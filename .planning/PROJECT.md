@@ -64,9 +64,9 @@ Bozor ma'muriyati har bir band rastadan patta to'liq yig'ilayotganini raqamlar v
 ## Constraints
 
 - **Muddat**: 12 hafta (2026-07-28 → ~2026-10-18 Karmanada jonli) — davlat dasturi oynasi va raqobat tezligi
-- **Stek**: FastAPI (core-api, cv-service) + aiogram (bot-service) + Next.js/Tailwind (frontend) + PostgreSQL/Redis/MinIO + Docker Compose — jamoa ko'nikmasi, MVP topshirig'ida qat'iylashtirilgan
+- **Stek**: FastAPI (core-api, cv-service) + aiogram (bot-service) + Next.js/Tailwind (frontend) + PostgreSQL/Valkey/SeaweedFS + Docker Compose — jamoa ko'nikmasi, MVP topshirig'ida qat'iylashtirilgan (tadqiqot 2026-07-29: MinIO arxivlangan → SeaweedFS; Redis → Valkey)
 - **Servislar soni**: aynan 3 ta (core-api, cv-service, bot-service) — ortiqcha mikroservis bo'linmaydi
-- **Litsenziya**: CV modellar faqat Apache-2.0/MIT (RT-DETR/D-FINE/YOLOX oilasi); AGPL (Ultralytics) taqiqlangan — tijoriy SaaS
+- **Litsenziya**: CV modellar faqat Apache-2.0/MIT — tanlov: RF-DETR (Nano→Large; XLarge/2XLarge PML 1.0 — TAQIQ); AGPL (Ultralytics) taqiqlangan — tijoriy SaaS
 - **Infra**: Contabo VPS (8–16 GB RAM, 4–6 vCPU, 400+ GB disk), GPU'siz inference (CPU yetadi); fine-tuning uchun vaqtinchalik ijara GPU
 - **Data-rezidentlik**: shaxsiy ma'lumotlar O'zR qonuni ostida — davlat bosqichidan oldin O'zbekiston hostingiga ko'chish rejalashtirilgan (compose ko'chishni osonlashtiradi)
 - **Multi-tenant**: hamma jadvalda `market_id` — bitta kod bazasi, cheksiz bozor; yangi bozor kod yozmasdan wizard orqali ulanadi
@@ -86,6 +86,10 @@ Bozor ma'muriyati har bir band rastadan patta to'liq yig'ilayotganini raqamlar v
 | Hosting hozircha Contabo, keyin O'zbekistonga ko'chish | Tezlik; lokalizatsiya davlat bosqichidan oldin | — Pending |
 | CV: Apache-2.0 modellar (RT-DETR/D-FINE/YOLOX), Ultralytics AGPL emas | Tijoriy SaaS uchun litsenziya xavfi | — Pending |
 | "SBOZOR" nomi yakuniy | Buyurtmachi tasdiqladi | ✓ Good |
+| Obyekt-ombor: SeaweedFS (MinIO emas) | MinIO upstream arxivlangan (2026-04); S3 API boto3 orqali — almashish .env darajasida | — Pending |
+| Detektor: RF-DETR Nano→Large (ONNX Runtime CPU) | Yagona faol Apache-2.0 oila; XLarge/2XLarge PML 1.0 litsenziyada — ishlatilmaydi | — Pending |
+| Patta sharti: ≥2 kadr tasdiq (yoki 1 kadr + nazoratchi) | Bitta kadr nizo generatori (o'tkinchi odam xatosi) — buyurtmachi 2026-07-29 tasdiqladi | — Pending |
+| Aniqlik KPI: ko'r tasodifiy audit + xatolik turlari | noaniq-navbatdan o'lchash statistik xato (selection bias) | — Pending |
 | Fikrlash tili: hujjatlar o'zbek-lotin | Jamoa va buyurtmachi o'zbek tilida ishlaydi | ✓ Good |
 
 ## Evolution

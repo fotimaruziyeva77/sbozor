@@ -125,17 +125,75 @@ Aniq chiqarilgan. Qayta qo'shishning oldini olish uchun hujjatlashtirilgan.
 
 ## Traceability
 
-Roadmap yaratilganda to'ldiriladi.
+Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi bog'liqlik ishi, v1 REQ-ID biriktirilmagan.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| — | — | — |
+| FOUND-01 | Phase 1 | Pending |
+| FOUND-02 | Phase 1 | Pending |
+| FOUND-03 | Phase 1 | Pending |
+| FOUND-04 | Phase 1 | Pending |
+| FOUND-05 | Phase 1 | Pending |
+| FOUND-06 | Phase 4 | Pending |
+| FOUND-07 | Phase 8 | Pending |
+| MARKET-01 | Phase 2 | Pending |
+| MARKET-02 | Phase 2 | Pending |
+| MARKET-03 | Phase 2 | Pending |
+| MARKET-04 | Phase 2 | Pending |
+| MARKET-05 | Phase 2 | Pending |
+| MARKET-06 | Phase 2 | Pending |
+| CAM-01 | Phase 3 | Pending |
+| CAM-02 | Phase 3 | Pending |
+| CAM-03 | Phase 3 | Pending |
+| CAM-04 | Phase 4 | Pending |
+| CAM-05 | Phase 4 | Pending |
+| CAM-06 | Phase 4 | Pending |
+| CAM-07 | Phase 4 | Pending |
+| AI-01 | Phase 5 | Pending |
+| AI-02 | Phase 5 | Pending |
+| AI-03 | Phase 5 | Pending |
+| AI-04 | Phase 5 | Pending |
+| AI-05 | Phase 5 | Pending |
+| AI-06 | Phase 5 | Pending |
+| BILL-01 | Phase 6 | Pending |
+| BILL-02 | Phase 6 | Pending |
+| BILL-03 | Phase 6 | Pending |
+| BILL-04 | Phase 6 | Pending |
+| BILL-05 | Phase 6 | Pending |
+| CASH-01 | Phase 6 | Pending |
+| CASH-02 | Phase 6 | Pending |
+| CASH-03 | Phase 6 | Pending |
+| CASH-04 | Phase 6 | Pending |
+| CASH-05 | Phase 7 | Pending |
+| RECON-01 | Phase 7 | Pending |
+| RECON-02 | Phase 7 | Pending |
+| RECON-03 | Phase 7 | Pending |
+| RECON-04 | Phase 8 | Pending |
+| RECON-05 | Phase 8 | Pending |
+| RECON-06 | Phase 7 | Pending |
+| BOT-01 | Phase 7 | Pending |
+| BOT-02 | Phase 7 | Pending |
+| BOT-03 | Phase 7 | Pending |
+| BOT-04 | Phase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 46 total
-- Mapped to phases: 0
-- Unmapped: 46 ⚠️
+- Mapped to phases: 46 ✓
+- Unmapped: 0
+
+**Faza kesimida:**
+
+| Phase | Nomi | Talablar soni |
+|-------|------|---------------|
+| 1 | Poydevor va tenant xavfsizligi | 5 |
+| 2 | Bozor domeni va "Yangi bozor" ustasi | 6 |
+| 3 | Kamera va tarmoq ulanishi | 3 |
+| 4 | Snapshot pipeline | 5 |
+| 5 | Kamera zonalari, CV va nazoratchi tasdig'i | 6 |
+| 6 | Billing va kassir | 9 |
+| 7 | Nomuvofiqlik, bildirishnoma va botlar | 9 |
+| 8 | Hisobotlar, mustahkamlash va ishga tushirish | 3 |
 
 ---
 *Requirements defined: 2026-07-29*
-*Last updated: 2026-07-29 after initial definition*
+*Last updated: 2026-07-29 after roadmap creation (traceability filled)*
