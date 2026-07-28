@@ -1,0 +1,141 @@
+# Requirements: SBOZOR
+
+**Defined:** 2026-07-29
+**Core Value:** Bozor ma'muriyati har bir band rastadan patta to'liq yig'ilayotganini raqamlar va rasm-dalil bilan ko'radi — "band, lekin to'lovsiz" rastalar kunlik hisobotda avtomatik fosh bo'ladi.
+
+## v1 Requirements
+
+Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga bog'lanadi.
+
+### Poydevor (FOUND)
+
+- [ ] **FOUND-01**: Foydalanuvchi rolga mos kirish oladi — platforma admini, direktor, bozor admini, kassir, nazoratchi (RBAC); har rol faqat o'z bozori ma'lumotini ko'radi
+- [ ] **FOUND-02**: Tenant izolyatsiyasi: har jadvalda `market_id` + Postgres RLS; cross-tenant kirish avtomatik test bilan isbotlangan
+- [ ] **FOUND-03**: Har moliyaviy/ma'muriy harakat audit jurnaliga yoziladi (kim, qachon, nima, eski→yangi); jurnal o'zgartirib bo'lmaydigan
+- [ ] **FOUND-04**: Interfeys 3 tilda (o'zbek-lotin asosiy, o'zbek-kirill, rus); til bir bosishda almashadi
+- [ ] **FOUND-05**: Biznes-kun Asia/Tashkent bo'yicha hisoblanadi (`business_date`); pul qiymatlari butun so'mda (BIGINT)
+- [ ] **FOUND-06**: Tizim o'zini kuzatadi: kamera offline, o'tkazib yuborilgan snapshot, backup xatosi — platforma adminiga Telegram-alert; xatolar Sentry'da
+- [ ] **FOUND-07**: Kunlik avtomatik backup (Postgres + obyekt-ombor) boshqa lokatsiyaga; tiklash mashqi kamida bir marta o'tkazilgan
+
+### Bozor boshqaruvi (MARKET)
+
+- [ ] **MARKET-01**: Platforma admini "Yangi bozor" ustasi orqali bozorni kod yozmasdan kiritadi: rekvizitlar → zonalar → rastalar → toifalar → tariflar → kameralar → kamera zonalari → snapshot jadvali
+- [ ] **MARKET-02**: Bozor admini rastalar reestrini yuritadi: raqam, zona/qator, mahsulot toifasi, holat (faol/ta'mirda/yopiq), sotuvchi biriktirish
+- [ ] **MARKET-03**: Tariflar tarixiy saqlanadi (qaysi sanadan qaysi narx) — o'tmishdagi hisoblar keyingi narx o'zgarishidan buzilmaydi
+- [ ] **MARKET-04**: Bozor admini sotuvchilar reestrini yuritadi (F.I.Sh., telefon) va rasta biriktirish davrlarini boshqaradi
+- [ ] **MARKET-05**: Bozor admini ishlamaydigan/bayram kunlarini belgilaydi — o'sha kunlarga patta hisoblanmaydi
+- [ ] **MARKET-06**: Sxematik plan-xarita: rastalar zona bo'yicha rangli grid (yashil bo'sh, ko'k to'langan, qizil qarzdor, sariq nomuvofiq); rasta bosilganda karta (dalil-rasm bilan) ochiladi
+
+### Kamera va suratga olish (CAM)
+
+- [ ] **CAM-01**: Bozor admini kameralarni qo'shadi/sozlaydi; RTSP ma'lumotlari shifrlangan saqlanadi; "ulanishni tekshirish" tugmasi ishlaydi
+- [ ] **CAM-02**: Server NVR'ga faqat WireGuard VPN orqali kiradi; NVR internetga to'g'ridan-to'g'ri ochilmaydi
+- [ ] **CAM-03**: Direktor/admin panelda jonli kamera tasvirini ko'radi (go2rtc, avtorizatsiya ortida)
+- [ ] **CAM-04**: Snapshot jadvali har bozor uchun sozlanadi va mavsumiy profilni qo'llaydi (standart: 06:00–08:00 har 30 daq + 16:00, 18:00)
+- [ ] **CAM-05**: Rejalashtirilgan kadr olish idempotent va retry'li; o'tkazib yuborilgan slot jurnalda ko'rinadi va alert yuboradi
+- [ ] **CAM-06**: Har kadr sifat filtridan o'tadi (qorong'i/buzuq/bo'sh kadr belgilanadi, `light_mode` saqlanadi) — yaroqsiz kadr billing'ga ta'sir qilmaydi
+- [ ] **CAM-07**: Kadrlar S3-mos omborda (SeaweedFS) bozor/kamera/sana bo'yicha saqlanadi; 90 kun to'liq, keyin siqilgan 1 yil (sozlanadigan)
+
+### AI tahlil (AI)
+
+- [ ] **AI-01**: Bozor admini har kamera kadrida rasta zonalarini poligon qilib chizadi (normalangan 0..1 koordinatalar, versiyalangan); bitta rasta bir necha kameraga bog'lanishi mumkin
+- [ ] **AI-02**: Detektor (RF-DETR Apache-2.0, ONNX Runtime CPU) har zonani band/bo'sh/noaniq deb baholaydi; AI natijasi confidence bilan saqlanadi va hech qachon o'zgartirilmaydi (nazoratchi qarori alohida yozuv)
+- [ ] **AI-03**: Nazoratchi noaniq navbatini ko'rib chiqadi — kunlik byudjet va ustuvorlik bilan, "hammasini tasdiqlash" tugmasisiz; tasdiqlangan javoblar fine-tuning dataseti bo'ladi
+- [ ] **AI-04**: Ko'r tasodifiy audit navbati: nazoratchi AI javobini ko'rmasdan tasodifiy tanlangan zonalarni baholaydi — aniqlik hisoboti faqat shu namunadan olinadi
+- [ ] **AI-05**: Rasta bir necha kamerada ko'rinsa — birortasi "band" desa rasta band (agregatsiya qoidasi)
+- [ ] **AI-06**: Kun oxirigacha tasdiqlanmagan noaniq → "bo'sh" (hisobotda alohida belgi bilan)
+
+### Billing (BILL)
+
+- [ ] **BILL-01**: Kun yopilishida band rastaga (kamida 2 snapshotda band, yoki 1 snapshot + nazoratchi tasdig'i) toifa tarifi bo'yicha to'liq kunlik patta hisoblanadi; job idempotent — qayta ishga tushirish dublikat yaratmaydi (`UNIQUE(market_id, stall_id, business_date)`)
+- [ ] **BILL-02**: Har hisob yozuvi dalil-kadrlarga bog'langan; yaratilgach o'zgartirilmaydi — tuzatish faqat sabab ko'rsatilgan `charge_adjustments` yozuvi orqali
+- [ ] **BILL-03**: Qarz faqat biriktirilgan sotuvchiga yoziladi; qoldiq har doim hisoblanadigan ko'rinish (hisoblar − to'lovlar), saqlangan balans ustuni emas
+- [ ] **BILL-04**: Biriktirilmagan rasta band ko'rinsa — hisob yozilmaydi, "ro'yxatga olinmagan savdo" anomaliyasi sifatida hisobotga tushadi
+- [ ] **BILL-05**: Kun davomida kassir/direktor "kutilayotgan patta"ni (bugungi tarif + eski qarz) ko'radi — bu jonli projection, yozilgan hisob emas
+
+### Kassir (CASH)
+
+- [ ] **CASH-01**: Kassir telefonda rastani raqam bo'yicha topadi → summa tarifdan avtomatik → to'lov turi (naqd/terminal) → ≤3 bosishda tasdiqlaydi
+- [ ] **CASH-02**: Kassir summani faqat sabab-kod bilan o'zgartira oladi; har o'zgartirish auditda ko'rinadi
+- [ ] **CASH-03**: To'lov kiritish idempotent (takror bosish dublikat yaratmaydi); to'lov tuzatish faqat storno + qayta kiritish orqali, o'chirish/tahrirlash yo'q
+- [ ] **CASH-04**: Kassir smenani ochadi/yopadi; yopishda yig'ilgan naqdni ko'r (tizim summasini ko'rmasdan) deklaratsiya qiladi; tizim farqni (variance) hisoblab direktor hisobotiga chiqaradi
+- [ ] **CASH-05**: To'lov kiritilishi bilan sotuvchiga Telegram orqali zudlik push-kvitansiya boradi (summa, rasta, kassir, vaqt)
+
+### Nomuvofiqlik va hisobotlar (RECON)
+
+- [ ] **RECON-01**: Kunlik nomuvofiqlik hisoboti: "band, lekin to'lovsiz" rastalar + "ro'yxatga olinmagan savdo" anomaliyalari, rasm-dalil havolalari bilan
+- [ ] **RECON-02**: Har nomuvofiqlik case sifatida yuritiladi: mas'ul, holat (yangi/ko'rilmoqda/asosli/asossiz), yechim; hit-rate metrikasi hisoblanadi
+- [ ] **RECON-03**: Direktor ertalab dayjesta oladi (kechagi tushum, bandlik %, TOP-10 qarzdor), kechqurun nomuvofiqlik xabarini oladi
+- [ ] **RECON-04**: Davr bo'yicha hisobotlar: tushum (kunlik/oylik), qarzdorlik reestri, nomuvofiqlik arxivi — har biri Excel (.xlsx) yuklab olinadi
+- [ ] **RECON-05**: AI aniqlik hisoboti: ko'r audit namunasidan, xatolik turlari ajratilgan ("band deb xato" = nizo xavfi, "bo'sh deb xato" = yo'qotish)
+- [ ] **RECON-06**: Har rol bosh ekranida o'ziga mos bitta asosiy ko'rsatkich (direktor: bugungi tushum; nazoratchi: kutayotgan navbat; kassir: bugungi yig'im)
+
+### Telegram-bot (BOT)
+
+- [ ] **BOT-01**: Sotuvchi botga telefon raqamini contact ulashish orqali tasdiqlab ulanadi — raqam admin kiritgan reestrga mos bo'lsa
+- [ ] **BOT-02**: Sotuvchi botda qoldiq/qarz va to'lov tarixini ko'radi
+- [ ] **BOT-03**: Qarz N kundan oshsa sotuvchiga avtomatik eslatma (N sozlanadigan; quiet hours hurmat qilinadi)
+- [ ] **BOT-04**: Barcha xabarlar outbox orqali throttling bilan yuboriladi; yetkazilganlik holati saqlanadi; botni bloklagan foydalanuvchi belgilanadi
+
+## v2 Requirements
+
+Keyingi relizga qoldirilgan. Kuzatiladi, lekin joriy roadmapda emas.
+
+### Kassir kengaytmalari
+- **V2-CASH-01**: Jonli undirish ro'yxati — kassirga "band, hali to'lamagan" rastalar real vaqtda (GAP-06)
+- **V2-CASH-02**: Kassir↔zona biriktirish va kassir kesimida samaradorlik statistikasi (GAP-08)
+- **V2-CASH-03**: QR/bank o'tkazma to'lov turi + majburiy referens; UzQR/bank ko'chirmasi bilan solishtiruv importi (GAP-09)
+- **V2-CASH-04**: Qonuniy to'liq kvitansiya maydonlari (lex.uz 2185), "nofiskal" belgisi bilan; keyin OFD'ga o'tish zamini (GAP-03)
+- **V2-CASH-05**: Kassir offline-lite rejimi (navbat + qayta yuborish)
+
+### AI kengaytmalari
+- **V2-AI-01**: Kamera siljish/tebranish nazorati — reference kadr bilan avtomatik solishtirish (GAP-16)
+- **V2-AI-02**: Qo'lda rejim: kamera ko'rmaydigan ~10% rastalar uchun nazoratchi kunlik band/bo'sh belgilaydi, manba hisobotlarda ajratiladi (GAP-07). V1 da bu rastalar uchun faqat to'lov qaydi ishlaydi, AI hisobi yo'q
+- **V2-AI-03**: O'tkazib yuborilgan snapshotni NVR arxividan tiklash (GAP-20)
+- **V2-AI-04**: Karmana ma'lumotida RF-DETR fine-tuning
+
+### Jarayon kengaytmalari
+- **V2-PROC-01**: Sotuvchi e'tiroz/nizo oqimi — rasmiy appeal jarayoni (GAP-04)
+- **V2-PROC-02**: Kun/davr yopish qulfi (period lock)
+- **V2-PROC-03**: Qarz eskirish tahlili (aging) va hisobdan chiqarish siyosati
+- **V2-PROC-04**: To'liq interaktiv plan-xarita (yuklangan rasmda rastalarni belgilash)
+- **V2-PROC-05**: Onlayn to'lov: Payme/Click/Uzum merchant integratsiyasi
+
+## Out of Scope
+
+Aniq chiqarilgan. Qayta qo'shishning oldini olish uchun hujjatlashtirilgan.
+
+| Funksiya | Sabab |
+|---------|--------|
+| Do'kon ijarasi (yillik shartnoma) | MVP faqat rasta/kunlik patta; alohida modul |
+| Avtoturargoh (ANPR), hojatxona, mol bozor modullari | Keyingi bosqich modullari |
+| Xaridor super-ilovasi | Strategik, lekin pilot qiymatiga aloqasiz |
+| Soliq/OFD, E-bozor integratsiyasi | Davlat bosqichida; v1 kvitansiya "nofiskal" |
+| Yuzni aniqlash / biometrik identifikatsiya | Huquqiy xavf (shaxsiy ma'lumot), daromad signali deyarli nol |
+| AI natijasidan avtomatik jarima | Ishonch o'ldiradi; AI faqat ko'rsatadi, qaror insonda |
+| Hamyon/to'lov-rail mahsuloti | Bank emas, nazorat vositasimiz |
+| To'liq VMS/video yozib olish | NVR bor; biz faqat snapshot olamiz |
+| Uzluksiz real-time inference | 175 kadr/kun yetadi; xarajat oqlanmaydi |
+| Yarim kunlik proratsiya | Buyurtmachi qarori: to'liq patta (2026-07-28) |
+| Biriktirilmagan rastani placeholder'ga avtomatik billing | To'lovchisiz qarz ma'nosiz; anomaliya sifatida ko'rsatiladi |
+| Kassir leaderboard/gamifikatsiya | Raqobat emas, nazorat kerak |
+| To'lov yozuvini tahrirlash/o'chirish | Faqat storno; moliyaviy yaxlitlik |
+| Erkin summali to'lov (sababsiz) | Korrupsiya teshigi |
+| Sotuvchilar uchun LLM-chatbot | Qiymat yo'q, xarajat bor |
+
+## Traceability
+
+Roadmap yaratilganda to'ldiriladi.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| — | — | — |
+
+**Coverage:**
+- v1 requirements: 46 total
+- Mapped to phases: 0
+- Unmapped: 46 ⚠️
+
+---
+*Requirements defined: 2026-07-29*
+*Last updated: 2026-07-29 after initial definition*
