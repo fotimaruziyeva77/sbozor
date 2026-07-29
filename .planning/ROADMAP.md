@@ -83,7 +83,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-06-PLAN.md — Auth API: login/select-market/refresh/logout/change-password, RBAC matritsasi, tenant sessiyasi, bloklash keshi (W5)
+- [x] 01-06-PLAN.md — Auth API: login/select-market/refresh/logout/change-password, RBAC matritsasi, tenant sessiyasi, bloklash keshi (W5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
