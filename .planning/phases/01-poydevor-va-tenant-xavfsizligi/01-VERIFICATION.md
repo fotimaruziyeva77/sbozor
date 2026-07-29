@@ -250,6 +250,52 @@ SKIPPED — bu fazada probe-asoslangan tekshiruv konventsiyasi yo'q (migratsiya/
 
 ---
 
+## Addendum — tekshiruvdan KEYINGI hotfix (CR-04 regressiyasi)
+
+Ushbu hisobot yozilgandan **keyin** gap-closure kodiga fokuslangan code review
+(`01-REVIEW-GAPS.md`) o'tkazildi va u yuqorida "yopilgan" deb belgilangan
+**CR-04 aslida teskari bo'lganini** aniqladi. Xulosa mustaqil tasdiqlandi
+(o'rnatilgan `uvicorn 0.51.0` manbasi o'qildi):
+
+- `_TrustedHosts.__init__` → `always_trust = trusted_hosts in ("*", ["*"])`
+- `get_trusted_client_address()` → `always_trust` da `x_forwarded_for_hosts[0]`,
+  ya'ni **eng chapdagi** yozuvni qaytaradi
+- `nginx.conf` esa `$proxy_add_x_forwarded_for` ishlatardi — mijoz yuborgan
+  `X-Forwarded-For` ga haqiqiy peer'ni **qo'shib** qo'yadi
+
+Natijada `request.client.host` internetdan to'liq soxtalashtirilardi:
+rate-limit chetlab o'tish, boshqa bozorning haqiqiy IP'sini 15 daqiqaga
+qulflash va `audit_log.ip` (FOUND-03 ning dalil ustuni) qalbakilashtirish.
+01-13 gacha XFF butunlay e'tiborsiz edi — ya'ni tuzatish DoS'ni spoofingga
+almashtirgan edi.
+
+**Hotfix (commit `e393a17`, uch qatlam):**
+1. `nginx.conf` — ikkala `location` da `X-Forwarded-For $remote_addr`
+   (qo'shish emas, **ustiga yozish**); sabab fayl sarlavhasida hujjatlashtirilgan.
+2. `compose.yaml` + `compose.override.yml` — `--forwarded-allow-ips` endi
+   `${FORWARDED_ALLOW_IPS:-172.16.0.0/12}`, wildcard emas. Qiymat empirik
+   aniqlandi (`docker network inspect sbozor_default` → `172.19.0.0/16`), lekin
+   Docker bridge subnetlarini dinamik taqsimlagani uchun ataylab /12 pool
+   qoldirildi.
+3. `tests/integration/test_rate_limit_proxy.py` — 9 yangi test, ular
+   `ProxyHeadersMiddleware` ni haqiqatan ishga soladi va kutilgan qiymatni
+   **konfiguratsiyadan o'qiydi** (qattiq kodlamaydi), shuning uchun har qanday
+   qatlamni orqaga qaytarish testni qizartiradi. Sabotaj tasdig'i: ikkala
+   qatlam qaytarilganda hujumchining `192.0.2.66` qiymati haqiqatan
+   `rl:login:ip:192.0.2.66` kalitiga tushdi.
+
+**Hotfixdan keyingi holat:** 425 backend test yashil (avval 416),
+`docker compose config --quiet` ikkala shaklda ham toza, `nginx -t` muvaffaqiyatli.
+CR-04 endi HAQIQATAN yopilgan; yuqoridagi 25/25 hisobi kuchida qoladi.
+
+`01-REVIEW-GAPS.md` da qolgan WARNING'lar (jumladan WR-02/WR-03 —
+`POST /auth/select-market` `require_password_current` dan tashqarida va
+`is_platform_admin` ni `users` dan qayta o'qimasdan token'dan qayta imzolaydi)
+hali ochiq va keyingi qarorni talab qiladi.
+
+---
+
 _Verified: 2026-07-29T21:15:00Z_
 _Verifier: Claude (gsd-verifier)_
 _Re-verification: Ha — 01-11…01-15 gap-closure to'lqinidan keyin_
+_Addendum: 2026-07-29T22:00:00Z — tekshiruvdan keyingi CR-04 hotfix (`e393a17`)_
