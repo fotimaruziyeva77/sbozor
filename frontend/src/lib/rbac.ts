@@ -92,8 +92,19 @@ export function hasPermission(
   );
 }
 
-/** Rol nomining tarjima kaliti (`roles.*`). Noma'lum rol — `null`. */
-export function roleLabelKey(role: string): string | null {
+/** `roles.*` namespace'idagi kalitlar. */
+export type RoleLabelKey =
+  | "platformAdmin"
+  | "director"
+  | "marketAdmin"
+  | "cashier"
+  | "inspector";
+
+/**
+ * Rol nomining tarjima kaliti. Noma'lum rol — `null`, ya'ni xom
+ * `market_admin` satri foydalanuvchiga HECH QACHON ko'rinmaydi.
+ */
+export function roleLabelKey(role: string): RoleLabelKey | null {
   switch (role) {
     case "platform_admin":
       return "platformAdmin";

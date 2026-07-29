@@ -7,7 +7,20 @@
     "loading": "Yuklanmoqda",
     "retry": "Qayta urinish",
     "search": "Qidirish",
-    "back": "Orqaga"
+    "back": "Orqaga",
+    "languageLabel": "Til"
+  },
+  "shell": {
+    "marketLabel": "Bozor",
+    "loading": "Sessiya tiklanmoqda",
+    "sections": "Bo'limlar"
+  },
+  "roles": {
+    "platformAdmin": "Platforma admini",
+    "director": "Direktor",
+    "marketAdmin": "Bozor admini",
+    "cashier": "Kassir",
+    "inspector": "Nazoratchi"
   },
   "nav": {
     "dashboard": "Boshqaruv paneli",

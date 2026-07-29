@@ -7,7 +7,20 @@
     "loading": "Юкланмоқда",
     "retry": "Қайта уриниш",
     "search": "Қидириш",
-    "back": "Орқага"
+    "back": "Орқага",
+    "languageLabel": "Тил"
+  },
+  "shell": {
+    "marketLabel": "Бозор",
+    "loading": "Сессия тикланмоқда",
+    "sections": "Бўлимлар"
+  },
+  "roles": {
+    "platformAdmin": "Платформа админи",
+    "director": "Директор",
+    "marketAdmin": "Бозор админи",
+    "cashier": "Кассир",
+    "inspector": "Назоратчи"
   },
   "nav": {
     "dashboard": "Бошқарув панели",

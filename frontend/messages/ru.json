@@ -7,7 +7,20 @@
     "loading": "Загрузка",
     "retry": "Повторить",
     "search": "Поиск",
-    "back": "Назад"
+    "back": "Назад",
+    "languageLabel": "Язык"
+  },
+  "shell": {
+    "marketLabel": "Рынок",
+    "loading": "Восстановление сессии",
+    "sections": "Разделы"
+  },
+  "roles": {
+    "platformAdmin": "Администратор платформы",
+    "director": "Директор",
+    "marketAdmin": "Администратор рынка",
+    "cashier": "Кассир",
+    "inspector": "Контролёр"
   },
   "nav": {
     "dashboard": "Панель управления",
