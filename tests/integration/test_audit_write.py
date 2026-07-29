@@ -23,17 +23,30 @@ yozadi, ya'ni har bozorda uchtadan audit qatori ALLAQACHON mavjud bo'ladi
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fixtures import TenantSessionFactory
 from fixtures.two_markets import TwoMarketSeed
 from sbozor_core.enums import ActorKind, AuditAction, AuditSource
 from sbozor_core.models import AuditLog, UserMarketRole
-from sqlalchemy import select, text
+from sqlalchemy import CursorResult, Result, select, text
 
 UPDATE_ROLES_RAW = text("UPDATE user_market_roles SET roles = :roles WHERE id = :role_id")
 NOOP_UPDATE_RAW = text("UPDATE user_market_roles SET roles = roles WHERE id = :role_id")
 DELETE_MEMBERSHIP_RAW = text("DELETE FROM user_market_roles WHERE id = :role_id")
+
+
+def _rowcount(result: Result[Any]) -> int:
+    """DML natijasidagi `rowcount`.
+
+    `AsyncSession.execute()` umumiy `Result` e'lon qiladi, `rowcount` esa
+    `CursorResult` da yashaydi. DML uchun natija HAR DOIM `CursorResult`
+    bo'ladi, shuning uchun bu tor tekshiruv tipni ham to'g'rilaydi, ham
+    kutilmagan holatni ushlaydi.
+    """
+    assert isinstance(result, CursorResult), f"DML natijasi kutilgan, {type(result)!r} keldi"
+    return result.rowcount
 
 
 async def _audit_rows(
@@ -149,7 +162,7 @@ async def test_raw_sql_is_audited(
         result = await session.execute(
             UPDATE_ROLES_RAW, {"roles": ["market_admin"], "role_id": str(role_id)}
         )
-        assert result.rowcount == 1, "xom UPDATE qatorga tegmadi — test o'z shartini bajarmadi"
+        assert _rowcount(result) == 1, "xom UPDATE qatorga tegmadi — test shartini bajarmadi"
 
     rows = await _audit_rows(tenant_session, market.id, role_id, AuditAction.UPDATE)
     assert len(rows) == 1, "xom SQL orqali qilingan o'zgarish AUDITSIZ qoldi (M10)"
@@ -178,7 +191,7 @@ async def test_noop_update_writes_nothing(
 
     async with tenant_session(market.id, market.admin_user_id) as session:
         result = await session.execute(NOOP_UPDATE_RAW, {"role_id": str(role_id)})
-        assert result.rowcount == 1, "no-op UPDATE qatorga umuman tegmadi — test ma'nosiz"
+        assert _rowcount(result) == 1, "no-op UPDATE qatorga umuman tegmadi — test ma'nosiz"
 
     # Seed qo'ygan `insert` qatoridan boshqa HECH NARSA qo'shilmasligi shart.
     updates = await _audit_rows(tenant_session, market.id, role_id, AuditAction.UPDATE)
@@ -203,7 +216,7 @@ async def test_delete_records_old_value_only(
 
     async with tenant_session(market.id, market.admin_user_id) as session:
         result = await session.execute(DELETE_MEMBERSHIP_RAW, {"role_id": str(role_id)})
-        assert result.rowcount == 1
+        assert _rowcount(result) == 1
 
     rows = await _audit_rows(tenant_session, market.id, role_id, AuditAction.DELETE)
     assert len(rows) == 1

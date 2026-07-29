@@ -38,7 +38,10 @@ SET_MARKET = "SELECT set_config('app.market_id', %s, false)"
 SNAPSHOT = "SELECT id, action, table_name FROM audit_log ORDER BY id"
 
 # Hujum operatorlari — ATAYIN `WHERE` siz: eng agressiv shakl sinaladi.
-TAMPER_UPDATE = f"UPDATE audit_log SET action = '{TAMPERED}'"
+# Matn LITERAL yozilgan (f-string EMAS): hujum operatori nima qilishini
+# o'qiyotgan odam boshqa joyga qaramasdan ko'rishi kerak, va f-string bu
+# yerda ruff `S608` ni ham keltirib chiqarardi.
+TAMPER_UPDATE = "UPDATE audit_log SET action = 'tampered'"
 TAMPER_DELETE = "DELETE FROM audit_log"
 TAMPER_TRUNCATE = "TRUNCATE audit_log"
 
@@ -58,8 +61,7 @@ def _with_market(conn: Connection[TupleRow], seed: TwoMarketSeed) -> list[tuple[
     conn.execute(SET_MARKET, (str(seed.market_a.id),))
     before = _snapshot(conn)
     assert before, (
-        "audit_log bo'sh — seed audit qatorlarini yaratmagan; bu testlar "
-        "hech narsani isbotlamaydi"
+        "audit_log bo'sh — seed audit qatorlarini yaratmagan; bu testlar hech narsani isbotlamaydi"
     )
     return before
 
@@ -113,9 +115,10 @@ def test_owner_update_changes_nothing(
 ) -> None:
     """Ega `UPDATE` qila olmaydi — va bu XATOSIZ sodir bo'ladi (Pitfall 9).
 
-    `pytest.raises` ATAYIN ISHLATILMAGAN: UPDATE uchun policy yo'q, ya'ni
-    komanda 0 qator ko'radi va muvaffaqiyatli tugaydi. Yagona to'g'ri
-    verifikatsiya — HOLATNI o'lchash.
+    Istisno kutuvchi kontekst-menejer bu yerda ATAYIN ISHLATILMAGAN: UPDATE
+    uchun policy yo'q, ya'ni komanda 0 qator ko'radi va MUVAFFAQIYATLI
+    tugaydi. Yagona to'g'ri verifikatsiya — HOLATNI o'lchash. Fayl
+    docstringida sabab batafsil yozilgan.
     """
     before = _with_market(sync_owner_conn, two_markets)
 

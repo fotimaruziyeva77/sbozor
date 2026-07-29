@@ -41,6 +41,7 @@ from fixtures.two_markets import TwoMarketSeed, cleanup_two_markets, seed_two_ma
 from psycopg import Connection, sql
 from psycopg.rows import TupleRow
 from sbozor_core.db import make_sessionmaker
+from sbozor_core.enums import ActorKind
 from sbozor_core.tenancy import set_tenant_context
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
@@ -271,13 +272,17 @@ def tenant_session(app_sessionmaker: async_sessionmaker[AsyncSession]) -> Tenant
     async def _tenant_session(
         market_id: UUID | None,
         actor_id: UUID | None = None,
+        *,
+        actor_kind: ActorKind = ActorKind.USER,
+        request_id: str = "pytest",
     ) -> AsyncIterator[AsyncSession]:
         async with app_sessionmaker() as session, session.begin():
             await set_tenant_context(
                 session,
                 market_id=market_id,
                 actor_id=actor_id,
-                request_id="pytest",
+                request_id=request_id,
+                actor_kind=actor_kind,
             )
             yield session
 

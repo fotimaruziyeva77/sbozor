@@ -27,11 +27,12 @@ import psycopg
 import pytest
 from psycopg import Connection
 from psycopg.rows import TupleRow
-from migrations.helpers import audit_trigger_name
 from sbozor_core.models.identity import LOCALE_VALUES, ROLE_VALUES
 from sbozor_core.schema_contract import AUDITED_TABLES, FINANCIAL_TABLES, GLOBAL_TABLES
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+from migrations.helpers import audit_trigger_name
 
 pytestmark = pytest.mark.tenancy
 
@@ -567,8 +568,9 @@ def test_audited_tables_have_trigger(sync_app_conn: Connection[TupleRow], migrat
     triggers = {(row[0], row[1]) for row in rows}
 
     missing = [
-        table for table in sorted(AUDITED_TABLES) if (table, audit_trigger_name(table)) not in
-        triggers
+        table
+        for table in sorted(AUDITED_TABLES)
+        if (table, audit_trigger_name(table)) not in triggers
     ]
     assert not missing, (
         f"`AUDITED_TABLES` da bor, lekin audit triggeri YO'Q: {missing} — "
@@ -576,9 +578,7 @@ def test_audited_tables_have_trigger(sync_app_conn: Connection[TupleRow], migrat
     )
 
 
-def test_financial_tables_have_guards(
-    sync_app_conn: Connection[TupleRow], migrated: None
-) -> None:
+def test_financial_tables_have_guards(sync_app_conn: Connection[TupleRow], migrated: None) -> None:
     """MAVJUD moliyaviy jadvallarning har birida uchta konstrayt bor (mezon #5).
 
     1-fazada `FINANCIAL_TABLES` dagi jadvallarning HECH BIRI hali yo'q
