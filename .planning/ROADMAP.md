@@ -87,8 +87,8 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 01-07-PLAN.md — Foydalanuvchi boshqaruvi, profil/til, bozorlar ro'yxati, audit ko'rish API va o'qish-audit dependency (W6)
-- [ ] 01-08-PLAN.md — Frontend auth qobig'i: login, majburiy parol almashtirish, bozor tanlash, app shell, til almashtirgich (W6)
+- [x] 01-07-PLAN.md — Foydalanuvchi boshqaruvi, profil/til, bozorlar ro'yxati, audit ko'rish API va o'qish-audit dependency (W6)
+- [x] 01-08-PLAN.md — Frontend auth qobig'i: login, majburiy parol almashtirish, bozor tanlash, app shell, til almashtirgich (W6)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
