@@ -20,7 +20,7 @@ Har faza "band rastadan patta to'liq yig'ilyaptimi?" savolini isbotlash zanjirin
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 0: Dala treki va tashqi bog'liqliklar** - Baza o'lchovi, NVR kirish, buyurtmachi qarorlari (parallel, 1-haftadan)
-- [ ] **Phase 1: Poydevor va tenant xavfsizligi** - Rol, izolyatsiya, audit, biznes-kun, 3 til — retrofit qilinmaydigan qatlam
+- [x] **Phase 1: Poydevor va tenant xavfsizligi** - Rol, izolyatsiya, audit, biznes-kun, 3 til — retrofit qilinmaydigan qatlam (completed 2026-07-29)
 - [ ] **Phase 2: Bozor domeni va "Yangi bozor" ustasi** - Rasta, toifa, tarixiy tarif, sotuvchi, ish kunlari, sxematik plan-xarita
 - [ ] **Phase 3: Kamera va tarmoq ulanishi** - WireGuard tunnel, shifrlangan RTSP, ulanish testi, jonli ko'rish
 - [ ] **Phase 4: Snapshot pipeline** - Mavsumiy jadval, idempotent kadr olish, sifat filtri, S3 arxiv, alertlar
@@ -92,8 +92,8 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 01-09-PLAN.md — Ma'muriy ekranlar: foydalanuvchi boshqaruvi UI va audit jurnali UI + faza mezonlarining uchidan-uchiga tekshiruvi (W7)
-- [ ] 01-10-PLAN.md — Cross-tenant marshrut matritsasi, marshrut qamrovi darvozasi, CI yig'imi va validatsiya imzosi (W7)
+- [x] 01-09-PLAN.md — Ma'muriy ekranlar: foydalanuvchi boshqaruvi UI va audit jurnali UI + faza mezonlarining uchidan-uchiga tekshiruvi (W7)
+- [x] 01-10-PLAN.md — Cross-tenant marshrut matritsasi, marshrut qamrovi darvozasi, CI yig'imi va validatsiya imzosi (W7)
 
 **UI hint**: yes
 
