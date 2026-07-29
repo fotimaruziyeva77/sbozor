@@ -75,8 +75,40 @@ services:
       dockerfile: services/core-api/Dockerfile
       target: runtime
     # --workers 1: kelajakdagi scheduler/cron dublikatining oldini oladi.
+    #
+    # --proxy-headers + --forwarded-allow-ips (CR-04) — bu ikkisi MAJBURIY.
+    # uvicorn `X-Forwarded-For` ni FAQAT `--forwarded-allow-ips` ro'yxatidagi
+    # manzildan qabul qiladi; standart qiymat `127.0.0.1`. nginx esa compose
+    # tarmog'ida BOSHQA konteyner manzilida turadi — ya'ni bayroqsiz uning
+    # sarlavhasi TASHLAB YUBORILADI va `request.client.host` har doim proxy
+    # IP'si bo'lardi (`auth.py::_client_ip` ishonch qarorini ataylab shu
+    # qatlamga topshiradi). Oqibati ikkita:
+    #   1) `rl:login:ip:<proxy-ip>` — BUTUN PLATFORMA uchun bitta sanagich.
+    #      Chegara (IP_LIMIT=50) parol tekshiruvidan OLDIN ishlaydi, ya'ni
+    #      muvaffaqiyatli login uni tozalay olmaydi: ~51 anonim so'rov barcha
+    #      kassir/admin/direktorni 15 daqiqaga qulflaydi.
+    #   2) `audit_log.ip` har doim proxy manzilini yozadi — "kimdan" savoli
+    #      javobsiz qoladi (FOUND-03 dalil sifati).
+    #
+    # `*` NEGA XAVFSIZ: `core-api` xost portiga PUBLISH QILINMAYDI — unga faqat
+    # compose tarmog'idan, nginx orqali kiriladi (dev `compose.override.yml`
+    # uni FAQAT 127.0.0.1 ga bog'laydi). Ya'ni sarlavhani soxtalashtira
+    # oladigan yagona tomon — allaqachon ichkarida bo'lgan tomon.
+    # AGAR port kelajakda tashqi interfeysga chiqarilsa, `FORWARDED_ALLOW_IPS`
+    # ni nginx servisining manziliga QADASH SHART — aks holda har bir mijoz
+    # o'z IP'sini o'zi yozadi va rate-limit ham, audit ham ma'nosini yo'qotadi.
     command:
-      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+      - "uvicorn"
+      - "app.main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--workers"
+      - "1"
+      - "--proxy-headers"
+      - "--forwarded-allow-ips"
+      - "${FORWARDED_ALLOW_IPS:-*}"
     environment:
       DATABASE_URL: ${DATABASE_URL}
       VALKEY_URL: ${VALKEY_URL:-redis://cache:6379/0}

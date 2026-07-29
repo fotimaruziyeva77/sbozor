@@ -64,6 +64,30 @@ SENSITIVE_KEYS = frozenset(
 """Log'ga HECH QACHON tushmasligi kerak bo'lgan kalitlar (kichik harfda)."""
 
 
+def _is_sensitive(key: object) -> bool:
+    """Kalit nomi reyestrda-mi (registr farqi hisobga olinmaydi)."""
+    return str(key).lower() in SENSITIVE_KEYS
+
+
+def _censor(value: object) -> object:
+    """Qiymatni REKURSIV maskalaydi: ichma-ich lug'at va ro'yxatlar ham.
+
+    Yangi obyekt qaytaradi, chaqiruvchining ma'lumotini O'ZGARTIRMAYDI —
+    log protsessori yon ta'sir bermasligi kerak (o'sha lug'at chaqiruvchida
+    hali ishlatilayotgan bo'lishi mumkin).
+
+    `tuple` ham qamraladi va ro'yxat sifatida qaytadi: JSON'da kortej yo'q,
+    ya'ni `JSONRenderer` chiqishi baribir massiv bo'lardi.
+    """
+    if isinstance(value, dict):
+        return {
+            key: CENSORED if _is_sensitive(key) else _censor(item) for key, item in value.items()
+        }
+    if isinstance(value, list | tuple):
+        return [_censor(item) for item in value]
+    return value
+
+
 def censor_secrets(
     logger: WrappedLogger,
     method_name: str,
@@ -75,10 +99,17 @@ def censor_secrets(
     (bu yolg'on-musbat va yolg'on-manfiy beradi). Shuning uchun qoida
     oddiy: sirni har doim nomlangan kalit sifatida uzating, `event`
     matnining ichiga qo'shmang.
+
+    REKURSIV — `app.repositories.audit_repo.mask_sensitive` bilan bir xil
+    chuqurlikda ishlaydi. Faqat yuqori daraja tekshirilganda
+    `log.info("x", payload={"password": ...})` yoki
+    `log.warning("y", items=[{"token": ...}])` senzuradan o'tmasdan
+    `JSONRenderer` ga, undan stdout va Sentry'ga ketardi (WR-01). Ikki
+    qatlam (log va audit JSONB) bir xil tahdidga qarshi turadi, shuning
+    uchun ular bir xil qoidani bilishi shart.
     """
     for key in list(event_dict):
-        if isinstance(key, str) and key.lower() in SENSITIVE_KEYS:
-            event_dict[key] = CENSORED
+        event_dict[key] = CENSORED if _is_sensitive(key) else _censor(event_dict[key])
     return event_dict
 
 

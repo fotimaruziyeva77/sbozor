@@ -20,8 +20,24 @@ services:
   core-api:
     build:
       target: dev
+    # `command` MERGE QILINMAYDI — u bazadagi ro'yxatni butunlay ALMASHTIRADI,
+    # shuning uchun `--proxy-headers`/`--forwarded-allow-ips` bu yerda ham
+    # takrorlanishi shart (CR-04). Aks holda dev stek (`npm run up` bu faylni
+    # AVTOMATIK yuklaydi) tuzatilmagan holatda qolardi va nginx ortidagi
+    # haqiqiy mijoz IP'si yana yo'qolardi.
+    # Xost porti FAQAT 127.0.0.1 ga bog'lanadi (pastda), ya'ni `*` shu yerda ham
+    # xavfsiz: sarlavhani soxtalashtirish uchun xostda allaqachon bo'lish kerak.
     command:
-      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+      - "uvicorn"
+      - "app.main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--reload"
+      - "--proxy-headers"
+      - "--forwarded-allow-ips"
+      - "${FORWARDED_ALLOW_IPS:-*}"
     working_dir: /app/services/core-api
     volumes:
       - .:/app
