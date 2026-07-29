@@ -1,11 +1,17 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { ApiError, apiFetch, errorMessageKey } from "@/lib/api-client";
 import type { ErrorMessageKey } from "@/lib/api-client";
 import type { ApiLocale } from "@/lib/api-types";
 import {
+  auditListResponseSchema,
   createUserResponseSchema,
   emptyResponseSchema,
   resetPasswordResponseSchema,
@@ -131,6 +137,75 @@ export function useResetPassword() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
     },
+  });
+}
+
+/* ---------------------------------------------------------------------------
+ * Audit ko'rish (D-11, D-12)
+ * ------------------------------------------------------------------------- */
+
+/** `/api/v1/audit`. */
+export const AUDIT_PATH = "/audit";
+
+/**
+ * Bitta sahifadagi yozuvlar soni.
+ *
+ * Backend chegarasi 200 (`AUDIT_PAGE_SIZE_MAX`); 50 — o'qish uchun qulay
+ * sahifa va "ko'proq yuklash" tugmasi qolganini kursor bilan olib keladi.
+ */
+export const AUDIT_PAGE_SIZE = 50;
+
+/** Filtrlar (D-12 minimal to'plami). Bo'sh satr — "filtr qo'yilmagan". */
+export type AuditFilters = {
+  from: string;
+  to: string;
+  actorUserId: string;
+  action: string;
+  tableName: string;
+};
+
+export const EMPTY_AUDIT_FILTERS: AuditFilters = {
+  from: "",
+  to: "",
+  actorUserId: "",
+  action: "",
+  tableName: "",
+};
+
+function buildAuditPath(filters: AuditFilters, cursor: string | null): string {
+  const params = new URLSearchParams();
+  // Backend nomlari `AuditQuery` dan: `from`/`to` alias, qolgani snake_case.
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  if (filters.actorUserId) params.set("actor_user_id", filters.actorUserId);
+  if (filters.action) params.set("action", filters.action);
+  if (filters.tableName) params.set("table_name", filters.tableName);
+  params.set("limit", String(AUDIT_PAGE_SIZE));
+  if (cursor) params.set("cursor", cursor);
+  return `${AUDIT_PATH}?${params.toString()}`;
+}
+
+/**
+ * Filtrlanadigan audit ro'yxati — KURSOR bilan sahifalanadi.
+ *
+ * Sahifa RAQAMI ishlatilmaydi va bu backend qarori (01-07): auditni ko'rish
+ * o'zi yangi `read` qatorini yozadi (D-09), ya'ni jurnal so'rovlar ORASIDA
+ * o'sadi. Raqamli sahifalashda o'sha yangi qatorlar sahifalarni surib
+ * yuborardi va foydalanuvchi 2-sahifada 1-sahifadagi yozuvni qayta ko'rardi.
+ * `next_cursor` esa `(at, id)` juftligi ustidagi qat'iy chegara.
+ *
+ * `queryKey` filtrlarni to'liq o'z ichiga oladi: filtr o'zgarganda kesh
+ * yangi zanjir boshlaydi va eski sahifalar aralashib ketmaydi.
+ */
+export function useAuditQuery(filters: AuditFilters) {
+  return useInfiniteQuery({
+    queryKey: ["audit", filters],
+    queryFn: ({ pageParam }) =>
+      apiFetch(buildAuditPath(filters, pageParam), {
+        schema: auditListResponseSchema,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.next_cursor,
   });
 }
 

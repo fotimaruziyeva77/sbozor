@@ -6,6 +6,7 @@ import {
   getTranslations,
   setRequestLocale,
 } from "next-intl/server";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { Toaster } from "sonner";
 
 import { routing } from "@/i18n/routing";
@@ -65,17 +66,23 @@ export default async function LocaleLayout({
     <html lang={locale} className="h-full">
       <body className="flex min-h-full flex-col">
         {/*
-          Provayder tartibi: i18n -> server holati keshi -> sessiya.
+          Provayder tartibi: i18n -> URL holati -> server holati keshi -> sessiya.
           `AuthProvider` eng ichkarida, chunki sessiya tiklash `apiFetch` ga
           tayanadi va u `QueryProvider` bilan bir xil daraxtda bo'lishi kerak.
+
+          `NuqsAdapter` — URL qidiruv parametrlarini holat sifatida o'qiydigan
+          komponentlar uchun (audit filtrlari). U marshrutlashga bog'liq,
+          shuning uchun keshdan ham, sessiyadan ham TASHQARIDA turadi.
         */}
         <NextIntlClientProvider messages={messages}>
-          <QueryProvider>
-            <AuthProvider>
-              {children}
-              <Toaster position="top-center" richColors />
-            </AuthProvider>
-          </QueryProvider>
+          <NuqsAdapter>
+            <QueryProvider>
+              <AuthProvider>
+                {children}
+                <Toaster position="top-center" richColors />
+              </AuthProvider>
+            </QueryProvider>
+          </NuqsAdapter>
         </NextIntlClientProvider>
       </body>
     </html>

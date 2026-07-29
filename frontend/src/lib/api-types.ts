@@ -185,6 +185,92 @@ export const resetPasswordResponseSchema = z.object({
   temporary_password: z.string(),
 });
 
+/* ---------------------------------------------------------------------------
+ * Audit ko'rish (01-07 `app/api/v1/audit.py`, D-11 / D-12)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * `audit_log.action` qiymatlari — `sbozor_core.enums.AuditAction` nusxasi.
+ *
+ * Ro'yxat FILTR variantlarini quradi va har bir qiymat uchun
+ * `audit.actions.<qiymat>` tarjima kaliti UCHALA tilda bo'lishi shart.
+ * Ikkisining mosligi `frontend/scripts/audit-actions.test.mjs` da qulflangan:
+ * backend yangi hodisa qo'shsa-yu kalit qo'shilmasa, jurnalda tarjimasiz
+ * texnik identifikator ko'rinib qolardi.
+ */
+export const AUDIT_ACTIONS = [
+  "insert",
+  "update",
+  "delete",
+  "read",
+  "login",
+  "login_failed",
+  "logout",
+  "market_selected",
+  "password_reset",
+  "password_changed",
+  "user_blocked",
+  "user_unblocked",
+  "refresh_reuse_detected",
+] as const;
+export type AuditActionValue = (typeof AUDIT_ACTIONS)[number];
+
+export function isAuditAction(value: string): value is AuditActionValue {
+  return (AUDIT_ACTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * 1-fazada auditga tushadigan jadvallar
+ * (`services/core-api/app/security/audit.py` konstantalari + trigger
+ * o'rnatilgan jadvallar).
+ *
+ * Ro'yxatda YO'Q nom xato emas: keyingi fazalar yangi jadval qo'shadi va
+ * u tarjimasiz, xom nomi bilan ko'rinadi — bu jadval nomi texnik
+ * identifikator bo'lgani uchun to'g'ri xulq (D-16 ruhida).
+ */
+export const AUDIT_TABLES = [
+  "users",
+  "user_market_roles",
+  "markets",
+  "refresh_tokens",
+  "audit_log",
+] as const;
+export type AuditTableValue = (typeof AUDIT_TABLES)[number];
+
+export function isAuditTable(value: string): value is AuditTableValue {
+  return (AUDIT_TABLES as readonly string[]).includes(value);
+}
+
+/**
+ * `GET /api/v1/audit` qatori (D-12: kim / qachon / nima / eski->yangi).
+ *
+ * `old_value`/`new_value` backend'da ALLAQACHON maskalangan
+ * (`mask_sensitive()` sezgir kalitlarni `"***"` ga almashtiradi, T-01-52).
+ * UI qiymatni o'zgartirmasdan ko'rsatadi va qo'shimcha maydon so'ramaydi.
+ */
+export const auditEntrySchema = z.object({
+  id: z.number().int(),
+  at: z.string(),
+  business_date: z.string(),
+  actor_user_id: z.uuid().nullable(),
+  actor_label: z.string().nullable(),
+  action: z.string(),
+  table_name: z.string(),
+  row_id: z.uuid().nullable(),
+  changed_keys: z.array(z.string()).nullable(),
+  old_value: z.record(z.string(), z.unknown()).nullable(),
+  new_value: z.record(z.string(), z.unknown()).nullable(),
+  request_id: z.string().nullable(),
+  source: z.string(),
+});
+export type AuditEntry = z.infer<typeof auditEntrySchema>;
+
+/** `next_cursor === null` — oxirgi sahifa (keyset, OFFSET yo'q). */
+export const auditListResponseSchema = z.object({
+  items: z.array(auditEntrySchema),
+  next_cursor: z.string().nullable(),
+});
+
 /**
  * Xato tanasi. FastAPI validatsiya xatosida (`422`) `detail` MASSIV bo'ladi,
  * shuning uchun `z.string()` emas, `z.unknown()`: shaklni `api-client`
