@@ -30,9 +30,13 @@ from datetime import UTC, date, datetime
 
 import psycopg
 import pytest
+from fixtures.financial import (
+    INSERT_CHARGE_AT,
+    INSERT_CHARGE_WITH_BUSINESS_DATE,
+    SELECT_DATES,
+    FinancialProbe,
+)
 from sbozor_core.timeutil import business_date
-
-from fixtures.financial import CHILD_TABLE, INSERT_CHARGE_AT, FinancialProbe
 
 # RESEARCH Pattern 7 dagi o'lchangan chegara jadvali.
 EVENING_UTC = datetime(2026, 11, 5, 18, 30, tzinfo=UTC)
@@ -44,10 +48,6 @@ EXPECTED = {
     AFTER_MIDNIGHT_UTC: date(2026, 11, 6),
     EARLY_MORNING_UTC: date(2026, 11, 5),
 }
-
-SELECT_DATES = (
-    f"SELECT business_date, (created_at)::date FROM {CHILD_TABLE} WHERE stall_id = %s"
-)
 
 
 def _insert_at(probe: FinancialProbe, stall_index: int, moment: datetime) -> tuple[date, date]:
@@ -133,8 +133,7 @@ def test_business_date_cannot_be_written_directly(financial_probe: FinancialProb
     """
     with pytest.raises(psycopg.errors.GeneratedAlways) as excinfo:
         financial_probe.conn.execute(
-            f"INSERT INTO {CHILD_TABLE} (market_id, stall_id, amount_soum, business_date) "
-            "VALUES (%s, %s, %s, %s)",
+            INSERT_CHARGE_WITH_BUSINESS_DATE,
             (
                 str(financial_probe.market_a),
                 str(financial_probe.stalls_a[0]),

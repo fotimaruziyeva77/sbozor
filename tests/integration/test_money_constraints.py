@@ -23,11 +23,8 @@ from __future__ import annotations
 
 import psycopg
 import pytest
+from fixtures.financial import CHILD_TABLE, INSERT_CHARGE, SELECT_AMOUNT, FinancialProbe
 from sbozor_core.money import MAX_SAFE_SOUM
-
-from fixtures.financial import CHILD_TABLE, INSERT_CHARGE, FinancialProbe
-
-SELECT_AMOUNT = f"SELECT amount_soum FROM {CHILD_TABLE} WHERE stall_id = %s"
 
 AMOUNT_TYPE = (
     "SELECT data_type FROM information_schema.columns "

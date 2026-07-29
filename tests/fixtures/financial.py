@@ -40,38 +40,47 @@ __all__ = [
     "INSERT_CHARGE",
     "INSERT_CHARGE_AT",
     "INSERT_CHARGE_IDEMPOTENT",
+    "INSERT_CHARGE_WITH_BUSINESS_DATE",
     "PARENT_TABLE",
+    "SELECT_AMOUNT",
+    "SELECT_DATES",
     "SELECT_ROWS",
     "FinancialProbe",
     "create_financial_probe",
     "drop_financial_probe",
 ]
 
+# Jadval nomlari SQL matnlarida LITERAL yozilgan (o'zgaruvchi bilan
+# birlashtirilmagan) — `tests/tenancy/test_composite_fk.py` da o'rnatilgan
+# qoida: bu yerda dinamiklikka ehtiyoj yo'q, literal shakl SQL'ni o'qishni
+# osonlashtiradi va ruff `S608` yolg'on-musbatini ham keltirib chiqarmaydi.
+# Quyidagi ikki konstanta faqat jadval NOMI kerak bo'lgan joylar uchun
+# (`financial_guard_statements()` argumenti, `information_schema` so'rovi).
 PARENT_TABLE = "probe_stalls"
 CHILD_TABLE = "probe_charges"
 
 _DROP_SQL = (
-    f"DROP TABLE IF EXISTS {CHILD_TABLE}",
-    f"DROP TABLE IF EXISTS {PARENT_TABLE}",
+    "DROP TABLE IF EXISTS probe_charges",
+    "DROP TABLE IF EXISTS probe_stalls",
 )
 
 # Ota-jadval: `stalls` ning minimal shakli. `UNIQUE(market_id, id)` —
 # composite FK ning MAQSADI (T-01-26): usiz bola-jadval `(market_id, id)`
 # juftligiga havola qila olmaydi.
-_CREATE_PARENT = f"""
-CREATE TABLE {PARENT_TABLE} (
+_CREATE_PARENT = """
+CREATE TABLE probe_stalls (
     market_id uuid NOT NULL,
     id        uuid NOT NULL DEFAULT uuidv7(),
-    CONSTRAINT pk_{PARENT_TABLE} PRIMARY KEY (id),
-    CONSTRAINT uq_{PARENT_TABLE}_market_id_id UNIQUE (market_id, id)
+    CONSTRAINT pk_probe_stalls PRIMARY KEY (id),
+    CONSTRAINT uq_probe_stalls_market_id_id UNIQUE (market_id, id)
 )
 """
 
 # Bola-jadval `financial_guards()` GACHA bo'lgan holatda yaratiladi:
 # `business_date`, `CHECK`, `UNIQUE` va composite FK ni AYNAN o'sha yordamchi
 # qo'shadi. Ya'ni test yordamchining hissasini alohida o'lchay oladi.
-_CREATE_CHILD = f"""
-CREATE TABLE {CHILD_TABLE} (
+_CREATE_CHILD = """
+CREATE TABLE probe_charges (
     id          uuid PRIMARY KEY DEFAULT uuidv7(),
     market_id   uuid NOT NULL,
     stall_id    uuid NOT NULL,
@@ -80,21 +89,28 @@ CREATE TABLE {CHILD_TABLE} (
 )
 """
 
-_INSERT_PARENT = f"INSERT INTO {PARENT_TABLE} (market_id, id) VALUES (%s, %s)"
+_INSERT_PARENT = "INSERT INTO probe_stalls (market_id, id) VALUES (%s, %s)"
 
-INSERT_CHARGE = f"INSERT INTO {CHILD_TABLE} (market_id, stall_id, amount_soum) VALUES (%s, %s, %s)"
+INSERT_CHARGE = "INSERT INTO probe_charges (market_id, stall_id, amount_soum) VALUES (%s, %s, %s)"
 INSERT_CHARGE_AT = (
-    f"INSERT INTO {CHILD_TABLE} (market_id, stall_id, amount_soum, created_at) "
+    "INSERT INTO probe_charges (market_id, stall_id, amount_soum, created_at) "
+    "VALUES (%s, %s, %s, %s)"
+)
+INSERT_CHARGE_WITH_BUSINESS_DATE = (
+    "INSERT INTO probe_charges (market_id, stall_id, amount_soum, business_date) "
     "VALUES (%s, %s, %s, %s)"
 )
 INSERT_CHARGE_IDEMPOTENT = (
-    f"{INSERT_CHARGE} ON CONFLICT (market_id, stall_id, business_date) DO NOTHING"
+    "INSERT INTO probe_charges (market_id, stall_id, amount_soum) VALUES (%s, %s, %s) "
+    "ON CONFLICT (market_id, stall_id, business_date) DO NOTHING"
 )
 
 SELECT_ROWS = (
-    f"SELECT amount_soum, business_date FROM {CHILD_TABLE} "
+    "SELECT amount_soum, business_date FROM probe_charges "
     "WHERE market_id = %s AND stall_id = %s ORDER BY business_date"
 )
+SELECT_AMOUNT = "SELECT amount_soum FROM probe_charges WHERE stall_id = %s"
+SELECT_DATES = "SELECT business_date, (created_at)::date FROM probe_charges WHERE stall_id = %s"
 
 
 @dataclass(frozen=True)

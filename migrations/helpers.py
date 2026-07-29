@@ -34,7 +34,9 @@ from alembic import op
 
 __all__ = [
     "APP_ROLE",
+    "BUSINESS_DATE_EXPR",
     "DEFAULT_DML",
+    "MARKET_TZ_LITERAL",
     "OWNER_ROLE",
     "attach_audit_trigger",
     "audit_trigger_name",
@@ -44,6 +46,8 @@ __all__ = [
     "drop_entity",
     "enable_rls",
     "enable_tenant_rls",
+    "financial_guard_statements",
+    "financial_guards",
     "grant_app_dml",
     "restore_force",
     "revoke_app_all",
@@ -212,3 +216,117 @@ def detach_audit_trigger(table: str) -> None:
     """`attach_audit_trigger()` jufti — `downgrade()` uchun."""
     tbl = _ident(table)
     op.execute(f"DROP TRIGGER IF EXISTS {audit_trigger_name(tbl)} ON {tbl}")
+
+
+# ===========================================================================
+# MOLIYAVIY KONSTRAYT ASBOBLAR TO'PLAMI (ROADMAP mezoni #5, FOUND-05)
+# ===========================================================================
+
+MARKET_TZ_LITERAL = "Asia/Tashkent"
+"""Biznes-kun chegarasi hisoblanadigan mintaqa.
+
+`sbozor_core.timeutil.MARKET_TZ` bilan bir xil bo'lishi SHART —
+`tests/integration/test_business_date.py` DB natijasini kod-qatlami natijasi
+bilan uchala chegara holatida solishtiradi.
+"""
+
+BUSINESS_DATE_EXPR = f"((created_at AT TIME ZONE '{MARKET_TZ_LITERAL}')::date)"
+"""`business_date` generated column ifodasi.
+
+IKKI ARGUMENTLI shakl ATAYIN: `timezone(text, timestamptz)` PostgreSQL'da
+`provolatile = 'i'` (IMMUTABLE), shuning uchun generated column'da ruxsat
+etiladi. Bitta argumentli `timezone(timestamptz)` esa `TimeZone` GUC'iga
+bog'liq va `'s'` (STABLE) — u `ERROR: generation expression is not immutable`
+beradi.
+"""
+
+
+def financial_guard_statements(
+    table: str,
+    *,
+    unique_cols: list[str],
+    amount_col: str = "amount_soum",
+    parent: tuple[str, str] | None = None,
+) -> list[str]:
+    """`financial_guards()` chiqaradigan DDL operatorlari — SOF funksiya.
+
+    Ajratilishining sababi: `financial_guards()` `alembic.op` ga tayanadi va
+    migratsiya konteksti tashqarisida chaqirib bo'lmaydi. Testlar shu ro'yxatni
+    oladi va HAQIQIY jadvalda bajaradi, ya'ni ular yordamchining nusxasini
+    emas, AYNAN o'zi chiqaradigan DDL'ni isbotlaydi. Nusxa yozilganda test
+    yashil qolib, migratsiya boshqa narsa qilishi mumkin edi.
+    """
+    tbl = _ident(table)
+    amount = _ident(amount_col)
+    keys = [_ident(col) for col in unique_cols]
+    if not keys:
+        raise ValueError(f"{table}: `unique_cols` bo'sh — idempotentlik kaliti aniqlanmagan")
+
+    statements = [
+        f"ALTER TABLE {tbl} ADD COLUMN business_date date "
+        f"GENERATED ALWAYS AS {BUSINESS_DATE_EXPR} STORED",
+        f"ALTER TABLE {tbl} ADD CONSTRAINT ck_{tbl}_{amount}_positive CHECK ({amount} > 0)",
+        f"ALTER TABLE {tbl} ADD CONSTRAINT uq_{tbl}_business_day "
+        f"UNIQUE (market_id, {', '.join(keys)}, business_date)",
+    ]
+
+    if parent is not None:
+        parent_table, child_col = _ident(parent[0]), _ident(parent[1])
+        statements.append(
+            f"ALTER TABLE {tbl} ADD CONSTRAINT fk_{tbl}_{parent_table} "
+            f"FOREIGN KEY (market_id, {child_col}) "
+            f"REFERENCES {parent_table} (market_id, id)"
+        )
+
+    return statements
+
+
+def financial_guards(
+    table: str,
+    *,
+    unique_cols: list[str],
+    amount_col: str = "amount_soum",
+    parent: tuple[str, str] | None = None,
+) -> None:
+    """Moliyaviy jadvalga to'rt konstraytni BIRGA o'rnatadi (mezon #5).
+
+    Chiqadigan DDL::
+
+        business_date date GENERATED ALWAYS AS
+            ((created_at AT TIME ZONE 'Asia/Tashkent')::date) STORED
+        CHECK  (amount_soum > 0)
+        UNIQUE (market_id, <unique_cols...>, business_date)
+        FOREIGN KEY (market_id, <child_col>) REFERENCES <parent> (market_id, id)
+
+    Har biri boshqa nosozlikni yopadi va ular ALOHIDA unutilishi mumkin:
+
+    * `business_date` — mahalliy yarim tundan keyingi besh soat naive UTC
+      sanasida OLDINGI kunga tushadi. Ustun DB tomonda hisoblanadi, ya'ni
+      kod-qatlamida ikkinchi haqiqat manbai paydo bo'lmaydi (Pitfall 6).
+    * `CHECK (amount_soum > 0)` — pul `bigint` so'm; `float` TAQIQLANGAN
+      (yaxlitlanish drifti aynan mahsulot bartaraf etadigan nizoni tug'diradi).
+    * `UNIQUE(market_id, ..., business_date)` — kunni qayta yopish ikkinchi
+      hisob yaratmaydi (`ON CONFLICT DO NOTHING` bilan birga, BILL-01).
+    * composite FK — A bozori qatori B bozorining rastasiga havola qila
+      olmaydi; bu RLS emas, SXEMA darajasidagi kafolat.
+
+    BU YORDAMCHI 2- VA 6-FAZALARDA HAR BIR MOLIYAVIY JADVAL UCHUN MAJBURIY.
+    `sbozor_core.schema_contract.FINANCIAL_TABLES` reyestri +
+    `tests/tenancy/test_meta.py::test_financial_tables_have_guards` uni
+    unutishni CI'da bloklaydi: jadval tug'ilgan kuni darvoza yopiladi.
+
+    CHEKLOV — PER-MARKET TIMEZONE: mintaqa ifodada LITERAL yozilgan
+    (`'Asia/Tashkent'`). Generated column BOSHQA JADVALGA MUROJAAT QILA
+    OLMAYDI, ya'ni `markets.timezone` ustunini bu yerdan o'qib bo'lmaydi.
+    Bozorga xos mintaqa kerak bo'lganda yagona yo'l — `timezone` ni qatorning
+    O'ZIGA denormalizatsiya qilish va ifodani `(created_at AT TIME ZONE
+    timezone)::date` ga o'zgartirish; bu jadvalni qayta yozadigan migratsiya
+    bo'ladi. MVP'da barcha bozorlar `Asia/Tashkent` da.
+    """
+    for statement in financial_guard_statements(
+        table,
+        unique_cols=unique_cols,
+        amount_col=amount_col,
+        parent=parent,
+    ):
+        op.execute(statement)

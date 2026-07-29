@@ -30,7 +30,6 @@ from datetime import UTC, datetime, timedelta
 
 import psycopg
 import pytest
-
 from fixtures.financial import (
     INSERT_CHARGE,
     INSERT_CHARGE_AT,
@@ -101,9 +100,7 @@ def test_next_business_day_is_a_separate_charge(financial_probe: FinancialProbe)
     """
     market, stall = financial_probe.market_a, financial_probe.stalls_a[0]
 
-    financial_probe.conn.execute(
-        INSERT_CHARGE_AT, (str(market), str(stall), FIRST_AMOUNT, DAY_ONE)
-    )
+    financial_probe.conn.execute(INSERT_CHARGE_AT, (str(market), str(stall), FIRST_AMOUNT, DAY_ONE))
     financial_probe.conn.execute(
         INSERT_CHARGE_AT, (str(market), str(stall), SECOND_AMOUNT, DAY_TWO)
     )
