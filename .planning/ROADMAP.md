@@ -75,7 +75,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-04-PLAN.md — Alembic async infra, RLS asboblari (NULLIF), identifikatsiya sxemasi, SECURITY DEFINER login funksiyalari, tenancy meta-test (W3)
+- [x] 01-04-PLAN.md — Alembic async infra, RLS asboblari (NULLIF), identifikatsiya sxemasi, SECURITY DEFINER login funksiyalari, tenancy meta-test (W3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
