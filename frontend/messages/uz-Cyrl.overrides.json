@@ -1,0 +1,19 @@
+{
+  "_comment": "YAGONA qo'lda tahrirlanadigan kirill fayli (D-14). `uz-Cyrl.json` bundan va `uz-Latn.json` dan avtomatik hosil qilinadi — unga qo'l tegizilmaydi. Ustuvorlik: messages > words > mapping. `messages` — to'liq kalit (`audit.resultCount`) → to'liq kirillcha xabar; transliterator butunlay chetlab o'tiladi, shuning uchun ICU platsholderlarini O'ZINGIZ to'g'ri ko'chiring. `words` — bitta so'z → kirillcha shakl; bosh harf holati manbadan ko'chiriladi (`Protsent` → `Процент`).",
+
+  "messages": {},
+
+  "words": {
+    "SBOZOR": "SBOZOR",
+
+    "Karmana": "Кармана",
+    "Navoiy": "Навоий",
+
+    "protsent": "процент",
+    "protsess": "процесс",
+    "litsenziya": "лицензия",
+    "aktsiya": "акция",
+    "sertifikat": "сертификат",
+    "terminal": "терминал"
+  }
+}

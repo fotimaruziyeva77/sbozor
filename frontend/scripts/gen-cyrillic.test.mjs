@@ -47,6 +47,22 @@ describe("transliterate — apostrof variantlari", () => {
   it("qolgan apostrof tutuq belgisiga (ъ) aylanadi", () => {
     assert.equal(transliterate("ma'no"), "маъно");
   });
+
+  it("apostrof-digraf `yo` dan kuchliroq bog'lanadi", () => {
+    // `yo'q` = y + o' (ikkita harf), `yo` + ' EMAS.
+    assert.equal(transliterate("yo'q"), "йўқ");
+    assert.equal(transliterate("yo'l"), "йўл");
+    assert.equal(transliterate("sho'r"), "шўр");
+  });
+
+  it("apostrofsiz `yo` odatdagidek ё beradi", () => {
+    assert.equal(transliterate("yog'"), "ёғ");
+    assert.equal(transliterate("yozuv"), "ёзув");
+  });
+
+  it("`ya` + apostrof tutuq belgisini saqlaydi", () => {
+    assert.equal(transliterate("ya'ni"), "яъни");
+  });
 });
 
 describe("transliterate — e / э noaniqligi", () => {
