@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { ROLES, type Role } from "@/lib/rbac";
+
 /**
  * core-api HTTP kontraktining runtime sxemalari (01-06 / 01-07).
  *
@@ -15,6 +17,21 @@ export const LOCALES = ["uz-Latn", "uz-Cyrl", "ru"] as const;
 
 export const localeSchema = z.enum(LOCALES);
 export type ApiLocale = z.infer<typeof localeSchema>;
+
+/**
+ * Til ENDONIMLARI — ataylab tarjima fayllarida emas (01-08 qarori).
+ *
+ * "Русский" ni o'zbekchaga o'girish tanlovni o'qib bo'lmas qiladi:
+ * foydalanuvchi ro'yxatdan o'zi tushunadigan YAGONA so'zni izlaydi. Shu
+ * sababli yorliqlar `next-intl` katalogidan tashqarida va bitta joyda
+ * turadi — til almashtirgich ham, yangi foydalanuvchi formasi ham shu
+ * ro'yxatni o'qiydi va ular ajralib keta olmaydi.
+ */
+export const LOCALE_LABELS: Readonly<Record<ApiLocale, string>> = {
+  "uz-Latn": "O'zbekcha",
+  "uz-Cyrl": "Ўзбекча",
+  ru: "Русский",
+};
 
 /**
  * Pul yordamchisi (Pitfall 7).
@@ -92,6 +109,82 @@ export type MeResponse = z.infer<typeof meResponseSchema>;
 /** `PATCH /api/v1/me` javobi — faqat saqlangan til. */
 export const meLocaleResponseSchema = z.object({ locale: localeSchema });
 
+/* ---------------------------------------------------------------------------
+ * Foydalanuvchi boshqaruvi (01-07 `app/api/v1/users.py`)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * D-04 ning ikkinchi bosqichi — bozor admini bera oladigan rollar.
+ *
+ * Nomi backend'dagi `services/core-api/app/api/v1/users.py::
+ * MARKET_ADMIN_ASSIGNABLE_ROLES` bilan AYNAN bir xil va qiymati ham
+ * o'sha `frozenset({CASHIER, INSPECTOR})` ning nusxasi.
+ *
+ * DIQQAT: bu ro'yxat XAVFSIZLIK CHEGARASI EMAS. Haqiqiy darvoza serverda,
+ * `_assert_roles_assignable()` ichida va u yaratishdan OLDIN 403
+ * (`role_not_allowed`) qaytaradi. Bu yerdagi nusxa faqat "ko'rinmasin"
+ * degan savolga javob beradi: bozor admini bera OLMAYDIGAN rolni forma
+ * umuman ko'rsatmaydi, ya'ni u kutilgan rad javobini oldindan biladi.
+ * Ikkisi ajralib qolsa foydalanuvchi 403 oladi — ma'lumot ochilmaydi.
+ */
+export const MARKET_ADMIN_ASSIGNABLE_ROLES = ["cashier", "inspector"] as const;
+
+/**
+ * Yaratish formasida ko'rsatiladigan rollar (D-04 darajasi bo'yicha).
+ *
+ * Platforma admini — beshala rol; qolgan hamma (jumladan bozor admini) —
+ * faqat `MARKET_ADMIN_ASSIGNABLE_ROLES`. Ro'yxat SHU YERDA quriladi, ya'ni
+ * komponentda qattiq yozilgan rol nomlari bo'lmaydi va D-04 ni o'zgartirish
+ * bitta joyni tahrirlash bilan cheklanadi.
+ */
+export function assignableRoles(isPlatformAdmin: boolean): readonly Role[] {
+  return isPlatformAdmin ? ROLES : MARKET_ADMIN_ASSIGNABLE_ROLES;
+}
+
+/**
+ * `GET /api/v1/users` qatori.
+ *
+ * `password_hash` bu yerda YO'Q va bo'lishi ham mumkin emas —
+ * `auth_list_users()` uni umuman qaytarmaydi (01-07).
+ *
+ * `locale` ATAYIN `z.string()`, `localeSchema` emas: backend uni `str`
+ * sifatida qaytaradi va bir kun yangi til qo'shilsa, ro'yxat butunlay
+ * yiqilmasligi kerak — bu maydon faqat ko'rsatish uchun.
+ */
+export const userListItemSchema = z.object({
+  id: z.uuid(),
+  phone: z.string(),
+  full_name: z.string().nullable(),
+  roles: z.array(z.string()),
+  is_active: z.boolean(),
+  must_change_password: z.boolean(),
+  locale: z.string(),
+  created_at: z.string(),
+});
+export type UserListItem = z.infer<typeof userListItemSchema>;
+
+export const userListResponseSchema = z.object({
+  items: z.array(userListItemSchema),
+});
+
+/**
+ * `POST /api/v1/users` javobi (D-02).
+ *
+ * `temporary_password` BIR MARTA ochiq keladi va boshqa hech qachon
+ * qaytarilmaydi (DB'da faqat Argon2id hash yashaydi). Shuning uchun uni
+ * faqat dialog holatida ushlab turish mumkin — hech qanday keshga,
+ * URL'ga yoki brauzer omboriga tushmasligi kerak (T-01-68).
+ */
+export const createUserResponseSchema = z.object({
+  id: z.uuid(),
+  temporary_password: z.string(),
+});
+
+/** `POST /api/v1/users/{id}/reset-password` javobi (D-02). */
+export const resetPasswordResponseSchema = z.object({
+  temporary_password: z.string(),
+});
+
 /**
  * Xato tanasi. FastAPI validatsiya xatosida (`422`) `detail` MASSIV bo'ladi,
  * shuning uchun `z.string()` emas, `z.unknown()`: shaklni `api-client`
@@ -116,5 +209,10 @@ export const ERROR_CODES = [
   "weak_password",
   "role_not_allowed",
   "password_change_required",
+  // 01-07 foydalanuvchi boshqaruvi va audit ko'rish kodlari.
+  "phone_taken",
+  "cannot_block_self",
+  "not_found",
+  "invalid_cursor",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

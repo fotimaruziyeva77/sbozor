@@ -6,7 +6,11 @@ import { useLocale, useTranslations } from "next-intl";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { apiFetch } from "@/lib/api-client";
 import type { ApiLocale } from "@/lib/api-types";
-import { meLocaleResponseSchema } from "@/lib/api-types";
+import {
+  LOCALE_LABELS,
+  LOCALES,
+  meLocaleResponseSchema,
+} from "@/lib/api-types";
 import { cn } from "@/lib/cn";
 import { useAuthStore } from "@/lib/auth-store";
 
@@ -35,13 +39,10 @@ const ME_PATH = "/me";
  * Yorliqlar ATAYIN tarjima fayllarida EMAS: til nomi har doim O'Z tilida
  * yoziladi (endonim). "Русский" ni o'zbekchaga tarjima qilish tanlovni
  * o'qib bo'lmas holga keltirardi — foydalanuvchi o'zi tushunadigan yagona
- * variantni izlaydi.
+ * variantni izlaydi. Ro'yxat `api-types.ts` da: yangi foydalanuvchi
+ * formasidagi til tanlovi ham SHU manbadan o'qiydi va ikkisi ajralib
+ * keta olmaydi.
  */
-const LOCALE_OPTIONS: readonly { code: ApiLocale; label: string }[] = [
-  { code: "uz-Latn", label: "O'zbekcha" },
-  { code: "uz-Cyrl", label: "Ўзбекча" },
-  { code: "ru", label: "Русский" },
-];
 
 export function LocaleSwitcher() {
   const t = useTranslations("common");
@@ -80,8 +81,8 @@ export function LocaleSwitcher() {
       className="inline-flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"
       role="group"
     >
-      {LOCALE_OPTIONS.map((option) => {
-        const isActive = option.code === active;
+      {LOCALES.map((code) => {
+        const isActive = code === active;
         return (
           <button
             aria-current={isActive ? "true" : undefined}
@@ -93,12 +94,12 @@ export function LocaleSwitcher() {
                 : "text-text-muted hover:bg-surface-muted hover:text-text",
             )}
             disabled={isPending}
-            key={option.code}
-            lang={option.code}
-            onClick={() => change(option.code)}
+            key={code}
+            lang={code}
+            onClick={() => change(code)}
             type="button"
           >
-            {option.label}
+            {LOCALE_LABELS[code]}
           </button>
         );
       })}
