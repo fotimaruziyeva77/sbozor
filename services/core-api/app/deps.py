@@ -1,19 +1,29 @@
 """FastAPI dependency'lari — principal, bloklash keshi va tenant sessiyasi.
 
 =============================================================================
-UCHTA DEPENDENCY, UCHTA ALOHIDA MAS'ULIYAT:
+TO'RTTA DEPENDENCY, TO'RTTA ALOHIDA MAS'ULIYAT:
 
 1. `get_current_principal` — KIM? Access tokenni tekshiradi va foydalanuvchi
    HALI BLOKLANMAGANINI Valkey keshi orqali aniqlaydi (D-08).
-2. `require_permission(...)` — NIMA QILISHI MUMKIN? Kodda qat'iy matritsa
+2. `require_password_current` — HOZIR KIRA OLADIMI? Vaqtinchalik parol
+   almashtirilmagan bo'lsa (D-02) hech qanday tenant/yozuv endpointiga
+   yo'l yo'q. Bu SESSIYA HOLATI darajasidagi nazorat.
+3. `require_permission(...)` — NIMA QILISHI MUMKIN? Kodda qat'iy matritsa
    (D-07). Bu FUNKSIYA darajasidagi nazorat.
-3. `get_tenant_session` — QAYSI BOZORDA? Tranzaksiya ochadi va tenant
+4. `get_tenant_session` — QAYSI BOZORDA? Tranzaksiya ochadi va tenant
    GUC'larini o'rnatadi. Bu MA'LUMOT darajasidagi nazorat (RLS).
 
-2 va 3 bir-birining o'rnini BOSMAYDI: `require_permission` "kassir to'lov
+3 va 4 bir-birining o'rnini BOSMAYDI: `require_permission` "kassir to'lov
 kirita oladi" deydi, RLS esa "faqat O'Z bozorida" deydi. Birinchisisiz
 har kim hamma narsani qila olardi; ikkinchisisiz kassir boshqa bozorning
 to'lovini kirita olardi.
+
+2 esa ikkalasidan ham OLDIN turadi va ikkalasiga ham BOG'LANGAN (3 va 4
+ning ichidan chaqiriladi) — ya'ni yangi endpoint yozgan odam darvozani
+"qo'shishni unutishi" MUMKIN EMAS. Uni faqat `get_current_principal` ga
+to'g'ridan-to'g'ri bog'langan endpointlar (`/auth/change-password`,
+`/auth/logout`, `/api/v1/me`) chetlab o'tadi — bu ATAYIN: aks holda
+foydalanuvchi parolni almashtira olmasdi va darvoza abadiy qulf bo'lardi.
 =============================================================================
 
 TENANT KONTEKSTI HAR TRANZAKSIYADA O'RNATILADI, ULANISHDA EMAS.
@@ -55,6 +65,7 @@ if TYPE_CHECKING:
 __all__ = [
     "AuthSessionDep",
     "CacheDep",
+    "CurrentPasswordDep",
     "Principal",
     "PrincipalDep",
     "SettingsDep",
@@ -67,6 +78,7 @@ __all__ = [
     "get_settings_dep",
     "get_tenant_session",
     "invalidate_user_state",
+    "require_password_current",
     "require_permission",
     "require_roles",
     "user_state_key",
@@ -75,16 +87,30 @@ __all__ = [
 log = structlog.get_logger(__name__)
 
 USER_STATE_TTL_SECONDS = 30
-"""Bloklash keshining amal qilish muddati (D-08).
+"""Foydalanuvchi holati keshining amal qilish muddati (D-08, D-02).
 
-Eng yomon holat — 30 soniya kechikish. Amalda kechikish YO'Q: bloklovchi
-endpoint (01-07) yozuvdan keyin `invalidate_user_state()` chaqiradi va
+Eng yomon holat — 30 soniya kechikish. Amalda kechikish YO'Q: holatni
+o'zgartiruvchi HAR BIR endpoint (`block`, `unblock`, `reset-password`,
+`change-password`) yozuvdan keyin `invalidate_user_state()` chaqiradi va
 keyingi so'rov DB'dan o'qiydi. TTL — o'sha invalidatsiya biror sababga
 ko'ra bajarilmay qolgan holat uchun yuqori chegara.
 """
 
-_STATE_ACTIVE = "1"
-_STATE_BLOCKED = "0"
+_FLAG_TRUE = "1"
+_FLAG_FALSE = "0"
+_STATE_FLAGS = frozenset({_FLAG_TRUE, _FLAG_FALSE})
+_STATE_CODE_LENGTH = 2
+"""Kesh qiymati — IKKI belgili holat kodi: `{faol}{majburiy-almashtirish}`.
+
+Bitta belgi (eski shakl) YETARLI EMAS: `must_change_password` endi kirish
+qarorining bir qismi (`require_password_current`), ya'ni u ham AYNAN
+o'sha qatordan, AYNAN o'sha kesh yozuvidan kelishi kerak. Ikkinchi kalit
+qo'shish ikkita mustaqil TTL va ikkita invalidatsiya nuqtasini
+tug'dirardi — o'shanda bittasi eskirib, ikkinchisi yangilanib qolishi
+mumkin edi.
+"""
+
+_PASSWORD_CHANGE_REQUIRED = "password_change_required"  # noqa: S105 — javob kodi, sir emas
 
 _bearer = HTTPBearer(auto_error=False, description="Access token (15 daqiqa)")
 
@@ -121,6 +147,15 @@ class Principal:
     is_platform_admin: bool
     request_id: str
     actor_label: str
+    must_change_password: bool = False
+    """D-02: vaqtinchalik parol hali almashtirilmagan.
+
+    Qiymat TOKENDAN OLINMAYDI — u `is_active` bilan BIR XIL manbadan
+    (`auth_user_state()` ning bitta qatori, D-08 keshi) keladi. Tokenga
+    yozilganda 15 daqiqalik access token parol almashtirilgandan keyin
+    ham "hali almashtirilmagan" deb turaverardi, ya'ni foydalanuvchi o'z
+    parolini almashtirib ham qulf ortida qolardi.
+    """
 
     @property
     def permissions(self) -> frozenset[Permission]:
@@ -195,15 +230,21 @@ async def get_auth_session(request: Request) -> AsyncIterator[AsyncSession]:
 AuthSessionDep = Annotated["AsyncSession", Depends(get_auth_session)]
 
 
-async def _is_user_active(
+async def _user_state(
     request: Request,
     cache: Redis,
     user_id: UUID,
-) -> bool:
-    """Foydalanuvchi holati: avval Valkey keshi, promahda DB (D-08).
+) -> tuple[bool, bool]:
+    """`(faol, majburiy-parol-almashtirish)`: avval Valkey keshi, promahda DB.
 
-    FAIL-OPEN EMAS: Valkey o'chgan bo'lsa ham javob DB'dan olinadi.
-    Keshning yagona vazifasi — har so'rovda `users` ga bormaslik.
+    IKKALA BAYROQ HAM BITTA `auth_user_state()` QATORIDAN olinadi va bitta
+    kesh yozuvi ostida saqlanadi (D-08 + D-02). Ularni ajratish ikkita
+    mustaqil TTL yaratardi va bittasi eskirib qolgan holat jimgina paydo
+    bo'lardi — masalan "parol almashtirildi" keshda, "bloklandi" esa DB'da.
+
+    FAIL-OPEN EMAS: Valkey o'chgan yoki qiymat tanib bo'lmas bo'lsa javob
+    DB'dan olinadi. Keshning yagona vazifasi — har so'rovda `users` ga
+    bormaslik.
     """
     key = user_state_key(user_id)
     try:
@@ -213,30 +254,50 @@ async def _is_user_active(
         cached = None
 
     if cached is not None:
-        return _decode_state(cached)
+        decoded = _decode_state(cached)
+        if decoded is not None:
+            return decoded
 
     async with _sessionmaker(request)() as session:
         state = await auth_repo.user_state(session, user_id)
 
     # Foydalanuvchi umuman topilmasa (o'chirilgan) — bloklangan deb qaraladi.
     is_active = bool(state and state.is_active)
+    must_change = bool(state and state.must_change_password)
 
     try:
         await cache.set(
             key,
-            _STATE_ACTIVE if is_active else _STATE_BLOCKED,
+            _encode_state(is_active=is_active, must_change=must_change),
             ex=USER_STATE_TTL_SECONDS,
         )
     except RedisError as exc:
         log.warning("user_state_cache_write_failed", user_id=str(user_id), error=str(exc))
 
-    return is_active
+    return is_active, must_change
 
 
-def _decode_state(cached: Any) -> bool:
-    """Valkey qiymatini `bool` ga o'giradi (klient `bytes` yoki `str` qaytaradi)."""
+def _encode_state(*, is_active: bool, must_change: bool) -> str:
+    """Ikki bayroqni ikki belgili kesh qiymatiga o'giradi."""
+    active = _FLAG_TRUE if is_active else _FLAG_FALSE
+    pending = _FLAG_TRUE if must_change else _FLAG_FALSE
+    return active + pending
+
+
+def _decode_state(cached: Any) -> tuple[bool, bool] | None:
+    """Kesh qiymatini bayroqlarga o'giradi; TANIB BO'LMASA `None`.
+
+    `None` — "kesh promahi" degani, "hammasi joyida" EMAS. Bu ataylab
+    fail-closed emas, fail-to-source: eski (bir belgili) yoki buzilgan
+    qiymat uchraganda javob DB'dan qayta olinadi. Aks holda deploy
+    paytida keshda qolgan eski format jimgina `must_change=false` deb
+    talqin qilinardi va darvoza 30 soniyaga ochilib qolardi.
+    """
     raw = cached.decode() if isinstance(cached, bytes | bytearray) else str(cached)
-    return raw == _STATE_ACTIVE
+    if len(raw) != _STATE_CODE_LENGTH or not set(raw) <= _STATE_FLAGS:
+        log.info("user_state_cache_value_unrecognized", length=len(raw))
+        return None
+    return raw[0] == _FLAG_TRUE, raw[1] == _FLAG_TRUE
 
 
 async def get_current_principal(
@@ -272,7 +333,10 @@ async def get_current_principal(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
-    if not await _is_user_active(request, cache, claims.user_id):
+    is_active, must_change = await _user_state(request, cache, claims.user_id)
+    if not is_active:
+        # BLOKLASH BIRINCHI: bloklangan hisob uchun javob "parolni
+        # almashtiring" bo'lmasligi kerak — u umuman kira olmaydi.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="account_blocked",
@@ -289,15 +353,45 @@ async def get_current_principal(
         is_platform_admin=claims.is_platform_admin,
         request_id=request_id,
         actor_label=actor_label_for(roles, is_platform_admin=claims.is_platform_admin),
+        must_change_password=must_change,
     )
 
 
 PrincipalDep = Annotated[Principal, Depends(get_current_principal)]
 
 
+async def require_password_current(principal: PrincipalDep) -> Principal:
+    """Vaqtinchalik parol almashtirilmaguncha kirishni RAD ETADI (D-02, CR-01).
+
+    NEGA 403, 401 EMAS: sessiya YAROQLI — token to'g'ri, foydalanuvchi
+    bloklanmagan. Rad etishning sababi da'voda emas, HOLATDA. 401 bo'lganda
+    frontend sessiyani o'lgan deb hisoblab login sahifasiga qaytarardi va
+    foydalanuvchi cheksiz siklga tushardi (kirish -> 401 -> kirish).
+
+    `password_change_required` kodi frontendning `api-types.ts` sida
+    ALLAQACHON zaxiralangan — u shu javobni ko'rgach parol almashtirish
+    formasiga yo'naltiradi.
+
+    Bu dependency ENDPOINTLARGA QO'LDA ULANMAYDI: u `get_tenant_session`,
+    `require_permission` va `require_roles` ning ICHIDAN chaqiriladi, ya'ni
+    har bir tenant/yozuv endpointi undan avtomatik o'tadi. Qo'lda ulash
+    "yangi endpointga qo'shishni unutish" xatosini ochiq qoldirardi.
+    """
+    if principal.must_change_password:
+        log.info("password_change_required", user_id=str(principal.user_id))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_PASSWORD_CHANGE_REQUIRED,
+        )
+    return principal
+
+
+CurrentPasswordDep = Annotated[Principal, Depends(require_password_current)]
+
+
 async def get_tenant_session(
     request: Request,
-    principal: PrincipalDep,
+    principal: CurrentPasswordDep,
 ) -> AsyncIterator[AsyncSession]:
     """Tenant konteksti O'RNATILGAN sessiya (RESEARCH Code Example §1).
 
@@ -340,9 +434,15 @@ def require_permission(perm: Permission) -> Callable[[Principal], Coroutine[Any,
     javob 404 bo'lishi SHART (T-01-47): u yerda RLS 0 qator beradi va
     endpoint "topilmadi" deydi. 403 bo'lganda javobning o'zi "bunday
     obyekt bor, lekin sizniki emas" degan ma'lumotni oshkor qilardi.
+
+    Parol darvozasi (`CurrentPasswordDep`) huquq tekshiruvidan OLDIN hal
+    bo'ladi: vaqtinchalik parol egasi uchun javob `password_change_required`
+    bo'ladi, `forbidden` EMAS. Testlar buni hisobga olishi SHART — aks
+    holda RBAC rad etish testi darvoza tufayli yashil qolib, huquq
+    matritsasini umuman sinamay qo'yardi (T-01-83).
     """
 
-    async def _require(principal: PrincipalDep) -> Principal:
+    async def _require(principal: CurrentPasswordDep) -> Principal:
         if perm not in principal.permissions:
             log.info(
                 "permission_denied",
@@ -362,10 +462,14 @@ def require_roles(*roles: Role) -> Callable[[Principal], Coroutine[Any, Any, Pri
     o'tadi va D-07 o'zgarganda bu joy jimgina eskirib qoladi. Bu variant
     faqat huquq tushunchasiga to'g'ri kelmaydigan holatlar uchun
     (masalan "faqat platforma admini" oqimlari).
+
+    Parol darvozasi bu yerda ham `require_permission` dagidek OLDIN turadi:
+    ikkita rad etish yo'li bo'lib, biri darvozasiz qolsa u darvozani
+    chetlab o'tish yo'liga aylanardi.
     """
     allowed = {str(role) for role in roles}
 
-    async def _require(principal: PrincipalDep) -> Principal:
+    async def _require(principal: CurrentPasswordDep) -> Principal:
         if not allowed & principal.roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
         return principal

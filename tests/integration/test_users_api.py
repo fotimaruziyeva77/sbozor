@@ -33,7 +33,7 @@ from fixtures.admin_api import (
     platform_admin_headers,
     session_headers,
 )
-from fixtures.auth_api import ME_URL, login
+from fixtures.auth_api import CHANGE_PASSWORD_URL, ME_URL, login
 from sbozor_core.enums import AuditAction
 
 if TYPE_CHECKING:
@@ -47,6 +47,9 @@ if TYPE_CHECKING:
 
 FORBIDDEN_ROLES = ("market_admin", "director", "platform_admin")
 """Bozor admini bera OLMAYDIGAN rollar (D-04) — hujjat sifatida ham qoladi."""
+
+ONBOARDED_PASSWORD = "onboard-uzun-parol-2026"  # noqa: S105 — test ma'lumoti
+"""API orqali yaratilgan foydalanuvchining majburiy almashtirishdan keyingi paroli."""
 
 
 async def _market_admin_headers(
@@ -75,6 +78,32 @@ async def _create(
         },
         headers=headers,
     )
+
+
+async def _onboarded_headers(
+    api_client: httpx.AsyncClient, phone: str, temporary: str
+) -> dict[str, str]:
+    """Vaqtinchalik parol -> MAJBURIY almashtirish -> sessiya (D-02 haqiqiy oqimi).
+
+    01-11 dan boshlab `require_password_current` must-change sessiyani har
+    qanday tenant endpointida 403 `password_change_required` bilan rad
+    etadi. Ya'ni RBAC da'vosini sinamoqchi bo'lgan test AVVAL parolni
+    almashtirishi SHART — aks holda u 403 oladi-yu, sababi huquq
+    yetishmasligi emas, darvoza bo'lardi.
+
+    Assert'ni `password_change_required` ga bo'shashtirish MUQOBIL EMAS:
+    o'shanda test yashil bo'lardi va D-07 huquq matritsasi haqida hech
+    narsa isbotlamasdi (aynan shu green-for-wrong-reason naqshi 01-11 da
+    yopilmoqda).
+    """
+    temporary_headers = await session_headers(api_client, phone, temporary)
+    changed = await api_client.post(
+        CHANGE_PASSWORD_URL,
+        json={"current_password": temporary, "new_password": ONBOARDED_PASSWORD},
+        headers=temporary_headers,
+    )
+    assert changed.status_code == 204, changed.text
+    return await session_headers(api_client, phone, ONBOARDED_PASSWORD)
 
 
 def _phone_exists(conn: Connection[TupleRow], phone: str) -> bool:
@@ -390,9 +419,15 @@ async def test_cashier_and_director_cannot_manage_users(
     """Kassir ham, DIREKTOR ham foydalanuvchi yarata olmaydi (D-07).
 
     Direktor bu yerda AYNAN D-04 ning birinchi bosqichi orqali yaratiladi
-    (platforma admini tomonidan) — ya'ni test bir vaqtda ikki narsani
-    isbotlaydi: direktor yaratish ISHLAYDI va yaratilgan direktor
-    `USER_MANAGE` huquqiga EGA EMAS.
+    (platforma admini tomonidan) — ya'ni test bir vaqtda uch narsani
+    isbotlaydi: direktor yaratish ISHLAYDI, u D-02 oqimidan o'tib to'liq
+    faol sessiya oladi va SHUNDAN KEYIN HAM `USER_MANAGE` huquqiga EGA
+    EMAS.
+
+    Kassir seed'dan olinadi (`must_change=false`), direktor esa
+    `_onboarded_headers()` bilan parolini almashtiradi — ikkalasining ham
+    so'rovi RBAC qatlamiga YETIB BORADI va javob `forbidden` bo'ladi,
+    `password_change_required` EMAS (01-11 test-yaxlitligi).
     """
     platform = await platform_admin_headers(api_client, auth_seed)
     director_phone = new_phone()
@@ -400,7 +435,7 @@ async def test_cashier_and_director_cannot_manage_users(
     assert created.status_code == 201, created.text
 
     cashier = await session_headers(api_client, auth_seed.cashier.phone, auth_seed.password)
-    director = await session_headers(
+    director = await _onboarded_headers(
         api_client, director_phone, created.json()["temporary_password"]
     )
 

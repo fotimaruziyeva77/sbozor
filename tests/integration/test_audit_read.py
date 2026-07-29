@@ -32,7 +32,7 @@ from fixtures.admin_api import (
     platform_admin_headers,
     session_headers,
 )
-from fixtures.auth_api import audit_rows
+from fixtures.auth_api import CHANGE_PASSWORD_URL, audit_rows
 from sbozor_core.enums import AuditAction
 from sbozor_core.timeutil import now_tz
 
@@ -45,13 +45,29 @@ if TYPE_CHECKING:
 
 TABLE_AUDIT_LOG = "audit_log"
 
+DIRECTOR_PASSWORD = "direktor-uzun-parol-2026"  # noqa: S105 — test ma'lumoti
+"""API orqali yaratilgan direktorning ONBOARDING dan keyingi doimiy paroli."""
+
 
 async def _market_admin(api_client: httpx.AsyncClient, auth_seed: AuthSeed) -> dict[str, str]:
     return await session_headers(api_client, auth_seed.market_admin.phone, auth_seed.password)
 
 
 async def _director(api_client: httpx.AsyncClient, auth_seed: AuthSeed) -> dict[str, str]:
-    """Direktor D-04 ning birinchi bosqichi orqali yaratiladi (seed'da yo'q)."""
+    """Direktor D-04 ning birinchi bosqichi orqali yaratiladi va ONBOARD qilinadi.
+
+    ONBOARDING QISMI MAJBURIY (01-11, CR-01). Vaqtinchalik parol bilan
+    yaratilgan foydalanuvchida `must_change_password = true` bo'ladi va
+    `require_password_current` uni HAR QANDAY tenant endpointida 403
+    `password_change_required` bilan rad etadi — ya'ni parol
+    almashtirilmasa `GET /audit` javobi 403 bo'lardi va
+    `test_director_can_view_the_audit_log` "direktorda `AUDIT_VIEW` bor"
+    degan da'voni umuman sinamay qo'yardi.
+
+    Shuning uchun bu yordamchi D-02 ning HAQIQIY oqimini bajaradi:
+    vaqtinchalik parol -> majburiy almashtirish -> yangi parol bilan
+    sessiya. Natijada test yana AYNAN huquq matritsasini sinaydi.
+    """
     platform = await platform_admin_headers(api_client, auth_seed)
     phone = new_phone()
     created = await api_client.post(
@@ -60,7 +76,17 @@ async def _director(api_client: httpx.AsyncClient, auth_seed: AuthSeed) -> dict[
         headers=platform,
     )
     assert created.status_code == 201, created.text
-    return await session_headers(api_client, phone, created.json()["temporary_password"])
+    temporary = created.json()["temporary_password"]
+
+    temporary_headers = await session_headers(api_client, phone, temporary)
+    changed = await api_client.post(
+        CHANGE_PASSWORD_URL,
+        json={"current_password": temporary, "new_password": DIRECTOR_PASSWORD},
+        headers=temporary_headers,
+    )
+    assert changed.status_code == 204, changed.text
+
+    return await session_headers(api_client, phone, DIRECTOR_PASSWORD)
 
 
 async def _read_audit_rows(tenant_session: TenantSessionFactory, auth_seed: AuthSeed) -> list[Any]:
@@ -107,7 +133,12 @@ async def test_market_admin_sees_the_current_market_log(
 async def test_director_can_view_the_audit_log(
     api_client: httpx.AsyncClient, auth_seed: AuthSeed
 ) -> None:
-    """D-11: direktorda `AUDIT_VIEW` bor (u nazorat rolida)."""
+    """D-11: direktorda `AUDIT_VIEW` bor (u nazorat rolida).
+
+    Direktor `_director()` da ONBOARD qilinadi (D-02: vaqtinchalik parol
+    almashtiriladi) — busiz parol darvozasi 403 qaytarardi va bu test
+    huquqni emas, darvozani sinagan bo'lardi.
+    """
     headers = await _director(api_client, auth_seed)
 
     response = await api_client.get(AUDIT_URL, headers=headers)
@@ -151,12 +182,23 @@ async def test_cashier_cannot_view_the_audit_log(
 async def test_inspector_cannot_view_the_audit_log(
     api_client: httpx.AsyncClient, auth_seed: AuthSeed
 ) -> None:
-    """Nazoratchida ham `AUDIT_VIEW` yo'q — uning ishi faqat HITL navbati."""
-    headers = await session_headers(api_client, auth_seed.must_change.phone, auth_seed.password)
+    """Nazoratchida ham `AUDIT_VIEW` yo'q — uning ishi faqat HITL navbati.
+
+    MANBA ATAYIN `auth_seed.inspector`, `auth_seed.must_change` EMAS
+    (01-11, CR-01 test-yaxlitligi). Ikkalasi ham nazoratchi, farqi faqat
+    D-02 bayrog'ida — lekin `must_change` bilan javob
+    `password_change_required` bo'lardi va test 403 ni ko'rib YASHIL
+    qolardi-yu, `AUDIT_VIEW` yo'qligini umuman sinamasdi.
+
+    Shu sababli `detail` ham tekshiriladi: kelajakda darvoza yana bu
+    testning yo'liga tushib qolsa, u jimgina yashil emas, QIZIL bo'ladi.
+    """
+    headers = await session_headers(api_client, auth_seed.inspector.phone, auth_seed.password)
 
     response = await api_client.get(AUDIT_URL, headers=headers)
 
     assert response.status_code == 403
+    assert response.json() == {"detail": "forbidden"}
 
 
 async def test_cross_tenant_rows_are_invisible_under_every_filter(

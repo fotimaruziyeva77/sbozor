@@ -285,15 +285,30 @@ async def reset_password(
     user_id: UUID,
     principal: UserManagerDep,
     session: TenantSessionDep,
+    cache: CacheDep,
+    background: BackgroundTasks,
 ) -> ResetPasswordResponse:
     """Admin orqali parol tiklash (D-02) — SMS/email/bot-kod oqimi YO'Q.
 
-    Uchta narsa BIRGA bajariladi va ularni ajratib bo'lmaydi:
+    To'rt narsa BIRGA bajariladi va ularni ajratib bo'lmaydi:
       * yangi vaqtinchalik parol + `must_change_password = true`;
       * foydalanuvchining BARCHA refresh sessiyalari bekor qilinadi
         (ASVS V7 — tiklashning sababi ko'pincha "parolim boshqasiga
         ma'lum" shubhasi, ya'ni eski sessiyalar yashab qolmasligi kerak);
+      * `user:state:{id}` keshi bekor qilinadi;
       * audit yozuvi (kim kimning parolini tikladi).
+
+    KESH INVALIDATSIYASI MAJBURIY, `block`/`unblock` dagi kabi (D-08).
+    Refresh tokenlarni bekor qilish YETARLI EMAS: hujumchining qo'lidagi
+    ACCESS token yana 15 daqiqa yaroqli qoladi va uni faqat
+    `require_password_current` darvozasi to'xtata oladi. Darvoza esa
+    keshdagi `must_change_password` ga qaraydi — invalidatsiyasiz u
+    30 soniyagacha eski (`false`) qiymatni ko'rsatib turardi, ya'ni
+    tiklash aynan eng muhim 30 soniyada kuchga kirmasdi.
+
+    `BackgroundTasks` — COMMIT dan KEYIN ishlaydi (`block_user` dagi bilan
+    bir xil sabab): endpoint ichida o'chirilganda parallel so'rov hali
+    commit bo'lmagan eski holatni qaytadan keshlab qo'yardi.
     """
     repo = UserRepository(session, _market_id(principal))
     if await repo.member_roles(user_id) is None:
@@ -311,6 +326,7 @@ async def reset_password(
         principal=principal,
         new={"must_change_password": True, "revoked_sessions": revoked},
     )
+    background.add_task(invalidate_user_state, cache, user_id)
 
     return ResetPasswordResponse(temporary_password=temporary)
 
