@@ -20,7 +20,6 @@ from uuid import UUID, uuid4
 
 import jwt
 import pytest
-
 from sbozor_core.security import (
     ALG,
     TokenClaims,
@@ -235,6 +234,11 @@ def test_alg_none_token_is_rejected() -> None:
         _decode(forged)
 
 
+# PyJWT SHA512 uchun >=64 baytlik kalit tavsiya qiladi. Bu yerda ATAYIN
+# o'sha 48 baytlik SECRET ishlatiladi: test aynan "bir xil sir, boshqa
+# algoritm" holatini qamraydi, ya'ni tokenni rad etayotgan narsa imzo emas,
+# `algorithms=["HS256"]` ro'yxati ekanini isbotlaydi.
+@pytest.mark.filterwarnings("ignore::jwt.warnings.InsecureKeyLengthWarning")
 def test_token_signed_with_other_algorithm_is_rejected() -> None:
     """HS512 bilan imzolangan token HS256 ro'yxatiga tushmaydi."""
     now = datetime.now(UTC)
