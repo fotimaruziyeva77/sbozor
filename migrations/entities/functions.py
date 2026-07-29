@@ -49,8 +49,18 @@ from alembic_utils.pg_function import PGFunction
 __all__ = [
     "ALL_FUNCTIONS",
     "AUTH_FIND_LOGIN",
+    "AUTH_FIND_LOGIN_BY_ID",
     "AUTH_LIST_MARKETS",
     "AUTH_MEMBERSHIPS",
+    "AUTH_REFRESH_FIND",
+    "AUTH_REFRESH_ISSUE",
+    "AUTH_REFRESH_REVOKE_FAMILY",
+    "AUTH_REFRESH_REVOKE_USER",
+    "AUTH_REFRESH_ROTATE",
+    "AUTH_SET_ACTIVE",
+    "AUTH_SUPPORT_FUNCTIONS",
+    "AUTH_SUPPORT_GRANT_SIGNATURES",
+    "AUTH_UPDATE_PASSWORD_HASH",
     "AUTH_USER_STATE",
     "GRANT_SIGNATURES",
 ]
@@ -183,6 +193,12 @@ ALL_FUNCTIONS: list[PGFunction] = [
     AUTH_LIST_MARKETS,
     AUTH_USER_STATE,
 ]
+"""`0001_identity` migratsiyasi yaratadigan LOGIN BOOTSTRAP to'plami.
+
+Keyingi migratsiyalarda qo'shilgan funksiyalar bu ro'yxatga TUSHMAYDI —
+aks holda `0001` mavjud bo'lmagan obyektga `GRANT` berishga urinardi.
+Ular `AUTH_SUPPORT_FUNCTIONS` da (pastda).
+"""
 
 GRANT_SIGNATURES: tuple[str, ...] = (
     "auth_find_login(text)",
@@ -195,4 +211,290 @@ GRANT_SIGNATURES: tuple[str, ...] = (
 `ALL_FUNCTIONS` dagi tartib bilan bir xil; ikkalasining mosligi
 `tests/tenancy/test_login_bootstrap.py` da tekshiriladi, chunki bu ro'yxat
 unutilsa funksiya yaratiladi-yu, `sbozor_app` uni chaqira olmaydi.
+"""
+
+
+# ===========================================================================
+# 0003_auth_support — SESSIYA VA PAROL YOZISH YO'LI
+# ===========================================================================
+#
+# NEGA `refresh_tokens` HAM `SECURITY DEFINER` ORTIDA (01-06 da aniqlangan):
+#
+# `refresh_tokens` tenant-scoped (RLS ENABLE + FORCE). Refresh cookie
+# kelganda esa bozor HALI NOMA'LUM: `mid` claim'i refresh tokenga ATAYIN
+# yozilmaydi (01-03 — huquqlar har `/refresh` da DB'dan qayta o'qiladi,
+# aks holda bloklangan foydalanuvchi 30 kun eski huquqlari bilan yashardi).
+# Ya'ni qatorni `jti` bo'yicha topish tenant kontekstisiz bajarilishi kerak,
+# RLS esa uni 0 qatorga tushiradi -> `/refresh` HECH QACHON ishlamasdi.
+#
+# Bu Pitfall 3 ning AYNAN o'sha mexanizmi (login RLS ostida imkonsiz), faqat
+# `users` emas, `refresh_tokens` ustida — shuning uchun yechim ham bir xil:
+# tor, `search_path` pin qilingan, `PUBLIC` dan yopiq `SECURITY DEFINER`
+# funksiyalar. Jadval sxemasi (`uq_refresh_tokens_jti` GLOBAL unique indeksi)
+# 01-04 da aynan shu global qidiruvni ko'zlab qurilgan edi.
+#
+# YUZA QASDDAN TOR: har bir funksiya BITTA operatsiyani bajaradi va
+# `jti` / `family_id` / `user_id` bo'yicha aniq filtrlanadi. Hech biri
+# ixtiyoriy `WHERE` qabul qilmaydi, ya'ni ular "RLS'siz refresh_tokens
+# ustida ishlash" imkonini bermaydi.
+
+AUTH_FIND_LOGIN_BY_ID = PGFunction(
+    schema="public",
+    signature="auth_find_login_by_id(p_user_id uuid)",
+    definition="""
+RETURNS TABLE (
+    user_id uuid,
+    phone_e164 text,
+    password_hash text,
+    is_active boolean,
+    must_change_password boolean,
+    locale text,
+    is_platform_admin boolean,
+    full_name text
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT u.id,
+           u.phone_e164,
+           u.password_hash,
+           u.is_active,
+           u.must_change_password,
+           u.locale,
+           u.is_platform_admin,
+           u.full_name
+    FROM public.users AS u
+    WHERE u.id = p_user_id
+$$
+""",
+)
+"""`user_id` bo'yicha login qatori — parol almashtirish oqimi uchun (D-02).
+
+Access tokenda telefon YO'Q (u shaxsiy ma'lumot va tokenga kerak emas),
+`change-password` esa joriy parol hash'ini talab qiladi. Telefon shu
+funksiyadan olinadi va D-06 `actor_label` matnida ishlatiladi.
+"""
+
+AUTH_UPDATE_PASSWORD_HASH = PGFunction(
+    schema="public",
+    signature="auth_update_password_hash(p_user_id uuid, p_hash text, p_must_change boolean)",
+    definition="""
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+    UPDATE public.users
+       SET password_hash = p_hash,
+           must_change_password = COALESCE(p_must_change, must_change_password),
+           updated_at = now()
+     WHERE id = p_user_id
+$$
+""",
+)
+"""Parol hash'ini yangilaydi. `p_must_change IS NULL` -> bayroq TEGILMAYDI.
+
+Ikki chaqiruvchisi bor va ular boshqacha xulq kutadi:
+  * `change-password` -> `false` (D-02: majburiy almashtirish bajarildi);
+  * login paytidagi `verify_and_update` (T-01-18: Argon2 parametrlari
+    eskirgan) -> `NULL`, chunki bu foydalanuvchi uchun ko'rinmas texnik
+    yangilanish va u majburiy almashtirish holatini o'zgartirmasligi kerak.
+
+`DEFAULT` ATAYIN ISHLATILMAGAN: `alembic-utils` imzoni matn sifatida
+solishtiradi va standart qiymatli argument autogenerate'da keraksiz
+`replace_entity` chiqarishi mumkin.
+"""
+
+AUTH_SET_ACTIVE = PGFunction(
+    schema="public",
+    signature="auth_set_active(p_user_id uuid, p_is_active boolean)",
+    definition="""
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+    UPDATE public.users
+       SET is_active = p_is_active,
+           updated_at = now()
+     WHERE id = p_user_id
+$$
+""",
+)
+"""Foydalanuvchini bloklaydi/tiklaydi (D-08).
+
+Bloklash DARHOL kuchga kirishi uchun chaqiruvchi shu funksiyadan KEYIN
+`app.deps.invalidate_user_state()` ni ishga tushiradi. Boshqaruv UI'si
+01-07 rejasida; funksiya bu yerda yaratiladi, chunki uning yagona
+alternativasi `users` ga to'g'ridan-to'g'ri GRANT berish bo'lardi va bu
+Pattern 2 ni butunlay buzardi.
+"""
+
+AUTH_REFRESH_ISSUE = PGFunction(
+    schema="public",
+    signature=(
+        "auth_refresh_issue(p_market_id uuid, p_user_id uuid, p_jti text, "
+        "p_family_id uuid, p_expires_at timestamptz)"
+    ),
+    definition="""
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+    INSERT INTO public.refresh_tokens (market_id, user_id, jti, family_id, expires_at)
+    VALUES (p_market_id, p_user_id, p_jti, p_family_id, p_expires_at)
+$$
+""",
+)
+"""Yangi refresh token qatorini yozadi (login yoki bozor tanlashdan keyin)."""
+
+AUTH_REFRESH_FIND = PGFunction(
+    schema="public",
+    signature="auth_refresh_find(p_jti text)",
+    definition="""
+RETURNS TABLE (
+    market_id uuid,
+    user_id uuid,
+    family_id uuid,
+    expires_at timestamptz,
+    revoked_at timestamptz,
+    replaced_by_jti text
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT t.market_id,
+           t.user_id,
+           t.family_id,
+           t.expires_at,
+           t.revoked_at,
+           t.replaced_by_jti
+    FROM public.refresh_tokens AS t
+    WHERE t.jti = p_jti
+$$
+""",
+)
+"""`jti` bo'yicha global qidiruv — cookie kelganda bozor noma'lum.
+
+Topilmasa 0 qator (xato emas): chaqiruvchi buni `401 invalid_refresh` ga
+aylantiradi. `revoked_at` to'ldirilgan qator ham QAYTARILADI — reuse
+aniqlash aynan shu qatorga tayanadi (o'chirilgan qator hech nima aytmagan
+bo'lardi).
+"""
+
+AUTH_REFRESH_ROTATE = PGFunction(
+    schema="public",
+    signature="auth_refresh_rotate(p_old_jti text, p_new_jti text)",
+    definition="""
+RETURNS integer
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+    WITH rotated AS (
+        UPDATE public.refresh_tokens
+           SET revoked_at = now(),
+               replaced_by_jti = p_new_jti
+         WHERE jti = p_old_jti
+           AND revoked_at IS NULL
+        RETURNING 1
+    )
+    SELECT count(*)::integer FROM rotated
+$$
+""",
+)
+"""Eski qatorni bekor qilib yangisiga bog'laydi; TEGILGAN QATORLAR SONI qaytadi.
+
+`0` qaytishi — reuse signali. Tekshiruv `UPDATE ... WHERE revoked_at IS
+NULL` ICHIDA bajariladi: avval `SELECT` qilib keyin `UPDATE` qilish ikki
+parallel `/refresh` so'roviga bir xil tokenni rotatsiya qilish imkonini
+berardi (poyga oynasi), bu yerda esa faqat BITTASI g'olib chiqadi.
+"""
+
+AUTH_REFRESH_REVOKE_FAMILY = PGFunction(
+    schema="public",
+    signature="auth_refresh_revoke_family(p_family_id uuid)",
+    definition="""
+RETURNS integer
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+    WITH revoked AS (
+        UPDATE public.refresh_tokens
+           SET revoked_at = now()
+         WHERE family_id = p_family_id
+           AND revoked_at IS NULL
+        RETURNING 1
+    )
+    SELECT count(*)::integer FROM revoked
+$$
+""",
+)
+"""BUTUN token oilasini bekor qiladi (reuse aniqlanganda va logout'da, T-01-41)."""
+
+AUTH_REFRESH_REVOKE_USER = PGFunction(
+    schema="public",
+    signature="auth_refresh_revoke_user(p_user_id uuid)",
+    definition="""
+RETURNS integer
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+    WITH revoked AS (
+        UPDATE public.refresh_tokens
+           SET revoked_at = now()
+         WHERE user_id = p_user_id
+           AND revoked_at IS NULL
+        RETURNING 1
+    )
+    SELECT count(*)::integer FROM revoked
+$$
+""",
+)
+"""Foydalanuvchining BARCHA sessiyalarini bekor qiladi.
+
+Parol almashtirilganda majburiy (ASVS V7): eski parolni bilgan hujumchining
+mavjud sessiyasi parol almashtirilgandan keyin ham yashab qolmasligi kerak.
+"""
+
+AUTH_SUPPORT_FUNCTIONS: list[PGFunction] = [
+    AUTH_FIND_LOGIN_BY_ID,
+    AUTH_UPDATE_PASSWORD_HASH,
+    AUTH_SET_ACTIVE,
+    AUTH_REFRESH_ISSUE,
+    AUTH_REFRESH_FIND,
+    AUTH_REFRESH_ROTATE,
+    AUTH_REFRESH_REVOKE_FAMILY,
+    AUTH_REFRESH_REVOKE_USER,
+]
+"""`0003_auth_support` migratsiyasi yaratadigan to'plam."""
+
+AUTH_SUPPORT_GRANT_SIGNATURES: tuple[str, ...] = (
+    "auth_find_login_by_id(uuid)",
+    "auth_update_password_hash(uuid, text, boolean)",
+    "auth_set_active(uuid, boolean)",
+    "auth_refresh_issue(uuid, uuid, text, uuid, timestamptz)",
+    "auth_refresh_find(text)",
+    "auth_refresh_rotate(text, text)",
+    "auth_refresh_revoke_family(uuid)",
+    "auth_refresh_revoke_user(uuid)",
+)
+"""`AUTH_SUPPORT_FUNCTIONS` bilan bir xil TARTIBDA.
+
+Mosligi `tests/tenancy/test_login_bootstrap.py` da tekshiriladi: ro'yxat
+ajralib qolsa funksiya yaratiladi-yu, `sbozor_app` uni chaqira olmaydi va
+sessiya oqimi `permission denied` bilan yiqiladi.
 """

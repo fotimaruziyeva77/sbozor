@@ -48,10 +48,22 @@ INDEX_EXCEPTIONS = {
 }
 
 EXPECTED_DEFINER_FUNCTIONS = {
+    # 0001 — login bootstrap (O'QISH yuzasi, Pattern 2)
     "auth_find_login",
     "auth_memberships",
     "auth_list_markets",
     "auth_user_state",
+    # 0003 — sessiya va parol (YOZISH yuzasi). `refresh_tokens` ham shu
+    # yerda, chunki refresh cookie kelganda bozor hali noma'lum va RLS
+    # `jti` bo'yicha global qidiruvni 0 qatorga tushiradi.
+    "auth_find_login_by_id",
+    "auth_update_password_hash",
+    "auth_set_active",
+    "auth_refresh_issue",
+    "auth_refresh_find",
+    "auth_refresh_rotate",
+    "auth_refresh_revoke_family",
+    "auth_refresh_revoke_user",
 }
 
 # Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun

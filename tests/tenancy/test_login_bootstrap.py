@@ -24,9 +24,22 @@ from psycopg import Connection
 from psycopg.rows import TupleRow
 from sqlalchemy import text
 
-from migrations.entities.functions import ALL_FUNCTIONS, GRANT_SIGNATURES
+from migrations.entities.functions import (
+    ALL_FUNCTIONS,
+    AUTH_SUPPORT_FUNCTIONS,
+    AUTH_SUPPORT_GRANT_SIGNATURES,
+    GRANT_SIGNATURES,
+)
 
 pytestmark = pytest.mark.tenancy
+
+# (funksiyalar ro'yxati, `GRANT` imzolari) juftliklari. Yangi migratsiya
+# yangi juftlik qo'shadi va u AVTOMATIK ravishda quyidagi ikkala darvozadan
+# o'tadi — ro'yxat qo'lda ikki joyda yuritilmaydi.
+DEFINER_FUNCTION_SETS = (
+    (ALL_FUNCTIONS, GRANT_SIGNATURES),
+    (AUTH_SUPPORT_FUNCTIONS, AUTH_SUPPORT_GRANT_SIGNATURES),
+)
 
 
 def test_app_role_cannot_select_users(sync_app_conn: Connection[TupleRow], migrated: None) -> None:
@@ -164,23 +177,24 @@ async def test_platform_admin_sees_only_the_selected_market(
 def test_definer_functions_are_executable_by_app_role(
     sync_app_conn: Connection[TupleRow], migrated: None
 ) -> None:
-    """`sbozor_app` to'rt funksiyaning HAMMASINI chaqira oladi.
+    """`sbozor_app` ro'yxatga olingan HAR BIR funksiyani chaqira oladi.
 
-    `GRANT_SIGNATURES` ro'yxati `ALL_FUNCTIONS` dan ajralib qolsa, funksiya
-    yaratiladi-yu, ilova uni chaqira olmaydi — va login sahifasi
-    `permission denied` bilan yiqiladi.
+    `GRANT` imzolari ro'yxati funksiyalar ro'yxatidan ajralib qolsa,
+    funksiya yaratiladi-yu, ilova uni chaqira olmaydi — va login sahifasi
+    (yoki `/auth/refresh`) `permission denied` bilan yiqiladi.
     """
-    assert len(GRANT_SIGNATURES) == len(ALL_FUNCTIONS), (
-        "GRANT_SIGNATURES va ALL_FUNCTIONS uzunligi mos emas — "
-        "yangi funksiyaga GRANT berilmagan bo'lishi mumkin"
-    )
+    for functions, signatures in DEFINER_FUNCTION_SETS:
+        assert len(signatures) == len(functions), (
+            "`GRANT` imzolari va funksiyalar ro'yxati uzunligi mos emas — "
+            "yangi funksiyaga GRANT berilmagan bo'lishi mumkin"
+        )
 
-    for signature in GRANT_SIGNATURES:
-        row = sync_app_conn.execute(
-            "SELECT has_function_privilege('sbozor_app', %s, 'EXECUTE')", (signature,)
-        ).fetchone()
-        assert row is not None
-        assert row[0] is True, f"{signature}: sbozor_app EXECUTE huquqiga ega emas"
+        for signature in signatures:
+            row = sync_app_conn.execute(
+                "SELECT has_function_privilege('sbozor_app', %s, 'EXECUTE')", (signature,)
+            ).fetchone()
+            assert row is not None
+            assert row[0] is True, f"{signature}: sbozor_app EXECUTE huquqiga ega emas"
 
 
 def test_definer_functions_are_not_granted_to_public(

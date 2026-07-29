@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from migrations.entities.functions import ALL_FUNCTIONS
+from migrations.entities.functions import ALL_FUNCTIONS, AUTH_SUPPORT_FUNCTIONS
 from migrations.entities.policies import (
     audit_append_policy,
     audit_read_policy,
@@ -56,6 +56,10 @@ ALL_ENTITIES: list[Any] = [
     audit_read_policy(),
     # Login bootstrap — global o'qish yuzasining BUTUN ro'yxati (Pattern 2).
     *ALL_FUNCTIONS,
+    # Sessiya va parol YOZISH yo'li (0003): `refresh_tokens` ustidagi
+    # operatsiyalar ham tenant kontekstisiz bajarilishi kerak, chunki
+    # refresh cookie kelganda bozor hali noma'lum.
+    *AUTH_SUPPORT_FUNCTIONS,
     # Audit yozuvchisi + append-only qo'riqchisi (D-10).
     *ALL_TRIGGER_FUNCTIONS,
 ]

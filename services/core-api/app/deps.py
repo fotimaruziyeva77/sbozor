@@ -53,11 +53,14 @@ if TYPE_CHECKING:
     from app.settings import Settings
 
 __all__ = [
+    "AuthSessionDep",
     "CacheDep",
     "Principal",
     "PrincipalDep",
     "SettingsDep",
+    "TenantSessionDep",
     "USER_STATE_TTL_SECONDS",
+    "actor_label_for",
     "get_auth_session",
     "get_cache",
     "get_current_principal",
@@ -177,6 +180,9 @@ async def get_auth_session(request: Request) -> AsyncIterator[AsyncSession]:
     """
     async with _sessionmaker(request)() as session:
         yield session
+
+
+AuthSessionDep = Annotated["AsyncSession", Depends(get_auth_session)]
 
 
 async def _is_user_active(
