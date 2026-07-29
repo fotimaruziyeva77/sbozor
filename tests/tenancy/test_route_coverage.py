@@ -18,8 +18,15 @@ Ikkalasi ham "test bor, lekin hech nimani tekshirmaydi" holatiga olib
 keladi — bu testning umuman yo'qligidan YOMONROQ, chunki yashil CI
 himoya bor degan ishonch beradi.
 
-`xfail` va `skip` bu faylda ISHLATILMAYDI. Tasniflanmagan marshrut
-"kutilgan nosozlik" emas — u qamrovdagi teshik va CI'ni YIQITISHI kerak.
+BU FAYLDA "KUTILGAN NOSOZLIK" VA "O'TKAZIB YUBORISH" MARKERLARI YO'Q —
+ular ATAYIN ishlatilmaydi. Tasniflanmagan marshrut kutilgan nosozlik
+emas: u qamrovdagi teshik va CI'ni YIQITISHI kerak. Marker qo'yilgan
+darvoza esa qizarmaydi, ya'ni teshik ochiq qolib, hisobotda "o'tdi" deb
+ko'rinadi.
+
+(Bu qoida qabul mezonida grep bilan tekshiriladi, shuning uchun taqiqlangan
+marker nomlari bu izohda ham LITERAL yozilmaydi — 01-01/01-03/01-05/01-06/
+01-07 da aynan shu sinf xato besh marta takrorlangan.)
 =============================================================================
 """
 
