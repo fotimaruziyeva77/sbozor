@@ -27,8 +27,9 @@ import psycopg
 import pytest
 from psycopg import Connection
 from psycopg.rows import TupleRow
+from migrations.helpers import audit_trigger_name
 from sbozor_core.models.identity import LOCALE_VALUES, ROLE_VALUES
-from sbozor_core.schema_contract import GLOBAL_TABLES
+from sbozor_core.schema_contract import AUDITED_TABLES, FINANCIAL_TABLES, GLOBAL_TABLES
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -545,6 +546,88 @@ def test_locale_check_constraint_matches_enum(
 ) -> None:
     """DB dagi til ro'yxati `sbozor_core.enums.Locale` bilan AYNAN mos (D-13)."""
     assert _check_literals(sync_app_conn, "ck_users_locale_allowed") == set(LOCALE_VALUES)
+
+
+def test_audited_tables_have_trigger(sync_app_conn: Connection[TupleRow], migrated: None) -> None:
+    """`AUDITED_TABLES` reyestridagi har bir jadvalda audit triggeri BOR.
+
+    Reyestr (`sbozor_core.schema_contract`) va amaldagi DDL
+    (`migrations/versions/*.py`) ikki alohida joyda yashaydi, ya'ni ular
+    ajralib ketishi mumkin. Bu darvoza ikkalasini `pg_trigger` bilan
+    solishtiradi: 2- va 6-fazalarda `payments` yoki `daily_charges`
+    yaratilib `attach_audit_trigger()` unutilsa, CI shu yerda qizaradi —
+    va bu "audit bor" degan yolg'on ishonchdan ancha arzon.
+    """
+    rows = sync_app_conn.execute(
+        "SELECT c.relname, t.tgname FROM pg_trigger t "
+        "JOIN pg_class c ON c.oid = t.tgrelid "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = 'public' AND NOT t.tgisinternal"
+    ).fetchall()
+    triggers = {(row[0], row[1]) for row in rows}
+
+    missing = [
+        table for table in sorted(AUDITED_TABLES) if (table, audit_trigger_name(table)) not in
+        triggers
+    ]
+    assert not missing, (
+        f"`AUDITED_TABLES` da bor, lekin audit triggeri YO'Q: {missing} — "
+        "jadval o'zgarishlari izsiz qoladi (D-10)"
+    )
+
+
+def test_financial_tables_have_guards(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """MAVJUD moliyaviy jadvallarning har birida uchta konstrayt bor (mezon #5).
+
+    1-fazada `FINANCIAL_TABLES` dagi jadvallarning HECH BIRI hali yo'q
+    (ular 2- va 6-fazalarda tug'iladi), ya'ni bu test HOZIRCHA vakuum —
+    lekin u vakuum bo'lib QOLMAYDI: jadval paydo bo'lgan kuni darvoza
+    avtomatik yopiladi va `financial_guards()` chaqirilmagan bo'lsa CI
+    qizaradi. Reyestrni oldindan yozishning butun ma'nosi shu.
+
+    Uch talab (har biri boshqa nosozlikni yopadi):
+      * `business_date` STORED generated ustuni  -> biznes-kun chegarasi;
+      * `CHECK (<amount> > 0)`                    -> pul musbat va `bigint`;
+      * `market_id` bilan boshlanadigan UNIQUE    -> kun yopilishi idempotent.
+    """
+    existing = set(_base_tables(sync_app_conn)) & FINANCIAL_TABLES
+
+    problems: list[str] = []
+    for table in sorted(existing):
+        generated = sync_app_conn.execute(
+            "SELECT a.attgenerated FROM pg_attribute a "
+            "JOIN pg_class c ON c.oid = a.attrelid "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'public' AND c.relname = %s AND a.attname = 'business_date'",
+            (table,),
+        ).fetchone()
+        if generated is None or generated[0] != "s":
+            problems.append(f"{table}: `business_date` STORED generated ustuni yo'q")
+
+        checks = sync_app_conn.execute(
+            "SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c "
+            "WHERE c.contype = 'c' AND c.conrelid = %s::regclass",
+            (table,),
+        ).fetchall()
+        if not any(re.search(r"amount_soum\s*>\s*0", row[0]) for row in checks):
+            problems.append(f"{table}: `CHECK (amount_soum > 0)` yo'q")
+
+        uniques = sync_app_conn.execute(
+            "SELECT (SELECT a.attname FROM pg_attribute a "
+            "        WHERE a.attrelid = c.conrelid AND a.attnum = c.conkey[1]) "
+            "FROM pg_constraint c WHERE c.contype = 'u' AND c.conrelid = %s::regclass",
+            (table,),
+        ).fetchall()
+        if not any(row[0] == "market_id" for row in uniques):
+            problems.append(f"{table}: `market_id` bilan boshlanadigan UNIQUE konstrayt yo'q")
+
+    assert not problems, (
+        "Moliyaviy jadval `financial_guards()` siz yaratilgan:\n  "
+        + "\n  ".join(problems)
+        + "\n(`migrations/helpers.py::financial_guards()` ni chaqiring)"
+    )
 
 
 def test_users_table_is_closed_to_app_role(
