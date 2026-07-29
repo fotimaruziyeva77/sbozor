@@ -36,7 +36,10 @@ __all__ = [
     "APP_ROLE",
     "DEFAULT_DML",
     "OWNER_ROLE",
+    "attach_audit_trigger",
+    "audit_trigger_name",
     "create_entity",
+    "detach_audit_trigger",
     "disable_force_for_backfill",
     "drop_entity",
     "enable_rls",
@@ -163,3 +166,49 @@ def disable_force_for_backfill(table: str) -> None:
 def restore_force(table: str) -> None:
     """Backfill tugagach FORCE'ni qaytaradi (`disable_force_for_backfill` jufti)."""
     op.execute(f"ALTER TABLE {_ident(table)} FORCE  ROW LEVEL SECURITY")
+
+
+# ===========================================================================
+# AUDIT TRIGGERI (D-10)
+# ===========================================================================
+
+
+def audit_trigger_name(table: str) -> str:
+    """Jadval uchun audit trigger nomi — testlar ham shu yerdan oladi.
+
+    Nom `sbozor_core.schema_contract.AUDITED_TABLES` reyestri bilan birga
+    `tests/tenancy/test_meta.py::test_audited_tables_have_trigger` darvozasini
+    hosil qiladi: reyestrda bor, lekin triggeri yo'q jadval CI'da qizaradi.
+    """
+    return f"trg_audit_{_ident(table)}"
+
+
+def attach_audit_trigger(table: str) -> None:
+    """Jadvalga `fn_audit_row()` triggerini ulaydi (`AFTER ... FOR EACH ROW`).
+
+    `AFTER` — qator allaqachon yozilgan payt: audit "urinish" emas, SODIR
+    BO'LGAN o'zgarishni qayd etadi (rad etilgan INSERT audit qatori
+    qoldirmaydi).
+
+    Yangi moliyaviy/huquqiy jadval tug'ilganda uch qadam BIRGA bajariladi::
+
+        op.create_table("payments", ...)
+        enable_tenant_rls("payments")
+        attach_audit_trigger("payments")            # <- bu satr
+        # + `AUDITED_TABLES` reyestriga "payments" qo'shiladi
+
+    TALAB: jadvalning birlamchi kaliti `id uuid` bo'lishi shart —
+    `fn_audit_row()` `row_id` ni `uuid` ga keltiradi.
+    """
+    tbl = _ident(table)
+    op.execute(
+        f"CREATE TRIGGER {audit_trigger_name(tbl)} "
+        f"AFTER INSERT OR UPDATE OR DELETE ON {tbl} "
+        "FOR EACH ROW EXECUTE FUNCTION fn_audit_row()"
+    )
+
+
+def detach_audit_trigger(table: str) -> None:
+    """`attach_audit_trigger()` jufti — `downgrade()` uchun."""
+    tbl = _ident(table)
+    op.execute(f"DROP TRIGGER IF EXISTS {audit_trigger_name(tbl)} ON {tbl}")

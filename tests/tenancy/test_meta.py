@@ -52,6 +52,20 @@ EXPECTED_DEFINER_FUNCTIONS = {
     "auth_user_state",
 }
 
+# Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun
+# sabab SHU YERDA yozilishi SHART — istisno qo'shish code review'da ko'zga
+# tashlanadigan, ataylab qilingan harakat bo'lib qolsin.
+POLICY_TENANT_GUC_EXCEPTIONS = {
+    # `audit_log` ga YOZISH hech qachon bloklanmasligi kerak: tenant
+    # kontekstisiz bajarilgan har qanday o'zgarish (fon job, migratsiya,
+    # admin skripti) aks holda audit yozuvini jimgina yo'qotardi — ya'ni eng
+    # kam nazorat qilinadigan yo'l eng kam iz qoldirardi. Istisno FAQAT
+    # `WITH CHECK` ga tegishli; O'QISH (`audit_read`) to'liq tenant-scoped
+    # va u pastdagi `test_audit_read_policy_is_tenant_scoped` bilan alohida
+    # qulflangan.
+    ("audit_log", "audit_append"),
+}
+
 # (policyname, roles, qual, with_check)
 type PolicyRow = tuple[str, list[str], str, str | None]
 
@@ -340,6 +354,8 @@ def test_app_role_policies_all_reference_tenant_guc(
         role_names = set(roles)
         if not ({"sbozor_app", "public"} & role_names):
             continue
+        if (table, policy) in POLICY_TENANT_GUC_EXCEPTIONS:
+            continue
         for label, expression in (("USING", qual), ("WITH CHECK", with_check)):
             if expression is None:
                 continue
@@ -347,7 +363,134 @@ def test_app_role_policies_all_reference_tenant_guc(
                 problems.append(f"{table}.{policy} {label}: `{TENANT_GUC}` ga murojaat yo'q")
 
     assert not problems, (
-        "Ilova roliga tenant filtri qo'ymaydigan policy topildi:\n  " + "\n  ".join(problems)
+        "Ilova roliga tenant filtri qo'ymaydigan policy topildi:\n  "
+        + "\n  ".join(problems)
+        + "\n(atayin istisno bo'lsa `POLICY_TENANT_GUC_EXCEPTIONS` ga sabab bilan qo'shing)"
+    )
+
+
+def test_audit_read_policy_is_tenant_scoped(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`audit_append` istisnosi O'QISH tomoniga TARQALMAGAN (D-11).
+
+    Yuqoridagi test `audit_log` uchun bitta istisnoga ruxsat beradi. Bu test
+    o'sha istisnoning CHEGARASINI belgilaydi: `audit_log` da `SELECT`
+    policy'si bo'lishi va u tenant GUC'iga tayanishi SHART. Aks holda
+    "yozishni bloklab bo'lmaydi" degan to'g'ri qoida "hamma hammaning
+    auditini o'qiy oladi" degan noto'g'ri natijaga aylanib ketardi.
+
+    Shuningdek `UPDATE`/`DELETE` uchun policy YO'Q ekani tekshiriladi — bu
+    o'zgarmaslikning 2-qatlami va u tasodifan qo'shilgan policy bilan
+    jimgina yo'qoladi.
+    """
+    rows = sync_app_conn.execute(
+        "SELECT p.polname, p.polcmd FROM pg_policy p "
+        "JOIN pg_class c ON c.oid = p.polrelid "
+        "WHERE c.relname = 'audit_log' ORDER BY p.polname"
+    ).fetchall()
+
+    commands = {row[0]: row[1] for row in rows}
+    assert commands == {"audit_append": "a", "audit_read": "r"}, (
+        f"`audit_log` policy'lari kutilganidan farq qiladi: {commands} — "
+        "`w` (UPDATE) yoki `d` (DELETE) policy'si paydo bo'lsa jadval "
+        "egasiga qarshi o'zgarmaslikning 2-qatlami yo'qoladi"
+    )
+
+    read_qual = sync_app_conn.execute(
+        "SELECT qual FROM pg_policies "
+        "WHERE schemaname = 'public' AND tablename = 'audit_log' AND policyname = 'audit_read'"
+    ).fetchone()
+    assert read_qual is not None
+    assert TENANT_GUC in (read_qual[0] or ""), (
+        "`audit_read` policy'si tenant GUC'iga tayanmayapti — boshqa bozor "
+        "auditi ko'rinadigan bo'lib qoladi"
+    )
+
+
+def test_audit_log_is_read_only_for_app_role(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """1-QATLAM: `sbozor_app` da faqat `SELECT` va `INSERT` huquqi bor (T-01-30).
+
+    Bu qatlam BALAND OVOZDA ishlaydi (`permission denied`), qolgan uchtasi
+    esa jimroq — shuning uchun u birinchi va eng muhim.
+    """
+    row = sync_app_conn.execute(
+        "SELECT has_table_privilege('sbozor_app', 'audit_log', 'SELECT'), "
+        "       has_table_privilege('sbozor_app', 'audit_log', 'INSERT'), "
+        "       has_table_privilege('sbozor_app', 'audit_log', 'UPDATE'), "
+        "       has_table_privilege('sbozor_app', 'audit_log', 'DELETE'), "
+        "       has_table_privilege('sbozor_app', 'audit_log', 'TRUNCATE')"
+    ).fetchone()
+    assert row is not None
+    can_select, can_insert, can_update, can_delete, can_truncate = row
+
+    assert can_select, "sbozor_app `audit_log` ni o'qiy olmaydi — audit ekrani ishlamaydi"
+    assert can_insert, "sbozor_app `audit_log` ga yoza olmaydi — trigger har DML da yiqiladi"
+    assert not can_update, "sbozor_app `audit_log` ni TAHRIRLAY oladi (T-01-30)"
+    assert not can_delete, "sbozor_app `audit_log` dan O'CHIRA oladi (T-01-30)"
+    assert not can_truncate, "sbozor_app `audit_log` ni TRUNCATE qila oladi (T-01-32)"
+
+
+def test_audit_trigger_function_is_not_security_definer(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`fn_audit_row()` ATAYIN `SECURITY DEFINER` EMAS (T-01-35).
+
+    `audit_log` da `WITH CHECK (true)` policy'si va app-rolga `INSERT` grant'i
+    bor, ya'ni trigger chaqiruvchi huquqi bilan bemalol yozadi. Ega huquqiga
+    ko'tarish hech qanday qo'shimcha imkoniyat bermaydi, faqat
+    privilege-escalation yuzasini ochadi.
+
+    `search_path` esa SHUNDA HAM pin qilinishi shart: trigger DML qilayotgan
+    sessiyaning `search_path` i bilan ishlaydi va chaqiruvchi o'z sxemasida
+    soxta `audit_log` yaratib yozuvni o'sha yerga burib yuborishi mumkin.
+    """
+    rows = sync_app_conn.execute(
+        "SELECT p.proname, p.prosecdef, p.proconfig FROM pg_proc p "
+        "JOIN pg_namespace n ON n.oid = p.pronamespace "
+        "WHERE n.nspname = 'public' AND p.proname IN ('fn_audit_row', 'audit_immutable') "
+        "ORDER BY p.proname"
+    ).fetchall()
+
+    found = {row[0] for row in rows}
+    assert found == {"audit_immutable", "fn_audit_row"}, (
+        f"audit trigger funksiyalari yo'q yoki nomi o'zgargan: {sorted(found)}"
+    )
+
+    for name, is_definer, proconfig in rows:
+        assert not is_definer, (
+            f"{name} `SECURITY DEFINER` bo'lib qolgan — bu ataylab qilingan "
+            "qarorning bekor qilinishi (T-01-35)"
+        )
+        assert proconfig and "search_path=pg_catalog, public" in proconfig, (
+            f"{name}: `SET search_path = pg_catalog, public` yo'q — chaqiruvchi "
+            "soxta `audit_log` yaratib audit yozuvini burib yuborishi mumkin"
+        )
+
+
+def test_audit_log_business_date_is_stored_generated(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`audit_log.business_date` — STORED generated ustun (FOUND-05).
+
+    `attgenerated = 's'` bo'lmasa ustun oddiy `date` bo'lib qoladi va uni
+    ilova to'ldirishi kerak bo'ladi — ya'ni mintaqa arifmetikasi ikkinchi
+    marta, boshqa qatlamda takrorlanadi va aynan yarim tun atrofida farq
+    qiladi (Anti-Pattern 10).
+    """
+    row = sync_app_conn.execute(
+        "SELECT a.attgenerated FROM pg_attribute a "
+        "JOIN pg_class c ON c.oid = a.attrelid "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = 'public' AND c.relname = 'audit_log' "
+        "AND a.attname = 'business_date'"
+    ).fetchone()
+    assert row is not None, "`audit_log.business_date` ustuni yo'q"
+    assert row[0] == "s", (
+        f"`business_date` generated STORED emas (attgenerated={row[0]!r}) — "
+        "biznes-kun endi DB kafolati emas"
     )
 
 

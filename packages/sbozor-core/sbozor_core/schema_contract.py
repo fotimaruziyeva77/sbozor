@@ -34,7 +34,17 @@ GLOBAL_TABLES: frozenset[str] = frozenset(
         "alembic_version",
     }
 )
-"""`market_id` ustuni va standart tenant policy'si BO'LMASLIGI kutilgan jadvallar."""
+"""`market_id` ustuni va standart tenant policy'si BO'LMASLIGI kutilgan jadvallar.
+
+`audit_log` bu ro'yxatda ATAYIN YO'Q va bo'lmasligi ham kerak: unda
+`market_id` ustuni bor, RLS ENABLE+FORCE qilingan va o'qish policy'si oddiy
+tenant predikatiga bo'ysunadi — ya'ni u umumiy invariantdan o'tadi. Uning
+YAGONA farqi YOZISH tomonida: `audit_append` policy'si `WITH CHECK (true)`,
+chunki jurnalga yozishni bloklash imkonsiz bo'lishi kerak (kontekstsiz
+bajarilgan o'zgarish ham iz qoldirsin). O'sha bitta istisno
+`tests/tenancy/test_meta.py::POLICY_TENANT_GUC_EXCEPTIONS` da sabab bilan
+qayd etilgan.
+"""
 
 FINANCIAL_TABLES: frozenset[str] = frozenset(
     {

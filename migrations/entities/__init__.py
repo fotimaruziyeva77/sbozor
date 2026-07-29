@@ -16,10 +16,13 @@ from typing import Any
 
 from migrations.entities.functions import ALL_FUNCTIONS
 from migrations.entities.policies import (
+    audit_append_policy,
+    audit_read_policy,
     markets_policy,
     owner_bootstrap_policy,
     tenant_policy,
 )
+from migrations.entities.triggers import ALL_TRIGGER_FUNCTIONS
 
 __all__ = ["ALL_ENTITIES", "RLS_TABLES", "TENANT_TABLES"]
 
@@ -32,7 +35,13 @@ jadvalni policy'siz topib darvozani yopadi.
 """
 
 RLS_TABLES: tuple[str, ...] = ("markets", *TENANT_TABLES)
-"""RLS yoqilgan barcha jadvallar (`markets` maxsus policy bilan)."""
+"""RLS yoqilgan barcha jadvallar (`markets` maxsus policy bilan).
+
+`audit_log` bu ro'yxatda ATAYIN YO'Q: unga `owner_bootstrap` policy'si
+BERILMASLIGI shart. O'sha policy `FOR ALL ... USING (true)` bo'lgani uchun
+egaga `UPDATE`/`DELETE` da qatorlarni ko'rsatib qo'yardi va o'zgarmaslikning
+2-qatlamini bir zarbada yo'q qilardi (`migrations/versions/0002_audit.py`).
+"""
 
 ALL_ENTITIES: list[Any] = [
     # `markets` — tenant chegarasining o'zi: predikat `id` bo'yicha.
@@ -41,6 +50,12 @@ ALL_ENTITIES: list[Any] = [
     # Ega uchun bootstrap: `SECURITY DEFINER` login funksiyalari va bozor
     # yaratish yo'li FORCE ostida bloklanib qolmasligi uchun.
     *(owner_bootstrap_policy(table) for table in RLS_TABLES),
+    # `audit_log` — yozish predikatsiz, o'qish tenant-scoped, UPDATE/DELETE
+    # uchun policy YO'Q (o'zgarmaslikning 2-qatlami).
+    audit_append_policy(),
+    audit_read_policy(),
     # Login bootstrap — global o'qish yuzasining BUTUN ro'yxati (Pattern 2).
     *ALL_FUNCTIONS,
+    # Audit yozuvchisi + append-only qo'riqchisi (D-10).
+    *ALL_TRIGGER_FUNCTIONS,
 ]

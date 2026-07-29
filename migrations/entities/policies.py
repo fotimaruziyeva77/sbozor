@@ -36,11 +36,15 @@ from alembic_utils.pg_policy import PGPolicy
 
 __all__ = [
     "APP_ROLE",
+    "AUDIT_APPEND_SIGNATURE",
+    "AUDIT_READ_SIGNATURE",
     "MARKETS_PREDICATE",
     "OWNER_BOOTSTRAP_SIGNATURE",
     "OWNER_ROLE",
     "TENANT_PREDICATE",
     "TENANT_POLICY_SIGNATURE",
+    "audit_append_policy",
+    "audit_read_policy",
     "markets_policy",
     "owner_bootstrap_policy",
     "tenant_policy",
@@ -51,6 +55,8 @@ OWNER_ROLE = "sbozor_owner"
 
 TENANT_POLICY_SIGNATURE = "tenant_isolation"
 OWNER_BOOTSTRAP_SIGNATURE = "owner_bootstrap"
+AUDIT_APPEND_SIGNATURE = "audit_append"
+AUDIT_READ_SIGNATURE = "audit_read"
 
 TENANT_PREDICATE = "market_id = NULLIF(current_setting('app.market_id', true), '')::uuid"
 """Standart tenant jadvallari uchun predikat (`market_id` ustuni bo'yicha)."""
@@ -141,5 +147,63 @@ def owner_bootstrap_policy(table: str) -> PGPolicy:
             TO {OWNER_ROLE}
             USING      (true)
             WITH CHECK (true)
+        """,
+    )
+
+
+def audit_append_policy() -> PGPolicy:
+    """`audit_log` ga YOZISH — har doim ruxsat, hech qanday predikatsiz.
+
+    Bu jadvaldagi ikkita policy'ning BIRINCHISI va u ataylab boshqa hamma
+    joydagi qoidadan chetga chiqadi. Sabab: jurnalga yozishni bloklash
+    IMKONSIZ bo'lishi kerak. Agar `WITH CHECK` tenant predikatiga
+    bo'ysunganida, tenant kontekstisiz bajarilgan har qanday o'zgarish
+    (fon job, migratsiya, admin skripti) audit yozuvini yo'qotardi — ya'ni
+    aynan eng kam nazorat qilinadigan yo'l eng kam iz qoldirardi.
+
+    `TO` bandi ATAYIN YO'Q (ya'ni `PUBLIC`): `fn_audit_row()` `SECURITY
+    DEFINER` EMAS, shuning uchun u DML qilayotgan rol nomidan yozadi — bu
+    `sbozor_app` ham, migratsiya/seed paytida `sbozor_owner` ham bo'lishi
+    mumkin. Policy'ni bitta rolga bog'lash ikkinchisining yozuvini jimgina
+    yo'qotardi.
+
+    Bu — `tests/tenancy/test_meta.py::test_app_role_policies_all_reference_tenant_guc`
+    dagi YAGONA hujjatlashtirilgan istisno. Uning xavfsiz bo'lishining sababi:
+    predikatsiz ruxsat faqat YOZISHDA berilgan; O'QISH esa
+    `audit_read_policy()` orqali to'liq tenant-scoped.
+    """
+    return PGPolicy(
+        schema="public",
+        signature=AUDIT_APPEND_SIGNATURE,
+        on_entity="public.audit_log",
+        definition="""
+            AS PERMISSIVE
+            FOR INSERT
+            WITH CHECK (true)
+        """,
+    )
+
+
+def audit_read_policy() -> PGPolicy:
+    """`audit_log` dan O'QISH — oddiy tenant predikatiga to'liq bo'ysunadi (D-11).
+
+    `UPDATE` va `DELETE` uchun policy ATAYIN YARATILMAYDI. Bu — o'zgarmaslik
+    zanjirining 2-QATLAMI: policy'siz komanda hech qanday qatorni KO'RMAYDI,
+    ya'ni jadval egasiga qarshi ham `UPDATE 0` / `DELETE 0` qaytadi. Diqqat:
+    bu JIMGINA himoya, exception EMAS — shuning uchun uning testi "xato
+    bo'ldimi?" emas, "holat o'zgarmadimi?" ni tekshiradi (Pitfall 9).
+
+    `market_id IS NULL` bo'lgan platforma-global yozuvlar bu predikat ostida
+    hech kimga ko'rinmaydi. Bu ataylab: ular platforma admini uchun alohida
+    tor yo'l bilan beriladi (01-07), umumiy o'qish yuzasi orqali emas.
+    """
+    return PGPolicy(
+        schema="public",
+        signature=AUDIT_READ_SIGNATURE,
+        on_entity="public.audit_log",
+        definition=f"""
+            AS PERMISSIVE
+            FOR SELECT
+            USING ({TENANT_PREDICATE})
         """,
     )
