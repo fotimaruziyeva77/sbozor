@@ -9,21 +9,51 @@ Superuser va `BYPASSRLS` atributli rollar RLS'ni HAR DOIM chetlab o'tadi —
 va agar test fixture'i o'sha rol bilan ulansa, keyingi barcha RLS testlari
 YOLG'ON-YASHIL beradi. Shuning uchun rol invariantlari birinchi qulflanadi.
 
-DIQQAT: sxema invariantlari (har jadvalda `market_id`, RLS ENABLE+FORCE,
-policy mavjudligi, indekslar `market_id` bilan boshlanishi) 01-04 rejasida
-qo'shiladi — bu bosqichda hali hech qanday jadval yo'q.
+SXEMA INVARIANTLARI (01-04): bu fayl endi rol invariantlaridan tashqari
+SXEMA invariantlarini ham qulflaydi va ular HAR YANGI JADVALNI avtomatik
+qamrab oladi — ro'yxat qo'lda yuritilmaydi, `pg_catalog` dan o'qiladi.
+Yangi jadval qo'shgan odam RLS'ni unutsa, u testni "yangilashi" kerak
+bo'ladi, ya'ni unutish ko'rinmas emas, ATAYIN qilingan harakatga aylanadi.
+
+Istisnolar YAGONA manbada — `sbozor_core.schema_contract.GLOBAL_TABLES`.
+Ro'yxat bu faylda TAKRORLANMAYDI.
 """
 
 from __future__ import annotations
+
+import re
 
 import psycopg
 import pytest
 from psycopg import Connection
 from psycopg.rows import TupleRow
+from sbozor_core.models.identity import LOCALE_VALUES, ROLE_VALUES
+from sbozor_core.schema_contract import GLOBAL_TABLES
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 pytestmark = pytest.mark.tenancy
+
+TENANT_GUC = "app.market_id"
+
+# `market_id` bilan BOSHLANMASLIGI ruxsat etilgan indekslar. Har biri uchun
+# sabab shu yerda yozilishi SHART — ro'yxat o'sib ketsa, u sharh bilan
+# birga code review'da ko'rinadi.
+INDEX_EXCEPTIONS = {
+    # Refresh cookie kelganda bozor HALI noma'lum: token aynan shu global
+    # kalit bo'yicha topiladi va bozor undan keyin aniqlanadi.
+    "uq_refresh_tokens_jti",
+}
+
+EXPECTED_DEFINER_FUNCTIONS = {
+    "auth_find_login",
+    "auth_memberships",
+    "auth_list_markets",
+    "auth_user_state",
+}
+
+# (policyname, roles, qual, with_check)
+type PolicyRow = tuple[str, list[str], str, str | None]
 
 
 def _role_flags(conn: Connection[TupleRow], rolname: str) -> tuple[bool, bool]:
@@ -87,4 +117,299 @@ def test_public_schema_create_revoked_from_public(sync_app_conn: Connection[Tupl
     assert row[0] is False, (
         "sbozor_app `public` sxemada CREATE huquqiga ega — RLS'siz yordamchi "
         "jadval yaratib izolyatsiyani chetlab o'tish mumkin"
+    )
+
+
+def test_no_bypassrls_role_exists(sync_app_conn: Connection[TupleRow]) -> None:
+    """Klasterda superuser bo'lmagan `BYPASSRLS` roli YO'Q (D-06 / T-01-24).
+
+    Platforma admini bozorni TANLAB kiradi va tanlagan bozorining oddiy
+    tenant policy'siga bo'ysunadi. `BYPASSRLS` roli paydo bo'lishi — bu
+    qarorni jimgina bekor qilish yo'li, shuning uchun butun klaster
+    tekshiriladi, faqat ma'lum ikki rol emas.
+    """
+    rows = sync_app_conn.execute(
+        "SELECT rolname FROM pg_roles WHERE rolbypassrls AND NOT rolsuper"
+    ).fetchall()
+    assert rows == [], (
+        f"BYPASSRLS atributli rol(lar) topildi: {[r[0] for r in rows]} — "
+        "ular RLS'ni butunlay chetlab o'tadi va D-06 ni buzadi"
+    )
+
+
+# ===========================================================================
+# SXEMA INVARIANTLARI (01-04) — har yangi jadval avtomatik qamraladi
+# ===========================================================================
+
+
+def _base_tables(conn: Connection[TupleRow]) -> list[str]:
+    """`public` sxemadagi barcha oddiy jadvallar."""
+    rows = conn.execute(
+        "SELECT c.relname FROM pg_class c "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = 'public' AND c.relkind = 'r' "
+        "ORDER BY c.relname"
+    ).fetchall()
+    return [row[0] for row in rows]
+
+
+def _has_column(conn: Connection[TupleRow], table: str, column: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM pg_attribute a "
+        "JOIN pg_class c ON c.oid = a.attrelid "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = 'public' AND c.relname = %s AND a.attname = %s "
+        "AND a.attnum > 0 AND NOT a.attisdropped",
+        (table, column),
+    ).fetchone()
+    return row is not None
+
+
+def _rls_flags(conn: Connection[TupleRow], table: str) -> tuple[bool, bool]:
+    row = conn.execute(
+        "SELECT c.relrowsecurity, c.relforcerowsecurity FROM pg_class c "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = 'public' AND c.relname = %s",
+        (table,),
+    ).fetchone()
+    assert row is not None, f"{table} jadvali `pg_class` da topilmadi"
+    return bool(row[0]), bool(row[1])
+
+
+def _policies(conn: Connection[TupleRow], table: str) -> list[PolicyRow]:
+    rows = conn.execute(
+        "SELECT policyname, roles, qual, with_check FROM pg_policies "
+        "WHERE schemaname = 'public' AND tablename = %s ORDER BY policyname",
+        (table,),
+    ).fetchall()
+    return [(r[0], list(r[1]), r[2], r[3]) for r in rows]
+
+
+def test_every_table_is_tenant_scoped(sync_app_conn: Connection[TupleRow], migrated: None) -> None:
+    """Har bir jadval: `market_id` + RLS ENABLE + FORCE + policy.
+
+    Uchtasi ham kerak va uchtasi ham ALOHIDA buzilishi mumkin:
+      * `market_id` yo'q -> jadval umuman tenant'ga bog'lanmagan;
+      * ENABLE yo'q      -> policy TA'SIRSIZ, hamma narsa ochiq (Pitfall 10);
+      * FORCE yo'q       -> ega (migratsiya roli) policy'dan chetda qoladi;
+      * policy yo'q      -> RLS bor, lekin deny-all (fail-closed, lekin ilova ishlamaydi).
+    """
+    tables = _base_tables(sync_app_conn)
+    assert tables, "`public` sxemada birorta jadval yo'q — migratsiya bajarilmagan"
+
+    problems: list[str] = []
+    checked = 0
+    for table in tables:
+        if table in GLOBAL_TABLES:
+            continue
+        checked += 1
+        if not _has_column(sync_app_conn, table, "market_id"):
+            problems.append(f"{table}: `market_id` ustuni yo'q")
+            continue
+        enabled, forced = _rls_flags(sync_app_conn, table)
+        if not enabled:
+            problems.append(f"{table}: `ENABLE ROW LEVEL SECURITY` yo'q")
+        if not forced:
+            problems.append(f"{table}: `FORCE ROW LEVEL SECURITY` yo'q")
+        if not _policies(sync_app_conn, table):
+            problems.append(f"{table}: birorta policy yo'q")
+
+    assert checked > 0, (
+        "birorta tenant jadval tekshirilmadi — GLOBAL_TABLES butun sxemani "
+        "yutib yuborgan bo'lishi mumkin"
+    )
+    assert not problems, "Tenant invariantlari buzilgan:\n  " + "\n  ".join(problems)
+
+
+def test_markets_rls_and_policy(sync_app_conn: Connection[TupleRow], migrated: None) -> None:
+    """`markets` MAXSUS HOLATINING alohida isboti (RESEARCH Open Question 4).
+
+    `markets` `GLOBAL_TABLES` da, ya'ni yuqoridagi umumiy tsikldan chiqib
+    ketadi. Istisno qilingan jadval tekshiruvsiz qolmasligi SHART, shuning
+    uchun uning RLS'i va policy'si shu yerda qulflanadi: predikat
+    `market_id = ...` EMAS, `id = ...` — chunki `markets` da tenant kaliti
+    `id` ning O'ZI.
+    """
+    enabled, forced = _rls_flags(sync_app_conn, "markets")
+    assert enabled, "markets: `ENABLE ROW LEVEL SECURITY` yo'q"
+    assert forced, "markets: `FORCE ROW LEVEL SECURITY` yo'q"
+
+    policies = _policies(sync_app_conn, "markets")
+    assert policies, "markets: birorta policy yo'q"
+
+    app_policies = [p for p in policies if "sbozor_app" in p[1]]
+    assert app_policies, "markets: `sbozor_app` uchun policy yo'q"
+
+    quals = " ".join(p[2] or "" for p in app_policies)
+    assert "market_id" not in quals, (
+        "markets policy'si `market_id` ustuniga murojaat qilmoqda — bunday "
+        "ustun yo'q, tenant kaliti `id` ning o'zi"
+    )
+    assert "NULLIF" in quals.upper(), (
+        "markets policy'sida `NULLIF` yo'q — pool'dagi ulanishda "
+        '`invalid input syntax for type uuid: ""` beradi (Pitfall 1)'
+    )
+    assert TENANT_GUC in quals, f"markets policy'si `{TENANT_GUC}` GUC'iga tayanmaydi"
+
+
+def test_tenant_indexes_lead_with_market_id(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """Tenant jadvallarining indekslari `market_id` bilan boshlanadi (P9).
+
+    Ikkinchi qatlam filtri (`TenantScopedRepository`) har so'rovga
+    `market_id = ...` qo'shadi; indeks boshqa ustundan boshlansa,
+    rejalashtiruvchi uni ishlata olmaydi va bozor kattalashgan sari
+    so'rovlar sekinlashadi.
+    """
+    rows = sync_app_conn.execute(
+        "SELECT t.relname, i.relname, x.indisprimary, a.attname "
+        "FROM pg_index x "
+        "JOIN pg_class t ON t.oid = x.indrelid "
+        "JOIN pg_class i ON i.oid = x.indexrelid "
+        "JOIN pg_namespace n ON n.oid = t.relnamespace "
+        "JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = x.indkey[0] "
+        "WHERE n.nspname = 'public' AND t.relkind = 'r' "
+        "ORDER BY t.relname, i.relname"
+    ).fetchall()
+
+    problems: list[str] = []
+    for table, index, is_primary, first_column in rows:
+        if table in GLOBAL_TABLES or is_primary or index in INDEX_EXCEPTIONS:
+            continue
+        if first_column != "market_id":
+            problems.append(f"{table}.{index}: birinchi ustun `{first_column}`, `market_id` emas")
+
+    assert not problems, (
+        "Indekslar `market_id` bilan boshlanmayapti:\n  "
+        + "\n  ".join(problems)
+        + "\n(atayin istisno bo'lsa `INDEX_EXCEPTIONS` ga sabab bilan qo'shing)"
+    )
+
+
+def test_security_definer_functions_pin_search_path(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """Har bir `SECURITY DEFINER` funksiya `search_path` ni pin qiladi (T-01-23).
+
+    Pin qilinmasa chaqiruvchi o'z sxemasida soxta `users` jadvali yaratib
+    funksiyani unga qaratishi mumkin — klassik privilege escalation.
+    Test butun `public` sxemani skanerlaydi, ya'ni kelajakdagi funksiyalar
+    ham avtomatik qamraladi.
+    """
+    rows = sync_app_conn.execute(
+        "SELECT p.proname, p.proconfig FROM pg_proc p "
+        "JOIN pg_namespace n ON n.oid = p.pronamespace "
+        "WHERE n.nspname = 'public' AND p.prosecdef ORDER BY p.proname"
+    ).fetchall()
+
+    found = {row[0] for row in rows}
+    assert found >= EXPECTED_DEFINER_FUNCTIONS, (
+        f"kutilgan login funksiyalari yo'q: {sorted(EXPECTED_DEFINER_FUNCTIONS - found)}"
+    )
+
+    for name, proconfig in rows:
+        assert proconfig, f"{name}: `SECURITY DEFINER`, lekin `proconfig` bo'sh"
+        assert any(item.startswith("search_path=") for item in proconfig), (
+            f"{name}: `SET search_path = ...` yo'q — privilege escalation vektori"
+        )
+
+
+def test_app_role_policies_all_reference_tenant_guc(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`sbozor_app` ga tegishli HAR BIR policy tenant GUC'iga tayanadi.
+
+    Bu — butun dizaynning qulfi: ilova roliga `USING (true)` bergan bitta
+    policy barcha tenant izolyatsiyasini bir zarbada yo'q qiladi va boshqa
+    hech qanday test buni ko'rmaydi (hamma so'rov "muvaffaqiyatli" qaytadi,
+    faqat begona qatorlar bilan).
+    """
+    rows = sync_app_conn.execute(
+        "SELECT tablename, policyname, roles, qual, with_check FROM pg_policies "
+        "WHERE schemaname = 'public' ORDER BY tablename, policyname"
+    ).fetchall()
+    assert rows, "birorta policy yo'q — migratsiya bajarilmagan"
+
+    problems: list[str] = []
+    for table, policy, roles, qual, with_check in rows:
+        role_names = set(roles)
+        if not ({"sbozor_app", "public"} & role_names):
+            continue
+        for label, expression in (("USING", qual), ("WITH CHECK", with_check)):
+            if expression is None:
+                continue
+            if TENANT_GUC not in expression:
+                problems.append(f"{table}.{policy} {label}: `{TENANT_GUC}` ga murojaat yo'q")
+
+    assert not problems, (
+        "Ilova roliga tenant filtri qo'ymaydigan policy topildi:\n  " + "\n  ".join(problems)
+    )
+
+
+def test_owner_bootstrap_policies_are_owner_only(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`owner_bootstrap` policy'si FAQAT `sbozor_owner` ga berilgan.
+
+    Bu policy `SECURITY DEFINER` login funksiyalari FORCE ostida bloklanib
+    qolmasligi uchun bor (`migrations/entities/policies.py` da batafsil).
+    U `sbozor_app` ga yoki `PUBLIC` ga kengaysa, ilova roli bir zarbada
+    barcha bozorlarni ko'radi — shuning uchun rollar ro'yxati qulflanadi.
+    """
+    rows = sync_app_conn.execute(
+        "SELECT tablename, roles FROM pg_policies "
+        "WHERE schemaname = 'public' AND policyname = 'owner_bootstrap' "
+        "ORDER BY tablename"
+    ).fetchall()
+    assert rows, "birorta `owner_bootstrap` policy yo'q"
+
+    for table, roles in rows:
+        assert set(roles) == {"sbozor_owner"}, (
+            f"{table}.owner_bootstrap `{sorted(roles)}` rollariga berilgan — "
+            "faqat `sbozor_owner` bo'lishi shart"
+        )
+
+
+def _check_literals(conn: Connection[TupleRow], constraint: str) -> set[str]:
+    """Konstrayt ta'rifidagi matn literallarini ajratib oladi."""
+    row = conn.execute(
+        "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = %s",
+        (constraint,),
+    ).fetchone()
+    assert row is not None, f"{constraint} konstrayti topilmadi"
+    return set(re.findall(r"'([^']+)'::text", row[0]))
+
+
+def test_role_check_constraint_matches_enum(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """DB dagi rol ro'yxati `sbozor_core.enums.Role` bilan AYNAN mos.
+
+    Enum'ga yangi rol qo'shilib migratsiya unutilsa, ilova o'sha rolni
+    yozmoqchi bo'lganda `check constraint` xatosi bilan yiqilardi —
+    va sabab kod bilan sxema orasidagi jimgina drift bo'lardi.
+    """
+    assert _check_literals(sync_app_conn, "ck_user_market_roles_roles_allowed") == set(ROLE_VALUES)
+
+
+def test_locale_check_constraint_matches_enum(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """DB dagi til ro'yxati `sbozor_core.enums.Locale` bilan AYNAN mos (D-13)."""
+    assert _check_literals(sync_app_conn, "ck_users_locale_allowed") == set(LOCALE_VALUES)
+
+
+def test_users_table_is_closed_to_app_role(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`users` da `sbozor_app` uchun HECH QANDAY huquq yo'q (T-01-25)."""
+    row = sync_app_conn.execute(
+        "SELECT bool_or(has_table_privilege('sbozor_app', 'users', priv)) "
+        "FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','REFERENCES','TRIGGER']) AS priv"
+    ).fetchone()
+    assert row is not None
+    assert row[0] is False, (
+        "sbozor_app `users` jadvaliga huquqqa ega — global identifikatsiya "
+        "ma'lumoti ORM orqali o'qilishi mumkin bo'lib qoladi"
     )
