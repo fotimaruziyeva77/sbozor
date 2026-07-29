@@ -17,10 +17,12 @@ from typing import Any
 from migrations.entities.functions import (
     ALL_FUNCTIONS,
     AUTH_SUPPORT_FUNCTIONS,
+    PLATFORM_AUDIT_FUNCTIONS,
     USER_ADMIN_FUNCTIONS,
 )
 from migrations.entities.policies import (
     audit_append_policy,
+    audit_read_platform_policy,
     audit_read_policy,
     markets_policy,
     owner_bootstrap_policy,
@@ -45,6 +47,13 @@ RLS_TABLES: tuple[str, ...] = ("markets", *TENANT_TABLES)
 BERILMASLIGI shart. O'sha policy `FOR ALL ... USING (true)` bo'lgani uchun
 egaga `UPDATE`/`DELETE` da qatorlarni ko'rsatib qo'yardi va o'zgarmaslikning
 2-qatlamini bir zarbada yo'q qilardi (`migrations/versions/0002_audit.py`).
+
+DIQQAT — `audit_read_platform` (0005) BUNGA ZID EMAS. U ham EGAGA
+mo'ljallangan (`TO sbozor_owner`), lekin `FOR SELECT`: `UPDATE`/`DELETE`
+uchun baribir birorta policy paydo bo'lmaydi, ya'ni 2-qatlam o'zgarishsiz
+qoladi. Butun farq komanda bandida — uni kelajakda `FOR ALL` ga
+"soddalashtirish" o'zgarmaslikni JIMGINA yo'q qilardi, shuning uchun
+`test_audit_read_platform_is_owner_only` komandani `SELECT` ga qulflaydi.
 """
 
 ALL_ENTITIES: list[Any] = [
@@ -58,6 +67,9 @@ ALL_ENTITIES: list[Any] = [
     # uchun policy YO'Q (o'zgarmaslikning 2-qatlami).
     audit_append_policy(),
     audit_read_policy(),
+    # Platforma-global (`market_id IS NULL`) qatorlar uchun EGAGA ochiladigan
+    # tor `FOR SELECT` yo'li — `auth_list_platform_audit()` ning jufti (Gap 5).
+    audit_read_platform_policy(),
     # Login bootstrap — global o'qish yuzasining BUTUN ro'yxati (Pattern 2).
     *ALL_FUNCTIONS,
     # Sessiya va parol YOZISH yo'li (0003): `refresh_tokens` ustidagi
@@ -67,6 +79,9 @@ ALL_ENTITIES: list[Any] = [
     # Foydalanuvchi boshqaruvi va profil (0004): `users` app-rolga yopiq,
     # ya'ni yaratish/profil o'qish/til saqlash ham shu yuzadan o'tadi.
     *USER_ADMIN_FUNCTIONS,
+    # Platforma-global audit o'qish (0005): yuqoridagi `audit_read_platform`
+    # policy'si bilan JUFTLIKDA ishlaydi — biri ikkinchisisiz 0 qator beradi.
+    *PLATFORM_AUDIT_FUNCTIONS,
     # Audit yozuvchisi + append-only qo'riqchisi (D-10).
     *ALL_TRIGGER_FUNCTIONS,
 ]

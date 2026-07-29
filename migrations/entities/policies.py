@@ -37,13 +37,16 @@ from alembic_utils.pg_policy import PGPolicy
 __all__ = [
     "APP_ROLE",
     "AUDIT_APPEND_SIGNATURE",
+    "AUDIT_READ_PLATFORM_SIGNATURE",
     "AUDIT_READ_SIGNATURE",
     "MARKETS_PREDICATE",
     "OWNER_BOOTSTRAP_SIGNATURE",
     "OWNER_ROLE",
+    "PLATFORM_AUDIT_PREDICATE",
     "TENANT_PREDICATE",
     "TENANT_POLICY_SIGNATURE",
     "audit_append_policy",
+    "audit_read_platform_policy",
     "audit_read_policy",
     "markets_policy",
     "owner_bootstrap_policy",
@@ -57,6 +60,7 @@ TENANT_POLICY_SIGNATURE = "tenant_isolation"
 OWNER_BOOTSTRAP_SIGNATURE = "owner_bootstrap"
 AUDIT_APPEND_SIGNATURE = "audit_append"
 AUDIT_READ_SIGNATURE = "audit_read"
+AUDIT_READ_PLATFORM_SIGNATURE = "audit_read_platform"
 
 TENANT_PREDICATE = "market_id = NULLIF(current_setting('app.market_id', true), '')::uuid"
 """Standart tenant jadvallari uchun predikat (`market_id` ustuni bo'yicha)."""
@@ -65,6 +69,17 @@ MARKETS_PREDICATE = "id = NULLIF(current_setting('app.market_id', true), '')::uu
 """`markets` MAXSUS HOLATI: unda `market_id` ustuni yo'q — tenant kaliti `id` ning O'ZI.
 
 RESEARCH Open Question 4. `test_markets_rls_and_policy` buni doimiy qulflaydi.
+"""
+
+PLATFORM_AUDIT_PREDICATE = "market_id IS NULL"
+"""Platforma-global audit qatorlari — hech qaysi bozorga tegishli EMAS.
+
+`login_failed` kabi yozuvlar ataylab `market_id = NULL` bilan yoziladi: rad
+etilgan login urinishida bozor NOMA'LUM va uni taxmin qilish jurnalga YOLG'ON
+dalil yozish bo'lardi (01-05/01-06). Bu predikat `TENANT_PREDICATE` ning
+to'ldiruvchisi, ALTERNATIVASI EMAS: ikkalasi kesishmaydi (`market_id = X` va
+`market_id IS NULL` bir qatorga bir vaqtda mos kelolmaydi), shuning uchun
+bittasini ochish ikkinchisining yuzasini kengaytirmaydi.
 """
 
 
@@ -195,7 +210,8 @@ def audit_read_policy() -> PGPolicy:
 
     `market_id IS NULL` bo'lgan platforma-global yozuvlar bu predikat ostida
     hech kimga ko'rinmaydi. Bu ataylab: ular platforma admini uchun alohida
-    tor yo'l bilan beriladi (01-07), umumiy o'qish yuzasi orqali emas.
+    tor yo'l bilan beriladi — `audit_read_platform_policy()` +
+    `auth_list_platform_audit()` (0005), umumiy o'qish yuzasi orqali emas.
     """
     return PGPolicy(
         schema="public",
@@ -205,5 +221,61 @@ def audit_read_policy() -> PGPolicy:
             AS PERMISSIVE
             FOR SELECT
             USING ({TENANT_PREDICATE})
+        """,
+    )
+
+
+def audit_read_platform_policy() -> PGPolicy:
+    """`audit_log` dagi PLATFORMA-GLOBAL (`market_id IS NULL`) qatorlarni ochadi.
+
+    Bu jadvaldagi UCHINCHI policy va u `owner_bootstrap_policy()` bilan AYNAN
+    bir qolipda ishlaydi: EGAGA tor yo'l ochadi, ilova roliga emas.
+
+    NEGA UMUMAN KERAK (Gap 5 — 01-06, 01-07, 01-09 SUMMARY'larida uch marta
+    ketma-ket ochiq qayd etilgan): `login_failed` kabi yozuvlar ataylab
+    `market_id = NULL` bilan yoziladi, `audit_read` predikati esa
+    `market_id = app.market_id` — ya'ni bu qatorlar HECH QANDAY tenant
+    konteksti bilan mos kelmaydi va mahsulot yo'lida HECH KIMGA ko'rinmaydi.
+    Ular faqat test-superuseri bilan o'qilardi, ya'ni "kim tizimga kirishga
+    urinmoqda" savoli FOUND-03 ostida javobsiz qolardi.
+
+    NEGA YOLG'IZ `SECURITY DEFINER` YETMAYDI: `audit_log` da RLS ENABLE+FORCE
+    va `sbozor_owner` `NOSUPERUSER NOBYPASSRLS`. FORCE tufayli EGA HAM
+    policy'ga bo'ysunadi, ya'ni ega uchun birorta `SELECT` policy'si bo'lmasa
+    natija deny-all bo'ladi va `SECURITY DEFINER` funksiya (u ega nomidan
+    ishlaydi) **0 qator** qaytarardi. `users` naqshi (funksiya global jadvalni
+    o'qiydi) bu yerda ISHLAMAYDI, chunki `users` da RLS umuman yo'q.
+
+    NEGA `TO sbozor_owner`: haqiqiy xavfsizlik chegarasi — `sbozor_app`.
+    Ilova FAQAT o'sha rol bilan ulanadi va bu policy unga UMUMAN qo'llanmaydi,
+    ya'ni ilova `SELECT ... FROM audit_log WHERE market_id IS NULL` yozsa
+    baribir 0 qator oladi. NULL qatorlarga yagona yo'l — grant qilingan
+    `auth_list_platform_audit()` funksiyasi, ya'ni yuza aniq, tor va
+    greplanadigan bo'lib qoladi.
+
+    NEGA `FOR SELECT`, `FOR ALL` EMAS (BU BAND KRITIK): `audit_log` ga
+    `owner_bootstrap` policy'si ATAYIN berilmagan, chunki u `FOR ALL ...
+    USING (true)` bo'lib egaga `UPDATE`/`DELETE` da qatorlarni ko'rsatib
+    qo'yardi va o'zgarmaslikning 2-QATLAMINI bir zarbada yo'q qilardi
+    (`migrations/versions/0002_audit.py`). Bu policy esa FAQAT `SELECT` —
+    `UPDATE`/`DELETE` uchun baribir birorta policy yo'q, ya'ni 2-qatlam
+    o'zgarishsiz qoladi va `tests/integration/test_audit_immutable.py`
+    yashil turaveradi.
+
+    Ikki meta-test qulflaydi:
+      * `test_audit_read_platform_is_owner_only` — rollar AYNAN
+        `{sbozor_owner}` va komanda AYNAN `SELECT`;
+      * `test_audit_read_policy_is_tenant_scoped` — `audit_log` policy'lari
+        to'plami aynan shu uchtasi (`w`/`d` paydo bo'lishi darhol qizaradi).
+    """
+    return PGPolicy(
+        schema="public",
+        signature=AUDIT_READ_PLATFORM_SIGNATURE,
+        on_entity="public.audit_log",
+        definition=f"""
+            AS PERMISSIVE
+            FOR SELECT
+            TO {OWNER_ROLE}
+            USING ({PLATFORM_AUDIT_PREDICATE})
         """,
     )
