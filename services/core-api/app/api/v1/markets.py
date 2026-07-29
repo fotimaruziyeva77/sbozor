@@ -8,8 +8,8 @@ ishlaydi (ilova boshqa ulanishni umuman bilmaydi):
 
 | Kim                  | Manba                      | Nima cheklaydi          |
 | -------------------- | -------------------------- | ----------------------- |
-| `MARKET_VIEW_ALL`    | `auth_list_markets_full()` | funksiyaning O'ZI: u    |
-| (platforma admini)   | `SECURITY DEFINER`         | faqat bozor KONFIG'ini  |
+| `is_platform_admin`  | `auth_list_markets_full()` | funksiyaning O'ZI: u    |
+| (BAYROQ, rol emas)   | `SECURITY DEFINER`         | faqat bozor KONFIG'ini  |
 |                      |                            | ochadi, tenant ma'lumot |
 |                      |                            | ini emas                |
 | qolganlar            | `SELECT ... FROM markets`  | `markets` policy'si:    |
@@ -21,6 +21,23 @@ darvozasi buni butun klaster bo'yicha qulflaydi. Ya'ni platforma
 adminining "hamma bozorni ko'rish" huquqi bozor KONFIGURATSIYASI bilan
 cheklangan: bozor tanlangandan keyin u ham oddiy tenant policy'siga
 bo'ysunadi (bu 01-06 da `/auth/me` orqali uchdan-uchiga isbotlangan).
+=============================================================================
+
+BRANCH MANBAI — `is_platform_admin` BAYROG'I, `MARKET_VIEW_ALL` HUQUQI EMAS
+(CR-03 tuzatishi; ilgari teskarisi yozilgan edi).
+
+Sabab: huquq ROLDAN hisoblanadi (`permissions_for()`), rol esa a'zolik
+qatoridan ham kelishi mumkin. Ya'ni `user_market_roles.roles` ga
+`'platform_admin'` yozilgan har qanday hisob — bayroqsiz bo'lsa ham —
+`MARKET_VIEW_ALL` ni olardi va bu yerdan platformadagi BARCHA bozorlar
+ro'yxatini ko'rardi. Bayroq esa `users` jadvalidagi yagona autoritativ
+manba: uni faqat platforma darajasidagi tayinlash o'zgartiradi va u
+hech qanday rol/a'zolik yo'li bilan qo'lga kiritilmaydi.
+
+Ikkinchi qulf `users.py::_assert_roles_assignable` da: `platform_admin`
+a'zolik roli sifatida umuman berilmaydi. Ikkalasi mustaqil — biri
+"gibrid hisob yaratib bo'lmaydi", ikkinchisi "gibrid hisob baribir
+ko'rmaydi" deydi.
 =============================================================================
 
 Bozor TANLASH endpointi bu yerda EMAS — u `POST /api/v1/auth/select-market`
@@ -36,7 +53,6 @@ from sqlalchemy import text
 
 from app.deps import PrincipalDep, TenantSessionDep
 from app.schemas import MarketListItem
-from app.security.rbac import Permission
 
 router = APIRouter(tags=["markets"])
 
@@ -62,20 +78,24 @@ async def list_markets(
 ) -> list[MarketListItem]:
     """Ko'rinadigan bozorlar (D-06).
 
-    `MARKET_VIEW_ALL` huquqi bo'lsa barcha bozorlar, aks holda faqat
-    tanlangan bozor. Tekshiruv HUQUQ bo'yicha, `is_platform_admin`
-    bayrog'i bo'yicha EMAS: matritsa (D-07) yagona haqiqat manbai bo'lib
-    qolishi kerak, aks holda bir kun matritsa o'zgaradi-yu, bu yerdagi
-    shart eskirib qoladi.
+    HAQIQIY platforma admini (`users.is_platform_admin = true`) barcha
+    bozorlarni ko'radi, qolganlar — faqat tanlangan bozorni. Tekshiruv
+    BAYROQ bo'yicha, `MARKET_VIEW_ALL` huquqi bo'yicha EMAS (CR-03):
+    huquq roldan hisoblanadi, rol esa a'zolik qatoridan ham kelishi
+    mumkin, ya'ni u bozor darajasida "qo'lga kiritiladigan" qiymat.
+    Bayroq esa bozor darajasidan yuqorida turadi va faqat platforma
+    tayinlashi bilan o'zgaradi.
+
+    Matritsa (D-07) hamon yagona haqiqat manbai — LEKIN "nima qila oladi"
+    savoli uchun. "Qaysi TENANT chegarasida" savoliga u javob bermaydi va
+    aynan shu chalkashlik CR-03 ni tug'digan edi.
 
     Bozor tanlanmagan sessiya `TenantSessionDep` da 409 oladi. Bu ataylab:
     bozor tanlash ekranining manbai `POST /auth/login` javobidagi
     `markets` ro'yxati (01-06), bu endpoint esa boshqaruv panelining
     ichki ro'yxati.
     """
-    statement = (
-        _ALL_MARKETS if Permission.MARKET_VIEW_ALL in principal.permissions else _CURRENT_MARKET
-    )
+    statement = _ALL_MARKETS if principal.is_platform_admin else _CURRENT_MARKET
     result = await session.execute(statement)
     return [
         MarketListItem(id=row[0], name=row[1], timezone=row[2], is_active=row[3]) for row in result

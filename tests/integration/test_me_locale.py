@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fixtures.admin_api import MARKETS_URL, PROFILE_URL, platform_admin_headers, session_headers
+from fixtures.auth_api import ME_URL as SESSION_URL
 from fixtures.auth_api import SELECT_MARKET_URL, audit_rows
 from sbozor_core.enums import AuditAction, Locale
 
@@ -29,6 +30,12 @@ if TYPE_CHECKING:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ROUTING_TS = REPO_ROOT / "frontend" / "src" / "i18n" / "routing.ts"
+
+# `SESSION_URL` = `/api/v1/auth/me` (SESSIYA: rollar, huquqlar, bozor),
+# `PROFILE_URL` = `/api/v1/me` (PROFIL: telefon, ism, til). Ikkalasi bu
+# faylda uchraydi, shuning uchun birinchisi ochiq nom bilan olinadi —
+# `ME_URL` va `PROFILE_URL` yonma-yon turganda qaysi biri qaysi ekani
+# o'qiyotgan odam uchun taxminga aylanardi.
 
 _LOCALES_ARRAY = re.compile(r"locales:\s*\[(?P<body>[^\]]*)\]", re.DOTALL)
 
@@ -156,10 +163,23 @@ async def test_patch_locale_writes_an_audit_row_with_old_and_new(
 # ---------------------------------------------------------------------------
 
 
-async def test_markets_list_depends_on_market_view_all(
+async def test_markets_list_depends_on_the_platform_admin_flag(
     api_client: httpx.AsyncClient, auth_seed: AuthSeed
 ) -> None:
-    """Platforma admini barcha bozorlarni, bozor admini AYNAN bittasini ko'radi."""
+    """Platforma admini barcha bozorlarni, bozor admini AYNAN bittasini ko'radi.
+
+    TEST NOMI 01-11 da o'zgartirildi (`..._depends_on_market_view_all` ->
+    `..._depends_on_the_platform_admin_flag`): CR-03 dan keyin branch
+    manbai `Permission.MARKET_VIEW_ALL` emas, `users.is_platform_admin`
+    bayrog'i. Eski nom endi mavjud bo'lmagan bog'liqlikni tasdiqlardi —
+    bu aynan hujjat sifatidagi test nomi jimgina yolg'onga aylanadigan
+    holat.
+
+    Bu test o'zi CR-03 ni USHLAMAYDI (bu yerdagi platforma adminida
+    bayroq ham, huquq ham bor, ya'ni ikkala shakl ostida ham yashil).
+    Uni ushlaydigan test — pastdagi
+    `test_market_view_all_without_the_flag_sees_only_its_own_market`.
+    """
     admin_headers = await session_headers(
         api_client, auth_seed.market_admin.phone, auth_seed.password
     )
@@ -180,12 +200,69 @@ async def test_markets_list_depends_on_market_view_all(
     assert {str(auth_seed.market_a_id), str(auth_seed.market_b_id)} <= platform_ids
 
 
+async def test_market_admin_markets_list_returns_only_own_market(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """Bozor admini javobida B bozorining IZI ham yo'q (FOUND-02 regressiyasi).
+
+    Yuqoridagi test bozorlar SONINI tekshiradi, bu esa MAZMUNINI: javob
+    tanasida B bozorining `id` si ham, nomi ham uchramasligi kerak.
+    Ikkinchisi kuchliroq — noto'g'ri branch bitta qator qaytarib, lekin
+    "boshqa bozor" qatorini qaytarishi ham mumkin edi.
+    """
+    headers = await session_headers(api_client, auth_seed.market_admin.phone, auth_seed.password)
+
+    response = await api_client.get(MARKETS_URL, headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert [item["id"] for item in response.json()] == [str(auth_seed.market_a_id)]
+    assert str(auth_seed.market_b_id) not in response.text
+    assert auth_seed.market_b_name not in response.text
+
+
+async def test_market_view_all_without_the_flag_sees_only_its_own_market(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """CR-03 NING SABOTAJ DARVOZASI: huquq YETARLI EMAS, BAYROQ kerak.
+
+    `auth_seed.hybrid_platform_role` — a'zolik roli `platform_admin`,
+    lekin `users.is_platform_admin = false`. Ya'ni `permissions_for()`
+    unga `MARKET_VIEW_ALL` ni BERADI, bayroq esa yo'q.
+
+    `list_markets` branchi huquqqa qaytarilsa (aynan CR-03 dagi holat) bu
+    hisob platformadagi BARCHA bozorlarni — nomi va vaqt mintaqasi bilan —
+    ko'radi. Boshqa birorta test buni ushlamaydi:
+    `test_markets_list_depends_on_the_platform_admin_flag` dagi platforma
+    adminida ikkala shart ham bajarilgan.
+
+    Nazorat sifatida `MARKET_VIEW_ALL` HAQIQATAN borligi ham tekshiriladi
+    (`GET /auth/me` javobidagi `permissions`): usiz test rol umuman
+    ishlamayotgan holatda ham yashil bo'lardi va hech nimani isbotlamasdi.
+    """
+    headers = await session_headers(
+        api_client, auth_seed.hybrid_platform_role.phone, auth_seed.password
+    )
+
+    session = await api_client.get(SESSION_URL, headers=headers)
+    response = await api_client.get(MARKETS_URL, headers=headers)
+
+    assert session.status_code == 200, session.text
+    assert session.json()["is_platform_admin"] is False
+    assert "market_view_all" in session.json()["permissions"], (
+        "gibrid hisobda MARKET_VIEW_ALL yo'q — test o'z shartini bajarmadi"
+    )
+
+    assert response.status_code == 200, response.text
+    assert [item["id"] for item in response.json()] == [str(auth_seed.market_a_id)]
+    assert str(auth_seed.market_b_id) not in response.text
+
+
 async def test_platform_admin_sees_the_same_list_from_either_market(
     api_client: httpx.AsyncClient, auth_seed: AuthSeed
 ) -> None:
     """Ro'yxat TANLANGAN bozorga bog'liq emas — u platforma darajasidagi ko'rinish.
 
-    Bu nazorat holati: agar `MARKET_VIEW_ALL` yo'li tasodifan tenant
+    Bu nazorat holati: agar platforma admini yo'li tasodifan tenant
     so'roviga almashsa, B bozorini tanlagan admin faqat B ni ko'rardi va
     yuqoridagi test baribir yashil qolardi.
     """

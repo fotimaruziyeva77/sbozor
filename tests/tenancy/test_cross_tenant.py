@@ -94,7 +94,10 @@ EXEMPT_ROUTES: dict[str, str] = {
     "/api/v1/auth/change-password": "auth bootstrap — parol PROFILGA tegishli, bozorga emas",
     # --- global: tenant chegarasidan tashqari ---
     "/api/v1/me": "global — profil (ism, til) bozorga tegishli emas va bozorsiz ishlaydi (D-13)",
-    "/api/v1/markets": "global — platforma admini uchun BOZORLAR RO'YXATI (D-06 tanlash yuzasi)",
+    "/api/v1/markets": (
+        "global — bozorlar ro'yxati FAQAT haqiqiy platforma adminiga "
+        "(`users.is_platform_admin` bayrog'i) ochiladi, gibrid huquqli hisobga EMAS (CR-03)"
+    ),
 }
 """Cross-tenant matritsasidan CHIQARILGAN marshrutlar — har biri SABAB bilan.
 
@@ -106,6 +109,15 @@ Uchta ruxsat etilgan sabab turi:
   * `auth bootstrap` — tenant konteksti hali mavjud emas;
   * `global`         — resurs tenant chegarasidan tashqarida;
   * `health`         — autentifikatsiyasiz, ma'lumot qaytarmaydi.
+
+`/api/v1/markets` istisnosining SABABI 01-11 da qayta yozildi. Istisnoning
+o'zi qonuniy va QOLADI (platforma admini barcha bozorlarni ko'rishi —
+D-06 bozor tanlash yuzasi), lekin eski asos ("platforma admini uchun")
+`MARKET_VIEW_ALL` HUQUQIGA tayangan edi, huquq esa a'zolik roli orqali
+qo'lga kiritilardi (CR-03). Endi branch `users.is_platform_admin`
+bayrog'ida va istisno faqat shu bayroqni qamraydi. Bayroqsiz, lekin
+huquqli hisob uchun regressiya darvozasi —
+`tests/integration/test_me_locale.py::test_market_view_all_without_the_flag_sees_only_its_own_market`.
 """
 
 EXEMPT_REASON_PREFIXES = ("auth bootstrap", "global", "health")

@@ -17,6 +17,15 @@ ikki bosqichli modelini butunlay yo'q qiladi.
 
 Har bir rad etish IKKI narsani tekshiradi: javob kodi VA bazada qoldiq
 qolmagani (yaratish umuman boshlanmagani).
+
+TO'RTINCHISI — 01-11 da qo'shilgan va u yuqoridagi uchtasidan BOSHQA
+qatlamda turadi:
+
+    platform_admin -> platform_admin  403 role_not_allowed
+
+Bu D-04 ning "platforma admini cheklovsiz" bandidagi YAGONA istisno
+(CR-03). Uchlik faqat `is_platform_admin=False` chaqiruvchini sinagani
+uchun bu yo'l uzoq vaqt hech qanday test bilan qoplanmagan edi.
 =============================================================================
 """
 
@@ -230,6 +239,57 @@ async def test_platform_admin_creates_market_admin_and_director(
 
     assert admin.status_code == 201, admin.text
     assert director.status_code == 201, director.text
+
+
+async def test_platform_admin_cannot_assign_the_platform_admin_role(
+    api_client: httpx.AsyncClient,
+    auth_seed: AuthSeed,
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """PLATFORMA ADMINI HAM `platform_admin` rolini bera olmaydi (CR-03, T-01-81).
+
+    Bu D-04 ning "cheklovsiz" bandidagi YAGONA istisno va u shu yerda
+    qulflanadi. Sabab tuzilmaviy: `platform_admin` — `users.is_platform_admin`
+    bayrog'i, a'zolik roli EMAS. Uni `user_market_roles.roles` ga yozish
+    GIBRID hisob yaratadi (rol bor, bayroq yo'q), u esa `permissions_for()`
+    orqali `MARKET_VIEW_ALL` ni oladi.
+
+    Yuqoridagi `test_market_admin_cannot_create_platform_admin` bozor
+    admini yo'lini qoplaydi; darvoza AYNAN platforma admini uchun ham
+    yopilganini faqat SHU test isbotlaydi — o'sha paytda mavjud
+    testlarning hammasi `is_platform_admin=False` chaqiruvchi bilan
+    ishlagani uchun teshik yillar davomida yashil qolgan edi.
+
+    Qoldiqsizlik ham tekshiriladi (D-04 rad etish naqshi): rad etish
+    `auth_create_user` dan OLDIN sodir bo'ladi.
+    """
+    headers = await platform_admin_headers(api_client, auth_seed)
+    phone = new_phone()
+    before = _membership_count(sync_owner_conn, auth_seed.market_a_id)
+
+    response = await _create(api_client, headers, roles=["platform_admin"], phone=phone)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "role_not_allowed"}
+    assert not _phone_exists(sync_owner_conn, phone), "`users` da qator qoldi"
+    assert _membership_count(sync_owner_conn, auth_seed.market_a_id) == before
+
+
+async def test_platform_admin_cannot_smuggle_the_platform_admin_role(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """Ruxsat etilgan rol bilan ARALASHTIRIB berish ham rad etiladi.
+
+    `["cashier", "platform_admin"]` — darvoza to'plamning ICHIDA qidiradi,
+    ya'ni "birinchi rol ruxsat etilgan" shaklidagi tekshiruv bu yerda
+    jimgina o'tkazib yuborardi.
+    """
+    headers = await platform_admin_headers(api_client, auth_seed)
+
+    response = await _create(api_client, headers, roles=["cashier", "platform_admin"])
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "role_not_allowed"}
 
 
 async def test_empty_roles_is_rejected(api_client: httpx.AsyncClient, auth_seed: AuthSeed) -> None:

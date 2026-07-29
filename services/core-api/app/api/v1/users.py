@@ -8,15 +8,23 @@ BERISH" degani EMAS. Ikki bosqichli model quyidagicha ishlaydi:
 
 | Yaratuvchi          | Bera oladigan rollar          | Nazorat             |
 | ------------------- | ----------------------------- | ------------------- |
-| platforma admini    | cheklovsiz (bozor admini,     | `is_platform_admin` |
-|                     | direktor, kassir, nazoratchi) |                     |
+| platforma admini    | bozor admini, direktor,       | `is_platform_admin` |
+|                     | kassir, nazoratchi            |                     |
 | bozor admini        | AYNAN {kassir, nazoratchi}    | pastdagi darvoza    |
+| HECH KIM            | `platform_admin` — a'zolik    | so'zsiz 403         |
+|                     | roli sifatida BERILMAYDI      |                     |
 
 Ya'ni bozor admini o'ziga TENG (`market_admin`) yoki undan yuqori
 (`director`, `platform_admin`) rol yarata OLMAYDI — aks holda u bir
 so'rov bilan o'zining nazoratchisini (direktorni) yoki cheksiz sonli
 teng huquqli adminni tug'dira olardi va D-04 ning butun ma'nosi
 yo'qolardi (T-01-50, ASVS V8).
+
+Uchinchi qator (CR-03) — platforma adminining O'ZIGA ham tegishli:
+`platform_admin` `users.is_platform_admin` bayrog'i orqali beriladi,
+a'zolik qatori orqali EMAS. Ikkalasi mos kelmagan "gibrid" hisob
+(`roles=[platform_admin]` + `is_platform_admin=false`) bozorlararo
+ma'lumot ochib berardi — batafsil `_assert_roles_assignable` da.
 
 Bu tekshiruv MATRITSAGA qo'shilmadi: `ROLE_PERMISSIONS` "rol -> huquq"
 jadvali, bu yerda esa "rol -> qaysi ROLNI bera oladi" munosabati kerak.
@@ -123,10 +131,36 @@ def _assert_roles_assignable(principal: Principal, roles: Sequence[Role]) -> Non
     Rad etish DB'ga tegilmasdan sodir bo'ladi: `auth_create_user` ham,
     a'zolik qatori ham chaqirilmaydi, ya'ni muvaffaqiyatsiz urinishdan
     keyin bazada hech qanday qoldiq qolmaydi.
+
+    IKKI BOSQICH, ATAYIN SHU TARTIBDA: avval `platform_admin` (CHAQIRUVCHIDAN
+    QAT'I NAZAR), keyin bozor admini uchun qism-to'plam tekshiruvi.
     """
+    requested = set(roles)
+    if Role.PLATFORM_ADMIN in requested:
+        # `platform_admin` — `users.is_platform_admin` BAYROG'I, a'zolik
+        # roli EMAS (CR-03). Uni `user_market_roles.roles` ga yozish
+        # STRUKTURAVIY noto'g'ri va GIBRID hisob tug'diradi: sessiya
+        # `roles=["platform_admin"]` oladi (`auth.py::_session_roles`
+        # a'zolik va bayroqni BIRLASHTIRADI), ya'ni matritsa bo'yicha
+        # `MARKET_VIEW_ALL` huquqi ham beriladi — bayroq esa `false`
+        # qoladi. Bitta bozorga tegishli hisob shu yo'l bilan platformadagi
+        # BARCHA bozorlar ro'yxatini ocha olardi (T-01-81, T-01-82).
+        #
+        # Rad etish PLATFORMA ADMINI uchun ham amal qiladi: haqiqiy
+        # platforma admini `users.is_platform_admin = true` bilan
+        # tayinlanadi (bu API'da UMUMAN yo'l yo'q — atayin), ya'ni bu
+        # rolni a'zolik sifatida berishning HECH QANDAY qonuniy holati
+        # yo'q. "Faqat platforma admini bera oladi" degan yumshoq variant
+        # aynan gibrid hisobni yaratish yo'lini ochiq qoldirardi.
+        log.info(
+            "platform_admin_role_assignment_denied",
+            requested=sorted(str(role) for role in requested),
+            caller_is_platform_admin=principal.is_platform_admin,
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ROLE_NOT_ALLOWED)
+
     if principal.is_platform_admin:
         return
-    requested = set(roles)
     if not requested <= MARKET_ADMIN_ASSIGNABLE_ROLES:
         log.info(
             "role_assignment_denied",
