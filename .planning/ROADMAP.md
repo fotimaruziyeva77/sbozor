@@ -71,7 +71,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-03-PLAN.md — sbozor-core primitivlari: pul (BIGINT so'm), biznes-kun, telefon, Argon2id + JWT, tenancy helperi (W2)
+- [x] 01-03-PLAN.md — sbozor-core primitivlari: pul (BIGINT so'm), biznes-kun, telefon, Argon2id + JWT, tenancy helperi (W2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
