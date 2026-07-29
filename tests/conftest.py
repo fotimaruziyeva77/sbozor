@@ -9,8 +9,10 @@ to'xtatmaydi, shuning uchun superuser bilan ishlaydigan test har qanday
 cross-tenant sizishni "muvaffaqiyatli izolyatsiya" deb ko'rsatadi.
 =============================================================================
 
-SQLite ISHLATISH TAQIQLANGAN — RLS faqat PostgreSQL'da mavjud, shuning uchun
-SQLite'ga qarshi testlar loyihaning eng xavfli kod yo'lini umuman sinamaydi.
+Yengil/embedded fayl-bazalar bu yerda TAQIQLANGAN (CLAUDE.md direktivasi):
+Row Level Security FAQAT PostgreSQL'da mavjud, shuning uchun boshqa bazaga
+qarshi testlar loyihaning eng xavfli kod yo'lini umuman sinamaydi va yashil
+bo'lib turaveradi. Yagona ruxsat etilgan baza — `postgres:18.4-trixie`.
 
 Rol atributlari uchun yagona haqiqat manbai — `ops/db/init/01-roles.sql`.
 Bu fayl shu yerda VERBATIM o'qib bajariladi; rol DDL'i testda TAKRORLANMAYDI,

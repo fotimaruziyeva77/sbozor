@@ -2,8 +2,9 @@
 
 # SBOZOR core-api — multi-stage image.
 #
-# Baza: python:3.13-slim-trixie. ALPINE EMAS — manylinux_2_28 g'ildiraklar
-# glibc >= 2.28 talab qiladi; musl'da ular manbadan qurilardi.
+# Baza: python:3.13-slim-trixie (Debian, glibc). musl-asosidagi yengil
+# image'lar ISHLATILMAYDI — manylinux_2_28 g'ildiraklar glibc >= 2.28 talab
+# qiladi, musl ostida esa ular manbadan qurilardi (onnxruntime, asyncpg...).
 #
 # Build konteksti — REPO ILDIZI (compose.yaml da `context: .`), chunki
 # `packages/sbozor-core` editable bog'liqlik sifatida kerak.
