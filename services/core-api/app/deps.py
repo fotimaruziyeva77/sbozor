@@ -167,11 +167,21 @@ CacheDep = Annotated["Redis", Depends(get_cache)]
 
 
 async def get_auth_session(request: Request) -> AsyncIterator[AsyncSession]:
-    """Tenant kontekstisiz sessiya — FAQAT `/api/v1/auth/*` uchun.
+    """Tenant kontekstisiz sessiya — BOZORGA BOG'LIQ BO'LMAGAN oqimlar uchun.
 
-    Login paytida bozor HALI NOMA'LUM, shuning uchun bu yerda
-    `set_tenant_context()` chaqirilmaydi: barcha so'rovlar `SECURITY
-    DEFINER` funksiyalari orqali ketadi (`app/repositories/auth_repo.py`).
+    Ikki iste'molchisi bor va ikkalasida ham bozor BO'LMASLIGI MUMKIN:
+      * `/api/v1/auth/*` — login paytida bozor hali aniqlanmagan;
+      * `/api/v1/me` — profil (ism, til) bozorga tegishli emas va
+        platforma admini uni bozor tanlashdan OLDIN ham ko'radi (D-13).
+
+    Shuning uchun bu yerda `set_tenant_context()` chaqirilmaydi: barcha
+    so'rovlar `SECURITY DEFINER` funksiyalari orqali ketadi
+    (`app/repositories/auth_repo.py`, `app/repositories/user_repo.py`).
+
+    TENANT MA'LUMOTI UCHUN ISHLATILMAYDI: bu sessiyada RLS predikati
+    bo'sh GUC bilan ishlaydi, ya'ni har qanday tenant jadvali fail-closed
+    0 qator beradi. Bozor doirasidagi har bir endpoint `TenantSessionDep`
+    ni oladi.
 
     Tranzaksiya ATAYIN ochilmaydi: rad etish yo'llari audit qatorini
     yozib, uni COMMIT qilib, KEYIN `HTTPException` ko'taradi. Umumiy

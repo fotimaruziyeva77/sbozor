@@ -41,6 +41,8 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.v1.auth import router as auth_router
+from app.api.v1.markets import router as markets_router
+from app.api.v1.me import router as me_router
 from app.api.v1.users import router as users_router
 from app.settings import Settings, get_settings
 
@@ -120,6 +122,8 @@ app.add_middleware(CorrelationIdMiddleware)
 
 app.include_router(auth_router, prefix=f"{API_V1_PREFIX}/auth")
 app.include_router(users_router, prefix=f"{API_V1_PREFIX}/users")
+app.include_router(me_router, prefix=f"{API_V1_PREFIX}/me")
+app.include_router(markets_router, prefix=f"{API_V1_PREFIX}/markets")
 
 
 @app.exception_handler(DBAPIError)

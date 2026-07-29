@@ -76,7 +76,16 @@ def cleanup_test_users(conn: Connection[TupleRow]) -> None:
     A'zolik va refresh token qatorlari `ON DELETE CASCADE` bilan ketadi.
     `audit_log` qatorlari QOLADI — jadval append-only va ularni o'chirish
     imkonsiz (aynan kutilgan xulq).
+
+    Sxema hali qurilmagan bo'lsa JIMGINA qaytadi: bu tozalash `autouse`
+    fixture'dan chaqiriladi va `tests/integration` da migratsiyaga umuman
+    tegmaydigan testlar ham bor (masalan frontend fayli bilan
+    solishtirish). Ularni `migrated` ga bog'lab qo'yish tozalash uchun
+    butun bazani ko'tarishga majbur qilardi.
     """
+    row = conn.execute("SELECT to_regclass('public.users')").fetchone()
+    if row is None or row[0] is None:
+        return
     conn.execute("DELETE FROM users WHERE phone_e164 LIKE %s", (f"{TEST_PHONE_PREFIX}%",))
 
 
