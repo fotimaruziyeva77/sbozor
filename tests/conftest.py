@@ -40,7 +40,8 @@ from alembic import command
 from alembic.config import Config
 from app.settings import Settings
 from fastapi import FastAPI
-from fixtures import TenantSessionFactory
+from fixtures import TenantSessionFactory, TokenFactory
+from fixtures.admin_api import session_headers
 from fixtures.auth_users import AuthSeed, cleanup_auth_users, seed_auth_users
 from fixtures.two_markets import TwoMarketSeed, cleanup_two_markets, seed_two_markets
 from psycopg import Connection, sql
@@ -461,3 +462,28 @@ def auth_seed(
         yield seed
     finally:
         cleanup_auth_users(sync_owner_conn, seed)
+
+
+@pytest.fixture
+def token_for(api_client: httpx.AsyncClient) -> TokenFactory:
+    """Berilgan foydalanuvchi/bozor uchun HAQIQIY access token beradi.
+
+    Token MAHSULOT OQIMI orqali olinadi: `POST /auth/login`, keyin —
+    agar `market_id` berilgan bo'lsa — `POST /auth/select-market`.
+    `encode_access()` bilan to'g'ridan-to'g'ri yasash tezroq bo'lardi,
+    lekin o'sha token login oqimidagi har qanday nosozlikni (rate-limit,
+    bloklash tekshiruvi, a'zolik qidiruvi, `mid` claim'ining
+    joylanishi) YASHIRARDI — cross-tenant matritsasi esa aynan shu
+    zanjirning butunligiga tayanadi.
+
+    `market_id` platforma admini uchun MAJBURIY: uning a'zoligi bir
+    nechta, ya'ni login bozorni avtomatik tanlamaydi va tokenda `mid`
+    bo'lmaydi (01-06). Bunday token bilan har qanday tenant endpointi
+    `409 market_not_selected` beradi.
+    """
+
+    async def _token_for(phone: str, password: str, market_id: UUID | None = None) -> str:
+        headers = await session_headers(api_client, phone, password, market_id=market_id)
+        return headers["Authorization"].removeprefix("Bearer ")
+
+    return _token_for

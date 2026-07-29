@@ -1,20 +1,20 @@
-"""Auth testlari uchun HAQIQIY Argon2 parolli foydalanuvchilar.
+"""Auth testlari uchun maxsus holatdagi foydalanuvchilar (bloklangan, parol almashtiruvchi).
 
-`two_markets` seed'i (01-04) `password_hash` ga o'rinbosar satr yozadi —
-u RLS va GRANT yo'llarini sinash uchun yetarli edi, chunki parol umuman
-tekshirilmasdi. Login oqimini sinash uchun esa haqiqiy hash kerak.
-
-Bu modul mavjud seed USTIGA quriladi:
-  * beshta seed foydalanuvchisining hash'i bir xil, HAQIQIY Argon2 hash
-    bilan almashtiriladi;
+Bu modul mavjud `two_markets` seed'i USTIGA quriladi:
+  * seed foydalanuvchilarining hash'i bir xil, HAQIQIY Argon2 hash bilan
+    qayta yoziladi (01-10 dan boshlab `two_markets` allaqachon aynan shu
+    hash'ni yozadi, ya'ni bu yozuv endi holatni O'ZGARTIRMAYDI va faqat
+    modulning o'z-o'ziga yetarliligini saqlaydi);
   * ikkita qo'shimcha foydalanuvchi qo'shiladi — BLOKLANGAN (D-08) va
     MAJBURIY PAROL ALMASHTIRADIGAN (D-02); ularsiz o'sha ikki qaror
     umuman sinalmagan bo'lardi.
 
-HASH BIR MARTA HISOBLANADI (modul import paytida, ~100 ms). Har testda
-`hash_password()` chaqirish butun to'plamga o'nlab soniya qo'shardi va
-u hech qanday yangi narsani isbotlamasdi — Argon2 ning o'zi
-`tests/unit/test_password.py` da sinalgan.
+PAROL VA HASH `fixtures/two_markets.py` DAN OLINADI. Ikki modulda ikki
+literal bo'lganda ular jimgina ajralib ketardi va `MarketSeed.admin_password`
+`auth_seed` faol bo'lgan testlarda yolg'on qiymatga aylanardi. Hash ham
+BIR MARTA hisoblanadi (~100 ms) — har testda `hash_password()` chaqirish
+butun to'plamga o'nlab soniya qo'shardi va hech qanday yangi narsani
+isbotlamasdi (Argon2 ning o'zi `tests/unit/test_password.py` da sinalgan).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sbozor_core.security import hash_password
+from fixtures.two_markets import SEED_PASSWORD, SEED_PASSWORD_HASH
 
 if TYPE_CHECKING:
     from psycopg import Connection
@@ -33,10 +33,10 @@ if TYPE_CHECKING:
 
 __all__ = ["PASSWORD", "AuthSeed", "AuthUser", "cleanup_auth_users", "seed_auth_users"]
 
-PASSWORD = "sbozor-test-parol-2026"  # noqa: S105 — test ma'lumoti, mahsulot siri emas
-"""Barcha seed foydalanuvchilari uchun bitta parol."""
+PASSWORD = SEED_PASSWORD
+"""Barcha seed foydalanuvchilari uchun bitta parol (yagona manba — `two_markets`)."""
 
-_PASSWORD_HASH = hash_password(PASSWORD)
+_PASSWORD_HASH = SEED_PASSWORD_HASH
 
 # `two_markets` `+99897…` diapazonini ishlatadi; bu yerdagi qo'shimcha
 # foydalanuvchilar `+99890…` da — to'qnashuv bo'lmasligi uchun.
@@ -111,7 +111,13 @@ def _insert_member(
 
 
 def seed_auth_users(conn: Connection[TupleRow], markets: TwoMarketSeed) -> AuthSeed:
-    """Mavjud seed'ga haqiqiy parol beradi va ikkita maxsus holat qo'shadi."""
+    """Ikkita maxsus holatdagi foydalanuvchi qo'shadi (bloklangan, parol almashtiruvchi).
+
+    Quyidagi `UPDATE` 01-10 dan beri holatni O'ZGARTIRMAYDI (`two_markets`
+    aynan shu hash'ni yozadi), lekin ATAYIN qoldirilgan: u bu modulning
+    "parol haqiqiy hash bilan yozilgan" degan talabini o'z ichida
+    saqlaydi va seed manbasi kelajakda o'zgarsa ham buzilmaydi.
+    """
     conn.execute(
         "UPDATE users SET password_hash = %s WHERE id = ANY(%s::uuid[])",
         (_PASSWORD_HASH, [str(user_id) for user_id in markets.all_user_ids]),

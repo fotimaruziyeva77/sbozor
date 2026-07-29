@@ -18,13 +18,47 @@ kabi global funksiyalar aks holda flaky bo'lardi).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from uuid import UUID, uuid4
 
 from psycopg import Connection
 from psycopg.rows import TupleRow
+from sbozor_core.security import hash_password
 
-__all__ = ["MarketSeed", "TwoMarketSeed", "cleanup_two_markets", "seed_two_markets"]
+__all__ = [
+    "SEED_PASSWORD",
+    "SEED_PASSWORD_HASH",
+    "MarketSeed",
+    "TwoMarketSeed",
+    "cleanup_two_markets",
+    "seed_two_markets",
+]
+
+SEED_PASSWORD = "sbozor-test-parol-2026"
+"""Seed foydalanuvchilarining ochiq paroli — BARCHA test seed'lari uchun yagona.
+
+`fixtures/auth_users.py` uni AYNAN shu yerdan oladi. Ikki modulda ikki
+literal bo'lganda ular jimgina ajralib ketardi va `MarketSeed.admin_password`
+`auth_seed` faol bo'lgan testlarda yolg'on qiymat bo'lib qolardi (login 401
+bilan yiqilardi, sabab esa fixture'da ko'rinmasdi).
+"""
+
+SEED_PASSWORD_HASH = hash_password(SEED_PASSWORD)
+"""Hash BIR MARTA hisoblanadi (modul import paytida, ~100 ms).
+
+01-04 seed'i bu yerga o'rinbosar satr yozardi va login oqimi u bilan
+ishlamasdi. Endi seed foydalanuvchilarining HAMMASI mahsulot yo'lidan
+(`POST /auth/login`) kira oladi — cross-tenant matritsasi tokenni aynan
+shu yo'l bilan oladi, qo'lda yasalgan token bilan emas.
+"""
+
+_AUDIT_ID_PENDING = 0
+"""`audit_row_id` uchun vaqtinchalik qiymat — `seed_two_markets()` ichida almashtiriladi.
+
+Bu qiymat funksiyadan TASHQARIGA hech qachon chiqmaydi: `MarketSeed`
+qaytarilishidan oldin `dataclasses.replace()` bilan haqiqiy `audit_log.id`
+qo'yiladi.
+"""
 
 
 @dataclass(frozen=True)
@@ -39,10 +73,37 @@ class MarketSeed:
     cashier_user_id: UUID
     cashier_phone: str
     cashier_role_id: UUID
+    director_user_id: UUID
+    director_phone: str
+    director_role_id: UUID
+    audit_row_id: int
+    """Shu bozorning BIRINCHI `audit_log` qatorining kaliti.
+
+    Qator seed paytida a'zolik INSERT'ining triggeri tomonidan yoziladi —
+    ya'ni mahsulot yo'lidan tug'ilgan haqiqiy yozuv.
+
+    Cross-tenant matritsasi undan foydalanadi: A bozori tokeni bilan
+    olingan `GET /api/v1/audit` javobida B bozorining AYNAN SHU `id` si
+    bo'lmasligi tekshiriladi. "Javobda B'ning UUID'lari yo'q" da'vosidan
+    kuchliroq — bu yerda tekshirilayotgan qatorning MAVJUDLIGI ham
+    isbotlangan (`test_audit_list_shows_the_own_market_probe_row`).
+    """
+
+    admin_password: str = SEED_PASSWORD
+    """Bozor adminining ochiq paroli (barcha seed foydalanuvchilarida bir xil)."""
 
     @property
     def user_ids(self) -> tuple[UUID, ...]:
-        return (self.admin_user_id, self.cashier_user_id)
+        return (self.admin_user_id, self.cashier_user_id, self.director_user_id)
+
+    @property
+    def role_ids(self) -> tuple[UUID, ...]:
+        """A'zolik qatorlarining kalitlari (`audit_log.row_id` shular bilan to'ladi)."""
+        return (self.admin_role_id, self.cashier_role_id, self.director_role_id)
+
+    @property
+    def phones(self) -> tuple[str, ...]:
+        return (self.admin_phone, self.cashier_phone, self.director_phone)
 
 
 @dataclass(frozen=True)
@@ -64,10 +125,20 @@ class TwoMarketSeed:
         return (*self.market_a.user_ids, *self.market_b.user_ids, self.platform_admin_id)
 
 
-# Har bozorda: admin + kassir + platforma admini = 3 a'zolik qatori.
-ROLES_PER_MARKET = 3
+# Har bozorda: admin + kassir + direktor + platforma admini = 4 a'zolik qatori.
+ROLES_PER_MARKET = 4
 
 _PHONE_COUNTER = 700_000_00
+
+_SET_MARKET_GUC = "SELECT set_config('app.market_id', %s, false)"
+"""Sessiya darajasidagi tenant konteksti (`is_local=false`).
+
+`audit_log` ga `owner_bootstrap` policy'si ATAYIN berilmagan
+(`migrations/entities/__init__.py`), ya'ni EGA ham `audit_read` ning tenant
+predikatiga bo'ysunadi: kontekstsiz `SELECT` 0 qator qaytaradi.
+"""
+
+_FIRST_AUDIT_ROW = "SELECT id FROM audit_log WHERE market_id = %s ORDER BY id LIMIT 1"
 
 
 def _next_phone() -> str:
@@ -87,7 +158,40 @@ def _make_market(name: str) -> MarketSeed:
         cashier_user_id=uuid4(),
         cashier_phone=_next_phone(),
         cashier_role_id=uuid4(),
+        director_user_id=uuid4(),
+        director_phone=_next_phone(),
+        director_role_id=uuid4(),
+        audit_row_id=_AUDIT_ID_PENDING,
     )
+
+
+def _first_audit_row_id(conn: Connection[TupleRow], market_id: UUID) -> int:
+    """Bozorning BIRINCHI audit qatorining kalitini qaytaradi.
+
+    QATOR SUN'IY YARATILMAYDI: a'zolik qatorlari yozilganda `fn_audit_row()`
+    triggeri ularni allaqachon jurnalga tushirgan. Qo'shimcha "probe"
+    qatori yozish mavjud testlarni buzardi — masalan
+    `test_patch_locale_writes_an_audit_row_with_old_and_new` bozordagi
+    `update` qatorlarini SANAYDI va sun'iy qator uni ikkiga chiqarardi.
+    Ya'ni bu yerda mahsulot yo'lidan tug'ilgan HAQIQIY yozuv olinadi.
+
+    KONTEKST QAYTA BO'SHATILISHI SHART: `conn` autocommit rejimida va
+    `set_config(..., false)` qiymati SESSIYA davomida saqlanadi. Uni
+    qoldirib ketish `cleanup_two_markets()` ni jimgina buzardi — o'chirish
+    faqat bitta bozorning qatorlarini ko'rib, ikkinchisi FK bilan qolib
+    ketardi. Bo'sh satr `NULLIF` tufayli "kontekst yo'q" bilan bir xil.
+    """
+    try:
+        conn.execute(_SET_MARKET_GUC, (str(market_id),))
+        row = conn.execute(_FIRST_AUDIT_ROW, (str(market_id),)).fetchone()
+    finally:
+        conn.execute(_SET_MARKET_GUC, ("",))
+
+    if row is None:
+        raise AssertionError(
+            f"{market_id}: seed audit qatori topilmadi — `fn_audit_row()` triggeri ishlamayapti"
+        )
+    return int(row[0])
 
 
 def seed_two_markets(conn: Connection[TupleRow]) -> TwoMarketSeed:
@@ -117,15 +221,21 @@ def seed_two_markets(conn: Connection[TupleRow]) -> TwoMarketSeed:
         users.append(
             (str(market.cashier_user_id), market.cashier_phone, f"{market.name} kassiri", False)
         )
+        users.append(
+            (str(market.director_user_id), market.director_phone, f"{market.name} direktori", False)
+        )
     users.append((str(platform_admin_id), platform_admin_phone, "Platforma admini", True))
 
     for user_id, phone, full_name, is_platform_admin in users:
         conn.execute(
             "INSERT INTO users (id, phone_e164, password_hash, full_name, is_platform_admin) "
             "VALUES (%s, %s, %s, %s, %s)",
-            # Parol hash'i seed uchun ahamiyatsiz: bu testlar RLS va GRANT
-            # yo'llarini sinaydi, parol tekshiruvini emas (u `tests/unit`da).
-            (user_id, phone, "argon2-seed-placeholder", full_name, is_platform_admin),
+            # HAQIQIY Argon2 hash: seed foydalanuvchilari mahsulot yo'lidan
+            # (`POST /auth/login`) kira olishi kerak — cross-tenant matritsasi
+            # tokenni aynan shu yo'ldan oladi. `users` jadvalida audit
+            # triggeri YO'Q (`0002` faqat `user_market_roles` ga ulaydi),
+            # ya'ni hash jurnalga tushmaydi.
+            (user_id, phone, SEED_PASSWORD_HASH, full_name, is_platform_admin),
         )
 
     memberships: list[tuple[str, str, str, list[str]]] = []
@@ -135,6 +245,14 @@ def seed_two_markets(conn: Connection[TupleRow]) -> TwoMarketSeed:
         )
         memberships.append(
             (str(market.cashier_role_id), str(market.id), str(market.cashier_user_id), ["cashier"])
+        )
+        memberships.append(
+            (
+                str(market.director_role_id),
+                str(market.id),
+                str(market.director_user_id),
+                ["director"],
+            )
         )
         memberships.append(
             (
@@ -150,6 +268,13 @@ def seed_two_markets(conn: Connection[TupleRow]) -> TwoMarketSeed:
             "INSERT INTO user_market_roles (id, market_id, user_id, roles) VALUES (%s, %s, %s, %s)",
             (role_id, market_id, user_id, roles),
         )
+
+    # Audit kalitlari ENG OXIRIDA o'qiladi: qatorlarni yuqoridagi a'zolik
+    # INSERT'lari triggeri yozadi, `_first_audit_row_id()` esa tenant
+    # kontekstini sessiya darajasida o'rnatadi — undan keyin bajarilgan
+    # har qanday `markets`/`users` yozuvi boshqa policy ostiga tushardi.
+    market_a = replace(market_a, audit_row_id=_first_audit_row_id(conn, market_a.id))
+    market_b = replace(market_b, audit_row_id=_first_audit_row_id(conn, market_b.id))
 
     return TwoMarketSeed(
         market_a=market_a,
