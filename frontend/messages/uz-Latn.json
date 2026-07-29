@@ -7,7 +7,20 @@
     "loading": "Yuklanmoqda",
     "retry": "Qayta urinish",
     "search": "Qidirish",
-    "back": "Orqaga"
+    "back": "Orqaga",
+    "languageLabel": "Til"
+  },
+  "shell": {
+    "marketLabel": "Bozor",
+    "loading": "Sessiya tiklanmoqda",
+    "sections": "Bo'limlar"
+  },
+  "roles": {
+    "platformAdmin": "Platforma admini",
+    "director": "Direktor",
+    "marketAdmin": "Bozor admini",
+    "cashier": "Kassir",
+    "inspector": "Nazoratchi"
   },
   "nav": {
     "dashboard": "Boshqaruv paneli",
@@ -17,12 +30,26 @@
   },
   "auth": {
     "phoneLabel": "Telefon raqami",
+    "phoneHint": "+998 90 123 45 67",
     "passwordLabel": "Parol",
     "signIn": "Kirish",
     "signingIn": "Kirilmoqda",
     "invalidCredentials": "Telefon raqami yoki parol xato",
+    "invalidPhone": "Telefon raqami noto'g'ri kiritilgan",
+    "tooManyAttempts": "Urinishlar soni ko'payib ketdi. Biroz kutib, qayta urinib ko'ring",
+    "accountBlocked": "Hisob bloklangan. Bozor ma'muriyatiga murojaat qiling",
     "mustChangePassword": "Davom etish uchun parolni almashtiring",
-    "selectMarket": "Bozorni tanlang"
+    "changePasswordTitle": "Parolni almashtirish",
+    "currentPassword": "Joriy parol",
+    "newPassword": "Yangi parol",
+    "confirmPassword": "Yangi parolni takrorlang",
+    "passwordMismatch": "Parollar mos kelmadi",
+    "passwordTooShort": "Parol kamida 10 ta belgidan iborat bo'lsin",
+    "passwordSameAsCurrent": "Yangi parol joriy paroldan farq qilsin",
+    "passwordChanged": "Parol almashtirildi",
+    "selectMarket": "Bozorni tanlang",
+    "selectMarketTitle": "Bozorni tanlang",
+    "noMarkets": "Sizga hech qanday bozor biriktirilmagan"
   },
   "users": {
     "title": "Foydalanuvchilar",
@@ -48,6 +75,7 @@
     "generic": "Kutilmagan xato yuz berdi",
     "network": "Tarmoq bilan aloqa yo'q",
     "forbidden": "Bu amal uchun ruxsat yo'q",
-    "notFound": "Topilmadi"
+    "notFound": "Topilmadi",
+    "required": "Bu maydon to'ldirilishi shart"
   }
 }

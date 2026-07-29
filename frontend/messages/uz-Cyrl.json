@@ -7,7 +7,20 @@
     "loading": "Юкланмоқда",
     "retry": "Қайта уриниш",
     "search": "Қидириш",
-    "back": "Орқага"
+    "back": "Орқага",
+    "languageLabel": "Тил"
+  },
+  "shell": {
+    "marketLabel": "Бозор",
+    "loading": "Сессия тикланмоқда",
+    "sections": "Бўлимлар"
+  },
+  "roles": {
+    "platformAdmin": "Платформа админи",
+    "director": "Директор",
+    "marketAdmin": "Бозор админи",
+    "cashier": "Кассир",
+    "inspector": "Назоратчи"
   },
   "nav": {
     "dashboard": "Бошқарув панели",
@@ -17,12 +30,26 @@
   },
   "auth": {
     "phoneLabel": "Телефон рақами",
+    "phoneHint": "+998 90 123 45 67",
     "passwordLabel": "Парол",
     "signIn": "Кириш",
     "signingIn": "Кирилмоқда",
     "invalidCredentials": "Телефон рақами ёки парол хато",
+    "invalidPhone": "Телефон рақами нотўғри киритилган",
+    "tooManyAttempts": "Уринишлар сони кўпайиб кетди. Бироз кутиб, қайта уриниб кўринг",
+    "accountBlocked": "Ҳисоб блокланган. Бозор маъмуриятига мурожаат қилинг",
     "mustChangePassword": "Давом этиш учун паролни алмаштиринг",
-    "selectMarket": "Бозорни танланг"
+    "changePasswordTitle": "Паролни алмаштириш",
+    "currentPassword": "Жорий парол",
+    "newPassword": "Янги парол",
+    "confirmPassword": "Янги паролни такрорланг",
+    "passwordMismatch": "Пароллар мос келмади",
+    "passwordTooShort": "Парол камида 10 та белгидан иборат бўлсин",
+    "passwordSameAsCurrent": "Янги парол жорий паролдан фарқ қилсин",
+    "passwordChanged": "Парол алмаштирилди",
+    "selectMarket": "Бозорни танланг",
+    "selectMarketTitle": "Бозорни танланг",
+    "noMarkets": "Сизга ҳеч қандай бозор бириктирилмаган"
   },
   "users": {
     "title": "Фойдаланувчилар",
@@ -48,6 +75,7 @@
     "generic": "Кутилмаган хато юз берди",
     "network": "Тармоқ билан алоқа йўқ",
     "forbidden": "Бу амал учун рухсат йўқ",
-    "notFound": "Топилмади"
+    "notFound": "Топилмади",
+    "required": "Бу майдон тўлдирилиши шарт"
   }
 }
