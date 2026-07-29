@@ -12,7 +12,6 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-
 from sbozor_core.enums import Locale
 from sbozor_core.money import MAX_SAFE_SOUM, assert_safe_soum, format_soum
 

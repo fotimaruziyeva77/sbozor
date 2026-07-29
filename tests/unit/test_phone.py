@@ -9,7 +9,6 @@ bajariladi va bu yerda to'rt xil kirish shakli bilan qulflanadi.
 from __future__ import annotations
 
 import pytest
-
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
 E164 = "+998901234567"

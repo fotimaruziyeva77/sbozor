@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
-
 from sbozor_core.timeutil import MARKET_TZ, business_date, now_tz
 
 
