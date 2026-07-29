@@ -66,8 +66,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Monorepo skeleti, Compose steki, sbozor_owner/sbozor_app rollari, Wave 0 test infratuzilmasi (W1)
-- [ ] 01-02-PLAN.md — Next 16 skeleti, next-intl proxy.ts routing, 3 locale, uz-Cyrl transliteratsiya va parity skriptlari (W1)
+- [x] 01-01-PLAN.md — Monorepo skeleti, Compose steki, sbozor_owner/sbozor_app rollari, Wave 0 test infratuzilmasi (W1)
+- [x] 01-02-PLAN.md — Next 16 skeleti, next-intl proxy.ts routing, 3 locale, uz-Cyrl transliteratsiya va parity skriptlari (W1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
