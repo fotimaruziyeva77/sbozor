@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/*
+ * SBOZOR dizayn tokenlari — Apple-uslub minimal.
+ *
+ * Tailwind 4 CSS-first konfiguratsiya: `tailwind.config.js` / `tailwind.config.ts`
+ * YARATILMAYDI (CLAUDE.md cheklovi). Barcha tokenlar shu `@theme` blokida.
+ *
+ * Nomlash: `--color-*` → `bg-*` / `text-*` / `border-*` utilitalari,
+ *          `--radius-*` → `rounded-*`, `--shadow-*` → `shadow-*`.
+ */
+@theme {
+  /* ---- Tipografika ---------------------------------------------------- */
+  --font-sans:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Inter,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ---- Neytral kulrang shkala ----------------------------------------- */
+  --color-bg: oklch(0.985 0 0);
+  --color-surface: oklch(1 0 0);
+  --color-surface-muted: oklch(0.968 0 0);
+  --color-border: oklch(0.916 0 0);
+  --color-border-strong: oklch(0.85 0 0);
+  --color-text: oklch(0.205 0 0);
+  --color-text-muted: oklch(0.556 0 0);
+
+  /* ---- Bitta aksent rang ---------------------------------------------- */
+  --color-accent: oklch(0.58 0.19 255);
+  --color-accent-hover: oklch(0.53 0.19 255);
+  --color-accent-fg: oklch(1 0 0);
+
+  /* ---- Semantik holat ranglari ----------------------------------------
+   * Keyingi fazalarda rasta holatlari uchun ishlatiladi:
+   * band (success) / noaniq (warning) / qarzdor (danger).
+   */
+  --color-success: oklch(0.63 0.16 150);
+  --color-success-fg: oklch(1 0 0);
+  --color-warning: oklch(0.78 0.15 85);
+  --color-warning-fg: oklch(0.205 0 0);
+  --color-danger: oklch(0.58 0.21 27);
+  --color-danger-hover: oklch(0.53 0.21 27);
+  --color-danger-fg: oklch(1 0 0);
+
+  /* ---- Radiuslar (kartalar 12–16px) ----------------------------------- */
+  --radius-sm: 0.5rem; /* 8px  — inputlar */
+  --radius-md: 0.75rem; /* 12px — tugmalar, kichik kartalar */
+  --radius-lg: 1rem; /* 16px — kartalar, modallar */
+
+  /* ---- Soyalar (yumshoq, past kontrast) ------------------------------- */
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.04), 0 1px 3px oklch(0 0 0 / 0.06);
+  --shadow-raised: 0 2px 4px oklch(0 0 0 / 0.04), 0 8px 24px oklch(0 0 0 / 0.08);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Klaviatura navigatsiyasi ko'rinadigan bo'lsin (WCAG 2.4.7) */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
