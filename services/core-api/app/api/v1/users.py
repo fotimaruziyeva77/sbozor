@@ -246,10 +246,12 @@ async def block_user(
         is_active=False,
         action=AuditAction.USER_BLOCKED,
     )
-    # COMMIT dan KEYIN: `BackgroundTasks` FastAPI'da javob yuborilgandan
-    # so'ng ishlaydi, dependency'ning tranzaksiyasi esa undan OLDIN
-    # yopiladi. Teskari tartibda (endpoint ichida invalidatsiya) parallel
-    # so'rov hali commit bo'lmagan "faol" holatni qaytadan keshlab qo'yardi.
+    # Valkey `user:state:{id}` kaliti COMMIT dan KEYIN o'chiriladi (D-08).
+    # `BackgroundTasks` FastAPI'da javob yuborilgandan so'ng ishlaydi,
+    # dependency'ning tranzaksiyasi esa undan OLDIN yopiladi. Teskari
+    # tartibda (endpoint ichida invalidatsiya) parallel so'rov hali commit
+    # bo'lmagan "faol" holatni qaytadan keshlab qo'yardi va bloklash TTL
+    # tugagunicha (30 s) kuchga kirmasdi.
     background.add_task(invalidate_user_state, cache, user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

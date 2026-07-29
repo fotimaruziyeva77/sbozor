@@ -79,6 +79,11 @@ async def update_profile(
 ) -> LocaleResponse:
     """Til tanlovini profilda saqlaydi (D-13).
 
+    Yozuv `auth_set_locale` `SECURITY DEFINER` funksiyasi orqali ketadi
+    (`app/repositories/user_repo.py`): `users` jadvali app-rolga butunlay
+    yopiq, ya'ni oddiy `UPDATE users SET locale = ...` `permission denied`
+    bilan yiqilardi.
+
     Audit yozuvi ESKI qiymatni ham oladi: "kim tilni o'zgartirdi" emas,
     "nimadan nimaga" savoliga javob beradigan yozuv kerak — D-12 ning
     ko'rish UI'si aynan shu juftlikni ko'rsatadi.

@@ -1,9 +1,10 @@
 """Bozorlar ro'yxati (D-06).
 
 =============================================================================
-BU YERDA HECH QANDAY RLS BYPASS YO'Q — VA BO'LMAYDI.
+BU YERDA RLS'NI CHETLAB O'TISH YO'LI YO'Q — VA BO'LMAYDI.
 
-Ikki yo'l bor va ikkalasi ham `sbozor_app` roli bilan ishlaydi:
+Ikki yo'l bor va ikkalasi ham AYNAN BIR XIL `sbozor_app` ulanishi bilan
+ishlaydi (ilova boshqa ulanishni umuman bilmaydi):
 
 | Kim                  | Manba                      | Nima cheklaydi          |
 | -------------------- | -------------------------- | ----------------------- |
@@ -14,12 +15,12 @@ Ikki yo'l bor va ikkalasi ham `sbozor_app` roli bilan ishlaydi:
 | qolganlar            | `SELECT ... FROM markets`  | `markets` policy'si:    |
 |                      | (RLS ostida)               | `id = app.market_id`    |
 
-`BYPASSRLS` atributli rol klasterda UMUMAN YARATILMAGAN va
-`tests/tenancy/test_meta.py::test_no_bypassrls_role_exists` buni butun
-klaster bo'yicha qulflaydi. Ya'ni platforma adminining "hamma bozorni
-ko'rish" huquqi bozor NOMLARI bilan cheklangan: bozor tanlangandan keyin
-u ham oddiy tenant policy'siga bo'ysunadi (bu 01-06 da `/auth/me` orqali
-uchdan-uchiga isbotlangan).
+Qator himoyasini chetlab o'tish atributiga ega rol klasterda UMUMAN
+YARATILMAGAN va `tests/tenancy/test_meta.py` dagi rol invariantlari
+darvozasi buni butun klaster bo'yicha qulflaydi. Ya'ni platforma
+adminining "hamma bozorni ko'rish" huquqi bozor KONFIGURATSIYASI bilan
+cheklangan: bozor tanlangandan keyin u ham oddiy tenant policy'siga
+bo'ysunadi (bu 01-06 da `/auth/me` orqali uchdan-uchiga isbotlangan).
 =============================================================================
 
 Bozor TANLASH endpointi bu yerda EMAS — u `POST /api/v1/auth/select-market`
