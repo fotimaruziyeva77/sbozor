@@ -23,17 +23,46 @@ ya'ni har so'rov bitta IP'dan kelgandek ko'rinadi.
 Bu yerdagi testlar ASGI scope'idagi `client` juftligini O'ZGARTIRADI — bu
 uvicorn `--forwarded-allow-ips` bilan proxy sarlavhasini qabul qilganda
 QO'YADIGAN aynan o'sha qiymat. Shu tariqa deploy-only folklor testga aylanadi.
+
+-----------------------------------------------------------------------------
+HOTFIX (01-13 regressiyasi): YUQORIDAGI YONDASHUVNING KO'R NUQTASI.
+
+`_client_at()` scope'dagi `client` ni TO'G'RIDAN-TO'G'RI yozadi, ya'ni
+`ProxyHeadersMiddleware` UMUMAN ISHGA TUSHMAYDI. Natijada middleware'ning
+O'ZIDAGI nuqson bu testlarga KO'RINMAS edi — va aynan shunday nuqson ketdi:
+
+  * `compose.yaml` `--forwarded-allow-ips *` bilan kelardi;
+  * uvicorn 0.51.0 `_TrustedHosts.always_trust` holatida
+    `get_trusted_client_address()` zanjirning BIRINCHI (chap) elementini
+    qaytaradi;
+  * nginx esa `$proxy_add_x_forwarded_for` bilan mijoz yuborgan qiymatga
+    `$remote_addr` ni QO'SHARDI, ya'ni chap element MIJOZNIKI edi.
+
+Zanjir: mijoz `X-Forwarded-For: 1.2.3.4` yuboradi -> nginx
+`1.2.3.4, <haqiqiy peer>` qiladi -> uvicorn `1.2.3.4` ni oladi ->
+`request.client.host` to'liq hujumchi nazoratida. Bu CR-04 yopmoqchi bo'lgan
+DoS'dan og'irroq: rate-limit chetlab o'tiladi, istalgan qurbonni 15 daqiqaga
+qulflash mumkin va `audit_log.ip` soxta yoziladi (FOUND-03 dalili).
+
+Quyidagi `Hotfix` bo'limidagi testlar ilovani HAQIQIY
+`ProxyHeadersMiddleware` ga o'raydi va uni SHIPPED konfiguratsiyadan
+(`compose*.yml` + `ops/nginx/nginx.conf`) o'qilgan qiymatlar bilan haydaydi —
+ya'ni ikkala qatlamdan biri orqaga qaytarilsa test QIZARADI.
 =============================================================================
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import ipaddress
+import re
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 import pytest
 from app.security.ratelimit import IP_LIMIT, TooManyAttempts, check_login_rate
 from fixtures.auth_api import LOGIN_URL
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -47,6 +76,29 @@ CLIENT_B_IP = "198.51.100.7"
 SPOOFED_IP = "192.0.2.66"
 
 CLIENT_PORT = 51_000
+
+# --- Hotfix konstantalari -------------------------------------------------
+# Repo ildizi: bu fayl `<root>/tests/integration/` da yotadi. Konteynerda ham
+# (`working_dir: /app`, `.:/app`), xostda ham bir xil ishlaydi.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+NGINX_CONF = REPO_ROOT / "ops" / "nginx" / "nginx.conf"
+COMPOSE_FILES = (REPO_ROOT / "compose.yaml", REPO_ROOT / "compose.override.yml")
+
+# nginx konteynerining compose bridge tarmog'idagi manzili (kuzatilgan
+# `sbozor_default` = 172.19.0.0/16 ichidan). uvicorn uchun bu — PEER, ya'ni
+# `--forwarded-allow-ips` ro'yxatida bo'lishi kerak bo'lgan tomon.
+NGINX_PEER_IP = "172.19.0.5"
+
+# Hujumchi `X-Forwarded-For` ga YOZMOQCHI bo'lgan qiymat.
+ATTACKER_IP = SPOOFED_IP
+# nginx `$remote_addr` da ko'radigan HAQIQIY peer (internetdagi mijoz).
+REAL_CLIENT_IP = CLIENT_A_IP
+
+_XFF_DIRECTIVE = re.compile(
+    r"^\s*proxy_set_header\s+X-Forwarded-For\s+(?P<source>\S+?)\s*;",
+    re.MULTILINE | re.IGNORECASE,
+)
+_ALLOW_IPS_DEFAULT = re.compile(r"\$\{FORWARDED_ALLOW_IPS:-(?P<default>[^}]*)\}")
 
 # `+99893` — testlarda qo'llaniladigan yaroqli E.164 diapazoni. Bu raqamlarga
 # foydalanuvchi YARATILMAYDI: login `401` beradi, lekin sanagich baribir
@@ -193,3 +245,253 @@ async def test_exhausted_ip_scope_leaves_other_scope_open(valkey_client: Redis) 
     # Ikkinchi kesim TEGILMAGAN — istisno ko'tarilmaydi.
     await check_login_rate(valkey_client, phone="+998939200002", ip=CLIENT_B_IP)
     assert await _counter(valkey_client, CLIENT_B_IP) == 1
+
+
+# ===========================================================================
+# HOTFIX: `X-Forwarded-For` SOXTALASHTIRISHI (01-13 regressiyasi)
+#
+# Yuqoridagi testlar `ProxyHeadersMiddleware` ni CHETLAB O'TADI (scope'dagi
+# `client` to'g'ridan-to'g'ri yoziladi). Quyidagilar esa aksincha: ilova
+# HAQIQIY middleware'ga o'raladi va SHIPPED konfiguratsiya bilan haydaladi.
+# ===========================================================================
+
+
+def _strip_comments(text: str) -> str:
+    """`#` bilan boshlanadigan qatorlarni olib tashlaydi.
+
+    MAJBURIY: `nginx.conf` dagi tushuntirish bloki `$proxy_add_x_forwarded_for`
+    ni ATAYLAB tilga oladi (nega taqiqlanganini yozadi). Taqiq esa matnga
+    emas, DIREKTIVAGA tegishli — izohlarni sanamaslik kerak.
+    """
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+def _nginx_xff_sources() -> list[str]:
+    """`ops/nginx/nginx.conf` dagi har bir `X-Forwarded-For` manba o'zgaruvchisi."""
+    conf = _strip_comments(NGINX_CONF.read_text(encoding="utf-8"))
+    return [str(match.group("source")) for match in _XFF_DIRECTIVE.finditer(conf)]
+
+
+def _nginx_forwards(client_supplied: str | None, *, remote_addr: str) -> str:
+    """nginx SIMGA QO'YADIGAN `X-Forwarded-For` — shipped direktivadan hisoblanadi.
+
+    Bu funksiya qiymatni QATTIQ YOZMAYDI, balki `nginx.conf` dagi haqiqiy
+    o'zgaruvchidan keltirib chiqaradi. Shu sababli kimdir direktivani
+    `$proxy_add_x_forwarded_for` ga qaytarsa, quyidagi testlar yangi
+    (soxtalashtiriladigan) haqiqat bilan ishlaydi va QIZARADI.
+    """
+    sources = _nginx_xff_sources()
+    assert sources, f"{NGINX_CONF} da `X-Forwarded-For` direktivasi topilmadi"
+    assert len(set(sources)) == 1, f"location'lar bir-biriga zid: {sources}"
+
+    source = sources[0]
+    if source == "$remote_addr":
+        # USTIGA YOZADI — mijoz yuborgan har qanday qiymat tashlanadi.
+        return remote_addr
+    if source == "$proxy_add_x_forwarded_for":
+        # QO'SHADI — mijoz zanjirning chap tomonini o'zi to'ldiradi.
+        return f"{client_supplied}, {remote_addr}" if client_supplied else remote_addr
+    raise AssertionError(f"noma'lum `X-Forwarded-For` manbasi: {source!r}")
+
+
+def _compose_allow_ips() -> dict[str, str]:
+    """Har bir compose faylidagi `--forwarded-allow-ips` STANDART qiymati."""
+    defaults: dict[str, str] = {}
+    for path in COMPOSE_FILES:
+        match = _ALLOW_IPS_DEFAULT.search(path.read_text(encoding="utf-8"))
+        assert match is not None, f"{path.name} da `FORWARDED_ALLOW_IPS` standarti yo'q"
+        defaults[path.name] = str(match.group("default"))
+    return defaults
+
+
+def _shipped_allow_ips() -> str:
+    """Ikkala compose fayli KELISHGAN qiymat.
+
+    `command` compose'da MERGE QILINMAYDI — u butunlay almashadi, ya'ni
+    qiymat ikki joyda takrorlanadi va ular ajralib ketishi mumkin. Ajralsa —
+    dev va prod turli xavfsizlik holatida qoladi.
+    """
+    defaults = _compose_allow_ips()
+    assert len(set(defaults.values())) == 1, f"compose fayllari zid: {defaults}"
+    return next(iter(defaults.values()))
+
+
+def _proxied_client(api_app: FastAPI, *, trusted_hosts: str, peer_ip: str) -> httpx.AsyncClient:
+    """Ilovani HAQIQIY `ProxyHeadersMiddleware` ga o'ragan klient.
+
+    uvicorn aynan shunday qiladi: middleware ENG TASHQI qatlam bo'ladi va
+    `scope["client"]` ni ilova ko'rishidan OLDIN almashtiradi. `peer_ip` —
+    TCP darajasidagi haqiqiy qo'shni (compose tarmog'idagi nginx konteyneri).
+    """
+    proxied = ProxyHeadersMiddleware(cast("Any", api_app), trusted_hosts=trusted_hosts)
+    transport = httpx.ASGITransport(app=cast("Any", proxied), client=(peer_ip, CLIENT_PORT))
+    return httpx.AsyncClient(transport=transport, base_url="http://testserver")
+
+
+async def _login_through_proxy(
+    api_app: FastAPI, *, forwarded_for: str, trusted_hosts: str
+) -> httpx.Response:
+    """`peer -> ProxyHeadersMiddleware -> ilova` zanjiri orqali muvaffaqiyatsiz login."""
+    async with _proxied_client(
+        api_app, trusted_hosts=trusted_hosts, peer_ip=NGINX_PEER_IP
+    ) as client:
+        return await client.post(
+            LOGIN_URL,
+            json={"phone": PHONE_A, "password": WRONG_PASSWORD},
+            headers={"X-Forwarded-For": forwarded_for},
+        )
+
+
+# ---------------------------------------------------------------------------
+# Hotfix: SHIPPED konfiguratsiya bo'yicha xulq-atvor
+# ---------------------------------------------------------------------------
+
+
+async def test_spoofed_forwarded_for_cannot_set_client_host(
+    api_app: FastAPI, valkey_client: Redis
+) -> None:
+    """Mijoz yuborgan `X-Forwarded-For` `request.client.host` ni BOSHQARA OLMAYDI.
+
+    Bu — hotfix'ning asosiy da'vosi. Zanjir shipped konfiguratsiyadan
+    yig'iladi: sarlavha `ops/nginx/nginx.conf` direktivasidan hisoblanadi,
+    ishonch ro'yxati esa `compose*.yml` dan o'qiladi. Ikkala qatlamdan biri
+    orqaga qaytarilsa, bu test ATTACKER_IP ni ko'radi va yiqiladi.
+    """
+    on_the_wire = _nginx_forwards(ATTACKER_IP, remote_addr=REAL_CLIENT_IP)
+
+    response = await _login_through_proxy(
+        api_app, forwarded_for=on_the_wire, trusted_hosts=_shipped_allow_ips()
+    )
+
+    assert response.status_code == 401
+    # Hujumchi tanlagan kalit UMUMAN yaratilmagan — ya'ni na chegarani
+    # chetlab o'tish, na qurbonni qulflash, na soxta `audit_log.ip` mumkin.
+    assert await _counter(valkey_client, ATTACKER_IP) is None
+    assert await _ip_keys(valkey_client) == [f"{IP_KEY_PREFIX}{REAL_CLIENT_IP}"]
+
+
+async def test_trusted_hop_still_sets_the_real_client_host(
+    api_app: FastAPI, valkey_client: Redis
+) -> None:
+    """Zanjir SOG'LOM bo'lganda proxy bergan qiymat ISHLATILADI (CR-04 saqlanadi).
+
+    Hotfix "hech kimga ishonmaslik" emas: nginx qo'ygan haqiqiy peer baribir
+    `request.client.host` ga tushishi kerak, aks holda 01-13 tuzatgan nuqson
+    (butun platforma bitta `rl:login:ip:<proxy-ip>` sanagichida) qaytardi.
+    """
+    on_the_wire = _nginx_forwards(None, remote_addr=REAL_CLIENT_IP)
+
+    response = await _login_through_proxy(
+        api_app, forwarded_for=on_the_wire, trusted_hosts=_shipped_allow_ips()
+    )
+
+    assert response.status_code == 401
+    assert await _ip_keys(valkey_client) == [f"{IP_KEY_PREFIX}{REAL_CLIENT_IP}"]
+    assert await _counter(valkey_client, REAL_CLIENT_IP) == 1
+    # Proxy'ning O'Z manzili sanagich bo'lib qolmadi.
+    assert await _counter(valkey_client, NGINX_PEER_IP) is None
+
+
+# ---------------------------------------------------------------------------
+# Hotfix: qatlamlarning MUSTAQILLIGI (defense in depth) + 01-13 qaydi
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("nginx_appends", "trusted_hosts", "expected_ip"),
+    [
+        # Ikkala qatlam joyida — asosiy holat.
+        pytest.param(False, "172.16.0.0/12", REAL_CLIENT_IP, id="overwrite+cidr"),
+        # FAQAT nginx qatlami: wildcard qaytarilsa ham hujumchi yuta olmaydi,
+        # chunki chap element endi mijozniki emas.
+        pytest.param(False, "*", REAL_CLIENT_IP, id="overwrite+wildcard"),
+        # FAQAT uvicorn qatlami: nginx qo'shsa ham, aniq ro'yxat bilan uvicorn
+        # zanjirni o'ngdan chapga yurib birinchi ishonchsiz hop'da to'xtaydi.
+        pytest.param(True, "172.16.0.0/12", REAL_CLIENT_IP, id="append+cidr"),
+        # 01-13 QAYDI: aynan shu kombinatsiya ketgan edi — hujumchi G'OLIB.
+        pytest.param(True, "*", ATTACKER_IP, id="append+wildcard-REGRESSION"),
+    ],
+)
+async def test_proxy_layers_are_independently_sufficient(
+    api_app: FastAPI,
+    valkey_client: Redis,
+    *,
+    nginx_appends: bool,
+    trusted_hosts: str,
+    expected_ip: str,
+) -> None:
+    """Har bir qatlam YAKKA O'ZI yetarli ekanini isbotlaydi.
+
+    Qiymatlar bu yerda ATAYLAB qattiq yozilgan — bu test shipped
+    konfiguratsiyani emas, MEXANIKANI qayd etadi. Oxirgi holat (`append` +
+    `*`) yashil bo'lib qoladi va 01-13 dagi teshik haqiqatan ishlaganini
+    hujjatlashtiradi: usul ishlamayotgani uchun emas, kombinatsiya xavfli
+    bo'lgani uchun.
+    """
+    on_the_wire = f"{ATTACKER_IP}, {REAL_CLIENT_IP}" if nginx_appends else REAL_CLIENT_IP
+
+    response = await _login_through_proxy(
+        api_app, forwarded_for=on_the_wire, trusted_hosts=trusted_hosts
+    )
+
+    assert response.status_code == 401
+    assert await _ip_keys(valkey_client) == [f"{IP_KEY_PREFIX}{expected_ip}"]
+
+
+# ---------------------------------------------------------------------------
+# Hotfix: shipped konfiguratsiya DARVOZALARI
+# ---------------------------------------------------------------------------
+
+
+def test_nginx_overwrites_forwarded_for_instead_of_appending() -> None:
+    """`nginx.conf` mijoz sarlavhasini USTIGA yozadi, unga QO'SHMAYDI."""
+    sources = _nginx_xff_sources()
+
+    assert sources, f"{NGINX_CONF} da `X-Forwarded-For` direktivasi yo'q"
+    # Har bir `location` uchun bittadan — biri unutilsa teshik ochiq qoladi.
+    assert len(sources) == 2, f"kutilgan 2 ta direktiva, topildi: {sources}"
+    assert set(sources) == {"$remote_addr"}, (
+        "`X-Forwarded-For` `$remote_addr` bilan USTIGA yozilishi shart. "
+        f"Topildi: {sources}. `$proxy_add_x_forwarded_for` mijozga zanjirning "
+        "chap elementini yozish imkonini beradi — uvicorn `always_trust` "
+        "ostida aynan o'sha element `request.client.host` ga tushadi."
+    )
+
+
+def test_compose_never_trusts_every_proxy() -> None:
+    """`--forwarded-allow-ips` HECH QACHON `*` bo'lmaydi va CIDR sifatida yaroqli.
+
+    `*` uvicornni `always_trust` rejimiga o'tkazadi — u holda zanjir
+    O'NGDAN CHAPGA yurilmaydi, balki BIRINCHI element olinadi. Aniq tarmoq
+    berilganda esa uvicorn ishonchsiz hop'ni to'g'ri topadi.
+    """
+    defaults = _compose_allow_ips()
+
+    for name, value in defaults.items():
+        assert value != "*", (
+            f"{name}: `--forwarded-allow-ips` `*` ga qaytarilgan — "
+            "bu `X-Forwarded-For` soxtalashtirishni ochadi (01-13 regressiyasi)."
+        )
+        # `ip_network` yaroqsiz qiymatda ValueError beradi; uvicorn esa uni
+        # jimgina "literal" deb qabul qilib, HECH KIMGA ishonmay qo'yardi.
+        ipaddress.ip_network(value)
+
+    assert len(set(defaults.values())) == 1, (
+        f"compose fayllari zid: {defaults}. `command` merge qilinmaydi — "
+        "qiymat ikkala faylda bir xil bo'lishi shart."
+    )
+
+
+def test_env_example_does_not_ship_the_wildcard() -> None:
+    """`.env.example` ham `*` tarqatmaydi — u har bir dev'ning `.env` iga ko'chadi."""
+    env_example = REPO_ROOT / ".env.example"
+    assignments = [
+        line.split("=", 1)[1].strip()
+        for line in _strip_comments(env_example.read_text(encoding="utf-8")).splitlines()
+        if line.startswith("FORWARDED_ALLOW_IPS=")
+    ]
+
+    assert assignments, "`.env.example` da `FORWARDED_ALLOW_IPS` yo'q"
+    for value in assignments:
+        assert value != "*", "`.env.example` `*` tarqatmasligi shart"
+        ipaddress.ip_network(value)

@@ -167,3 +167,156 @@ Yo'q — tashqi servis sozlash talab qilinmaydi. Faqat qayd: mavjud `.env` fayli
 ---
 *Phase: 01-poydevor-va-tenant-xavfsizligi*
 *Completed: 2026-07-29*
+
+---
+
+## Hotfix (2026-07-29) — `X-Forwarded-For` soxtalashtirish teshigi yopildi
+
+> Bu bo'lim yuqoridagi xulosadan KEYIN qo'shildi. Yuqoridagi matn 01-13
+> topshirilgan paytdagi holatni saqlaydi va O'ZGARTIRILMAGAN — quyidagi
+> tuzatish uni bir nechta joyda BEKOR QILADI (pastda "Eskirgan da'volar").
+
+### Muammo: 01-13 DoS'ni spoofing'ga almashtirgan edi
+
+01-13 `--forwarded-allow-ips *` ni jo'natdi. uvicorn 0.51.0 manbasi
+(`uvicorn/middleware/proxy_headers.py`, o'qib tasdiqlandi) shuni qiladi:
+
+```python
+self.always_trust = trusted_hosts in ("*", ["*"])
+...
+if self.always_trust:
+    return _parse_host_port(x_forwarded_for_hosts[0])   # ENG CHAP element
+```
+
+`ops/nginx/nginx.conf` esa `$proxy_add_x_forwarded_for` ishlatardi — bu
+nginx o'zgaruvchisi mijoz YUBORGAN sarlavhaga `$remote_addr` ni QO'SHADI.
+Zanjir:
+
+1. Internetdagi mijoz: `X-Forwarded-For: 1.2.3.4`
+2. nginx uzatadi: `X-Forwarded-For: 1.2.3.4, <haqiqiy mijoz IP>`
+3. uvicorn (`always_trust`) `[0]` ni oladi → `request.client.host == "1.2.3.4"`
+
+Ya'ni `request.client.host` TO'LIQ hujumchi nazoratida edi. Ta'siri 01-13
+tuzatmoqchi bo'lgan nuqsondan OG'IRROQ:
+
+| Ta'sir | Tafsilot |
+|---|---|
+| Rate-limit chetlab o'tish | Har so'rovga yangi soxta IP → `rl:login:ip:*` cheksiz aylanadi, parol terish chegarasiz |
+| Maqsadli qulflash | Qurbonning haqiqiy IP'sini yozib, o'sha bozorni 15 daqiqaga qulflash |
+| Soxta audit dalili | `audit_log.ip` hujumchi TANLAGAN qiymatni yozadi — FOUND-03 ning "kim qildi" ustuni |
+
+01-13 gacha XFF umuman o'qilmasdi: bu umumiy-kalit DoS edi, lekin
+SOXTALASHTIRIB bo'lmasdi. 01-13 DoS'ni autentifikatsiyaga tegishli
+spoofing teshigiga almashtirdi.
+
+### Nega 01-13 testi buni ushlamadi
+
+`tests/integration/test_rate_limit_proxy.py` `httpx.ASGITransport(client=...)`
+orqali ASGI scope'idagi `client` juftligini TO'G'RIDAN-TO'G'RI yozardi, ya'ni
+`ProxyHeadersMiddleware` umuman ishga tushmasdi. Middleware'ning O'ZIDAGI
+(va uni haydab turgan konfiguratsiyadagi) nuqson testga ko'rinmas edi —
+buni 01-13 ning o'zi "Issues Encountered" da halol qayd etgan, lekin
+xulosa noto'g'ri edi: bo'shliqni izoh emas, TEST yopishi kerak.
+
+### Tuzatish — uchta mustaqil qatlam
+
+**1-qatlam — nginx USTIGA yozadi (asosiy tuzatish).** `ops/nginx/nginx.conf`,
+ikkala `location` da:
+
+```nginx
+proxy_set_header X-Forwarded-For   $remote_addr;   # oldin: $proxy_add_x_forwarded_for
+```
+
+Endi nginx mijoz yuborgan har qanday `X-Forwarded-For` ni TASHLAYDI va aynan
+bitta element qoldiradi. `X-Real-IP $remote_addr` o'z holicha qoldirildi.
+Faylga izoh yozildi: bu OVERWRITE bo'lib qolishi shart; oldinga ishonchli
+upstream proxy (CDN/L7) qo'yilsa, ishonchli hop soni va
+`--forwarded-allow-ips` BIRGALIKDA qayta ko'rib chiqiladi.
+
+**2-qatlam — wildcard olib tashlandi.** `compose.yaml` + `compose.override.yml`:
+
+```yaml
+- "${FORWARDED_ALLOW_IPS:-172.16.0.0/12}"   # oldin: ${FORWARDED_ALLOW_IPS:-*}
+```
+
+Wildcard bo'lmaganda uvicorn zanjirni O'NGDAN CHAPGA yuradi va birinchi
+ishonchsiz hop'da to'xtaydi — to'g'ri algoritm aynan shu.
+
+Qiymat EMPIRIK aniqlandi, taxmin qilinmadi:
+
+```
+$ docker network inspect sbozor_default --format '{{json .IPAM.Config}}'
+[{"Subnet":"172.19.0.0/16","Gateway":"172.19.0.1"}]
+```
+
+Kuzatilgan `172.19.0.0/16` QADALMADI: Docker bridge tarmoqlariga subnetni
+standart puldan (`172.16.0.0/12` → `/16` bo'laklar) DINAMIK beradi, ya'ni
+tarmoq qayta yaratilsa `sbozor_default` `172.20.x` bo'lib qolishi mumkin va
+qadalgan `/16` jimgina ishlamay qo'yardi. Shuning uchun standart — butun
+pul. Sabab va o'lchov `compose.yaml` hamda `.env.example` izohlarida yozildi;
+prod uchun toraytirish yo'li ham ko'rsatildi.
+
+**3-qatlam — haqiqatan ushlaydigan test.** `test_rate_limit_proxy.py` ga 9 ta
+test qo'shildi. Ular ilovani HAQIQIY `ProxyHeadersMiddleware` ga o'raydi
+(`uvicorn.middleware.proxy_headers` dan import) va uni SHIPPED
+konfiguratsiyadan o'qilgan qiymatlar bilan haydaydi — sarlavha
+`nginx.conf` direktivasidan HISOBLANADI, ishonch ro'yxati `compose*.yml` dan
+o'qiladi:
+
+| Test | Nimani qulflaydi |
+|---|---|
+| `test_spoofed_forwarded_for_cannot_set_client_host` | Hujumchi prefiksi `request.client.host` ga TUSHMAYDI (asosiy da'vo) |
+| `test_trusted_hop_still_sets_the_real_client_host` | Sog'lom zanjirda proxy bergan qiymat ISHLATILADI — CR-04 buzilmadi |
+| `test_proxy_layers_are_independently_sufficient` (4 holat) | 2×2 matritsa: har bir qatlam YAKKA O'ZI yetarli; `append+wildcard` holati 01-13 teshigi haqiqatan ishlaganini qayd etadi |
+| `test_nginx_overwrites_forwarded_for_instead_of_appending` | `$proxy_add_x_forwarded_for` qaytarilsa QIZARADI |
+| `test_compose_never_trusts_every_proxy` | `*` qaytarilsa QIZARADI; ikkala compose fayli kelishgan bo'lishi shart |
+| `test_env_example_does_not_ship_the_wildcard` | `.env.example` `*` tarqatmaydi (u har bir dev'ning `.env` iga ko'chadi) |
+
+### Sabotaj tekshiruvi
+
+Ikkala qatlam 01-13 holatiga qaytarildi (`$proxy_add_x_forwarded_for` +
+`${FORWARDED_ALLOW_IPS:-*}`), keyin `pytest tests/integration/test_rate_limit_proxy.py`:
+
+```
+FAILED test_spoofed_forwarded_for_cannot_set_client_host
+FAILED test_nginx_overwrites_forwarded_for_instead_of_appending
+FAILED test_compose_never_trusts_every_proxy
+```
+
+Asosiy xulq-atvor testi aynan ekspluatatsiyani ko'rsatdi:
+
+```
+>       assert await _counter(valkey_client, ATTACKER_IP) is None
+E       assert 1 is None
+```
+
+— ya'ni hujumchi tanlagan `192.0.2.66` HAQIQATAN `rl:login:ip:192.0.2.66`
+kalitiga tushdi. Sabotaj bekor qilindi (fayllar `md5sum` bo'yicha bayt-ma-bayt
+tiklandi) va to'plam qayta yashil bo'ldi.
+
+### Verifikatsiya
+
+| Tekshiruv | Natija |
+|---|---|
+| `docker compose config --quiet` | exit 0 |
+| `docker compose -f compose.yaml config --quiet` | exit 0 |
+| `nginx -t` (`nginx:1.30.4-alpine`, upstream'lar `--add-host` bilan) | `syntax is ok` / `test is successful` |
+| `docker compose --profile test run --rm tests pytest -q` | **425 passed**, 0 failed (416 baseline + 9 yangi) |
+| `ruff check` + `ruff format --check` + `mypy` (strict) | toza |
+
+### O'zgargan fayllar
+
+`ops/nginx/nginx.conf`, `compose.yaml`, `compose.override.yml`,
+`.env.example`, `tests/integration/test_rate_limit_proxy.py`.
+`services/core-api/` va `frontend/` OCHILMADI — ilova kodi o'zgarmadi.
+`STATE.md` / `ROADMAP.md` TEGILMAGAN.
+
+### Eskirgan da'volar (yuqoridagi matnda)
+
+- **"User Setup Required"** endi noto'g'ri: standart `*` EMAS, `172.16.0.0/12`.
+  `*` ni `.env` ga yozish TAQIQLANADI — u soxtalashtirish teshigini qayta ochadi.
+- **"Issues Encountered" → "Testning halol chegarasi"** endi amal qilmaydi:
+  deploy qatlami izohlar bilan emas, `ProxyHeadersMiddleware` ni haqiqatan
+  ishga tushiradigan testlar bilan qamralgan.
+- **T-01-86 (audit repudiation)** 01-13 dan keyin aslida OCHIQ qolgan edi
+  (`audit_log.ip` soxtalashtirilardi); shu hotfix bilan yopildi.

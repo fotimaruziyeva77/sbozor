@@ -25,8 +25,13 @@ services:
     # takrorlanishi shart (CR-04). Aks holda dev stek (`npm run up` bu faylni
     # AVTOMATIK yuklaydi) tuzatilmagan holatda qolardi va nginx ortidagi
     # haqiqiy mijoz IP'si yana yo'qolardi.
-    # Xost porti FAQAT 127.0.0.1 ga bog'lanadi (pastda), ya'ni `*` shu yerda ham
-    # xavfsiz: sarlavhani soxtalashtirish uchun xostda allaqachon bo'lish kerak.
+    #
+    # DIQQAT: bu yerda ham `*` ISHLATILMAYDI. Wildcard uvicornni
+    # `always_trust` rejimiga o'tkazadi va u `X-Forwarded-For` ning CHAP
+    # elementini oladi — ya'ni qiymatni mijozning o'zi tanlaydi. Qiymat
+    # `compose.yaml` bilan BIR XIL bo'lishi shart (sabab va empirik o'lchov
+    # tavsifi o'sha yerda), aks holda dev va prod turli xavfsizlik holatida
+    # qolardi va regressiya faqat prod'da ko'rinardi.
     command:
       - "uvicorn"
       - "app.main:app"
@@ -37,7 +42,7 @@ services:
       - "--reload"
       - "--proxy-headers"
       - "--forwarded-allow-ips"
-      - "${FORWARDED_ALLOW_IPS:-*}"
+      - "${FORWARDED_ALLOW_IPS:-172.16.0.0/12}"
     working_dir: /app/services/core-api
     volumes:
       - .:/app

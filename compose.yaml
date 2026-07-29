@@ -90,13 +90,30 @@ services:
     #   2) `audit_log.ip` har doim proxy manzilini yozadi — "kimdan" savoli
     #      javobsiz qoladi (FOUND-03 dalil sifati).
     #
-    # `*` NEGA XAVFSIZ: `core-api` xost portiga PUBLISH QILINMAYDI — unga faqat
-    # compose tarmog'idan, nginx orqali kiriladi (dev `compose.override.yml`
-    # uni FAQAT 127.0.0.1 ga bog'laydi). Ya'ni sarlavhani soxtalashtira
-    # oladigan yagona tomon — allaqachon ichkarida bo'lgan tomon.
-    # AGAR port kelajakda tashqi interfeysga chiqarilsa, `FORWARDED_ALLOW_IPS`
-    # ni nginx servisining manziliga QADASH SHART — aks holda har bir mijoz
-    # o'z IP'sini o'zi yozadi va rate-limit ham, audit ham ma'nosini yo'qotadi.
+    # `*` NEGA TAQIQLANGAN (01-13 regressiyasi, hotfix bilan yopildi):
+    # uvicorn 0.51.0 `_TrustedHosts.always_trust` holatida
+    # `get_trusted_client_address()` zanjirning BIRINCHI (chap) elementini
+    # qaytaradi. nginx `$proxy_add_x_forwarded_for` bilan mijoz yuborgan
+    # qiymat aynan CHAPDA turardi -> `request.client.host` ni mijozning o'zi
+    # tanlardi: rate-limit chetlab o'tilardi, istalgan qurbonni qulflash
+    # mumkin edi va `audit_log.ip` soxta qiymat yozardi. nginx endi
+    # `$remote_addr` bilan USTIGA yozadi (ops/nginx/nginx.conf), bu yerda esa
+    # wildcard O'RNIGA tarmoq oralig'i turadi — ikki qatlam mustaqil.
+    #
+    # ANIQ RO'YXAT bilan uvicorn zanjirni O'NGDAN CHAPGA yuradi va birinchi
+    # ISHONCHSIZ hop'da to'xtaydi — to'g'ri algoritm aynan shu.
+    #
+    # QIYMAT QANDAY TANLANDI (empirik, 2026-07-29):
+    #   docker network inspect sbozor_default --format '{{json .IPAM.Config}}'
+    #   -> [{"Subnet":"172.19.0.0/16","Gateway":"172.19.0.1"}]
+    # Kuzatilgan /16 QADALMAYDI: Docker bridge tarmoqlariga subnetni standart
+    # puldan (172.16.0.0/12 -> /16 bo'laklar) DINAMIK beradi, ya'ni tarmoq
+    # qayta yaratilsa `sbozor_default` 172.20.x, 172.21.x ... bo'lib qolishi
+    # mumkin va qadalgan /16 jimgina ishlamay qo'yardi. Shuning uchun standart
+    # — butun pul: 172.16.0.0/12 (172.16.0.0 – 172.31.255.255).
+    #
+    # Prod'da toraytiring: tarmoqqa aniq subnet bering va `FORWARDED_ALLOW_IPS`
+    # ga aynan o'sha /16 ni (yoki nginx konteyneri manzilini) yozing.
     command:
       - "uvicorn"
       - "app.main:app"
@@ -108,7 +125,7 @@ services:
       - "1"
       - "--proxy-headers"
       - "--forwarded-allow-ips"
-      - "${FORWARDED_ALLOW_IPS:-*}"
+      - "${FORWARDED_ALLOW_IPS:-172.16.0.0/12}"
     environment:
       DATABASE_URL: ${DATABASE_URL}
       VALKEY_URL: ${VALKEY_URL:-redis://cache:6379/0}
