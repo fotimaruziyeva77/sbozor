@@ -9,6 +9,8 @@ import {
 import { Toaster } from "sonner";
 
 import { routing } from "@/i18n/routing";
+import { AuthProvider } from "@/lib/auth-store";
+import { QueryProvider } from "@/lib/query-provider";
 
 import "../globals.css";
 
@@ -62,9 +64,18 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} className="h-full">
       <body className="flex min-h-full flex-col">
+        {/*
+          Provayder tartibi: i18n -> server holati keshi -> sessiya.
+          `AuthProvider` eng ichkarida, chunki sessiya tiklash `apiFetch` ga
+          tayanadi va u `QueryProvider` bilan bir xil daraxtda bo'lishi kerak.
+        */}
         <NextIntlClientProvider messages={messages}>
-          {children}
-          <Toaster position="top-center" richColors />
+          <QueryProvider>
+            <AuthProvider>
+              {children}
+              <Toaster position="top-center" richColors />
+            </AuthProvider>
+          </QueryProvider>
         </NextIntlClientProvider>
       </body>
     </html>
