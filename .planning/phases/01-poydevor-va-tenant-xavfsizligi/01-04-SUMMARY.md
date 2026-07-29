@@ -334,3 +334,14 @@ npm run migrate           # docker compose --profile migrate run --rm migrate al
 - **`owner_bootstrap` policy'si `sbozor_owner` uchun FORCE ni amalda neytrallaydi.** Bu ataylab va hujjatlashtirilgan, lekin `disable_force_for_backfill()` naqshining ahamiyati kamayadi: ega endi `UPDATE` qila oladi. Kelajakda ega uchun policy'siz jadval paydo bo'lsa, Pitfall 4 qaytadan kuchga kiradi — shuning uchun yordamchilar saqlab qolindi.
 - **`markets.timezone` ustuni bor, lekin hech kim o'qimaydi.** 2-fazadagi `business_date` generated column IMMUTABLE ifoda talab qiladi va boshqa ustunga havola qila olmaydi, shuning uchun u literal `'Asia/Tashkent'` bilan boshlanadi. Bozorga xos mintaqa kerak bo'lganda ifoda o'zgaradi — bu migratsiya bilan jadvalni qayta yozishni talab qiladi.
 - **`.github/workflows/ci-backend.yml` bu ishni hali ko'rmadi.** Mahalliy zanjir (`ruff` + `format` + `mypy` + `pytest`) yashil; CI'da `migrated` fixture'i uchun Docker-in-Docker sozlamasi birinchi ishga tushishda kuzatilishi kerak.
+
+## Self-Check: PASSED
+
+- **Fayllar:** da'vo qilingan 20 ta artefaktning (17 yangi + 3 modifikatsiya) hammasi mavjud va git'da kuzatilmoqda (`git ls-files`).
+- **Commitlar:** `825739f`, `9f0dd94`, `dbe8ed3`, `e4c0eba`, `743e087` — beshtasi ham `git log` da mavjud.
+- **O'chirilgan fayl yo'q:** `git diff --diff-filter=D --name-only 2db3473..HEAD` bo'sh.
+- **Umumiy artefaktlarga tegilmadi:** `git diff --name-only 2db3473..HEAD -- STATE.md ROADMAP.md REQUIREMENTS.md` bo'sh (worktree rejimi — ularni orkestrator yangilaydi).
+- **Ishchi katalog toza:** `git status --short` bo'sh; `.env` kuzatilmaydi.
+- **Darvozalar:** `ruff check` + `ruff format --check` + `mypy` (strict, 40 fayl) + `pytest` (181 test: 145 unit + 36 tenancy) — hammasi yashil.
+- **Migratsiya:** `alembic downgrade base && alembic upgrade head` takroran xatosiz; `alembic revision --autogenerate` BO'SH diff beradi (model ↔ migratsiya pariteti).
+- **Sabotaj tekshiruvlari:** `NULLIF` olib tashlanganda `test_same_connection_after_commit_is_still_fail_closed` yiqildi; `enable_tenant_rls("refresh_tokens")` olib tashlanganda `test_every_table_is_tenant_scoped` yiqildi. Ikkalasi ham qaytarildi va suite yana yashil.
