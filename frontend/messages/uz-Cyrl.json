@@ -1,0 +1,53 @@
+{
+  "common": {
+    "appName": "SBOZOR",
+    "appTagline": "Бозор савдосини рақамли назорат қилиш тизими",
+    "save": "Сақлаш",
+    "cancel": "Бекор қилиш",
+    "loading": "Юкланмоқда",
+    "retry": "Қайта уриниш",
+    "search": "Қидириш",
+    "back": "Орқага"
+  },
+  "nav": {
+    "dashboard": "Бошқарув панели",
+    "users": "Фойдаланувчилар",
+    "audit": "Аудит журнали",
+    "logout": "Чиқиш"
+  },
+  "auth": {
+    "phoneLabel": "Телефон рақами",
+    "passwordLabel": "Парол",
+    "signIn": "Кириш",
+    "signingIn": "Кирилмоқда",
+    "invalidCredentials": "Телефон рақами ёки парол хато",
+    "mustChangePassword": "Давом этиш учун паролни алмаштиринг",
+    "selectMarket": "Бозорни танланг"
+  },
+  "users": {
+    "title": "Фойдаланувчилар",
+    "create": "Янги фойдаланувчи",
+    "block": "Блоклаш",
+    "unblock": "Блокдан чиқариш",
+    "resetPassword": "Паролни тиклаш",
+    "rolesLabel": "Роллар",
+    "createdBy": "{name} томонидан яратилди"
+  },
+  "audit": {
+    "title": "Аудит журнали",
+    "who": "Ким",
+    "when": "Қачон",
+    "what": "Нима",
+    "oldValue": "Эски қиймат",
+    "newValue": "Янги қиймат",
+    "filterAction": "Ҳаракат бўйича саралаш",
+    "emptyState": "Ёзув топилмади",
+    "resultCount": "{count, plural, one {# ёзув} other {# ёзув}} топилди"
+  },
+  "errors": {
+    "generic": "Кутилмаган хато юз берди",
+    "network": "Тармоқ билан алоқа йўқ",
+    "forbidden": "Бу амал учун рухсат йўқ",
+    "notFound": "Топилмади"
+  }
+}
