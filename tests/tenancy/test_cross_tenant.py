@@ -98,6 +98,11 @@ EXEMPT_ROUTES: dict[str, str] = {
         "global — bozorlar ro'yxati FAQAT haqiqiy platforma adminiga "
         "(`users.is_platform_admin` bayrog'i) ochiladi, gibrid huquqli hisobga EMAS (CR-03)"
     ),
+    "/api/v1/audit/platform": (
+        "global — platforma-global (`market_id IS NULL`) audit qatorlari, ya'ni "
+        "HECH QAYSI bozorga tegishli bo'lmagan yozuvlar; tenant qatorlari undan "
+        "hech qachon qaytmaydi va darvoza `users.is_platform_admin` bayrog'i"
+    ),
 }
 """Cross-tenant matritsasidan CHIQARILGAN marshrutlar — har biri SABAB bilan.
 
@@ -118,6 +123,15 @@ qo'lga kiritilardi (CR-03). Endi branch `users.is_platform_admin`
 bayrog'ida va istisno faqat shu bayroqni qamraydi. Bayroqsiz, lekin
 huquqli hisob uchun regressiya darvozasi —
 `tests/integration/test_me_locale.py::test_market_view_all_without_the_flag_sees_only_its_own_market`.
+
+DIQQAT — ISTISNO MARSHRUTNI MATRITSADAN TO'LIQ CHIQARADI, faqat
+"404 qaytarsin" da'vosidan emas: tokensiz/buzilgan/muddati o'tgan token
+testlari ham unga qo'llanmaydi. `/api/v1/audit/platform` uchun o'sha
+qamrov `tests/integration/test_audit_platform.py` da AYNAN qayta
+tiklangan (tokensiz -> 401; `is_platform_admin=false` -> 403; gibrid
+`platform_admin` a'zolik roli -> 403; javobda tenant qatorlari YO'Q).
+Istisno qo'shgan odam bu qamrovni ham ko'chirishi SHART — aks holda
+marshrut "istisno" degan so'z bilan butunlay sinovsiz qolardi.
 """
 
 EXEMPT_REASON_PREFIXES = ("auth bootstrap", "global", "health")
