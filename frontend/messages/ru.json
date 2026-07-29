@@ -1,0 +1,53 @@
+{
+  "common": {
+    "appName": "SBOZOR",
+    "appTagline": "Система цифрового контроля рыночной торговли",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "loading": "Загрузка",
+    "retry": "Повторить",
+    "search": "Поиск",
+    "back": "Назад"
+  },
+  "nav": {
+    "dashboard": "Панель управления",
+    "users": "Пользователи",
+    "audit": "Журнал аудита",
+    "logout": "Выход"
+  },
+  "auth": {
+    "phoneLabel": "Номер телефона",
+    "passwordLabel": "Пароль",
+    "signIn": "Войти",
+    "signingIn": "Выполняется вход",
+    "invalidCredentials": "Неверный номер телефона или пароль",
+    "mustChangePassword": "Для продолжения смените пароль",
+    "selectMarket": "Выберите рынок"
+  },
+  "users": {
+    "title": "Пользователи",
+    "create": "Новый пользователь",
+    "block": "Заблокировать",
+    "unblock": "Разблокировать",
+    "resetPassword": "Сбросить пароль",
+    "rolesLabel": "Роли",
+    "createdBy": "Создан пользователем {name}"
+  },
+  "audit": {
+    "title": "Журнал аудита",
+    "who": "Кто",
+    "when": "Когда",
+    "what": "Что",
+    "oldValue": "Старое значение",
+    "newValue": "Новое значение",
+    "filterAction": "Фильтр по действию",
+    "emptyState": "Записи не найдены",
+    "resultCount": "Найдено {count, plural, one {# запись} few {# записи} many {# записей} other {# записи}}"
+  },
+  "errors": {
+    "generic": "Произошла непредвиденная ошибка",
+    "network": "Нет связи с сетью",
+    "forbidden": "Нет прав на это действие",
+    "notFound": "Не найдено"
+  }
+}

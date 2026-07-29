@@ -1,0 +1,53 @@
+{
+  "common": {
+    "appName": "SBOZOR",
+    "appTagline": "Bozor savdosini raqamli nazorat qilish tizimi",
+    "save": "Saqlash",
+    "cancel": "Bekor qilish",
+    "loading": "Yuklanmoqda",
+    "retry": "Qayta urinish",
+    "search": "Qidirish",
+    "back": "Orqaga"
+  },
+  "nav": {
+    "dashboard": "Boshqaruv paneli",
+    "users": "Foydalanuvchilar",
+    "audit": "Audit jurnali",
+    "logout": "Chiqish"
+  },
+  "auth": {
+    "phoneLabel": "Telefon raqami",
+    "passwordLabel": "Parol",
+    "signIn": "Kirish",
+    "signingIn": "Kirilmoqda",
+    "invalidCredentials": "Telefon raqami yoki parol xato",
+    "mustChangePassword": "Davom etish uchun parolni almashtiring",
+    "selectMarket": "Bozorni tanlang"
+  },
+  "users": {
+    "title": "Foydalanuvchilar",
+    "create": "Yangi foydalanuvchi",
+    "block": "Bloklash",
+    "unblock": "Blokdan chiqarish",
+    "resetPassword": "Parolni tiklash",
+    "rolesLabel": "Rollar",
+    "createdBy": "{name} tomonidan yaratildi"
+  },
+  "audit": {
+    "title": "Audit jurnali",
+    "who": "Kim",
+    "when": "Qachon",
+    "what": "Nima",
+    "oldValue": "Eski qiymat",
+    "newValue": "Yangi qiymat",
+    "filterAction": "Harakat bo'yicha saralash",
+    "emptyState": "Yozuv topilmadi",
+    "resultCount": "{count, plural, one {# yozuv} other {# yozuv}} topildi"
+  },
+  "errors": {
+    "generic": "Kutilmagan xato yuz berdi",
+    "network": "Tarmoq bilan aloqa yo'q",
+    "forbidden": "Bu amal uchun ruxsat yo'q",
+    "notFound": "Topilmadi"
+  }
+}
