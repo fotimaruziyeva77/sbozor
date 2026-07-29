@@ -79,7 +79,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-05-PLAN.md — audit_log + DB-trigger, 4 qatlamli o'zgarmaslik, moliyaviy konstrayt asboblari (business_date, CHECK, UNIQUE) (W4)
+- [x] 01-05-PLAN.md — audit_log + DB-trigger, 4 qatlamli o'zgarmaslik, moliyaviy konstrayt asboblari (business_date, CHECK, UNIQUE) (W4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
