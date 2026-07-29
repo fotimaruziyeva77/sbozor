@@ -97,10 +97,72 @@ test("D-04: bozor admini bera oladigan rollar backend bilan AYNAN mos", () => {
   assert.deepEqual([...frontend].sort(), ["cashier", "inspector"]);
 });
 
-test("Rollar ro'yxati `sbozor_core.enums.Role` bilan mos (platforma admini beshalasini ko'radi)", () => {
+/*
+ * DIQQAT: `rbac.ts::ROLES` — bu YORLIQ (label) ro'yxati, ya'ni "tizimda
+ * qanday rollar bor" degan savolga javob beradi. U BERILISHI MUMKIN bo'lgan
+ * rollar ro'yxati EMAS.
+ *
+ * Bu testning eski sarlavhasi "platforma admini beshalasini ko'radi" degan
+ * ma'noni yuklardi va shu bilan CR-03 zaifligini "to'g'ri xulq" sifatida
+ * qulflab qo'ygan edi. Aslida beshinchi rol — `platform_admin` — hech qachon
+ * a'zolik roli sifatida BERILMAYDI (pastdagi testga qarang).
+ */
+test("`rbac.ts::ROLES` yorliq ro'yxati `sbozor_core.enums.Role` bilan aynan mos", () => {
   const frontend = readTsStringArray(read(RBAC), "ROLES");
   const backend = readPythonEnumValues(read(CORE_ENUMS), "Role");
 
   assert.deepEqual([...frontend].sort(), [...backend].sort());
   assert.equal(frontend.length, 5);
+});
+
+/*
+ * CR-03 qulfi: `platform_admin` HECH BIR beriladigan rollar ro'yxatida
+ * bo'lmasligi kerak.
+ *
+ * NEGA: "platforma admini" `users.is_platform_admin` BAYROG'I bilan
+ * aniqlanadi, `user_market_roles` qatori bilan emas. A'zolik roli sifatida
+ * berilgan `platform_admin` hisobni ayni paytda ham ortiqcha huquqli
+ * (`market_view_all` -> butun platforma bozorlari ro'yxati), ham buzuq
+ * (`select-market` uni boshqa bozorga kiritmaydi) qilib qo'yadi.
+ *
+ * Bu test formaning O'ZINI tekshirmaydi — u ro'yxat manbasini tekshiradi;
+ * `create-user-dialog.tsx` katakchalarni aynan shu ro'yxatdan quradi.
+ */
+test("CR-03: `platform_admin` beriladigan rollar ro'yxatlarida YO'Q", () => {
+  const source = read(API_TYPES);
+  const platformAdminAssignable = readTsStringArray(
+    source,
+    "PLATFORM_ADMIN_ASSIGNABLE_ROLES",
+  );
+  const marketAdminAssignable = readTsStringArray(
+    source,
+    "MARKET_ADMIN_ASSIGNABLE_ROLES",
+  );
+
+  assert.ok(
+    !platformAdminAssignable.includes("platform_admin"),
+    "`platform_admin` platforma admini bera oladigan rollar ro'yxatiga tushib qolgan — u bayroq, a'zolik roli emas (CR-03)",
+  );
+  assert.ok(
+    !marketAdminAssignable.includes("platform_admin"),
+    "`platform_admin` bozor admini bera oladigan rollar ro'yxatiga tushib qolgan (CR-03)",
+  );
+
+  assert.deepEqual(
+    [...platformAdminAssignable].sort(),
+    ["cashier", "director", "inspector", "market_admin"],
+  );
+
+  /*
+   * Ro'yxat `Role` enum'iga BOG'LANADI: platforma admini `platform_admin`
+   * dan tashqari HAR BIR rolni bera oladi. Backend'ga yangi rol qo'shilsa
+   * shu assert qizaradi va ro'yxatni yangilash esdan chiqmaydi — ya'ni test
+   * qattiq yozilgan to'rtlikni takrorlab qo'ymaydi, qoidani qulflaydi.
+   */
+  const enumRoles = readPythonEnumValues(read(CORE_ENUMS), "Role");
+  assert.deepEqual(
+    [...platformAdminAssignable].sort(),
+    enumRoles.filter((role) => role !== "platform_admin").sort(),
+    "Platforma admini bera oladigan rollar = `Role` enum'i minus `platform_admin`",
+  );
 });

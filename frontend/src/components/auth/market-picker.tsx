@@ -90,9 +90,24 @@ export function MarketPicker() {
     },
   });
 
-  const isBusy = selectMarket.isPending || marketsQuery.isPending;
+  /*
+   * DIQQAT — `isLoading`, `isPending` EMAS (CR-02).
+   *
+   * TanStack Query v5 da `isPending` = "keshda ma'lumot YO'Q", ya'ni
+   * O'CHIRILGAN so'rov (`enabled: false`) uchun u ABADIY `true` bo'lib
+   * qoladi — hech qachon so'rov ketmagani uchun ma'lumot ham paydo
+   * bo'lmaydi. Asosiy yo'lda `markets` login javobidan to'ladi, ya'ni
+   * `enabled === false`, ya'ni `isPending === true`, ya'ni har bir bozor
+   * tugmasi `disabled` bo'lib qolardi va D-06 oqimi UMUMAN yakunlanmasdi.
+   *
+   * `isLoading` = `isPending && isFetching` — o'chirilgan so'rovda `false`,
+   * chunki hech narsa yuklanmayapti. Aynan shu "hozir so'rov ketyaptimi?"
+   * degan savolga javob beradi va tugmani faqat HAQIQIY kutish paytida
+   * bloklaydi.
+   */
+  const isBusy = selectMarket.isPending || marketsQuery.isLoading;
 
-  if (marketsQuery.isPending && markets.length === 0) {
+  if (marketsQuery.isLoading) {
     return (
       <p className="text-sm text-text-muted" role="status">
         {t("common.loading")}
