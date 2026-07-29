@@ -283,6 +283,13 @@ None — tashqi servis konfiguratsiyasi talab qilinmaydi.
 - `frontend/next.config.ts` da `NEXT_PUBLIC_API_BASE_URL` hali yo'q — core-api'ga ulanish 01-08 da qo'shiladi.
 - `uz-Cyrl.overrides.json` `words` lug'ati boshlang'ich holatda (8 ta yozuv). Kontent o'sgani sayin o'zlashma so'zlar qo'shilishi kerak; noto'g'ri transliteratsiya faqat ko'z bilan ko'rinadi — 01-08 dan keyin kirill sahifalarini bir marta ko'zdan kechirish tavsiya etiladi.
 
+## Self-Check: PASSED
+
+- **Fayllar:** SUMMARY'da da'vo qilingan 21 ta manba fayli va 8 ta konfiguratsiya fayli `git ls-files` da mavjud. `frontend/src/middleware.ts` va `frontend/tailwind.config.*` — YO'Q (kutilganidek).
+- **Commitlar:** `f40076f`, `86e4e56`, `4823574`, `5fda979`, `dc0a7ed` — hammasi `git log` da mavjud.
+- **Ish katalogi:** toza (`git status --short` bo'sh).
+- **Yakuniy tekshiruv (toza `npm ci` dan keyin):** `typecheck` exit 0 · `lint` exit 0 · `test` 32/32 · `i18n:check` exit 0 · `build` exit 0 (3 locale SSG + Proxy) · `docker build` muvaffaqiyatli.
+
 ---
 
 _Phase: 01-poydevor-va-tenant-xavfsizligi_
