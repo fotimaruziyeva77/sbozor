@@ -37,6 +37,7 @@ __all__ = [
     "audit_entries",
     "bearer",
     "cleanup_test_users",
+    "insert_audit_probe",
     "new_phone",
     "platform_admin_headers",
     "session_headers",
@@ -147,6 +148,32 @@ _AUDIT_ENTRIES = text(
     "old_value, new_value, changed_keys, source "
     "FROM audit_log WHERE market_id = :market_id ORDER BY id"
 )
+
+
+def insert_audit_probe(
+    conn: Connection[TupleRow],
+    market_id: UUID,
+    *,
+    table_name: str,
+    new_value: str,
+    action: str = "update",
+) -> None:
+    """Bozorga sun'iy audit qatori qo'yadi (`sbozor_owner` bilan).
+
+    NEGA KERAK: maskalash testi jurnalda SEZGIR KALIT bo'lgan qatorni
+    talab qiladi, mahsulot kodi esa bunday qatorni HECH QACHON yozmaydi
+    (parol ham, hash ham auditga tushmaydi). Ya'ni maskalashni haqiqiy
+    ma'lumot bilan sinab bo'lmaydi — u aynan "kimdir bir kun sezgir
+    maydonni auditga yozib qo'ysa" holatiga qarshi himoya.
+
+    `audit_append` policy'si `WITH CHECK (true)` va `TO` bandisiz, ya'ni
+    ega ham yoza oladi (01-05 da hujjatlashtirilgan qaror).
+    """
+    conn.execute(
+        "INSERT INTO audit_log (market_id, action, table_name, new_value, source) "
+        "VALUES (%s, %s, %s, %s::jsonb, 'app')",
+        (str(market_id), action, table_name, new_value),
+    )
 
 
 async def audit_entries(

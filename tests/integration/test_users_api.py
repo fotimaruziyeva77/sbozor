@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from fixtures.admin_api import (
+    AUDIT_URL,
     USERS_URL,
     audit_entries,
     new_phone,
@@ -475,3 +476,33 @@ async def test_temp_password_not_in_audit(
     assert reset_temporary not in serialized
     assert "password_hash" not in serialized
     assert "argon2" not in serialized.lower()
+
+
+async def test_created_user_is_visible_in_the_audit_api(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """UCHDAN-UCHIGA: yaratish yozuvi audit API'sida ko'rinadi va parolsiz.
+
+    Bu 1- va 3-tasklarning bog'lanish nuqtasi: jurnalga YOZISH ham, uni
+    KO'RISH ham bitta oqimda isbotlanadi. DB'ga to'g'ridan-to'g'ri
+    qaraydigan `test_temp_password_not_in_audit` bu yo'lni qamramaydi —
+    parol javob serializatsiyasida (masking) ham sizib chiqishi mumkin.
+    """
+    headers = await _market_admin_headers(api_client, auth_seed)
+    phone = new_phone()
+    created = await _create(api_client, headers, roles=["cashier"], phone=phone)
+    assert created.status_code == 201, created.text
+
+    response = await api_client.get(
+        AUDIT_URL,
+        params={"action": str(AuditAction.INSERT), "table_name": "users"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    entry = next(item for item in items if item["row_id"] == created.json()["id"])
+    assert entry["new_value"]["phone"] == phone
+    assert entry["new_value"]["roles"] == ["cashier"]
+    assert "password_hash" not in entry["new_value"]
+    assert created.json()["temporary_password"] not in repr(entry)
