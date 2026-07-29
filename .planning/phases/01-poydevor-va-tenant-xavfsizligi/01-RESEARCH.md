@@ -1287,32 +1287,37 @@ async def app_engine(pg, migrated):
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`alembic-utils` uzoq muddatli qo'llab-quvvatlanishi**
    - Bilamiz: 0.8.8 oxirgi reliz **2025-04-10** (15 oy oldin); alembic 1.18.5 bilan **ishlashi tekshirildi** (import + SQL generatsiya).
    - Noaniq: alembic 1.19/2.0 chiqqanda mos qoladimi.
    - Tavsiya: ishlatilsin, lekin `PGPolicy` ta'riflari **bitta faylda** (`migrations/entities/policies.py`) jamlansin — kerak bo'lsa `op.execute()` ga ko'chirish bir soatlik ish. Bu qarorni qaytarish narxi past.
+   - **HAL QILINDI:** A9 tekshiruvi 01-04 / Task 1 ning majburiy qadami sifatida rejalashtirildi (autogenerate async env'da); ishlamasa xom `op.execute()` fallback'iga o'tiladi va natija SUMMARY'da qayd etiladi. `PGPolicy` ta'riflari `migrations/entities/policies.py` da jamlangan.
 
 2. **Frontend brauzer testi (mezon #2 avtomatik isboti)**
    - Bilamiz: CLAUDE.md stekida test freymvorki yo'q; Next 16 `@playwright/test` ni **ixtiyoriy** peer sifatida ko'rsatadi.
    - Noaniq: 12 haftalik jadvalda Playwright o'rnatish oqlanadimi.
    - Tavsiya: 1-fazada `tsc --noEmit` + `next build` + `check-messages.mjs` + **qo'lda tekshirish** (mezon #2 `human-verify` sifatida). Playwright'ni 8-fazaga (mustahkamlash) qoldirish.
+   - **HAL QILINDI:** Playwright 1-fazaga kiritilmadi — 8-fazaga qoldirildi; brauzer isboti 01-08 / Task 3 (8 qadam) va 01-09 / Task 2 (15 qadam) dagi `<human-check>` ro'yxatlari bilan bajariladi, avtomatik darvoza esa `typecheck` + `lint` + `build` + `i18n:check`.
 
 3. **Deployment topologiyasi va cookie bayroqlari**
    - Bilamiz: nginx reverse proxy rejalashtirilgan; frontend va API bir xil domen ostida bo'lishi mumkin (`/` → Next, `/api` → FastAPI).
    - Noaniq: shundaymi yoki alohida subdomen (`app.` / `api.`).
    - Tavsiya: **bitta domen** tanlansin — `SameSite=Lax` yetarli bo'ladi va CSRF ishi kamayadi. Bu 1-fazada qaror qilinishi kerak, chunki keyin o'zgartirish auth oqimini qayta yozishni talab qiladi.
+   - **HAL QILINDI:** bitta domen tanlandi va 01-01 / Task 1 dagi `ops/nginx/nginx.conf` da qat'iylashtirildi (`/api/` → core-api, `/` → frontend); shu sababli `SameSite=Lax` + `Path=/api/v1/auth` yetarli (01-06 Task 1, T-01-43).
 
 4. **`markets` jadvali uchun RLS siyosati**
    - Bilamiz: `markets` — tenant chegarasining o'zi; platforma admini hammasini ko'rishi kerak (D-06), boshqalar faqat o'zinikini.
    - Noaniq: policy `id = GUC` bo'ladimi yoki `SECURITY DEFINER` ro'yxat funksiyasi.
    - Tavsiya: `markets` da `USING (id = NULLIF(current_setting('app.market_id',true),'')::uuid)` + platforma admini uchun alohida `auth_list_markets()` `SECURITY DEFINER` funksiyasi (login yo'lidagi bilan bir xil naqsh). Meta-testda `markets` `GLOBAL_TABLES` da emas, **maxsus holat** sifatida qayd etilsin.
+   - **HAL QILINDI:** 01-04 / Task 2 da `markets` uchun `id = NULLIF(current_setting('app.market_id', true), '')::uuid` policy'si va `auth_list_markets()` `SECURITY DEFINER` funksiyasi yaratiladi; 01-04 / Task 3 dagi `test_markets_rls_and_policy` maxsus holatni alohida qulflaydi.
 
 5. **Huquqiy ko'rik (STATE.md blocker)**
    - Bilamiz: shaxsiy ma'lumot lokalizatsiyasi va audit-o'qish talablari (D-09) avtomatik xulosadan olingan.
    - Noaniq: O'zR qonuni audit jurnali saqlash muddatini belgilaydimi (retention).
    - Tavsiya: `audit_log` uchun retention siyosati 1-fazada **belgilanmasin** (o'chirish yo'li bo'lmasin) — mahalliy yurist tasdig'igacha jurnal cheksiz saqlansin. Bu `[ASSUMED]` — yuridik tasdiq kerak.
+   - **HAL QILINDI (huquqiy tasdiq kutilmoqda):** 1-fazada retention siyosati belgilanmaydi va `audit_log` uchun hech qanday o'chirish yo'li qurilmaydi (01-05 ning to'rt qatlamli o'zgarmasligi). Yuridik ko'rik STATE.md da blocker sifatida ochiq qoladi — u faqat kelajakdagi retention qaroriga ta'sir qiladi, 1-faza ishini bloklamaydi.
 
 ---
 
