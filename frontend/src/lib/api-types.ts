@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ROLES, type Role } from "@/lib/rbac";
+import type { Role } from "@/lib/rbac";
 
 /**
  * core-api HTTP kontraktining runtime sxemalari (01-06 / 01-07).
@@ -130,15 +130,44 @@ export const meLocaleResponseSchema = z.object({ locale: localeSchema });
 export const MARKET_ADMIN_ASSIGNABLE_ROLES = ["cashier", "inspector"] as const;
 
 /**
+ * Platforma admini bera oladigan rollar — TO'RTTA (CR-03).
+ *
+ * `platform_admin` bu ro'yxatda ATAYIN YO'Q va u yerga hech qachon
+ * qo'shilmasligi kerak. Sabab: "platforma admini" `users.is_platform_admin`
+ * BAYROG'I bilan aniqlanadi, `user_market_roles` dagi a'zolik roli bilan
+ * emas. Ikkisi bir xil narsa emas va faqat bayroq haqiqiy hisoblanadi.
+ *
+ * Agar `platform_admin` a'zolik roli sifatida berilsa, hosil bo'lgan hisob
+ * bir vaqtning o'zida HAM ortiqcha huquqli, HAM buzuq bo'ladi: token
+ * `market_view_all` huquqini olib butun platformadagi bozorlar ro'yxatini
+ * ochadi (tenant chegarasidan sizish), lekin `is_platform_admin` `false`
+ * bo'lgani uchun `POST /auth/select-market` uni boshqa bozorga kiritmaydi —
+ * ya'ni nomi aytgan ishni ham bajara olmaydi.
+ *
+ * HAQIQIY darvoza serverda: `users.py::_assert_roles_assignable()` bu rolni
+ * so'ragan har qanday chaqiruvni 403 (`role_not_allowed`) bilan rad etadi.
+ * Bu yerdagi ro'yxat faqat formada ortiqcha katakcha KO'RINMASLIGI uchun.
+ */
+export const PLATFORM_ADMIN_ASSIGNABLE_ROLES = [
+  "director",
+  "market_admin",
+  "cashier",
+  "inspector",
+] as const;
+
+/**
  * Yaratish formasida ko'rsatiladigan rollar (D-04 darajasi bo'yicha).
  *
- * Platforma admini — beshala rol; qolgan hamma (jumladan bozor admini) —
- * faqat `MARKET_ADMIN_ASSIGNABLE_ROLES`. Ro'yxat SHU YERDA quriladi, ya'ni
+ * Platforma admini — to'rt rol (`platform_admin` bundan MUSTASNO, u
+ * membership roli emas); qolgan hamma (jumladan bozor admini) — faqat
+ * `MARKET_ADMIN_ASSIGNABLE_ROLES`. Ro'yxat SHU YERDA quriladi, ya'ni
  * komponentda qattiq yozilgan rol nomlari bo'lmaydi va D-04 ni o'zgartirish
  * bitta joyni tahrirlash bilan cheklanadi.
  */
 export function assignableRoles(isPlatformAdmin: boolean): readonly Role[] {
-  return isPlatformAdmin ? ROLES : MARKET_ADMIN_ASSIGNABLE_ROLES;
+  return isPlatformAdmin
+    ? PLATFORM_ADMIN_ASSIGNABLE_ROLES
+    : MARKET_ADMIN_ASSIGNABLE_ROLES;
 }
 
 /**
