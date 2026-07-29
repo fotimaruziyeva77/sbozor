@@ -24,6 +24,11 @@ ning ichidan chaqiriladi) — ya'ni yangi endpoint yozgan odam darvozani
 to'g'ridan-to'g'ri bog'langan endpointlar (`/auth/change-password`,
 `/auth/logout`, `/api/v1/me`) chetlab o'tadi — bu ATAYIN: aks holda
 foydalanuvchi parolni almashtira olmasdi va darvoza abadiy qulf bo'lardi.
+
+`require_platform_admin` — 3 ning MAXSUS HOLI, beshinchi mas'uliyat EMAS:
+u ham FUNKSIYA darajasidagi nazorat va u ham 2 ga bog'langan. Farqi
+manbada: u rol/huquqqa emas, `users.is_platform_admin` BAYROG'IGA
+qaraydi (CR-03) va tenant sessiyasini TALAB QILMAYDI.
 =============================================================================
 
 TENANT KONTEKSTI HAR TRANZAKSIYADA O'RNATILADI, ULANISHDA EMAS.
@@ -80,6 +85,7 @@ __all__ = [
     "invalidate_user_state",
     "require_password_current",
     "require_permission",
+    "require_platform_admin",
     "require_roles",
     "user_state_key",
 ]
@@ -475,3 +481,42 @@ def require_roles(*roles: Role) -> Callable[[Principal], Coroutine[Any, Any, Pri
         return principal
 
     return _require
+
+
+async def require_platform_admin(principal: CurrentPasswordDep) -> Principal:
+    """Faqat HAQIQIY platforma admini — `users.is_platform_admin` BAYROG'I bo'yicha.
+
+    NEGA `require_roles(Role.PLATFORM_ADMIN)` EMAS — BU CR-03 NING DARSI:
+
+    `require_roles` (va u orqali har qanday huquq) rol NOMIGA qaraydi, rol
+    esa `user_market_roles.roles` a'zolik qatoridan ham kelishi mumkin.
+    Ya'ni o'sha massivga `'platform_admin'` yozilgan har qanday hisob —
+    `users.is_platform_admin = false` bo'lsa ham — darvozadan o'tib
+    ketardi. Bayroq esa bozor darajasidan YUQORIDA turadi: uni faqat
+    platforma tayinlashi o'zgartiradi va uni a'zolik orqali "qo'lga
+    kiritib" bo'lmaydi.
+
+    Ikkinchi qulf `api/v1/users.py::_assert_roles_assignable` da (01-11):
+    `platform_admin` a'zolik roli sifatida UMUMAN berilmaydi, ya'ni bunday
+    gibrid hisobni API orqali yaratib ham bo'lmaydi. Ikkalasi MUSTAQIL —
+    biri "gibrid hisob yaratilmaydi", bu esa "gibrid hisob baribir
+    ko'rmaydi" deydi. Regressiya darvozasi:
+    `tests/integration/test_audit_platform.py`.
+
+    `CurrentPasswordDep` ORQALI BOG'LANGAN, `PrincipalDep` orqali emas:
+    vaqtinchalik parolli platforma admini ham avval parolini
+    almashtirishi shart (D-02). Bu darvoza `require_permission` /
+    `require_roles` / `get_tenant_session` dagi bilan AYNAN bir xil
+    tartibda ishlaydi, ya'ni javob `password_change_required` bo'ladi,
+    `forbidden` EMAS — ikkita 403 ni bir-biridan ajratish testda ham,
+    frontendda ham muhim.
+
+    Bu dependency `TenantSessionDep` ni TALAB QILMAYDI: undan foydalanadigan
+    yagona endpoint (`GET /api/v1/audit/platform`) bozorga BOG'LIQ BO'LMAGAN
+    qatorlarni (`market_id IS NULL`) o'qiydi, ya'ni bozor tanlanmagan
+    platforma admini ham unga kira olishi kerak (409 emas).
+    """
+    if not principal.is_platform_admin:
+        log.info("platform_admin_required", roles=sorted(principal.roles))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+    return principal

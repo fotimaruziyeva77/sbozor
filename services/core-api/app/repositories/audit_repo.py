@@ -40,14 +40,17 @@ from __future__ import annotations
 import base64
 import binascii
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from sbozor_core.models import AuditLog
 from sbozor_core.tenancy import TenantScopedRepository
-from sqlalchemy import BigInteger, DateTime, literal, select, tuple_
+from sqlalchemy import BigInteger, DateTime, Integer, bindparam, literal, select, text, tuple_
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from app.schemas import AuditQuery
 
 __all__ = [
@@ -56,8 +59,11 @@ __all__ = [
     "AuditPage",
     "AuditRepository",
     "InvalidCursorError",
+    "PlatformAuditPage",
+    "PlatformAuditRow",
     "decode_cursor",
     "encode_cursor",
+    "list_platform_audit",
     "mask_sensitive",
 ]
 
@@ -202,3 +208,156 @@ class AuditRepository(TenantScopedRepository):
             last = rows[-1]
             return AuditPage(rows=rows, next_cursor=encode_cursor(last.at, last.id))
         return AuditPage(rows=rows, next_cursor=None)
+
+
+# ===========================================================================
+# PLATFORMA-GLOBAL O'QISH (Gap 5) — `market_id IS NULL` qatorlar
+# ===========================================================================
+#
+# NEGA BU YERDA ORM YO'Q VA `AuditRepository` KENGAYTIRILMAGAN:
+#
+# `AuditRepository` — `TenantScopedRepository`, ya'ni uning har bir so'rovi
+# `market_id = app.market_id` predikati bilan quriladi. Platforma-global
+# qatorlar esa AYNAN o'sha predikatga mos kelmaydigan qatorlar
+# (`market_id IS NULL`), ya'ni ularni tenant repozitoriysiga qo'shish
+# sinfning yagona da'vosini buzardi.
+#
+# Undan ham muhimi: bu qatorlarga ORM orqali umuman BORIB BO'LMAYDI.
+# `audit_log` da RLS ENABLE+FORCE va `audit_read` policy'si tenant-scoped,
+# `sbozor_app` esa `audit_read_platform` (`TO sbozor_owner`) policy'sidan
+# foydalana olmaydi — xom `select(AuditLog).where(market_id.is_(None))`
+# HAR DOIM 0 qator beradi (`tests/tenancy/test_login_bootstrap.py` da
+# o'lchangan). Yagona yo'l — `auth_list_platform_audit()` SECURITY DEFINER
+# funksiyasi (0005), ya'ni `auth_repo` dagi bilan bir xil naqsh: `text()`
+# + nomlangan, TIPLANGAN bind parametrlari.
+#
+# HUQUQ TEKSHIRUVI BU YERDA EMAS (D-07): funksiyaga `EXECUTE` berilgani
+# "ilova chaqira oladi" degani, "har kim ko'ra oladi" degani EMAS. Darvoza
+# — `app.deps.require_platform_admin` (`is_platform_admin` bayrog'i).
+
+_PLATFORM_AUDIT = text(
+    "SELECT id, at, business_date, actor_user_id, actor_label, action, table_name, "
+    "row_id, old_value, new_value, changed_keys, request_id, source "
+    "FROM auth_list_platform_audit(:limit, :before_at, :before_id)"
+).bindparams(
+    bindparam("limit", type_=Integer()),
+    bindparam("before_at", type_=DateTime(timezone=True)),
+    bindparam("before_id", type_=BigInteger()),
+)
+"""Bind parametrlari ATAYIN TIPLANGAN.
+
+`text()` da SQLAlchemy tipni ustundan chiqara olmaydi, kursorning ikkala
+qismi esa birinchi sahifada `None` bo'ladi — tipsiz `NULL` asyncpg'ga
+noma'lum tip bilan ketardi va Postgres funksiya imzosini bir ma'noli tanlay
+olmasdi. `at` uchun `timezone=True` alohida muhim: mintaqasiz `timestamp`
+ga tushgan kursor Toshkent yarim tuni atrofida bir necha qatorni o'tkazib
+yuborardi (`AuditRepository.list_audit` dagi `literal(..., type_)` bilan
+AYNAN bir xil sabab).
+"""
+
+
+@dataclass(frozen=True)
+class PlatformAuditRow:
+    """`auth_list_platform_audit()` ning bitta qatori — ORM obyekti EMAS.
+
+    Maydonlar funksiyaning 13 ustunli `RETURNS TABLE` imzosini AYNAN
+    takrorlaydi (`migrations/entities/functions.py`), ya'ni DB kontrakti
+    ilovada bir marta va ko'rinadigan joyda yozilgan: imzo o'zgarsa bu
+    dataclass ham o'zgarishi kerak va nomuvofiqlik mypy/testda darhol
+    chiqadi.
+
+    `ip` ustuni YO'Q — u funksiyada ham, `app.schemas.AuditEntry` da ham
+    yo'q (D-12). Platforma yo'li mavjud tenant o'qishidan KENGROQ ma'lumot
+    bermaydi.
+
+    `market_id` ham YO'Q va bu ataylab: funksiya sharti LITERAL
+    `market_id IS NULL`, ya'ni ustunning yagona mumkin bo'lgan qiymati
+    `NULL`. Uni qaytarish javobga hech nima qo'shmasdi.
+    """
+
+    id: int
+    at: datetime
+    business_date: date
+    actor_user_id: UUID | None
+    actor_label: str | None
+    action: str
+    table_name: str
+    row_id: UUID | None
+    old_value: dict[str, Any] | None
+    new_value: dict[str, Any] | None
+    changed_keys: list[str] | None
+    request_id: str | None
+    source: str
+
+
+@dataclass(frozen=True)
+class PlatformAuditPage:
+    """Bitta sahifa + keyingisining kursori (`AuditPage` bilan bir xil shakl)."""
+
+    rows: list[PlatformAuditRow]
+    next_cursor: str | None
+
+
+async def list_platform_audit(
+    session: AsyncSession,
+    *,
+    limit: int,
+    cursor: str | None = None,
+) -> PlatformAuditPage:
+    """Platforma-global audit sahifasi — `AuditRepository.list_audit` NAQSHIDA.
+
+    Keyset semantikasi tenant yo'li bilan AYNAN BIR XIL: `(at, id)`
+    juftligi, `at DESC, id DESC` tartibi, "yana bormi?" savoliga BITTA
+    ortiqcha qator javob beradi. Kursor formati ham o'sha
+    (`encode_cursor`/`decode_cursor`), ya'ni mijoz uchun ikkala endpoint
+    bir xil xulq ko'rsatadi va kursorni bir joydan ikkinchisiga uzatish
+    kabi chalkashlik tug'ilmaydi.
+
+    `limit` HECH QACHON `None` BO'LMASLIGI KERAK va tip shuni majburlaydi.
+    Funksiyada `LIMIT COALESCE(p_limit, 0)` turibdi (01-14), ya'ni `None`
+    XATO emas, 0 QATOR beradi — jimgina bo'sh sahifa. Yagona haqiqiy
+    chegara chaqiruvchida: endpoint `Query(ge=1, le=AUDIT_PAGE_SIZE_MAX)`
+    bilan validatsiya qiladi.
+
+    Raises:
+        InvalidCursorError: kursor buzuq bo'lsa. Yuqoriga TARQALADI —
+            endpoint uni 422 ga aylantiradi, xuddi tenant yo'lidagi kabi.
+            Jimgina birinchi sahifaga qaytish sahifalashni cheksiz siklga
+            aylantirardi.
+    """
+    before_at: datetime | None = None
+    before_id: int | None = None
+    if cursor is not None:
+        before_at, before_id = decode_cursor(cursor)
+
+    result = await session.execute(
+        _PLATFORM_AUDIT,
+        # `limit + 1` — `AuditRepository.list_audit` bilan bir xil hiyla:
+        # bitta ortiqcha qator "yana bormi?" savoliga `count(*)` siz javob
+        # beradi (append-only jadvalda `count(*)` vaqt o'tgani sari qimmatlashadi).
+        {"limit": limit + 1, "before_at": before_at, "before_id": before_id},
+    )
+    rows = [
+        PlatformAuditRow(
+            id=row.id,
+            at=row.at,
+            business_date=row.business_date,
+            actor_user_id=row.actor_user_id,
+            actor_label=row.actor_label,
+            action=row.action,
+            table_name=row.table_name,
+            row_id=row.row_id,
+            old_value=row.old_value,
+            new_value=row.new_value,
+            changed_keys=row.changed_keys,
+            request_id=row.request_id,
+            source=row.source,
+        )
+        for row in result
+    ]
+
+    if len(rows) > limit:
+        rows = rows[:limit]
+        last = rows[-1]
+        return PlatformAuditPage(rows=rows, next_cursor=encode_cursor(last.at, last.id))
+    return PlatformAuditPage(rows=rows, next_cursor=None)
