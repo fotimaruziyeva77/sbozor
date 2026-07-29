@@ -64,6 +64,93 @@ def test_censor_secrets_keeps_non_sensitive_fields() -> None:
     assert result["market_id"] == str(MARKET_ID)
 
 
+# --------------------------------------------------------------------------
+# WR-01: ichma-ich sirlar (rekursiya)
+# --------------------------------------------------------------------------
+
+
+def test_censor_secrets_masks_nested_dict() -> None:
+    """Ikki darajali ichma-ich sir ham maskalanadi.
+
+    Faqat yuqori daraja tekshirilganda bu satr JSONRenderer orqali stdout
+    va Sentry'ga OCHIQ ketardi (WR-01).
+    """
+    result = censor_secrets(
+        None,
+        "info",
+        {"event": "webhook", "body": {"credentials": {"token": "haqiqiy-sir", "user": "aziz"}}},
+    )
+
+    assert result["body"] == {"credentials": {"token": CENSORED, "user": "aziz"}}
+
+
+def test_censor_secrets_masks_dict_inside_list() -> None:
+    """Ro'yxat elementlari ham ko'riladi — massiv sirni yashira olmaydi."""
+    result = censor_secrets(
+        None,
+        "info",
+        {"event": "batch", "items": [{"password": "sir-1"}, {"phone": "+998901234567"}]},
+    )
+
+    assert result["items"] == [{"password": CENSORED}, {"phone": "+998901234567"}]
+
+
+def test_censor_secrets_masks_nested_tuple() -> None:
+    """Kortej ham qamraladi (JSON'da u baribir massiv bo'lib chiqadi)."""
+    result = censor_secrets(None, "info", {"event": "batch", "items": ({"api_key": "sir"},)})
+
+    assert result["items"] == [{"api_key": CENSORED}]
+
+
+def test_censor_secrets_is_case_insensitive_when_nested() -> None:
+    result = censor_secrets(
+        None, "info", {"event": "proxy", "headers": {"Authorization": "Bearer abc"}}
+    )
+
+    assert result["headers"] == {"Authorization": CENSORED}
+
+
+def test_censor_secrets_keeps_nested_non_sensitive_values() -> None:
+    """Rekursiya oddiy ma'lumotni BUZMASLIGI kerak."""
+    payload = {"market": {"id": str(MARKET_ID), "stalls": [1, 2, 3], "name": "Karmana"}}
+
+    result = censor_secrets(None, "info", {"event": "report", **payload})
+
+    assert result["market"] == {"id": str(MARKET_ID), "stalls": [1, 2, 3], "name": "Karmana"}
+
+
+def test_censor_secrets_does_not_mutate_caller_payload() -> None:
+    """Protsessor chaqiruvchining lug'atini o'zgartirmaydi.
+
+    Aks holda log yozish `payload` ni joyida buzardi va o'sha obyekt bilan
+    davom etayotgan kod `***` ni HAQIQIY qiymat sifatida ishlatardi.
+    """
+    payload = {"credentials": {"password": "haqiqiy-sir"}}
+
+    result = censor_secrets(None, "info", {"event": "auth", "payload": payload})
+
+    assert result["payload"] == {"credentials": {"password": CENSORED}}
+    assert payload == {"credentials": {"password": "haqiqiy-sir"}}
+
+
+def test_nested_secret_is_censored_in_rendered_json_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Uchdan-uchi: ichma-ich sir CHIQISH SATRIDA ham yo'q.
+
+    Protsessorni alohida chaqirish yetarli emas — qulf haqiqiy structlog
+    quvuri (protsessorlar tartibi + JSONRenderer) ustida bo'lishi kerak.
+    """
+    configure_logging("info")
+    clear_request_context()
+
+    structlog.get_logger().info("webhook", body={"credentials": {"token": "haqiqiy-sir"}})
+
+    line = capsys.readouterr().out.strip().splitlines()[-1]
+    assert "haqiqiy-sir" not in line
+    assert json.loads(line)["body"] == {"credentials": {"token": CENSORED}}
+
+
 def test_sensitive_keys_are_lowercase() -> None:
     """Taqqoslash `key.lower()` bilan — reyestrdagi kalit ham kichik bo'lishi shart."""
     assert all(key == key.lower() for key in SENSITIVE_KEYS)
