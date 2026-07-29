@@ -53,6 +53,7 @@ __all__ = [
     "AUTH_FIND_LOGIN_BY_ID",
     "AUTH_LIST_MARKETS",
     "AUTH_LIST_MARKETS_FULL",
+    "AUTH_LIST_PLATFORM_AUDIT",
     "AUTH_LIST_USERS",
     "AUTH_MEMBERSHIPS",
     "AUTH_REFRESH_FIND",
@@ -67,6 +68,8 @@ __all__ = [
     "AUTH_UPDATE_PASSWORD_HASH",
     "AUTH_USER_STATE",
     "GRANT_SIGNATURES",
+    "PLATFORM_AUDIT_FUNCTIONS",
+    "PLATFORM_AUDIT_GRANT_SIGNATURES",
     "USER_ADMIN_FUNCTIONS",
     "USER_ADMIN_GRANT_SIGNATURES",
 ]
@@ -687,3 +690,122 @@ USER_ADMIN_GRANT_SIGNATURES: tuple[str, ...] = (
     "auth_list_markets_full()",
 )
 """`USER_ADMIN_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari)."""
+
+
+# ===========================================================================
+# 0005_platform_audit — PLATFORMA-GLOBAL AUDIT QATORLARINI O'QISH (Gap 5)
+# ===========================================================================
+#
+# `login_failed` kabi yozuvlar ataylab `market_id = NULL` bilan yoziladi:
+# rad etilgan login urinishida bozor NOMA'LUM va uni taxmin qilish jurnalga
+# YOLG'ON dalil yozish bo'lardi. `audit_read` policy'si esa
+# `market_id = app.market_id` shaklida, ya'ni bu qatorlar HECH QANDAY tenant
+# konteksti bilan mos kelmaydi va mahsulot yo'lida HECH KIMGA ko'rinmaydi —
+# ular faqat test-superuseri bilan o'qilardi (01-06, 01-07, 01-09 SUMMARY'da
+# uch marta ochiq qayd etilgan bo'shliq).
+#
+# BU YERDA NAQSH BOSHQACHA VA SABABI MUHIM. Yuqoridagi funksiyalar `users` /
+# `refresh_tokens` ustida ishlaydi: `users` da RLS UMUMAN YO'Q, ya'ni ega
+# huquqi o'z-o'zidan yetarli. `audit_log` da esa RLS ENABLE+FORCE va
+# `sbozor_owner` `NOSUPERUSER NOBYPASSRLS` — FORCE tufayli EGA HAM policy'ga
+# bo'ysunadi. Shuning uchun `SECURITY DEFINER` YOLG'IZ YETMAYDI: u ega
+# nomidan ishlab ham 0 qator qaytarardi. Funksiya AYNAN `audit_read_platform`
+# policy'si (`FOR SELECT TO sbozor_owner USING (market_id IS NULL)`) bilan
+# JUFTLIKDA ishlaydi — biri ikkinchisisiz ma'nosiz.
+#
+# YUZA QASDDAN TOR: funksiya ixtiyoriy `WHERE` qabul qilmaydi — sharti
+# LITERAL `market_id IS NULL`. Ya'ni uni "RLS'siz butun audit jurnalini
+# o'qish" vositasiga aylantirib bo'lmaydi: tenant qatorlari (`market_id`
+# to'ldirilgan) bu funksiyadan HECH QACHON qaytmaydi.
+
+AUTH_LIST_PLATFORM_AUDIT = PGFunction(
+    schema="public",
+    signature=(
+        "auth_list_platform_audit(p_limit integer, p_before_at timestamptz, p_before_id bigint)"
+    ),
+    definition="""
+RETURNS TABLE (
+    id bigint,
+    at timestamptz,
+    business_date date,
+    actor_user_id uuid,
+    actor_label text,
+    action text,
+    table_name text,
+    row_id uuid,
+    old_value jsonb,
+    new_value jsonb,
+    changed_keys text[],
+    request_id text,
+    source text
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT a.id,
+           a.at,
+           a.business_date,
+           a.actor_user_id,
+           a.actor_label,
+           a.action,
+           a.table_name,
+           a.row_id,
+           a.old_value,
+           a.new_value,
+           a.changed_keys,
+           a.request_id,
+           a.source
+    FROM public.audit_log AS a
+    WHERE a.market_id IS NULL
+      AND (p_before_at IS NULL OR (a.at, a.id) < (p_before_at, p_before_id))
+    ORDER BY a.at DESC, a.id DESC
+    LIMIT COALESCE(p_limit, 0)
+$$
+""",
+)
+"""Platforma-global (`market_id IS NULL`) audit qatorlari — KEYSET sahifalash bilan.
+
+`ip` ustuni ATAYIN QAYTARILMAYDI: `app.api.v1.audit.AuditEntry` uni ham
+qaytarmaydi (D-12 maskalash qarori), ya'ni bu funksiya mavjud o'qish
+shaklidan kengroq ma'lumot bermaydi.
+
+KEYSET SEMANTIKASI `app.repositories.audit_repo.AuditRepository.list_audit`
+BILAN AYNAN BIR XIL: `(at, id)` juftligi chegara juftligidan KICHIK,
+`ORDER BY at DESC, id DESC`. Juftlik kerak, `at` yolg'iz emas — bir
+tranzaksiyada yozilgan qatorlar aynan bir xil `at` ga ega bo'lishi mumkin va
+`at <` predikati ularning bir qismini o'tkazib yuborardi. Chaqiruvchi
+`p_limit` ga `limit + 1` beradi va "yana bormi?" savoliga shu ortiqcha qator
+bilan javob topadi.
+
+`p_before_at IS NULL` — birinchi sahifa (chegara yo'q). `p_before_at`
+berilib `p_before_id` NULL qolsa juftlik solishtiruvi NULL beradi va natija
+0 qator bo'ladi — FAIL-CLOSED, ya'ni yarim kursor jimgina butun sahifani
+qaytarib yubormaydi.
+
+`LIMIT COALESCE(p_limit, 0)`: xom `LIMIT p_limit` da `p_limit IS NULL`
+Postgres uchun "CHEKLOVSIZ" degani, ya'ni chaqiruvchidagi bitta `None`
+butun platforma-global jurnalni bir so'rovda tortib olardi. `COALESCE(...,
+0)` uni fail-closed qiladi: kursor `NULLIF` naqshi bilan bir xil qoida —
+noto'g'ri kirish XATO emas, 0 QATOR beradi.
+
+INDEKS: `ix_audit_log_market_id_at` (`market_id`, `at DESC`) bu so'rovni
+to'liq qamraydi — btree NULL'larni ham indekslaydi, shuning uchun
+`market_id IS NULL` indeks bo'yicha qidiruv (`IS NULL` btree uchun
+qidiriladigan shart) va `at DESC` tartibi bepul keladi.
+
+XAVFSIZLIK: `audit_read_platform` policy'siz bu funksiya 0 qator qaytaradi
+(`audit_log` da FORCE RLS, ega ham policy'ga bo'ysunadi) — juftlik
+`tests/tenancy/test_login_bootstrap.py` da sabotaj bilan sinaladi.
+`sbozor_app` esa o'sha policy'ni UMUMAN ishlata olmaydi, ya'ni funksiya
+NULL qatorlarga yagona yo'l bo'lib qoladi.
+"""
+
+PLATFORM_AUDIT_FUNCTIONS: list[PGFunction] = [AUTH_LIST_PLATFORM_AUDIT]
+"""`0005_platform_audit` migratsiyasi yaratadigan to'plam."""
+
+PLATFORM_AUDIT_GRANT_SIGNATURES: tuple[str, ...] = (
+    "auth_list_platform_audit(integer, timestamptz, bigint)",
+)
+"""`PLATFORM_AUDIT_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari)."""
