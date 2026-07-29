@@ -297,3 +297,14 @@ Yo'q — tashqi servis konfiguratsiyasi talab qilinmaydi. Testlar `docker compos
 - `TenantScopedRepository.scoped()` `stmt.column_descriptions[0]` ga tayanadi — ya'ni JOIN'li so'rovda **birinchi** entity'ga predikat qo'yadi. 01-04 da ko'p jadvalli so'rovlar paydo bo'lganda bu xulq-atvor qayta ko'rib chiqilishi kerak (ehtimol har bir tenant-scoped entity uchun alohida predikat).
 - `dummy_verify()` uchun hash **import paytida** hisoblanadi (~100 ms). Bu ataylab (birinchi so'rov sekin bo'lmasligi uchun), lekin `sbozor_core.security` ni import qiladigan har bir jarayon shu narxni to'laydi — CLI vositalarida seziladi.
 - `censor_secrets` faqat yuqori darajadagi kalitlarni ko'radi. Ichma-ich `dict` (masalan butun `headers` obyekti bitta qiymat sifatida) maskalanmaydi. Agar middleware sarlavhalarni to'plam sifatida yozadigan bo'lsa, 01-06 da rekursiv variantga o'tish kerak.
+
+## Self-Check: PASSED
+
+- **Fayllar:** da'vo qilingan 19 ta artefaktning (18 yangi + 1 modifikatsiya) hammasi mavjud va git'da kuzatilmoqda (`git ls-files`).
+- **Commitlar:** `0095faf`, `099c3fa`, `0034cfb`, `dee3ba6`, `d2c848f`, `1aee3b5` — oltalasi ham `git log` da mavjud.
+- **O'chirilgan fayl yo'q:** `git diff --diff-filter=D --name-only b5efbd1..HEAD` bo'sh.
+- **Umumiy artefaktlarga tegilmadi:** `git diff --name-only b5efbd1..HEAD` da `STATE.md` ham, `ROADMAP.md` ham YO'Q (worktree rejimi — ularni orkestrator yangilaydi).
+- **Ishchi katalog toza:** `git status --short` bo'sh.
+- **Darvozalar:** `ruff check .` + `ruff format --check .` + `mypy .` (strict, 25 fayl) + `pytest -q` (150 test: 145 unit + 5 tenancy meta) — hammasi yashil.
+- **Grep darvozalari:** `grep -rn "passlib\|from jose\|python_jose" packages/` → bo'sh; `grep -rn "SET LOCAL" packages/` → bo'sh; `grep 'float' money.py` → faqat TAQIQ izohi va `isinstance` satri.
+- **To'qqizta modul import bo'ladi:** `enums`, `money`, `timeutil`, `phone`, `security`, `db`, `tenancy`, `logging`, `schema_contract`.
