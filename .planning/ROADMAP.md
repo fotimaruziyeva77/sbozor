@@ -55,7 +55,19 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Har ma'muriy/moliyaviy harakatdan keyin audit jurnalida yozuv paydo bo'ladi (kim, qachon, nima, eski→yangi) va uni tahrirlab yoki o'chirib bo'lmaydi
   4. Har sana Asia/Tashkent biznes-kuni bo'yicha, har summa butun so'mda ko'rsatiladi — yarim tunda kun chegarasi to'g'ri suriladi
   5. Moliyaviy jadvallar dublikat-himoyasi bilan tug'iladi: `UNIQUE(market_id, stall_id, business_date)` va o'zgarmas hisob konstraytlari 6-fazadan oldin allaqachon o'rnida
-**Plans**: TBD
+**Plans**: 10 plans in 7 waves
+
+Plans:
+- [ ] 01-01-PLAN.md — Monorepo skeleti, Compose steki, sbozor_owner/sbozor_app rollari, Wave 0 test infratuzilmasi (W1)
+- [ ] 01-02-PLAN.md — Next 16 skeleti, next-intl proxy.ts routing, 3 locale, uz-Cyrl transliteratsiya va parity skriptlari (W1)
+- [ ] 01-03-PLAN.md — sbozor-core primitivlari: pul (BIGINT so'm), biznes-kun, telefon, Argon2id + JWT, tenancy helperi (W2)
+- [ ] 01-04-PLAN.md — Alembic async infra, RLS asboblari (NULLIF), identifikatsiya sxemasi, SECURITY DEFINER login funksiyalari, tenancy meta-test (W3)
+- [ ] 01-05-PLAN.md — audit_log + DB-trigger, 4 qatlamli o'zgarmaslik, moliyaviy konstrayt asboblari (business_date, CHECK, UNIQUE) (W4)
+- [ ] 01-06-PLAN.md — Auth API: login/select-market/refresh/logout/change-password, RBAC matritsasi, tenant sessiyasi, bloklash keshi (W5)
+- [ ] 01-07-PLAN.md — Foydalanuvchi boshqaruvi, profil/til, bozorlar ro'yxati, audit ko'rish API va o'qish-audit dependency (W6)
+- [ ] 01-08-PLAN.md — Frontend auth qobig'i: login, majburiy parol almashtirish, bozor tanlash, app shell, til almashtirgich (W6)
+- [ ] 01-09-PLAN.md — Ma'muriy ekranlar: foydalanuvchi boshqaruvi UI va audit jurnali UI + faza mezonlarining uchidan-uchiga tekshiruvi (W7)
+- [ ] 01-10-PLAN.md — Cross-tenant marshrut matritsasi, marshrut qamrovi darvozasi, CI yig'imi va validatsiya imzosi (W7)
 **UI hint**: yes
 
 ### Phase 2: Bozor domeni va "Yangi bozor" ustasi
@@ -201,7 +213,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Dala treki va tashqi bog'liqliklar | N/A | Not started | - |
-| 1. Poydevor va tenant xavfsizligi | 0/TBD | Not started | - |
+| 1. Poydevor va tenant xavfsizligi | 0/10 | Planned | - |
 | 2. Bozor domeni va ustasi | 0/TBD | Not started | - |
 | 3. Kamera va tarmoq ulanishi | 0/TBD | Not started | - |
 | 4. Snapshot pipeline | 0/TBD | Not started | - |
