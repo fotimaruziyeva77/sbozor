@@ -241,8 +241,12 @@ def test_markets_rls_and_policy(sync_app_conn: Connection[TupleRow], migrated: N
     assert app_policies, "markets: `sbozor_app` uchun policy yo'q"
 
     quals = " ".join(p[2] or "" for p in app_policies)
-    assert "market_id" not in quals, (
-        "markets policy'si `market_id` ustuniga murojaat qilmoqda — bunday "
+    # DIQQAT: `market_id` satri GUC NOMIDA ham bor (`app.market_id`), shuning
+    # uchun tekshiruv USTUN havolasi bo'yicha — ya'ni `<ustun> =` shakli
+    # bo'yicha — qilinadi, oddiy substring bo'yicha emas.
+    assert re.search(r"\bid\s*=", quals), "markets policy'si `id` ustuni bilan solishtirmayapti"
+    assert not re.search(r"\bmarket_id\s*=", quals), (
+        "markets policy'si `market_id` USTUNIGA murojaat qilmoqda — bunday "
         "ustun yo'q, tenant kaliti `id` ning o'zi"
     )
     assert "NULLIF" in quals.upper(), (

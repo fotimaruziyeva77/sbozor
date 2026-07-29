@@ -56,9 +56,18 @@ COUNT_CHILD = "SELECT count(*) FROM t_composite_fk_probe"
 
 @pytest.fixture
 def child_table(
-    sync_owner_conn: Connection[TupleRow], migrated: None
+    sync_owner_conn: Connection[TupleRow],
+    migrated: None,
+    two_markets: TwoMarketSeed,
 ) -> Iterator[Connection[TupleRow]]:
-    """Composite FK bilan vaqtinchalik bola-jadval."""
+    """Composite FK bilan vaqtinchalik bola-jadval.
+
+    `two_markets` ATAYIN shu yerda so'raladi (test signaturasida ham
+    bo'lsa-da): pytest fixture'larni teskari tartibda yopadi, ya'ni seed
+    AVVAL qurilib, bola-jadval KEYIN qurilishi kerak — aks holda seed
+    tozalanayotganda hali havola qilib turgan probe jadvali `DELETE` ni
+    FK buzilishi bilan yiqitadi.
+    """
     sync_owner_conn.execute(DROP_CHILD)
     sync_owner_conn.execute(CREATE_CHILD)
     try:
@@ -114,7 +123,7 @@ def test_composite_unique_constraints_exist(
         "AND c.connamespace = 'public'::regnamespace "
         "AND (SELECT array_agg(a.attname ORDER BY a.attname) "
         "     FROM unnest(c.conkey) k JOIN pg_attribute a "
-        "       ON a.attrelid = c.conrelid AND a.attnum = k) = ARRAY['id','market_id']"
+        "       ON a.attrelid = c.conrelid AND a.attnum = k) = ARRAY['id','market_id']::name[]"
     ).fetchall()
 
     tables = {row[0] for row in rows}

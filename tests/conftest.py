@@ -26,16 +26,29 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote_plus
+from uuid import UUID
 
 import psycopg
 import pytest
+from alembic import command
+from alembic.config import Config
+from fixtures import TenantSessionFactory
+from fixtures.two_markets import TwoMarketSeed, cleanup_two_markets, seed_two_markets
 from psycopg import Connection, sql
 from psycopg.rows import TupleRow
+from sbozor_core.db import make_sessionmaker
+from sbozor_core.tenancy import set_tenant_context
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 # testcontainers 4.15: `testcontainers.postgres` eskirgan (DeprecationWarning),
 # `testcontainers.community.postgres` — amaldagi yo'l. API bir xil.
@@ -46,6 +59,8 @@ POSTGRES_IMAGE = "postgres:18.4-trixie"
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ROLES_SQL_PATH = REPO_ROOT / "ops" / "db" / "init" / "01-roles.sql"
+ALEMBIC_INI_PATH = REPO_ROOT / "alembic.ini"
+MIGRATIONS_PATH = REPO_ROOT / "migrations"
 
 # Faqat efemer test konteyneri uchun parollar — bular sir emas.
 APP_PASSWORD = "app_pw"  # noqa: S105
@@ -180,3 +195,90 @@ def sync_app_conn(
     )
     with psycopg.connect(dsn, autocommit=True) as conn:
         yield conn
+
+
+@pytest.fixture
+def sync_owner_conn(
+    owner_url: str,
+    _bootstrap_roles: None,
+) -> Iterator[Connection[TupleRow]]:
+    """Sinxron `sbozor_owner` ulanishi — seed va test uchun DDL.
+
+    FAQAT ma'lumot tayyorlash uchun: hech qanday izolyatsiya da'vosi bu
+    ulanish bilan tekshirilmaydi. Isbotlar har doim `sbozor_app` bilan
+    (`app_engine` / `sync_app_conn`) olinadi, chunki egaga qarshi RLS xulqi
+    boshqacha va u ilova ko'radigan haqiqat emas.
+    """
+    url = make_url(owner_url)
+    dsn = (
+        f"postgresql://{quote_plus(url.username or '')}:{quote_plus(url.password or '')}"
+        f"@{url.host}:{url.port}/{url.database}"
+    )
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        yield conn
+
+
+@pytest.fixture(scope="session")
+def migrated(owner_url: str, _bootstrap_roles: None) -> None:
+    """`alembic upgrade head` — `sbozor_owner` roli bilan, DASTURIY ravishda.
+
+    Sxemani testda qo'lda qurish TAQIQLANGAN: u holda testlar migratsiya
+    haqiqatan nima yaratganini emas, testning o'z tasavvurini tekshirardi.
+    Bu yerda aynan prod'dagi migratsiya bajariladi.
+
+    Rol ham ahamiyatli: `sbozor_owner` superuser EMAS, ya'ni migratsiya
+    FORCE ROW LEVEL SECURITY ostida ishlaydi va o'sha yerda buziladigan
+    narsa (Pitfall 4) testda ham buziladi, prod'da birinchi marta emas.
+    """
+    config = Config(str(ALEMBIC_INI_PATH))
+    config.set_main_option("script_location", str(MIGRATIONS_PATH))
+    os.environ["MIGRATION_DATABASE_URL"] = owner_url
+    command.upgrade(config, "head")
+
+
+@pytest.fixture
+def two_markets(sync_owner_conn: Connection[TupleRow], migrated: None) -> Iterator[TwoMarketSeed]:
+    """Ikki bozor + beshta foydalanuvchi + oltita a'zolik qatori.
+
+    Har testda YANGI UUID'lar, teardown'da to'liq tozalash — testlar bir
+    biriga ta'sir qilmaydi va `auth_list_markets()` kabi global funksiyalar
+    flaky bo'lmaydi.
+    """
+    seed = seed_two_markets(sync_owner_conn)
+    try:
+        yield seed
+    finally:
+        cleanup_two_markets(sync_owner_conn, seed)
+
+
+@pytest.fixture(scope="session")
+def app_sessionmaker(app_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    """`sbozor_app` engine ustidagi sessiya fabrikasi (prod bilan bir xil helper)."""
+    return make_sessionmaker(app_engine)
+
+
+@pytest.fixture
+def tenant_session(app_sessionmaker: async_sessionmaker[AsyncSession]) -> TenantSessionFactory:
+    """Tenant konteksti o'rnatilgan sessiya beruvchi fabrika.
+
+    Sessiya TRANZAKSIYA ICHIDA ochiladi — `set_config(..., is_local=true)`
+    autocommit rejimida qiymatni darhol yo'qotadi va kontekst umuman
+    o'rnatilmagan bo'lardi (testlar esa jimgina 0 qator olib "izolyatsiya
+    ishlayapti" degan yolg'on xulosaga kelardi).
+    """
+
+    @asynccontextmanager
+    async def _tenant_session(
+        market_id: UUID | None,
+        actor_id: UUID | None = None,
+    ) -> AsyncIterator[AsyncSession]:
+        async with app_sessionmaker() as session, session.begin():
+            await set_tenant_context(
+                session,
+                market_id=market_id,
+                actor_id=actor_id,
+                request_id="pytest",
+            )
+            yield session
+
+    return _tenant_session
