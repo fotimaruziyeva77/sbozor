@@ -40,6 +40,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
@@ -124,6 +125,7 @@ app.include_router(auth_router, prefix=f"{API_V1_PREFIX}/auth")
 app.include_router(users_router, prefix=f"{API_V1_PREFIX}/users")
 app.include_router(me_router, prefix=f"{API_V1_PREFIX}/me")
 app.include_router(markets_router, prefix=f"{API_V1_PREFIX}/markets")
+app.include_router(audit_router, prefix=f"{API_V1_PREFIX}/audit")
 
 
 @app.exception_handler(DBAPIError)

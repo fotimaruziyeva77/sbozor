@@ -24,30 +24,43 @@ yozuvi bozor hali aniqlanmagan paytda ham qoldirilishi kerak.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import structlog
+from fastapi import BackgroundTasks, Request
 from sbozor_core.enums import ActorKind, AuditAction, AuditSource
 from sqlalchemy import Text, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.deps import Principal, PrincipalDep
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
     from uuid import UUID
 
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from app.deps import Principal
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 __all__ = [
+    "TABLE_AUDIT_LOG",
     "TABLE_MARKETS",
     "TABLE_REFRESH_TOKENS",
     "TABLE_USERS",
+    "AuditReadIntent",
+    "audit_read",
     "platform_admin_label",
     "write_app_audit",
 ]
 
+log = structlog.get_logger(__name__)
+
 TABLE_USERS = "users"
 """`login`, `login_failed`, `password_changed` — hodisa foydalanuvchiga tegishli."""
+
+TABLE_AUDIT_LOG = "audit_log"
+"""Jurnalning O'ZINI o'qish (D-11) — `action='read'` yozuvining resursi."""
 
 TABLE_MARKETS = "markets"
 """`market_selected` — hodisa bozor konteksti tanlanishiga tegishli (D-06)."""
@@ -119,8 +132,15 @@ async def write_app_audit(
     request_id: str | None = None,
     ip: str | None = None,
     actor_kind: ActorKind = ActorKind.USER,
+    track_changes: bool = True,
 ) -> None:
     """`audit_log` ga bitta app-qatlam yozuvi qo'shadi.
+
+    `track_changes=False` — `changed_keys` bo'sh qoldiriladi. Bu O'QISH
+    yozuvlari uchun: `new_value` da filtr tavsifi turadi, lekin HECH
+    NARSA O'ZGARMAGAN. Kalitlarni "o'zgargan" deb yozish jurnalni
+    o'qiyotgan odamga yolg'on ma'lumot berardi (D-12 ning ko'rish UI'si
+    aynan shu ustunni "nima o'zgardi" deb ko'rsatadi).
 
     `principal` berilsa, undan `actor_user_id` / `market_id` / `request_id` /
     `actor_label` STANDART QIYMAT sifatida olinadi; aniq argument har doim
@@ -154,7 +174,7 @@ async def write_app_audit(
             "row_id": row_id,
             "old_value": old,
             "new_value": new,
-            "changed_keys": sorted(new) if new else None,
+            "changed_keys": sorted(new) if (new and track_changes) else None,
             "request_id": resolved_request,
             "ip": ip,
             "source": str(AuditSource.APP),
@@ -176,3 +196,132 @@ def _principal_request(principal: Principal | None) -> str | None:
 
 def _principal_label(principal: Principal | None) -> str | None:
     return principal.actor_label if principal is not None else None
+
+
+# ===========================================================================
+# O'QISH AUDITI (D-09) — SHAXSIY MA'LUMOT O'QISHLARI HAM QAYD ETILADI
+# ===========================================================================
+#
+# PostgreSQL'da `SELECT` uchun trigger YO'Q, ya'ni o'qishni faqat ilova
+# qatlami yozib qo'yishi mumkin (RESEARCH Pattern 6).
+#
+# BLANKET MIDDLEWARE ATAYIN YOZILMAYDI. U:
+#   * HAR bir so'rovni yozardi (`/healthz`, statik, OpenAPI) va jurnalni
+#     foydasiz shovqin bilan to'ldirardi — natijada haqiqiy o'qish
+#     hodisasi shovqin ichida yo'qolardi;
+#   * qaysi RESURS o'qilganini bilmasdi (marshrut yo'li resurs turi emas);
+#   * "nima uchun o'qildi" savoliga hech qachon javob bera olmasdi.
+#
+# Buning o'rniga — endpointda ANIQ E'LON QILINADIGAN dependency. Qamrov
+# 1-fazada bitta (audit ko'rish UI'ning o'zi, D-11), keyingi fazalarda har
+# bir shaxsiy-ma'lumot endpointi bir satr bilan qo'shiladi.
+#
+# YOZUV ALOHIDA TRANZAKSIYADA: o'qish SODIR BO'LGAN. Biznes tranzaksiyasi
+# rollback bo'lsa ham (masalan keyinroq xato chiqsa) jurnalda iz qolishi
+# kerak — aks holda aynan muvaffaqiyatsiz tugagan so'rovlar izsiz qolardi.
+
+
+@dataclass
+class AuditReadIntent:
+    """Endpoint bilan fon vazifasi o'rtasidagi o'qish tavsifi.
+
+    ATAYIN `frozen=True` EMAS: dependency uni so'rov BOSHIDA quradi
+    (o'shanda natija hali noma'lum), endpoint esa `filters` va
+    `result_count` ni to'ldiradi. Fon vazifasi javob yuborilgandan keyin
+    ishlaydi va allaqachon to'ldirilgan obyektni ko'radi.
+    """
+
+    resource_type: str
+    reason: str
+    filters: dict[str, Any] = field(default_factory=dict)
+    result_count: int = 0
+
+
+async def _write_read_audit(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    principal: Principal,
+    intent: AuditReadIntent,
+) -> None:
+    """O'qish yozuvini YANGI sessiyada va alohida tranzaksiyada yozadi.
+
+    Xato YUTILADI (log'ga yozib): bu kod javob mijozga JO'NATILGANDAN
+    KEYIN ishlaydi, ya'ni istisno ko'tarish hech kimga yetib bormaydi va
+    faqat "Task exception was never retrieved" ogohlantirishini beradi.
+    Buning o'rniga nosozlik `error` darajasida yoziladi — monitoring uni
+    aynan shu satrdan ko'radi.
+    """
+    try:
+        async with sessionmaker() as session:
+            await write_app_audit(
+                session,
+                action=AuditAction.READ,
+                table_name=intent.resource_type,
+                principal=principal,
+                new={
+                    "reason": intent.reason,
+                    "filters": intent.filters,
+                    "result_count": intent.result_count,
+                },
+                track_changes=False,
+            )
+            await session.commit()
+    except SQLAlchemyError as exc:
+        log.error(
+            "audit_read_write_failed",
+            resource_type=intent.resource_type,
+            reason=intent.reason,
+            error=str(exc),
+        )
+
+
+def audit_read(
+    resource_type: str,
+    *,
+    reason: str,
+) -> Callable[[Request, Principal, BackgroundTasks], Coroutine[Any, Any, AuditReadIntent]]:
+    """O'qish auditini e'lon qiluvchi dependency fabrikasi (D-09).
+
+    Ishlatilishi::
+
+        ViewerDep = Annotated[Principal, Depends(require_permission(AUDIT_VIEW))]
+        IntentDep = Annotated[
+            AuditReadIntent,
+            Depends(audit_read("audit_log", reason="audit_view")),
+        ]
+
+        @router.get("")
+        async def list_audit(principal: ViewerDep, intent: IntentDep, ...):
+            intent.filters = ...
+            intent.result_count = len(items)
+
+    RAD ETILGAN SO'ROV IZ QOLDIRMASLIGINI IKKI MUSTAQIL MEXANIZM
+    ta'minlaydi (ikkalasi ham sabotaj bilan o'lchangan, batafsil sabab
+    `app/api/v1/audit.py` modul docstringida):
+
+      * huquq tekshiruvi dependency'si SHUNDAN OLDIN e'lon qilinadi —
+        403 olgan so'rov bu yergacha yetib kelmaydi;
+      * yozuv `BackgroundTasks` orqali ketadi, u esa endpoint
+        MUVAFFAQIYATLI qaytargan javobga biriktiriladi — istisno bilan
+        tugagan so'rov (masalan 422 query validatsiyasi) uchun FastAPI
+        yangi javob quradi va unda fon vazifasi yo'q.
+    """
+
+    async def _dependency(
+        request: Request,
+        principal: PrincipalDep,
+        background: BackgroundTasks,
+    ) -> AuditReadIntent:
+        intent = AuditReadIntent(resource_type=resource_type, reason=reason)
+        # `request.state` — endpointdan tashqaridagi kod (masalan kelajakdagi
+        # exception handler) niyatni topa olishi uchun; endpointning o'zi
+        # obyektni dependency qiymati sifatida to'g'ridan-to'g'ri oladi.
+        request.state.audit_read = intent
+        background.add_task(
+            _write_read_audit,
+            request.app.state.sessionmaker,
+            principal,
+            intent,
+        )
+        return intent
+
+    return _dependency

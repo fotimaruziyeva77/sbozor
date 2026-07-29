@@ -299,7 +299,8 @@ AUDIT_PAGE_SIZE_MAX = 200
 Chegarasiz so'rov bitta so'rovda butun jurnalni JSON'ga aylantirardi —
 bu DoS emas, o'z-o'ziga DoS: jurnal o'sib boradi va bir kun bitta
 "limit=1000000" so'rovi API'ni yiqitadi. Keyingi sahifa kursor bilan
-olinadi (OFFSET emas — u chuqur sahifada butun jadvalni skanerlaydi).
+olinadi — sahifa raqami bilan emas (sababi
+`app/repositories/audit_repo.py` modul docstringida).
 """
 
 
@@ -308,9 +309,9 @@ class AuditQuery(BaseModel):
 
     `from`/`to` — Python kalit so'zi bilan to'qnashadi, shuning uchun
     maydon nomi `date_from`/`date_to` va tashqi nom alias orqali beriladi.
-    Filtr `business_date` USTUNI bo'yicha ishlaydi (`date_trunc` emas):
-    biznes-kun `Asia/Tashkent` bo'yicha DB tomonda hisoblanadi va uning
-    ustida indeks bor.
+    Filtr `business_date` USTUNI bo'yicha ishlaydi, vaqt tamg'asini
+    yaxlitlovchi ifoda bilan emas: biznes-kun `Asia/Tashkent` bo'yicha DB
+    tomonda hisoblanadi va uning ustida indeks bor.
     """
 
     date_from: date | None = Field(default=None, alias="from")
