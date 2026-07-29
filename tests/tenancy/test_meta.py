@@ -71,6 +71,11 @@ EXPECTED_DEFINER_FUNCTIONS = {
     "auth_set_locale",
     "auth_list_users",
     "auth_list_markets_full",
+    # 0005 — platforma-global (`market_id IS NULL`) audit qatorlari. Bu
+    # funksiya boshqalardan farqli o'laroq RLS QO'YILGAN jadvalni o'qiydi,
+    # ya'ni u yolg'iz o'zi yetarli emas: `audit_read_platform` policy'si
+    # bilan juftlikda ishlaydi (pastdagi alohida test).
+    "auth_list_platform_audit",
 }
 
 # Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun
@@ -404,6 +409,14 @@ def test_audit_read_policy_is_tenant_scoped(
     Shuningdek `UPDATE`/`DELETE` uchun policy YO'Q ekani tekshiriladi — bu
     o'zgarmaslikning 2-qatlami va u tasodifan qo'shilgan policy bilan
     jimgina yo'qoladi.
+
+    UCHINCHI POLICY (`audit_read_platform`, 0005) — ATAYIN va u APP-ROLNING
+    o'qish yuzasini KENGAYTIRMAYDI: u `TO sbozor_owner`, ya'ni `sbozor_app`
+    uni umuman ishlata olmaydi, va u faqat `market_id IS NULL` qatorlarni
+    ochadi — tenant qatorlari bilan kesishmaydi. Uning owner-only ekani
+    pastdagi `test_audit_read_platform_is_owner_only` da alohida qulflanadi;
+    bu yerda esa TO'PLAM qulflanadi: `w`/`d` komandali policy paydo bo'lishi
+    (yoki bu uchtasidan biri yo'qolishi) darhol qizaradi.
     """
     rows = sync_app_conn.execute(
         "SELECT p.polname, p.polcmd FROM pg_policy p "
@@ -412,7 +425,11 @@ def test_audit_read_policy_is_tenant_scoped(
     ).fetchall()
 
     commands = {row[0]: row[1] for row in rows}
-    assert commands == {"audit_append": "a", "audit_read": "r"}, (
+    assert commands == {
+        "audit_append": "a",
+        "audit_read": "r",
+        "audit_read_platform": "r",
+    }, (
         f"`audit_log` policy'lari kutilganidan farq qiladi: {commands} — "
         "`w` (UPDATE) yoki `d` (DELETE) policy'si paydo bo'lsa jadval "
         "egasiga qarshi o'zgarmaslikning 2-qatlami yo'qoladi"
@@ -537,6 +554,55 @@ def test_owner_bootstrap_policies_are_owner_only(
             f"{table}.owner_bootstrap `{sorted(roles)}` rollariga berilgan — "
             "faqat `sbozor_owner` bo'lishi shart"
         )
+
+
+def test_audit_read_platform_is_owner_only(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`audit_read_platform` FAQAT `sbozor_owner` ga va FAQAT `SELECT` uchun (Gap 5).
+
+    Bu — 0005 ning butun xavfsizlik da'vosi bitta testda. Uchala shart
+    ALOHIDA buzilishi mumkin va har biri boshqa nosozlik beradi:
+
+      * rollar kengaysa (`sbozor_app` yoki `PUBLIC`) -> ilova roli
+        platforma-global audit qatorlarini TO'G'RIDAN-TO'G'RI o'qiy oladi va
+        `auth_list_platform_audit()` darvozasi ma'nosiz bo'lib qoladi;
+      * komanda `ALL` ga aylansa -> egaga `UPDATE`/`DELETE` da qatorlar
+        KO'RINADI va o'zgarmaslikning 2-qatlami yo'qoladi (aynan shu sababdan
+        `audit_log` ga `owner_bootstrap` berilmagan);
+      * predikat kengaysa (`market_id IS NULL` o'rniga `true`) -> policy
+        BUTUN audit jurnalini ochadi, ya'ni `SECURITY DEFINER` funksiya
+        orqali tenant qatorlari ham sizib chiqishi mumkin bo'lardi.
+
+    Uchtasi ham `pg_policies` dan o'qiladi, kod ta'rifidan emas — ya'ni test
+    fabrikaning nusxasini emas, BAZADAGI haqiqatni tekshiradi.
+    """
+    rows = sync_app_conn.execute(
+        "SELECT roles, cmd, qual FROM pg_policies "
+        "WHERE schemaname = 'public' AND tablename = 'audit_log' "
+        "AND policyname = 'audit_read_platform'"
+    ).fetchall()
+    assert len(rows) == 1, (
+        "`audit_read_platform` policy'si topilmadi — `market_id IS NULL` "
+        "audit qatorlari yana hech kimga ko'rinmaydi (Gap 5)"
+    )
+
+    roles, cmd, qual = rows[0]
+
+    assert set(roles) == {"sbozor_owner"}, (
+        f"audit_read_platform `{sorted(roles)}` rollariga berilgan — faqat "
+        "`sbozor_owner` bo'lishi shart, aks holda `sbozor_app` platforma-global "
+        "qatorlarni to'g'ridan-to'g'ri o'qiy oladi"
+    )
+    assert cmd == "SELECT", (
+        f"audit_read_platform komandasi `{cmd}` — `FOR ALL`/`UPDATE`/`DELETE` "
+        "egaga o'zgartirish yo'lini ochadi va o'zgarmaslikning 2-qatlamini "
+        "yo'q qiladi"
+    )
+    assert (qual or "").strip() == "(market_id IS NULL)", (
+        f"audit_read_platform predikati `{qual}` — u AYNAN `market_id IS NULL` "
+        "bo'lishi shart, aks holda policy tenant qatorlarini ham ochadi"
+    )
 
 
 def _check_literals(conn: Connection[TupleRow], constraint: str) -> set[str]:

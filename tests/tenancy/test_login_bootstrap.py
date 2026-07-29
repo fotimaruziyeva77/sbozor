@@ -16,6 +16,8 @@ sinaydi:
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import psycopg
 import pytest
 from fixtures import TenantSessionFactory
@@ -29,6 +31,8 @@ from migrations.entities.functions import (
     AUTH_SUPPORT_FUNCTIONS,
     AUTH_SUPPORT_GRANT_SIGNATURES,
     GRANT_SIGNATURES,
+    PLATFORM_AUDIT_FUNCTIONS,
+    PLATFORM_AUDIT_GRANT_SIGNATURES,
     USER_ADMIN_FUNCTIONS,
     USER_ADMIN_GRANT_SIGNATURES,
 )
@@ -42,6 +46,7 @@ DEFINER_FUNCTION_SETS = (
     (ALL_FUNCTIONS, GRANT_SIGNATURES),
     (AUTH_SUPPORT_FUNCTIONS, AUTH_SUPPORT_GRANT_SIGNATURES),
     (USER_ADMIN_FUNCTIONS, USER_ADMIN_GRANT_SIGNATURES),
+    (PLATFORM_AUDIT_FUNCTIONS, PLATFORM_AUDIT_GRANT_SIGNATURES),
 )
 
 
@@ -175,6 +180,152 @@ async def test_platform_admin_sees_only_the_selected_market(
         )
         assert other.id not in visible
         assert total == ROLES_PER_MARKET
+
+
+# ===========================================================================
+# PLATFORMA-GLOBAL AUDIT (Gap 5, 0005) — `market_id IS NULL` qatorlar
+# ===========================================================================
+
+
+def _insert_platform_audit_row(conn: Connection[TupleRow], marker: str) -> None:
+    """`login_failed` shaklidagi platforma-global audit qatorini yozadi.
+
+    ILOVA ROLI bilan, ataylab: `audit_append` policy'si `FOR INSERT WITH
+    CHECK (true)` va `TO` bandisiz, ya'ni `sbozor_app` bunday qatorni yoza
+    oladi — mahsulotda `login_failed` aynan shu yo'l bilan yoziladi (01-06).
+    Yozish tomonini owner bilan qilib qo'yish testni haqiqiy oqimdan
+    uzoqlashtirardi.
+
+    `id` va `business_date` BERILMAYDI: birinchisi `IDENTITY ALWAYS`,
+    ikkinchisi generated STORED ustun.
+    """
+    conn.execute(
+        "INSERT INTO audit_log (market_id, action, table_name, source, request_id) "
+        "VALUES (NULL, 'login_failed', 'users', 'app', %s)",
+        (marker,),
+    )
+
+
+def test_platform_audit_rows_are_invisible_to_app_role_directly(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`sbozor_app` NULL qatorlarni TO'G'RIDAN-TO'G'RI o'qiy olmaydi (T-01-88).
+
+    Bu — `audit_read_platform` policy'sining chegarasi. Policy `TO
+    sbozor_owner`, ya'ni ilova roli uni UMUMAN ishlata olmaydi va unga faqat
+    `audit_read` (`market_id = app.market_id`) qo'llanadi. Tenant konteksti
+    yo'q -> `NULLIF(...) -> NULL` -> predikat NULL -> 0 qator (fail-closed,
+    XATO EMAS).
+
+    Agar bu test bir kun qizarsa, demak policy `sbozor_app` yoki `PUBLIC` ga
+    kengaygan va funksiya-darvoza chetlab o'tiladigan bo'lib qolgan.
+    """
+    marker = f"pytest-platform-{uuid4().hex}"
+    _insert_platform_audit_row(sync_app_conn, marker)
+
+    rows = sync_app_conn.execute(
+        "SELECT count(*) FROM audit_log WHERE market_id IS NULL"
+    ).fetchone()
+    assert rows is not None
+    assert rows[0] == 0, (
+        "sbozor_app `market_id IS NULL` audit qatorlarini to'g'ridan-to'g'ri "
+        "ko'ryapti — SECURITY DEFINER darvozasi chetlab o'tilmoqda (Gap 5)"
+    )
+
+
+def test_auth_list_platform_audit_returns_null_market_rows(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """Funksiya `market_id IS NULL` qatorni QAYTARADI — Gap 5 ning yopilishi.
+
+    Yuqoridagi test "to'g'ridan-to'g'ri yo'l yopiq" deydi; bu test o'sha
+    yopiqlikning ma'nosini beradi: yozuv YO'QOLMAGAN, u tor darvoza orqali
+    O'QILADI. Ikkalasi birga bo'lmasa da'vo yarim qoladi — biri "hech kim
+    ko'rmaydi", ikkinchisi "kerakli odam ko'radi".
+
+    Chaqiruv `sbozor_app` roli bilan bajariladi (ilova aynan shunday
+    chaqiradi). Funksiya `SECURITY DEFINER`, ya'ni ichkarida `sbozor_owner`
+    huquqi bilan ishlaydi va `audit_read_platform` policy'sidan foydalanadi.
+
+    SABOTAJ (qo'lda o'lchangan): `DROP POLICY audit_read_platform ON
+    audit_log` bajarilganda bu test aynan shu yerda 0 qator bilan yiqiladi —
+    ya'ni `SECURITY DEFINER` YOLG'IZ YETMAYDI, `audit_log` da FORCE RLS
+    egani ham bog'laydi. Policy qaytarilgach test yana yashil.
+
+    Qator ENG YANGISI (`at` o'sib boradi, `at DESC, id DESC` tartibi), shuning
+    uchun 50 lik sahifada bo'lishi kafolatlangan — test boshqa testlar
+    yozgan qatorlar soniga bog'liq emas.
+    """
+    marker = f"pytest-platform-{uuid4().hex}"
+    _insert_platform_audit_row(sync_app_conn, marker)
+
+    rows = sync_app_conn.execute(
+        "SELECT id, at, action, table_name, request_id, source "
+        "FROM auth_list_platform_audit(%s, NULL, NULL)",
+        (50,),
+    ).fetchall()
+
+    matched = [row for row in rows if row[4] == marker]
+    assert len(matched) == 1, (
+        f"`auth_list_platform_audit()` yangi yozilgan `{marker}` qatorini "
+        f"qaytarmadi ({len(rows)} qator keldi) — platforma-global audit "
+        "hamon o'qilmaydi (Gap 5)"
+    )
+    assert matched[0][2] == "login_failed"
+    assert matched[0][3] == "users"
+    assert matched[0][5] == "app"
+
+
+def test_auth_list_platform_audit_keyset_excludes_boundary_row(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """Keyset chegarasi `(at, id)` JUFTLIGI bo'yicha — `audit_repo` bilan bir xil.
+
+    Chegara qatorining O'ZI natijaga TUSHMAYDI (predikat qat'iy `<`), aks
+    holda sahifalar chegarada bitta qatorni takrorlardi. Juftlik kerak, `at`
+    yolg'iz emas: bir tranzaksiyada yozilgan qatorlar aynan bir xil `at` ga
+    ega bo'lishi mumkin.
+    """
+    marker = f"pytest-platform-{uuid4().hex}"
+    _insert_platform_audit_row(sync_app_conn, marker)
+
+    first_page = sync_app_conn.execute(
+        "SELECT id, at, request_id FROM auth_list_platform_audit(%s, NULL, NULL)", (1,)
+    ).fetchall()
+    assert len(first_page) == 1, "birinchi sahifa aynan bitta qator bo'lishi kerak"
+    row_id, row_at, row_marker = first_page[0]
+    assert row_marker == marker, "eng yangi qator birinchi kelmadi (`at DESC, id DESC`)"
+
+    next_page = sync_app_conn.execute(
+        "SELECT id FROM auth_list_platform_audit(%s, %s, %s)", (50, row_at, row_id)
+    ).fetchall()
+
+    assert row_id not in {row[0] for row in next_page}, (
+        "chegara qatori keyingi sahifada ham qaytdi — kursor `<` emas, `<=` "
+        "bo'lib qolgan va sahifalar chegarada takrorlanadi"
+    )
+
+
+def test_auth_list_platform_audit_without_limit_returns_nothing(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`p_limit IS NULL` -> 0 qator (FAIL-CLOSED), CHEKLOVSIZ EMAS.
+
+    Xom `LIMIT p_limit` da `NULL` Postgres uchun "cheklovsiz" degani, ya'ni
+    chaqiruvchidagi bitta `None` butun platforma-global jurnalni bir so'rovda
+    tortib olardi. `LIMIT COALESCE(p_limit, 0)` uni RLS predikatidagi
+    `NULLIF` bilan bir xil qoidaga bo'ysundiradi: noto'g'ri kirish XATO emas,
+    0 QATOR beradi.
+    """
+    _insert_platform_audit_row(sync_app_conn, f"pytest-platform-{uuid4().hex}")
+
+    rows = sync_app_conn.execute(
+        "SELECT id FROM auth_list_platform_audit(NULL, NULL, NULL)"
+    ).fetchall()
+
+    assert rows == [], (
+        "`p_limit IS NULL` da funksiya qator qaytardi — `LIMIT NULL` cheklovsiz bo'lib qolgan"
+    )
 
 
 def test_definer_functions_are_executable_by_app_role(
