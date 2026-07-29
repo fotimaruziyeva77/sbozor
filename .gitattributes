@@ -1,0 +1,31 @@
+# SBOZOR — satr oxirlarini normallashtirish.
+#
+# NEGA MAJBURIY: ishlab chiqish Windows'da (core.autocrlf=true), ijro esa Linux
+# konteynerlarida. CRLF bilan checkout qilingan `.sh` fayl konteyner ichida
+# `\r: not found` bilan yiqiladi, `docker-entrypoint-initdb.d` esa jimgina
+# to'xtaydi. Quyidagi fayllar HAR DOIM LF bilan checkout qilinadi.
+
+* text=auto eol=lf
+
+*.sh      text eol=lf
+*.sql     text eol=lf
+*.yaml    text eol=lf
+*.yml     text eol=lf
+*.conf    text eol=lf
+*.py      text eol=lf
+*.toml    text eol=lf
+*.json    text eol=lf
+*.md      text eol=lf
+Dockerfile text eol=lf
+.env.example text eol=lf
+.dockerignore text eol=lf
+.gitignore text eol=lf
+
+# Ikkilik fayllar — tegilmaydi.
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.ico     binary
+*.pdf     binary
+*.docx    binary
+*.onnx    binary

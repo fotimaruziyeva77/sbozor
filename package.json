@@ -1,0 +1,23 @@
+{
+  "name": "sbozor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SBOZOR — root orkestratsiya skriptlari. Xostda `make` yo'q (Windows), shuning uchun barcha yorliqlar shu yerda.",
+  "scripts": {
+    "up": "docker compose up -d db cache core-api --wait",
+    "down": "docker compose down",
+    "logs": "docker compose logs -f",
+    "migrate": "docker compose --profile migrate run --rm migrate alembic upgrade head",
+    "revision": "docker compose --profile migrate run --rm migrate alembic revision --autogenerate -m",
+    "test": "docker compose --profile test run --rm tests pytest -q",
+    "test:unit": "docker compose --profile test run --rm tests pytest tests/unit -x -q",
+    "lint": "docker compose --profile test run --rm tests sh -c \"ruff check . && ruff format --check . && mypy .\"",
+    "fe:dev": "npm --prefix frontend run dev",
+    "fe:build": "npm --prefix frontend run build",
+    "fe:lint": "npm --prefix frontend run lint",
+    "fe:i18n": "npm --prefix frontend run i18n:check"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

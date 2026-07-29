@@ -1,0 +1,153 @@
+# SBOZOR — yagona orkestratsiya nuqtasi.
+# Xost mashinasida `make` YO'Q (Windows) — barcha yorliqlar root `package.json` da.
+#
+# Profillar:
+#   (yo'q)   -> db, cache, core-api    : `npm run up`
+#   migrate  -> Alembic one-shot job   : `npm run migrate`
+#   web      -> frontend (01-02 rejasi Dockerfile'ni yaratadi)
+#   proxy    -> nginx
+#   test     -> pytest + testcontainers: `npm run test`
+
+name: sbozor
+
+services:
+  db:
+    image: postgres:18.4-trixie
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sbozor}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SBOZOR_OWNER_PASSWORD: ${SBOZOR_OWNER_PASSWORD}
+      SBOZOR_APP_PASSWORD: ${SBOZOR_APP_PASSWORD}
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      # DIQQAT: postgres 18+ image'i ma'lumotni major-versiya bo'yicha
+      # kataloglarda saqlaydi (/var/lib/postgresql/18/docker), shuning uchun
+      # volume `/var/lib/postgresql` ga o'rnatiladi — `/var/lib/postgresql/data` ga EMAS
+      # (aks holda konteyner "unused mount/volume" xatosi bilan yiqiladi).
+      - pgdata:/var/lib/postgresql
+      # Rollar + parollar: faqat birinchi ishga tushishda (bo'sh data katalogida) bajariladi.
+      - ./ops/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # DIQQAT: xost portiga publish QILINMAYDI (T-01-04).
+    # Dev uchun `compose.override.yml` uni 127.0.0.1 ga bog'laydi.
+    restart: unless-stopped
+
+  cache:
+    image: valkey/valkey:9.1.1-alpine
+    # Kesh — davomiylik kerak emas (volume yo'q), RDB/AOF o'chirilgan.
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    environment:
+      TZ: ${TZ:-Asia/Tashkent}
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    # One-shot job. Alembic ILOVA STARTUP'ida ishga tushmaydi.
+    profiles: ["migrate"]
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: dev
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      # DDL egasi roli — ilova roli EMAS.
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL}
+      TZ: ${TZ:-Asia/Tashkent}
+    working_dir: /app
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  core-api:
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: runtime
+    # --workers 1: kelajakdagi scheduler/cron dublikatining oldini oladi.
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      VALKEY_URL: ${VALKEY_URL:-redis://cache:6379/0}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-sbozor}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-sbozor-api}
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-15}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-30}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: Asia/Tashkent
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    # `frontend/Dockerfile` 01-02 rejasida yaratiladi — shu sababli profil ortida,
+    # aks holda `npm run up` build xatosi berardi.
+    profiles: ["web"]
+    build:
+      context: ./frontend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api/v1}
+      TZ: ${TZ:-Asia/Tashkent}
+    depends_on:
+      - core-api
+    restart: unless-stopped
+
+  nginx:
+    profiles: ["proxy"]
+    image: nginx:1.30.4-alpine
+    volumes:
+      - ./ops/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${PROXY_HOST_PORT:-8080}:80"
+    restart: unless-stopped
+
+  tests:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: dev
+    command: ["pytest", "-q"]
+    environment:
+      # testcontainers konteyner ichidan Docker'ni boshqaradi (docker-outside-of-docker):
+      # ishga tushirilgan Postgres xost portiga publish qilinadi, biz unga
+      # host.docker.internal orqali boramiz.
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+      TZ: Asia/Tashkent
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  pgdata:
