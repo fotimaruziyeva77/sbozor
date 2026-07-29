@@ -17,12 +17,26 @@
   },
   "auth": {
     "phoneLabel": "Номер телефона",
+    "phoneHint": "+998 90 123 45 67",
     "passwordLabel": "Пароль",
     "signIn": "Войти",
     "signingIn": "Выполняется вход",
     "invalidCredentials": "Неверный номер телефона или пароль",
+    "invalidPhone": "Номер телефона указан неверно",
+    "tooManyAttempts": "Слишком много попыток. Подождите немного и повторите",
+    "accountBlocked": "Учётная запись заблокирована. Обратитесь к администрации рынка",
     "mustChangePassword": "Для продолжения смените пароль",
-    "selectMarket": "Выберите рынок"
+    "changePasswordTitle": "Смена пароля",
+    "currentPassword": "Текущий пароль",
+    "newPassword": "Новый пароль",
+    "confirmPassword": "Повторите новый пароль",
+    "passwordMismatch": "Пароли не совпадают",
+    "passwordTooShort": "Пароль должен содержать не менее 10 символов",
+    "passwordSameAsCurrent": "Новый пароль должен отличаться от текущего",
+    "passwordChanged": "Пароль изменён",
+    "selectMarket": "Выберите рынок",
+    "selectMarketTitle": "Выберите рынок",
+    "noMarkets": "К вам не привязан ни один рынок"
   },
   "users": {
     "title": "Пользователи",
@@ -48,6 +62,7 @@
     "generic": "Произошла непредвиденная ошибка",
     "network": "Нет связи с сетью",
     "forbidden": "Нет прав на это действие",
-    "notFound": "Не найдено"
+    "notFound": "Не найдено",
+    "required": "Это поле обязательно для заполнения"
   }
 }

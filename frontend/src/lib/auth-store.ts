@@ -43,7 +43,12 @@ import type { ApiLocale, MarketSummary } from "@/lib/api-types";
  */
 
 export type Principal = {
-  userId: string;
+  /**
+   * `null` bo'lishi mumkin: login javobida foydalanuvchi `id` si YO'Q
+   * (unda faqat sessiya konteksti bor). Profil `GET /api/v1/me` bilan
+   * keyinroq to'ldiriladi va bu to'ldirish yiqilsa ham login oqimi ishlaydi.
+   */
+  userId: string | null;
   phone: string | null;
   fullName: string | null;
   roles: readonly string[];
