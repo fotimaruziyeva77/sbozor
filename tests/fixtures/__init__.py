@@ -7,14 +7,15 @@ ma'lumot fabrikasi emas.
 
 from __future__ import annotations
 
+from collections.abc import Coroutine
 from contextlib import AbstractAsyncContextManager
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from sbozor_core.enums import ActorKind
 from sqlalchemy.ext.asyncio import AsyncSession
 
-__all__ = ["TenantSessionFactory"]
+__all__ = ["TenantSessionFactory", "TokenFactory"]
 
 
 class TenantSessionFactory(Protocol):
@@ -40,3 +41,22 @@ class TenantSessionFactory(Protocol):
         actor_kind: ActorKind = ActorKind.USER,
         request_id: str = "pytest",
     ) -> AbstractAsyncContextManager[AsyncSession]: ...
+
+
+class TokenFactory(Protocol):
+    """`token_for(phone, password, market_id)` — HAQIQIY access token beradi.
+
+    Imzo rejadagi `token_for(user_id, market_id, roles)` dan farq qiladi
+    va bu ATAYIN: rollar chaqiruvchidan EMAS, bazadagi a'zolik qatoridan
+    keladi. Rollarni argument sifatida qabul qilish "kassir tokeni
+    `market_admin` rollari bilan" kabi BAZADA MAVJUD BO'LMAGAN holatni
+    yasashga imkon berardi — matritsa esa o'shanda haqiqiy tizimni emas,
+    o'zi o'ylab topgan tizimni sinardi.
+    """
+
+    def __call__(
+        self,
+        phone: str,
+        password: str,
+        market_id: UUID | None = None,
+    ) -> Coroutine[Any, Any, str]: ...

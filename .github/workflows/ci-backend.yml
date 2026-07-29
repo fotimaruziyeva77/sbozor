@@ -33,12 +33,25 @@ jobs:
       - name: Lint (ruff)
         run: uv run --project services/core-api ruff check .
 
+      # ALOHIDA qadam, `ruff check .` ichida emas (T-01-80). Sabab: umumiy
+      # lint yiqilganda sabab o'nlab diagnostika orasida yo'qoladi, bu qadam
+      # esa qizarganda nomi bilan aytadi — SQL injection. Qoida `[tool.ruff]`
+      # da allaqachon yoqilgan, ya'ni bu takror emas, KO'RINUVCHANLIK.
+      - name: SQL injection gate
+        run: uv run --project services/core-api ruff check --select S608 .
+
       - name: Format check (ruff)
         run: uv run --project services/core-api ruff format --check .
 
       - name: Types (mypy strict)
         run: uv run --project services/core-api mypy .
 
-      # Tenancy darvozasi: RLS invariantlari yiqilsa butun quvur to'xtaydi.
       - name: Tests (pytest + testcontainers)
         run: uv run --project services/core-api pytest -q
+
+      # FOUND-02 darvozasi ALOHIDA ishlaydi (T-01-81). To'liq to'plam
+      # allaqachon shu testlarni qamraydi — takror ATAYIN: darvozani
+      # o'chirish endi `pytest -q` ni "tezlashtirish" emas, quvurdan
+      # QADAM O'CHIRISH bo'ladi va u diff'da ko'rinadi.
+      - name: Tenancy gate (FOUND-02)
+        run: uv run --project services/core-api pytest tests/tenancy -q
