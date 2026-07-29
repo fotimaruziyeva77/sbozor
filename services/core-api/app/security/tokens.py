@@ -29,12 +29,11 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
+from fastapi import Response
 from sbozor_core.security import TokenClaims, decode_token, encode_access, encode_refresh
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
-    from fastapi import Response
 
     from app.settings import Settings
 
@@ -44,6 +43,7 @@ __all__ = [
     "REFRESH_COOKIE_NAME",
     "SECONDS_PER_DAY",
     "clear_refresh_cookie",
+    "cleared_cookie_headers",
     "decode",
     "issue_access",
     "issue_refresh",
@@ -171,3 +171,22 @@ def clear_refresh_cookie(response: Response) -> None:
     kelmasa eski cookie joyida qolib ketadi.
     """
     response.delete_cookie(key=REFRESH_COOKIE_NAME, path=COOKIE_PATH)
+
+
+def cleared_cookie_headers() -> dict[str, str]:
+    """Cookie'ni o'chiruvchi sarlavha — `HTTPException(headers=...)` uchun.
+
+    NEGA ALOHIDA FUNKSIYA: `HTTPException` ko'tarilganda FastAPI YANGI javob
+    quradi va endpointga uzatilgan `Response` obyektining sarlavhalari
+    UNGA KO'CHMAYDI. Ya'ni `clear_refresh_cookie(response)` dan keyin
+    `raise HTTPException(...)` yozish — jimgina ishlamaydigan kod: server
+    tomonda token bekor qilinadi, brauzerda esa o'lik cookie qolib ketadi
+    va foydalanuvchi har navbatdagi so'rovda 401 oladi.
+
+    Shuning uchun sarlavha shu yerda `Response` ustida hosil qilinib,
+    istisno bilan BIRGA uzatiladi — atributlar (`Path`, `HttpOnly`)
+    `clear_refresh_cookie()` bilan bir xil manbadan keladi.
+    """
+    probe = Response()
+    clear_refresh_cookie(probe)
+    return {"set-cookie": probe.headers["set-cookie"]}

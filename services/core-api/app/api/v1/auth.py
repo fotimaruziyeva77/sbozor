@@ -28,6 +28,7 @@ qaytarardi va farq o'lchansa "bu raqam bor" degan signal bo'lardi).
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from ipaddress import ip_address
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
@@ -69,6 +70,7 @@ from app.security.audit import (
 from app.security.ratelimit import TooManyAttempts, check_login_rate, reset_login_rate
 from app.security.tokens import (
     clear_refresh_cookie,
+    cleared_cookie_headers,
     decode,
     issue_access,
     issue_refresh,
@@ -119,8 +121,20 @@ def _client_ip(request: Request) -> str | None:
     kerak. Nginx `proxy_set_header` bilan haqiqiy IP'ni uzatadi va
     uvicorn `--proxy-headers` bilan uni `request.client` ga qo'yadi —
     ya'ni ishonch qarori DEPLOY qatlamida, kodda emas.
+
+    Qiymat `inet` ga tushmasa `None` qaytariladi: `audit_log.ip` ustuni
+    `inet` va yaroqsiz satr INSERT'ni yiqitardi — ya'ni g'alati
+    `client` qiymati BUTUN LOGIN oqimini o'chirardi.
     """
-    return request.client.host if request.client else None
+    host = request.client.host if request.client else None
+    if host is None:
+        return None
+    try:
+        ip_address(host)
+    except ValueError:
+        log.info("client_ip_unparsable", value=host)
+        return None
+    return host
 
 
 def _verify_password_safe(raw: str, stored: str) -> tuple[bool, str | None]:
@@ -147,8 +161,19 @@ def _invalid_credentials() -> HTTPException:
     )
 
 
-def _invalid_refresh() -> HTTPException:
-    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_INVALID_REFRESH)
+def _invalid_refresh(*, clear_cookie: bool = False) -> HTTPException:
+    """`401 invalid_refresh`.
+
+    `clear_cookie=True` — sessiya QAYTA TIKLANMAYDIGAN holatda (reuse
+    aniqlangan, oila bekor qilingan, foydalanuvchi bloklangan): brauzerda
+    o'lik cookie qolib ketmasligi kerak, aks holda har so'rov 401 beradi
+    va foydalanuvchi sababini tushunmaydi.
+    """
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=_INVALID_REFRESH,
+        headers=cleared_cookie_headers() if clear_cookie else None,
+    )
 
 
 def _session_roles(
@@ -555,19 +580,17 @@ async def refresh(
         # foydalanuvchi ham qaytadan login qilishi kerak bo'ladi. Bu
         # ataylab: o'g'irlik sodir bo'lganini foydalanuvchi SEZISHI kerak.
         await _handle_reuse(session, row, ip=ip, rid=request_id)
-        clear_refresh_cookie(response)
-        raise _invalid_refresh()
+        raise _invalid_refresh(clear_cookie=True)
 
     if row.expires_at <= datetime.now(UTC):
-        raise _invalid_refresh()
+        raise _invalid_refresh(clear_cookie=True)
 
     who = await auth_repo.find_login_by_id(session, row.user_id)
     if who is None or not who.is_active:
         # D-08: bloklangan foydalanuvchining uzoq umrli sessiyasi ham o'ladi.
         await auth_repo.refresh_revoke_family(session, row.family_id)
         await session.commit()
-        clear_refresh_cookie(response)
-        raise _invalid_refresh()
+        raise _invalid_refresh(clear_cookie=True)
 
     memberships = await auth_repo.memberships(session, row.user_id)
     membership = next((m for m in memberships if m.market_id == row.market_id), None)
@@ -575,8 +598,7 @@ async def refresh(
         # A'zolik olib tashlangan — sessiya davom etmaydi.
         await auth_repo.refresh_revoke_family(session, row.family_id)
         await session.commit()
-        clear_refresh_cookie(response)
-        raise _invalid_refresh()
+        raise _invalid_refresh(clear_cookie=True)
 
     issued = issue_refresh(user_id=row.user_id, family_id=row.family_id, settings=settings)
     rotated = await auth_repo.refresh_rotate(session, old_jti=claims.jti, new_jti=issued.jti)
@@ -584,8 +606,7 @@ async def refresh(
         # Poyga: boshqa so'rov ayni tokenni allaqachon rotatsiya qildi.
         # Bu ham reuse — yuqoridagi tekshiruv bilan bir xil qarorga keladi.
         await _handle_reuse(session, row, ip=ip, rid=request_id)
-        clear_refresh_cookie(response)
-        raise _invalid_refresh()
+        raise _invalid_refresh(clear_cookie=True)
 
     await auth_repo.refresh_issue(
         session,
@@ -620,8 +641,25 @@ async def _handle_reuse(
     ip: str | None,
     rid: str,
 ) -> None:
-    """Oilani bekor qiladi, audit yozadi va COMMIT qiladi (T-01-41)."""
+    """Oilani bekor qiladi, audit yozadi va COMMIT qiladi (T-01-41).
+
+    AUDIT YOZUVI FAQAT HAQIQATAN BEKOR QILINGANDA yoziladi. Sabab: oila
+    o'lgandan keyin ham eski cookie'lar bir necha marta kelib turadi
+    (o'g'irlangan nusxa, haqiqiy foydalanuvchining brauzeri, logout'dan
+    keyingi eski tab). Har biri uchun `refresh_reuse_detected` yozilsa,
+    BITTA o'g'irlik jurnalda o'nlab signalga aylanardi va nazoratchi
+    haqiqiy hodisani shovqin ichida yo'qotardi. Qoida: bitta o'g'irlik =
+    bitta ogohlantirish; keyingi urinishlar baribir 401 oladi.
+    """
     revoked = await auth_repo.refresh_revoke_family(session, row.family_id)
+    if revoked == 0:
+        # Oila ALLAQACHON o'lik (avvalgi reuse, logout yoki bloklash).
+        log.info(
+            "refresh_on_dead_family",
+            user_id=str(row.user_id),
+            family_id=str(row.family_id),
+        )
+        return
     log.warning(
         "refresh_reuse_detected",
         user_id=str(row.user_id),

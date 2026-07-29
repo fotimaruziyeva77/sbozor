@@ -18,13 +18,14 @@ Rol atributlari uchun yagona haqiqat manbai — `ops/db/init/01-roles.sql`.
 Bu fayl shu yerda VERBATIM o'qib bajariladi; rol DDL'i testda TAKRORLANMAYDI,
 shuning uchun prod (`docker-entrypoint-initdb.d`) va test bir xil DDL'ni oladi.
 
-Qochish yo'li: `TEST_DATABASE_URL` o'rnatilgan bo'lsa konteyner ishga
-tushirilmaydi va o'sha URL ishlatiladi (CI/Windows uchun).
+Qochish yo'li: `TEST_DATABASE_URL` / `TEST_VALKEY_URL` o'rnatilgan bo'lsa
+konteyner ishga tushirilmaydi va o'sha URL ishlatiladi (CI/Windows uchun).
 """
 
 from __future__ import annotations
 
 import os
+import secrets
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -32,14 +33,19 @@ from pathlib import Path
 from urllib.parse import quote_plus
 from uuid import UUID
 
+import httpx
 import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from app.settings import Settings
+from fastapi import FastAPI
 from fixtures import TenantSessionFactory
+from fixtures.auth_users import AuthSeed, cleanup_auth_users, seed_auth_users
 from fixtures.two_markets import TwoMarketSeed, cleanup_two_markets, seed_two_markets
 from psycopg import Connection, sql
 from psycopg.rows import TupleRow
+from redis.asyncio import Redis
 from sbozor_core.db import make_sessionmaker
 from sbozor_core.enums import ActorKind
 from sbozor_core.tenancy import set_tenant_context
@@ -54,9 +60,13 @@ from sqlalchemy.ext.asyncio import (
 # testcontainers 4.15: `testcontainers.postgres` eskirgan (DeprecationWarning),
 # `testcontainers.community.postgres` — amaldagi yo'l. API bir xil.
 from testcontainers.community.postgres import PostgresContainer
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 # CLAUDE.md da qulflangan — PG 19 EMAS (hali 19beta2).
 POSTGRES_IMAGE = "postgres:18.4-trixie"
+VALKEY_IMAGE = "valkey/valkey:9.1.1-alpine"
+VALKEY_PORT = 6379
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ROLES_SQL_PATH = REPO_ROOT / "ops" / "db" / "init" / "01-roles.sql"
@@ -199,6 +209,28 @@ def sync_app_conn(
 
 
 @pytest.fixture
+def sync_superuser_conn(
+    pg_container: PgEndpoint,
+    _bootstrap_roles: None,
+) -> Iterator[Connection[TupleRow]]:
+    """Klaster superuseri — FAQAT `market_id IS NULL` audit qatorlarini o'qish uchun.
+
+    Bunday qatorlar (`login_failed`) `audit_read` policy'si ostida NA
+    `sbozor_app`, NA `sbozor_owner` roliga ko'rinadi — bu ataylab
+    (`migrations/entities/policies.py` da hujjatlashtirilgan). Ularni
+    tekshirishning boshqa yo'li 01-07 dagi tor `SECURITY DEFINER`
+    funksiya qo'shilgunga qadar yo'q.
+
+    HECH QANDAY IZOLYATSIYA DA'VOSI bu ulanish bilan tekshirilmaydi:
+    superuser RLS'ni umuman chetlab o'tadi, ya'ni u bilan yozilgan
+    izolyatsiya testi HAR DOIM yashil bo'lardi (Pitfall 2).
+    """
+    dsn = _psycopg_dsn(pg_container.superuser, pg_container.superuser_password, pg_container)
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        yield conn
+
+
+@pytest.fixture
 def sync_owner_conn(
     owner_url: str,
     _bootstrap_roles: None,
@@ -287,3 +319,145 @@ def tenant_session(app_sessionmaker: async_sessionmaker[AsyncSession]) -> Tenant
             yield session
 
     return _tenant_session
+
+
+# ===========================================================================
+# AUTH API (01-06) — HTTP chegarasidan o'tadigan integratsiya testlari uchun
+# ===========================================================================
+
+
+@pytest.fixture(scope="session")
+def valkey_url() -> Iterator[str]:
+    """Haqiqiy Valkey — `fakeredis` yoki qo'lda yozilgan qalbaki klient EMAS.
+
+    Bloklash keshi va rate-limit sanagichi `INCR`/`EXPIRE`/TTL semantikasiga
+    tayanadi; qalbaki klient bu semantikani TAXMIN qilardi va real Valkey
+    bilan farqi faqat prod'da ko'rinardi.
+
+    `TEST_VALKEY_URL` o'rnatilgan bo'lsa konteyner ishga TUSHIRILMAYDI
+    (`TEST_DATABASE_URL` bilan bir xil qochish yo'li).
+    """
+    external = os.environ.get("TEST_VALKEY_URL")
+    if external:
+        yield external
+        return
+
+    container = (
+        DockerContainer(VALKEY_IMAGE)
+        .with_exposed_ports(VALKEY_PORT)
+        # Port ochilishi YETARLI EMAS: Valkey portni tinglashni bosqichma-bosqich
+        # boshlaydi va birinchi `PING` "LOADING" bilan qaytishi mumkin.
+        .waiting_for(LogMessageWaitStrategy("Ready to accept connections"))
+    )
+    with container:
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(VALKEY_PORT)
+        yield f"redis://{host}:{port}/0"
+
+
+@pytest.fixture
+async def valkey_client(valkey_url: str) -> AsyncIterator[Redis]:
+    """Har test uchun TOZA Valkey.
+
+    `flushdb()` majburiy: rate-limit sanagichi va bloklash keshi testlar
+    orasida saqlanib qolsa, testlar bir-birini yiqitadi va sabab
+    "flaky" bo'lib ko'rinadi.
+    """
+    client: Redis = Redis.from_url(valkey_url)
+    await client.flushdb()
+    try:
+        yield client
+    finally:
+        await client.aclose()
+
+
+@pytest.fixture(scope="session")
+async def api_engine(app_url: str, _bootstrap_roles: None) -> AsyncIterator[AsyncEngine]:
+    """API testlari uchun alohida engine — STANDART pul o'lchami bilan.
+
+    `app_engine` ataylab `pool_size=1` (GUC sizishini ochib berish uchun),
+    lekin bitta HTTP so'rovi ba'zan IKKI sessiya ochadi (bloklash keshi
+    promahi + tenant sessiyasi). Bitta ulanishli pulda bu deadlock
+    berardi — testlar esa timeout bilan yiqilib, sabab tenant izolyatsiyasi
+    kabi ko'rinardi.
+    """
+    engine = create_async_engine(app_url)
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def api_sessionmaker(api_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    """API ilovasi ishlatadigan sessiya fabrikasi (prod bilan bir xil helper)."""
+    return make_sessionmaker(api_engine)
+
+
+@pytest.fixture(scope="session")
+def test_settings(app_url: str, valkey_url: str) -> Settings:
+    """Test uchun `Settings`.
+
+    `get_settings()` CHAQIRILMAYDI: u `lru_cache` bilan muhitdan o'qiydi
+    va testda uni almashtirib bo'lmasdi. Ilova sozlamalarni
+    `app.state.settings` dan oladi, ya'ni test prod kodining nusxasini
+    emas, PROD KODINI ishga tushiradi.
+
+    `cookie_secure=False` — test klienti HTTP orqali ishlaydi va `Secure`
+    bayrog'i bilan cookie saqlanmasdi.
+    """
+    return Settings(
+        database_url=app_url,
+        valkey_url=valkey_url,
+        jwt_secret=secrets.token_urlsafe(48),
+        cookie_secure=False,
+    )
+
+
+@pytest.fixture
+def api_app(
+    test_settings: Settings,
+    api_engine: AsyncEngine,
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    valkey_client: Redis,
+    migrated: None,
+) -> FastAPI:
+    """HAQIQIY `app.main.app`, faqat `app.state` test resurslari bilan to'ldirilgan.
+
+    `lifespan` ishga tushirilmaydi (`ASGITransport` uni chaqirmaydi) —
+    aynan shu sababdan ilova resurslari `app.state` da yashaydi va
+    dependency'lar ularni modul darajasidagi globaldan emas,
+    `request.app.state` dan oladi.
+    """
+    from app.main import app
+
+    app.state.settings = test_settings
+    app.state.engine = api_engine
+    app.state.sessionmaker = api_sessionmaker
+    app.state.cache = valkey_client
+    return app
+
+
+@pytest.fixture
+async def api_client(api_app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    """ASGI transport orqali to'g'ridan-to'g'ri ilovaga so'rov yuboradi.
+
+    Tarmoq, port va uvicorn YO'Q — lekin middleware'lar, dependency'lar,
+    Pydantic validatsiyasi va cookie mexanikasi to'liq ishlaydi.
+    """
+    transport = httpx.ASGITransport(app=api_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+
+@pytest.fixture
+def auth_seed(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+) -> Iterator[AuthSeed]:
+    """`two_markets` ustiga HAQIQIY Argon2 parol + bloklangan/majburiy-almashtirish holatlari."""
+    seed = seed_auth_users(sync_owner_conn, two_markets)
+    try:
+        yield seed
+    finally:
+        cleanup_auth_users(sync_owner_conn, seed)

@@ -27,8 +27,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from sbozor_core.enums import ActorKind, AuditAction, AuditSource
-from sbozor_core.models.ops import AuditLog
-from sqlalchemy import insert
+from sqlalchemy import Text, bindparam, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUuid
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -53,6 +54,41 @@ TABLE_MARKETS = "markets"
 
 TABLE_REFRESH_TOKENS = "refresh_tokens"  # noqa: S105 — jadval nomi, sir emas
 """`logout`, `refresh_reuse_detected` — hodisa sessiyaga tegishli."""
+
+_INSERT_AUDIT = text(
+    "INSERT INTO audit_log ("
+    "market_id, actor_user_id, actor_kind, actor_label, action, table_name, row_id, "
+    "old_value, new_value, changed_keys, request_id, ip, source"
+    ") VALUES ("
+    ":market_id, :actor_user_id, :actor_kind, :actor_label, :action, :table_name, :row_id, "
+    ":old_value, :new_value, :changed_keys, :request_id, CAST(:ip AS inet), :source)"
+).bindparams(
+    bindparam("market_id", type_=PgUuid(as_uuid=True)),
+    bindparam("actor_user_id", type_=PgUuid(as_uuid=True)),
+    bindparam("row_id", type_=PgUuid(as_uuid=True)),
+    bindparam("old_value", type_=JSONB),
+    bindparam("new_value", type_=JSONB),
+    bindparam("changed_keys", type_=ARRAY(Text)),
+)
+"""=============================================================================
+NEGA ORM `insert(AuditLog)` EMAS, XOM `text()`:
+
+SQLAlchemy mapped klass ustidagi `insert()` uchun `RETURNING id` QO'SHADI
+(`Identity(always=True)` kaliti shu yo'l bilan qaytariladi). PostgreSQL esa
+`INSERT ... RETURNING` da qaytariladigan qatorga **SELECT policy'sini**
+qo'llaydi — `audit_log` da u tenant-scoped (`audit_read`). Natijada auth
+oqimidagi (tenant kontekstisiz) har bir audit yozuvi
+
+    new row violates row-level security policy for table "audit_log"
+
+bilan yiqilardi va butun login endpointi 404 qaytarardi. Yozuvchiga
+qatorni QAYTA O'QISH huquqi kerak emas va berilmasligi ham kerak —
+`audit_append` policy'si ATAYIN faqat `WITH CHECK (true)`, `USING` emas.
+
+Bind parametrlari `bindparam(type_=...)` bilan tiplangan: `text()` da
+SQLAlchemy tipni ustundan chiqara olmaydi va `jsonb` / `text[]` / `uuid`
+qiymatlari asyncpg'ga xom `dict`/`list` bo'lib borardi.
+============================================================================="""
 
 
 def platform_admin_label(phone: str | None, market_name: str | None) -> str:
@@ -107,21 +143,22 @@ async def write_app_audit(
     resolved_label = actor_label if actor_label is not None else _principal_label(principal)
 
     await session.execute(
-        insert(AuditLog).values(
-            market_id=resolved_market,
-            actor_user_id=resolved_actor,
-            actor_kind=str(actor_kind),
-            actor_label=resolved_label,
-            action=str(action),
-            table_name=table_name,
-            row_id=row_id,
-            old_value=old,
-            new_value=new,
-            changed_keys=sorted(new) if new else None,
-            request_id=resolved_request,
-            ip=ip,
-            source=str(AuditSource.APP),
-        )
+        _INSERT_AUDIT,
+        {
+            "market_id": resolved_market,
+            "actor_user_id": resolved_actor,
+            "actor_kind": str(actor_kind),
+            "actor_label": resolved_label,
+            "action": str(action),
+            "table_name": table_name,
+            "row_id": row_id,
+            "old_value": old,
+            "new_value": new,
+            "changed_keys": sorted(new) if new else None,
+            "request_id": resolved_request,
+            "ip": ip,
+            "source": str(AuditSource.APP),
+        },
     )
 
 
