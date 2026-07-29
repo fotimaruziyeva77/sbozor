@@ -41,6 +41,10 @@ SENSITIVE_KEYS = frozenset(
         "old_password",
         "new_password",
         "raw_password",
+        # D-02: admin bergan vaqtinchalik parol javobda BIR MARTA ochiq
+        # ketadi — u log'ga tushsa, "bir martalik" degan kafolat yo'qoladi
+        # va parol jurnalda muddatsiz yashab qolardi.
+        "temporary_password",
         # Token va sirlar
         "token",
         "access_token",

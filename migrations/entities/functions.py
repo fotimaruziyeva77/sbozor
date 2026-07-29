@@ -48,9 +48,12 @@ from alembic_utils.pg_function import PGFunction
 
 __all__ = [
     "ALL_FUNCTIONS",
+    "AUTH_CREATE_USER",
     "AUTH_FIND_LOGIN",
     "AUTH_FIND_LOGIN_BY_ID",
     "AUTH_LIST_MARKETS",
+    "AUTH_LIST_MARKETS_FULL",
+    "AUTH_LIST_USERS",
     "AUTH_MEMBERSHIPS",
     "AUTH_REFRESH_FIND",
     "AUTH_REFRESH_ISSUE",
@@ -58,11 +61,14 @@ __all__ = [
     "AUTH_REFRESH_REVOKE_USER",
     "AUTH_REFRESH_ROTATE",
     "AUTH_SET_ACTIVE",
+    "AUTH_SET_LOCALE",
     "AUTH_SUPPORT_FUNCTIONS",
     "AUTH_SUPPORT_GRANT_SIGNATURES",
     "AUTH_UPDATE_PASSWORD_HASH",
     "AUTH_USER_STATE",
     "GRANT_SIGNATURES",
+    "USER_ADMIN_FUNCTIONS",
+    "USER_ADMIN_GRANT_SIGNATURES",
 ]
 
 AUTH_FIND_LOGIN = PGFunction(
@@ -498,3 +504,186 @@ Mosligi `tests/tenancy/test_login_bootstrap.py` da tekshiriladi: ro'yxat
 ajralib qolsa funksiya yaratiladi-yu, `sbozor_app` uni chaqira olmaydi va
 sessiya oqimi `permission denied` bilan yiqiladi.
 """
+
+
+# ===========================================================================
+# 0004_user_admin — FOYDALANUVCHI BOSHQARUVI VA PROFIL
+# ===========================================================================
+#
+# `users` jadvali app-rolga BUTUNLAY yopiq (Pattern 2), ya'ni foydalanuvchi
+# YARATISH, PROFIL O'QISH va TIL SAQLASH ham xuddi login yo'li kabi tor
+# `SECURITY DEFINER` funksiyalari orqali o'tadi. Muqobil yechim — `users`
+# ga `INSERT`/`UPDATE`/`SELECT` GRANT berish — butun naqshni bekor qilardi:
+# o'shanda ORM orqali tasodifan global `select(User)` yozish yana mumkin
+# bo'lardi va tenant chegarasi ilova kodining intizomiga qolardi.
+#
+# YUZA QASDDAN TOR: `auth_list_users` ixtiyoriy `WHERE` qabul qilmaydi —
+# u faqat ANIQ ID RO'YXATI bo'yicha ishlaydi. ID'lar esa chaqiruvchida
+# `user_market_roles` dan RLS OSTIDA olinadi, ya'ni funksiya global o'qish
+# yuzasini kengaytirmaydi: boshqa bozor a'zosining ID'si birinchi qadamda
+# umuman qaytmaydi. "Barcha foydalanuvchilarni bering" degan so'rov shakli
+# bu yerda ATAYIN yo'q.
+
+AUTH_CREATE_USER = PGFunction(
+    schema="public",
+    signature=(
+        "auth_create_user(p_phone text, p_hash text, p_full_name text, "
+        "p_locale text, p_is_platform_admin boolean)"
+    ),
+    definition="""
+RETURNS uuid
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+    INSERT INTO public.users (
+        phone_e164, password_hash, full_name, locale, is_platform_admin, must_change_password
+    )
+    VALUES (p_phone, p_hash, p_full_name, p_locale, p_is_platform_admin, true)
+    ON CONFLICT (phone_e164) DO NOTHING
+    RETURNING id
+$$
+""",
+)
+"""Yangi foydalanuvchi yaratadi; telefon BAND bo'lsa `NULL` qaytaradi (D-04).
+
+`must_change_password` ATAYIN LITERAL `true` — parametr emas. D-02 bo'yicha
+admin bergan parol HAR DOIM vaqtinchalik: uni birinchi kirishda almashtirish
+majburiy. Parametr bo'lganida chaqiruvchi uni bir kun `false` bilan chaqirib
+qo'yardi va vaqtinchalik parol doimiy parolga aylanardi — bunday teshikning
+yagona kafolatlangan yopilishi uni UMUMAN mavjud qilmaslik.
+
+`ON CONFLICT DO NOTHING` istisno o'rniga 0 qator beradi, ya'ni funksiya
+`NULL` qaytaradi va chaqiruvchi uni `409 phone_taken` ga aylantiradi. Xom
+`unique_violation` istisnosi tranzaksiyani ABORT qilardi va o'sha
+tranzaksiyada yozilishi kerak bo'lgan audit qatori ham yo'qolardi.
+"""
+
+AUTH_SET_LOCALE = PGFunction(
+    schema="public",
+    signature="auth_set_locale(p_user_id uuid, p_locale text)",
+    definition="""
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+    WITH updated AS (
+        UPDATE public.users
+           SET locale = p_locale,
+               updated_at = now()
+         WHERE id = p_user_id
+        RETURNING 1
+    )
+    SELECT count(*) > 0 FROM updated
+$$
+""",
+)
+"""Foydalanuvchi tilini profilda saqlaydi (D-13) — DB yagona haqiqat manbai.
+
+`boolean` qaytaradi: qator topilmasa `false`. Chaqiruvchi buni 404 ga
+aylantiradi, aks holda `PATCH /me` o'chirilgan foydalanuvchi uchun ham
+"muvaffaqiyatli" javob berardi.
+
+Qiymat `users_locale_allowed` CHECK konstrayti bilan cheklangan
+(`sbozor_core.enums.Locale` dan hosil qilinadi), ya'ni bu funksiya orqali
+ham noma'lum til yozib bo'lmaydi.
+"""
+
+AUTH_LIST_USERS = PGFunction(
+    schema="public",
+    signature="auth_list_users(p_user_ids uuid[])",
+    definition="""
+RETURNS TABLE (
+    user_id uuid,
+    phone_e164 text,
+    full_name text,
+    locale text,
+    is_active boolean,
+    must_change_password boolean,
+    is_platform_admin boolean,
+    created_at timestamptz
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT u.id,
+           u.phone_e164,
+           u.full_name,
+           u.locale,
+           u.is_active,
+           u.must_change_password,
+           u.is_platform_admin,
+           u.created_at
+    FROM public.users AS u
+    WHERE u.id = ANY(p_user_ids)
+    ORDER BY u.created_at, u.id
+$$
+""",
+)
+"""ANIQ ID ro'yxati bo'yicha profil ma'lumoti (foydalanuvchilar ro'yxati, `/me`).
+
+`password_hash` ATAYIN QAYTARILMAYDI: bu funksiyaning chaqiruvchilari
+(ro'yxat ekrani, profil) parolga umuman tegmaydi, `auth_find_login*` esa
+alohida mavjud. Hash'ni "har ehtimolga qarshi" qo'shish uni ro'yxat
+javobiga tasodifan chiqarish yo'lini ochardi.
+"""
+
+AUTH_LIST_MARKETS_FULL = PGFunction(
+    schema="public",
+    signature="auth_list_markets_full()",
+    definition="""
+RETURNS TABLE (
+    market_id uuid,
+    market_name text,
+    market_timezone text,
+    is_active boolean
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT m.id,
+           m.name,
+           m.timezone,
+           m.is_active
+    FROM public.markets AS m
+    ORDER BY m.name
+$$
+""",
+)
+"""`GET /api/v1/markets` uchun bozor qatori — `timezone` bilan (D-06).
+
+NEGA `auth_list_markets()` KENGAYTIRILMADI: u `0001` migratsiyasi yaratgan
+obyekt va uning `RETURNS TABLE` imzosini o'zgartirish `CREATE OR REPLACE`
+bilan MUMKIN EMAS (Postgres qaytish tipini almashtirishga yo'l bermaydi) —
+ya'ni allaqachon qo'llangan migratsiyani qayta yozish kerak bo'lardi.
+Additiv funksiya bu tarixni tegmasdan qoldiradi va `downgrade()` ham toza.
+
+Ikkalasining vazifasi ham boshqacha: `auth_list_markets()` — LOGIN
+oqimidagi bozor tanlash ro'yxati (faqat nom), bu esa boshqaruv panelining
+bozor ro'yxati. Ikkalasi ham faqat bozor KONFIGURATSIYASINI ochadi, hech
+qanday tenant ma'lumotini emas, shuning uchun `BYPASSRLS` roli baribir
+kerak emas (D-06).
+"""
+
+USER_ADMIN_FUNCTIONS: list[PGFunction] = [
+    AUTH_CREATE_USER,
+    AUTH_SET_LOCALE,
+    AUTH_LIST_USERS,
+    AUTH_LIST_MARKETS_FULL,
+]
+"""`0004_user_admin` migratsiyasi yaratadigan to'plam."""
+
+USER_ADMIN_GRANT_SIGNATURES: tuple[str, ...] = (
+    "auth_create_user(text, text, text, text, boolean)",
+    "auth_set_locale(uuid, text)",
+    "auth_list_users(uuid[])",
+    "auth_list_markets_full()",
+)
+"""`USER_ADMIN_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari)."""

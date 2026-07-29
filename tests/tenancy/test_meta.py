@@ -64,6 +64,13 @@ EXPECTED_DEFINER_FUNCTIONS = {
     "auth_refresh_rotate",
     "auth_refresh_revoke_family",
     "auth_refresh_revoke_user",
+    # 0004 — foydalanuvchi boshqaruvi va profil. `users` app-rolga butunlay
+    # yopiq, ya'ni yaratish, profil o'qish va til saqlash ham shu yuzadan
+    # o'tadi; `auth_list_markets_full` esa `timezone` bilan bozor ro'yxati.
+    "auth_create_user",
+    "auth_set_locale",
+    "auth_list_users",
+    "auth_list_markets_full",
 }
 
 # Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun

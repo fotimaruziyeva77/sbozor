@@ -14,7 +14,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from migrations.entities.functions import ALL_FUNCTIONS, AUTH_SUPPORT_FUNCTIONS
+from migrations.entities.functions import (
+    ALL_FUNCTIONS,
+    AUTH_SUPPORT_FUNCTIONS,
+    USER_ADMIN_FUNCTIONS,
+)
 from migrations.entities.policies import (
     audit_append_policy,
     audit_read_policy,
@@ -60,6 +64,9 @@ ALL_ENTITIES: list[Any] = [
     # operatsiyalar ham tenant kontekstisiz bajarilishi kerak, chunki
     # refresh cookie kelganda bozor hali noma'lum.
     *AUTH_SUPPORT_FUNCTIONS,
+    # Foydalanuvchi boshqaruvi va profil (0004): `users` app-rolga yopiq,
+    # ya'ni yaratish/profil o'qish/til saqlash ham shu yuzadan o'tadi.
+    *USER_ADMIN_FUNCTIONS,
     # Audit yozuvchisi + append-only qo'riqchisi (D-10).
     *ALL_TRIGGER_FUNCTIONS,
 ]

@@ -18,9 +18,24 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
+from fixtures.admin_api import cleanup_test_users
 from fixtures.financial import FinancialProbe, create_financial_probe, drop_financial_probe
 from psycopg import Connection
 from psycopg.rows import TupleRow
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_api_created_users(sync_owner_conn: Connection[TupleRow]) -> Iterator[None]:
+    """API orqali YARATILGAN foydalanuvchilarni har testdan keyin o'chiradi.
+
+    `two_markets`/`auth_seed` teardown'lari faqat O'Z seed'ini biladi, ya'ni
+    `POST /users` yaratgan qator bazada qolib ketardi va uning telefoni
+    keyingi testda kutilmagan `409 phone_taken` berardi. Telefon diapazoni
+    (`fixtures.admin_api.TEST_PHONE_PREFIX`) seed diapazonlaridan ajratilgan,
+    shuning uchun tozalash boshqa hech nimaga tegmaydi.
+    """
+    yield
+    cleanup_test_users(sync_owner_conn)
 
 
 @pytest.fixture
