@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from migrations.entities.functions import ALL_FUNCTIONS
 from migrations.entities.policies import (
     markets_policy,
     owner_bootstrap_policy,
@@ -40,5 +41,6 @@ ALL_ENTITIES: list[Any] = [
     # Ega uchun bootstrap: `SECURITY DEFINER` login funksiyalari va bozor
     # yaratish yo'li FORCE ostida bloklanib qolmasligi uchun.
     *(owner_bootstrap_policy(table) for table in RLS_TABLES),
-    # `SECURITY DEFINER` login funksiyalari 2-taskda shu ro'yxatga qo'shiladi.
+    # Login bootstrap — global o'qish yuzasining BUTUN ro'yxati (Pattern 2).
+    *ALL_FUNCTIONS,
 ]

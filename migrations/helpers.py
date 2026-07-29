@@ -28,6 +28,7 @@ Yangi tenant jadvali qo'shganda TARTIB muhim:
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from alembic import op
 
@@ -35,7 +36,9 @@ __all__ = [
     "APP_ROLE",
     "DEFAULT_DML",
     "OWNER_ROLE",
+    "create_entity",
     "disable_force_for_backfill",
+    "drop_entity",
     "enable_rls",
     "enable_tenant_rls",
     "grant_app_dml",
@@ -80,6 +83,23 @@ def _dml(ops: str) -> str:
     if not _DML_RE.match(ops.strip()):
         raise ValueError(f"{ops!r} yaroqli DML huquqlari ro'yxati emas")
     return ops.strip()
+
+
+def create_entity(entity: Any) -> None:
+    """`op.create_entity()` ning tipli o'ram'i.
+
+    `alembic-utils` o'z operatsiyalarini import paytida `Operations` ga
+    DINAMIK ro'yxatdan o'tkazadi, shuning uchun mypy ularni ko'rmaydi
+    (`Module has no attribute "create_entity"`). Ignore'ni har bir
+    migratsiyada takrorlash o'rniga u shu yerda BIR MARTA, sababi bilan
+    yoziladi — va migratsiyalar `attr-defined` tekshiruvini yo'qotmaydi.
+    """
+    op.create_entity(entity)  # type: ignore[attr-defined]
+
+
+def drop_entity(entity: Any) -> None:
+    """`op.drop_entity()` ning tipli o'ram'i (`create_entity` jufti)."""
+    op.drop_entity(entity)  # type: ignore[attr-defined]
 
 
 def enable_rls(table: str) -> None:
