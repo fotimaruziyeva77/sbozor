@@ -1,0 +1,36 @@
+# SBOZOR — repo ildizi: FAQAT vosita konfiguratsiyasi.
+#
+# `[project]` bo'limi ATAYIN YO'Q — uv bu katalogni loyiha deb hisoblamasligi
+# kerak. Har bir servis o'z `pyproject.toml` + `uv.lock` iga ega (aiogram
+# pydantic/redis pin konflikti shuni talab qiladi).
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "tenancy: tenant izolyatsiyasi (RLS) invariantlari — faza darvozasi, majburiy yashil",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = [".venv", "node_modules", ".planning", "frontend", ".next"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# Testlarda `assert` — pytest'ning asosiy mexanizmi.
+# S105/S106: test fixture'laridagi dev parol literallari (haqiqiy sir emas).
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = []
+exclude = ["^frontend/", "^\\.planning/"]
+
+[[tool.mypy.overrides]]
+module = ["testcontainers.*", "alembic_utils.*"]
+ignore_missing_imports = true

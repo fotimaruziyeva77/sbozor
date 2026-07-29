@@ -1,0 +1,48 @@
+[project]
+name = "core-api"
+version = "0.1.0"
+description = "SBOZOR core-api — FastAPI HTTP qatlami (auth, RBAC, audit, hisobotlar)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi==0.140.13",
+    "uvicorn[standard]==0.51.0",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "sqlalchemy[asyncio]==2.0.51",
+    "asyncpg==0.31.0",
+    "alembic==1.18.5",
+    "alembic-utils==0.8.8",
+    "pyjwt==2.13.0",
+    "pwdlib[argon2]==0.3.0",
+    "cryptography==49.0.0",
+    "phonenumbers==9.0.35",
+    "structlog==26.1.0",
+    "asgi-correlation-id==5.0.1",
+    "redis[hiredis]==8.0.1",
+    "sentry-sdk[fastapi]==2.66.1",
+    "tzdata==2026.3",
+    "python-multipart==0.0.32",
+    "email-validator==2.3.0",
+    "sbozor-core",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.0",
+    "mypy==2.3.0",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov==7.1.0",
+    "testcontainers[postgres]==4.15.0",
+    "httpx==0.28.1",
+    # Sinxron `pg_catalog` meta-so'rovlari uchun (tenancy meta-testlari).
+    "psycopg[binary]==3.3.4",
+]
+
+[tool.uv]
+# Virtual loyiha: `core-api` ning o'zi paket sifatida qurilmaydi/o'rnatilmaydi,
+# faqat bog'liqliklari sync qilinadi. `app` moduli working-dir orqali topiladi.
+package = false
+
+[tool.uv.sources]
+sbozor-core = { path = "../../packages/sbozor-core", editable = true }

@@ -1,0 +1,34 @@
+# SBOZOR core-api build konteksti istisnolari.
+#
+# DIQQAT: core-api repo ILDIZIDAN quriladi (`context: .`), shuning uchun
+# BuildKit uchun amaldagi fayl — repo ildizidagi `/.dockerignore`.
+# Bu fayl servis o'z konteksti bilan qurilgan holat uchun saqlanadi;
+# ikkalasi bir xil ro'yxatni ushlab turishi kerak.
+
+.git
+.gitignore
+.gitattributes
+.planning
+.github
+.claude
+
+# Sirlar HECH QACHON image qatlamiga tushmaydi.
+.env
+.env.*
+!.env.example
+
+node_modules
+frontend
+.next
+
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+htmlcov
+coverage
+
+*.docx
+*.log
