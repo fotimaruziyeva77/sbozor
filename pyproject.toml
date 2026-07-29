@@ -12,12 +12,18 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
-# `.`     -> `migrations` paketi (helpers, entities) testlardan import qilinadi;
-#            Alembic ham `prepend_sys_path = .` bilan aynan shu yo'lni ishlatadi.
-# `tests` -> `fixtures` paketi (seed'lar va umumiy fixture tiplari).
+# `.`                  -> `migrations` paketi (helpers, entities) testlardan
+#                         import qilinadi; Alembic ham `prepend_sys_path = .`
+#                         bilan aynan shu yo'lni ishlatadi.
+# `tests`              -> `fixtures` paketi (seed'lar va umumiy fixture tiplari).
+# `services/core-api`  -> `app` paketi (FastAPI ilovasi). Servis kodi o'z
+#                         katalogida yashaydi, testlar esa repo ildizida —
+#                         busiz `import app.security.rbac` topilmaydi. Aynan
+#                         shu yo'lni `mypy_path` va Dockerfile'ning
+#                         `WORKDIR /app/services/core-api` i ham ishlatadi.
 # Bu ATAYIN aniq yozilgan: pytest'ning rootdir'ga qarab sys.path ni o'zi
 # to'ldirishi test faylining qayerda turishiga bog'liq va jimgina o'zgaradi.
-pythonpath = [".", "tests"]
+pythonpath = [".", "tests", "services/core-api"]
 addopts = "-q --strict-markers"
 markers = [
     "tenancy: tenant izolyatsiyasi (RLS) invariantlari — faza darvozasi, majburiy yashil",
@@ -41,9 +47,9 @@ python_version = "3.13"
 strict = true
 plugins = []
 exclude = ["^frontend/", "^\\.planning/"]
-# `tests/fixtures` paketi test modullaridan `fixtures.*` sifatida import
-# qilinadi (pytest `pythonpath` bilan bir xil yo'l).
-mypy_path = "tests"
+# `tests/fixtures` paketi test modullaridan `fixtures.*` sifatida, `app` esa
+# `services/core-api` dan import qilinadi (pytest `pythonpath` bilan bir xil yo'l).
+mypy_path = "tests:services/core-api"
 
 [[tool.mypy.overrides]]
 module = ["testcontainers.*", "alembic_utils.*"]
