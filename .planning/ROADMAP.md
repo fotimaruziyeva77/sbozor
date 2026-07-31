@@ -130,7 +130,7 @@ Plans:
 
 **Wave 6**
 
-- [ ] 02-07-PLAN.md — Domen darvozalari: SC#2/SC#3/SC#4 va D-09…D-12 ning DB isboti (W6)
+- [x] 02-07-PLAN.md — Domen darvozalari: SC#2/SC#3/SC#4 va D-09…D-12 ning DB isboti (W6)
 
 **Wave 7–11** *(API, ketma-ket — `schemas.py`/`main.py`/marshrut matritsasi umumiy)*
 
