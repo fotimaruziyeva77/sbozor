@@ -126,7 +126,7 @@ Plans:
 
 - [x] 02-04-PLAN.md — 10 domen modeli, `[)` davr yordamchisi, 5 DB funksiyasi, 3 trigger (W3)
 - [x] 02-05-PLAN.md — `0007_market_domain` + `0008_temporal` + Alembic ko'rmaydigan darvozalar (W4)
-- [ ] 02-06-PLAN.md — `0009_vendors` (EXCLUDE) + `0010_calendar` + ikki bozorli domen seed'i (W5)
+- [x] 02-06-PLAN.md — `0009_vendors` (EXCLUDE) + `0010_calendar` + ikki bozorli domen seed'i (W5)
 
 **Wave 6**
 
