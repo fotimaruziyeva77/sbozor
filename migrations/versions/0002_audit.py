@@ -36,7 +36,7 @@ from sbozor_core.models.ops import AUDIT_BUSINESS_DATE_EXPR
 from sqlalchemy.dialects import postgresql as pg
 
 from migrations.entities.policies import audit_append_policy, audit_read_policy
-from migrations.entities.triggers import ALL_TRIGGER_FUNCTIONS
+from migrations.entities.triggers import AUDIT_TRIGGER_FUNCTIONS
 from migrations.helpers import (
     attach_audit_trigger,
     create_entity,
@@ -68,8 +68,16 @@ def upgrade() -> None:
     #    `audit_log` ga murojaat bor, lekin plpgsql tanasi CREATE paytida
     #    tekshirilmaydi — shunga qaramay tartib mantiqan shunday: funksiya
     #    jadvalning bir qismi emas, mustaqil obyekt.
+    #
+    #    ⚠ `AUDIT_TRIGGER_FUNCTIONS` (aggregat `ALL_TRIGGER_FUNCTIONS` EMAS):
+    #    bu migratsiya faqat O'ZI yaratgan ikkita funksiyaga egalik qiladi.
+    #    Aggregat ustidan tsikl qilganda 2-faza domen triggerlari ham shu
+    #    yerda tug'ilardi va keyin ularni o'z migratsiyasida yaratmoqchi
+    #    bo'lgan `create_entity()` `DuplicateFunction` bilan yiqilardi
+    #    (o'lchangan). Ro'yxat mazmuni bu o'zgarishdan OLDIN ham aynan
+    #    shu ikkita funksiya edi — bajariladigan DDL o'zgarmadi.
     # ------------------------------------------------------------------
-    for function in ALL_TRIGGER_FUNCTIONS:
+    for function in AUDIT_TRIGGER_FUNCTIONS:
         create_entity(function)
 
     # ------------------------------------------------------------------
@@ -188,5 +196,5 @@ def downgrade() -> None:
 
     # Funksiyalar OXIRIDA: ularga bog'langan triggerlar yuqorida
     # o'chirilmagan bo'lsa `DROP FUNCTION` bog'liqlik xatosi bilan yiqiladi.
-    for function in reversed(ALL_TRIGGER_FUNCTIONS):
+    for function in reversed(AUDIT_TRIGGER_FUNCTIONS):
         drop_entity(function)

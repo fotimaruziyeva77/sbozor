@@ -76,6 +76,13 @@ __all__ = [
     "AUTH_UPDATE_PASSWORD_HASH",
     "AUTH_USER_STATE",
     "GRANT_SIGNATURES",
+    "MARKET_ACTIVATE",
+    "MARKET_CREATE",
+    "MARKET_DELETE_DRAFT",
+    "MARKET_DOMAIN_FUNCTIONS",
+    "MARKET_DOMAIN_GRANT_SIGNATURES",
+    "MARKET_IS_OPEN",
+    "MARKET_RENAME",
     "PLATFORM_AUDIT_FUNCTIONS",
     "PLATFORM_AUDIT_GRANT_SIGNATURES",
     "USER_ADMIN_FUNCTIONS",
@@ -834,3 +841,296 @@ PLATFORM_AUDIT_GRANT_SIGNATURES: tuple[str, ...] = (
     "auth_list_platform_audit(integer, timestamptz, bigint)",
 )
 """`PLATFORM_AUDIT_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari)."""
+
+
+# ===========================================================================
+# 0007_market_domain — BOZOR HAYOT SIKLI (2-faza, MARKET-01…MARKET-05)
+# ===========================================================================
+#
+# NEGA `markets` GA YOZISH YANA `SECURITY DEFINER` ORTIDA (RESEARCH Pattern 6):
+#
+# `sbozor_app` roliga `markets` da FAQAT `SELECT` grant'i berilgan (0001), va
+# policy predikati `id = NULLIF(current_setting('app.market_id', true), '')::uuid`.
+# Ya'ni ikki mustaqil to'siq bor va ikkalasi ham yangi bozor yaratishni
+# imkonsiz qiladi:
+#   1. GRANT yo'q  ->  `INSERT INTO markets` = `permission denied`;
+#   2. GRANT berilganda ham yangi bozorning `id` si hali `app.market_id` ga
+#      teng emas  ->  `WITH CHECK` rad etadi.
+#
+# Bu AYNAN `auth_create_user` bilan bir xil naqsh: tor, `search_path` pin
+# qilingan, `PUBLIC` dan yopiq funksiya. Muqobil yechim — app-rolga `markets`
+# ga `INSERT`/`UPDATE` berish — tenant chegarasini ilova kodining intizomiga
+# qoldirardi.
+#
+# YUZA QASDDAN TOR VA BO'LINGAN: yaratish, faollashtirish, qayta nomlash va
+# o'chirish — TO'RTTA alohida funksiya. Bittaga birlashtirilganda ular bitta
+# GRANT bilan kelardi va "bozor yaratish huquqi" avtomatik "bozorni
+# faollashtirish huquqi" ni ham bergan bo'lardi.
+#
+# `market_is_open()` esa BU GURUHDA, LEKIN `SECURITY DEFINER` EMAS — sababi
+# o'z docstringida.
+
+MARKET_CREATE = PGFunction(
+    schema="public",
+    signature=(
+        "market_create(p_name text, p_timezone text, p_operating_since date, "
+        "p_open_weekdays smallint[], p_address text, p_tin text, "
+        "p_bank_account text, p_bank_mfo text, p_contact_phone text)"
+    ),
+    definition="""
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+DECLARE
+  v_market_id uuid;
+BEGIN
+  INSERT INTO public.markets (name, timezone, is_active)
+  VALUES (p_name, COALESCE(NULLIF(p_timezone, ''), 'Asia/Tashkent'), false)
+  RETURNING id INTO v_market_id;
+
+  INSERT INTO public.market_profile (
+      market_id, operating_since, open_weekdays,
+      address, tin, bank_account, bank_mfo, contact_phone
+  )
+  VALUES (
+      v_market_id,
+      p_operating_since,
+      COALESCE(p_open_weekdays, ARRAY[1,2,3,4,5,6,7]::smallint[]),
+      NULLIF(p_address, ''),
+      NULLIF(p_tin, ''),
+      NULLIF(p_bank_account, ''),
+      NULLIF(p_bank_mfo, ''),
+      NULLIF(p_contact_phone, '')
+  );
+
+  RETURN v_market_id;
+END $$
+""",
+)
+"""QORALAMA bozor + uning profil qatorini BIR TRANZAKSIYADA yaratadi (usta 1-qadam).
+
+`is_active` LITERAL `false` va `p_is_active` nomli parametr YO'Q. Bu
+`auth_create_user` dagi `must_change_password = true` bilan aynan bir xil
+sabab: parametr bo'lganda chaqiruvchi uni bir kun `true` bilan berib
+`activate` dagi TO'LIQLIK TEKSHIRUVINI butunlay chetlab o'tardi. Bunday
+teshikning yagona kafolatlangan yopilishi — uni umuman mavjud qilmaslik.
+Faollashtirish alohida funksiya, ya'ni alohida GRANT va alohida audit
+hodisasi.
+
+NEGA PROFIL QATORI SHU YERDA, ALOHIDA CHAQIRUVDA EMAS: `market_is_open()`
+FAIL-CLOSED — `market_profile` qatori bo'lmasa u HAR KUNI `false` qaytaradi.
+Ya'ni profilsiz bozor xato bermaydi, u shunchaki HECH QACHON ishlamaydi va
+tushum jimgina nolga tushadi (RESEARCH Pattern 7 ogohlantirishi). Ikki
+alohida chaqiruvda ikkinchisi tarmoq uzilishida yo'qolishi mumkin edi;
+bitta funksiyada esa ikkalasi bitta tranzaksiyada.
+
+`NULLIF(p_..., '')` MAJBURIY, stil emas: usta bo'sh maydonni odatda `''`
+sifatida yuboradi va `''` `ck_market_profile_tin_format` regeksidan
+O'TMAYDI. Ya'ni NULLIF'siz "STIR ko'rsatilmagan" holati bozor yaratishni
+tushunarsiz CHECK xatosi bilan yiqitardi.
+
+`p_timezone` bo'sh -> `'Asia/Tashkent'`; `p_open_weekdays` NULL -> har kuni
+ochiq. Ikkala standart ham `markets`/`market_profile` ustunlaridagi
+`server_default` bilan bir xil qiymatda — plpgsql `INSERT` da ustun aniq
+sanab o'tilgani uchun default qo'llanmaydi.
+"""
+
+MARKET_ACTIVATE = PGFunction(
+    schema="public",
+    signature="market_activate(p_market_id uuid)",
+    definition="""
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+    UPDATE public.markets
+       SET is_active = true,
+           updated_at = now()
+     WHERE id = p_market_id
+$$
+""",
+)
+"""Qoralama bozorni JONLI holatga o'tkazadi (usta oxirgi qadami).
+
+TO'LIQLIK TEKSHIRUVI BU YERDA ATAYIN YO'Q. U ilova qatlamida (02-11),
+chunki javob "yo'q" emas, `409` + YETISHMAYOTGAN QADAMLAR RO'YXATI bo'lishi
+kerak (`setup-status` bilan bir xil `blocking[]` shakli). DB funksiyasi
+faqat "yiqildi" deya olardi va foydalanuvchi qaysi qadamga qaytishni
+bilmasdi.
+
+TESKARI YO'L YO'Q: `market_deactivate()` funksiyasi ATAYIN YARATILMAGAN.
+Bu shunchaki "kerak emas" emas — u ikkita kafolatning asosi:
+  * jonli bozorni `market_delete_draft()` bilan o'chirib bo'lmaydi;
+  * o'tmishdagi tarif/toifa daxlsizligining qoralama istisnosi
+    (`tariff_past_immutable()`) bir marta faollashgan bozorga hech qachon
+    qayta qo'llanmaydi.
+Bozorni vaqtincha to'xtatish kerak bo'lsa u kalendar istisnolari bilan
+qilinadi (`market_calendar_exceptions`), bayroq bilan emas.
+"""
+
+MARKET_RENAME = PGFunction(
+    schema="public",
+    signature="market_rename(p_market_id uuid, p_name text)",
+    definition="""
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+    UPDATE public.markets
+       SET name = p_name,
+           updated_at = now()
+     WHERE id = p_market_id
+$$
+""",
+)
+"""Bozor nomini o'zgartiradi — `markets` ga yozishning uchinchi (va oxirgi) yo'li.
+
+Alohida funksiya, chunki nom o'zgartirish `MARKET_MANAGE` huquqi bo'lgan
+har kimga ochiq bo'lishi mumkin, faollashtirish esa yo'q. Bitta umumiy
+`market_update(...)` funksiyasi ikkala amalni bitta GRANT ostiga qo'yardi.
+"""
+
+MARKET_DELETE_DRAFT = PGFunction(
+    schema="public",
+    signature="market_delete_draft(p_market_id uuid)",
+    definition="""
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+VOLATILE
+AS $$
+DECLARE
+  v_is_active boolean;
+BEGIN
+  SELECT m.is_active INTO v_is_active
+  FROM public.markets AS m
+  WHERE m.id = p_market_id;
+
+  IF v_is_active IS DISTINCT FROM false THEN
+    RETURN false;
+  END IF;
+
+  DELETE FROM public.stall_assignments          WHERE market_id = p_market_id;
+  DELETE FROM public.stall_category_periods     WHERE market_id = p_market_id;
+  DELETE FROM public.tariffs                    WHERE market_id = p_market_id;
+  DELETE FROM public.stall_code_registry        WHERE market_id = p_market_id;
+  DELETE FROM public.stalls                     WHERE market_id = p_market_id;
+  DELETE FROM public.vendors                    WHERE market_id = p_market_id;
+  DELETE FROM public.zones                      WHERE market_id = p_market_id;
+  DELETE FROM public.stall_categories           WHERE market_id = p_market_id;
+  DELETE FROM public.market_calendar_exceptions WHERE market_id = p_market_id;
+  DELETE FROM public.market_profile             WHERE market_id = p_market_id;
+  DELETE FROM public.user_market_roles          WHERE market_id = p_market_id;
+  DELETE FROM public.refresh_tokens             WHERE market_id = p_market_id;
+  DELETE FROM public.markets                    WHERE id = p_market_id;
+
+  RETURN true;
+END $$
+""",
+)
+"""Tashlab ketilgan QORALAMA bozorni butunlay o'chiradi; `false` = o'chirilmadi.
+
+FAOL BOZORNI O'CHIRISH YO'LI UMUMAN YARATILMAGAN. `is_active = true` bo'lsa
+funksiya `false` qaytaradi va BIRORTA qatorga tegmaydi. Bayroq `NULL`
+bo'lganda ham (bozor topilmadi) `false` qaytadi — `IS DISTINCT FROM false`
+shakli aynan shu ikki holatni birga qamraydi va FAIL-CLOSED bo'ladi.
+Chaqiruvchi `false` ni 404 yoki 409 ga aylantiradi (02-11).
+
+`ON DELETE CASCADE` ATAYIN ISHLATILMADI. Kaskad hozir qulay ko'rinardi,
+lekin 6-fazada `daily_charges` / `payments` jadvallari tug'ilganda u
+ULARGA HAM JIMGINA tarqalardi — ya'ni bitta `DELETE FROM markets` haqiqiy
+moliyaviy tarixni o'chirib yuborardi va buni hech kim ko'rmasdi. Bu yerdagi
+ANIQ ro'yxat esa yangi jadval qo'shilganda KO'RINADIGAN qarz qoldiradi:
+jadval ro'yxatga qo'shilmasa `DELETE FROM markets` FK xatosi bilan yiqiladi
+va sabab darhol ma'lum bo'ladi.
+
+TARTIB — FK bo'yicha bolalardan ota-onaga: biriktirishlar -> toifa davrlari
+-> tariflar -> kod reyestri -> rastalar -> sotuvchilar -> zonalar ->
+toifalar -> kalendar -> profil -> a'zoliklar -> tokenlar -> bozor.
+
+⚠ `tariffs` va `stall_category_periods` ustidagi `DELETE` o'zgarmaslik
+triggerlarini ishga tushiradi. Ular QORALAMA bozor uchun ataylab o'tkazib
+yuboradi — sabab `migrations/entities/triggers.py::TARIFF_PAST_IMMUTABLE`
+docstringida. Usiz bu funksiya `operating_since` o'tgan sanada bo'lgan har
+qanday qoralama uchun HAR DOIM `23514` bilan yiqilardi.
+"""
+
+MARKET_IS_OPEN = PGFunction(
+    schema="public",
+    signature="market_is_open(p_market_id uuid, p_date date)",
+    definition="""
+RETURNS boolean
+LANGUAGE sql
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT COALESCE(
+        (SELECT e.is_open
+           FROM public.market_calendar_exceptions AS e
+          WHERE e.market_id = p_market_id
+            AND e.exception_date = p_date),
+        (SELECT EXTRACT(ISODOW FROM p_date)::smallint = ANY(p.open_weekdays)
+           FROM public.market_profile AS p
+          WHERE p.market_id = p_market_id),
+        false
+    )
+$$
+""",
+)
+"""Bozor shu kuni ishlaydimi (D-17/D-18). 6-fazaga kontrakt: bitta shart.
+
+⚠ `SECURITY DEFINER` ATAYIN YO'Q — bu shu fayldagi YAGONA shunday funksiya
+va farq qasddan. U CHAQIRUVCHI huquqi bilan ishlaydi, ya'ni RLS unga
+TO'LIQ qo'llanadi: boshqa bozorning `market_id` si so'ralganda ikkala
+subquery ham 0 qator beradi va natija `false` bo'ladi (o'lchangan).
+`SECURITY DEFINER` qilish uni RLS'dan chiqarardi va bir bozor
+boshqasining kalendarini — ya'ni uning bayram/ish kunlari jadvalini —
+o'qiy olardi (T-02-22).
+
+UCH QAVATLI `COALESCE` va tartibi MUHIM:
+  1. `market_calendar_exceptions` — istisno HAR DOIM ustun (bayram yoki
+     istisno ish kuni, D-18);
+  2. `market_profile.open_weekdays` — haftalik jadval (ISO kun raqami);
+  3. `false` — FAIL-CLOSED.
+
+FAIL-CLOSED'NING TESKARI TOMONI: sozlamasi yo'q bozor HECH QACHON
+ishlamaydi va tushum jimgina nolga tushadi. Aynan shuning uchun
+`market_create()` profil qatorini bozor bilan BIR TRANZAKSIYADA yaratadi va
+`activate` to'liqlik tekshiruvi `open_weekdays` ni ham talab qiladi.
+
+`EXTRACT(ISODOW ...)` — dushanba=1 … yakshanba=7, ya'ni `open_weekdays`
+massivi bilan bir xil asosda; hech qanday konversiya yozilmaydi.
+"""
+
+MARKET_DOMAIN_FUNCTIONS: list[PGFunction] = [
+    MARKET_CREATE,
+    MARKET_ACTIVATE,
+    MARKET_RENAME,
+    MARKET_DELETE_DRAFT,
+    MARKET_IS_OPEN,
+]
+"""`0007_market_domain` migratsiyasi yaratadigan to'plam."""
+
+MARKET_DOMAIN_GRANT_SIGNATURES: tuple[str, ...] = (
+    "market_create(text, text, date, smallint[], text, text, text, text, text)",
+    "market_activate(uuid)",
+    "market_rename(uuid, text)",
+    "market_delete_draft(uuid)",
+    "market_is_open(uuid, date)",
+)
+"""`MARKET_DOMAIN_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari).
+
+`market_is_open` ham shu ro'yxatda: u `SECURITY DEFINER` emas, lekin
+`PUBLIC` dan `REVOKE` va `sbozor_app` ga `GRANT` baribir kerak —
+yaratilgandan keyin Postgres unga `EXECUTE TO PUBLIC` ni standart beradi va
+usiz bazadagi HAR QANDAY rol uni chaqira olardi. (RLS baribir qatorlarni
+yashiradi, lekin funksiyaning MAVJUDLIGI ham keraksiz axborot.)
+"""
