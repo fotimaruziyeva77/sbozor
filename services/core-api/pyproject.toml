@@ -23,6 +23,22 @@ dependencies = [
     "tzdata==2026.3",
     "python-multipart==0.0.32",
     "email-validator==2.3.0",
+    # --- Excel import/eksport (02-12, D-13) ---
+    #
+    # Uchalasi ham 02-RESEARCH ning "Package Legitimacy Audit" jadvalida
+    # `slopcheck install -e pypi` bilan tekshirilgan va `[OK]` verdikti
+    # olgan; `[ASSUMED]`/`[SUS]` paket yo'q.
+    #
+    # ROLLAR ALMASHTIRILMAYDI: `openpyxl` faqat O'QIYDI, `XlsxWriter` faqat
+    # YOZADI (CLAUDE.md loyiha standarti — `openpyxl` yozishda butun
+    # kitobni xotirada quradi, `XlsxWriter` esa doimiy xotirada oqadi).
+    #
+    # `defusedxml` — openpyxl'ning O'Z hujjatidagi talab: usiz u quadratic
+    # blowup / billion laughs hujumlaridan HIMOYALANMAGAN. U ZIP-bombaga
+    # yordam BERMAYDI — ikkinchi darvoza `app/services/xlsx_reader.py` da.
+    "openpyxl==3.1.5",
+    "defusedxml==0.7.1",
+    "XlsxWriter==3.2.9",
     "sbozor-core",
 ]
 

@@ -52,5 +52,11 @@ exclude = ["^frontend/", "^\\.planning/"]
 mypy_path = "tests:services/core-api"
 
 [[tool.mypy.overrides]]
-module = ["testcontainers.*", "alembic_utils.*"]
+# `py.typed` YO'Q paketlar (o'lchandi: uchalasida ham marker fayli yo'q).
+# `openpyxl`/`xlsxwriter`/`defusedxml` uchun rasmiy stub paketlari alohida
+# yashaydi (`types-*`) va ular AYRIM versiyalarda kutubxonadan orqada
+# qoladi — shuning uchun bu yerda "stub yo'q" deb tan olinadi, chaqiruv
+# joylari esa `Any` bilan ishlaydi va qaytariladigan qiymat DARHOL o'z
+# tipimizga (`SheetRow`, `bytes`) o'giriladi.
+module = ["testcontainers.*", "alembic_utils.*", "openpyxl.*", "xlsxwriter.*", "defusedxml.*"]
 ignore_missing_imports = true
