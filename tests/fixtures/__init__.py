@@ -15,7 +15,21 @@ from uuid import UUID
 from sbozor_core.enums import ActorKind
 from sqlalchemy.ext.asyncio import AsyncSession
 
-__all__ = ["TenantSessionFactory", "TokenFactory"]
+from fixtures.market_domain import (
+    MarketDomainRows,
+    MarketDomainSeed,
+    cleanup_market_domain,
+    seed_market_domain,
+)
+
+__all__ = [
+    "MarketDomainRows",
+    "MarketDomainSeed",
+    "TenantSessionFactory",
+    "TokenFactory",
+    "cleanup_market_domain",
+    "seed_market_domain",
+]
 
 
 class TenantSessionFactory(Protocol):
