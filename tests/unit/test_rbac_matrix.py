@@ -76,6 +76,48 @@ def test_platform_admin_can_run_the_wizard() -> None:
     )
 
 
+def test_market_manage_is_platform_admin_only() -> None:
+    """`MARKET_MANAGE` — FAQAT platforma adminida (D-06, T-02-79).
+
+    =========================================================================
+    BU DA'VO 02-11 DAN BOSHLAB YUK KO'TARADI — VA UNING BUZILISHI JIMGINA
+    SODIR BO'LADI.
+
+    Uchta endpoint aynan shu huquq ostida: `POST /markets`,
+    `POST /markets/{id}/activate` va `DELETE /markets/{id}`. Ya'ni huquq
+    bozor adminiga berilsa, u:
+
+      * platformada YANGI BOZOR ocha oladi (`POST /markets` da ikkinchi
+        darvoza — `require_platform_admin` — hamon ushlab turadi, lekin
+        qolgan ikkitasida ikkinchi darvoza YO'Q);
+      * o'z bozorini FAOLLASHTIRA oladi, ya'ni platforma nazoratisiz
+        jonli holatga o'tkazadi;
+      * qoralamani O'CHIRA oladi.
+
+    Hech biri endpoint kodida ko'rinmasdi: `require_permission` satri
+    o'zgarmagan bo'lardi. Yagona o'zgarish `ROLE_PERMISSIONS` dagi bitta
+    satrda bo'lardi.
+
+    Bundan tashqari bu da'vo `tests/tenancy/test_cross_tenant.py::
+    PLATFORM_ADMIN_ROUTES` ning MAVJUD BO'LISH SABABI: o'sha marshrutlar
+    matritsada kuchaytirilgan sessiya bilan chaqiriladi, chunki bozor
+    adminining 403 i tenant darvozasini butunlay yashirardi. Huquq
+    kengaysa, o'sha ro'yxat ham keraksiz bo'lib qoladi va
+    `test_platform_admin_routes_really_need_the_elevated_session`
+    darhol qizaradi.
+    =========================================================================
+    """
+    holders = {
+        role for role, granted in ROLE_PERMISSIONS.items() if Permission.MARKET_MANAGE in granted
+    }
+
+    assert holders == {Role.PLATFORM_ADMIN}, (
+        f"`MARKET_MANAGE` quyidagi rollarda: {sorted(str(role) for role in holders)}. "
+        "U FAQAT platforma adminida bo'lishi kerak — bozor yaratish, faollashtirish va "
+        "qoralamani o'chirish bozorlararo amallar (D-06, T-02-79)."
+    )
+
+
 def test_director_is_read_only_on_market_data() -> None:
     """D-07: direktorga bozor ma'lumoti O'QISH uchun ochiq, YOZISH uchun yopiq.
 
