@@ -115,8 +115,8 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Wave-0 backend darvozalari: reyestrlar, RBAC, `btree_gist`, WR-02/WR-03 (W1)
-- [ ] 02-02-PLAN.md — Wave-0 frontend: WCAG token tuzatishlari, 7 `ui/` primitivi, transliteratsiya darvozasi (W1)
+- [x] 02-01-PLAN.md — Wave-0 backend darvozalari: reyestrlar, RBAC, `btree_gist`, WR-02/WR-03 (W1)
+- [x] 02-02-PLAN.md — Wave-0 frontend: WCAG token tuzatishlari, 7 `ui/` primitivi, transliteratsiya darvozasi (W1)
 
 **Wave 2** *(blocked on Wave 1)*
 
