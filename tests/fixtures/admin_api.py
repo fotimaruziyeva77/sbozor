@@ -29,12 +29,14 @@ if TYPE_CHECKING:
     from fixtures.auth_users import AuthSeed
 
 __all__ = [
+    "ACTIVATE_URL",
     "ASSIGNMENTS_URL",
     "AUDIT_URL",
     "CALENDAR_URL",
     "CATEGORIES_URL",
     "MARKETS_URL",
     "PROFILE_URL",
+    "SETUP_STATUS_URL",
     "STALLS_URL",
     "TARIFFS_URL",
     "TEST_PHONE_PREFIX",
@@ -69,6 +71,15 @@ VENDORS_URL = "/api/v1/vendors"
 ASSIGNMENTS_URL = "/api/v1/assignments"
 """Biriktirish yozuv yo'li. RASTA tarixi esa `{STALLS_URL}/{id}/assignments` —
 u ATAYIN boshqa prefiksda va sabab `app/api/v1/assignments.py` da."""
+
+# --- 02-11: "yangi bozor" ustasi ---
+#
+# SHABLON konstantalar (`{market_id}` bilan): bu ikkala yo'l ham bozor
+# identifikatorini o'z ichiga oladi, ya'ni ular `MARKETS_URL` dan
+# `f"{MARKETS_URL}/{market_id}/..."` shaklida qurilardi va prefiks
+# takrorlangan joyda o'zgarishi mumkin bo'lardi.
+SETUP_STATUS_URL = MARKETS_URL + "/{market_id}/setup-status"
+ACTIVATE_URL = MARKETS_URL + "/{market_id}/activate"
 
 TEST_PHONE_PREFIX = "+99893"
 """Testlar YARATADIGAN foydalanuvchilarning telefon diapazoni.

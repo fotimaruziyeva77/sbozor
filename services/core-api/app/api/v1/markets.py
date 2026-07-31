@@ -82,6 +82,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import JSONResponse
 from sbozor_core.enums import AuditAction
 
 from app.deps import (
@@ -92,8 +93,14 @@ from app.deps import (
     require_permission,
     require_platform_admin,
 )
-from app.repositories.market_repo import MarketRepository
-from app.schemas import MarketCreateRequest, MarketCreateResponse, MarketListItem
+from app.repositories.market_repo import MarketRepository, SetupStatusRow
+from app.schemas import (
+    BlockingItem,
+    MarketCreateRequest,
+    MarketCreateResponse,
+    MarketListItem,
+    SetupStatusResponse,
+)
 from app.security.audit import TABLE_MARKETS, write_app_audit
 from app.security.rbac import Permission
 
@@ -107,10 +114,12 @@ log = structlog.get_logger(__name__)
 router = APIRouter(tags=["markets"])
 
 MarketManagerDep = Annotated[Principal, Depends(require_permission(Permission.MARKET_MANAGE))]
+MarketDataViewerDep = Annotated[Principal, Depends(require_permission(Permission.MARKET_DATA_VIEW))]
 PlatformAdminDep = Annotated[Principal, Depends(require_platform_admin)]
 
 _NOT_FOUND = "not_found"
 _MARKET_IS_ACTIVE = "market_is_active"
+_MARKET_INCOMPLETE = "market_incomplete"
 
 
 def _market_id(principal: Principal) -> UUID:
@@ -155,6 +164,91 @@ def _own_market(market_id: UUID, principal: Principal) -> UUID:
     if market_id != tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     return tenant
+
+
+def _blocking(status_row: SetupStatusRow) -> list[BlockingItem]:
+    """Faollashtirishni to'sib turgan sabablar — QADAM tartibida.
+
+    =========================================================================
+    TO'LIQLIK QOIDASI SHU YERDA VA FAQAT SHU YERDA YASHAYDI.
+
+    Uni `GET /setup-status` ham, `POST /activate` ham AYNAN shu funksiyadan
+    oladi. Ikki joyda yozilganda ular bir kun ajralib ketardi va natija eng
+    yomon shaklda ko'rinardi: panel "hammasi tayyor" deb turib, tugma 409
+    berardi (yoki aksincha — tugma ishlab, panel qizil qolardi).
+
+    TARTIB — `step` BO'YICHA O'SISH. Frontend `blocking[0].step` ni
+    "birinchi tugallanmagan qadam" deb ishlatadi (UI-SPEC §6.4 va 02-03
+    dagi `firstIncompleteStep()`), ya'ni tartib javob SHARTNOMASINING bir
+    qismi, ko'rinish qulayligi emas.
+
+    `detail` FAQAT SONLARNI tashiydi (`"0"`, `"498/512"`). Server matn
+    yozmaydi: UI uchta tilda ishlaydi va bu yerdan chiqqan har qanday
+    jumla i18n chegarasidan tashqarida qolardi. Frontend `code` ni
+    tarjimaga, `detail` ni esa o'sha tarjimaning sonli o'rniga qo'yadi.
+
+    SOTUVCHILAR (`vendors`) VA KAMERALAR (`cameras`) BU YERDA UMUMAN
+    UCHRAMAYDI — D-11 va D-16. Ular yakuniy panelda ko'rinadi, lekin
+    hech qachon to'smaydi.
+    =========================================================================
+    """
+    items: list[BlockingItem] = []
+
+    if status_row.zones == 0:
+        items.append(BlockingItem(step=2, code="zones_missing", detail="0"))
+    if status_row.categories == 0:
+        items.append(BlockingItem(step=3, code="categories_missing", detail="0"))
+    if status_row.tariffs_covered < status_row.categories:
+        items.append(
+            BlockingItem(
+                step=4,
+                code="tariff_missing_for_category",
+                detail=f"{status_row.tariffs_covered}/{status_row.categories}",
+            )
+        )
+    if status_row.stalls == 0:
+        items.append(BlockingItem(step=5, code="stalls_missing", detail="0"))
+    if status_row.stalls_with_category < status_row.stalls:
+        items.append(
+            BlockingItem(
+                step=5,
+                code="stalls_without_category",
+                detail=f"{status_row.stalls_with_category}/{status_row.stalls}",
+            )
+        )
+    if not status_row.calendar_configured:
+        items.append(BlockingItem(step=7, code="calendar_missing", detail="0"))
+
+    return items
+
+
+def _setup_status_response(status_row: SetupStatusRow) -> SetupStatusResponse:
+    """Sanoqlar + hisoblangan `blocking[]` -> javob DTO'si.
+
+    `cameras` HAR DOIM `0` va bu D-16 ning ILGAGI: maydon javobda
+    BUGUNDAN bor, ya'ni 3–5 fazalar haqiqiy sanoqni qo'yganda frontend
+    shakli o'zgarmaydi va yakuniy paneldagi neytral qator (UI-SPEC §6.7)
+    o'z joyida qoladi. Kamera jadvali hali mavjud emas, shuning uchun
+    sanoq DB so'rovida emas — u shu yerda, ko'rinadigan joyda.
+
+    `can_activate` — SERVER qarori va u `blocking` ning bo'shligidan
+    hisoblanadi. Klient uni sanoqlardan qayta hisoblamaydi (o'sha holatda
+    to'liqlik qoidasi ikkinchi marta, boshqa tilda yozilgan bo'lardi).
+    """
+    blocking = _blocking(status_row)
+    return SetupStatusResponse(
+        zones=status_row.zones,
+        categories=status_row.categories,
+        tariffs_covered=status_row.tariffs_covered,
+        categories_total=status_row.categories,
+        stalls=status_row.stalls,
+        stalls_with_category=status_row.stalls_with_category,
+        vendors=status_row.vendors,
+        calendar_configured=status_row.calendar_configured,
+        cameras=0,
+        can_activate=not blocking,
+        blocking=blocking,
+    )
 
 
 @router.get("", response_model=list[MarketListItem])
@@ -269,6 +363,120 @@ async def create_market(
 
     log.info("market_created", market_id=str(market_id))
     return MarketCreateResponse(id=market_id, name=payload.name, is_active=False)
+
+
+@router.get("/{market_id}/setup-status", response_model=SetupStatusResponse)
+async def market_setup_status(
+    market_id: UUID,
+    principal: MarketDataViewerDep,
+    session: TenantSessionDep,
+) -> SetupStatusResponse:
+    """Ustaning to'liqlik holati — HISOBLANADI, HECH QAYERDA SAQLANMAYDI.
+
+    =========================================================================
+    `wizard_session` JADVALI YO'Q VA BO'LMAYDI (RESEARCH Pattern 5).
+
+    Qadam holati domen ma'lumotining O'ZIDAN o'qiladi: zona bor —
+    2-qadam bajarilgan. Alohida holat jadvali `market_id` hali yo'q
+    paytda RLS'siz global jadval talab qilardi va 1000 rastali import
+    JSONB ichida yashab qolardi; klient-tomon store esa sahifa
+    yangilanishida butun ishni yo'q qilardi.
+
+    Buning bevosita natijasi: usta boshqa qurilmadan davom ettiriladi,
+    sahifa yangilash xavfsiz va ikkita parallel oyna bir-birini buzmaydi
+    — hech qanday sinxronlash kodisiz.
+    =========================================================================
+
+    Yo'ldagi `market_id` TANLANGAN bozor bilan solishtiriladi va mos
+    kelmasa **404** (`_own_market`). RLS baribir bo'sh sanoqlar berardi,
+    lekin "hammasi nol" javobi begona bozorni "bo'm-bo'sh qoralama" deb
+    ko'rsatib, uning MAVJUDLIGINI tasdiqlagan bo'lardi — 02-10 dagi
+    "bo'sh ro'yxat tenant teshigini yashiradi" holatining aynan o'zi.
+
+    `MARKET_DATA_VIEW` yetarli (`MARKET_MANAGE` EMAS): direktor bozorning
+    to'liqligini KO'RADI, lekin faollashtira olmaydi (D-07).
+    """
+    tenant_id = _own_market(market_id, principal)
+    status_row = await MarketRepository(session).setup_status(tenant_id)
+    return _setup_status_response(status_row)
+
+
+@router.post("/{market_id}/activate", response_model=MarketCreateResponse)
+async def activate_market(
+    market_id: UUID,
+    principal: MarketManagerDep,
+    session: TenantSessionDep,
+) -> MarketCreateResponse | JSONResponse:
+    """Qoralamani JONLI holatga o'tkazadi — ustaning oxirgi qadami.
+
+    =========================================================================
+    409 — XATO EMAS, YO'L KO'RSATKICHI (UI-SPEC §6.6).
+
+    Chala bozor uchun javob tanasi `{"detail": "market_incomplete",
+    "blocking": [...]}` va `blocking` AYNAN `setup-status` dagi bilan bir
+    xil shaklda. Sabab UI qarorida: yakuniy panel 409 ni ALOHIDA xato
+    UI'si bilan emas, o'sha ro'yxatni ALMASHTIRISH bilan ko'rsatadi
+    (bitta render yo'li, `role="status"`, toast yo'q). Ro'yxatsiz 409
+    foydalanuvchini "nima yetishmayapti?" savoli bilan qoldirardi va u
+    qadamlarni bittalab qidirib chiqishga majbur bo'lardi.
+
+    Shuning uchun javob `HTTPException` bilan EMAS, `JSONResponse` bilan
+    quriladi: `HTTPException` tanani `{"detail": ...}` ichiga o'raydi va
+    `blocking` bir daraja pastga tushib ketardi.
+    =========================================================================
+
+    TO'LIQLIK TEKSHIRUVI SERVERDA (T-02-81) va `market_activate()` unga
+    umuman qaramaydi — DB funksiyasi parametr qabul qilmaydi va faqat
+    bayroqni ko'taradi. Ya'ni klientdagi tugmani DevTools bilan yoqib
+    yuborish hech nima bermaydi.
+
+    ALLAQACHON FAOL BOZOR -> 409 `market_is_active`, va bu tekshiruv
+    to'liqlikdan OLDIN turadi: faollashtirilgandan keyin zonasi
+    o'chirilgan bozor uchun javob "chala" emas, "allaqachon jonli"
+    bo'lishi kerak.
+    """
+    tenant_id = _own_market(market_id, principal)
+    repo = MarketRepository(session)
+
+    # `old` qiymati TAXMIN QILINMAYDI — u yozuvdan OLDIN o'qiladi
+    # (`users.py:368-397` qoidasi). Bu ayni paytda "allaqachon faol"
+    # darvozasining ham manbai: ikkita alohida so'rov bo'lganda ular
+    # orasida bayroq o'zgarishi mumkin edi.
+    current = await repo.current_market()
+    if current is None:  # pragma: no cover - RLS bir xil tranzaksiyada 1 qator beradi
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    if current.is_active:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_MARKET_IS_ACTIVE)
+
+    status_row = await repo.setup_status(tenant_id)
+    blocking = _blocking(status_row)
+    if blocking:
+        log.info(
+            "market_activation_blocked",
+            market_id=str(tenant_id),
+            codes=[item.code for item in blocking],
+        )
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": _MARKET_INCOMPLETE,
+                "blocking": [item.model_dump() for item in blocking],
+            },
+        )
+
+    await repo.activate_market(tenant_id)
+    await write_app_audit(
+        session,
+        action=AuditAction.UPDATE,
+        table_name=TABLE_MARKETS,
+        row_id=tenant_id,
+        principal=principal,
+        old={"is_active": current.is_active},
+        new={"is_active": True},
+    )
+
+    log.info("market_activated", market_id=str(tenant_id))
+    return MarketCreateResponse(id=tenant_id, name=current.name, is_active=True)
 
 
 @router.delete(

@@ -331,6 +331,7 @@ noto'g'ri signal berardi.
 PLATFORM_ADMIN_ROUTES: frozenset[RouteSpec] = frozenset(
     {
         RouteSpec("DELETE", "/api/v1/markets/{market_id}"),
+        RouteSpec("POST", "/api/v1/markets/{market_id}/activate"),
     }
 )
 """Matritsa KUCHAYTIRILGAN sessiya bilan chaqiradigan marshrutlar (02-11).

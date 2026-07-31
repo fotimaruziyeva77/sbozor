@@ -1191,11 +1191,19 @@ class MarketCreateRequest(BaseModel):
 
 
 class MarketCreateResponse(BaseModel):
-    """`POST /markets` javobi.
+    """Bozor holatining qisqa javobi — `POST /markets` VA `POST /{id}/activate`.
 
-    `is_active` HAR DOIM `false` bo'ladi (D-16: yangi bozor QORALAMA), lekin
-    maydon baribir qaytariladi — klient uni taxmin qilmasligi kerak va
-    `MarketRef` bilan bir xil shaklda o'qiy olishi kerak.
+    `is_active` yaratishda HAR DOIM `false` (D-16: yangi bozor QORALAMA),
+    faollashtirishda esa HAR DOIM `true`. Maydon ikkala yo'lda ham
+    qaytariladi va aynan shuning uchun bitta DTO ikkalasiga xizmat qiladi:
+    klient bayroqni HECH QACHON taxmin qilmaydi, u har javobda o'qiladi va
+    `MarketRef` bilan bir xil shaklda talqin qilinadi.
+
+    ⚠ 02-11 gacha bu DTO faqat yaratish yo'liga tegishli edi. Ikkinchi,
+    maydonlari AYNAN bir xil `MarketActivateResponse` yaratish frontendga
+    bitta shaklning ikki nomini berardi va ular bir kun ajralib ketardi
+    (02-10 dagi `GET /vendors/{id}` -> `VendorListItem` qarori bilan bir
+    xil mulohaza).
     """
 
     id: UUID
