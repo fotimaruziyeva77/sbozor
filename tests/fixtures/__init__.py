@@ -8,10 +8,12 @@ ma'lumot fabrikasi emas.
 from __future__ import annotations
 
 from collections.abc import Coroutine
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from typing import Any, Protocol
 from uuid import UUID
 
+from psycopg import Connection
+from psycopg.rows import TupleRow
 from sbozor_core.enums import ActorKind
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +27,7 @@ from fixtures.market_domain import (
 __all__ = [
     "MarketDomainRows",
     "MarketDomainSeed",
+    "MarketScope",
     "TenantSessionFactory",
     "TokenFactory",
     "cleanup_market_domain",
@@ -55,6 +58,27 @@ class TenantSessionFactory(Protocol):
         actor_kind: ActorKind = ActorKind.USER,
         request_id: str = "pytest",
     ) -> AbstractAsyncContextManager[AsyncSession]: ...
+
+
+class MarketScope(Protocol):
+    """`with market_scope(market_id) as conn:` — SINXRON `sbozor_app` bloki.
+
+    `TenantSessionFactory` ning sinxron jufti va u ATAYIN alohida mavjud:
+    2-fazaning sxema testlari (`tests/integration/test_tariff_history.py`
+    va qo'shnilari) ORM'ga UMUMAN tegmaydi — ular DB triggerlarini va
+    konstraytlarini xom `psycopg` bilan sinaydi, chunki API qatlami hali
+    yozilmagan. ORM sessiyasi orqali borish o'sha testlarga SQLAlchemy
+    qatlamini ham qo'shib qo'yardi va "trigger ishlamadi" bilan "ORM boshqa
+    SQL yubordi" ni ajratib bo'lmasdi.
+
+    Blok TUGAGANDA kontekst BO'SHATILADI va bu majburiy: `sync_app_conn`
+    autocommit rejimida, ya'ni `set_config(..., is_local=false)` qiymati
+    SESSIYA davomida saqlanadi. Qoldirilgan kontekst keyingi testga sizib
+    o'tardi va u YOLG'ON-YASHIL bo'lardi (`fixtures/two_markets.py::
+    _first_audit_row_id` da aynan shu sabab yozilgan).
+    """
+
+    def __call__(self, market_id: UUID) -> AbstractContextManager[Connection[TupleRow]]: ...
 
 
 class TokenFactory(Protocol):

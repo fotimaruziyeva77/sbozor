@@ -53,6 +53,8 @@ from fixtures.two_markets import TwoMarketSeed
 __all__ = [
     "A_STALL_CODES",
     "A_STALL_CODES_BY_SORT",
+    "A_TARIFF_AMOUNTS",
+    "B_TARIFF_AMOUNT",
     "GAP_DAY",
     "HANDOVER_DAY",
     "MarketDomainRows",
