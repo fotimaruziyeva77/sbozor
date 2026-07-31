@@ -82,6 +82,7 @@ __all__ = [
     "TariffCreateRequest",
     "TariffItem",
     "TariffListResponse",
+    "TariffUpdateRequest",
     "UpdateProfileRequest",
     "UserListItem",
     "UserListResponse",
@@ -865,6 +866,26 @@ class TariffCreateRequest(BaseModel):
     category_id: UUID
     amount_soum: Annotated[int, Field(gt=0, le=MAX_SAFE_SOUM)]
     valid_from: date
+
+
+class TariffUpdateRequest(BaseModel):
+    """`PATCH /tariffs/{id}` tanasi — BERILGAN maydonlar tahrirlanadi (D-07).
+
+    `category_id` MAYDONI ATAYIN YO'Q: tarif kaliti — aynan
+    `(category_id, valid_from)` (D-05), ya'ni toifani almashtirish
+    qatorni BOSHQA narx tarixiga ko'chirardi. Toifani "tuzatish" kerak
+    bo'lsa eski qator o'chiriladi (faqat kelajakdagisi) va yangisi
+    yoziladi — shunda ikkala tarix ham to'g'ri qoladi.
+
+    `valid_from` bu yerda ham KELAJAK bo'lishi shart va sabab
+    `TariffCreateRequest` dagidan farq qiladi: DB triggeri (`BEFORE
+    UPDATE`) faqat `OLD.valid_from` ni tekshiradi, ya'ni kelajakdagi
+    qatorni O'TMISHGA surish uning uchun butunlay qonuniy amal. Darvoza
+    `TariffRepository.update_future()` da.
+    """
+
+    amount_soum: Annotated[int, Field(gt=0, le=MAX_SAFE_SOUM)] | None = None
+    valid_from: date | None = None
 
 
 class TariffListResponse(BaseModel):
