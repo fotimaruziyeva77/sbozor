@@ -46,6 +46,85 @@ def test_director_cannot_manage() -> None:
     assert Permission.DISPUTE_DECIDE in director
 
 
+def test_platform_admin_can_run_the_wizard() -> None:
+    """MARKET-01: usta qadamlarining HAMMASI platforma admini uchun ochiq (Pitfall 6).
+
+    Bu da'vo boshqa hech qayerda tekshirilmaydi va uning buzilishi JIMGINA
+    sodir bo'ladi: endpoint kodi to'g'ri ko'rinadi, matritsa esa rad etadi.
+    2-fazadan oldin `PLATFORM_ADMIN` da `STALL_MANAGE`/`TARIFF_MANAGE`/
+    `VENDOR_MANAGE` YO'Q edi, ya'ni "bozorni kod yozmasdan kiritish" talabini
+    bajaradigan odam ustaning 3-qadamida 403 bilan to'xtardi.
+
+    `permissions_for()` orqali tekshiriladi, `ROLE_PERMISSIONS` dan
+    to'g'ridan-to'g'ri emas: endpoint aynan shu funksiyaning natijasini
+    ko'radi, ya'ni test rad etish YO'LINI sinaydi, lug'at ichidagi qiymatni
+    emas.
+    """
+    granted = permissions_for(["platform_admin"])
+
+    required = {
+        Permission.MARKET_MANAGE,  # 1-qadam: rekvizitlar
+        Permission.STALL_MANAGE,  # 3-qadam: zonalar va rastalar
+        Permission.TARIFF_MANAGE,  # 4-qadam: toifalar va tariflar
+        Permission.VENDOR_MANAGE,  # sotuvchi biriktirish
+        Permission.MARKET_DATA_VIEW,  # har qadamda kiritilganini qayta ko'rish
+    }
+    missing = required - granted
+    assert not missing, (
+        f"MARKET-01 bajarilmaydi: platforma adminida {sorted(missing)} yo'q — "
+        "usta shu qadamda 403 bilan to'xtaydi va sabab endpoint kodida ko'rinmaydi"
+    )
+
+
+def test_director_is_read_only_on_market_data() -> None:
+    """D-07: direktorga bozor ma'lumoti O'QISH uchun ochiq, YOZISH uchun yopiq.
+
+    Matritsa 2-fazada kengaydi (`MARKET_DATA_VIEW`, `VENDOR_VIEW`) — aynan
+    shunday kengayish paytida `*_MANAGE` ham "qo'shib yuborilishi" oson
+    bo'ladi ("direktor baribir ko'ryapti-ku"). Bu test kengaytmaning
+    CHEGARASINI qulflaydi: ikki tomon ham bir testda, ya'ni faqat pozitiv
+    yarmini nusxalab qo'yish mumkin emas.
+    """
+    director = permissions_for(["director"])
+
+    assert Permission.MARKET_DATA_VIEW in director, (
+        "direktor rasta/tarif reestrini ko'ra olmaydi — hisobotlari ma'nosiz bo'ladi"
+    )
+    assert Permission.VENDOR_VIEW in director, "direktor sotuvchi reestrini ko'ra olmaydi"
+
+    forbidden = {
+        Permission.STALL_MANAGE,
+        Permission.TARIFF_MANAGE,
+        Permission.VENDOR_MANAGE,
+    }
+    leaked = forbidden & director
+    assert not leaked, (
+        f"D-07 buzildi: bozor ma'lumotini O'QISH huquqi bilan birga {sorted(leaked)} "
+        "ham berilgan — direktor endi tarif/rasta o'zgartira oladi"
+    )
+
+
+def test_cashier_and_inspector_have_no_market_data_view() -> None:
+    """A8: 2-fazada kassir ham, nazoratchi ham rasta/sotuvchi reestrini KO'RMAYDI.
+
+    Ikkalasining yuzasi ataylab tor (`test_cashier_scope_minimal` va
+    `test_inspector_scope_minimal` uni aynan qulflaydi), lekin bu test
+    boshqa savolga javob beradi: matritsa kengayganda yangi O'QISH huquqi
+    "hammaga zarari yo'q" degan mulohaza bilan pastga sirg'alib tushmasin.
+
+    Bu chegara 5- va 6-fazalarda ATAYIN qayta ko'riladi (kassir rasta
+    qidiradi, nazoratchi zona ko'radi) — o'shanda bu test qizaradi va
+    o'zgarish ataylab qilingan harakat bo'ladi, jimgina sizib o'tish emas.
+    """
+    for role in ("cashier", "inspector"):
+        granted = permissions_for([role])
+        leaked = {Permission.MARKET_DATA_VIEW, Permission.VENDOR_VIEW} & granted
+        assert not leaked, (
+            f"A8 buzildi: `{role}` roliga {sorted(leaked)} berilgan — 2-fazada "
+            "unga bozor reestri ochilmasligi kerak edi"
+        )
+
+
 def test_cashier_scope_minimal() -> None:
     """Kassirning huquqlari AYNAN bitta: to'lov qayd etish.
 

@@ -43,6 +43,7 @@ from sqlalchemy import text
 from app.deps import (
     AuthSessionDep,
     CacheDep,
+    CurrentPasswordDep,
     PrincipalDep,
     SettingsDep,
     TenantSessionDep,
@@ -431,7 +432,7 @@ async def select_market(
     payload: SelectMarketRequest,
     request: Request,
     response: Response,
-    principal: PrincipalDep,
+    principal: CurrentPasswordDep,
     settings: SettingsDep,
     session: AuthSessionDep,
     refresh_token: RefreshCookie = None,
@@ -442,17 +443,56 @@ async def select_market(
     odatdagidek o'rnatiladi va platforma admini ham boshqa bozorning
     qatorini ko'ra olmaydi. `is_platform_admin` bayrog'i faqat "qaysi
     bozorlarni TANLASH mumkin" savoliga javob beradi.
+
+    `CurrentPasswordDep`, `PrincipalDep` EMAS (1-faza ko'rigi, WR-02):
+    bu endpoint SESSIYA YARATADI — yangi refresh oila va yangi 30 kunlik
+    cookie yozadi. Parol darvozasidan tashqarida bo'lganda u
+    `reset_password` ning "BARCHA sessiyalar bekor qilinadi" kafolatini
+    buzardi: hujumchi qurbonning hali yaroqli access tokeni bilan (≤15 daq)
+    `select-market` chaqirib, `refresh_revoke_user()` allaqachon o'tib
+    ketgan YANGI oila ochib olardi va uni cheksiz rotatsiya qilardi.
+    Ma'lumot olinmasdi (har bir tenant endpointi baribir
+    `password_change_required` beradi), lekin hujjatlashtirilgan bekor
+    qilish kafolati yolg'on bo'lib qolardi.
+
+    Parol darvozasidan ATAYIN tashqarida qoladigan yagona uchta yo'l —
+    `POST /auth/change-password`, `POST /auth/logout` va `GET /api/v1/me`:
+    ular qulflangan sessiyani TARK ETISH yoki ochish uchun kerak.
     """
     request_id = correlation_id.get() or ""
+
+    # WR-03: `is_platform_admin` DB'DAN qayta o'qiladi, tokendan EMAS.
+    #
+    # `select-market` — tokendan token yasaydigan YAGONA yo'l. Bayroqni
+    # kelgan da'vodan ko'chirish `token -> select-market -> yangi token ->
+    # select-market -> ...` zanjirini ochardi: `users` jadvaliga umuman
+    # tegmasdan `pa=true` cheksiz yangilanardi, ya'ni BEKOR QILISH aynan
+    # shu yerda uzilardi. `login` (yuqorida, `row.is_platform_admin`) va
+    # `refresh` (pastda, `who.is_platform_admin`) allaqachon DB'dan
+    # o'qiydi — bu endpoint yagona istisno edi.
+    #
+    # Qator bir marta o'qiladi va uchta joyda ishlatiladi (huquq, audit
+    # yorlig'i, yangi token), ya'ni bu qo'shimcha so'rov EMAS: audit
+    # yorlig'i uchun u avval ham chaqirilardi, faqat pastroqda.
+    who = await auth_repo.find_login_by_id(session, principal.user_id)
+    if who is None or not who.is_active:
+        # D-08: bloklangan (yoki o'chirilgan) foydalanuvchi sessiya ocholmaydi.
+        # `_invalid_credentials()` — MAVJUD 401 kodi; yangi kod kiritilmaydi,
+        # aks holda javob "bu hisob bor, lekin bloklangan" degan signal berardi.
+        raise _invalid_credentials()
+    is_platform_admin = who.is_platform_admin
+
     memberships = await auth_repo.memberships(session, principal.user_id)
     membership = next((m for m in memberships if m.market_id == payload.market_id), None)
 
     if membership is not None:
         market = MarketRef(id=membership.market_id, name=membership.market_name)
     else:
-        market = await _platform_admin_market(session, principal, payload.market_id)
+        market = await _platform_admin_market(
+            session, payload.market_id, is_platform_admin=is_platform_admin
+        )
 
-    roles = _session_roles(membership, is_platform_admin=principal.is_platform_admin)
+    roles = _session_roles(membership, is_platform_admin=is_platform_admin)
 
     # Eski oila bekor qilinadi: bozor almashtirilganda oldingi bozorga
     # bog'langan sessiya yashab qolmasligi kerak.
@@ -467,10 +507,14 @@ async def select_market(
         settings=settings,
     )
 
-    label = principal.actor_label
-    if principal.is_platform_admin:
-        who = await auth_repo.find_login_by_id(session, principal.user_id)
-        label = platform_admin_label(who.phone_e164 if who else None, market.name)
+    # Yorliq ham DB haqiqatidan quriladi: `principal.actor_label` tokendagi
+    # (ehtimol eskirgan) bayroqdan hisoblangan va lavozimi olib tashlangan
+    # odamni auditda hamon "platforma admini" deb ko'rsatardi.
+    label = (
+        platform_admin_label(who.phone_e164, market.name)
+        if is_platform_admin
+        else actor_label_for(roles, is_platform_admin=False)
+    )
 
     await write_app_audit(
         session,
@@ -491,7 +535,7 @@ async def select_market(
             user_id=principal.user_id,
             market_id=market.id,
             roles=roles,
-            is_platform_admin=principal.is_platform_admin,
+            is_platform_admin=is_platform_admin,
             settings=settings,
         ),
         expires_in=_expires_in(settings),
@@ -502,17 +546,23 @@ async def select_market(
 
 async def _platform_admin_market(
     session: AsyncSession,
-    principal: PrincipalDep,
     market_id: UUID,
+    *,
+    is_platform_admin: bool,
 ) -> MarketRef:
     """A'zoligi bo'lmagan bozorni tanlash — FAQAT platforma admini uchun (D-06).
 
     Mavjud bo'lmagan bozor ham, ruxsat etilmagan bozor ham AYNAN bir xil
     403 beradi: aks holda javob "bunday bozor bor" degan ma'lumotni
     oshkor qilardi.
+
+    Bayroq `Principal` dan EMAS, argument sifatida keladi (WR-03): u
+    chaqiruvchida `users` jadvalidan o'qilgan bo'lishi SHART. Aks holda
+    lavozimi olib tashlangan odam a'zoligi bo'lmagan bozorni tanlashda
+    davom etardi.
     """
     forbidden = HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="market_forbidden")
-    if not principal.is_platform_admin:
+    if not is_platform_admin:
         raise forbidden
     for market in await auth_repo.list_markets(session):
         if market.market_id == market_id and market.is_active:

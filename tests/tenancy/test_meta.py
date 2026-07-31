@@ -78,6 +78,43 @@ EXPECTED_DEFINER_FUNCTIONS = {
     "auth_list_platform_audit",
 }
 
+# `AUDITED_TABLES` da RO'YXATGA OLINGAN, lekin jadval hali TUG'ILMAGAN nomlar.
+#
+# Reyestr (`sbozor_core.schema_contract.AUDITED_TABLES`) 2-fazaning boshida,
+# birinchi migratsiyadan OLDIN to'ldirildi — ATAYIN. Teskari tartib (avval
+# migratsiya, keyin reyestr) darvozani vaqtincha ochiq qoldirardi: triggersiz
+# jadval hech qayerda ko'rinmasdan o'tib ketishi mumkin bo'lardi.
+#
+# NEGA BU "SHUNCHAKI QIZIL TEST" EMAS: bu ro'yxat 02-05 va 02-06 migratsiyalari
+# yozilgunga qadar 16 ta rejaning har birida `npm run test:tenancy` ni qizil
+# qilib turardi va o'sha 16 reja uchun darvoza SIGNAL BERMAY qolardi — "mening
+# o'zgarishim tenancy'ni buzdimi yoki bu o'sha ma'lum qizilmi?" savoliga javob
+# yo'qolardi. Buzilgan darvoza — darvoza emas.
+#
+# Ro'yxat IKKI TOMONLAMA qulflangan (pastdagi `==` solishtiruvi):
+#   * trigger ULANSA  -> `missing` kichrayadi -> test QIZARADI va migratsiya
+#     muallifini shu ro'yxatdan nomni o'chirishga majbur qiladi. Ya'ni qarz
+#     jimgina "yopilib" ketolmaydi.
+#   * mavjud trigger YO'QOLSA (masalan `user_market_roles`) -> `missing`
+#     kattalashadi -> test QIZARADI. Ya'ni amaldagi kafolat susaymaydi.
+#
+# Bu `INDEX_EXCEPTIONS` va `POLICY_TENANT_GUC_EXCEPTIONS` bilan bir xil naqsh:
+# istisno testda, sababi yozma, o'zgartirish code review'da ko'zga tashlanadi.
+PENDING_AUDIT_TRIGGERS = frozenset(
+    {
+        # 02-05: bozor profili, zonalar, rastalar, toifa davrlari
+        "market_profile",
+        "stalls",
+        "stall_category_periods",
+        "market_calendar_exceptions",
+        # 02-05/02-06: tariflar
+        "tariffs",
+        # 02-06: sotuvchilar va biriktirish davrlari
+        "vendors",
+        "stall_assignments",
+    }
+)
+
 # Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun
 # sabab SHU YERDA yozilishi SHART — istisno qo'shish code review'da ko'zga
 # tashlanadigan, ataylab qilingan harakat bo'lib qolsin.
@@ -157,6 +194,33 @@ def test_public_schema_create_revoked_from_public(sync_app_conn: Connection[Tupl
     assert row[0] is False, (
         "sbozor_app `public` sxemada CREATE huquqiga ega — RLS'siz yordamchi "
         "jadval yaratib izolyatsiyani chetlab o'tish mumkin"
+    )
+
+
+def test_btree_gist_extension_is_installed(sync_app_conn: Connection[TupleRow]) -> None:
+    """`btree_gist` bazada MAVJUD — ya'ni init qadami haqiqatan bajarilgan.
+
+    `ops/db/init/00-extensions.sql` prod'da `docker-entrypoint-initdb.d`
+    orqali, testda esa `_bootstrap_extensions` fixture'i orqali ishlaydi.
+    Ikkinchisi jimgina o'chirilsa yoki fixture bog'liqligi uzilsa, sabab
+    faqat 02-05 migratsiyasi yozilganda — ya'ni bir necha reja keyin —
+    ko'rinardi. Bu test uni SHU ZAHOTI ko'rsatadi.
+
+    Kengaytma `stall_assignments` dagi `EXCLUDE USING gist (market_id
+    WITH =, stall_id WITH =, period WITH &&)` uchun kerak: `uuid`/`date`
+    skalyar tiplarining GiST operator klasslarini aynan u beradi.
+
+    `sync_app_conn` ATAYIN — `pg_extension` ni ilova roli ham o'qiy oladi
+    va tekshiruv aynan ilova ko'radigan haqiqatga tegishli.
+    """
+    row = sync_app_conn.execute(
+        "SELECT extname FROM pg_extension WHERE extname = 'btree_gist'"
+    ).fetchone()
+    assert row is not None, (
+        "`btree_gist` kengaytmasi yo'q — `ops/db/init/00-extensions.sql` "
+        "bajarilmagan. `sbozor_owner` uni O'ZI o'rnata olmaydi "
+        "(`permission denied to create extension`), ya'ni migratsiya bu "
+        "holatni tuzata olmaydi."
     )
 
 
@@ -635,7 +699,7 @@ def test_locale_check_constraint_matches_enum(
 
 
 def test_audited_tables_have_trigger(sync_app_conn: Connection[TupleRow], migrated: None) -> None:
-    """`AUDITED_TABLES` reyestridagi har bir jadvalda audit triggeri BOR.
+    """`AUDITED_TABLES` reyestri va amaldagi triggerlar AYNAN mos.
 
     Reyestr (`sbozor_core.schema_contract`) va amaldagi DDL
     (`migrations/versions/*.py`) ikki alohida joyda yashaydi, ya'ni ular
@@ -643,6 +707,11 @@ def test_audited_tables_have_trigger(sync_app_conn: Connection[TupleRow], migrat
     solishtiradi: 2- va 6-fazalarda `payments` yoki `daily_charges`
     yaratilib `attach_audit_trigger()` unutilsa, CI shu yerda qizaradi —
     va bu "audit bor" degan yolg'on ishonchdan ancha arzon.
+
+    Solishtiruv `not missing` EMAS, `missing == PENDING_AUDIT_TRIGGERS`:
+    reyestr birinchi migratsiyadan OLDIN to'ldirilgan (2-faza), ya'ni hali
+    tug'ilmagan jadvallar unda ATAYIN bor. Tenglik ikkala yo'nalishni ham
+    qulflaydi — sabab va mexanika `PENDING_AUDIT_TRIGGERS` yonida.
     """
     rows = sync_app_conn.execute(
         "SELECT c.relname, t.tgname FROM pg_trigger t "
@@ -652,14 +721,21 @@ def test_audited_tables_have_trigger(sync_app_conn: Connection[TupleRow], migrat
     ).fetchall()
     triggers = {(row[0], row[1]) for row in rows}
 
-    missing = [
-        table
-        for table in sorted(AUDITED_TABLES)
-        if (table, audit_trigger_name(table)) not in triggers
-    ]
-    assert not missing, (
-        f"`AUDITED_TABLES` da bor, lekin audit triggeri YO'Q: {missing} — "
+    missing = {
+        table for table in AUDITED_TABLES if (table, audit_trigger_name(table)) not in triggers
+    }
+
+    regressed = missing - PENDING_AUDIT_TRIGGERS
+    assert not regressed, (
+        f"`AUDITED_TABLES` da bor, lekin audit triggeri YO'Q: {sorted(regressed)} — "
         "jadval o'zgarishlari izsiz qoladi (D-10)"
+    )
+
+    closed = PENDING_AUDIT_TRIGGERS - missing
+    assert not closed, (
+        f"{sorted(closed)} jadval(lar)iga audit triggeri ULANGAN, lekin ular hamon "
+        "`PENDING_AUDIT_TRIGGERS` ro'yxatida — nomni o'sha ro'yxatdan O'CHIRING. "
+        "Aks holda kelajakda trigger yo'qolsa bu test buni SEZMAY qolardi."
     )
 
 

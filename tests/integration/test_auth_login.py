@@ -32,6 +32,7 @@ from fixtures.auth_api import (
     audit_rows,
     global_audit_rows,
     login,
+    set_user_active,
 )
 from sbozor_core.security import decode_token
 
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
     from psycopg import Connection
     from psycopg.rows import TupleRow
     from redis.asyncio import Redis
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 EXPECTED_EXPIRES_IN = 900
 EXPECTED_MAX_AGE = 2_592_000
@@ -354,6 +356,152 @@ async def test_unknown_market_is_also_403(
 
     assert response.status_code == 403
     assert response.json() == {"detail": "market_forbidden"}
+
+
+_DEMOTE = "UPDATE users SET is_platform_admin = %s WHERE id = %s"
+"""`sbozor_owner` bilan bajariladi — `users` app-rolga butunlay yopiq.
+
+Mahsulot yo'li (lavozimni olib tashlash endpointi) 1-fazada YO'Q va aynan
+shu sababdan WR-03 hali ekspluatatsiya qilinmagan edi. Test o'sha
+endpoint tug'ilgandagi holatni oldindan qulflaydi.
+"""
+
+
+async def test_select_market_rereads_platform_admin_flag(
+    api_client: httpx.AsyncClient,
+    auth_seed: AuthSeed,
+    sync_owner_conn: Connection[TupleRow],
+    test_settings: Settings,
+) -> None:
+    """Bayroq DB'da o'chirilgach ESKI token yangi `pa=true` sessiya BERMAYDI (WR-03).
+
+    `select-market` — tokendan token yasaydigan YAGONA yo'l. 1-fazada u
+    `is_platform_admin` ni KELGAN da'vodan ko'chirardi, ya'ni zanjir
+    `token -> select-market -> yangi token -> select-market -> ...`
+    `users` jadvaliga umuman tegmasdan bayroqni CHEKSIZ yangilardi.
+
+    Bu bayroqni QO'LGA KIRITISH yo'li emas edi (`_assert_roles_assignable`
+    va `require_platform_admin` uni to'g'ri rad etadi) — bu uni BEKOR
+    QILISHDAN keyin SAQLAB QOLISH yo'li edi. `login` va `refresh`
+    allaqachon DB'dan o'qiydi; `select-market` yagona istisno edi.
+
+    Da'vo `pa` CLAIM'i bo'yicha tekshiriladi, `roles` bo'yicha EMAS:
+    `require_platform_admin` va `markets.list_markets` aynan shu bayroqqa
+    qaraydi (CR-03 ning darsi — rol nomi a'zolikdan ham kelishi mumkin, va
+    bu seed'da platforma adminining a'zolik roli aynan `platform_admin`).
+    """
+    login_body = (
+        await login(api_client, auth_seed.platform_admin.phone, auth_seed.password)
+    ).json()
+    assert login_body["is_platform_admin"] is True
+    headers = {"Authorization": f"Bearer {login_body['access_token']}"}
+
+    sync_owner_conn.execute(_DEMOTE, (False, str(auth_seed.platform_admin.user_id)))
+
+    selected = await api_client.post(
+        SELECT_MARKET_URL, json={"market_id": str(auth_seed.market_a_id)}, headers=headers
+    )
+
+    assert selected.status_code == 200, selected.text
+    claims = decode_token(
+        selected.json()["access_token"],
+        expected_type="access",
+        secret=test_settings.jwt_secret,
+        issuer=test_settings.jwt_issuer,
+        audience=test_settings.jwt_audience,
+    )
+    assert claims.is_platform_admin is False, (
+        "`select-market` bayroqni tokendan ko'chirdi — lavozimi olib tashlangan "
+        "hisob `pa=true` ni cheksiz yangilay oladi (WR-03)"
+    )
+
+    # Ikkinchi yarim: bayroq faqat token ichida emas, QARORDA ham o'chgan.
+    # A'zoligi bo'lmagan bozorni tanlash endi platforma admini yo'lidan
+    # o'tmaydi (403 — `test_unknown_market_is_also_403` bilan bir xil kod,
+    # mavjudlik oshkor qilinmaydi).
+    foreign = await api_client.post(
+        SELECT_MARKET_URL, json={"market_id": str(uuid4())}, headers=headers
+    )
+    assert foreign.status_code == 403
+    assert foreign.json() == {"detail": "market_forbidden"}
+
+
+async def test_select_market_keeps_platform_admin_when_still_set(
+    api_client: httpx.AsyncClient,
+    auth_seed: AuthSeed,
+    test_settings: Settings,
+) -> None:
+    """NAZORAT HOLATI: bayroq DB'da HAMON `true` bo'lsa u saqlanadi.
+
+    Usiz yuqoridagi test "hamma narsa rad etilyapti" holatida ham yashil
+    ko'rinardi — masalan `find_login_by_id` har doim `None` qaytarsa yoki
+    bayroq har doim `false` ga qattiq yozilsa. Bu test qayta o'qish
+    HAQIQIY qiymatni olayotganini isbotlaydi.
+    """
+    login_body = (
+        await login(api_client, auth_seed.platform_admin.phone, auth_seed.password)
+    ).json()
+    headers = {"Authorization": f"Bearer {login_body['access_token']}"}
+
+    selected = await api_client.post(
+        SELECT_MARKET_URL, json={"market_id": str(auth_seed.market_b_id)}, headers=headers
+    )
+
+    assert selected.status_code == 200, selected.text
+    claims = decode_token(
+        selected.json()["access_token"],
+        expected_type="access",
+        secret=test_settings.jwt_secret,
+        issuer=test_settings.jwt_issuer,
+        audience=test_settings.jwt_audience,
+    )
+    assert claims.is_platform_admin is True
+    assert "platform_admin" in claims.roles
+
+
+async def test_select_market_rejects_blocked_user_inside_the_cache_window(
+    api_client: httpx.AsyncClient,
+    auth_seed: AuthSeed,
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Bloklangan hisob bozor tanlay olmaydi — HATTO kesh hali "faol" desa ham.
+
+    `is_active` ni `get_current_principal` ham tekshiradi, LEKIN u Valkey
+    keshidan o'qiydi (`USER_STATE_TTL_SECONDS = 30`). Bloklash mahsulot
+    endpointi orqali kelganda kesh darhol bekor qilinadi; boshqa har qanday
+    yo'ldan (to'g'ridan-to'g'ri DB, migratsiya, kelajakdagi fon jarayoni)
+    kelganda esa 30 soniyalik oyna ochiq qoladi. `select-market` aynan o'sha
+    oynada YANGI 30 KUNLIK refresh oila ocha olardi — ya'ni bir necha
+    soniyalik nomuvofiqlik bir oylik sessiyaga aylanardi.
+
+    Test ATAYIN keshni AVVAL isitadi (`GET /api/v1/me`), so'ng bayroqni
+    keshni bekor qilmasdan o'chiradi. Shu tartibsiz javob 401
+    `account_blocked` bo'lardi — ya'ni test bu yerdagi tekshiruvni emas,
+    `get_current_principal` ni sinagan bo'lardi (green-for-wrong-reason).
+
+    Javob 401 `invalid_credentials` — MAVJUD kod: "bu hisob bor, lekin
+    bloklangan" degan signal berilmaydi (T-01-40 enumeration siyosati).
+    """
+    login_body = (
+        await login(api_client, auth_seed.platform_admin.phone, auth_seed.password)
+    ).json()
+    headers = {"Authorization": f"Bearer {login_body['access_token']}"}
+
+    # Keshni isitadi: `user:state:{id}` endi "faol, almashtirish shart emas".
+    # (Bozor tanlanmagani uchun javob 409, lekin principal qurilgan — kerakli yon ta'sir.)
+    warmed = await api_client.get(ME_URL, headers=headers)
+    assert warmed.status_code == 409, warmed.text
+
+    await set_user_active(api_sessionmaker, auth_seed.platform_admin.user_id, is_active=False)
+    try:
+        response = await api_client.post(
+            SELECT_MARKET_URL, json={"market_id": str(auth_seed.market_a_id)}, headers=headers
+        )
+    finally:
+        await set_user_active(api_sessionmaker, auth_seed.platform_admin.user_id, is_active=True)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "invalid_credentials"}
 
 
 async def test_select_market_audit_carries_platform_admin_label(

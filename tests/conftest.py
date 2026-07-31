@@ -14,9 +14,11 @@ Row Level Security FAQAT PostgreSQL'da mavjud, shuning uchun boshqa bazaga
 qarshi testlar loyihaning eng xavfli kod yo'lini umuman sinamaydi va yashil
 bo'lib turaveradi. Yagona ruxsat etilgan baza — `postgres:18.4-trixie`.
 
-Rol atributlari uchun yagona haqiqat manbai — `ops/db/init/01-roles.sql`.
-Bu fayl shu yerda VERBATIM o'qib bajariladi; rol DDL'i testda TAKRORLANMAYDI,
-shuning uchun prod (`docker-entrypoint-initdb.d`) va test bir xil DDL'ni oladi.
+Rol atributlari uchun yagona haqiqat manbai — `ops/db/init/01-roles.sql`,
+kengaytmalar uchun esa `ops/db/init/00-extensions.sql`. Ikkala fayl ham shu
+yerda VERBATIM o'qib bajariladi va ular prod'dagi tartibda (`00-` -> `01-`)
+ishlaydi; DDL testda TAKRORLANMAYDI, shuning uchun prod
+(`docker-entrypoint-initdb.d`) va test bir xil DDL'ni oladi.
 
 Qochish yo'li: `TEST_DATABASE_URL` / `TEST_VALKEY_URL` o'rnatilgan bo'lsa
 konteyner ishga tushirilmaydi va o'sha URL ishlatiladi (CI/Windows uchun).
@@ -70,6 +72,7 @@ VALKEY_IMAGE = "valkey/valkey:9.1.1-alpine"
 VALKEY_PORT = 6379
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+EXTENSIONS_SQL_PATH = REPO_ROOT / "ops" / "db" / "init" / "00-extensions.sql"
 ROLES_SQL_PATH = REPO_ROOT / "ops" / "db" / "init" / "01-roles.sql"
 ALEMBIC_INI_PATH = REPO_ROOT / "alembic.ini"
 MIGRATIONS_PATH = REPO_ROOT / "migrations"
@@ -136,12 +139,41 @@ def pg_container() -> Iterator[PgEndpoint]:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _bootstrap_roles(pg_container: PgEndpoint) -> None:
+def _bootstrap_extensions(pg_container: PgEndpoint) -> None:
+    """`ops/db/init/00-extensions.sql` ni SUPERUSER bilan VERBATIM bajaradi.
+
+    `_bootstrap_roles` bilan AYNAN bir xil naqsh va aynan bir xil sababdan:
+    SQL matni testda TAKRORLANMAYDI — prod DDL'ining O'ZI bajariladi. Nusxa
+    yozilganda test o'z tasavvurini tekshirgan bo'lardi, prod esa boshqa
+    kengaytma bilan ishlab ketardi.
+
+    ULANISH ROLI AHAMIYATLI: bu yerda superuser ATAYIN — `sbozor_owner`
+    `CREATE EXTENSION btree_gist` ni bajara olmaydi (`permission denied to
+    create extension`, empirik). Aynan shu sababdan kengaytma migratsiyada
+    emas, init faylida yashaydi (2-faza Pitfall 1). Agar bu fixture owner
+    roliga o'tkazilsa, u prod bilan bir xil xato bilan yiqiladi — ya'ni
+    testning o'zi qarorni himoya qiladi.
+    """
+    extensions_sql = EXTENSIONS_SQL_PATH.read_text(encoding="utf-8")
+    dsn = _psycopg_dsn(pg_container.superuser, pg_container.superuser_password, pg_container)
+
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        conn.execute(extensions_sql)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _bootstrap_roles(pg_container: PgEndpoint, _bootstrap_extensions: None) -> None:
     """`ops/db/init/01-roles.sql` ni VERBATIM bajaradi, so'ng parol beradi.
 
     Rol atributlari (NOSUPERUSER / NOBYPASSRLS) bu yerda QAYTA YOZILMAYDI —
     ular faqat SQL faylida yashaydi. Shu sababli meta-test prod DDL'ini
     tekshiradi, testga xos nusxani emas.
+
+    `_bootstrap_extensions` ga BOG'LIQLIK prod'dagi fayl tartibini
+    (`00-` -> `01-`) takrorlaydi: autouse fixture'larning o'zaro tartibi
+    kafolatlanmagan, shuning uchun u argument sifatida ATAYIN e'lon
+    qilingan. Aks holda kengaytma rollardan keyin yaratilib, tartib
+    prod'dan jimgina farq qilardi.
     """
     roles_sql = ROLES_SQL_PATH.read_text(encoding="utf-8")
     dsn = _psycopg_dsn(pg_container.superuser, pg_container.superuser_password, pg_container)

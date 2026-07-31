@@ -35,13 +35,20 @@ from typing import TYPE_CHECKING
 
 from fixtures.admin_api import (
     AUDIT_URL,
+    PROFILE_URL,
     USERS_URL,
     bearer,
     new_phone,
     platform_admin_headers,
     session_headers,
 )
-from fixtures.auth_api import CHANGE_PASSWORD_URL, LOGOUT_URL, ME_URL, login
+from fixtures.auth_api import (
+    CHANGE_PASSWORD_URL,
+    LOGOUT_URL,
+    ME_URL,
+    SELECT_MARKET_URL,
+    login,
+)
 
 if TYPE_CHECKING:
     import httpx
@@ -170,6 +177,59 @@ async def test_session_endpoint_is_gated_too(
     assert response.json() == GATED
 
 
+async def test_select_market_requires_current_password(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """`POST /auth/select-market` darvoza ostida (1-faza ko'rigi, WR-02).
+
+    Bu endpoint 1-fazada `PrincipalDep` da edi va shu bilan darvozadan
+    BUTUNLAY tashqarida qolgandi. Oqibati oddiy 403 emas edi: u SESSIYA
+    YARATADI — yangi refresh oila va yangi 30 kunlik cookie. Ya'ni
+    `reset_password` "foydalanuvchining BARCHA sessiyalari bekor qilinadi"
+    deb yozgan kafolat yolg'on bo'lardi: qurbonning hali yaroqli access
+    tokeni (≤15 daqiqa — aynan CR-01 tahdid modeli) bilan
+    `refresh_revoke_user()` dan KEYIN yangi oila ochib olish mumkin edi va
+    uni cheksiz rotatsiya qilish mumkin edi.
+
+    Tekshiruv AYNAN `must_change` foydalanuvchining O'Z bozori bilan
+    qilinadi: agar begona bozor berilsa javob 403 `market_forbidden`
+    bo'lardi va test darvozani emas, D-06 ni sinagan bo'lardi
+    (green-for-wrong-reason).
+    """
+    headers = await session_headers(api_client, auth_seed.must_change.phone, auth_seed.password)
+
+    response = await api_client.post(
+        SELECT_MARKET_URL,
+        json={"market_id": str(auth_seed.market_a_id)},
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == GATED, (
+        "select-market darvozadan tashqarida — qulflangan sessiya yangi "
+        "refresh oila ocha oladi (WR-02)"
+    )
+
+
+async def test_profile_write_requires_current_password(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """`PATCH /api/v1/me` ham darvoza ostida — u YOZADI (WR-02).
+
+    `GET /api/v1/me` ATAYIN ochiq qoladi (pastdagi test) — parol
+    almashtirish ekrani foydalanuvchining tilini bilishi kerak. Lekin
+    YOZISH boshqa masala: u `users.locale` ni o'zgartiradi va qurbon
+    nomidan `update` audit qatorini chiqaradi, ya'ni "qulflangan sessiya
+    hech narsa yoza olmaydi" da'vosini buzardi.
+    """
+    headers = await session_headers(api_client, auth_seed.must_change.phone, auth_seed.password)
+
+    response = await api_client.patch(PROFILE_URL, json={"locale": "ru"}, headers=headers)
+
+    assert response.status_code == 403
+    assert response.json() == GATED
+
+
 # ---------------------------------------------------------------------------
 # Darvoza OCHIQ qoladigan yo'llar
 # ---------------------------------------------------------------------------
@@ -189,6 +249,24 @@ async def test_change_password_stays_open(
     )
 
     assert response.status_code == 204, response.text
+
+
+async def test_profile_read_stays_open(api_client: httpx.AsyncClient, auth_seed: AuthSeed) -> None:
+    """`GET /api/v1/me` O'QISH ochiq qoladi — til D-13 bo'yicha profildan keladi.
+
+    Yuqoridagi `test_profile_write_requires_current_password` bilan JUFT:
+    ikkalasisiz "profil endpointi darvoza ostida" degan noaniq da'vo qolardi.
+    Aslida chegara metod bo'yicha o'tadi — O'QISH ochiq, YOZISH yopiq.
+
+    Usiz vaqtinchalik parolli foydalanuvchi parol almashtirish ekranini
+    O'ZI TUSHUNMAYDIGAN tilda ko'rardi va tilni almashtira ham olmasdi.
+    """
+    headers = await session_headers(api_client, auth_seed.must_change.phone, auth_seed.password)
+
+    response = await api_client.get(PROFILE_URL, headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["must_change_password"] is True
 
 
 async def test_logout_stays_open(api_client: httpx.AsyncClient, auth_seed: AuthSeed) -> None:

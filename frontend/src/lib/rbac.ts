@@ -34,6 +34,12 @@ export const PERMISSIONS = [
   "stall_manage",
   "tariff_manage",
   "vendor_manage",
+  // O'QISH huquqlari YOZISHdan alohida (2-faza): direktor reestrni ko'radi,
+  // lekin o'zgartira olmaydi (D-07). `vendor_view` esa `market_data_view`
+  // dan ajratilgan, chunki sotuvchi — shaxsiy ma'lumot va uning O'QILISHI
+  // ham auditda (D-09).
+  "market_data_view",
+  "vendor_view",
   "payment_create",
   "report_view",
   "occupancy_review",
@@ -45,21 +51,32 @@ export type Permission = (typeof PERMISSIONS)[number];
 const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
   // Platforma admini: bozorlararo yagona rol (D-06). `market_view_all` unga
   // RLS bypass BERMAYDI — u faqat bozor tanlash ekranini ochadi.
+  //
+  // `stall_manage`/`tariff_manage`/`vendor_manage` — MARKET-01 uchun
+  // majburiy: usta rasta, tarif va sotuvchi qadamlarini o'z ichiga oladi.
   platform_admin: [
     "market_view_all",
     "market_manage",
     "user_manage",
     "user_view",
     "audit_view",
+    "stall_manage",
+    "tariff_manage",
+    "vendor_manage",
+    "market_data_view",
+    "vendor_view",
   ],
   // D-07: FAQAT ko'rish + nizo qarori. `*_manage` huquqlarining YO'QLIGI —
-  // bu qatorning asosiy mazmuni.
+  // bu qatorning asosiy mazmuni. 2-fazada qo'shilgan ikkita huquq ham
+  // faqat o'qish.
   director: [
     "report_view",
     "audit_view",
     "camera_view",
     "dispute_decide",
     "user_view",
+    "market_data_view",
+    "vendor_view",
   ],
   market_admin: [
     "user_manage",
@@ -68,6 +85,8 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "stall_manage",
     "tariff_manage",
     "vendor_manage",
+    "market_data_view",
+    "vendor_view",
     "report_view",
     "camera_view",
   ],
