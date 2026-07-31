@@ -17,11 +17,20 @@ Aks holda har bir rol-juftligi uchun alohida huquq kerak bo'lardi va
 matritsa o'qib bo'lmas holga kelardi.
 =============================================================================
 
-Qamrov: bu yerdagi ba'zi huquqlar 1-fazada hech qayerda tekshirilmaydi
-(`STALL_MANAGE`, `TARIFF_MANAGE`, `VENDOR_MANAGE`, `PAYMENT_CREATE`,
-`OCCUPANCY_REVIEW`, `DISPUTE_DECIDE`). Ular ATAYIN hozirdan bor: D-07 ning
-mazmuni — "direktor NIMA QILA OLMAYDI" — aynan shu huquqlarning yo'qligi
-bilan ifodalanadi. Ularsiz D-07 ni test bilan qulflab bo'lmasdi.
+JUFTINI YANGILASHNI UNUTMANG: bu matritsaning UI ko'zgusi
+`frontend/src/lib/rbac.ts` da yashaydi va u QO'LDA sinxron saqlanadi (til
+chegarasi tufayli avtomatik tekshiruv yo'q). Bu yerga yangi `Permission`
+qo'shsangiz yoki rol qatorini o'zgartirsangiz — o'sha faylda AYNAN bir xil
+o'zgarishni bajaring. Ko'zgu xavfsizlik chegarasi EMAS (haqiqiy qaror
+`require_permission(...)` da), ya'ni uni unutish ma'lumot ochmaydi — lekin
+tugma ko'rinib turib 403 beradigan (yoki huquq bor bo'la turib menyu
+yo'qoladigan) chalkash UI hosil qiladi.
+
+Qamrov: bu yerdagi ba'zi huquqlar hali hech qayerda tekshirilmaydi
+(`PAYMENT_CREATE`, `OCCUPANCY_REVIEW`, `DISPUTE_DECIDE` — 5- va 6-fazalar).
+Ular ATAYIN hozirdan bor: D-07 ning mazmuni — "direktor NIMA QILA
+OLMAYDI" — aynan shu huquqlarning yo'qligi bilan ifodalanadi. Ularsiz D-07
+ni test bilan qulflab bo'lmasdi.
 """
 
 from __future__ import annotations
@@ -56,6 +65,22 @@ class Permission(StrEnum):
     STALL_MANAGE = "stall_manage"
     TARIFF_MANAGE = "tariff_manage"
     VENDOR_MANAGE = "vendor_manage"
+    # O'QISH huquqlari YOZISHdan ALOHIDA: D-07 ning butun mazmuni —
+    # direktor reestrni KO'RADI, lekin o'zgartira olmaydi. Bitta
+    # `*_MANAGE` huquqi ikkalasini ham qamrasa, "ko'rsin" so'rovi
+    # "o'zgartirsin" ga aylanib ketardi.
+    MARKET_DATA_VIEW = "market_data_view"
+    """Zona / toifa / rasta / tarif / kalendar O'QISH.
+
+    Shaxsiy ma'lumotni QAMRAMAYDI — sotuvchi uchun alohida `VENDOR_VIEW`.
+    """
+    VENDOR_VIEW = "vendor_view"
+    """Sotuvchi (F.I.Sh., telefon — SHAXSIY MA'LUMOT) O'QISH.
+
+    `MARKET_DATA_VIEW` dan ATAYIN ajratilgan: 1-faza D-09 bo'yicha shaxsiy
+    ma'lumotning O'QILISHI ham auditda qayd etiladi, ya'ni bu huquq berilishi
+    boshqa reestrlarni ko'rish bilan bir xil og'irlikda emas.
+    """
 
     # --- Operatsiya (5- va 6-fazalar) ---
     PAYMENT_CREATE = "payment_create"
@@ -68,6 +93,13 @@ class Permission(StrEnum):
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     # Platforma admini: bozorlararo yagona rol (D-06). `MARKET_VIEW_ALL` unga
     # RLS bypass BERMAYDI — u faqat bozor tanlash ekranini ochadi.
+    #
+    # `STALL_MANAGE`/`TARIFF_MANAGE`/`VENDOR_MANAGE` — 2-fazada QO'SHILDI va
+    # ular MARKET-01 uchun MAJBURIY: "platforma admini yangi bozor ustasi
+    # orqali bozorni kod yozmasdan kiritadi" talabi ustaning rasta, tarif va
+    # sotuvchi qadamlarini o'z ichiga oladi. Ularsiz usta 3-qadamda 403 bilan
+    # to'xtardi va sabab endpoint kodida KO'RINMASDI — kod to'g'ri ko'rinib,
+    # matritsa jimgina rad etardi (Pitfall 6).
     Role.PLATFORM_ADMIN: frozenset(
         {
             Permission.MARKET_VIEW_ALL,
@@ -75,10 +107,20 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.USER_MANAGE,
             Permission.USER_VIEW,
             Permission.AUDIT_VIEW,
+            Permission.STALL_MANAGE,
+            Permission.TARIFF_MANAGE,
+            Permission.VENDOR_MANAGE,
+            Permission.MARKET_DATA_VIEW,
+            Permission.VENDOR_VIEW,
         }
     ),
     # D-07: FAQAT ko'rish + nizo qarori. `*_MANAGE` huquqlarining yo'qligi —
     # bu qatorning ASOSIY mazmuni, qo'shimchasi emas.
+    #
+    # 2-fazada qo'shilgan ikkita huquq ham FAQAT O'QISH: direktor rasta va
+    # tarif reestrini ko'radi (hisobotlari shunsiz ma'nosiz), lekin birorta
+    # `*_MANAGE` OLMAYDI. `test_director_is_read_only_on_market_data` shu
+    # chegarani qulflaydi — matritsa kengayishi D-07 ni buzmasin.
     Role.DIRECTOR: frozenset(
         {
             Permission.REPORT_VIEW,
@@ -86,6 +128,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.CAMERA_VIEW,
             Permission.DISPUTE_DECIDE,
             Permission.USER_VIEW,
+            Permission.MARKET_DATA_VIEW,
+            Permission.VENDOR_VIEW,
         }
     ),
     # Bozor admini o'z bozorining hamma narsasini boshqaradi, LEKIN boshqa
@@ -98,6 +142,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.STALL_MANAGE,
             Permission.TARIFF_MANAGE,
             Permission.VENDOR_MANAGE,
+            Permission.MARKET_DATA_VIEW,
+            Permission.VENDOR_VIEW,
             Permission.REPORT_VIEW,
             Permission.CAMERA_VIEW,
         }
