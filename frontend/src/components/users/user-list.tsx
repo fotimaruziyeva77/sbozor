@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { KeyRound, Lock, MoreHorizontal, Unlock } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { UserListItem } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
-import { cn } from "@/lib/cn";
 import {
   adminErrorMessageKey,
   useBlockUser,
@@ -87,7 +88,7 @@ export function UserList({
 
   if (usersQuery.isError) {
     return (
-      <p className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
+      <p className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text" role="alert">
         {t(adminErrorMessageKey(usersQuery.error))}
       </p>
     );
@@ -96,8 +97,38 @@ export function UserList({
   const items = usersQuery.data.items;
 
   if (items.length === 0) {
-    return <p className="text-sm text-text-muted">{t("users.emptyState")}</p>;
+    return (
+      <EmptyState
+        description={t("users.emptyStateHint")}
+        title={t("users.emptyState")}
+      />
+    );
   }
+
+  const isBusy =
+    blockUser.isPending || unblockUser.isPending || resetPassword.isPending;
+
+  /*
+   * Sarlavha va savol SHU YERDA hisoblanadi: `ui/confirm-dialog` — umumiy
+   * primitiv va unda foydalanuvchiga ko'rinadigan matn bo'lmaydi.
+   */
+  const confirmTitle =
+    pending === null
+      ? ""
+      : pending.kind === "block"
+        ? t("users.block")
+        : pending.kind === "unblock"
+          ? t("users.unblock")
+          : t("users.resetPassword");
+
+  const confirmQuestion =
+    pending === null
+      ? ""
+      : pending.kind === "reset"
+        ? t("users.confirmReset")
+        : pending.kind === "block"
+          ? t("users.confirmBlock")
+          : t("users.confirmUnblock");
 
   return (
     <>
@@ -116,18 +147,44 @@ export function UserList({
         ))}
       </ul>
 
+      {/*
+       * Bloklash va parol tiklash QAYTARIB BO'LMAYDIGAN yon ta'sirga ega
+       * (bloklash darhol kuchga kiradi, tiklash foydalanuvchining barcha
+       * sessiyalarini bekor qiladi) — shuning uchun bir bosishda
+       * bajarilmaydi. `unblock` esa TIKLOVCHI amal, shu sababli uning
+       * tugmasi qizil EMAS.
+       */}
       <ConfirmDialog
-        error={actionError}
-        isBusy={
-          blockUser.isPending || unblockUser.isPending || resetPassword.isPending
-        }
-        onCancel={() => {
+        cancelLabel={t("common.cancel")}
+        confirmLabel={isBusy ? t("common.loading") : t("users.confirm")}
+        confirmVariant={pending?.kind === "block" ? "destructive" : "default"}
+        description={confirmQuestion}
+        isBusy={isBusy}
+        onConfirm={() => void confirmPending()}
+        onOpenChange={(next) => {
+          if (next) return;
           setPending(null);
           setActionError(null);
         }}
-        onConfirm={() => void confirmPending()}
-        pending={pending}
-      />
+        open={pending !== null}
+        title={confirmTitle}
+      >
+        {/* D-16: ism/telefon DB kontenti — tarjima qilinmaydi. */}
+        {pending ? (
+          <p className="rounded-sm bg-surface-muted px-3 py-2 text-sm font-semibold">
+            {pending.user.full_name ?? pending.user.phone}
+          </p>
+        ) : null}
+
+        {actionError ? (
+          <p
+            className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
+            role="alert"
+          >
+            {actionError}
+          </p>
+        ) : null}
+      </ConfirmDialog>
     </>
   );
 }
@@ -155,7 +212,7 @@ function UserCard({
       <CardHeader className="flex-row items-start justify-between gap-3 pb-2">
         <div className="min-w-0">
           {/* D-16: ism va telefon DB kontenti — tarjima qilinmaydi. */}
-          <p className="truncate text-base font-medium">
+          <p className="truncate text-lg font-semibold">
             {user.full_name ?? user.phone}
           </p>
           <p className="truncate text-sm text-text-muted">{user.phone}</p>
@@ -171,7 +228,7 @@ function UserCard({
       </CardHeader>
 
       <CardContent className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
           {user.is_active ? (
             <Badge tone="success">{t("users.statusActive")}</Badge>
           ) : (
@@ -248,117 +305,5 @@ function UserActions({
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
-  );
-}
-
-/**
- * Tasdiq dialogi — bloklash va parol tiklash QAYTARIB BO'LMAYDIGAN yon
- * ta'sirga ega (bloklash darhol kuchga kiradi, tiklash esa foydalanuvchining
- * barcha sessiyalarini bekor qiladi), shuning uchun ikkalasi ham bir bosishda
- * bajarilmaydi.
- */
-function ConfirmDialog({
-  error,
-  isBusy,
-  onCancel,
-  onConfirm,
-  pending,
-}: {
-  error: string | null;
-  isBusy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-  pending: PendingAction | null;
-}) {
-  const t = useTranslations();
-
-  const title =
-    pending === null
-      ? ""
-      : pending.kind === "block"
-        ? t("users.block")
-        : pending.kind === "unblock"
-          ? t("users.unblock")
-          : t("users.resetPassword");
-
-  const question =
-    pending === null
-      ? ""
-      : pending.kind === "reset"
-        ? t("users.confirmReset")
-        : pending.kind === "block"
-          ? t("users.confirmBlock")
-          : t("users.confirmUnblock");
-
-  return (
-    <Dialog.Root
-      onOpenChange={(open) => {
-        if (!open) onCancel();
-      }}
-      open={pending !== null}
-    >
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 flex w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-lg border border-border bg-surface p-6 shadow-raised">
-          <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
-          <Dialog.Description className="text-sm text-text-muted">
-            {question}
-          </Dialog.Description>
-
-          {/* D-16: ism/telefon tarjima qilinmaydi. */}
-          {pending ? (
-            <p className="rounded-sm bg-surface-muted px-3 py-2 text-sm font-medium">
-              {pending.user.full_name ?? pending.user.phone}
-            </p>
-          ) : null}
-
-          {error ? (
-            <p
-              className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger"
-              role="alert"
-            >
-              {error}
-            </p>
-          ) : null}
-
-          <div className="flex flex-col gap-2 sm:flex-row-reverse">
-            <Button
-              className="sm:flex-1"
-              disabled={isBusy}
-              onClick={onConfirm}
-              variant={pending?.kind === "block" ? "destructive" : "default"}
-            >
-              {isBusy ? t("common.loading") : t("users.confirm")}
-            </Button>
-            <Dialog.Close asChild>
-              <Button className="sm:flex-1" variant="secondary">
-                {t("common.cancel")}
-              </Button>
-            </Dialog.Close>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-function Badge({
-  children,
-  tone,
-}: {
-  children: React.ReactNode;
-  tone: "success" | "warning" | "danger";
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        tone === "success" && "bg-success/12 text-success",
-        tone === "warning" && "bg-warning/20 text-text",
-        tone === "danger" && "bg-danger/12 text-danger",
-      )}
-    >
-      {children}
-    </span>
   );
 }

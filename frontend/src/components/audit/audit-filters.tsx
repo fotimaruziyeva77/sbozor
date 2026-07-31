@@ -5,7 +5,9 @@ import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { AUDIT_ACTIONS, AUDIT_TABLES } from "@/lib/api-types";
 import type { AuditFilters } from "@/lib/queries";
 import { useUsersQuery } from "@/lib/queries";
@@ -87,7 +89,7 @@ export function AuditFiltersPanel() {
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Field htmlFor="audit-from" label={t("audit.filterFrom")}>
+        <Field id="audit-from" label={t("audit.filterFrom")}>
           <Input
             id="audit-from"
             onChange={(event) =>
@@ -98,7 +100,7 @@ export function AuditFiltersPanel() {
           />
         </Field>
 
-        <Field htmlFor="audit-to" label={t("audit.filterTo")}>
+        <Field id="audit-to" label={t("audit.filterTo")}>
           <Input
             id="audit-to"
             onChange={(event) => void setUrlFilters({ to: event.target.value })}
@@ -107,10 +109,12 @@ export function AuditFiltersPanel() {
           />
         </Field>
 
-        <Field htmlFor="audit-action" label={t("audit.filterAction")}>
+        <Field id="audit-action" label={t("audit.filterAction")}>
           <Select
             id="audit-action"
-            onChange={(value) => void setUrlFilters({ action: value })}
+            onChange={(event) =>
+              void setUrlFilters({ action: event.target.value })
+            }
             value={urlFilters.action}
           >
             <option value="">{t("audit.filterActionAll")}</option>
@@ -122,10 +126,12 @@ export function AuditFiltersPanel() {
           </Select>
         </Field>
 
-        <Field htmlFor="audit-actor" label={t("audit.filterActor")}>
+        <Field id="audit-actor" label={t("audit.filterActor")}>
           <Select
             id="audit-actor"
-            onChange={(value) => void setUrlFilters({ actor: value })}
+            onChange={(event) =>
+              void setUrlFilters({ actor: event.target.value })
+            }
             value={urlFilters.actor}
           >
             <option value="">{t("audit.filterActorAll")}</option>
@@ -138,10 +144,12 @@ export function AuditFiltersPanel() {
           </Select>
         </Field>
 
-        <Field htmlFor="audit-table" label={t("audit.filterTable")}>
+        <Field id="audit-table" label={t("audit.filterTable")}>
           <Select
             id="audit-table"
-            onChange={(value) => void setUrlFilters({ table: value })}
+            onChange={(event) =>
+              void setUrlFilters({ table: event.target.value })
+            }
             value={urlFilters.table}
           >
             <option value="">{t("audit.filterTableAll")}</option>
@@ -170,44 +178,3 @@ export function AuditFiltersPanel() {
   );
 }
 
-function Field({
-  children,
-  htmlFor,
-  label,
-}: {
-  children: React.ReactNode;
-  htmlFor: string;
-  label: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium" htmlFor={htmlFor}>
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function Select({
-  children,
-  id,
-  onChange,
-  value,
-}: {
-  children: React.ReactNode;
-  id: string;
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <select
-      className="h-10 w-full rounded-sm border border-border bg-surface px-3 text-sm text-text outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
-      id={id}
-      onChange={(event) => onChange(event.target.value)}
-      value={value}
-    >
-      {children}
-    </select>
-  );
-}

@@ -72,7 +72,7 @@ export function AuditDiff({ entry }: { entry: AuditEntry }) {
   }
 
   return (
-    <dl className="flex flex-col gap-1.5">
+    <dl className="flex flex-col gap-2">
       {keys.map((key) => (
         <div
           className="grid grid-cols-[minmax(6rem,auto)_1fr] items-baseline gap-x-3 gap-y-1 sm:grid-cols-[minmax(8rem,auto)_1fr_1fr]"
@@ -84,7 +84,9 @@ export function AuditDiff({ entry }: { entry: AuditEntry }) {
           {showOld ? (
             <dd className="min-w-0">
               <span className="sr-only">{t("oldValue")}: </span>
-              <span className="font-mono text-xs break-all text-danger">
+              {/* `*-text` tokenlari: `--color-danger`/`--color-success`
+                  12px matn sifatida AA (4.5:1) dan o'tmaydi. */}
+              <span className="font-mono text-xs break-all text-danger-text">
                 {formatValue(entry.old_value?.[key] ?? null)}
               </span>
             </dd>
@@ -93,7 +95,7 @@ export function AuditDiff({ entry }: { entry: AuditEntry }) {
           {showNew ? (
             <dd className="min-w-0">
               <span className="sr-only">{t("newValue")}: </span>
-              <span className="font-mono text-xs break-all text-success">
+              <span className="font-mono text-xs break-all text-success-text">
                 {formatValue(entry.new_value?.[key] ?? null)}
               </span>
             </dd>

@@ -1,7 +1,31 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { describe, it, test } from "node:test";
 
 import { generateCyrillic, transliterate } from "./gen-cyrillic.mjs";
+
+const MESSAGES_DIR = path.join(import.meta.dirname, "..", "messages");
+
+function readJson(name) {
+  return JSON.parse(readFileSync(path.join(MESSAGES_DIR, name), "utf8"));
+}
+
+/*
+ * HAQIQIY override fayli o'qiladi, sintetik lug'at EMAS.
+ *
+ * Sabab: bu bloklar `uz-Cyrl.overrides.json` ning SHU HOLATINI qulflaydi.
+ * Sintetik lug'at bilan test "transliterator lug'atni qo'llay oladimi?"
+ * degan savolga javob berardi (u allaqachon yuqorida tekshirilgan), bu
+ * yerdagi savol esa boshqa: "yetkazilayotgan konfiguratsiya o'lchangan
+ * to'rtta defektni yopadimi?".
+ */
+const OVERRIDE_WORDS = readJson("uz-Cyrl.overrides.json").words;
+
+/** Lotin harfi qolib ketganini topadi — aralash yozuv defektining belgisi. */
+function hasLatinLetters(text) {
+  return /[A-Za-z]/u.test(text);
+}
 
 describe("transliterate — asosiy mapping", () => {
   it("bosh harf holatini saqlaydi", () => {
@@ -164,6 +188,160 @@ describe("transliterate — daxlsiz segmentlar", () => {
       transliterate("<b>Rasta</b> band"),
       "<b>Раста</b> банд",
     );
+  });
+});
+
+/*
+ * =============================================================================
+ * T-01…T-04 — O'LCHANGAN TRANSLITERATOR DEFEKTLARI (UI-SPEC §5.2).
+ *
+ * NEGA ALOHIDA DARVOZA KERAK: `npm run i18n:check` kalit-parity va
+ * ICU-argument parity'ni tekshiradi, lekin transliteratsiya SIFATINI
+ * umuman tekshirmaydi. Ya'ni bu defektlar qaytsa, mavjud darvozalarning
+ * hech biri qizarmaydi va buzuq kirillcha matn jimgina yetkaziladi.
+ *
+ * Har test AYNAN bitta defektni qulflaydi va ikki tomonlama tasdiqlaydi:
+ * to'g'ri natija BOR va buzuq natija YO'Q.
+ * =============================================================================
+ */
+describe("transliterate — T-01…T-04 o'lchangan defektlar (haqiqiy overrides)", () => {
+  test("T-01: `Excel` transliteratsiya qilinmaydi va aralash yozuv hosil bo'lmaydi", () => {
+    const out = transliterate("Excel fayldan yuklash", OVERRIDE_WORDS);
+
+    assert.equal(out, "Excel файлдан юклаш");
+    assert.ok(out.includes("Excel"), "`Excel` lotin holida qolishi kerak");
+    assert.ok(
+      !out.includes("Эхcэл"),
+      "buzuq `Эхcэл` (ichida lotin `c`) qaytib kelgan",
+    );
+  });
+
+  test("T-02: `xlsx` fayl kengaytmasi transliteratsiya qilinmaydi", () => {
+    const out = transliterate("xlsx fayl", OVERRIDE_WORDS);
+
+    assert.equal(out, "xlsx файл");
+    assert.ok(out.includes("xlsx"), "`xlsx` lotin holida qolishi kerak");
+    assert.ok(!out.includes("хлсх"), "buzuq `хлсх` qaytib kelgan");
+  });
+
+  test("T-03: `filtr` ning qo'shimchali shakllari ham `фильтр` beradi", () => {
+    const out = transliterate("Filtrga mos rasta topilmadi", OVERRIDE_WORDS);
+
+    assert.equal(out, "Фильтрга мос раста топилмади");
+    assert.ok(out.includes("Фильтрга"), "kutilgan `Фильтрга` yo'q");
+    assert.ok(
+      !out.includes("Филтрга"),
+      "yumshatish belgisiz `Филтрга` qaytib kelgan",
+    );
+
+    // O'zbekcha agglyutinativ: har qo'shimchali shakl ALOHIDA yozuv.
+    assert.equal(
+      transliterate("Filtrni tozalash", OVERRIDE_WORDS),
+      "Фильтрни тозалаш",
+    );
+    assert.equal(
+      transliterate("filtrdan chiqarish", OVERRIDE_WORDS),
+      "фильтрдан чиқариш",
+    );
+  });
+
+  test("T-04: `Excel` gap o'rtasida ham buzilmaydi", () => {
+    const out = transliterate("Excel qilib yuklab olish", OVERRIDE_WORDS);
+
+    assert.equal(out, "Excel қилиб юклаб олиш");
+    assert.ok(out.includes("Excel"), "`Excel` lotin holida qolishi kerak");
+    assert.ok(!out.includes("Эхcэл"), "buzuq `Эхcэл` qaytib kelgan");
+  });
+
+  test("IJOBIY NAZORAT: ICU platsholderi transliteratsiyadan buzilmasdan o'tadi", () => {
+    const out = transliterate(
+      "{count, plural, one {# ta xato} other {# ta xato}}",
+      OVERRIDE_WORDS,
+    );
+
+    assert.equal(out, "{count, plural, one {# та хато} other {# та хато}}");
+    // Struktura: argument nomi, turi, branch nomlari va `#` daxlsiz.
+    assert.ok(out.startsWith("{count, plural, one {# "));
+    assert.ok(out.includes("other {# "));
+    assert.equal((out.match(/#/gu) ?? []).length, 2);
+  });
+});
+
+/*
+ * COPY QOIDASI — bu test override YETARLI EMASLIGINI hujjatlashtiradi.
+ *
+ * `Excel'dan` override bilan ham buziladi, chunki apostrofli shakl boshqa
+ * token. Yechim kodda emas, MATNDA: `Excel fayldan`. Shu sababli darvoza
+ * transliteratorni emas, tarjima fayllarini tekshiradi.
+ */
+describe("copy qoidasi — `Excel` apostrofli qo'shimcha bilan yozilmaydi", () => {
+  test("apostrofli shakl HAMON buziladi — qoidaning mavjudlik sababi", () => {
+    const out = transliterate("Excel'dan yuklash", OVERRIDE_WORDS);
+
+    assert.ok(
+      out.includes("Эхcэлъдан"),
+      "agar bu shakl tuzalgan bo'lsa, copy qoidasi va bu test qayta ko'rib chiqilsin",
+    );
+  });
+
+  for (const file of ["uz-Latn.json", "ru.json"]) {
+    test(`${file} da apostrofli \`Excel'\` yoki \`.xlsx\` shakli yo'q`, () => {
+      const raw = readFileSync(path.join(MESSAGES_DIR, file), "utf8");
+
+      assert.ok(
+        !/Excel['ʻʼ‘’]/u.test(raw),
+        `${file}: \`Excel'…\` topildi — o'rniga \`Excel fayldan\` yozing (README Qoida 1)`,
+      );
+      assert.ok(
+        !/\.xlsx/u.test(raw),
+        `${file}: \`.xlsx\` topildi — o'rniga \`xlsx fayl\` yozing (README Qoida 1)`,
+      );
+    });
+  }
+});
+
+/*
+ * Hosil qilingan `uz-Cyrl.json` ning O'ZI tekshiriladi: yuqoridagi
+ * testlar sof funksiyani qulflaydi, bu esa YETKAZILAYOTGAN faylni.
+ */
+describe("uz-Cyrl.json — yetkazilayotgan fayl toza", () => {
+  test("buzuq transliteratsiya izlari yo'q", () => {
+    const raw = readFileSync(path.join(MESSAGES_DIR, "uz-Cyrl.json"), "utf8");
+
+    for (const broken of ["Эхcэл", "хлсх", "Филтр", "филтр"]) {
+      assert.ok(
+        !raw.includes(broken),
+        `uz-Cyrl.json ichida buzuq shakl topildi: ${broken}`,
+      );
+    }
+  });
+
+  test("lug'atdagi lotin so'zlardan tashqari lotin harfi qolmagan", () => {
+    const tree = readJson("uz-Cyrl.json");
+    // Lug'at ATAYIN lotin holida qoldiradigan so'zlar.
+    const allowed = /SBOZOR|Excel|xlsx|https?:\/\/\S+|[\w.%+-]+@[\w.-]+/gu;
+
+    const walk = (node, prefix) => {
+      for (const [key, value] of Object.entries(node)) {
+        const full = prefix ? `${prefix}.${key}` : key;
+        if (value && typeof value === "object") {
+          walk(value, full);
+        } else if (typeof value === "string") {
+          // ICU struktura qismlari ham lotin — ular olib tashlanadi.
+          const stripped = value
+            .replace(/\{[^{}]*,\s*(plural|select|selectordinal)\s*,/gu, "")
+            .replace(/\{[^{}]*\}/gu, "")
+            .replace(/\b(one|other|few|many|zero)\b/gu, "")
+            .replace(allowed, "");
+          assert.ok(
+            !hasLatinLetters(stripped),
+            `${full}: kutilmagan lotin harfi qoldi -> ${JSON.stringify(value)}`,
+          );
+        }
+      }
+    };
+
+    walk(tree, "");
   });
 });
 

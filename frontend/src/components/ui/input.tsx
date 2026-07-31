@@ -15,7 +15,11 @@ export function Input({ className, ...props }: InputProps) {
   return (
     <input
       className={cn(
-        "flex h-10 w-full rounded-sm border border-border bg-surface px-3 py-2",
+        // `border-ui`, `border` EMAS: chegara bu elementni boshqaruv
+        // elementi sifatida tanitadigan YAGONA signal, ya'ni WCAG 2.2
+        // SC 1.4.11 (≥3:1) qo'llanadi. `--color-border` o'lchangan 1.28:1
+        // — dekorativ chegara uchun; `--color-border-ui` 3.64:1.
+        "flex h-10 w-full rounded-sm border border-border-ui bg-surface px-3 py-2",
         "text-sm text-text placeholder:text-text-muted",
         "outline-none transition-colors",
         "focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25",

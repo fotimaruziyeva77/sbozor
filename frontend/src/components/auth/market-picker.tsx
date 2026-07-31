@@ -138,7 +138,7 @@ export function MarketPicker() {
         {options.map((market) => (
           <li key={market.id}>
             <button
-              className="w-full rounded-md border border-border bg-surface px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-surface-muted disabled:pointer-events-none disabled:opacity-50"
+              className="w-full rounded-md border border-border bg-surface px-4 py-3 text-left text-sm font-semibold transition-colors hover:bg-surface-muted disabled:pointer-events-none disabled:opacity-50"
               disabled={isBusy}
               onClick={() => selectMarket.mutate(market.id)}
               type="button"
@@ -151,7 +151,7 @@ export function MarketPicker() {
 
       {formError ? (
         <p
-          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger"
+          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
           role="alert"
         >
           {formError}
