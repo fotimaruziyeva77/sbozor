@@ -71,10 +71,31 @@ def validate_password_strength(value: str) -> bool:
 
 
 class MarketRef(BaseModel):
-    """Bozor havolasi — javoblarda faqat `id` va nom ko'rinadi."""
+    """Bozor havolasi — `id`, nom va BOZOR faolligi.
+
+    `is_active = false` — usta tugallanmagan QORALAMA bozor (D-16:
+    `is_active` faollashtirish bayrog'i, "kamera bor/yo'q" emas). Bozor
+    tanlash ekrani uni `Qoralama` belgisi bilan ko'rsatadi va bosilganda
+    birinchi tugallanmagan qadamga olib boradi (UI-SPEC §6.4).
+
+    MAYDON MAJBURIY VA STANDART QIYMATI YO'Q — bu ataylab. `= True`
+    standart qiymati har bir chaqiruvchiga "argumentni unutish" imkonini
+    berardi va unutilgan joyda qoralama bozor JIMGINA "faol" deb
+    yorliqlanardi. Aynan shu xato bugungi holatning sababi (UI-SPEC
+    §12.1.1 X-2): a'zolik tarmog'ida qoralama bozor allaqachon ko'rinardi,
+    lekin uni faoldan ajratadigan maydon javob shaklida umuman yo'q edi.
+    Majburiy maydon esa manbani kengaytirishga MAJBURLAYDI — `Membership`
+    va `MarketRow` ikkalasida ham `is_active` bor.
+
+    FILTRLASH MAS'ULIYATI ISTE'MOLCHIDA (RESEARCH Pitfall 7): bu maydonning
+    javobda bo'lishi aynan ANIQ filtrlashni mumkin qiladigan narsa. Har bir
+    iste'molchi o'zi filtrlaydi (6-faza billing job `WHERE m.is_active`),
+    "ro'yxat allaqachon toza" degan taxminga tayanmaydi.
+    """
 
     id: UUID
     name: str
+    is_active: bool
 
 
 class LoginRequest(BaseModel):

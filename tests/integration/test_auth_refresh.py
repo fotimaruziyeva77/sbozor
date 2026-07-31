@@ -84,7 +84,14 @@ async def test_refresh_returns_roles_and_market(
     body = (await api_client.post(REFRESH_URL)).json()
 
     assert body["roles"] == ["market_admin"]
-    assert body["market"] == {"id": str(auth_seed.market_a_id), "name": auth_seed.market_a_name}
+    # `is_active` — MAJBURIY maydon (02-03). `/refresh` javobi ham
+    # `MarketRef` ni qaytaradi, ya'ni uchala oqim (login / select-market /
+    # refresh) bir xil shakl bilan qulflanadi.
+    assert body["market"] == {
+        "id": str(auth_seed.market_a_id),
+        "name": auth_seed.market_a_name,
+        "is_active": True,
+    }
 
 
 async def test_refresh_extends_expiry(

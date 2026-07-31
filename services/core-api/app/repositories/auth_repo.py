@@ -79,6 +79,18 @@ class Membership:
     market_id: UUID
     market_name: str
     roles: tuple[str, ...]
+    is_active: bool
+    """BOZOR faolligi (`markets.is_active`), foydalanuvchi faolligi EMAS.
+
+    Nom `LoginRow.is_active` / `UserState.is_active` bilan bir xil, ma'nosi
+    esa boshqacha — chalkashish narxi yuqori, shuning uchun bu farq shu
+    yerda yozib qo'yiladi. `false` — usta tugallanmagan QORALAMA bozor
+    (D-16: `is_active` faollashtirish bayrog'i, "kamera bor/yo'q" emas).
+
+    Maydon `MarketRow.is_active` bilan bir xil shaklda: ikkalasi ham
+    `MarketRef.is_active` javob maydonining manbai bo'ladi va hech bir
+    chaqiruvchi `True` literalini yozmasligi kerak.
+    """
 
 
 @dataclass(frozen=True)
@@ -121,7 +133,9 @@ _FIND_LOGIN_BY_ID = text(
     "locale, is_platform_admin, full_name FROM auth_find_login_by_id(:user_id)"
 )
 
-_MEMBERSHIPS = text("SELECT market_id, market_name, roles FROM auth_memberships(:user_id)")
+_MEMBERSHIPS = text(
+    "SELECT market_id, market_name, roles, is_active FROM auth_memberships(:user_id)"
+)
 
 _LIST_MARKETS = text("SELECT market_id, market_name, is_active FROM auth_list_markets()")
 
@@ -198,13 +212,22 @@ async def find_login_by_id(session: AsyncSession, user_id: UUID) -> LoginRow | N
 
 
 async def memberships(session: AsyncSession, user_id: UUID) -> list[Membership]:
-    """Foydalanuvchining barcha a'zoliklari (bozor nomi bilan, nom bo'yicha tartiblangan)."""
+    """Foydalanuvchining barcha a'zoliklari (bozor nomi bilan, nom bo'yicha tartiblangan).
+
+    Ro'yxat FILTRLANMAYDI: qoralama bozor (`is_active = false`) ham
+    qaytariladi va bayroq chaqiruvchiga uzatiladi. Filtrlash mas'uliyati
+    ATAYIN iste'molchida — bozor tanlash ekrani qoralamani ko'rsatishi
+    KERAK, mahsulot oqimlari esa (6-faza billing job) `is_active` bo'yicha
+    ANIQ filtrlaydi va "ro'yxat allaqachon toza" degan taxminga tayanmaydi
+    (RESEARCH Pitfall 7).
+    """
     result = await session.execute(_MEMBERSHIPS, {"user_id": str(user_id)})
     return [
         Membership(
             market_id=row.market_id,
             market_name=row.market_name,
             roles=tuple(row.roles or ()),
+            is_active=row.is_active,
         )
         for row in result
     ]

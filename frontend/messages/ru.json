@@ -50,7 +50,8 @@
     "passwordChanged": "Пароль изменён",
     "selectMarket": "Выберите рынок",
     "selectMarketTitle": "Выберите рынок",
-    "noMarkets": "К вам не привязан ни один рынок"
+    "noMarkets": "К вам не привязан ни один рынок",
+    "marketDraft": "Черновик"
   },
   "users": {
     "title": "Пользователи",

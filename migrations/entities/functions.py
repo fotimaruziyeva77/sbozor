@@ -40,6 +40,14 @@ Funksiya tanasidagi har bir ustun havolasi jadval ALIASI bilan yoziladi
 (`u.locale`, `r.market_id`): `RETURNS TABLE (...)` chiqish nomlari SQL
 tanasida ko'rinadigan nomlar bo'lib, aliassiz `column reference ... is
 ambiguous` xatosini beradi.
+
+QAYTISH TIPINI O'ZGARTIRISH `CREATE OR REPLACE` BILAN IMKONSIZ: Postgres
+mavjud funksiyaning `RETURNS TABLE (...)` ro'yxatini almashtirishga yo'l
+bermaydi (`cannot change return type of existing function`). Bu yerdagi
+ta'rifga ustun qo'shish "tekin" emas — u alohida migratsiya bandini talab
+qiladi: `DROP FUNCTION` + qayta yaratish + `REVOKE`/`GRANT` ni QAYTADAN
+qo'yish (`DROP` dan keyin Postgres yangi funksiyaga `EXECUTE TO PUBLIC` ni
+standart beradi). Namuna — `migrations/versions/0006_membership_active.py`.
 """
 
 from __future__ import annotations
@@ -118,7 +126,8 @@ AUTH_MEMBERSHIPS = PGFunction(
 RETURNS TABLE (
     market_id uuid,
     market_name text,
-    roles text[]
+    roles text[],
+    is_active boolean
 )
 LANGUAGE sql
 SECURITY DEFINER
@@ -127,7 +136,8 @@ STABLE
 AS $$
     SELECT r.market_id,
            m.name,
-           r.roles
+           r.roles,
+           m.is_active
     FROM public.user_market_roles AS r
     JOIN public.markets AS m ON m.id = r.market_id
     WHERE r.user_id = p_user_id
@@ -135,7 +145,22 @@ AS $$
 $$
 """,
 )
-"""Foydalanuvchining barcha a'zoliklari — bozor tanlash ekranining manbai (D-05)."""
+"""Foydalanuvchining barcha a'zoliklari — bozor tanlash ekranining manbai (D-05).
+
+`is_active` — BOZOR faolligi (`markets.is_active`), foydalanuvchi faolligi
+EMAS. U qoralama bozorni (usta tugallanmagan, `false`) bozor tanlash
+ekranida ajratish uchun kerak: a'zolik tarmog'ida bozor avval ham
+ko'rinardi, lekin javob shaklida bu maydon umuman yo'q edi va UI uni
+jimgina "faol" deb yorliqlardi (UI-SPEC §12.1.1 X-2).
+
+`m.is_active` jadval ALIASI bilan yozilgan: `RETURNS TABLE` chiqish nomi
+ham `is_active` va aliassiz `column reference "is_active" is ambiguous`
+xatosi chiqadi.
+
+⚠ Bu ta'rif `0001` da yaratiladi, LEKIN qaytish tipi `0006` da o'zgardi.
+Mavjud bazada `CREATE OR REPLACE` yetmaydi — `0006_membership_active.py`
+`DROP` + qayta yaratish + `GRANT` tiklashni bajaradi.
+"""
 
 AUTH_LIST_MARKETS = PGFunction(
     schema="public",

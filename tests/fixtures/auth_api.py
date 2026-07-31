@@ -11,12 +11,14 @@ takrorlanadigan SQL va URL satrlarini bir joyga yig'adi.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
 if TYPE_CHECKING:
-    from uuid import UUID
+    from collections.abc import Iterator
 
     import httpx
     from psycopg import Connection
@@ -34,6 +36,7 @@ __all__ = [
     "REFRESH_URL",
     "SELECT_MARKET_URL",
     "audit_rows",
+    "draft_market",
     "global_audit_rows",
     "login",
     "refresh_token_row",
@@ -122,6 +125,54 @@ async def refresh_token_row(
     async with sessionmaker() as session:
         result = await session.execute(_REFRESH_FIND, {"jti": jti})
         return result.one_or_none()
+
+
+_INSERT_DRAFT_MARKET = "INSERT INTO markets (id, name, is_active) VALUES (%s, %s, false)"
+_INSERT_MEMBERSHIP = (
+    "INSERT INTO user_market_roles (id, market_id, user_id, roles) VALUES (%s, %s, %s, %s)"
+)
+_DELETE_MEMBERSHIPS = "DELETE FROM user_market_roles WHERE market_id = %s"
+_DELETE_REFRESH = "DELETE FROM refresh_tokens WHERE market_id = %s"
+_DELETE_MARKET = "DELETE FROM markets WHERE id = %s"
+
+
+@contextmanager
+def draft_market(
+    conn: Connection[TupleRow],
+    *,
+    name: str = "Qoralama bozor",
+    member_id: UUID | None = None,
+    roles: list[str] | None = None,
+) -> Iterator[UUID]:
+    """QORALAMA bozor (`markets.is_active = false`) — usta 1-qadamidan keyingi holat.
+
+    `sbozor_owner` bilan yoziladi (`two_markets` seed'i bilan bir xil sabab):
+    `markets` app-rolga faqat `SELECT` beradi, `user_market_roles` ga yozish
+    esa avval tenant kontekstini talab qilardi — ya'ni seed o'zi sinayotgan
+    mexanizmga tayanib qolardi.
+
+    `member_id` berilsa o'sha foydalanuvchiga a'zolik qatori ham yoziladi:
+    UI-SPEC §12.1.1 X-2 dagi holat aynan shu — qoralama bozorga tayinlangan
+    bozor admini uni ro'yxatda ALLAQACHON ko'radi va savol faqat uning
+    to'g'ri YORLIQLANISHIDA.
+
+    Teardown FK tartibida: sessiya qatorlari -> a'zolik -> bozor.
+    `audit_log` qatorlari ATAYIN qoladi — jadval append-only va uni
+    o'chirib bo'lmaydi (`cleanup_two_markets` bilan bir xil qoida).
+    """
+    market_id = uuid4()
+    conn.execute(_INSERT_DRAFT_MARKET, (str(market_id), name))
+    if member_id is not None:
+        conn.execute(
+            _INSERT_MEMBERSHIP,
+            (str(uuid4()), str(market_id), str(member_id), roles or ["market_admin"]),
+        )
+    try:
+        yield market_id
+    finally:
+        conn.execute(_DELETE_REFRESH, (str(market_id),))
+        conn.execute(_DELETE_MEMBERSHIPS, (str(market_id),))
+        conn.execute(_DELETE_MARKET, (str(market_id),))
 
 
 async def set_user_active(

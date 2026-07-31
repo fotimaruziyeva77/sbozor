@@ -423,6 +423,36 @@ def test_security_definer_functions_pin_search_path(
         )
 
 
+def test_auth_memberships_returns_is_active(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`auth_memberships()` qaytish to'plamida `is_active boolean` bor (0006).
+
+    NEGA BU ALOHIDA DARVOZA: funksiyaning IMZOSI (`auth_memberships(uuid)`)
+    o'zgarmadi, faqat QAYTISH TIPI kengaydi. Ya'ni `EXPECTED_DEFINER_FUNCTIONS`,
+    `GRANT_SIGNATURES` va mavjud bootstrap testlarining birortasi ham eski
+    (uch ustunli) ta'rif tiklanib qolganini KO'RMAYDI: nom joyida, grant
+    joyida, `search_path` joyida. Nosozlik faqat ilova qatlamida —
+    `auth_repo.memberships()` da `column "is_active" does not exist` bo'lib
+    chiqardi va sababi migratsiyada emas, repozitoriyda izlanardi.
+
+    `pg_get_function_result()` bazadagi AMALDAGI ta'rifni o'qiydi, entity
+    modulini emas — ya'ni test `0006` migratsiyasi HAQIQATAN bajarilganini
+    tekshiradi, kod nusxasini emas.
+    """
+    row = sync_app_conn.execute(
+        "SELECT pg_get_function_result('public.auth_memberships(uuid)'::regprocedure)"
+    ).fetchone()
+
+    assert row is not None, "`auth_memberships(uuid)` funksiyasi bazada yo'q"
+    result_type = row[0]
+    assert "is_active boolean" in result_type, (
+        f"`auth_memberships()` qaytish to'plami: {result_type!r} — `is_active boolean` yo'q. "
+        "Qoralama bozor (`markets.is_active = false`) a'zolik tarmog'ida "
+        "'faol' deb yolg'on yorliqlanadi (UI-SPEC §12.1.1 X-2)"
+    )
+
+
 def test_app_role_policies_all_reference_tenant_guc(
     sync_app_conn: Connection[TupleRow], migrated: None
 ) -> None:

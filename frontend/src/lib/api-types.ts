@@ -44,21 +44,53 @@ export const LOCALE_LABELS: Readonly<Record<ApiLocale, string>> = {
  */
 export const soumSchema = z.number().int().max(Number.MAX_SAFE_INTEGER);
 
-/** Bozor havolasi — auth javoblarida faqat `id` va nom keladi. */
+/**
+ * Bozor havolasi — auth javoblarida `id`, nom va BOZOR faolligi keladi.
+ *
+ * `is_active === false` — usta tugallanmagan QORALAMA bozor. Maydon
+ * `MAJBURIY` va `.optional()` EMAS: bayroq yo'qolganda UI qoralamani
+ * faoldan ajrata olmaydi va foydalanuvchi chala bozorni tayyor deb
+ * o'ylaydi. Backend'dagi `MarketRef.is_active` ham aynan shu sababdan
+ * standart qiymatsiz.
+ */
 export const marketRefSchema = z.object({
   id: z.uuid(),
   name: z.string(),
+  is_active: z.boolean(),
 });
 export type MarketSummary = z.infer<typeof marketRefSchema>;
 
-/** `GET /api/v1/markets` elementi (01-07) — `marketRefSchema` ning kengaytmasi. */
+/**
+ * `GET /api/v1/markets` elementi (01-07) — `marketRefSchema` ning kengaytmasi.
+ *
+ * `is_active` bu yerda TAKRORLANMAYDI: u endi bazaviy sxemadan keladi.
+ * Takror e'lon zarar qilmasdi, lekin ikki joyda yashagan maydon bir kun
+ * ajralib ketardi (biri `optional`, ikkinchisi majburiy).
+ */
 export const marketListItemSchema = marketRefSchema.extend({
   timezone: z.string(),
-  is_active: z.boolean(),
 });
 export type MarketListItem = z.infer<typeof marketListItemSchema>;
 
 export const marketListSchema = z.array(marketListItemSchema);
+
+/**
+ * `GET /api/v1/markets/{id}/setup-status` — usta to'liqligi (UI-SPEC §6.4).
+ *
+ * ENDPOINT 02-11 GACHA MAVJUD EMAS. Sxema shu yerda oldindan e'lon qilinadi,
+ * chunki bozor tanlash ekrani qoralama bozorni bosganda AYNAN shu javobdan
+ * `?step=` ni oladi. Chaqiruv `try/catch` ostida va xatoda 1-qadamga tushadi
+ * — ya'ni endpoint yo'qligi ham, shakli o'zgarishi ham oqimni to'xtatmaydi.
+ *
+ * FAQAT `step` MAJBURIY: 02-11 bandga `code`, `count` kabi maydonlar
+ * qo'shadi va zod noma'lum kalitlarni jimgina tashlab yuboradi, ya'ni bu
+ * sxema kengayishga chidamli. Butun javob shaklini oldindan qotirib
+ * qo'yish esa 02-11 ni shu faylga bog'lab qo'yardi.
+ */
+export const setupStatusSchema = z.object({
+  blocking: z.array(z.object({ step: z.number().int().min(1) })),
+});
+export type SetupStatus = z.infer<typeof setupStatusSchema>;
 
 /**
  * `POST /api/v1/auth/login` javobi.
