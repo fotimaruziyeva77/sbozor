@@ -77,6 +77,10 @@ __all__ = [
     "AUTH_USER_STATE",
     "GRANT_SIGNATURES",
     "MARKET_ACTIVATE",
+    "MARKET_CALENDAR_FUNCTIONS",
+    "MARKET_CALENDAR_GRANT_SIGNATURES",
+    "MARKET_CORE_FUNCTIONS",
+    "MARKET_CORE_GRANT_SIGNATURES",
     "MARKET_CREATE",
     "MARKET_DELETE_DRAFT",
     "MARKET_DOMAIN_FUNCTIONS",
@@ -1110,23 +1114,52 @@ ishlamaydi va tushum jimgina nolga tushadi. Aynan shuning uchun
 massivi bilan bir xil asosda; hech qanday konversiya yozilmaydi.
 """
 
-MARKET_DOMAIN_FUNCTIONS: list[PGFunction] = [
+MARKET_CORE_FUNCTIONS: list[PGFunction] = [
     MARKET_CREATE,
     MARKET_ACTIVATE,
     MARKET_RENAME,
-    MARKET_DELETE_DRAFT,
-    MARKET_IS_OPEN,
 ]
-"""`0007_market_domain` migratsiyasi yaratadigan to'plam."""
+"""`0007_market_domain` YARATADIGAN to'plam — BU RO'YXAT MUZLATILGAN.
 
-MARKET_DOMAIN_GRANT_SIGNATURES: tuple[str, ...] = (
+⚠ YANGI FUNKSIYA BU YERGA QO'SHILMAYDI (`AUDIT_TRIGGER_FUNCTIONS` bilan bir
+xil qoida): `migrations/versions/0007_market_domain.py` shu ro'yxat ustidan
+`upgrade()` da ham, `downgrade()` da ham TSIKL qiladi.
+
+NEGA AYNAN UCHTASI — bu bo'linish TEXNIK ZARURAT, tartib emas.
+`market_is_open()` `LANGUAGE sql` bo'lib, uning tanasi `CREATE FUNCTION`
+paytida PARSE VA VALIDATSIYA qilinadi (`check_function_bodies` standart
+`on`). Tana `market_calendar_exceptions` jadvaliga murojaat qiladi, u esa
+`0010_calendar` da tug'iladi — ya'ni funksiyani `0007` da yaratishga urinish
+`relation "public.market_calendar_exceptions" does not exist` bilan
+YIQILARDI. `market_delete_draft()` esa `stall_assignments` / `vendors` /
+`market_calendar_exceptions` dan `DELETE` qiladi; u plpgsql bo'lgani uchun
+CREATE paytida tekshirilmaydi, lekin uning YAGONA ma'noli o'rni — barcha
+o'sha jadvallar mavjud bo'lgan payt, ya'ni `0010`.
+"""
+
+MARKET_CORE_GRANT_SIGNATURES: tuple[str, ...] = (
     "market_create(text, text, date, smallint[], text, text, text, text, text)",
     "market_activate(uuid)",
     "market_rename(uuid, text)",
+)
+"""`MARKET_CORE_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari)."""
+
+MARKET_CALENDAR_FUNCTIONS: list[PGFunction] = [
+    MARKET_DELETE_DRAFT,
+    MARKET_IS_OPEN,
+]
+"""`0010_calendar` YARATADIGAN to'plam — kalendar jadvali bilan BIRGA.
+
+Ikkalasi ham `market_calendar_exceptions` ga tegadi, ya'ni ular o'sha jadval
+tug'ilgan migratsiyada yaratilishi SHART (sabab `MARKET_CORE_FUNCTIONS`
+docstringida).
+"""
+
+MARKET_CALENDAR_GRANT_SIGNATURES: tuple[str, ...] = (
     "market_delete_draft(uuid)",
     "market_is_open(uuid, date)",
 )
-"""`MARKET_DOMAIN_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari).
+"""`MARKET_CALENDAR_FUNCTIONS` bilan bir xil TARTIBDA.
 
 `market_is_open` ham shu ro'yxatda: u `SECURITY DEFINER` emas, lekin
 `PUBLIC` dan `REVOKE` va `sbozor_app` ga `GRANT` baribir kerak —
@@ -1134,3 +1167,21 @@ yaratilgandan keyin Postgres unga `EXECUTE TO PUBLIC` ni standart beradi va
 usiz bazadagi HAR QANDAY rol uni chaqira olardi. (RLS baribir qatorlarni
 yashiradi, lekin funksiyaning MAVJUDLIGI ham keraksiz axborot.)
 """
+
+MARKET_DOMAIN_FUNCTIONS: list[PGFunction] = [
+    *MARKET_CORE_FUNCTIONS,
+    *MARKET_CALENDAR_FUNCTIONS,
+]
+"""Bozor hayot siklining BARCHA funksiyalari — autogenerate reyestri uchun.
+
+Faqat KUZATUV ro'yxati (`ALL_ENTITIES` shundan quriladi): `register_entities()`
+unga qarab ta'rif o'zgarganda `op.replace_entity(...)` taklif qiladi. Birorta
+migratsiya bu aggregat ustidan tsikl QILMAYDI — har bir migratsiya o'z
+scope'li ro'yxatini oladi (`ALL_TRIGGER_FUNCTIONS` bilan bir xil naqsh).
+"""
+
+MARKET_DOMAIN_GRANT_SIGNATURES: tuple[str, ...] = (
+    *MARKET_CORE_GRANT_SIGNATURES,
+    *MARKET_CALENDAR_GRANT_SIGNATURES,
+)
+"""`MARKET_DOMAIN_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari)."""
