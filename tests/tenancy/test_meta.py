@@ -84,13 +84,19 @@ EXPECTED_DEFINER_FUNCTIONS = {
     # ⚠ `market_is_open` bu ro'yxatga HECH QACHON QO'SHILMAYDI: u ATAYIN
     # `SECURITY DEFINER` EMAS (u CHAQIRUVCHI huquqi bilan ishlashi va RLS
     # ostida qolishi kerak, aks holda bir bozor boshqasining bayram jadvalini
-    # o'qiy olardi — T-02-22/T-02-41). U `0010` da tug'iladi va uning INVOKER
-    # ekani `test_market_domain_meta.py` da ALOHIDA qulflanadi.
-    # `market_delete_draft` esa `SECURITY DEFINER` va u ham `0010` da — nomi
-    # o'sha yerda qo'shiladi (02-06).
+    # o'qiy olardi — T-02-22/T-02-41). Uning INVOKER ekani
+    # `test_market_domain_meta.py::test_market_is_open_is_not_security_definer`
+    # da ALOHIDA va TESKARI yo'nalishda qulflangan: u yerdagi test
+    # `prosecdef` ROSTGA aylansa qizaradi. Ya'ni nomni "unutilgan" deb bu
+    # yerga qo'shish ikkita testni bir vaqtda buzadi — biri talab qiladi,
+    # ikkinchisi taqiqlaydi.
     "market_create",
     "market_activate",
     "market_rename",
+    # 0010 — qoralama bozorni o'chirish. `SECURITY DEFINER`, chunki u o'nta
+    # domen jadvalidan va `markets` dan `DELETE` qiladi; `sbozor_app` da esa
+    # `markets` ustida faqat `SELECT` grant'i bor (T-02-45).
+    "market_delete_draft",
 }
 
 # `AUDITED_TABLES` da RO'YXATGA OLINGAN, lekin jadval hali TUG'ILMAGAN nomlar.
@@ -115,15 +121,15 @@ EXPECTED_DEFINER_FUNCTIONS = {
 #
 # Bu `INDEX_EXCEPTIONS` va `POLICY_TENANT_GUC_EXCEPTIONS` bilan bir xil naqsh:
 # istisno testda, sababi yozma, o'zgartirish code review'da ko'zga tashlanadi.
-PENDING_AUDIT_TRIGGERS = frozenset(
-    {
-        # 02-06 (`0009_vendors`): sotuvchilar va biriktirish davrlari
-        "vendors",
-        "stall_assignments",
-        # 02-06 (`0010_calendar`): yopiq kun istisnolari
-        "market_calendar_exceptions",
-    }
-)
+PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset()
+"""BO'SH — 02-06 (`0010_calendar`) qarzni to'liq yopdi.
+
+⚠ BU RO'YXATGA YANGI NOM QO'SHISH — OXIRGI CHORA, ODATIY QADAM EMAS.
+Reyestrga (`AUDITED_TABLES`) jadval qo'shilgan, lekin
+`attach_audit_trigger()` hali chaqirilmagan HOLAT faqat jadval KEYINGI
+migratsiyada tug'ilganda ma'noli (2-fazada aynan shunday edi: reyestr
+birinchi migratsiyadan OLDIN to'ldirilgan). Bir migratsiya ichida ikkalasini
+ham qilish mumkin bo'lsa, ro'yxat BO'SH qolishi kerak."""
 
 # Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun
 # sabab SHU YERDA yozilishi SHART — istisno qo'shish code review'da ko'zga
@@ -431,6 +437,35 @@ def test_security_definer_functions_pin_search_path(
         assert any(item.startswith("search_path=") for item in proconfig), (
             f"{name}: `SET search_path = ...` yo'q — privilege escalation vektori"
         )
+
+
+def test_market_is_open_is_absent_from_definer_registry() -> None:
+    """Reyestrning O'ZI qulflanadi: `market_is_open` bu ro'yxatga TUSHMASLIGI shart.
+
+    Yuqoridagi test BAZANI tekshiradi (`pg_proc.prosecdef`), bu esa
+    REYESTRNI — va aynan shu tartibda ikkalasi bir-birini yopadi.
+
+    Nega yolg'iz baza tekshiruvi yetarli emas: `EXPECTED_DEFINER_FUNCTIONS`
+    ga `market_is_open` qo'shilsa, yuqoridagi `found >= EXPECTED_...`
+    da'vosi uni `SECURITY DEFINER` QILISHNI talab qilib qizarardi. Xatoni
+    o'qigan keyingi ishlovchi uchun eng tabiiy "tuzatish" — migratsiyada
+    funksiyaga `SECURITY DEFINER` qo'shish, ya'ni AYNAN T-02-41 ni ochish
+    (u RLS'dan chiqadi va bir bozor boshqasining bayram jadvalini o'qiy
+    oladi). Bu test o'sha yo'lni boshidayoq to'sadi va sababni aytadi.
+
+    Funksiyaning haqiqiy huquq rejimi
+    `test_market_domain_meta.py::test_market_is_open_is_not_security_definer`
+    da qulflangan.
+    """
+    assert "market_is_open" not in EXPECTED_DEFINER_FUNCTIONS, (
+        "`market_is_open` `EXPECTED_DEFINER_FUNCTIONS` ga qo'shilgan — u ATAYIN INVOKER "
+        "(chaqiruvchi huquqi + RLS). Reyestr uni `SECURITY DEFINER` qilishga majburlaydi "
+        "va bu T-02-41 ni ochadi. Nomni ro'yxatdan OLIB TASHLANG."
+    )
+    assert "market_delete_draft" in EXPECTED_DEFINER_FUNCTIONS, (
+        "`market_delete_draft` reyestrdan tushib qolgan — u o'nta domen jadvalidan va "
+        "`markets` dan `DELETE` qiladi, `sbozor_app` da esa bunday grant YO'Q (T-02-45)"
+    )
 
 
 def test_auth_memberships_returns_is_active(

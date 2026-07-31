@@ -45,6 +45,11 @@ from fastapi import FastAPI
 from fixtures import TenantSessionFactory, TokenFactory
 from fixtures.admin_api import session_headers
 from fixtures.auth_users import AuthSeed, cleanup_auth_users, seed_auth_users
+from fixtures.market_domain import (
+    MarketDomainSeed,
+    cleanup_market_domain,
+    seed_market_domain,
+)
 from fixtures.two_markets import TwoMarketSeed, cleanup_two_markets, seed_two_markets
 from psycopg import Connection, sql
 from psycopg.rows import TupleRow
@@ -315,6 +320,31 @@ def two_markets(sync_owner_conn: Connection[TupleRow], migrated: None) -> Iterat
         yield seed
     finally:
         cleanup_two_markets(sync_owner_conn, seed)
+
+
+@pytest.fixture
+def market_domain(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+) -> Iterator[MarketDomainSeed]:
+    """`two_markets` USTIGA 2-fazaning domen qatlami (MARKET-02…MARKET-05).
+
+    `two_markets` ATAYIN argument sifatida olinadi, faqat "oldin ishlasin"
+    uchun emas: pytest fixture'larni TESKARI tartibda yopadi, ya'ni domen
+    qatlami bozorlar o'chirilishidan OLDIN tozalanadi. Teskari holatda
+    `cleanup_two_markets()` dagi `DELETE FROM markets` hali havola qilib
+    turgan `market_profile` / `zones` qatorlari sababli FK buzilishi bilan
+    yiqilardi (`test_composite_fk.py::child_table` bilan bir xil naqsh).
+
+    Nima seed qilinishi va NEGA aynan shunday — `fixtures/market_domain.py`
+    modul docstringida (har bir element aniq bir downstream testni
+    oziqlantiradi).
+    """
+    seed = seed_market_domain(sync_owner_conn, two_markets)
+    try:
+        yield seed
+    finally:
+        cleanup_market_domain(sync_owner_conn, seed)
 
 
 @pytest.fixture(scope="session")
