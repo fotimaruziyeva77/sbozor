@@ -46,7 +46,7 @@ from tenancy.test_cross_tenant import (
 
 pytestmark = pytest.mark.tenancy
 
-MINIMUM_MATRIX_ROUTES = 28
+MINIMUM_MATRIX_ROUTES = 31
 """Matritsada kamida shuncha marshrut bo'lishi shart.
 
 01-07 holatida qamrovda 7 marshrut bor edi (`/users` GET+POST,
@@ -55,6 +55,14 @@ MINIMUM_MATRIX_ROUTES = 28
 rastalar 6) va chegara 12 ga ko'tarildi. 02-09 yana 8 tasini qo'shdi
 (tariflar 4, kalendar 4) — chegara 20. 02-10 esa 7 tasini
 (sotuvchilar 4, biriktirishlar 3), ya'ni amaldagi son 36 — chegara 28.
+02-11 uchta usta marshrutini qo'shdi (`setup-status`, `activate`,
+`DELETE /markets/{id}`) — amaldagi son 39, chegara 31.
+
+⚠ `POST /api/v1/markets` bu sanoqqa KIRMAYDI: `/api/v1/markets` yo'li
+`EXEMPT_ROUTES` da va istisno YO'L bo'yicha, metod bo'yicha emas. Uning
+qamrovi `tests/integration/test_wizard_flow.py` da QAYTA tiklangan
+(tokensiz -> 401; bozor admini -> 403; platforma admini -> 201) —
+`EXEMPT_ROUTES` docstringidagi talab shuni buyuradi.
 
 Chegara ATAYIN AMALDAGI SONDAN PAST — u "matritsa bo'shab qolmadimi?"
 degan savolga javob beradi, aniq sonni qulflamaydi. Aniq son yozilganda
