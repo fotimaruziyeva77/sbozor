@@ -30,7 +30,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 from sbozor_core.enums import AuditAction
 
-from app.deps import AuthSessionDep, PrincipalDep
+from app.deps import AuthSessionDep, CurrentPasswordDep, PrincipalDep
 from app.repositories import user_repo
 from app.schemas import LocaleResponse, ProfileResponse, UpdateProfileRequest
 from app.security.audit import TABLE_USERS, write_app_audit
@@ -74,10 +74,21 @@ async def read_profile(principal: PrincipalDep, session: AuthSessionDep) -> Prof
 @router.patch("", response_model=LocaleResponse)
 async def update_profile(
     payload: UpdateProfileRequest,
-    principal: PrincipalDep,
+    principal: CurrentPasswordDep,
     session: AuthSessionDep,
 ) -> LocaleResponse:
     """Til tanlovini profilda saqlaydi (D-13).
+
+    `CurrentPasswordDep`, `PrincipalDep` EMAS (1-faza ko'rigi, WR-02): bu
+    endpoint YOZADI (`users.locale`) va qurbon nomidan `update` audit
+    qatorini chiqaradi. `read_profile` (yuqorida) darvozadan ATAYIN
+    tashqarida qoladi — parol almashtirish ekrani foydalanuvchining tilini
+    bilishi kerak, aks holda u o'zi tushunmaydigan tilda qulflanib qolardi.
+
+    UI buzilmaydi: `locale-switcher.tsx` interfeys tilini DARHOL o'zgartiradi
+    va yozuv xatosini jimgina yutadi (u yerda hujjatlashtirilgan) — ya'ni
+    vaqtinchalik parolli foydalanuvchi ham tilni almashtira oladi, tanlov
+    faqat parol almashtirilgandan keyin profilga saqlanadi.
 
     Yozuv `auth_set_locale` `SECURITY DEFINER` funksiyasi orqali ketadi
     (`app/repositories/user_repo.py`): `users` jadvali app-rolga butunlay

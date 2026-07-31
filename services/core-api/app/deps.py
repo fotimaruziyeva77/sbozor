@@ -18,12 +18,32 @@ kirita oladi" deydi, RLS esa "faqat O'Z bozorida" deydi. Birinchisisiz
 har kim hamma narsani qila olardi; ikkinchisisiz kassir boshqa bozorning
 to'lovini kirita olardi.
 
-2 esa ikkalasidan ham OLDIN turadi va ikkalasiga ham BOG'LANGAN (3 va 4
-ning ichidan chaqiriladi) — ya'ni yangi endpoint yozgan odam darvozani
-"qo'shishni unutishi" MUMKIN EMAS. Uni faqat `get_current_principal` ga
-to'g'ridan-to'g'ri bog'langan endpointlar (`/auth/change-password`,
-`/auth/logout`, `/api/v1/me`) chetlab o'tadi — bu ATAYIN: aks holda
-foydalanuvchi parolni almashtira olmasdi va darvoza abadiy qulf bo'lardi.
+2 esa ikkalasidan ham OLDIN turadi va 3 hamda 4 ning ICHIDAN chaqiriladi,
+ya'ni har qanday tenant yoki huquq talab qiladigan endpoint undan
+AVTOMATIK o'tadi.
+
+LEKIN BU AVTOMATIKLIK TO'LIQ EMAS — VA BU YERDA ANIQ AYTILADI (WR-02):
+`PrincipalDep + AuthSessionDep` juftligi yaroqli naqsh va u darvozani
+CHETLAB O'TADI. Ya'ni "yangi endpoint yozgan odam darvozani qo'shishni
+unutishi mumkin emas" degan da'vo NOTO'G'RI edi: 1-faza ko'rigi aynan
+shu yo'ldan qurilgan ikkita yozuv endpointini topdi
+(`POST /auth/select-market` va `PATCH /api/v1/me`) va ikkalasi ham
+2-fazada `CurrentPasswordDep` ga o'tkazildi.
+
+QOIDA: `PrincipalDep` faqat O'QISH endpointi uchun va faqat qulflangan
+sessiyaga ATAYIN ochiq bo'lishi kerak bo'lganda ishlatiladi. Yozadigan
+(`POST`/`PATCH`/`PUT`/`DELETE`) yoki sessiya yaratadigan har qanday
+endpoint `CurrentPasswordDep` oladi.
+
+Darvozadan ATAYIN tashqarida qoladigan AYNAN uchta yo'l:
+  * `POST /api/v1/auth/change-password` — darvozadan chiqish yo'lining o'zi;
+  * `POST /api/v1/auth/logout` — qulflangan sessiyani tark etish;
+  * `GET  /api/v1/me` — parol almashtirish ekrani foydalanuvchining tilini
+    bilishi kerak (D-13), aks holda u tushunmaydigan tilda qulflanardi.
+`POST /auth/login` va `POST /auth/refresh` bu ro'yxatga KIRMAYDI: ularda
+principal umuman yo'q (biri parol, ikkinchisi cookie bilan ishlaydi).
+`refresh` bergan access token esa har so'rovda `get_current_principal`
+orqali qayta tekshiriladi — ya'ni u darvozani chetlab o'tolmaydi.
 
 `require_platform_admin` — 3 ning MAXSUS HOLI, beshinchi mas'uliyat EMAS:
 u ham FUNKSIYA darajasidagi nazorat va u ham 2 ga bog'langan. Farqi
