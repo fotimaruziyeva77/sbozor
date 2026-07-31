@@ -102,16 +102,14 @@ EXPECTED_DEFINER_FUNCTIONS = {
 # istisno testda, sababi yozma, o'zgartirish code review'da ko'zga tashlanadi.
 PENDING_AUDIT_TRIGGERS = frozenset(
     {
-        # 02-05: bozor profili, zonalar, rastalar, toifa davrlari
-        "market_profile",
-        "stalls",
+        # 02-05 (`0008_temporal`): toifa davrlari va tariflar
         "stall_category_periods",
-        "market_calendar_exceptions",
-        # 02-05/02-06: tariflar
         "tariffs",
-        # 02-06: sotuvchilar va biriktirish davrlari
+        # 02-06 (`0009_vendors`): sotuvchilar va biriktirish davrlari
         "vendors",
         "stall_assignments",
+        # 02-06 (`0010_calendar`): yopiq kun istisnolari
+        "market_calendar_exceptions",
     }
 )
 

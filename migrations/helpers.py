@@ -40,9 +40,11 @@ __all__ = [
     "MARKET_TZ_LITERAL",
     "OWNER_ROLE",
     "attach_audit_trigger",
+    "attach_immutability_trigger",
     "audit_trigger_name",
     "create_entity",
     "detach_audit_trigger",
+    "detach_immutability_trigger",
     "disable_force_for_backfill",
     "drop_entity",
     "enable_rls",
@@ -257,6 +259,54 @@ def detach_audit_trigger(table: str) -> None:
     """`attach_audit_trigger()` jufti — `downgrade()` uchun."""
     tbl = _ident(table)
     op.execute(f"DROP TRIGGER IF EXISTS {audit_trigger_name(tbl)} ON {tbl}")
+
+
+# ===========================================================================
+# O'ZGARMASLIK TRIGGERI (2-faza, D-04 / D-07)
+# ===========================================================================
+
+
+def attach_immutability_trigger(table: str, function: str, name: str) -> None:
+    """`BEFORE UPDATE OR DELETE ... FOR EACH ROW` qo'riqchi triggerini ulaydi.
+
+    `attach_audit_trigger()` bilan bir xil shaklda yozilgan, LEKIN uchta
+    ataylab qilingan farq bor va har biri boshqa sababga ega:
+
+    * **`BEFORE`, `AFTER` emas** — qo'riqchi o'zgarish SODIR BO'LISHIDAN
+      OLDIN to'xtatishi kerak. Audit esa teskari: u faqat sodir bo'lgan
+      o'zgarishni qayd etadi.
+    * **Trigger funksiyasi PARAMETR** — audit uchun `fn_audit_row()` yagona,
+      bu yerda esa har bir jadval O'Z funksiyasiga ega (`tariff_past_immutable`
+      / `category_period_past_immutable`). Sabab: xato xabari QAYSI qoida
+      buzilganini aytishi kerak, `TG_TABLE_NAME` bo'yicha shoxlanadigan umumiy
+      funksiya esa ikkala jadvalni bir-biriga bog'lab qo'yardi.
+    * **Trigger nomi ham PARAMETR** — `audit_trigger_name()` kabi hosila nom
+      yo'q, chunki bitta jadvalda kelajakda bir nechta qo'riqchi bo'lishi
+      mumkin va nom o'sha paytda ma'noli bo'lib qolishi kerak.
+
+    NEGA `alembic-utils` `PGTrigger` ISHLATILMAYDI: triggerlar bu loyihada xom
+    `op.execute("CREATE TRIGGER ...")` bilan yaratiladi — naqsh
+    `migrations/versions/0002_audit.py` da (`audit_no_mutate` /
+    `audit_no_truncate`) o'rnatilgan. Trigger FUNKSIYASI `alembic-utils`
+    nazoratida (`migrations/entities/triggers.py`), triggerning O'ZI esa
+    migratsiyada. Ikkala mexanizmni aralashtirish autogenerate'ni har safar
+    "o'zgargan" deb ko'rsatishga majburlardi.
+
+    TRIGGER TARTIBI (Postgres qoidasi, izoh ataylab shu yerda): bir xil vaqtda
+    ishlaydigan triggerlar ALIFBO tartibida chaqiriladi, `BEFORE` esa `AFTER`
+    dan oldin yuradi. Ya'ni bu qo'riqchi rad etgan `UPDATE` audit qatori
+    QOLDIRMAYDI — bu to'g'ri xulq: rad etilgan amal "o'zgardi" deb yozilmasin.
+    """
+    op.execute(
+        f"CREATE TRIGGER {_ident(name)} "
+        f"BEFORE UPDATE OR DELETE ON {_ident(table)} "
+        f"FOR EACH ROW EXECUTE FUNCTION {_ident(function)}()"
+    )
+
+
+def detach_immutability_trigger(table: str, name: str) -> None:
+    """`attach_immutability_trigger()` jufti — `downgrade()` uchun."""
+    op.execute(f"DROP TRIGGER IF EXISTS {_ident(name)} ON {_ident(table)}")
 
 
 # ===========================================================================
