@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-__all__ = ["ActorKind", "AuditAction", "AuditSource", "Locale", "Role"]
+__all__ = ["ActorKind", "AuditAction", "AuditSource", "Locale", "Role", "StallStatus"]
 
 
 class Role(StrEnum):
@@ -44,6 +44,35 @@ class Locale(StrEnum):
     UZ_LATN = "uz-Latn"
     UZ_CYRL = "uz-Cyrl"
     RU = "ru"
+
+
+class StallStatus(StrEnum):
+    """`stalls.status` qiymatlari — AYNAN uchta (2-faza A4 taxmini).
+
+    Qiymatlar DB KONTENTI va ATAYIN BITTA TILDA (1-faza D-16): ular
+    `stalls.status` ustunida matn sifatida yashaydi va `STALL_STATUS_CHECK`
+    konstraytiga aynan shu ro'yxatdan hosil qilinadi. UI ularni tarjima
+    QILMAYDI — u `stalls.status.*` i18n kalitlari orqali uch tilda
+    ko'rsatadi (`stalls.status.active` va h.k.), ya'ni tilni almashtirish
+    DB qiymatiga hech qachon tegmaydi.
+
+    A4 TAXMINI — QIYMATLARNING MAZMUNI (6-faza billing kontrakti):
+    `closed` va `maintenance` rastalarga kunlik hisob YOZILMAYDI. Bu
+    keyinroq qo'shiladigan filtr emas, holatlarning O'Z ma'nosi: rasta
+    "yopiq" deb belgilangani — "bu kun uchun pul talab qilinmaydi" degani.
+    Shuning uchun yangi holat qo'shish 6-fazadagi hisob filtrini jimgina
+    o'zgartiradi va `tests/unit/test_enums.py::
+    test_stall_status_has_exactly_three_states` ataylab qizaradi.
+
+    `active`      — rasta ishlaydi, hisob yoziladi
+    `maintenance` — vaqtincha ta'mirda; hisob YO'Q
+    `closed`      — foydalanishdan chiqarilgan; hisob YO'Q. Qator
+                    O'CHIRILMAYDI (kod reyestri va tarix saqlanadi, D-02).
+    """
+
+    ACTIVE = "active"
+    MAINTENANCE = "maintenance"
+    CLOSED = "closed"
 
 
 class AuditAction(StrEnum):

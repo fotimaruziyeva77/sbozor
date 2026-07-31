@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 import pytest
-from sbozor_core.enums import ActorKind, AuditAction, AuditSource, Locale, Role
+from sbozor_core.enums import ActorKind, AuditAction, AuditSource, Locale, Role, StallStatus
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ROUTING_TS = REPO_ROOT / "frontend" / "src" / "i18n" / "routing.ts"
@@ -49,6 +49,23 @@ def test_locale_matches_frontend_routing_ts() -> None:
 
     frontend_locales = re.findall(r'["\']([^"\']+)["\']', match.group(1))
     assert frontend_locales == [locale.value for locale in Locale]
+
+
+def test_stall_status_has_exactly_three_states() -> None:
+    """A4: `active` / `maintenance` / `closed` — aynan uchta, aynan shu tartibda.
+
+    Bu test ATAYIN qattiq: yangi holat qo'shilishi 6-fazadagi billing
+    filtrini ("faqat `active` rastaga hisob yoziladi") jimgina o'zgartiradi.
+    Qizarganda savol aniq bo'ladi — yangi holatga hisob yoziladimi yoki
+    yo'qmi, va javob shu yerda hujjatlashtiriladi.
+    """
+    assert [status.value for status in StallStatus] == ["active", "maintenance", "closed"]
+
+
+def test_stall_status_is_a_closed_set() -> None:
+    """`STALL_STATUS_CHECK` shu to'plamdan hosil qilinadi — DB uni qulflaydi."""
+    assert {status.value for status in StallStatus} == {"active", "maintenance", "closed"}
+    assert len(StallStatus) == 3
 
 
 def test_audit_action_db_ops_are_lowercase() -> None:
