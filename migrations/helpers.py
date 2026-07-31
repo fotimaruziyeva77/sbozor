@@ -30,6 +30,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import sqlalchemy as sa
 from alembic import op
 
 __all__ = [
@@ -49,6 +50,7 @@ __all__ = [
     "financial_guard_statements",
     "financial_guards",
     "grant_app_dml",
+    "require_extension",
     "restore_force",
     "revoke_app_all",
 ]
@@ -90,6 +92,45 @@ def _dml(ops: str) -> str:
     if not _DML_RE.match(ops.strip()):
         raise ValueError(f"{ops!r} yaroqli DML huquqlari ro'yxati emas")
     return ops.strip()
+
+
+# ===========================================================================
+# KENGAYTMA DARVOZASI (2-faza, Pitfall 1)
+# ===========================================================================
+
+_REQUIRE_EXTENSION = sa.text("SELECT 1 FROM pg_extension WHERE extname = :name")
+
+
+def require_extension(name: str) -> None:
+    """Kengaytma bazada MAVJUDLIGINI talab qiladi; yo'q bo'lsa `RuntimeError`.
+
+    BU TEKSHIRUV MIGRATSIYANING BIRINCHI SATRI BO'LISHI KERAK. Sabab: kerakli
+    kengaytmasiz `op.create_table(...)` o'rtada yiqiladi ("data type uuid has
+    no default operator class for access method gist") va xabar aslida NIMA
+    yetishmayotganini aytmaydi — dasturchi konstraytni "noto'g'ri yozilgan"
+    deb o'ylab uni olib tashlaydi. Darvoza oldinda tursa, xato matni yagona
+    to'g'ri harakatni ko'rsatadi.
+
+    NEGA MIGRATSIYA KENGAYTMANI O'ZI YARATMAYDI (empirik, `postgres:18.4`):
+    `sbozor_owner` — `NOCREATEDB` va bazaning egasi emas, ya'ni
+    `CREATE EXTENSION` unga `permission denied to create extension` beradi.
+    Kengaytma `ops/db/init/00-extensions.sql` da, superuser bilan yaratiladi
+    (sabab va rad etilgan muqobil o'sha faylda batafsil).
+
+    `name` ATAYIN `_ident()` darvozasidan O'TKAZILMAYDI: u DDL satriga
+    qo'shilmaydi, bind parametr sifatida uzatiladi — ya'ni bu yerda
+    injection yuzasi umuman yo'q va `_ident()` faqat soxta xotirjamlik
+    bergan bo'lardi.
+    """
+    if op.get_bind().execute(_REQUIRE_EXTENSION, {"name": name}).first() is None:
+        raise RuntimeError(
+            f"`{name}` kengaytmasi bazada yo'q. Migratsiya roli (`{OWNER_ROLE}`) uni "
+            "O'ZI o'rnata olmaydi — `permission denied to create extension`. "
+            "`ops/db/init/00-extensions.sql` ni SUPERUSER bilan bajaring "
+            "(prod'da bu fayl `docker-entrypoint-initdb.d` orqali avtomatik "
+            "ishlaydi; mavjud bazada esa qo'lda: "
+            f'psql -U postgres -d <db> -c "CREATE EXTENSION IF NOT EXISTS {name};").'
+        )
 
 
 def create_entity(entity: Any) -> None:
