@@ -36,9 +36,12 @@ __all__ = [
     "MARKET_ERROR_CODES",
     "MIN_PASSWORD_LENGTH",
     "STALL_PAGE_SIZE_MAX",
+    "VENDOR_PAGE_SIZE_MAX",
+    "VENDOR_STALL_CODES_MAX",
     "AssignmentCloseRequest",
     "AssignmentCreateRequest",
     "AssignmentItem",
+    "AssignmentListResponse",
     "AuditEntry",
     "AuditListResponse",
     "AuditQuery",
@@ -88,7 +91,9 @@ __all__ = [
     "UserListResponse",
     "VendorListItem",
     "VendorListResponse",
+    "VendorQuery",
     "VendorRequest",
+    "VendorUpdateRequest",
     "ZoneItem",
     "ZoneListResponse",
     "ZoneRequest",
@@ -481,6 +486,7 @@ MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
         "vendor_phone_taken",
         "assignment_period_overlaps",
         "assignment_not_open",
+        "invalid_period",
         # --- usta (02-11, MARKET-01) ---
         "market_incomplete",
         # --- import (02-12, D-13/D-14/D-15) ---
@@ -490,7 +496,7 @@ MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
         "unsupported_file_type",
     }
 )
-"""2-faza qaytaradigan BARCHA `detail` kodlari — yigirmata.
+"""2-faza qaytaradigan BARCHA `detail` kodlari — yigirma bitta.
 
 ⚠ JUFTINI YANGILASHNI UNUTMANG: bu ro'yxatning UI ko'zgusi
 `frontend/src/lib/api-types.ts::ERROR_CODES` da yashaydi va u QO'LDA
@@ -511,6 +517,26 @@ STALL_PAGE_SIZE_MAX = 200
 so'rov 1000 rastali bozorda butun reestrni bitta JSON'ga aylantirardi.
 Keyingi sahifa KURSOR bilan olinadi — `OFFSET` umuman ishlatilmaydi
 (`app/repositories/stall_repo.py` modul docstringi).
+"""
+
+VENDOR_PAGE_SIZE_MAX = 200
+"""`GET /vendors?limit=` ning yuqori chegarasi (T-02-78).
+
+`STALL_PAGE_SIZE_MAX` bilan bir xil qiymat, lekin ALOHIDA konstanta:
+sotuvchi qatori rasta qatoridan qimmatroq (har biriga bugungi
+biriktirishlar agregati hisoblanadi), ya'ni ikki yuza kelajakda turli
+chegara talab qilishi mumkin. Bitta konstantani baham ko'rish o'sha
+farqni jimgina yo'q qilardi.
+"""
+
+VENDOR_STALL_CODES_MAX = 20
+"""Bitta sotuvchi uchun javobda qaytariladigan rasta KODLARINING chegarasi.
+
+UI badge sifatida ko'rsatadi (UI-SPEC §8.2), ya'ni yigirmadan ortig'i
+ekranda baribir sig'maydi. Ortiqchasi YO'QOLMAYDI — `stall_count`
+to'liq sonni beradi va u alohida maydon. Chegarasiz agregat bitta
+sotuvchiga yuzlab rasta biriktirilgan bozorda javobni cheksiz
+o'stirardi (T-02-78).
 """
 
 ISO_WEEKDAYS: Final[frozenset[int]] = frozenset(range(1, 8))
@@ -1014,6 +1040,54 @@ class VendorRequest(BaseModel):
             raise ValueError(str(exc)) from exc
 
 
+class VendorUpdateRequest(BaseModel):
+    """`PATCH /vendors/{id}` tanasi — BERILGAN maydonlar tahrirlanadi (D-12).
+
+    `VendorRequest` dan farqi FAQAT majburiylikda: u yerda ikkala maydon
+    ham shart (yangi sotuvchini ismsiz yoki telefonsiz yaratib bo'lmaydi),
+    bu yerda esa faqat ismni tuzatish ("Aliyev Vali" -> "Aliev Vali")
+    telefonni qayta yuborishni TALAB QILMASLIGI kerak — aks holda klient
+    uni ekrandan qayta o'qib yuborardi va bir kun eskirgan qiymat bilan
+    yuborib, telefonni jimgina orqaga qaytarardi.
+
+    Cheklov `Annotated[str, StringConstraints(...)] | None` shaklida —
+    union USTIGA emas (02-08 deviatsiya #7 ning qoidasi).
+
+    Telefon bu yerda ham CHEGARADA normallashadi: `VendorRequest` bilan
+    bir xil validator, ya'ni ikki yo'l bir xil E.164 shaklini yozadi.
+    """
+
+    full_name: _LongNameStr | None = None
+    phone: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def _normalize(cls, value: str | None) -> str | None:
+        """E.164 ga keltiradi; o'qib bo'lmasa 422."""
+        if value is None:
+            return None
+        try:
+            return normalize_phone(value)
+        except InvalidPhoneError as exc:
+            raise ValueError(str(exc)) from exc
+
+
+class VendorQuery(BaseModel):
+    """`GET /vendors` query parametrlari (UI-SPEC §8.2).
+
+    `q` — F.I.Sh. PREFIKSI yoki telefonning ISTALGAN qismi. Ikki xil
+    naqsh ataylab: ism bo'yicha qidiruv alifbo tartibidagi ro'yxatni
+    toraytiradi (prefiks), telefon esa odatda o'rtasidan eslab qolinadi
+    ("...45 67 bilan tugaydigan").
+
+    `limit` ning yuqori chegarasi — `VENDOR_PAGE_SIZE_MAX` (T-02-78).
+    """
+
+    q: _SearchStr | None = None
+    limit: Annotated[int, Field(ge=1, le=VENDOR_PAGE_SIZE_MAX)] = 50
+    cursor: str | None = None
+
+
 class VendorListResponse(BaseModel):
     """`GET /vendors` — keyset sahifa (sotuvchi soni rastalar bilan o'sadi)."""
 
@@ -1051,9 +1125,28 @@ class AssignmentCreateRequest(BaseModel):
 
 
 class AssignmentCloseRequest(BaseModel):
-    """`POST /assignments/{id}/close` tanasi — ochiq davrni yopadi."""
+    """`PATCH /assignments/{id}` tanasi — OCHIQ davrni yopadi.
+
+    Yagona maydon `to_date` va bu ataylab: `from_date` ni tahrirlash
+    o'tmishdagi kunlarning qarz egaligini boshqa sotuvchiga ko'chirardi
+    (D-10) va `daily_charges` allaqachon yozilgan kunlarni qayta
+    baholardi. Davrni "surish" uchun yagona qonuniy yo'l — eskisini
+    yopib, yangisini ochish, ya'ni IKKI alohida audit izi.
+    """
 
     to_date: date
+
+
+class AssignmentListResponse(BaseModel):
+    """`GET /stalls/{stall_id}/assignments` — rastaning biriktirish TARIXI.
+
+    Sahifalash YO'Q: bir rastadagi davrlar soni yiliga bir necha marta
+    o'sadi va butun tarix bitta ekranga sig'adi. Kursor mexanikasi bu
+    yerda hech qanday muammoni hal qilmasdi-yu, "sotuvchi qachondan beri
+    shu rastada" savolining javobini kesib qo'yardi.
+    """
+
+    items: list[AssignmentItem]
 
 
 # ---------------------------------------------------------------------------

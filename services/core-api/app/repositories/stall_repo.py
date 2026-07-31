@@ -88,6 +88,7 @@ __all__ = [
     "ZoneRow",
     "decode_stall_cursor",
     "encode_stall_cursor",
+    "like_term",
     "sqlstate_of",
 ]
 
@@ -566,8 +567,15 @@ teskari chiziq, shuning uchun `ESCAPE` bandi kerak emas.
 """
 
 
-def _like_term(value: str | None) -> str | None:
-    """Qidiruv so'zini `ILIKE` uchun xavfsiz holga keltiradi."""
+def like_term(value: str | None) -> str | None:
+    """Qidiruv so'zini `ILIKE` uchun xavfsiz holga keltiradi.
+
+    OMMAVIY (`_` prefiksisiz) va bu ataylab: `vendor_repo.py` da ham
+    `q` filtri bor va u AYNAN shu qochirishga muhtoj. Nusxa ko'chirilsa
+    `_LIKE_SPECIALS` ikkinchi haqiqat manbaiga ega bo'lardi — biri
+    yangilanib, ikkinchisi eskirganda esa filtr faqat BITTA yuzada
+    jimgina ishlamay qolardi.
+    """
     return None if value is None else value.translate(_LIKE_SPECIALS)
 
 
@@ -745,7 +753,7 @@ class StallRepository(TenantScopedRepository):
         if query.cursor is not None:
             cursor_code, cursor_id = decode_stall_cursor(query.cursor)
 
-        term = _like_term(query.q)
+        term = like_term(query.q)
         result = await self.session.execute(
             _STALL_ROWS,
             {
