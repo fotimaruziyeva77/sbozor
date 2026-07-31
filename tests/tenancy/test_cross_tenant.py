@@ -992,6 +992,48 @@ def test_file_fillers_point_at_live_routes() -> None:
     assert not stale, f"`FILE_FILLERS` da mavjud bo'lmagan marshrutlar qolgan: {stale}"
 
 
+@pytest.mark.parametrize("route", sorted(FILE_FILLERS), ids=_route_id)
+async def test_file_routes_actually_execute(
+    api_client: httpx.AsyncClient,
+    tenant_seed: TenantSeed,
+    market_a_headers: dict[str, str],
+    route: RouteSpec,
+) -> None:
+    """Fayl marshruti HAQIQATAN ishga tushadi — 422 da to'xtab qolmaydi.
+
+    =======================================================================
+    BU TEST `FILE_FILLERS` MEXANIZMINI YUK KO'TARUVCHI QILADI — VA U
+    SABOTAJ BILAN O'LCHANGANDAN KEYIN QO'SHILDI.
+
+    `call_route()` dan `FILE_FILLERS` olib tashlanganda butun tenancy
+    to'plami (307 test) YASHIL qoldi. Sabab: JSON tanali so'rov
+    `multipart/form-data` endpointida **422** beradi, 422 esa
+    matritsaning birorta da'vosini buzmaydi — u 403 emas, B bozorining
+    identifikatorini ham sizdirmaydi (javob faqat "file maydoni
+    yetishmayapti" deydi) va tokensiz so'rov baribir 401 oladi.
+
+    Ya'ni mexanizm to'g'ri, lekin uning YO'QLIGINI hech nima
+    KO'RSATMASDI: ikkala import marshruti matritsada "bor" bo'lib
+    turib, endpoint mantiqi UMUMAN ishlamasdi. Bu 02-08 deviatsiya #4
+    (`BODY_FILLERS` ning o'zi) bilan AYNAN bir xil sinf xato va u
+    o'sha yerda ham aynan shunday jimgina yashiringan edi.
+
+    Shuning uchun bu yerda ALOHIDA, POZITIV da'vo: so'rov 422 BILAN
+    TUGAMASLIGI shart. Aniq status kodi qulflanmaydi (u 200 ham, 409
+    ham bo'lishi mumkin — matritsa qatorlarni HAQIQATAN yozadi va
+    ketma-ket ishga tushishda ikkinchisi konfliktga tushishi mumkin);
+    yagona ma'noli da'vo — endpoint YUKLAMANI QABUL QILDI.
+    =======================================================================
+    """
+    response = await call_route(api_client, route, tenant_seed, headers=market_a_headers)
+
+    assert response.status_code != 422, (
+        f"{route.test_id}: yuklama qabul qilinmadi ({response.text}) — "
+        "`FILE_FILLERS` yozuvi yo'q yoki `call_route()` uni ishlatmayapti"
+    )
+    assert response.status_code != 403, f"{route.test_id}: {response.text}"
+
+
 def test_file_and_body_fillers_do_not_overlap() -> None:
     """Bitta marshrut IKKALA xaritada ham bo'lmaydi.
 
