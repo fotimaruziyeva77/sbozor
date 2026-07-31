@@ -40,12 +40,27 @@ const REFRESH_PATH = "/auth/refresh";
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: string;
+  /**
+   * Xato javobining TO'LIQ tanasi (tahlil qilinmagan `unknown`).
+   *
+   * `detail` ba'zi javoblarda YETARLI EMAS: import 422 si `detail` bilan
+   * BIRGA `errors[]` va `error_counts` ni ham qaytaradi (D-14) va aynan
+   * o'sha ro'yxat foydalanuvchiga qaysi QATOR noto'g'ri ekanini aytadi.
+   * Javob tanasi bir marta o'qiladi, ya'ni uni bu yerda ushlab qolmasak
+   * chaqiruvchi uchun u BUTUNLAY yo'qolardi.
+   *
+   * ATAYIN `unknown`: shakl chaqiruvchida, kutilgan sxema bilan
+   * tahlil qilinadi — bu yerda "har ehtimolga qarshi" tiplash ikkinchi,
+   * ajralib ketadigan kontrakt tug'dirardi.
+   */
+  readonly body: unknown;
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, body?: unknown) {
     super(`api_error_${status}_${detail || "unknown"}`);
     this.name = "ApiError";
     this.status = status;
     this.detail = detail;
+    this.body = body;
   }
 }
 
@@ -58,17 +73,41 @@ export class NetworkError extends Error {
   }
 }
 
-export type ApiFetchOptions<T> = {
-  schema: z.ZodType<T>;
+export type ApiRequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+  /**
+   * So'rov tanasi. `FormData` berilsa `Content-Type` QO'YILMAYDI va tana
+   * `JSON.stringify` dan o'tmaydi — chegara satrini (`boundary`) brauzer
+   * o'zi qo'shadi. Qo'lda `multipart/form-data` yozilsa `boundary`
+   * yo'qoladi va server tanani umuman ajrata olmaydi.
+   */
   body?: unknown;
   /** Bearer qo'shilmaydi va 401 da refresh qilinmaydi (login, refresh). */
   skipAuth?: boolean;
   signal?: AbortSignal;
 };
 
+export type ApiFetchOptions<T> = ApiRequestOptions & {
+  schema: z.ZodType<T>;
+};
+
 function buildUrl(path: string): string {
   return `${API_BASE_URL}${path}`;
+}
+
+/**
+ * Xato javobining tanasi (JSON bo'lmasa `undefined`).
+ *
+ * Tana FAQAT BIR MARTA o'qiladi, shuning uchun u to'liq holda qaytariladi
+ * va `detail` undan ajratiladi — ikki marta o'qish urinishi
+ * `TypeError: body stream already read` berardi.
+ */
+async function readErrorBody(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -78,16 +117,11 @@ function buildUrl(path: string): string {
  * bo'lmasligi mumkin. Ikkala holatda ham bo'sh satr qaytariladi va UI
  * `errors.generic` ga tushadi — ichki tafsilot foydalanuvchiga chiqmaydi.
  */
-async function readErrorDetail(response: Response): Promise<string> {
-  try {
-    const parsed = apiErrorSchema.safeParse(await response.json());
-    if (parsed.success && typeof parsed.data.detail === "string") {
-      return parsed.data.detail;
-    }
-  } catch {
-    // JSON emas — kod bo'sh qoladi.
-  }
-  return "";
+function detailOf(body: unknown): string {
+  const parsed = apiErrorSchema.safeParse(body);
+  return parsed.success && typeof parsed.data.detail === "string"
+    ? parsed.data.detail
+    : "";
 }
 
 async function readBody<T>(
@@ -151,30 +185,45 @@ export function refreshSession(): Promise<SessionResponse | null> {
 }
 
 /**
- * Tiplangan `fetch` o'rami.
+ * XOM javob qaytaradigan so'rov (autentifikatsiya + 401 refresh bilan).
+ *
+ * `apiFetch` dan AJRATILGAN, chunki hamma javob JSON emas: import shabloni
+ * va xatolar hisoboti `.xlsx` BAYT oqimi bo'lib keladi (02-12) va ularni
+ * `schema.parse()` dan o'tkazib bo'lmaydi. Ikkinchi, mustaqil `fetch`
+ * yozish esa token, refresh navbati va cookie siyosatini IKKINCHI marta
+ * takrorlardi — ya'ni bir kun ular ajralib ketardi.
  *
  * - `credentials: 'include'` — refresh cookie'ning yuborilishi uchun MAJBURIY.
  * - Bearer token XOTIRA store'idan olinadi (brauzer omboridan emas).
  * - 401 javobda BIR MARTA refresh qilib, asl so'rov qayta yuboriladi.
  *   Ikkinchi 401 — sessiya o'lgan, `ApiError` tashlanadi va store tozalanadi.
  */
-export async function apiFetch<T>(
+export async function apiRequest(
   path: string,
-  options: ApiFetchOptions<T>,
-): Promise<T> {
-  const { schema, method = "GET", body, skipAuth = false, signal } = options;
+  options: ApiRequestOptions = {},
+): Promise<Response> {
+  const { method = "GET", body, skipAuth = false, signal } = options;
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
 
   const send = async (token: string | null): Promise<Response> => {
     const headers: Record<string, string> = { Accept: "application/json" };
-    if (body !== undefined) headers["Content-Type"] = "application/json";
+    // FormData: `Content-Type` ni brauzer `boundary` bilan birga qo'yadi.
+    if (body !== undefined && !isFormData) {
+      headers["Content-Type"] = "application/json";
+    }
     if (token) headers.Authorization = `Bearer ${token}`;
+
+    let payload: BodyInit | undefined;
+    if (body !== undefined) {
+      payload = isFormData ? (body as FormData) : JSON.stringify(body);
+    }
 
     try {
       return await fetch(buildUrl(path), {
         method,
         headers,
         credentials: "include",
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: payload,
         signal,
       });
     } catch (cause) {
@@ -192,12 +241,26 @@ export async function apiFetch<T>(
   }
 
   if (!response.ok) {
-    const detail = await readErrorDetail(response);
+    const errorBody = await readErrorBody(response);
     if (response.status === 401 && !skipAuth) clearSession();
-    throw new ApiError(response.status, detail);
+    throw new ApiError(response.status, detailOf(errorBody), errorBody);
   }
 
-  return readBody(response, schema);
+  return response;
+}
+
+/**
+ * Tiplangan `fetch` o'rami — javob CHEGARADA `schema` bilan tekshiriladi.
+ *
+ * Noto'g'ri shakl komponent ichida jimgina `undefined` bo'lib emas, aynan
+ * shu yerda aniq xato bilan chiqadi (T-02-98).
+ */
+export async function apiFetch<T>(
+  path: string,
+  options: ApiFetchOptions<T>,
+): Promise<T> {
+  const { schema, ...rest } = options;
+  return readBody(await apiRequest(path, rest), schema);
 }
 
 /* ---------------------------------------------------------------------------
