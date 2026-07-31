@@ -118,9 +118,11 @@
    * avtomatik kattalashtiradi. `Input` va `<select>` — `text-sm` (14px),
    * ilova esa telefon-birinchi (bozor admini va kassir telefonda ishlaydi).
    *
-   * `<meta viewport maximum-scale=1>` RAD ETILDI: u pinch-zoom'ni
-   * o'ldiradi va WCAG 1.4.4 (Resize Text) ni buzadi. Loyihada `viewport`
-   * eksporti yo'q va bo'lmaydi ham.
+   * Keng tarqalgan "yechim" — viewport meta orqali kattalashtirishni
+   * cheklash — RAD ETILDI: u pinch-zoom'ni o'ldiradi va WCAG 1.4.4
+   * (Resize Text) ni buzadi. Loyihada `viewport` eksporti yo'q va
+   * bo'lmaydi ham; bu taqiq grep darvozasi bilan qulflangani uchun
+   * taqiqlangan atribut nomi bu yerda literal sifatida yozilmaydi.
    *
    * O'rniga faqat BARMOQ bilan boshqariladigan qurilmalarda shrift 16px
    * qilinadi — desktopdagi 14px zichligi saqlanadi.

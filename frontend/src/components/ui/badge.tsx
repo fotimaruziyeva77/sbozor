@@ -19,8 +19,11 @@ import { cn } from "@/lib/cn";
  *   accent   bg-accent/10  + text-accent-text  -> 5.29:1
  *   warning  bg-warning/20 + text-text         -> 15.64:1
  *
- * `--color-warning` MATN sifatida oq fonda 2.03:1 — shuning uchun sariq
- * tintdagi matn `text-text` bo'ladi, `text-warning` EMAS (qat'iy taqiq).
+ * `--color-warning` MATN sifatida oq fonda 2.03:1 — falokat. Shuning
+ * uchun sariq tintdagi matn `text-text` bo'ladi va ogohlantirish rangi
+ * matn uchun HECH QACHON ishlatilmaydi. Bu taqiq grep darvozasi bilan
+ * qulflangan, shuning uchun taqiqlangan utilita nomi bu izohda literal
+ * sifatida yozilmaydi (kodbaza konvensiyasi).
  */
 export type BadgeTone =
   | "neutral"
