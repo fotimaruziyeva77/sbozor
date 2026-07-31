@@ -50,7 +50,8 @@
     "passwordChanged": "Parol almashtirildi",
     "selectMarket": "Bozorni tanlang",
     "selectMarketTitle": "Bozorni tanlang",
-    "noMarkets": "Sizga hech qanday bozor biriktirilmagan"
+    "noMarkets": "Sizga hech qanday bozor biriktirilmagan",
+    "marketDraft": "Qoralama"
   },
   "users": {
     "title": "Foydalanuvchilar",
