@@ -34,6 +34,10 @@ __all__ = [
     "AUDIT_URL",
     "CALENDAR_URL",
     "CATEGORIES_URL",
+    "IMPORTS_ERRORS_URL",
+    "IMPORTS_TEMPLATE_URL",
+    "IMPORT_STALLS_URL",
+    "IMPORT_VENDORS_URL",
     "MARKETS_URL",
     "PROFILE_URL",
     "SETUP_STATUS_URL",
@@ -80,6 +84,18 @@ u ATAYIN boshqa prefiksda va sabab `app/api/v1/assignments.py` da."""
 # takrorlangan joyda o'zgarishi mumkin bo'lardi.
 SETUP_STATUS_URL = MARKETS_URL + "/{market_id}/setup-status"
 ACTIVATE_URL = MARKETS_URL + "/{market_id}/activate"
+
+# --- 02-12: Excel import (D-13/D-14/D-15) ---
+_IMPORTS_URL = "/api/v1/imports"
+IMPORTS_TEMPLATE_URL = f"{_IMPORTS_URL}/template"
+IMPORT_STALLS_URL = f"{_IMPORTS_URL}/stalls"
+IMPORT_VENDORS_URL = f"{_IMPORTS_URL}/vendors"
+IMPORTS_ERRORS_URL = f"{_IMPORTS_URL}/errors.xlsx"
+"""Xato ro'yxatini `.xlsx` qilib qaytaradigan yo'l.
+
+Nomida NUQTA bor (`errors.xlsx`) va bu ATAYIN: brauzer `Content-
+Disposition` bo'lmagan holatda ham fayl nomini yo'ldan oladi. FastAPI
+uchun bu oddiy segment — u yo'l parametri emas."""
 
 TEST_PHONE_PREFIX = "+99893"
 """Testlar YARATADIGAN foydalanuvchilarning telefon diapazoni.

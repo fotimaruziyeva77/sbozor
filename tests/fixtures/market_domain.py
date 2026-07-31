@@ -57,6 +57,7 @@ from sbozor_core.periods import assignment_period
 from fixtures.two_markets import TwoMarketSeed
 
 __all__ = [
+    "A_CATEGORY_NAMES",
     "A_OPERATING_SINCE",
     "A_STALL_CODES",
     "A_STALL_CODES_BY_SORT",
@@ -80,6 +81,11 @@ API testlari boshlang'ich toifa davrining sanasini va zona nomlarini
 tekshiradi. Ularni test faylida qayta yozish ikkinchi haqiqat manbai
 bo'lardi — seed qiymati o'zgarganda test jimgina eski qiymatni kutib
 qolardi (02-06 da o'rnatilgan qoida).
+
+`A_CATEGORY_NAMES` 02-12 da qo'shildi: import matritsasi va integratsiya
+testlari faylga HAQIQIY toifa nomini yozishi shart — to'qib chiqarilgan
+nom `category_not_found` berardi va test importni emas, validatorning
+rad etish yo'lini sinardi.
 
 `B_OPERATING_SINCE` va `B_HOLIDAY` 02-09 da qo'shildi: tarif API'sining
 "boshlang'ich narx" testlari B bozorining ish boshlash sanasini, cross-tenant

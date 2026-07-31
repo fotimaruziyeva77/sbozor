@@ -46,6 +46,7 @@ from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.calendar import router as calendar_router
 from app.api.v1.categories import router as categories_router
+from app.api.v1.imports import router as imports_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
 from app.api.v1.stalls import router as stalls_router
@@ -162,6 +163,16 @@ app.include_router(assignments_router, prefix=f"{API_V1_PREFIX}/assignments")
 # ulanadi. `stalls_router` bilan to'qnashuv YO'Q — yo'llarning segment
 # soni har xil (sabab `api/v1/assignments.py` modul docstringida).
 app.include_router(stall_assignments_router, prefix=API_V1_PREFIX)
+# --- 02-12: Excel import (D-13/D-14/D-15) ---
+#
+# Marshrutlarning UCHTASI tana talab qiladi, LEKIN ikkitasi `multipart/
+# form-data` (fayl) va faqat bittasi JSON. Cross-tenant matritsasi
+# `BODY_FILLERS` orqali FAQAT JSON yubora oladi, shuning uchun fayl
+# marshrutlari uchun `FILE_FILLERS` qo'shildi — usiz ular 422 da
+# to'xtab, "javobda B bozorining izi yo'q" da'vosini SINAMASDAN
+# o'tkazib yuborardi (02-08 dagi `BODY_FILLERS` bilan aynan bir xil
+# sinf xato).
+app.include_router(imports_router, prefix=f"{API_V1_PREFIX}/imports")
 
 
 @app.exception_handler(DBAPIError)
