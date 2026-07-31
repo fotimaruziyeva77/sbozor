@@ -39,8 +39,13 @@ import { roleLabelKey } from "@/lib/rbac";
  * yerdagi tekshiruv faqat "yozishda adashildi" holatini forma ichida
  * ushlaydi va `+998 90 123 45 67`, `998901234567`, `901234567`
  * shakllarining hammasini qabul qiladi.
+ *
+ * EKSPORT QILINGAN (02-15): sotuvchi formasi ham AYNAN shu shaklni
+ * tekshiradi (D-12 — telefon bozor ichida yagona identifikator). Ikkinchi
+ * nusxa yozish ikki regexni yaratardi va ular bir kun ajralib ketardi —
+ * o'shanda bir yo'l qabul qilgan raqamni ikkinchisi rad etardi.
  */
-function looksLikeUzbekPhone(value: string): boolean {
+export function looksLikeUzbekPhone(value: string): boolean {
   const digits = value.replace(/\D/gu, "");
   return /^998\d{9}$/u.test(digits) || /^\d{9}$/u.test(digits);
 }
