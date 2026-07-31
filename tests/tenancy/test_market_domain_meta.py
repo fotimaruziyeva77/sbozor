@@ -74,24 +74,23 @@ DOMAIN_TRIGGER_FUNCTIONS = (
 
 MARKET_WRITE_FUNCTIONS = ("market_create", "market_activate", "market_rename")
 
-PENDING_DOMAIN_TABLES = frozenset(
-    {
-        # 02-06 (`0010_calendar`)
-        "market_calendar_exceptions",
-    }
-)
-"""`Base.metadata` da E'LON QILINGAN, lekin bazada hali YO'Q jadvallar.
+PENDING_DOMAIN_TABLES: frozenset[str] = frozenset()
+"""BO'SH — 02-06 (`0009_vendors` + `0010_calendar`) qarzni to'liq yopdi.
 
 Ro'yxat `tests/tenancy/test_meta.py::PENDING_AUDIT_TRIGGERS` bilan AYNAN bir
 xil naqshda ishlaydi va pastdagi `test_autogenerate_is_empty` uni IKKI
-TOMONLAMA qulflaydi:
+TOMONLAMA qulflagan edi:
 
-  * jadval TUG'ILSA  -> `missing` kichrayadi -> test QIZARADI va 02-06
+  * jadval TUG'ILSA  -> `missing` kichrayadi -> test QIZARADI va migratsiya
     muallifini nomni shu ro'yxatdan o'chirishga majbur qiladi. O'sha
     daqiqadan boshlab jadval to'liq autogenerate solishtiruviga tushadi,
     ya'ni qarz jimgina "yopilib" ketolmaydi.
   * mavjud jadval YO'QOLSA yoki modelda BO'LMAGAN jadval paydo bo'lsa ->
     test QIZARADI.
+
+RO'YXAT BO'SHAGANI TESTNI ZAIFLASHTIRMAYDI, KUCHAYTIRADI: `include_object`
+filtri endi HECH NIMANI chiqarib tashlamaydi va `compare_metadata()` butun
+sxemani (o'nta domen jadvali bilan) qamraydi.
 """
 
 _CLEAN_ORDER = (

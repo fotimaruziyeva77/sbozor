@@ -115,12 +115,15 @@ EXPECTED_DEFINER_FUNCTIONS = {
 #
 # Bu `INDEX_EXCEPTIONS` va `POLICY_TENANT_GUC_EXCEPTIONS` bilan bir xil naqsh:
 # istisno testda, sababi yozma, o'zgartirish code review'da ko'zga tashlanadi.
-PENDING_AUDIT_TRIGGERS = frozenset(
-    {
-        # 02-06 (`0010_calendar`): yopiq kun istisnolari
-        "market_calendar_exceptions",
-    }
-)
+PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset()
+"""BO'SH — 02-06 (`0010_calendar`) qarzni to'liq yopdi.
+
+⚠ BU RO'YXATGA YANGI NOM QO'SHISH — OXIRGI CHORA, ODATIY QADAM EMAS.
+Reyestrga (`AUDITED_TABLES`) jadval qo'shilgan, lekin
+`attach_audit_trigger()` hali chaqirilmagan HOLAT faqat jadval KEYINGI
+migratsiyada tug'ilganda ma'noli (2-fazada aynan shunday edi: reyestr
+birinchi migratsiyadan OLDIN to'ldirilgan). Bir migratsiya ichida ikkalasini
+ham qilish mumkin bo'lsa, ro'yxat BO'SH qolishi kerak."""
 
 # Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun
 # sabab SHU YERDA yozilishi SHART — istisno qo'shish code review'da ko'zga
