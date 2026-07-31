@@ -120,7 +120,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 02-03-PLAN.md — `MarketRef.is_active` zanjiri (6 band) va qoralama bozorning ko'rinishi (W2)
+- [x] 02-03-PLAN.md — `MarketRef.is_active` zanjiri (6 band) va qoralama bozorning ko'rinishi (W2)
 
 **Wave 3–5** *(sxema, ketma-ket migratsiya zanjiri)*
 
