@@ -1192,32 +1192,39 @@ ROLE_PERMISSIONS = {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> Beshta savolning **hammasi** rejalashtirish bosqichida yopildi. Har bandda `RESOLVED:` qatori qaysi reja va qaysi task savolni yopganini ko'rsatadi. Yangi noaniqlik chiqsa — bu ro'yxatga emas, tegishli rejaning `<action>` iga qo'shiladi.
 
 1. **`btree_gist` init qadami qayerga qo'yiladi?**
    - Bilamiz: `sbozor_owner` uni o'rnata olmaydi (empirik); superuser init yoki `GRANT CREATE ON DATABASE` kerak.
    - Noaniq: `tests/conftest.py` hozir faqat `ops/db/init/01-roles.sql` ni o'qiydi. Yangi `00-extensions.sql` qo'shilsa conftest ham o'zgaradi — bu 1-faza faylini o'zgartirish.
    - Tavsiya: `00-extensions.sql` + conftest o'zgarishi Wave 0 vazifasi bo'lsin (migratsiyalardan oldin). Muqobil (`GRANT CREATE ON DATABASE`) imtiyoz kengaytirgani uchun ikkinchi o'rinda.
+   - **RESOLVED: 02-01 Task 2** — `ops/db/init/00-extensions.sql` superuser init qadami sifatida qo'shiladi, `tests/conftest.py` uni o'qiydi va `migrations/helpers.py::require_extension()` yordamchisi yoziladi. Tavsiya qilingan birinchi variant tanlandi; `GRANT CREATE ON DATABASE` **rad etildi**. Iste'molchi: 02-06 Task 1 (`upgrade()` ning birinchi satri).
 
 2. **`stall_category_periods` haqiqatan kerakmi, yoki `stalls.category_id` yetarlimi?**
    - Bilamiz: D-04 "tarif tarixi bilan bir xil mexanizm" deb **qulflangan** → periods jadvali.
    - Noaniq: bu qo'shimcha jadval + har so'rovda LATERAL 2 hafta byudjetiga ta'sir qiladi.
    - Tavsiya: qulflangan qarorni bajarish. Agar reja byudjetdan chiqsa, **kesish nomzodi** sifatida `stalls.category_id` (tarixsiz) ni discuss-phase'ga qaytarish — lekin bu D-04 ni ochish demak, jimgina qilinmaydi.
+   - **RESOLVED: 02-05 Task 2** — `0008_temporal.py` `stall_category_periods` ni voris modeli sifatida yaratadi (D-04 qulflangan qaror bajarildi, kesish nomzodi ishlatilmadi). O'qish yo'li: 02-08 Task 2 (`LEFT JOIN LATERAL`); yozish yo'li: 02-08 `POST /stalls/{id}/category`; sanoq: 02-11 `stalls_with_category`; seed: 02-06 Task 3 (har rastaga boshlang'ich davr).
 
 3. **`defusedxml` yoki `python-calamine`?**
    - Bilamiz: openpyxl rasmiy hujjati `defusedxml` ni talab qiladi; `defusedxml` oxirgi relizi 2021-03-08; `python-calamine` Rust bo'lgani uchun bu sinf hujumlariga strukturaviy immun va faol (2026-07-13).
    - Noaniq: `defusedxml` 0.7.1 Python 3.13 + openpyxl 3.1.5 bilan hozir ham to'g'ri ulanadimi.
    - Tavsiya: `openpyxl + defusedxml` bilan boshlash (CONTEXT.md yo'nalishi) **va Wave 0 da billion-laughs smoke-testi yozish**. Test qizarsa — `python-calamine` ga o'tish (allaqachon tekshirilgan, cp313 g'ildiragi bor).
+   - **RESOLVED: 02-12 Task 1** — xavfsiz `.xlsx` o'qish qatlami `openpyxl + defusedxml` bilan quriladi va hujum testlari (billion-laughs, tashqi entity, zip-bomba) o'sha taskda yoziladi. `python-calamine` ga o'tish sharti hujjatlashtirilgan zaxira yo'l bo'lib qoladi: smoke-test qizarsa almashtiriladi.
 
 4. **Kim ish kunlari kalendarini o'zgartiradi?**
    - Bilamiz: MARKET-05 "Bozor admini" deydi; yopiq kun belgilash tushumni nolga tushiruvchi amal va `market_calendar_exceptions` DB-trigger auditi ostida bo'ladi.
    - Noaniq: nazorat nuqtai nazaridan bu direktor tasdig'ini talab qiladimi (1-faza "maker-checker" ni v2 ga qoldirgan).
    - Tavsiya: MVP'da bozor admini + majburiy audit; 8-fazada "ketma-ket N yopiq kun" hisoboti.
+   - **RESOLVED: 02-09 Task 2** — kalendar endpointlari `STALL_MANAGE` huquqi ostida (bozor admini), yozuv DB-trigger auditi bilan; direktor faqat `MARKET_DATA_VIEW` (D-07) va o'zgartirishga urinish 403 beradi. Maker-checker **v2 ga qoldirildi** (A5). Klient tomoni: 02-15 Task 3 (yopiq kun uchun ikki darajali tasdiq).
 
 5. **Zona nomi tahrirlanganda import fayllari eskiradimi?**
    - Bilamiz: import zonani **nom bo'yicha** topadi (admin uchun qulay).
    - Noaniq: zona nomi o'zgargach eski fayl "zona topilmadi" beradi.
    - Tavsiya: shablon faylida zona ro'yxatini alohida (yashirin) varaqda va data-validation ro'yxati sifatida berish — XlsxWriter buni qo'llab-quvvatlaydi.
+   - **RESOLVED: 02-12 Task 2** — `xlsx_template.py` zona va toifa ro'yxatini yashirin varaqda va data-validation ro'yxati sifatida beradi; shablon `GET /api/v1/imports/template` dan **har safar yangidan** olinadi (repoda nusxa saqlanmaydi — 02-17 Task 1), ya'ni nom o'zgarsa keyingi yuklab olishda avtomatik yangilanadi. `zone_not_found` xatosi va uni tuzatish yo'li 02-17 README'sining 5-bo'limida yozilgan.
 
 ---
 
