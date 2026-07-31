@@ -46,8 +46,12 @@ if TYPE_CHECKING:
 __all__ = [
     "TABLE_AUDIT_LOG",
     "TABLE_MARKETS",
+    "TABLE_MARKET_PROFILE",
     "TABLE_REFRESH_TOKENS",
+    "TABLE_STALLS",
+    "TABLE_TARIFFS",
     "TABLE_USERS",
+    "TABLE_VENDORS",
     "AuditReadIntent",
     "audit_read",
     "platform_admin_label",
@@ -67,6 +71,34 @@ TABLE_MARKETS = "markets"
 
 TABLE_REFRESH_TOKENS = "refresh_tokens"  # noqa: S105 — jadval nomi, sir emas
 """`logout`, `refresh_reuse_detected` — hodisa sessiyaga tegishli."""
+
+# ---------------------------------------------------------------------------
+# 2-faza domen jadvallari.
+#
+# ⚠ BULARNING KO'PCHILIGIDA DB TRIGGERI BOR (`fn_audit_row()`, 02-05/02-06),
+# ya'ni yozuv o'zi auditga tushadi va `write_app_audit()` chaqirilmaydi —
+# aks holda har `INSERT` uchun IKKITA qator paydo bo'lardi va jurnalni
+# o'qiyotgan odam "nima ikki marta sodir bo'ldi?" degan savol bilan qolardi.
+#
+# Konstantalar baribir kerak, chunki `source='app'` yozuvi trigger KO'RA
+# OLMAYDIGAN hodisalar uchun yoziladi: shaxsiy ma'lumot O'QISHI (D-09 —
+# `SELECT` uchun trigger yo'q) va DB o'zgarishisiz sodir bo'ladigan
+# harakatlar. Nomlar bir joyda turgani uchun ular literal satr sifatida
+# router fayllariga tarqalmaydi va `audit.table_name` filtri bilan mos
+# qoladi.
+# ---------------------------------------------------------------------------
+
+TABLE_STALLS = "stalls"
+"""`GET /stalls`, `GET /stalls/map`, `GET /stalls/{id}` — reestr resursi."""
+
+TABLE_VENDORS = "vendors"
+"""`GET /vendors` — SHAXSIY MA'LUMOT o'qishi (D-09), 02-10 `audit_read` manbai."""
+
+TABLE_TARIFFS = "tariffs"
+"""`GET /tariffs`, `POST /tariffs` — narx tarixi resursi (02-09)."""
+
+TABLE_MARKET_PROFILE = "market_profile"
+"""`PUT /calendar/weekdays` va usta rekvizitlari — bozor profili (02-09/02-11)."""
 
 _INSERT_AUDIT = text(
     "INSERT INTO audit_log ("

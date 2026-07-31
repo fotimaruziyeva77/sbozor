@@ -25,7 +25,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-__all__ = ["MARKET_TZ", "business_date", "now_tz"]
+__all__ = ["MARKET_TZ", "business_date", "business_today", "now_tz"]
 
 # `tzdata` paketi bog'liqlik sifatida o'rnatilgan: slim Debian image'da tizim
 # zoneinfo bazasi YO'Q va busiz bu satr `ZoneInfoNotFoundError` beradi.
@@ -60,3 +60,31 @@ def business_date(moment: datetime) -> date:
             "UTC sanasida oldingi kunga tushadi — shuning uchun bu holat xato."
         )
     return moment.astimezone(MARKET_TZ).date()
+
+
+def business_today() -> date:
+    """BUGUNGI biznes-kun (`Asia/Tashkent`).
+
+    `date.today()` LOYIHADA ISHLATILMAYDI va bu funksiya aynan uning
+    o'rnini bosadi: konteynerlar UTC soatida ishlaydi, ya'ni mahalliy
+    00:00–04:59 oralig'ida `date.today()` OLDINGI kunni qaytaradi.
+    O'sha besh soat ichida "kelajakdagi sana" deb yozilgan `valid_from`
+    DB triggeri uchun allaqachon o'tmish bo'lib chiqardi va ilova
+    darvozasi bilan DB darvozasi bir-biriga qarama-qarshi javob berardi.
+
+    ⚠ QAMROV OGOHLANTIRISHI (modul docstringi bilan bir xil): bu qiymat
+    `business_date` USTUNINI hisoblashda ishlatilmaydi — u DB'da generated
+    column. Bu yerdagi funksiya faqat ILOVA DARVOZALARI uchun:
+
+      * `stall_repo.StallRepository.set_category()` — toifa davrining
+        `valid_from` i kelajakda bo'lishi sharti (T-02-61a). Bu yerda u
+        DB triggerining o'rnini BOSADI, chunki
+        `trg_category_period_past_immutable` `BEFORE UPDATE OR DELETE` va
+        INSERT'da umuman ishga tushmaydi;
+      * 02-09 `add_tariff()` — aynan shu shakl, o'z istisnosi bilan.
+
+    Chegara DB triggeridagi `(now() AT TIME ZONE 'Asia/Tashkent')::date`
+    ifodasi bilan AYNAN bir xil kunni beradi — ikkalasi ham Toshkent
+    devor-soatiga tayanadi.
+    """
+    return business_date(now_tz())

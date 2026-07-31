@@ -7,30 +7,61 @@ Chegara qoidalari shu yerda qulflanadi:
   normalizatsiya endpoint ichida qilinsa, bir kun kimdir uni unutadi va
   bitta odam ikkita hisob oladi (qarz tarixi ikkiga bo'linadi).
 * **Parol siyosati BITTA joyda** — `validate_password_strength()`.
+
+=============================================================================
+FAYL ATAYIN BITTA MODUL BO'LIB QOLADI (02-08 qarori).
+
+2-faza bu faylga ~30 ta domen shaklini qo'shadi va uni paketga bo'lish
+(`schemas/` katalogi) o'zini oqlamaydi: mavjud `from app.schemas import ...`
+importlari re-export qatlami bilan ushlab turilishi kerak bo'lardi va bu
+faza o'rtasida qo'shimcha yuza ochardi. Fayl uzunligi o'qilishga hozircha
+to'sqinlik qilmaydi — shakllar bo'lim izohlari ostida guruhlangan.
+=============================================================================
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
-from sbozor_core.enums import Locale, Role
+from pydantic import BaseModel, Field, StringConstraints, field_validator
+from sbozor_core.enums import Locale, Role, StallStatus
+from sbozor_core.money import MAX_SAFE_SOUM
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
 __all__ = [
     "AUDIT_PAGE_SIZE_MAX",
+    "ISO_WEEKDAYS",
+    "MARKET_ERROR_CODES",
     "MIN_PASSWORD_LENGTH",
+    "STALL_PAGE_SIZE_MAX",
+    "AssignmentCloseRequest",
+    "AssignmentCreateRequest",
+    "AssignmentItem",
     "AuditEntry",
     "AuditListResponse",
     "AuditQuery",
+    "BlockingItem",
+    "CalendarException",
+    "CalendarExceptionRequest",
+    "CalendarResponse",
+    "CategoryItem",
+    "CategoryListResponse",
+    "CategoryRequest",
     "ChangePasswordRequest",
     "CreateUserRequest",
     "CreateUserResponse",
+    "ImportErrorItem",
+    "ImportErrorResponse",
+    "ImportResultResponse",
     "LocaleResponse",
     "LoginRequest",
     "LoginResponse",
+    "MapCell",
+    "MapZone",
+    "MarketCreateRequest",
+    "MarketCreateResponse",
     "MarketListItem",
     "MarketRef",
     "MeResponse",
@@ -39,9 +70,27 @@ __all__ = [
     "ResetPasswordResponse",
     "SelectMarketRequest",
     "SessionResponse",
+    "SetupStatusResponse",
+    "StallCategoryRequest",
+    "StallCreateRequest",
+    "StallDetail",
+    "StallListItem",
+    "StallListResponse",
+    "StallMapResponse",
+    "StallQuery",
+    "StallUpdateRequest",
+    "TariffCreateRequest",
+    "TariffItem",
+    "TariffListResponse",
     "UpdateProfileRequest",
     "UserListItem",
     "UserListResponse",
+    "VendorListItem",
+    "VendorListResponse",
+    "VendorRequest",
+    "ZoneItem",
+    "ZoneListResponse",
+    "ZoneRequest",
     "validate_password_strength",
 ]
 
@@ -372,3 +421,747 @@ class AuditListResponse(BaseModel):
 
     items: list[AuditEntry]
     next_cursor: str | None
+
+
+# ===========================================================================
+# 2-FAZA: BOZOR DOMENI — zona / toifa / rasta / tarif / kalendar / sotuvchi
+# ===========================================================================
+#
+# BU BO'LIM 2-FAZANING BUTUN HTTP SHARTNOMASINI BIR JOYDA E'LON QILADI.
+# `02-09` (tarif/kalendar), `02-10` (sotuvchi/biriktirish), `02-11` (usta),
+# `02-12` (import) va `02-13` (frontend kontrakti) shakl haqida QAYTA qaror
+# qabul QILMAYDI — ular shu yerdagi modellarni import qiladi. Shakl bir
+# rejada qotirilmaganda har bir keyingi reja "yana bitta maydon" qo'shib,
+# frontend esa besh xil ro'yxat shakliga moslashishga majbur bo'lardi.
+#
+# ---------------------------------------------------------------------------
+# MASS-ASSIGNMENT DARVOZASI (T-02-54) — LITERAL QOIDA:
+#
+# QUYIDAGI BIRORTA SO'ROV MODELIDA `market_id` MAYDONI YO'Q va hech qachon
+# qo'shilmaydi. Bozor FAQAT `principal.market_id` dan olinadi
+# (`_market_id(principal)`), so'rov tanasidan EMAS. Aks holda A bozorining
+# admini `{"market_id": "<B>"}` yuborib B bozorida rasta yarata olardi va
+# RLS `WITH CHECK` bu urinishni faqat POLICY darajasida to'sardi — ya'ni
+# himoya bitta migratsiya xatosidan narida bo'lardi.
+#
+# Butun faylda `market_id` MAYDONI BOR yagona so'rov modeli —
+# `SelectMarketRequest` (D-06). U auth bootstrap yuzasida yashaydi va
+# uning butun VAZIFASI aynan bozorni tanlash, ya'ni u tenant chegarasidan
+# TASHQARIDA turadi. Domen so'rovlarida bunday maydon yo'q.
+# ---------------------------------------------------------------------------
+#
+# PUL: `int` (so'm) — kasrli tiplar TAQIQ (`sbozor_core.money` modul
+# docstringi). Yuqori chegara `MAX_SAFE_SOUM`: qiymat JSON'da oddiy `number`
+# bo'lib ketadi va JS xavfsiz butun son chegarasidan oshgani JIMGINA
+# yaxlitlanardi.
+#
+# SANA: `date` — `datetime` EMAS. `valid_from` uchun "soat nechada?" degan
+# savolning javobi yo'q: tarif va toifa KUN chegarasida kuchga kiradi.
+
+MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
+    {
+        # --- zona / toifa reestrlari (02-08) ---
+        "zone_name_taken",
+        "zone_in_use",
+        "category_name_taken",
+        "category_in_use",
+        # --- rasta reestri (02-08, D-01/D-02/D-04) ---
+        "stall_code_taken",
+        "stall_code_retired",
+        "category_period_exists",
+        "category_period_past_locked",
+        # --- tarif (02-09, D-06/D-07) ---
+        "tariff_already_set_for_date",
+        "tariff_past_locked",
+        "valid_from_must_be_future",
+        # --- kalendar (02-09, D-18) ---
+        "calendar_exception_exists",
+        # --- sotuvchi va biriktirish (02-10, D-09/D-12) ---
+        "vendor_phone_taken",
+        "assignment_period_overlaps",
+        "assignment_not_open",
+        # --- usta (02-11, MARKET-01) ---
+        "market_incomplete",
+        # --- import (02-12, D-13/D-14/D-15) ---
+        "import_validation_failed",
+        "file_too_large",
+        "file_too_complex",
+        "unsupported_file_type",
+    }
+)
+"""2-faza qaytaradigan BARCHA `detail` kodlari — yigirmata.
+
+⚠ JUFTINI YANGILASHNI UNUTMANG: bu ro'yxatning UI ko'zgusi
+`frontend/src/lib/api-types.ts::ERROR_CODES` da yashaydi va u QO'LDA
+sinxron saqlanadi (til chegarasi tufayli avtomatik tekshiruv yo'q —
+`security/rbac.py` dagi matritsa bilan AYNAN bir xil holat). Ko'zguda
+yo'q kod xavfsizlik teshigi EMAS: `api-client` uni `errors.generic` ga
+tushiradi, ya'ni foydalanuvchi umumiy xato matnini ko'radi va aniq sabab
+YO'QOLADI. Frontend tomonini `02-13`/`02-14` to'ldiradi.
+
+Ro'yxatning O'ZI ham hujjat: u "bu fazada nima noto'g'ri ketishi mumkin"
+savoliga to'liq javob beradi va yangi kod qo'shish shu yerda ko'rinadi.
+"""
+
+STALL_PAGE_SIZE_MAX = 200
+"""`GET /stalls?limit=` ning yuqori chegarasi (T-02-59).
+
+`AUDIT_PAGE_SIZE_MAX` bilan bir xil qiymat va bir xil sabab: chegarasiz
+so'rov 1000 rastali bozorda butun reestrni bitta JSON'ga aylantirardi.
+Keyingi sahifa KURSOR bilan olinadi — `OFFSET` umuman ishlatilmaydi
+(`app/repositories/stall_repo.py` modul docstringi).
+"""
+
+ISO_WEEKDAYS: Final[frozenset[int]] = frozenset(range(1, 8))
+"""Haftalik jadval uchun ruxsat etilgan kun raqamlari (1=dushanba … 7=yakshanba).
+
+`EXTRACT(ISODOW FROM ...)` bilan AYNAN bir xil asos — `market_is_open()`
+da konversiya kerak emas (`sbozor_core.models.market.OPEN_WEEKDAYS_CHECK`).
+"""
+
+# ---------------------------------------------------------------------------
+# Qayta ishlatiladigan matn cheklovlari.
+#
+# `StringConstraints` ATAYIN `Field` o'rniga ishlatiladi va IKKI sabab bor:
+#   * `strip_whitespace` `Field()` da UMUMAN yo'q — u faqat shu yerda;
+#   * cheklov ICHKI `str` ga qo'yiladi (`Annotated[str, ...] | None`), union
+#     ustiga EMAS. Union ustidagi metadata Pydantic versiyalari orasida har
+#     xil talqin qilinadi va "cheklov jimgina qo'llanmadi" holatini beradi —
+#     ya'ni uzunlik chegarasi bor deb o'ylagan joyda hech qanday chegara
+#     bo'lmasdi.
+#
+# Kesish (`strip_whitespace`) DB'dagi `length(btrim(name)) > 0` konstraytining
+# jufti: `"  "` kesilgandan keyin bo'sh qoladi va `min_length=1` uni 422
+# bilan rad etadi — konstraytgacha yetib bormaydi.
+# ---------------------------------------------------------------------------
+
+_NameStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+_LongNameStr = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+]
+_CodeStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
+_NoteStr = Annotated[str, StringConstraints(max_length=500)]
+_ShortNoteStr = Annotated[str, StringConstraints(max_length=200)]
+_SearchStr = Annotated[str, StringConstraints(max_length=64)]
+_WeekdayList = Annotated[list[int], Field(min_length=1, max_length=7)]
+
+
+def _normalized_weekdays(value: list[int]) -> list[int]:
+    """`open_weekdays` ni tekshiradi va BARQAROR tartibda qaytaradi.
+
+    Ikkala tekshiruv ham DB'dagi `OPEN_WEEKDAYS_CHECK` konstraytining
+    jufti, lekin ular ILOVA chegarasida ham kerak: konstrayt buzilganda
+    javob 500 (yoki global handler orqali 404) bo'lardi, bu yerda esa
+    422 — ya'ni foydalanuvchi nima noto'g'ri ekanini ko'radi.
+
+    TAKRORLANISH ALOHIDA rad etiladi: `[2,2,2]` konstrayt uchun mutlaqo
+    yaroqli (`<@` dan o'tadi, uzunligi ham `NULL` emas), lekin u "bozor
+    haftada bir kun ishlaydi" degani-yu, foydalanuvchi uchta kun
+    tanlaganday ko'rinadi.
+    """
+    unknown = sorted(set(value) - ISO_WEEKDAYS)
+    if unknown:
+        raise ValueError(f"hafta kuni 1..7 oralig'ida bo'lishi kerak, berilgani: {unknown}")
+    if len(set(value)) != len(value):
+        raise ValueError("hafta kunlari takrorlanmasligi kerak")
+    return sorted(value)
+
+
+# ---------------------------------------------------------------------------
+# Zonalar (D-03) — YASSI ro'yxat, ierarxiya yo'q
+# ---------------------------------------------------------------------------
+
+
+class ZoneItem(BaseModel):
+    """`GET /zones` qatori va `POST`/`PATCH` javobi.
+
+    `stall_count` ATAYIN javobda: u "bu zonani o'chira olamanmi?" savoliga
+    oldindan javob beradi (D-03 — zona rastasi bo'lsa o'chirilmaydi) va UI
+    tugmani bloklashi uchun ikkinchi so'rov qilishi shart emas.
+    """
+
+    id: UUID
+    name: str
+    stall_count: int
+
+
+class ZoneListResponse(BaseModel):
+    """`GET /zones` — TO'LIQ ro'yxat, sahifalash YO'Q.
+
+    `next_cursor` maydoni ATAYIN yo'q (`StallListResponse` dan farqli):
+    zona soni bozor bo'yicha 5–15 ta, ya'ni kursor mexanikasi hech qanday
+    muammoni hal qilmasdi-yu, klientga "yana sahifa bormi?" degan doimiy
+    savolni yuklardi. Chegara kutilmaganda o'sib ketsa — bu domen qarori
+    o'zgargani, ya'ni kontrakt ham ochiq o'zgarishi kerak.
+    """
+
+    items: list[ZoneItem]
+
+
+class ZoneRequest(BaseModel):
+    """`POST /zones` va `PATCH /zones/{id}` tanasi.
+
+    `_NameStr` DB'dagi `name_not_blank` konstraytining jufti: import zonani
+    NOM bo'yicha bog'laydi (D-14), ya'ni faqat bo'shliqdan iborat nom hech
+    qachon mos kelmaydi va jimgina "fantom" zona yaratardi.
+    """
+
+    name: _NameStr
+
+
+# ---------------------------------------------------------------------------
+# Toifalar (D-05) — tarif kalitining O'ZI
+# ---------------------------------------------------------------------------
+
+
+class CategoryItem(BaseModel):
+    """`GET /categories` qatori.
+
+    `current_tariff_soum` `None` bo'lishi MA'NOLI holat, nuqson emas
+    (D-08): toifa yaratilgan, lekin unga hali narx berilmagan. UI aynan shu
+    holatni "tarif kiritilmagan" ogohlantirishi bilan ko'rsatadi va usta
+    4-qadami undan boshlanadi. `0` QAYTARILMAYDI — u "bepul toifa" degan
+    yolg'on ma'no berardi va anomaliya hech qachon ko'rinmasdi.
+    """
+
+    id: UUID
+    name: str
+    stall_count: int
+    current_tariff_soum: int | None
+
+
+class CategoryListResponse(BaseModel):
+    """`GET /categories` — sahifalashsiz (`ZoneListResponse` bilan bir xil sabab)."""
+
+    items: list[CategoryItem]
+
+
+class CategoryRequest(BaseModel):
+    """`POST /categories` va `PATCH /categories/{id}` tanasi."""
+
+    name: _NameStr
+
+
+# ---------------------------------------------------------------------------
+# Rastalar (D-01, D-02, D-03, D-04) — fazaning eng ko'p ishlatiladigan yuzasi
+# ---------------------------------------------------------------------------
+
+
+class StallListItem(BaseModel):
+    """`GET /stalls` qatori — UI-SPEC §8.2 ustunlarining aynan manbai.
+
+    UCHTA MAYDON `None` BO'LISHI MUMKIN va uchalasi ham HAR XIL holatni
+    bildiradi — ularni aralashtirish 6-fazadagi anomaliya hisobini buzardi:
+
+      * `category_id`/`category_name` — rastaga toifa davri yozilmagan
+        (import chala o'tgan holat; usta uni to'ldirishga majburlaydi);
+      * `vendor_id`/`vendor_name`     — bugun biriktirilgan sotuvchi yo'q
+        (D-11: "band, lekin sotuvchisiz" — XATO EMAS, anomaliya alomati);
+      * `tariff_soum`                 — toifa bor, lekin uning bugungi
+        narxi yo'q (D-08 fail-closed).
+    """
+
+    id: UUID
+    code: str
+    zone_id: UUID
+    zone_name: str
+    category_id: UUID | None
+    category_name: str | None
+    status: StallStatus
+    vendor_id: UUID | None
+    vendor_name: str | None
+    tariff_soum: int | None
+    created_at: datetime
+
+
+class StallDetail(StallListItem):
+    """`GET /stalls/{id}` va yozuv endpointlarining javobi.
+
+    Ro'yxat qatorining KENGAYTMASI: uchta qo'shimcha maydon faqat bitta
+    rasta ochilganda kerak va ularni ro'yxatga qo'shish har bir qatorga
+    ortiqcha shaxsiy ma'lumot (telefon) yuklardi.
+
+    `phone` — sotuvchining telefoni, ya'ni SHAXSIY MA'LUMOT (D-09). U
+    `vendor_id` bilan birga keladi yoki ikkalasi ham `None`.
+    """
+
+    phone: str | None
+    assignment_from: date | None
+    note: str | None
+
+
+class StallListResponse(BaseModel):
+    """`GET /stalls` — keyset sahifa (`next_cursor` `null` bo'lsa oxirgisi).
+
+    Tartib SERVERDA hal qilinadi (`code_sort` — inson-raqamli: 2 < 10 < 100)
+    va frontend uni QAYTA SARALAMAYDI (UI-SPEC §7.3). Klient tomonda
+    saralash uchala tilda boshqacha natija berardi va xarita bilan ro'yxat
+    ajralib ketardi.
+    """
+
+    items: list[StallListItem]
+    next_cursor: str | None
+
+
+class StallQuery(BaseModel):
+    """`GET /stalls` query parametrlari (UI-SPEC §8.3 filtrlari).
+
+    `q` — rasta KODI (prefiks) yoki SOTUVCHI ismi. D-01 tufayli raqam bozor
+    bo'yicha yagona, ya'ni qidiruv zona tanlashni TALAB QILMAYDI — bu
+    6-fazadagi kassir oqimining ("raqam bo'yicha topish") poydevori.
+
+    `limit` ning yuqori chegarasi — `STALL_PAGE_SIZE_MAX` (T-02-59).
+    """
+
+    q: _SearchStr | None = None
+    zone: UUID | None = None
+    category: UUID | None = None
+    status: StallStatus | None = None
+    limit: Annotated[int, Field(ge=1, le=STALL_PAGE_SIZE_MAX)] = 50
+    cursor: str | None = None
+
+
+class StallCreateRequest(BaseModel):
+    """`POST /stalls` tanasi.
+
+    `zone_id` MAJBURIY (D-03): zona har rastada bo'lishi shart va DB'dagi
+    `zone_id NOT NULL` ning jufti.
+
+    `category_id` ham MAJBURIY, LEKIN u `stalls` jadvaliga YOZILMAYDI —
+    `stalls.category_id` ustuni umuman yo'q (D-04). Uning o'rniga
+    `create()` shu qiymat bilan BOSHLANG'ICH toifa davrini yozadi va
+    davrning `valid_from` i `market_profile.operating_since` dan olinadi,
+    so'rov tanasidan EMAS. Sana maydonining bu yerda YO'QLIGI — ataylab:
+    u bo'lganda klient o'tmishdagi sanani tanlab, hisob tarixini surib
+    qo'yardi (T-02-61a).
+
+    `status` standart qiymati `active`: yangi rasta ishlaydi deb qaraladi.
+    """
+
+    code: _CodeStr
+    zone_id: UUID
+    category_id: UUID
+    status: StallStatus = StallStatus.ACTIVE
+    note: _NoteStr | None = None
+
+
+class StallUpdateRequest(BaseModel):
+    """`PATCH /stalls/{id}` tanasi — BERILGAN maydonlar tahrirlanadi.
+
+    `category_id` MAYDONI ATAYIN YO'Q (D-04): toifa — SANADAN kuchga
+    kiradigan atribut va uni oddiy `PATCH` bilan almashtirish o'tmishdagi
+    hisobni qayta yozardi. Toifa uchun alohida endpoint bor:
+    `POST /stalls/{id}/category`.
+
+    `code` esa tahrirlanadi (D-02) — bo'shab qolgan kodni QAYTA ISHLATISHNI
+    DB rad etadi (`stall_code_registry` + `trg_stall_code_claim`), ya'ni
+    "12-rasta" hisobotda yillar davomida bitta jismoniy joyni anglatadi.
+    """
+
+    code: _CodeStr | None = None
+    zone_id: UUID | None = None
+    status: StallStatus | None = None
+    note: _NoteStr | None = None
+
+
+class StallCategoryRequest(BaseModel):
+    """`POST /stalls/{id}/category` tanasi (D-04 — voris modeli).
+
+    `valid_from` FAQAT KELAJAK bo'lishi mumkin va bu qoida ILOVA
+    qatlamida majburlanadi (`stall_repo.StallRepository.set_category()`).
+    Bugungi kun ham rad etiladi: 6-fazaning kunlik job'i bugungi hisobni
+    allaqachon yozib bo'lgan bo'lishi mumkin, ya'ni "bugun" ham o'tmish.
+
+    Pydantic bu yerda sanani KELAJAK deb tekshirmaydi — sababi ataylab:
+    javob kodi **403** `category_period_past_locked` bo'lishi kerak, 422
+    emas. So'rovning SHAKLI to'g'ri; rad etishning sababi — o'tmish hech
+    kimga ochiq emas, ya'ni bu HUQUQ masalasi (02-09 dagi
+    `tariff_past_locked` bilan bir xil mulohaza).
+    """
+
+    category_id: UUID
+    valid_from: date
+
+
+# ---------------------------------------------------------------------------
+# Plan-xarita (MARKET-06, D-19/D-20)
+# ---------------------------------------------------------------------------
+
+
+class MapCell(BaseModel):
+    """Xaritadagi bitta katak.
+
+    ⚠ `tone` MAYDONI YO'Q va hech qachon qo'shilmaydi (D-20, RESEARCH
+    Pattern 11 qoida 4). API `status` + `has_vendor` XOM faktlarini
+    beradi, rangni esa frontend hosil qiladi (`stall-tone.ts`). Rang
+    mantiqi serverda hisoblanganda 6-fazada "to'langan/qarzdor" manbai
+    qo'shilishi API kontraktini o'zgartirishni talab qilardi; hosila
+    funksiyada esa u bitta `switch` ga qo'shiladi.
+
+    ⚠ KOORDINATA HAM YO'Q (D-19): joylashuv avtomatik (CSS Grid), ya'ni
+    hech kim rastalarni qo'lda joylashtirmaydi va saqlanadigan `x`/`y`
+    bo'lmagani uchun ular eskirib ham qolmaydi.
+    """
+
+    id: UUID
+    code: str
+    status: StallStatus
+    has_vendor: bool
+
+
+class MapZone(BaseModel):
+    """Xaritadagi zona bloki — kataklar `code_sort` TARTIBIDA keladi.
+
+    `name` — DB kontenti va TARJIMA QILINMAYDI (1-faza D-16).
+    """
+
+    id: UUID
+    name: str
+    cells: list[MapCell]
+
+
+class StallMapResponse(BaseModel):
+    """`GET /stalls/map` — zonalar NOM tartibida (UI-SPEC §7.3).
+
+    Ro'yxat endpointidan ALOHIDA: xarita butun bozorni bir marta oladi
+    (sahifalashsiz) va har katak uchun atigi to'rt maydon qaytaradi, ya'ni
+    1000 rastali bozorda ham javob kichik qoladi. `GET /stalls` ni
+    `limit=1000` bilan chaqirish o'rniga aynan shu endpoint ishlatiladi.
+    """
+
+    zones: list[MapZone]
+
+
+# ---------------------------------------------------------------------------
+# Tariflar (02-09 to'ldiradi — bu yerda FAQAT shakl) — D-05/D-06/D-07
+# ---------------------------------------------------------------------------
+
+
+class TariffItem(BaseModel):
+    """Tarif tarixining bitta qatori.
+
+    `valid_to` DB'da USTUN EMAS (Pitfall 9) — u keyingi qatorning
+    `valid_from` idan `LEAD()` bilan HISOBLANADI va oxirgi qator uchun
+    `None` bo'ladi. Ustun sifatida saqlansa ikkinchi haqiqat manbai
+    bo'lardi va ikkalasi bir kun ajralib ketardi.
+
+    `is_past` — `valid_from <= business_today()`. UI shu bayroqqa qarab
+    tahrir tugmasini KO'RSATMAYDI, lekin bu QULAYLIK: haqiqiy darvoza
+    serverda (`trg_tariff_past_immutable`, D-07).
+    """
+
+    id: UUID
+    category_id: UUID
+    category_name: str
+    amount_soum: int
+    valid_from: date
+    valid_to: date | None
+    is_past: bool
+
+
+class TariffCreateRequest(BaseModel):
+    """`POST /tariffs` tanasi (D-06 — YANGI qator, `UPDATE` yo'q)."""
+
+    category_id: UUID
+    amount_soum: Annotated[int, Field(gt=0, le=MAX_SAFE_SOUM)]
+    valid_from: date
+
+
+class TariffListResponse(BaseModel):
+    """`GET /tariffs` — tarif tarixi + ruxsat etilgan eng erta sana.
+
+    ⚠ `next_cursor` YO'Q: tarif ro'yxati sahifalanmaydi (02-09). Toifa
+    soni o'nlab, har toifada esa yiliga bir necha narx — ya'ni ro'yxat
+    tabiiy ravishda kichik va uni kesish faqat "qaysi narx qachon amal
+    qilgan" savolining javobini yashirardi.
+    """
+
+    items: list[TariffItem]
+    min_valid_from: date
+    """Klient tanlashi mumkin bo'lgan ENG ERTA `valid_from`.
+
+    MAYDON MAJBURIY VA `| None` EMAS — bu ataylab (`MarketRef.is_active`
+    bilan aynan bir xil sabab): standart qiymat har bir chaqiruvchiga uni
+    "unutish" imkonini berardi va unutilgan joyda sana maydoni chegarasiz
+    ochilib qolardi. Ro'yxat BO'SH bo'lganda ham qiymat keladi — usta
+    4-qadami aynan bo'sh ro'yxatdan boshlanadi.
+
+    Qiymatni **02-09** hisoblaydi: qoralama bozorda
+    `market_profile.operating_since`, faol bozorda `business_today() + 1`.
+    Bu rejada faqat SHAKL e'lon qilinadi.
+
+    ⚠ BU DARVOZA EMAS — u KLIENT QULAYLIGI (sana maydonining `min`
+    atributi, 02-15). Haqiqiy tekshiruv `add_tariff()` da va u DevTools
+    bilan olib tashlanmaydi.
+    """
+
+
+# ---------------------------------------------------------------------------
+# Ish kunlari kalendari (D-17/D-18) — 02-09 to'ldiradi
+# ---------------------------------------------------------------------------
+
+
+class CalendarException(BaseModel):
+    """Haftalik jadvaldan chiqadigan alohida kun.
+
+    `is_open` IKKI TOMONLAMA: `false` — bayram/yopiq kun, `true` — jadvalda
+    dam olish bo'lgan, lekin ISHLAYDIGAN kun. Bitta jadval ikkalasini ham
+    ifodalaydi, chunki `market_is_open()` da istisno HAR DOIM haftalik
+    jadvaldan ustun turadi.
+    """
+
+    id: UUID
+    exception_date: date
+    is_open: bool
+    note: str | None
+
+
+class CalendarResponse(BaseModel):
+    """`GET /calendar` — haftalik jadval + istisnolar (FAQAT bozor darajasida, D-18)."""
+
+    open_weekdays: list[int]
+    exceptions: list[CalendarException]
+
+
+class WeekdaysRequest(BaseModel):
+    """`PUT /calendar/weekdays` tanasi (D-17).
+
+    `min_length=1` — BO'SH massiv rad etiladi. U DB konstraytidan ham
+    o'tmasdi, lekin sabab muhimroq: bo'sh jadval "bozor hech qachon
+    ochilmaydi" degani va tushum JIMGINA nolga tushardi.
+    """
+
+    open_weekdays: _WeekdayList
+
+    @field_validator("open_weekdays")
+    @classmethod
+    def _weekdays(cls, value: list[int]) -> list[int]:
+        return _normalized_weekdays(value)
+
+
+class CalendarExceptionRequest(BaseModel):
+    """`POST /calendar/exceptions` tanasi (D-18)."""
+
+    exception_date: date
+    is_open: bool
+    note: _ShortNoteStr | None = None
+
+
+# ---------------------------------------------------------------------------
+# Sotuvchilar va biriktirishlar (D-09…D-12) — 02-10 to'ldiradi
+# ---------------------------------------------------------------------------
+
+
+class VendorListItem(BaseModel):
+    """`GET /vendors` qatori — SHAXSIY MA'LUMOT (D-09: o'qish ham auditda).
+
+    `stall_codes` ATAYIN `stall_count` bilan BIRGA: sanoq ro'yxatning qisqa
+    ko'rinishi uchun (UI-SPEC §8.2 — `<640px` da faqat badge), kodlar esa
+    kengroq ekranda ko'rsatiladi. Ikkinchi so'rov qilinmaydi.
+    """
+
+    id: UUID
+    full_name: str
+    phone: str
+    stall_count: int
+    stall_codes: list[str]
+    created_at: datetime
+
+
+class VendorRequest(BaseModel):
+    """`POST /vendors` va `PATCH /vendors/{id}` tanasi (D-12).
+
+    Telefon CHEGARADA normallashtiriladi — `CreateUserRequest` dagi shakl
+    AYNAN takrorlanadi va sabab ham o'sha: normalizatsiya endpoint ichida
+    qilinsa, bir kun kimdir uni unutadi va bitta sotuvchi ikkita qator
+    oladi (qarz tarixi ikkiga bo'linadi).
+
+    Unikalik BOZOR ICHIDA (`uq_vendors_market_id_phone_e164`), global EMAS:
+    bir odam ikki bozorda savdo qilishi mumkin (D-12, T-02-44).
+    """
+
+    full_name: _LongNameStr
+    phone: str
+
+    @field_validator("phone")
+    @classmethod
+    def _normalize(cls, value: str) -> str:
+        """E.164 ga keltiradi; o'qib bo'lmasa 422."""
+        try:
+            return normalize_phone(value)
+        except InvalidPhoneError as exc:
+            raise ValueError(str(exc)) from exc
+
+
+class VendorListResponse(BaseModel):
+    """`GET /vendors` — keyset sahifa (sotuvchi soni rastalar bilan o'sadi)."""
+
+    items: list[VendorListItem]
+    next_cursor: str | None
+
+
+class AssignmentItem(BaseModel):
+    """Rasta ↔ sotuvchi biriktirish DAVRI (D-09/D-10/D-11).
+
+    `to_date` `None` — davr OCHIQ (sotuvchi hozir ham shu rastada).
+    Chegara `[)`: almashinuv kuni YANGI sotuvchiga tegishli va o'sha
+    kunning pattasi unga yoziladi (`sbozor_core.periods`).
+
+    PUL MAYDONI YO'Q va bo'lmaydi (D-10): qarz `daily_charges` da tug'iladi
+    va ESKI sotuvchida qoladi.
+    """
+
+    id: UUID
+    stall_id: UUID
+    stall_code: str
+    vendor_id: UUID
+    vendor_name: str
+    from_date: date
+    to_date: date | None
+
+
+class AssignmentCreateRequest(BaseModel):
+    """`POST /assignments` tanasi. Qoplanish DB'da rad etiladi (`23P01` → 409)."""
+
+    stall_id: UUID
+    vendor_id: UUID
+    from_date: date
+    to_date: date | None = None
+
+
+class AssignmentCloseRequest(BaseModel):
+    """`POST /assignments/{id}/close` tanasi — ochiq davrni yopadi."""
+
+    to_date: date
+
+
+# ---------------------------------------------------------------------------
+# "Yangi bozor" ustasi (MARKET-01, D-16) — 02-11 to'ldiradi
+# ---------------------------------------------------------------------------
+
+
+class MarketCreateRequest(BaseModel):
+    """`POST /markets` tanasi — ustaning 1-qadami.
+
+    `operating_since` MAJBURIY va bu A3 taxminining bevosita natijasi:
+    barcha BOSHLANG'ICH `valid_from` lar (birinchi tarif va birinchi toifa
+    davri) aynan shu sanadan olinadi. Import kuni qo'yilsa, 6-faza undan
+    oldingi har bir kunni "tarifsiz" deb topib butun tarixni anomaliyaga
+    aylantirardi.
+
+    `tin` formati DB'da ham tekshiriladi (`tin_format`, 9 raqam — A2
+    taxmini); bank rekvizitlari esa ATAYIN formatlanmaydi (A1 buyurtmachi
+    bilan tasdiqlanmagan va noto'g'ri qat'iy format haqiqiy rekvizitni rad
+    etardi).
+    """
+
+    name: _LongNameStr
+    timezone: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+    operating_since: date
+    open_weekdays: _WeekdayList | None = None
+    address: _NoteStr | None = None
+    tin: Annotated[str, StringConstraints(pattern=r"^[0-9]{9}$")] | None = None
+    bank_account: Annotated[str, StringConstraints(max_length=50)] | None = None
+    bank_mfo: Annotated[str, StringConstraints(max_length=20)] | None = None
+    contact_phone: Annotated[str, StringConstraints(max_length=32)] | None = None
+
+    @field_validator("open_weekdays")
+    @classmethod
+    def _weekdays(cls, value: list[int] | None) -> list[int] | None:
+        return None if value is None else _normalized_weekdays(value)
+
+
+class MarketCreateResponse(BaseModel):
+    """`POST /markets` javobi.
+
+    `is_active` HAR DOIM `false` bo'ladi (D-16: yangi bozor QORALAMA), lekin
+    maydon baribir qaytariladi — klient uni taxmin qilmasligi kerak va
+    `MarketRef` bilan bir xil shaklda o'qiy olishi kerak.
+    """
+
+    id: UUID
+    name: str
+    is_active: bool
+
+
+class BlockingItem(BaseModel):
+    """Faollashtirishni to'sib turgan bitta sabab (UI-SPEC §6.6).
+
+    `step` — ustaning QAYSI qadamiga qaytish kerakligi. Aynan shu maydon
+    409 ni "xato" emas, "yo'l ko'rsatkichi" qiladi: UI foydalanuvchini
+    to'g'ridan-to'g'ri chala qadamga olib boradi.
+    """
+
+    step: int
+    code: str
+    detail: str
+
+
+class SetupStatusResponse(BaseModel):
+    """`GET /markets/{id}/setup-status` — ustaning to'liqlik holati.
+
+    SANOQLAR XOM HOLDA qaytariladi va UI ularni "3/5 toifada tarif bor"
+    shaklida ko'rsatadi. `can_activate` esa SERVER qarori: klient uni
+    sanoqlardan qayta hisoblamaydi, aks holda to'liqlik qoidasi ikki joyda
+    yashab, bir kun ajralib ketardi (02-11 `activate` darvozasi bilan).
+
+    `calendar_configured` — `bool`, sanoq emas: haftalik jadval BOR yoki
+    YO'Q, "yarim sozlangan" holati yo'q (fail-closed narxi).
+    """
+
+    zones: int
+    categories: int
+    tariffs_covered: int
+    categories_total: int
+    stalls: int
+    stalls_with_category: int
+    vendors: int
+    calendar_configured: bool
+    cameras: int
+    can_activate: bool
+    blocking: list[BlockingItem]
+
+
+# ---------------------------------------------------------------------------
+# Excel import (D-13/D-14/D-15) — 02-12 to'ldiradi
+# ---------------------------------------------------------------------------
+
+
+class ImportResultResponse(BaseModel):
+    """`POST /imports/*` muvaffaqiyatli javobi.
+
+    `skipped` ALOHIDA maydon: "10 qator yozildi" javobi 12 qatorli fayl
+    uchun foydalanuvchini chalg'itardi — u qolgan ikkitasi qayerga
+    ketganini bilishi kerak.
+    """
+
+    inserted: int
+    skipped: int
+
+
+class ImportErrorItem(BaseModel):
+    """Bitta qatordagi validatsiya xatosi.
+
+    `row` — FAYLDAGI qator raqami (1 dan, sarlavha bilan birga), ya'ni
+    foydalanuvchi Excel'da o'sha raqamga to'g'ridan-to'g'ri o'ta oladi.
+    `message` DB xatosidan OLINMAYDI: RLS `DETAIL` ni o'chiradi (Pitfall 4)
+    va xom konstrayt matni foydalanuvchiga hech nima aytmasdi.
+    """
+
+    row: int
+    code: str
+    message: str
+
+
+class ImportErrorResponse(BaseModel):
+    """`POST /imports/*` ning 422 javobi — D-14: validatsiya YOZISHDAN OLDIN.
+
+    `error_counts` — `{kod: soni}`. 500 qatorli faylda 480 ta bir xil xato
+    bo'lishi mumkin va ularning hammasini ro'yxatda ko'rsatish ekranni
+    foydasiz qilardi; sanoq esa "asosiy muammo nima" savoliga bitta qatorda
+    javob beradi (`errors` ro'yxati esa cheklangan namuna bo'ladi).
+    """
+
+    detail: str
+    errors: list[ImportErrorItem]
+    error_counts: dict[str, int]
