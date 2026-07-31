@@ -62,7 +62,7 @@ export function AuditList() {
   if (auditQuery.isError) {
     return (
       <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger"
+        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
         role="alert"
       >
         {t(adminErrorMessageKey(auditQuery.error))}
@@ -184,7 +184,11 @@ function AuditCard({
           <span
             className={cn(
               "inline-flex items-center rounded-full px-2 py-0.5 text-xs",
-              isDbTrigger ? "bg-surface-muted text-text" : "bg-accent/10 text-accent",
+              // `text-accent-text` — aksent MATNI tint fonida
+              // (o'lchangan 3.82:1 -> 5.31:1, WCAG 1.4.3).
+              isDbTrigger
+                ? "bg-surface-muted text-text"
+                : "bg-accent/10 text-accent-text",
             )}
           >
             <span className="sr-only">{t("audit.sourceLabel")}: </span>

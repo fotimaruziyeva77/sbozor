@@ -151,7 +151,7 @@ export function MarketPicker() {
 
       {formError ? (
         <p
-          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger"
+          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
           role="alert"
         >
           {formError}

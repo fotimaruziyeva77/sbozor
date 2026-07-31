@@ -202,7 +202,9 @@ function Select({
 }) {
   return (
     <select
-      className="h-10 w-full rounded-sm border border-border bg-surface px-3 text-sm text-text outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
+      // `border-ui` — boshqaruv elementi chegarasi (WCAG 2.2 SC 1.4.11,
+      // o'lchangan 1.28:1 -> 3.64:1).
+      className="h-10 w-full rounded-sm border border-border-ui bg-surface px-3 text-sm text-text outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
       id={id}
       onChange={(event) => onChange(event.target.value)}
       value={value}

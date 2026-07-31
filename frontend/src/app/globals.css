@@ -17,31 +17,72 @@
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  /* ---- Neytral kulrang shkala ----------------------------------------- */
+  /* ---- Neytral kulrang shkala -----------------------------------------
+   * IKKI XIL CHEGARA, ikki xil mas'uliyat:
+   *
+   *   `--color-border`    — FAQAT DEKORATIV: karta konturi, ajratkich
+   *                         chiziq, panel va dialog chegarasi. Surface
+   *                         fonida 1.28:1; WCAG 2.2 SC 1.4.11 dekorativ
+   *                         chegaraga QO'LLANMAYDI, shuning uchun bu
+   *                         qiymat ataylab o'zgarmaydi.
+   *   `--color-border-ui` — MAJBURIY: chegarasi elementni "boshqaruv
+   *                         elementi" sifatida tanitadigan har narsa —
+   *                         input, select, textarea, checkbox, xarita
+   *                         katagi.
+   */
   --color-bg: oklch(0.985 0 0);
   --color-surface: oklch(1 0 0);
   --color-surface-muted: oklch(0.968 0 0);
   --color-border: oklch(0.916 0 0);
+  /* WCAG 2.2 SC 1.4.11 (Non-text Contrast, ≥3:1). O'lchandi:
+   * 3.64:1 (surface), 3.49:1 (bg), 3.32:1 (surface-muted). */
+  --color-border-ui: oklch(0.62 0 0);
   --color-border-strong: oklch(0.85 0 0);
   --color-text: oklch(0.205 0 0);
-  --color-text-muted: oklch(0.556 0 0);
+  /* WCAG 1.4.3 (AA 4.5:1). 0.556 -> 0.53: surface-muted fonida
+   * o'lchangan 4.31:1 (buzilish) -> 4.81:1. */
+  --color-text-muted: oklch(0.53 0 0);
 
   /* ---- Bitta aksent rang ---------------------------------------------- */
-  --color-accent: oklch(0.58 0.19 255);
+  /* WCAG 1.4.3. 0.58 -> 0.56: birlamchi tugmadagi oq matn
+   * (`--color-accent-fg`) bu fonda o'lchangan 4.36:1 (buzilish) -> 4.72:1. */
+  --color-accent: oklch(0.56 0.19 255);
   --color-accent-hover: oklch(0.53 0.19 255);
   --color-accent-fg: oklch(1 0 0);
+  /* WCAG 1.4.3. Aksent MATNI tint fonida (`bg-accent/10`):
+   * o'lchangan 3.82:1 (buzilish) -> 5.31:1. */
+  --color-accent-text: oklch(0.50 0.18 255);
 
   /* ---- Semantik holat ranglari ----------------------------------------
    * Keyingi fazalarda rasta holatlari uchun ishlatiladi:
    * band (success) / noaniq (warning) / qarzdor (danger).
+   *
+   * Uch xil rol, aralashtirilmaydi (DIQQAT: bu izohda `bg-` naqshini
+   * yulduzcha bilan yozib bo'lmaydi — `yulduzcha + qiya chiziq` ketma-ketligi
+   * CSS izohini erta yopadi va butun blok buziladi):
+   *   `--color-<holat>`      — TO'YINGAN FON (tugma foni, holat nuqtasi).
+   *   `--color-<holat>-fg`   — o'sha to'yingan fon USTIDAGI matn.
+   *   `--color-<holat>-text` — TINT fon (`bg-danger/12`, `bg-warning/20`)
+   *                            ustidagi MATN. Asosiy token matn sifatida
+   *                            AA dan O'TMAYDI.
+   *
+   * TAQIQ: `--color-warning` (oq fonda o'lchangan 2.02:1) HECH QACHON
+   * matn rangi bo'lmaydi — u faqat fon. Sariq tintdagi matn uchun
+   * `bg-warning/20 text-text` (15.63:1) yoki `--color-warning-text`.
    */
   --color-success: oklch(0.63 0.16 150);
   --color-success-fg: oklch(1 0 0);
+  /* WCAG 1.4.3. `bg-success/12` fonida: 2.87:1 (buzilish) -> 5.34:1. */
+  --color-success-text: oklch(0.48 0.14 150);
   --color-warning: oklch(0.78 0.15 85);
   --color-warning-fg: oklch(0.205 0 0);
+  /* WCAG 1.4.3. `bg-warning/20` fonida 5.28:1. */
+  --color-warning-text: oklch(0.50 0.11 85);
   --color-danger: oklch(0.58 0.21 27);
   --color-danger-hover: oklch(0.53 0.21 27);
   --color-danger-fg: oklch(1 0 0);
+  /* WCAG 1.4.3. `bg-danger/12` fonida: 3.97:1 (buzilish) -> 5.52:1. */
+  --color-danger-text: oklch(0.50 0.19 27);
 
   /* ---- Radiuslar (kartalar 12–16px) ----------------------------------- */
   --radius-sm: 0.5rem; /* 8px  — inputlar */
@@ -70,5 +111,25 @@
   :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
+  }
+
+  /*
+   * iOS Safari 16px'dan KICHIK forma elementiga fokuslanganda sahifani
+   * avtomatik kattalashtiradi. `Input` va `<select>` — `text-sm` (14px),
+   * ilova esa telefon-birinchi (bozor admini va kassir telefonda ishlaydi).
+   *
+   * `<meta viewport maximum-scale=1>` RAD ETILDI: u pinch-zoom'ni
+   * o'ldiradi va WCAG 1.4.4 (Resize Text) ni buzadi. Loyihada `viewport`
+   * eksporti yo'q va bo'lmaydi ham.
+   *
+   * O'rniga faqat BARMOQ bilan boshqariladigan qurilmalarda shrift 16px
+   * qilinadi — desktopdagi 14px zichligi saqlanadi.
+   */
+  @media (pointer: coarse) {
+    input,
+    select,
+    textarea {
+      font-size: 1rem;
+    }
   }
 }

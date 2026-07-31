@@ -153,7 +153,7 @@ export function LoginForm() {
           {...register("phone")}
         />
         {errors.phone ? (
-          <p className="text-sm text-danger" id="phone-error">
+          <p className="text-sm text-danger-text" id="phone-error">
             {errors.phone.message}
           </p>
         ) : null}
@@ -172,7 +172,7 @@ export function LoginForm() {
           {...register("password")}
         />
         {errors.password ? (
-          <p className="text-sm text-danger" id="password-error">
+          <p className="text-sm text-danger-text" id="password-error">
             {errors.password.message}
           </p>
         ) : null}
@@ -180,7 +180,7 @@ export function LoginForm() {
 
       {formError ? (
         <p
-          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger"
+          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
           role="alert"
         >
           {formError}

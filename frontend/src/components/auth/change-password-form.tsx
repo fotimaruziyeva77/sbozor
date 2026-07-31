@@ -118,7 +118,7 @@ export function ChangePasswordForm() {
           {...register("currentPassword")}
         />
         {errors.currentPassword ? (
-          <p className="text-sm text-danger">{errors.currentPassword.message}</p>
+          <p className="text-sm text-danger-text">{errors.currentPassword.message}</p>
         ) : null}
       </div>
 
@@ -134,7 +134,7 @@ export function ChangePasswordForm() {
           {...register("newPassword")}
         />
         {errors.newPassword ? (
-          <p className="text-sm text-danger">{errors.newPassword.message}</p>
+          <p className="text-sm text-danger-text">{errors.newPassword.message}</p>
         ) : null}
       </div>
 
@@ -150,13 +150,13 @@ export function ChangePasswordForm() {
           {...register("confirmPassword")}
         />
         {errors.confirmPassword ? (
-          <p className="text-sm text-danger">{errors.confirmPassword.message}</p>
+          <p className="text-sm text-danger-text">{errors.confirmPassword.message}</p>
         ) : null}
       </div>
 
       {formError ? (
         <p
-          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger"
+          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
           role="alert"
         >
           {formError}

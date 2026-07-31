@@ -87,7 +87,7 @@ export function UserList({
 
   if (usersQuery.isError) {
     return (
-      <p className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">
+      <p className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text" role="alert">
         {t(adminErrorMessageKey(usersQuery.error))}
       </p>
     );
@@ -314,7 +314,7 @@ function ConfirmDialog({
 
           {error ? (
             <p
-              className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger"
+              className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
               role="alert"
             >
               {error}
@@ -353,9 +353,9 @@ function Badge({
     <span
       className={cn(
         "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        tone === "success" && "bg-success/12 text-success",
+        tone === "success" && "bg-success/12 text-success-text",
         tone === "warning" && "bg-warning/20 text-text",
-        tone === "danger" && "bg-danger/12 text-danger",
+        tone === "danger" && "bg-danger/12 text-danger-text",
       )}
     >
       {children}

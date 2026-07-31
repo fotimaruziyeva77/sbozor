@@ -172,7 +172,7 @@ export function CreateUserDialog({
                 {...register("phone")}
               />
               {errors.phone ? (
-                <p className="text-sm text-danger">{errors.phone.message}</p>
+                <p className="text-sm text-danger-text">{errors.phone.message}</p>
               ) : null}
             </div>
 
@@ -205,7 +205,7 @@ export function CreateUserDialog({
                 );
               })}
               {errors.roles ? (
-                <p className="text-sm text-danger">{errors.roles.message}</p>
+                <p className="text-sm text-danger-text">{errors.roles.message}</p>
               ) : null}
             </fieldset>
 
@@ -214,8 +214,10 @@ export function CreateUserDialog({
                 {t("users.localeLabel")}
               </label>
               {/* Yorliqlar ENDONIM — tarjima qilinmaydi (`LOCALE_LABELS`). */}
+              {/* `border-ui` — boshqaruv elementi chegarasi (WCAG 2.2
+                  SC 1.4.11, o'lchangan 1.28:1 -> 3.64:1). */}
               <select
-                className="h-10 w-full rounded-sm border border-border bg-surface px-3 text-sm text-text outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
+                className="h-10 w-full rounded-sm border border-border-ui bg-surface px-3 text-sm text-text outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
                 id="create-locale"
                 {...register("locale")}
               >
@@ -229,7 +231,7 @@ export function CreateUserDialog({
 
             {formError ? (
               <p
-                className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger"
+                className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
                 role="alert"
               >
                 {formError}
@@ -272,7 +274,9 @@ function RoleCheckbox({
 }) {
   return (
     <label
-      className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-surface-muted"
+      // `border-ui` — bu yorliq checkbox'ning barmoq nishoni, ya'ni
+      // boshqaruv elementi (WCAG 2.2 SC 1.4.11, 1.28:1 -> 3.64:1).
+      className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border-ui px-3 py-2 text-sm transition-colors hover:bg-surface-muted"
       htmlFor={`create-role-${role}`}
     >
       <input
