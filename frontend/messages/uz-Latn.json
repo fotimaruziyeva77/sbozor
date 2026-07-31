@@ -75,6 +75,7 @@
     "copy": "Nusxa olish",
     "copied": "Nusxa olindi",
     "emptyState": "Bu bozorda hali foydalanuvchi yo'q",
+    "emptyStateHint": "Birinchi foydalanuvchini qo'shing — u telefon raqami va vaqtinchalik parol bilan kiradi.",
     "statusActive": "Faol",
     "statusBlocked": "Bloklangan",
     "statusMustChange": "Parol almashtirilishi kerak",
@@ -108,6 +109,7 @@
     "clearFilters": "Filtrlarni tozalash",
     "loadMore": "Ko'proq yuklash",
     "emptyState": "Yozuv topilmadi",
+    "emptyStateHint": "Sana oralig'ini kengaytiring yoki filtrlarni tozalang.",
     "resultCount": "{count, plural, one {# yozuv} other {# yozuv}} ko'rsatilmoqda",
     "actions": {
       "insert": "Qo'shildi",

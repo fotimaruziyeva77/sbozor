@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "@/i18n/navigation";
 import { ApiError, NetworkError, apiFetch } from "@/lib/api-client";
@@ -137,10 +138,11 @@ export function LoginForm() {
       noValidate
       onSubmit={handleSubmit(onSubmit)}
     >
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium" htmlFor="phone">
-          {t("auth.phoneLabel")}
-        </label>
+      <Field
+        error={errors.phone?.message}
+        id="phone"
+        label={t("auth.phoneLabel")}
+      >
         <Input
           id="phone"
           type="tel"
@@ -152,17 +154,13 @@ export function LoginForm() {
           aria-describedby={errors.phone ? "phone-error" : undefined}
           {...register("phone")}
         />
-        {errors.phone ? (
-          <p className="text-sm text-danger-text" id="phone-error">
-            {errors.phone.message}
-          </p>
-        ) : null}
-      </div>
+      </Field>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium" htmlFor="password">
-          {t("auth.passwordLabel")}
-        </label>
+      <Field
+        error={errors.password?.message}
+        id="password"
+        label={t("auth.passwordLabel")}
+      >
         <Input
           id="password"
           type="password"
@@ -171,12 +169,7 @@ export function LoginForm() {
           aria-describedby={errors.password ? "password-error" : undefined}
           {...register("password")}
         />
-        {errors.password ? (
-          <p className="text-sm text-danger-text" id="password-error">
-            {errors.password.message}
-          </p>
-        ) : null}
-      </div>
+      </Field>
 
       {formError ? (
         <p

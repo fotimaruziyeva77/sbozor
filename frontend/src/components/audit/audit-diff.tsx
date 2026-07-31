@@ -72,7 +72,7 @@ export function AuditDiff({ entry }: { entry: AuditEntry }) {
   }
 
   return (
-    <dl className="flex flex-col gap-1.5">
+    <dl className="flex flex-col gap-2">
       {keys.map((key) => (
         <div
           className="grid grid-cols-[minmax(6rem,auto)_1fr] items-baseline gap-x-3 gap-y-1 sm:grid-cols-[minmax(8rem,auto)_1fr_1fr]"

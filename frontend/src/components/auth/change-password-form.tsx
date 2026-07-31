@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "@/i18n/navigation";
 import { apiFetch, errorMessageKey } from "@/lib/api-client";
@@ -105,54 +106,57 @@ export function ChangePasswordForm() {
       noValidate
       onSubmit={handleSubmit(onSubmit)}
     >
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium" htmlFor="current-password">
-          {t("auth.currentPassword")}
-        </label>
+      <Field
+        error={errors.currentPassword?.message}
+        id="current-password"
+        label={t("auth.currentPassword")}
+      >
         <Input
           id="current-password"
           type="password"
           autoComplete="current-password"
           autoFocus
           aria-invalid={errors.currentPassword ? true : undefined}
+          aria-describedby={
+            errors.currentPassword ? "current-password-error" : undefined
+          }
           {...register("currentPassword")}
         />
-        {errors.currentPassword ? (
-          <p className="text-sm text-danger-text">{errors.currentPassword.message}</p>
-        ) : null}
-      </div>
+      </Field>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium" htmlFor="new-password">
-          {t("auth.newPassword")}
-        </label>
+      <Field
+        error={errors.newPassword?.message}
+        id="new-password"
+        label={t("auth.newPassword")}
+      >
         <Input
           id="new-password"
           type="password"
           autoComplete="new-password"
           aria-invalid={errors.newPassword ? true : undefined}
+          aria-describedby={
+            errors.newPassword ? "new-password-error" : undefined
+          }
           {...register("newPassword")}
         />
-        {errors.newPassword ? (
-          <p className="text-sm text-danger-text">{errors.newPassword.message}</p>
-        ) : null}
-      </div>
+      </Field>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium" htmlFor="confirm-password">
-          {t("auth.confirmPassword")}
-        </label>
+      <Field
+        error={errors.confirmPassword?.message}
+        id="confirm-password"
+        label={t("auth.confirmPassword")}
+      >
         <Input
           id="confirm-password"
           type="password"
           autoComplete="new-password"
           aria-invalid={errors.confirmPassword ? true : undefined}
+          aria-describedby={
+            errors.confirmPassword ? "confirm-password-error" : undefined
+          }
           {...register("confirmPassword")}
         />
-        {errors.confirmPassword ? (
-          <p className="text-sm text-danger-text">{errors.confirmPassword.message}</p>
-        ) : null}
-      </div>
+      </Field>
 
       {formError ? (
         <p

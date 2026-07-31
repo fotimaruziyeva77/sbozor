@@ -1,14 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import * as Dialog from "@radix-ui/react-dialog";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import type { ApiLocale } from "@/lib/api-types";
 import { assignableRoles, LOCALE_LABELS, LOCALES, localeSchema } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
@@ -143,119 +145,106 @@ export function CreateUserDialog({
 
   return (
     <Dialog.Root onOpenChange={handleOpenChange} open={open}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-lg border border-border bg-surface p-6 shadow-raised">
-          <Dialog.Title className="text-lg font-semibold">
-            {t("users.createTitle")}
-          </Dialog.Title>
-          <Dialog.Description className="sr-only">
-            {t("users.createHint")}
-          </Dialog.Description>
-
-          <form
-            className="flex flex-col gap-4"
-            noValidate
-            onSubmit={handleSubmit(onSubmit)}
+      <Dialog.Content
+        description={t("users.createHint")}
+        size="lg"
+        srOnlyDescription
+        title={t("users.createTitle")}
+      >
+        <form
+          className="flex flex-col gap-4"
+          noValidate
+          onSubmit={handleSubmit(onSubmit)}
+        >
+          <Field
+            error={errors.phone?.message}
+            id="create-phone"
+            label={t("users.phoneLabel")}
           >
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" htmlFor="create-phone">
-                {t("users.phoneLabel")}
-              </label>
-              <Input
-                aria-invalid={errors.phone ? true : undefined}
-                autoComplete="off"
-                id="create-phone"
-                inputMode="tel"
-                placeholder={t("auth.phoneHint")}
-                type="tel"
-                {...register("phone")}
-              />
-              {errors.phone ? (
-                <p className="text-sm text-danger-text">{errors.phone.message}</p>
-              ) : null}
-            </div>
+            <Input
+              aria-describedby={errors.phone ? "create-phone-error" : undefined}
+              aria-invalid={errors.phone ? true : undefined}
+              autoComplete="off"
+              id="create-phone"
+              inputMode="tel"
+              placeholder={t("auth.phoneHint")}
+              type="tel"
+              {...register("phone")}
+            />
+          </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" htmlFor="create-full-name">
-                {t("users.fullNameLabel")}
-              </label>
-              <Input
-                autoComplete="off"
-                id="create-full-name"
-                {...register("fullName")}
-              />
-            </div>
+          <Field id="create-full-name" label={t("users.fullNameLabel")}>
+            <Input
+              autoComplete="off"
+              id="create-full-name"
+              {...register("fullName")}
+            />
+          </Field>
 
-            <fieldset className="flex flex-col gap-2">
-              <legend className="mb-1 text-sm font-medium">
-                {t("users.rolesLabel")}
-              </legend>
-              {roleOptions.map((role) => {
-                const labelKey = roleLabelKey(role);
-                if (labelKey === null) return null;
-                return (
-                  <RoleCheckbox
-                    checked={selectedRoles.includes(role)}
-                    key={role}
-                    label={tRoles(labelKey)}
-                    onToggle={() => toggleRole(role)}
-                    role={role}
-                  />
-                );
-              })}
-              {errors.roles ? (
-                <p className="text-sm text-danger-text">{errors.roles.message}</p>
-              ) : null}
-            </fieldset>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" htmlFor="create-locale">
-                {t("users.localeLabel")}
-              </label>
-              {/* Yorliqlar ENDONIM — tarjima qilinmaydi (`LOCALE_LABELS`). */}
-              {/* `border-ui` — boshqaruv elementi chegarasi (WCAG 2.2
-                  SC 1.4.11, o'lchangan 1.28:1 -> 3.64:1). */}
-              <select
-                className="h-10 w-full rounded-sm border border-border-ui bg-surface px-3 text-sm text-text outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
-                id="create-locale"
-                {...register("locale")}
-              >
-                {LOCALES.map((code) => (
-                  <option key={code} lang={code} value={code}>
-                    {LOCALE_LABELS[code]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {formError ? (
-              <p
-                className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-                role="alert"
-              >
-                {formError}
-              </p>
+          {/*
+           * `fieldset`/`legend` — `Field` EMAS: rollar bitta boshqaruv
+           * elementi emas, checkbox GURUHI. `Field` ning `htmlFor` i
+           * guruhga bog'lana olmaydi, `legend` esa aynan shu uchun bor.
+           */}
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1 text-sm font-semibold">
+              {t("users.rolesLabel")}
+            </legend>
+            {roleOptions.map((role) => {
+              const labelKey = roleLabelKey(role);
+              if (labelKey === null) return null;
+              return (
+                <RoleCheckbox
+                  checked={selectedRoles.includes(role)}
+                  key={role}
+                  label={tRoles(labelKey)}
+                  onToggle={() => toggleRole(role)}
+                  role={role}
+                />
+              );
+            })}
+            {errors.roles ? (
+              <p className="text-sm text-danger-text">{errors.roles.message}</p>
             ) : null}
+          </fieldset>
 
-            <div className="flex flex-col gap-2 sm:flex-row-reverse">
-              <Button
-                className="sm:flex-1"
-                disabled={selectedRoles.length === 0 || isSubmitting}
-                size="lg"
-                type="submit"
-              >
-                {isSubmitting ? t("common.loading") : t("common.save")}
+          <Field id="create-locale" label={t("users.localeLabel")}>
+            {/* Yorliqlar ENDONIM — tarjima qilinmaydi (`LOCALE_LABELS`). */}
+            <Select id="create-locale" {...register("locale")}>
+              {LOCALES.map((code) => (
+                <option key={code} lang={code} value={code}>
+                  {LOCALE_LABELS[code]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          {formError ? (
+            <p
+              className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
+              role="alert"
+            >
+              {formError}
+            </p>
+          ) : null}
+
+          <Dialog.Footer>
+            <Button
+              className="sm:flex-1"
+              disabled={selectedRoles.length === 0 || isSubmitting}
+              size="lg"
+              type="submit"
+            >
+              {isSubmitting ? t("common.loading") : t("common.save")}
+            </Button>
+            <Dialog.Close asChild>
+              <Button className="sm:flex-1" size="lg" variant="secondary">
+                {t("common.cancel")}
               </Button>
-              <Dialog.Close asChild>
-                <Button className="sm:flex-1" size="lg" variant="secondary">
-                  {t("common.cancel")}
-                </Button>
-              </Dialog.Close>
-            </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Portal>
+            </Dialog.Close>
+          </Dialog.Footer>
+        </form>
+      </Dialog.Content>
     </Dialog.Root>
   );
 }

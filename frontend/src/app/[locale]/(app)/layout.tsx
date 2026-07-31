@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { AppShell } from "@/components/shell/app-shell";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "@/i18n/navigation";
 import { loadPrincipal, restoreSession } from "@/lib/api-client";
 import { updatePrincipal, useAuthStore } from "@/lib/auth-store";
@@ -88,12 +89,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!ready) {
     return (
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-6">
-        <p className="text-sm text-text-muted" role="status">
-          {t("loading")}
-        </p>
-        <div className="h-24 animate-pulse rounded-lg bg-surface-muted" />
-        <div className="h-24 animate-pulse rounded-lg bg-surface-muted" />
+      /*
+       * UI-SPEC §9.1: sessiya tiklanayotganda mavjud GIBRID saqlanadi —
+       * matnli holat + skeleton. `aria-busy` konteynerda BIR MARTA
+       * beriladi, har blokda emas (`Skeleton` o'zi `aria-hidden`).
+       */
+      <main
+        aria-busy="true"
+        className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-6"
+        role="status"
+      >
+        <p className="text-sm text-text-muted">{t("loading")}</p>
+        <Skeleton className="h-24 rounded-lg" />
+        <Skeleton className="h-24 rounded-lg" />
       </main>
     );
   }

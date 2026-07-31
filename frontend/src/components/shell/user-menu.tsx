@@ -53,7 +53,7 @@ export function UserMenu() {
 
   return (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium transition-colors hover:bg-surface-muted">
+      <DropdownMenu.Trigger className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm font-semibold transition-colors hover:bg-surface-muted">
         <span className="max-w-[10rem] truncate">{displayName}</span>
         <ChevronDown aria-hidden="true" className="size-4 text-text-muted" />
       </DropdownMenu.Trigger>
@@ -65,9 +65,9 @@ export function UserMenu() {
           sideOffset={4}
         >
           <DropdownMenu.Label className="px-3 py-2">
-            <span className="block text-sm font-medium">{displayName}</span>
+            <span className="block text-sm font-semibold">{displayName}</span>
             {roleLabels.length > 0 ? (
-              <span className="mt-0.5 block text-xs text-text-muted">
+              <span className="mt-1 block text-xs text-text-muted">
                 {roleLabels.join(" · ")}
               </span>
             ) : null}

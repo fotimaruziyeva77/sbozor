@@ -78,7 +78,7 @@ export function LocaleSwitcher() {
   return (
     <div
       aria-label={t("languageLabel")}
-      className="inline-flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"
+      className="inline-flex items-center gap-1 rounded-md border border-border bg-surface p-1"
       role="group"
     >
       {LOCALES.map((code) => {
@@ -87,7 +87,7 @@ export function LocaleSwitcher() {
           <button
             aria-current={isActive ? "true" : undefined}
             className={cn(
-              "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+              "rounded-sm px-2 py-1 text-xs font-semibold transition-colors",
               "disabled:pointer-events-none disabled:opacity-50",
               isActive
                 ? "bg-accent text-accent-fg"

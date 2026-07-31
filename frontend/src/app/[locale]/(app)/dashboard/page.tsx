@@ -73,7 +73,7 @@ export default function DashboardPage() {
                 <Link className="block" href={section.href}>
                   <Card className="transition-colors hover:bg-surface-muted">
                     <CardHeader>
-                      <span className="flex items-center gap-2 text-base font-medium">
+                      <span className="flex items-center gap-2 text-lg font-semibold">
                         <Icon aria-hidden="true" className="size-4" />
                         {t(`nav.${section.labelKey}`)}
                       </span>

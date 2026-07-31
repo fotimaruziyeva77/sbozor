@@ -5,11 +5,12 @@ import { useFormatter, useTranslations } from "next-intl";
 
 import { AuditDiff } from "@/components/audit/audit-diff";
 import { useAuditFilters } from "@/components/audit/audit-filters";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { AuditEntry } from "@/lib/api-types";
 import { isAuditAction, isAuditTable } from "@/lib/api-types";
-import { cn } from "@/lib/cn";
 import { adminErrorMessageKey, useAuditQuery, useUsersQuery } from "@/lib/queries";
 
 /*
@@ -73,7 +74,12 @@ export function AuditList() {
   const entries = auditQuery.data.pages.flatMap((page) => page.items);
 
   if (entries.length === 0) {
-    return <p className="text-sm text-text-muted">{t("audit.emptyState")}</p>;
+    return (
+      <EmptyState
+        description={t("audit.emptyStateHint")}
+        title={t("audit.emptyState")}
+      />
+    );
   }
 
   return (
@@ -156,7 +162,7 @@ function AuditCard({
       <CardHeader className="gap-2 pb-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           {/* NIMA */}
-          <span className="text-base font-medium">
+          <span className="text-lg font-semibold">
             <span className="sr-only">{t("audit.what")}: </span>
             {actionLabel} · {tableLabel}
           </span>
@@ -172,7 +178,7 @@ function AuditCard({
           {/* KIM — D-16: ism/telefon tarjima qilinmaydi. */}
           <span>
             {t("audit.who")}:{" "}
-            <span className="font-medium text-text">
+            <span className="font-semibold text-text">
               {actorName ?? entry.actor_label ?? t("audit.systemActor")}
             </span>
           </span>
@@ -181,19 +187,14 @@ function AuditCard({
             {t("audit.businessDate")}: {entry.business_date}
           </span>
 
-          <span
-            className={cn(
-              "inline-flex items-center rounded-full px-2 py-0.5 text-xs",
-              // `text-accent-text` — aksent MATNI tint fonida
-              // (o'lchangan 3.82:1 -> 5.31:1, WCAG 1.4.3).
-              isDbTrigger
-                ? "bg-surface-muted text-text"
-                : "bg-accent/10 text-accent-text",
-            )}
-          >
+          {/*
+           * `accent` tone = `bg-accent/10 text-accent-text` — o'lchangan
+           * 3.82:1 (AA buzilishi) -> 5.29:1.
+           */}
+          <Badge tone={isDbTrigger ? "neutral" : "accent"}>
             <span className="sr-only">{t("audit.sourceLabel")}: </span>
             {isDbTrigger ? t("audit.sourceDbTrigger") : t("audit.sourceApp")}
-          </span>
+          </Badge>
         </div>
       </CardHeader>
 
