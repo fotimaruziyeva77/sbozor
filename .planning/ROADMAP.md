@@ -136,7 +136,7 @@ Plans:
 
 - [x] 02-08-PLAN.md — API I: barcha domen DTO'lari + zona/toifa/rasta + xarita agregati (W7)
 - [x] 02-09-PLAN.md — API II: tariflar (faqat qo'shadigan) va ish kunlari (W8)
-- [ ] 02-10-PLAN.md — API III: sotuvchilar (o'qish auditi) va biriktirish davrlari (W9)
+- [x] 02-10-PLAN.md — API III: sotuvchilar (o'qish auditi) va biriktirish davrlari (W9)
 - [ ] 02-11-PLAN.md — API IV: usta — bozor yaratish, `setup-status`, faollashtirish (W10)
 - [ ] 02-12-PLAN.md — Excel import: xavfsiz o'qish, validatsiya, shablon, all-or-nothing (W11)
 
