@@ -135,3 +135,23 @@
     }
   }
 }
+
+@layer components {
+  /*
+   * Plan-xaritaning zona bloki (UI-SPEC §7.8).
+   *
+   * 1000 katak = 360px kenglikda ~8700px skroll. `content-visibility: auto`
+   * brauzerga ekrandan TASHQARIDAGI zonalarni render qilmaslikni aytadi,
+   * `contain-intrinsic-size` esa render qilinmagan blokning taxminiy
+   * balandligini beradi — usiz skroll paneli har blok ochilganda sakrardi.
+   *
+   * Bu virtualizatsiya KUTUBXONASINING o'rnini bosadi: nol bog'liqlik,
+   * nol JS, nol test yuzasi. Tugmalar DOM'da qoladi, ya'ni klaviatura,
+   * skrinrider va brauzer qidiruvi ishlashda davom etadi — virtualizatsiya
+   * esa aynan shularni yo'qotardi.
+   */
+  .zone-block {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 400px;
+  }
+}
