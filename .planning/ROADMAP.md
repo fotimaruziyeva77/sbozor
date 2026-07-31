@@ -142,7 +142,7 @@ Plans:
 
 **Wave 12–14** *(frontend)*
 
-- [ ] 02-13-PLAN.md — Frontend domen kontrakti: zod, TanStack Query, 9 namespace, navigatsiya (W12)
+- [x] 02-13-PLAN.md — Frontend domen kontrakti: zod, TanStack Query, 9 namespace, navigatsiya (W12)
 - [ ] 02-14-PLAN.md — Rasta reestri va sxematik plan-xarita (CSS Grid, react-konva EMAS) (W13)
 - [ ] 02-15-PLAN.md — Sotuvchi, tarif, kalendar, zona va toifa ekranlari (W13)
 - [ ] 02-16-PLAN.md — Usta UI (7 qadam, faollashtirish paneli) va Excel import paneli (W14)
