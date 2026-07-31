@@ -28,7 +28,13 @@ downstream testni YOLG'ON-YASHIL qiladi:
     bo'shlig'i va D-11 ning ikkinchi shakli (umuman biriktirilmagan rasta).
   * **B bozorida bitta toifa TARIFSIZ qoladi** — bu ATAYIN nuqson: 02-11
     dagi `activate` to'liqlik tekshiruvi ("har toifada tarif bor") uchun
-    manfiy holat kerak, aks holda u faqat baxtli yo'lda sinalardi.
+    manfiy holat kerak, aks holda u faqat baxtli yo'lda sinalardi. 02-09 dagi
+    "boshlang'ich narx" testlari ham aynan shu bo'sh joyga yozadi.
+  * **FAQAT B bozorida bitta kalendar istisnosi** (`B_HOLIDAY`) — cross-tenant
+    matritsasi `exception_id` uchun HAQIQIY B qatorini talab qiladi. A bozori
+    ATAYIN istisnosiz qoladi: 02-07 uning boshlang'ich holatini "birorta
+    istisno qatorisiz" deb ta'riflaydi va `market_is_open()` ning haftalik
+    jadval qavatini aynan shu toza holatda sinaydi.
 =============================================================================
 
 Seed `sbozor_owner` autocommit ulanishi bilan yoziladi (`two_markets` bilan
@@ -56,6 +62,8 @@ __all__ = [
     "A_STALL_CODES_BY_SORT",
     "A_TARIFF_AMOUNTS",
     "A_ZONE_NAMES",
+    "B_HOLIDAY",
+    "B_OPERATING_SINCE",
     "B_TARIFF_AMOUNT",
     "GAP_DAY",
     "HANDOVER_DAY",
@@ -72,6 +80,10 @@ API testlari boshlang'ich toifa davrining sanasini va zona nomlarini
 tekshiradi. Ularni test faylida qayta yozish ikkinchi haqiqat manbai
 bo'lardi — seed qiymati o'zgarganda test jimgina eski qiymatni kutib
 qolardi (02-06 da o'rnatilgan qoida).
+
+`B_OPERATING_SINCE` va `B_HOLIDAY` 02-09 da qo'shildi: tarif API'sining
+"boshlang'ich narx" testlari B bozorining ish boshlash sanasini, cross-tenant
+matritsasi esa B ning HAQIQIY kalendar istisnosini talab qiladi.
 """
 
 # ---------------------------------------------------------------------------
@@ -176,6 +188,29 @@ DARHOL yiqiladi va sabab ko'rinadi (T-02-44).
 
 B_ASSIGNMENT_START = date(2026, 8, 1)
 
+B_HOLIDAY = date(2026, 3, 21)
+B_HOLIDAY_NOTE = "Navro'z (seed)"
+"""B bozorining YAGONA kalendar istisnosi — cross-tenant matritsasi uchun.
+
+⚠ FAQAT B BOZORIDA VA BU ATAYIN. `tests/integration/test_market_calendar.py`
+(02-07) A bozorining boshlang'ich holatini "birorta istisno qatorisiz"
+deb ta'riflaydi va `market_is_open()` ning HAFTALIK JADVAL qavatini aynan
+shu toza holatda sinaydi — A ga istisno qo'shilsa o'sha testlar nimani
+o'lchayotganini yo'qotardi.
+
+SANA HAM ATAYIN: 02-07 ning ikkala kalendar sanasi (`CLOSED_MONDAY`
+2026-08-24 va `OPEN_TUESDAY` 2026-08-25) avgustda, ya'ni mart bilan
+to'qnashmaydi. `test_calendar_is_fail_closed` ning NAZORAT bandi
+(`market_is_open(B, OPEN_TUESDAY) is True`) shu tufayli o'zgarmasdan
+qoladi.
+
+NEGA UMUMAN KERAK: `PARAM_FILLERS["exception_id"]` B bozorining HAQIQIY
+qatoriga ishora qilishi shart (`test_param_fillers_point_at_the_other
+_market`). Tasodifiy UUID bilan 404 javobi "obyekt yo'q" degani bo'lardi
+va matritsa "obyekt BOR, lekin boshqa bozorniki" holatini umuman
+sinamasdi.
+"""
+
 
 @dataclass(frozen=True)
 class MarketDomainRows:
@@ -199,6 +234,17 @@ class MarketDomainRows:
     """
     tariff_by_category: dict[UUID, UUID] = field(default_factory=dict)
     """`category_id -> tariff_id`. B bozorida BITTA toifa bu xaritada YO'Q."""
+    tariff_ids: tuple[UUID, ...] = ()
+    """Tarif qatorlari — TOIFA TARTIBIDA (`tariff_by_category` bilan bir xil manba).
+
+    `tariff_by_category` dan farqi shakl darajasida: xarita "shu toifaning
+    tarifi bormi?" savoliga javob beradi, bu esa BARQAROR TARTIBLANGAN
+    ro'yxat. Cross-tenant matritsasining `PARAM_FILLERS["tariff_id"]`
+    filleri aynan barqaror birinchi elementni talab qiladi —
+    `dict.values()` dan olish tartibga bog'liq bo'lib qolardi.
+    """
+    calendar_exception_ids: tuple[UUID, ...] = ()
+    """Kalendar istisnolari. A bozorida ATAYIN BO'SH (`B_HOLIDAY` docstringi)."""
 
     handover_stall_id: UUID | None = None
     """D-10: sotuvchi almashgan rasta (ikkita ketma-ket davr)."""
@@ -245,6 +291,10 @@ _INSERT_ASSIGNMENT = (
     "INSERT INTO stall_assignments (id, market_id, stall_id, vendor_id, period) "
     "VALUES (%s, %s, %s, %s, %s)"
 )
+_INSERT_CALENDAR_EXCEPTION = (
+    "INSERT INTO market_calendar_exceptions (id, market_id, exception_date, is_open, note) "
+    "VALUES (%s, %s, %s, %s, %s)"
+)
 
 CLEANUP_ORDER: tuple[str, ...] = (
     "stall_assignments",
@@ -260,10 +310,11 @@ CLEANUP_ORDER: tuple[str, ...] = (
 )
 """O'CHIRISH TARTIBI — FK bo'yicha bolalardan ota-onaga.
 
-`market_calendar_exceptions` seed tomonidan YOZILMAYDI, lekin ro'yxatda
-ATAYIN bor: kalendar testlari o'z istisnolarini qo'shadi va ular tozalanmasa
-keyingi testda `UNIQUE(market_id, exception_date)` ni buzardi yoki
-`markets` ni o'chirish FK bilan yiqilardi.
+`market_calendar_exceptions` 02-09 dan boshlab seed tomonidan ham
+yoziladi (faqat B bozorida, `B_HOLIDAY`), lekin ro'yxatdagi o'rni undan
+ham OLDIN kerak edi: kalendar testlari o'z istisnolarini qo'shadi va ular
+tozalanmasa keyingi testda `UNIQUE(market_id, exception_date)` ni
+buzardi yoki `markets` ni o'chirish FK bilan yiqilardi.
 """
 
 
@@ -320,6 +371,7 @@ def _seed_market(
         conn.execute(_INSERT_CATEGORY, (str(category_id), str(market_id), name))
 
     tariff_by_category: dict[UUID, UUID] = {}
+    tariff_ids: list[UUID] = []
     for category_id, amount in zip(category_ids, tariff_amounts, strict=False):
         tariff_id = uuid4()
         # A3: `valid_from` `operating_since` dan — import kunidan EMAS.
@@ -328,6 +380,7 @@ def _seed_market(
             (str(tariff_id), str(market_id), str(category_id), amount, operating_since),
         )
         tariff_by_category[category_id] = tariff_id
+        tariff_ids.append(tariff_id)
 
     stall_ids = tuple(uuid4() for _ in stall_codes)
     category_by_stall: dict[UUID, UUID] = {}
@@ -362,6 +415,7 @@ def _seed_market(
         assignment_ids=(),
         category_by_stall=category_by_stall,
         tariff_by_category=tariff_by_category,
+        tariff_ids=tuple(tariff_ids),
     )
 
 
@@ -448,7 +502,18 @@ def seed_market_domain(conn: Connection[TupleRow], base: TwoMarketSeed) -> Marke
     b_assignments = (
         _assign(conn, b.market_id, b.stall_ids[0], b.vendor_ids[0], B_ASSIGNMENT_START, None),
     )
-    market_b = replace(b, assignment_ids=b_assignments)
+
+    # ---- FAQAT B bozorida: kalendar istisnosi (sabab `B_HOLIDAY` docstringida)
+    b_exception_id = uuid4()
+    conn.execute(
+        _INSERT_CALENDAR_EXCEPTION,
+        (str(b_exception_id), str(b.market_id), B_HOLIDAY, False, B_HOLIDAY_NOTE),
+    )
+    market_b = replace(
+        b,
+        assignment_ids=b_assignments,
+        calendar_exception_ids=(b_exception_id,),
+    )
 
     return MarketDomainSeed(market_a=market_a, market_b=market_b)
 

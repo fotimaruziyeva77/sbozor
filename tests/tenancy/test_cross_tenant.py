@@ -173,11 +173,16 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     "zone_id": lambda seed: str(seed.domain.market_b.zone_ids[0]),
     "category_id": lambda seed: str(seed.domain.market_b.category_ids[0]),
     "stall_id": lambda seed: str(seed.domain.market_b.stall_ids[0]),
+    "tariff_id": lambda seed: str(seed.domain.market_b.tariff_ids[0]),
+    # B bozorining YAGONA kalendar istisnosi. A ga ATAYIN istisno
+    # qo'shilmagan (`fixtures/market_domain.B_HOLIDAY` docstringi), ya'ni
+    # bu filler haqiqatan "boshqa bozorning qatori" ni ko'rsatadi.
+    "exception_id": lambda seed: str(seed.domain.market_b.calendar_exception_ids[0]),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
-Kelajakdagi parametr turlari (`vendor_id`, `tariff_id`, `payment_id`, ...)
-shu yerga qo'shiladi. Xaritada bo'lmagan parametr paydo bo'lsa
+Kelajakdagi parametr turlari (`vendor_id`, `assignment_id`, `payment_id`,
+...) shu yerga qo'shiladi. Xaritada bo'lmagan parametr paydo bo'lsa
 `test_all_path_params_have_fillers` va `test_no_unclassified_routes`
 DARHOL yiqiladi — jimgina o'tkazib yuborish YO'Q.
 """
@@ -217,6 +222,23 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
         # o'z-o'zidan yiqitishi mumkin edi.
         "category_id": str(seed.domain.market_a.category_ids[0]),
         "valid_from": _future_date(),
+    },
+    # --- 02-09: tarif va kalendar ---
+    RouteSpec("POST", "/api/v1/tariffs"): lambda seed: {
+        "category_id": str(seed.domain.market_a.category_ids[0]),
+        "amount_soum": 15_000,
+        "valid_from": _future_date(),
+    },
+    # `valid_from` ATAYIN YO'Q: u berilganda so'rov avval `market_profile`
+    # oynasini o'qiydi va sana darvozasidan o'tadi, ya'ni matritsa 404
+    # o'rniga 422 yoki 409 olishi mumkin edi. Tana faqat marshrutni
+    # ISHLAB KETTIRISHI kerak — chegara holatlari `test_tariffs_api.py` da.
+    RouteSpec("PATCH", "/api/v1/tariffs/{tariff_id}"): lambda _: {"amount_soum": 15_000},
+    RouteSpec("PUT", "/api/v1/calendar/weekdays"): lambda _: {"open_weekdays": [1, 2, 3, 4, 5]},
+    RouteSpec("POST", "/api/v1/calendar/exceptions"): lambda _: {
+        "exception_date": _future_date(),
+        "is_open": False,
+        "note": "matritsa",
     },
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
@@ -365,6 +387,8 @@ def foreign_markers(seed: TenantSeed) -> tuple[str, ...]:
         *(str(category_id) for category_id in domain_b.category_ids),
         *(str(stall_id) for stall_id in domain_b.stall_ids),
         *(str(vendor_id) for vendor_id in domain_b.vendor_ids),
+        *(str(tariff_id) for tariff_id in domain_b.tariff_ids),
+        *(str(exception_id) for exception_id in domain_b.calendar_exception_ids),
     )
 
 
@@ -676,6 +700,8 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             *domain_b.category_ids,
             *domain_b.stall_ids,
             *domain_b.vendor_ids,
+            *domain_b.tariff_ids,
+            *domain_b.calendar_exception_ids,
         )
     }
 

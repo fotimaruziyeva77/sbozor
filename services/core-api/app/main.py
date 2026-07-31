@@ -42,10 +42,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.calendar import router as calendar_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
 from app.api.v1.stalls import router as stalls_router
+from app.api.v1.tariffs import router as tariffs_router
 from app.api.v1.users import router as users_router
 from app.api.v1.zones import router as zones_router
 from app.settings import Settings, get_settings
@@ -133,12 +135,17 @@ app.include_router(audit_router, prefix=f"{API_V1_PREFIX}/audit")
 #
 # Yangi marshrutlar `tests/tenancy/test_cross_tenant.py` matritsasiga
 # AVTOMATIK tushadi (u ro'yxatni `app.routes` dan oladi), ya'ni bu yerga
-# qo'shish o'sha faylda qo'lda ro'yxat yuritishni TALAB QILMAYDI. Yagona
-# qo'lda qadam — yangi yo'l parametri uchun `PARAM_FILLERS` ga B bozori
-# qiymatini qo'shish; unutilsa `test_no_unclassified_routes` qizaradi.
+# qo'shish o'sha faylda qo'lda ro'yxat yuritishni TALAB QILMAYDI. IKKI
+# qo'lda qadam bor: yangi yo'l parametri uchun `PARAM_FILLERS` ga B bozori
+# qiymatini, TANA talab qiladigan marshrut uchun esa `BODY_FILLERS` ga
+# yaroqli tanani qo'shish. Birinchisi unutilsa `test_no_unclassified_routes`,
+# ikkinchisi unutilsa `test_cross_tenant_object_returns_404` qizaradi
+# (tanasiz so'rov 422 da to'xtab, 404 da'vosini sinamay qo'yardi).
 app.include_router(zones_router, prefix=f"{API_V1_PREFIX}/zones")
 app.include_router(categories_router, prefix=f"{API_V1_PREFIX}/categories")
 app.include_router(stalls_router, prefix=f"{API_V1_PREFIX}/stalls")
+app.include_router(tariffs_router, prefix=f"{API_V1_PREFIX}/tariffs")
+app.include_router(calendar_router, prefix=f"{API_V1_PREFIX}/calendar")
 
 
 @app.exception_handler(DBAPIError)
