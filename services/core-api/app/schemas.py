@@ -489,6 +489,11 @@ MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
         "invalid_period",
         # --- usta (02-11, MARKET-01) ---
         "market_incomplete",
+        # Jonli bozorni o'chirish yoki faol bozorni QAYTA faollashtirish.
+        # `market_incomplete` dan ATAYIN ajratilgan: u "yana nima kerak"
+        # deydi va `blocking[]` bilan keladi, bu esa "amal umuman
+        # qo'llanmaydi" deydi va hech qanday yo'l ko'rsatmaydi.
+        "market_is_active",
         # --- import (02-12, D-13/D-14/D-15) ---
         "import_validation_failed",
         "file_too_large",
@@ -496,7 +501,7 @@ MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
         "unsupported_file_type",
     }
 )
-"""2-faza qaytaradigan BARCHA `detail` kodlari — yigirma bitta.
+"""2-faza qaytaradigan BARCHA `detail` kodlari — yigirma ikkita.
 
 ⚠ JUFTINI YANGILASHNI UNUTMANG: bu ro'yxatning UI ko'zgusi
 `frontend/src/lib/api-types.ts::ERROR_CODES` da yashaydi va u QO'LDA

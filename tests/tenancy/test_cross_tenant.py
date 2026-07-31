@@ -118,7 +118,11 @@ EXEMPT_ROUTES: dict[str, str] = {
     "/api/v1/me": "global — profil (ism, til) bozorga tegishli emas va bozorsiz ishlaydi (D-13)",
     "/api/v1/markets": (
         "global — bozorlar ro'yxati FAQAT haqiqiy platforma adminiga "
-        "(`users.is_platform_admin` bayrog'i) ochiladi, gibrid huquqli hisobga EMAS (CR-03)"
+        "(`users.is_platform_admin` bayrog'i) ochiladi, gibrid huquqli hisobga EMAS (CR-03); "
+        "IKKALA metod ham shu istisnoga tushadi — `POST` yangi bozor yaratadi va o'sha "
+        "chaqiruvda tenant konteksti PRINSIPIAL ravishda mavjud emas (identifikator aynan "
+        "javob natijasida tug'iladi), ya'ni unda 'boshqa bozorning obyekti' tushunchasining "
+        "o'zi yo'q"
     ),
     "/api/v1/audit/platform": (
         "global — platforma-global (`market_id IS NULL`) audit qatorlari, ya'ni "
@@ -187,6 +191,12 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # darvozasi emas, holat darvozasi sinalgan bo'lardi.
     "vendor_id": lambda seed: str(seed.domain.market_b.vendor_ids[0]),
     "assignment_id": lambda seed: str(seed.domain.market_b.assignment_ids[0]),
+    # --- 02-11: usta (`setup-status` / `activate` / `DELETE`) ---
+    #
+    # Bu YAGONA filler bozorning O'ZIGA ishora qiladi, uning ichidagi
+    # obyektga emas — `markets` da `market_id` ustuni yo'q, tenant kaliti
+    # `id` ning o'zi (`MARKETS_PREDICATE`).
+    "market_id": lambda seed: str(seed.base.market_b.id),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -316,6 +326,46 @@ yiqilardi. Bu chegara holati o'zi ALOHIDA uchta test bilan qamralgan
 `RouteSpec` bo'yicha kalitlanadi (yo'l bo'yicha EMAS): bitta yo'lda bir
 necha metod bo'ladi (`PATCH` va `DELETE`) va `DELETE` ga tana yuborish
 noto'g'ri signal berardi.
+"""
+
+PLATFORM_ADMIN_ROUTES: frozenset[RouteSpec] = frozenset(
+    {
+        RouteSpec("DELETE", "/api/v1/markets/{market_id}"),
+    }
+)
+"""Matritsa KUCHAYTIRILGAN sessiya bilan chaqiradigan marshrutlar (02-11).
+
+=============================================================================
+NEGA BU RO'YXAT MATRITSANI ZAIFLASHTIRMAYDI, AKSINCHA — KUCHAYTIRADI.
+
+Ikkala marshrut ham `MARKET_MANAGE` talab qiladi, u esa D-07 matritsasida
+FAQAT `platform_admin` da bor. Ya'ni odatdagi `market_a_headers` (bozor
+admini) sessiyasi bilan javob **403** bo'lardi va
+`test_cross_tenant_object_returns_404` aynan 403 ga qarshi yozilgan
+assertion'da yiqilardi.
+
+"Yiqilmasin" deb 403 ni ruxsat etish eng yomon yechim bo'lardi: o'shanda
+HUQUQ darvozasi TENANT darvozasini butunlay YOPIB qo'yardi va "begona
+bozorni faollashtirib bo'lmaydi" degan da'vo HECH QACHON sinalmasdi —
+matritsa yashil bo'lib turardi, chunki so'rov tenant tekshiruvigacha
+umuman yetib bormasdi. Bu 02-10 dagi "bo'sh 200 tenant teshigini
+yashiradi" holatining aynan boshqa ko'rinishi.
+
+Shuning uchun bu marshrutlar `MARKET_MANAGE` GA EGA sessiya bilan (A
+bozorini tanlagan platforma admini) chaqiriladi — ya'ni so'rov huquq
+darvozasidan O'TADI va tenant darvozasi HAQIQATAN sinaladi. Bu D-06 ning
+asosiy da'vosining bevosita davomi: platforma admini "hamma narsani
+qiladigan" rol emas, u bozor TANLAB kiradi.
+
+`test_platform_admin_routes_really_need_the_elevated_session` esa ro'yxatga
+qo'shilgan har bir marshrut uchun bozor admini ROSTDAN 403 olishini
+qulflaydi — aks holda kimdir bir kun oddiy marshrutni bu yerga qo'shib,
+uni kuchsizroq sessiyadan olib chiqib ketardi.
+
+⚠ `GET /markets/{market_id}/setup-status` bu ro'yxatda ATAYIN YO'Q: u
+`MARKET_DATA_VIEW` talab qiladi va bozor adminida u BOR, ya'ni u odatdagi
+sessiya bilan tenant darvozasigacha yetib boradi.
+=============================================================================
 """
 
 UNKNOWN_ID = "00000000-0000-4000-8000-000000000000"
@@ -479,6 +529,43 @@ async def market_a_headers(
     return await session_headers(api_client, market_a.admin_phone, market_a.admin_password)
 
 
+@pytest.fixture
+async def market_a_admin_headers(
+    api_client: httpx.AsyncClient, tenant_seed: TenantSeed
+) -> dict[str, str]:
+    """A bozorini TANLAGAN platforma adminining sessiyasi (`MARKET_MANAGE` bilan).
+
+    `test_platform_admin_cannot_reach_the_unselected_market` bilan aynan
+    bir xil sessiya: bozor tanlangandan keyin platforma admini oddiy
+    tenant sifatida ishlaydi (D-06). Bu yerda u faqat `PLATFORM_ADMIN_
+    ROUTES` uchun ishlatiladi — sabab o'sha konstantaning docstringida.
+    """
+    return await session_headers(
+        api_client,
+        tenant_seed.base.platform_admin_phone,
+        SEED_PASSWORD,
+        market_id=tenant_seed.base.market_a.id,
+    )
+
+
+@pytest.fixture
+def headers_for(
+    market_a_headers: dict[str, str],
+    market_a_admin_headers: dict[str, str],
+) -> Callable[[RouteSpec], dict[str, str]]:
+    """Marshrutga MOS keladigan A-bozor sessiyasini tanlaydi.
+
+    Tanlov `PLATFORM_ADMIN_ROUTES` bo'yicha va boshqa hech qanday shart
+    yo'q: sessiya HAR DOIM **A bozoriga** tegishli, ya'ni "begona bozor
+    obyekti -> 404" da'vosi o'zgarmaydi. Farq faqat HUQUQ darajasida.
+    """
+
+    def _pick(route: RouteSpec) -> dict[str, str]:
+        return market_a_admin_headers if route in PLATFORM_ADMIN_ROUTES else market_a_headers
+
+    return _pick
+
+
 # ===========================================================================
 # T-01-75 / T-01-76 — A tokeni + B obyekti -> 404 (403 EMAS)
 # ===========================================================================
@@ -488,7 +575,7 @@ async def market_a_headers(
 async def test_cross_tenant_object_returns_404(
     api_client: httpx.AsyncClient,
     tenant_seed: TenantSeed,
-    market_a_headers: dict[str, str],
+    headers_for: Callable[[RouteSpec], dict[str, str]],
     route: RouteSpec,
 ) -> None:
     """A bozori tokeni + B bozori obyekti -> **404**, va AYNIQSA 403 EMAS.
@@ -498,7 +585,7 @@ async def test_cross_tenant_object_returns_404(
     kimdir kodni 403 ga o'zgartirsa xato xabari "404 kutilgan edi" deb
     chiqardi va sabab (information disclosure) ko'rinmasdi.
     """
-    response = await call_route(api_client, route, tenant_seed, headers=market_a_headers)
+    response = await call_route(api_client, route, tenant_seed, headers=headers_for(route))
 
     assert response.status_code != 403, (
         f"{route.test_id}: 403 obyekt MAVJUDLIGINI tasdiqlaydi — 404 bo'lishi shart (T-01-76)"
@@ -510,7 +597,7 @@ async def test_cross_tenant_object_returns_404(
 async def test_cross_tenant_is_indistinguishable_from_unknown_id(
     api_client: httpx.AsyncClient,
     tenant_seed: TenantSeed,
-    market_a_headers: dict[str, str],
+    headers_for: Callable[[RouteSpec], dict[str, str]],
     route: RouteSpec,
 ) -> None:
     """Begona bozor ID'si va MAVJUD BO'LMAGAN ID — bayt-bayt bir xil javob.
@@ -522,10 +609,9 @@ async def test_cross_tenant_is_indistinguishable_from_unknown_id(
     for name in route.param_names:
         unknown_path = unknown_path.replace("{" + name + "}", UNKNOWN_ID)
 
-    foreign = await call_route(api_client, route, tenant_seed, headers=market_a_headers)
-    unknown = await call_route(
-        api_client, route, tenant_seed, headers=market_a_headers, path=unknown_path
-    )
+    headers = headers_for(route)
+    foreign = await call_route(api_client, route, tenant_seed, headers=headers)
+    unknown = await call_route(api_client, route, tenant_seed, headers=headers, path=unknown_path)
 
     assert foreign.status_code == unknown.status_code
     assert foreign.content == unknown.content, f"{route.test_id}: javob tanalari farq qiladi"
@@ -535,7 +621,7 @@ async def test_cross_tenant_is_indistinguishable_from_unknown_id(
 async def test_no_route_leaks_other_market_identifiers(
     api_client: httpx.AsyncClient,
     tenant_seed: TenantSeed,
-    market_a_headers: dict[str, str],
+    headers_for: Callable[[RouteSpec], dict[str, str]],
     route: RouteSpec,
 ) -> None:
     """HAR BIR tenant marshruti: A tokeni bilan javobda B'ning izi ham yo'q.
@@ -548,7 +634,7 @@ async def test_no_route_leaks_other_market_identifiers(
     `BODY_FILLERS` tufayli yozuv marshrutlari ham HAQIQIY yo'ldan o'tadi
     (422 da to'xtab qolmaydi), ya'ni bu da'vo ular uchun ham ma'noli.
     """
-    response = await call_route(api_client, route, tenant_seed, headers=market_a_headers)
+    response = await call_route(api_client, route, tenant_seed, headers=headers_for(route))
 
     assert_no_foreign_data(response, tenant_seed, route.test_id)
 
@@ -785,6 +871,52 @@ def test_body_fillers_point_at_live_routes() -> None:
     stale = sorted(route.test_id for route in BODY_FILLERS if route not in live)
 
     assert not stale, f"`BODY_FILLERS` da mavjud bo'lmagan marshrutlar qolgan: {stale}"
+
+
+def test_platform_admin_routes_point_at_live_routes() -> None:
+    """`PLATFORM_ADMIN_ROUTES` da o'chirilgan marshrut QOLIB KETMAGAN.
+
+    `BODY_FILLERS` va `EXEMPT_ROUTES` bilan bir xil sabab: eskirgan yozuv
+    o'zi zararsiz, lekin marshrut BOSHQA ma'noda qayta paydo bo'lganda u
+    tug'ilishidanoq kuchaytirilgan sessiya bilan chaqirilardi.
+    """
+    live = set(all_routes(fastapi_app))
+    stale = sorted(route.test_id for route in PLATFORM_ADMIN_ROUTES if route not in live)
+
+    assert not stale, f"`PLATFORM_ADMIN_ROUTES` da mavjud bo'lmagan marshrutlar: {stale}"
+
+
+@pytest.mark.parametrize("route", sorted(PLATFORM_ADMIN_ROUTES), ids=_route_id)
+async def test_platform_admin_routes_really_need_the_elevated_session(
+    api_client: httpx.AsyncClient,
+    tenant_seed: TenantSeed,
+    market_a_headers: dict[str, str],
+    route: RouteSpec,
+) -> None:
+    """Ro'yxatdagi marshrut bozor admini uchun ROSTDAN 403 beradi.
+
+    Bu — `PLATFORM_ADMIN_ROUTES` ning O'ZINI himoya qiladigan darvoza.
+    Usiz kimdir oddiy (bozor adminiga ochiq) marshrutni ro'yxatga qo'shib,
+    uni kuchsizroq sessiyadan olib chiqib ketardi va matritsa buni
+    umuman sezmasdi — ikkala sessiya ham A bozoriga tegishli, ya'ni 404
+    baribir kelardi.
+
+    So'rov **A bozorining O'Z** identifikatori bilan yuboriladi: aks
+    holda 404 (tenant darvozasi) 403 dan OLDIN kelib, huquq darvozasi
+    umuman sinalmay qolardi.
+    """
+    own_path = route.path
+    for name in route.param_names:
+        own_path = own_path.replace("{" + name + "}", str(tenant_seed.base.market_a.id))
+
+    response = await call_route(
+        api_client, route, tenant_seed, headers=market_a_headers, path=own_path
+    )
+
+    assert response.status_code == 403, (
+        f"{route.test_id}: bozor admini uchun 403 kutilgan edi — bu marshrut "
+        f"`PLATFORM_ADMIN_ROUTES` da bo'lishi shart emas ({response.status_code})"
+    )
 
 
 def test_exempt_reasons_use_a_known_category() -> None:
