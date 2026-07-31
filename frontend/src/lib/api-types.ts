@@ -75,24 +75,6 @@ export type MarketListItem = z.infer<typeof marketListItemSchema>;
 export const marketListSchema = z.array(marketListItemSchema);
 
 /**
- * `GET /api/v1/markets/{id}/setup-status` — usta to'liqligi (UI-SPEC §6.4).
- *
- * ENDPOINT 02-11 GACHA MAVJUD EMAS. Sxema shu yerda oldindan e'lon qilinadi,
- * chunki bozor tanlash ekrani qoralama bozorni bosganda AYNAN shu javobdan
- * `?step=` ni oladi. Chaqiruv `try/catch` ostida va xatoda 1-qadamga tushadi
- * — ya'ni endpoint yo'qligi ham, shakli o'zgarishi ham oqimni to'xtatmaydi.
- *
- * FAQAT `step` MAJBURIY: 02-11 bandga `code`, `count` kabi maydonlar
- * qo'shadi va zod noma'lum kalitlarni jimgina tashlab yuboradi, ya'ni bu
- * sxema kengayishga chidamli. Butun javob shaklini oldindan qotirib
- * qo'yish esa 02-11 ni shu faylga bog'lab qo'yardi.
- */
-export const setupStatusSchema = z.object({
-  blocking: z.array(z.object({ step: z.number().int().min(1) })),
-});
-export type SetupStatus = z.infer<typeof setupStatusSchema>;
-
-/**
  * `POST /api/v1/auth/login` javobi.
  *
  * `market === null` — bozor tanlanmagan (platforma admini yoki bir nechta
@@ -332,6 +314,409 @@ export const auditListResponseSchema = z.object({
   next_cursor: z.string().nullable(),
 });
 
+/* ===========================================================================
+ * 2-FAZA: BOZOR DOMENI — zona / toifa / rasta / tarif / kalendar / sotuvchi
+ * ===========================================================================
+ *
+ * Manba — `services/core-api/app/schemas.py` ning shu nomli bo'limi. Maydon
+ * nomlari backend'dagidek `snake_case` va ATAYIN camelCase ga o'girilmaydi:
+ * o'girish qatlami har yangi maydonda yangilanishi kerak bo'lardi va
+ * unutilgan joyda maydon jimgina `undefined` bo'lib chiqardi.
+ *
+ * SANA va VAQT `z.string()` bo'lib qoladi (`z.iso.date()` emas): backend
+ * ularni ISO satr sifatida yuboradi va biz uni `Date` ga faqat KO'RSATISH
+ * joyida (`next-intl` formatlagichi) aylantiramiz. Chegarada `Date` ga
+ * aylantirish vaqt mintaqasi bo'yicha jimgina siljish kiritardi
+ * (`2026-08-01` -> mahalliy yarim tunda oldingi kun).
+ *
+ * NULLABLE, OPTIONAL EMAS: backend maydonni TUSHIRMAYDI, u `null` yuboradi
+ * (`category_id: UUID | None` -> `"category_id": null`). `.optional()`
+ * ishlatilsa maydonning UMUMAN yo'qligi ham qonuniy bo'lib qolardi va
+ * kontrakt buzilishi chegaradan o'tib ketardi.
+ *
+ * ⚠ XARITA KATAGINING RANG TIPI BU YERDA E'LON QILINMAYDI va bu qoida
+ * mexanik darvoza bilan qulflangan (uning nomi shu fayl bo'ylab grep
+ * qilinadi, shuning uchun izohda ham YOZILMAYDI — darvoza o'z-o'ziga
+ * qarshi turmasin). Sabab: u API kontrakti emas, RENDER kontrakti
+ * (UI-SPEC §7.2). Server `status` + `has_vendor` xom faktlarini beradi,
+ * rang esa ulardan HOSIL QILINADI va uning uyi —
+ * `components/stalls/stall-tone.ts`. Bu yerga ko'chirilsa, 6-fazada
+ * "to'langan/qarzdor" manbai qo'shilishi API tipini o'zgartirishni talab
+ * qilardi; hosila funksiyada esa u bitta `switch` ga qo'shiladi.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * `stalls.status` qiymatlari — `sbozor_core.enums.StallStatus` nusxasi.
+ *
+ * Qiymatlarning O'ZI DB kontenti va bitta tilda (D-16); UI ularni
+ * `stalls.status.<qiymat>` kalitlari orqali uch tilda ko'rsatadi, ya'ni til
+ * almashtirish DB qiymatiga hech qachon tegmaydi.
+ */
+export const STALL_STATUSES = ["active", "maintenance", "closed"] as const;
+export type StallStatusValue = (typeof STALL_STATUSES)[number];
+
+export function isStallStatus(value: string): value is StallStatusValue {
+  return (STALL_STATUSES as readonly string[]).includes(value);
+}
+
+export const stallStatusSchema = z.enum(STALL_STATUSES);
+
+/* --- Zonalar (D-03) ------------------------------------------------------ */
+
+/**
+ * `GET /zones` qatori.
+ *
+ * `stall_count` "bu zonani o'chira olamanmi?" savoliga oldindan javob
+ * beradi — UI tugmani bloklash uchun ikkinchi so'rov qilmaydi.
+ *
+ * `name` — DB KONTENTI va tarjima QILINMAYDI (D-16).
+ */
+export const zoneItemSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  stall_count: z.number().int(),
+});
+export type ZoneItem = z.infer<typeof zoneItemSchema>;
+
+/** `GET /zones` — TO'LIQ ro'yxat. `next_cursor` YO'Q (backend kontrakti). */
+export const zoneListResponseSchema = z.object({
+  items: z.array(zoneItemSchema),
+});
+
+/* --- Toifalar (D-05) ----------------------------------------------------- */
+
+/**
+ * `GET /categories` qatori.
+ *
+ * `current_tariff_soum === null` — MA'NOLI holat, nuqson emas (D-08): toifa
+ * bor, narx yo'q. UI aynan shu holatni ogohlantirish bilan ko'rsatadi va
+ * ustaning 4-qadami undan boshlanadi. Backend `0` qaytarMAYDI — u "bepul
+ * toifa" degan yolg'on ma'no berardi.
+ */
+export const categoryItemSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  stall_count: z.number().int(),
+  current_tariff_soum: soumSchema.nullable(),
+});
+export type CategoryItem = z.infer<typeof categoryItemSchema>;
+
+/** `GET /categories` — sahifalashsiz (zonalar bilan bir xil sabab). */
+export const categoryListResponseSchema = z.object({
+  items: z.array(categoryItemSchema),
+});
+
+/* --- Rastalar (D-01/D-02/D-04) ------------------------------------------- */
+
+/**
+ * `GET /stalls` qatori — UI-SPEC §8.2 ustunlarining manbai.
+ *
+ * UCHTA maydon `null` bo'lishi mumkin va uchalasi HAR XIL holat:
+ *   `category_id`/`category_name` — toifa davri yozilmagan (chala import);
+ *   `vendor_id`/`vendor_name`     — bugun biriktirilgan sotuvchi yo'q
+ *                                   (D-11 — anomaliya alomati, xato emas);
+ *   `tariff_soum`                 — toifa bor, bugungi narxi yo'q (D-08).
+ * Ularni aralashtirish 6-fazadagi anomaliya hisobini buzardi.
+ */
+export const stallListItemSchema = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  zone_id: z.uuid(),
+  zone_name: z.string(),
+  category_id: z.uuid().nullable(),
+  category_name: z.string().nullable(),
+  status: stallStatusSchema,
+  vendor_id: z.uuid().nullable(),
+  vendor_name: z.string().nullable(),
+  tariff_soum: soumSchema.nullable(),
+  created_at: z.string(),
+});
+export type StallListItem = z.infer<typeof stallListItemSchema>;
+
+/**
+ * `GET /stalls/{id}` va yozuv endpointlarining javobi — qatorning KENGAYTMASI.
+ *
+ * `phone` — sotuvchining telefoni, ya'ni SHAXSIY MA'LUMOT (D-09). U
+ * `vendor_id` bilan birga keladi yoki ikkalasi ham `null`. Ro'yxat qatorida
+ * bu maydon ATAYIN yo'q: har qatorga telefon yuklash reestrni shaxsiy
+ * ma'lumot ombori qilardi.
+ */
+export const stallDetailSchema = stallListItemSchema.extend({
+  phone: z.string().nullable(),
+  assignment_from: z.string().nullable(),
+  note: z.string().nullable(),
+});
+export type StallDetail = z.infer<typeof stallDetailSchema>;
+
+/**
+ * `GET /stalls` — keyset sahifa (`next_cursor === null` bo'lsa oxirgisi).
+ *
+ * Tartib SERVERDA hal qilinadi (`code_sort` — inson-raqamli: 2 < 10 < 100)
+ * va frontend uni QAYTA SARALAMAYDI (UI-SPEC §7.3): klient tomonda saralash
+ * uchala tilda boshqa natija berardi va xarita bilan ro'yxat ajralib ketardi.
+ */
+export const stallListResponseSchema = z.object({
+  items: z.array(stallListItemSchema),
+  next_cursor: z.string().nullable(),
+});
+
+/* --- Plan-xarita (MARKET-06, D-19/D-20) ---------------------------------- */
+
+/**
+ * Xaritadagi bitta katak.
+ *
+ * `tone` ham, koordinata ham YO'Q va qo'shilmaydi (D-19/D-20): rang
+ * frontendda hosil bo'ladi, joylashuv esa avtomatik (CSS Grid) — saqlangan
+ * `x`/`y` bo'lmagani uchun ular eskirib ham qolmaydi.
+ */
+export const mapCellSchema = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  status: stallStatusSchema,
+  has_vendor: z.boolean(),
+});
+export type MapCell = z.infer<typeof mapCellSchema>;
+
+/** Zona bloki — kataklar `code_sort` tartibida. `name` tarjima qilinmaydi. */
+export const mapZoneSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  cells: z.array(mapCellSchema),
+});
+export type MapZone = z.infer<typeof mapZoneSchema>;
+
+/** `GET /stalls/map` — zonalar nom tartibida, sahifalashsiz. */
+export const stallMapResponseSchema = z.object({
+  zones: z.array(mapZoneSchema),
+});
+
+/* --- Tariflar (D-06/D-07) ------------------------------------------------ */
+
+/**
+ * Tarif tarixining bitta qatori.
+ *
+ * `valid_to` DB'da USTUN EMAS — u keyingi qatordan hisoblanadi va oxirgi
+ * qator uchun `null` ("hozircha amalda").
+ *
+ * `is_past` — UI tahrir tugmasini ko'rsatmaslik uchun QULAYLIK; haqiqiy
+ * darvoza serverda (`trg_tariff_past_immutable`, D-07).
+ */
+export const tariffItemSchema = z.object({
+  id: z.uuid(),
+  category_id: z.uuid(),
+  category_name: z.string(),
+  amount_soum: soumSchema,
+  valid_from: z.string(),
+  valid_to: z.string().nullable(),
+  is_past: z.boolean(),
+});
+export type TariffItem = z.infer<typeof tariffItemSchema>;
+
+/**
+ * `GET /tariffs` — tarif tarixi + ruxsat etilgan ENG ERTA sana.
+ *
+ * `min_valid_from` MAJBURIY: `.optional()` ham, `.nullable()` ham EMAS. U
+ * serverning ruxsat etgan eng erta `valid_from` i — qoralama bozorda
+ * `operating_since`, faol bozorda ertangi kun (02-09). Ro'yxat BO'SH
+ * bo'lganda ham keladi, chunki ustaning 4-qadami aynan bo'sh ro'yxatdan
+ * boshlanadi.
+ *
+ * KLIENT BU SANANI O'ZI HISOBLAMAYDI. Ertangi kunni lokal hisoblash
+ * qoralama bozorda server RUXSAT BERGAN boshlang'ich sanani (o'tmishdagi
+ * `operating_since`) UI darajasida taqiqlab qo'yardi va ustaning 4-qadami
+ * bajarilmas bo'lardi. Ixtiyoriy qilib qo'yish esa har chaqiruvchiga uni
+ * "unutish" imkonini berardi.
+ *
+ * ⚠ BU DARVOZA EMAS — u sana maydonining `min` atributi (02-15). Haqiqiy
+ * tekshiruv serverda va u DevTools bilan olib tashlanmaydi.
+ *
+ * `next_cursor` YO'Q: tarif ro'yxati sahifalanmaydi (backend kontrakti).
+ */
+export const tariffListResponseSchema = z.object({
+  items: z.array(tariffItemSchema),
+  min_valid_from: z.string(),
+});
+
+/* --- Ish kunlari kalendari (D-17/D-18) ----------------------------------- */
+
+/**
+ * Haftalik jadvaldan chiqadigan alohida kun.
+ *
+ * `is_open` IKKI TOMONLAMA: `false` — bayram/yopiq kun, `true` — jadvalda
+ * dam olish bo'lgan, lekin ISHLAYDIGAN kun.
+ */
+export const calendarExceptionSchema = z.object({
+  id: z.uuid(),
+  exception_date: z.string(),
+  is_open: z.boolean(),
+  note: z.string().nullable(),
+});
+export type CalendarException = z.infer<typeof calendarExceptionSchema>;
+
+/** `GET /calendar` — haftalik jadval (1=dushanba … 7=yakshanba) + istisnolar. */
+export const calendarResponseSchema = z.object({
+  open_weekdays: z.array(z.number().int().min(1).max(7)),
+  exceptions: z.array(calendarExceptionSchema),
+});
+
+/* --- Sotuvchilar va biriktirishlar (D-09…D-12) --------------------------- */
+
+/**
+ * `GET /vendors` qatori — SHAXSIY MA'LUMOT (D-09: o'qish ham auditda).
+ *
+ * `stall_codes` ro'yxati SERVERDA cheklangan (20 ta), `stall_count` esa
+ * to'liq son — ya'ni badge kesilganda ham "nechta?" savolining javobi
+ * yo'qolmaydi.
+ *
+ * `full_name` va `phone` — DB kontenti, tarjima qilinmaydi (D-16).
+ */
+export const vendorListItemSchema = z.object({
+  id: z.uuid(),
+  full_name: z.string(),
+  phone: z.string(),
+  stall_count: z.number().int(),
+  stall_codes: z.array(z.string()),
+  created_at: z.string(),
+});
+export type VendorListItem = z.infer<typeof vendorListItemSchema>;
+
+/** `GET /vendors` — keyset sahifa (sotuvchi soni rastalar bilan o'sadi). */
+export const vendorListResponseSchema = z.object({
+  items: z.array(vendorListItemSchema),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * Rasta ↔ sotuvchi biriktirish DAVRI.
+ *
+ * `to_date === null` — davr OCHIQ (sotuvchi hozir ham shu rastada).
+ * Chegara `[)`: almashinuv kuni YANGI sotuvchiga tegishli (D-10).
+ * PUL MAYDONI YO'Q va bo'lmaydi — qarz eski sotuvchida qoladi.
+ */
+export const assignmentItemSchema = z.object({
+  id: z.uuid(),
+  stall_id: z.uuid(),
+  stall_code: z.string(),
+  vendor_id: z.uuid(),
+  vendor_name: z.string(),
+  from_date: z.string(),
+  to_date: z.string().nullable(),
+});
+export type AssignmentItem = z.infer<typeof assignmentItemSchema>;
+
+/** `GET /stalls/{id}/assignments` — sahifalashsiz to'liq tarix. */
+export const assignmentListResponseSchema = z.object({
+  items: z.array(assignmentItemSchema),
+});
+
+/* --- "Yangi bozor" ustasi (MARKET-01, D-16) ------------------------------ */
+
+/**
+ * `POST /markets` VA `POST /markets/{id}/activate` javobi — BITTA shakl.
+ *
+ * `is_active` yaratishda har doim `false` (yangi bozor QORALAMA),
+ * faollashtirishda har doim `true`. Klient bayroqni taxmin qilmaydi — u
+ * har javobda o'qiladi.
+ */
+export const marketCreateResponseSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  is_active: z.boolean(),
+});
+export type MarketCreateResponse = z.infer<typeof marketCreateResponseSchema>;
+
+/**
+ * Faollashtirishni to'sib turgan bitta sabab (UI-SPEC §6.6).
+ *
+ * `step` aynan shu javobni "xato" emas, YO'L KO'RSATKICHI qiladi: UI
+ * foydalanuvchini to'g'ridan-to'g'ri chala qadamga olib boradi.
+ *
+ * `code` — `wizard.blocking.<code>` tarjima kalitining kaliti. `detail`
+ * esa XOM sanoq (masalan `"3/5"`) va u KO'RSATILMAYDI: matn tarjimadan
+ * keladi, aks holda ekranda tarjimasiz texnik satr paydo bo'lardi.
+ */
+export const blockingItemSchema = z.object({
+  step: z.number().int().min(1),
+  code: z.string(),
+  detail: z.string(),
+});
+export type BlockingItem = z.infer<typeof blockingItemSchema>;
+
+/**
+ * `GET /markets/{id}/setup-status` — ustaning to'liqlik holati.
+ *
+ * SANOQLAR XOM: UI ularni "3/5 toifada tarif bor" shaklida ko'rsatadi.
+ * `can_activate` esa SERVER qarori va klient uni sanoqlardan QAYTA
+ * HISOBLAMAYDI — aks holda to'liqlik qoidasi ikki joyda yashab, bir kun
+ * `activate` darvozasi bilan ajralib ketardi.
+ *
+ * `calendar_configured` — `bool`, sanoq emas: haftalik jadval BOR yoki
+ * YO'Q, "yarim sozlangan" holati yo'q.
+ *
+ * Bozor tanlash ekrani shu javobdan FAQAT `blocking[].step` ni oladi
+ * (§6.4) — qolgan maydonlar ustaning o'zi uchun.
+ */
+export const setupStatusResponseSchema = z.object({
+  zones: z.number().int(),
+  categories: z.number().int(),
+  tariffs_covered: z.number().int(),
+  categories_total: z.number().int(),
+  stalls: z.number().int(),
+  stalls_with_category: z.number().int(),
+  vendors: z.number().int(),
+  calendar_configured: z.boolean(),
+  cameras: z.number().int(),
+  can_activate: z.boolean(),
+  blocking: z.array(blockingItemSchema),
+});
+export type SetupStatusResponse = z.infer<typeof setupStatusResponseSchema>;
+
+/* --- Excel import (D-13/D-14/D-15) --------------------------------------- */
+
+/**
+ * `POST /imports/*` muvaffaqiyatli javobi.
+ *
+ * `skipped` ALOHIDA maydon: "10 qator yozildi" javobi 12 qatorli fayl uchun
+ * foydalanuvchini chalg'itardi — u qolgan ikkitasi qayerga ketganini
+ * bilishi kerak.
+ */
+export const importResultSchema = z.object({
+  inserted: z.number().int(),
+  skipped: z.number().int(),
+});
+export type ImportResult = z.infer<typeof importResultSchema>;
+
+/**
+ * Bitta qatordagi validatsiya xatosi.
+ *
+ * `row` — FAYLDAGI qator raqami (sarlavha bilan birga), ya'ni foydalanuvchi
+ * jadvalda o'sha raqamga to'g'ridan-to'g'ri o'ta oladi. `code` —
+ * `import.errors.<code>` tarjima kalitining kaliti; `message` esa
+ * SERVERNING tayyor matni va u faqat xatolar hisobotiga (xlsx) tushadi.
+ */
+export const importErrorItemSchema = z.object({
+  row: z.number().int(),
+  code: z.string(),
+  message: z.string(),
+});
+export type ImportErrorItem = z.infer<typeof importErrorItemSchema>;
+
+/**
+ * `POST /imports/*` ning 422 javobi — D-14: validatsiya YOZISHDAN OLDIN,
+ * ya'ni bu javob kelgan bo'lsa bazaga HECH NARSA yozilmagan.
+ *
+ * `error_counts` — `{kod: soni}`. 500 qatorli faylda 480 ta bir xil xato
+ * bo'lishi mumkin va ularning hammasini ro'yxatda ko'rsatish ekranni
+ * foydasiz qilardi; sanoq esa "asosiy muammo nima" savoliga bitta qatorda
+ * javob beradi (`errors` — cheklangan namuna).
+ */
+export const importErrorResponseSchema = z.object({
+  detail: z.string(),
+  errors: z.array(importErrorItemSchema),
+  error_counts: z.record(z.string(), z.number().int()),
+});
+export type ImportErrorResponse = z.infer<typeof importErrorResponseSchema>;
+
 /**
  * Xato tanasi. FastAPI validatsiya xatosida (`422`) `detail` MASSIV bo'ladi,
  * shuning uchun `z.string()` emas, `z.unknown()`: shaklni `api-client`
@@ -346,6 +731,16 @@ export const emptyResponseSchema = z.undefined();
  * Backend qaytaradigan `detail` kodlari (01-06).
  * Tarjima xaritasi shu ro'yxat ustiga quriladi; ro'yxatda yo'q kod
  * `errors.generic` ga tushadi (T-01-65 — ichki tafsilot ko'rsatilmaydi).
+ *
+ * ⚠ JUFTINI YANGILASHNI UNUTMANG: 2-faza qismining manbai
+ * `services/core-api/app/schemas.py::MARKET_ERROR_CODES` va u QO'LDA
+ * sinxron saqlanadi (til chegarasi tufayli kompilyator tekshiruvi yo'q —
+ * `rbac.ts` dagi matritsa bilan aynan bir xil holat). Ko'zguda yo'q kod
+ * xavfsizlik teshigi EMAS: `api-client` uni `errors.generic` ga tushiradi,
+ * ya'ni foydalanuvchi umumiy xato matnini ko'radi va ANIQ SABAB yo'qoladi.
+ *
+ * Drift `frontend/scripts/error-codes.test.mjs` da qulflangan: u backend
+ * ro'yxatini o'qib, shu massiv uni to'liq qamrashini tekshiradi.
  */
 export const ERROR_CODES = [
   "invalid_credentials",
@@ -361,5 +756,35 @@ export const ERROR_CODES = [
   "cannot_block_self",
   "not_found",
   "invalid_cursor",
+  // --- 2-faza: zona / toifa reestrlari (02-08) ---
+  "zone_name_taken",
+  "zone_in_use",
+  "category_name_taken",
+  "category_in_use",
+  // --- 2-faza: rasta reestri (02-08) ---
+  "stall_code_taken",
+  "stall_code_retired",
+  "category_period_exists",
+  "category_period_past_locked",
+  // --- 2-faza: tarif (02-09) ---
+  "tariff_already_set_for_date",
+  "tariff_past_locked",
+  "valid_from_must_be_future",
+  // --- 2-faza: kalendar (02-09) ---
+  "calendar_exception_exists",
+  // --- 2-faza: sotuvchi va biriktirish (02-10) ---
+  "vendor_phone_taken",
+  "assignment_period_overlaps",
+  "assignment_not_open",
+  "invalid_period",
+  // --- 2-faza: usta (02-11) ---
+  "market_incomplete",
+  "market_is_active",
+  // --- 2-faza: import (02-12) ---
+  "import_validation_failed",
+  "file_too_large",
+  "file_too_complex",
+  "unsupported_file_type",
+  "import_conflict",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

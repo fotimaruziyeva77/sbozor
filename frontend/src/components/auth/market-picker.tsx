@@ -13,7 +13,7 @@ import {
   emptyResponseSchema,
   marketListSchema,
   sessionResponseSchema,
-  setupStatusSchema,
+  setupStatusResponseSchema,
 } from "@/lib/api-types";
 import { applySession, useAuthStore } from "@/lib/auth-store";
 
@@ -64,7 +64,7 @@ const FIRST_STEP = 1;
 async function firstIncompleteStep(marketId: string): Promise<number> {
   try {
     const status = await apiFetch(`${MARKETS_PATH}/${marketId}/setup-status`, {
-      schema: setupStatusSchema,
+      schema: setupStatusResponseSchema,
     });
     const steps = status.blocking.map((item) => item.step);
     return steps.length > 0 ? Math.min(...steps) : FIRST_STEP;
