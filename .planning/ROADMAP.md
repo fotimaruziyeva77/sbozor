@@ -138,7 +138,7 @@ Plans:
 - [x] 02-09-PLAN.md — API II: tariflar (faqat qo'shadigan) va ish kunlari (W8)
 - [x] 02-10-PLAN.md — API III: sotuvchilar (o'qish auditi) va biriktirish davrlari (W9)
 - [x] 02-11-PLAN.md — API IV: usta — bozor yaratish, `setup-status`, faollashtirish (W10)
-- [ ] 02-12-PLAN.md — Excel import: xavfsiz o'qish, validatsiya, shablon, all-or-nothing (W11)
+- [x] 02-12-PLAN.md — Excel import: xavfsiz o'qish, validatsiya, shablon, all-or-nothing (W11)
 
 **Wave 12–14** *(frontend)*
 
