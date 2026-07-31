@@ -30,10 +30,12 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AUDIT_URL",
+    "CALENDAR_URL",
     "CATEGORIES_URL",
     "MARKETS_URL",
     "PROFILE_URL",
     "STALLS_URL",
+    "TARIFFS_URL",
     "TEST_PHONE_PREFIX",
     "USERS_URL",
     "ZONES_URL",
@@ -59,6 +61,8 @@ AUDIT_URL = "/api/v1/audit"
 ZONES_URL = "/api/v1/zones"
 CATEGORIES_URL = "/api/v1/categories"
 STALLS_URL = "/api/v1/stalls"
+TARIFFS_URL = "/api/v1/tariffs"
+CALENDAR_URL = "/api/v1/calendar"
 
 TEST_PHONE_PREFIX = "+99893"
 """Testlar YARATADIGAN foydalanuvchilarning telefon diapazoni.
