@@ -30,6 +30,7 @@ from fixtures.auth_api import (
     REFRESH_URL,
     SELECT_MARKET_URL,
     audit_rows,
+    draft_market,
     global_audit_rows,
     login,
     set_user_active,
@@ -61,7 +62,11 @@ async def test_login_returns_access_token_and_roles(
     assert body["roles"] == ["market_admin"]
     assert body["market"]["id"] == str(auth_seed.market_a_id)
     assert body["market"]["name"] == auth_seed.market_a_name
-    assert body["markets"] == [{"id": str(auth_seed.market_a_id), "name": auth_seed.market_a_name}]
+    # `is_active` — MAJBURIY maydon (02-03): javob shakli bozor faolligini
+    # uzatadi, ya'ni bu yerdagi bayt-bayt taqqoslash uni ham qamraydi.
+    assert body["markets"] == [
+        {"id": str(auth_seed.market_a_id), "name": auth_seed.market_a_name, "is_active": True}
+    ]
     assert body["is_platform_admin"] is False
     assert body["must_change_password"] is False
     assert body["expires_in"] == EXPECTED_EXPIRES_IN
@@ -313,7 +318,11 @@ async def test_platform_admin_can_select_each_market(
             SELECT_MARKET_URL, json={"market_id": str(market_id)}, headers=headers
         )
         assert selected.status_code == 200, selected.text
-        assert selected.json()["market"] == {"id": str(market_id), "name": market_name}
+        assert selected.json()["market"] == {
+            "id": str(market_id),
+            "name": market_name,
+            "is_active": True,
+        }
 
         # Tanlangan token bilan `/me` AYNAN o'sha bozorni tenant sessiyasidan o'qiydi.
         me = await api_client.get(
@@ -321,7 +330,11 @@ async def test_platform_admin_can_select_each_market(
             headers={"Authorization": f"Bearer {selected.json()['access_token']}"},
         )
         assert me.status_code == 200, me.text
-        assert me.json()["market"] == {"id": str(market_id), "name": market_name}
+        assert me.json()["market"] == {
+            "id": str(market_id),
+            "name": market_name,
+            "is_active": True,
+        }
 
 
 async def test_member_cannot_select_foreign_market(
@@ -353,6 +366,134 @@ async def test_unknown_market_is_also_403(
         json={"market_id": str(uuid4())},
         headers={"Authorization": f"Bearer {login_body['access_token']}"},
     )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "market_forbidden"}
+
+
+async def test_login_reports_draft_market_as_inactive(
+    api_client: httpx.AsyncClient,
+    auth_seed: AuthSeed,
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """A'zolik tarmog'i qoralama bozorni ro'yxatga chiqaradi VA `is_active: false` deydi.
+
+    IKKI DA'VO, IKKALASI HAM ZARUR (UI-SPEC §12.1.1 X-2):
+
+    1. Bozor RO'YXATDA BOR. A'zolik tarmog'ida hech qachon filtr bo'lmagan,
+       ya'ni bu da'vo o'zgarishdan oldin ham bajarilardi — u regressiya
+       qulfi sifatida turadi.
+    2. Bayroq `false`. Aynan SHU YANGI: ilgari `MarketRef` da bunday maydon
+       umuman yo'q edi va UI qoralamani faoldan ajrata olmasdi. Standart
+       qiymatli (`= True`) maydon bu testni jimgina yashil qilardi —
+       shuning uchun `MarketRef.is_active` da standart qiymat YO'Q.
+
+    Foydalanuvchi ATAYIN `inspector`: uning bitta a'zoligi bor, ya'ni
+    ikkinchi (qoralama) a'zolik qo'shilgach bozor AVTOMATIK tanlanmaydi va
+    `markets` ro'yxati to'ldiriladi — bozor tanlash ekranidagi holat.
+    """
+    with draft_market(sync_owner_conn, member_id=auth_seed.inspector.user_id) as market_id:
+        body = (await login(api_client, auth_seed.inspector.phone, auth_seed.password)).json()
+
+    listed = {market["id"]: market for market in body["markets"]}
+    assert str(market_id) in listed, f"qoralama bozor a'zolik ro'yxatiga chiqmadi: {sorted(listed)}"
+    assert listed[str(market_id)]["is_active"] is False, (
+        "qoralama bozor 'faol' deb yorliqlandi — UI uni oddiy bozordan ajrata olmaydi"
+    )
+    # NAZORAT: o'sha javobdagi HAQIQIY faol bozor `true` bo'lib qoladi, ya'ni
+    # bayroq har doim `false` deb qattiq yozilmagan.
+    assert listed[str(auth_seed.market_a_id)]["is_active"] is True
+
+
+async def test_platform_admin_sees_draft_market_in_list(
+    api_client: httpx.AsyncClient,
+    auth_seed: AuthSeed,
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """Platforma admini qoralama bozorni ro'yxatda KO'RADI (avval server kesib tashlardi).
+
+    Bu — o'zgarishning to'g'ridan-to'g'ri qulfi. Ilgari `_visible_markets()`
+    platforma admini tarmog'ida bayroq bo'yicha kesardi, ya'ni ustani boshlab
+    yarim tashlab ketgan odam O'ZI yaratgan qoralamani qaytib topa olmasdi —
+    a'zolik tarmog'idagi bozor admini esa uni ko'raverardi (assimetriya).
+
+    A'zolik ATAYIN berilmaydi: platforma admini tarmog'i (`auth_list_markets()`)
+    aynan a'zoliksiz ishlashi kerak.
+    """
+    with draft_market(sync_owner_conn) as market_id:
+        body = (await login(api_client, auth_seed.platform_admin.phone, auth_seed.password)).json()
+
+    listed = {market["id"]: market for market in body["markets"]}
+    assert str(market_id) in listed, (
+        "qoralama bozor platforma admini ro'yxatida yo'q — server hamon kesyapti"
+    )
+    assert listed[str(market_id)]["is_active"] is False
+    assert listed[str(auth_seed.market_a_id)]["is_active"] is True
+
+
+async def test_platform_admin_can_select_a_draft_market(
+    api_client: httpx.AsyncClient,
+    auth_seed: AuthSeed,
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """Ko'ringan qoralama bozor TANLANADI ham — ko'rinadigan, lekin o'lik element qolmaydi.
+
+    Ro'yxatni ochib, tanlashni yopiq qoldirish o'zgarishdan OLDINGI holatdan
+    ham yomonroq bo'lardi: foydalanuvchi qoralamani ko'rib, bosib, 403 olardi.
+    Bundan tashqari ustaning O'Z oqimi shu yo'lga tayanadi — 2–7-qadamlar
+    tenant-scoped jadvallarga yozadi, ya'ni ular `app.market_id` ni aynan
+    qoralama bozorga o'rnatishni talab qiladi.
+
+    Javobdagi `is_active: false` — usta relsini chizish uchun kerakli signal
+    (UI-SPEC §6.4: bosilganda birinchi tugallanmagan qadamga o'tiladi).
+    """
+    login_body = (
+        await login(api_client, auth_seed.platform_admin.phone, auth_seed.password)
+    ).json()
+    headers = {"Authorization": f"Bearer {login_body['access_token']}"}
+
+    with draft_market(sync_owner_conn, name="Karmana (qoralama)") as market_id:
+        selected = await api_client.post(
+            SELECT_MARKET_URL, json={"market_id": str(market_id)}, headers=headers
+        )
+        assert selected.status_code == 200, selected.text
+        assert selected.json()["market"] == {
+            "id": str(market_id),
+            "name": "Karmana (qoralama)",
+            "is_active": False,
+        }
+
+        # Tanlangan token bilan tenant konteksti HAQIQATAN o'sha bozorga
+        # bog'landi — ya'ni usta qadamlari shu sessiyada yozishi mumkin.
+        me = await api_client.get(
+            ME_URL, headers={"Authorization": f"Bearer {selected.json()['access_token']}"}
+        )
+        assert me.status_code == 200, me.text
+        assert me.json()["market"]["id"] == str(market_id)
+        assert me.json()["market"]["is_active"] is False
+
+
+async def test_member_cannot_select_a_foreign_draft_market(
+    api_client: httpx.AsyncClient,
+    auth_seed: AuthSeed,
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """NAZORAT HOLATI: qoralama bozor darvozani HAMMAGA ochib yubormaydi.
+
+    Usiz yuqoridagi test "endi har kim har qanday bozorni tanlay oladi"
+    holatida ham yashil ko'rinardi. Bu yerda a'zoligi bo'lmagan oddiy
+    bozor admini AYNAN o'sha qoralama bozorni so'raydi va 403
+    `market_forbidden` oladi — vakolat hamon `is_platform_admin` bayrog'iga
+    bog'liq, bozorning faolligiga emas (T-01-47 bo'yicha javob "bunday
+    bozor bor" degan signalni ham bermaydi).
+    """
+    login_body = (await login(api_client, auth_seed.market_admin.phone, auth_seed.password)).json()
+    headers = {"Authorization": f"Bearer {login_body['access_token']}"}
+
+    with draft_market(sync_owner_conn) as market_id:
+        response = await api_client.post(
+            SELECT_MARKET_URL, json={"market_id": str(market_id)}, headers=headers
+        )
 
     assert response.status_code == 403
     assert response.json() == {"detail": "market_forbidden"}

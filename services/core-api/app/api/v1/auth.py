@@ -233,10 +233,18 @@ async def _market_ref(
 ) -> MarketRef:
     """Bozor nomini a'zolikdan yoki (platforma admini uchun) global ro'yxatdan oladi."""
     if membership is not None:
-        return MarketRef(id=membership.market_id, name=membership.market_name)
+        return MarketRef(
+            id=membership.market_id,
+            name=membership.market_name,
+            is_active=membership.is_active,
+        )
     for market in await auth_repo.list_markets(session):
         if market.market_id == market_id:
-            return MarketRef(id=market.market_id, name=market.market_name)
+            return MarketRef(
+                id=market.market_id,
+                name=market.market_name,
+                is_active=market.is_active,
+            )
     raise _invalid_refresh()
 
 
@@ -351,7 +359,11 @@ async def login(
         expires_in=_expires_in(settings),
         must_change_password=row.must_change_password,
         locale=row.locale,
-        market=MarketRef(id=auto_select.market_id, name=auto_select.market_name)
+        market=MarketRef(
+            id=auto_select.market_id,
+            name=auto_select.market_name,
+            is_active=auto_select.is_active,
+        )
         if auto_select
         else None,
         markets=markets,
@@ -377,18 +389,46 @@ async def _visible_markets(
 ) -> list[MarketRef]:
     """Bozor tanlash ekranining manbai.
 
-    Platforma admini uchun BARCHA faol bozorlar (D-06), qolganlar uchun
-    faqat o'z a'zoliklari. `auth_list_markets()` faqat nomlarni ochadi —
-    hech qanday tenant ma'lumotini emas, shuning uchun u `BYPASSRLS`
-    rolining o'rnini bosadi va kengaymaydi.
+    Platforma admini uchun BARCHA bozorlar (D-06), qolganlar uchun faqat
+    o'z a'zoliklari. `auth_list_markets()` faqat nomlarni ochadi — hech
+    qanday tenant ma'lumotini emas, shuning uchun u `BYPASSRLS` rolining
+    o'rnini bosadi va kengaymaydi.
+
+    RO'YXAT SERVERDA FILTRLANMAYDI — qoralama bozor (bayrog'i `false`) ham
+    chiqadi va bayroq javobda uzatiladi. Ilgari platforma admini tarmog'ida
+    bayroq bo'yicha kesuvchi shart turardi, a'zolik tarmog'ida esa hech
+    qanday filtr yo'q edi — ya'ni qoralama bozorga tayinlangan bozor admini
+    uni KO'RARDI, uni yaratgan platforma admini esa YO'Q. Bu assimetriya
+    ataylab qilingan qaror emas edi (UI-SPEC §12.1.1 X-2).
+
+    Filtrlangan ro'yxat qoralamani YETIB BO'LMAYDIGAN qilmasdi, faqat
+    KO'RINMAYDIGAN qilardi (X-1) — ya'ni u xavfsizlik chegarasi emas,
+    ko'rish qulayligi masalasi edi va aynan §6.4 dagi "uzilishdan tiklanish"
+    oqimini imkonsiz qilardi.
+
+    FILTRLASH MAS'ULIYATI ISTE'MOLCHIDA (RESEARCH Pitfall 7): bozor tanlash
+    ekrani qoralamani ATAYIN ko'rsatadi; mahsulot oqimlari (6-faza billing
+    job) `WHERE m.is_active` bilan ANIQ filtrlaydi. Server ro'yxatni
+    "tozalab" bermaydi, chunki tozalangan ro'yxat iste'molchini o'z
+    filtrini yozishdan ozod qilib, jimgina noto'g'ri taxminni tug'dirardi.
+
+    HECH BIR TARMOQDA BAYROQ LITERAL `True` bilan berilmaydi (grep darvozasi
+    shu taqiqni qulflaydi, shuning uchun taqiqlangan shakl bu izohda
+    yozilmaydi): ikkala manba (`MarketRow`, `Membership`) ham uni DB'dan
+    olib keladi.
     """
     if is_platform_admin:
         return [
-            MarketRef(id=market.market_id, name=market.market_name)
+            MarketRef(
+                id=market.market_id,
+                name=market.market_name,
+                is_active=market.is_active,
+            )
             for market in await auth_repo.list_markets(session)
-            if market.is_active
         ]
-    return [MarketRef(id=m.market_id, name=m.market_name) for m in memberships]
+    return [
+        MarketRef(id=m.market_id, name=m.market_name, is_active=m.is_active) for m in memberships
+    ]
 
 
 async def _audit_login_failed(
@@ -486,7 +526,11 @@ async def select_market(
     membership = next((m for m in memberships if m.market_id == payload.market_id), None)
 
     if membership is not None:
-        market = MarketRef(id=membership.market_id, name=membership.market_name)
+        market = MarketRef(
+            id=membership.market_id,
+            name=membership.market_name,
+            is_active=membership.is_active,
+        )
     else:
         market = await _platform_admin_market(
             session, payload.market_id, is_platform_admin=is_platform_admin
@@ -560,13 +604,36 @@ async def _platform_admin_market(
     chaqiruvchida `users` jadvalidan o'qilgan bo'lishi SHART. Aks holda
     lavozimi olib tashlangan odam a'zoligi bo'lmagan bozorni tanlashda
     davom etardi.
+
+    QORALAMA BOZOR (bayrog'i `false`) HAM TANLANADI. Ilgari bu yerda
+    bayroq bo'yicha qo'shimcha shart turardi va u ustaning O'Z oqimini
+    imkonsiz qilardi: usta 1-qadamda qoralama bozor tug'diradi, keyingi
+    qadamlar esa (zonalar, rastalar, tariflar) TENANT-scoped jadvallarga
+    yozadi, ya'ni ular `app.market_id` o'sha qoralama bozorga
+    o'rnatilishini TALAB qiladi. Yagona o'rnatish yo'li — shu funksiya.
+    Shart saqlanganda bozor tanlash ekranida ko'rinadigan qoralama bosilishi
+    bilan 403 berardi: ko'rinadigan, lekin yetib bo'lmaydigan element —
+    o'zgarishdan OLDINGI holatdan ham yomonroq.
+
+    YANGI VAKOLAT BERILMAYDI (UI-SPEC §12.1.1 X-1): platforma admini
+    a'zoligi bo'lmagan bozorni allaqachon tanlay oladi va qoralama bozorni
+    o'zi yaratadi — o'zgarish shu vakolatning ichidagi bo'shliqni yopadi.
+    RLS teginilmaydi: tanlashdan keyin `app.market_id` odatdagidek
+    o'rnatiladi va qoralama bozor ham oddiy tenant sifatida yashaydi
+    (RESEARCH Pattern 5 — usta holati alohida jadvalda emas, bozorning
+    O'ZIDA). Faollashtirish to'liqligi alohida darvoza (02-11 `activate`)
+    bilan tekshiriladi, bozor tanlash bilan emas.
     """
     forbidden = HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="market_forbidden")
     if not is_platform_admin:
         raise forbidden
     for market in await auth_repo.list_markets(session):
-        if market.market_id == market_id and market.is_active:
-            return MarketRef(id=market.market_id, name=market.market_name)
+        if market.market_id == market_id:
+            return MarketRef(
+                id=market.market_id,
+                name=market.market_name,
+                is_active=market.is_active,
+            )
     raise forbidden
 
 
@@ -828,22 +895,27 @@ async def change_password(
 async def me(principal: PrincipalDep, session: TenantSessionDep) -> MeResponse:
     """Joriy sessiya tavsifi — bozor nomi TENANT SESSIYASIDAN o'qiladi.
 
-    So'rov ATAYIN filtrsiz (`SELECT id, name FROM markets`): `markets`
-    policy'si `id = app.market_id` bo'lgani uchun u AYNAN BITTA qator
-    qaytaradi. Ya'ni bu endpoint tenant kontekstining uchdan-uchiga
+    So'rov ATAYIN filtrsiz (`SELECT id, name, is_active FROM markets`):
+    `markets` policy'si `id = app.market_id` bo'lgani uchun u AYNAN BITTA
+    qator qaytaradi. Ya'ni bu endpoint tenant kontekstining uchdan-uchiga
     ishlayotganini har chaqiruvda isbotlaydi — noto'g'ri o'rnatilgan
     kontekst bu yerda 0 qator bo'lib DARHOL ko'rinadi.
 
+    `is_active` ham SHU QATORDAN olinadi, `True` deb taxmin qilinmaydi:
+    usta ichidagi sessiya aynan qoralama bozorda ochilgan bo'ladi va
+    `/auth/me` uni "faol" deb ko'rsatsa, ekran usta relsini emas, oddiy
+    boshqaruv panelini chizardi.
+
     Bozor tanlanmagan bo'lsa `get_tenant_session` 409 qaytaradi.
     """
-    result = await session.execute(text("SELECT id, name FROM markets"))
+    result = await session.execute(text("SELECT id, name, is_active FROM markets"))
     row = result.one_or_none()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="market_not_found")
 
     return MeResponse(
         user_id=principal.user_id,
-        market=MarketRef(id=row.id, name=row.name),
+        market=MarketRef(id=row.id, name=row.name, is_active=row.is_active),
         roles=sorted(principal.roles),
         permissions=sorted(str(perm) for perm in principal.permissions),
         is_platform_admin=principal.is_platform_admin,
