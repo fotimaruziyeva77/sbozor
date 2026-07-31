@@ -1,6 +1,10 @@
 {
   "_comment": "YAGONA qo'lda tahrirlanadigan kirill fayli (D-14). `uz-Cyrl.json` bundan va `uz-Latn.json` dan avtomatik hosil qilinadi — unga qo'l tegizilmaydi. Ustuvorlik: messages > words > mapping. `messages` — to'liq kalit (`audit.resultCount`) → to'liq kirillcha xabar; transliterator butunlay chetlab o'tiladi, shuning uchun ICU platsholderlarini O'ZINGIZ to'g'ri ko'chiring. `words` — bitta so'z → kirillcha shakl; bosh harf holati manbadan ko'chiriladi (`Protsent` → `Процент`).",
 
+  "_comment_agglutination": "DIQQAT: o'zbek tili AGGLYUTINATIV — har qo'shimchali shakl ALOHIDA yozuv talab qiladi. `filtr` yozuvi `filtrga` ni QAMRAMAYDI, chunki lug'at butun so'zni (token) qidiradi, o'zakni emas. Shu sababli bu ro'yxat yangi kalit qo'shilgan sayin o'sadi. Yangi kalitda lug'atdagi so'zning yangi qo'shimchali shakli paydo bo'lsa, uni shu yerga qo'shing va `npm --prefix frontend test` bilan tekshiring.",
+
+  "_comment_excel": "COPY QOIDASI (override YETARLI EMAS): Excel va xlsx so'zlariga APOSTROFLI qo'shimcha ulanmaydi — apostrofli shakl boshqa token bo'lgani uchun override uni qutqarmaydi va apostrof tutuq belgisiga aylanadi. To'g'ri shakl: `Excel fayldan yuklash`, `xlsx fayl`. To'liq qoida va o'lchangan misollar: `frontend/messages/README.md` (Qoida 1). Darvoza: `scripts/gen-cyrillic.test.mjs`.",
+
   "messages": {},
 
   "words": {
@@ -16,9 +20,15 @@
     "sertifikat": "сертификат",
     "terminal": "терминал",
 
+    "Excel": "Excel",
+    "xlsx": "xlsx",
+
     "filtr": "фильтр",
     "filtrlar": "фильтрлар",
     "filtrlarni": "фильтрларни",
-    "filtrlash": "фильтрлаш"
+    "filtrlash": "фильтрлаш",
+    "filtrga": "фильтрга",
+    "filtrni": "фильтрни",
+    "filtrdan": "фильтрдан"
   }
 }
