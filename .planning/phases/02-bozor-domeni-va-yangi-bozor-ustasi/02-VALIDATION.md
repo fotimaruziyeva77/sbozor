@@ -47,11 +47,63 @@ created: 2026-07-30
 
 ## Per-Task Verification Map
 
-> **STUB — planner must fill.** One row per task across all Phase 2 plans. Every row needs an automated command or an explicit Wave 0 dependency. The requirement→test mapping to draw from is in `02-RESEARCH.md` § "Phase Requirements → Test Map" (35 rows, already written against SC#1–SC#5, D-02…D-20 and the six MARKET-* requirements).
+> **Filled by the planner (2026-07-31).** 17 plans / 51 tasks. Every task carries an `<automated>` verify command; three tasks additionally carry `<human-check>` steps (real Karmana data, usability walkthrough, perceptual map check) which are recorded under **Manual-Only Verifications** below.
+>
+> Wave 0 work is **not** a separate wave here — it is plans `02-01` (backend gates) and `02-02` (frontend design-system gates), both in wave 1, plus the mandatory ordering chain in `02-03`. Every later plan depends on them transitively.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 02-01-01 | 01 | 0 | — | — | — | — | — | — | ⬜ pending |
+| 02-01-01 | 01 | 1 | MARKET-01,MARKET-02,MARKET-03,MARKET-04 | T-02-01 | Sxema reyestrlari va RBAC matritsasini 2-faza uchun to'g'rilash | unit | `npm run test:unit` | ⬜ | ⬜ pending |
+| 02-01-02 | 01 | 1 | MARKET-01,MARKET-02,MARKET-03,MARKET-04 | T-02-02 | `btree_gist` superuser init qadami, conftest ulanishi va `require_extension()` yordamchisi | tenancy | `npm run test:tenancy` | ⬜ | ⬜ pending |
+| 02-01-03 | 01 | 1 | MARKET-01,MARKET-02,MARKET-03,MARKET-04 | T-02-03 | WR-02/WR-03 — `select-market` ni parol darvozasi ostiga olish va `is_platform_admin` ni DB'dan qayta o'qish | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-02-01 | 02 | 1 | MARKET-01,MARKET-02,MARKET-06 | T-02-09 | Dizayn tokenlarini WCAG AA ga keltirish va boshqaruv elementlarini yangi tokenlarga ko'chirish | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
+| 02-02-02 | 02 | 1 | MARKET-01,MARKET-02,MARKET-06 | T-02-10 | Yetti `ui/` primitivini ajratish + tipografiya va bo'shliq panjarasini mexanik tozalash | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ⬜ | ⬜ pending |
+| 02-02-03 | 02 | 1 | MARKET-01,MARKET-02,MARKET-06 | T-02-11 | Transliterator defektlarini yopish va frontend testlarini faza darvozasiga ulash | component | `npm --prefix frontend test && npm --prefix frontend run i18n:check` | ⬜ | ⬜ pending |
+| 02-03-01 | 03 | 2 | MARKET-01 | T-02-15 | Zanjir 1–2-bandlari — `auth_memberships()` qaytish tipi va `Membership.is_active` | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ⬜ | ⬜ pending |
+| 02-03-02 | 03 | 2 | MARKET-01 | T-02-16 | Zanjir 3–4-bandlari — `MarketRef.is_active` va serverdagi filtrni olib tashlash | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-03-03 | 03 | 2 | MARKET-01 | T-02-17 | Zanjir 5–6-bandlari — zod kontrakti, `Qoralama` belgisi va uzilgan ustaga qaytish | component | `npm --prefix frontend run test:component && npm --prefix frontend run i18…` | ⬜ | ⬜ pending |
+| 02-04-01 | 04 | 3 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-20 | `StallStatus` enum'i va `[)` davr yordamchisi | unit | `npm run test:unit` | ⬜ | ⬜ pending |
+| 02-04-02 | 04 | 3 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-21 | O'nta domen modeli (`models/market.py`) va barrel importi | gate | `docker compose --profile test run --rm tests sh -c "python -c 'from sbozo…` | ⬜ | ⬜ pending |
+| 02-04-03 | 04 | 3 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-22 | DB funksiyalari, trigger funksiyalari va entity reyestrlari | gate | `docker compose --profile test run --rm tests sh -c "python -c 'from migra…` | ⬜ | ⬜ pending |
+| 02-05-01 | 05 | 4 | MARKET-01,MARKET-02,MARKET-03 | T-02-29 | `0007_market_domain.py` — yadro jadvallar, RLS, audit va rasta-kod kafolati | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ⬜ | ⬜ pending |
+| 02-05-02 | 05 | 4 | MARKET-01,MARKET-02,MARKET-03 | T-02-30 | `0008_temporal.py` — tarif va toifa tarixi + o'zgarmaslik triggerlari | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ⬜ | ⬜ pending |
+| 02-05-03 | 05 | 4 | MARKET-01,MARKET-02,MARKET-03 | T-02-31 | Alembic ko'rmaydigan narsalar uchun meta-test darvozasi + bo'sh autogenerate diff | tenancy | `docker compose --profile test run --rm tests pytest tests/tenancy/test_ma…` | ⬜ | ⬜ pending |
+| 02-06-01 | 06 | 5 | MARKET-04,MARKET-05 | T-02-37 | `0009_vendors.py` — sotuvchilar va qoplanmaydigan biriktirish davrlari | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ⬜ | ⬜ pending |
+| 02-06-02 | 06 | 5 | MARKET-04,MARKET-05 | T-02-38 | `0010_calendar.py` — ish kunlari istisnolari, `market_is_open()` va `market_delete_draft()` | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ⬜ | ⬜ pending |
+| 02-06-03 | 06 | 5 | MARKET-04,MARKET-05 | T-02-39 | Ikki bozorli domen seed'i va EXCLUDE/`market_is_open` darvozalari | tenancy | `docker compose --profile test run --rm tests pytest tests/tenancy -x -q` | ⬜ | ⬜ pending |
+| 02-07-01 | 07 | 6 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-46 | Tarif va toifa tarixi — SC#3 ning to'liq isboti | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-07-02 | 07 | 6 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-47 | Sotuvchi biriktirish — D-09/D-10/D-11/D-12 isboti | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-07-03 | 07 | 6 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-48 | Ish kunlari kalendari (SC#4) va rasta raqamining qayta ishlatilmasligi (SC#2/D-02) | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-08-01 | 08 | 7 | MARKET-02,MARKET-06 | T-02-54 | Domen DTO'lari, xato kodlari va oddiy reestrlar (zonalar, toifalar) | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ⬜ | ⬜ pending |
+| 02-08-02 | 08 | 7 | MARKET-02,MARKET-06 | T-02-55 | `stall_repo.py` va `stalls.py` — reestr, keyset, filtrlar va xarita agregati | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ⬜ | ⬜ pending |
+| 02-08-03 | 08 | 7 | MARKET-02,MARKET-06 | T-02-56 | Marshrutlarni ulash, cross-tenant matritsasiga qo'shish va SC#2 ning API isboti | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-09-01 | 09 | 8 | MARKET-03,MARKET-05 | T-02-62 | `tariff_repo.py` va `tariffs.py` — faqat qo'shadigan tarif API'si | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ⬜ | ⬜ pending |
+| 02-09-02 | 09 | 8 | MARKET-03,MARKET-05 | T-02-63 | `calendar.py` — haftalik jadval va istisno kunlar | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-09-03 | 09 | 8 | MARKET-03,MARKET-05 | T-02-64 | Tarif va kalendar API'sining integratsiya testlari | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-10-01 | 10 | 9 | MARKET-04 | T-02-70 | `vendor_repo.py` va `vendors.py` — reestr va shaxsiy ma'lumot o'qish auditi | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ⬜ | ⬜ pending |
+| 02-10-02 | 10 | 9 | MARKET-04 | T-02-71 | `assignments.py` — biriktirish davrlari va almashinuv oqimi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-10-03 | 10 | 9 | MARKET-04 | T-02-72 | Sotuvchi va biriktirish API'sining integratsiya testlari | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-11-01 | 11 | 10 | MARKET-01 | T-02-79 | `market_repo.py` va qoralama bozor yaratish / o'chirish | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ⬜ | ⬜ pending |
+| 02-11-02 | 11 | 10 | MARKET-01 | T-02-80 | `setup-status` agregati va faollashtirish darvozasi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-11-03 | 11 | 10 | MARKET-01 | T-02-81 | SC#1 ning uchidan-uchiga testi va RBAC darvozasi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-12-01 | 12 | 11 | MARKET-02,MARKET-04 | T-02-87 | Xavfsiz `.xlsx` o'qish qatlami va uning hujum testlari | unit | `docker compose --profile test run --rm tests pytest tests/unit/test_xlsx_…` | ⬜ | ⬜ pending |
+| 02-12-02 | 12 | 11 | MARKET-02,MARKET-04 | T-02-88 | Validator (yozishdan oldin) va shablon/xato-hisoboti generatori | unit | `docker compose --profile test run --rm tests pytest tests/unit/test_xlsx_…` | ⬜ | ⬜ pending |
+| 02-12-03 | 12 | 11 | MARKET-02,MARKET-04 | T-02-89 | `imports.py` routeri va all-or-nothing / idempotentlik testlari | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-13-01 | 13 | 12 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-98 | Zod kontraktlari va xato-kod xaritasi | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint` | ⬜ | ⬜ pending |
+| 02-13-02 | 13 | 12 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-99 | TanStack Query hooklari va navigatsiya kengaytmasi | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
+| 02-13-03 | 13 | 12 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-100 | To'qqizta namespace uchun uch tilli matnlar | component | `npm --prefix frontend run i18n:check && npm --prefix frontend test` | ⬜ | ⬜ pending |
+| 02-14-01 | 14 | 13 | MARKET-02,MARKET-06 | T-02-105 | Rastalar reestri sahifasi — ro'yxat, filtrlar va tahrir dialoglari | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
+| 02-14-02 | 14 | 13 | MARKET-02,MARKET-06 | T-02-106 | Sxematik plan-xarita — grid, katak, tone kontrakti va legenda | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
+| 02-14-03 | 14 | 13 | MARKET-02,MARKET-06 | T-02-107 | Rasta kartasi dialogi va xarita darvozasi (vitest) | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ⬜ | ⬜ pending |
+| 02-15-01 | 15 | 13 | MARKET-03,MARKET-04,MARKET-05 | T-02-112 | Sotuvchilar reestri va biriktirish oqimi | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ⬜ | ⬜ pending |
+| 02-15-02 | 15 | 13 | MARKET-03,MARKET-04,MARKET-05 | T-02-113 | Tarif tarixi, zona va toifa ro'yxatlari | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
+| 02-15-03 | 15 | 13 | MARKET-03,MARKET-04,MARKET-05 | T-02-114 | Ish kunlari kalendari | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
+| 02-16-01 | 16 | 14 | MARKET-01,MARKET-02,MARKET-04 | T-02-120 | Usta qobig'i, qadam relsi va marshrutlar | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ⬜ | ⬜ pending |
+| 02-16-02 | 16 | 14 | MARKET-01,MARKET-02,MARKET-04 | T-02-121 | Rekvizitlar formasi va faollashtirish paneli | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
+| 02-16-03 | 16 | 14 | MARKET-01,MARKET-02,MARKET-04 | T-02-122 | Excel import paneli va xato ro'yxati | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ⬜ | ⬜ pending |
+| 02-17-01 | 17 | 15 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-128 | Real ma'lumot yo'riqnomasi va takrorlanadigan import skripti | gate | `node scripts/karmana-import.mjs --help && node -e "const fs=require('node…` | ⬜ | ⬜ pending |
+| 02-17-02 | 17 | 15 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-129 | Beshta faza mezonining uchidan-uchiga avtomatik tekshiruvi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
+| 02-17-03 | 17 | 15 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-130 | Real ma'lumotni yuklash, solishtirish va faza darvozasi | gate + human-check | `npm run gate` | ⬜ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

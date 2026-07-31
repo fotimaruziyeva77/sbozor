@@ -111,7 +111,46 @@ Plans:
   4. Bozor admini bayram/ishlamaydigan kunni belgilaydi va o'sha kunga patta hisoblanmaydi
   5. Bozor admini sxematik plan-xaritada rastalarni zona bo'yicha grid ko'rinishida ko'radi; rasta bosilganda uning kartasi (raqam, toifa, tarif, sotuvchi, holat) ochiladi
 
-**Plans**: TBD
+**Plans**: 17 plans in 15 waves
+Plans:
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Wave-0 backend darvozalari: reyestrlar, RBAC, `btree_gist`, WR-02/WR-03 (W1)
+- [ ] 02-02-PLAN.md — Wave-0 frontend: WCAG token tuzatishlari, 7 `ui/` primitivi, transliteratsiya darvozasi (W1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 02-03-PLAN.md — `MarketRef.is_active` zanjiri (6 band) va qoralama bozorning ko'rinishi (W2)
+
+**Wave 3–5** *(sxema, ketma-ket migratsiya zanjiri)*
+
+- [ ] 02-04-PLAN.md — 10 domen modeli, `[)` davr yordamchisi, 5 DB funksiyasi, 3 trigger (W3)
+- [ ] 02-05-PLAN.md — `0007_market_domain` + `0008_temporal` + Alembic ko'rmaydigan darvozalar (W4)
+- [ ] 02-06-PLAN.md — `0009_vendors` (EXCLUDE) + `0010_calendar` + ikki bozorli domen seed'i (W5)
+
+**Wave 6**
+
+- [ ] 02-07-PLAN.md — Domen darvozalari: SC#2/SC#3/SC#4 va D-09…D-12 ning DB isboti (W6)
+
+**Wave 7–11** *(API, ketma-ket — `schemas.py`/`main.py`/marshrut matritsasi umumiy)*
+
+- [ ] 02-08-PLAN.md — API I: barcha domen DTO'lari + zona/toifa/rasta + xarita agregati (W7)
+- [ ] 02-09-PLAN.md — API II: tariflar (faqat qo'shadigan) va ish kunlari (W8)
+- [ ] 02-10-PLAN.md — API III: sotuvchilar (o'qish auditi) va biriktirish davrlari (W9)
+- [ ] 02-11-PLAN.md — API IV: usta — bozor yaratish, `setup-status`, faollashtirish (W10)
+- [ ] 02-12-PLAN.md — Excel import: xavfsiz o'qish, validatsiya, shablon, all-or-nothing (W11)
+
+**Wave 12–14** *(frontend)*
+
+- [ ] 02-13-PLAN.md — Frontend domen kontrakti: zod, TanStack Query, 9 namespace, navigatsiya (W12)
+- [ ] 02-14-PLAN.md — Rasta reestri va sxematik plan-xarita (CSS Grid, react-konva EMAS) (W13)
+- [ ] 02-15-PLAN.md — Sotuvchi, tarif, kalendar, zona va toifa ekranlari (W13)
+- [ ] 02-16-PLAN.md — Usta UI (7 qadam, faollashtirish paneli) va Excel import paneli (W14)
+
+**Wave 15**
+
+- [ ] 02-17-PLAN.md — Karmananing real ma'lumoti, faza mezonlari testi va darvoza (W15)
+
 **UI hint**: yes
 **Note**: Ustaning kamera / kamera-zona / snapshot-jadval qadamlari 3–5 fazalarda ulanadi. Plan-xarita **sxematik** (grid) bo'lib qoladi — to'liq interaktiv xarita v2. Ranglar to'liq to'plami (ko'k to'langan, qizil qarzdor, sariq nomuvofiq) va dalil-rasm 6–7 fazalarda yonadi. Karmananing real ma'lumoti aynan shu fazada kiritiladi — keyingi fazalar fikstura emas, haqiqat ustida sinaladi.
 
@@ -263,7 +302,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 |-------|----------------|--------|-----------|
 | 0. Dala treki va tashqi bog'liqliklar | N/A | Not started | - |
 | 1. Poydevor va tenant xavfsizligi | 0/10 | Planned | - |
-| 2. Bozor domeni va ustasi | 0/TBD | Not started | - |
+| 2. Bozor domeni va ustasi | 0/17 | Planned | - |
 | 3. Kamera va tarmoq ulanishi | 0/TBD | Not started | - |
 | 4. Snapshot pipeline | 0/TBD | Not started | - |
 | 5. Kamera zonalari, CV va HITL | 0/TBD | Not started | - |
