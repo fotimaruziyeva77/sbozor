@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from fixtures.auth_users import AuthSeed
 
 __all__ = [
+    "ASSIGNMENTS_URL",
     "AUDIT_URL",
     "CALENDAR_URL",
     "CATEGORIES_URL",
@@ -38,6 +39,7 @@ __all__ = [
     "TARIFFS_URL",
     "TEST_PHONE_PREFIX",
     "USERS_URL",
+    "VENDORS_URL",
     "ZONES_URL",
     "audit_entries",
     "bearer",
@@ -63,6 +65,10 @@ CATEGORIES_URL = "/api/v1/categories"
 STALLS_URL = "/api/v1/stalls"
 TARIFFS_URL = "/api/v1/tariffs"
 CALENDAR_URL = "/api/v1/calendar"
+VENDORS_URL = "/api/v1/vendors"
+ASSIGNMENTS_URL = "/api/v1/assignments"
+"""Biriktirish yozuv yo'li. RASTA tarixi esa `{STALLS_URL}/{id}/assignments` —
+u ATAYIN boshqa prefiksda va sabab `app/api/v1/assignments.py` da."""
 
 TEST_PHONE_PREFIX = "+99893"
 """Testlar YARATADIGAN foydalanuvchilarning telefon diapazoni.

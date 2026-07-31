@@ -40,6 +40,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.api.v1.assignments import router as assignments_router
+from app.api.v1.assignments import stall_router as stall_assignments_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.calendar import router as calendar_router
@@ -49,6 +51,7 @@ from app.api.v1.me import router as me_router
 from app.api.v1.stalls import router as stalls_router
 from app.api.v1.tariffs import router as tariffs_router
 from app.api.v1.users import router as users_router
+from app.api.v1.vendors import router as vendors_router
 from app.api.v1.zones import router as zones_router
 from app.settings import Settings, get_settings
 
@@ -146,6 +149,19 @@ app.include_router(categories_router, prefix=f"{API_V1_PREFIX}/categories")
 app.include_router(stalls_router, prefix=f"{API_V1_PREFIX}/stalls")
 app.include_router(tariffs_router, prefix=f"{API_V1_PREFIX}/tariffs")
 app.include_router(calendar_router, prefix=f"{API_V1_PREFIX}/calendar")
+app.include_router(vendors_router, prefix=f"{API_V1_PREFIX}/vendors")
+app.include_router(assignments_router, prefix=f"{API_V1_PREFIX}/assignments")
+# ⚠ IKKINCHI ROUTER, PREFIKSSIZ — `GET /api/v1/stalls/{stall_id}/assignments`.
+#
+# Marshrut BIRIKTIRISH domeniga tegishli (`AssignmentItem` qaytaradi va
+# `assignments.py` dagi xato semantikasini baham ko'radi), lekin yo'li
+# rasta ostida yashaydi. `assignments_router` ichida qoldirilsa yo'l
+# `/api/v1/assignments/stalls/...` bo'lib ketardi, `stalls_router` ga
+# ko'chirilsa esa rasta reestri biriktirish repozitoriysiga bog'lanib
+# qolardi. Shuning uchun u alohida router va u `{API_V1_PREFIX}` ga
+# ulanadi. `stalls_router` bilan to'qnashuv YO'Q — yo'llarning segment
+# soni har xil (sabab `api/v1/assignments.py` modul docstringida).
+app.include_router(stall_assignments_router, prefix=API_V1_PREFIX)
 
 
 @app.exception_handler(DBAPIError)
