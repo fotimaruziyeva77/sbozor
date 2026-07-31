@@ -1,21 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "@/i18n/navigation";
-import { apiFetch, errorMessageKey } from "@/lib/api-client";
+import { errorMessageKey } from "@/lib/api-client";
 import type { MarketSummary } from "@/lib/api-types";
-import {
-  emptyResponseSchema,
-  marketListSchema,
-  sessionResponseSchema,
-  setupStatusResponseSchema,
-} from "@/lib/api-types";
+import { useLogout, useSelectMarket } from "@/lib/auth-queries";
 import { applySession, useAuthStore } from "@/lib/auth-store";
+import {
+  fetchFirstIncompleteStep,
+  useMarketsQuery,
+} from "@/lib/market-queries";
 
 /*
  * D-06: platforma admini bozor TANLAB kiradi — `market_view_all` unga RLS
@@ -23,7 +21,9 @@ import { applySession, useAuthStore } from "@/lib/auth-store";
  * `app.market_id` GUC'iga yoziladi va yangi access token beriladi.
  *
  * Endpointlar: `POST /api/v1/auth/select-market`, `GET /api/v1/markets`,
- * `GET /api/v1/markets/{id}/setup-status`.
+ * `GET /api/v1/markets/{id}/setup-status`. Ularning HAMMASI so'rov
+ * modullarida (`auth-queries.ts`, `market-queries.ts`) — bu komponent HTTP
+ * qatlamiga to'g'ridan-to'g'ri tegmaydi.
  *
  * QORALAMA BOZOR (§6.4 — uzilishdan tiklanish): usta 1-qadamda qoralama
  * bozor tug'diradi va foydalanuvchi ishni yarim tashlab ketishi mumkin. U
@@ -36,42 +36,8 @@ import { applySession, useAuthStore } from "@/lib/auth-store";
  * app shell'da ham ATAYIN yo'q — u alohida qaror va alohida audit talab
  * qiladi.
  */
-const SELECT_MARKET_PATH = "/auth/select-market";
-const MARKETS_PATH = "/markets";
-const LOGOUT_PATH = "/auth/logout";
 const DASHBOARD_PATH = "/dashboard";
 const WIZARD_PATH = "/markets/setup";
-
-/**
- * `setup-status` javobsiz qolganda tushiladigan qadam.
- *
- * FAIL-SAFE, fail-closed EMAS — bu navigatsiya, xavfsizlik chegarasi emas.
- * Endpoint yiqilsa (yoki 02-11 gacha umuman mavjud bo'lmasa) foydalanuvchi
- * baribir ustaga kiradi va 1-qadamdan davom etadi; muqobil variant —
- * "xato" ekrani — uni qoralama bozor ichiga umuman kirita olmasdi.
- */
-const FIRST_STEP = 1;
-
-/**
- * Birinchi TUGALLANMAGAN qadam raqami (§6.4 qoidasi).
- *
- * `blocking[]` dagi ENG KICHIK qadam olinadi, "oxirgi ochilgan qadam" EMAS:
- * klientda hech qanday xotira yo'q va bo'lmasligi ham kerak — haqiqat
- * manbai DB'dagi qoralama bozorning O'ZI (RESEARCH Pattern 5). Ro'yxat
- * bo'sh bo'lsa bloklovchi band qolmagan, ya'ni foydalanuvchi 1-qadamdan
- * ko'z yugurtirib chiqadi.
- */
-async function firstIncompleteStep(marketId: string): Promise<number> {
-  try {
-    const status = await apiFetch(`${MARKETS_PATH}/${marketId}/setup-status`, {
-      schema: setupStatusResponseSchema,
-    });
-    const steps = status.blocking.map((item) => item.step);
-    return steps.length > 0 ? Math.min(...steps) : FIRST_STEP;
-  } catch {
-    return FIRST_STEP;
-  }
-}
 
 export function MarketPicker() {
   const t = useTranslations();
@@ -91,9 +57,7 @@ export function MarketPicker() {
    * ro'yxat bo'sh bo'lsa (masalan klient tomonda navigatsiya bilan kelingan
    * bo'lsa) serverdan so'raladi.
    */
-  const marketsQuery = useQuery({
-    queryKey: ["markets"],
-    queryFn: () => apiFetch(MARKETS_PATH, { schema: marketListSchema }),
+  const marketsQuery = useMarketsQuery({
     enabled: accessToken !== null && markets.length === 0,
   });
 
@@ -114,13 +78,7 @@ export function MarketPicker() {
           is_active: market.is_active,
         }));
 
-  const selectMarket = useMutation({
-    mutationFn: (marketId: string) =>
-      apiFetch(SELECT_MARKET_PATH, {
-        method: "POST",
-        body: { market_id: marketId },
-        schema: sessionResponseSchema,
-      }),
+  const selectMarket = useSelectMarket({
     /*
      * Marshrut qarori SERVER javobidan olinadi (`session.market.is_active`),
      * bosilgan ro'yxat elementidan EMAS: ro'yxat login paytida olingan va
@@ -137,15 +95,13 @@ export function MarketPicker() {
         router.replace(DASHBOARD_PATH);
         return;
       }
-      const step = await firstIncompleteStep(session.market.id);
+      const step = await fetchFirstIncompleteStep(session.market.id);
       router.replace(`${WIZARD_PATH}?step=${step}`);
     },
     onError: (error) => setFormError(t(errorMessageKey(error))),
   });
 
-  const logout = useMutation({
-    mutationFn: () =>
-      apiFetch(LOGOUT_PATH, { method: "POST", schema: emptyResponseSchema }),
+  const logout = useLogout({
     // Sessiya har qanday holatda tozalanadi: server javobi kelmasa ham
     // brauzerda o'lik token qolib ketmasligi kerak.
     onSettled: () => {

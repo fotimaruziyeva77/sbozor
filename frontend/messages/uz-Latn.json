@@ -25,8 +25,16 @@
   },
   "nav": {
     "dashboard": "Boshqaruv paneli",
+    "map": "Plan-xarita",
+    "stalls": "Rastalar",
+    "vendors": "Sotuvchilar",
+    "tariffs": "Tariflar",
+    "calendar": "Ish kunlari",
     "users": "Foydalanuvchilar",
     "audit": "Audit jurnali",
+    "more": "Ko'proq",
+    "groupMarket": "Bozor",
+    "groupSystem": "Tizim",
     "logout": "Chiqish"
   },
   "auth": {

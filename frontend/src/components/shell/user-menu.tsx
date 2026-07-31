@@ -1,13 +1,11 @@
 "use client";
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { useMutation } from "@tanstack/react-query";
 import { ChevronDown, LogOut } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { useRouter } from "@/i18n/navigation";
-import { apiFetch } from "@/lib/api-client";
-import { emptyResponseSchema } from "@/lib/api-types";
+import { useLogout } from "@/lib/auth-queries";
 import { useAuthStore } from "@/lib/auth-store";
 import type { RoleLabelKey } from "@/lib/rbac";
 import { roleLabelKey } from "@/lib/rbac";
@@ -18,19 +16,17 @@ import { roleLabelKey } from "@/lib/rbac";
  * Rollar TARJIMA qilingan yorliqlar bilan ko'rsatiladi — xom `market_admin`
  * satri foydalanuvchiga hech qachon ko'rinmaydi.
  *
- * Endpoint: `POST /api/v1/auth/logout` -> 204.
+ * Chiqish endpointi `lib/auth-queries.ts` da: u BOZOR TANLASH ekranida ham
+ * chaqiriladi va yo'lni ikki joyda yozish ularning bir kun ajralib
+ * ketishiga yo'l ochardi.
  */
-const LOGOUT_PATH = "/auth/logout";
-
 export function UserMenu() {
   const t = useTranslations();
   const tRoles = useTranslations("roles");
   const router = useRouter();
   const { principal, clearSession } = useAuthStore();
 
-  const logout = useMutation({
-    mutationFn: () =>
-      apiFetch(LOGOUT_PATH, { method: "POST", schema: emptyResponseSchema }),
+  const logout = useLogout({
     // Server javobidan QAT'I NAZAR sessiya tozalanadi: aks holda tarmoq
     // uzilganda brauzerda ishlaydigan token qolib ketardi.
     onSettled: () => {
