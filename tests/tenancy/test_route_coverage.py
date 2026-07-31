@@ -46,14 +46,20 @@ from tenancy.test_cross_tenant import (
 
 pytestmark = pytest.mark.tenancy
 
-MINIMUM_MATRIX_ROUTES = 3
+MINIMUM_MATRIX_ROUTES = 12
 """Matritsada kamida shuncha marshrut bo'lishi shart.
 
-01-07 holatiga ko'ra qamrovda 7 ta marshrut bor (`/users` GET+POST,
-`{user_id}` ning uchtasi, `/audit`, `/auth/me`). Chegara ATAYIN past —
-u "matritsa bo'shab qolmadimi?" degan savolga javob beradi, aniq sonni
-qulflamaydi (aks holda har yangi endpoint bu faylni tahrirlashni talab
-qilardi va darvoza bezovta qiluvchi shovqinga aylanardi).
+01-07 holatida qamrovda 7 marshrut bor edi (`/users` GET+POST,
+`{user_id}` ning uchtasi, `/audit`, `/auth/me`) va chegara 3 edi.
+02-08 unga 14 ta domen marshrutini qo'shdi (zonalar 4, toifalar 4,
+rastalar 6), ya'ni chegara ham ko'tarildi.
+
+Chegara ATAYIN AMALDAGI SONDAN PAST — u "matritsa bo'shab qolmadimi?"
+degan savolga javob beradi, aniq sonni qulflamaydi. Aniq son yozilganda
+har yangi endpoint bu faylni tahrirlashni talab qilardi va darvoza
+bezovta qiluvchi shovqinga aylanib, oxir-oqibat "shunchaki raqamni
+oshiring" refleksini tug'dirardi — o'shanda u haqiqiy qisqarishni ham
+o'tkazib yuborardi.
 """
 
 

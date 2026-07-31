@@ -31,6 +31,7 @@ qayta ishlatiladi va tasniflanmagan marshrut CI'ni yiqitadi.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any, NamedTuple
 from uuid import UUID
 
@@ -46,14 +47,17 @@ if TYPE_CHECKING:
     import httpx
     from app.settings import Settings
     from fastapi import FastAPI
+    from fixtures.market_domain import MarketDomainSeed
     from fixtures.two_markets import TwoMarketSeed
 
 pytestmark = pytest.mark.tenancy
 
 __all__ = [
+    "BODY_FILLERS",
     "EXEMPT_ROUTES",
     "PARAM_FILLERS",
     "RouteSpec",
+    "TenantSeed",
     "all_routes",
     "parametrized_routes",
     "tenant_resource_routes",
@@ -75,6 +79,24 @@ class RouteSpec(NamedTuple):
     def param_names(self) -> tuple[str, ...]:
         """Yo'ldagi `{...}` parametrlarining nomlari."""
         return tuple(chunk.split("}", 1)[0] for chunk in self.path.split("{")[1:] if "}" in chunk)
+
+
+class TenantSeed(NamedTuple):
+    """Matritsa uchun IKKI qatlamli seed: a'zolik (1-faza) + domen (2-faza).
+
+    NEGA BIRLASHTIRILDI: `PARAM_FILLERS` to'ldiruvchilari HAQIQIY B bozori
+    obyektlarini qaytarishi shart, `user_id` esa `two_markets` da,
+    `zone_id`/`category_id`/`stall_id` esa `market_domain` da yashaydi.
+    Ikkita alohida argument bilan har bir filler ikkita seed qabul
+    qilardi va imzo o'zgarganda o'nlab joy tahrirlanardi.
+
+    `market_domain` `two_markets` USTIGA qatlanadi (u fixture argumenti
+    sifatida oladi), ya'ni bu yerdagi ikkala maydon ham AYNI bozor
+    UUID'lariga tegishli.
+    """
+
+    base: TwoMarketSeed
+    domain: MarketDomainSeed
 
 
 EXEMPT_ROUTES: dict[str, str] = {
@@ -138,15 +160,81 @@ EXEMPT_REASON_PREFIXES = ("auth bootstrap", "global", "health")
 """Ruxsat etilgan sabab toifalari (`test_exempt_reasons_use_a_known_category`)."""
 
 
-PARAM_FILLERS: dict[str, Callable[[TwoMarketSeed], str]] = {
-    "user_id": lambda seed: str(seed.market_b.cashier_user_id),
+PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
+    "user_id": lambda seed: str(seed.base.market_b.cashier_user_id),
+    # --- 2-faza domen obyektlari ---
+    #
+    # ⚠ HAR BIR QIYMAT B BOZORINING HAQIQIY OBYEKT ID'SI BO'LISHI SHART,
+    # tasodifiy UUID EMAS. Sabab matritsaning butun ma'nosiga tegadi:
+    # tasodifiy UUID uchun javob "bunday obyekt yo'q" degani bo'lardi va
+    # 404 hech nimani isbotlamasdi — biz esa aynan "obyekt BOR, lekin
+    # boshqa bozorniki" holatini sinayapmiz. `test_param_fillers_point_at
+    # _the_other_market` bu qoidani doimiy qulflaydi.
+    "zone_id": lambda seed: str(seed.domain.market_b.zone_ids[0]),
+    "category_id": lambda seed: str(seed.domain.market_b.category_ids[0]),
+    "stall_id": lambda seed: str(seed.domain.market_b.stall_ids[0]),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
-Kelajakdagi parametr turlari (`stall_id`, `payment_id`, `vendor_id`, ...)
+Kelajakdagi parametr turlari (`vendor_id`, `tariff_id`, `payment_id`, ...)
 shu yerga qo'shiladi. Xaritada bo'lmagan parametr paydo bo'lsa
 `test_all_path_params_have_fillers` va `test_no_unclassified_routes`
 DARHOL yiqiladi — jimgina o'tkazib yuborish YO'Q.
+"""
+
+FUTURE_DAYS = 30
+"""`valid_from` uchun "kelajak" oralig'i — SOBIT SANA EMAS.
+
+02-07 deviatsiya #1 dagi bilan bir xil sabab: qotirilgan sana loyihaning
+O'Z muddati ichida o'tmishga aylanadi va o'shanda toifa davri so'rovi
+403 olib, matritsa 404 kutayotgan joyda yiqilardi. O'ttiz kun UTC va
+Toshkent orasidagi bir kunlik farqdan ancha katta, ya'ni chegara
+holati yuzaga kelmaydi.
+"""
+
+
+def _future_date() -> str:
+    return (date.today() + timedelta(days=FUTURE_DAYS)).isoformat()
+
+
+BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
+    RouteSpec("POST", "/api/v1/zones"): lambda _: {"name": "Matritsa zonasi"},
+    RouteSpec("PATCH", "/api/v1/zones/{zone_id}"): lambda _: {"name": "Matritsa zonasi"},
+    RouteSpec("POST", "/api/v1/categories"): lambda _: {"name": "Matritsa toifasi"},
+    RouteSpec("PATCH", "/api/v1/categories/{category_id}"): lambda _: {"name": "Matritsa toifasi"},
+    RouteSpec("POST", "/api/v1/stalls"): lambda seed: {
+        "code": "9001",
+        "zone_id": str(seed.domain.market_a.zone_ids[0]),
+        "category_id": str(seed.domain.market_a.category_ids[0]),
+    },
+    RouteSpec("PATCH", "/api/v1/stalls/{stall_id}"): lambda _: {"note": "matritsa"},
+    RouteSpec("POST", "/api/v1/stalls/{stall_id}/category"): lambda seed: {
+        # Toifa **A** bozoridan: matritsa YO'L PARAMETRINI (B ning rastasi)
+        # sinaydi, tana emas. A ning toifasi bilan so'rov 404 gacha yetib
+        # boradi va javobda B ning birorta identifikatori ham bo'lmaydi —
+        # 422 validatsiya javobi kirish qiymatini AKS ETTIRADI, ya'ni
+        # tanaga B ning ID'sini qo'yish `test_no_route_leaks_...` ni
+        # o'z-o'zidan yiqitishi mumkin edi.
+        "category_id": str(seed.domain.market_a.category_ids[0]),
+        "valid_from": _future_date(),
+    },
+}
+"""Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
+
+NEGA KERAK: FastAPI dependency'larni tanadan OLDIN hal qiladi, lekin
+tanani undan keyin tekshiradi. Ya'ni tanasiz `PATCH`/`POST` so'rovi
+autentifikatsiyadan o'tib, so'ng **422** bilan tugardi — endpoint
+mantiqi UMUMAN ishlamasdi va "cross-tenant obyekt 404 beradi" degan
+asosiy da'vo hech qachon sinalmasdi (matritsa yashil bo'lib turardi).
+
+`valid_from` KELAJAKDA (`_future_date()`): o'tmishdagi sana 403
+`category_period_past_locked` berardi va matritsa 404 kutayotgan joyda
+yiqilardi. Bu chegara holati o'zi ALOHIDA uchta test bilan qamralgan
+(`tests/integration/test_stall_registry.py`).
+
+`RouteSpec` bo'yicha kalitlanadi (yo'l bo'yicha EMAS): bitta yo'lda bir
+necha metod bo'ladi (`PATCH` va `DELETE`) va `DELETE` ga tana yuborish
+noto'g'ri signal berardi.
 """
 
 UNKNOWN_ID = "00000000-0000-4000-8000-000000000000"
@@ -218,7 +306,7 @@ def _route_id(route: RouteSpec) -> str:
     return route.test_id
 
 
-def fill_path(route: RouteSpec, seed: TwoMarketSeed) -> str:
+def fill_path(route: RouteSpec, seed: TenantSeed) -> str:
     """Yo'l parametrlarini **B bozori** qiymatlari bilan to'ldiradi."""
     path = route.path
     for name in route.param_names:
@@ -226,7 +314,30 @@ def fill_path(route: RouteSpec, seed: TwoMarketSeed) -> str:
     return path
 
 
-def foreign_markers(seed: TwoMarketSeed) -> tuple[str, ...]:
+async def call_route(
+    client: httpx.AsyncClient,
+    route: RouteSpec,
+    seed: TenantSeed,
+    *,
+    headers: dict[str, str] | None = None,
+    path: str | None = None,
+) -> httpx.Response:
+    """Marshrutni chaqiradi va (kerak bo'lsa) YAROQLI tana yuboradi.
+
+    Barcha matritsa testlari SHU yordamchidan o'tadi. Har testda alohida
+    `client.request(...)` yozilganda tana faqat ba'zilariga qo'shilardi va
+    "nega bu test 422 oldi?" savoli har safar qaytadan tekshirilardi.
+    """
+    body = BODY_FILLERS.get(route)
+    return await client.request(
+        route.method,
+        fill_path(route, seed) if path is None else path,
+        headers=headers,
+        json=None if body is None else body(seed),
+    )
+
+
+def foreign_markers(seed: TenantSeed) -> tuple[str, ...]:
     """B bozoriga tegishli, javobda HECH QACHON uchramasligi kerak bo'lgan satrlar.
 
     Faqat UUID va E.164 telefon: ular yetarlicha uzun va tasodifiy, ya'ni
@@ -235,17 +346,29 @@ def foreign_markers(seed: TwoMarketSeed) -> tuple[str, ...]:
     joyidagi songa mos kelib YOLG'ON-QIZIL berardi; u
     `test_audit_list_never_leaks_the_other_market` da STRUKTURA bo'yicha
     (aynan `item["id"]` bilan) tekshiriladi.
+
+    ⚠ SOTUVCHI TELEFONI RO'YXATGA QO'SHILMAYDI: `fixtures/market_domain.py`
+    B bozorining sotuvchisiga A ning telefonini ATAYIN beradi (D-12 —
+    unikalik bozor ICHIDA). Uni marker sifatida olish A bozorining O'Z
+    javobini "sizish" deb belgilab, yolg'on-qizil berardi. Domen
+    obyektlarining UUID'lari esa bozorlar orasida hech qachon
+    takrorlanmaydi va shuning uchun ular ro'yxatda BOR.
     """
-    market_b = seed.market_b
+    market_b = seed.base.market_b
+    domain_b = seed.domain.market_b
     return (
         str(market_b.id),
         *(str(user_id) for user_id in market_b.user_ids),
         *(str(role_id) for role_id in market_b.role_ids),
         *market_b.phones,
+        *(str(zone_id) for zone_id in domain_b.zone_ids),
+        *(str(category_id) for category_id in domain_b.category_ids),
+        *(str(stall_id) for stall_id in domain_b.stall_ids),
+        *(str(vendor_id) for vendor_id in domain_b.vendor_ids),
     )
 
 
-def assert_no_foreign_data(response: httpx.Response, seed: TwoMarketSeed, label: str) -> None:
+def assert_no_foreign_data(response: httpx.Response, seed: TenantSeed, label: str) -> None:
     """Javob tanasida B bozorining birorta identifikatori ham yo'q."""
     body = response.text
     for marker in foreign_markers(seed):
@@ -253,11 +376,22 @@ def assert_no_foreign_data(response: httpx.Response, seed: TwoMarketSeed, label:
 
 
 @pytest.fixture
+def tenant_seed(two_markets: TwoMarketSeed, market_domain: MarketDomainSeed) -> TenantSeed:
+    """A'zolik va domen qatlamlarini bitta obyektga bog'laydi.
+
+    `market_domain` `two_markets` ni O'ZI argument sifatida oladi, ya'ni
+    ikkalasi AYNI bozorlarni tavsiflaydi va teardown tartibi ham to'g'ri
+    qoladi (domen qatlami bozorlardan OLDIN tozalanadi).
+    """
+    return TenantSeed(base=two_markets, domain=market_domain)
+
+
+@pytest.fixture
 async def market_a_headers(
-    api_client: httpx.AsyncClient, two_markets: TwoMarketSeed
+    api_client: httpx.AsyncClient, tenant_seed: TenantSeed
 ) -> dict[str, str]:
     """A bozori adminining sessiyasi (a'zoligi bitta -> bozor avtomatik tanlanadi)."""
-    market_a = two_markets.market_a
+    market_a = tenant_seed.base.market_a
     return await session_headers(api_client, market_a.admin_phone, market_a.admin_password)
 
 
@@ -269,7 +403,7 @@ async def market_a_headers(
 @pytest.mark.parametrize("route", OBJECT_ROUTES, ids=_route_id)
 async def test_cross_tenant_object_returns_404(
     api_client: httpx.AsyncClient,
-    two_markets: TwoMarketSeed,
+    tenant_seed: TenantSeed,
     market_a_headers: dict[str, str],
     route: RouteSpec,
 ) -> None:
@@ -280,9 +414,7 @@ async def test_cross_tenant_object_returns_404(
     kimdir kodni 403 ga o'zgartirsa xato xabari "404 kutilgan edi" deb
     chiqardi va sabab (information disclosure) ko'rinmasdi.
     """
-    response = await api_client.request(
-        route.method, fill_path(route, two_markets), headers=market_a_headers
-    )
+    response = await call_route(api_client, route, tenant_seed, headers=market_a_headers)
 
     assert response.status_code != 403, (
         f"{route.test_id}: 403 obyekt MAVJUDLIGINI tasdiqlaydi — 404 bo'lishi shart (T-01-76)"
@@ -293,7 +425,7 @@ async def test_cross_tenant_object_returns_404(
 @pytest.mark.parametrize("route", OBJECT_ROUTES, ids=_route_id)
 async def test_cross_tenant_is_indistinguishable_from_unknown_id(
     api_client: httpx.AsyncClient,
-    two_markets: TwoMarketSeed,
+    tenant_seed: TenantSeed,
     market_a_headers: dict[str, str],
     route: RouteSpec,
 ) -> None:
@@ -306,10 +438,10 @@ async def test_cross_tenant_is_indistinguishable_from_unknown_id(
     for name in route.param_names:
         unknown_path = unknown_path.replace("{" + name + "}", UNKNOWN_ID)
 
-    foreign = await api_client.request(
-        route.method, fill_path(route, two_markets), headers=market_a_headers
+    foreign = await call_route(api_client, route, tenant_seed, headers=market_a_headers)
+    unknown = await call_route(
+        api_client, route, tenant_seed, headers=market_a_headers, path=unknown_path
     )
-    unknown = await api_client.request(route.method, unknown_path, headers=market_a_headers)
 
     assert foreign.status_code == unknown.status_code
     assert foreign.content == unknown.content, f"{route.test_id}: javob tanalari farq qiladi"
@@ -318,27 +450,28 @@ async def test_cross_tenant_is_indistinguishable_from_unknown_id(
 @pytest.mark.parametrize("route", MATRIX_ROUTES, ids=_route_id)
 async def test_no_route_leaks_other_market_identifiers(
     api_client: httpx.AsyncClient,
-    two_markets: TwoMarketSeed,
+    tenant_seed: TenantSeed,
     market_a_headers: dict[str, str],
     route: RouteSpec,
 ) -> None:
     """HAR BIR tenant marshruti: A tokeni bilan javobda B'ning izi ham yo'q.
 
     Bu — path parametri BO'LMAGAN marshrutlarni (`GET /users`,
-    `GET /audit`, `GET /auth/me`) qamraydigan qism. Ular uchun "B obyektini
-    so'rash" mumkin emas, ya'ni yagona ma'noli da'vo — javobda B'ning
-    birorta identifikatori ham bo'lmasligi.
-    """
-    response = await api_client.request(
-        route.method, fill_path(route, two_markets), headers=market_a_headers
-    )
+    `GET /audit`, `GET /stalls`, `GET /stalls/map`) qamraydigan qism. Ular
+    uchun "B obyektini so'rash" mumkin emas, ya'ni yagona ma'noli da'vo —
+    javobda B'ning birorta identifikatori ham bo'lmasligi.
 
-    assert_no_foreign_data(response, two_markets, route.test_id)
+    `BODY_FILLERS` tufayli yozuv marshrutlari ham HAQIQIY yo'ldan o'tadi
+    (422 da to'xtab qolmaydi), ya'ni bu da'vo ular uchun ham ma'noli.
+    """
+    response = await call_route(api_client, route, tenant_seed, headers=market_a_headers)
+
+    assert_no_foreign_data(response, tenant_seed, route.test_id)
 
 
 async def test_user_list_contains_no_other_market_members(
     api_client: httpx.AsyncClient,
-    two_markets: TwoMarketSeed,
+    tenant_seed: TenantSeed,
     market_a_headers: dict[str, str],
 ) -> None:
     """`GET /users` — A ning uchala a'zosi BOR, B ning birortasi ham YO'Q.
@@ -350,8 +483,8 @@ async def test_user_list_contains_no_other_market_members(
 
     assert response.status_code == 200, response.text
     returned = {item["id"] for item in response.json()["items"]}
-    assert {str(uid) for uid in two_markets.market_a.user_ids} <= returned
-    assert returned & {str(uid) for uid in two_markets.market_b.user_ids} == set()
+    assert {str(uid) for uid in tenant_seed.base.market_a.user_ids} <= returned
+    assert returned & {str(uid) for uid in tenant_seed.base.market_b.user_ids} == set()
 
 
 # ===========================================================================
@@ -371,7 +504,7 @@ AUDIT_FILTERS: tuple[tuple[str, dict[str, str]], ...] = (
 @pytest.mark.parametrize(("label", "params"), AUDIT_FILTERS, ids=[f[0] for f in AUDIT_FILTERS])
 async def test_audit_list_never_leaks_the_other_market(
     api_client: httpx.AsyncClient,
-    two_markets: TwoMarketSeed,
+    tenant_seed: TenantSeed,
     market_a_headers: dict[str, str],
     label: str,
     params: dict[str, str],
@@ -386,15 +519,15 @@ async def test_audit_list_never_leaks_the_other_market(
 
     assert response.status_code == 200, f"{label}: {response.text}"
     ids = {item["id"] for item in response.json()["items"]}
-    assert two_markets.market_b.audit_row_id not in ids, (
+    assert tenant_seed.base.market_b.audit_row_id not in ids, (
         f"{label}: B bozorining audit qatori A tokeni bilan ko'rindi"
     )
-    assert_no_foreign_data(response, two_markets, f"GET {AUDIT_URL} ({label})")
+    assert_no_foreign_data(response, tenant_seed, f"GET {AUDIT_URL} ({label})")
 
 
 async def test_audit_list_shows_the_own_market_probe_row(
     api_client: httpx.AsyncClient,
-    two_markets: TwoMarketSeed,
+    tenant_seed: TenantSeed,
     market_a_headers: dict[str, str],
 ) -> None:
     """NAZORAT HOLATI: A ning O'Z qatori ko'rinadi.
@@ -407,7 +540,7 @@ async def test_audit_list_shows_the_own_market_probe_row(
 
     assert response.status_code == 200, response.text
     ids = {item["id"] for item in response.json()["items"]}
-    assert two_markets.market_a.audit_row_id in ids
+    assert tenant_seed.base.market_a.audit_row_id in ids
 
 
 # ===========================================================================
@@ -458,11 +591,17 @@ async def test_platform_admin_cannot_reach_the_unselected_market(
 @pytest.mark.parametrize("route", MATRIX_ROUTES, ids=_route_id)
 async def test_missing_token_is_rejected(
     api_client: httpx.AsyncClient,
-    two_markets: TwoMarketSeed,
+    tenant_seed: TenantSeed,
     route: RouteSpec,
 ) -> None:
-    """`Authorization` sarlavhasisiz har bir tenant marshruti 401 qaytaradi."""
-    response = await api_client.request(route.method, fill_path(route, two_markets))
+    """`Authorization` sarlavhasisiz har bir tenant marshruti 401 qaytaradi.
+
+    Tana YUBORILADI (`call_route`), lekin javob baribir 401 bo'lishi shart:
+    FastAPI dependency'larni tanani tekshirishdan OLDIN hal qiladi. Agar
+    biror marshrut bu yerda 422 qaytarsa, u autentifikatsiyadan OLDIN
+    tanani o'qiyapti degani va bu holat alohida ko'rinishi kerak.
+    """
+    response = await call_route(api_client, route, tenant_seed)
 
     assert response.status_code == 401, f"{route.test_id}: {response.status_code}"
 
@@ -470,14 +609,12 @@ async def test_missing_token_is_rejected(
 @pytest.mark.parametrize("route", MATRIX_ROUTES, ids=_route_id)
 async def test_malformed_token_is_rejected(
     api_client: httpx.AsyncClient,
-    two_markets: TwoMarketSeed,
+    tenant_seed: TenantSeed,
     route: RouteSpec,
 ) -> None:
     """Buzilgan token 401 — va sabab javobga CHIQMAYDI."""
-    response = await api_client.request(
-        route.method,
-        fill_path(route, two_markets),
-        headers=bearer("buzilgan.token.qiymati"),
+    response = await call_route(
+        api_client, route, tenant_seed, headers=bearer("buzilgan.token.qiymati")
     )
 
     assert response.status_code == 401, f"{route.test_id}: {response.status_code}"
@@ -486,7 +623,7 @@ async def test_malformed_token_is_rejected(
 @pytest.mark.parametrize("route", MATRIX_ROUTES, ids=_route_id)
 async def test_expired_token_is_rejected(
     api_client: httpx.AsyncClient,
-    two_markets: TwoMarketSeed,
+    tenant_seed: TenantSeed,
     test_settings: Settings,
     route: RouteSpec,
 ) -> None:
@@ -499,8 +636,8 @@ async def test_expired_token_is_rejected(
     bo'lsa ham test yashil qolardi.
     """
     expired = encode_access(
-        user_id=two_markets.market_a.admin_user_id,
-        market_id=two_markets.market_a.id,
+        user_id=tenant_seed.base.market_a.admin_user_id,
+        market_id=tenant_seed.base.market_a.id,
         roles=["market_admin"],
         is_platform_admin=False,
         secret=test_settings.jwt_secret,
@@ -509,9 +646,7 @@ async def test_expired_token_is_rejected(
         ttl_minutes=-5,
     )
 
-    response = await api_client.request(
-        route.method, fill_path(route, two_markets), headers=bearer(expired)
-    )
+    response = await call_route(api_client, route, tenant_seed, headers=bearer(expired))
 
     assert response.status_code == 401, f"{route.test_id}: {response.status_code}"
 
@@ -521,7 +656,7 @@ async def test_expired_token_is_rejected(
 # ===========================================================================
 
 
-def test_param_fillers_point_at_the_other_market(two_markets: TwoMarketSeed) -> None:
+def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> None:
     """`PARAM_FILLERS` HAQIQATAN B bozorining qiymatlarini beradi.
 
     Agar biror filler bir kun A bozoriga (yoki tasodifiy UUID'ga)
@@ -529,20 +664,40 @@ def test_param_fillers_point_at_the_other_market(two_markets: TwoMarketSeed) -> 
     o'sha holatda ham to'g'ri javob. Ya'ni matritsaning ma'nosi aynan shu
     yerda qulflanadi.
     """
+    market_b = tenant_seed.base.market_b
+    domain_b = tenant_seed.domain.market_b
     foreign_values = {
         str(value)
         for value in (
-            two_markets.market_b.id,
-            *two_markets.market_b.user_ids,
-            *two_markets.market_b.role_ids,
+            market_b.id,
+            *market_b.user_ids,
+            *market_b.role_ids,
+            *domain_b.zone_ids,
+            *domain_b.category_ids,
+            *domain_b.stall_ids,
+            *domain_b.vendor_ids,
         )
     }
 
     assert PARAM_FILLERS, "PARAM_FILLERS bo'sh — matritsa hech qanday obyektni sinamaydi"
     for name, filler in PARAM_FILLERS.items():
-        value = filler(two_markets)
+        value = filler(tenant_seed)
         assert value in foreign_values, f"`{name}` filleri B bozoriga tegishli emas: {value}"
         UUID(value)
+
+
+def test_body_fillers_point_at_live_routes() -> None:
+    """`BODY_FILLERS` da o'chirilgan marshrut QOLIB KETMAGAN.
+
+    `EXEMPT_ROUTES` uchun `test_exempt_routes_still_exist_in_the_app` bilan
+    AYNAN bir xil sabab: eskirgan yozuv o'zi zararsiz, lekin u ro'yxatni
+    ishonchsiz qiladi va marshrut boshqa ma'noda qayta paydo bo'lganda
+    tug'ilishidanoq noto'g'ri tana bilan chaqirilardi.
+    """
+    live = set(all_routes(fastapi_app))
+    stale = sorted(route.test_id for route in BODY_FILLERS if route not in live)
+
+    assert not stale, f"`BODY_FILLERS` da mavjud bo'lmagan marshrutlar qolgan: {stale}"
 
 
 def test_exempt_reasons_use_a_known_category() -> None:

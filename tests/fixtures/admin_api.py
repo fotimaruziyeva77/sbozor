@@ -30,10 +30,13 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AUDIT_URL",
+    "CATEGORIES_URL",
     "MARKETS_URL",
     "PROFILE_URL",
+    "STALLS_URL",
     "TEST_PHONE_PREFIX",
     "USERS_URL",
+    "ZONES_URL",
     "audit_entries",
     "bearer",
     "cleanup_test_users",
@@ -47,6 +50,15 @@ USERS_URL = "/api/v1/users"
 PROFILE_URL = "/api/v1/me"
 MARKETS_URL = "/api/v1/markets"
 AUDIT_URL = "/api/v1/audit"
+
+# --- 2-faza: bozor domeni reestrlari ---
+#
+# URL'lar SHU YERDA, testlarda literal sifatida EMAS: prefiks o'zgarganda
+# (masalan `/api/v2/`) bitta joy tahrirlanadi va o'nlab test fayli
+# ergashadi. 1-fazadagi to'rttasi bilan aynan bir xil qoida.
+ZONES_URL = "/api/v1/zones"
+CATEGORIES_URL = "/api/v1/categories"
+STALLS_URL = "/api/v1/stalls"
 
 TEST_PHONE_PREFIX = "+99893"
 """Testlar YARATADIGAN foydalanuvchilarning telefon diapazoni.
