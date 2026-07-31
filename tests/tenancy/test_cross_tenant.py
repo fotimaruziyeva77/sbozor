@@ -178,6 +178,15 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # qo'shilmagan (`fixtures/market_domain.B_HOLIDAY` docstringi), ya'ni
     # bu filler haqiqatan "boshqa bozorning qatori" ni ko'rsatadi.
     "exception_id": lambda seed: str(seed.domain.market_b.calendar_exception_ids[0]),
+    # --- 02-10: sotuvchi va biriktirish ---
+    #
+    # B bozorining YAGONA sotuvchisi va uning YAGONA OCHIQ biriktirish
+    # davri (`B_ASSIGNMENT_START` dan boshlab). Davr ochiqligi ahamiyatli:
+    # `PATCH /assignments/{id}` yopiq davr uchun 409 `assignment_not_open`
+    # berardi va matritsa 404 kutayotgan joyda yiqilardi — ya'ni tenant
+    # darvozasi emas, holat darvozasi sinalgan bo'lardi.
+    "vendor_id": lambda seed: str(seed.domain.market_b.vendor_ids[0]),
+    "assignment_id": lambda seed: str(seed.domain.market_b.assignment_ids[0]),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -200,6 +209,30 @@ holati yuzaga kelmaydi.
 
 def _future_date() -> str:
     return (date.today() + timedelta(days=FUTURE_DAYS)).isoformat()
+
+
+MATRIX_VENDOR_PHONE = "+998909990001"
+"""Matritsa YARATADIGAN sotuvchining telefoni — seed diapazonlaridan TASHQARIDA.
+
+`fixtures/market_domain.A_VENDOR_PHONES` `+99890111...` ni,
+`fixtures/two_markets._next_phone()` esa `+99897...` ni ishlatadi. Bu
+raqam ikkalasiga ham tegmaydi, ya'ni `POST /api/v1/vendors` matritsa
+chaqiruvida kutilmagan `409 vendor_phone_taken` olmaydi — 409 esa
+matritsani "404 kutilgan edi" o'rniga sababsiz yiqitardi.
+"""
+
+
+def _free_stall(seed: TenantSeed) -> str:
+    """A bozorining HECH QACHON biriktirilmagan rastasi (D-11 ning ikkinchi shakli).
+
+    `POST /api/v1/assignments` matritsa chaqiruvi HAQIQIY qator yozadi,
+    ya'ni tanlangan rasta bo'sh bo'lishi shart: band rasta bilan javob
+    409 `assignment_period_overlaps` bo'lardi va marshrut yana ham
+    sinalmay qolardi (`BODY_FILLERS` docstringidagi umumiy sabab).
+    """
+    stall_id = seed.domain.market_a.unassigned_stall_id
+    assert stall_id is not None, "seed `unassigned_stall_id` ni to'ldirmagan"
+    return str(stall_id)
 
 
 BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
@@ -239,6 +272,32 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
         "exception_date": _future_date(),
         "is_open": False,
         "note": "matritsa",
+    },
+    # --- 02-10: sotuvchi va biriktirish ---
+    RouteSpec("POST", "/api/v1/vendors"): lambda _: {
+        "full_name": "Matritsa Sotuvchisi",
+        "phone": MATRIX_VENDOR_PHONE,
+    },
+    # `phone` ATAYIN YO'Q: `PATCH` yo'lida u faqat unikalik konstraytiga
+    # olib borardi va matritsa 404 o'rniga 409 olishi mumkin edi. Tana
+    # marshrutni ISHLAB KETTIRISHI kifoya — telefon chegara holatlari
+    # `test_vendors_api.py` da.
+    RouteSpec("PATCH", "/api/v1/vendors/{vendor_id}"): lambda _: {
+        "full_name": "Matritsa Sotuvchisi",
+    },
+    RouteSpec("POST", "/api/v1/assignments"): lambda seed: {
+        # Rasta ham, sotuvchi ham **A** bozoridan: bu marshrutda yo'l
+        # parametri YO'Q, ya'ni u faqat "javobda B'ning izi yo'q"
+        # da'vosiga tushadi. Tanaga B ning ID'sini qo'yish 422 javobini
+        # tug'dirardi va o'sha javob kirish qiymatini AKS ETTIRIB
+        # `test_no_route_leaks_...` ni o'z-o'zidan yiqitardi
+        # (`POST /stalls/{id}/category` bilan bir xil mulohaza).
+        "stall_id": _free_stall(seed),
+        "vendor_id": str(seed.domain.market_a.vendor_ids[0]),
+        "from_date": _future_date(),
+    },
+    RouteSpec("PATCH", "/api/v1/assignments/{assignment_id}"): lambda _: {
+        "to_date": _future_date(),
     },
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
@@ -389,6 +448,7 @@ def foreign_markers(seed: TenantSeed) -> tuple[str, ...]:
         *(str(vendor_id) for vendor_id in domain_b.vendor_ids),
         *(str(tariff_id) for tariff_id in domain_b.tariff_ids),
         *(str(exception_id) for exception_id in domain_b.calendar_exception_ids),
+        *(str(assignment_id) for assignment_id in domain_b.assignment_ids),
     )
 
 
@@ -702,6 +762,7 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             *domain_b.vendor_ids,
             *domain_b.tariff_ids,
             *domain_b.calendar_exception_ids,
+            *domain_b.assignment_ids,
         )
     }
 

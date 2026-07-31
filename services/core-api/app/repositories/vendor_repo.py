@@ -1,6 +1,18 @@
-"""Sotuvchilar reestri (MARKET-04, D-12) — shaxsiy ma'lumotning o'qish yo'li.
+"""Sotuvchilar reestri va biriktirish davrlari (MARKET-04, D-09…D-12).
 
 =============================================================================
+IKKI REPOZITORIY, BITTA MODUL — VA BU ATAYIN.
+
+`VendorRepository` va `AssignmentRepository` bitta domenning ikki yuzi:
+sotuvchi qatorining `stall_codes`/`stall_count` agregati AYNAN biriktirish
+jadvalidan hisoblanadi va ikkalasi ham "bugun biriktirilgan" ni bir xil
+ta'riflashi shart (`period @> :today`, `[)` chegara). Ikki faylga bo'lish
+o'sha ta'rifni ikki modulga tarqatardi va u bir kun ajralib ketardi —
+o'shanda sotuvchi kartochkasi bilan rasta kartochkasi ALMASHINUV KUNIDA
+bir-biriga zid javob berardi (D-10). `stall_repo.py` dagi uchta repozitoriy
+uchun ham aynan shu qaror va aynan shu sabab yozilgan.
+=============================================================================
+
 SOTUVCHI — SHAXSIY MA'LUMOT (F.I.Sh. + telefon).
 
 Bu modul o'qish AUDITINI o'zi YOZMAYDI: u endpoint darajasida
@@ -23,6 +35,12 @@ bir xil sabab (`scoped()` so'rovning BITTA asosiy entity'siga tayanadi).
 docstringidagi taqiq bu yerda ham to'liq kuchda va u yerdagi kabi mexanik
 darvoza bilan qulflangan, shuning uchun taqiqlangan SQL bandining nomi bu
 faylda hech qayerda — izohda ham — yozilmaydi.
+
+⚠ DAVR CHEGARASI (`[)`) BU MODULDA HECH QAYERDA YOZILMAYDI. Har bir davr
+`sbozor_core.periods.assignment_period()` orqali quriladi; xom `Range(...)`
+konstruktori ham, `daterange(...)` SQL matni ham bu yerda yo'q (Pitfall 10).
+Konvensiya bitta joyda — `PERIOD_BOUNDS` da — yashaydi va uni ikkinchi
+manbaga ega qilish almashinuv kunidagi pattani IKKI sotuvchiga yozardi.
 """
 
 from __future__ import annotations
@@ -33,7 +51,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sbozor_core.models import Vendor
+from sbozor_core.models import Stall, StallAssignment, Vendor
+from sbozor_core.periods import assignment_period
 from sbozor_core.tenancy import TenantScopedRepository
 from sqlalchemy import Date, Integer, Text, bindparam, insert, select, text, update
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
@@ -44,9 +63,13 @@ from app.repositories.stall_repo import like_term
 if TYPE_CHECKING:
     from datetime import date, datetime
 
+    from sqlalchemy.dialects.postgresql import Range
+
     from app.schemas import VendorQuery
 
 __all__ = [
+    "AssignmentRepository",
+    "AssignmentRow",
     "VendorPage",
     "VendorRepository",
     "VendorRow",
@@ -379,3 +402,226 @@ class VendorRepository(TenantScopedRepository):
             .returning(Vendor.id)
         )
         return result.scalar_one_or_none()
+
+
+# ---------------------------------------------------------------------------
+# Biriktirish davrlari (D-09 / D-10 / D-11)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AssignmentRow:
+    """Bitta biriktirish davri — chegaralar SANA sifatida yoyilgan.
+
+    `to_date` `None` — davr OCHIQ (sotuvchi hozir ham shu rastada).
+    Chegara `[)`: `to_date` KUNI davrga KIRMAYDI va o'sha kunning pattasi
+    YANGI sotuvchiga yoziladi (D-10).
+
+    `Range` obyekti tashqariga CHIQMAYDI: chegara harfi (`bounds`) API
+    javobiga sizib chiqsa, klient uni o'zi talqin qilishga urinardi —
+    konvensiya esa SERVER qarori va u `sbozor_core.periods` da yashaydi.
+    """
+
+    id: UUID
+    stall_id: UUID
+    stall_code: str
+    vendor_id: UUID
+    vendor_name: str
+    from_date: date
+    to_date: date | None
+
+
+_ASSIGNMENT_ROWS = text(
+    """
+    SELECT a.id,
+           a.stall_id,
+           s.code       AS stall_code,
+           a.vendor_id,
+           v.full_name  AS vendor_name,
+           lower(a.period) AS from_date,
+           upper(a.period) AS to_date
+    FROM stall_assignments a
+    JOIN stalls s
+      ON s.market_id = a.market_id AND s.id = a.stall_id
+    JOIN vendors v
+      ON v.market_id = a.market_id AND v.id = a.vendor_id
+    WHERE a.market_id = :market_id
+      AND (:assignment_id IS NULL OR a.id = :assignment_id)
+      AND (:stall_id IS NULL OR a.stall_id = :stall_id)
+    ORDER BY lower(a.period) DESC, a.id
+    """
+).bindparams(
+    bindparam("market_id", type_=PgUuid(as_uuid=True)),
+    bindparam("assignment_id", type_=PgUuid(as_uuid=True)),
+    bindparam("stall_id", type_=PgUuid(as_uuid=True)),
+)
+"""Biriktirish davrlari — rasta kodi va sotuvchi ismi bilan.
+
+DAVR CHEGARALARI `lower()`/`upper()` BILAN YOYILADI, xom `period` ustuni
+qaytarilmaydi: shunda chegara harfi javob shakliga umuman tegmaydi va
+`AssignmentItem` uchun `bounds` degan maydon tug'ilmaydi.
+
+`INNER JOIN` (LEFT emas) ikkala tomonda ham: composite FK
+(`(market_id, stall_id)` va `(market_id, vendor_id)`) bu qatorlarning
+MAVJUDLIGINI struktura bilan kafolatlaydi, ya'ni `LEFT JOIN` hech qachon
+bajarilmaydigan `NULL` tarmog'ini ochardi va javob tipini keraksiz
+`str | None` ga aylantirardi.
+
+TARTIB: davr boshlanishi bo'yicha KAMAYISH — eng yangi biriktirish
+birinchi (UI rasta kartochkasida aynan shu tartibni kutadi). Ikkinchi
+kalit (`a.id`) BARQARORLIK uchun: bir kunda ochilib yopilgan ikki davr
+usiz har so'rovda har xil tartibda kelardi.
+
+BITTA SQL MATNI IKKI CHAQIRUVCHIGA XIZMAT QILADI: rastaning tarixi
+(`:stall_id` berilgan) va yozuvdan keyingi yakka qator javobi
+(`:assignment_id` berilgan) — `stall_repo._STALL_ROWS` bilan bir xil
+naqsh va bir xil sabab.
+"""
+
+
+class AssignmentRepository(TenantScopedRepository):
+    """`stall_assignments` ustidagi o'qish va yozish (D-09/D-10/D-11).
+
+    ⚠ QOPLANISHNI BU SINF TEKSHIRMAYDI VA TEKSHIRMASLIGI KERAK. Yagona
+    qo'riqchi — `ex_stall_assignments_no_overlap` (`EXCLUDE USING gist`,
+    SQLSTATE `23P01`). "Avval `SELECT`, keyin `INSERT`" shaklidagi ilova
+    tekshiruvi ikki parallel so'rovda IKKALASINI ham o'tkazib yuborardi va
+    rastada bir kunda ikkita qarz egasi paydo bo'lardi (T-02-73).
+    Chaqiruvchi `IntegrityError` ni 409 ga aylantiradi.
+    """
+
+    async def create(
+        self,
+        *,
+        stall_id: UUID,
+        vendor_id: UUID,
+        from_date: date,
+        to_date: date | None,
+    ) -> UUID:
+        """Yangi biriktirish davri.
+
+        Davr `assignment_period()` bilan quriladi — xom `daterange`
+        YOZILMAYDI (Pitfall 10). Begona bozorning `stall_id`/`vendor_id`
+        si composite FK'ga uriladi (`23503`) va chaqiruvchi uni **404** ga
+        aylantiradi: 403 o'sha rasta yoki sotuvchi MAVJUDLIGINI
+        tasdiqlardi (T-02-74).
+
+        Raises:
+            ValueError: `to_date` `from_date` dan keyin kelmasa
+                (`assignment_period()` ning O'Z darvozasi) -> 422.
+            IntegrityError: qoplanish (`23P01`) yoki begona havola
+                (`23503`).
+        """
+        period = assignment_period(from_date, to_date)
+        result = await self.session.execute(
+            insert(StallAssignment)
+            .values(
+                # `market_id` `self.market_id` DAN — so'rov tanasidan EMAS
+                # (T-02-54 mass-assignment darvozasi).
+                market_id=self.market_id,
+                stall_id=stall_id,
+                vendor_id=vendor_id,
+                period=period,
+            )
+            .returning(StallAssignment.id)
+        )
+        return result.scalar_one()
+
+    async def period_of(self, assignment_id: UUID) -> Range[date] | None:
+        """Davrning XOM qiymati; qator topilmasa (yoki begona bozorniki) `None`.
+
+        `close()` dan ALOHIDA metod: chaqiruvchi "topilmadi" (404) va
+        "davr allaqachon yopiq" (409) holatlarini AJRATISHI kerak, bu ikki
+        javob esa foydalanuvchi uchun butunlay boshqacha. Bitta
+        `UPDATE ... WHERE upper(period) IS NULL` bilan ikkalasi ham "0
+        qator" bo'lib kelardi va API ularni ajrata olmasdi.
+        """
+        result = await self.session.execute(
+            self.scoped(select(StallAssignment.period).where(StallAssignment.id == assignment_id))
+        )
+        period: Range[date] | None = result.scalar_one_or_none()
+        return period
+
+    async def close(self, assignment_id: UUID, *, from_date: date, to_date: date) -> bool:
+        """OCHIQ davrni yopadi; qator topilmasa `False` (-> 404).
+
+        Davr QAYTA QURILADI (`assignment_period(from_date, to_date)`),
+        ustun darajasida tahrirlanmaydi: `UPDATE ... SET period =
+        daterange(lower(period), :to_date, '[)')` shakli chegara harfini
+        SQL matniga ikkinchi nusxa qilib ko'chirardi (Pitfall 10).
+
+        Raises:
+            ValueError: `to_date` davr boshidan keyin kelmasa -> 422.
+        """
+        period = assignment_period(from_date, to_date)
+        result = await self.session.execute(
+            update(StallAssignment)
+            .where(
+                StallAssignment.market_id == self.market_id,
+                StallAssignment.id == assignment_id,
+            )
+            .values(period=period)
+            .returning(StallAssignment.id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def get(self, assignment_id: UUID) -> AssignmentRow | None:
+        """Bitta davr (rasta kodi va sotuvchi ismi bilan); topilmasa `None`."""
+        rows = await self._rows(assignment_id=assignment_id, stall_id=None)
+        return rows[0] if rows else None
+
+    async def list_for_stall(self, stall_id: UUID) -> list[AssignmentRow]:
+        """Rastaning BUTUN biriktirish tarixi (eng yangisi birinchi).
+
+        BO'SH RO'YXAT — XATO EMAS (D-11): hech qachon biriktirilmagan
+        rasta ham, davrlar orasidagi bo'shliq ham ma'noli holat va 6-faza
+        aynan shu bo'shliqni "band, lekin sotuvchisiz" anomaliyasi
+        sifatida topadi.
+
+        ⚠ "Rasta bormi?" savolini chaqiruvchi ALOHIDA tekshiradi
+        (`stall_exists()`): usiz begona bozorning rastasi uchun ham bo'sh
+        200 qaytardi va cross-tenant da'vosi (404) buzilardi — natija
+        RLS tufayli bo'sh bo'lgani uchun test ham hech nima sezmasdi.
+        """
+        return await self._rows(assignment_id=None, stall_id=stall_id)
+
+    async def stall_exists(self, stall_id: UUID) -> bool:
+        """Rasta SHU bozorda mavjudmi — cross-tenant 404 darvozasi.
+
+        `StallRepository.detail()` CHAQIRILMAYDI: u uchta `LATERAL` bilan
+        butun kartochkani yig'adi, bu yerda esa kerak bo'lgan yagona javob
+        — "bormi?". Ikkinchi sabab bog'liqlik yo'nalishi: biriktirish
+        yuzasi rasta reestrining butun o'qish yo'liga bog'lanib
+        qolmasligi kerak.
+        """
+        result = await self.session.execute(
+            self.scoped(select(Stall.id).where(Stall.id == stall_id))
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def _rows(
+        self,
+        *,
+        assignment_id: UUID | None,
+        stall_id: UUID | None,
+    ) -> list[AssignmentRow]:
+        result = await self.session.execute(
+            _ASSIGNMENT_ROWS,
+            {
+                "market_id": self.market_id,
+                "assignment_id": assignment_id,
+                "stall_id": stall_id,
+            },
+        )
+        return [
+            AssignmentRow(
+                id=row.id,
+                stall_id=row.stall_id,
+                stall_code=row.stall_code,
+                vendor_id=row.vendor_id,
+                vendor_name=row.vendor_name,
+                from_date=row.from_date,
+                to_date=row.to_date,
+            )
+            for row in result
+        ]
