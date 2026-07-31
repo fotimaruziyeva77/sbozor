@@ -76,9 +76,6 @@ MARKET_WRITE_FUNCTIONS = ("market_create", "market_activate", "market_rename")
 
 PENDING_DOMAIN_TABLES = frozenset(
     {
-        # 02-06 (`0009_vendors`)
-        "vendors",
-        "stall_assignments",
         # 02-06 (`0010_calendar`)
         "market_calendar_exceptions",
     }
