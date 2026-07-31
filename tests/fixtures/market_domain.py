@@ -51,9 +51,11 @@ from sbozor_core.periods import assignment_period
 from fixtures.two_markets import TwoMarketSeed
 
 __all__ = [
+    "A_OPERATING_SINCE",
     "A_STALL_CODES",
     "A_STALL_CODES_BY_SORT",
     "A_TARIFF_AMOUNTS",
+    "A_ZONE_NAMES",
     "B_TARIFF_AMOUNT",
     "GAP_DAY",
     "HANDOVER_DAY",
@@ -63,6 +65,14 @@ __all__ = [
     "seed_market_domain",
     "to_pg_period",
 ]
+"""Eksport qilinadigan konstantalar — TESTLAR KUTILMANI SEED'DAN OLADI.
+
+`A_OPERATING_SINCE` va `A_ZONE_NAMES` 02-08 da qo'shildi: rasta reestrining
+API testlari boshlang'ich toifa davrining sanasini va zona nomlarini
+tekshiradi. Ularni test faylida qayta yozish ikkinchi haqiqat manbai
+bo'lardi — seed qiymati o'zgarganda test jimgina eski qiymatni kutib
+qolardi (02-06 da o'rnatilgan qoida).
+"""
 
 # ---------------------------------------------------------------------------
 # A bozori — 3 zona / 3 toifa / 6 rasta / 3 sotuvchi / 4 biriktirish

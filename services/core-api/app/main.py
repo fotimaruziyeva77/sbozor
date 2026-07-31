@@ -42,9 +42,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.categories import router as categories_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
+from app.api.v1.stalls import router as stalls_router
 from app.api.v1.users import router as users_router
+from app.api.v1.zones import router as zones_router
 from app.settings import Settings, get_settings
 
 log = structlog.get_logger(__name__)
@@ -126,6 +129,16 @@ app.include_router(users_router, prefix=f"{API_V1_PREFIX}/users")
 app.include_router(me_router, prefix=f"{API_V1_PREFIX}/me")
 app.include_router(markets_router, prefix=f"{API_V1_PREFIX}/markets")
 app.include_router(audit_router, prefix=f"{API_V1_PREFIX}/audit")
+# --- 2-faza: bozor domeni reestrlari ---
+#
+# Yangi marshrutlar `tests/tenancy/test_cross_tenant.py` matritsasiga
+# AVTOMATIK tushadi (u ro'yxatni `app.routes` dan oladi), ya'ni bu yerga
+# qo'shish o'sha faylda qo'lda ro'yxat yuritishni TALAB QILMAYDI. Yagona
+# qo'lda qadam — yangi yo'l parametri uchun `PARAM_FILLERS` ga B bozori
+# qiymatini qo'shish; unutilsa `test_no_unclassified_routes` qizaradi.
+app.include_router(zones_router, prefix=f"{API_V1_PREFIX}/zones")
+app.include_router(categories_router, prefix=f"{API_V1_PREFIX}/categories")
+app.include_router(stalls_router, prefix=f"{API_V1_PREFIX}/stalls")
 
 
 @app.exception_handler(DBAPIError)
