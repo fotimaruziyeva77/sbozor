@@ -76,6 +76,21 @@ EXPECTED_DEFINER_FUNCTIONS = {
     # ya'ni u yolg'iz o'zi yetarli emas: `audit_read_platform` policy'si
     # bilan juftlikda ishlaydi (pastdagi alohida test).
     "auth_list_platform_audit",
+    # 0007 — bozor hayot sikli (Pattern 6). `sbozor_app` ga `markets` da
+    # FAQAT `SELECT` grant'i berilgan va policy predikati `id =
+    # app.market_id`, ya'ni yangi bozor yaratishga ikki mustaqil to'siq bor —
+    # yagona yo'l shu uchta funksiya.
+    #
+    # ⚠ `market_is_open` bu ro'yxatga HECH QACHON QO'SHILMAYDI: u ATAYIN
+    # `SECURITY DEFINER` EMAS (u CHAQIRUVCHI huquqi bilan ishlashi va RLS
+    # ostida qolishi kerak, aks holda bir bozor boshqasining bayram jadvalini
+    # o'qiy olardi — T-02-22/T-02-41). U `0010` da tug'iladi va uning INVOKER
+    # ekani `test_market_domain_meta.py` da ALOHIDA qulflanadi.
+    # `market_delete_draft` esa `SECURITY DEFINER` va u ham `0010` da — nomi
+    # o'sha yerda qo'shiladi (02-06).
+    "market_create",
+    "market_activate",
+    "market_rename",
 }
 
 # `AUDITED_TABLES` da RO'YXATGA OLINGAN, lekin jadval hali TUG'ILMAGAN nomlar.
