@@ -32,6 +32,7 @@ from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
 __all__ = [
     "AUDIT_PAGE_SIZE_MAX",
+    "IMPORT_ERROR_REPORT_MAX",
     "ISO_WEEKDAYS",
     "MARKET_ERROR_CODES",
     "MIN_PASSWORD_LENGTH",
@@ -56,6 +57,7 @@ __all__ = [
     "CreateUserRequest",
     "CreateUserResponse",
     "ImportErrorItem",
+    "ImportErrorReportRequest",
     "ImportErrorResponse",
     "ImportResultResponse",
     "LocaleResponse",
@@ -499,9 +501,17 @@ MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
         "file_too_large",
         "file_too_complex",
         "unsupported_file_type",
+        # Konstrayt buzilishi YOZISH paytida — ya'ni FAQAT poyga holati
+        # (ikki admin bir vaqtda import qildi). Mazmun xatolari
+        # `import_validation_failed` ostida, QATOR RAQAMI bilan keladi;
+        # bu kod esa hech qanday qator ko'rsatmaydi va foydalanuvchi
+        # uchun yagona ma'noli harakat — qayta urinish. Ikkalasini
+        # birlashtirish 422 javobining `errors[]` shartnomasini
+        # buzardi (bu yo'lda ro'yxat BO'SH bo'lardi).
+        "import_conflict",
     }
 )
-"""2-faza qaytaradigan BARCHA `detail` kodlari — yigirma ikkita.
+"""2-faza qaytaradigan BARCHA `detail` kodlari — yigirma uchta.
 
 ⚠ JUFTINI YANGILASHNI UNUTMANG: bu ro'yxatning UI ko'zgusi
 `frontend/src/lib/api-types.ts::ERROR_CODES` da yashaydi va u QO'LDA
@@ -1292,3 +1302,34 @@ class ImportErrorResponse(BaseModel):
     detail: str
     errors: list[ImportErrorItem]
     error_counts: dict[str, int]
+
+
+IMPORT_ERROR_REPORT_MAX = 5_000
+"""`POST /imports/errors.xlsx` qabul qiladigan eng ko'p xato soni (T-02-97).
+
+`xlsx_reader.MAX_ROWS` bilan AYNAN bir xil: bitta fayl eng ko'pi bilan
+shuncha qator beradi, ya'ni har qatorda bittadan xato bo'lgan holatda
+ham ro'yxat shu chegaraga sig'adi.
+
+⚠ CHEGARA MAJBURIY. Usiz endpoint o'z-o'ziga DoS bo'lardi: klient
+o'nlab million elementli massiv yuborib, serverda o'nlab million
+qatorli `.xlsx` qurdirardi. Kirish bu yerda MAHSULOT yo'lidan
+kelmaydi — u 422 javobining NUSXASI, ya'ni uni hech kim tekshirmagan.
+"""
+
+
+class ImportErrorReportRequest(BaseModel):
+    """`POST /imports/errors.xlsx` so'rov tanasi.
+
+    Klient 422 javobining `errors` massivini AYNAN qaytarib yuboradi.
+    Server uni SAQLAMAYDI: 300 qatorlik xato ro'yxatini bazaga yozish
+    hech qanday savolga javob bermaydigan, lekin saqlash muddati va
+    o'chirish yo'li talab qiladigan ma'lumot yaratardi.
+
+    Uzunlik `IMPORT_ERROR_REPORT_MAX` bilan cheklangan (T-02-97).
+    Cheklov `Field(max_length=...)` orqali — ya'ni u Pydantic
+    darajasida, endpoint mantiqiga YETIB KELMASDAN qo'llanadi va
+    ortiqcha massiv umuman xotiraga to'liq yig'ilmaydi.
+    """
+
+    errors: Annotated[list[ImportErrorItem], Field(max_length=IMPORT_ERROR_REPORT_MAX)]

@@ -31,13 +31,16 @@ qayta ishlatiladi va tasniflanmagan marshrut CI'ni yiqitadi.
 
 from __future__ import annotations
 
+import io
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any, NamedTuple
 from uuid import UUID
 
 import pytest
+import xlsxwriter
 from app.main import app as fastapi_app
 from fixtures.admin_api import AUDIT_URL, USERS_URL, bearer, session_headers
+from fixtures.market_domain import A_CATEGORY_NAMES, A_ZONE_NAMES
 from fixtures.two_markets import SEED_PASSWORD
 from sbozor_core.security import encode_access
 
@@ -55,6 +58,7 @@ pytestmark = pytest.mark.tenancy
 __all__ = [
     "BODY_FILLERS",
     "EXEMPT_ROUTES",
+    "FILE_FILLERS",
     "PARAM_FILLERS",
     "RouteSpec",
     "TenantSeed",
@@ -309,6 +313,12 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
     RouteSpec("PATCH", "/api/v1/assignments/{assignment_id}"): lambda _: {
         "to_date": _future_date(),
     },
+    # --- 02-12: import ---
+    #
+    # Xato ro'yxati BO'SH: marshrut faylni QAYTARADI, ya'ni matritsa
+    # uchun ahamiyatlisi uning ISHLAB KETISHI. Bo'sh ro'yxat ham yaroqli
+    # `.xlsx` beradi (`test_empty_error_report_is_still_a_valid_file`).
+    RouteSpec("POST", "/api/v1/imports/errors.xlsx"): lambda _: {"errors": []},
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
 
@@ -326,6 +336,87 @@ yiqilardi. Bu chegara holati o'zi ALOHIDA uchta test bilan qamralgan
 `RouteSpec` bo'yicha kalitlanadi (yo'l bo'yicha EMAS): bitta yo'lda bir
 necha metod bo'ladi (`PATCH` va `DELETE`) va `DELETE` ga tana yuborish
 noto'g'ri signal berardi.
+"""
+
+
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+MATRIX_STALL_CODE = "9101"
+"""Matritsa import qiladigan rasta kodi — seed diapazonidan TASHQARIDA.
+
+Seed kodlari `2, 3, 7, 10, 55, 100`. Ular bilan to'qnashsa javob D-15
+bo'yicha `skipped` bo'lardi — bu ham 200, ya'ni matritsa buzilmasdi,
+lekin marshrutning YOZISH yo'li umuman sinalmasdi.
+"""
+
+MATRIX_IMPORT_PHONE = "+998909990002"
+"""Matritsa import qiladigan sotuvchi telefoni — barcha seed'lardan tashqarida.
+
+`MATRIX_VENDOR_PHONE` (`...0001`) `POST /vendors` uchun band, seed'lar
+esa `+99890111...` va `+99897...` ni ishlatadi.
+"""
+
+
+def _matrix_stall_file() -> bytes:
+    """Matritsa yuboradigan YAROQLI rasta `.xlsx` — A bozorining O'Z lug'ati bilan.
+
+    Zona va toifa **A** bozoridan olinadi (`POST /stalls/{id}/category`
+    tanasidagi bilan bir xil mulohaza): B ning nomini yozish 422
+    javobini tug'dirardi va o'sha javob kirish qiymatini AKS ETTIRIB
+    `test_no_route_leaks_other_market_identifiers` ni o'z-o'zidan
+    yiqitardi.
+    """
+    return _write_xlsx(
+        "Rastalar",
+        ["kod", "zona", "toifa", "holat", "izoh"],
+        [MATRIX_STALL_CODE, A_ZONE_NAMES[0], A_CATEGORY_NAMES[0], "active", ""],
+    )
+
+
+def _matrix_vendor_file() -> bytes:
+    """Matritsa yuboradigan YAROQLI sotuvchi `.xlsx`.
+
+    Rasta kodi ATAYIN BO'SH: biriktirish yozilsa matritsa har
+    chaqiruvda o'sha rastaga yangi davr qo'shib, `EXCLUDE` konstraytiga
+    urilardi va marshrut 404 kutilgan joyda 409 berardi.
+    """
+    return _write_xlsx(
+        "Sotuvchilar",
+        ["F.I.Sh.", "telefon", "rasta kodi", "boshlanish sanasi"],
+        ["Matritsa Import", MATRIX_IMPORT_PHONE, "", ""],
+    )
+
+
+def _write_xlsx(sheet: str, header: list[str], row: list[str]) -> bytes:
+    buffer = io.BytesIO()
+    workbook = xlsxwriter.Workbook(buffer, {"in_memory": True})
+    worksheet = workbook.add_worksheet(sheet)
+    worksheet.write_row(0, 0, header)
+    worksheet.write_row(1, 0, row)
+    workbook.close()
+    return buffer.getvalue()
+
+
+FILE_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, tuple[str, bytes, str]]]] = {
+    RouteSpec("POST", "/api/v1/imports/stalls"): lambda _: {
+        "file": ("rastalar.xlsx", _matrix_stall_file(), XLSX_MEDIA_TYPE)
+    },
+    RouteSpec("POST", "/api/v1/imports/vendors"): lambda _: {
+        "file": ("sotuvchilar.xlsx", _matrix_vendor_file(), XLSX_MEDIA_TYPE)
+    },
+}
+"""`multipart/form-data` TALAB QILADIGAN marshrutlar uchun HAQIQIY fayl.
+
+NEGA `BODY_FILLERS` YETMAYDI: u `json=` bilan yuboradi, fayl
+endpointi esa `multipart/form-data` kutadi. JSON tanali so'rov
+`UploadFile` maydonini topa olmay **422** bilan tugardi — ya'ni
+endpoint mantiqi UMUMAN ishlamasdi va "javobda B bozorining izi yo'q"
+degan da'vo bu ikkala marshrut uchun HECH QACHON sinalmasdi, matritsa
+esa yashil bo'lib turardi. Bu 02-08 deviatsiya #4 (`BODY_FILLERS` ning
+o'zi) bilan AYNAN bir xil sinf xato, faqat kontent tipi darajasida.
+
+Ikkala xarita ham bir vaqtda berilmaydi: `call_route()` avval
+`FILE_FILLERS` ga qaraydi va topsa `json=` ni umuman ishlatmaydi.
 """
 
 PLATFORM_ADMIN_ROUTES: frozenset[RouteSpec] = frozenset(
@@ -454,12 +545,25 @@ async def call_route(
     headers: dict[str, str] | None = None,
     path: str | None = None,
 ) -> httpx.Response:
-    """Marshrutni chaqiradi va (kerak bo'lsa) YAROQLI tana yuboradi.
+    """Marshrutni chaqiradi va (kerak bo'lsa) YAROQLI tana yoki FAYL yuboradi.
 
     Barcha matritsa testlari SHU yordamchidan o'tadi. Har testda alohida
     `client.request(...)` yozilganda tana faqat ba'zilariga qo'shilardi va
     "nega bu test 422 oldi?" savoli har safar qaytadan tekshirilardi.
+
+    JSON va FAYL bir-birini ISTISNO qiladi: `multipart/form-data`
+    marshrutiga JSON yuborish 422 berardi va marshrut mantiqi umuman
+    ishlamasdi (`FILE_FILLERS` docstringi).
     """
+    files = FILE_FILLERS.get(route)
+    if files is not None:
+        return await client.request(
+            route.method,
+            fill_path(route, seed) if path is None else path,
+            headers=headers,
+            files=files(seed),
+        )
+
     body = BODY_FILLERS.get(route)
     return await client.request(
         route.method,
@@ -872,6 +976,72 @@ def test_body_fillers_point_at_live_routes() -> None:
     stale = sorted(route.test_id for route in BODY_FILLERS if route not in live)
 
     assert not stale, f"`BODY_FILLERS` da mavjud bo'lmagan marshrutlar qolgan: {stale}"
+
+
+def test_file_fillers_point_at_live_routes() -> None:
+    """`FILE_FILLERS` da o'chirilgan marshrut QOLIB KETMAGAN (02-12).
+
+    `BODY_FILLERS` bilan aynan bir xil sabab. Qo'shimcha xavf shu yerda
+    KUCHLIROQ: fayl fillerи eskirsa marshrut JSON yo'liga tushib
+    ketardi va 422 bilan tugab, "javobda B ning izi yo'q" da'vosini
+    jimgina sinamay qo'yardi.
+    """
+    live = set(all_routes(fastapi_app))
+    stale = sorted(route.test_id for route in FILE_FILLERS if route not in live)
+
+    assert not stale, f"`FILE_FILLERS` da mavjud bo'lmagan marshrutlar qolgan: {stale}"
+
+
+@pytest.mark.parametrize("route", sorted(FILE_FILLERS), ids=_route_id)
+async def test_file_routes_actually_execute(
+    api_client: httpx.AsyncClient,
+    tenant_seed: TenantSeed,
+    market_a_headers: dict[str, str],
+    route: RouteSpec,
+) -> None:
+    """Fayl marshruti HAQIQATAN ishga tushadi — 422 da to'xtab qolmaydi.
+
+    =======================================================================
+    BU TEST `FILE_FILLERS` MEXANIZMINI YUK KO'TARUVCHI QILADI — VA U
+    SABOTAJ BILAN O'LCHANGANDAN KEYIN QO'SHILDI.
+
+    `call_route()` dan `FILE_FILLERS` olib tashlanganda butun tenancy
+    to'plami (307 test) YASHIL qoldi. Sabab: JSON tanali so'rov
+    `multipart/form-data` endpointida **422** beradi, 422 esa
+    matritsaning birorta da'vosini buzmaydi — u 403 emas, B bozorining
+    identifikatorini ham sizdirmaydi (javob faqat "file maydoni
+    yetishmayapti" deydi) va tokensiz so'rov baribir 401 oladi.
+
+    Ya'ni mexanizm to'g'ri, lekin uning YO'QLIGINI hech nima
+    KO'RSATMASDI: ikkala import marshruti matritsada "bor" bo'lib
+    turib, endpoint mantiqi UMUMAN ishlamasdi. Bu 02-08 deviatsiya #4
+    (`BODY_FILLERS` ning o'zi) bilan AYNAN bir xil sinf xato va u
+    o'sha yerda ham aynan shunday jimgina yashiringan edi.
+
+    Shuning uchun bu yerda ALOHIDA, POZITIV da'vo: so'rov 422 BILAN
+    TUGAMASLIGI shart. Aniq status kodi qulflanmaydi (u 200 ham, 409
+    ham bo'lishi mumkin — matritsa qatorlarni HAQIQATAN yozadi va
+    ketma-ket ishga tushishda ikkinchisi konfliktga tushishi mumkin);
+    yagona ma'noli da'vo — endpoint YUKLAMANI QABUL QILDI.
+    =======================================================================
+    """
+    response = await call_route(api_client, route, tenant_seed, headers=market_a_headers)
+
+    assert response.status_code != 422, (
+        f"{route.test_id}: yuklama qabul qilinmadi ({response.text}) — "
+        "`FILE_FILLERS` yozuvi yo'q yoki `call_route()` uni ishlatmayapti"
+    )
+    assert response.status_code != 403, f"{route.test_id}: {response.text}"
+
+
+def test_file_and_body_fillers_do_not_overlap() -> None:
+    """Bitta marshrut IKKALA xaritada ham bo'lmaydi.
+
+    `call_route()` avval `FILE_FILLERS` ga qaraydi, ya'ni kesishuv
+    bo'lsa `BODY_FILLERS` yozuvi JIMGINA e'tiborsiz qolardi — va uni
+    qo'shgan odam "tana yuborilyapti" deb o'ylab yurardi.
+    """
+    assert set(FILE_FILLERS) & set(BODY_FILLERS) == set()
 
 
 def test_platform_admin_routes_point_at_live_routes() -> None:

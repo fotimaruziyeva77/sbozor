@@ -42,6 +42,28 @@ class Settings(BaseSettings):
     # Dev'da HTTP -> false; prod'da (TLS ortida) true bo'lishi SHART.
     cookie_secure: bool = False
 
+    # --- Excel import chegaralari (02-12, A7) ---
+    #
+    # Chegaralar SOZLANADIGAN, chunki A7 ning o'zi ularni taxmin deb
+    # belgilaydi: "1000 rastadan kattaroq bozor kelganda chegaraga
+    # urilinadi (sozlanadigan qilinsin)". Standart qiymatlar
+    # `app/services/xlsx_reader.py` dagi modul konstantalari bilan AYNAN
+    # bir xil va o'sha yerda `test_default_limits_match_the_documented_
+    # values` bilan qulflangan — ya'ni bittasini o'zgartirish ikkinchisini
+    # jimgina eskirtira olmaydi.
+    #
+    # Ikkita hajm chegarasi MUSTAQIL va ikkalasi ham majburiy:
+    # `import_max_upload_bytes` — tarmoqdan kelgan XOM bayt (`.xlsx` = ZIP),
+    # `import_max_uncompressed_bytes` — o'sha ZIP OCHILGANDAGI hajmi.
+    # 1 MB fayl 10 GB ga ochilishi mumkin, ya'ni birinchisi ikkinchisidan
+    # hech qanday himoya bermaydi (T-02-88).
+    import_max_upload_bytes: int = 5 * 1024 * 1024
+    import_max_uncompressed_bytes: int = 50 * 1024 * 1024
+    import_max_rows: int = 5_000
+    import_max_cols: int = 32
+    import_max_sheets: int = 8
+    import_max_zip_entries: int = 200
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"
