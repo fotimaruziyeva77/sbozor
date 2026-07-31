@@ -1,11 +1,14 @@
 ---
 phase: 2
 slug: bozor-domeni-va-yangi-bozor-ustasi
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 design_system: manual (1-fazadan meros, Tailwind 4 CSS-first + Radix primitivlari)
 created: 2026-07-31
+reviewed_at: 2026-07-31
+reviewed_by: gsd-ui-checker
+review_result: 6/6 dimension PASS
 ---
 
 # Phase 2 — UI Design Contract
@@ -416,7 +419,11 @@ Uchta emas, **to'rtta** holat kerak (prompt uchtasini nomlagan, lekin "ochiq-lek
 3. Bosilganda: `select-market` → `setup-status` → `router.replace('/markets/setup?step=' + firstIncompleteStep)`.
 4. **`firstIncompleteStep` = `blocking[]` dagi eng kichik qadam raqami**, "oxirgi ochilgan qadam" emas. Klientda hech qanday xotira yo'q — bu Pattern 5 ning to'g'ridan-to'g'ri natijasi.
 
-> ⚠ **O'LCHANGAN to'siq:** `frontend/src/components/auth/market-picker.tsx:61` hozir `.filter((market) => market.is_active)` qiladi — ya'ni **usta yaratgan qoralamani ekranda ko'rsatmaydi va tiklanish umuman ishlamaydi.** Bu filtr platforma admini uchun olib tashlanishi va o'rniga `is_active === false` → `Qoralama` badge'i qo'yilishi shart. Bu 2-fazaning bloklovchi o'zgarishi.
+> ⚠ **O'LCHANGAN to'siq — bu oqim BUGUN ishlamaydi va tuzatish 6 fayldan iborat zanjir.**
+>
+> Qoralama bozor bozor tanlash ekraniga **umuman yetib bormaydi**: u serverda kesiladi va `is_active` maydoni javob sxemasida **umuman yo'q**. Ya'ni faqat frontend filtrini olib tashlash **hech narsani o'zgartirmaydi** — vazifa "bajarildi" deb yopiladi, oqim esa hamon ishlamaydi va UAT'da qaytadan chiqadi.
+>
+> To'liq zanjir — §12.1.1 (6 band, tartib majburiy: DB → backend → tip → UI). Xavfsizlik ta'siri — §12.1.1 dagi X-1…X-4.
 
 ### 6.5 Saqlash va fikr-mulohaza (feedback)
 
@@ -1128,6 +1135,23 @@ Xom `detail` foydalanuvchiga **hech qachon** ko'rsatilmaydi [MEROS: 1-faza naqsh
 | **D-4** | Sotuvchi biriktirishini yopish | 1 — oddiy tasdiq | «{vendor} bu rastadan {date} dan boshlab ajratiladi. Undagi qarz o'ziga qoladi.» / «{vendor} будет откреплён от места с {date}. Его задолженность остаётся за ним.» |
 | **D-5** | Kunni yopiq deb belgilash | 1 — oddiy tasdiq | «{date} kuni bozor yopiq bo'ladi va o'sha kunga patta hisoblanmaydi.» / «{date} рынок будет закрыт, и сбор за этот день не начисляется.» |
 
+**Tasdiq tugmasining MATNI — generic "Tasdiqlash" EMAS.**
+
+Mavjud naqsh tasdiq tugmasiga generic `t("users.confirm")` = **"Tasdiqlash"** qo'yadi [KOD: `user-list.tsx:331`]. 2-faza bu naqshni **meros qilmaydi**: qaytarib bo'lmaydigan amalda tugma o'z fe'lini takrorlashi shart — foydalanuvchi ko'pincha dialog matnini o'qimasdan tugmaga qarab qaror qiladi, "Tasdiqlash" esa nimani tasdiqlayotganini aytmaydi.
+
+| # | Kalit | uz-Latn | uz-Cyrl (hosila, tekshirildi) | ru |
+|---|-------|---------|-------------------------------|-----|
+| D-1 | `markets.deleteDraftAction` | **Bozorni o'chirish** | Бозорни ўчириш | **Удалить рынок** |
+| D-2 | `stalls.closeAction` | **Rastani yopish** | Растани ёпиш | **Закрыть место** |
+| D-3 | `tariffs.deleteAction` | **Tarifni o'chirish** | Тарифни ўчириш | **Удалить тариф** |
+| D-4 | `assignments.closeAction` | **Biriktirishni yopish** | Бириктиришни ёпиш | **Закрыть назначение** |
+| D-5 | `calendar.closeDayAction` | **Yopiq deb belgilash** | Ёпиқ деб белгилаш | **Отметить нерабочим** |
+| — | `common.cancel` (mavjud) | Bekor qilish | Бекор қилиш | Отмена |
+
+**Transliteratsiya tekshirildi** [O'LCHANDI: beshtasi ham `gen-cyrillic.mjs` orqali o'tkazildi] — birortasida §5.2 dagi defektlar yo'q: lotin so'zi ham, apostrofli qo'shimcha ham yo'q; `o'chirish` → `ўчириш` digrafi to'g'ri ko'chadi. **Qo'shimcha override kerak emas.**
+
+**Nega buyruq fe'li emas, harakat nomi** ("O'chir" emas, "O'chirish"): mavjud katalog butunlay harakat nomidan iborat (`Saqlash`, `Bloklash`, `Tasdiqlash`) — aralashtirish uslubni buzardi; rus tilida ham `Удалить` infinitiv shakl.
+
 **2-daraja nima uchun faqat D-1 va D-2 da:** ikkalasi ham **UI'dan qaytarib bo'lmaydi**. D-1 kaskad o'chirish; D-2 esa D-02 qarori bo'yicha rasta raqamini **abadiy iste'moldan chiqaradi** (`stall_code_registry`) — "bekor qilish" tugmasi bo'lishi mumkin emas. Yozib tasdiqlash arzon: bozor nomi va rasta raqami ekranda ko'rinib turadi va 1–4 belgidan iborat.
 
 **D-4 matni D-10 ni ataylab takrorlaydi** ("qarz o'ziga qoladi") — bu admin uchun eng ehtimolli noto'g'ri tushuncha va uni aynan shu daqiqada tuzatish kerak.
@@ -1185,7 +1209,42 @@ Xom `detail` foydalanuvchiga **hech qachon** ko'rsatilmaydi [MEROS: 1-faza naqsh
 | W0-9 | `ui/` primitivlarini ajratish: `dialog`, `field`, `select`, `badge`, `skeleton`, `empty-state`, `confirm-dialog` | §1.2 |
 | W0-10 | `uz-Cyrl.overrides.json` — 5 ta yangi so'z (§5.2) | 5 qator |
 | W0-11 | `gen-cyrillic.test.mjs` — T-01…T-04 uchun assertionlar | 4 test |
-| W0-12 | `market-picker.tsx:61` — `is_active` filtri olib tashlanadi, `Qoralama` badge qo'shiladi | §6.4 |
+| W0-12 | **Qoralama bozor ko'rinadigan bo'ladi** — 6 bandli zanjir | §12.1.1 |
+
+#### 12.1.1 W0-12 to'liq zanjiri — qoralama bozor ko'rinadigan bo'lishi
+
+§6.4 dagi "chala ustaga qaytish" oqimi **oltita fayl birga o'zgargandagina** ishlaydi. Zanjir kod bo'yicha oxirigacha kuzatildi — har band `fayl:qator` bilan tasdiqlangan.
+
+**Nega bitta bandning o'zi yetarli emas:** bozor tanlash ekranining **asosiy** manbai — `POST /auth/login` javobidagi `markets` ro'yxati, va u serverda allaqachon kesilgan. `market-picker.tsx:61` dagi `.filter(...)` esa faqat **zaxira** yo'lga (`GET /markets`) tegishli. Bundan tashqari zaxira yo'l bu ekranda **umuman ishlay olmaydi**: `GET /markets` `TenantSessionDep` talab qiladi va bozor tanlanmagan sessiya u yerda **409** oladi — bu ataylab qilingan [KOD: `services/core-api/app/api/v1/markets.py` docstring: *"Bozor tanlanmagan sessiya `TenantSessionDep` da 409 oladi. Bu ataylab..."*].
+
+| # | Fayl:qator | Hozir | O'zgarish |
+|---|------------|-------|-----------|
+| **1** | `migrations/` — `auth_memberships()` SQL funksiyasi | `SELECT market_id, market_name, roles` [KOD: `auth_repo.py:124`] | Qaytish to'plamiga `is_active` qo'shiladi. ⚠ Postgres'da funksiya qaytish tipini o'zgartirish uchun `DROP FUNCTION` + qayta yaratish kerak — "ustun qo'shish" tekin emas, alohida migratsiya bandi |
+| **2** | `services/core-api/app/repositories/auth_repo.py:76-81` | `class Membership` da `market_id`, `market_name`, `roles` — **`is_active` YO'Q** | `is_active: bool` qo'shiladi; `memberships()` uni o'qiydi (`auth_repo.py:200-210`) |
+| **3** | `services/core-api/app/schemas.py:73-77` | `class MarketRef(BaseModel)` da **faqat `id` va `name`** | `is_active: bool` qo'shiladi |
+| **4** | `services/core-api/app/api/v1/auth.py:384-390` | `_visible_markets()` platforma admini uchun `if market.is_active` bilan **serverda kesadi** va `is_active` ni uzatmaydi ham | Filtr **olib tashlanadi**, `is_active=...` uzatiladi. ⚠ `MarketRef` **8 joyda** quriladi (`auth.py:235, 238, 353, 386, 390, 451, 519, 796`) — majburiy maydon qo'shilgani uchun **hammasi** o'zgaradi |
+| **5** | `frontend/src/lib/api-types.ts:48-52` | `marketRefSchema` / `MarketSummary` da faqat `id`/`name` | `is_active: z.boolean()` qo'shiladi. `marketListItemSchema` allaqachon uni `.extend()` qiladi (`api-types.ts:55-58`) — endi takrorlanmaydi |
+| **6** | `frontend/src/components/auth/market-picker.tsx:57-62` | `.filter((market) => market.is_active)` (o'lik zaxira yo'lida) | Filtr olib tashlanadi; `is_active === false` → `Qoralama` badge + `?step=` ga marshrutlash (§6.4) |
+
+**Tartib majburiy:** 1 → 2 → 3 → 4 → 5 → 6. 3-band 4-banddan oldin bajarilmasa `MarketRef` qurilishi yiqiladi; 5-band 4-banddan oldin bajarilsa zod sxemasi hali kelmagan maydonni talab qiladi va **butun login oqimi** chegarada yiqiladi.
+
+**Test ta'siri:** `MarketRef` — uchta javob modelining bir qismi (`schemas.py:116-117, 137, 164`: `LoginResponse.market`, `LoginResponse.markets`, `SessionResponse.market`). Majburiy maydon qo'shish **login / select-market / refresh** javob shakllarini o'zgartiradi — shu uchala oqimning mavjud testlari yangilanadi.
+
+##### Xavfsizlik ta'siri — to'rt topilma; ikkitasi kutilganidan kichik, bittasi katta
+
+**X-1 — Yangi vakolat berilMAYDI, faqat topiladigan bo'ladi.** Platforma admini qoralama bozorni **allaqachon tanlay oladi**: `POST /auth/select-market` a'zoligi bo'lmagan bozorni tanlashga ruxsat beradi (`_platform_admin_market()`) [MEROS: RESEARCH Pattern 5, 2-qadam]. Ya'ni qoralama bozor bugun ham **yetib boriladigan**, faqat **ko'rinmaydigan**. O'zgarish yangi kirish sinfini ochmaydi — u mavjud vakolatni topiladigan qiladi.
+
+**X-2 — Hozirgi xulq assimetrik: a'zolar qoralamani ALLAQACHON ko'radi.** `_visible_markets()` da `if market.is_active` **faqat `is_platform_admin` tarmog'ida** [KOD: `auth.py:384-389`]. A'zolik tarmog'ida (`auth.py:390`) hech qanday filtr **yo'q**. Ya'ni D-04 bo'yicha qoralama bozorga tayinlangan bozor admini uni **bugun ham ro'yxatda ko'radi va ichiga kiradi**, uni yaratgan platforma admini esa ko'rmaydi. Tuzatish bu assimetriyani yopadi, kengaytirmaydi. Zanjirning 2-bandi aynan shuning uchun kerak: `is_active` ni faqat platforma admini tarmog'ida uzatib, a'zolik tarmog'ida `True` deb standart qo'yish qoralamani "faol" deb **yolg'on yorliqlagan** bo'lardi.
+
+**X-3 — WR-03 shu fazada JONLI bo'ladi. Bu ilgak emas, ogohlantirish.** 1-faza ko'rigi `POST /auth/select-market` ning `is_platform_admin` ni DB'dan qayta o'qimay, **chaqiruvchi tokenidan qayta imzolashini** qayd etgan va so'zma-so'z shunday yozgan [KOD: `.planning/phases/01-poydevor-va-tenant-xavfsizligi/01-REVIEW-GAPS.md:307-311`]:
+
+> *"There is no revocation API in phase 1, which is the only reason this is not already exploitable; **the moment one is added (market wizard / platform admin management) this becomes a live authorization bypass.**"*
+
+2-faza — **aynan o'sha market wizard**, va uning 2-qadami `POST /auth/select-market` ni ishlatadi [MEROS: RESEARCH Pattern 5]. Ya'ni 1-faza nomma-nom ko'rsatgan shart bu fazada bajariladi. WR-02 ham shu endpointga tegishli (`select-market` `require_password_current` dan tashqarida).
+
+**Kontrakt:** WR-02 va WR-03 Wave 0 da yopiladi, keyingi fazaga qoldirilmaydi va ular §12.1 dagi boshqa Wave 0 ishlaridan **oldin** turadi. Bu UI qarori emas — lekin UI-SPEC uni **jimgina o'tkazib yubormaydi**, chunki ustaning butun oqimi aynan shu endpointga tayanadi.
+
+**X-4 — Qoralama mahsulot oqimlariga sizib chiqmasligi.** `is_active` ni javobga chiqarish — aynan **filtrni mumkin qiladigan** narsa [MEROS: RESEARCH Pitfall 7]. Kontrakt: `is_active` ochilgandan keyin har bir iste'molchi **aniq** filtrlaydi (6-faza billing job `WHERE m.is_active`), "ro'yxat allaqachon toza" degan taxminga tayanmaydi. Bozor tanlash ekrani — qoralama **ataylab ko'rinadigan** yagona joy.
 
 ### 12.2 Yangi komponentlar
 
@@ -1273,14 +1332,18 @@ Bu subagent kontekstida foydalanuvchiga savol berish vositasi yo'q. Quyidagilar 
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-07-31 — `gsd-ui-checker`, 6/6 dimension PASS.
+Checker 11 ta WCAG kontrast da'vosini mustaqil qayta hisoblab, 2 xonagacha tasdiqladi.
+Tasdiqdan keyin ikkita tavsiya kiritildi:
+§12.1.1 (W0-12 ning to'liq 6 bandli zanjiri + X-1…X-4 xavfsizlik ta'siri) va
+§10.6 (destruktiv amal tugmalarining o'z matni, uch tilda).
 
 ---
 
