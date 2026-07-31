@@ -546,9 +546,11 @@ class AssignmentRepository(TenantScopedRepository):
         """OCHIQ davrni yopadi; qator topilmasa `False` (-> 404).
 
         Davr QAYTA QURILADI (`assignment_period(from_date, to_date)`),
-        ustun darajasida tahrirlanmaydi: `UPDATE ... SET period =
-        daterange(lower(period), :to_date, '[)')` shakli chegara harfini
-        SQL matniga ikkinchi nusxa qilib ko'chirardi (Pitfall 10).
+        ustun darajasida tahrirlanmaydi. "Mavjud davrning yuqori
+        chegarasini SQL ichida almashtirish" shakli chegara HARFINI SQL
+        matniga ikkinchi nusxa qilib ko'chirardi va konvensiya bir kun
+        ikki joyda ajralib ketardi (Pitfall 10) — o'shanda almashinuv
+        kunidagi patta ikki sotuvchiga yozilardi.
 
         Raises:
             ValueError: `to_date` davr boshidan keyin kelmasa -> 422.
