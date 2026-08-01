@@ -201,6 +201,13 @@ Yo'q — tashqi xizmat sozlamasi talab qilinmaydi.
 - **Ochiq qarz:** to'liq `npm run gate` (backend Docker qismi) birlashtirilgandan keyin bir marta o'tkazilishi kerak.
 - **Kelajakdagi bozor-almashtirish UI'si (v2) uchun poydevor tayyor:** kalitlar doiralangan va tozalash kanali mavjud, ya'ni UI qo'shilganda yangi tenant-izolyatsiya ishi talab qilinmaydi — faqat `applySession` chaqiruvi kerak bo'ladi.
 
+## Self-Check: PASSED
+
+Barcha da'vo qilingan artefaktlar diskda va barcha commit'lar git tarixida mavjud:
+
+- Fayllar (6/6): `tenant-cache.test.tsx`, `market-queries.ts`, `auth-store.ts`, `query-provider.tsx`, `market-queries.test.tsx`, `02-20-SUMMARY.md`
+- Commit'lar (5/5): `06f900c`, `025634b`, `940c505`, `51ca6f3`, `aecc812`
+
 ---
 *Phase: 02-bozor-domeni-va-yangi-bozor-ustasi*
 *Completed: 2026-08-01*
