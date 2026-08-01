@@ -72,7 +72,20 @@ class Permission(StrEnum):
     MARKET_DATA_VIEW = "market_data_view"
     """Zona / toifa / rasta / tarif / kalendar O'QISH.
 
-    Shaxsiy ma'lumotni QAMRAMAYDI — sotuvchi uchun alohida `VENDOR_VIEW`.
+    ⚠ CHEGARA MARSHRUT DARAJASIDA MAJBURLANADI, huquqning O'ZIDA emas.
+    Javobida sotuvchi nomi yoki telefoni bo'lgan marshrutlar — `GET
+    /stalls`, `GET /stalls/{id}`, `GET /stalls/{id}/assignments` — bu
+    huquq USTIGA `VENDOR_VIEW` ni ham talab qiladi va o'qish auditi
+    e'lon qiladi (D-09). `GET /stalls/map` esa TALAB QILMAYDI: uning
+    javobida `has_vendor` boolean'idan boshqa hech nima yo'q.
+
+    Ilgari bu docstring shaxsiy ma'lumot bu huquqning qamrovidan
+    tashqarida deb da'vo qilgan, kod esa buni HECH QAYERDA bajarmasdi —
+    matn va xulq ajralib turgan edi (02-VERIFICATION 4-bo'shlig'i /
+    CR-02). Endi da'vo `tests/tenancy/
+    test_personal_data_coverage.py` darvozasi bilan qulflangan: shaxsiy
+    maydon qaytaradigan har qanday YANGI `GET` marshruti ikkala talabni
+    ham e'lon qilmasa CI qizaradi.
     """
     VENDOR_VIEW = "vendor_view"
     """Sotuvchi (F.I.Sh., telefon — SHAXSIY MA'LUMOT) O'QISH.
@@ -80,6 +93,20 @@ class Permission(StrEnum):
     `MARKET_DATA_VIEW` dan ATAYIN ajratilgan: 1-faza D-09 bo'yicha shaxsiy
     ma'lumotning O'QILISHI ham auditda qayd etiladi, ya'ni bu huquq berilishi
     boshqa reestrlarni ko'rish bilan bir xil og'irlikda emas.
+
+    ⚠ QAMROVI `vendors.py` BILAN CHEKLANMAYDI: bu huquq RASTA YUZASIDAGI
+    shaxsiy maydonlarni ham qo'riqlaydi (`vendor_name` rasta ro'yxatida
+    va biriktirish tarixida, `phone` rasta kartochkasida). Ya'ni uni
+    berish qarori "sotuvchilar ekranini ochsinmi?" degan bitta savol
+    emas — u butun shaxsiy-ma'lumot yuzasini ochadi.
+
+    Bugungi rol-huquq matritsasida (pastdagi jadval) `MARKET_DATA_VIEW`
+    egasining HAMMASIDA — platforma admini, direktor, bozor admini — bu
+    huquq ham bor va MATRITSA BU REJADA O'ZGARTIRILMADI, ya'ni
+    yuqoridagi chegara birorta amaldagi foydalanuvchining kirishini
+    TORAYTIRMAYDI. U KELAJAKDAGI "faqat ko'rsin" rolini himoya qiladi:
+    bunday rol shaxsiy ma'lumotni JIMGINA meros qilib olmaydi — aynan shu
+    xavfni CR-02 ning oxirgi xatboshi nomlagan.
     """
 
     # --- Operatsiya (5- va 6-fazalar) ---
