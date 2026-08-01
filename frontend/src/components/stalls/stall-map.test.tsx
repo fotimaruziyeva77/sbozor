@@ -25,7 +25,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { useCallback, useState } from "react";
 import type { ReactElement } from "react";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import messages from "../../../messages/uz-Latn.json";
 
@@ -80,9 +80,17 @@ const { apiFetch } = apiClientMock;
 
 import { StallCardDialog } from "@/components/stalls/stall-card-dialog";
 import { StallMap } from "@/components/stalls/stall-map";
+import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 
 const MAP_PATH = "/stalls/map";
 const ZONE_ID = "11111111-1111-4111-8111-111111111111";
+
+/**
+ * Domen so'rovlari sessiyadagi bozorsiz UMUMAN ketmaydi (CR-01): kalit
+ * `market_id` bilan doiralangan va `enabled` sharti `marketId !== null`.
+ * Shuning uchun bu test ham haqiqiy sessiya bilan ishlaydi.
+ */
+const MARKET_ID = "99999999-9999-4999-8999-999999999999";
 
 type MockCell = {
   id: string;
@@ -149,12 +157,33 @@ function renderMap(): ReturnType<typeof render> {
   const tree: ReactElement = (
     <NextIntlClientProvider locale="uz-Latn" messages={messages}>
       <QueryClientProvider client={queryClient}>
-        <Harness />
+        <AuthProvider>
+          <Harness />
+        </AuthProvider>
       </QueryClientProvider>
     </NextIntlClientProvider>
   );
 
   return render(tree);
+}
+
+/** Bozor admini — xarita va rasta kartasi shu kontekstda o'qiladi. */
+function seedMarketAdminSession(): void {
+  setSession({
+    accessToken: "test-access-token",
+    principal: {
+      userId: "33333333-3333-4333-8333-333333333333",
+      phone: "+998900000000",
+      fullName: "Test Admin",
+      roles: ["market_admin"],
+      marketId: MARKET_ID,
+      marketName: "Karmana markaziy bozori",
+      isPlatformAdmin: false,
+      locale: "uz-Latn",
+      mustChangePassword: false,
+    },
+    markets: [],
+  });
 }
 
 /** Kataklar — DOM tartibida. Legendadagi namunalar tugma EMAS. */
@@ -166,6 +195,12 @@ function cellButtons(): HTMLButtonElement[] {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  clearSession();
+  seedMarketAdminSession();
+});
+
+afterEach(() => {
+  clearSession();
 });
 
 describe("StallMap — tartib (§7.3)", () => {

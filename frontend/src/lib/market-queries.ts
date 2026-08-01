@@ -9,6 +9,7 @@ import {
 import type { QueryClient } from "@tanstack/react-query";
 
 import { ApiError, apiFetch, apiRequest } from "@/lib/api-client";
+import { useAuthStore } from "@/lib/auth-store";
 import {
   assignmentListResponseSchema,
   assignmentItemSchema,
@@ -59,6 +60,13 @@ import type {
  * TARTIB SERVERDA: `GET /stalls` `code_sort` bo'yicha inson-raqamli
  * tartibda keladi (2 < 10 < 100) va bu yerda ham, komponentda ham QAYTA
  * SARALANMAYDI — klient saralashi uchala tilda boshqa natija berardi.
+ *
+ * KESH — TENANT CHEGARASINING BIR QISMI (CR-01). CLAUDE.md ning eng qat'iy
+ * me'moriy cheklovi «hamma jadvalda `market_id`» Postgres'da bajarilgan va
+ * bir muddat brauzerda tashlab yuborilgan edi: kalitlar global (`["zones"]`)
+ * bo'lgani uchun ikki bozor bitta kesh yozuvini bo'lishardi. Endi har bir
+ * domen kaliti `["m", marketId, ...]` bilan boshlanadi va ISTISNO YO'Q —
+ * pastdagi `domainKey` ga qarang.
  * =============================================================================
  */
 
@@ -86,34 +94,56 @@ export const PAGE_SIZE = 50;
 
 /* --- Query kalitlari ------------------------------------------------------ */
 
-export const ZONES_KEY = ["zones"] as const;
-export const CATEGORIES_KEY = ["categories"] as const;
-export const STALLS_KEY = ["stalls"] as const;
-export const MAP_KEY = ["map"] as const;
-export const TARIFFS_KEY = ["tariffs"] as const;
-export const CALENDAR_KEY = ["calendar"] as const;
-export const VENDORS_KEY = ["vendors"] as const;
-export const ASSIGNMENTS_KEY = ["assignments"] as const;
-export const SETUP_STATUS_KEY = ["setup-status"] as const;
+/**
+ * HAR BIR domen kaliti shu yerdan quriladi — `["m", marketId, ...]`.
+ *
+ * ⚠ GLOBAL KALIT KONSTANTALARI (`ZONES_KEY`, `STALLS_KEY`, ...) ATAYIN
+ * O'CHIRILGAN va qaytarilmaydi. Ular qolsa keyingi kod ularni "qulay" deb
+ * qayta ishlatardi va bo'shliq jimgina qaytardi — CR-01 ning o'zi aynan shu
+ * sinfdagi xato edi. Endi doiralashni chetlab o'tish TS xatosisiz mumkin
+ * emas: kalit fabrikasining birinchi argumenti `marketId`.
+ *
+ * Prefiks bo'yicha bekor qilish shu shakl bilan ishlaydi: TanStack Query
+ * kalitni PREFIKS sifatida solishtiradi, ya'ni `domainKey(m, "stalls")`
+ * `["m", m, "stalls", "list", filtrlar]` ni ham, `[..., "detail", id]` ni
+ * ham qamraydi. Shu sababli `["m", marketId]` prefiksi bitta bozorning
+ * BARCHA domen so'rovlarini bildiradi.
+ */
+export const domainKey = (marketId: string, ...rest: readonly unknown[]) =>
+  ["m", marketId, ...rest] as const;
 
-export const zonesKey = () => ZONES_KEY;
-export const categoriesKey = () => CATEGORIES_KEY;
-export const stallsKey = (filters: StallFilters) =>
-  [...STALLS_KEY, "list", filters] as const;
-export const stallKey = (stallId: string) =>
-  [...STALLS_KEY, "detail", stallId] as const;
-export const mapKey = () => MAP_KEY;
-export const tariffsKey = (categoryId: string | null) =>
-  [...TARIFFS_KEY, categoryId] as const;
-export const calendarKey = () => CALENDAR_KEY;
-export const vendorsKey = (filters: VendorFilters) =>
-  [...VENDORS_KEY, "list", filters] as const;
-export const vendorKey = (vendorId: string) =>
-  [...VENDORS_KEY, "detail", vendorId] as const;
-export const assignmentsKey = (stallId: string) =>
-  [...ASSIGNMENTS_KEY, stallId] as const;
+export const zonesKey = (marketId: string) => domainKey(marketId, "zones");
+export const categoriesKey = (marketId: string) =>
+  domainKey(marketId, "categories");
+export const stallsKey = (marketId: string, filters: StallFilters) =>
+  domainKey(marketId, "stalls", "list", filters);
+export const stallKey = (marketId: string, stallId: string) =>
+  domainKey(marketId, "stalls", "detail", stallId);
+export const mapKey = (marketId: string) => domainKey(marketId, "map");
+export const tariffsKey = (marketId: string, categoryId: string | null) =>
+  domainKey(marketId, "tariffs", categoryId);
+export const calendarKey = (marketId: string) =>
+  domainKey(marketId, "calendar");
+export const vendorsKey = (marketId: string, filters: VendorFilters) =>
+  domainKey(marketId, "vendors", "list", filters);
+export const vendorKey = (marketId: string, vendorId: string) =>
+  domainKey(marketId, "vendors", "detail", vendorId);
+export const assignmentsKey = (marketId: string, stallId: string) =>
+  domainKey(marketId, "assignments", stallId);
 export const setupStatusKey = (marketId: string) =>
-  [...SETUP_STATUS_KEY, marketId] as const;
+  domainKey(marketId, "setup-status");
+
+/**
+ * Joriy bozor — kalit qurish uchun YAGONA manba.
+ *
+ * `useAuthStore()` ni har hookda takrorlash o'rniga bitta joyda o'qiladi:
+ * takrorlangan `principal?.marketId ?? null` qatorlari orasidan bittasi
+ * tushib qolsa, o'sha hook jimgina global kalitga qaytardi.
+ */
+function useMarketId(): string | null {
+  const { principal } = useAuthStore();
+  return principal?.marketId ?? null;
+}
 
 /*
  * Invalidatsiya YORDAMCHILARI.
@@ -122,10 +152,13 @@ export const setupStatusKey = (marketId: string) =>
  * to'plamni bekor qiladi va uni har `onSuccess` da qo'lda sanash aynan
  * "bittasini unutish" xatosiga olib kelardi.
  *
- * `setup-status` KENG bekor qilinadi (`marketId` siz): usta faqat BITTA
- * bozor uchun ochiq bo'ladi va kalitni aniqlashtirish uchun mutatsiyaga
- * `marketId` ni uzatish har chaqiruvchini bozor kontekstini bilishga
- * majburlardi — holbuki server uni tokendan oladi.
+ * `setup-status` bir vaqtlar KENG (`marketId` siz) bekor qilinardi va sabab
+ * qilib "usta faqat BITTA bozor uchun ochiq bo'ladi" taxmini keltirilgan
+ * edi. TAXMIN NOTO'G'RI BO'LIB CHIQDI: platforma admini bitta sessiyada
+ * ikkinchi bozor yaratishi — ustaning butun maqsadi, va aynan shu yo'l
+ * A bozorining zonalarini B bozorining 2-qadamida ko'rsatgan (CR-01).
+ * Yangi qoida bitta jumla: HAR BIR domen kaliti `market_id` bilan
+ * boshlanadi va istisno yo'q.
  */
 function invalidate(client: QueryClient, keys: readonly (readonly unknown[])[]) {
   for (const key of keys) {
@@ -134,26 +167,37 @@ function invalidate(client: QueryClient, keys: readonly (readonly unknown[])[]) 
 }
 
 /** Rasta o'zgarishi: ro'yxat + xarita + zona/toifa sanoqlari + usta holati. */
-const STALL_SIDE_EFFECTS = [
-  STALLS_KEY,
-  MAP_KEY,
-  ZONES_KEY,
-  CATEGORIES_KEY,
-  SETUP_STATUS_KEY,
-] as const;
+const stallSideEffects = (marketId: string) =>
+  [
+    domainKey(marketId, "stalls"),
+    mapKey(marketId),
+    zonesKey(marketId),
+    categoriesKey(marketId),
+    setupStatusKey(marketId),
+  ] as const;
 
 /* --- Zonalar (D-03) ------------------------------------------------------- */
 
+/**
+ * ⚠ `enabled` shartidagi `marketId !== null` QULAYLIK EMAS, kontrakt.
+ *
+ * Bozorsiz sessiyada domen so'rovi serverda `409 market_not_selected` oladi
+ * (`deps.py:408-412`) va o'sha xato kesh grafida yashab qolardi. Aynan shu
+ * sababli `marketId` `null` bo'lganda kalitdagi bo'sh satr ham xavfsiz:
+ * o'sha kalit ostida hech qachon ma'lumot yozilmaydi.
+ */
 export function useZonesQuery(options?: { enabled?: boolean }) {
+  const marketId = useMarketId();
   return useQuery({
-    queryKey: zonesKey(),
+    queryKey: zonesKey(marketId ?? ""),
     queryFn: () => apiFetch(ZONES_PATH, { schema: zoneListResponseSchema }),
-    enabled: options?.enabled ?? true,
+    enabled: marketId !== null && (options?.enabled ?? true),
   });
 }
 
 export function useCreateZone() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: { name: string }) =>
       apiFetch(ZONES_PATH, {
@@ -161,12 +205,14 @@ export function useCreateZone() {
         body: { name: input.name },
         schema: zoneItemSchema,
       }),
-    onSuccess: () => invalidate(client, [ZONES_KEY, SETUP_STATUS_KEY]),
+    onSuccess: () =>
+      invalidate(client, [zonesKey(marketId), setupStatusKey(marketId)]),
   });
 }
 
 export function useUpdateZone() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: { id: string; name: string }) =>
       apiFetch(`${ZONES_PATH}/${input.id}`, {
@@ -176,35 +222,44 @@ export function useUpdateZone() {
       }),
     // Zona NOMI rasta ro'yxatida va xaritada ham ko'rinadi (`zone_name`).
     onSuccess: () =>
-      invalidate(client, [ZONES_KEY, STALLS_KEY, MAP_KEY, SETUP_STATUS_KEY]),
+      invalidate(client, [
+        zonesKey(marketId),
+        domainKey(marketId, "stalls"),
+        mapKey(marketId),
+        setupStatusKey(marketId),
+      ]),
   });
 }
 
 export function useDeleteZone() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (zoneId: string) =>
       apiFetch(`${ZONES_PATH}/${zoneId}`, {
         method: "DELETE",
         schema: emptyResponseSchema,
       }),
-    onSuccess: () => invalidate(client, [ZONES_KEY, SETUP_STATUS_KEY]),
+    onSuccess: () =>
+      invalidate(client, [zonesKey(marketId), setupStatusKey(marketId)]),
   });
 }
 
 /* --- Toifalar (D-05) ------------------------------------------------------ */
 
 export function useCategoriesQuery(options?: { enabled?: boolean }) {
+  const marketId = useMarketId();
   return useQuery({
-    queryKey: categoriesKey(),
+    queryKey: categoriesKey(marketId ?? ""),
     queryFn: () =>
       apiFetch(CATEGORIES_PATH, { schema: categoryListResponseSchema }),
-    enabled: options?.enabled ?? true,
+    enabled: marketId !== null && (options?.enabled ?? true),
   });
 }
 
 export function useCreateCategory() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: { name: string }) =>
       apiFetch(CATEGORIES_PATH, {
@@ -212,12 +267,14 @@ export function useCreateCategory() {
         body: { name: input.name },
         schema: categoryItemSchema,
       }),
-    onSuccess: () => invalidate(client, [CATEGORIES_KEY, SETUP_STATUS_KEY]),
+    onSuccess: () =>
+      invalidate(client, [categoriesKey(marketId), setupStatusKey(marketId)]),
   });
 }
 
 export function useUpdateCategory() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: { id: string; name: string }) =>
       apiFetch(`${CATEGORIES_PATH}/${input.id}`, {
@@ -228,16 +285,17 @@ export function useUpdateCategory() {
     // Toifa NOMI rasta ro'yxatida va tarif tarixida ham ko'rinadi.
     onSuccess: () =>
       invalidate(client, [
-        CATEGORIES_KEY,
-        STALLS_KEY,
-        TARIFFS_KEY,
-        SETUP_STATUS_KEY,
+        categoriesKey(marketId),
+        domainKey(marketId, "stalls"),
+        domainKey(marketId, "tariffs"),
+        setupStatusKey(marketId),
       ]),
   });
 }
 
 export function useDeleteCategory() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (categoryId: string) =>
       apiFetch(`${CATEGORIES_PATH}/${categoryId}`, {
@@ -245,7 +303,11 @@ export function useDeleteCategory() {
         schema: emptyResponseSchema,
       }),
     onSuccess: () =>
-      invalidate(client, [CATEGORIES_KEY, TARIFFS_KEY, SETUP_STATUS_KEY]),
+      invalidate(client, [
+        categoriesKey(marketId),
+        domainKey(marketId, "tariffs"),
+        setupStatusKey(marketId),
+      ]),
   });
 }
 
@@ -293,23 +355,26 @@ function buildStallsPath(filters: StallFilters, cursor: string | null): string {
  * o'zgarganda kesh yangi zanjir boshlaydi va eski sahifalar aralashmaydi.
  */
 export function useStallsQuery(filters: StallFilters) {
+  const marketId = useMarketId();
   return useInfiniteQuery({
-    queryKey: stallsKey(filters),
+    queryKey: stallsKey(marketId ?? "", filters),
     queryFn: ({ pageParam }) =>
       apiFetch(buildStallsPath(filters, pageParam), {
         schema: stallListResponseSchema,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor,
+    enabled: marketId !== null,
   });
 }
 
 export function useStallQuery(stallId: string | null) {
+  const marketId = useMarketId();
   return useQuery({
-    queryKey: stallKey(stallId ?? ""),
+    queryKey: stallKey(marketId ?? "", stallId ?? ""),
     queryFn: () =>
       apiFetch(`${STALLS_PATH}/${stallId}`, { schema: stallDetailSchema }),
-    enabled: stallId !== null,
+    enabled: marketId !== null && stallId !== null,
   });
 }
 
@@ -331,6 +396,7 @@ export type StallCreateInput = {
  */
 export function useCreateStall() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: StallCreateInput) =>
       apiFetch(STALLS_PATH, {
@@ -338,7 +404,7 @@ export function useCreateStall() {
         body: input,
         schema: stallDetailSchema,
       }),
-    onSuccess: () => invalidate(client, STALL_SIDE_EFFECTS),
+    onSuccess: () => invalidate(client, stallSideEffects(marketId)),
   });
 }
 
@@ -359,6 +425,7 @@ export type StallUpdateInput = {
  */
 export function useUpdateStall() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: ({ id, ...body }: StallUpdateInput) =>
       apiFetch(`${STALLS_PATH}/${id}`, {
@@ -367,8 +434,10 @@ export function useUpdateStall() {
         schema: stallDetailSchema,
       }),
     onSuccess: (_data, variables) => {
-      invalidate(client, STALL_SIDE_EFFECTS);
-      void client.invalidateQueries({ queryKey: stallKey(variables.id) });
+      invalidate(client, stallSideEffects(marketId));
+      void client.invalidateQueries({
+        queryKey: stallKey(marketId, variables.id),
+      });
     },
   });
 }
@@ -385,6 +454,7 @@ export function useUpdateStall() {
  */
 export function useSetStallCategory() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: {
       stallId: string;
@@ -397,8 +467,10 @@ export function useSetStallCategory() {
         schema: emptyResponseSchema,
       }),
     onSuccess: (_data, variables) => {
-      invalidate(client, STALL_SIDE_EFFECTS);
-      void client.invalidateQueries({ queryKey: stallKey(variables.stallId) });
+      invalidate(client, stallSideEffects(marketId));
+      void client.invalidateQueries({
+        queryKey: stallKey(marketId, variables.stallId),
+      });
     },
   });
 }
@@ -411,11 +483,12 @@ export function useSetStallCategory() {
  * kichik ushlab turadi.
  */
 export function useStallMapQuery(options?: { enabled?: boolean }) {
+  const marketId = useMarketId();
   return useQuery({
-    queryKey: mapKey(),
+    queryKey: mapKey(marketId ?? ""),
     queryFn: () =>
       apiFetch(STALL_MAP_PATH, { schema: stallMapResponseSchema }),
-    enabled: options?.enabled ?? true,
+    enabled: marketId !== null && (options?.enabled ?? true),
   });
 }
 
@@ -434,14 +507,15 @@ export function useTariffsQuery(
   categoryId: string | null = null,
   options?: { enabled?: boolean },
 ) {
+  const marketId = useMarketId();
   return useQuery({
-    queryKey: tariffsKey(categoryId),
+    queryKey: tariffsKey(marketId ?? "", categoryId),
     queryFn: () =>
       apiFetch(
         categoryId ? `${TARIFFS_PATH}?category=${categoryId}` : TARIFFS_PATH,
         { schema: tariffListResponseSchema },
       ),
-    enabled: options?.enabled ?? true,
+    enabled: marketId !== null && (options?.enabled ?? true),
   });
 }
 
@@ -450,15 +524,17 @@ export function useTariffsQuery(
  * `current_tariff_soum` bor va u eskirsa, ekranda "tarif kiritilmagan"
  * ogohlantirishi narx qo'shilgandan keyin ham turaverardi.
  */
-const TARIFF_SIDE_EFFECTS = [
-  TARIFFS_KEY,
-  CATEGORIES_KEY,
-  STALLS_KEY,
-  SETUP_STATUS_KEY,
-] as const;
+const tariffSideEffects = (marketId: string) =>
+  [
+    domainKey(marketId, "tariffs"),
+    categoriesKey(marketId),
+    domainKey(marketId, "stalls"),
+    setupStatusKey(marketId),
+  ] as const;
 
 export function useCreateTariff() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: {
       category_id: string;
@@ -470,12 +546,13 @@ export function useCreateTariff() {
         body: input,
         schema: tariffItemSchema,
       }),
-    onSuccess: () => invalidate(client, TARIFF_SIDE_EFFECTS),
+    onSuccess: () => invalidate(client, tariffSideEffects(marketId)),
   });
 }
 
 export function useUpdateTariff() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: ({
       id,
@@ -490,36 +567,42 @@ export function useUpdateTariff() {
         body,
         schema: tariffItemSchema,
       }),
-    onSuccess: () => invalidate(client, TARIFF_SIDE_EFFECTS),
+    onSuccess: () => invalidate(client, tariffSideEffects(marketId)),
   });
 }
 
 /** Faqat KELAJAKDAGI qator o'chiriladi — o'tgani serverda qulflangan. */
 export function useDeleteTariff() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (tariffId: string) =>
       apiFetch(`${TARIFFS_PATH}/${tariffId}`, {
         method: "DELETE",
         schema: emptyResponseSchema,
       }),
-    onSuccess: () => invalidate(client, TARIFF_SIDE_EFFECTS),
+    onSuccess: () => invalidate(client, tariffSideEffects(marketId)),
   });
 }
 
 /* --- Ish kunlari kalendari (D-17/D-18) ------------------------------------ */
 
 export function useCalendarQuery(options?: { enabled?: boolean }) {
+  const marketId = useMarketId();
   return useQuery({
-    queryKey: calendarKey(),
+    queryKey: calendarKey(marketId ?? ""),
     queryFn: () =>
       apiFetch(CALENDAR_PATH, { schema: calendarResponseSchema }),
-    enabled: options?.enabled ?? true,
+    enabled: marketId !== null && (options?.enabled ?? true),
   });
 }
 
+const calendarSideEffects = (marketId: string) =>
+  [calendarKey(marketId), setupStatusKey(marketId)] as const;
+
 export function useUpdateWeekdays() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (openWeekdays: readonly number[]) =>
       apiFetch(`${CALENDAR_PATH}/weekdays`, {
@@ -527,12 +610,13 @@ export function useUpdateWeekdays() {
         body: { open_weekdays: openWeekdays },
         schema: calendarResponseSchema,
       }),
-    onSuccess: () => invalidate(client, [CALENDAR_KEY, SETUP_STATUS_KEY]),
+    onSuccess: () => invalidate(client, calendarSideEffects(marketId)),
   });
 }
 
 export function useCreateException() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: {
       exception_date: string;
@@ -544,19 +628,20 @@ export function useCreateException() {
         body: input,
         schema: calendarExceptionSchema,
       }),
-    onSuccess: () => invalidate(client, [CALENDAR_KEY, SETUP_STATUS_KEY]),
+    onSuccess: () => invalidate(client, calendarSideEffects(marketId)),
   });
 }
 
 export function useDeleteException() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (exceptionId: string) =>
       apiFetch(`${CALENDAR_PATH}/exceptions/${exceptionId}`, {
         method: "DELETE",
         schema: emptyResponseSchema,
       }),
-    onSuccess: () => invalidate(client, [CALENDAR_KEY, SETUP_STATUS_KEY]),
+    onSuccess: () => invalidate(client, calendarSideEffects(marketId)),
   });
 }
 
@@ -589,29 +674,32 @@ export function useVendorsQuery(
   filters: VendorFilters,
   options?: { enabled?: boolean },
 ) {
+  const marketId = useMarketId();
   return useInfiniteQuery({
-    queryKey: vendorsKey(filters),
+    queryKey: vendorsKey(marketId ?? "", filters),
     queryFn: ({ pageParam }) =>
       apiFetch(buildVendorsPath(filters, pageParam), {
         schema: vendorListResponseSchema,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor,
-    enabled: options?.enabled ?? true,
+    enabled: marketId !== null && (options?.enabled ?? true),
   });
 }
 
 export function useVendorQuery(vendorId: string | null) {
+  const marketId = useMarketId();
   return useQuery({
-    queryKey: vendorKey(vendorId ?? ""),
+    queryKey: vendorKey(marketId ?? "", vendorId ?? ""),
     queryFn: () =>
       apiFetch(`${VENDORS_PATH}/${vendorId}`, { schema: vendorListItemSchema }),
-    enabled: vendorId !== null,
+    enabled: marketId !== null && vendorId !== null,
   });
 }
 
 export function useCreateVendor() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: { full_name: string; phone: string }) =>
       apiFetch(VENDORS_PATH, {
@@ -619,12 +707,17 @@ export function useCreateVendor() {
         body: input,
         schema: vendorListItemSchema,
       }),
-    onSuccess: () => invalidate(client, [VENDORS_KEY, SETUP_STATUS_KEY]),
+    onSuccess: () =>
+      invalidate(client, [
+        domainKey(marketId, "vendors"),
+        setupStatusKey(marketId),
+      ]),
   });
 }
 
 export function useUpdateVendor() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: ({
       id,
@@ -641,20 +734,27 @@ export function useUpdateVendor() {
       }),
     // Sotuvchi ISMI rasta ro'yxatida ham ko'rinadi (`vendor_name`).
     onSuccess: (_data, variables) => {
-      invalidate(client, [VENDORS_KEY, STALLS_KEY, ASSIGNMENTS_KEY]);
-      void client.invalidateQueries({ queryKey: vendorKey(variables.id) });
+      invalidate(client, [
+        domainKey(marketId, "vendors"),
+        domainKey(marketId, "stalls"),
+        domainKey(marketId, "assignments"),
+      ]);
+      void client.invalidateQueries({
+        queryKey: vendorKey(marketId, variables.id),
+      });
     },
   });
 }
 
 export function useStallAssignmentsQuery(stallId: string | null) {
+  const marketId = useMarketId();
   return useQuery({
-    queryKey: assignmentsKey(stallId ?? ""),
+    queryKey: assignmentsKey(marketId ?? "", stallId ?? ""),
     queryFn: () =>
       apiFetch(`${STALLS_PATH}/${stallId}/assignments`, {
         schema: assignmentListResponseSchema,
       }),
-    enabled: stallId !== null,
+    enabled: marketId !== null && stallId !== null,
   });
 }
 
@@ -664,16 +764,18 @@ export function useStallAssignmentsQuery(stallId: string | null) {
  * "Band, lekin sotuvchisiz" — 6-fazadagi anomaliya hisobining asosi, ya'ni
  * eskirgan `has_vendor` xaritani jimgina yolg'on qilardi.
  */
-const ASSIGNMENT_SIDE_EFFECTS = [
-  ASSIGNMENTS_KEY,
-  VENDORS_KEY,
-  STALLS_KEY,
-  MAP_KEY,
-  SETUP_STATUS_KEY,
-] as const;
+const assignmentSideEffects = (marketId: string) =>
+  [
+    domainKey(marketId, "assignments"),
+    domainKey(marketId, "vendors"),
+    domainKey(marketId, "stalls"),
+    mapKey(marketId),
+    setupStatusKey(marketId),
+  ] as const;
 
 export function useCreateAssignment() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: {
       stall_id: string;
@@ -686,7 +788,7 @@ export function useCreateAssignment() {
         body: input,
         schema: assignmentItemSchema,
       }),
-    onSuccess: () => invalidate(client, ASSIGNMENT_SIDE_EFFECTS),
+    onSuccess: () => invalidate(client, assignmentSideEffects(marketId)),
   });
 }
 
@@ -699,6 +801,7 @@ export function useCreateAssignment() {
  */
 export function useCloseAssignment() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: { id: string; to_date: string }) =>
       apiFetch(`${ASSIGNMENTS_PATH}/${input.id}`, {
@@ -706,12 +809,26 @@ export function useCloseAssignment() {
         body: { to_date: input.to_date },
         schema: assignmentItemSchema,
       }),
-    onSuccess: () => invalidate(client, ASSIGNMENT_SIDE_EFFECTS),
+    onSuccess: () => invalidate(client, assignmentSideEffects(marketId)),
   });
 }
 
 /* --- "Yangi bozor" ustasi (MARKET-01, D-16) ------------------------------- */
 
+/**
+ * ⚠ `MARKETS_KEY` ATAYIN DOIRALANMAGAN va shunday qoladi.
+ *
+ * `GET /markets` — PLATFORMA darajasidagi ro'yxat: u bozor tanlashdan
+ * OLDIN, tenant konteksti hali umuman yo'q paytda o'qiladi, ya'ni uni
+ * `market_id` bilan doiralash mumkin ham emas. Bu izoh shu yerda turibdi,
+ * chunki usiz keyingi o'quvchi uni "doiralash unutilgan" deb hisoblab
+ * "tuzatardi" — va bozor tanlash ekranini bo'shatib qo'yardi.
+ *
+ * Tenant chegarasi bu kalitda BOSHQA chora bilan ta'minlanadi: sessiya
+ * identifikatori o'zgarganda butun kesh `client.clear()` bilan bo'shaydi
+ * (`query-provider.tsx`), ya'ni oldingi foydalanuvchining bozorlar ro'yxati
+ * keyingisiga qolmaydi.
+ */
 export const MARKETS_KEY = ["markets"] as const;
 
 /**
@@ -776,9 +893,18 @@ export type MarketCreateInput = {
   contact_phone?: string | null;
 };
 
-/** Ustaning 1-qadami — QORALAMA bozor tug'iladi (`is_active === false`). */
+/**
+ * Ustaning 1-qadami — QORALAMA bozor tug'iladi (`is_active === false`).
+ *
+ * ⚠ Bu mutatsiya YANGI bozor tug'diradi, ya'ni `onSuccess` paytida store'da
+ * hamon ESKI (yoki `null`) bozor turadi va `setupStatusKey` shunga tushadi.
+ * Bu zarar qilmaydi: darhol keyin `applySession(...)` sessiya identifikatorini
+ * o'zgartiradi va butun keshni bo'shatadi (`query-provider.tsx`). Platforma
+ * ro'yxati (`MARKETS_KEY`) esa doiralanmagan va to'g'ri bekor qilinadi.
+ */
 export function useCreateMarket() {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (input: MarketCreateInput) =>
       apiFetch(MARKETS_PATH, {
@@ -786,7 +912,8 @@ export function useCreateMarket() {
         body: input,
         schema: marketCreateResponseSchema,
       }),
-    onSuccess: () => invalidate(client, [MARKETS_KEY, SETUP_STATUS_KEY]),
+    onSuccess: () =>
+      invalidate(client, [MARKETS_KEY, setupStatusKey(marketId)]),
   });
 }
 
@@ -826,7 +953,10 @@ export function useActivateMarket() {
         method: "POST",
         schema: marketCreateResponseSchema,
       }),
-    onSuccess: () => invalidate(client, [MARKETS_KEY, SETUP_STATUS_KEY]),
+    // `marketId` STORE'dan emas, MUTATSIYA argumentidan olinadi: faollashgan
+    // bozor aynan shu, va u store'dagi joriy bozordan farq qilishi mumkin.
+    onSuccess: (_data, marketId) =>
+      invalidate(client, [MARKETS_KEY, setupStatusKey(marketId)]),
   });
 }
 
@@ -859,7 +989,8 @@ export function useDeleteDraftMarket() {
         method: "DELETE",
         schema: emptyResponseSchema,
       }),
-    onSuccess: () => invalidate(client, [MARKETS_KEY, SETUP_STATUS_KEY]),
+    onSuccess: (_data, marketId) =>
+      invalidate(client, [MARKETS_KEY, setupStatusKey(marketId)]),
   });
 }
 
@@ -885,8 +1016,42 @@ export function importErrorsOf(error: unknown): ImportErrorResponse | null {
  * 422 kelganda bazaga HECH NARSA yozilmagan — xatolar ro'yxatini
  * `importErrorsOf(error)` beradi.
  */
+/**
+ * Import yon ta'sirlari — `kind` bo'yicha IKKI xil to'plam (WR-10).
+ *
+ * ⚠ `vendors` tarmog'ida `assignments` MAJBURIY:
+ * `ImportRepository.insert_vendors()` (`import_repo.py:223-234`) rasta kodi
+ * ko'rsatilgan HAR sotuvchi uchun `stall_assignments` qatori yozadi. Bu
+ * kalit tushib qolganida ochiq turgan `GET /stalls/{id}/assignments` paneli
+ * import tugagandan keyin ham import OLDIDAGI bo'sh tarixni ko'rsatib
+ * turardi.
+ *
+ * `stalls` va `map` sotuvchi tarmog'ida ham bor: rasta qatoridagi
+ * `has_vendor` va `vendor_name` biriktirish yaratilganda o'zgaradi.
+ *
+ * Ro'yxat qo'lda emas, shu yerda quriladi — ayni modulning invalidatsiya
+ * kontrakti buzilgan YAGONA joyi aynan qo'lda yozilgan ro'yxat edi.
+ */
+const importSideEffects = (marketId: string, kind: ImportKind) =>
+  kind === "stalls"
+    ? ([
+        domainKey(marketId, "stalls"),
+        mapKey(marketId),
+        zonesKey(marketId),
+        categoriesKey(marketId),
+        setupStatusKey(marketId),
+      ] as const)
+    : ([
+        domainKey(marketId, "vendors"),
+        domainKey(marketId, "assignments"),
+        domainKey(marketId, "stalls"),
+        mapKey(marketId),
+        setupStatusKey(marketId),
+      ] as const);
+
 export function useImportMutation(kind: ImportKind) {
   const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
   return useMutation({
     mutationFn: (file: File) => {
       const form = new FormData();
@@ -897,14 +1062,7 @@ export function useImportMutation(kind: ImportKind) {
         schema: importResultSchema,
       });
     },
-    onSuccess: () =>
-      invalidate(client, [
-        kind === "stalls" ? STALLS_KEY : VENDORS_KEY,
-        MAP_KEY,
-        ZONES_KEY,
-        CATEGORIES_KEY,
-        SETUP_STATUS_KEY,
-      ]),
+    onSuccess: () => invalidate(client, importSideEffects(marketId, kind)),
   });
 }
 
