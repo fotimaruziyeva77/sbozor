@@ -111,7 +111,7 @@ Plans:
   4. Bozor admini bayram/ishlamaydigan kunni belgilaydi va o'sha kunga patta hisoblanmaydi
   5. Bozor admini sxematik plan-xaritada rastalarni zona bo'yicha grid ko'rinishida ko'radi; rasta bosilganda uning kartasi (raqam, toifa, tarif, sotuvchi, holat) ochiladi
 
-**Plans**: 17 plans in 15 waves
+**Plans**: 23 plans in 19 waves (18–23 — bo‘shliqlarni yopish to‘lqini)
 Plans:
 **Wave 1**
 
@@ -150,6 +150,24 @@ Plans:
 **Wave 15**
 
 - [x] 02-17-PLAN.md — Karmananing real ma'lumoti, faza mezonlari testi va darvoza (W15)
+
+**Wave 16** *(bo‘shliqlarni yopish — 02-VERIFICATION.md)*
+
+- [ ] 02-18-PLAN.md — Ustaga yo‘l ochish: marshrut istisnosi, navigatsiya yozuvi, bo‘sh holat havolasi (+WR-09) (W16)
+- [ ] 02-19-PLAN.md — Shaxsiy ma’lumot o‘qishining auditi va MARKET_DATA_VIEW/VENDOR_VIEW chegarasi (W16)
+- [ ] 02-20-PLAN.md — Klient keshining tenant chegarasi: market_id bilan doiralangan kalitlar va tozalash (+WR-10) (W16)
+
+**Wave 17**
+
+- [ ] 02-21-PLAN.md — Ish kunlari tanlovi majburiy (WR-06) va qolgan ko‘rik topilmalarining triaji (W17)
+
+**Wave 18**
+
+- [ ] 02-22-PLAN.md — Yakuniy regressiya va REQUIREMENTS.md traceability yakunlanishi (W18)
+
+**Wave 19** *(BLOKLANGAN — ma’muriyatning beshta hujjati kutilmoqda)*
+
+- [ ] 02-23-PLAN.md — Karmananing REAL ma’lumotini yuklash, solishtirish va validatsiya imzosi (W19)
 
 **UI hint**: yes
 **Note**: Ustaning kamera / kamera-zona / snapshot-jadval qadamlari 3–5 fazalarda ulanadi. Plan-xarita **sxematik** (grid) bo'lib qoladi — to'liq interaktiv xarita v2. Ranglar to'liq to'plami (ko'k to'langan, qizil qarzdor, sariq nomuvofiq) va dalil-rasm 6–7 fazalarda yonadi. Karmananing real ma'lumoti aynan shu fazada kiritiladi — keyingi fazalar fikstura emas, haqiqat ustida sinaladi.
