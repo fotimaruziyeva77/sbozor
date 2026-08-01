@@ -1,10 +1,15 @@
 ---
 phase: 2
 slug: bozor-domeni-va-yangi-bozor-ustasi
-status: draft
+status: automated-green-manual-open
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-07-30
+measured: 2026-08-01
+open_items:
+  - "To'rtala «Manual-Only Verification» ham BAJARILMAGAN — REAL Karmana ma'lumoti (rasta reestri, tariflar, sotuvchilar, ish rejimi, rekvizitlar) hali topshirilmagan. Fazaning maqsad jumlasining ikkinchi yarmi («Karmananing real rasta/tarif/sotuvchi ma'lumoti tizimda yashaydi») shu sababli ISBOTLANMAGAN."
+  - "To'lqin darajasidagi kechikish byudjeti BUZILGAN: to'liq backend to'plami 225 s (maqsad ≤180 s). Task darajasi 11 s bilan byudjet ichida (≤30 s)."
+  - "02-16 dan qolgan ikki qarz yopilmagan: ustaga navigatsiya havolasi yo'q (`app-shell.tsx`) va BIRORTA bozori yo'q platforma admini ustaga umuman kira olmaydi (`(app)/layout.tsx`). Ikkalasi ham 02-17 ning fayl chegarasidan TASHQARIDA."
 ---
 
 # Phase 2 — Validation Strategy
@@ -28,7 +33,7 @@ created: 2026-07-30
 | **Full suite command** | `npm run test` → `docker compose --profile test run --rm tests pytest -q` |
 | **Frontend suite command** | `npm --prefix frontend test` |
 | **Phase gate command** | `npm run gate` (lint + mypy + backend + tenancy + i18n + typecheck + eslint + build) |
-| **Estimated runtime** | Phase 1 measured: quick **8 s** · full **47 s** · tenancy **20 s**. Phase 2 adds ~9 tables and ~8 integration files — **re-measure at the phase gate task**, do not carry Phase 1 numbers forward as fact |
+| **Estimated runtime** | **2-fazada O'LCHANDI (2026-08-01, 02-17 darvoza taski; 1-faza raqamlari KO'CHIRILMADI):** task darajasi (`pytest tests/unit -x -q`) **11 s** ✅ (maqsad ≤30 s) · to'lqin darajasi (`npm run test:tenancy`, 309 test) **99 s** · to'liq backend (`npm run test`, **890** test) **225 s** ❌ (maqsad ≤180 s) · frontend to'plami (`npm --prefix frontend test`, 54 node + 40 vitest) **12 s** · to'liq darvoza (`npm run gate`) **403 s**. Har bir raqam konteyner ko'tarilishini O'Z ICHIGA OLADI (xostda `time` bilan). 1-faza: quick 8 s / full 47 s / tenancy 20 s — ya'ni to'liq to'plam **4.8×** o'sdi |
 
 **Forbidden:** SQLite (RLS does not exist there). The test engine MUST connect as `sbozor_app`, never as a superuser — `FORCE ROW LEVEL SECURITY` does not constrain superusers, so a superuser fixture makes every RLS test falsely green.
 
@@ -42,6 +47,7 @@ created: 2026-07-30
 - **After every plan wave:** `npm run test` + `npm run test:tenancy` + `npm --prefix frontend test`
 - **Before `/gsd-verify-work`:** `npm run gate` fully green
 - **Max feedback latency:** target ≤30 s at task level, ≤180 s at wave level (Phase 1 budgets; confirm by measurement)
+- **O'LCHOV NATIJASI (2026-08-01):** task darajasi **11 s** ✅; to'lqin darajasi **225 s** ❌ — byudjet **45 s ga oshib ketdi**. Sabab strukturaviy va u yashirilmasligi kerak: har integratsiya testi `two_markets` + `market_domain` seed'ini QAYTA yozadi (function-scope fixture), ya'ni 890 testning taxminan yarmi har safar ikki bozorlik domen qatlamini quradi. Bu 2-fazada TUZATILMADI — tuzatish fixture doirasini o'zgartirishni talab qiladi va u testlar orasidagi izolyatsiyaga (bu fazaning eng qimmat kafolati) tegadi. 3-fazaga o'tkaziladi va u yerda `pytest-xdist` yoki tranzaksiyaga o'ralgan seed sifatida ko'rib chiqiladi.
 
 ---
 
@@ -53,59 +59,68 @@ created: 2026-07-30
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 02-01-01 | 01 | 1 | MARKET-01,MARKET-02,MARKET-03,MARKET-04 | T-02-01 | Sxema reyestrlari va RBAC matritsasini 2-faza uchun to'g'rilash | unit | `npm run test:unit` | ⬜ | ⬜ pending |
-| 02-01-02 | 01 | 1 | MARKET-01,MARKET-02,MARKET-03,MARKET-04 | T-02-02 | `btree_gist` superuser init qadami, conftest ulanishi va `require_extension()` yordamchisi | tenancy | `npm run test:tenancy` | ⬜ | ⬜ pending |
-| 02-01-03 | 01 | 1 | MARKET-01,MARKET-02,MARKET-03,MARKET-04 | T-02-03 | WR-02/WR-03 — `select-market` ni parol darvozasi ostiga olish va `is_platform_admin` ni DB'dan qayta o'qish | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-02-01 | 02 | 1 | MARKET-01,MARKET-02,MARKET-06 | T-02-09 | Dizayn tokenlarini WCAG AA ga keltirish va boshqaruv elementlarini yangi tokenlarga ko'chirish | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
-| 02-02-02 | 02 | 1 | MARKET-01,MARKET-02,MARKET-06 | T-02-10 | Yetti `ui/` primitivini ajratish + tipografiya va bo'shliq panjarasini mexanik tozalash | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ⬜ | ⬜ pending |
-| 02-02-03 | 02 | 1 | MARKET-01,MARKET-02,MARKET-06 | T-02-11 | Transliterator defektlarini yopish va frontend testlarini faza darvozasiga ulash | component | `npm --prefix frontend test && npm --prefix frontend run i18n:check` | ⬜ | ⬜ pending |
-| 02-03-01 | 03 | 2 | MARKET-01 | T-02-15 | Zanjir 1–2-bandlari — `auth_memberships()` qaytish tipi va `Membership.is_active` | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ⬜ | ⬜ pending |
-| 02-03-02 | 03 | 2 | MARKET-01 | T-02-16 | Zanjir 3–4-bandlari — `MarketRef.is_active` va serverdagi filtrni olib tashlash | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-03-03 | 03 | 2 | MARKET-01 | T-02-17 | Zanjir 5–6-bandlari — zod kontrakti, `Qoralama` belgisi va uzilgan ustaga qaytish | component | `npm --prefix frontend run test:component && npm --prefix frontend run i18…` | ⬜ | ⬜ pending |
-| 02-04-01 | 04 | 3 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-20 | `StallStatus` enum'i va `[)` davr yordamchisi | unit | `npm run test:unit` | ⬜ | ⬜ pending |
-| 02-04-02 | 04 | 3 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-21 | O'nta domen modeli (`models/market.py`) va barrel importi | gate | `docker compose --profile test run --rm tests sh -c "python -c 'from sbozo…` | ⬜ | ⬜ pending |
-| 02-04-03 | 04 | 3 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-22 | DB funksiyalari, trigger funksiyalari va entity reyestrlari | gate | `docker compose --profile test run --rm tests sh -c "python -c 'from migra…` | ⬜ | ⬜ pending |
-| 02-05-01 | 05 | 4 | MARKET-01,MARKET-02,MARKET-03 | T-02-29 | `0007_market_domain.py` — yadro jadvallar, RLS, audit va rasta-kod kafolati | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ⬜ | ⬜ pending |
-| 02-05-02 | 05 | 4 | MARKET-01,MARKET-02,MARKET-03 | T-02-30 | `0008_temporal.py` — tarif va toifa tarixi + o'zgarmaslik triggerlari | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ⬜ | ⬜ pending |
-| 02-05-03 | 05 | 4 | MARKET-01,MARKET-02,MARKET-03 | T-02-31 | Alembic ko'rmaydigan narsalar uchun meta-test darvozasi + bo'sh autogenerate diff | tenancy | `docker compose --profile test run --rm tests pytest tests/tenancy/test_ma…` | ⬜ | ⬜ pending |
-| 02-06-01 | 06 | 5 | MARKET-04,MARKET-05 | T-02-37 | `0009_vendors.py` — sotuvchilar va qoplanmaydigan biriktirish davrlari | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ⬜ | ⬜ pending |
-| 02-06-02 | 06 | 5 | MARKET-04,MARKET-05 | T-02-38 | `0010_calendar.py` — ish kunlari istisnolari, `market_is_open()` va `market_delete_draft()` | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ⬜ | ⬜ pending |
-| 02-06-03 | 06 | 5 | MARKET-04,MARKET-05 | T-02-39 | Ikki bozorli domen seed'i va EXCLUDE/`market_is_open` darvozalari | tenancy | `docker compose --profile test run --rm tests pytest tests/tenancy -x -q` | ⬜ | ⬜ pending |
-| 02-07-01 | 07 | 6 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-46 | Tarif va toifa tarixi — SC#3 ning to'liq isboti | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-07-02 | 07 | 6 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-47 | Sotuvchi biriktirish — D-09/D-10/D-11/D-12 isboti | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-07-03 | 07 | 6 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-48 | Ish kunlari kalendari (SC#4) va rasta raqamining qayta ishlatilmasligi (SC#2/D-02) | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-08-01 | 08 | 7 | MARKET-02,MARKET-06 | T-02-54 | Domen DTO'lari, xato kodlari va oddiy reestrlar (zonalar, toifalar) | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ⬜ | ⬜ pending |
-| 02-08-02 | 08 | 7 | MARKET-02,MARKET-06 | T-02-55 | `stall_repo.py` va `stalls.py` — reestr, keyset, filtrlar va xarita agregati | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ⬜ | ⬜ pending |
-| 02-08-03 | 08 | 7 | MARKET-02,MARKET-06 | T-02-56 | Marshrutlarni ulash, cross-tenant matritsasiga qo'shish va SC#2 ning API isboti | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-09-01 | 09 | 8 | MARKET-03,MARKET-05 | T-02-62 | `tariff_repo.py` va `tariffs.py` — faqat qo'shadigan tarif API'si | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ⬜ | ⬜ pending |
-| 02-09-02 | 09 | 8 | MARKET-03,MARKET-05 | T-02-63 | `calendar.py` — haftalik jadval va istisno kunlar | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-09-03 | 09 | 8 | MARKET-03,MARKET-05 | T-02-64 | Tarif va kalendar API'sining integratsiya testlari | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-10-01 | 10 | 9 | MARKET-04 | T-02-70 | `vendor_repo.py` va `vendors.py` — reestr va shaxsiy ma'lumot o'qish auditi | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ⬜ | ⬜ pending |
-| 02-10-02 | 10 | 9 | MARKET-04 | T-02-71 | `assignments.py` — biriktirish davrlari va almashinuv oqimi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-10-03 | 10 | 9 | MARKET-04 | T-02-72 | Sotuvchi va biriktirish API'sining integratsiya testlari | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-11-01 | 11 | 10 | MARKET-01 | T-02-79 | `market_repo.py` va qoralama bozor yaratish / o'chirish | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ⬜ | ⬜ pending |
-| 02-11-02 | 11 | 10 | MARKET-01 | T-02-80 | `setup-status` agregati va faollashtirish darvozasi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-11-03 | 11 | 10 | MARKET-01 | T-02-81 | SC#1 ning uchidan-uchiga testi va RBAC darvozasi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-12-01 | 12 | 11 | MARKET-02,MARKET-04 | T-02-87 | Xavfsiz `.xlsx` o'qish qatlami va uning hujum testlari | unit | `docker compose --profile test run --rm tests pytest tests/unit/test_xlsx_…` | ⬜ | ⬜ pending |
-| 02-12-02 | 12 | 11 | MARKET-02,MARKET-04 | T-02-88 | Validator (yozishdan oldin) va shablon/xato-hisoboti generatori | unit | `docker compose --profile test run --rm tests pytest tests/unit/test_xlsx_…` | ⬜ | ⬜ pending |
-| 02-12-03 | 12 | 11 | MARKET-02,MARKET-04 | T-02-89 | `imports.py` routeri va all-or-nothing / idempotentlik testlari | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-13-01 | 13 | 12 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-98 | Zod kontraktlari va xato-kod xaritasi | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint` | ⬜ | ⬜ pending |
-| 02-13-02 | 13 | 12 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-99 | TanStack Query hooklari va navigatsiya kengaytmasi | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
-| 02-13-03 | 13 | 12 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-100 | To'qqizta namespace uchun uch tilli matnlar | component | `npm --prefix frontend run i18n:check && npm --prefix frontend test` | ⬜ | ⬜ pending |
-| 02-14-01 | 14 | 13 | MARKET-02,MARKET-06 | T-02-105 | Rastalar reestri sahifasi — ro'yxat, filtrlar va tahrir dialoglari | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
-| 02-14-02 | 14 | 13 | MARKET-02,MARKET-06 | T-02-106 | Sxematik plan-xarita — grid, katak, tone kontrakti va legenda | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
-| 02-14-03 | 14 | 13 | MARKET-02,MARKET-06 | T-02-107 | Rasta kartasi dialogi va xarita darvozasi (vitest) | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ⬜ | ⬜ pending |
-| 02-15-01 | 15 | 13 | MARKET-03,MARKET-04,MARKET-05 | T-02-112 | Sotuvchilar reestri va biriktirish oqimi | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ⬜ | ⬜ pending |
-| 02-15-02 | 15 | 13 | MARKET-03,MARKET-04,MARKET-05 | T-02-113 | Tarif tarixi, zona va toifa ro'yxatlari | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
-| 02-15-03 | 15 | 13 | MARKET-03,MARKET-04,MARKET-05 | T-02-114 | Ish kunlari kalendari | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
-| 02-16-01 | 16 | 14 | MARKET-01,MARKET-02,MARKET-04 | T-02-120 | Usta qobig'i, qadam relsi va marshrutlar | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ⬜ | ⬜ pending |
-| 02-16-02 | 16 | 14 | MARKET-01,MARKET-02,MARKET-04 | T-02-121 | Rekvizitlar formasi va faollashtirish paneli | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ⬜ | ⬜ pending |
-| 02-16-03 | 16 | 14 | MARKET-01,MARKET-02,MARKET-04 | T-02-122 | Excel import paneli va xato ro'yxati | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ⬜ | ⬜ pending |
-| 02-17-01 | 17 | 15 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-128 | Real ma'lumot yo'riqnomasi va takrorlanadigan import skripti | gate | `node scripts/karmana-import.mjs --help && node -e "const fs=require('node…` | ⬜ | ⬜ pending |
-| 02-17-02 | 17 | 15 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-129 | Beshta faza mezonining uchidan-uchiga avtomatik tekshiruvi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ⬜ | ⬜ pending |
-| 02-17-03 | 17 | 15 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-130 | Real ma'lumotni yuklash, solishtirish va faza darvozasi | gate + human-check | `npm run gate` | ⬜ | ⬜ pending |
+| 02-01-01 | 01 | 1 | MARKET-01,MARKET-02,MARKET-03,MARKET-04 | T-02-01 | Sxema reyestrlari va RBAC matritsasini 2-faza uchun to'g'rilash | unit | `npm run test:unit` | ✅ | ✅ green |
+| 02-01-02 | 01 | 1 | MARKET-01,MARKET-02,MARKET-03,MARKET-04 | T-02-02 | `btree_gist` superuser init qadami, conftest ulanishi va `require_extension()` yordamchisi | tenancy | `npm run test:tenancy` | ✅ | ✅ green |
+| 02-01-03 | 01 | 1 | MARKET-01,MARKET-02,MARKET-03,MARKET-04 | T-02-03 | WR-02/WR-03 — `select-market` ni parol darvozasi ostiga olish va `is_platform_admin` ni DB'dan qayta o'qish | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-02-01 | 02 | 1 | MARKET-01,MARKET-02,MARKET-06 | T-02-09 | Dizayn tokenlarini WCAG AA ga keltirish va boshqaruv elementlarini yangi tokenlarga ko'chirish | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ✅ | ✅ green |
+| 02-02-02 | 02 | 1 | MARKET-01,MARKET-02,MARKET-06 | T-02-10 | Yetti `ui/` primitivini ajratish + tipografiya va bo'shliq panjarasini mexanik tozalash | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ✅ | ✅ green |
+| 02-02-03 | 02 | 1 | MARKET-01,MARKET-02,MARKET-06 | T-02-11 | Transliterator defektlarini yopish va frontend testlarini faza darvozasiga ulash | component | `npm --prefix frontend test && npm --prefix frontend run i18n:check` | ✅ | ✅ green |
+| 02-03-01 | 03 | 2 | MARKET-01 | T-02-15 | Zanjir 1–2-bandlari — `auth_memberships()` qaytish tipi va `Membership.is_active` | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ✅ | ✅ green |
+| 02-03-02 | 03 | 2 | MARKET-01 | T-02-16 | Zanjir 3–4-bandlari — `MarketRef.is_active` va serverdagi filtrni olib tashlash | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-03-03 | 03 | 2 | MARKET-01 | T-02-17 | Zanjir 5–6-bandlari — zod kontrakti, `Qoralama` belgisi va uzilgan ustaga qaytish | component | `npm --prefix frontend run test:component && npm --prefix frontend run i18…` | ✅ | ✅ green |
+| 02-04-01 | 04 | 3 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-20 | `StallStatus` enum'i va `[)` davr yordamchisi | unit | `npm run test:unit` | ✅ | ✅ green |
+| 02-04-02 | 04 | 3 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-21 | O'nta domen modeli (`models/market.py`) va barrel importi | gate | `docker compose --profile test run --rm tests sh -c "python -c 'from sbozo…` | ✅ | ✅ green |
+| 02-04-03 | 04 | 3 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-22 | DB funksiyalari, trigger funksiyalari va entity reyestrlari | gate | `docker compose --profile test run --rm tests sh -c "python -c 'from migra…` | ✅ | ✅ green |
+| 02-05-01 | 05 | 4 | MARKET-01,MARKET-02,MARKET-03 | T-02-29 | `0007_market_domain.py` — yadro jadvallar, RLS, audit va rasta-kod kafolati | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ✅ | ✅ green |
+| 02-05-02 | 05 | 4 | MARKET-01,MARKET-02,MARKET-03 | T-02-30 | `0008_temporal.py` — tarif va toifa tarixi + o'zgarmaslik triggerlari | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ✅ | ✅ green |
+| 02-05-03 | 05 | 4 | MARKET-01,MARKET-02,MARKET-03 | T-02-31 | Alembic ko'rmaydigan narsalar uchun meta-test darvozasi + bo'sh autogenerate diff | tenancy | `docker compose --profile test run --rm tests pytest tests/tenancy/test_ma…` | ✅ | ✅ green |
+| 02-06-01 | 06 | 5 | MARKET-04,MARKET-05 | T-02-37 | `0009_vendors.py` — sotuvchilar va qoplanmaydigan biriktirish davrlari | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ✅ | ✅ green |
+| 02-06-02 | 06 | 5 | MARKET-04,MARKET-05 | T-02-38 | `0010_calendar.py` — ish kunlari istisnolari, `market_is_open()` va `market_delete_draft()` | gate | `docker compose --profile migrate run --rm migrate alembic upgrade head &&…` | ✅ | ✅ green |
+| 02-06-03 | 06 | 5 | MARKET-04,MARKET-05 | T-02-39 | Ikki bozorli domen seed'i va EXCLUDE/`market_is_open` darvozalari | tenancy | `docker compose --profile test run --rm tests pytest tests/tenancy -x -q` | ✅ | ✅ green |
+| 02-07-01 | 07 | 6 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-46 | Tarif va toifa tarixi — SC#3 ning to'liq isboti | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-07-02 | 07 | 6 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-47 | Sotuvchi biriktirish — D-09/D-10/D-11/D-12 isboti | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-07-03 | 07 | 6 | MARKET-02,MARKET-03,MARKET-04,MARKET-05 | T-02-48 | Ish kunlari kalendari (SC#4) va rasta raqamining qayta ishlatilmasligi (SC#2/D-02) | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-08-01 | 08 | 7 | MARKET-02,MARKET-06 | T-02-54 | Domen DTO'lari, xato kodlari va oddiy reestrlar (zonalar, toifalar) | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ✅ | ✅ green |
+| 02-08-02 | 08 | 7 | MARKET-02,MARKET-06 | T-02-55 | `stall_repo.py` va `stalls.py` — reestr, keyset, filtrlar va xarita agregati | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ✅ | ✅ green |
+| 02-08-03 | 08 | 7 | MARKET-02,MARKET-06 | T-02-56 | Marshrutlarni ulash, cross-tenant matritsasiga qo'shish va SC#2 ning API isboti | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-09-01 | 09 | 8 | MARKET-03,MARKET-05 | T-02-62 | `tariff_repo.py` va `tariffs.py` — faqat qo'shadigan tarif API'si | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ✅ | ✅ green |
+| 02-09-02 | 09 | 8 | MARKET-03,MARKET-05 | T-02-63 | `calendar.py` — haftalik jadval va istisno kunlar | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-09-03 | 09 | 8 | MARKET-03,MARKET-05 | T-02-64 | Tarif va kalendar API'sining integratsiya testlari | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-10-01 | 10 | 9 | MARKET-04 | T-02-70 | `vendor_repo.py` va `vendors.py` — reestr va shaxsiy ma'lumot o'qish auditi | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ✅ | ✅ green |
+| 02-10-02 | 10 | 9 | MARKET-04 | T-02-71 | `assignments.py` — biriktirish davrlari va almashinuv oqimi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-10-03 | 10 | 9 | MARKET-04 | T-02-72 | Sotuvchi va biriktirish API'sining integratsiya testlari | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-11-01 | 11 | 10 | MARKET-01 | T-02-79 | `market_repo.py` va qoralama bozor yaratish / o'chirish | gate | `docker compose --profile test run --rm tests sh -c "ruff check . && mypy …` | ✅ | ✅ green |
+| 02-11-02 | 11 | 10 | MARKET-01 | T-02-80 | `setup-status` agregati va faollashtirish darvozasi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-11-03 | 11 | 10 | MARKET-01 | T-02-81 | SC#1 ning uchidan-uchiga testi va RBAC darvozasi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-12-01 | 12 | 11 | MARKET-02,MARKET-04 | T-02-87 | Xavfsiz `.xlsx` o'qish qatlami va uning hujum testlari | unit | `docker compose --profile test run --rm tests pytest tests/unit/test_xlsx_…` | ✅ | ✅ green |
+| 02-12-02 | 12 | 11 | MARKET-02,MARKET-04 | T-02-88 | Validator (yozishdan oldin) va shablon/xato-hisoboti generatori | unit | `docker compose --profile test run --rm tests pytest tests/unit/test_xlsx_…` | ✅ | ✅ green |
+| 02-12-03 | 12 | 11 | MARKET-02,MARKET-04 | T-02-89 | `imports.py` routeri va all-or-nothing / idempotentlik testlari | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-13-01 | 13 | 12 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-98 | Zod kontraktlari va xato-kod xaritasi | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint` | ✅ | ✅ green |
+| 02-13-02 | 13 | 12 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-99 | TanStack Query hooklari va navigatsiya kengaytmasi | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ✅ | ✅ green |
+| 02-13-03 | 13 | 12 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-100 | To'qqizta namespace uchun uch tilli matnlar | component | `npm --prefix frontend run i18n:check && npm --prefix frontend test` | ✅ | ✅ green |
+| 02-14-01 | 14 | 13 | MARKET-02,MARKET-06 | T-02-105 | Rastalar reestri sahifasi — ro'yxat, filtrlar va tahrir dialoglari | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ✅ | ✅ green |
+| 02-14-02 | 14 | 13 | MARKET-02,MARKET-06 | T-02-106 | Sxematik plan-xarita — grid, katak, tone kontrakti va legenda | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ✅ | ✅ green |
+| 02-14-03 | 14 | 13 | MARKET-02,MARKET-06 | T-02-107 | Rasta kartasi dialogi va xarita darvozasi (vitest) | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ✅ | ✅ green |
+| 02-15-01 | 15 | 13 | MARKET-03,MARKET-04,MARKET-05 | T-02-112 | Sotuvchilar reestri va biriktirish oqimi | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ✅ | ✅ green |
+| 02-15-02 | 15 | 13 | MARKET-03,MARKET-04,MARKET-05 | T-02-113 | Tarif tarixi, zona va toifa ro'yxatlari | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ✅ | ✅ green |
+| 02-15-03 | 15 | 13 | MARKET-03,MARKET-04,MARKET-05 | T-02-114 | Ish kunlari kalendari | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ✅ | ✅ green |
+| 02-16-01 | 16 | 14 | MARKET-01,MARKET-02,MARKET-04 | T-02-120 | Usta qobig'i, qadam relsi va marshrutlar | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ✅ | ✅ green |
+| 02-16-02 | 16 | 14 | MARKET-01,MARKET-02,MARKET-04 | T-02-121 | Rekvizitlar formasi va faollashtirish paneli | component | `npm --prefix frontend run typecheck && npm --prefix frontend run lint && …` | ✅ | ✅ green |
+| 02-16-03 | 16 | 14 | MARKET-01,MARKET-02,MARKET-04 | T-02-122 | Excel import paneli va xato ro'yxati | component | `npm --prefix frontend run test:component && npm --prefix frontend run typ…` | ✅ | ✅ green |
+| 02-17-01 | 17 | 15 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-128 | Real ma'lumot yo'riqnomasi va takrorlanadigan import skripti | gate | `node scripts/karmana-import.mjs --help && node -e "const fs=require('node…` | ✅ | ✅ green |
+| 02-17-02 | 17 | 15 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-129 | Beshta faza mezonining uchidan-uchiga avtomatik tekshiruvi | integration | `docker compose --profile test run --rm tests pytest tests/integration/tes…` | ✅ | ✅ green |
+| 02-17-03 | 17 | 15 | MARKET-01,MARKET-02,MARKET-03,MARKET-04,MARKET-05,MARKET-06 | T-02-130 | Real ma'lumotni yuklash, solishtirish va faza darvozasi | gate + human-check | `npm run gate` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+> **`Status` ustuni FAQAT `Automated Command` ustunini bildiradi** va u
+> 2026-08-01 da `npm run gate` ning to'liq yashil o'tishi bilan tasdiqlangan
+> (890 backend + 54 node + 40 vitest testi, lint/mypy/typecheck/eslint/build).
+>
+> ⚠ **`02-17-03` ning `human-check` yarmi BU USTUNGA KIRMAYDI va u OCHIQ.**
+> Uning to'rt bandi quyidagi "Manual-Only Verifications" jadvalida alohida
+> yuritiladi. Ya'ni bu jadvaldagi to'liq yashil qator "faza mezonlari
+> isbotlangan" degani EMAS — u "kod darvozalari yashil" degani.
 
 **Coverage anchors the planner must not drop** (each already has a named command in RESEARCH.md):
 
@@ -127,38 +142,81 @@ created: 2026-07-30
 
 Two of these are **inherited landmines from Phase 1** and must land before the first Phase 2 migration — otherwise the existing meta-tests go red on the first table created.
 
-- [ ] `packages/sbozor-core/sbozor_core/schema_contract.py` — remove `stall_assignments` from `FINANCIAL_TABLES` (with a reason comment); extend `AUDITED_TABLES` to the 6 domain tables — **Pitfall 3**
-- [ ] `services/core-api/app/security/rbac.py` — grant `PLATFORM_ADMIN` the `STALL_MANAGE` / `TARIFF_MANAGE` / `VENDOR_MANAGE` permissions; add the two new `Permission` members — **Pitfall 6** (without this, the person running the wizard cannot enter stalls or tariffs into the market they are building)
-- [ ] `ops/db/init/00-extensions.sql` + read it from `tests/conftest.py` — `btree_gist` — **Pitfall 1**
-- [ ] `tests/fixtures/market_domain.py` — two-market seed (zone / category / stall / tariff / vendor / assignment), layered on the existing `two_markets.py`
-- [ ] `tests/tenancy/test_market_domain_meta.py` — asserts the EXCLUDE constraint exists, `tariff_past_immutable` trigger exists, `stall_code_claim` trigger exists, and `market_is_open` is **NOT** `SECURITY DEFINER` — **Pitfall 2** (Alembic cannot see `ExcludeConstraint` drift in either direction; this meta-test is the only guard)
-- [ ] `tests/integration/test_{tariff_history,stall_assignments,market_calendar,stall_import,wizard_flow,stall_registry,stall_code_reuse,vendors}.py` — stubs
-- [ ] `tests/unit/test_{xlsx_reader,xlsx_template}.py` — parser limits, billion-laughs smoke test, formula injection
-- [ ] `frontend/src/components/stalls/stall-map.test.tsx` — vitest + jsdom (infrastructure ready from Phase 1)
-- [ ] `tests/tenancy/test_route_coverage.py` — register the new routes (CI goes red until done — **this is deliberate**)
+- [x] `packages/sbozor-core/sbozor_core/schema_contract.py` — remove `stall_assignments` from `FINANCIAL_TABLES` (with a reason comment); extend `AUDITED_TABLES` to the 6 domain tables — **Pitfall 3**
+- [x] `services/core-api/app/security/rbac.py` — grant `PLATFORM_ADMIN` the `STALL_MANAGE` / `TARIFF_MANAGE` / `VENDOR_MANAGE` permissions; add the two new `Permission` members — **Pitfall 6** (without this, the person running the wizard cannot enter stalls or tariffs into the market they are building)
+- [x] `ops/db/init/00-extensions.sql` + read it from `tests/conftest.py` — `btree_gist` — **Pitfall 1**
+- [x] `tests/fixtures/market_domain.py` — two-market seed (zone / category / stall / tariff / vendor / assignment), layered on the existing `two_markets.py`
+- [x] `tests/tenancy/test_market_domain_meta.py` — asserts the EXCLUDE constraint exists, `tariff_past_immutable` trigger exists, `stall_code_claim` trigger exists, and `market_is_open` is **NOT** `SECURITY DEFINER` — **Pitfall 2** (Alembic cannot see `ExcludeConstraint` drift in either direction; this meta-test is the only guard)
+- [x] `tests/integration/test_{tariff_history,stall_assignments,market_calendar,stall_import,wizard_flow,stall_registry,stall_code_reuse,vendors}.py` — stubs *(hammasi endi to'liq test, stub emas; `vendors` fayli `test_vendors_api.py` nomi bilan)*
+- [x] `tests/unit/test_{xlsx_reader,xlsx_template}.py` — parser limits, billion-laughs smoke test, formula injection
+- [x] `frontend/src/components/stalls/stall-map.test.tsx` — vitest + jsdom (infrastructure ready from Phase 1)
+- [x] `tests/tenancy/test_route_coverage.py` — register the new routes (CI goes red until done — **this is deliberate**)
 
 **Framework install:** not required — every tool is present from Phase 1.
+
+**To'qqizta band diskda TEKSHIRILDI (2026-08-01, 02-17):** to'qqizala fayl mavjud
+(`ls` bilan), `FINANCIAL_TABLES` da `stall_assignments` YO'Q (sabab izohi bilan),
+`AUDITED_TABLES` da yettita domen jadvali bor, `PLATFORM_ADMIN` uchala `*_MANAGE`
+huquqiga ega, `conftest.py::_bootstrap_extensions` `00-extensions.sql` ni
+VERBATIM bajaradi va `MINIMUM_MATRIX_ROUTES = 34` (matritsada 43 marshrut).
+
+⚠ **Bu bandlarning bajarilishi ularning KUCHINI o'lchamaydi.** Kuchi 02-17 dagi
+olti sabotaj bilan alohida o'lchandi (`02-17-SUMMARY.md`), shu jumladan
+`PLATFORM_ADMIN` dan `STALL_MANAGE` ni olib tashlash — 2-bandning aynan
+o'zi — va u `test_phase2_criteria.py::test_sc1_...` ni AYNAN qizartirdi.
 
 ---
 
 ## Manual-Only Verifications
 
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| Real Karmana data actually loads (~300–1000 stalls) and the numbers match the administration's own register | MARKET-01, MARKET-02 | Requires the real spreadsheet from the market administration; cannot be fixtured | Run the import against the real file; compare stall count and per-zone totals with the administration's paper register; record deltas |
-| The wizard is completable by a non-developer without code | MARKET-01 / SC#1 | "No code written" is a usability claim, not a source assertion | Platform admin walks the wizard start→finish on a clean market; observe without assisting; record every point they get stuck |
-| Schematic map is readable at real scale on the admin's actual screen | MARKET-06 / SC#5 | Perceptual — jsdom cannot judge legibility | Open the map with real Karmana zone/stall counts on the target device; confirm zone blocks and stall numbers are readable without zooming |
-| Business-requisite formats (STIR, address fields) match the customer's real documents | MARKET-01 | Research confidence is **LOW** here (assumptions A1/A2 — official regulation not read) | Show the market-requisites form to the customer; confirm STIR digit count and required fields before the form is frozen |
+| Behavior | Requirement | Why Manual | Test Instructions | Natija (kim / qachon / nima topildi) |
+|----------|-------------|------------|-------------------|--------------------------------------|
+| Real Karmana data actually loads (~300–1000 stalls) and the numbers match the administration's own register | MARKET-01, MARKET-02 | Requires the real spreadsheet from the market administration; cannot be fixtured | Run the import against the real file; compare stall count and per-zone totals with the administration's paper register; record deltas | ❌ **BAJARILMADI — REAL MA'LUMOT YO'Q.** Bajaruvchi agent / 2026-08-01. Ma'muriyatdan rasta reestri hali topshirilmagan (`02-17-PLAN.md::user_setup` bandi ochiq), ya'ni solishtiriladigan raqam ham, qog'oz reestr ham mavjud emas. **Buning O'RNIGA yo'l TAKRORLANADIGAN qilib o'lchandi:** tirik stek (`docker compose up db cache core-api` + `alembic upgrade head`) ustida `scripts/karmana-import.mjs` uchidan-uchiga ishlatildi — login → select-market → shablon (6209 bayt) → o'zgarmagan shablon importi `inserted=1` → qayta import `skipped=1` (D-15) → noto'g'ri fayl `422` + guruhlangan sanoq + exit **1**. Namuna sifatida API generatsiya qilgan shablonning O'ZI ishlatildi (repoda nusxa saqlanmaydi). **Real fayl kelganda takrorlanadigan buyruq: `ops/data/karmana/README.md` §2 tartibi + «Skript bilan ishlash» bo'limi.** Ikkita HAQIQIY defekt aynan shu ijro bilan topildi (`02-17-SUMMARY.md` deviatsiya #2, #3) |
+| The wizard is completable by a non-developer without code | MARKET-01 / SC#1 | "No code written" is a usability claim, not a source assertion | Platform admin walks the wizard start→finish on a clean market; observe without assisting; record every point they get stuck | ❌ **BAJARILMADI — KUZATILADIGAN ODAM YO'Q.** Bajaruvchi agent / 2026-08-01. Bu foydalanuvchanlik da'vosi va uni manba tekshiruvi bilan almashtirib bo'lmaydi. **Mashinaviy yarmi qamralgan:** `test_phase2_criteria.py::test_sc1_...` butun zanjirni FAQAT HTTP orqali bajaradi va har bosqichdan keyin 403 yo'qligini tekshiradi. ⚠ **Kuzatuvdan OLDIN yopilishi kerak bo'lgan ikki to'siq allaqachon MA'LUM** (02-16 dan meros, 02-17 fayl chegarasidan tashqarida): (1) yon panelda `/markets/new` ga havola YO'Q — usta faqat to'g'ridan-to'g'ri URL bilan ochiladi; (2) BIRORTA bozori bo'lmagan platforma admini `(app)/layout.tsx` tomonidan `/select-market` ga yuboriladi va u yerdan faqat "chiqish" mumkin — ya'ni **birinchi bozorni yaratish yo'li UI'da umuman yo'q**. Kuzatuv bu ikkisisiz 1-daqiqadayoq to'xtardi |
+| Schematic map is readable at real scale on the admin's actual screen | MARKET-06 / SC#5 | Perceptual — jsdom cannot judge legibility | Open the map with real Karmana zone/stall counts on the target device; confirm zone blocks and stall numbers are readable without zooming | ❌ **BAJARILMADI — MAQSADLI QURILMA HAM, REAL MIQYOS HAM YO'Q.** Bajaruvchi agent / 2026-08-01. Karmananing haqiqiy zona/rasta soni noma'lum (~300–1000 taxmini tasdiqlanmagan), ya'ni "real miqyos" ta'riflanmagan. **API tomoni qamralgan:** `test_sc5_...` xarita va reestr to'plamining tengligini, inson-raqamli tartibni va katak↔karta mosligini tekshiradi; `stall-map.test.tsx` (02-14) grid renderini. Ikkalasi ham O'QILISHNI baholay olmaydi |
+| Business-requisite formats (STIR, address fields) match the customer's real documents | MARKET-01 | Research confidence is **LOW** here (assumptions A1/A2 — official regulation not read) | Show the market-requisites form to the customer; confirm STIR digit count and required fields before the form is frozen | ❌ **BAJARILMADI — BUYURTMACHI BILAN ALOQA YO'Q.** Bajaruvchi agent / 2026-08-01. A1/A2 taxminlari OCHIQ. **Bugungi holat xavfsiz tomonga qiya:** server rekvizit maydonlarini ATAYIN formatlamaydi (02-16 qarori), klientdagi MFO besh-raqam qoidasi esa QULAYLIK bo'lib yozilgan va "haqiqiy rekvizit rad etilsa qoidani OLIB TASHLANG" ko'rsatmasi kodda turibdi. Ya'ni forma hali QOTIRILMAGAN va tasdiqlash kechiktirilishi bu bosqichda zarar keltirmaydi |
+
+**Umumiy holat: 0/4 bajarildi.** To'rttasi ham tashqi kirish talab qiladi
+(real fayl, kuzatiladigan odam, maqsadli qurilma, buyurtmachi) va ularning
+birortasi ham bu agentga ochiq emas. Shuning uchun frontmatter'da
+`nyquist_compliant: false` — bu "ish sifatsiz" degani emas, "faza maqsad
+jumlasining ikkinchi yarmi hali ISBOTLANMAGAN" degani.
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (9 items above)
-- [ ] No watch-mode flags
-- [ ] Feedback latency measured and recorded (do not carry Phase 1 numbers forward)
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies — 51/51 satrda `Automated Command` bor
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify — har taskda buyruq bor, ya'ni ketma-ketlik uzilmaydi
+- [x] Wave 0 covers all MISSING references (9 items above) — to'qqizala band diskda tekshirildi
+- [x] No watch-mode flags — `grep -rn "\-\-watch" package.json frontend/package.json` da darvoza skriptlarida yo'q (`vitest run`, `node --test`)
+- [x] Feedback latency measured and recorded (do not carry Phase 1 numbers forward) — o'lchandi va yozildi; **to'lqin byudjeti BUZILGAN** (225 s / ≤180 s) va bu ochiq band sifatida qayd etilgan
+- [ ] `nyquist_compliant: true` set in frontmatter — **QO'YILMADI (ATAYIN)**
 
-**Approval:** pending
+**Approval:** ❌ **BERILMADI — TO'RTTA MANUAL-ONLY TEKSHIRUV OCHIQ.**
+
+Kod darvozalari to'liq yashil (`npm run gate`, 2026-08-01, 403 s) va faza
+mezonlarining beshtasi ham avtomatik testga bog'langan
+(`tests/integration/test_phase2_criteria.py`, olti sabotaj bilan
+o'lchangan). Lekin fazaning maqsad jumlasi IKKI qismdan iborat:
+
+> "Platforma admini kod yozmasdan yangi bozorni tizimga kiritadi **va
+> Karmananing real rasta/tarif/sotuvchi ma'lumoti tizimda yashaydi**"
+
+Birinchi qismi mashinaviy isbotlangan. **Ikkinchi qismi isbotlanmagan** —
+real ma'lumot topshirilmagan. `nyquist_compliant: true` ni hozir qo'yish
+aynan shu farqni yashirardi.
+
+**Yopish uchun kerak bo'lgan aniq bandlar (ustuvorlik tartibida):**
+
+1. Ma'muriyatdan beshta hujjat (`ops/data/karmana/README.md` §1) va
+   `README.md` §2 tartibi bo'yicha import — **tarif qadami faollashtirishdan
+   OLDIN**;
+2. `README.md` §7 tekshiruv ro'yxatini qog'oz reestr bilan solishtirish va
+   farqlarni yozish;
+3. Ustaga navigatsiya havolasi va "bozorsiz platforma admini" boshi berk
+   ko'chasi (02-16 qarzlari) — foydalanuvchanlik kuzatuvidan OLDIN;
+4. Rekvizitlar formasini buyurtmachiga ko'rsatish (A1/A2);
+5. Xaritani maqsadli qurilmada real miqyosda ochish;
+6. To'lqin darajasidagi kechikish byudjetini qayta ko'rib chiqish yoki
+   to'plamni tezlatish (225 s / ≤180 s).
