@@ -104,8 +104,13 @@ Qo'shimcha eslatmalar:
 
 - **Birinchi qator — sarlavha.** Xato xabarlaridagi qator raqami Excel'dagi
   raqam bilan aynan bir xil (ikkinchi ma'lumot qatori = `3-qator`);
-- **Holat** ustuni bo'sh bo'lsa `active` qabul qilinadi; mumkin qiymatlar
-  shablonning yashirin `Ma'lumotnoma` varag'ida ochiluvchi ro'yxat sifatida;
+- **Holat** ustuni bo'sh bo'lsa `active` qabul qilinadi. Mumkin qiymatlar
+  faqat uchta: `active`, `maintenance`, `closed`. Ular **DB kontenti** va
+  shablonning tili qanday bo'lishidan qat'i nazar **o'zgarmaydi** —
+  ularni tarjima qilib yozish `invalid_status` beradi. Registr ahamiyatsiz
+  (`ACTIVE` ham qabul qilinadi);
+  ⚠ `maintenance` va `closed` rastalarga 6-fazada **kunlik hisob
+  yozilmaydi** — ya'ni bu ustun pul oqimiga bevosita ta'sir qiladi;
 - **Boshlanish sanasi** bo'sh bo'lsa `operating_since` qo'yiladi (ya'ni
   "sotuvchi bozor ochilganidan beri shu yerda"). Shakl: `2026-08-01` yoki
   `01.08.2026`;
@@ -150,7 +155,7 @@ uchun alohida yozuv. Skript ikkalasini ham konsolga chiqaradi.
 | `row_too_short` | Majburiy ustun bo'sh (zona, toifa, F.I.Sh., telefon) | Xabarda ustun nomi ko'rsatilgan |
 | `zone_not_found` | Fayldagi zona nomi bozorda yo'q | Avval zonani qo'shing (2-qadam) yoki fayldagi nomni to'g'rilang |
 | `category_not_found` | Fayldagi toifa nomi bozorda yo'q | Avval toifani qo'shing (3-qadam) yoki fayldagi nomni to'g'rilang |
-| `invalid_status` | Holat ustunidagi so'z tanilmadi | Ochiluvchi ro'yxatdan tanlang (`active` / `repair` / `closed`) |
+| `invalid_status` | Holat ustunidagi so'z tanilmadi | Ochiluvchi ro'yxatdan tanlang: **`active`** / **`maintenance`** / **`closed`** (bular DB qiymatlari va **tarjima qilinmaydi**, hatto ruscha shablonda ham) |
 | `invalid_phone` | Telefon raqami O'zbekiston formatiga tushmadi | `+998XXXXXXXXX` yoki `90 123 45 67` shaklida yozing |
 | `duplicate_phone_in_file` | Bir xil telefon faylda ikki marta | Xabarda ikkala qator raqami bor |
 | `stall_not_found` | Sotuvchi faylidagi rasta kodi bozorda yo'q | Avval rastalarni import qiling (5-qadam) yoki kodni to'g'rilang |
@@ -201,7 +206,7 @@ farqlarni yozib qo'ying — 8-fazadagi baza solishtiruvi shunga tayanadi
 |---------------------|------------------|
 | Umumiy rasta soni | `GET /api/v1/stalls?limit=1` → sahifani oxirigacha varaqlash **yoki** `/uz/map` sahifasidagi kataklar soni |
 | Zona bo'yicha rasta soni | `GET /api/v1/zones` → har qatorda `stall_count`; xaritada har zona bloki |
-| Holat bo'yicha taqsimot | `GET /api/v1/stalls?status=active` / `?status=repair` / `?status=closed` |
+| Holat bo'yicha taqsimot | `GET /api/v1/stalls?status=active` / `?status=maintenance` / `?status=closed` |
 | Toifa bo'yicha rasta soni | `GET /api/v1/categories` → har qatorda `stall_count` |
 | Sotuvchi soni | `GET /api/v1/vendors` |
 | Biriktirilgan rasta soni | Rastalar ro'yxatida `vendor_name` bo'sh bo'lmagan qatorlar; xaritada `has_vendor` |
