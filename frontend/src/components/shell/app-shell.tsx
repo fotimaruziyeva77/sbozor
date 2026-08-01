@@ -59,7 +59,8 @@ type NavItem = {
     | "/tariffs"
     | "/calendar"
     | "/users"
-    | "/audit";
+    | "/audit"
+    | "/markets/new";
   labelKey:
     | "dashboard"
     | "map"
@@ -68,7 +69,8 @@ type NavItem = {
     | "tariffs"
     | "calendar"
     | "users"
-    | "audit";
+    | "audit"
+    | "newMarket";
   icon: LucideIcon;
   permission: Permission | null;
   group: NavGroup;
@@ -131,6 +133,29 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "audit",
     icon: ScrollText,
     permission: "audit_view",
+    group: "system",
+  },
+  /*
+   * "Yangi bozor" — CR-03 ning ikkinchi to'sig'ini yopadigan yozuv.
+   *
+   * OXIRDA TURISHI ATAYIN: yuqoridagi izohga ko'ra ro'yxatning BOSHI mobil
+   * pastki panelning birinchi to'rttasini beradi. Yozuv oxirda bo'lgani
+   * uchun u "Ko'proq" varag'iga tushadi va UI-SPEC §12.3 ning "mobilda eng
+   * ko'pi 5 element" kontrakti BUZILMAYDI. Uni yuqoriga ko'chirish kassir
+   * eng ko'p ishlatadigan bo'limni paneldan siqib chiqarardi.
+   *
+   * `system` GURUHI ATAYIN: bu bozor ICHIDAGI ma'lumot emas (Bozor guruhi
+   * — xarita, rastalar, tariflar), balki platforma darajasidagi amal.
+   *
+   * `market_manage` faqat menyuni yashiradi (yuqoridagi DIQQAT bandiga
+   * qarang). Haqiqiy darvozalar: `markets/new/page.tsx` (`market_manage`
+   * VA `isPlatformAdmin`) hamda server `POST /markets` (02-11).
+   */
+  {
+    href: "/markets/new",
+    labelKey: "newMarket",
+    icon: Store,
+    permission: "market_manage",
     group: "system",
   },
 ];

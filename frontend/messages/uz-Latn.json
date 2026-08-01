@@ -32,6 +32,7 @@
     "calendar": "Ish kunlari",
     "users": "Foydalanuvchilar",
     "audit": "Audit jurnali",
+    "newMarket": "Yangi bozor",
     "more": "Ko'proq",
     "groupMarket": "Bozor",
     "groupSystem": "Tizim",
@@ -59,7 +60,8 @@
     "selectMarket": "Bozorni tanlang",
     "selectMarketTitle": "Bozorni tanlang",
     "noMarkets": "Sizga hech qanday bozor biriktirilmagan",
-    "marketDraft": "Qoralama"
+    "marketDraft": "Qoralama",
+    "passwordChangeRequired": "Parolingiz almashtirilishi kerak. Parol almashtirish sahifasiga o'ting."
   },
   "users": {
     "title": "Foydalanuvchilar",
@@ -359,6 +361,7 @@
   },
   "wizard": {
     "title": "Yangi bozor",
+    "createFirstMarket": "Birinchi bozorni yaratish",
     "progress": "7 qadamdan {done} tasi bajarilgan",
     "save": "Saqlash",
     "saveAndContinue": "Saqlash va davom etish",

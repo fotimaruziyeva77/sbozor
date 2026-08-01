@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 
 import { AppShell } from "@/components/shell/app-shell";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useRouter } from "@/i18n/navigation";
+import { usePathname, useRouter } from "@/i18n/navigation";
 import { loadPrincipal, restoreSession } from "@/lib/api-client";
 import { updatePrincipal, useAuthStore } from "@/lib/auth-store";
 
@@ -21,12 +21,25 @@ import { updatePrincipal, useAuthStore } from "@/lib/auth-store";
  *      qaytadi (T-01-64). Server tomonda ham yozuv endpointlari yopiq.
  *   3. Bozor tanlanmagan -> `/select-market` (D-06).
  *
+ * 3-QOIDANING YAGONA ISTISNOSI: `/markets/new` (CR-03). Bu — butun
+ * mahsulotdagi YAGONA ekran, u tenant konteksti YO'Q holatda qonuniy
+ * ishlaydi, chunki u aynan o'sha kontekstni TUG'DIRADI. Istisnosiz birinchi
+ * bozorni yaratish umuman mumkin emas edi: bozori yo'q platforma admini
+ * `/select-market` ga haydalar, u yerda esa faqat "chiqish" tugmasi turardi.
+ * Istisno PREFIKS emas, TENGLIK bilan yozilgan (T-02-140) — `startsWith`
+ * bo'lsa `/markets/new-anything` ham bozorsiz ochilib, butun `(app)`
+ * daraxtiga huquq oshirish yuzasi paydo bo'lardi.
+ *
  * Tekshiruv davomida BO'SH ekran emas, skelet ko'rsatiladi: bo'sh ekran
  * "ilova qotib qoldi" degan taassurot beradi.
  */
+
+/** Usta boshlanishi — `markets/new/page.tsx` o'z darvozasini o'zi qo'yadi. */
+const WIZARD_NEW_PATH = "/markets/new";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const t = useTranslations("shell");
   const router = useRouter();
+  const pathname = usePathname();
   const { accessToken, principal } = useAuthStore();
   const [restoreAttempted, setRestoreAttempted] = useState(false);
   const restoreStarted = useRef(false);
@@ -37,6 +50,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // effekt ichida `setState` bilan emas (cascading render).
   const hasSession = accessToken !== null && principal !== null;
   const checked = hasSession || restoreAttempted;
+
+  /*
+   * "Bu ekran tenant kontekstini TALAB QILADIMI?" — yagona manba.
+   *
+   * U IKKI joyda ishlatiladi va bu TAKROR EMAS: `useEffect` yo'naltirishni,
+   * `ready` esa ekranning ochilishini boshqaradi. Faqat effekt tuzatilsa
+   * `ready` `false` qolib, sahifa ABADIY SKELET ko'rsatardi; faqat `ready`
+   * tuzatilsa effekt sahifani ochilishi bilanoq surib yuborardi.
+   */
+  const needsMarket = pathname !== WIZARD_NEW_PATH;
 
   useEffect(() => {
     if (restoreStarted.current || hasSession) return;
@@ -55,10 +78,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace("/change-password");
       return;
     }
-    if (principal.marketId === null) {
+    if (needsMarket && principal.marketId === null) {
       router.replace("/select-market");
     }
-  }, [checked, principal, router]);
+  }, [checked, needsMarket, principal, router]);
 
   useEffect(() => {
     // Login javobida foydalanuvchi `id`, telefoni va ismi YO'Q — ular
@@ -85,7 +108,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     checked &&
     principal !== null &&
     !principal.mustChangePassword &&
-    principal.marketId !== null;
+    (!needsMarket || principal.marketId !== null);
 
   if (!ready) {
     return (

@@ -21,24 +21,39 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { ReactElement } from "react";
+import type { ComponentProps, ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import messages from "../../../messages/uz-Latn.json";
 import { MarketPicker } from "@/components/auth/market-picker";
+import { apiRequest, errorMessageKey } from "@/lib/api-client";
 import type { MarketSummary } from "@/lib/api-types";
-import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
+import {
+  AuthProvider,
+  clearSession,
+  readSession,
+  setSession,
+} from "@/lib/auth-store";
 
 /*
  * `useRouter` Next.js router kontekstini talab qiladi — u jsdom'da yo'q,
  * shuning uchun navigatsiya mock bilan almashtiriladi. Mock `vi.mock`
  * ko'tarilishidan (hoisting) OLDIN mavjud bo'lishi kerak, shuning uchun
  * `vi.hoisted`.
+ *
+ * `Link` 02-18 da qo'shildi: bo'sh ro'yxat holatida usta havolasi shu
+ * komponentdan chiqadi va u oddiy `<a>` ga aylantiriladi (locale prefiksini
+ * qo'yish `next-intl` ning zimmasida va bu yerda sinalmaydi).
  */
 const routerMock = vi.hoisted(() => ({ replace: vi.fn() }));
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => routerMock,
+  Link: ({ children, href, ...rest }: ComponentProps<"a">) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 /*
@@ -73,6 +88,11 @@ const DRAFT = {
 
 /** `auth.marketDraft` — uz-Latn qiymati (test AYNAN shu katalogni yuklaydi). */
 const DRAFT_BADGE = "Qoralama";
+/** `wizard.createFirstMarket` va `auth.noMarkets` — uz-Latn qiymatlari. */
+const CREATE_FIRST_MARKET = "Birinchi bozorni yaratish";
+const NO_MARKETS_TEXT = "Sizga hech qanday bozor biriktirilmagan";
+const LOGOUT_LABEL = "Chiqish";
+const NEW_MARKET_PATH = "/markets/new";
 const SELECT_MARKET_PATH = "/auth/select-market";
 const setupStatusPath = (marketId: string): string =>
   `/markets/${marketId}/setup-status`;
@@ -147,6 +167,36 @@ function seedSessionWithMarkets(
   });
 }
 
+/**
+ * Bozori UMUMAN yo'q sessiya — CR-03 ning asosiy holati (toza o'rnatish).
+ *
+ * `roles` ATAYIN haqiqiy: `auth.py::_session_roles` platforma adminiga
+ * a'zolik qatorisiz ham `platform_admin` rolini beradi, ya'ni bozorsiz
+ * login javobida ham `roles: ["platform_admin"]` keladi. Yuqoridagi
+ * `seedSessionWithMarkets` dagi bo'sh `roles: []` — 1-fazadan qolgan
+ * soddalashtirish va u bu yerda TAKRORLANMAYDI, aks holda test o'zi
+ * tekshirmoqchi bo'lgan huquqni yo'q qilib qo'yardi.
+ */
+function seedSessionWithoutMarkets(
+  roles: readonly string[] = ["platform_admin"],
+): void {
+  setSession({
+    accessToken: "test-access-token",
+    principal: {
+      userId: "33333333-3333-4333-8333-333333333333",
+      phone: "+998901234567",
+      fullName: "Test Foydalanuvchi",
+      roles,
+      marketId: null,
+      marketName: null,
+      isPlatformAdmin: roles.includes("platform_admin"),
+      locale: "uz-Latn",
+      mustChangePassword: false,
+    },
+    markets: [],
+  });
+}
+
 beforeEach(() => {
   clearSession();
   // Chaqiruv tarixi VA implementatsiyani tozalaydi — har test o'z javobini
@@ -156,6 +206,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearSession();
+  vi.unstubAllGlobals();
 });
 
 describe("MarketPicker — bozor tanlash (D-06)", () => {
@@ -319,5 +370,147 @@ describe("MarketPicker — qoralama bozor (§6.4 uzilishdan tiklanish)", () => {
     }
     expect(apiFetch).toHaveBeenCalledTimes(1);
     expect(apiFetch.mock.calls[0]?.[0]).toBe(SELECT_MARKET_PATH);
+  });
+});
+
+/*
+ * =============================================================================
+ * CR-03 ning UCHINCHI to'sig'i — bo'sh ro'yxatdagi chiqish yo'li (02-18).
+ *
+ * NEGA MUHIM: toza platformada birinchi bozorni yaratish yo'li AYNAN shu
+ * ekrandan o'tadi. Bozori yo'q platforma admini login qilgach `(app)/layout`
+ * uni bu yerga yuboradi va bu yerda faqat "Chiqish" tugmasi turardi —
+ * ya'ni mahsulot o'z-o'zini bootstrap qila olmasdi.
+ *
+ * `apiFetch` bu blokda `[]` qaytaradi: ro'yxat bo'sh bo'lgani uchun
+ * `useMarketsQuery` YOQILADI (`enabled: markets.length === 0`) va u
+ * yakunlanmaguncha komponent yuklanish holatida turadi. Ya'ni bo'sh holat
+ * tarmog'iga faqat serverning "bozor yo'q" javobidan KEYIN tushiladi —
+ * bu haqiqiy oqimning o'zi.
+ * =============================================================================
+ */
+describe("MarketPicker — bo'sh ro'yxat: ustaga chiqish yo'li (CR-03)", () => {
+  test("`market_manage` huquqli admin «Birinchi bozorni yaratish» havolasini ko'radi", async () => {
+    seedSessionWithoutMarkets();
+    apiFetch.mockResolvedValue([]);
+
+    renderPicker();
+
+    expect(await screen.findByText(NO_MARKETS_TEXT)).toBeInTheDocument();
+
+    const link = screen.getByRole("link", { name: CREATE_FIRST_MARKET });
+    expect(link).toHaveAttribute("href", NEW_MARKET_PATH);
+
+    /*
+     * "Chiqish" OLIB TASHLANMAYDI va bu alohida da'vo: havola qo'shilishi
+     * mavjud yagona chiqish yo'lini yo'q qilib yubormasligi kerak.
+     */
+    expect(
+      screen.getByRole("button", { name: LOGOUT_LABEL }),
+    ).toBeInTheDocument();
+  });
+
+  test("NAZORAT: `market_manage` YO'Q foydalanuvchida havola ko'rinmaydi", async () => {
+    // Noto'g'ri a'zolik bilan qolgan bozor admini: bozori yo'q, yaratish
+    // huquqi ham yo'q. Unga havola ko'rsatish 403 ga olib boradigan yolg'on
+    // signal bo'lardi (T-02-142), shuning uchun faqat "Chiqish" qoladi.
+    seedSessionWithoutMarkets(["market_admin"]);
+    apiFetch.mockResolvedValue([]);
+
+    renderPicker();
+
+    expect(await screen.findByText(NO_MARKETS_TEXT)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: CREATE_FIRST_MARKET }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: LOGOUT_LABEL }),
+    ).toBeInTheDocument();
+  });
+
+  test("NAZORAT: ro'yxat bo'sh EMAS — havola bo'sh holat tarmog'ida qoladi", () => {
+    seedSessionWithMarkets();
+    renderPicker();
+
+    /*
+     * Usiz havola butun ekranga chiqib ketgan (bo'sh holat tarmog'idan
+     * tashqariga) holat ham yashil ko'rinardi — ya'ni bozori BOR admin
+     * tanlash o'rniga yangi bozor yaratishga undalgan bo'lardi.
+     */
+    expect(
+      screen.queryByRole("link", { name: CREATE_FIRST_MARKET }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+  });
+});
+
+/*
+ * =============================================================================
+ * WR-09 — sessiya o'rtasidagi parol darvozasi (02-REVIEW.md).
+ *
+ * SENARIY: admin boshqa odamning parolini u ISHLAYOTGAN paytda tiklaydi.
+ * Server o'sha zahoti har yozuv so'roviga 403 `password_change_required`
+ * qaytara boshlaydi, klientdagi `principal.mustChangePassword` esa hamon
+ * `false` — natijada foydalanuvchi har ekranda "ruxsat yo'q" ko'radi va
+ * `/change-password` ga BIRORTA yo'l yo'q.
+ *
+ * NEGA `apiRequest` MOCK QILINMAYDI: bu blok aynan uning xato tarmog'ini
+ * o'lchaydi. Fayl boshidagi mock faqat `apiFetch` ni almashtiradi
+ * (`importOriginal` bilan), ya'ni `apiRequest` HAQIQIY kod bo'lib qoladi va
+ * `fetch` global darajada almashtiriladi.
+ * =============================================================================
+ */
+describe("apiRequest — 403 `password_change_required` (WR-09)", () => {
+  function stubResponse(status: number, detail: string): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail }), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+  }
+
+  test("store server verdiktiga moslashadi: `mustChangePassword` `true` bo'ladi", async () => {
+    seedSessionWithoutMarkets();
+    stubResponse(403, "password_change_required");
+
+    await expect(apiRequest("/stalls")).rejects.toThrow();
+
+    /*
+     * `clearSession()` ATAYIN chaqirilmaydi: server 401 EMAS, 403 ni
+     * tanlagan (`deps.py:389-412`) — 401 sessiyani uzib redirect siklini
+     * tug'dirardi. Shuning uchun sessiya YASHAYDI va faqat bayroq mos
+     * qilinadi; qolganini `(app)/layout.tsx` ning mavjud qoidasi qiladi.
+     */
+    expect(readSession().principal?.mustChangePassword).toBe(true);
+    expect(readSession().accessToken).not.toBeNull();
+  });
+
+  test("NAZORAT: boshqa 403 (`role_not_allowed`) bayroqqa TEGMAYDI", async () => {
+    seedSessionWithoutMarkets();
+    stubResponse(403, "role_not_allowed");
+
+    await expect(apiRequest("/stalls")).rejects.toThrow();
+
+    /*
+     * NAZORAT MAJBURIY: usiz "har 403 da `mustChangePassword = true`"
+     * degan implementatsiya ham yashil ko'rinardi — u esa oddiy huquq
+     * xatosini parol almashtirish ekraniga aylantirib yuborardi.
+     */
+    expect(readSession().principal?.mustChangePassword).toBe(false);
+  });
+
+  test("xato kodi tarjima kalitiga xaritalanadi (xom `detail` ko'rsatilmaydi)", async () => {
+    seedSessionWithoutMarkets();
+    stubResponse(403, "password_change_required");
+
+    const error = await apiRequest("/stalls").catch((cause: unknown) => cause);
+
+    // T-01-65: xom kod emas, tarjima kaliti — va u uchala tilda mavjud.
+    expect(errorMessageKey(error)).toBe("auth.passwordChangeRequired");
+    expect(messages.auth.passwordChangeRequired).toBeTruthy();
   });
 });

@@ -32,6 +32,7 @@
     "calendar": "Рабочие дни",
     "users": "Пользователи",
     "audit": "Журнал аудита",
+    "newMarket": "Новый рынок",
     "more": "Ещё",
     "groupMarket": "Рынок",
     "groupSystem": "Система",
@@ -59,7 +60,8 @@
     "selectMarket": "Выберите рынок",
     "selectMarketTitle": "Выберите рынок",
     "noMarkets": "К вам не привязан ни один рынок",
-    "marketDraft": "Черновик"
+    "marketDraft": "Черновик",
+    "passwordChangeRequired": "Требуется смена пароля. Перейдите на страницу смены пароля."
   },
   "users": {
     "title": "Пользователи",
@@ -359,6 +361,7 @@
   },
   "wizard": {
     "title": "Новый рынок",
+    "createFirstMarket": "Создать первый рынок",
     "progress": "Выполнено {done} из 7 шагов",
     "save": "Сохранить",
     "saveAndContinue": "Сохранить и продолжить",
