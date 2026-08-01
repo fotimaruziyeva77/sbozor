@@ -39,6 +39,15 @@ import type { ApiLocale, MarketSummary } from "@/lib/api-types";
  * foydalanuvchining tokeni boshqa so'rovning render'iga tusha olmaydi.
  * `client-only` importi esa bu faylning Server Component grafiga tortilishini
  * butunlay bloklaydi.
+ *
+ * SERVER HOLATI KESHI HAM TENANT CHEGARASINING BIR QISMI (CR-01). Sessiya
+ * IDENTIFIKATORI o'zgarganda (logout, yangi login, boshqa bozor) kesh
+ * to'liq bo'shatilishi kerak, aks holda brauzer oldingi bozorning
+ * zonalarini, rastalarini va sotuvchi F.I.Sh. + telefonini yangi kontekstda
+ * chizib turadi. Bu modul so'rov keshi kutubxonasidan HECH NIMA IMPORT
+ * QILMAYDI — yuqoridagi "React'dan mustaqil" sharti buzilardi va aynan shu
+ * bog'lanmaganlik uning butun ishlash sharti. Aloqa `subscribeSessionReset`
+ * obunachi reyestri orqali quriladi va uni `query-provider.tsx` ulaydi.
  * =============================================================================
  */
 
@@ -87,6 +96,46 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
+/*
+ * SESSIYA IDENTIFIKATORI kanali — yuqoridagi `listeners` dan ATAYIN ALOHIDA.
+ *
+ * NEGA IKKINCHI TO'PLAM: `listeners` — `useSyncExternalStore` ning render
+ * obunasi va u sessiya HAR tegilganda ishlaydi (`setMarkets`,
+ * `updatePrincipal`, har token yangilash). Keshni har `locale`
+ * yangilanishida tozalash foydali hech narsa qilmasdi — faqat butun ekranni
+ * qayta yuklaydigan foydasiz so'rov to'lqinini tug'dirardi.
+ *
+ * Bu kanal esa faqat BITTA hodisani olib yuradi: "kim/qaysi bozor
+ * o'zgardi". Uni tinglovchi (`query-provider.tsx`) javoban keshni to'liq
+ * bo'shatadi.
+ */
+const resetListeners = new Set<() => void>();
+
+/**
+ * Sessiya identifikatori o'zgarganda xabar beradi.
+ *
+ * Qaytgan funksiya obunani bekor qiladi (React `useEffect` tozalashi uchun).
+ * HOOK EMAS va `AuthStore` tipiga ham qo'shilmaydi: uni ishlatadigan
+ * `QueryProvider` `AuthProvider` dan YUQORIDA turadi, ya'ni kontekst orqali
+ * yetib bora olmasdi.
+ */
+export function subscribeSessionReset(listener: () => void): () => void {
+  resetListeners.add(listener);
+  return () => {
+    resetListeners.delete(listener);
+  };
+}
+
+/*
+ * `function` e'loni emas, `const`: shu shaklda chaqiruv shakli faylda
+ * AYNAN uchta joyda — haqiqiy chaqiruvlarda — uchraydi, ta'rifning o'zida
+ * emas. Ya'ni "kesh nechta joyda bo'shatiladi?" savoliga oddiy grep
+ * to'g'ri javob beradi.
+ */
+const emitSessionReset = (): void => {
+  for (const listener of resetListeners) listener();
+};
+
 /** Joriy sessiya — React'siz o'qish (`api-client` shu yo'ldan foydalanadi). */
 export function readSession(): Session {
   return memorySession;
@@ -100,15 +149,28 @@ function readServerSession(): Session {
   return EMPTY_SESSION;
 }
 
-/** To'liq sessiyani almashtiradi (login yoki sessiya tiklashdan keyin). */
+/**
+ * To'liq sessiyani almashtiradi (login yoki sessiya tiklashdan keyin).
+ *
+ * Kesh SHARTSIZ bo'shatiladi: yangi login — ta'rifi bo'yicha yangi
+ * identifikator. Oldingi foydalanuvchining qatorlari yashab qolishi CR-01
+ * ning ikkinchi yo'li edi ("logout -> boshqa foydalanuvchi bilan login",
+ * bitta telefonda navbat bilan kirish MVP uchun real ssenariy).
+ *
+ * TARTIB MUHIM: avval kesh bo'shaydi, keyin `emit()` React'ni yangilaydi —
+ * teskarisida React yangi identifikat bilan bir marta ESKI ma'lumot ustida
+ * render qilib ulgurardi.
+ */
 export function setSession(next: Session): void {
   memorySession = next;
+  emitSessionReset();
   emit();
 }
 
 /** Sessiyani o'chiradi (logout, refresh muvaffaqiyatsizligi). */
 export function clearSession(): void {
   memorySession = EMPTY_SESSION;
+  emitSessionReset();
   emit();
 }
 
@@ -133,6 +195,15 @@ export function setMarkets(markets: readonly MarketSummary[]): void {
  * Yangi access token + bozor konteksti (`/auth/refresh` va
  * `/auth/select-market` javoblari). Principal mavjud bo'lsa uning rollari va
  * bozori yangilanadi — eski rollar bilan menyu ko'rsatib qolmaslik uchun.
+ *
+ * ⚠ KESH TOZALASH BU YERDA SHARTLI, va shart qulaylik uchun emas: bu
+ * funksiya `/auth/refresh` javobida ham chaqiriladi (`api-client.ts:164`)
+ * va u yerda bozor O'ZGARMAYDI. Shartsiz tozalash har 15 daqiqalik token
+ * yangilashda butun keshni yo'q qilib, foydalanuvchi ishlab turgan ekranni
+ * sababsiz qayta yuklardi.
+ *
+ * Solishtirish `marketId` bo'yicha, `accessToken` bo'yicha EMAS: token har
+ * yangilanishda o'zgaradi va u tenant identifikatori emas.
  */
 export function applySession(next: {
   accessToken: string;
@@ -140,6 +211,9 @@ export function applySession(next: {
   market: MarketSummary;
 }): void {
   const current = memorySession.principal;
+  // Yozuvdan OLDIN o'qiladi — keyin uni tiklab bo'lmasdi.
+  const previousMarketId = current?.marketId ?? null;
+
   memorySession = {
     ...memorySession,
     accessToken: next.accessToken,
@@ -152,6 +226,8 @@ export function applySession(next: {
         }
       : null,
   };
+
+  if (previousMarketId !== next.market.id) emitSessionReset();
   emit();
 }
 

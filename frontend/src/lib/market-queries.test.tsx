@@ -9,9 +9,16 @@
  * faqat kalitlarni HAQIQATAN o'lchab ushlash mumkin.
  *
  * O'lchov usuli: `QueryClient.invalidateQueries` josuslanadi va mutatsiya
- * bajarilgandan keyin chaqirilgan kalitlarning BIRINCHI segmenti yig'iladi.
- * Birinchi segment — kalit oilasining ildizi (`["stalls", "list", ...]` ->
- * `stalls`), ya'ni test kalit ichki tuzilishiga bog'lanib qolmaydi.
+ * bajarilgandan keyin chaqirilgan kalitlarning DOMEN segmenti yig'iladi.
+ * Domen segmenti — kalit oilasining ildizi
+ * (`["m", marketId, "stalls", "list", ...]` -> `stalls`), ya'ni test kalit
+ * ichki tuzilishiga bog'lanib qolmaydi.
+ *
+ * ⚠ SEGMENT INDEKSI 2, 0 EMAS (CR-01): har bir domen kaliti endi
+ * `["m", marketId, ...]` bilan boshlanadi. `invalidatedMarkets` shu
+ * prefiksni ALOHIDA yig'adi va quyidagi `NAZORAT` bo'limi har bekor
+ * qilingan kalit joriy bozorga tegishli ekanini tekshiradi — usiz
+ * "doiralash olib tashlandi" holati bu faylda jimgina yashil qolardi.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
@@ -27,6 +34,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
 
 const { apiFetch } = apiClientMock;
 
+import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 import {
   useCloseAssignment,
   useCreateAssignment,
@@ -38,22 +46,62 @@ import {
   useUpdateWeekdays,
 } from "@/lib/market-queries";
 
+/** Mutatsiyalar kalitni SESSIYADAGI bozordan quradi — boshqa manba yo'q. */
+const MARKET_ID = "11111111-1111-4111-8111-111111111111";
+
 let client: QueryClient;
 let invalidated: string[];
+let invalidatedMarkets: string[];
 
+/*
+ * `AuthProvider` MAJBURIY: hooklar `market_id` ni sessiyadan o'qiydi
+ * (CR-01). Uni tushirib qoldirish `useAuthStore()` ni yiqitardi — ya'ni
+ * doiralashni "chetlab o'tish" bu faylda ham imkonsiz.
+ */
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <AuthProvider>{children}</AuthProvider>
+    </QueryClientProvider>
+  );
+}
+
+function seedSession(): void {
+  setSession({
+    accessToken: "test-access-token",
+    principal: {
+      userId: "33333333-3333-4333-8333-333333333333",
+      phone: "+998900000000",
+      fullName: "Test Admin",
+      roles: ["market_admin"],
+      marketId: MARKET_ID,
+      marketName: "Karmana markaziy bozori",
+      isPlatformAdmin: false,
+      locale: "uz-Latn",
+      mustChangePassword: false,
+    },
+    markets: [],
+  });
 }
 
 beforeEach(() => {
   vi.resetAllMocks();
   invalidated = [];
+  invalidatedMarkets = [];
+  clearSession();
+  seedSession();
   client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   vi.spyOn(client, "invalidateQueries").mockImplementation((filters) => {
     const key = filters?.queryKey as readonly unknown[] | undefined;
-    if (key && key.length > 0) invalidated.push(String(key[0]));
+    if (key && key.length > 2 && key[0] === "m") {
+      invalidatedMarkets.push(String(key[1]));
+      invalidated.push(String(key[2]));
+    } else if (key && key.length > 0) {
+      // Doiralanmagan kalitlar (`MARKETS_KEY`) shu tarmoqqa tushadi.
+      invalidated.push(String(key[0]));
+    }
     return Promise.resolve();
   });
   // Javob shakli bu testda ahamiyatsiz: `apiFetch` mock qilingan, ya'ni
@@ -64,6 +112,7 @@ beforeEach(() => {
 
 afterEach(() => {
   client.clear();
+  clearSession();
 });
 
 /** Mutatsiyani bajaradi va bekor qilingan kalit ildizlarini qaytaradi. */
@@ -179,20 +228,43 @@ describe("import va kalendar", () => {
     expect(keys).toContain("stalls");
     expect(keys).toContain("map");
     expect(keys).toContain("setup-status");
+
+    /*
+     * JUFTLIKNING MANFIY YARMI (WR-10). Rasta importi `stall_assignments`
+     * ga TEGMAYDI, ya'ni biriktirish tarixi eskirmaydi. Usiz quyidagi
+     * ijobiy da'vo "har qanday import hamma narsani bekor qiladi"
+     * holatidan ajralmasdi — ya'ni hech narsani o'lchamasdi.
+     */
+    expect(keys).not.toContain("assignments");
   });
 
-  test("sotuvchi importi RASTA ro'yxatini emas, sotuvchini bekor qiladi", async () => {
+  test("sotuvchi importi BIRIKTIRISH tarixini ham bekor qiladi (WR-10)", async () => {
     const { result } = renderHook(() => useImportMutation("vendors"), {
       wrapper,
     });
     result.current.mutate(new File(["x"], "sotuvchilar.xlsx"));
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    // NAZORAT: `kind` tarmog'i haqiqatan ishlaydi. Ikkalasi ham bir xil
-    // to'plamni bekor qilsa, test hech narsani ajratmagan bo'lardi.
     const keys = new Set(invalidated);
     expect(keys).toContain("vendors");
-    expect(keys).not.toContain("stalls");
+
+    /*
+     * `ImportRepository.insert_vendors()` (`import_repo.py:223-234`) rasta
+     * kodi ko'rsatilgan HAR sotuvchi uchun `stall_assignments` qatori
+     * yozadi. Ochiq turgan `GET /stalls/{id}/assignments` paneli bekor
+     * qilinmasa, import tugagandan keyin ham import OLDIDAGI bo'sh
+     * tarixni ko'rsatib turardi.
+     */
+    expect(keys).toContain("assignments");
+
+    /*
+     * `has_vendor` (xarita) va `vendor_name` (rasta reestri) biriktirish
+     * yaratilganda o'zgaradi — ya'ni sotuvchi importi rasta yuzasiga ham
+     * tegadi. Eski test bu yerda `not.toContain("stalls")` deb turgan edi;
+     * o'sha da'voning O'ZI defektning izi edi.
+     */
+    expect(keys).toContain("stalls");
+    expect(keys).toContain("map");
   });
 
   test("ish kunlari usta holatini bekor qiladi", async () => {
@@ -212,6 +284,25 @@ describe("NAZORAT: o'lchov usuli haqiqiy", () => {
     // yiqilardi — ya'ni yuqoridagi ijobiy testlar ma'noli.
     expect(keys).toContain("zones");
     expect(keys).not.toContain("map");
+  });
+
+  test("bekor qilingan HAR domen kaliti joriy bozorga doiralangan (CR-01)", async () => {
+    await runMutation(useCreateStall, {
+      code: "12",
+      zone_id: "z",
+      category_id: "c",
+      status: "active",
+      note: null,
+    });
+
+    /*
+     * Yuqoridagi testlarning hammasi 2-INDEKSDAGI segmentni o'qiydi, ya'ni
+     * `domainKey` dan `marketId` olib tashlansa ular kalitni umuman topa
+     * olmasdi va bo'sh to'plam bilan yiqilardi. Bu da'vo esa buni ANIQ
+     * qiladi: prefiksda AYNAN joriy bozor turibdi, tasodifiy satr emas.
+     */
+    expect(invalidatedMarkets.length).toBeGreaterThan(0);
+    expect(new Set(invalidatedMarkets)).toEqual(new Set([MARKET_ID]));
   });
 
   test("FormData yuborilganda tana JSON ga aylantirilmaydi", async () => {

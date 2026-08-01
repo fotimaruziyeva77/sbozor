@@ -40,6 +40,15 @@ import { vendorsKey } from "@/lib/market-queries";
 /** `+998` bilan boshlanadigan E.164 — server aynan shu shaklda yuboradi. */
 const VENDOR_PHONE = "+998901234567";
 
+/**
+ * Sessiyadagi bozor VA kesh kalitidagi bozor — BITTA qiymat (CR-01).
+ *
+ * Kalit `market_id` bilan doiralangani uchun ekilgan ma'lumot faqat AYNAN
+ * shu bozor kontekstida topiladi. Ikkalasi ajralib ketsa, ekran bo'sh
+ * holat chiqarib test yiqiladi — ya'ni doiralash bu yerda ham o'lchanadi.
+ */
+const MARKET_ID = "11111111-1111-4111-8111-111111111111";
+
 const VENDOR = {
   id: "55555555-5555-4555-8555-555555555555",
   full_name: "Aliyev Vali",
@@ -76,7 +85,7 @@ function renderVendorsPage(): ReturnType<typeof render> {
     },
   });
 
-  queryClient.setQueryData(vendorsKey({ q: "" }), {
+  queryClient.setQueryData(vendorsKey(MARKET_ID, { q: "" }), {
     pages: [{ items: [VENDOR], next_cursor: null }],
     pageParams: [null],
   });
@@ -105,7 +114,7 @@ function seedMarketAdminSession(): void {
       phone: "+998900000000",
       fullName: "Test Admin",
       roles: ["market_admin"],
-      marketId: "11111111-1111-4111-8111-111111111111",
+      marketId: MARKET_ID,
       marketName: "Karmana markaziy bozori",
       isPlatformAdmin: false,
       locale: "uz-Latn",
