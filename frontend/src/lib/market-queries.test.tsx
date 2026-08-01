@@ -179,20 +179,43 @@ describe("import va kalendar", () => {
     expect(keys).toContain("stalls");
     expect(keys).toContain("map");
     expect(keys).toContain("setup-status");
+
+    /*
+     * JUFTLIKNING MANFIY YARMI (WR-10). Rasta importi `stall_assignments`
+     * ga TEGMAYDI, ya'ni biriktirish tarixi eskirmaydi. Usiz quyidagi
+     * ijobiy da'vo "har qanday import hamma narsani bekor qiladi"
+     * holatidan ajralmasdi — ya'ni hech narsani o'lchamasdi.
+     */
+    expect(keys).not.toContain("assignments");
   });
 
-  test("sotuvchi importi RASTA ro'yxatini emas, sotuvchini bekor qiladi", async () => {
+  test("sotuvchi importi BIRIKTIRISH tarixini ham bekor qiladi (WR-10)", async () => {
     const { result } = renderHook(() => useImportMutation("vendors"), {
       wrapper,
     });
     result.current.mutate(new File(["x"], "sotuvchilar.xlsx"));
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    // NAZORAT: `kind` tarmog'i haqiqatan ishlaydi. Ikkalasi ham bir xil
-    // to'plamni bekor qilsa, test hech narsani ajratmagan bo'lardi.
     const keys = new Set(invalidated);
     expect(keys).toContain("vendors");
-    expect(keys).not.toContain("stalls");
+
+    /*
+     * `ImportRepository.insert_vendors()` (`import_repo.py:223-234`) rasta
+     * kodi ko'rsatilgan HAR sotuvchi uchun `stall_assignments` qatori
+     * yozadi. Ochiq turgan `GET /stalls/{id}/assignments` paneli bekor
+     * qilinmasa, import tugagandan keyin ham import OLDIDAGI bo'sh
+     * tarixni ko'rsatib turardi.
+     */
+    expect(keys).toContain("assignments");
+
+    /*
+     * `has_vendor` (xarita) va `vendor_name` (rasta reestri) biriktirish
+     * yaratilganda o'zgaradi — ya'ni sotuvchi importi rasta yuzasiga ham
+     * tegadi. Eski test bu yerda `not.toContain("stalls")` deb turgan edi;
+     * o'sha da'voning O'ZI defektning izi edi.
+     */
+    expect(keys).toContain("stalls");
+    expect(keys).toContain("map");
   });
 
   test("ish kunlari usta holatini bekor qiladi", async () => {
