@@ -60,7 +60,8 @@
     "selectMarket": "Бозорни танланг",
     "selectMarketTitle": "Бозорни танланг",
     "noMarkets": "Сизга ҳеч қандай бозор бириктирилмаган",
-    "marketDraft": "Қоралама"
+    "marketDraft": "Қоралама",
+    "passwordChangeRequired": "Паролингиз алмаштирилиши керак. Парол алмаштириш саҳифасига ўтинг."
   },
   "users": {
     "title": "Фойдаланувчилар",
@@ -360,6 +361,7 @@
   },
   "wizard": {
     "title": "Янги бозор",
+    "createFirstMarket": "Биринчи бозорни яратиш",
     "progress": "7 қадамдан {done} таси бажарилган",
     "save": "Сақлаш",
     "saveAndContinue": "Сақлаш ва давом этиш",

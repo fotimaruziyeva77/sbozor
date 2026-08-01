@@ -16,6 +16,7 @@ import {
   clearSession,
   readSession,
   setSession,
+  updatePrincipal,
 } from "@/lib/auth-store";
 
 /**
@@ -242,8 +243,31 @@ export async function apiRequest(
 
   if (!response.ok) {
     const errorBody = await readErrorBody(response);
+    const detail = detailOf(errorBody);
     if (response.status === 401 && !skipAuth) clearSession();
-    throw new ApiError(response.status, detailOf(errorBody), errorBody);
+
+    /*
+     * WR-09: admin boshqa odamning parolini u ISHLAYOTGAN paytda tiklashi
+     * mumkin. O'sha lahzadan server har so'rovga 403 `password_change_required`
+     * qaytaradi, brauzerdagi `principal.mustChangePassword` esa hamon
+     * `false` — natijada foydalanuvchi HAR EKRANDA "ruxsat yo'q" ko'radi va
+     * `/change-password` ga birorta yo'l qolmaydi.
+     *
+     * NEGA `clearSession()` EMAS: server 401 ni ATAYIN tanlamagan
+     * (`deps.py:389-412`) — 401 sessiyani uzib, login <-> parol almashtirish
+     * redirect siklini tug'dirardi. Sessiyani bu yerda tozalash o'sha rad
+     * etilgan yo'lni orqa eshikdan qaytarardi.
+     *
+     * TO'G'RI JAVOB — store'ni server verdikti bilan MOSLASH. Bayroq `true`
+     * bo'lgan zahoti `(app)/layout.tsx` ning MAVJUD birinchi qoidasi
+     * keyingi renderda `/change-password` ga olib boradi. Ya'ni bu yerda
+     * yangi redirect mantiqi YOZILMAYDI — mavjudi to'g'ri ma'lumot oladi.
+     */
+    if (response.status === 403 && detail === "password_change_required") {
+      updatePrincipal({ mustChangePassword: true });
+    }
+
+    throw new ApiError(response.status, detail, errorBody);
   }
 
   return response;
@@ -338,7 +362,8 @@ export type ErrorMessageKey =
   | "auth.invalidCredentials"
   | "auth.tooManyAttempts"
   | "auth.accountBlocked"
-  | "auth.passwordTooShort";
+  | "auth.passwordTooShort"
+  | "auth.passwordChangeRequired";
 
 export function errorMessageKey(error: unknown): ErrorMessageKey {
   if (error instanceof NetworkError) return "errors.network";
@@ -354,6 +379,14 @@ export function errorMessageKey(error: unknown): ErrorMessageKey {
         return "auth.accountBlocked";
       case "weak_password":
         return "auth.passwordTooShort";
+      /*
+       * WR-09: umumiy "ruxsat yo'q" MAZMUNSIZ bo'lardi — foydalanuvchi
+       * nima qilishi kerakligini bilmasdi. Matn keyingi qadamni AYTADI
+       * (UI-SPEC §9.3), yo'naltirishni esa layout qoidasi bajaradi.
+       * Bu tarmoq `error.status === 403` tekshiruvidan OLDIN turishi shart.
+       */
+      case "password_change_required":
+        return "auth.passwordChangeRequired";
       case "role_not_allowed":
         return "errors.forbidden";
       default:

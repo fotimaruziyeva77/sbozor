@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { useRouter } from "@/i18n/navigation";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Link, useRouter } from "@/i18n/navigation";
 import { errorMessageKey } from "@/lib/api-client";
 import type { MarketSummary } from "@/lib/api-types";
 import { useLogout, useSelectMarket } from "@/lib/auth-queries";
 import { applySession, useAuthStore } from "@/lib/auth-store";
+import { hasPermission } from "@/lib/rbac";
 import {
   fetchFirstIncompleteStep,
   useMarketsQuery,
@@ -35,15 +36,34 @@ import {
  * DEFERRED (v2): sessiya ichida bozorni ALMASHTIRISH UI'si bu yerda ham,
  * app shell'da ham ATAYIN yo'q — u alohida qaror va alohida audit talab
  * qiladi.
+ *
+ * BO'SH RO'YXAT (CR-03, 02-18): ilgari bu yerda faqat "Chiqish" turardi va
+ * toza platformada BIRINCHI bozorni yaratishning mahsulot ichidagi yo'li
+ * umuman yo'q edi. Endi bo'sh holat UI-SPEC §9.2 shakliga keltirilgan:
+ * "hech narsa yo'q" -> YARATISH amali. Bu bozorni ALMASHTIRISH emas, ya'ni
+ * yuqoridagi v2 qaroriga tegmaydi.
  */
 const DASHBOARD_PATH = "/dashboard";
 const WIZARD_PATH = "/markets/setup";
+const NEW_MARKET_PATH = "/markets/new";
 
 export function MarketPicker() {
   const t = useTranslations();
   const router = useRouter();
-  const { accessToken, markets, clearSession } = useAuthStore();
+  const { accessToken, markets, principal, clearSession } = useAuthStore();
   const [formError, setFormError] = useState<string | null>(null);
+
+  /*
+   * `auth.py::_session_roles` bozorsiz login javobida ham platforma
+   * adminiga `platform_admin` rolini beradi, ya'ni bu tekshiruv aynan
+   * bootstrap holatida ISHLAYDI.
+   *
+   * Havola huquq ostida, chunki huquqsiz odamga 403 ga olib boradigan
+   * havola ko'rsatish UI-SPEC ning "bo'sh sarlavha yolg'on signal" qoidasi
+   * bilan bir xil sinf (T-02-142). Bu XAVFSIZLIK chegarasi emas — chegara
+   * `markets/new/page.tsx` da va serverda.
+   */
+  const canCreate = hasPermission(principal?.roles ?? [], "market_manage");
 
   // Tokensiz bu ekranning ma'nosi yo'q: bozor tanlanmagan sessiyaga refresh
   // cookie BERILMAYDI (01-06), ya'ni sahifa yangilangan bo'lsa qaytadan
@@ -139,6 +159,29 @@ export function MarketPicker() {
     return (
       <div className="flex flex-col gap-4">
         <p className="text-sm text-text-muted">{t("auth.noMarkets")}</p>
+
+        {/*
+         * BIRLAMCHI amal (§10.1: sahifada `variant="default"` bilan eng
+         * ko'pi bitta tugma). `buttonVariants` orqali stillanadi —
+         * ko'rinish dizayn tizimidan keladi, semantikasi esa HAVOLA bo'lib
+         * qoladi (o'ng tugma bilan ochish, fokus tartibi, skrinriderdagi
+         * "havola" e'loni).
+         */}
+        {canCreate ? (
+          <Link
+            className={buttonVariants({ variant: "default", size: "lg" })}
+            href={NEW_MARKET_PATH}
+          >
+            {t("wizard.createFirstMarket")}
+          </Link>
+        ) : null}
+
+        {/*
+         * "Chiqish" OLIB TASHLANMAYDI: `canCreate` `false` bo'lgan
+         * foydalanuvchi uchun (masalan noto'g'ri a'zolik bilan qolgan bozor
+         * admini) u YAGONA chiqish yo'li bo'lib qoladi. Havola qo'shilishi
+         * bir boshi berk ko'chani ikkinchisiga almashtirmasligi kerak.
+         */}
         <Button
           variant="secondary"
           size="lg"
