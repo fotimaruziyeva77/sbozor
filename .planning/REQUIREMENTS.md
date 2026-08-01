@@ -25,6 +25,7 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 - [ ] **MARKET-04**: Bozor admini sotuvchilar reestrini yuritadi (F.I.Sh., telefon) va rasta biriktirish davrlarini boshqaradi
 - [ ] **MARKET-05**: Bozor admini ishlamaydigan/bayram kunlarini belgilaydi — o'sha kunlarga patta hisoblanmaydi
 - [ ] **MARKET-06**: Sxematik plan-xarita: rastalar zona bo'yicha rangli grid (yashil bo'sh, ko'k to'langan, qizil qarzdor, sariq nomuvofiq); rasta bosilganda karta (dalil-rasm bilan) ochiladi
+- [ ] **MARKET-07**: Bozor admini ma'muriyat bergan xodimlar ro'yxatini bitta fayl bilan yuklaydi (F.I.Sh., telefon, rol); tizim hisoblarni rollar bilan yaratadi, telefon raqamlarini E.164 ga normallaydi, dublikatni rad etadi va vaqtinchalik parollarni beradi — qo'lda birma-bir kiritish shart emas
 
 ### Kamera va suratga olish (CAM)
 
@@ -35,6 +36,8 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 - [ ] **CAM-05**: Rejalashtirilgan kadr olish idempotent va retry'li; o'tkazib yuborilgan slot jurnalda ko'rinadi va alert yuboradi
 - [ ] **CAM-06**: Har kadr sifat filtridan o'tadi (qorong'i/buzuq/bo'sh kadr belgilanadi, `light_mode` saqlanadi) — yaroqsiz kadr billing'ga ta'sir qilmaydi
 - [ ] **CAM-07**: Kadrlar S3-mos omborda (SeaweedFS) bozor/kamera/sana bo'yicha saqlanadi; 90 kun to'liq, keyin siqilgan 1 yil (sozlanadigan)
+- [ ] **CAM-08**: Admin **faqat** NVR manzili + login/parolni kiritadi; tizim Hikvision ISAPI orqali qurilmani aniqlaydi, barcha kanallarni sanab chiqadi va kameralarni (nom, kanal, asosiy/sub oqim URL'i) avtomat yaratadi. Qayta skanerlash idempotent (yangi kanal qo'shiladi, yo'qolgani `offline`, mavjudi tegilmaydi). Ulanish xatosi **sababi va tuzatish yo'li** bilan ko'rsatiladi: parol xato / NVR soati >5 daq farqi → NTP / firmware `digest/basic` talab qiladi / kanal offline / sessiya limitiga yetildi
+- [ ] **CAM-09**: Simulyatsiya qilingan Hikvision NVR (ISAPI mock + go2rtc RTSP manbasi) compose profili sifatida mavjud; kamera kashfiyoti, ulanish testi, jonli ko'rish va kadr olish yo'li real uskunasiz uchidan-uchiga ishlaydi va CI'da o'lchanadi
 
 ### AI tahlil (AI)
 
@@ -142,6 +145,7 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | MARKET-04 | Phase 2 | Pending |
 | MARKET-05 | Phase 2 | Pending |
 | MARKET-06 | Phase 2 | Pending |
+| MARKET-07 | Phase 2 | Pending |
 | CAM-01 | Phase 3 | Pending |
 | CAM-02 | Phase 3 | Pending |
 | CAM-03 | Phase 3 | Pending |
@@ -149,6 +153,8 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | CAM-05 | Phase 4 | Pending |
 | CAM-06 | Phase 4 | Pending |
 | CAM-07 | Phase 4 | Pending |
+| CAM-08 | Phase 3 | Pending |
+| CAM-09 | Phase 3 | Pending |
 | AI-01 | Phase 5 | Pending |
 | AI-02 | Phase 5 | Pending |
 | AI-03 | Phase 5 | Pending |

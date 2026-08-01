@@ -4,9 +4,30 @@
 
 SBOZOR 12 haftada (2026-07-28 → ~2026-10-18) Karmana bozorida jonli ishga tushadi. Yo'l xaritasi bog'liqlik zanjiri bo'yicha qurilgan: avval keyinchalik retrofit qilib bo'lmaydigan poydevor (tenant izolyatsiyasi, audit, biznes-kun, o'zgarmas hisob sxemasi) → bozor domeni (rasta / tarif / sotuvchi) → tashqi ulanish (NVR / WireGuard) → kadr olish → CV aniqlash va nazoratchi tasdig'i → billing va kassir → nomuvofiqlik va botlar → hisobot va ishga tushirish. Bu ketma-ketlik uchta mustaqil tadqiqot yo'nalishida (ARCHITECTURE / PITFALLS / FEATURES) bir xil chiqqan.
 
-Bu zanjir ustidan birinchi haftadanoq **parallel dala treki (Phase 0)** ishlaydi. U keyinroq bajarib bo'lmaydigan ikki narsani vaqtida qo'lga kiritadi: raqamlashtirishdan oldingi tushum bazasi (yig'uvchilar tizim haqida bilishidan oldin o'lchanishi shart) va NVR'ga masofaviy kirish (tashqi yetkazib berish muddati bizga bog'liq emas). Ikkalasi ham 12 haftalik, zaxirasiz jadvaldagi eng katta xavf.
+Bu zanjir ustidan birinchi haftadanoq **parallel dala treki (Phase 0)** ishlaydi. U raqamlashtirishdan oldingi tushum bazasini o'lchaydi — bu Phase 8 dagi pilot ta'siri hisobotining mustaqil taqqoslash nuqtasi. **Phase 0 hech qanday build fazasini bloklamaydi** (2026-08-01 qarori): u o'lchov va sozlash treki, darvoza emas.
 
 Har faza "band rastadan patta to'liq yig'ilyaptimi?" savolini isbotlash zanjirining bir bo'g'ini. Oxirida direktor "band, lekin to'lovsiz" rastalarni rasm-dalil bilan ko'radi.
+
+## Mahsulot qoidasi: self-service onboarding (MAJBURIY)
+
+**2026-08-01 da o'rnatilgan, barcha fazalarga taalluqli qat'iy qoida.** Har bir faza shu shaklda loyihalanadi va shu shaklda tekshiriladi:
+
+> **Admin saytda faqat kerakli ma'lumotni kiritadi — tizim qolganini o'zi, xatosiz bajaradi.**
+
+Amaliy ma'nosi:
+
+| Onboarding qadami | Admin nima kiritadi | Tizim nima qiladi |
+|---|---|---|
+| Yangi bozor | Rekvizit + bozor chizmasi (plan-rasm) | Zona/rasta/toifa/tarif tuzilmasini ustadan o'tkazib quradi |
+| Kameralar | NVR manzili + login/parol | ISAPI orqali qurilmani aniqlaydi, kanallarni sanaydi, **kameralarni avtomat qo'shadi** — qo'lda kamera kiritish YO'Q |
+| Xodimlar | Ma'muriyat bergan odamlar ro'yxati (fayl) | Hisoblarni rollar bilan yaratadi, vaqtinchalik parollarni beradi |
+| Rasta/sotuvchi ma'lumoti | Excel fayl | Validatsiya qilib, all-or-nothing yuklaydi |
+
+Buning uchta oqibati bor va ular majburiy:
+
+1. **Muhandis aralashuvi bilan ishlaydigan onboarding qabul qilinmaydi.** Yangi bozor kod yozmasdan, skript ishlatmasdan, SSH'siz ulanadi. Bu mahsulotning asosiy raqobat ustunligi.
+2. **Tashqi bog'liqlik hech qachon `Blocks:` bo'lmaydi.** Yetishmayotgan real ma'lumot, kelmagan hujjat yoki ulanmagan uskuna — bularning hech biri fazani yoki jarayonni to'xtatmaydi. Ular keyin to'ldiriladigan ma'lumot sifatida modellashtiriladi.
+3. **Tekshiruv simulyator ustida bajariladigan qilib loyihalanadi.** Real uskuna kelguncha to'liq yo'l simulyatsiya qilingan NVR (ISAPI mock + go2rtc RTSP manbasi) ustida ishlab chiqiladi va o'lchanadi. Real qurilmaga o'tish sozlama o'zgarishi bo'ladi, qayta loyihalash emas.
 
 **Muddat:** 12 hafta, zaxirasiz. 12-faza (hafta 12) — yangi funksiya emas, mustahkamlash haftasi. Kesish ro'yxati (cut list) 1-haftada yozma kelishiladi (Phase 0), 11-haftada bosim ostida emas.
 
@@ -19,7 +40,7 @@ Har faza "band rastadan patta to'liq yig'ilyaptimi?" savolini isbotlash zanjirin
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 0: Dala treki va tashqi bog'liqliklar** - Baza o'lchovi, NVR kirish, buyurtmachi qarorlari (parallel, 1-haftadan)
+- [ ] **Phase 0: Dala treki va o'lchov bazasi** - Tushum bazasi, kamera qamrovi, buyurtmachi javoblari (parallel, **hech narsani bloklamaydi**)
 - [x] **Phase 1: Poydevor va tenant xavfsizligi** - Rol, izolyatsiya, audit, biznes-kun, 3 til — retrofit qilinmaydigan qatlam (completed 2026-07-29)
 - [ ] **Phase 2: Bozor domeni va "Yangi bozor" ustasi** - Rasta, toifa, tarixiy tarif, sotuvchi, ish kunlari, sxematik plan-xarita (17/23 reja bajarildi; tekshiruv `gaps_found` — 16–19-to'lqinlarda yopilmoqda)
 - [ ] **Phase 3: Kamera va tarmoq ulanishi** - WireGuard tunnel, shifrlangan RTSP, ulanish testi, jonli ko'rish
@@ -31,9 +52,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ## Phase Details
 
-### Phase 0: Dala treki va tashqi bog'liqliklar (PARALLEL TRACK)
+### Phase 0: Dala treki va o'lchov bazasi (PARALLEL TRACK — BLOKLAMAYDI)
 
-**Goal**: Loyihaning tashqi bog'liqliklari va o'lchov bazasi 2-hafta oxiriga qadar qo'lga kiritilgan bo'ladi — keyinroq bajarib bo'lmaydigan ishlar o'z vaqtida bajariladi
+**Goal**: Pilot ta'sirini o'lchash uchun raqamlashtirishdan oldingi baza va real dala ma'lumoti yig'iladi — build fazalarining hech biri buni kutmaydi
 **Depends on**: Hech narsa — 1-haftadan boshlanadi, 1–8 fazalar bilan parallel ishlaydi
 **Timeline**: Hafta 1–2 (2026-07-28 → 2026-08-09); kuzatuv 12-haftagacha davom etadi
 **Requirements**: — (dala/ops ishi; v1 REQ-ID biriktirilmagan)
@@ -46,7 +67,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Buyurtmachi bilan yozma kelishuv: 7 ochiq savol javob olgan (KKM/virtual kassa, UzQR, naqd egaligi, imtiyoz/kunlik tarif, rasta almashinuvi, Telegram qamrovi, nomuvofiqlik mas'uli), aniqlik mezoni formulasi va kesish ro'yxati (cut list) tasdiqlangan
 
 **Plans**: N/A — dala/ops ishi, kod rejasi yo'q (`/gsd-plan-phase 0` ishlatilmaydi)
-**Blocks**: Phase 3 (NVR kirish ma'lumotlari), Phase 4 (real kadrlar va capture usuli tanlovi), Phase 2 va 6 rejalashtirish (7 savol javobi), Phase 8 (baza bilan solishtirish)
+**Blocks**: **HECH NARSANI** (2026-08-01 qarori). Ilgari bu trek Phase 3/4/8 ni bloklardi; endi mahsulotning o'zi o'sha ishni yutadi — NVR avtomatik kashfiyoti (CAM-08) kamera qamrovi auditini keraksiz qiladi, simulyator (CAM-09) real kadrsiz ishlab chiqishga imkon beradi, self-service import esa hujjatlarni kutmaydi. Bu trekning natijalari **sozlash va o'lchov** uchun ishlatiladi:
+- Tushum bazasi → Phase 8 dagi pilot ta'siri hisobotining taqqoslash nuqtasi (yagona qaytarilmas band — yig'uvchilar tizim haqida bilishidan oldin o'lchanishi kerak)
+- Real kadrlar → Phase 4/5 dagi sifat chegaralari va CV aniqligini sozlash (standart qiymatlar simulyatorda o'rnatiladi, real ma'lumot ularni aniqlashtiradi)
+- Buyurtmachining 7 javobi → Phase 6/7 dagi tarif/kvitansiya tafsilotlari (javobsiz — hujjatlashtirilgan standart qiymat ishlatiladi)
 
 ### Phase 1: Poydevor va tenant xavfsizligi
 
@@ -99,10 +123,10 @@ Plans:
 
 ### Phase 2: Bozor domeni va "Yangi bozor" ustasi
 
-**Goal**: Platforma admini kod yozmasdan yangi bozorni tizimga kiritadi va Karmananing real rasta/tarif/sotuvchi ma'lumoti tizimda yashaydi
+**Goal**: Platforma admini kod yozmasdan yangi bozorni tizimga kiritadi — rasta/tarif/sotuvchi va xodimlar ro'yxati saytning o'zidan, fayl yuklash orqali kiritiladi
 **Depends on**: Phase 1
 **Timeline**: Hafta 3–4 (2026-08-10 → 2026-08-23)
-**Requirements**: MARKET-01, MARKET-02, MARKET-03, MARKET-04, MARKET-05, MARKET-06
+**Requirements**: MARKET-01, MARKET-02, MARKET-03, MARKET-04, MARKET-05, MARKET-06, MARKET-07
 **Success Criteria** (what must be TRUE):
 
   1. Platforma admini ustadan o'tib yangi bozor yaratadi (rekvizit → zona → rasta → toifa → tarif) va oxirida bozor ishlashga tayyor holatda ko'rinadi — kod yozilmaydi
@@ -110,6 +134,7 @@ Plans:
   3. Tarif o'zgartirilganda o'tmishdagi sanaga tegishli hisob eski narxda qoladi — yangi narx faqat belgilangan sanadan ta'sir qiladi
   4. Bozor admini bayram/ishlamaydigan kunni belgilaydi va o'sha kunga patta hisoblanmaydi
   5. Bozor admini sxematik plan-xaritada rastalarni zona bo'yicha grid ko'rinishida ko'radi; rasta bosilganda uning kartasi (raqam, toifa, tarif, sotuvchi, holat) ochiladi
+  6. Bozor admini ma'muriyat bergan xodimlar ro'yxatini (F.I.Sh., telefon, rol) bitta fayl bilan yuklaydi; tizim hisoblarni rollar bilan yaratadi va vaqtinchalik parollarni beradi — qo'lda birma-bir kiritish shart emas
 
 **Plans**: 23 plans in 19 waves (18–23 — bo‘shliqlarni yopish to‘lqini)
 Plans:
@@ -170,29 +195,35 @@ Plans:
 - [ ] 02-23-PLAN.md — Karmananing REAL ma’lumotini yuklash, solishtirish va validatsiya imzosi (W19)
 
 **UI hint**: yes
-**Note**: Ustaning kamera / kamera-zona / snapshot-jadval qadamlari 3–5 fazalarda ulanadi. Plan-xarita **sxematik** (grid) bo'lib qoladi — to'liq interaktiv xarita v2. Ranglar to'liq to'plami (ko'k to'langan, qizil qarzdor, sariq nomuvofiq) va dalil-rasm 6–7 fazalarda yonadi. Karmananing real ma'lumoti aynan shu fazada kiritiladi — keyingi fazalar fikstura emas, haqiqat ustida sinaladi.
+**Note**: Ustaning kamera / kamera-zona / snapshot-jadval qadamlari 3–5 fazalarda ulanadi. Plan-xarita **sxematik** (grid) bo'lib qoladi — to'liq interaktiv xarita v2. Ranglar to'liq to'plami (ko'k to'langan, qizil qarzdor, sariq nomuvofiq) va dalil-rasm 6–7 fazalarda yonadi.
 
-### Phase 3: Kamera va tarmoq ulanishi
+**Real ma'lumot haqida (2026-08-01 da qayta ta'riflandi).** Ilgari bu faza "Karmananing real ma'lumoti aynan shu fazada kiritiladi" deb yozilgan va bu fazani ma'muriyatdan hujjat kelishiga bog'lab qo'ygan edi. Self-service qoidasi bo'yicha **fazaning yetkazib berish mahsuloti — import qobiliyati, ma'lum bir fayl emas**: yo'l (shablon → validatsiya → all-or-nothing yuklash → D-15 takroriy import himoyasi) qurilgan, hujjatlashtirilgan va o'lchangan bo'lsa, faza yopiladi. Real Karmana ma'lumoti kelganda admin uni saytning o'zidan yuklaydi — bu operatsion amal, faza darvozasi emas. Keyingi fazalar realistik hajmdagi (~300–1000 rasta) seed ma'lumot ustida sinaladi va real ma'lumot kelganda ustiga qo'yiladi.
 
-**Goal**: Bizning serverimiz Karmana NVR'iga xavfsiz yetib boradi va direktor jonli tasvirni panelda ko'radi
-**Depends on**: Phase 1; Phase 0 (NVR kirish ma'lumotlari va CGNAT holati)
+### Phase 3: NVR avtomatik kashfiyoti va tarmoq ulanishi
+
+**Goal**: Admin saytga NVR manzili va login/parolini kiritadi — tizim Hikvision qurilmasini o'zi aniqlaydi, kanallarni sanab chiqadi va kameralarni avtomat qo'shadi; direktor jonli tasvirni panelda ko'radi
+**Depends on**: Phase 1 *(Phase 0 bog'liqligi 2026-08-01 da olib tashlandi — self-service qoidasi)*
 **Timeline**: Hafta 3–4 (2026-08-10 → 2026-08-23) — Phase 2 bilan parallel
-**Requirements**: CAM-01, CAM-02, CAM-03
+**Requirements**: CAM-01, CAM-02, CAM-03, CAM-08, CAM-09
 **Success Criteria** (what must be TRUE):
 
-  1. Bozor admini kamera qo'shadi va "ulanishni tekshirish" tugmasi real NVR'dan javob oladi — muvaffaqiyat yoki xato sababi aniq ko'rsatiladi
-  2. RTSP login/parollari bazada shifrlangan saqlanadi — bazaga kirgan odam ham ochiq matn parol ko'rmaydi
-  3. Server NVR'ga faqat WireGuard tunnel orqali kiradi; tunnel o'chirilsa ulanish uziladi va NVR internetdan to'g'ridan-to'g'ri ochiq emas
-  4. Direktor avtorizatsiyadan keyin panelda jonli kamera tasvirini ko'radi; avtorizatsiyasiz to'g'ridan-to'g'ri havola ishlamaydi
+  1. Bozor admini **faqat** NVR manzili + login/parolni kiritadi va "kameralarni topish" tugmasini bosadi; tizim ISAPI orqali qurilma modelini aniqlaydi, barcha kanallarni sanaydi va har biri uchun kamera yozuvini (nom, kanal raqami, asosiy/sub oqim URL'i) **avtomat** yaratadi — qo'lda birorta RTSP URL yozilmaydi
+  2. Qayta skanerlash idempotent: yangi kanal qo'shiladi, yo'qolgani `offline` deb belgilanadi, mavjudi tegilmaydi — takroriy kamera yozuvi yaratilmaydi
+  3. Ulanish muvaffaqiyatsiz bo'lsa, xato **sababi va tuzatish yo'li** ko'rsatiladi (parol xato / NVR soati >5 daq farq qilyapti → NTP / firmware `digest/basic` talab qiladi / kanal offline / bir vaqtdagi sessiya limitiga yetildi) — "ulanmadi" degan quruq xabar qabul qilinmaydi
+  4. RTSP login/parollari bazada Fernet bilan shifrlangan saqlanadi — bazaga kirgan odam ham ochiq matn parol ko'rmaydi; parol hech qachon API javobida yoki jurnalda ko'rinmaydi
+  5. Server NVR'ga faqat WireGuard tunnel orqali kiradi; tunnel o'chirilsa ulanish uziladi va NVR internetdan to'g'ridan-to'g'ri ochiq emas
+  6. Direktor avtorizatsiyadan keyin panelda jonli kamera tasvirini ko'radi; avtorizatsiyasiz to'g'ridan-to'g'ri havola ishlamaydi
+  7. **Butun yuqoridagi oqim real uskunasiz, simulyatsiya qilingan Hikvision NVR ustida uchidan-uchiga ishlaydi va CI'da o'lchanadi** — real qurilmaga o'tish sozlama o'zgarishi bo'ladi, kod o'zgarishi emas
 
 **Plans**: TBD
 **UI hint**: yes
-**Research flag**: yes — `/gsd-plan-phase 3 --research-phase 3`. Bu NVR modelining ISAPI/Digest xatti-harakati, bir vaqtdagi RTSP sessiya limiti va Karmanadagi haqiqiy CGNAT/WireGuard topologiyasi tadqiqotda LOW confidence deb belgilangan — dalada tekshiriladi.
+**Research flag**: yes — `/gsd-plan-phase 3 --research-phase 3`. Tadqiqot **simulyator-birinchi** yondashuvda o'tkaziladi: Hikvision ISAPI kashfiyot endpointlari (`/ISAPI/System/deviceInfo`, `/ISAPI/ContentMgmt/InputProxy/channels`, `/ISAPI/System/Video/inputs/channels`), kanal raqamlash qoidasi (`{ch}01` asosiy / `{ch}02` sub), Digest autentifikatsiyasining soat farqiga sezgirligi, firmware'ning `digest/basic` talabi, NVR'ning bir vaqtdagi masofaviy sessiya limiti (odatda 6–16) va CGNAT ostidagi WireGuard topologiyasi. Bularning har biri simulyatorda modellashtiriladi, real qurilmada esa tasdiqlanadi.
+**Note**: CGNAT holati mahsulot muammosi emas — bozor tomonida oldindan sozlangan WireGuard qurilmasi (mini-PC yoki OpenWrt router) `PersistentKeepalive` bilan o'zi uyga qo'ng'iroq qiladi. Admin uni faqat rozetkaga ulaydi.
 
 ### Phase 4: Snapshot pipeline
 
 **Goal**: Har kuni rejadagi kadrlar avtomatik olinadi, sifat tekshiruvidan o'tadi, ishonchli arxivlanadi va uzilish jim qolmaydi
-**Depends on**: Phase 3; Phase 0 (real kadr bilan capture usuli tanlovi)
+**Depends on**: Phase 3 *(Phase 0 bog'liqligi 2026-08-01 da olib tashlandi — self-service qoidasi)*
 **Timeline**: Hafta 5–6 (2026-08-24 → 2026-09-06)
 **Requirements**: CAM-04, CAM-05, CAM-06, CAM-07, FOUND-06
 **Success Criteria** (what must be TRUE):
@@ -204,7 +235,7 @@ Plans:
   5. Kamera offline bo'lsa, slot o'tkazib yuborilsa yoki backup xato bersa — platforma adminiga Telegram-alert keladi va xato Sentry'da ko'rinadi
 
 **Plans**: TBD
-**Research flag**: yes — `/gsd-plan-phase 4 --research-phase 4`. Hal qilinmagan: kadr olish usuli (Hikvision ISAPI still-image / go2rtc frame endpoint / ffmpeg) real NVR'da o'lchanadi; job-orchestration mexanizmi (DB-materialized `capture_runs` + `SKIP LOCKED` vs `arq`) bitta aniq qaror talab qiladi; sifat va `light_mode` chegaralari pilot ma'lumotida sozlanadi.
+**Research flag**: yes — `/gsd-plan-phase 4 --research-phase 4`. **Kadr olish usuli endi kutilmaydi — standart tanlov: go2rtc `/api/frame.jpeg`, zaxira: Hikvision ISAPI `/picture`, oxirgi chora: ffmpeg** (tadqiqot tavsiyasi, CLAUDE.md da qat'iylashtirilgan). Uchala yo'l ham sozlanadigan qilib quriladi va simulyatorda o'lchanadi; real NVR ma'lumoti kelganda tanlov **sozlama** bilan o'zgaradi, qayta loyihalash talab qilmaydi. Hal qilinmagan qolgani: job-orchestration mexanizmi (DB-materialized `capture_runs` + `SKIP LOCKED` vs `arq`) bitta aniq qaror talab qiladi; sifat va `light_mode` chegaralari simulyatorda standart qiymat oladi, pilot ma'lumotida aniqlashtiriladi.
 
 ### Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i
 
@@ -288,16 +319,18 @@ Bu build fazasi emas — 8-fazada loyihalanadigan va go-live'dan keyin bajarilad
 
 | Faza | REQ-ID lar | Soni |
 |------|-----------|------|
-| Phase 0 | — (dala ishi) | 0 |
+| Phase 0 | — (dala ishi, bloklamaydi) | 0 |
 | Phase 1 | FOUND-01, FOUND-02, FOUND-03, FOUND-04, FOUND-05 | 5 |
-| Phase 2 | MARKET-01, MARKET-02, MARKET-03, MARKET-04, MARKET-05, MARKET-06 | 6 |
-| Phase 3 | CAM-01, CAM-02, CAM-03 | 3 |
+| Phase 2 | MARKET-01, MARKET-02, MARKET-03, MARKET-04, MARKET-05, MARKET-06, MARKET-07 | 7 |
+| Phase 3 | CAM-01, CAM-02, CAM-03, CAM-08, CAM-09 | 5 |
 | Phase 4 | CAM-04, CAM-05, CAM-06, CAM-07, FOUND-06 | 5 |
 | Phase 5 | AI-01, AI-02, AI-03, AI-04, AI-05, AI-06 | 6 |
 | Phase 6 | BILL-01, BILL-02, BILL-03, BILL-04, BILL-05, CASH-01, CASH-02, CASH-03, CASH-04 | 9 |
 | Phase 7 | RECON-01, RECON-02, RECON-03, RECON-06, CASH-05, BOT-01, BOT-02, BOT-03, BOT-04 | 9 |
 | Phase 8 | RECON-04, RECON-05, FOUND-07 | 3 |
-| **Jami** | | **46 / 46** |
+| **Jami** | | **49 / 49** |
+
+*2026-08-01 da qo'shildi (self-service qoidasi): MARKET-07 (xodimlar ro'yxatini ommaviy import), CAM-08 (NVR avtomatik kashfiyoti), CAM-09 (NVR simulyatori va test rejimi).*
 
 Yetim (orphan) talab yo'q, dublikat biriktirish yo'q.
 
@@ -305,7 +338,7 @@ Yetim (orphan) talab yo'q, dublikat biriktirish yo'q.
 
 | # | Qaror | Qachon |
 |---|-------|--------|
-| 1 | Kadr olish usuli: Hikvision ISAPI still-image vs go2rtc frame endpoint vs ffmpeg | Phase 4 rejasi (Phase 0 dala testidan keyin) |
+| 1 | ~~Kadr olish usuli~~ — **HAL QILINDI 2026-08-01**: standart `go2rtc /api/frame.jpeg`, zaxira ISAPI `/picture`, oxirgi chora ffmpeg. Uchalasi ham sozlanadigan qilib quriladi; real NVR ma'lumoti tanlovni **sozlama** bilan o'zgartiradi | — (dala testini kutmaydi) |
 | 2 | Job orchestration: DB-materialized `capture_runs` + `SKIP LOCKED` vs `arq` (yoki arq ostida) | Phase 4 rejasi |
 | 3 | Obyekt-ombor nomi: MinIO arxivlangan → SeaweedFS (S3 API bir xil) | Phase 4 rejasi; PROJECT.md Key Decisions yangilanadi |
 | 4 | Detektor: RF-DETR (Apache-2.0, Nano→Large) — XLarge/2XLarge PML litsenziyasi TAQIQ | Phase 5 rejasi; PROJECT.md Key Decisions yangilanadi |
