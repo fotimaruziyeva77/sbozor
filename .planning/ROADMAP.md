@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 0: Dala treki va tashqi bog'liqliklar** - Baza o'lchovi, NVR kirish, buyurtmachi qarorlari (parallel, 1-haftadan)
 - [x] **Phase 1: Poydevor va tenant xavfsizligi** - Rol, izolyatsiya, audit, biznes-kun, 3 til — retrofit qilinmaydigan qatlam (completed 2026-07-29)
-- [ ] **Phase 2: Bozor domeni va "Yangi bozor" ustasi** - Rasta, toifa, tarixiy tarif, sotuvchi, ish kunlari, sxematik plan-xarita
+- [x] **Phase 2: Bozor domeni va "Yangi bozor" ustasi** - Rasta, toifa, tarixiy tarif, sotuvchi, ish kunlari, sxematik plan-xarita (completed 2026-08-01)
 - [ ] **Phase 3: Kamera va tarmoq ulanishi** - WireGuard tunnel, shifrlangan RTSP, ulanish testi, jonli ko'rish
 - [ ] **Phase 4: Snapshot pipeline** - Mavsumiy jadval, idempotent kadr olish, sifat filtri, S3 arxiv, alertlar
 - [ ] **Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i** - Poligon muharriri, RF-DETR aniqlash, noaniq navbati, ko'r audit
@@ -149,7 +149,7 @@ Plans:
 
 **Wave 15**
 
-- [ ] 02-17-PLAN.md — Karmananing real ma'lumoti, faza mezonlari testi va darvoza (W15)
+- [x] 02-17-PLAN.md — Karmananing real ma'lumoti, faza mezonlari testi va darvoza (W15)
 
 **UI hint**: yes
 **Note**: Ustaning kamera / kamera-zona / snapshot-jadval qadamlari 3–5 fazalarda ulanadi. Plan-xarita **sxematik** (grid) bo'lib qoladi — to'liq interaktiv xarita v2. Ranglar to'liq to'plami (ko'k to'langan, qizil qarzdor, sariq nomuvofiq) va dalil-rasm 6–7 fazalarda yonadi. Karmananing real ma'lumoti aynan shu fazada kiritiladi — keyingi fazalar fikstura emas, haqiqat ustida sinaladi.
