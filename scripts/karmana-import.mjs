@@ -286,20 +286,39 @@ function reportFailure(status, json, text) {
 
     console.error(`\n  Qatorlar (jami ${detail.errors.length}):`);
     for (const issue of detail.errors.slice(0, MAX_PRINTED_ERRORS)) {
-      console.error(`    ${issue.row}-qator: ${issue.message}`);
+      console.error(`    ${rowLine(issue)}`);
     }
     const rest = detail.errors.length - MAX_PRINTED_ERRORS;
     if (rest > 0) console.error(`    … va yana ${rest} ta xato`);
 
     console.error("\n  Kodlarning ma'nosi va tuzatish yo'li: ops/data/karmana/README.md §5");
     console.error("  Faylni tuzatib QAYTA yuklash xavfsiz (§6).");
-    process.exit(1);
+    throw new CliError("import rad etildi", { printed: true });
   }
 
   if (typeof detail === "string") {
     fail(`Import rad etildi (${status}): ${detail}\n  Sabablari: ops/data/karmana/README.md §4–§5`);
   }
   fail(`Import rad etildi (${status}). ${short(text)}`);
+}
+
+/**
+ * Bitta xato qatori — `{qator}-qator: {sabab}` shaklida, IKKI MARTA EMAS.
+ *
+ * ⚠ SERVER `message` NI ALLAQACHON SHU PREFIKS BILAN YUBORADI
+ * (`import_validator.ImportIssue` docstringi: "foydalanuvchi uchun, uz-Latn,
+ * qator raqami BILAN"). Prefiksni ko'r-ko'rona qo'shish
+ * `2-qator: 2-qator: '...' zonasi topilmadi` berardi — bu SKRIPTNI TIRIK
+ * stek ustida ishga tushirib O'LCHANDI.
+ *
+ * Tekshiruv baribir qoldirilgan: prefiks server tomonda bir kun olib
+ * tashlansa qator raqami YO'QOLMASLIGI kerak — u xatoni topishning yagona
+ * yo'li.
+ */
+function rowLine(issue) {
+  const prefix = `${issue.row}-qator:`;
+  const message = String(issue.message ?? issue.code ?? "");
+  return message.startsWith(prefix) ? message : `${prefix} ${message}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -316,9 +335,22 @@ function short(text) {
   return flat.length > 300 ? `${flat.slice(0, 300)}…` : flat;
 }
 
+/**
+ * Foydalanuvchiga ko'rsatiladigan xato — stek IZI KERAK EMAS.
+ *
+ * `printed: true` — xabar ALLAQACHON chiqarilgan (xato hisoboti kabi ko'p
+ * qatorli holatlar), ya'ni yuqori qatlam uni QAYTA chiqarmaydi.
+ */
+class CliError extends Error {
+  constructor(message, { printed = false } = {}) {
+    super(message);
+    this.name = "CliError";
+    this.printed = printed;
+  }
+}
+
 function fail(message) {
-  console.error(`[karmana] ${message}`);
-  process.exit(1);
+  throw new CliError(message);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -334,8 +366,7 @@ async function main() {
   }
   if (command === null) {
     console.error(USAGE);
-    console.error("\n[karmana] buyruq ko'rsatilmagan.");
-    process.exit(1);
+    throw new CliError("buyruq ko'rsatilmagan.");
   }
   if (command !== "template" && command !== "upload") {
     fail(`noma'lum buyruq: '${command}' (mumkin: template, upload). --help bilan ko'ring.`);
@@ -347,10 +378,23 @@ async function main() {
 }
 
 main().catch((error) => {
-  // Tarmoq uzilishi va boshqa kutilmagan holatlar — steki BILAN, chunki
-  // bu skript ishlab chiqarish bazasiga yozadi va "nimadir bo'ldi"
-  // xabari bilan qoldirish qabul qilib bo'lmaydigan holat.
-  console.error("[karmana] kutilmagan xato:");
-  console.error(error);
-  process.exit(1);
+  if (error instanceof CliError) {
+    if (!error.printed) console.error(`[karmana] ${error.message}`);
+  } else {
+    // Tarmoq uzilishi va boshqa kutilmagan holatlar — steki BILAN, chunki
+    // bu skript ishlab chiqarish bazasiga yozadi va "nimadir bo'ldi"
+    // xabari bilan qoldirish qabul qilib bo'lmaydigan holat.
+    console.error("[karmana] kutilmagan xato:");
+    console.error(error);
+  }
+
+  // ⚠ `process.exit(1)` EMAS — VA BU O'LCHANGAN. Windows'da quvurga
+  // (`|`, CI jurnali) yozilayotgan stdio hali bo'shatilmagan paytda
+  // `process.exit()` chaqirilsa libuv `Assertion failed:
+  // !(handle->flags & UV_HANDLE_CLOSING)` bilan qulaydi va protsess
+  // **127** kodi bilan tugaydi, `1` bilan emas. Ya'ni xato hisobotining
+  // oxirgi qatorlari YO'QOLARDI va `&&` zanjiri/CI noto'g'ri kodni
+  // ko'rardi. `exitCode` esa Node'ga stdio'ni bo'shatib, so'ng tabiiy
+  // tugashga imkon beradi.
+  process.exitCode = 1;
 });
