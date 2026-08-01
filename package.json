@@ -14,6 +14,8 @@
     "test:tenancy": "docker compose --profile test run --rm tests pytest tests/tenancy -q",
     "lint": "docker compose --profile test run --rm tests sh -c \"ruff check . && ruff format --check . && mypy .\"",
     "gate": "npm run lint && npm run test && npm run test:tenancy && npm --prefix frontend run i18n:check && npm --prefix frontend test && npm --prefix frontend run typecheck && npm --prefix frontend run lint && npm --prefix frontend run build",
+    "karmana:template": "node scripts/karmana-import.mjs template",
+    "karmana:upload": "node scripts/karmana-import.mjs upload",
     "fe:test": "npm --prefix frontend test",
     "fe:dev": "npm --prefix frontend run dev",
     "fe:build": "npm --prefix frontend run build",
