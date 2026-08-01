@@ -1,15 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { ApiError } from "@/lib/api-client";
+import { subscribeSessionReset } from "@/lib/auth-store";
 
 /**
  * Server holati keshi.
  *
  * `QueryClient` `useState` initsializatori ichida quriladi: modul darajasida
  * yaratilgan klient SSR paytida barcha so'rovlar orasida bo'lishib ketardi.
+ *
+ * KESH — TENANT CHEGARASINING BIR QISMI (CR-01). Sessiya identifikatori
+ * o'zgarganda (logout, yangi login, boshqa bozor) u to'liq bo'shatiladi —
+ * pastdagi `useEffect` ga qarang.
  */
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [client] = useState(
@@ -45,6 +50,27 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         },
       }),
   );
+
+  /*
+   * Sessiya identifikatori o'zgardi -> butun kesh bo'shaydi (CR-01).
+   *
+   * ⚠ AYNAN `clear()`, TanStack'ning yumshoqroq `reset*` / `remove*`
+   * oilasidagi `*Queries` metodlari EMAS: `reset*` variantlari kalitlarni
+   * SAQLAB, faol so'rovlarni QAYTA YUKLAYDI — ya'ni B bozori kontekstida
+   * A bozorining kalitlari yana serverga borardi. `clear()` esa butun
+   * keshni, shu jumladan mutatsiya keshini ham bo'shatadi.
+   *
+   * ⚠ IKKALA CHORA HAM KERAK va biri ikkinchisining o'rnini BOSMAYDI:
+   * kalitlarni `market_id` bilan doiralash (`market-queries.ts`) yolg'iz
+   * o'zi eski qatorlarni `gcTime` (5 daq) tugagunicha xotirada qoldirardi
+   * va ular devtools yoki orqaga navigatsiya bilan yetib borardi; `clear()`
+   * yolg'iz o'zi esa sessiya ichida bozor almashtirish UI'si qo'shilgan
+   * zahoti kalitlar poygasida buzilardi.
+   *
+   * `client` `useState` dan keladi, ya'ni bog'liqlik ro'yxati barqaror va
+   * obuna komponent umri davomida bir marta quriladi.
+   */
+  useEffect(() => subscribeSessionReset(() => client.clear()), [client]);
 
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
