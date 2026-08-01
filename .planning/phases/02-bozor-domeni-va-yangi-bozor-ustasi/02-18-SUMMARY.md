@@ -71,12 +71,20 @@ completed: 2026-08-01
 
 **«Yangi bozor» ustasi uchala to'siqdan ozod qilindi — marshrut istisnosi, `market_manage` bilan himoyalangan menyu yozuvi va bo'sh ro'yxatdagi «Birinchi bozorni yaratish» havolasi; yo'l 12 ta vitest + 3 ta manba darvozasi testi bilan qulflandi va 5 ta sabotaj bilan o'lchandi.**
 
+## Holat
+
+**Rejaning avtomatik qamrovi — TUGALLANGAN.** Uchala task ham yetkazildi va commit qilindi, shu jumladan 3-taskning artefakti (`frontend/scripts/wizard-reachability.test.mjs`). `npm run gate` yashil (exit 0).
+
+**CR-03 ning KOD bo'shlig'i yopildi va mustaqil tekshiriladi.** Bu da'vo `npm run gate` bilan isbotlanadi va uni har kim qayta yugurtira oladi.
+
+**CR-03 ning FOYDALANUVCHANLIK tasdig'i esa OCHIQ va u `02-23` ga o'tkazildi** (pastdagi bo'limga qarang). Ikkala da'vo ATAYIN ajratilgan va birlashtirilmaydi: «yo'l bor» — o'lchangan; «yo'l topiladi» — hali o'lchanmagan.
+
 ## Performance
 
 - **Duration:** ~100 min
 - **Started:** 2026-08-01T06:38:00Z
-- **Completed:** 2026-08-01T07:20:00Z (avtomatik qism; odam darvozasi ochiq)
-- **Tasks:** 2/3 to'liq (3-task avtomatik qismi bajarildi, odam kuzatuvi OCHIQ)
+- **Completed:** 2026-08-01T07:20:00Z
+- **Tasks:** 3/3 (avtomatik qamrov to'liq; Manual-Only #2 `02-23` ga o'tkazildi)
 - **Files modified:** 11 (3 yangi, 8 tahrir)
 
 ## Accomplishments
@@ -91,7 +99,7 @@ completed: 2026-08-01
 
 1. **Task 1: Marshrut istisnosi va navigatsiya yozuvi** — `6468af4` (feat)
 2. **Task 2: Bo'sh ro'yxat havolasi va WR-09** — `30a6659` (feat)
-3. **Task 3: Yetib borish darvozasi** (avtomatik qismi) — `1cbca80` (test)
+3. **Task 3: Yetib borish darvozasi** — `1cbca80` (test)
 
 _TDD tsikli fayl ichida bajarildi: har taskda avval test yozilib QIZARTIRILDI (o'lchangan), keyin kod yozildi. RED holatlar quyida «Sabotaj o'lchovlari» bo'limida qayd etilgan._
 
@@ -140,7 +148,7 @@ RED bosqichlari ham o'lchandi: 1-taskda 3 ta yangi test (1 layout + 2 app-shell)
 
 - **Prefiks emas, tenglik (T-02-140).** `startsWith` bo'lsa `/markets/new-anything` ham bozorsiz ochilib, butun `(app)` daraxtiga huquq oshirish yuzasi paydo bo'lardi. `layout.test.tsx` da alohida nazorat holati bor va manba darvozasi ham buni tekshiradi.
 - **WR-09 da sessiya tozalanmaydi.** Server 403 ni ATAYIN tanlagan (401 sessiyani uzib redirect siklini tug'dirardi). To'g'ri javob — store'ni server bilan moslash; yo'naltirishni mavjud layout qoidasi bajaradi. Yangi redirect mantiqi yozilmagani uchun yangi sikl xavfi ham tug'ilmadi.
-- **`canCreate` gati bootstrap holatida ishlashi TEKSHIRILDI.** Reja bu tekshiruvni talab qilmagan, lekin usiz butun tuzatish bekor bo'lishi mumkin edi: agar bozorsiz platforma admini `roles: []` bilan kelsa, `hasPermission` `false` qaytarib, havola aynan kerakli holatda ko'rinmasdi. `services/core-api/app/api/v1/auth.py::_session_roles` o'qildi — u `is_platform_admin` bo'lsa a'zolik qatorisiz ham `platform_admin` rolini qo'shadi, ya'ni bozorsiz login javobi `roles: ["platform_admin"]` beradi. Test seed'i shu haqiqatga moslandi (`seedSessionWithoutMarkets`), 1-fazadagi bo'sh `roles: []` soddalashtirishi TAKRORLANMADI.
+- **⚠ REJADAN TASHQARI, LEKIN HAL QILUVCHI TEKSHIRUV — `canCreate` gati bootstrap holatida haqiqatan ishlaydimi?** Reja buni talab qilmagan, lekin javob «yo'q» bo'lganda **butun tuzatish bekor bo'lardi va buni birorta test ushlamasdi**: agar bozorsiz platforma admini `roles: []` bilan kelsa, `hasPermission(roles, "market_manage")` `false` qaytarib, «Birinchi bozorni yaratish» havolasi AYNAN o'zi uchun yaratilgan holatda ko'rinmasdi — ya'ni 3-to'siq qog'ozda yopilib, amalda ochiq qolardi. `services/core-api/app/api/v1/auth.py::_session_roles` o'qildi: u `is_platform_admin` bo'lsa a'zolik qatorisiz ham `platform_admin` rolini qo'shadi (`login` yo'lida `auto_select is None` bo'lsa ham), ya'ni bozorsiz login javobi `roles: ["platform_admin"]` beradi va gat ishlaydi. Test seed'i shu O'LCHANGAN haqiqatga moslandi (`seedSessionWithoutMarkets`); mavjud `seedSessionWithMarkets` dagi bo'sh `roles: []` — 1-fazadan qolgan soddalashtirish va u ATAYIN takrorlanmadi, aks holda test o'zi tekshirmoqchi bo'lgan huquqni yo'q qilib qo'yardi.
 - **Manba darvozasi nomlarni emas, mexanizmni qulflaydi.** Qo'riqchi identifikatori regexdan olinadi, keyin uning `pathname !== <const>` dan kelib chiqishi va konstantaning qiymati tekshiriladi. Qayta nomlash darvozani buzmaydi; mantiqni yo'q qilish buzadi.
 - **`MOBILE_MAX_PRIMARY` testda qo'lda yozildi.** `MOBILE_PRIMARY_COUNT` ni import qilish testni implementatsiyaga tasdiqlatib qo'yardi (konstanta 8 ga o'zgarsa test ham 8 ni kutib, jimgina yashil qolardi). Test WCAG 2.5.8 dan kelib chiqadigan SONNI qo'riqlaydi.
 - **v2 qarori saqlandi.** `market-picker.tsx` dagi «DEFERRED (v2): bozorni ALMASHTIRISH UI'si ATAYIN yo'q» bandiga tegilmadi — yangi bozor YARATISH bozorni ALMASHTIRISH emas.
@@ -206,17 +214,21 @@ Yo'q. Bu rejada qattiq yozilgan bo'sh qiymat, «coming soon» matni yoki manbaga
 
 Yo'q — yangi tarmoq endpointi, auth yo'li, fayl kirish naqshi yoki sxema o'zgarishi kiritilmadi. Reja `<threat_model>` idagi `mitigate` dispozitsiyalari (T-02-140, T-02-142, T-02-143, T-02-144) bajarildi va har biri test bilan qulflandi; T-02-141 rejadagidek `accept (qatlamlangan)` bo'lib qoldi.
 
-## 🔴 OCHIQ BAND — foydalanuvchanlik kuzatuvi (02-VALIDATION.md Manual-Only #2)
+## ⏭ O'TKAZILGAN BAND — foydalanuvchanlik kuzatuvi (02-VALIDATION.md Manual-Only #2)
 
-**Holat: O'TKAZILMAGAN.** «Bajarildi» deb belgilanmaydi (reja qabul mezoni shuni talab qiladi).
+**Holat: O'TKAZILMAGAN va bu rejada BAJARILMAYDI. Egasi — `02-23`.**
 
-- **Kim:** —
-- **Qachon:** —
+Bu **kutilayotgan tasdiq emas, egasi bor o'tkazma**. `02-23` `02-VALIDATION.md` faylini va TO'RTALA Manual-Only bandini birga olib boradi (#1 real ma'lumot solishtiruvi, **#2 foydalanuvchanlik kuzatuvi**, #3 haqiqiy qurilmada idrok tekshiruvi, #4 rekvizit formatini mijoz bilan tasdiqlash), shuningdek `nyquist_compliant` bayrog'ini oxirida o'zi qaytaradi. Shu sababli #2 shu yerda yopilmaydi — u qolgan uchtasi bilan BIR O'TISHDA, odam haqiqatan mavjud bo'lganda imzolanadi.
+
+- **Kim:** — (`02-23` da belgilanadi)
+- **Qachon:** — (`02-23` da belgilanadi)
 - **To'xtalish nuqtalari soni:** o'lchanmagan
 
-**Sabab:** kuzatuvning hal qiluvchi sharti — **dasturchi bo'lmagan odam**, va u avtonom ijrochi uchun mavjud emas. (Stek cheklov EMAS: `npm run gate` shu muhitda to'liq o'tdi, ya'ni `docker compose` ishlaydi va bozorsiz platforma admini seed'i texnik jihatdan yaratilishi mumkin.) Kuzatuvni ijrochining o'zi "o'ynab chiqishi" esa uni **butunlay ma'nosiz** qilardi: rejani yozgan va kodni yozgan agent yo'lni tabiiy ravishda topadi — o'lchanayotgan narsa aynan shu emas.
+**Nega bu yerda emas:** kuzatuvning hal qiluvchi sharti — **dasturchi bo'lmagan odam**, va u avtonom ijrochi uchun mavjud emas. (Stek cheklov EMAS: `npm run gate` shu muhitda to'liq o'tdi, ya'ni `docker compose` ishlaydi va bozorsiz platforma admini seed'i texnik jihatdan yaratilishi mumkin.) Kuzatuvni ijrochining o'zi "o'ynab chiqishi" esa uni **butunlay ma'nosiz** qilardi: rejani yozgan va kodni yozgan agent yo'lni tabiiy ravishda topadi — o'lchanayotgan narsa aynan shu emas. «Bajarildi» deb belgilash esa aynan `02-VALIDATION.md` ga — vazifasi nima tekshirilgan va nima tekshirilmaganini halol saqlash bo'lgan yagona artefaktga — yolg'on yozuv kiritardi.
 
-**Nima uchun buni manba tekshiruvi BILAN ALMASHTIRIB BO'LMAYDI:** SC#1 ning da'vosi «kod yozilmaydi», ya'ni u odamning yo'lni O'ZI topishi haqida. Avtomatik darvozalar «yo'l bor» ni isbotlaydi, «yo'l topiladi» ni emas. Shu sababli quyidagi 7 band ochiq qoladi:
+**Nima uchun buni manba tekshiruvi BILAN ALMASHTIRIB BO'LMAYDI:** SC#1 ning da'vosi «kod yozilmaydi», ya'ni u odamning yo'lni O'ZI topishi haqida. Avtomatik darvozalar «yo'l bor» ni isbotlaydi, «yo'l topiladi» ni emas.
+
+**Quyidagi 7 band — kuzatuvni o'tkazadigan odam uchun YO'RIQNOMA** (u shu holicha `02-23` ga ko'chiriladi):
 
 1. Toza stek ko'tariladi va bozori bo'lmagan platforma admini yaratiladi.
 2. Dasturchi bo'lmagan odam `/uz` ga kirib login qiladi; kuzatuvchi **yordam bermaydi**.
@@ -226,35 +238,39 @@ Yo'q — yangi tarmoq endpointi, auth yo'li, fayl kirish naqshi yoki sxema o'zga
 6. 360px kenglikda pastki panel ≤5 element ko'rsatayotgani va «Yangi bozor» «Ko'proq» varag'ida ekani (UI-SPEC §12.3).
 7. `/ru` da menyu yorlig'i («Новый рынок») va bo'sh holat havolasi («Создать первый рынок») ikki qatorga tushmayotgani (§5.1).
 
-**6- va 7-bandlar uchun avtomatik dalil ALLAQACHON bor** (odam tasdig'ining o'rnini bosmaydi, lekin xavfni kamaytiradi):
+**6- va 7-bandlar uchun avtomatik/o'lchangan dalil ALLAQACHON bor** (odam tasdig'ining o'rnini bosmaydi, lekin xavfni kamaytiradi):
 - 6-band: `app-shell.test.tsx` mobil panelda ≤4 havola + 1 «Ko'proq» tugmasini o'lchaydi va «Yangi bozor» u yerda YO'Qligini tasdiqlaydi.
-- 7-band: `nav.newMarket` = «Новый рынок» (13 belgi, uz-Latn'dagi «Yangi bozor» — 12); `wizard.createFirstMarket` = «Создать первый рынок» (22 belgi, uz-Latn — 26). Ikkala juftlik ham §5.1 ning «2× o'sishga chidash» chegarasidan ancha pastda va tugmalarda qat'iy kenglik yo'q (`buttonVariants` → `whitespace-nowrap` + tabiiy kenglik). Ya'ni ikki qatorga tushish xavfi past, lekin **o'lchanmagan**.
+- 7-band: `nav.newMarket` = «Новый рынок» (13 belgi, uz-Latn'dagi «Yangi bozor» — 12); `wizard.createFirstMarket` = «Создать первый рынок» (22 belgi, uz-Latn — 26). Ikkala juftlik ham §5.1 ning «2× o'sishga chidash» chegarasidan ancha pastda va tugmalarda qat'iy kenglik yo'q (`buttonVariants` → `whitespace-nowrap` + tabiiy kenglik). Ya'ni ikki qatorga tushish xavfi past, lekin **brauzerda o'lchanmagan**.
 
-**Bu band `02-VALIDATION.md` ga BU REJADA ko'chirilmaydi** — u fayl 02-23 ning zimmasida (bir faylni ikki reja tahrirlamaydi).
+➡ **Demak `02-23` uchun qoladigan HAQIQIY odam ishi — 1–5-bandlar.** 6- va 7-bandlar tasdiqlovchi ko'z bilan bir daqiqada yopiladi.
+
+**Bu band `02-VALIDATION.md` ga BU REJADA ko'chirilmadi** — u fayl `02-23` ning zimmasida va bir faylni ikki reja tahrirlamaydi. `STATE.md` va `ROADMAP.md` ham bu rejada o'zgartirilmadi (orkestrator zimmasida).
 
 ## User Setup Required
 
-Yo'q — tashqi servis sozlamasi talab qilinmaydi. Foydalanuvchanlik kuzatuvi uchun lokal stek va bitta bozorsiz platforma admini hisobi kerak (yuqoriga qarang).
+Yo'q — tashqi servis sozlamasi talab qilinmaydi. `02-23` dagi foydalanuvchanlik kuzatuvi uchun lokal stek, bitta bozorsiz platforma admini hisobi va **dasturchi bo'lmagan kuzatiluvchi** kerak (yuqoriga qarang).
 
 ## Next Phase Readiness
 
-**Yopildi:**
-- 02-VERIFICATION.md 1-bo'shlig'ining **kod qismi** to'liq: uchala artefakt ham `contains: "/markets/new"` talabini bajaradi, uchala `key_link` ham WIRED.
-- 02-REVIEW.md WR-09 yopildi.
-
+**Yopildi (o'lchangan):**
+- 02-VERIFICATION.md 1-bo'shlig'ining **kod qismi** to'liq: uchala artefakt ham `contains: "/markets/new"` talabini bajaradi, uchala `key_link` ham NOT_WIRED → **WIRED**.
+- 02-REVIEW.md **WR-09** yopildi.
 - `npm run gate` **yashil** (exit 0): 890 backend + tenant izolyatsiyasi + 112 frontend + typecheck + lint + build. Yashil darvoza regressiya QILMADI.
 
-**Ochiq qoldi (bu rejaning qamrovidan tashqari, ataylab):**
-- Foydalanuvchanlik kuzatuvi (yuqorida, 02-23 ga).
-- MARKET-01 ni `REQUIREMENTS.md` da belgilash **hali erta**: 02-VERIFICATION.md tavsiyasiga ko'ra oltala MARKET-ID ham CR-01/CR-02 yopilib, real Karmana ma'lumoti kelgunicha `Pending` qoladi. Shu sababli `requirements-completed: []`.
+**Boshqa rejalarga o'tkazildi (ataylab, egasi bilan):**
+- **Manual-Only #2 (foydalanuvchanlik kuzatuvi) → `02-23`.** U `02-VALIDATION.md` ni va to'rtala Manual-Only bandini birga yopadi hamda `nyquist_compliant` bayrog'ini qaytaradi. Qolgan odam ishi — yuqoridagi yo'riqnomaning 1–5-bandlari.
+- **MARKET-01 katakchasini belgilash → `02-22`.** Bu rejada `requirements-completed: []` ATAYIN bo'sh: 02-VERIFICATION.md ning traceability qaroriga ko'ra oltala MARKET-ID ham CR-01/CR-02 yopilib, real Karmana ma'lumoti kelgunicha `Pending` qoladi. `02-22` faqat yopilishi HAQIQATAN yuz bergan IDlarni belgilaydi.
+
+**Bu reja SC#1 ni YAKKA O'ZI yopa olmaydi** va bunga da'vo ham qilmaydi: SC#1 uchun (a) shu yerdagi kod qismi — bajarildi, (b) foydalanuvchanlik tasdig'i — `02-23`, (c) 02-VERIFICATION.md ning 2-bo'shlig'i (real Karmana ma'lumoti) — hamon ochiq va u bozor ma'muriyatining beshta hujjatiga bog'liq.
 
 ## Self-Check: PASSED
 
 - 3 ta yangi fayl diskda mavjud (`layout.test.tsx`, `app-shell.test.tsx`, `wizard-reachability.test.mjs`).
 - 5 ta tahrir qilingan manba fayli diskda mavjud.
 - 3 ta commit hash `git log` da tasdiqlandi: `6468af4`, `30a6659`, `1cbca80`.
-- `STATE.md` va `ROADMAP.md` ga TEGILMADI (orkestrator zimmasida).
+- **TEGILMAGAN fayllar** (egasi boshqa reja yoki orkestrator): `02-VALIDATION.md` (`02-23`), `REQUIREMENTS.md` (`02-22`), `STATE.md` va `ROADMAP.md` (orkestrator).
 - `files_modified` ro'yxatidan tashqariga birorta fayl chiqmadi.
+- Bu tahrir **hujjat aniqligi uchun**: birorta kod fayli o'zgarmadi va birorta o'lchov qayta yugurtirilmadi — yuqoridagi barcha raqamlar asl ijro paytida olingan.
 
 ---
 *Phase: 02-bozor-domeni-va-yangi-bozor-ustasi*
