@@ -15,6 +15,33 @@ O'QISH VA YOZISH HUQUQLARI AJRATILGAN (D-07): `GET` uchun
 YO'Q — `test_director_cannot_manage_stalls` shu chegarani qulflaydi va
 nazorat holati (`GET` -> 200) bilan birga keladi.
 
+-----------------------------------------------------------------------------
+SHAXSIY MA'LUMOT QAYTARADIGAN `GET` LAR — `MARKET_DATA_VIEW` YETMAYDI (D-09).
+
+`GET ""` javobida `vendor_name`, `GET /{stall_id}` javobida esa
+`vendor_name` VA `phone` bor, ya'ni ikkalasi ham O'zR shaxsiy ma'lumotlar
+qonuni ostidagi ma'lumotni beradi. `MARKET_DATA_VIEW` ning O'Z docstringi
+"shaxsiy ma'lumot uchun alohida `VENDOR_VIEW`" deydi — shuning uchun bu
+ikki marshrut `MARKET_DATA_VIEW` USTIGA `VENDOR_VIEW` ni ham talab qiladi
+va har MUVAFFAQIYATLI o'qishni `audit_read` bilan jurnalga yozadi.
+
+⚠ HUQUQ TALABI MARSHRUT DEKORATORIDA (`dependencies=[...]`), imzo
+parametri sifatida EMAS. FastAPI dekorator darajasidagi bog'liqliklarni
+imzo parametrlaridan OLDIN hal qiladi (`fastapi/routing.py` ularni
+`dependant.dependencies` ning BOSHIGA qo'yadi), ya'ni 403 olgan so'rov
+`audit_read` gacha YETIB BORMAYDI va jurnalda "kim nimani ko'rdi"
+degan YOLG'ON DALIL qolmaydi. Bu `vendors.py` dagi e'lon-tartibi
+qoidasi bilan BIR XIL kafolat, lekin BOSHQA mexanizm bilan (T-02-147).
+
+⚠ `GET /map` bu qoidaga KIRMAYDI va unga audit ATAYIN qo'yilmagan:
+`MapCell` da faqat `id`, `code`, `status`, `has_vendor` bor — sotuvchining
+na nomi, na telefoni. `has_vendor` boolean'i shaxsiy ma'lumot emas.
+Auditni u yerga ham yopishtirish jurnalni HAR xarita ochilishida shovqin
+bilan to'ldirardi va haqiqiy o'qish hodisasini ko'mib yuborardi — aynan
+`security/audit.py:240-245` da rad etilgan "blanket middleware"
+mulohazasining o'zi (T-02-148).
+-----------------------------------------------------------------------------
+
 CROSS-TENANT JAVOB — HAR DOIM 404 (T-02-55), 403 EMAS.
 
 `market_id` HECH QACHON SO'ROV TANASIDAN OLINMAYDI (T-02-54): u faqat
@@ -89,6 +116,7 @@ from app.schemas import (
     StallQuery,
     StallUpdateRequest,
 )
+from app.security.audit import TABLE_STALLS, AuditReadIntent, audit_read
 from app.security.rbac import Permission
 
 # `UUID` ish paytida kerak — FastAPI yo'l parametrlarining annotatsiyasini
@@ -99,6 +127,22 @@ router = APIRouter(tags=["stalls"])
 
 StallManagerDep = Annotated[Principal, Depends(require_permission(Permission.STALL_MANAGE))]
 MarketDataViewerDep = Annotated[Principal, Depends(require_permission(Permission.MARKET_DATA_VIEW))]
+
+StallReadIntentDep = Annotated[
+    AuditReadIntent,
+    Depends(audit_read(TABLE_STALLS, reason="stall_view")),
+]
+"""D-09: rasta yuzasidagi shaxsiy ma'lumotning HAR BIR o'qilishi jurnalda.
+
+`reason` `vendors.py` dagi `vendor_view` dan FARQ QILADI: jurnalni
+o'qiyotgan odam "kim sotuvchilar reestrini varaqladi" va "kim rasta
+reestrini (yondosh sotuvchi nomi bilan) varaqladi" ni ajrata olishi kerak.
+Bir xil `reason` bilan o'sha farq yo'qolardi.
+
+`resource_type` — `TABLE_STALLS`: o'qilgan RESURS rasta, sotuvchi emas.
+`audit.table_name` filtri bo'yicha "rasta reestri kim tomonidan
+ko'rildi?" savoli aynan shu qiymat bilan javob oladi.
+"""
 
 _NOT_FOUND = "not_found"
 _CODE_TAKEN = "stall_code_taken"
@@ -189,6 +233,28 @@ def _past_locked() -> HTTPException:
     )
 
 
+def _describe(query: StallQuery) -> dict[str, Any]:
+    """Qo'llangan filtrlarning JSON tavsifi — o'qish yozuvi uchun (D-09).
+
+    ⚠ `q` XOM HOLDA YOZILADI va bu ataylab: `stall_repo._STALL_ROWS`
+    qidiruvni `v.full_name ILIKE :q_any` bilan bajaradi, ya'ni `q`
+    SOTUVCHI ISMI bo'yicha qidiruv bo'lishi mumkin. Jurnalning butun
+    ma'nosi aynan "kim kimni izladi" savoliga javob berishda — matnni
+    tashlab yuborish yozuvni "kimdir reestrni ochdi" darajasiga
+    tushirardi.
+
+    `cursor` CHIQARIB TASHLANADI: u opaque va o'qiyotgan odamga hech nima
+    aytmaydi. `limit` esa QOLADI — "kim butun reestrni yuklab oldi"
+    savoliga aynan u javob beradi (`vendors.py::_describe()` /
+    `audit.py::_describe()` bilan bir xil qoida va bir xil sabab).
+
+    Lug'at QO'LDA yig'ilmaydi: `model_dump()` yangi filtr qo'shilganda
+    o'zi ergashadi, qo'lda yozilgan variant esa jimgina eskirib qolardi
+    (02-10 deviatsiya #1 da o'lchangan sinf).
+    """
+    return query.model_dump(mode="json", exclude_none=True, exclude={"cursor"})
+
+
 def _list_item(row: StallRow) -> StallListItem:
     """Repozitoriy qatorini ro'yxat elementiga o'giradi.
 
@@ -235,16 +301,28 @@ async def _detail_or_404(repo: StallRepository, stall_id: UUID) -> StallDetail:
     return _detail(row)
 
 
-@router.get("", response_model=StallListResponse)
+@router.get(
+    "",
+    response_model=StallListResponse,
+    dependencies=[Depends(require_permission(Permission.VENDOR_VIEW))],
+)
 async def list_stalls(
     principal: MarketDataViewerDep,
+    intent: StallReadIntentDep,
     session: TenantSessionDep,
     query: Annotated[StallQuery, Query()],
 ) -> StallListResponse:
-    """Filtrlangan keyset sahifa (`MARKET_DATA_VIEW`), UI-SPEC §8.3 filtrlari.
+    """Filtrlangan keyset sahifa (`MARKET_DATA_VIEW` + `VENDOR_VIEW` + o'qish auditi).
 
     Tartib — `code_sort` bo'yicha, ya'ni INSON-RAQAMLI (2 < 10 < 100).
     Frontend qayta saralamaydi (UI-SPEC §7.3).
+
+    ⚠ `VENDOR_VIEW` DEKORATORDA, imzoda EMAS — sabab modul docstringida
+    (403 `audit_read` gacha yetib bormasligi kerak).
+
+    422 (buzuq kursor) yo'lida o'qish yozuvi QOLMAYDI: `HTTPException`
+    ko'tarilganda FastAPI yangi javob quradi va unda fon vazifasi yo'q
+    (`security/audit.py::audit_read` docstringidagi ikkinchi qatlam).
     """
     repo = StallRepository(session, _market_id(principal))
     try:
@@ -257,6 +335,9 @@ async def list_stalls(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="invalid_cursor",
         ) from exc
+
+    intent.filters = _describe(query)
+    intent.result_count = len(page.rows)
 
     return StallListResponse(
         items=[_list_item(row) for row in page.rows],
@@ -273,6 +354,15 @@ async def stall_map(
 
     ⚠ BU MARSHRUT `GET /{stall_id}` DAN OLDIN e'lon qilingan — sabab modul
     docstringida.
+
+    ⚠ `VENDOR_VIEW` HAM, `audit_read` HAM BU YERDA ATAYIN YO'Q. `MapCell`
+    da faqat `id`, `code`, `status`, `has_vendor` bor — sotuvchining nomi
+    ham, telefoni ham YO'Q, ya'ni bu marshrut shaxsiy ma'lumot
+    qaytarmaydi va D-09 uni qamramaydi. Batafsil sabab modul
+    docstringida (T-02-148: jurnalni shovqin bilan to'ldirmaslik). Bu
+    qaror `tests/tenancy/test_personal_data_coverage.py` dagi NAZORAT
+    holati bilan qulflangan — darvoza "hamma `GET` ga audit" talab
+    qilmasligi aynan shu yerda o'lchanadi.
 
     Javobda `tone` YO'Q (D-20): API `status` + `has_vendor` xom faktlarini
     beradi, rangni frontend hosil qiladi.
@@ -299,21 +389,41 @@ async def stall_map(
     )
 
 
-@router.get("/{stall_id}", response_model=StallDetail)
+@router.get(
+    "/{stall_id}",
+    response_model=StallDetail,
+    dependencies=[Depends(require_permission(Permission.VENDOR_VIEW))],
+)
 async def get_stall(
     stall_id: UUID,
     principal: MarketDataViewerDep,
+    intent: StallReadIntentDep,
     session: TenantSessionDep,
 ) -> StallDetail:
-    """Bitta rasta kartochkasi (`MARKET_DATA_VIEW`).
+    """Bitta rasta kartochkasi (`MARKET_DATA_VIEW` + `VENDOR_VIEW` + o'qish auditi).
 
     Ro'yxat qatoridan uchta maydon bilan farq qiladi: sotuvchi telefoni
     (SHAXSIY MA'LUMOT — shuning uchun ro'yxatda yo'q), biriktirish
     boshlangan sana va izoh.
+
+    Faqat ro'yxat qamralganda "bittalab varaqlash" usuli auditdan chetda
+    qolardi: yuzta so'rov bilan butun reestrni telefonlari bilan o'qib
+    olish mumkin bo'lardi-yu, jurnalda birorta iz qolmasdi
+    (`test_vendor_detail_read_is_audited` bilan bir xil mulohaza).
+
+    Topilmagan (404) holatda o'qish yozuvi QOLDIRILMAYDI — hech nima
+    o'qilmagan, ya'ni yozuv YOLG'ON dalil bo'lardi.
     """
     row = await StallRepository(session, _market_id(principal)).detail(stall_id, business_today())
     if row is None:
         raise _not_found()
+
+    # Yakka obyekt o'qishida "filtr" tushunchasi yo'q, lekin RESURS bor —
+    # jurnalni o'qiyotgan odam "butun reestr varaqlandimi yoki bitta rasta
+    # kartochkasi ochildimi?" savoliga javob olishi kerak.
+    intent.filters = {"stall_id": str(stall_id)}
+    intent.result_count = 1
+
     return _detail(row)
 
 
