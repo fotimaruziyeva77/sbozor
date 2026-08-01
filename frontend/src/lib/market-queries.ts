@@ -20,6 +20,7 @@ import {
   importErrorResponseSchema,
   importResultSchema,
   marketCreateResponseSchema,
+  marketIncompleteSchema,
   marketListSchema,
   setupStatusResponseSchema,
   stallDetailSchema,
@@ -32,7 +33,11 @@ import {
   zoneItemSchema,
   zoneListResponseSchema,
 } from "@/lib/api-types";
-import type { ImportErrorItem, ImportErrorResponse } from "@/lib/api-types";
+import type {
+  BlockingItem,
+  ImportErrorItem,
+  ImportErrorResponse,
+} from "@/lib/api-types";
 
 /*
  * =============================================================================
@@ -823,6 +828,26 @@ export function useActivateMarket() {
       }),
     onSuccess: () => invalidate(client, [MARKETS_KEY, SETUP_STATUS_KEY]),
   });
+}
+
+/**
+ * 409 `market_incomplete` javobidagi to'siqlar — `ApiError.body` dan.
+ *
+ * `null` qaytsa javob to'liqlik haqida EMAS (masalan `market_is_active`,
+ * 403 yoki tarmoq): chaqiruvchi u holda odatdagi xato matnini ko'rsatadi.
+ *
+ * NEGA HOOK EMAS va nega KOMPONENTDA emas: shakl chegarada, bitta joyda
+ * ochiladi (`importErrorsOf` bilan AYNI naqsh). Komponent `ApiError` ni
+ * ham, zod sxemasini ham ko'rmaydi — u faqat `BlockingItem[]` oladi va
+ * uni `setup-status` dan kelgan ro'yxat bilan BIR XIL yo'ldan chizadi
+ * (UI-SPEC §6.6: alohida xato UI'si YO'Q).
+ */
+export function activationBlockingOf(
+  error: unknown,
+): readonly BlockingItem[] | null {
+  if (!(error instanceof ApiError)) return null;
+  const parsed = marketIncompleteSchema.safeParse(error.body);
+  return parsed.success ? parsed.data.blocking : null;
 }
 
 /** Tashlab ketilgan QORALAMANI o'chiradi. Jonli bozor hech qachon o'chmaydi. */

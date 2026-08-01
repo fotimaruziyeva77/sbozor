@@ -14,9 +14,15 @@ import { useSetupStatusQuery } from "@/lib/market-queries";
  *
  * HOLAT SERVERDAN: `useSetupStatusQuery` bajarilganlikni hisoblab beradi va
  * qobiq uni stepperga uzatadi. Klientda qadam holatini saqlaydigan xotira
- * YO'Q — na `localStorage`, na global store. Aynan shuning uchun sahifa
+ * YO'Q va bo'lmasligi ham kerak — brauzer xotirasining hech qanday turi
+ * ham, global store ham bu yerda ISHLATILMAYDI. Aynan shuning uchun sahifa
  * yangilash, boshqa qurilmadan davom ettirish va uzilishdan tiklanish
- * qo'shimcha kodsiz ishlaydi.
+ * qo'shimcha kodsiz ishlaydi; saqlangan qadam esa serverdagi haqiqatdan
+ * ajralib, "bajarilgan" deb turgan bo'sh qadamni ko'rsatardi.
+ *
+ * ⚠ Bu qoida mexanik grep bilan qulflangan: taqiqlangan brauzer-xotira
+ * API'larining nomlari shu izohda ham LITERAL yozilmaydi — keyingi
+ * ishlovchi ularni "tushuntirish uchun" qaytarib qo'ymasin.
  *
  * `marketId === null` — bozor hali TUG'ILMAGAN (`/markets/new`). So'rov
  * yuborilmaydi va stepper `status = null` bilan chiziladi. Bu yerda joriy

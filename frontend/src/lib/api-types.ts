@@ -671,6 +671,24 @@ export const setupStatusResponseSchema = z.object({
 });
 export type SetupStatusResponse = z.infer<typeof setupStatusResponseSchema>;
 
+/**
+ * `POST /markets/{id}/activate` ning 409 `market_incomplete` javobi.
+ *
+ * `blocking` AYNAN `setup-status` dagi bilan bir xil shaklda keladi (02-11
+ * uni test bilan qulflagan) va UI uni AYNI ro'yxat komponentiga uzatadi:
+ * chala bozor XATO emas, yo'l ko'rsatkichi (UI-SPEC §6.6). Shuning uchun bu
+ * yerda alohida "xato" tipi yo'q — faqat to'siqlarning yangi nusxasi.
+ *
+ * ⚠ `market_is_active` (boshqa 409) bu shaklga TUSHMAYDI: unda `blocking`
+ * yo'q va u hech qanday qadamga yo'l ko'rsatmaydi. `safeParse` uni rad
+ * etadi va chaqiruvchi odatdagi xato matniga tushadi.
+ */
+export const marketIncompleteSchema = z.object({
+  detail: z.string(),
+  blocking: z.array(blockingItemSchema),
+});
+export type MarketIncomplete = z.infer<typeof marketIncompleteSchema>;
+
 /* --- Excel import (D-13/D-14/D-15) --------------------------------------- */
 
 /**
