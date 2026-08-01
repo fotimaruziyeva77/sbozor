@@ -42,7 +42,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 0: Dala treki va o'lchov bazasi** - Tushum bazasi, kamera qamrovi, buyurtmachi javoblari (parallel, **hech narsani bloklamaydi**)
 - [x] **Phase 1: Poydevor va tenant xavfsizligi** - Rol, izolyatsiya, audit, biznes-kun, 3 til — retrofit qilinmaydigan qatlam (completed 2026-07-29)
-- [ ] **Phase 2: Bozor domeni va "Yangi bozor" ustasi** - Rasta, toifa, tarixiy tarif, sotuvchi, ish kunlari, sxematik plan-xarita (17/23 reja bajarildi; tekshiruv `gaps_found` — 16–19-to'lqinlarda yopilmoqda)
+- [ ] **Phase 2: Bozor domeni va "Yangi bozor" ustasi** - Rasta, toifa, tarixiy tarif, sotuvchi, ish kunlari, sxematik plan-xarita (20/24 reja bajarildi; tekshiruv `gaps_found` — 16–20-to'lqinlarda yopilmoqda)
 - [ ] **Phase 3: Kamera va tarmoq ulanishi** - WireGuard tunnel, shifrlangan RTSP, ulanish testi, jonli ko'rish
 - [ ] **Phase 4: Snapshot pipeline** - Mavsumiy jadval, idempotent kadr olish, sifat filtri, S3 arxiv, alertlar
 - [ ] **Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i** - Poligon muharriri, RF-DETR aniqlash, noaniq navbati, ko'r audit
@@ -136,7 +136,7 @@ Plans:
   5. Bozor admini sxematik plan-xaritada rastalarni zona bo'yicha grid ko'rinishida ko'radi; rasta bosilganda uning kartasi (raqam, toifa, tarif, sotuvchi, holat) ochiladi
   6. Bozor admini ma'muriyat bergan xodimlar ro'yxatini (F.I.Sh., telefon, rol) bitta fayl bilan yuklaydi; tizim hisoblarni rollar bilan yaratadi va vaqtinchalik parollarni beradi — qo'lda birma-bir kiritish shart emas
 
-**Plans**: 23 plans in 19 waves (18–23 — bo‘shliqlarni yopish to‘lqini)
+**Plans**: 24 plans in 20 waves (18–24 — bo‘shliqlarni yopish va self-service to‘lqini)
 Plans:
 **Wave 1**
 
@@ -190,9 +190,13 @@ Plans:
 
 - [ ] 02-22-PLAN.md — Yakuniy regressiya va REQUIREMENTS.md traceability yakunlanishi (W18)
 
-**Wave 19** *(BLOKLANGAN — ma’muriyatning beshta hujjati kutilmoqda)*
+**Wave 19**
 
-- [ ] 02-23-PLAN.md — Karmananing REAL ma’lumotini yuklash, solishtirish va validatsiya imzosi (W19)
+- [ ] 02-24-PLAN.md — MARKET-07: xodimlar ro‘yxatining ommaviy importi, rollar va vaqtinchalik parollar (W19)
+
+**Wave 20**
+
+- [ ] 02-23-PLAN.md — Import qobiliyatining Karmana miqyosidagi isboti, operatsion runbook va validatsiya imzosi (W20)
 
 **UI hint**: yes
 **Note**: Ustaning kamera / kamera-zona / snapshot-jadval qadamlari 3–5 fazalarda ulanadi. Plan-xarita **sxematik** (grid) bo'lib qoladi — to'liq interaktiv xarita v2. Ranglar to'liq to'plami (ko'k to'langan, qizil qarzdor, sariq nomuvofiq) va dalil-rasm 6–7 fazalarda yonadi.
