@@ -478,6 +478,26 @@ def require_permission(perm: Permission) -> Callable[[Principal], Coroutine[Any,
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
         return principal
 
+    # INTROSPEKTSIYA TEGI — ISH PAYTIDA HECH KIM O'QIMAYDI.
+    #
+    # Bu atribut xulqqa MUTLAQO ta'sir qilmaydi: darvoza yuqoridagi
+    # `if perm not in ...` shartida va faqat o'sha yerda. Teg BITTA
+    # iste'molchi uchun bor — `tests/tenancy/test_personal_data_coverage.py`
+    # marshrutning bog'liqlik grafini yurib "bu yerda qaysi huquq talab
+    # qilingan?" savoliga javob olishi kerak.
+    #
+    # MUQOBILI MANBA MATNINI REGEX BILAN TIRNASH EDI va u yomonroq:
+    # dekorator shakli o'zgarganda (masalan `dependencies=[...]` boshqa
+    # qatorga ko'chirilganda yoki alias orqali berilganda) regex hech nima
+    # topmasdi va darvoza JIMGINA yashil bo'lib qolardi — ya'ni unutish
+    # xavfsiz tomonga emas, XAVFLI tomonga ishlardi.
+    #
+    # `type: ignore` — yopilma obyekti `Callable` sifatida tiplangan va
+    # unga atribut qo'yish mypy uchun xato. Sinf (`__call__` li obyekt)
+    # bilan qayta yozish tipni toza qilardi, lekin u xavfsizlik-kritik
+    # darvozaning butun shaklini o'zgartirardi; `setattr()` esa ruff B010
+    # ga tushardi. Eng kichik va eng ko'rinadigan variant tanlandi.
+    _require.required_permission = perm  # type: ignore[attr-defined]
     return _require
 
 

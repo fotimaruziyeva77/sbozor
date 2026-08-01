@@ -356,4 +356,16 @@ def audit_read(
         )
         return intent
 
+    # INTROSPEKTSIYA TEGI — ISH PAYTIDA HECH KIM O'QIMAYDI.
+    #
+    # Yozuvni yuqoridagi `background.add_task(...)` qiladi va bu atribut
+    # unga umuman tegmaydi. Teg BITTA iste'molchi uchun bor —
+    # `tests/tenancy/test_personal_data_coverage.py` marshrutning
+    # bog'liqlik grafini yurib "bu marshrutda o'qish auditi e'lon
+    # qilinganmi va qaysi resurs uchun?" savoliga javob olishi kerak.
+    #
+    # Sabab va tanlangan tiplash varianti `deps.py::require_permission`
+    # dagi jufti bilan AYNAN bir xil (manba matnini regex bilan tirnash
+    # dekorator shakli o'zgarganda jimgina yashil qolardi).
+    _dependency.audit_resource = resource_type  # type: ignore[attr-defined]
     return _dependency

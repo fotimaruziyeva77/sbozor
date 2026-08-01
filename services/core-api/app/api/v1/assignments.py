@@ -71,11 +71,30 @@ davrni DB xatosidan olib bo'lmaydi. UI aniqroq xabar xohlasa, u
 server esa xom xato matnini javobga HECH QACHON qo'ymaydi (T-02-75).
 -----------------------------------------------------------------------------
 
-AUDIT BU YERDA YOZILMAYDI: `stall_assignments` `AUDITED_TABLES` da va
-`fn_audit_row()` triggeri ostida (02-06). Davr o'zgarishi `old`/`new`
-farqida `period` kaliti bilan ko'rinadi — aynan shu yozuv "qarzni kim
-boshqa sotuvchiga o'tkazdi" savoliga javob beradi (T-02-72). App-qatlam
-yozuvi qo'shilsa har amal uchun IKKITA qator paydo bo'lardi.
+YOZUV YO'LLARIDA APP-QATLAM AUDITI YOZILMAYDI: `stall_assignments`
+`AUDITED_TABLES` da va `fn_audit_row()` triggeri ostida (02-06). Davr
+o'zgarishi `old`/`new` farqida `period` kaliti bilan ko'rinadi — aynan shu
+yozuv "qarzni kim boshqa sotuvchiga o'tkazdi" savoliga javob beradi
+(T-02-72). App-qatlam yozuvi qo'shilsa har `POST`/`PATCH` uchun IKKITA
+qator paydo bo'lardi.
+
+⚠ O'QISH YO'LI ESA BOSHQA HODISA VA U ALOHIDA YOZILADI (D-09).
+`GET /stalls/{id}/assignments` javobida `vendor_name` bor, ya'ni u
+sotuvchi F.I.Sh. ning TARIXINI qaytaradi — kim qaysi rastada, qachondan
+qachongacha ishlagani. `SELECT` uchun PostgreSQL'da trigger YO'Q, ya'ni bu
+izni faqat ilova qatlami qoldira oladi. Shuning uchun bu marshrut
+`audit_read` e'lon qiladi va `MARKET_DATA_VIEW` USTIGA `VENDOR_VIEW`
+talab qiladi.
+
+Ikkalasi bir-birini ALMASHTIRMAYDI va ikkalasi ham kerak: trigger yozuvi
+"kim O'ZGARTIRDI" savoliga, `audit_read` yozuvi esa "kim KO'RDI"
+savoliga javob beradi. Nizoda ko'pincha ikkinchisi hal qiluvchi bo'ladi.
+
+⚠ HUQUQ TALABI MARSHRUT DEKORATORIDA (`dependencies=[...]`), imzo
+parametri sifatida EMAS: FastAPI dekorator darajasidagi bog'liqliklarni
+imzo parametrlaridan OLDIN hal qiladi, ya'ni 403 olgan so'rov
+`audit_read` gacha yetib bormaydi va jurnalda YOLG'ON dalil qolmaydi
+(T-02-147; `stalls.py` da AYNAN bir xil qoida).
 """
 
 from __future__ import annotations
@@ -96,6 +115,7 @@ from app.schemas import (
     AssignmentItem,
     AssignmentListResponse,
 )
+from app.security.audit import TABLE_STALLS, AuditReadIntent, audit_read
 from app.security.rbac import Permission
 
 # `UUID` ish paytida kerak — FastAPI yo'l parametrlarining annotatsiyasini
@@ -108,6 +128,23 @@ stall_router = APIRouter(tags=["assignments"])
 
 VendorManagerDep = Annotated[Principal, Depends(require_permission(Permission.VENDOR_MANAGE))]
 MarketDataViewerDep = Annotated[Principal, Depends(require_permission(Permission.MARKET_DATA_VIEW))]
+
+AssignmentReadIntentDep = Annotated[
+    AuditReadIntent,
+    Depends(audit_read(TABLE_STALLS, reason="stall_assignments_view")),
+]
+"""D-09: biriktirish TARIXI ham shaxsiy ma'lumot — o'qilishi jurnalda.
+
+RESURS `TABLE_STALLS`, `TABLE_VENDORS` EMAS. Yo'l `/stalls/{id}/
+assignments` va jurnalni o'qiyotgan odam "QAYSI RASTANING tarixi
+ko'rildi?" savoliga javob izlaydi — `audit.table_name = 'stalls'` filtri
+bilan bu marshrut rasta reestrining qolgan o'qishlari bilan bir qatorga
+tushadi va rasta bo'yicha butun o'qish tarixi bitta so'rovda ko'rinadi.
+
+`reason` `stall_view` dan FARQ QILADI: "reestr varaqlandi" va "bitta
+rastaning sotuvchi tarixi ochildi" ikki xil hodisa va ularni ajratish
+`reason` ning butun vazifasi.
+"""
 
 _NOT_FOUND = "not_found"
 _OVERLAPS = "assignment_period_overlaps"
@@ -314,13 +351,18 @@ async def close_assignment(
     return await _row_or_404(repo, assignment_id)
 
 
-@stall_router.get("/stalls/{stall_id}/assignments", response_model=AssignmentListResponse)
+@stall_router.get(
+    "/stalls/{stall_id}/assignments",
+    response_model=AssignmentListResponse,
+    dependencies=[Depends(require_permission(Permission.VENDOR_VIEW))],
+)
 async def list_stall_assignments(
     stall_id: UUID,
     principal: MarketDataViewerDep,
+    intent: AssignmentReadIntentDep,
     session: TenantSessionDep,
 ) -> AssignmentListResponse:
-    """Rastaning biriktirish TARIXI (`MARKET_DATA_VIEW`, eng yangisi birinchi).
+    """Rastaning biriktirish TARIXI (`MARKET_DATA_VIEW` + `VENDOR_VIEW` + audit).
 
     ⚠ RASTA MAVJUDLIGI ALOHIDA TEKSHIRILADI. Usiz begona bozorning
     rastasi uchun ham bo'sh 200 qaytardi (RLS natijani baribir bo'shatadi)
@@ -328,13 +370,27 @@ async def list_stall_assignments(
     bajarilmasdi — matritsa esa hech nima sezmasdi, chunki javob
     strukturaviy jihatdan to'g'ri ko'rinardi.
 
+    Topilmagan yoki begona rasta (404) uchun o'qish yozuvi QOLMAYDI: hech
+    nima o'qilmagan, ya'ni "A admini B ning rastasining sotuvchi tarixini
+    ko'rdi" degan yozuv YOLG'ON dalil bo'lardi (02-10 deviatsiya #6 bilan
+    bir xil sinf).
+
     BO'SH RO'YXAT — NORMAL HOLAT (D-11): rasta hech qachon
     biriktirilmagan bo'lishi ham, davrlar orasida bo'shliq bo'lishi ham
-    mumkin. Bu 404 EMAS: rasta MAVJUD, faqat sotuvchisi yo'q.
+    mumkin. Bu 404 EMAS: rasta MAVJUD, faqat sotuvchisi yo'q. Bunday
+    holatda ham o'qish YOZILADI (`result_count = 0`) — "kim so'radi"
+    savoli javob bor-yo'qligidan MUSTAQIL.
     """
     repo = AssignmentRepository(session, _market_id(principal))
     if not await repo.stall_exists(stall_id):
         raise _not_found()
 
     rows = await repo.list_for_stall(stall_id)
+
+    # Yakka rasta so'ralgan, ya'ni "filtr" tushunchasi yo'q, lekin RESURS
+    # bor — jurnaldan "qaysi rastaning tarixi ochildi?" savoliga javob
+    # olinishi kerak (`vendors.py::get_vendor` bilan bir xil qoida).
+    intent.filters = {"stall_id": str(stall_id)}
+    intent.result_count = len(rows)
+
     return AssignmentListResponse(items=[_item(row) for row in rows])
