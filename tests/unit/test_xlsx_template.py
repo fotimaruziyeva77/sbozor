@@ -713,3 +713,132 @@ def test_accepted_rows_keep_their_excel_row_number() -> None:
 
     assert isinstance(accepted[0], StallImportRow)
     assert accepted[0].row == 77
+
+
+# ===========================================================================
+# MARKET-07 — xodimlar shabloni (uchinchi varaq turi)
+# ===========================================================================
+
+STAFF_ROLES = ("cashier", "inspector")
+"""Bozor adminining darajasi (`assignable_roles(False)`) — shablonga shu tushadi."""
+
+_STAFF_SHEETS = {"uz-Latn": "Xodimlar", "uz-Cyrl": "Ходимлар", "ru": "Сотрудники"}
+
+
+def staff_template(locale: str = UZ, roles: tuple[str, ...] = STAFF_ROLES) -> bytes:
+    """`staff` shabloni — zona/toifa lug'atlari bu turga UMUMAN tegmaydi."""
+    return build_template("staff", locale, (), (), roles=list(roles))
+
+
+def test_staff_template_headers_are_translated_in_every_locale() -> None:
+    """Uchala tilda sarlavha BOSHQA, ustun soni esa AYNAN bir xil (O-05)."""
+    headers = []
+    for locale, sheet_name in _STAFF_SHEETS.items():
+        book = open_book(staff_template(locale))
+        assert book.sheetnames[0] == sheet_name, locale
+        sheet = book[sheet_name]
+        headers.append(tuple(sheet.cell(row=1, column=index + 1).value for index in range(3)))
+
+    assert headers[0] == ("F.I.Sh.", "telefon", "rol")
+    assert headers[2] == ("Ф.И.О.", "телефон", "роль")
+    assert len(set(headers)) == 3, "tarjima umuman qo'llanmagan"
+
+
+def test_staff_template_is_parsed_back_identically_in_every_locale() -> None:
+    """Shablon -> `read_rows(expected_columns=3)` uchala tilda AYNAN bir xil.
+
+    Faqat sarlavhani solishtirish "til o'zgardi" ni ko'rsatardi, lekin
+    "parser buzilmadi" ni EMAS — namunaviy qator ustunlar bo'yicha
+    surilgan holatda ham sarlavha testi yashil qolardi.
+    """
+    from app.services.xlsx_reader import read_rows
+
+    parsed = []
+    for locale in _STAFF_SHEETS:
+        rows = read_rows(staff_template(locale), expected_columns=3)
+        assert len(rows) == 1, locale
+        assert rows[0].row == 2, locale
+        parsed.append(rows[0].values)
+
+    assert parsed[0] == parsed[1] == parsed[2]
+    assert parsed[0] == ("Aliyev Vali", "+998901234567", "cashier")
+
+
+def test_staff_sample_row_is_accepted_by_the_validator() -> None:
+    """UCHIDAN-UCHIGA: namunaviy qator O'ZGARTIRILMASDAN import qilinadi.
+
+    Bu — A6 ustunlar tartibining va D-16 ning eng kuchli isboti:
+    namunadagi `cashier` TARJIMA QILINMAYDI (u DB kontenti, aynan
+    `_STALL_SAMPLE_STATUS` dagi `active` bilan bir xil sabab), ya'ni
+    ruscha shablonni to'ldirgan admin ham to'g'ri qiymat yuboradi.
+    """
+    from app.services.import_validator import validate_staff_rows
+    from app.services.xlsx_reader import read_rows
+
+    rows = read_rows(staff_template(RU), expected_columns=3)
+    accepted, issues = validate_staff_rows(
+        rows,
+        allowed_roles=frozenset(STAFF_ROLES),
+        existing_member_phones=(),
+    )
+
+    assert issues == []
+    assert [row.phone for row in accepted] == ["+998901234567"]
+    assert [row.roles for row in accepted] == [("cashier",)]
+
+
+def test_staff_template_has_a_hidden_role_reference_sheet() -> None:
+    """Rollar YASHIRIN varaqda va C ustuniga ochiluvchi ro'yxat bilan bog'langan.
+
+    ⚠ `data_validation` — QULAYLIK, DARVOZA EMAS: haqiqiy tekshiruv
+    `validate_staff_rows` da. Ro'yxat faqat qo'lda yozishdagi imlo
+    xatosini (`invalid_role` ning eng ko'p uchraydigan sababi) yo'q
+    qiladi.
+    """
+    book = open_book(staff_template())
+
+    assert book.sheetnames == ["Xodimlar", "Ma'lumotnoma"]
+    reference = book["Ma'lumotnoma"]
+    assert reference.sheet_state == "hidden"
+    assert reference.cell(row=1, column=1).value == "Rollar"
+    assert [reference.cell(row=index + 2, column=1).value for index in range(2)] == list(
+        STAFF_ROLES
+    )
+
+    sources = [rule.formula1 for rule in book["Xodimlar"].data_validations.dataValidation]
+    assert len(sources) == 1
+    assert sources[0] == "='Ma''lumotnoma'!$A$2:$A$3"
+
+    ranges = [
+        str(rule.sqref) for rule in book["Xodimlar"].data_validations.dataValidation
+    ]
+    assert ranges[0].startswith("C2"), f"ro'yxat C ustuniga bog'lanmagan: {ranges[0]}"
+
+
+def test_staff_role_with_a_formula_prefix_is_escaped() -> None:
+    """Rol ro'yxati ham `_write_text()` dan o'tadi (T-02-184).
+
+    Rollar `assignable_roles()` dan keladi, ya'ni bugun ular xavfsiz
+    enum qiymatlari. Test KELAJAK uchun: ro'yxat manbai bir kun
+    sozlanadigan bo'lsa, yozish yo'li allaqachon qochirilgan bo'lishi
+    kerak — aks holda himoya jimgina teshilardi.
+    """
+    reference = open_book(staff_template(roles=("=cmd|'/c calc'!A1",)))["Ma'lumotnoma"]
+
+    stored = str(reference.cell(row=2, column=1).value)
+    assert stored == "'=cmd|'/c calc'!A1"
+    assert not stored.startswith(FORMULA_PREFIXES)
+
+
+def test_staff_template_without_roles_has_no_reference_sheet() -> None:
+    """Bo'sh ro'yxat varaq QURMAYDI (`stalls` dagi bilan bir xil qoida)."""
+    book = open_book(staff_template(roles=()))
+
+    assert book.sheetnames == ["Xodimlar"]
+
+
+def test_template_kinds_are_exactly_three() -> None:
+    """`TEMPLATE_KINDS` — `Literal` bilan sinxron qoladigan YAGONA ro'yxat."""
+    from app.services.xlsx_template import TEMPLATE_KINDS
+
+    assert TEMPLATE_KINDS == ("stalls", "vendors", "staff")
