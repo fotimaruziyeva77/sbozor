@@ -32,6 +32,13 @@ Uni matritsaga siqish har bir rol-juftligi uchun alohida permission
 talab qilardi (`USER_MANAGE_CASHIER`, `USER_MANAGE_DIRECTOR`, ...) va
 matritsa o'qib bo'lmas holga kelardi. Sabab `security/rbac.py` fayl
 docstringida ham qayd etilgan.
+
+⚠ 02-24 DAN BOSHLAB TO'PLAMNING O'ZI `app/services/staff_accounts.py`
+DA (`assignable_roles`). Sabab: darajaning endi IKKITA chaqiruvchisi bor
+— shu fayldagi `POST /users` va `POST /imports/staff`. Jadval va uning
+IZOHI shu yerda qoladi (u aynan shu endpointning shartnomasi), lekin
+QIYMAT bitta manbadan olinadi; ikkinchi nusxa bir kun ajralib ketardi va
+D-04 jimgina yumshardi.
 =============================================================================
 
 CROSS-TENANT JAVOB — HAR DOIM 404 (T-01-51). Boshqa bozor foydalanuvchisi
@@ -43,7 +50,6 @@ oshkor qilardi.
 
 from __future__ import annotations
 
-import secrets
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
@@ -70,6 +76,12 @@ from app.schemas import (
 )
 from app.security.audit import TABLE_USERS, write_app_audit
 from app.security.rbac import Permission
+from app.services.staff_accounts import (
+    MARKET_ADMIN_ASSIGNABLE_ROLES,
+    TEMPORARY_PASSWORD_BYTES,
+    assignable_roles,
+    temporary_password,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -80,22 +92,21 @@ log = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["users"])
 
-MARKET_ADMIN_ASSIGNABLE_ROLES = frozenset({Role.CASHIER, Role.INSPECTOR})
-"""Bozor admini bera oladigan rollar to'plami (D-04 ikkinchi bosqichi).
+__all__ = [
+    "MARKET_ADMIN_ASSIGNABLE_ROLES",
+    "TEMPORARY_PASSWORD_BYTES",
+    "router",
+]
+"""`MARKET_ADMIN_ASSIGNABLE_ROLES` va `TEMPORARY_PASSWORD_BYTES` bu yerda
+QAYTA EKSPORT qilinadi, lekin ular ENDI `app/services/staff_accounts.py`
+da yashaydi (02-24).
 
-`frozenset` — ro'yxat ish paytida o'zgartirilishi mumkin bo'lmasligi kerak.
-Bu to'plamga yangi rol qo'shish = D-04 ni o'zgartirish, ya'ni u kod
-review'dan va `tests/integration/test_users_api.py` dagi uchta rad etish
-testidan o'tishi shart.
-"""
-
-TEMPORARY_PASSWORD_BYTES = 9
-"""`secrets.token_urlsafe(9)` -> 12 belgi.
-
-`MIN_PASSWORD_LENGTH` (10) dan uzun, ya'ni yaratilgan foydalanuvchi bu
-parol bilan login qila oladi va uni birinchi kirishda almashtiradi.
-Qisqaroq qiymat "vaqtinchalik parol siyosatdan o'tmaydi" degan jimgina
-tuzoqni yaratardi.
+Ko'chirishning sababi: 02-24 dan boshlab D-04 rol berish darajasining
+IKKITA chaqiruvchisi bor (`POST /users` va `POST /imports/staff`), ya'ni
+to'plam endi bitta endpointning ichki tafsiloti emas. Nomlar shu yerda
+saqlanadi, chunki mavjud testlar ularni `app.api.v1.users` dan oladi va
+import yo'lini almashtirish o'sha testlarni sababsiz qayta yozishga
+majburlardi.
 """
 
 _ROLE_NOT_ALLOWED = "role_not_allowed"
@@ -103,11 +114,6 @@ _USER_NOT_FOUND = "not_found"
 
 UserManagerDep = Annotated[Principal, Depends(require_permission(Permission.USER_MANAGE))]
 UserViewerDep = Annotated[Principal, Depends(require_permission(Permission.USER_VIEW))]
-
-
-def _temporary_password() -> str:
-    """Bir martalik vaqtinchalik parol (D-02)."""
-    return secrets.token_urlsafe(TEMPORARY_PASSWORD_BYTES)
 
 
 def _market_id(principal: Principal) -> UUID:
@@ -159,13 +165,17 @@ def _assert_roles_assignable(principal: Principal, roles: Sequence[Role]) -> Non
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ROLE_NOT_ALLOWED)
 
-    if principal.is_platform_admin:
-        return
-    if not requested <= MARKET_ADMIN_ASSIGNABLE_ROLES:
+    # ⚠ To'plam `staff_accounts.assignable_roles()` dan olinadi — bu YAGONA
+    # manba (02-24). Ilgari u shu modulda literal turgan va o'shanda
+    # `POST /imports/staff` uni ikkinchi nusxa sifatida takrorlashi kerak
+    # bo'lardi; ikki nusxa bir kun ajralib ketardi va D-04 jimgina
+    # yumshardi.
+    allowed = assignable_roles(principal.is_platform_admin)
+    if not requested <= allowed:
         log.info(
             "role_assignment_denied",
             requested=sorted(str(role) for role in requested),
-            allowed=sorted(str(role) for role in MARKET_ADMIN_ASSIGNABLE_ROLES),
+            allowed=sorted(str(role) for role in allowed),
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_ROLE_NOT_ALLOWED)
 
@@ -226,7 +236,7 @@ async def create_user(
     repo = UserRepository(session, _market_id(principal))
     roles = [str(role) for role in payload.roles]
     locale = str(payload.locale)
-    temporary = _temporary_password()
+    temporary = temporary_password()
 
     user_id = await repo.create_user(
         phone=payload.phone,
@@ -348,7 +358,7 @@ async def reset_password(
     if await repo.member_roles(user_id) is None:
         raise _not_found()
 
-    temporary = _temporary_password()
+    temporary = temporary_password()
     await repo.set_temporary_password(user_id, hash_password(temporary))
     revoked = await auth_repo.refresh_revoke_user(session, user_id)
 

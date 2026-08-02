@@ -81,10 +81,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 import structlog
-from sbozor_core.enums import StallStatus
+from sbozor_core.enums import Role, StallStatus
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
 if TYPE_CHECKING:
@@ -94,11 +94,14 @@ if TYPE_CHECKING:
     from app.services.xlsx_reader import SheetRow
 
 __all__ = [
+    "STAFF_COLUMNS",
     "STALL_COLUMNS",
     "VENDOR_COLUMNS",
     "ImportIssue",
+    "StaffImportRow",
     "StallImportRow",
     "VendorImportRow",
+    "validate_staff_rows",
     "validate_stall_rows",
     "validate_vendor_rows",
 ]
@@ -111,12 +114,32 @@ STALL_COLUMNS = 5
 VENDOR_COLUMNS = 4
 """Sotuvchi shabloni ustunlari (A6): `F.I.Sh., telefon, rasta kodi, boshlanish sanasi`."""
 
+STAFF_COLUMNS = 3
+"""Xodim shabloni ustunlari (A6): `F.I.Sh., telefon, rol` (MARKET-07).
+
+TIL USTUNI ATAYIN YO'Q: yaratilgan hisobning tili fayldan emas, import
+qilayotgan adminning profilidan olinadi — shablonning tili ham AYNAN
+o'sha manbadan keladi (`imports.py::_locale_of`). Faylga ustun qo'shish
+ikkinchi haqiqat manbaini tug'dirardi va admin "ruscha shablonda uzbekcha
+til yozib qo'ydim" degan holatga tushardi.
+"""
+
 # Ustun POZITSIYALARI — sarlavha matni O'QILMAYDI (O-05). Shablon
 # foydalanuvchi tilida hosil bo'ladi, ya'ni ruscha shablonni yuklab
 # olgan admin uzbekcha interfeysda import qilsa ham fayl ishlaydi.
 # Sarlavhaga qarab ustun topish bu oqimni JIMGINA buzardi.
 _STALL_CODE, _STALL_ZONE, _STALL_CATEGORY, _STALL_STATUS, _STALL_NOTE = range(STALL_COLUMNS)
 _VENDOR_NAME, _VENDOR_PHONE, _VENDOR_STALL, _VENDOR_FROM = range(VENDOR_COLUMNS)
+_STAFF_NAME, _STAFF_PHONE, _STAFF_ROLES = range(STAFF_COLUMNS)
+
+_ROLE_SEPARATORS: Final = (",", ";")
+"""Rol katagidagi ajratgichlar — IKKALASI ham qabul qilinadi.
+
+Admin qaysi birini yozishini oldindan bilib bo'lmaydi: `,` — ingliz
+uslubi, `;` esa CIS lokalidagi Excel'ning ustun ajratgichi va odamlar
+uni ro'yxat ajratgichi deb ham ishlatadi. Bittasini tanlash qatorlarning
+yarmini `invalid_role` ga aylantirardi.
+"""
 
 _DATE_FORMATS = ("%d.%m.%Y", "%d/%m/%Y")
 """ISO'dan TASHQARI qabul qilinadigan sana shakllari.
@@ -168,6 +191,23 @@ class VendorImportRow:
     phone: str
     stall_id: UUID | None
     from_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class StaffImportRow:
+    """Yaratishga TAYYOR xodim qatori (MARKET-07).
+
+    `roles` — `Role` QIYMATLARI (`cashier`, `inspector`, ...) va FAYLDAGI
+    TARTIB saqlanadi. D-05 bo'yicha bir odam bir nechta rolga ega
+    bo'lishi mumkin, ya'ni bu maydon ATAYIN ro'yxat.
+
+    `phone` E.164 shaklida, `full_name` esa tozalangan (`_at()`).
+    """
+
+    row: int
+    full_name: str
+    phone: str
+    roles: tuple[str, ...]
 
 
 def validate_stall_rows(
@@ -440,6 +480,177 @@ def validate_vendor_rows(
         )
 
     return accepted, issues
+
+
+def validate_staff_rows(
+    rows: Sequence[SheetRow],
+    *,
+    allowed_roles: frozenset[str],
+    existing_member_phones: Iterable[str],
+) -> tuple[list[StaffImportRow], list[ImportIssue]]:
+    """Xodim qatorlarini tekshiradi; `(yaratiladigan, xatolar)` juftini beradi.
+
+    `allowed_roles` — `str` QIYMATLAR to'plami, `Role` enum'i EMAS: bu
+    modul sof funksiya bo'lib qolishi va chaqiruvchining D-04 darajasini
+    ARGUMENT sifatida olishi kerak. Enum'ga bog'lanish uni
+    `staff_accounts` ga (ya'ni ikkinchi qatlamga) bog'lardi va testda
+    darajani almashtirish uchun butun modulni mock qilishga majburlardi.
+
+    `existing_member_phones` — JORIY BOZOR a'zolarining telefonlari
+    (D-15). Ular xato EMAS: `accepted` dan chiqarib tashlanadi va
+    chaqiruvchi ularni `skipped` deb sanaydi.
+
+    HAR QATOR UCHUN BARCHA TEKSHIRUVLAR BAJARILADI (`validate_stall_rows`
+    bilan aynan bir xil sabab: admin faylni BIR MARTA tuzatsin).
+    """
+    known_phones = set(existing_member_phones)
+    issues: list[ImportIssue] = []
+    accepted: list[StaffImportRow] = []
+    phone_first_seen: dict[str, int] = {}
+
+    for sheet_row in rows:
+        number = sheet_row.row
+        values = sheet_row.values
+
+        full_name = _at(values, _STAFF_NAME)
+        raw_phone = _at(values, _STAFF_PHONE)
+        raw_roles = _at(values, _STAFF_ROLES)
+
+        row_issues: list[ImportIssue] = []
+
+        if full_name is None:
+            row_issues.append(_too_short(number, "F.I.Sh."))
+        if raw_phone is None:
+            row_issues.append(_too_short(number, "telefon"))
+
+        phone: str | None = None
+        if raw_phone is not None:
+            try:
+                # Telefon SHU YERDA normallashtiriladi: import DTO'dan
+                # o'tmaydi. Usiz faylda `901234567` shaklida kelgan raqam
+                # bazadagi `+998901234567` bilan MOS TUSHMASDI va D-15
+                # idempotentligi buzilardi (`validate_vendor_rows` dagi
+                # bilan aynan bir xil sabab).
+                phone = normalize_phone(raw_phone)
+            except InvalidPhoneError:
+                row_issues.append(
+                    ImportIssue(
+                        number,
+                        "invalid_phone",
+                        f"{number}-qator: '{raw_phone}' telefon raqami noto'g'ri",
+                    )
+                )
+            else:
+                if phone in phone_first_seen:
+                    row_issues.append(
+                        ImportIssue(
+                            number,
+                            "duplicate_phone_in_file",
+                            f"{number}-qator: {phone} raqami "
+                            f"{phone_first_seen[phone]}-qatorda ham bor",
+                        )
+                    )
+                else:
+                    phone_first_seen[phone] = number
+
+        roles = _staff_roles(number, raw_roles, allowed_roles, row_issues)
+
+        if row_issues:
+            issues.extend(row_issues)
+            continue
+
+        assert full_name is not None and phone is not None  # noqa: S101
+        assert roles is not None  # noqa: S101
+
+        if phone in known_phones:
+            # D-15 — SKIP, VA U XATO TARMOG'IDAN KEYIN TURADI.
+            #
+            # ⚠ TARTIB TESKARI BO'LSA mavjud a'zoning qatoridagi noto'g'ri
+            # rol JIMGINA yutilardi: admin "rolni to'g'riladim" deb o'ylab
+            # yurardi, fayl esa aslida umuman o'qilmagan bo'lardi.
+            #
+            # SKIPNING O'ZI — XAVFSIZLIK QARORI, qulaylik emas. Muqobil
+            # (parolni qayta berish) roster faylini OMMAVIY PAROL TIKLASH
+            # quroliga aylantirardi: eski faylni tasodifan qayta yuklagan
+            # admin butun jamoani tizimdan chiqarib yuborardi.
+            continue
+
+        accepted.append(StaffImportRow(row=number, full_name=full_name, phone=phone, roles=roles))
+
+    return accepted, issues
+
+
+def _staff_roles(
+    number: int,
+    raw: str | None,
+    allowed_roles: frozenset[str],
+    row_issues: list[ImportIssue],
+) -> tuple[str, ...] | None:
+    """Rol katagini `Role` qiymatlariga keltiradi; xato bo'lsa `None`.
+
+    IKKI XIL XATO ATAYIN AJRATILGAN:
+
+      `invalid_role`     — matn birorta `Role` ga tushmaydi (imlo xatosi:
+                           `kassr`). Admin uchun harakat — faylni tuzatish.
+      `role_not_allowed` — matn HAQIQIY rol, lekin chaqiruvchining D-04
+                           darajasidan yuqori (`market_admin` bozor
+                           admini uchun). Admin uchun harakat — platforma
+                           adminiga murojaat qilish.
+
+    Ikkalasini birlashtirish adminni imloni tuzatishga majburlardi,
+    holbuki fayl to'g'ri yozilgan edi. `platform_admin` hech qachon
+    `allowed_roles` da bo'lmagani uchun avtomatik ikkinchi kodni oladi.
+
+    Katakdagi TAKRORIY rol xato EMAS — u siqiladi (birinchi uchrashuv
+    qoladi, tartib saqlanadi): `cashier, cashier` yozgan admin hech
+    qanday yangi ma'no bermagan, ya'ni uni rad etish faqat to'sqinlik
+    bo'lardi.
+    """
+    if raw is None:
+        row_issues.append(_too_short(number, "rol"))
+        return None
+
+    normalized = raw
+    for separator in _ROLE_SEPARATORS[1:]:
+        normalized = normalized.replace(separator, _ROLE_SEPARATORS[0])
+    pieces = [piece.strip() for piece in normalized.split(_ROLE_SEPARATORS[0])]
+    pieces = [piece for piece in pieces if piece]
+
+    if not pieces:
+        # Katakda faqat ajratgich va bo'sh joy bor edi (`" , ; "`).
+        row_issues.append(_too_short(number, "rol"))
+        return None
+
+    known = {str(role).casefold(): str(role) for role in Role}
+    allowed_text = ", ".join(sorted(allowed_roles))
+    roles: list[str] = []
+    failed = False
+
+    for piece in pieces:
+        role = known.get(piece.casefold())
+        if role is None:
+            row_issues.append(
+                ImportIssue(
+                    number,
+                    "invalid_role",
+                    f"{number}-qator: '{piece}' roli noma'lum (mumkin: {allowed_text})",
+                )
+            )
+            failed = True
+        elif role not in allowed_roles:
+            row_issues.append(
+                ImportIssue(
+                    number,
+                    "role_not_allowed",
+                    f"{number}-qator: '{role}' rolini berishga huquqingiz yo'q "
+                    f"(mumkin: {allowed_text})",
+                )
+            )
+            failed = True
+        elif role not in roles:
+            roles.append(role)
+
+    return None if failed else tuple(roles)
 
 
 def _too_short(number: int, column: str) -> ImportIssue:

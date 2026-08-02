@@ -72,8 +72,15 @@ tashlab yuborib KEYINGI belgiga qaraydi — ya'ni `"\\t=cmd|..."` oddiy
 `=` tekshiruvidan o'tib ketardi.
 """
 
-TEMPLATE_KINDS: Final = ("stalls", "vendors")
-"""`GET /imports/template?kind=` qabul qiladigan qiymatlar."""
+TEMPLATE_KINDS: Final = ("stalls", "vendors", "staff")
+"""`GET /imports/template?kind=` qabul qiladigan qiymatlar.
+
+⚠ `imports.py` dagi `Literal[...]` bilan QO'LDA sinxron saqlanadi
+(FastAPI so'rov parametrini `Literal` bilan tekshiradi, bu ro'yxat esa
+ish vaqtidagi darvoza). Ajralib qolgan holatni
+`test_template_kinds_are_exactly_three` va `imports` marshrutlarining
+OpenAPI darvozasi birgalikda ushlaydi.
+"""
 
 ERROR_REPORT_COLUMNS: Final = 3
 """Xato hisobotidagi ustunlar: `qator`, `kod`, `xabar`."""
@@ -102,8 +109,11 @@ _TEXTS: Final[dict[str, dict[str, str]]] = {
         "phone": "telefon",
         "stall_code": "rasta kodi",
         "from_date": "boshlanish sanasi",
+        "staff_sheet": "Xodimlar",
+        "role": "rol",
         "zones_header": "Zonalar",
         "categories_header": "Toifalar",
+        "roles_header": "Rollar",
         "error_row": "qator",
         "error_code": "kod",
         "error_message": "xabar",
@@ -122,8 +132,11 @@ _TEXTS: Final[dict[str, dict[str, str]]] = {
         "phone": "телефон",
         "stall_code": "раста коди",
         "from_date": "бошланиш санаси",
+        "staff_sheet": "Ходимлар",
+        "role": "рол",
         "zones_header": "Зоналар",
         "categories_header": "Тоифалар",
+        "roles_header": "Роллар",
         "error_row": "қатор",
         "error_code": "код",
         "error_message": "хабар",
@@ -142,8 +155,11 @@ _TEXTS: Final[dict[str, dict[str, str]]] = {
         "phone": "телефон",
         "stall_code": "номер прилавка",
         "from_date": "дата начала",
+        "staff_sheet": "Сотрудники",
+        "role": "роль",
         "zones_header": "Зоны",
         "categories_header": "Категории",
+        "roles_header": "Роли",
         "error_row": "строка",
         "error_code": "код",
         "error_message": "сообщение",
@@ -152,12 +168,49 @@ _TEXTS: Final[dict[str, dict[str, str]]] = {
 
 _STALL_HEADER_KEYS: Final = ("code", "zone", "category", "status", "note")
 _VENDOR_HEADER_KEYS: Final = ("full_name", "phone", "stall_code", "from_date")
+_STAFF_HEADER_KEYS: Final = ("full_name", "phone", "role")
+
+_SHEET_KEYS: Final[dict[str, str]] = {
+    "stalls": "stalls_sheet",
+    "vendors": "vendors_sheet",
+    "staff": "staff_sheet",
+}
+_HEADER_KEYS: Final[dict[str, tuple[str, ...]]] = {
+    "stalls": _STALL_HEADER_KEYS,
+    "vendors": _VENDOR_HEADER_KEYS,
+    "staff": _STAFF_HEADER_KEYS,
+}
+
+_STAFF_ROLE_COLUMN: Final = 2
+"""`rol` ustunining 0-asosli indeksi — ochiluvchi ro'yxat shunga bog'lanadi.
+
+`_STAFF_HEADER_KEYS` ning uchinchi elementi bilan mos bo'lishi SHART.
+Ikkalasini bir joyga siqib bo'lmaydi: sarlavha ro'yxati matn kalitlari,
+bu esa `data_validation` diapazoni.
+"""
 
 # Namunaviy qator — TARJIMA QILINMAYDI va bu ataylab. `holat` ustunidagi
 # `active` — DB KONTENTI (`StallStatus`, 1-faza D-16), ya'ni uni ruscha
 # yozish faylni ishlamaydigan qilardi. Qolgan qiymatlar esa haqiqiy
 # zona/toifa nomlari bilan almashtiriladi (`_sample_row`).
 _STALL_SAMPLE_STATUS: Final = "active"
+_SAMPLE_PHONE: Final = "998901234567"
+"""Namunaviy telefon — `+` SIZ (02-24 deviatsiya #1).
+
+`+` `FORMULA_PREFIXES` da, ya'ni `escape_formula()` uni apostrof bilan
+qochiradi va katakdagi qiymat `'+998901234567` bo'lib qoladi. O'sha
+qiymat O'Z shablonining importida `invalid_phone` berardi. Bu ikkala
+shablonga ham (`vendors`, `staff`) tegishli va u yerda ham AYNAN shu
+qiymat ishlatiladi — ikki xil namunaviy shakl adminni chalg'itardi.
+"""
+
+_STAFF_SAMPLE_ROLE: Final = "cashier"
+"""Namunaviy rol — `Role.CASHIER` qiymati, TARJIMASIZ (D-16).
+
+`cashier` ikkala darajada ham ruxsat etilgan (`assignable_roles` ning
+har ikkala natijasida bor), ya'ni namunaviy qator O'ZGARTIRILMASDAN
+import qilinganda ham `role_not_allowed` bermaydi.
+"""
 
 
 def escape_formula(value: str) -> str:
@@ -180,12 +233,21 @@ def build_template(
     locale: str,
     zones: Sequence[str],
     categories: Sequence[str],
+    *,
+    roles: Sequence[str] = (),
 ) -> bytes:
-    """Import shablonini hosil qiladi (`kind` — `stalls` yoki `vendors`).
+    """Import shablonini hosil qiladi (`stalls` / `vendors` / `staff`).
 
     Fayl HAR SAFAR yangidan quriladi va repoda nusxa saqlanmaydi
     (Open Question 5): zona nomi tahrirlanganda keyingi yuklab olishda
     ro'yxat AVTOMATIK yangilanadi.
+
+    `roles` — FAQAT `staff` uchun va u chaqiruvchining D-04 darajasidan
+    keladi (`staff_accounts.assignable_roles`). Kalit-so'zli va standart
+    bo'sh: mavjud ikkita chaqiruv o'zgarmaydi. Ro'yxatni shu yerda
+    `Role` enum'idan qurish ikkinchi haqiqat manbaini tug'dirardi —
+    shablon bozor admini berolmaydigan rolni taklif qilardi va u
+    `role_not_allowed` bilan qaytardi.
 
     Raises:
         ValueError: noma'lum `kind`.
@@ -198,11 +260,9 @@ def build_template(
     workbook = xlsxwriter.Workbook(buffer, {"in_memory": True})
     try:
         header_format = workbook.add_format({"bold": True, "bg_color": "#F2F2F2"})
-        sheet_key = "stalls_sheet" if kind == "stalls" else "vendors_sheet"
-        worksheet = workbook.add_worksheet(texts[sheet_key])
+        worksheet = workbook.add_worksheet(texts[_SHEET_KEYS[kind]])
 
-        keys = _STALL_HEADER_KEYS if kind == "stalls" else _VENDOR_HEADER_KEYS
-        for column, key in enumerate(keys):
+        for column, key in enumerate(_HEADER_KEYS[kind]):
             _write_text(worksheet, 0, column, texts[key], header_format)
             worksheet.set_column(column, column, 18)
 
@@ -213,7 +273,7 @@ def build_template(
         # tushgan admin qaysi ustun nima ekanini ko'rmay qolardi.
         worksheet.freeze_panes(1, 0)
 
-        _reference_sheet(workbook, worksheet, texts, kind, zones, categories)
+        _reference_sheet(workbook, worksheet, texts, kind, zones, categories, roles)
     finally:
         workbook.close()
     return buffer.getvalue()
@@ -277,12 +337,26 @@ def _sample_row(
     `"Zona nomi"`), uni tahrirlashni unutgan admin DARHOL
     `zone_not_found` olardi. Haqiqiy nom esa namunani ham, ko'rsatmani
     ham bir vaqtda bajaradi.
+
+    ⚠ TELEFON `+` SIZ YOZILADI VA BU MAJBURIY, "uslub" EMAS (02-24).
+    `+` — `FORMULA_PREFIXES` a'zosi, ya'ni `escape_formula()` uni
+    apostrof bilan qochiradi (TO'G'RI xulq) va katakda `'+998901234567`
+    qoladi. `normalize_phone()` esa apostrofni raqam deb qabul qilmaydi,
+    ya'ni namunaviy qator O'Z shablonining importidan `invalid_phone`
+    bilan qaytardi. `998901234567` — `normalize_phone` qabul qiladigan va
+    admin AMALDA yozadigan shakl; `test_staff_sample_row_is_accepted_by_
+    the_validator` shu aylanmani qulflaydi.
     """
     zone = zones[0] if zones else ""
     category = categories[0] if categories else ""
     if kind == "stalls":
         return ("1", zone, category, _STALL_SAMPLE_STATUS, "")
-    return ("Aliyev Vali", "+998901234567", "1", "2026-01-15")
+    if kind == "staff":
+        # ⚠ `cashier` TARJIMA QILINMAYDI — u DB KONTENTI (`Role`, 1-faza
+        # D-16), aynan `_STALL_SAMPLE_STATUS` dagi `active` bilan bir xil
+        # sabab: ruscha yozilgan qiymat faylni ishlamaydigan qilardi.
+        return ("Aliyev Vali", _SAMPLE_PHONE, _STAFF_SAMPLE_ROLE)
+    return ("Aliyev Vali", _SAMPLE_PHONE, "1", "2026-01-15")
 
 
 def _reference_sheet(
@@ -292,6 +366,7 @@ def _reference_sheet(
     kind: str,
     zones: Sequence[str],
     categories: Sequence[str],
+    roles: Sequence[str],
 ) -> None:
     """Yashirin ma'lumotnoma varag'i + `data_validation` ro'yxatlari.
 
@@ -302,14 +377,21 @@ def _reference_sheet(
     ⚠ `data_validation` — QULAYLIK, DARVOZA EMAS. Excel ro'yxatdan
     tashqari qiymat kiritishga ruxsat beradi (va boshqa dastur uni
     umuman o'qimaydi), ya'ni haqiqiy tekshiruv baribir SERVERDA
-    (`import_validator`). Bu yerdagi ro'yxat faqat `zone_not_found`
-    xatolarining eng ko'p uchraydigan sababini — qo'lda yozishdagi
-    xatoni — yo'q qiladi.
+    (`import_validator`). Bu yerdagi ro'yxat faqat `zone_not_found` /
+    `invalid_role` xatolarining eng ko'p uchraydigan sababini — qo'lda
+    yozishdagi xatoni — yo'q qiladi.
+
+    UCH TURDAN IKKITASIDA VARAQ QURILADI:
+      `stalls` — zona va toifa nomlari;
+      `staff`  — chaqiruvchi bera oladigan ROL qiymatlari (D-04);
+      `vendors` — HECH NARSA, va bu ATAYIN: rasta kodi ro'yxati minglab
+        element bo'lishi mumkin va uni ochiluvchi ro'yxatga aylantirish
+        faylni foydasiz kattalashtirardi.
     """
+    if kind == "staff":
+        _staff_reference_sheet(workbook, target, texts, roles)
+        return
     if kind != "stalls" or not (zones or categories):
-        # Sotuvchi shablonida bog'lanadigan lug'at YO'Q: rasta kodi
-        # ro'yxati minglab element bo'lishi mumkin va uni ochiluvchi
-        # ro'yxatga aylantirish faylni foydasiz kattalashtirardi.
         return
 
     reference = workbook.add_worksheet(texts["reference_sheet"])
@@ -339,6 +421,38 @@ def _reference_sheet(
             2,
             {"validate": "list", "source": f"={sheet_name}!$B$2:$B${len(categories) + 1}"},
         )
+
+
+def _staff_reference_sheet(
+    workbook: Any,
+    target: Any,
+    texts: dict[str, str],
+    roles: Sequence[str],
+) -> None:
+    """Rol ro'yxati — YASHIRIN varaqning A ustunida, `rol` ustuniga bog'langan.
+
+    Ro'yxat CHAQIRUVCHINING darajasidan keladi, `Role` enum'idan EMAS:
+    bozor admini `director` ni tanlab, keyin `role_not_allowed` olishi
+    ustaning eng bema'ni yo'li bo'lardi — tanlov ro'yxati aynan
+    ruxsat etilgan to'plamni ko'rsatishi kerak.
+    """
+    if not roles:
+        return
+
+    reference = workbook.add_worksheet(texts["reference_sheet"])
+    _write_text(reference, 0, 0, texts["roles_header"])
+    for index, name in enumerate(roles, start=1):
+        _write_text(reference, index, 0, name)
+    reference.hide()
+
+    sheet_name = _quote_sheet_name(texts["reference_sheet"])
+    target.data_validation(
+        1,
+        _STAFF_ROLE_COLUMN,
+        len(roles) + 1,
+        _STAFF_ROLE_COLUMN,
+        {"validate": "list", "source": f"={sheet_name}!$A$2:$A${len(roles) + 1}"},
+    )
 
 
 def _quote_sheet_name(name: str) -> str:

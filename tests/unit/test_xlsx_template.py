@@ -761,7 +761,10 @@ def test_staff_template_is_parsed_back_identically_in_every_locale() -> None:
         parsed.append(rows[0].values)
 
     assert parsed[0] == parsed[1] == parsed[2]
-    assert parsed[0] == ("Aliyev Vali", "+998901234567", "cashier")
+    # ⚠ Telefon `+` SIZ: `+` — `FORMULA_PREFIXES` a'zosi va qochirish uni
+    # `'+998...` ga aylantirardi, ya'ni namunaviy qator O'Z shablonining
+    # importidan `invalid_phone` bilan qaytardi (02-24 deviatsiya #1).
+    assert parsed[0] == ("Aliyev Vali", "998901234567", "cashier")
 
 
 def test_staff_sample_row_is_accepted_by_the_validator() -> None:
@@ -805,13 +808,13 @@ def test_staff_template_has_a_hidden_role_reference_sheet() -> None:
         STAFF_ROLES
     )
 
+    # openpyxl boshlang'ich `=` ni O'ZI tashlaydi (mavjud `stalls` testi
+    # ham `startswith("'Ma''lumotnoma'!")` bilan tekshiradi).
     sources = [rule.formula1 for rule in book["Xodimlar"].data_validations.dataValidation]
     assert len(sources) == 1
-    assert sources[0] == "='Ma''lumotnoma'!$A$2:$A$3"
+    assert sources[0] == "'Ma''lumotnoma'!$A$2:$A$3"
 
-    ranges = [
-        str(rule.sqref) for rule in book["Xodimlar"].data_validations.dataValidation
-    ]
+    ranges = [str(rule.sqref) for rule in book["Xodimlar"].data_validations.dataValidation]
     assert ranges[0].startswith("C2"), f"ro'yxat C ustuniga bog'lanmagan: {ranges[0]}"
 
 
