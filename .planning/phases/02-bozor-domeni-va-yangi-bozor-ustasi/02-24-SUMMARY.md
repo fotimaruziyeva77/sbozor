@@ -273,3 +273,7 @@ Task 2 ning sabotaj bosqichida `git checkout -- services/core-api/app/api/v1/imp
 - `POST /users` (bittalab) va `POST /imports/staff` (ommaviy) ikkalasi ham qoladi — birinchisi «yangi kassir ishga keldi», ikkinchisi «bozor ochilyapti» holati uchun.
 - Xodim hisobi yaratilgandan keyin unga TELEGRAM orqali xabar berish yo'li YO'Q (7-faza bot mavzusi) — bugun parolni admin qo'lda yetkazadi va bu ROADMAP self-service qoidasiga zid emas (ro'yxatni admin bergan, hisoblarni tizim yaratgan).
 - `vendors` shabloni endi to'g'ri namunaviy telefon bilan chiqadi, lekin uning uchidan-uchiga aylanma testi HAMON yo'q (faqat `stalls` va `staff` da bor) — 3-fazada qo'shish arzon.
+
+## Self-Check: PASSED
+
+Barcha yaratilgan fayllar diskda mavjud (6/6) va barcha commit hash'lari git tarixida topildi (6/6).
