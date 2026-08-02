@@ -23,6 +23,31 @@ dependencies = [
     "tzdata==2026.3",
     "python-multipart==0.0.32",
     "email-validator==2.3.0",
+    # --- NVR domeni: ISAPI klienti va fon navbati (03-01, D-16/D-06) ---
+    #
+    # To'rtalasi ham 03-RESEARCH ning "Package Legitimacy Audit" jadvalida
+    # `slopcheck install -e pypi` bilan tekshirilgan va `[OK]` verdikti
+    # olgan; `[ASSUMED]`/`[SUS]`/`[SLOP]` paket YO'Q.
+    #
+    # `httpx` BU YERGA `[dependency-groups] dev` DAN KO'CHDI (D-16).
+    # Sabab: ISAPI klienti (03-05) — ISHLAB CHIQARISH kodi, dev guruhi esa
+    # runtime image'ga TUSHMAYDI (`Dockerfile` ning `runtime` target'i
+    # `uv sync --frozen --no-dev` bilan quriladi). Ko'chirilmaganda 24 ta
+    # test fayli `httpx` ni `dev` target'da topib YASHIL qolardi, xato esa
+    # FAQAT DEPLOY paytida `ModuleNotFoundError: httpx` bo'lib chiqardi —
+    # ya'ni yashil CI hech nima isbotlamasdi (03-RESEARCH Pitfall 7).
+    #
+    # `arq` ATAYIN ISHLATILMADI (D-06). U `redis[hiredis]<6,>=4.2.0` talab
+    # qiladi, bu faylda esa `redis[hiredis]==8.0.1` pini bor: `arq` ni
+    # o'rnatish `redis` ni 5.x ga TUSHIRARDI va `app/security/ratelimit.py`
+    # bilan sessiya keshini jimgina eskiroq klientda qoldirardi. 2026-08-02
+    # da PyPI metadata'si va EMPIRIK o'rnatish bilan tasdiqlangan
+    # (03-RESEARCH E.16 / Pitfall 1). `taskiq-redis 1.2.3` esa
+    # `redis<9,>=8.0.0` talab qiladi — mavjud pin bilan AYNAN mos.
+    "httpx==0.28.1",
+    "taskiq==0.12.4",
+    "taskiq-redis==1.2.3",
+    "tenacity==9.1.4",
     # --- Excel import/eksport (02-12, D-13) ---
     #
     # Uchalasi ham 02-RESEARCH ning "Package Legitimacy Audit" jadvalida
@@ -50,9 +75,17 @@ dev = [
     "pytest-asyncio==1.4.0",
     "pytest-cov==7.1.0",
     "testcontainers[postgres]==4.15.0",
-    "httpx==0.28.1",
     # Sinxron `pg_catalog` meta-so'rovlari uchun (tenancy meta-testlari).
     "psycopg[binary]==3.3.4",
+    # `respx` — `httpx` uchun mock transport (03-05 ISAPI klientining unit
+    # testlari). 03-RESEARCH "Package Legitimacy Audit": `slopcheck install
+    # -e pypi` -> `[OK]`, BSD-3-Clause, 0.23.1 (2026-04-08).
+    #
+    # U ATAYIN `dev` da qoladi — mock qatlami ishlab chiqarish kodidan
+    # HECH QACHON chaqirilmaydi, ya'ni `httpx` bilan bir xil sabab bu yerda
+    # TESKARI ishlaydi. `tests/unit/test_runtime_deps.py` ikkala yo'nalishni
+    # ham qulflaydi.
+    "respx==0.23.1",
 ]
 
 [tool.uv]

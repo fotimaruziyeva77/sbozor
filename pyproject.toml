@@ -27,6 +27,14 @@ pythonpath = [".", "tests", "services/core-api"]
 addopts = "-q --strict-markers"
 markers = [
     "tenancy: tenant izolyatsiyasi (RLS) invariantlari — faza darvozasi, majburiy yashil",
+    # 3-FAZA. `--strict-markers` ostida e'lon qilinmagan marker YIG'ILISH
+    # paytida yiqiladi ("unknown marker"), ya'ni `-m sim` yozgan zahoti
+    # butun to'plam qizarardi va sabab test mantig'ida emas, shu ro'yxatda
+    # bo'lardi. Shuning uchun markerlar simulyator KODIDAN OLDIN e'lon
+    # qilinadi (W0-5).
+    "sim: simulyatsiya qilingan Hikvision NVR ustidagi uchidan-uchiga testlar (CAM-09) — `--profile sim` talab qiladi",
+    "hardware: faqat real NVR bilan ishlaydigan testlar — CI'da `-m \"not hardware\"` bilan chetlab o'tiladi, fazani BLOKLAMAYDI",
+    "slow: uzoq davom etadigan sim stsenariylari (25 kanal) — standart `test:sim` zanjiridan chetda, `npm run test:sim:slow` bilan ishga tushadi",
 ]
 
 [tool.ruff]
