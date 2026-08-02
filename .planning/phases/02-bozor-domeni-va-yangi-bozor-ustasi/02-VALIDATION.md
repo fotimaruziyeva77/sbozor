@@ -35,7 +35,7 @@ automated_replacements:
   - was: "`nyquist_compliant` bayrog'ining qo'lda, kelishuv bilan qo'yilishi"
     now: "node scripts/check-validation-signoff.mjs"
 open_items:
-  - "KECHIKISH BYUDJETI (egasi: 3-FAZA). To'lqin darajasi hamon byudjetdan tashqarida va u 02-23 da YANA o'sdi: 02-17 da 225 s (890 test) -> 02-22 da o'lchangan `npm run gate` 585 s -> 02-24 da ~571 s -> 02-23 da 599 s (`npm run gate`, 1000 backend testi). Maqsad ≤180 s (to'lqin). Sabab strukturaviy: har integratsiya testi `two_markets` + `market_domain` seed'ini QAYTA yozadi (function-scope fixture). Tuzatish fixture doirasiga tegadi va u bu fazaning eng qimmat kafolati — shuning uchun 3-fazaga o'tkaziladi (`pytest-xdist` yoki tranzaksiyaga o'ralgan seed)."
+  - "KECHIKISH BYUDJETI (egasi: 3-FAZA). To'lqin darajasi hamon byudjetdan tashqarida va u 02-23 da YANA o'sdi: 02-17 da 225 s (890 test) -> 02-22 da o'lchangan `npm run gate` 585 s -> 02-24 da ~571 s -> 02-23 da **464 s** (`npm run gate`, 992 backend + 322 tenancy testi). ⚠ Darvozaning DEVOR-SOATI 02-22 dagidan KAM chiqdi (585 s -> 464 s) va bu tezlashtirish EMAS: raqam Docker keshi va `next build` ning holatiga qattiq bog'liq, ya'ni u trend o'lchovi sifatida ishonchsiz. Ishonchli o'lchov — ajratilgan fayl narxi (pastga qarang). Maqsad ≤180 s (to'lqin). Sabab strukturaviy: har integratsiya testi `two_markets` + `market_domain` seed'ini QAYTA yozadi (function-scope fixture). Tuzatish fixture doirasiga tegadi va u bu fazaning eng qimmat kafolati — shuning uchun 3-fazaga o'tkaziladi (`pytest-xdist` yoki tranzaksiyaga o'ralgan seed)."
   - "MIQYOS KONSTANTASINING IKKI JOYDA YASHASHI (egasi: 3-FAZA, past ustuvorlik). `KARMANA_ZONE_COUNT`/`KARMANA_STALL_COUNT` Python fixture'ida, `stall-map.test.tsx` da esa QO'LDA takrorlangan — Python konstantasini vitest'ga import qilib bo'lmaydi. Ajralib ketsa frontend testi eski miqyosni o'lchab yashil qolardi."
   - "REAL KARMANA MA'LUMOTI hali yuklanmagan va bu FAZA DARVOZASI EMAS (ROADMAP self-service qoidasi, 2026-08-01). U `human_only_verifications` ning 1-bandi sifatida, egasi va ishga tushish sharti bilan yuritiladi."
 ---
@@ -61,7 +61,7 @@ open_items:
 | **Full suite command** | `npm run test` → `docker compose --profile test run --rm tests pytest -q` |
 | **Frontend suite command** | `npm --prefix frontend test` |
 | **Phase gate command** | `npm run gate` (lint + mypy + backend + tenancy + i18n + typecheck + eslint + build) |
-| **Estimated runtime** | **ESKI RAQAMLAR O'CHIRILMAYDI — o'sish byudjet muhokamasi uchun kerak.**<br>**2026-08-01 (02-17):** task darajasi (`pytest tests/unit -x -q`) **11 s** ✅ (maqsad ≤30 s) · to'lqin darajasi (`npm run test:tenancy`, 309 test) **99 s** · to'liq backend (`npm run test`, **890** test) **225 s** ❌ (maqsad ≤180 s) · frontend (54 node + 40 vitest) **12 s** · to'liq darvoza (`npm run gate`) **403 s**.<br>**2026-08-02 (02-22):** `npm run gate` **585 s**; **(02-24):** `npm run gate` **~571 s**.<br>**2026-08-03 (02-23):** to'liq darvoza (`npm run gate`, **1000** backend testi) **599 s** · frontend to'plami (57 node + 74 vitest) **14 s** · yangi miqyos fayli YOLG'IZ (`test_karmana_scale_import.py`) **14 s** (konteyner ko'tarilishi bilan; testning O'ZI ~5 s) · generator birlik fayli (`test_karmana_seed.py`) to'liq `tests/unit` ichida, task byudjeti ichida.<br>Har bir raqam konteyner ko'tarilishini O'Z ICHIGA OLADI (xostda `time` bilan). 1-faza: quick 8 s / full 47 s / tenancy 20 s |
+| **Estimated runtime** | **ESKI RAQAMLAR O'CHIRILMAYDI — o'sish byudjet muhokamasi uchun kerak.**<br>**2026-08-01 (02-17):** task darajasi (`pytest tests/unit -x -q`) **11 s** ✅ (maqsad ≤30 s) · to'lqin darajasi (`npm run test:tenancy`, 309 test) **99 s** · to'liq backend (`npm run test`, **890** test) **225 s** ❌ (maqsad ≤180 s) · frontend (54 node + 40 vitest) **12 s** · to'liq darvoza (`npm run gate`) **403 s**.<br>**2026-08-02 (02-22):** `npm run gate` **585 s**; **(02-24):** `npm run gate` **~571 s**.<br>**2026-08-03 (02-23):** to'liq darvoza (`npm run gate`, **992** backend + **322** tenancy testi) **464 s** (⚠ devor-soati Docker keshiga bog'liq — trend o'lchovi sifatida ishonchsiz) · frontend to'plami (57 node + 74 vitest) **14 s** · yangi miqyos fayli YOLG'IZ (`test_karmana_scale_import.py`) **14 s** (konteyner ko'tarilishi bilan; testning O'ZI ~5 s) · generator birlik fayli (`test_karmana_seed.py`) to'liq `tests/unit` ichida, task byudjeti ichida.<br>Har bir raqam konteyner ko'tarilishini O'Z ICHIGA OLADI (xostda `time` bilan). 1-faza: quick 8 s / full 47 s / tenancy 20 s |
 
 **Forbidden:** SQLite (RLS does not exist there). The test engine MUST connect as `sbozor_app`, never as a superuser — `FORCE ROW LEVEL SECURITY` does not constrain superusers, so a superuser fixture makes every RLS test falsely green.
 
@@ -164,7 +164,8 @@ open_items:
 
 > **`Status` ustuni FAQAT `Automated Command` ustunini bildiradi** va u
 > 2026-08-03 da `npm run gate` ning to'liq yashil o'tishi bilan tasdiqlangan
-> (1000 backend + 57 node + 74 vitest testi, lint/mypy/typecheck/eslint/build).
+> (992 backend + 322 tenancy + 57 node + 74 vitest testi,
+> lint/mypy/typecheck/eslint/build; exit 0).
 > 2026-08-01 dagi o'lchov (890 backend + 54 node + 40 vitest) tarixiy yozuv
 > sifatida SAQLANADI — o'sishni ko'rsatish byudjet muhokamasi uchun kerak.
 >
