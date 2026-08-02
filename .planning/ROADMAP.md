@@ -43,7 +43,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 0: Dala treki va o'lchov bazasi** - Tushum bazasi, kamera qamrovi, buyurtmachi javoblari (parallel, **hech narsani bloklamaydi**)
 - [x] **Phase 1: Poydevor va tenant xavfsizligi** - Rol, izolyatsiya, audit, biznes-kun, 3 til — retrofit qilinmaydigan qatlam (completed 2026-07-29)
 - [x] **Phase 2: Bozor domeni va "Yangi bozor" ustasi** - Rasta, toifa, tarixiy tarif, sotuvchi, ish kunlari, sxematik plan-xarita (24/24 reja bajarildi; 02-VERIFICATION.md ning to'rtala bo'shlig'i 16–20-to'lqinlarda yopildi — qayta tekshiruv kutilyapti) (plans completed 2026-08-03)
-- [ ] **Phase 3: Kamera va tarmoq ulanishi** - WireGuard tunnel, shifrlangan RTSP, ulanish testi, jonli ko'rish
+- [ ] **Phase 3: NVR avtomatik kashfiyoti va tarmoq ulanishi** - Simulyator, ISAPI kashfiyoti, Fernet rekvizitlari, WireGuard tunnel, jonli ko'rish
 - [ ] **Phase 4: Snapshot pipeline** - Mavsumiy jadval, idempotent kadr olish, sifat filtri, S3 arxiv, alertlar
 - [ ] **Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i** - Poligon muharriri, RF-DETR aniqlash, noaniq navbati, ko'r audit
 - [ ] **Phase 6: Billing va kassir** - O'zgarmas kunlik patta, dalil bog'lash, qarz, ≤3 bosishli kassir, smena hisobi
@@ -221,7 +221,34 @@ Plans:
   7. **Butun yuqoridagi oqim real uskunasiz, simulyatsiya qilingan Hikvision NVR ustida uchidan-uchiga ishlaydi va CI'da o'lchanadi** — real qurilmaga o'tish sozlama o'zgarishi bo'ladi, kod o'zgarishi emas
   8. **WR-02 (2-fazadan eskalatsiya, YUQORI ustuvorlik):** `market_delete_draft()` o'n ikki jadval bo'ylab kaskad o'chiradi va uning yagona chegarasi ilova qatlamida — DB darajasida hech narsa uni to'xtatmaydi. Bu fazada u migratsiya bilan DB darajasida cheklanadi (qoralama bo'lmagan bozorni o'chirish imkonsiz bo'lishi test bilan isbotlanadi). 2-fazada tuzatilmadi, chunki `0011` bilan bir oynaga tiqish downgrade'ni ishonchsiz qilardi
 
-**Plans**: TBD
+**Plans**: 11 plans in 10 waves
+Plans:
+**Wave 1** *(Wave 0 darvozalari — birinchi migratsiyadan OLDIN, yolg'iz)*
+
+- [ ] 03-01-PLAN.md — `03-PATTERNS.md` §5 ning yetti bandi: httpx prod'ga, `CAMERA_MANAGE`, markerlar, kaskad darvozasi, tez teskari aloqa yo'li (W1)
+
+**Wave 2** *(parallel — fayllar kesishmaydi)*
+
+- [ ] 03-02-PLAN.md — Hikvision NVR simulyatori: RFC 7616 server tomoni, real dump fixture'lari, `--profile sim`, sizib ketmaslik darvozasi (W2)
+- [ ] 03-03-PLAN.md — To'rt tenant jadvali, `0012_nvr_domain`, `0013_market_delete_guard` (WR-02) va NVR domenining meta-invariantlari (W2)
+
+**Wave 3–6** *(backend zanjiri — ketma-ket)*
+
+- [ ] 03-04-PLAN.md — Fernet sirlari va rotatsiya, RTSP URL fabrikasi, xususiy-tarmoq validatsiyasi, idempotent upsert (W3)
+- [ ] 03-05-PLAN.md — ISAPI klienti: xato taksonomiyasi, namespace-agnostik parser, Digest, teskari retry siyosati, kashfiyot orkestratsiyasi (W4)
+- [ ] 03-06-PLAN.md — taskiq navbati, kashfiyot jobi (tenant konteksti) va NVR API: test-connection, 202 + poll (W5)
+- [ ] 03-07-PLAN.md — Kamera API, jonli ko'rish tokeni va `auth_request`, go2rtc allow-listi, nginx bloklari, WireGuard split-tunnel (W6)
+
+**Wave 7–9** *(frontend)*
+
+- [ ] 03-08-PLAN.md — Frontend kontrakti: navigatsiya, ~95 kalit uch tilda, zod/query qatlami, G-1…G-7 darvozalari, vendored pleyer (W7)
+- [ ] 03-09-PLAN.md — `/cameras` sahifasi, NVR formasi va kartasi, xato bloki (sabab + tuzatish), auth qulfi (W8)
+- [ ] 03-10-PLAN.md — Kashfiyot paneli va uch hisoblagich, kameralar ro'yxati, arxivlash, jonli ko'rish dialogi (W9)
+
+**Wave 10**
+
+- [ ] 03-11-PLAN.md — Sakkizala mezonning yagona darvozasi, bloklanmaydigan `hardware` to'plami, runbook va validatsiya imzosi (W10)
+
 **UI hint**: yes
 **Research flag**: yes — `/gsd-plan-phase 3 --research-phase 3`. Tadqiqot **simulyator-birinchi** yondashuvda o'tkaziladi: Hikvision ISAPI kashfiyot endpointlari (`/ISAPI/System/deviceInfo`, `/ISAPI/ContentMgmt/InputProxy/channels`, `/ISAPI/System/Video/inputs/channels`), kanal raqamlash qoidasi (`{ch}01` asosiy / `{ch}02` sub), Digest autentifikatsiyasining soat farqiga sezgirligi, firmware'ning `digest/basic` talabi, NVR'ning bir vaqtdagi masofaviy sessiya limiti (odatda 6–16) va CGNAT ostidagi WireGuard topologiyasi. Bularning har biri simulyatorda modellashtiriladi, real qurilmada esa tasdiqlanadi.
 **Note**: CGNAT holati mahsulot muammosi emas — bozor tomonida oldindan sozlangan WireGuard qurilmasi (mini-PC yoki OpenWrt router) `PersistentKeepalive` bilan o'zi uyga qo'ng'iroq qiladi. Admin uni faqat rozetkaga ulaydi.
@@ -360,7 +387,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 0. Dala treki va tashqi bog'liqliklar | N/A | Not started | - |
 | 1. Poydevor va tenant xavfsizligi | 0/10 | Planned | - |
 | 2. Bozor domeni va ustasi | 0/17 | Planned | - |
-| 3. Kamera va tarmoq ulanishi | 0/TBD | Not started | - |
+| 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 0/11 | Planned | - |
 | 4. Snapshot pipeline | 0/TBD | Not started | - |
 | 5. Kamera zonalari, CV va HITL | 0/TBD | Not started | - |
 | 6. Billing va kassir | 0/TBD | Not started | - |
