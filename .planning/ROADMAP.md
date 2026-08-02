@@ -219,6 +219,7 @@ Plans:
   5. Server NVR'ga faqat WireGuard tunnel orqali kiradi; tunnel o'chirilsa ulanish uziladi va NVR internetdan to'g'ridan-to'g'ri ochiq emas
   6. Direktor avtorizatsiyadan keyin panelda jonli kamera tasvirini ko'radi; avtorizatsiyasiz to'g'ridan-to'g'ri havola ishlamaydi
   7. **Butun yuqoridagi oqim real uskunasiz, simulyatsiya qilingan Hikvision NVR ustida uchidan-uchiga ishlaydi va CI'da o'lchanadi** — real qurilmaga o'tish sozlama o'zgarishi bo'ladi, kod o'zgarishi emas
+  8. **WR-02 (2-fazadan eskalatsiya, YUQORI ustuvorlik):** `market_delete_draft()` o'n ikki jadval bo'ylab kaskad o'chiradi va uning yagona chegarasi ilova qatlamida — DB darajasida hech narsa uni to'xtatmaydi. Bu fazada u migratsiya bilan DB darajasida cheklanadi (qoralama bo'lmagan bozorni o'chirish imkonsiz bo'lishi test bilan isbotlanadi). 2-fazada tuzatilmadi, chunki `0011` bilan bir oynaga tiqish downgrade'ni ishonchsiz qilardi
 
 **Plans**: TBD
 **UI hint**: yes
