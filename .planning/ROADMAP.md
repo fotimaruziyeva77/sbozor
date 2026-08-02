@@ -189,7 +189,7 @@ Plans:
 
 **Wave 18**
 
-- [ ] 02-22-PLAN.md — Yakuniy regressiya va REQUIREMENTS.md traceability yakunlanishi (W18)
+- [x] 02-22-PLAN.md — Yakuniy regressiya va REQUIREMENTS.md traceability yakunlanishi (W18)
 
 **Wave 19**
 

@@ -307,6 +307,15 @@ Yo'q — tashqi servis sozlamasi, migratsiya yoki deploy qadami talab qilinmaydi
 - **Darvoza holati:** `npm run gate` **yashil** (exit 0, 585 s) — bu reja regressiya qilmadi va qila olmasdi (birorta kod fayliga tegmadi).
 - **Ochiq qarz (bu rejaniki emas, ko'rinadigan bo'lsin uchun):** to'lqin darajasidagi kechikish byudjeti hamon buzilgan; `GET /api/v1/users` hamon o'qish auditisiz (02-19 flagi); `02-VALIDATION.md` ning to'rtala Manual-Only bandi hamon ochiq (`02-23`).
 
+## Self-Check: PASSED
+
+- Da'vo qilingan uchala fayl ham diskda mavjud: `scripts/check-requirements-sync.mjs`, `.planning/REQUIREMENTS.md`, `.planning/phases/02-bozor-domeni-va-yangi-bozor-ustasi/02-22-SUMMARY.md`
+- Ikkala commit ham git tarixida: `a425ece` (task), `9b7a1b0` (summary)
+- Sabotajlardan keyin fayl to'liq tiklandi — `node scripts/check-requirements-sync.mjs` qayta **exit 0**
+- Commit'larda fayl o'chirilishi **yo'q** (`git diff --diff-filter=D` bo'sh)
+- Referens qilingan 13 ta yopish commit'i (`6468af4`…`4693b40`) `git cat-file -e` bilan mavjudligi tasdiqlandi
+- Repo ildizidagi uchta kuzatilmagan fayl (`*.docx`, `SBOZOR-MVP-texnik-topshiriq.md`) TEGILMADI — ular bu ijrodan oldin ham bor edi
+
 ---
 *Phase: 02-bozor-domeni-va-yangi-bozor-ustasi*
 *Completed: 2026-08-02*
