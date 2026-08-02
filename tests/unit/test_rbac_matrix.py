@@ -167,6 +167,123 @@ def test_cashier_and_inspector_have_no_market_data_view() -> None:
         )
 
 
+# --------------------------------------------------------------------------
+# 3-FAZA: kamera huquqlari (D-15, W0-2/W0-4, T-03-02/T-03-03)
+# --------------------------------------------------------------------------
+
+
+def test_platform_admin_can_manage_cameras() -> None:
+    """CAM-08: platforma admini NVR ulaydi VA topilgan kameralarni ko'radi.
+
+    =========================================================================
+    BU 2-FAZADAGI Pitfall 6 NING AYNAN TAKRORI.
+
+    2026-08-01 self-service direktivasi bo'yicha bozorni ulaydigan odam —
+    aynan PLATFORMA ADMINI: "admin faqat NVR manzili va login/parolini
+    kiritadi" (D-01). 3-fazagacha `PLATFORM_ADMIN` da `CAMERA_VIEW` YO'Q
+    edi va `CAMERA_MANAGE` umuman MAVJUD EMAS edi (o'lchandi:
+    `rbac.py:112-117, 130-143`).
+
+    Ya'ni u NVR'ni ulaganidan keyin usta oxirida BO'SH EKRAN ko'rardi va
+    sabab endpoint kodida KO'RINMASDI — `require_permission(CAMERA_VIEW)`
+    satri butunlay to'g'ri ko'rinadi, rad etish esa matritsada sodir
+    bo'ladi.
+
+    `permissions_for()` orqali tekshiriladi, `ROLE_PERMISSIONS` dan
+    to'g'ridan-to'g'ri emas: endpoint aynan shu funksiyaning natijasini
+    ko'radi.
+    =========================================================================
+    """
+    granted = permissions_for(["platform_admin"])
+
+    required = {
+        Permission.CAMERA_MANAGE,  # NVR qo'shish + kashfiyotni ishga tushirish
+        Permission.CAMERA_VIEW,  # topilgan kameralar ro'yxati va jonli ko'rish
+    }
+    missing = required - granted
+    assert not missing, (
+        f"CAM-08 bajarilmaydi: platforma adminida {sorted(missing)} yo'q — "
+        "u o'zi ulagan NVR'ning kameralarini ko'ra olmaydi va sabab endpoint "
+        "kodida ko'rinmaydi (Pitfall 6 ning takrori)"
+    )
+
+
+def test_market_admin_can_manage_cameras() -> None:
+    """Bozor admini ham o'z bozorining NVR'ini boshqaradi (W0-4).
+
+    `CAMERA_VIEW` unda 2-fazadan beri bor edi; yetishmagani `CAMERA_MANAGE`.
+    Ikkalasi birga tekshiriladi, chunki faqat ko'rish huquqi bilan u
+    kamerani qayta nomlay ham, arxivlay ham olmasdi.
+    """
+    granted = permissions_for(["market_admin"])
+
+    assert Permission.CAMERA_MANAGE in granted, (
+        "bozor admini o'z bozorining NVR'ini sozlay olmaydi — u kamera "
+        "nomini ham o'zgartira olmasdi"
+    )
+    assert Permission.CAMERA_VIEW in granted
+
+
+def test_director_cannot_manage_cameras() -> None:
+    """D-07 CHEGARASI: direktor kameralarni KO'RADI, NVR'ga TEGMAYDI.
+
+    Bu test kengaytmaning chegarasini qulflaydi. `CAMERA_VIEW` va
+    `CAMERA_MANAGE` ni bitta huquqqa birlashtirish juda oson yo'l bo'lardi
+    ("direktor baribir kameralarni ko'ryapti-ku"), lekin unda "ko'rsin"
+    so'rovi jimgina "NVR PAROLINI YANGILAY OLSIN" ga aylanardi —
+    `rbac.py:68-71` dagi mulohazaning aynan o'zi.
+
+    Ikkala tomon ham BITTA testda: faqat pozitiv yarmini nusxalab qo'yish
+    mumkin emas.
+    """
+    director = permissions_for(["director"])
+
+    assert Permission.CAMERA_VIEW in director, (
+        "direktor kameralarni ko'ra olmaydi — bandlik hisobotining rasm-dalili "
+        "unga yopiq bo'lardi"
+    )
+    assert Permission.CAMERA_MANAGE not in director, (
+        "D-07 buzildi: direktorga `CAMERA_MANAGE` berilgan — o'qish roli endi "
+        "NVR hisob ma'lumotlarini yangilay oladi"
+    )
+
+
+def test_cashier_and_inspector_have_no_camera_access() -> None:
+    """Kassir ham, nazoratchi ham kamera yuzasini UMUMAN ko'rmaydi.
+
+    Nazoratchi 5-fazada bandlik qarorini tasdiqlaydi va o'shanda unga
+    ZONA KESIMIDAGI rasm ko'rsatiladi — lekin bu kamera ro'yxati yoki
+    jonli oqim EMAS. Chegara hozirdan qulflanadi: 5-fazada u ataylab
+    qayta ko'riladi va o'shanda bu test qizarib, o'zgarish KO'RINADIGAN
+    qaror bo'ladi.
+    """
+    for role in ("cashier", "inspector"):
+        granted = permissions_for([role])
+        leaked = {Permission.CAMERA_VIEW, Permission.CAMERA_MANAGE} & granted
+        assert not leaked, (
+            f"`{role}` roliga {sorted(leaked)} berilgan — 3-fazada unga kamera "
+            "yuzasi ochilmasligi kerak edi"
+        )
+
+
+def test_camera_manage_holders_are_exactly_the_two_admins() -> None:
+    """`CAMERA_MANAGE` AYNAN ikki rolda — ro'yxat teskari yo'nalishda ham qulflangan.
+
+    Yuqoridagi to'rt test "kimda bor / kimda yo'q" ni ROL bo'yicha
+    tekshiradi. Bu esa HUQUQ bo'yicha tekshiradi: yangi rol qo'shilib unga
+    kamera boshqaruvi "zarari yo'q" deb berilsa, yuqoridagilar hammasi
+    yashil qolardi.
+    """
+    holders = {
+        role for role, granted in ROLE_PERMISSIONS.items() if Permission.CAMERA_MANAGE in granted
+    }
+
+    assert holders == {Role.PLATFORM_ADMIN, Role.MARKET_ADMIN}, (
+        f"`CAMERA_MANAGE` quyidagi rollarda: {sorted(str(role) for role in holders)}. "
+        "U AYNAN platforma admini va bozor adminida bo'lishi kerak (D-15/D-07)."
+    )
+
+
 def test_cashier_scope_minimal() -> None:
     """Kassirning huquqlari AYNAN bitta: to'lov qayd etish.
 

@@ -162,6 +162,111 @@ def test_sensitive_keys_cover_nvr_credentials() -> None:
 
 
 # --------------------------------------------------------------------------
+# D-12 (W0-6): NVR parollarining maskalanishi — TASDIQLANADI, taxmin
+# QILINMAYDI. `logging.py` bu rejada O'ZGARTIRILMAYDI.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("key", ["nvr_password", "rtsp_password"])
+def test_nvr_password_is_masked(key: str) -> None:
+    """D-12: NVR va RTSP parollari to'g'ridan-to'g'ri berilganda maskalanadi.
+
+    1-faza bu ikki kalitni `SENSITIVE_KEYS` ga ALLAQACHON qo'shgan
+    (`logging.py:59-61`). 3-fazaning majburiyati — buni TASDIQLASH: "bor
+    bo'lsa kerak" degan taxmin ustiga NVR hisob ma'lumotlarining butun
+    maxfiyligi qurilardi.
+    """
+    result = censor_secrets(None, "info", {"event": "nvr_probe", key: "Sim12345"})
+
+    assert result[key] == CENSORED
+
+
+def test_nvr_password_is_masked_inside_error_detail() -> None:
+    """ICHMA-ICH holat: `nvr_discovery_runs.error_detail` shakli (T-03-04).
+
+    3-fazada kashfiyot xatosi xom javob bilan birga saqlanadi (D-05 —
+    "ehtimol sessiya limitiga yetildi" xabari `error_detail` da xom javobni
+    qoldiradi). O'sha tuzilma log'ga ham, Sentry'ga ham butunligicha
+    uzatiladi, ya'ni faqat YUQORI daraja tekshirilganda parol ochiq
+    ketardi (WR-01 ning aynan takrori, boshqa domenda).
+    """
+    result = censor_secrets(
+        None,
+        "warning",
+        {
+            "event": "nvr_discovery_failed",
+            "error_detail": {
+                "code": "nvr_bad_credentials",
+                "request": {"host": "192.168.1.64", "nvr_password": "Sim12345"},
+            },
+        },
+    )
+
+    assert result["error_detail"] == {
+        "code": "nvr_bad_credentials",
+        "request": {"host": "192.168.1.64", "nvr_password": CENSORED},
+    }
+
+
+def test_nvr_password_never_reaches_the_rendered_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Uchdan-uchi: haqiqiy structlog quvurida ham parol CHIQISH SATRIDA yo'q.
+
+    Protsessorni alohida chaqirish yetarli emas — kafolat protsessorlar
+    TARTIBI ustida turadi: `censor_secrets` `JSONRenderer` dan OLDIN
+    bo'lishi shart, aks holda sir allaqachon satrga aylangan bo'lardi.
+    """
+    configure_logging("info")
+    clear_request_context()
+
+    structlog.get_logger().warning(
+        "nvr_discovery_failed",
+        host="192.168.1.64",
+        error_detail={"request": {"nvr_password": "Sim12345"}},
+    )
+
+    line = capsys.readouterr().out.strip().splitlines()[-1]
+    assert "Sim12345" not in line
+    payload = json.loads(line)
+    assert payload["error_detail"] == {"request": {"nvr_password": CENSORED}}
+    assert payload["host"] == "192.168.1.64"
+
+
+def test_password_inside_a_formatted_message_is_NOT_masked() -> None:
+    """QOLDIQ XAVFNI QULFLAYDI: filtr faqat KALIT nomiga qaraydi (T-03-04).
+
+    =========================================================================
+    BU TEST XATO XULQNI EMAS, FILTRNING CHEGARASINI hujjatlashtiradi.
+
+    `censor_secrets` qiymat ichidan sir "topishga" URINMAYDI — bu
+    yolg'on-musbat va yolg'on-manfiy berardi (`logging.py:97-101`). Ya'ni
+    parol formatlangan matn ichiga qo'shilsa, u filtrdan O'TIB KETADI va
+    stdout'ga hamda Sentry'ga OCHIQ tushadi.
+
+    Amaliy qoida shundan kelib chiqadi va u 03-05 ning ISAPI klientiga
+    to'g'ridan-to'g'ri tegishli:
+
+        TO'G'RI:  log.warning("nvr_probe", nvr_password=pwd)
+        XATO:     log.warning(f"nvr_probe failed for {user}:{pwd}@{host}")
+
+    Test AYNAN shu farqni o'lchaydi. U qizarsa — demak filtr qiymat
+    skanerlashga o'tgan va yuqoridagi qoida endi boshqacha; bu ATAYIN
+    qilingan o'zgarish bo'lishi va shu yerda qayd etilishi kerak.
+    =========================================================================
+    """
+    result = censor_secrets(
+        None, "warning", {"event": "nvr_probe failed for admin:Sim12345@192.168.1.64"}
+    )
+
+    assert "Sim12345" in result["event"], (
+        "filtr endi qiymat ichini ham skanerlayapti — bu yaxshi yangilik "
+        "bo'lishi mumkin, lekin u ATAYIN qilingan o'zgarish bo'lishi va "
+        "`logging.py` docstringida qayd etilishi kerak"
+    )
+
+
+# --------------------------------------------------------------------------
 # Uchdan-uchi: JSON chiqish + bog'langan kontekst
 # --------------------------------------------------------------------------
 
