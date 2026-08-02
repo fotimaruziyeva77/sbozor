@@ -263,3 +263,9 @@ Yo'q. Bu reja mahsulot kodiga umuman tegmadi (faqat test, skript va hujjat), mig
 ---
 *Phase: 02-bozor-domeni-va-yangi-bozor-ustasi*
 *Completed: 2026-08-03*
+
+## Self-Check: PASSED
+
+Barcha e'lon qilingan fayllar diskda mavjud (8/8) va barcha commit hash'lari
+git tarixida topildi (5/5): `8c38d12`, `029b1fd`, `fd80e67`, `2401448`,
+`3761cd6`.
