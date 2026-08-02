@@ -23,6 +23,7 @@ updated: 2026-08-03
 | **Config file** | `pyproject.toml` (`[tool.pytest.ini_options]`) · `frontend/vitest.config.ts` |
 | **Quick run command** | `npm run gate:fast` (`03-01` da yaratiladi) |
 | **Full suite command** | `npm run gate` (`test:sim` bilan — `03-02` da zanjirga qo'shiladi) |
+| **Slow lane** | `npm run test:sim:slow` (`-m "sim and slow"`) — D-09 ning 25 kanalli stsenariysi; `gate` dan **ataylab tashqarida**, faza yopilishidan oldin bir marta bajariladi |
 | **Estimated runtime** | ~470–590 s to'liq (2-fazada o'lchangan: 464 s / 571 s / 585 s); `--profile sim` ikkita konteyner qo'shadi → **`03-01` da qayta o'lchanadi** |
 
 **Yangi infratuzilma (bu fazada tug'iladi):**
@@ -32,7 +33,7 @@ updated: 2026-08-03
 | `--profile sim` (Hikvision NVR simulyatori) | CAM-09 — real uskunasiz uchidan-uchiga isbot | **03-02** |
 | `taskiq` worker konteyneri | D-06 — loyihaning birinchi fon job'i | paketlar **03-01**, konteyner **03-06** |
 | ISAPI fixture'lari (`DS-7616NI-K2`, `DS-7732NI-M4`) | D-04 — **real yozib olingan dumplar**, o'ylab topilgan XML emas | **03-02** |
-| `sim` va `hardware` pytest markerlari | `--strict-markers` ostida majburiy | **03-01** |
+| `sim`, `slow` va `hardware` pytest markerlari | `--strict-markers` ostida majburiy; `slow` — D-09 ning to'g'ridan-to'g'ri talabi | **03-01** |
 | `gate:fast` tez yo'li | Task darajasidagi teskari aloqa ≤180 s | **03-01** |
 
 ---
@@ -71,12 +72,12 @@ updated: 2026-08-03
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| T03-01-1 | 03-01 | 1 | CAM-08, CAM-09 | T-03-01, T-03-06, T-03-SC | Prod image ISAPI klientini import qila oladi; `redis` pini pasaymaydi | unit | `pytest tests/unit/test_runtime_deps.py -q` | ❌ yaratiladi | ⬜ pending |
+| T03-01-1 | 03-01 | 1 | CAM-08, CAM-09 | T-03-01, T-03-06, T-03-SC | Prod image ISAPI klientini import qila oladi; `redis` pini pasaymaydi; `sim`/`slow`/`hardware` markerlari e'lon qilingan (D-09) | unit | `pytest tests/unit/test_runtime_deps.py -q` | ❌ yaratiladi | ⬜ pending |
 | T03-01-2 | 03-01 | 1 | CAM-01, CAM-03 | T-03-02, T-03-03, T-03-04 | Platforma admini kamera ko'radi va boshqaradi; direktor faqat ko'radi; NVR paroli maskalanadi | unit | `pytest tests/unit/test_rbac_matrix.py tests/unit/test_logging.py -q` | ⚠ mavjud (kengaytiriladi) | ⬜ pending |
 | T03-01-3 | 03-01 | 1 | CAM-08 | T-03-05, T-03-18 | Yangi tenant jadvali kaskaddan tushib qolsa CI qizaradi | integration | `pytest tests/integration/test_market_delete_guard.py -q` | ❌ yaratiladi | ⬜ pending |
 | T03-02-1 | 03-02 | 2 | CAM-09 | T-03-09 | Sim haqiqiy RFC 7616 `response` ni hisoblab tekshiradi; noto'g'ri parol o'tmaydi | lint+type | `ruff check services/nvr-sim && mypy services/nvr-sim` | ❌ yaratiladi | ⬜ pending |
-| T03-02-2 | 03-02 | 2 | CAM-09 | T-03-11 | Fixture'lar real dumpdan; namespace va manba izohi mavjud | unit | `pytest tests/unit/test_sim_fixtures.py -q` | ❌ yaratiladi | ⬜ pending |
-| T03-02-3 | 03-02 | 2 | CAM-09 | T-03-07, T-03-08, T-03-10, T-03-12 | Sim prodga chiqmaydi; ilova kodida sim tarmoqlanishi yo'q; CI'da skip emas | unit + integration (sim) | `pytest tests/unit/test_no_sim_branching.py -q` va `npm run test:sim` | ❌ yaratiladi | ⬜ pending |
+| T03-02-2 | 03-02 | 2 | CAM-09 | T-03-11, T-03-31 | Fixture'lar real dumpdan; namespace va manba izohi mavjud; **sessiya limiti D-05 ning ikkala shaklida** (`reject` / `silent`) modellashtirilgan | unit | `pytest tests/unit/test_sim_fixtures.py -q` + `grep -n stream_claims services/nvr-sim/sim/isapi.py` | ❌ yaratiladi | ⬜ pending |
+| T03-02-3 | 03-02 | 2 | CAM-09 | T-03-07, T-03-08, T-03-10, T-03-12 | Sim prodga chiqmaydi; ilova kodida sim tarmoqlanishi yo'q; CI'da skip emas; sekin lenta (`test:sim:slow`) standart zanjirdan ajratilgan | unit + integration (sim) | `pytest tests/unit/test_no_sim_branching.py -q` va `npm run test:sim` | ❌ yaratiladi | ⬜ pending |
 | T03-03-1 | 03-03 | 2 | CAM-01, CAM-08 | T-03-13, T-03-14 | `rtsp_url` ustuni yo'q; `nvr_credentials` auditdan tashqarida; reyestrlar to'liq | type + import | `ruff check . && mypy .` + model import assert'lari | ❌ yaratiladi | ⬜ pending |
 | T03-03-2 | 03-03 | 2 | CAM-01, CAM-08 | T-03-14, T-03-16, T-03-19 | To'rt jadval RLS ENABLE+FORCE va policy bilan; qisman UNIQUE indekslar | migration + tenancy | `alembic upgrade head` + `npm run test:tenancy` | ❌ yaratiladi | ⬜ pending |
 | T03-03-3 | 03-03 | 2 | CAM-08 | T-03-15, T-03-17, T-03-18 | Faol bozorni DB darajasida o'chirib bo'lmaydi; kanal noyobligi 23505 beradi | integration + tenancy | `pytest tests/integration/test_market_delete_guard.py tests/tenancy/test_nvr_domain_meta.py -q` | ⚠ qisman mavjud | ⬜ pending |
@@ -84,8 +85,8 @@ updated: 2026-08-03
 | T03-04-2 | 03-04 | 3 | CAM-02, CAM-08 | T-03-23, T-03-24, T-03-25 | Ommaviy IP rad etiladi; hostname qabul qilinadi; URL parol qabul qilmaydi | unit | `pytest tests/unit/test_rtsp_url.py tests/unit/test_nvr_host_validation.py -q` | ❌ yaratiladi | ⬜ pending |
 | T03-04-3 | 03-04 | 3 | CAM-08 | T-03-26, T-03-27, T-03-28 | Upsert idempotent; `DELETE` yo'q; `error_detail` maskalanadi | integration | `pytest tests/integration/test_nvr_repo.py -q` | ❌ yaratiladi | ⬜ pending |
 | T03-05-1 | 03-05 | 4 | CAM-08 | T-03-30, T-03-32, T-03-34 | Parser namespace bilan ishlaydi va jimgina bo'sh natija bermaydi; `detail` allowlist ostida | unit | `pytest tests/unit/test_isapi_parser.py tests/unit/test_isapi_errors.py -q` | ❌ yaratiladi | ⬜ pending |
-| T03-05-2 | 03-05 | 4 | CAM-08 | T-03-29, T-03-31, T-03-33, T-03-35, T-03-36 | `401` qayta urinilmaydi (`attempts == 1`); drift `401` dan oldin (`attempts == 0`) | integration (sim) | `npm run test:sim` (`test_nvr_errors.py`) | ❌ yaratiladi | ⬜ pending |
-| T03-05-3 | 03-05 | 4 | CAM-08 | T-03-26, T-03-27 | Kashfiyot idempotent; yo'qolgan kanal `offline`; RTSP porti kashf etiladi | integration (sim) | `npm run test:sim` (`test_nvr_discovery.py`) | ❌ yaratiladi | ⬜ pending |
+| T03-05-2 | 03-05 | 4 | CAM-08 | T-03-29, T-03-31, T-03-32, T-03-33, T-03-35, T-03-36 | `401` qayta urinilmaydi (`attempts == 1`); drift `401` dan oldin (`attempts == 0`); **`nvr_stream_limit` ikkala stsenariyda** va **`nvr_tls_untrusted` transport darajasida** o'lchanadi — o'n ikkala koddan o'n bittasi shu faylda | integration (sim) | `npm run test:sim` (`test_nvr_errors.py`) | ❌ yaratiladi | ⬜ pending |
+| T03-05-3 | 03-05 | 4 | CAM-08 | T-03-26, T-03-27 | Kashfiyot idempotent; yo'qolgan kanal `offline`; RTSP porti kashf etiladi; `channel_offline` (12-kod) shu yerda; **D-09 ning 25 kanalli sekin testi** | integration (sim) + slow | `npm run test:sim` va `npm run test:sim:slow` (`test_nvr_discovery.py`) | ❌ yaratiladi | ⬜ pending |
 | T03-06-1 | 03-06 | 5 | CAM-08 | T-03-38, T-03-42 | Job tenant kontekstini o'zi o'rnatadi; navbat kutubxonasi faqat `worker.py` da | lint+type+grep | `ruff check . && mypy .` + `grep -c taskiq app/jobs/discovery.py` = 0 | ❌ yaratiladi | ⬜ pending |
 | T03-06-2 | 03-06 | 5 | CAM-01, CAM-08 | T-03-37, T-03-39, T-03-44 | Javob modelida parol yo'q; `market_id` tanadan olinmaydi; `test-connection` rate-limit ostida | tenancy + type | `pytest tests/tenancy/test_route_coverage.py -q` + model assert'lari | ❌ yaratiladi | ⬜ pending |
 | T03-06-3 | 03-06 | 5 | CAM-01, CAM-08 | T-03-37, T-03-38, T-03-40, T-03-41, T-03-43 | 202 → poll → succeeded zanjiri; 409 + `run_id`; cross-tenant 404 | integration (sim) | `npm run test:sim` (`test_nvr_discovery_job.py`) + `pytest tests/integration/test_nvr_api.py -q` | ❌ yaratiladi | ⬜ pending |
@@ -94,7 +95,7 @@ updated: 2026-08-03
 | T03-07-3 | 03-07 | 6 | CAM-02, CAM-03 | T-03-46, T-03-49, T-03-51, T-03-52 | `AllowedIPs` da `0.0.0.0/0` yo'q; jonli ko'rish auditda; 403 jurnalga yozmaydi | unit + integration | `pytest tests/unit/test_wireguard_config.py tests/integration/test_live_view.py -q` | ❌ yaratiladi | ⬜ pending |
 | T03-08-1 | 03-08 | 7 | CAM-01, CAM-08 | T-03-61 | Kirill hosilasi defektsiz; akronim va `ts` birikmasi qulflangan | node:test + i18n | `npm --prefix frontend run i18n:check && node --test frontend/scripts/gen-cyrillic.test.mjs` | ⚠ mavjud (kengaytiriladi) | ⬜ pending |
 | T03-08-2 | 03-08 | 7 | CAM-01, CAM-03 | T-03-57, T-03-58, T-03-60 | Kesh kalitlari `market_id` bilan doiralangan; parol keshga tushmaydi; poll chegaralangan | typecheck + vitest | `npm --prefix frontend run typecheck && npm --prefix frontend test` | ❌ yaratiladi | ⬜ pending |
-| T03-08-3 | 03-08 | 7 | CAM-01, CAM-03 | T-03-55, T-03-56, T-03-61, T-03-62 | G-1…G-7 darvozalari; vendored pleyer SHA-256 bilan qulflangan | node:test | `node --test frontend/scripts/{error-codes,nvr-copy,vendor-integrity}.test.mjs` | ❌ yaratiladi (2 yangi) | ⬜ pending |
+| T03-08-3 | 03-08 | 7 | CAM-01, CAM-03 | T-03-55, T-03-56, T-03-61, T-03-62 | G-1…G-7 darvozalari; vendored pleyer SHA-256 bilan qulflangan — **qat'iy talab**, ikkita ekvivalent olish yo'li (git tegi yoki `alexxit/go2rtc:1.9.14` image'idan `docker cp`) | node:test | `node --test frontend/scripts/{error-codes,nvr-copy,vendor-integrity}.test.mjs` | ❌ yaratiladi (2 yangi) | ⬜ pending |
 | T03-09-1 | 03-09 | 8 | CAM-01, CAM-08 | T-03-68 | Sahifa huquq bilan darvozalangan; bitta birlamchi tugma; `?run=` tiklanadi | typecheck + build | `npm --prefix frontend run typecheck && npm --prefix frontend run build` | ❌ yaratiladi | ⬜ pending |
 | T03-09-2 | 03-09 | 8 | CAM-01 | T-03-63, T-03-65, T-03-67 | Manzil ajratiladi; parol keshga tushmaydi; auth qulfi faqat rekvizit o'zgarganda ochiladi | vitest | `npm --prefix frontend test -- nvr-form` | ❌ yaratiladi | ⬜ pending |
 | T03-09-3 | 03-09 | 8 | CAM-01, CAM-08 | T-03-63, T-03-64, T-03-66 | Sabab va tuzatish teng og'irlikda; qulflaydigan kodda retry yo'q; `raw` matn sifatida | vitest | `npm --prefix frontend test -- nvr-error-block` | ❌ yaratiladi | ⬜ pending |
@@ -103,11 +104,20 @@ updated: 2026-08-03
 | T03-10-3 | 03-10 | 9 | CAM-03 | T-03-69, T-03-70, T-03-71, T-03-72 | Oqim faqat aniq bosishdan keyin; 5 daqiqada tugaydi; `stream_name` DOM'da yo'q | vitest | `npm --prefix frontend test -- live-view-dialog` | ❌ yaratiladi | ⬜ pending |
 | T03-11-1 | 03-11 | 10 | CAM-01, CAM-02, CAM-03, CAM-08, CAM-09 | T-03-76, T-03-77 | Sakkizala mezon bitta zanjirda; SC#1 da `rtsp://` literali yo'q | integration (sim) | `npm run test:sim` (`test_phase3_criteria.py`) | ❌ yaratiladi | ⬜ pending |
 | T03-11-2 | 03-11 | 10 | CAM-02, CAM-08 | T-03-81 | `hardware` markeri standart zanjirdan tashqarida; runbookda SSH qadami yo'q | collect-only + shell | `pytest -m hardware -q --collect-only && bash -n ops/scripts/verify-real-nvr.sh` | ❌ yaratiladi | ⬜ pending |
-| T03-11-3 | 03-11 | 10 | CAM-01, CAM-02, CAM-03, CAM-08, CAM-09 | T-03-78, T-03-79, T-03-80 | `nyquist_compliant` hisoblanadi; talablar dalil bilan belgilanadi | script | `npm run validation:check && npm run requirements:check` | ⚠ mavjud (to'ldiriladi) | ⬜ pending |
+| T03-11-3 | 03-11 | 10 | CAM-01, CAM-02, CAM-03, CAM-08, CAM-09 | T-03-78, T-03-79, T-03-80 | `nyquist_compliant` hisoblanadi; talablar dalil bilan belgilanadi; `REQUIREMENTS.md` «Faza kesimida» jadvalidagi eskirgan faza nomi va soni **qayta hisoblanadi** | script | `npm run validation:check && npm run requirements:check` | ⚠ mavjud (to'ldiriladi) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
 **Namuna uzluksizligi:** 33 taskning **hammasida** `<automated>` verify bor — ketma-ket uchta avtomatik verifysiz task holati **yo'q**.
+
+**Xato kodlarining qamrovi (SC#3).** `NVR_ERROR_CODES` ning **o'n ikkitasi ham** funksional test bilan qoplangan va bu mexanik tekshiriladi (03-05 T2 ning qabul mezoni har kodni ikki test faylida nomma-nom izlaydi):
+
+| Kod | Qayerda o'lchanadi |
+|---|---|
+| `nvr_bad_credentials`, `nvr_account_locked`, `nvr_user_no_permission`, `nvr_clock_drift`, `nvr_digest_stale`, `nvr_auth_mode_basic_only`, `nvr_unreachable`, `nvr_isapi_unavailable`, `device_not_supported` | `test_nvr_errors.py` — sim rejimi bilan (9 ta) |
+| `nvr_stream_limit` | `test_nvr_errors.py::test_stream_limit_produces_actionable_error` — D-05 ning **ikkala** stsenariysi (`reject` / `silent`) |
+| `nvr_tls_untrusted` | `test_nvr_errors.py::test_tls_untrusted_is_diagnosed` — transport darajasida (sim rejimi emas; sabab test docstringida) |
+| `channel_offline` | `test_nvr_discovery.py` — `sim_mode("channel_offline", channels=[3,7])` |
 
 ---
 
@@ -153,5 +163,7 @@ updated: 2026-08-03
 - [ ] Teskari aloqa kechikishi o'lchangan va chegara asoslangan (2-fazadan meros qolgan 225 s / 180 s bandi hal qilingan)
 - [ ] `nyquist_compliant: true` skript bilan **hisoblangan**, qo'lda yozilmagan
 - [ ] Per-Task Map ning barcha 33 qatori holat oldi
+- [ ] `NVR_ERROR_CODES` ning o'n ikkitasi ham funksional test bilan qoplangan (yuqoridagi jadval)
+- [ ] D-09 ning 25 kanalli sekin testi bir marta bajarilgan (`npm run test:sim:slow`)
 
 **Approval:** pending

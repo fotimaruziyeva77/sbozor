@@ -1724,9 +1724,13 @@ def test_real_nvr_channel_enumeration(real_nvr_url): ...
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 > **Har biri uchun taklif qilingan standart qiymat bor — rejalashtirish hech qachon javob kutib to'xtamaydi.**
+>
+> ✅ **Yettalasi ham 2026-08-03 da `03-CONTEXT.md` da hal qilindi** — har biri taklif qilingan standart qiymatda qulflandi:
+> OQ-1 → **D-04** · OQ-2 → **D-05** · OQ-3 → **D-06** · OQ-4 → **D-07** · OQ-5 → **D-08** · OQ-6 → **D-09** · OQ-7 → **D-10**.
+> Quyidagi bandlar **tarixiy asoslash** sifatida saqlanadi: ular qaror qanday qabul qilinganini va qaysi muqobil rad etilganini ko'rsatadi.
 
 ### OQ-1 — Karmana NVR'i haqiqatan Hikvision-mi va model qaysi?
 
