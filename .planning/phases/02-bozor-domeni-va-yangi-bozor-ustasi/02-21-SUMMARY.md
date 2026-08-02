@@ -287,3 +287,9 @@ Xostda 5432 band bo'lsa `.env` ga `DB_HOST_PORT=55432` qo'shing. Tashqi servis s
 ---
 *Phase: 02-bozor-domeni-va-yangi-bozor-ustasi*
 *Completed: 2026-08-02*
+
+## Self-Check: PASSED
+
+- Yaratilgan uch fayl ham diskda mavjud (`0011_weekday_choice.py`, `test_import_validator.py`, `market-requisites-form.test.tsx`)
+- To'rt commit ham git tarixida (`1b74a8c`, `cac9b4d`, `4693b40`, `4ba3a7b`)
+- `alembic current` → `0011 (head)` — SUMMARY dagi da'vo bilan mos
