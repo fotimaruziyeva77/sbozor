@@ -239,8 +239,7 @@ def test_director_cannot_manage_cameras() -> None:
     director = permissions_for(["director"])
 
     assert Permission.CAMERA_VIEW in director, (
-        "direktor kameralarni ko'ra olmaydi — bandlik hisobotining rasm-dalili "
-        "unga yopiq bo'lardi"
+        "direktor kameralarni ko'ra olmaydi — bandlik hisobotining rasm-dalili unga yopiq bo'lardi"
     )
     assert Permission.CAMERA_MANAGE not in director, (
         "D-07 buzildi: direktorga `CAMERA_MANAGE` berilgan — o'qish roli endi "

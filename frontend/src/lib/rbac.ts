@@ -44,7 +44,11 @@ export const PERMISSIONS = [
   "report_view",
   "occupancy_review",
   "dispute_decide",
+  // Kamera yuzasi ham O'QISH/YOZISH ga ajratilgan (3-faza, D-15/D-07):
+  // direktor `camera_view` oladi, `camera_manage` esa faqat platforma va
+  // bozor adminida — NVR paroli va kashfiyot o'sha huquq ostida.
   "camera_view",
+  "camera_manage",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -54,6 +58,13 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
   //
   // `stall_manage`/`tariff_manage`/`vendor_manage` — MARKET-01 uchun
   // majburiy: usta rasta, tarif va sotuvchi qadamlarini o'z ichiga oladi.
+  //
+  // `camera_view`/`camera_manage` — CAM-08 uchun majburiy (3-faza): D-01
+  // bo'yicha NVR'ni aynan platforma admini ulaydi. Faqat backendni
+  // yangilash yetarli EMAS va faqat bu faylni yangilash undan ham yomon:
+  // birinchisida tugma ko'rinmaydi (huquq bor), ikkinchisida tugma
+  // ko'rinib turib 403 beradi. Shuning uchun ikkala matritsa BIRGA
+  // o'zgaradi va `scripts/role-gate.test.mjs` ularni solishtiradi.
   platform_admin: [
     "market_view_all",
     "market_manage",
@@ -65,6 +76,8 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "vendor_manage",
     "market_data_view",
     "vendor_view",
+    "camera_view",
+    "camera_manage",
   ],
   // D-07: FAQAT ko'rish + nizo qarori. `*_manage` huquqlarining YO'QLIGI —
   // bu qatorning asosiy mazmuni. 2-fazada qo'shilgan ikkita huquq ham
@@ -89,6 +102,7 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "vendor_view",
     "report_view",
     "camera_view",
+    "camera_manage",
   ],
   cashier: ["payment_create"],
   inspector: ["occupancy_review"],

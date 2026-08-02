@@ -115,6 +115,23 @@ class Permission(StrEnum):
     OCCUPANCY_REVIEW = "occupancy_review"
     DISPUTE_DECIDE = "dispute_decide"
     CAMERA_VIEW = "camera_view"
+    """Kameralar RO'YXATI va jonli ko'rish (3-faza)."""
+    CAMERA_MANAGE = "camera_manage"
+    """NVR va kamera SOZLAMASI (3-faza, D-15).
+
+    Qamrovi: NVR qurilmasini qo'shish va uning parolini yangilash,
+    kashfiyotni ishga tushirish va qayta skanerlash, kamerani qayta
+    nomlash, arxivlash va arxivdan qaytarish (D-10 — qattiq `DELETE`
+    yo'li UMUMAN yaratilmaydi).
+
+    `CAMERA_VIEW` DAN ATAYIN AJRATILGAN. D-07 bo'yicha direktor
+    kameralarni KO'RADI — bandlik hisobotining rasm-dalili unsiz ma'nosiz
+    bo'lardi — lekin NVR sozlamasiga TEGMAYDI. Bitta huquq ikkalasini ham
+    qamrasa, "direktor kameralarni ko'rsin" so'rovi jimgina "direktor NVR
+    PAROLINI YANGILAY OLSIN" ga aylanib ketardi. Bu yuqoridagi
+    `MARKET_DATA_VIEW` / `*_MANAGE` ajratmasining aynan o'zi (68-71
+    qatorlar).
+    """
 
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -127,6 +144,16 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     # sotuvchi qadamlarini o'z ichiga oladi. Ularsiz usta 3-qadamda 403 bilan
     # to'xtardi va sabab endpoint kodida KO'RINMASDI — kod to'g'ri ko'rinib,
     # matritsa jimgina rad etardi (Pitfall 6).
+    #
+    # KAMERA HUQUQLARI 3-FAZADA QO'SHILDI va ular CAM-08 uchun MAJBURIY —
+    # bu YUQORIDAGI XATONING AYNAN TAKRORI edi. 2026-08-01 self-service
+    # direktivasi "admin faqat NVR manzili va login/parolini kiritadi"
+    # deydi (D-01), ya'ni qurilmani ulaydigan odam PLATFORMA ADMINI. Unda
+    # esa `CAMERA_VIEW` YO'Q edi va `CAMERA_MANAGE` umuman MAVJUD EMAS edi
+    # (D-15, o'lchandi 2026-08-03). Natijada u NVR'ni ulab, kashfiyotni
+    # ishga tushirib, oxirida O'ZI TOPGAN kameralarni ko'ra olmasdi —
+    # usta bo'sh ekran bilan tugardi va sabab yana endpoint kodida
+    # KO'RINMASDI.
     Role.PLATFORM_ADMIN: frozenset(
         {
             Permission.MARKET_VIEW_ALL,
@@ -139,6 +166,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.VENDOR_MANAGE,
             Permission.MARKET_DATA_VIEW,
             Permission.VENDOR_VIEW,
+            Permission.CAMERA_VIEW,
+            Permission.CAMERA_MANAGE,
         }
     ),
     # D-07: FAQAT ko'rish + nizo qarori. `*_MANAGE` huquqlarining yo'qligi —
@@ -160,7 +189,10 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         }
     ),
     # Bozor admini o'z bozorining hamma narsasini boshqaradi, LEKIN boshqa
-    # bozorlarni umuman ko'rmaydi (`MARKET_VIEW_ALL` yo'q).
+    # bozorlarni umuman ko'rmaydi (`MARKET_VIEW_ALL` yo'q). Kamera
+    # boshqaruvi 3-fazada qo'shildi: `CAMERA_VIEW` unda allaqachon bor edi,
+    # ya'ni u kameralarni KO'RA olardi, lekin nomini o'zgartira ham,
+    # arxivlay ham olmasdi (W0-4).
     Role.MARKET_ADMIN: frozenset(
         {
             Permission.USER_MANAGE,
@@ -173,6 +205,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.VENDOR_VIEW,
             Permission.REPORT_VIEW,
             Permission.CAMERA_VIEW,
+            Permission.CAMERA_MANAGE,
         }
     ),
     # Kassir — eng tor yuza: u faqat to'lov qayd etadi. Summani tarif
