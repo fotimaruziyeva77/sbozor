@@ -46,7 +46,7 @@ from tenancy.test_cross_tenant import (
 
 pytestmark = pytest.mark.tenancy
 
-MINIMUM_MATRIX_ROUTES = 34
+MINIMUM_MATRIX_ROUTES = 35
 """Matritsada kamida shuncha marshrut bo'lishi shart.
 
 01-07 holatida qamrovda 7 marshrut bor edi (`/users` GET+POST,
@@ -58,9 +58,10 @@ rastalar 6) va chegara 12 ga ko'tarildi. 02-09 yana 8 tasini qo'shdi
 02-11 uchta usta marshrutini qo'shdi (`setup-status`, `activate`,
 `DELETE /markets/{id}`) — amaldagi son 39, chegara 31. 02-12 to'rtta
 import marshrutini qo'shdi (`template`, `stalls`, `vendors`,
-`errors.xlsx`) — amaldagi son 43, chegara 34.
+`errors.xlsx`) — amaldagi son 43, chegara 34. 02-24 esa bittasini
+(`POST /imports/staff`, MARKET-07) — amaldagi son 44, chegara 35.
 
-⚠ Import marshrutlarining IKKITASI `multipart/form-data` va ular
+⚠ Import marshrutlarining UCHTASI `multipart/form-data` va ular
 matritsaga FAQAT `FILE_FILLERS` tufayli haqiqiy yo'ldan tushadi. Filler
 o'chirilsa marshrut ro'yxatda QOLADI (ya'ni bu chegara qizarmaydi),
 lekin so'rov 422 da to'xtab, da'vo sinalmay qolardi — o'sha holatni

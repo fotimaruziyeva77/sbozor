@@ -79,8 +79,10 @@ from typing import TYPE_CHECKING, Annotated, Literal
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
+from sbozor_core.enums import AuditAction
+from sbozor_core.security import hash_password
 from sqlalchemy.exc import IntegrityError
 
 from app.deps import (
@@ -93,14 +95,19 @@ from app.deps import (
 from app.repositories import user_repo
 from app.repositories.import_repo import ImportRepository
 from app.repositories.stall_repo import MarketProfileMissingError, sqlstate_of
+from app.repositories.user_repo import StaffCreateEntry, UserRepository
 from app.schemas import (
     ImportErrorItem,
     ImportErrorReportRequest,
     ImportErrorResponse,
     ImportResultResponse,
+    StaffCredentialItem,
+    StaffImportResponse,
 )
+from app.security.audit import TABLE_USERS, write_app_audit
 from app.security.rbac import Permission
 from app.services import import_validator, xlsx_reader, xlsx_template
+from app.services.staff_accounts import assignable_roles, temporary_password
 from app.services.xlsx_reader import ImportRejected, ReadLimits
 
 if TYPE_CHECKING:
@@ -116,6 +123,27 @@ router = APIRouter(tags=["imports"])
 
 StallManagerDep = Annotated[Principal, Depends(require_permission(Permission.STALL_MANAGE))]
 VendorManagerDep = Annotated[Principal, Depends(require_permission(Permission.VENDOR_MANAGE))]
+UserManagerDep = Annotated[Principal, Depends(require_permission(Permission.USER_MANAGE))]
+
+ImportKind = Literal["stalls", "vendors", "staff"]
+"""`?kind=` va marshrut nomlari uchun YAGONA tip.
+
+`xlsx_template.TEMPLATE_KINDS` bilan qo'lda sinxron saqlanadi va ajralib
+qolgan holatni `test_template_kinds_are_exactly_three` hamda OpenAPI
+marshrutlar darvozasi birgalikda ushlaydi.
+"""
+
+_TEMPLATE_PERMISSIONS: dict[str, Permission] = {
+    "stalls": Permission.STALL_MANAGE,
+    "vendors": Permission.VENDOR_MANAGE,
+    "staff": Permission.USER_MANAGE,
+}
+"""Shablon turi -> uni olish uchun kerak bo'ladigan huquq (D-07).
+
+`staff` -> `USER_MANAGE`: shablon chaqiruvchi BERA OLADIGAN rollar
+ro'yxatini o'z ichiga oladi, ya'ni u hisob yaratish yuzasining bir
+qismi. Direktorda bu huquq YO'Q, ya'ni u shablonni ham ololmaydi.
+"""
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 XLSX_SUFFIX = ".xlsx"
@@ -124,6 +152,7 @@ _VALIDATION_FAILED = "import_validation_failed"
 _UNSUPPORTED = "unsupported_file_type"
 _CONFLICT = "import_conflict"
 _MARKET_INCOMPLETE = "market_incomplete"
+_ROSTER_TOO_LARGE = "staff_roster_too_large"
 
 UNIQUE_VIOLATION = "23505"
 EXCLUSION_VIOLATION = "23P01"
@@ -156,22 +185,22 @@ def _market_id(principal: Principal) -> UUID:
 
 async def require_template_access(
     principal: CurrentPasswordDep,
-    kind: Annotated[Literal["stalls", "vendors"], Query()] = "stalls",
+    kind: Annotated[ImportKind, Query()] = "stalls",
 ) -> Principal:
     """Shablon turi QAYSI huquqni talab qilishini hal qiladi.
 
-    `?kind=stalls` -> `STALL_MANAGE`, `?kind=vendors` -> `VENDOR_MANAGE`.
-    Bitta huquqni ikkalasiga ham qo'yish D-07 ning ajratishini buzardi:
-    hozirgi matritsada ikkala huquq HAM bir xil rollarda (bozor admini,
-    platforma admini), lekin ular ATAYIN alohida tushunchalar va
-    kelajakda ajralishi mumkin. Direktorda ikkalasi ham YO'Q, ya'ni u
-    har ikkala shablonni ham ololmaydi.
+    `?kind=stalls` -> `STALL_MANAGE`, `?kind=vendors` -> `VENDOR_MANAGE`,
+    `?kind=staff` -> `USER_MANAGE`. Bitta huquqni hammasiga qo'yish D-07
+    ning ajratishini buzardi: hozirgi matritsada uchala huquq HAM bir xil
+    rollarda (bozor admini, platforma admini), lekin ular ATAYIN alohida
+    tushunchalar va kelajakda ajralishi mumkin. Direktorda uchalasi ham
+    YO'Q, ya'ni u birorta shablonni ham ololmaydi.
 
     `Literal` tipi noma'lum `kind` ni 422 bilan rad etadi. Autentifikatsiya
     BUNDAN OLDIN hal bo'ladi (`principal` — quyi dependency), ya'ni
     tokensiz so'rov baribir 401 oladi.
     """
-    needed = Permission.STALL_MANAGE if kind == "stalls" else Permission.VENDOR_MANAGE
+    needed = _TEMPLATE_PERMISSIONS[kind]
     if needed not in principal.permissions:
         log.info("permission_denied", required=str(needed), roles=sorted(principal.roles))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
@@ -185,7 +214,7 @@ TemplateAccessDep = Annotated[Principal, Depends(require_template_access)]
 async def download_template(
     principal: TemplateAccessDep,
     session: TenantSessionDep,
-    kind: Annotated[Literal["stalls", "vendors"], Query()] = "stalls",
+    kind: Annotated[ImportKind, Query()] = "stalls",
 ) -> StreamingResponse:
     """Import shablonini yuklab beradi (`STALL_MANAGE` / `VENDOR_MANAGE`).
 
@@ -206,7 +235,12 @@ async def download_template(
     categories = sorted(await repo.category_ids_by_name())
     locale = await _locale_of(session, principal)
 
-    payload = xlsx_template.build_template(kind, locale, zones, categories)
+    # Rol ro'yxati CHAQIRUVCHINING D-04 darajasidan quriladi, `Role`
+    # enum'idan EMAS: bozor admini `director` ni tanlab, keyin
+    # `role_not_allowed` olishi ustaning eng bema'ni yo'li bo'lardi.
+    roles = sorted(str(role) for role in assignable_roles(principal.is_platform_admin))
+
+    payload = xlsx_template.build_template(kind, locale, zones, categories, roles=roles)
     return _xlsx_response(payload, f"sbozor-{kind}-shablon.xlsx")
 
 
@@ -288,6 +322,152 @@ async def import_vendors(
         raise _conflict(exc) from exc
 
     return ImportResultResponse(inserted=inserted, skipped=len(rows) - inserted)
+
+
+@router.post("/staff", response_model=StaffImportResponse)
+async def import_staff(
+    principal: UserManagerDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    response: Response,
+    file: Annotated[UploadFile, File()],
+) -> StaffImportResponse:
+    """Xodimlar rosterini `.xlsx` dan ommaviy hisobga aylantiradi (`USER_MANAGE`).
+
+    Ustunlar (A6): `F.I.Sh., telefon, rol` — POZITSIYA bo'yicha.
+
+    TARTIB MAJBURIY VA U SHU YERDA LITERAL YOZILGAN:
+
+      1. `_read_bounded()` -> `_read()` — 02-12 ning uch darvozasi;
+      2. ROSTER HAJMI (`import_max_staff_rows`) — umumiy qator
+         chegarasidan KEYIN va validatsiyadan OLDIN;
+      3. chaqiruvchining D-04 darajasi (`assignable_roles`);
+      4. joriy bozor a'zolarining telefonlari (D-15 skip lug'ati);
+      5. `validate_staff_rows()` -> bitta xato ham bo'lsa 422, HECH NARSA
+         yozilmaydi;
+      6. har qabul qilingan qator uchun vaqtinchalik parol + Argon2id
+         hash — OCHIQ qiymat FAQAT lokal lug'atda qoladi;
+      7. `create_members()`; band telefonlar qaytsa ular ham 422 ga
+         aylanadi;
+      8. har hisob uchun audit yozuvi;
+      9. importning O'ZI uchun bitta YIG'MA audit yozuvi;
+     10. `Cache-Control: no-store`.
+
+    ⚠ 7-QADAMDAGI 422 D-14 NI BUZMAYDI, GARCHI KOD SHUNDAY KO'RINSA HAM.
+    O'sha paytda `create_members()` allaqachon bir nechta `users` qatorini
+    yozgan bo'ladi — lekin `HTTPException` endpointdan chiqadi,
+    `TenantSessionDep` esa butun ishni orqaga qaytaradi, ya'ni yozilgan
+    hisoblar HAM yo'qoladi. Bu fakt kodni o'qigan odam uchun ravshan
+    emas, shuning uchun u shu yerda literal yozilgan.
+
+    ⚠ OCHIQ PAROL HECH QANDAY JURNALGA UZATILMAYDI: pastdagi `log.info`
+    faqat SANOQLARNI oladi. `censor_secrets` ikkinchi qatlam (kalit
+    `SENSITIVE_KEYS` da va senzura rekursiv); birinchi qatlam esa uni
+    umuman uzatmaslik.
+
+    ⚠ `market_id` HECH QACHON FAYLDAN OLINMAYDI (T-02-54): u faqat
+    `_market_id(principal)` dan keladi va shablonda bunday ustun umuman
+    yo'q.
+    """
+    repo = UserRepository(session, _market_id(principal))
+    rows = _read(await _read_bounded(file, settings), import_validator.STAFF_COLUMNS, settings)
+
+    if len(rows) > settings.import_max_staff_rows:
+        log.warning("staff_roster_too_large", rows=len(rows), limit=settings.import_max_staff_rows)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=_ROSTER_TOO_LARGE,
+        )
+
+    allowed = frozenset(str(role) for role in assignable_roles(principal.is_platform_admin))
+    accepted, issues = import_validator.validate_staff_rows(
+        rows,
+        allowed_roles=allowed,
+        existing_member_phones=await repo.existing_member_phones(),
+    )
+    _reject_if_invalid(issues)
+
+    locale = await _locale_of(session, principal)
+    # Ochiq parollar SHU LUG'ATDA va boshqa hech qayerda: repozitoriyga
+    # faqat hash ketadi (`user_repo` modul docstringi).
+    secrets_by_row = {row.row: temporary_password() for row in accepted}
+    entries = [
+        StaffCreateEntry(
+            row=row.row,
+            phone=row.phone,
+            password_hash=hash_password(secrets_by_row[row.row]),
+            full_name=row.full_name,
+            locale=locale,
+            roles=list(row.roles),
+        )
+        for row in accepted
+    ]
+
+    created, taken = await repo.create_members(entries)
+    _reject_if_invalid(
+        [
+            import_validator.ImportIssue(
+                row=number,
+                code="phone_taken",
+                message=f"{number}-qator: bu telefon platformada allaqachon band",
+            )
+            for number in taken
+        ]
+    )
+
+    for member in created:
+        # `users.py::create_user` dagi bilan AYNAN bir xil shakl: a'zolik
+        # qatorining O'Z auditi `fn_audit_row()` triggeridan avtomatik
+        # keladi, `users` uchun esa trigger YO'Q (`SECURITY DEFINER`).
+        await write_app_audit(
+            session,
+            action=AuditAction.INSERT,
+            table_name=TABLE_USERS,
+            row_id=member.user_id,
+            principal=principal,
+            new={"phone": member.phone, "roles": member.roles, "locale": locale},
+        )
+
+    # ⚠ YIG'MA YOZUV MAJBURIY. Usiz jurnalda 30 ta alohida `insert`
+    # ko'rinardi va "bular BITTA ommaviy amaldan" degan fakt yo'qolardi —
+    # nizoda aynan shu savol so'raladi (T-02-180). `track_changes=False`:
+    # bu yozuvda "nima o'zgardi" degan savolning ma'nosi yo'q, u amalning
+    # O'ZINI tasvirlaydi.
+    await write_app_audit(
+        session,
+        action=AuditAction.INSERT,
+        table_name=TABLE_USERS,
+        row_id=None,
+        principal=principal,
+        new={
+            "import": "staff",
+            "rows": len(rows),
+            "created": len(created),
+            "skipped": len(rows) - len(created),
+            "roles": sorted({role for member in created for role in member.roles}),
+        },
+        track_changes=False,
+    )
+
+    log.info("staff_import_done", created=len(created), skipped=len(rows) - len(created))
+    # Javob o'nlab OCHIQ parolni olib yuradi — u hech qayerda
+    # keshlanmasligi kerak (T-02-176).
+    response.headers["Cache-Control"] = "no-store"
+
+    return StaffImportResponse(
+        inserted=len(created),
+        skipped=len(rows) - len(created),
+        credentials=[
+            StaffCredentialItem(
+                row=member.row,
+                phone=member.phone,
+                full_name=member.full_name,
+                roles=member.roles,
+                temporary_password=secrets_by_row[member.row],
+            )
+            for member in created
+        ],
+    )
 
 
 @router.post("/errors.xlsx")

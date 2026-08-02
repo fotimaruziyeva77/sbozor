@@ -64,6 +64,19 @@ class Settings(BaseSettings):
     import_max_sheets: int = 8
     import_max_zip_entries: int = 200
 
+    # Xodimlar rosteri (02-24, MARKET-07) — `import_max_rows` DAN ALOHIDA
+    # va ATAYIN ancha tor. Ikki mustaqil sabab:
+    #
+    #   1. HAJM: xodimlar ro'yxati o'nlab kishilik (Karmanada ~10–30),
+    #      rastalar ro'yxati esa mingtacha. Bitta chegara ikkalasiga ham
+    #      to'g'ri kelmaydi.
+    #   2. NARX VA YUZA: har qator Argon2id hash'lash talab qiladi (CPU
+    #      bo'yicha ATAYIN qimmat) va har qator platformadagi telefon
+    #      band-emasligini oshkor qiladi (T-02-181). 5000 qatorli fayl
+    #      butun ishchini bloklab, bir so'rovda 5000 raqamni sanab
+    #      chiqish imkonini berardi.
+    import_max_staff_rows: int = 200
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"

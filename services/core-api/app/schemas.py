@@ -76,6 +76,8 @@ __all__ = [
     "SelectMarketRequest",
     "SessionResponse",
     "SetupStatusResponse",
+    "StaffCredentialItem",
+    "StaffImportResponse",
     "StallCategoryRequest",
     "StallCreateRequest",
     "StallDetail",
@@ -509,9 +511,19 @@ MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
         # birlashtirish 422 javobining `errors[]` shartnomasini
         # buzardi (bu yo'lda ro'yxat BO'SH bo'lardi).
         "import_conflict",
+        # --- xodimlar rosteri (02-24, MARKET-07) ---
+        #
+        # `file_too_complex` DAN ATAYIN AJRATILGAN: u faylning TUZILISHI
+        # haqida (varaq/ustun/qator soni, ZIP tuzilishi), bu esa HUJUM
+        # YUZASINING chegarasi — bir so'rovda nechta hisob yaratilishi va
+        # nechta telefonning band-emasligi oshkor bo'lishi mumkinligi
+        # (T-02-181). Ikkalasini birlashtirish adminga "faylni
+        # soddalashtiring" degan foydasiz maslahat berardi, holbuki
+        # yagona to'g'ri harakat — ro'yxatni bo'laklarga bo'lish.
+        "staff_roster_too_large",
     }
 )
-"""2-faza qaytaradigan BARCHA `detail` kodlari — yigirma uchta.
+"""2-faza qaytaradigan BARCHA `detail` kodlari — yigirma to'rtta.
 
 ⚠ JUFTINI YANGILASHNI UNUTMANG: bu ro'yxatning UI ko'zgusi
 `frontend/src/lib/api-types.ts::ERROR_CODES` da yashaydi va u QO'LDA
@@ -1302,6 +1314,46 @@ class ImportErrorResponse(BaseModel):
     detail: str
     errors: list[ImportErrorItem]
     error_counts: dict[str, int]
+
+
+class StaffCredentialItem(BaseModel):
+    """Yaratilgan bitta hisob va uning BIR MARTALIK paroli (D-02, MARKET-07).
+
+    `row` — FAYLDAGI qator raqami: admin javobni o'z faylining yonida
+    o'qiydi va kimning paroli ekanini telefon bilan emas, KO'ZI bilan
+    tekshiradi.
+
+    ⚠ `temporary_password` DB'da faqat Argon2id hash sifatida yashaydi,
+    ya'ni uni qaytadan ko'rsatish IMKONSIZ. Admin uni yo'qotsa yagona
+    yo'l — `POST /users/{id}/reset-password`.
+    """
+
+    row: int
+    phone: str
+    full_name: str | None
+    roles: list[str]
+    temporary_password: str
+
+
+class StaffImportResponse(BaseModel):
+    """`POST /imports/staff` muvaffaqiyatli javobi (MARKET-07).
+
+    ⚠ `ImportResultResponse` DAN MEROS OLMAYDI VA BU ATAYIN.
+
+    `credentials` maydoni bu javobni MAXFIY qiladi (`Cache-Control:
+    no-store`, klientda keshlanmaydi). Meros orqali u bir kun
+    `stalls`/`vendors` javobiga ham oqib o'tishi mumkin edi — o'sha
+    javoblar esa maxfiy emas va ularning yo'li boshqacha qo'riqlanadi.
+    Ikkita maydonni takrorlash bu xavfdan ancha arzon.
+
+    `skipped` — D-15 bo'yicha o'tkazib yuborilgan MAVJUD a'zolar soni.
+    Ular uchun `credentials` da yozuv BO'LMAYDI: parol tiklanmagan,
+    ya'ni ko'rsatadigan qiymat ham yo'q.
+    """
+
+    inserted: int
+    skipped: int
+    credentials: list[StaffCredentialItem]
 
 
 IMPORT_ERROR_REPORT_MAX = 5_000

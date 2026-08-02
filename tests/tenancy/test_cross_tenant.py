@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import io
 from datetime import date, timedelta
+from itertools import count
 from typing import TYPE_CHECKING, Any, NamedTuple
 from uuid import UUID
 
@@ -356,6 +357,37 @@ MATRIX_IMPORT_PHONE = "+998909990002"
 esa `+99890111...` va `+99897...` ni ishlatadi.
 """
 
+_MATRIX_STAFF_PHONES = count(909_990_100)
+"""Xodim rosteri fillerи uchun O'SUVCHI raqam manbai (02-24).
+
+⚠ QATTIQ YOZILGAN RAQAM BU YERDA ISHLAMAYDI VA BU O'LCHANGAN XAVF.
+
+Filler lambda'si HAR SO'ROVDA qayta chaqiriladi (matritsa bitta
+marshrutni bir necha token bilan uradi), sotuvchi importidan farqli
+o'laroq esa `POST /imports/staff` GLOBAL `users` jadvaliga yozadi —
+ya'ni ikkinchi chaqiruv `phone_taken` (422) olardi. 422 esa
+`test_file_routes_actually_execute` ning AYNAN tekshiradigan qiymati,
+ya'ni test "filler yo'q" deb YOLG'ON qizarardi va sabab butunlay
+boshqa joyda ko'rinardi.
+
+`+99890999xxxx` diapazoni barcha seed'lardan (`+99890111…`, `+99897…`,
+`+99893…`) tashqarida.
+"""
+
+
+def _matrix_staff_file() -> bytes:
+    """Matritsa yuboradigan YAROQLI xodim `.xlsx`.
+
+    Rol `cashier` — u D-04 ning IKKALA darajasida ham ruxsat etilgan,
+    ya'ni matritsa qaysi token bilan chaqirsa ham javob `role_not_allowed`
+    bo'lib qolmaydi.
+    """
+    return _write_xlsx(
+        "Xodimlar",
+        ["F.I.Sh.", "telefon", "rol"],
+        ["Matritsa Xodim", f"+998{next(_MATRIX_STAFF_PHONES)}", "cashier"],
+    )
+
 
 def _matrix_stall_file() -> bytes:
     """Matritsa yuboradigan YAROQLI rasta `.xlsx` — A bozorining O'Z lug'ati bilan.
@@ -403,6 +435,9 @@ FILE_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, tuple[str, bytes,
     },
     RouteSpec("POST", "/api/v1/imports/vendors"): lambda _: {
         "file": ("sotuvchilar.xlsx", _matrix_vendor_file(), XLSX_MEDIA_TYPE)
+    },
+    RouteSpec("POST", "/api/v1/imports/staff"): lambda _: {
+        "file": ("xodimlar.xlsx", _matrix_staff_file(), XLSX_MEDIA_TYPE)
     },
 }
 """`multipart/form-data` TALAB QILADIGAN marshrutlar uchun HAQIQIY fayl.

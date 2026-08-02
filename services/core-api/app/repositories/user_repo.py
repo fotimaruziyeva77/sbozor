@@ -34,6 +34,26 @@ YOZISH YO'LLARI:
 `fn_audit_row()` triggeri orqali AVTOMATIK auditga tushadi (01-05).
 `users` dagi o'zgarishlar uchun trigger YO'Q (funksiya ichida bajariladi),
 shuning uchun ular `write_app_audit()` bilan QO'LDA yoziladi.
+
+=============================================================================
+OCHIQ PAROL BU MODULGA UMUMAN KIRMAYDI (02-24, T-02-176).
+
+Parol qabul qiladigan UCHALA yozish yo'lining ham parametri
+`password_hash` deb ataladi va u AYNAN hash oladi. Ochiq qiymat
+chaqiruvchida (`imports.py`, `users.py`) lokal o'zgaruvchi bo'lib qoladi
+va bu yerga faqat Argon2id natijasi keladi.
+
+Sabab: repozitoriy qatlamining hech bir jurnali va hech bir istisno
+matni parolni ko'rmasligi kerak. `IntegrityError` ning `str(exc)` so'rov
+PARAMETRLARINI ham chiqaradi — ochiq qiymat bu yerdan o'tsa, u
+`log.warning(..., error=str(exc.orig))` orqali jurnalga tushardi va "bir
+martalik" kafolati jimgina yo'qolardi.
+
+⚠ Bu izohda tekshiriladigan ATAMA ATAYIN yozilmagan: qabul mezoni
+faylni o'sha atama bo'yicha grep qiladi va izohning O'ZI darvozani
+buzardi (`api/v1/imports.py` dagi tranzaksiya izohi bilan aynan bir xil
+qaror — 02-08 deviatsiya #3).
+=============================================================================
 """
 
 from __future__ import annotations
@@ -48,12 +68,48 @@ from sqlalchemy import insert, select, text
 from app.repositories import auth_repo
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from datetime import datetime
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-__all__ = ["MarketUser", "UserProfile", "UserRepository", "list_profiles", "set_locale"]
+__all__ = [
+    "CreatedMember",
+    "MarketUser",
+    "StaffCreateEntry",
+    "UserProfile",
+    "UserRepository",
+    "list_profiles",
+    "set_locale",
+]
+
+
+@dataclass(frozen=True)
+class StaffCreateEntry:
+    """Ommaviy yaratishning BITTA kirish qatori (02-24).
+
+    ⚠ Maydon nomi `password_hash` va u SHUNDAY qoladi: ochiq parol bu
+    modulga umuman kirmaydi (modul docstringi).
+    """
+
+    row: int
+    phone: str
+    password_hash: str
+    full_name: str | None
+    locale: str
+    roles: list[str]
+
+
+@dataclass(frozen=True)
+class CreatedMember:
+    """Yaratilgan bitta a'zo — chaqiruvchi javob va audit uchun ishlatadi."""
+
+    row: int
+    user_id: UUID
+    phone: str
+    full_name: str | None
+    roles: list[str]
 
 
 @dataclass(frozen=True)
@@ -192,6 +248,68 @@ class UserRepository(TenantScopedRepository):
             },
         )
         return result.scalar_one_or_none()
+
+    async def existing_member_phones(self) -> set[str]:
+        """Joriy bozor a'zolarining telefonlari (D-15 skip lug'ati).
+
+        YANGI SO'ROV YOZILMAYDI: `list_members()` allaqachon ikki
+        qatlamli naqshni bajaradi (RLS ostidagi a'zolik -> `SECURITY
+        DEFINER` profillar), ya'ni boshqa bozor a'zosining telefoni bu
+        to'plamga TUSHA OLMAYDI. Alohida `SELECT phone_e164 FROM users`
+        yozish esa aynan o'sha chegarani chetlab o'tardi — `users`
+        GLOBAL jadval.
+        """
+        return {member.phone for member in await self.list_members()}
+
+    async def create_members(
+        self,
+        entries: Sequence[StaffCreateEntry],
+    ) -> tuple[list[CreatedMember], list[int]]:
+        """Rosterni ommaviy yozadi; `(yaratilganlar, band telefonli QATORLAR)`.
+
+        Har `entry` uchun `create_user()` chaqiriladi. U `None` qaytarsa
+        telefon PLATFORMADA band — qator raqami ikkinchi ro'yxatga
+        tushadi va a'zolik qatori YOZILMAYDI (aks holda begona hisob bu
+        bozorga a'zo bo'lib qolardi).
+
+        ⚠ SIKL BIRINCHI BAND TELEFONDA TO'XTAMAYDI. `auth_create_user`
+        `ON CONFLICT (phone_e164) DO NOTHING` bilan ishlaydi, ya'ni u
+        tranzaksiyani ABORT QILMAYDI va davom etish xavfsiz. Admin band
+        telefonlarning HAMMASINI bir marta ko'rishi kerak
+        (`validate_staff_rows` dagi "har qator uchun barcha tekshiruvlar"
+        qoidasi bilan aynan bir xil sabab): to'xtash uni "tuzat -> yukla
+        -> yangi xato" siklga tushirardi.
+
+        Chaqiruvchi ikkinchi ro'yxat BO'SH BO'LMASA butun importni rad
+        etadi (D-14) — istisno tranzaksiyani orqaga qaytaradi va bu
+        yerda yozilgan qatorlar ham yo'qoladi.
+        """
+        created: list[CreatedMember] = []
+        taken: list[int] = []
+
+        for entry in entries:
+            user_id = await self.create_user(
+                phone=entry.phone,
+                password_hash=entry.password_hash,
+                full_name=entry.full_name,
+                locale=entry.locale,
+            )
+            if user_id is None:
+                taken.append(entry.row)
+                continue
+
+            await self.add_membership(user_id, entry.roles)
+            created.append(
+                CreatedMember(
+                    row=entry.row,
+                    user_id=user_id,
+                    phone=entry.phone,
+                    full_name=entry.full_name,
+                    roles=entry.roles,
+                )
+            )
+
+        return created, taken
 
     async def add_membership(self, user_id: UUID, roles: list[str]) -> None:
         """A'zolik qatorini JORIY BOZORDA yaratadi (RLS `WITH CHECK` ostida).

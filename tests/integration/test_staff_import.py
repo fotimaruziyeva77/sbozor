@@ -593,9 +593,7 @@ async def test_audit_records_each_account_and_the_bulk_import(
     entries = audit.json()["items"]
 
     users_rows = [
-        entry
-        for entry in entries
-        if entry["table_name"] == "users" and entry["action"] == "insert"
+        entry for entry in entries if entry["table_name"] == "users" and entry["action"] == "insert"
     ]
     per_account = {
         entry["new_value"]["phone"]
