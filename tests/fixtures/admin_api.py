@@ -36,6 +36,7 @@ __all__ = [
     "CATEGORIES_URL",
     "IMPORTS_ERRORS_URL",
     "IMPORTS_TEMPLATE_URL",
+    "IMPORT_STAFF_URL",
     "IMPORT_STALLS_URL",
     "IMPORT_VENDORS_URL",
     "MARKETS_URL",
@@ -90,6 +91,8 @@ _IMPORTS_URL = "/api/v1/imports"
 IMPORTS_TEMPLATE_URL = f"{_IMPORTS_URL}/template"
 IMPORT_STALLS_URL = f"{_IMPORTS_URL}/stalls"
 IMPORT_VENDORS_URL = f"{_IMPORTS_URL}/vendors"
+IMPORT_STAFF_URL = f"{_IMPORTS_URL}/staff"
+"""02-24: xodimlar rosteri (MARKET-07) — AYNI import mashinasining uchinchi turi."""
 IMPORTS_ERRORS_URL = f"{_IMPORTS_URL}/errors.xlsx"
 """Xato ro'yxatini `.xlsx` qilib qaytaradigan yo'l.
 
