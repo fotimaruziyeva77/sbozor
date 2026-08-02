@@ -19,12 +19,12 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 
 ### Bozor boshqaruvi (MARKET)
 
-- [ ] **MARKET-01**: Platforma admini "Yangi bozor" ustasi orqali bozorni kod yozmasdan kiritadi: rekvizitlar → zonalar → rastalar → toifalar → tariflar → kameralar → kamera zonalari → snapshot jadvali
-- [ ] **MARKET-02**: Bozor admini rastalar reestrini yuritadi: raqam, zona/qator, mahsulot toifasi, holat (faol/ta'mirda/yopiq), sotuvchi biriktirish
-- [ ] **MARKET-03**: Tariflar tarixiy saqlanadi (qaysi sanadan qaysi narx) — o'tmishdagi hisoblar keyingi narx o'zgarishidan buzilmaydi
-- [ ] **MARKET-04**: Bozor admini sotuvchilar reestrini yuritadi (F.I.Sh., telefon) va rasta biriktirish davrlarini boshqaradi
+- [x] **MARKET-01**: Platforma admini "Yangi bozor" ustasi orqali bozorni kod yozmasdan kiritadi: rekvizitlar → zonalar → rastalar → toifalar → tariflar → kameralar → kamera zonalari → snapshot jadvali
+- [x] **MARKET-02**: Bozor admini rastalar reestrini yuritadi: raqam, zona/qator, mahsulot toifasi, holat (faol/ta'mirda/yopiq), sotuvchi biriktirish
+- [x] **MARKET-03**: Tariflar tarixiy saqlanadi (qaysi sanadan qaysi narx) — o'tmishdagi hisoblar keyingi narx o'zgarishidan buzilmaydi
+- [x] **MARKET-04**: Bozor admini sotuvchilar reestrini yuritadi (F.I.Sh., telefon) va rasta biriktirish davrlarini boshqaradi
 - [x] **MARKET-05**: Bozor admini ishlamaydigan/bayram kunlarini belgilaydi — o'sha kunlarga patta hisoblanmaydi
-- [ ] **MARKET-06**: Sxematik plan-xarita: rastalar zona bo'yicha rangli grid (yashil bo'sh, ko'k to'langan, qizil qarzdor, sariq nomuvofiq); rasta bosilganda karta (dalil-rasm bilan) ochiladi
+- [x] **MARKET-06**: Sxematik plan-xarita: rastalar zona bo'yicha rangli grid (yashil bo'sh, ko'k to'langan, qizil qarzdor, sariq nomuvofiq); rasta bosilganda karta (dalil-rasm bilan) ochiladi
 - [ ] **MARKET-07**: Bozor admini ma'muriyat bergan xodimlar ro'yxatini bitta fayl bilan yuklaydi (F.I.Sh., telefon, rol); tizim hisoblarni rollar bilan yaratadi, telefon raqamlarini E.164 ga normallaydi, dublikatni rad etadi va vaqtinchalik parollarni beradi — qo'lda birma-bir kiritish shart emas
 
 ### Kamera va suratga olish (CAM)
@@ -142,12 +142,12 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | FOUND-05 | Phase 1 | Pending |
 | FOUND-06 | Phase 4 | Pending |
 | FOUND-07 | Phase 8 | Pending |
-| MARKET-01 | Phase 2 | Pending |
-| MARKET-02 | Phase 2 | Pending |
-| MARKET-03 | Phase 2 | Pending |
-| MARKET-04 | Phase 2 | Pending |
-| MARKET-05 | Phase 2 | Complete |
-| MARKET-06 | Phase 2 | Pending |
+| MARKET-01 | Phase 2 | Done |
+| MARKET-02 | Phase 2 | Done |
+| MARKET-03 | Phase 2 | Done |
+| MARKET-04 | Phase 2 | Done |
+| MARKET-05 | Phase 2 | Done |
+| MARKET-06 | Phase 2 | Done |
 | MARKET-07 | Phase 2 | Pending |
 | CAM-01 | Phase 3 | Pending |
 | CAM-02 | Phase 3 | Pending |
@@ -185,6 +185,33 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | BOT-03 | Phase 7 | Pending |
 | BOT-04 | Phase 7 | Pending |
 
+**Belgilash qoidasi va uning chegarasi** (2026-08-02, 2-faza yopish to'lqini —
+`02-22`). Bu jadvaldagi belgi **talab MATNI** bo'yicha qo'yiladi: band `Done`
+bo'ladi faqat o'sha talabning o'z jumlasi o'lchangan test bilan qoplangan va
+unga qarshi ochiq bloklovchi qolmagan bo'lsa. Belgi «faza to'liq yopildi»
+degani EMAS — va bu farq ataylab ko'rsatiladi, chunki 2-fazada uni
+chalkashtirish mumkin bo'lgan uchta joy bor:
+
+1. **Real ma'lumot sharti** — «Karmananing real rasta/tarif/sotuvchi
+   ma'lumoti tizimda yashaydi» — birorta MARKET bandining matnida YO'Q. U
+   `ROADMAP.md` §"Phase 2" ning «Real ma'lumot haqida» izohida qayta
+   ta'riflangan (2026-08-01: fazaning yetkazib berish mahsuloti — import
+   qobiliyati, ma'lum bir fayl emas), holati esa
+   `phases/02-bozor-domeni-va-yangi-bozor-ustasi/02-VALIDATION.md` da
+   (`nyquist_compliant` bayrog'i, `02-23` rejasi) yuritiladi — bu yerda emas.
+2. **MARKET-01 ning kamera, kamera-zonasi va kadr jadvali qadamlari**
+   `ROADMAP.md` §"Phase 2" ning **Note** bandi bo'yicha keyingi fazalarda
+   ulanadi. 2-faza ustaning rekvizit → zona → rasta → toifa → tarif zanjirini
+   yetkazadi va o'lchanadigan narsa aynan shu zanjir.
+3. **Odam ishtirokidagi tasdiqlar** (foydalanuvchanlik kuzatuvi, xaritaning
+   haqiqiy qurilmada o'qilishi, rekvizit formatini buyurtmachi bilan
+   tasdiqlash) `02-VALIDATION.md` ning «Manual-Only Verifications» jadvalida
+   yuritiladi va bu jadvalda AKS ETMAYDI.
+
+Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
+`node scripts/check-requirements-sync.mjs` — qo'lda, har faza yopilishida
+(doimiy CI darvozasi emas; sabab skript boshida yozilgan).
+
 **Coverage:**
 
 - v1 requirements: 46 total
@@ -204,6 +231,17 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | 7 | Nomuvofiqlik, bildirishnoma va botlar | 9 |
 | 8 | Hisobotlar, mustahkamlash va ishga tushirish | 3 |
 
+⚠ **Yuqoridagi ikki blokning SANOQLARI eskirgan va bu reja ularga ATAYIN
+tegmadi.** 2026-08-01 da uchta yangi talab qo'shilgan, sanoqlar esa
+yangilanmagan; ularni faylning O'Z mazmunidan qayta hisoblash `02-24`
+rejasining zimmasida. `node scripts/check-requirements-sync.mjs` farqni har
+ishga tushganda ogohlantirish sifatida ko'rsatadi, lekin xato deb sanamaydi —
+ya'ni eskirgan son jimgina yashab qolmaydi. Belgi qo'yish qamrovni
+o'zgartirmaydi, shuning uchun sanoqlarni shu rejada "yo'l-yo'lakay"
+to'g'rilash ikki bog'liq bo'lmagan o'zgarishni bitta yozuvda aralashtirardi.
+
 ---
 *Requirements defined: 2026-07-29*
-*Last updated: 2026-07-29 after roadmap creation (traceability filled)*
+*Last updated: 2026-08-02 — 2-faza yopish to'lqini (`02-22`): MARKET-01…06
+o'lchangan regressiya dalili bilan `Done` qilindi, MARKET-07 `02-24` ga
+qoldi; belgilash qoidasining chegarasi Traceability bo'limida yozildi*
