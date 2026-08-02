@@ -199,10 +199,12 @@ chalkashtirish mumkin bo'lgan uchta joy bor:
    qobiliyati, ma'lum bir fayl emas), holati esa
    `phases/02-bozor-domeni-va-yangi-bozor-ustasi/02-VALIDATION.md` da
    (`nyquist_compliant` bayrog'i, `02-23` rejasi) yuritiladi — bu yerda emas.
+
 2. **MARKET-01 ning kamera, kamera-zonasi va kadr jadvali qadamlari**
    `ROADMAP.md` §"Phase 2" ning **Note** bandi bo'yicha keyingi fazalarda
    ulanadi. 2-faza ustaning rekvizit → zona → rasta → toifa → tarif zanjirini
    yetkazadi va o'lchanadigan narsa aynan shu zanjir.
+
 3. **Odam ishtirokidagi tasdiqlar** (foydalanuvchanlik kuzatuvi, xaritaning
    haqiqiy qurilmada o'qilishi, rekvizit formatini buyurtmachi bilan
    tasdiqlash) `02-VALIDATION.md` ning «Manual-Only Verifications» jadvalida
