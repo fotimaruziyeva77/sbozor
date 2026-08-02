@@ -902,7 +902,7 @@ BEGIN
   VALUES (
       v_market_id,
       p_operating_since,
-      COALESCE(p_open_weekdays, ARRAY[1,2,3,4,5,6,7]::smallint[]),
+      p_open_weekdays,
       NULLIF(p_address, ''),
       NULLIF(p_tin, ''),
       NULLIF(p_bank_account, ''),
@@ -936,10 +936,35 @@ sifatida yuboradi va `''` `ck_market_profile_tin_format` regeksidan
 O'TMAYDI. Ya'ni NULLIF'siz "STIR ko'rsatilmagan" holati bozor yaratishni
 tushunarsiz CHECK xatosi bilan yiqitardi.
 
-`p_timezone` bo'sh -> `'Asia/Tashkent'`; `p_open_weekdays` NULL -> har kuni
-ochiq. Ikkala standart ham `markets`/`market_profile` ustunlaridagi
-`server_default` bilan bir xil qiymatda — plpgsql `INSERT` da ustun aniq
-sanab o'tilgani uchun default qo'llanmaydi.
+`p_timezone` bo'sh -> `'Asia/Tashkent'`. Bu standart QOLADI: vaqt mintaqasi
+tushumga ta'sir qilmaydigan texnik sozlama va uning yagona qo'llanadigan
+qiymati ham shu (WR-03).
+
+⚠ `p_open_weekdays` NULL -> USTUNGA HAM NULL YOZILADI, ya'ni "HALI
+TANLANMAGAN". Bu 0011 dagi tuzatish (WR-06) va u standart qiymatning
+YO'QLIGI — kamchilik emas, tuzatishning O'ZI:
+
+  * ilgari `INSERT` da parametr `COALESCE(...)` ichiga o'ralib
+    `ARRAY[1,2,3,4,5,6,7]` standarti bilan yozilardi, ya'ni
+    `array_length(open_weekdays,1) > 0` HAR DOIM rost bo'lardi;
+  * demak `calendar_configured` har doim `True` va `calendar_missing`
+    (step 7) to'sig'i BOZOR YARATADIGAN YAGONA yo'lda hech qachon ishga
+    tushmasdi;
+  * dushanba yopiladigan bozor "har kuni ochiq" deb faollashardi va
+    6-fazadagi kunlik job o'sha kunga patta yozardi — sotuvchi yopiq kun
+    uchun hisob olardi. Bu mahsulot oldini olish uchun mavjud bo'lgan
+    nizo sinfi.
+
+Endi `NULL` `calendar_missing` to'sig'ini ishga tushiradi va bozor
+faollashmaydi; `market_is_open()` esa fail-closed bo'lgani uchun bunday
+bozor uchun har kuni `false` beradi (`= ANY(NULL)` -> `NULL` -> uch qavatli
+`COALESCE` oxiridagi `false`). Ikkala qatlam BIRGA ishlaydi: to'siq
+faollashishga yo'l bermaydi, funksiya esa to'siqdan sirg'alib o'tgan holatda
+ham patta yozilishiga yo'l bermaydi.
+
+Ish rejimi ustaning 1-qadamida SO'RALADI (`MarketRequisitesForm`) —
+yettala kun oldindan belgilangan holda, lekin QIYMAT SIFATIDA yuboriladi.
+Ya'ni DB taxmin qilmaydi, UI esa oqilona taklif qiladi.
 """
 
 MARKET_ACTIVATE = PGFunction(

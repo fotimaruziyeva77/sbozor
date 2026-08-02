@@ -453,8 +453,15 @@ async def test_market_profile_is_born_with_the_market(
 
     assert row is not None, "market_create() profil qatorini yozmadi"
     assert row[0] == operating_since
-    # `market_create()` standart qiymati — har kuni ochiq.
-    assert sorted(row[1]) == [1, 2, 3, 4, 5, 6, 7]
+    # ⚠ ISH REJIMI TAXMIN QILINMAYDI (WR-06, 0011_weekday_choice).
+    # Ilgari bu yerda jadval yettala kun bilan solishtirilardi — `market_create()`
+    # `COALESCE(p_open_weekdays, ARRAY[1..7])` bilan standart yozardi. Aynan
+    # o'sha standart `calendar_configured` ni HAR DOIM rost qilib,
+    # `calendar_missing` to'sig'ini ustaning yagona yo'lida ishlamaydigan
+    # qilib qo'ygan edi. Endi `NULL` — "hali tanlanmagan" va u to'siqni
+    # ISHGA TUSHIRADI. Bo'sh massiv (`'{}'`) esa hamon TAQIQLANGAN: u
+    # "hech qachon ochilmaydi" degani va boshqa nosozlik.
+    assert row[1] is None
     assert row[2] == "123456789"
 
 
@@ -473,22 +480,28 @@ INCOMPLETE_CASES: tuple[tuple[str, str], ...] = (
 )
 """Har bloklovchi shart uchun bitta holat — `(o'tkazib yuborilgan qadam, kod)`.
 
-Oxirgi IKKITASI API orqali "o'tkazib yuborilmaydi" va bu ATAYIN shunday
-— ikkalasi ham strukturaviy jihatdan erishib bo'lmaydigan holat:
+Oxirgi IKKITASI API orqali "o'tkazib yuborilmaydi" va SABABLARI HAR XIL:
 
   * `stalls_without_category` — `POST /stalls` boshlang'ich toifa davrini
     HAR DOIM o'zi yozadi (`StallRepository.create()`), toifa davrini
-    o'chiradigan endpoint esa umuman yo'q;
-  * `calendar_missing` — `open_weekdays` `NOT NULL` va
-    `ck_market_profile_open_weekdays` bo'sh massivni rad etadi, ya'ni
-    "jadval sozlanmagan" holatiga faqat PROFIL QATORISIZ bozor tushadi
-    (`market_create()` esa uni har doim yozadi).
+    o'chiradigan endpoint esa umuman yo'q. Ya'ni bu holat hamon
+    strukturaviy jihatdan erishib bo'lmaydigan va u faqat `sbozor_owner`
+    bilan quriladi;
+  * `calendar_missing` — bu holatga ENDI IKKI YO'LDAN erishiladi
+    (0011_weekday_choice, WR-06):
+      (a) PROFIL QATORISIZ bozor — shu yerdagi `_DROP_PROFILE` yo'li,
+          ya'ni migratsiya/seed/qo'lda tuzatish natijasida tug'ilgan
+          qator uchun darvoza. SAQLANADI;
+      (b) `open_weekdays` TANLANMAGAN bozor — `market_create()` endi
+          standart yozmaydi, ya'ni `POST /markets` dan keyin `PUT
+          /calendar/weekdays` chaqirilmasa ustun `NULL` qoladi. Bu
+          MAHSULOT yo'li va u pastdagi alohida testlar bilan qamraladi
+          (`test_market_without_weekday_choice_is_blocked` va uning
+          nazorat/tiklanish juftlari).
 
-Shuning uchun ikkalasi `sbozor_owner` bilan quriladi. Bu "testni
-majburlash" emas: ikkala darvoza ham AYNAN `market_create()` dan
-tashqarida tug'ilgan qatorlar (migratsiya, import, qo'lda tuzatish) uchun
-mavjud va ularsiz faollashtirish tekshiruvi shu yo'llarga UMUMAN
-qaramasdi.
+Bu qatordagi `calendar` holati ATAYIN (a) yo'lida qoladi: ikkala yo'l
+bitta testga birlashtirilsa, profil qatori yo'q bozor uchun darvoza
+jimgina sinalmay qolardi.
 """
 
 
@@ -562,12 +575,26 @@ async def test_empty_draft_reports_every_missing_step(
     two_markets: TwoMarketSeed,
     market_today: date,
 ) -> None:
-    """Endigina yaratilgan bozor: uchta bloklovchi shart va kalendar TAYYOR.
+    """Endigina yaratilgan bozor: TO'RTTA bloklovchi shart, tartibi bilan.
 
-    Kalendar bandi ATAYIN yo'q: `market_create()` `open_weekdays` ni
-    standart `{1..7}` bilan yozadi, ya'ni yangi bozor 7-qadamda
-    bloklanmaydi. Buni "unutilgan" deb o'ylab bandni qo'shish
-    foydalanuvchini mavjud bo'lmagan ish bilan yuklardi.
+    Bu test `blocking[]` ning TO'LIQ VA TARTIBLI ro'yxatini qulflaydi —
+    ya'ni u pastdagi `test_market_without_weekday_choice_is_blocked` dan
+    BOSHQA savolga javob beradi. U yerda "`calendar_missing` bormi?"
+    so'raladi; bu yerda esa "ro'yxatda AYNAN shu to'rttasi bormi, ortiqcha
+    band yo'qmi va tartib `step` bo'yicha to'g'rimi?" so'raladi. Bandning
+    TUSHIB QOLISHI ham, ORTIQCHASI ham faqat shu yerda ushlanadi.
+
+    ⚠ KALENDAR BANDI ENDI RO'YXATDA — va bu tuzatish, regressiya emas
+    (WR-06, 0011_weekday_choice). Ilgari `market_create()` `open_weekdays`
+    ni `{1..7}` standarti bilan yozardi, ya'ni yangi bozor 7-qadamda
+    HECH QACHON bloklanmasdi va "dushanba yopiq" bozor "har kuni ochiq"
+    deb faollashardi. Endi ish rejimi ustaning 1-qadamida TANLANADI;
+    API orqali bevosita yaratilgan bozorda (bu test aynan shunday
+    yaratadi) u tanlanmagan qoladi va `calendar_missing` yonadi.
+
+    `calendar_missing` — `step: 7`, ya'ni ro'yxatning OXIRIDA. Tartib
+    `_blocking()` shartnomasi: frontend `blocking[0].step` ni "birinchi
+    tugallanmagan qadam" deb ishlatadi.
     """
     operating_since = market_today - timedelta(days=OPERATING_SINCE_DAYS)
     created = await api_client.post(
@@ -591,9 +618,165 @@ async def test_empty_draft_reports_every_missing_step(
         "zones_missing",
         "categories_missing",
         "stalls_missing",
+        "calendar_missing",
     ]
-    assert body["calendar_configured"] is True
+    assert body["calendar_configured"] is False
     assert two_markets.market_a.id != market_id
+
+
+# ---------------------------------------------------------------------------
+# WR-06 — ish rejimi TANLANADI, taxmin qilinmaydi (0011_weekday_choice)
+#
+# TO'RTTA test va ular BIRGA bitta da'voni qoplaydi: to'siq HAQIQATDA
+# ishlaydi (1), faollashtirishni HAQIQATDA to'sadi (2), HAR DOIM
+# yonavermaydi (3 — nazorat) va foydalanuvchini boshi berk ko'chaga qamab
+# qo'ymaydi (4 — tiklanish). Faqat (1) yozilganda to'siqning "har doim
+# yonadigan" buzuq varianti ham yashil ko'rinardi; faqat (1)+(2) yozilganda
+# esa 7-qadam ishlamay qolgani sezilmasdi.
+# ---------------------------------------------------------------------------
+
+
+async def test_market_without_weekday_choice_reports_calendar_missing(
+    api_client: httpx.AsyncClient,
+    new_market: Callable[..., Any],
+) -> None:
+    """Ish rejimi tanlanmagan bozor -> `blocking[]` da AYNAN `calendar_missing`.
+
+    Bozor 2–6-qadamlarning HAMMASI bajarilgan holda quriladi va faqat
+    haftalik jadval qoldiriladi. Shuning uchun ro'yxat AYNAN bitta
+    banddan iborat bo'lishi shart: shunda test "to'siq yondi" ni emas,
+    "AYNAN SHU to'siq yondi" ni o'lchaydi va boshqa qadamning tasodifiy
+    chala qolishi natijani yashira olmaydi.
+
+    ⚠ BU ASSERT 0011 GACHA YOZIB BO'LMAS EDI. `market_create()`
+    `open_weekdays` ni `{1..7}` standarti bilan yozardi, ya'ni holat
+    umuman yuzaga kelmasdi (WR-06). Testning yozib bo'lmasligi nosozlik
+    belgisining o'zi edi.
+    """
+    market_id, headers, _ = await new_market(name="Usta rejimsiz", skip="calendar")
+
+    body = await _status(api_client, headers, market_id)
+
+    assert body["calendar_configured"] is False
+    assert [item["code"] for item in body["blocking"]] == ["calendar_missing"]
+    assert body["blocking"][0]["step"] == 7
+    assert body["can_activate"] is False
+
+
+async def test_market_without_weekday_choice_cannot_activate(
+    api_client: httpx.AsyncClient,
+    new_market: Callable[..., Any],
+) -> None:
+    """Ish rejimisiz bozor faollashtirilmaydi -> **409** va sabab ro'yxati.
+
+    `setup-status` ni o'qish darvoza EMAS — faollashtirish yo'li o'z
+    tekshiruvidan o'tadi. Ikkalasi alohida sinaladi, chunki 02-11 dagi
+    shartnoma aynan "ikkala yo'l ham `_blocking()` dan o'tadi" degan
+    da'voga tayanadi va u jimgina ajralib ketishi mumkin.
+
+    Faollashtirish o'tib ketsa oqibat KO'RINMAYDIGAN bo'lardi:
+    `market_is_open()` fail-closed, ya'ni jadvalsiz bozor uchun HAR KUNI
+    `false` beradi — bozor "jonli" bo'lib turardi-yu, 6-fazadagi kunlik
+    job birorta patta yozmasdi va tushum JIMGINA nolga tushardi.
+    """
+    market_id, headers, _ = await new_market(name="Usta rejimsiz faollashuv", skip="calendar")
+
+    response = await _activate(api_client, headers, market_id)
+
+    assert response.status_code == 409, f"{response.status_code} — {response.text}"
+    body = response.json()
+    assert body["detail"] == "market_incomplete"
+    assert [item["code"] for item in body["blocking"]] == ["calendar_missing"]
+
+
+async def test_weekday_choice_at_step_one_leaves_no_calendar_gate(
+    api_client: httpx.AsyncClient,
+    created_markets: list[UUID],
+    platform_headers: dict[str, str],
+    market_today: date,
+) -> None:
+    """NAZORAT: 1-qadamda ish rejimi BERILSA to'siq umuman yonmaydi.
+
+    Usta 1-qadami aynan shunday yuboradi (`MarketRequisitesForm` ->
+    `open_weekdays`), ya'ni bu test MAHSULOT yo'lining o'zini o'lchaydi.
+    Usiz `calendar_missing` ning "har doim yoqilgan" buzuq varianti ham
+    yuqoridagi ikki testni yashil qoldirardi.
+
+    Jadval `WIZARD_WEEKDAYS` (yakshanbasiz) — `{1..7}` EMAS. Farq ataylab:
+    qiymat HAQIQATAN uzatilganini ko'rsatadi. Barcha yetti kun berilganda
+    test yo'qolgan standart qiymat bilan ham qanoatlanardi.
+    """
+    operating_since = market_today - timedelta(days=OPERATING_SINCE_DAYS)
+    created = await api_client.post(
+        MARKETS_URL,
+        json={
+            "name": "Usta rejim bilan",
+            "timezone": WIZARD_TIMEZONE,
+            "operating_since": operating_since.isoformat(),
+            "open_weekdays": list(WIZARD_WEEKDAYS),
+        },
+        headers=platform_headers,
+    )
+    assert created.status_code == 201, created.text
+    market_id = UUID(created.json()["id"])
+    created_markets.append(market_id)
+    headers = await _select(api_client, platform_headers, market_id)
+    # `skip="calendar"` — 7-qadam ATAYIN chaqirilmaydi: jadval 1-qadamda
+    # allaqachon berilgan va aynan shu holat sinalyapti.
+    await _fill_wizard(api_client, headers, operating_since=operating_since, skip="calendar")
+
+    body = await _status(api_client, headers, market_id)
+    calendar = await api_client.get(CALENDAR_URL, headers=headers)
+
+    assert body["calendar_configured"] is True
+    assert body["blocking"] == []
+    assert body["can_activate"] is True
+    # Yozilgan qiymat O'QISH yo'lidan ham tasdiqlanadi: yozish va o'qish
+    # jimgina ajralib ketmasin (02-09 naqshi).
+    assert calendar.status_code == 200, calendar.text
+    assert calendar.json()["open_weekdays"] == list(WIZARD_WEEKDAYS)
+    assert (await _activate(api_client, headers, market_id)).status_code == 200
+
+
+async def test_weekday_choice_at_step_seven_clears_the_gate(
+    api_client: httpx.AsyncClient,
+    new_market: Callable[..., Any],
+) -> None:
+    """TIKLANISH: 1-qadamda o'tkazib yuborilgan jadval 7-qadamda yoziladi.
+
+    UI-SPEC §6.6 ning "409 xato emas, yo'l ko'rsatkichi" qoidasi shu
+    yerda o'lchanadi: `calendar_missing` bandi `step: 7` bilan keladi,
+    foydalanuvchi o'sha qadamga qaytadi, jadvalni yozadi va faollashtirish
+    o'tadi. Bu test bo'lmasa 0011 foydalanuvchini boshi berk ko'chaga
+    qamab qo'ygan bo'lishi mumkin edi va yuqoridagi ikki test buni
+    KO'RSATMAS edi — ular to'siqning YONISHINI tekshiradi, O'CHISHINI
+    emas.
+
+    `GET /calendar` PUT'DAN OLDIN ham tekshiriladi: jadval tanlanmagan
+    bozor uchun u 409 emas, `[]` beradi (`CalendarRepository.profile()`).
+    Usiz 7-qadam ekrani umuman ochilmasdi — ya'ni "yo'l ko'rsatkichi"
+    ko'rsatgan joyda ishlamaydigan ekran turardi.
+    """
+    market_id, headers, _ = await new_market(name="Usta rejim keyin", skip="calendar")
+    assert (await _activate(api_client, headers, market_id)).status_code == 409
+
+    before = await api_client.get(CALENDAR_URL, headers=headers)
+    saved = await api_client.put(
+        f"{CALENDAR_URL}/weekdays",
+        json={"open_weekdays": list(WIZARD_WEEKDAYS)},
+        headers=headers,
+    )
+
+    assert before.status_code == 200, before.text
+    assert before.json()["open_weekdays"] == []
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["open_weekdays"] == list(WIZARD_WEEKDAYS)
+
+    body = await _status(api_client, headers, market_id)
+
+    assert body["calendar_configured"] is True
+    assert body["blocking"] == []
+    assert (await _activate(api_client, headers, market_id)).status_code == 200
 
 
 async def test_vendors_do_not_block_activation(

@@ -183,9 +183,16 @@ async def get_calendar(
 ) -> CalendarResponse:
     """Haftalik jadval + istisno kunlar (`MARKET_DATA_VIEW`, D-17/D-18).
 
-    Profil qatori yo'q bo'lsa 409 `market_incomplete` — bo'sh jadval
-    (`[]`) QAYTARILMAYDI: u "bozor hech qachon ochilmaydi" degan MA'NOLI
-    holat bilan "sozlama umuman yo'q" holatini aralashtirib yuborardi.
+    Profil QATORI yo'q bo'lsa 409 `market_incomplete`: yozadigan joy ham
+    yo'q, ya'ni bo'sh javob foydalanuvchini ishlamaydigan ekranga qamab
+    qo'yardi.
+
+    Profil bor, LEKIN jadval hali tanlanmagan bo'lsa (`open_weekdays`
+    ustuni `NULL` — 0011 dan keyingi normal holat) javob `[]` bo'ladi va
+    bu 409 EMAS. Bo'sh ro'yxat NOANIQ emas: `'{}'` DB darajasida
+    taqiqlangan, ya'ni `[]` faqat "hali tanlanmagan" degani. 7-qadamdagi
+    `WeekdayPicker` shu holatda belgisiz katakchalar bilan ochiladi va
+    foydalanuvchi tanlovni AYNAN shu ekranda yozadi.
     """
     market_id = _market_id(principal)
     repo = CalendarRepository(session, market_id)

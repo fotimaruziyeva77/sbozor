@@ -57,6 +57,7 @@ class CalendarProfileRow:
 
     id: UUID
     open_weekdays: list[int]
+    """Bo'sh ro'yxat = "hali tanlanmagan" (ustunda `NULL`), `profile()` ga qarang."""
 
 
 @dataclass(frozen=True)
@@ -77,15 +78,32 @@ class CalendarRepository(TenantScopedRepository):
     """`market_profile.open_weekdays` + `market_calendar_exceptions`."""
 
     async def profile(self) -> CalendarProfileRow:
-        """Bozorning haftalik jadvali.
+        """Bozorning haftalik jadvali; HALI TANLANMAGAN bo'lsa `[]`.
+
+        ⚠ `open_weekdays` USTUNI `NULL` BO'LISHI MUMKIN (0011,
+        `0011_weekday_choice`): `market_create()` endi ish rejimini
+        taxmin qilmaydi va usta 1-qadamidan tashqari yo'ldan (seed,
+        migratsiya, qo'lda `INSERT`) tug'ilgan bozorda ustun `NULL`
+        qoladi. Usiz bu yerdagi `list(...)` `TypeError` bilan yiqilib,
+        `GET /calendar` 500 berardi.
+
+        `NULL` -> `[]` XARITASI ENDI NOANIQ EMAS va aynan shu sabab u
+        xavfsiz: `'{}'` (bo'sh massiv) `ck_market_profile_open_weekdays_valid`
+        bilan TAQIQLANGAN, ya'ni javobdagi bo'sh ro'yxat FAQAT bitta
+        ma'noni tashiydi — "jadval hali tanlanmagan". Klient (7-qadamdagi
+        `WeekdayPicker`) uni belgisiz katakchalar bilan ko'rsatadi va
+        `PUT /calendar/weekdays` bilan tanlovni yozadi.
+
+        Profil QATORINING O'ZI yo'qligi esa boshqa holat va u istisno
+        bilan qoladi (pastda).
 
         Raises:
             MarketProfileMissingError: profil qatori yo'q bo'lsa ->
-                router 409 `market_incomplete`. Bo'sh javob (`[]`)
-                QAYTARILMAYDI: u "bozor hech qachon ochilmaydi" degan
-                MA'NOLI holat bilan "sozlama yo'q" holatini
-                aralashtirib yuborardi, `market_is_open()` esa
-                ikkalasida ham `false` berib turaverardi.
+                router 409 `market_incomplete`. Bu "jadval tanlanmagan"
+                dan FARQLI: qator yo'q bo'lsa yoziladigan joy ham yo'q,
+                ya'ni `PUT /calendar/weekdays` ham `None` qaytarardi va
+                bo'sh ro'yxat foydalanuvchini ishlamaydigan ekranga
+                qamab qo'yardi.
         """
         result = await self.session.execute(
             self.scoped(select(MarketProfile.id, MarketProfile.open_weekdays))
@@ -93,7 +111,7 @@ class CalendarRepository(TenantScopedRepository):
         row = result.one_or_none()
         if row is None:
             raise MarketProfileMissingError(f"market_profile topilmadi: {self.market_id}")
-        return CalendarProfileRow(id=row.id, open_weekdays=list(row.open_weekdays))
+        return CalendarProfileRow(id=row.id, open_weekdays=list(row.open_weekdays or ()))
 
     async def set_weekdays(self, open_weekdays: list[int]) -> UUID | None:
         """Haftalik jadvalni yozadi; profil qatori yo'q bo'lsa `None`.

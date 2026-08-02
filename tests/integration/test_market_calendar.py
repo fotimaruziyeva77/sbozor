@@ -75,6 +75,14 @@ ALL_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7]
 
 HOLIDAY_NOTE = "Mustaqillik kuni (probe)"
 
+UNCHOSEN_OPERATING_SINCE = date(2026, 1, 1)
+"""`market_with_unchosen_weekdays` profilining sanasi — ahamiyatsiz, lekin sobit.
+
+`operating_since` `NOT NULL` va bu fixture uni ATAYIN o'tmishda beradi:
+`market_is_open()` bu ustunga umuman qaramaydi, ya'ni qiymat testning
+da'vosiga ta'sir qilmasligi KO'RINIB turishi kerak.
+"""
+
 
 def _one(conn: Connection[TupleRow], sql: str, params: tuple[Any, ...]) -> Any:
     row = conn.execute(sql, params).fetchone()
@@ -108,6 +116,42 @@ def market_without_profile(sync_owner_conn: Connection[TupleRow], migrated: None
     try:
         yield market_id
     finally:
+        sync_owner_conn.execute("DELETE FROM markets WHERE id = %s", (str(market_id),))
+
+
+@pytest.fixture
+def market_with_unchosen_weekdays(
+    sync_owner_conn: Connection[TupleRow], migrated: None
+) -> Iterator[UUID]:
+    """Profili BOR, lekin `open_weekdays` HALI TANLANMAGAN bozor (0011).
+
+    `market_without_profile` dan FARQLI holat va farq mahsulot darajasida:
+    o'sha yerda profil qatorining O'ZI yo'q (buzilgan/yarim ko'chirilgan
+    ma'lumot), bu yerda esa qator bor va u to'g'ri — shunchaki ish rejimi
+    hali TANLANMAGAN.
+
+    Holat 0011 dan keyin NORMAL va MAHSULOT yo'lida uchraydi: `POST
+    /api/v1/markets` `open_weekdays` siz chaqirilganda `market_create()`
+    endi standart yozmaydi (WR-06). Ya'ni `market_is_open()` uchun bu
+    fail-closed'ning UCHINCHI tarmog'i va u yuqoridagi ikkitasidan
+    boshqa SQL yo'lidan keladi: `= ANY(NULL)` -> `NULL`.
+    """
+    market_id = uuid4()
+    sync_owner_conn.execute(
+        "INSERT INTO markets (id, name) VALUES (%s, %s)",
+        (str(market_id), "Rejimsiz probe bozori"),
+    )
+    sync_owner_conn.execute(
+        "INSERT INTO market_profile (market_id, operating_since, open_weekdays) "
+        "VALUES (%s, %s, NULL)",
+        (str(market_id), UNCHOSEN_OPERATING_SINCE),
+    )
+    try:
+        yield market_id
+    finally:
+        sync_owner_conn.execute(
+            "DELETE FROM market_profile WHERE market_id = %s", (str(market_id),)
+        )
         sync_owner_conn.execute("DELETE FROM markets WHERE id = %s", (str(market_id),))
 
 
@@ -269,6 +313,74 @@ def test_calendar_is_fail_closed(
     assert own_context is True, (
         "NAZORAT HOLATI YIQILDI: B o'z konteksti ostida ham `false` qaytardi — yuqoridagi "
         "cross-tenant `false` izolyatsiyadan emas, funksiyaning buzuqligidan kelgan"
+    )
+
+
+def test_unchosen_weekday_schedule_is_fail_closed(
+    market_scope: MarketScope,
+    market_with_unchosen_weekdays: UUID,
+) -> None:
+    """Ish rejimi TANLANMAGAN bozor — har qanday kun uchun `false` (0011).
+
+    Bu fail-closed'ning UCHINCHI tarmog'i va u `test_calendar_is_fail_closed`
+    dagi (a) tarmoqdan BOSHQA SQL yo'lidan keladi:
+
+      * (a) profil qatori YO'Q -> 2-qavat subquery'si 0 QATOR beradi ->
+        `NULL` -> `COALESCE` oxirgi argumentiga tushadi;
+      * bu yerda qator BOR, lekin ustun `NULL` -> subquery 1 QATOR beradi
+        va o'sha qatordagi ifoda `EXTRACT(ISODOW ...) = ANY(NULL)` ->
+        `NULL` -> yana `COALESCE` oxirgi argumenti.
+
+    Ikkinchi yo'l 0011 dan OLDIN mavjud emas edi (`open_weekdays`
+    `NOT NULL` edi), ya'ni bu test yangi holat uchun yangi qulf.
+    `market_is_open()` ning O'ZI TEGILMADI va bu test aynan shu "tegilmadi"
+    da'vosini O'LCHAYDI — o'lchanmagan da'vo qiymatsiz.
+
+    ⚠ NAZORAT HOLATI shu faylning `test_open_weekday_is_open` testida:
+    to'ldirilgan jadval `true` beradi, ya'ni bu yerdagi `false`
+    funksiyaning "har doim yopiq" buzuq variantidan emas.
+    """
+    with market_scope(market_with_unchosen_weekdays) as conn:
+        closed_day = _is_open(conn, market_with_unchosen_weekdays, CLOSED_MONDAY)
+        open_day = _is_open(conn, market_with_unchosen_weekdays, OPEN_TUESDAY)
+
+    assert closed_day is False
+    assert open_day is False, (
+        "ish rejimi tanlanmagan bozor uchun `market_is_open` `true` qaytardi — fail-closed "
+        "buzilgan va sozlanmagan bozorga patta hisoblanardi (0011, WR-06)"
+    )
+
+
+def test_empty_weekday_array_is_still_rejected(
+    market_scope: MarketScope,
+    market_with_unchosen_weekdays: UUID,
+) -> None:
+    """`NULL` RUXSAT, bo'sh massiv (`'{}'`) esa hamon TAQIQ — ikki xil holat.
+
+    0011 `open_weekdays` dan `NOT NULL` ni olib tashladi, LEKIN
+    `ck_market_profile_open_weekdays_valid` ning `array_length(...) IS NOT
+    NULL` sharti O'RNIDA QOLDI. Farq mahsulot darajasida:
+
+      * `NULL` — "hali tanlanmagan": `calendar_missing` to'sig'i yonadi va
+        bozor faollashmaydi, ya'ni holat KO'RINADI va TUZATILADI;
+      * `'{}'` — "hech qachon ochilmaydi": to'siq YONMAYDI
+        (`array_length('{}',1)` ham `NULL`... — ya'ni `calendar_configured`
+        yolg'on bo'lardi), lekin bozor faollashsa `market_is_open()` har
+        kuni `false` berardi va tushum JIMGINA nolga tushardi.
+
+    Shartni olib tashlash ikkinchi holatni bazaga kiritardi — shuning
+    uchun u alohida qulflanadi. Bu test 0011 dan oldin mavjud emas edi
+    (ustun `NOT NULL` bo'lgani uchun ifoda hech qachon alohida
+    sinalmagan).
+    """
+    with (
+        market_scope(market_with_unchosen_weekdays) as conn,
+        pytest.raises(psycopg.errors.CheckViolation) as excinfo,
+    ):
+        conn.execute(UPDATE_WEEKDAYS, ([], str(market_with_unchosen_weekdays)))
+
+    assert excinfo.value.sqlstate == "23514", (
+        f"bo'sh haftalik jadval `{excinfo.value.sqlstate}` bilan rad etildi, `23514` emas"
     )
 
 

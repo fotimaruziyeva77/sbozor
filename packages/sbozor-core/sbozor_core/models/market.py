@@ -118,20 +118,37 @@ solishtiriladi va darvoza yopiladi.
 """
 
 OPEN_WEEKDAYS_CHECK = (
+    "open_weekdays IS NULL OR ("
     "open_weekdays <@ ARRAY[1,2,3,4,5,6,7]::smallint[] "
-    "AND array_length(open_weekdays,1) IS NOT NULL"
+    "AND array_length(open_weekdays,1) IS NOT NULL)"
 )
 """Haftalik jadval — ISO kun raqamlari (1=dushanba … 7=yakshanba), D-17.
 
-IKKI shart ham kerak va ular boshqa nosozlikni yopadi:
-  * `<@` — massivda 8 yoki 0 kabi ma'nosiz raqam bo'lmasin;
-  * `array_length(...) IS NOT NULL` — BO'SH massiv (`'{}'`) ni rad etadi.
-    Bo'sh massiv `<@` dan bemalol o'tadi, lekin u "bozor hech qachon
-    ochilmaydi" degani: `market_is_open()` har kuni `false` beradi va tushum
-    JIMGINA nolga tushadi (RESEARCH Pattern 7 ogohlantirishi).
+UCH holat va UCHALASI HAM BOSHQA-BOSHQA MA'NOGA EGA — bu farq mahsulot
+qarori, texnik nuqta emas (WR-06, `0011_weekday_choice`):
 
-DIQQAT: `NULL` element ham `array_length` ni buzmaydi, lekin ustun
-`NOT NULL` va massiv elementlari usta/API validatsiyasidan o'tadi.
+  * `NULL` — **HALI TANLANMAGAN**, RUXSAT ETILADI. Bu holat ATAYIN
+    mavjud: `market_create()` ish rejimini TAXMIN QILMAYDI, chunki
+    taxmin qilingan jadval `calendar_configured` ni har doim rost
+    qilardi va `calendar_missing` to'sig'i ustaning YAGONA yo'lida hech
+    qachon ishga tushmasdi. `NULL` esa to'siqni ishga tushiradi —
+    sozlanmagan bozor faollashmaydi.
+  * `'{}'` (bo'sh massiv) — **RAD ETILADI**. U "bozor hech qachon
+    ochilmaydi" degani: `market_is_open()` har kuni `false` beradi va
+    tushum JIMGINA nolga tushadi (RESEARCH Pattern 7 ogohlantirishi).
+    Ya'ni `NULL` ("hali javob yo'q") bilan `'{}'` ("javob: hech qachon")
+    aralashtirilmaydi — birinchisi to'siq, ikkinchisi nosozlik.
+  * to'ldirilgan massiv — `<@` bilan tekshiriladi, ya'ni 8 yoki 0 kabi
+    ma'nosiz raqam o'tmaydi.
+
+`array_length(...) IS NOT NULL` AYNAN bo'sh massivni ushlaydi: bo'sh
+massiv `<@` dan bemalol o'tadi.
+
+⚠ IFODA IKKI JOYDA — bu yerda va `migrations/versions/0007_market_domain.py`
+(u shu KONSTANTANI import qiladi) hamda `0011_weekday_choice.py` (u xom
+SQL bilan qayta yaratadi). Uchalasi QO'LDA sinxron saqlanadi; farq
+`alembic revision --autogenerate` da EMAS, faqat ko'rikda ko'rinadi
+(`tin_format` bilan bir xil holat).
 """
 
 STALL_CODE_SORT_EXPR = r"lpad(regexp_replace(code, '\D', '', 'g'), 12, '0') || code"
@@ -227,10 +244,18 @@ class MarketProfile(Base, TenantMixin, TimestampMixin):
     # D-17: haftalik jadval FAQAT bozor darajasida (zona/rasta darajasida
     # emas). ISO kun raqamlari — `EXTRACT(ISODOW FROM ...)` bilan bir xil
     # asosda, ya'ni `market_is_open()` da konversiya kerak emas.
-    open_weekdays: Mapped[list[int]] = mapped_column(
+    #
+    # ⚠ `nullable=True` va `server_default` YO'Q — IKKALASI HAM ATAYIN
+    # (WR-06, `0011_weekday_choice`). Standart qiymat IKKI yo'ldan
+    # kelardi: `market_create()` ichidagi `COALESCE` va ustunning
+    # `server_default` i. Ikkalasi ham olib tashlandi, chunki bittasini
+    # qoldirish "ustun sanab o'tilmagan har qanday INSERT" (seed,
+    # fixture, kelajakdagi kod) uchun teshik qoldirardi va
+    # `calendar_missing` to'sig'i o'sha yo'lda yana ishlamay qolardi.
+    # `NULL` = "hali tanlanmagan" (ma'nosi `OPEN_WEEKDAYS_CHECK` da).
+    open_weekdays: Mapped[list[int] | None] = mapped_column(
         ARRAY(SmallInteger()),
-        nullable=False,
-        server_default=text("'{1,2,3,4,5,6,7}'"),
+        nullable=True,
     )
     address: Mapped[str | None] = mapped_column(Text(), nullable=True)
     tin: Mapped[str | None] = mapped_column(Text(), nullable=True)
