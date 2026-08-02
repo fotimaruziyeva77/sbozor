@@ -193,7 +193,7 @@ Plans:
 
 **Wave 19**
 
-- [ ] 02-24-PLAN.md — MARKET-07: xodimlar ro‘yxatining ommaviy importi, rollar va vaqtinchalik parollar (W19)
+- [x] 02-24-PLAN.md — MARKET-07: xodimlar ro‘yxatining ommaviy importi, rollar va vaqtinchalik parollar (W19)
 
 **Wave 20**
 
