@@ -23,7 +23,7 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 - [ ] **MARKET-02**: Bozor admini rastalar reestrini yuritadi: raqam, zona/qator, mahsulot toifasi, holat (faol/ta'mirda/yopiq), sotuvchi biriktirish
 - [ ] **MARKET-03**: Tariflar tarixiy saqlanadi (qaysi sanadan qaysi narx) — o'tmishdagi hisoblar keyingi narx o'zgarishidan buzilmaydi
 - [ ] **MARKET-04**: Bozor admini sotuvchilar reestrini yuritadi (F.I.Sh., telefon) va rasta biriktirish davrlarini boshqaradi
-- [ ] **MARKET-05**: Bozor admini ishlamaydigan/bayram kunlarini belgilaydi — o'sha kunlarga patta hisoblanmaydi
+- [x] **MARKET-05**: Bozor admini ishlamaydigan/bayram kunlarini belgilaydi — o'sha kunlarga patta hisoblanmaydi
 - [ ] **MARKET-06**: Sxematik plan-xarita: rastalar zona bo'yicha rangli grid (yashil bo'sh, ko'k to'langan, qizil qarzdor, sariq nomuvofiq); rasta bosilganda karta (dalil-rasm bilan) ochiladi
 - [ ] **MARKET-07**: Bozor admini ma'muriyat bergan xodimlar ro'yxatini bitta fayl bilan yuklaydi (F.I.Sh., telefon, rol); tizim hisoblarni rollar bilan yaratadi, telefon raqamlarini E.164 ga normallaydi, dublikatni rad etadi va vaqtinchalik parollarni beradi — qo'lda birma-bir kiritish shart emas
 
@@ -85,6 +85,7 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 Keyingi relizga qoldirilgan. Kuzatiladi, lekin joriy roadmapda emas.
 
 ### Kassir kengaytmalari
+
 - **V2-CASH-01**: Jonli undirish ro'yxati — kassirga "band, hali to'lamagan" rastalar real vaqtda (GAP-06)
 - **V2-CASH-02**: Kassir↔zona biriktirish va kassir kesimida samaradorlik statistikasi (GAP-08)
 - **V2-CASH-03**: QR/bank o'tkazma to'lov turi + majburiy referens; UzQR/bank ko'chirmasi bilan solishtiruv importi (GAP-09)
@@ -92,12 +93,14 @@ Keyingi relizga qoldirilgan. Kuzatiladi, lekin joriy roadmapda emas.
 - **V2-CASH-05**: Kassir offline-lite rejimi (navbat + qayta yuborish)
 
 ### AI kengaytmalari
+
 - **V2-AI-01**: Kamera siljish/tebranish nazorati — reference kadr bilan avtomatik solishtirish (GAP-16)
 - **V2-AI-02**: Qo'lda rejim: kamera ko'rmaydigan ~10% rastalar uchun nazoratchi kunlik band/bo'sh belgilaydi, manba hisobotlarda ajratiladi (GAP-07). V1 da bu rastalar uchun faqat to'lov qaydi ishlaydi, AI hisobi yo'q
 - **V2-AI-03**: O'tkazib yuborilgan snapshotni NVR arxividan tiklash (GAP-20)
 - **V2-AI-04**: Karmana ma'lumotida RF-DETR fine-tuning
 
 ### Jarayon kengaytmalari
+
 - **V2-PROC-01**: Sotuvchi e'tiroz/nizo oqimi — rasmiy appeal jarayoni (GAP-04)
 - **V2-PROC-02**: Kun/davr yopish qulfi (period lock)
 - **V2-PROC-03**: Qarz eskirish tahlili (aging) va hisobdan chiqarish siyosati
@@ -143,7 +146,7 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | MARKET-02 | Phase 2 | Pending |
 | MARKET-03 | Phase 2 | Pending |
 | MARKET-04 | Phase 2 | Pending |
-| MARKET-05 | Phase 2 | Pending |
+| MARKET-05 | Phase 2 | Complete |
 | MARKET-06 | Phase 2 | Pending |
 | MARKET-07 | Phase 2 | Pending |
 | CAM-01 | Phase 3 | Pending |
@@ -183,6 +186,7 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | BOT-04 | Phase 7 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 46 total
 - Mapped to phases: 46 ✓
 - Unmapped: 0

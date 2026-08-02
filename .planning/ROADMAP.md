@@ -68,6 +68,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Plans**: N/A — dala/ops ishi, kod rejasi yo'q (`/gsd-plan-phase 0` ishlatilmaydi)
 **Blocks**: **HECH NARSANI** (2026-08-01 qarori). Ilgari bu trek Phase 3/4/8 ni bloklardi; endi mahsulotning o'zi o'sha ishni yutadi — NVR avtomatik kashfiyoti (CAM-08) kamera qamrovi auditini keraksiz qiladi, simulyator (CAM-09) real kadrsiz ishlab chiqishga imkon beradi, self-service import esa hujjatlarni kutmaydi. Bu trekning natijalari **sozlash va o'lchov** uchun ishlatiladi:
+
 - Tushum bazasi → Phase 8 dagi pilot ta'siri hisobotining taqqoslash nuqtasi (yagona qaytarilmas band — yig'uvchilar tizim haqida bilishidan oldin o'lchanishi kerak)
 - Real kadrlar → Phase 4/5 dagi sifat chegaralari va CV aniqligini sozlash (standart qiymatlar simulyatorda o'rnatiladi, real ma'lumot ularni aniqlashtiradi)
 - Buyurtmachining 7 javobi → Phase 6/7 dagi tarif/kvitansiya tafsilotlari (javobsiz — hujjatlashtirilgan standart qiymat ishlatiladi)
@@ -178,13 +179,13 @@ Plans:
 
 **Wave 16** *(bo‘shliqlarni yopish — 02-VERIFICATION.md)*
 
-- [ ] 02-18-PLAN.md — Ustaga yo‘l ochish: marshrut istisnosi, navigatsiya yozuvi, bo‘sh holat havolasi (+WR-09) (W16)
-- [ ] 02-19-PLAN.md — Shaxsiy ma’lumot o‘qishining auditi va MARKET_DATA_VIEW/VENDOR_VIEW chegarasi (W16)
-- [ ] 02-20-PLAN.md — Klient keshining tenant chegarasi: market_id bilan doiralangan kalitlar va tozalash (+WR-10) (W16)
+- [x] 02-18-PLAN.md — Ustaga yo‘l ochish: marshrut istisnosi, navigatsiya yozuvi, bo‘sh holat havolasi (+WR-09) (W16)
+- [x] 02-19-PLAN.md — Shaxsiy ma’lumot o‘qishining auditi va MARKET_DATA_VIEW/VENDOR_VIEW chegarasi (W16)
+- [x] 02-20-PLAN.md — Klient keshining tenant chegarasi: market_id bilan doiralangan kalitlar va tozalash (+WR-10) (W16)
 
 **Wave 17**
 
-- [ ] 02-21-PLAN.md — Ish kunlari tanlovi majburiy (WR-06) va qolgan ko‘rik topilmalarining triaji (W17)
+- [x] 02-21-PLAN.md — Ish kunlari tanlovi majburiy (WR-06) va qolgan ko‘rik topilmalarining triaji (W17)
 
 **Wave 18**
 

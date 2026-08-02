@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 UI-SPEC approved
-last_updated: "2026-08-01T06:32:22.934Z"
-last_activity: 2026-08-01 -- Phase 02 planning complete
+stopped_at: Completed 02-21-PLAN.md (wave 17)
+last_updated: "2026-08-02T17:41:44.473Z"
+last_activity: 2026-08-02 -- 02-21 bajarildi, `npm run gate` yashil
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 38
-  completed_plans: 32
+  total_plans: 39
+  completed_plans: 36
   percent: 11
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 02 (bozor-domeni-va-yangi-bozor-ustasi) — EXECUTING
-Plan: 1 of 17
-Status: Ready to execute
-Last activity: 2026-08-01 -- Phase 02 planning complete
+Plan: 22 of 24
+Status: Executing Phase 02 — 02-21 (wave 17) tugadi, keyingisi 02-22
+Last activity: 2026-08-02 -- 02-21 bajarildi, `npm run gate` yashil
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████████░] 92%
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -38,19 +38,19 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0.0 hours
+- Total plans completed: 36 (o'lchov yozilgani: 1 — quyidagi jadval faqat metrikasi qayd etilgan rejalarni sanaydi)
+- Average duration: 95 min (n=1)
+- Total execution time: 1.6 hours (qayd etilgan qismi)
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| - | - | - | - |
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
+| 02 | 21 | 95 min | 3 | 16 |
 
 **Recent Trend:**
 
-- Last 5 plans: —
+- Last 5 plans: 02-21 (95 min) — undan oldingilarning metrikasi qayd etilmagan
 - Trend: —
 
 *Updated after each plan completion*
@@ -66,6 +66,9 @@ Recent decisions affecting current work:
 - [Roadmap]: Dala treki (baza o'lchovi + NVR kirish) ketma-ketlikdan chiqarildi — ikkalasi ham keyinroq bajarilmaydi
 - [Roadmap]: Phase 5 (poligon muharriri + detektor) atayin bir joyga yig'ildi — kesish kerak bo'lsa moliyaviy yadroga tegmasdan qisqartiriladi
 - [Roadmap]: MARKET-06 plan-xaritasi **sxematik** (grid) bo'lib qoladi; to'liq interaktiv xarita v2
+- [Phase 02]: 02-21: open_weekdays NULL = «hali tanlanmagan» (ruxsat, calendar_missing to'sig'ini yoqadi); '{}' = «hech qachon ochilmaydi» (hamon rad etiladi)
+- [Phase 02]: 02-21: DB ish rejimini TAXMIN QILMAYDI, UI esa TAKLIF qiladi — usta 1-qadamida yettala kun oldindan belgilangan, lekin qiymat sifatida yuboriladi
+- [Phase 02]: 02-21: WR-02 (market_activate/market_delete_draft tenant predikati) 3-fazaga YUQORI ustuvorlik bilan kechiktirildi — yangi migratsiya talab qiladi
 
 ### Pending Todos
 
@@ -94,6 +97,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-31T04:52:53.272Z
-Stopped at: Phase 2 UI-SPEC approved
-Resume file: .planning/phases/02-bozor-domeni-va-yangi-bozor-ustasi/02-UI-SPEC.md
+Last session: 2026-08-02T17:41:05.167Z
+Stopped at: Completed 02-21-PLAN.md (wave 17)
+Resume file: None
