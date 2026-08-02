@@ -1090,6 +1090,33 @@ triggerlarini ishga tushiradi. Ular QORALAMA bozor uchun ataylab o'tkazib
 yuboradi — sabab `migrations/entities/triggers.py::TARIFF_PAST_IMMUTABLE`
 docstringida. Usiz bu funksiya `operating_since` o'tgan sanada bo'lgan har
 qanday qoralama uchun HAR DOIM `23514` bilan yiqilardi.
+
+=============================================================================
+RO'YXATNING TO'LIQLIGI ENDI MEXANIK TEKSHIRILADI (3-faza, W0-7 / D-17).
+
+Yuqoridagi "KO'RINADIGAN qarz" aslida ko'rinmas edi: u faqat kimdir
+qoralama bozorni o'chirmoqchi bo'lganda, ISH PAYTIDA ko'rinardi.
+`tests/integration/test_market_delete_guard.py` uni CI'ga ko'chirdi —
+u `pg_catalog` dan `markets` ga chet el kaliti bilan bog'langan
+jadvallarni o'qib, shu funksiyaning HAQIQIY tanasi bilan
+(`pg_get_functiondef`, Python manbasidan EMAS) solishtiradi.
+
+Ya'ni: yangi tenant jadvali qo'shgan odam bu funksiyani ham yangilashi
+shart va uni unutish darhol qizil test beradi, yetishmayotgan jadval nomi
+esa xato xabarida turadi.
+
+⚠ `0012_nvr_domain` (03-03) to'rtta jadval olib keladi — `nvr_devices`,
+`cameras`, `nvr_credentials`, `nvr_discovery_runs`. Ular bu tanaga
+`0012` BILAN BIR OYNADA qo'shiladi, oldin EMAS: hali mavjud bo'lmagan
+jadvalga `DELETE` yozish shu funksiyani chaqiradigan bugungi usta
+testlarini DARHOL qizartirardi, ya'ni "yashil darvoza" o'z ma'nosini
+to'lqinlar orasida yo'qotardi.
+
+WR-02 ning holati: bu yerdagi kafolat faqat TO'LIQLIK. Faol bozorni
+o'chirib bo'lmasligining DB darajasidagi cheklovi alohida —
+`0013_market_delete_guard` (03-03 rejasi). Bugun u ilova qatlamida va
+yuqoridagi `IS DISTINCT FROM false` fail-closed shartida.
+=============================================================================
 """
 
 MARKET_IS_OPEN = PGFunction(
