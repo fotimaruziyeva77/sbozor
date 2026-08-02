@@ -145,12 +145,25 @@ class ImportRepository(TenantScopedRepository):
         Ilova tomonda qurilsa ro'yxat va xarita bir kun boshqa-boshqa
         tartibda chiqardi.
 
-        ⚠ `ON CONFLICT DO NOTHING` ATAYIN ISHLATILMAYDI. `stall_code_claim()`
-        `BEFORE INSERT` triggeri konfliktdan OLDIN ishga tushadi va
-        `ON CONFLICT` bandi uni CHETLAB O'TA OLMAYDI (02-05) — ya'ni band
-        yoki chetlangan kod baribir `23505` beradi. Bandni yozish "mavjud
-        kodlar jimgina o'tkazib yuboriladi" degan YOLG'ON kafolat berardi;
-        haqiqiy skip esa validatorda, YOZISHDAN OLDIN bajariladi (D-15).
+        ⚠ `ON CONFLICT DO NOTHING` ATAYIN ISHLATILMAYDI — QARORI O'ZGARMADI,
+        SABABI 02-21 DA TO'G'RILANDI (WR-04).
+
+        Bu yerda ilgari "`stall_code_claim()` `BEFORE` triggeri konfliktdan
+        OLDIN ishga tushadi va `ON CONFLICT` bandi uni CHETLAB O'TA
+        OLMAYDI" deb yozilgan edi. DDL esa
+        `AFTER INSERT OR UPDATE OF code` (`0007_market_domain.py:317-321`),
+        ya'ni AKSINCHA: konflikt yuzaga kelgan qator uchun trigger UMUMAN
+        ishga tushmaydi va `ON CONFLICT DO NOTHING` bemalol ishlagan
+        bo'lardi (`triggers.py:215-221`).
+
+        BAND BARIBIR YOZILMAYDI va sabab MAHSULOTDA: u "mavjud kodlar
+        jimgina o'tkazib yuborildi" holatini KO'RINMAYDIGAN qilardi.
+        Foydalanuvchiga qaytadigan `skipped` soni validatorda, YOZISHDAN
+        OLDIN hisoblanadi (D-15) — DB uni sanamaydi. Band qo'shilsa
+        `inserted` bilan `skipped` orasidagi farq jimgina yo'qolardi va
+        "qayta import hech nima o'zgartirmadi" javobi asossiz qolardi.
+        Ayni paytda band chala fayl xatosini ham (kod TASODIFAN
+        takrorlangan holat) jimgina yutib yuborardi.
         """
         if not rows:
             return 0

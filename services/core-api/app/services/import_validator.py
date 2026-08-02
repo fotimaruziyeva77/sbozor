@@ -37,12 +37,28 @@ TUSHMAYDI: ular natija ro'yxatidan CHIQARIB TASHLANADI va javobda
 `skipped` sifatida sanaladi. Upsert ham, "faylda yo'qlarni yopish" ham
 YO'Q.
 
-⚠ BU 02-05 DAN KELGAN KIRISH SHARTI, "optimizatsiya" EMAS.
-`stall_code_claim()` `BEFORE INSERT` triggeri `ON CONFLICT DO NOTHING`
-da HAM ishga tushadi va `23505` bilan BUTUN TRANZAKSIYANI yiqitadi.
-Ya'ni mavjud kodli qator INSERT'ga YETIB BORMASLIGI shart — aks holda
-D-15 (idempotent qayta import) DB darajasida bajarilmasdi va admin
-"hech narsa o'zgarmadi" o'rniga 409 olardi.
+⚠ OLDINDAN FILTRLASH — MAHSULOT TALABI, "optimizatsiya" EMAS. LEKIN
+UNING SABABI 02-21 DA TO'G'RILANDI (WR-04):
+
+`stall_code_claim()` — `AFTER INSERT OR UPDATE OF code` triggeri
+(`migrations/versions/0007_market_domain.py:317-321` ning DDL'si;
+`BEFORE` shakli `fk_stall_code_registry_market_id_stall_id_stalls` FK'si
+bilan ISHLAY OLMAGANI uchun tanlangan — `triggers.py:202-221`). Bu yerda
+ilgari u `BEFORE` deb yozilgan edi va o'sha yozuv NOTO'G'RI edi (WR-04).
+
+`AFTER` ekanining OQIBATI: `INSERT ... ON CONFLICT (market_id, code) DO
+NOTHING` da konflikt YUZAGA KELGAN qator uchun trigger UMUMAN ishga
+tushmaydi. Ya'ni DB `23505` bilan yiqilmaydi — mavjud kodli qator
+jimgina o'tkazib yuboriladi.
+
+SHU SABABLI TO'G'RI TUSHUNILISHI SHART: D-15 idempotentligi DB
+tomonidan KAFOLATLANMAYDI, uni AYNAN SHU VALIDATOR ushlab turadi.
+Filtrlash `skipped` sonini foydalanuvchiga ko'rsatish uchun ham kerak
+(DB uni sanamaydi) — lekin u endi "aks holda tranzaksiya yiqiladi"
+degan zaruriyat emas, mahsulot javobining manbai. Bu farq muhim:
+noto'g'ri yozilgan sabab keyingi maintainerni "kafolat DB'da" degan
+xulosaga olib borardi va u filtrlashni "ortiqcha" deb olib tashlashi
+mumkin edi.
 
 -----------------------------------------------------------------------------
 XABAR TILI — uz-Latn, VA BU TIL QOIDASINING ISTISNOSI EMAS.
@@ -293,7 +309,17 @@ def validate_vendor_rows(
     issues: list[ImportIssue] = []
     accepted: list[VendorImportRow] = []
     phone_first_seen: dict[str, int] = {}
-    stall_first_seen: dict[str, int] = {}
+    stall_first_seen: dict[UUID, int] = {}
+    """⚠ KALIT — YECHILGAN `stall_id`, FAYLDAGI XOM SATR EMAS (WR-05).
+
+    `_lookup()` avval aniq moslikni, so'ng `_fold_index` (registrsiz)
+    ni ko'radi, ya'ni `A1` va `a1` BITTA rastaga yechiladi. Xom satr
+    bo'yicha kalitlaganda ular ikki xil kalit bo'lib, ikkala qator ham
+    validatsiyadan o'tardi, ikkalasi ham o'sha rastaga ochiq biriktirish
+    yozardi va `ex_stall_assignments_no_overlap` `23P01` bilan yiqilardi
+    — foydalanuvchi esa QATOR RAQAMISIZ 409 olardi. D-14 aynan shuni
+    taqiqlaydi.
+    """
 
     stall_index = _fold_index(stalls_by_code)
 
@@ -354,22 +380,29 @@ def validate_vendor_rows(
                         f"{number}-qator: {stall_code} raqamli rasta topilmadi",
                     )
                 )
-            elif stall_code in stall_first_seen:
+            elif stall_id in stall_first_seen:
                 # BITTA RASTAGA IKKI SOTUVCHI — `duplicate_code_in_file`
                 # kodi QAYTA ISHLATILADI ("fayl ichida takroriy kod").
                 # Usiz bu holat `ex_stall_assignments_no_overlap` ga
                 # urilib, QATOR RAQAMISIZ 409 berardi — D-14 aynan shuni
                 # taqiqlaydi, va bu sotuvchi faylidagi eng ehtimolli xato.
+                #
+                # ⚠ KALIT `stall_id`, `stall_code` EMAS (WR-05): `A1` va
+                # `a1` bitta rastaga yechiladi, ya'ni xom satr bo'yicha
+                # kalitlash registr farqli juftlikni SIRG'ALIB o'tkazib
+                # yuborardi. Xabarda esa FOYDALANUVCHI YOZGAN kod
+                # ko'rsatiladi — u faylda aynan shu shaklda turibdi va
+                # yechilgan `stall_id` unga hech nima demasdi.
                 row_issues.append(
                     ImportIssue(
                         number,
                         "duplicate_code_in_file",
                         f"{number}-qator: {stall_code} raqamli rasta "
-                        f"{stall_first_seen[stall_code]}-qatorda ham biriktirilgan",
+                        f"{stall_first_seen[stall_id]}-qatorda ham biriktirilgan",
                     )
                 )
             else:
-                stall_first_seen[stall_code] = number
+                stall_first_seen[stall_id] = number
 
         from_date = default_from if raw_from is None else _parse_date(raw_from)
         if from_date is None:
