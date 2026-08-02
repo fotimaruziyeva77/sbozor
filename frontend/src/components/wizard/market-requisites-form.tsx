@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -41,16 +41,66 @@ import { useCreateMarket } from "@/lib/market-queries";
  *
  * T-02-125: rekvizit maydonlarida `autoComplete="off"` — bank ma'lumotlari
  * brauzerning avtomatik to'ldirish xotirasida qolmasligi kerak.
+ *
+ * -----------------------------------------------------------------------------
+ * 1-QADAM ISH REJIMINI HAM SO'RAYDI (WR-06 — 0011_weekday_choice bilan JUFT).
+ *
+ * Ilgari bu forma `open_weekdays` ni UMUMAN yubormasdi va `market_create()`
+ * uni jimgina `{1..7}` bilan to'ldirardi. Natijada `calendar_configured`
+ * har doim rost bo'lib, 7-qadamdagi `calendar_missing` to'sig'i bozor
+ * yaratadigan YAGONA yo'lda hech qachon ishga tushmasdi: dushanba kuni
+ * yopiladigan bozor "har kuni ochiq" deb faollashardi va 6-fazadagi kunlik
+ * job o'sha kunga patta yozardi.
+ *
+ * TUZATISH IKKI YOQLAMA VA IKKALASI HAM KERAK:
+ *   * DB endi TAXMIN QILMAYDI — standart olib tashlandi (0011);
+ *   * UI esa oqilona TAKLIF qiladi — yettala kun oldindan belgilangan,
+ *     lekin qiymat sifatida YUBORILADI.
+ * Faqat birinchisi qilinganda har bir yangi bozor 7-qadamda to'silardi va
+ * eng ko'p uchraydigan holat (har kuni ishlaydigan bozor) sababsiz
+ * og'irlashardi. Faqat ikkinchisi qilinganda esa ustadan TASHQARIDAGI
+ * yo'llar (seed, migratsiya, kelajakdagi kod) standartni yana olardi.
+ *
+ * 7-QADAM QOLADI: u tahrir va istisno kunlar (bayram) uchun (UI-SPEC §6.2,
+ * D-17/D-18). Bu yerdagi tanlov — BOSHLANG'ICH qiymat, uning o'rnini
+ * bosuvchi emas.
  * =============================================================================
  */
 
 /** MVP: bitta mintaqa. Ro'yxat kengaysa `Select` shu massivdan to'ladi. */
 const TIMEZONES = ["Asia/Tashkent"] as const;
 
+/** ISO-8601 hafta kunlari: 1 = dushanba … 7 = yakshanba (backend kontrakti). */
+const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
+
+/**
+ * Kun -> tarjima kaliti (`calendar/weekday-picker.tsx` dagi bilan bir xil).
+ *
+ * Xarita ATAYIN literal: `t()` next-intl'ning tip xavfsizligi ostida
+ * ishlaydi va `` t(`calendar.weekday.${day}`) `` shaklidagi dinamik kalit
+ * kompilyatorga noma'lum bo'lardi (kalit xatosi runtime'ga qolardi).
+ *
+ * ⚠ `WeekdayPicker` KOMPONENTINING O'ZI qayta ishlatilmaydi va bu ataylab:
+ * u `useUpdateWeekdays()` bilan SERVERGA O'ZI YOZADI, bu yerda esa hali
+ * bozor ham, `market_id` ham yo'q — qiymat forma holatida to'planib
+ * `POST /api/v1/markets` tanasi bilan BIRGA ketishi kerak. Undan faqat
+ * razmetka naqshi va shu xarita olinadi.
+ */
+const WEEKDAY_KEYS = {
+  1: "calendar.weekday.1",
+  2: "calendar.weekday.2",
+  3: "calendar.weekday.3",
+  4: "calendar.weekday.4",
+  5: "calendar.weekday.5",
+  6: "calendar.weekday.6",
+  7: "calendar.weekday.7",
+} as const;
+
 type RequisitesValues = {
   name: string;
   timezone: string;
   operatingSince: string;
+  openWeekdays: number[];
   address: string;
   tin: string;
   bankAccount: string;
@@ -62,6 +112,8 @@ const EMPTY_VALUES: RequisitesValues = {
   name: "",
   timezone: TIMEZONES[0],
   operatingSince: "",
+  // Yettala kun OLDINDAN BELGILANGAN — sabab fayl boshidagi izohda.
+  openWeekdays: [...WEEKDAYS],
   address: "",
   tin: "",
   bankAccount: "",
@@ -104,6 +156,16 @@ export function MarketRequisitesForm() {
           .max(120, { error: t("wizard.nameLength") }),
         timezone: z.string().min(1, { error: t("errors.required") }),
         operatingSince: z.string().min(1, { error: t("errors.required") }),
+        /*
+         * BO'SH TO'PLAM UCH QATLAMDA TO'SILADI (T-02-116) va bu — birinchi
+         * qatlam: zod `min(1)`, serverda pydantic `_WeekdayList`, DB'da
+         * `ck_market_profile_open_weekdays_valid`. Bo'sh massiv "bozor hech
+         * qachon ochilmaydi" degani — `NULL` ("hali tanlanmagan") dan
+         * BUTUNLAY boshqa holat va u nosozlik.
+         */
+        openWeekdays: z
+          .array(z.number())
+          .min(1, { error: t("wizard.weekdaysRequired") }),
         address: z.string().trim().max(300, { error: t("wizard.addressLong") }),
         /*
          * Ixtiyoriy maydonlar: BO'SH satr har doim yaroqli. `.optional()`
@@ -142,13 +204,35 @@ export function MarketRequisitesForm() {
   );
 
   const {
+    control,
     formState: { errors, isSubmitting },
     handleSubmit,
     register,
+    setValue,
   } = useForm<RequisitesValues>({
     resolver: zodResolver(schema),
     defaultValues: EMPTY_VALUES,
   });
+
+  /*
+   * `useWatch`, `watch()` EMAS: `watch` — `useForm()` qaytaradigan oddiy
+   * funksiya va React Compiler uni memoizatsiya qila olmaydi (eskirgan UI
+   * xavfi). `useWatch` esa hook bo'lib, obunani to'g'ri e'lon qiladi.
+   * Sabab `create-user-dialog.tsx:110-115` dagi bilan AYNAN bir xil.
+   */
+  const selectedWeekdays = useWatch({ control, name: "openWeekdays" });
+
+  function toggleWeekday(day: number) {
+    const next = selectedWeekdays.includes(day)
+      ? selectedWeekdays.filter((item) => item !== day)
+      : [...selectedWeekdays, day].sort((a, b) => a - b);
+    // `shouldValidate` faqat to'plam BO'SH BO'LMAGANDA: birinchi belgini
+    // olib tashlashda darhol qizil matn chiqarish "hali tugatmadim"
+    // holatini xato deb ko'rsatardi (create-user-dialog naqshi).
+    setValue("openWeekdays", next, {
+      shouldValidate: selectedWeekdays.length > 0,
+    });
+  }
 
   /*
    * Server xatosi paydo bo'lganda fokus AYNAN o'sha blokka ko'chadi (§6.8):
@@ -178,6 +262,10 @@ export function MarketRequisitesForm() {
         name: values.name.trim(),
         timezone: values.timezone,
         operating_since: values.operatingSince,
+        // O'SISH TARTIBIDA: server `_normalized_weekdays` bilan baribir
+        // tartiblaydi, lekin so'rov tanasi va DB qatori bir xil ko'rinishda
+        // bo'lishi audit diff'ini o'qishni osonlashtiradi.
+        open_weekdays: [...values.openWeekdays].sort((a, b) => a - b),
         address: orNull(values.address),
         tin: orNull(values.tin),
         bank_account: orNull(values.bankAccount),
@@ -281,6 +369,45 @@ export function MarketRequisitesForm() {
             {...register("operatingSince")}
           />
         </Field>
+
+        {/*
+         * ⚠ NEGA `<details>` ICHIDA EMAS: «Rasmiy rekvizitlar» bo'limi
+         * A1/A2 taxminlari ostidagi, buyurtmachi bilan TASDIQLANMAGAN
+         * maydonlar uchun. Ish rejimi esa tasdiqlangan mahsulot qarori
+         * (D-17) va u TUSHUMGA BEVOSITA ta'sir qiladi — yopiq bo'lim
+         * ichidagi maydon o'tkazib yuborilishi KUTILADIGAN maydon, aynan
+         * shu esa WR-06 ni tug'dirgan xatti-harakat.
+         *
+         * `fieldset`/`legend` — `Field` EMAS: bu bitta boshqaruv elementi
+         * emas, checkbox GURUHI va `Field` ning `htmlFor` i guruhga
+         * bog'lana olmaydi (UI-SPEC §11, `create-user-dialog.tsx` naqshi).
+         */}
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-sm font-semibold">
+            {t("wizard.weekdaysLabel")}
+          </legend>
+          <p className="mb-1 text-xs text-text-muted">
+            {t("wizard.weekdaysHint")}
+          </p>
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {WEEKDAYS.map((day) => (
+              <WeekdayCheckbox
+                checked={selectedWeekdays.includes(day)}
+                day={day}
+                key={day}
+                label={t(WEEKDAY_KEYS[day])}
+                onToggle={() => toggleWeekday(day)}
+              />
+            ))}
+          </div>
+
+          {errors.openWeekdays ? (
+            <p className="text-sm text-danger-text" role="alert">
+              {errors.openWeekdays.message}
+            </p>
+          ) : null}
+        </fieldset>
       </section>
 
       <details
@@ -393,5 +520,47 @@ export function MarketRequisitesForm() {
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Bitta kun katakchasi — `calendar/weekday-picker.tsx::WeekdayCheckbox` naqshi.
+ *
+ * `min-h-11` — barmoq nishoni kamida 44px (WCAG 2.2 SC 2.5.5). Nishon
+ * katakchaning O'ZI emas, butun YORLIQ: 16px'lik katakchani telefon
+ * ekranida aniq bosish mumkin emas. `border-ui` — yorliq boshqaruv
+ * elementi bo'lgani uchun kontrast >=3:1 (SC 1.4.11).
+ *
+ * `id` prefiksi `market-weekday-` — 7-qadamdagi `WeekdayPicker` `weekday-`
+ * ni ishlatadi va ikkalasi bir sahifada UCHRAMAYDI, lekin prefiks baribir
+ * ajratiladi: bir kun ustaning ikkala qismi bitta ekranga chiqsa,
+ * takrorlangan `id` yorliqni NOTO'G'RI katakchaga bog'lardi.
+ */
+function WeekdayCheckbox({
+  checked,
+  day,
+  label,
+  onToggle,
+}: {
+  checked: boolean;
+  day: number;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <label
+      className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border-ui px-3 py-2 text-sm transition-colors hover:bg-surface-muted"
+      htmlFor={`market-weekday-${day}`}
+    >
+      <input
+        checked={checked}
+        className="size-4 accent-accent"
+        id={`market-weekday-${day}`}
+        onChange={onToggle}
+        type="checkbox"
+        value={day}
+      />
+      {label}
+    </label>
   );
 }
