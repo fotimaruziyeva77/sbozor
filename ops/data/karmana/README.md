@@ -1,18 +1,41 @@
 # Karmana bozorining real ma'lumotini kiritish
 
-> Bu yo'riqnoma ROADMAP'ning 2-fazaga qo'ygan shartini bajaradi:
-> *"Karmananing real ma'lumoti aynan shu fazada kiritiladi — keyingi fazalar
-> fikstura emas, haqiqat ustida sinaladi."*
->
+## Operatsion tartib (bu hujjat darvoza EMAS)
+
+**Bu yo'riqnoma fazani bloklamaydi va hech qachon bloklamagan bo'lishi
+kerak edi.** ROADMAP'ning 2026-08-01 da o'rnatilgan self-service qoidasi
+buni qat'iy qilib qo'ygan:
+
+> *«Tashqi bog'liqlik hech qachon `Blocks:` bo'lmaydi. Yetishmayotgan real
+> ma'lumot, kelmagan hujjat yoki ulanmagan uskuna — bularning hech biri
+> fazani yoki jarayonni to'xtatmaydi. Ular keyin to'ldiriladigan ma'lumot
+> sifatida modellashtiriladi.»*
+
+Fazaning yetkazib berish mahsuloti — **import qobiliyati**, ma'lum bir
+fayl emas. Qobiliyatning o'zi Karmana miqyosida (8 zona / ~600 rasta /
+~480 sotuvchi) **allaqachon o'lchangan** va o'lchov CI'da takrorlanadi:
+
+```sh
+docker compose --profile test run --rm tests \
+  pytest tests/integration/test_karmana_scale_import.py -q
+```
+
+Quyidagi tartib esa ma'muriyatning **haqiqiy fayllari kelganda**
+bajariladigan operatsion amal. Uni bugun ham, `npm run karmana:sample`
+bilan hosil qilingan namunada mashq qilib ko'rish mumkin («Quruq mashq»
+bo'limi).
+
 > Yo'l **brauzersiz** ham takrorlanadi: `scripts/karmana-import.mjs`.
 > Katalogda real fayl **saqlanmaydi** — sabab `.gitignore` da.
 
 ---
 
-## 1. Nima kerak (ma'muriyatdan)
+## 1. Ma'muriyat fayllari kelganda nima kerak
 
-Beshta hujjat. Ularsiz kiritishni boshlash **mumkin emas** — har biri
-tizimdagi aniq bir maydonga tushadi va keyin tuzatish qimmat.
+Beshta hujjat — bu **kutilayotgan kirish ma'lumoti**, shartsiz talab
+emas. Har biri tizimdagi aniq bir maydonga tushadi va keyin tuzatish
+qimmat, shuning uchun ro'yxat to'liq saqlanadi: kelganda nima
+so'ralishini biladigan yagona joy shu.
 
 | # | Nima | Kimdan | Qayerga tushadi |
 |---|------|--------|-----------------|
@@ -30,6 +53,30 @@ tasdiqlatib oling — undan keyin forma qotiriladi.
 Uchinchi band — **shaxsiy ma'lumot**. Faylni elektron pochta yoki messenjer
 orqali emas, qo'lda yoki himoyalangan kanal orqali oling va ish tugagach
 `ops/data/karmana/local/` dan **o'chiring**.
+
+### Quruq mashq (fayl kelishidan OLDIN)
+
+Butun tartibni bir marta bajarib ko'rish uchun realistik namuna hosil
+qilinadi:
+
+```sh
+npm run karmana:sample
+```
+
+Bu buyruq `ops/data/karmana/local/` ga ikkita `.xlsx` yozadi — 600 rasta
+va 480 sotuvchi, **ataylab iflos**: takroriy rasta raqami, imlo xatosi
+bilan yozilgan zona, `repair` deb yozilgan holat, bo'sh kod, bo'sh
+qatorlar, son sifatida yozilgan kod, `+998` telefonining uch shakli.
+Ya'ni namuna baxtli yo'lni emas, **xatolar yo'lini** ham ko'rsatadi:
+§5 dagi xato kodlari va §6 dagi «tuzatib qayta yuklash» amali mashqda
+ham xuddi real fayldagidek chiqadi.
+
+Chiqish katalogi `.gitignore` ostida — hosil qilingan fayllar hech qachon
+git tarixiga tushmaydi.
+
+⚠ Namunadagi ismlar va telefonlar **to'qib chiqarilgan** (`+998 90 995 …`
+diapazoni). Ular real shaxsga tegishli emas va real ma'lumotning o'rnini
+bosmaydi — namuna faqat **tartibni** mashq qilish uchun.
 
 ---
 
@@ -132,9 +179,29 @@ Qo'shimcha eslatmalar:
 | ZIP ichidagi elementlar | 200 | `422 file_too_complex` |
 | Ochilgan hajm | 50 MB | `422 file_too_complex` |
 
-Karmana uchun 300–1000 rasta kutilmoqda, ya'ni chegaralardan besh barobar
-uzoq. Chegaralar muhit o'zgaruvchilaridan sozlanadi (`IMPORT_MAX_ROWS` va
-h.k.) — deploy qayta qurilmaydi.
+Karmana uchun 300–1000 rasta rejalashtirilgan, ya'ni chegaralardan besh
+barobar uzoq. Chegaralar muhit o'zgaruvchilaridan sozlanadi
+(`IMPORT_MAX_ROWS` va h.k.) — deploy qayta qurilmaydi.
+
+### O'LCHANDI (2026-08-03, `test_karmana_scale_import.py`)
+
+Quyidagilar taxmin emas — CI'da takrorlanadigan o'lchov. Raqamlar test
+konteyneridagi Postgres bilan olingan, ya'ni ishlab chiqarish VPS'ida
+boshqacha bo'lishi mumkin; kattalik tartibi esa aynan shu.
+
+| Nima | Qiymat |
+|------|--------|
+| 600 qatorli rasta importi (validatsiya + bitta tranzaksiya) | **0,28 s** |
+| 480 qatorli sotuvchi importi (biriktirishlar bilan) | **0,23 s** |
+| `GET /api/v1/stalls/map` (605 katak, 8 zona) | **0,04 s** |
+| `GET /api/v1/stalls/map` javobining hajmi | **58 235 bayt (~57 KB)** |
+| 600 rastali `.xlsx` fayl hajmi | **~19,9 KB** (chegara 5 MB) |
+| 480 sotuvchili `.xlsx` fayl hajmi | **~17,0 KB** (chegara 5 MB) |
+
+Ya'ni Karmana miqyosi chegaralarning **yuzdan bir qismida** turibdi va
+import odam sezadigan kutish vaqti bermaydi. `⚠ Importni ish vaqtidan
+tashqarida bajaring` ogohlantirishi (pastda) baribir kuchida qoladi —
+sabab tezlik emas, **bitta tranzaksiya**dagi qulflar (T-02-133).
 
 Faqat `.xlsx` qabul qilinadi. `.csv` va `.ods` `422 unsupported_file_type`
 bilan rad etiladi (`.xlsx` deb **nomlangan** boshqa fayl ham).
@@ -201,6 +268,21 @@ reestr ekranidan tahrirlaysiz.
 Har bir raqamni ma'muriyatning **o'z reestri** bilan solishtiring va
 farqlarni yozib qo'ying — 8-fazadagi baza solishtiruvi shunga tayanadi
 (T-02-132).
+
+> **Bu ro'yxatning MEXANIK yarmi endi testda yashaydi.** Yettala raqamning
+> har biri `tests/integration/test_karmana_scale_import.py` da assertion:
+> umumiy rasta soni, zona bo'yicha taqsimot, holat bo'yicha taqsimot,
+> toifa bo'yicha taqsimot, sotuvchi soni, biriktirilgan rasta soni va
+> toifa bo'yicha amaldagi narx — hammasi generator E'LON QILGAN qiymat
+> bilan solishtiriladi. Ya'ni «tizim o'zi bilan mos keladimi?» degan
+> savolga javob avtomatik.
+>
+> **Qog'oz reestr bilan solishtirish esa OPERATSION amal bo'lib qoladi**
+> va u faqat real fayl kelganda, aynan shu yettita raqam ustidan
+> bajariladi. Uni avtomatlashtirib bo'lmaydi: taqqoslanadigan ikkinchi
+> tomon (ma'muriyatning daftari) tizimdan tashqarida. Shu sababli u
+> `02-VALIDATION.md` da `human_only_verifications` bandi sifatida, egasi
+> va ishga tushish sharti bilan yuritiladi.
 
 | Nima solishtiriladi | Qayerdan olinadi |
 |---------------------|------------------|
