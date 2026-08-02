@@ -43,7 +43,7 @@ SBOZOR — O'zbekiston an'anaviy bozorlarini raqamlashtiruvchi universal SaaS pl
 | **PostgreSQL** | **18.4** (`postgres:18.4-trixie`) | Primary DB, multi-tenant | PG 18 GA, supported to 2030-11. **Do not use 19** (still `19beta2`). Native `uuidv7()`, async I/O, improved `EXPLAIN`. |
 | **Valkey** | **9.1.1** (`valkey/valkey:9.1.1-alpine`) | Queue broker + cache + FSM store | Drop-in Redis replacement, **BSD-3-Clause**, Linux Foundation governed. Redis 8.x is AGPLv3/RSALv2/SSPL tri-licensed — legally fine as an unmodified separate service, but Valkey removes the conversation entirely, which matches this project's stated license posture. `redis-py` client works unchanged. |
 | **SeaweedFS** | **4.40** (`chrislusf/seaweedfs:4.40`) | S3-compatible snapshot archive | **Replaces MinIO.** Apache-2.0, 33.7k stars, released 2026-07-20, active. Single-node: `weed server -s3 -dir=/data` in one container. Purpose-built for many small files (exactly: 175 JPEGs/day × N markets). |
-| **go2rtc** | **v1.9.14** | RTSP→WebRTC/HLS live view **and** snapshot capture | Fixed by constraint for live view; **also becomes the snapshot source** via `/api/frame.jpeg`. Single Go binary, holds persistent RTSP sessions so a snapshot is an HTTP GET. |
+| **go2rtc** | **v1.9.14** | RTSP→WebRTC/HLS live view **and** snapshot capture | Fixed by constraint for live view; **also becomes the snapshot source** via `/api/frame.jpeg`. Single Go binary, holds persistent RTSP sessions so a snapshot is an HTTP GET. **⚠ SECURITY (GHSA-wwww-5h25-jf98, CVSS 9.1): `PUT /api/streams?src=exec:…` executes arbitrary commands.** Therefore: go2rtc's HTTP API is NEVER proxied to users or exposed beyond the compose network, and any `src` value core-api forwards MUST be allow-listed to the `rtsp://` scheme. Treat go2rtc as a trusted-network-only internal service. |
 | **ONNX Runtime** | **1.28.0** (2026-07-25) | CPU inference for the detector | See "Why ONNX Runtime, not OpenVINO / not torch" below. ~15 MB wheel vs torch's ~800 MB — keeps the cv-service production image small. |
 | **RF-DETR** (`rfdetr`) | **1.8.3** | Object detector (person + goods in zones) | **Apache-2.0 code AND Apache-2.0 COCO weights for Nano→Large.** Verified: "Core models (Nano through Large) and all code are released under the Apache 2.0 license." Actively developed by Roboflow (pushed 2026-07-28, 8.8k stars, ICLR 2026). Explicitly "designed for fine-tuning" — matters for your month-2 Karmana fine-tune. |
 | **supervision** | **0.29.1** | Polygon-zone occupancy logic + HITL annotation images | MIT, 48k stars, pushed 2026-07-28. `sv.PolygonZone` / `sv.PolygonZoneAnnotator` is *literally* your `camera_zones` → `occupancy_events` step. Roboflow publishes an "Occupancy Analytics" cookbook for this exact pattern. Do **not** hand-roll point-in-polygon. |
@@ -78,7 +78,7 @@ SBOZOR — O'zbekiston an'anaviy bozorlarini raqamlashtiruvchi universal SaaS pl
 | `asgi-correlation-id` | 5.0.1 | Request ID propagation | Correlates core-api → cv-service → bot-service logs. |
 | `sentry-sdk[fastapi]` | 2.66.1 | Error tracking | Spec §5 explicitly requires Sentry. |
 | `tenacity` | 9.1.4 | In-request retry (HTTP to go2rtc / ISAPI) | Apache-2.0. Different layer from arq's job retries — use both. |
-| `httpx` | 0.28.1 | Async HTTP client | Talking to go2rtc, Hikvision ISAPI (`httpx.DigestAuth`), Telegram. |
+| `httpx` | 0.28.1 | Async HTTP client | Talking to go2rtc, Hikvision ISAPI (`httpx.DigestAuth`), Telegram. **⚠ As of 2026-08-02 `httpx` sits in core-api's `[dependency-groups] dev`, not `[project] dependencies`.** That is correct only while it is test-only. Phase 3's ISAPI client is production code — it MUST be promoted to `[project] dependencies` in that phase, or the service will import-fail at deploy while every test passes. |
 | `boto3` / `aioboto3` | 1.43.57 / 15.5.0 | S3 access to SeaweedFS | **Use the S3 API, not `minio-py`.** This is what makes the storage backend a config change (SeaweedFS → Garage → AWS S3 → Uzbek cloud) instead of a refactor. |
 | `tzdata` | 2026.3 | Asia/Tashkent in slim images | Python 3.13 on `python:3.13-slim` has **no** tzdata — `ZoneInfo("Asia/Tashkent")` raises without this. Bites you the first time a report boundary is wrong. |
 | `prometheus-fastapi-instrumentator` | 8.1.0 | Metrics | Optional for MVP. Add if you want snapshot-success-rate dashboards beyond Telegram alerts. |
@@ -87,7 +87,7 @@ SBOZOR — O'zbekiston an'anaviy bozorlarini raqamlashtiruvchi universal SaaS pl
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `arq` | **0.28.0** | Job queue **and** cron for the snapshot pipeline | See "Scheduling decision" below. Redis/Valkey-only, asyncio-native, `max_tries` + `Retry(defer=...)` maps directly to spec §4.5 "2 retries". |
+| `taskiq` + `taskiq-redis` | **0.12.4** + **1.2.3** | Job queue **and** cron for the snapshot pipeline | **Replaces arq (2026-08-02).** `arq 0.28.0` declares `redis[hiredis]<6,>=4.2.0`, but core-api pins `redis[hiredis]==8.0.1` — installing arq downgrades redis and breaks core-api. Verified against PyPI metadata and reproduced with `pip install arq`. `taskiq-redis 1.2.3` requires `redis<9,>=8.0.0`, which matches the existing pin exactly. See "Scheduling decision" below. |
 | `onnxruntime` | 1.28.0 | Detector inference (CPU EP) | Production inference. No torch in this image. |
 | `supervision` | 0.29.1 | `PolygonZone` occupancy, NMS, annotation | Zone logic + generating the marked-up evidence images the nazoratchi reviews. |
 | `opencv-python-headless` | **4.14.0.94** (2026-07-28) | Image decode/resize/crop, reference-frame differencing | **`-headless`** = no GTK/X11 in the container (≈70 MB smaller, no missing-`libGL` crash). **Not 5.0.0.93** — OpenCV 5.0 shipped 2026-07-02 with API breaks; 4.14 was released 3 weeks *later*, so 4.x is still the actively maintained line. |
@@ -177,11 +177,12 @@ SBOZOR — O'zbekiston an'anaviy bozorlarini raqamlashtiruvchi universal SaaS pl
 | **3. ffmpeg one-shot** | `ffmpeg -rtsp_transport tcp -i rtsp://… -frames:v 1 -q:v 2 out.jpg` | Last resort / diagnostics. Costs a full RTSP handshake + I-frame wait (3–10 s) per snapshot and needs subprocess timeout hygiene. |
 | ~~ONVIF `GetSnapshotUri`~~ | `onvif-zeep-async` 4.2.1 | **Not for snapshots.** Adds a SOAP round-trip to discover a URI that Hikvision exposes directly via ISAPI. `onvif-zeep` (0.2.12) is stale; the async fork is Home-Assistant-maintained. Use ONVIF only if you later need auto-discovery of unknown-brand cameras. |
 
-### Scheduling: arq, not APScheduler, not Celery
+### Scheduling: taskiq, not arq (uninstallable), not APScheduler, not Celery
 
 | Option | Verdict |
 |---|---|
-| **arq 0.28.0** | **Recommended.** Redis/Valkey-only, asyncio-native, ~2k LOC. `max_tries` + `Retry(defer=…)` is exactly the "2 retry" requirement. Job results persist in Redis → "which snapshots were skipped yesterday?" is a query, not a log grep. Built-in `cron()`. Honest caveat: release cadence is slow (0.28.0 in April 2026). |
+| **taskiq 0.12.4 + taskiq-redis 1.2.3** | **Recommended (changed 2026-08-02).** Requires `redis<9,>=8.0.0` — matches core-api's `redis[hiredis]==8.0.1` pin exactly. Actively developed (pushed 2026-07-24). Bigger abstraction surface than arq (brokers, middlewares, result backends, separate scheduler process) — accept that cost; it is the only asyncio-native queue that installs in this dependency set. |
+| ~~arq 0.28.0~~ | **UNINSTALLABLE — do not attempt.** Declares `redis[hiredis]<6,>=4.2.0`; core-api pins `redis[hiredis]==8.0.1`. `pip install arq` silently uninstalls redis 8.x and installs 5.3.1, breaking core-api. Confirmed against PyPI metadata 2026-08-02. Its design was the better fit (~2k LOC, `max_tries` + `Retry(defer=…)`, built-in `cron()`), but that is irrelevant if it cannot coexist with the pinned client. |
 | APScheduler **3.11.3** | It is a *scheduler*, not a queue: no durable retry, no job-result history, a job missed during a restart is simply gone. **4.0 — which fixes this — is still `4.0.0a6` from April 2025 and the maintainer explicitly says not for production.** Acceptable only if you want to cut a dependency and accept application-level retry via `tenacity`. |
 | Celery 5.6.3 + beat | Three processes (worker + beat + broker) and a sync-first design that fights FastAPI/httpx async code. Massive overkill for 175 jobs/day. **Reject.** |
 | taskiq 0.12.4 (+ taskiq-redis 1.2.3) | Closest competitor, more actively developed than arq (pushed 2026-07-24). Bigger abstraction surface (brokers, middlewares, result backends, separate scheduler process). **Switch to this if arq goes quiet.** |
@@ -281,6 +282,7 @@ SBOZOR — O'zbekiston an'anaviy bozorlarini raqamlashtiruvchi universal SaaS pl
 
 | Package A | Compatible With | Notes |
 |-----------|-----------------|-------|
+| `arq 0.28.0` | `redis[hiredis] >=4.2.0,<6` | **HARD CONFLICT — arq is unusable in this project.** core-api pins `redis[hiredis]==8.0.1`; installing arq downgrades it to 5.3.1 and breaks core-api. Verified against PyPI metadata 2026-08-02 and reproduced with a real install. Use `taskiq` + `taskiq-redis 1.2.3` (requires `redis<9,>=8.0.0` — matches exactly). |
 | `aiogram 3.30.0` | `pydantic >=2.4.1,<2.14` | **Hard cap.** Pydantic 2.13.4 is fine today; when 2.14 ships, core-api can move but bot-service cannot. **Isolate service dependency sets** — one `pyproject.toml` + `uv.lock` per service. Verified from aiogram 3.30.0 metadata. |
 | `aiogram[redis] 3.30.0` | `redis[hiredis] >=6.2.0,<8` | **Conflicts with redis-py 8.0.1.** Pin `redis>=7.4,<8` in bot-service; use 8.0.1 in core-api/cv-service. Verified from aiogram 3.30.0 metadata. |
 | `aiogram 3.30.0` | Python `>=3.10,<3.15` | Python 3.13 is inside the window. |

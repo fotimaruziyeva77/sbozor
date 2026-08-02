@@ -343,7 +343,7 @@ Yetim (orphan) talab yo'q, dublikat biriktirish yo'q.
 | # | Qaror | Qachon |
 |---|-------|--------|
 | 1 | ~~Kadr olish usuli~~ — **HAL QILINDI 2026-08-01**: standart `go2rtc /api/frame.jpeg`, zaxira ISAPI `/picture`, oxirgi chora ffmpeg. Uchalasi ham sozlanadigan qilib quriladi; real NVR ma'lumoti tanlovni **sozlama** bilan o'zgartiradi | — (dala testini kutmaydi) |
-| 2 | Job orchestration: DB-materialized `capture_runs` + `SKIP LOCKED` vs `arq` (yoki arq ostida) | Phase 4 rejasi |
+| 2 | Job orchestration — **`arq` variantini o'chirish kerak**: u `redis[hiredis]<6` talab qiladi, core-api esa `redis[hiredis]==8.0.1` ga qadalgan (2026-08-02 da PyPI metadata bilan tasdiqlandi). Qolgan tanlov: DB-materialized `capture_runs` + `SKIP LOCKED` **vs** `taskiq` + `taskiq-redis 1.2.3` (`redis<9,>=8.0.0` — pin bilan mos) | Phase 3 rejasi (Phase 4 dan oldin — CAM-08 kashfiyoti ham navbat talab qiladi) |
 | 3 | Obyekt-ombor nomi: MinIO arxivlangan → SeaweedFS (S3 API bir xil) | Phase 4 rejasi; PROJECT.md Key Decisions yangilanadi |
 | 4 | Detektor: RF-DETR (Apache-2.0, Nano→Large) — XLarge/2XLarge PML litsenziyasi TAQIQ | Phase 5 rejasi; PROJECT.md Key Decisions yangilanadi |
 | 5 | O'zbek huquqiy talablari (kvitansiya maydonlari, CCTV shaxsiy ma'lumot, KKM) — mahalliy yurist ko'rigi | Phase 1–2 bilan parallel, launch'gacha |
