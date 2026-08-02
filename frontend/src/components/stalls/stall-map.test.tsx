@@ -127,6 +127,18 @@ function mockMap(cells: readonly MockCell[], detail?: Record<string, unknown>) {
   });
 }
 
+type MockZone = { id: string; name: string; cells: readonly MockCell[] };
+
+/** Bir NECHTA zonali xarita javobi — miqyos testi uchun. */
+function mockZones(zones: readonly MockZone[]) {
+  apiFetch.mockImplementation((path: string) => {
+    if (path === MAP_PATH) {
+      return Promise.resolve({ zones });
+    }
+    return Promise.reject(new Error(`kutilmagan yo'l: ${path}`));
+  });
+}
+
 /**
  * Sinov qobig'i — SAHIFANING xulqini takrorlaydi: tanlangan ID SHU YERDA
  * yashaydi va xaritaga TUSHMAYDI (Pitfall 8).
@@ -397,4 +409,65 @@ describe("Rasta kartasi (§7.6)", () => {
     // bexabar qoldirardi.
     expect(noTariff.className).toContain("text-danger-text");
   });
+});
+
+/*
+ * ===========================================================================
+ * KARMANA MIQYOSI (02-23).
+ *
+ * Miqyos raqamlari `tests/fixtures/karmana_seed.py` dagi
+ * `KARMANA_ZONE_COUNT = 8` va `KARMANA_STALL_COUNT = 600` bilan bir xil.
+ * Ular BU YERDA qayta yozilgan va boshqa iloji yo'q — Python konstantasini
+ * vitest'ga import qilib bo'lmaydi. Ajralib ketish xavfi ochiq qoldiriladi
+ * va u `02-VALIDATION.md` da nomlangan.
+ *
+ * ⚠ BU TEST O'QILISHNI BAHOLAMAYDI. jsdom shrift, kontrast va skroll
+ * masofasini o'lchay olmaydi, ya'ni «xarita real miqyosda O'QILADIMI?»
+ * degan savol PERSEPTUAL bo'lib qoladi va u `02-VALIDATION.md` ning
+ * `human_only_verifications` bandi sifatida, egasi va ishga tushish
+ * sharti bilan yuritiladi. Bu yerda MEXANIK yarmi yopiladi: real
+ * miqyosda birorta rasta TUSHIB QOLMAYDI.
+ * ===========================================================================
+ */
+const KARMANA_ZONE_COUNT = 8;
+const KARMANA_STALL_COUNT = 600;
+const CELLS_PER_ZONE = KARMANA_STALL_COUNT / KARMANA_ZONE_COUNT;
+
+describe("StallMap — Karmana miqyosi", () => {
+  test("8 zona × 75 katak: DOM'da AYNAN 600 katak va 8 zona bloki", async () => {
+    const zones: MockZone[] = Array.from(
+      { length: KARMANA_ZONE_COUNT },
+      (_, zoneIndex) => ({
+        id: `zone-${zoneIndex}`,
+        name: `${zoneIndex + 1}-qator`,
+        cells: Array.from({ length: CELLS_PER_ZONE }, (_, cellIndex) =>
+          cell(String(zoneIndex * CELLS_PER_ZONE + cellIndex + 1)),
+        ),
+      }),
+    );
+
+    mockZones(zones);
+    renderMap();
+
+    await waitFor(() =>
+      expect(cellButtons()).toHaveLength(KARMANA_STALL_COUNT),
+    );
+
+    // Zona bloklari — har zona uchun BITTA `<section class="zone-block">`.
+    expect(document.querySelectorAll(".zone-block")).toHaveLength(
+      KARMANA_ZONE_COUNT,
+    );
+
+    /*
+     * Sanoq YOLG'IZ o'zi yetarli emas: bitta katak IKKI marta, boshqasi
+     * esa umuman chizilmagan holatda ham u 600 bo'lardi. Shuning uchun
+     * KODLAR to'plami serverdan kelgan to'plam bilan AYNAN solishtiriladi.
+     */
+    const codes = cellButtons().map((button) =>
+      button.getAttribute("data-stall-code"),
+    );
+    const expected = zones.flatMap((zone) => zone.cells.map((c) => c.code));
+    expect(codes).toEqual(expected);
+    expect(new Set(codes).size).toBe(KARMANA_STALL_COUNT);
+  }, 30_000);
 });
