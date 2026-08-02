@@ -25,7 +25,7 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 - [x] **MARKET-04**: Bozor admini sotuvchilar reestrini yuritadi (F.I.Sh., telefon) va rasta biriktirish davrlarini boshqaradi
 - [x] **MARKET-05**: Bozor admini ishlamaydigan/bayram kunlarini belgilaydi — o'sha kunlarga patta hisoblanmaydi
 - [x] **MARKET-06**: Sxematik plan-xarita: rastalar zona bo'yicha rangli grid (yashil bo'sh, ko'k to'langan, qizil qarzdor, sariq nomuvofiq); rasta bosilganda karta (dalil-rasm bilan) ochiladi
-- [ ] **MARKET-07**: Bozor admini ma'muriyat bergan xodimlar ro'yxatini bitta fayl bilan yuklaydi (F.I.Sh., telefon, rol); tizim hisoblarni rollar bilan yaratadi, telefon raqamlarini E.164 ga normallaydi, dublikatni rad etadi va vaqtinchalik parollarni beradi — qo'lda birma-bir kiritish shart emas
+- [x] **MARKET-07**: Bozor admini ma'muriyat bergan xodimlar ro'yxatini bitta fayl bilan yuklaydi (F.I.Sh., telefon, rol); tizim hisoblarni rollar bilan yaratadi, telefon raqamlarini E.164 ga normallaydi, dublikatni rad etadi va vaqtinchalik parollarni beradi — qo'lda birma-bir kiritish shart emas
 
 ### Kamera va suratga olish (CAM)
 
@@ -148,7 +148,7 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | MARKET-04 | Phase 2 | Done |
 | MARKET-05 | Phase 2 | Done |
 | MARKET-06 | Phase 2 | Done |
-| MARKET-07 | Phase 2 | Pending |
+| MARKET-07 | Phase 2 | Done |
 | CAM-01 | Phase 3 | Pending |
 | CAM-02 | Phase 3 | Pending |
 | CAM-03 | Phase 3 | Pending |
@@ -214,8 +214,8 @@ Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 
 **Coverage:**
 
-- v1 requirements: 46 total
-- Mapped to phases: 46 ✓
+- v1 requirements: 49 total
+- Mapped to phases: 49 ✓
 - Unmapped: 0
 
 **Faza kesimida:**
@@ -223,25 +223,27 @@ Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 | Phase | Nomi | Talablar soni |
 |-------|------|---------------|
 | 1 | Poydevor va tenant xavfsizligi | 5 |
-| 2 | Bozor domeni va "Yangi bozor" ustasi | 6 |
-| 3 | Kamera va tarmoq ulanishi | 3 |
+| 2 | Bozor domeni va "Yangi bozor" ustasi | 7 |
+| 3 | Kamera va tarmoq ulanishi | 5 |
 | 4 | Snapshot pipeline | 5 |
 | 5 | Kamera zonalari, CV va nazoratchi tasdig'i | 6 |
 | 6 | Billing va kassir | 9 |
 | 7 | Nomuvofiqlik, bildirishnoma va botlar | 9 |
 | 8 | Hisobotlar, mustahkamlash va ishga tushirish | 3 |
 
-⚠ **Yuqoridagi ikki blokning SANOQLARI eskirgan va bu reja ularga ATAYIN
-tegmadi.** 2026-08-01 da uchta yangi talab qo'shilgan, sanoqlar esa
-yangilanmagan; ularni faylning O'Z mazmunidan qayta hisoblash `02-24`
-rejasining zimmasida. `node scripts/check-requirements-sync.mjs` farqni har
-ishga tushganda ogohlantirish sifatida ko'rsatadi, lekin xato deb sanamaydi —
-ya'ni eskirgan son jimgina yashab qolmaydi. Belgi qo'yish qamrovni
-o'zgartirmaydi, shuning uchun sanoqlarni shu rejada "yo'l-yo'lakay"
-to'g'rilash ikki bog'liq bo'lmagan o'zgarishni bitta yozuvda aralashtirardi.
+✅ **Sanoqlar 2026-08-02 da (`02-24`) faylning O'Z mazmunidan qayta
+hisoblangan** — qo'lda taxmin qilinmagan: checkbox ro'yxati 49 ta band,
+Traceability jadvali 49 ta qator beradi va ular faza bo'yicha
+5/7/5/5/6/9/9/3 ga taqsimlanadi. Ilgari bu bloklar `46` va Phase 2 uchun
+`6`, Phase 3 uchun `3` deb turgan edi: 2026-08-01 da qo'shilgan uchta
+talab (MARKET-07, CAM-08, CAM-09) sanoqlarga kiritilmagan edi.
+`node scripts/check-requirements-sync.mjs` bu farqni har ishga tushganda
+ogohlantirish sifatida ko'rsatib turgan — ya'ni eskirgan son jimgina
+yashab qolmadi.
 
 ---
 *Requirements defined: 2026-07-29*
-*Last updated: 2026-08-02 — 2-faza yopish to'lqini (`02-22`): MARKET-01…06
-o'lchangan regressiya dalili bilan `Done` qilindi, MARKET-07 `02-24` ga
-qoldi; belgilash qoidasining chegarasi Traceability bo'limida yozildi*
+*Last updated: 2026-08-02 — `02-24`: MARKET-07 (xodimlar rosteri importi)
+o'lchangan dalil bilan `Done` qilindi va 2-faza talablari to'liq yopildi;
+`**Coverage:**` hamda `Faza kesimida` sanoqlari faylning O'Z mazmunidan
+qayta hisoblandi (46 -> 49)*

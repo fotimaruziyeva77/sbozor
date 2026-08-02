@@ -404,16 +404,7 @@ async def import_staff(
     ]
 
     created, taken = await repo.create_members(entries)
-    _reject_if_invalid(
-        [
-            import_validator.ImportIssue(
-                row=number,
-                code="phone_taken",
-                message=f"{number}-qator: bu telefon platformada allaqachon band",
-            )
-            for number in taken
-        ]
-    )
+    _reject_if_invalid([import_validator.phone_taken_issue(number) for number in taken])
 
     for member in created:
         # `users.py::create_user` dagi bilan AYNAN bir xil shakl: a'zolik

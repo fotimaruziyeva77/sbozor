@@ -319,7 +319,13 @@ describe("uz-Cyrl.json — yetkazilayotgan fayl toza", () => {
   test("lug'atdagi lotin so'zlardan tashqari lotin harfi qolmagan", () => {
     const tree = readJson("uz-Cyrl.json");
     // Lug'at ATAYIN lotin holida qoldiradigan so'zlar.
-    const allowed = /SBOZOR|Excel|xlsx|https?:\/\/\S+|[\w.%+-]+@[\w.-]+/gu;
+    //
+    // ⚠ `csv` 02-24 da qo'shildi va sababi `xlsx` bilan AYNAN bir xil:
+    // fayl formatining nomi harfma-harf o'girilganda (`цсв`) tanib
+    // bo'lmas holga kelardi. Ro'yxat `uz-Cyrl.overrides.json` -> `words`
+    // bilan JUFT yuritiladi — biri yangilanib, ikkinchisi unutilsa
+    // AYNAN shu test qizaradi.
+    const allowed = /SBOZOR|Excel|xlsx|CSV|csv|https?:\/\/\S+|[\w.%+-]+@[\w.-]+/gu;
 
     const walk = (node, prefix) => {
       for (const [key, value] of Object.entries(node)) {

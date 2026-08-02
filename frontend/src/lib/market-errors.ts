@@ -59,7 +59,8 @@ export type MarketErrorMessageKey =
   | "import.fileTooLarge"
   | "import.fileTooComplex"
   | "import.unsupportedType"
-  | "import.conflict";
+  | "import.conflict"
+  | "import.staffRosterTooLarge";
 
 /**
  * `ApiError.detail` -> tarjima kaliti (2-faza domeni).
@@ -137,6 +138,14 @@ export function marketErrorMessageKey(
       // mumkin emas — yagona ma'noli harakat qayta urinish.
       case "import_conflict":
         return "import.conflict";
+
+      /* --- xodimlar rosteri (02-24) --- */
+      // `file_too_complex` DAN AJRATILGAN: u faylning tuzilishi haqida,
+      // bu esa HUJUM YUZASINING chegarasi (bir so'rovda nechta hisob
+      // yaratilishi mumkinligi). Adminga aytiladigan harakat ham boshqa:
+      // "faylni soddalashtiring" emas, "ro'yxatni bo'laklarga bo'ling".
+      case "staff_roster_too_large":
+        return "import.staffRosterTooLarge";
 
       default:
         break;

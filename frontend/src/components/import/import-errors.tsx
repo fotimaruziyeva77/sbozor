@@ -69,6 +69,17 @@ const ERROR_LABEL_KEYS = {
   stall_not_found: "import.errors.stall_not_found",
   invalid_date: "import.errors.invalid_date",
   row_too_short: "import.errors.row_too_short",
+  // --- xodimlar rosteri (02-24) ---
+  //
+  // ⚠ `invalid_role` va `role_not_allowed` ATAYIN alohida: birinchisi
+  // imlo xatosi (`kassr`), ikkinchisi esa to'g'ri yozilgan, lekin
+  // adminning darajasidan yuqori rol (`market_admin`). Adminning
+  // harakati ikkalasida BUTUNLAY boshqa — faylni tuzatish yoki
+  // platforma adminiga murojaat qilish — va bitta matn ikkalasini ham
+  // noto'g'ri yo'naltirardi.
+  invalid_role: "import.errors.invalid_role",
+  role_not_allowed: "import.errors.role_not_allowed",
+  phone_taken: "import.errors.phone_taken",
 } as const;
 
 type KnownErrorCode = keyof typeof ERROR_LABEL_KEYS;

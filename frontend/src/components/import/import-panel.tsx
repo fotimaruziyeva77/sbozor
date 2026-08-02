@@ -5,6 +5,7 @@ import { Download, Upload } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { ImportErrors } from "@/components/import/import-errors";
+import { StaffCredentials } from "@/components/import/staff-credentials";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -51,6 +52,40 @@ import {
 const LIST_PATHS = {
   stalls: "/stalls",
   vendors: "/vendors",
+  staff: "/users",
+} as const;
+
+/**
+ * Turga qarab O'ZGARADIGAN matn kalitlari.
+ *
+ * ⚠ `staff` uchun UCHALA kalit ham boshqa va bu ATAYIN:
+ *
+ *   `title` — "Excel fayldan yuklash" xodimlar sahifasida qaysi ro'yxat
+ *     haqida ekanini aytmasdi (sahifada boshqa yuklash yo'li ham bor);
+ *   `hint`  — qator chegarasi 5000 EMAS, `import_max_staff_rows` (200);
+ *   `skippedExplanation` — "o'zgartirilmadi" degan umumiy ibora bu yerda
+ *     YETARLI EMAS. Admin aynan "parolni qayta oldimmi?" deb o'ylaydi,
+ *     ya'ni matn parol ham, rol ham tegilmaganini ANIQ aytishi kerak.
+ */
+const TEXTS = {
+  stalls: {
+    title: "import.title",
+    hint: "import.hint",
+    skipped: "import.skippedExplanation",
+    goTo: "import.goToStalls",
+  },
+  vendors: {
+    title: "import.title",
+    hint: "import.hint",
+    skipped: "import.skippedExplanation",
+    goTo: "import.goToVendors",
+  },
+  staff: {
+    title: "import.staffTitle",
+    hint: "import.staffHint",
+    skipped: "import.staffSkippedExplanation",
+    goTo: "import.goToUsers",
+  },
 } as const;
 
 export function ImportPanel({ kind }: { kind: ImportKind }) {
@@ -86,10 +121,12 @@ export function ImportPanel({ kind }: { kind: ImportKind }) {
     ? importErrorsOf(importFile.error)
     : null;
 
+  const texts = TEXTS[kind];
+
   return (
     <Card>
       <CardHeader className="pb-2">
-        <h2 className="text-lg font-semibold">{t("import.title")}</h2>
+        <h2 className="text-lg font-semibold">{t(texts.title)}</h2>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
@@ -123,8 +160,17 @@ export function ImportPanel({ kind }: { kind: ImportKind }) {
             {importFile.data.skipped > 0 ? (
               <p className="text-sm text-text-muted">
                 {t("import.skippedCount", { count: importFile.data.skipped })}{" "}
-                {t("import.skippedExplanation")}
+                {t(texts.skipped)}
               </p>
+            ) : null}
+
+            {/*
+             * Vaqtinchalik parollar — FAQAT `staff` tarmog'ida va faqat
+             * bir marta (D-02). `credentials` bo'sh bo'lsa komponent
+             * o'zi hech nima chizmaydi (qayta import holati).
+             */}
+            {"credentials" in importFile.data ? (
+              <StaffCredentials credentials={importFile.data.credentials} />
             ) : null}
 
             <div className="flex flex-wrap gap-2">
@@ -136,11 +182,7 @@ export function ImportPanel({ kind }: { kind: ImportKind }) {
                 className="inline-flex min-h-11 items-center gap-2 rounded-md px-4 text-sm font-semibold text-text hover:bg-surface-muted"
                 href={LIST_PATHS[kind]}
               >
-                {t(
-                  kind === "stalls"
-                    ? "import.goToStalls"
-                    : "import.goToVendors",
-                )}
+                {t(texts.goTo)}
               </Link>
             </div>
           </div>
@@ -168,9 +210,7 @@ export function ImportPanel({ kind }: { kind: ImportKind }) {
             >
               <Upload aria-hidden="true" className="size-5 text-text-muted" />
               <span>{t("import.dropzone")}</span>
-              <span className="text-xs text-text-muted">
-                {t("import.hint")}
-              </span>
+              <span className="text-xs text-text-muted">{t(texts.hint)}</span>
             </label>
 
             {/*

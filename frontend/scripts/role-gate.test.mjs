@@ -3,13 +3,19 @@
  * D-04 rol darvozasining FRONTEND KO'ZGUSI backend bilan mos ekanini tekshiradi.
  *
  * NEGA KERAK: `MARKET_ADMIN_ASSIGNABLE_ROLES` ikki tilda, ikki faylda
- * yozilgan — `services/core-api/app/api/v1/users.py` (haqiqiy darvoza, 403
- * qaytaradi) va `frontend/src/lib/api-types.ts` (forma qaysi katakchalarni
- * ko'rsatishini hal qiladi). Ular ajralib ketsa hech bir mavjud test
- * qizarmasdi: backend testlari frontend faylini bilmaydi, frontend esa
- * backendni. Natija — bozor admini formada ko'rgan rolni tanlaydi va
- * tushunarsiz "ruxsat yo'q" xatosiga uriladi (yoki teskarisi: ruxsat
- * etilgan rol umuman ko'rinmaydi).
+ * yozilgan — `services/core-api/app/services/staff_accounts.py` (haqiqiy
+ * darvozaning YAGONA manbai) va `frontend/src/lib/api-types.ts` (forma
+ * qaysi katakchalarni ko'rsatishini hal qiladi). Ular ajralib ketsa hech
+ * bir mavjud test qizarmasdi: backend testlari frontend faylini bilmaydi,
+ * frontend esa backendni. Natija — bozor admini formada ko'rgan rolni
+ * tanlaydi va tushunarsiz "ruxsat yo'q" xatosiga uriladi (yoki teskarisi:
+ * ruxsat etilgan rol umuman ko'rinmaydi).
+ *
+ * ⚠ MANBA 02-24 DA KO'CHDI: `users.py` -> `services/staff_accounts.py`,
+ * chunki darajaning endi IKKITA chaqiruvchisi bor (`POST /users` va
+ * `POST /imports/staff`). Bu darvoza ko'chishni O'ZI ushladi — eski yo'l
+ * bo'yicha o'qish "Python faylida topilmadi" bilan qizardi, ya'ni u
+ * "sukut bilan yashil qolish" sinfidan xoli.
  *
  * Nusxa emas, FAYLLARNING O'ZI o'qiladi (01-07 da o'rnatilgan naqsh:
  * `test_locale_enum_matches_frontend_routing` shu usulda ishlaydi).
@@ -24,14 +30,13 @@ const REPO_ROOT = path.join(FRONTEND_ROOT, "..");
 
 const API_TYPES = path.join(FRONTEND_ROOT, "src", "lib", "api-types.ts");
 const RBAC = path.join(FRONTEND_ROOT, "src", "lib", "rbac.ts");
-const USERS_ROUTE = path.join(
+const STAFF_ACCOUNTS = path.join(
   REPO_ROOT,
   "services",
   "core-api",
   "app",
-  "api",
-  "v1",
-  "users.py",
+  "services",
+  "staff_accounts.py",
 );
 const CORE_ENUMS = path.join(
   REPO_ROOT,
@@ -85,7 +90,7 @@ test("D-04: bozor admini bera oladigan rollar backend bilan AYNAN mos", () => {
     "MARKET_ADMIN_ASSIGNABLE_ROLES",
   );
   const backend = readPythonRoleSet(
-    read(USERS_ROUTE),
+    read(STAFF_ACCOUNTS),
     "MARKET_ADMIN_ASSIGNABLE_ROLES",
   );
 

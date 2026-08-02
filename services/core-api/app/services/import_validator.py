@@ -101,6 +101,7 @@ __all__ = [
     "StaffImportRow",
     "StallImportRow",
     "VendorImportRow",
+    "phone_taken_issue",
     "validate_staff_rows",
     "validate_stall_rows",
     "validate_vendor_rows",
@@ -651,6 +652,27 @@ def _staff_roles(
             roles.append(role)
 
     return None if failed else tuple(roles)
+
+
+def phone_taken_issue(number: int) -> ImportIssue:
+    """Telefon PLATFORMADA band — QATOR XATOSI, skip EMAS (MARKET-07).
+
+    ⚠ BU HOLAT D-15 SKIPIDAN BUTUNLAY BOSHQA. D-15 "bu odam ALLAQACHON
+    shu bozor a'zosi" degani va u xato emas; bu esa "bu telefon boshqa
+    joyda band" degani va admin buni BILISHI shart — jimgina o'tkazib
+    yuborish uni "xodim yaratildi" deb ishontirardi.
+
+    Yordamchi SHU MODULDA yashaydi, garchi uni faqat router chaqirsa
+    ham: `frontend/scripts/error-codes.test.mjs` `import.errors.*`
+    tarjimalarini AYNAN shu fayldagi `ImportIssue(...)` kodlari bilan
+    solishtiradi. Router ichida qurilgan xato o'sha darvozadan tashqarida
+    qolardi va rus tilidagi admin uz-Latn matnini ko'rardi.
+    """
+    return ImportIssue(
+        number,
+        "phone_taken",
+        f"{number}-qator: bu telefon platformada allaqachon band",
+    )
 
 
 def _too_short(number: int, column: str) -> ImportIssue:

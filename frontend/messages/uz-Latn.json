@@ -461,8 +461,16 @@
       "duplicate_phone_in_file": "Telefon raqami faylda takrorlangan",
       "stall_not_found": "Bunday raqamli rasta topilmadi",
       "invalid_date": "Sana noto'g'ri ko'rsatilgan",
-      "row_too_short": "Qatorda ustunlar yetishmaydi"
-    }
+      "row_too_short": "Qatorda ustunlar yetishmaydi",
+      "invalid_role": "Rol nomi noto'g'ri yozilgan",
+      "role_not_allowed": "Bu rolni berishga huquqingiz yo'q",
+      "phone_taken": "Telefon raqami platformada band"
+    },
+    "staffTitle": "Xodimlar ro'yxatini yuklash",
+    "staffHint": "Faqat xlsx fayl · 5 MB gacha · 200 qatorgacha",
+    "staffSkippedExplanation": "Ular allaqachon bozor a'zosi: paroli tiklanmadi va roli o'zgartirilmadi.",
+    "staffRosterTooLarge": "Ro'yxat juda uzun. Uni bo'laklarga bo'lib, har birini alohida yuklang",
+    "goToUsers": "Foydalanuvchilar ro'yxatiga o'tish"
   },
   "errors": {
     "generic": "Kutilmagan xato yuz berdi",
@@ -470,5 +478,14 @@
     "forbidden": "Bu amal uchun ruxsat yo'q",
     "notFound": "Topilmadi",
     "required": "Bu maydon to'ldirilishi shart"
+  },
+  "staffCredentials": {
+    "title": "Vaqtinchalik parollar",
+    "warning": "Bu parollar boshqa ko'rsatilmaydi. Ularni hoziroq nusxa oling yoki faylga saqlang — har bir xodim birinchi kirishda parolni o'zi almashtiradi.",
+    "copy": "Nusxa olish",
+    "copied": "Nusxa olindi",
+    "copyAll": "Hammasini nusxalash",
+    "download": "Parollarni csv faylga saqlash",
+    "noName": "Ismi ko'rsatilmagan"
   }
 }

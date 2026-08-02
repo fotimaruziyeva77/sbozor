@@ -20,6 +20,7 @@ import {
   emptyResponseSchema,
   importErrorResponseSchema,
   importResultSchema,
+  staffImportResultSchema,
   marketCreateResponseSchema,
   marketIncompleteSchema,
   marketListSchema,
@@ -38,7 +39,10 @@ import type {
   BlockingItem,
   ImportErrorItem,
   ImportErrorResponse,
+  ImportResult,
+  StaffImportResult,
 } from "@/lib/api-types";
+import { USERS_QUERY_KEY } from "@/lib/queries";
 
 /*
  * =============================================================================
@@ -996,7 +1000,7 @@ export function useDeleteDraftMarket() {
 
 /* --- Excel import (D-13/D-14/D-15) ---------------------------------------- */
 
-export type ImportKind = "stalls" | "vendors";
+export type ImportKind = "stalls" | "vendors" | "staff";
 
 /**
  * 422 javobining tanasi — `ApiError` ga biriktirilgan.
@@ -1032,35 +1036,76 @@ export function importErrorsOf(error: unknown): ImportErrorResponse | null {
  * Ro'yxat qo'lda emas, shu yerda quriladi — ayni modulning invalidatsiya
  * kontrakti buzilgan YAGONA joyi aynan qo'lda yozilgan ro'yxat edi.
  */
-const importSideEffects = (marketId: string, kind: ImportKind) =>
-  kind === "stalls"
-    ? ([
-        domainKey(marketId, "stalls"),
-        mapKey(marketId),
-        zonesKey(marketId),
-        categoriesKey(marketId),
-        setupStatusKey(marketId),
-      ] as const)
-    : ([
-        domainKey(marketId, "vendors"),
-        domainKey(marketId, "assignments"),
-        domainKey(marketId, "stalls"),
-        mapKey(marketId),
-        setupStatusKey(marketId),
-      ] as const);
+const importSideEffects = (
+  marketId: string,
+  kind: ImportKind,
+): readonly (readonly unknown[])[] => {
+  if (kind === "stalls") {
+    return [
+      domainKey(marketId, "stalls"),
+      mapKey(marketId),
+      zonesKey(marketId),
+      categoriesKey(marketId),
+      setupStatusKey(marketId),
+    ];
+  }
+  if (kind === "vendors") {
+    return [
+      domainKey(marketId, "vendors"),
+      domainKey(marketId, "assignments"),
+      domainKey(marketId, "stalls"),
+      mapKey(marketId),
+      setupStatusKey(marketId),
+    ];
+  }
+  /*
+   * ⚠ `staff` — YAGONA doiralanMAGAN kalitli tarmoq va bu ATAYIN emas,
+   * MEROS: `USERS_QUERY_KEY` 01-07 da global qilib yozilgan
+   * (`queries.ts`) va u shu yerda QAYTA IXTIRO QILINMAYDI. Yangi kalit
+   * o'ylab topish ro'yxatni ikki xil kalit ostida bo'lardi va ekran
+   * import tugagandan keyin ham eski a'zolarni ko'rsatib turardi.
+   *
+   * Tenant chegarasi bu kalitda BOSHQA chora bilan ta'minlanadi: sessiya
+   * identifikatori o'zgarganda butun kesh `client.clear()` bilan
+   * bo'shaydi (`query-provider.tsx`, CR-01) — `MARKETS_KEY` dagi bilan
+   * aynan bir xil holat.
+   */
+  return [USERS_QUERY_KEY, setupStatusKey(marketId)];
+};
 
-export function useImportMutation(kind: ImportKind) {
+/**
+ * `.xlsx` faylni yuklaydi (D-14: validatsiya YOZISHDAN OLDIN).
+ *
+ * ⚠ JAVOB SXEMASI `kind` BO'YICHA TANLANADI. `staff` javobi ochiq
+ * parollarni olib yuradi va uning shakli boshqa (`credentials[]`);
+ * bitta "hammasiga to'g'ri keladigan" sxema parol maydonini ixtiyoriy
+ * qilardi va tip xavfsizligini yo'qotardi.
+ *
+ * ⚠ `useMutation` (`useQuery` EMAS) — parol React Query KESHIGA
+ * tushmasligi kerak (`temp-password-dialog.tsx` dagi bilan aynan bir xil
+ * sabab, D-02).
+ */
+export function useImportMutation<K extends ImportKind>(kind: K) {
   const client = useQueryClient();
   const marketId = useMarketId() ?? "";
-  return useMutation({
-    mutationFn: (file: File) => {
+  return useMutation<K extends "staff" ? StaffImportResult : ImportResult, Error, File>({
+    mutationFn: async (file: File) => {
       const form = new FormData();
       form.append("file", file);
-      return apiFetch(`${IMPORTS_PATH}/${kind}`, {
-        method: "POST",
-        body: form,
-        schema: importResultSchema,
-      });
+      const path = `${IMPORTS_PATH}/${kind}`;
+      const result =
+        kind === "staff"
+          ? await apiFetch(path, {
+              method: "POST",
+              body: form,
+              schema: staffImportResultSchema,
+            })
+          : await apiFetch(path, {
+              method: "POST",
+              body: form,
+              schema: importResultSchema,
+            });
+      return result as K extends "staff" ? StaffImportResult : ImportResult;
     },
     onSuccess: () => invalidate(client, importSideEffects(marketId, kind)),
   });
@@ -1076,8 +1121,13 @@ export function useImportMutation(kind: ImportKind) {
  * Bekor qilish DARHOL emas, keyingi makrotaskda: `click()` dan keyin
  * yuklash ba'zi brauzerlarda ASINXRON boshlanadi va zudlik bilan revoke
  * qilish uni bo'sh fayl bilan tugatardi.
+ *
+ * 02-24 dan boshlab EKSPORT QILINADI: `staff-credentials.tsx` faylni
+ * KLIENTDA quradi (server yo'li parollarni ikkinchi marta tarmoqqa
+ * chiqarardi) va o'sha `revokeObjectURL` gigiyenasiga muhtoj. Ikkinchi
+ * nusxa yozish uni bir kun unutishga olib kelardi.
  */
-function saveBlob(blob: Blob, filename: string): void {
+export function saveBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;

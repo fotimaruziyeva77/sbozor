@@ -736,6 +736,34 @@ export const importErrorResponseSchema = z.object({
 export type ImportErrorResponse = z.infer<typeof importErrorResponseSchema>;
 
 /**
+ * Yaratilgan bitta hisob va uning BIR MARTALIK paroli (MARKET-07, D-02).
+ *
+ * ⚠ BU SHAKL ALOHIDA VA U `importResultSchema` GA QO'SHILMAYDI. `staff`
+ * javobi maxfiy (`Cache-Control: no-store`, keshlanmaydi), `stalls` va
+ * `vendors` javoblari esa emas — bitta sxemaga siqish parol maydonini
+ * ularga ham "ixtiyoriy" qilib olib kirardi va bir kun kimdir uni
+ * ko'rsatib qo'yardi.
+ *
+ * `full_name` NULLABLE: backend uni ixtiyoriy deb e'lon qilgan.
+ */
+export const staffCredentialSchema = z.object({
+  row: z.number().int(),
+  phone: z.string(),
+  full_name: z.string().nullable(),
+  roles: z.array(z.string()),
+  temporary_password: z.string(),
+});
+export type StaffCredential = z.infer<typeof staffCredentialSchema>;
+
+/** `POST /imports/staff` muvaffaqiyatli javobi (MARKET-07). */
+export const staffImportResultSchema = z.object({
+  inserted: z.number().int(),
+  skipped: z.number().int(),
+  credentials: z.array(staffCredentialSchema),
+});
+export type StaffImportResult = z.infer<typeof staffImportResultSchema>;
+
+/**
  * Xato tanasi. FastAPI validatsiya xatosida (`422`) `detail` MASSIV bo'ladi,
  * shuning uchun `z.string()` emas, `z.unknown()`: shaklni `api-client`
  * yumshoq o'qiydi va noma'lum shaklda `errors.generic` ga tushadi.
@@ -804,5 +832,7 @@ export const ERROR_CODES = [
   "file_too_complex",
   "unsupported_file_type",
   "import_conflict",
+  // --- 2-faza: xodimlar rosteri (02-24) ---
+  "staff_roster_too_large",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

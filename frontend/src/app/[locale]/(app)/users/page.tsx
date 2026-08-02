@@ -4,6 +4,7 @@ import { useState } from "react";
 import { UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { ImportPanel } from "@/components/import/import-panel";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { TempPasswordDialog } from "@/components/users/temp-password-dialog";
 import { UserList } from "@/components/users/user-list";
@@ -27,6 +28,16 @@ import { hasPermission } from "@/lib/rbac";
  * VAQTINCHALIK PAROL bitta joyda yashaydi — shu sahifaning holatida. Uni
  * yaratish dialogi ham, ro'yxatdagi "parolni tiklash" ham shu yerga uzatadi,
  * dialog yopilganda esa qiymat `null` ga qaytadi (D-02, T-01-68).
+ *
+ * ⚠ IKKITA YO'L, IKKI XIL MIQYOS (MARKET-07, ROADMAP self-service qoidasi).
+ * Dialog — BITTA odam uchun (yangi kassir ishga keldi); import paneli —
+ * ma'muriyat bergan BUTUN ro'yxat uchun. Ikkinchisi birinchisining o'rnini
+ * bosmaydi va aksincha ham: 30 kishilik bozor uchun dialogni 30 marta
+ * to'ldirish "muhandis aralashuvi bilan ishlaydigan onboarding" ning
+ * yumshoq ko'rinishi bo'lardi va u qabul qilinmaydi.
+ *
+ * Panel ro'yxatdan KEYIN turadi: kundalik ish — mavjud a'zolarni ko'rish,
+ * ommaviy yuklash esa bozor ochilishida bir-ikki marta bo'ladigan amal.
  */
 export default function UsersPage() {
   const t = useTranslations();
@@ -67,6 +78,14 @@ export default function UsersPage() {
       </div>
 
       <UserList onTemporaryPassword={setTemporaryPassword} />
+
+      {/*
+       * Panel `canManage` bo'lmasa UMUMAN chizilmaydi — bu UI ko'zgusi
+       * (T-01-62). Haqiqiy darvoza serverda:
+       * `require_permission(USER_MANAGE)`, ya'ni direktor so'rovni qo'lda
+       * yuborsa ham 403 oladi.
+       */}
+      {canManage ? <ImportPanel kind="staff" /> : null}
 
       {canManage ? (
         <CreateUserDialog
