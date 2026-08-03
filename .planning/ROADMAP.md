@@ -242,7 +242,7 @@ Plans:
 **Wave 7–9** *(frontend)*
 
 - [x] 03-08-PLAN.md — Frontend kontrakti: navigatsiya, ~95 kalit uch tilda, zod/query qatlami, G-1…G-7 darvozalari, vendored pleyer (W7)
-- [ ] 03-09-PLAN.md — `/cameras` sahifasi, NVR formasi va kartasi, xato bloki (sabab + tuzatish), auth qulfi (W8)
+- [x] 03-09-PLAN.md — `/cameras` sahifasi, NVR formasi va kartasi, xato bloki (sabab + tuzatish), auth qulfi (W8)
 - [ ] 03-10-PLAN.md — Kashfiyot paneli va uch hisoblagich, kameralar ro'yxati, arxivlash, jonli ko'rish dialogi (W9)
 
 **Wave 10**
