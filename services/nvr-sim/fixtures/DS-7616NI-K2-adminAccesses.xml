@@ -1,0 +1,46 @@
+<!--
+  MANBA (yozib olingan dump, QO'LDA YOZILMAGAN):
+    repozitoriy : github.com/maciej-or/hikvision_next
+    fayl        : tests/fixtures/devices/DS-7616NI-K2.json
+    ISAPI yo'li : /ISAPI/Security/adminAccesses
+    upstream    : a0e59ea7426c (2024-10-14)
+    blob sha1   : a145a70cf86383ce18ad576841381b477c947b8e
+    olingan     : 2026-08-03
+    qurilma     : DS-7616NI-K2
+
+  O'ZGARTIRISH: yo'q. Element tartibi, atributlar, namespace va qiymatlar
+  dumpdan VERBATIM. Yagona qo'shimcha — shu izoh.
+
+  NEGA BU MUHIM (Pitfall 4, `simulator-confirms-itself`): agar bu XML bizning
+  parserimiz kutgan shaklda O'YLAB TOPILSA, test faqat "kod o'z taxminiga mos"
+  ekanini isbotlardi — CI yashil, real qurilma qora.
+
+  Yuqoridagi dump anonimlashtirilgan holda yuqori oqimda saqlanadi (IP'lar
+  `1.0.0.x`, seriya raqamlari nollangan, MAC almashtirilgan) — ya'ni bu yerda
+  hech kimning haqiqiy tarmoq ma'lumoti yo'q.
+-->
+<AdminAccessProtocolList version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+  <AdminAccessProtocol version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>1</id>
+    <enabled>true</enabled>
+    <protocol>HTTP</protocol>
+    <portNo>80</portNo>
+  </AdminAccessProtocol>
+  <AdminAccessProtocol version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>2</id>
+    <enabled>true</enabled>
+    <protocol>RTSP</protocol>
+    <portNo>554</portNo>
+  </AdminAccessProtocol>
+  <AdminAccessProtocol version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>3</id>
+    <enabled>true</enabled>
+    <protocol>HTTPS</protocol>
+    <portNo>443</portNo>
+  </AdminAccessProtocol>
+  <AdminAccessProtocol version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>4</id>
+    <protocol>DEV_MANAGE</protocol>
+    <portNo>8000</portNo>
+  </AdminAccessProtocol>
+</AdminAccessProtocolList>

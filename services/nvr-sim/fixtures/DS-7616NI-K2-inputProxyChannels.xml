@@ -1,0 +1,141 @@
+<!--
+  MANBA (yozib olingan dump, QO'LDA YOZILMAGAN):
+    repozitoriy : github.com/maciej-or/hikvision_next
+    fayl        : tests/fixtures/devices/DS-7616NI-K2.json
+    ISAPI yo'li : /ISAPI/ContentMgmt/InputProxy/channels
+    upstream    : a0e59ea7426c (2024-10-14)
+    blob sha1   : a145a70cf86383ce18ad576841381b477c947b8e
+    olingan     : 2026-08-03
+    qurilma     : DS-7616NI-K2
+
+  O'ZGARTIRISH: yo'q. Element tartibi, atributlar, namespace va qiymatlar
+  dumpdan VERBATIM. Yagona qo'shimcha — shu izoh.
+
+  NEGA BU MUHIM (Pitfall 4, `simulator-confirms-itself`): agar bu XML bizning
+  parserimiz kutgan shaklda O'YLAB TOPILSA, test faqat "kod o'z taxminiga mos"
+  ekanini isbotlardi — CI yashil, real qurilma qora.
+
+  Yuqoridagi dump anonimlashtirilgan holda yuqori oqimda saqlanadi (IP'lar
+  `1.0.0.x`, seriya raqamlari nollangan, MAC almashtirilgan) — ya'ni bu yerda
+  hech kimning haqiqiy tarmoq ma'lumoti yo'q.
+-->
+<InputProxyChannelList version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema" size="10">
+  <InputProxyChannel version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>1</id>
+    <name>tagahoov</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.208</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2387G2-LSU/SL</model>
+      <serialNumber>DS-2CD2387G2-LSU/SL00000000AAWRJ00000000</serialNumber>
+      <firmwareVersion>V5.7.14 build 231028</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>f0c86cfe-af3a-474b-be4c-cb941e9dcbfd</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>2</id>
+    <name>garaazh</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.253</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>HWI-T220H</model>
+      <serialNumber>HWI-T000H00000000AAWRC00000000</serialNumber>
+      <firmwareVersion>V5.5.82 build 181022</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <enableTiming>true</enableTiming>
+    <devIndex>6f8bbaaa-623c-495d-ae9b-1f6033828b11</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>3</id>
+    <name>eeshoov</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.137</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2387G2-LSU/SL</model>
+      <serialNumber>DS-2CD2387G2-LSU/SL00000000AAWRAD0000000</serialNumber>
+      <firmwareVersion>V5.7.14 build 231028</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>b340f31d-e501-4b19-9df5-1fbd90c52c2e</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>4</id>
+    <name>sauna uks</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.227</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2387G2H-LISU/SL</model>
+      <serialNumber>DS-2CD2387G2H-LISU/SL00000000AAWRAW0000000</serialNumber>
+      <firmwareVersion>V5.7.15 build 240201</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>98029b01-79dd-44d2-94c9-b0cd3761885d</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>5</id>
+    <name>terrass</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.129</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2387G2H-LISU/SL</model>
+      <serialNumber>DS-2CD2387G2H-LISU/SL00000000AAWRAW0000000</serialNumber>
+      <firmwareVersion>V5.7.15 build 240201</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>69cf8cc8-0bb9-4ac8-8f01-9d34b7ae909f</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>6</id>
+    <name>uksekell</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.46</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-KV6113-WPE1(C)</model>
+      <serialNumber>DS-KV6113-WPE0(C)0000000000RRAH0000000</serialNumber>
+      <firmwareVersion>V2.2.65 build 230703</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <enableTiming>true</enableTiming>
+    <devIndex>37d5c328-8599-49c9-8b34-a62139e4f547</devIndex>
+  </InputProxyChannel>
+</InputProxyChannelList>
