@@ -45,6 +45,7 @@ from app.api.v1.assignments import stall_router as stall_assignments_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.calendar import router as calendar_router
+from app.api.v1.cameras import router as cameras_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.imports import router as imports_router
 from app.api.v1.markets import router as markets_router
@@ -198,6 +199,20 @@ app.include_router(imports_router, prefix=f"{API_V1_PREFIX}/imports")
 # qo'shdi; unutilganda `test_no_unclassified_routes` va
 # `test_cross_tenant_object_returns_404` qizaradi.
 app.include_router(nvr_router, prefix=f"{API_V1_PREFIX}/nvr-devices")
+# --- 03-07: kameralar reestri va jonli ko'rish (CAM-02/CAM-03) ---
+#
+# ⚠ ALOHIDA PREFIKS, `nvr-devices` OSTIDA EMAS. Kamera NVR ning bolasi
+# bo'lsa ham, u MUSTAQIL resurs: 4-fazadagi snapshotlar va 5-fazadagi
+# zonalar aynan `cameras.id` ga bog'lanadi va ular NVR ni umuman
+# bilmaydi. Yo'lni `/nvr-devices/{nvr_id}/cameras/...` qilish har bir
+# kamera amalini NVR identifikatorini bilishga majburlardi — UI esa
+# ro'yxatdan to'g'ridan-to'g'ri kamera ustida ishlaydi (UI-SPEC §6.1).
+#
+# Yangi yo'l parametri (`camera_id`) cross-tenant matritsasining
+# `PARAM_FILLERS` iga, `PATCH` esa `BODY_FILLERS` ga qo'shildi — usiz
+# `test_no_unclassified_routes` va `test_cross_tenant_object_returns_404`
+# qizaradi (yuqoridagi 2-faza izohidagi IKKI QO'LDA QADAM).
+app.include_router(cameras_router, prefix=f"{API_V1_PREFIX}/cameras")
 
 
 @app.exception_handler(DBAPIError)

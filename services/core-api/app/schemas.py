@@ -26,7 +26,7 @@ from typing import Annotated, Any, Final
 from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints, field_validator
-from sbozor_core.enums import DiscoveryRunStatus, Locale, Role, StallStatus
+from sbozor_core.enums import CameraStatus, DiscoveryRunStatus, Locale, Role, StallStatus
 from sbozor_core.money import MAX_SAFE_SOUM
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
@@ -43,9 +43,14 @@ __all__ = [
     "AuditListResponse",
     "AuditQuery",
     "BlockingItem",
+    "CAMERA_PAGE_SIZE_MAX",
     "CalendarException",
     "CalendarExceptionRequest",
     "CalendarResponse",
+    "CameraListResponse",
+    "CameraQuery",
+    "CameraRead",
+    "CameraUpdateRequest",
     "CategoryItem",
     "CategoryListResponse",
     "CategoryRequest",
@@ -61,6 +66,7 @@ __all__ = [
     "ImportErrorReportRequest",
     "ImportErrorResponse",
     "ImportResultResponse",
+    "LiveTokenResponse",
     "LocaleResponse",
     "LoginRequest",
     "LoginResponse",
@@ -1691,3 +1697,160 @@ class DiscoveryRunRead(BaseModel):
       kerak: filtrni klientga topshirish "backend nima yozsa ham
       xavfsiz" degan yolg'on xotirjamlik berardi.
     """
+
+
+# ---------------------------------------------------------------------------
+# Kameralar (03-07, CAM-02/CAM-03) — o'qish yuzasi va jonli ko'rish chiptasi
+#
+# =============================================================================
+# IKKITA MAYDON BU YERDA UMUMAN E'LON QILINMAYDI — VA IKKALASI BOSHQA-BOSHQA
+# SABABDAN (UI-SPEC §8.7).
+#
+#   `stream_name`  go2rtc'dagi oqimning BEVOSITA nishoni. U javobda
+#                  ko'ringan zahoti UI'da ko'rsatiladi, nusxa olinadi va
+#                  ertami-kechmi `/live/...?src=<nom>` shaklida qo'lda
+#                  yig'iladi — ya'ni avtorizatsiya darvozasi (auth_request)
+#                  o'z ma'nosini yo'qotadi. Nom FAQAT token javobidagi
+#                  opaque URL ichida bo'ladi.
+#
+#   `rtsp_url`     D-01: RTSP URL UI'da HECH QACHON ko'rsatilmaydi va
+#                  HECH QACHON kiritilmaydi. `cameras` jadvalida bunday
+#                  ustun ham yo'q (`sbozor_core.models.nvr.Camera`
+#                  docstringi) — u sof funksiyada hosil qilinadi va
+#                  ilova chegarasidan chiqmaydi.
+#
+# Ikkalasining ham darvozasi `tests/tenancy/test_camera_route_coverage.py`
+# da: u javob modellarini REKURSIV skanerlaydi va bu nomlarni izlaydi,
+# ya'ni ular ichma-ich modelga qo'shilganda ham ushlanadi.
+# =============================================================================
+# ---------------------------------------------------------------------------
+
+_CameraNameStr = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)
+]
+"""Kamera nomi — `cameras.name_not_blank` CHECK'ining jufti.
+
+`_NameStr` bilan bir xil shakl, LEKIN alohida alias: `_NameStr` 2-fazaning
+zona/toifa nomlariga tegishli va ularning chegarasi bu yerdagidan
+mustaqil o'zgarishi mumkin. Umumiy aliasni qayta ishlatish ikki domenning
+validatsiyasini jimgina bir-biriga bog'lab qo'yardi.
+"""
+
+CAMERA_PAGE_SIZE_MAX = 200
+"""`GET /cameras` sahifasining yuqori chegarasi.
+
+`STALL_PAGE_SIZE_MAX` dan KICHIK va bu ataylab: bitta NVR eng ko'pi 32
+kanal beradi (UI-SPEC §6.1 — «16/32 kanalli NVR da eng ko'pi 32 qator»),
+bir bozorda esa bir-ikkita NVR bo'ladi. Chegara so'ralgan hajmni
+o'lchamdan chiqarib yuborishni bloklaydi, mahsulot yo'lini esa umuman
+cheklamaydi.
+"""
+
+
+class CameraRead(BaseModel):
+    """`GET /cameras` qatori va kamera amallarining javobi.
+
+    Maydonlar UI-SPEC §6.1 dagi qator tuzilishidan KELIB CHIQADI:
+    kanal raqami, nom, `name_overridden` bayrog'i (qalam ikonkasi),
+    holat badge'i va meta qatori (IP · model · oxirgi ko'rilgan).
+
+    ⚠ `stream_name` VA `rtsp_url` BU YERDA YO'Q — sabab bo'lim boshidagi
+      izohda.
+
+    `source_ip` — `cameras.source_ip` (`inet`) ning NORMALLASHTIRILGAN
+    ko'rinishi: bazada qiymat `192.168.1.10/32` bo'lib yotadi
+    (03-04 `threat_flag: value-format`, `test_source_ip_is_stored_as_a_
+    host_prefixed_inet` bilan qulflangan), UI esa prefikssiz manzil
+    kutadi. Normalizatsiya `api/v1/cameras.py::_source_ip` da.
+    """
+
+    id: UUID
+    nvr_id: UUID
+    channel_no: int
+    name: str
+    name_overridden: bool
+    status: CameraStatus
+    is_archived: bool
+    has_substream: bool
+    source_ip: str | None
+    source_model: str | None
+    last_seen_at: datetime
+
+
+class CameraListResponse(BaseModel):
+    """`GET /cameras` — keyset sahifa (`next_cursor` `null` bo'lsa oxirgisi).
+
+    Tartib SERVERDA `channel_no` bo'yicha o'sish tartibida hal qilinadi va
+    frontend uni QAYTA SARALAMAYDI (UI-SPEC §6.1: «Saralash boshqaruvi
+    YO'Q» — kanal raqami NVR dagi jismoniy uyaga mos keladi va admin uni
+    NVR monitoridagi bilan bir xil tartibda ko'radi).
+    """
+
+    items: list[CameraRead]
+    next_cursor: str | None = None
+
+
+class CameraQuery(BaseModel):
+    """`GET /cameras` query parametrlari (UI-SPEC §6.1 filtrlari).
+
+    `archived` UCH HOLATLI (`None` / `False` / `True`), ikki emas:
+    `None` — standart, ya'ni arxivlanganlar YASHIRIN;
+    `True` — arxivlanganlar HAM ko'rinadi (checkbox yoqilgan).
+    `False` esa aniq «faqat faollar» degani va u standart bilan bir xil
+    natija beradi — farq FILTR TAVSIFIDA (`audit_log.new_value.filters`)
+    ko'rinadi: «admin checkbox'ni ataylab o'chirdi» va «umuman tegmadi»
+    ikki xil hodisa.
+    """
+
+    nvr_id: UUID | None = None
+    status: CameraStatus | None = None
+    archived: bool | None = None
+    limit: Annotated[int, Field(ge=1, le=CAMERA_PAGE_SIZE_MAX)] = 100
+    cursor: str | None = None
+
+
+class CameraUpdateRequest(BaseModel):
+    """`PATCH /cameras/{camera_id}` tanasi — nom va uning bayrog'i.
+
+    IKKALA MAYDON HAM IXTIYORIY va so'rov `exclude_unset=True` bilan
+    o'qiladi: `{"name": "..."}` nomni o'zgartiradi (va `name_overridden`
+    ni `true` qiladi), `{"name_overridden": false}` esa «NVR qurilmasidagi
+    nomga qaytarish» (UI-SPEC §6.5) amalini bajaradi.
+
+    ⚠ `name_overridden: true` ni YOLG'IZ yuborish MA'NOSIZ va u rad
+      etiladi: bayroq nomning HOSILASI — u qo'lda qo'yilgan nom bilan
+      BIRGA, bitta operatorda yoziladi (`nvr_repo.rename_camera`
+      docstringi: ajratilsa oradagi skan nomni bosib ketardi).
+
+    `is_archived` BU YERDA YO'Q (D-10): arxivlash — ALOHIDA, nomlangan
+    amal (`POST /{id}/archive`), umumiy tahrirlashning bir maydoni emas.
+    Fe'lning o'zi ham UI-SPEC §9.1 ning darvozasi ostida.
+    """
+
+    name: _CameraNameStr | None = None
+    name_overridden: bool | None = None
+
+
+class LiveTokenResponse(BaseModel):
+    """`POST /cameras/{camera_id}/live-token` javobi — ULANISH CHIPTASI.
+
+    ⚠ `url` OPAQUE: unda `stream_name` va qisqa muddatli token bor,
+      lekin ikkalasi ham UI uchun TUZILMASIZ satr. UI uni `<video>`
+      manbaiga beradi, ekranga chiqarmaydi va ulashish tugmasini
+      RENDER QILMAYDI (UI-SPEC §8.7).
+
+    ⚠ `expires_in` — TOKENNING muddati, SESSIYANING emas (UI-SPEC §8.3).
+      60 soniyalik token 60 soniyalik ko'rish sessiyasini ANGLATMAYDI:
+      WebRTC'da signalling bir marta bo'ladi va media UDP orqali
+      nginx'dan TASHQARIDA oqadi, HLS'da esa har segment `auth_request`
+      dan o'tadi. Sessiya chegarasini (5 daqiqa) UI o'zi qo'yadi, ya'ni
+      ikkala transport ham bir xil ishlaydi.
+
+    `transport_hint` — birinchi sinaladigan transport. go2rtc ning
+    veb-komponenti baribir avtomatik tanlaydi (WebRTC -> MSE -> HLS);
+    maslahat faqat UI ning badge'ini boshlang'ich holatga qo'yadi.
+    """
+
+    url: str
+    expires_in: int
+    transport_hint: str

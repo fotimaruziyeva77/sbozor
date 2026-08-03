@@ -224,6 +224,14 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # seed B ga ATAYIN yugurish yozmaydi va u asimmetriya saqlanadi.
     "nvr_id": lambda seed: str(seed.nvr.market_b.nvr_id),
     "run_id": lambda seed: str(seed.nvr.market_b.discovery_run_ids[0]),
+    # --- 03-07: kamera ---
+    #
+    # ⚠ B bozorining BIRINCHI (va yagona) kanali — u ARXIVLANMAGAN
+    # (`fixtures/nvr_domain.py`: arxivlash faqat ko'p kanalli bozorda).
+    # Arxivlangan qatorni ko'rsatish `POST /{id}/restore` ni matritsada
+    # boshqa yo'ldan yuborardi va 404 ning sababi tenant chegarasi emas,
+    # holat bo'lib qolardi.
+    "camera_id": lambda seed: str(seed.nvr.market_b.camera_ids[0]),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -369,6 +377,11 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
         "password": MATRIX_NVR_PASSWORD,
     },
     RouteSpec("PATCH", "/api/v1/nvr-devices/{nvr_id}"): lambda _: {"username": "matritsa"},
+    # 03-07: nom o'zgartirish. `name_overridden` ATAYIN yuborilmaydi — u
+    # nomning HOSILASI (`api/v1/cameras.py::update_camera`) va yolg'iz
+    # yuborilganda 422 berardi, ya'ni matritsa 404 kutayotgan joyda
+    # validatsiya darvozasiga urilardi.
+    RouteSpec("PATCH", "/api/v1/cameras/{camera_id}"): lambda _: {"name": "Matritsa kamerasi"},
     RouteSpec("POST", "/api/v1/nvr-devices/{nvr_id}/password"): lambda _: {
         "password": MATRIX_NVR_PASSWORD,
     },
