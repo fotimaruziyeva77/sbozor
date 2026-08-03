@@ -24,16 +24,24 @@ tekshiruvi.
 kishi) serverni ixtiyoriy tashqi manzilga so'rov yuborishga majburlay
 olardi va NVR ning o'zi internetga ochilgan bo'lardi.
 
-⚠ SIM SINDIRILMAYDI — VA BU ATAYIN.
-`nvr-sim` compose tarmog'ida DNS nomi bilan turadi; real o'rnatmalarda
-`.local` / `.internal` nomlari ham uchraydi. Shuning uchun HOSTNAME
-QABUL QILINADI va rad etiladigan yagona narsa — MARSHRUTLANADIGAN
-OMMAVIY IP. Aks holda sim ishlamay qolardi va keyingi qadam — buni
-sezgan odam validatorni butunlay o'chirib qo'yishi — SC#5 ning yagona
-CI'dagi da'vosini yo'q qilardi. Nom qanday manzilga yechilishini bu
-qatlam BILMAYDI: DNS so'rovi validatorni tarmoqqa bog'lab qo'yardi
-(sekin, ishonchsiz va o'zi SSRF vektori). Haqiqiy marshrut kafolati —
+⚠ HOSTNAME QABUL QILINADI — VA BU ATAYIN.
+Rad etiladigan yagona narsa — MARSHRUTLANADIGAN OMMAVIY IP. Nomlar
+(`.local`, `.internal`, compose tarmog'idagi xizmat nomlari) o'tadi.
+Faqat IP qabul qiladigan «qattiqroq» validator konteyner tarmog'idagi
+har qanday o'rnatmani sindirardi va keyingi qadam — buni sezgan odam
+validatorni butunlay o'chirib qo'yishi — SC#5 ning yagona CI'dagi
+da'vosini yo'q qilardi. Nom qanday manzilga yechilishini bu qatlam
+BILMAYDI: DNS so'rovi validatorni tarmoqqa bog'lab qo'yardi (sekin,
+ishonchsiz va o'zi SSRF vektori). Haqiqiy marshrut kafolati —
 WireGuard ning `AllowedIPs` i, ya'ni 2-da'vo.
+
+⚠ BU MODULDA BIRORTA XIZMAT NOMI ATAMA SIFATIDA HAM YOZILMAYDI.
+`tests/unit/test_no_sim_branching.py` (03-02) `app/` daraxtida
+simulyatorning imzolarini IZLAYDI va izoh bilan kodni AJRATMAYDI — bu
+ataylab shunday: «ilova uchun simulyator — bu shunchaki bazadagi bir
+qator» qoidasi nom kodga tushishi bilanoq yemirila boshlaydi. Aniq
+nomga bog'langan regressiya testi `tests/unit/test_nvr_host_validation.py`
+da, ya'ni to'g'ri tomonda turadi.
 """
 
 from __future__ import annotations
