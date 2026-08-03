@@ -515,6 +515,66 @@ class NvrRepository(TenantScopedRepository):
         )
         return result.scalar_one()
 
+    async def start_run(self, run_id: UUID) -> bool:
+        """`queued` -> `running`. Boshqa holatdan o'tkazmaydi (03-06).
+
+        ⚠ `status == 'queued'` SHARTI DARVOZA, TOZALIK EMAS. Navbatlar
+          vazifani "KAMIDA BIR MARTA" yetkazadi, ya'ni bir xil `run_id`
+          bilan ikkinchi chaqiruv MUMKIN. Shartsiz `UPDATE` ikkinchi jobni
+          ham ishga tushirardi va NVR ga IKKI BAROBAR Digest urinishi
+          borardi — bu esa Hikvision hisobining qulflanishi (T-03-16/D-03).
+          Shart bilan esa ikkinchi chaqiruv `False` oladi va jimgina
+          chiqib ketadi.
+
+        ⚠ `started_at` QAYTA YOZILMAYDI: u qator yaratilganda (`create_run`,
+          ya'ni admin tugmani bosgan payt) qo'yiladi va foydalanuvchi uchun
+          "kashfiyot qachon boshlandi" savolining javobi AYNAN o'sha payt —
+          navbatda kutish ham kutishdir.
+
+        Returns:
+            Qator `queued` holatda topilgan va `running` ga o'tgan bo'lsa
+            `True`. `False` — qator yo'q, boshqa holatda yoki (tenant
+            konteksti o'rnatilmagan bo'lsa) RLS uni ko'rsatmadi.
+        """
+        result = await self.session.execute(
+            update(NvrDiscoveryRun)
+            .where(
+                NvrDiscoveryRun.market_id == self.market_id,
+                NvrDiscoveryRun.id == run_id,
+                NvrDiscoveryRun.status == DiscoveryRunStatus.QUEUED.value,
+            )
+            .values(status=DiscoveryRunStatus.RUNNING.value)
+            .returning(NvrDiscoveryRun.id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def set_channels_found(self, run_id: UUID, channels_found: int) -> bool:
+        """Oraliq yangilanish: kanallar SANAB CHIQILDI (UI-SPEC §5.2 [TALAB]).
+
+        ⚠ NEGA ALOHIDA METOD, `finish_run()` NING BIR QISMI EMAS: bu qiymat
+          skan HALI DAVOM ETAYOTGANDA yoziladi va u yugurishning YAKUNI
+          emas. `finish_run()` bir vaqtda `finished_at` ni ham qo'yadi,
+          ya'ni uni bu yerda ishlatish yugurishni tugagan deb ko'rsatardi
+          va poll qilayotgan UI natijani vaqtidan oldin chizardi.
+
+        Chaqiruvchi buni O'Z, QISQA tranzaksiyasida bajaradi — sabab
+        `app/jobs/discovery.py` modul docstringida (uzun tranzaksiya ichida
+        yozilgan qiymat `COMMIT` gacha hech kimga ko'rinmaydi).
+
+        Returns:
+            Qator topilgan bo'lsa `True`.
+        """
+        result = await self.session.execute(
+            update(NvrDiscoveryRun)
+            .where(
+                NvrDiscoveryRun.market_id == self.market_id,
+                NvrDiscoveryRun.id == run_id,
+            )
+            .values(channels_found=channels_found)
+            .returning(NvrDiscoveryRun.id)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def finish_run(
         self,
         run_id: UUID,

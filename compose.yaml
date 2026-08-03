@@ -2,7 +2,7 @@
 # Xost mashinasida `make` YO'Q (Windows) — barcha yorliqlar root `package.json` da.
 #
 # Profillar:
-#   (yo'q)   -> db, cache, core-api    : `npm run up`
+#   (yo'q)   -> db, cache, core-api, worker : `npm run up`
 #   migrate  -> Alembic one-shot job   : `npm run migrate`
 #   web      -> frontend (01-02 rejasi Dockerfile'ni yaratadi)
 #   proxy    -> nginx
@@ -160,6 +160,75 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    # NVR KASHFIYOTINING FON ISHCHISI (03-06, D-06).
+    #
+    # ⚠ PROFILSIZ — VA BU ATAYIN. `nvr-sim` va `migrate` dan farqli o'laroq
+    # bu ISHLAB CHIQARISH komponenti: `npm run up` uni ham ko'taradi.
+    # Profil ortiga yashirilsa `POST /nvr-devices/{id}/discover` 202 qaytarib,
+    # yugurish esa MANGU `queued` bo'lib qolardi — hech qanday xato
+    # bermasdan (aynan o'sha "jimgina yolg'on" sinfi).
+    #
+    # TO'RTINCHI KONTEYNER, UCHINCHI SERVIS EMAS: `core-api` kod bazasining
+    # boshqa entrypoint'i — `migrate` va `tests` bilan aynan bir xil naqsh,
+    # ya'ni CLAUDE.md ning "aynan 3 ta servis" cheklovi buzilmaydi
+    # (`03-RESEARCH.md` E.16 va `03-PATTERNS.md` §S-14 ikkalasi ham buni
+    # aniq aytadi).
+    #
+    # `target: runtime` — `migrate`/`tests`/`nvr-sim` `dev` ni ishlatadi.
+    # Sabab: worker prod'da ishlaydi, ya'ni unda pytest/ruff/mypy kerak
+    # emas va non-root foydalanuvchi (`appuser`, T-01-07) bo'lishi shart.
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: runtime
+    # `--workers 1` — `core-api` dagi bilan bir xil sabab: ikkinchi jarayon
+    # 4-fazada qo'shiladigan cron vazifalarini IKKI MARTA ishga tushirardi.
+    # Bitta NVR uchun kunlik bitta skan bu chegaraga hech qachon urilmaydi.
+    command: ["taskiq", "worker", "app.worker:broker", "--workers", "1"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      VALKEY_URL: ${VALKEY_URL:-redis://cache:6379/0}
+      # ⚠ `JWT_SECRET` WORKER'GA KERAK EMAS, LEKIN U BUSIZ KO'TARILMAYDI —
+      # va bu O'LCHANGAN fakt, taxmin emas:
+      #
+      #   ValidationError: 1 validation error for Settings
+      #   jwt_secret  Field required [type=missing, ...]
+      #
+      # Sabab: `Settings` — SERVISGA yagona sozlama obyekti va uni har bir
+      # entrypoint to'liq quradi. Uni entrypoint bo'yicha bo'lish (masalan
+      # `WorkerSettings`) ikki modelning jimgina ajralib ketishiga yo'l
+      # ochardi — o'shanda `core-api` bir maydonni qo'shib, worker uni
+      # ko'rmay qolardi.
+      #
+      # Xavfsizlik jihatidan bu YANGI teshik emas: worker allaqachon
+      # `NVR_CREDENTIAL_KEY` ni ushlab turadi va `settings.py` ning O'Z
+      # izohi aynan uni "yagona eng qimmat sir" deb belgilaydi (JWT kaliti
+      # oshkor bo'lsa sessiyalar bekor qilinadi, shifr kaliti oshkor
+      # bo'lsa BARCHA NVR parollari ochiladi). Ikkalasi bir xil xost, bir
+      # xil image va bir xil ishonch chegarasida.
+      JWT_SECRET: ${JWT_SECRET}
+      # ⚠ SHIFR KALITI SHU YERDA MAJBURIY (03-04 ning ochiq bandi).
+      # Kashfiyot jobi NVR parolini `nvr_credentials` dan o'qiydi va uni
+      # `decrypt_nvr_password` bilan ochadi, ya'ni `Settings` bu maydonsiz
+      # UMUMAN qurilmaydi va konteyner ishga tushishda
+      # `ValidationError: nvr_credential_key Field required` bilan
+      # yiqiladi. `:-` bilan bo'sh standart berish esa undan YOMONROQ
+      # bo'lardi: worker ko'tarilib, xato faqat birinchi kashfiyotda
+      # chiqardi (T-03-22).
+      NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
+      NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: Asia/Tashkent
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    # DIQQAT: xost portiga publish QILINMAYDI — worker HTTP yuzasi bermaydi.
     restart: unless-stopped
 
   frontend:

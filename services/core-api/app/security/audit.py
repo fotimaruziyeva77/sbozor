@@ -45,8 +45,11 @@ if TYPE_CHECKING:
 
 __all__ = [
     "TABLE_AUDIT_LOG",
+    "TABLE_CAMERAS",
     "TABLE_MARKETS",
     "TABLE_MARKET_PROFILE",
+    "TABLE_NVR_DEVICES",
+    "TABLE_NVR_DISCOVERY_RUNS",
     "TABLE_REFRESH_TOKENS",
     "TABLE_STALLS",
     "TABLE_TARIFFS",
@@ -99,6 +102,51 @@ TABLE_TARIFFS = "tariffs"
 
 TABLE_MARKET_PROFILE = "market_profile"
 """`PUT /calendar/weekdays` va usta rekvizitlari — bozor profili (02-09/02-11)."""
+
+# ---------------------------------------------------------------------------
+# 3-faza NVR domeni.
+#
+# ⚠ UCHTASI UCH XIL SABABDAN BOR VA ULAR ALMASHTIRIB BO'LMAYDI.
+#
+# `nvr_devices` va `cameras` DB TRIGGERI ostida (`0012_nvr_domain` ning 7-bandi:
+# `NVR_AUDITED_TABLES`), ya'ni ularning har `INSERT`/`UPDATE`/`DELETE` i o'zi
+# auditga tushadi va `write_app_audit()` ular uchun IKKINCHI qator yozardi.
+# Konstantalar baribir kerak: trigger KO'RA OLMAYDIGAN hodisalar bor —
+# parolning almashtirilishi (`nvr_credentials` ATAYIN triggersiz, T-03-13)
+# `nvr_devices` ustiga QIYMATSIZ yoziladi, kamera yuzasining o'qish auditi
+# esa 03-07 da shu nom bilan qo'shiladi.
+#
+# `nvr_discovery_runs` da esa trigger ATAYIN YO'Q va sabab migratsiyada
+# yozilgan: u hodisa jurnali va faqat qo'shiladi, ya'ni trigger uning
+# IKKINCHI nusxasini yozardi. Shuning uchun kashfiyotning ishga tushishi va
+# yakunlanishi ILOVA qatlamida yoziladi (`03-PATTERNS.md` §S-6) — va aynan
+# shu konstanta bilan.
+# ---------------------------------------------------------------------------
+
+TABLE_NVR_DEVICES = "nvr_devices"
+"""`POST /nvr-devices/{id}/password` — parol almashtirish FAKTI (SC#4).
+
+Yozuv QIYMATSIZ (`{"credentials_updated": True}`): "kim, qachon parolni
+almashtirdi" savoliga javob bor, "parol nima edi" savoliga esa hech
+qachon bo'lmaydi (`sbozor_core.models.nvr.NvrCredential` docstringi).
+"""
+
+TABLE_NVR_DISCOVERY_RUNS = "nvr_discovery_runs"
+"""`POST /nvr-devices/{id}/discover` va fon jobining bosqichlari (§S-6).
+
+Bu jadvalda DB triggeri YO'Q (yuqoridagi izoh), ya'ni "kashfiyot ishga
+tushdi/tugadi" hodisasining yagona izi — shu nom bilan yozilgan
+`source='app'` qatorlari.
+"""
+
+TABLE_CAMERAS = "cameras"
+"""`GET /cameras` va kamera amallari (03-07) — kameralar reestri resursi.
+
+Trigger `cameras` ni allaqachon qamraydi, ya'ni O'ZGARISHLAR uchun bu
+konstanta ishlatilmaydi. U 03-07 ning O'QISH yuzasi uchun oldindan
+e'lon qilinadi (`TABLE_VENDORS` bilan aynan bir xil naqsh: nom bir
+joyda turadi va router fayllariga literal satr bo'lib tarqalmaydi).
+"""
 
 _INSERT_AUDIT = text(
     "INSERT INTO audit_log ("
