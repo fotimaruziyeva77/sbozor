@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 03-04-PLAN.md (sir, RTSP URL, manzil darvozasi, idempotent upsert)
-last_updated: "2026-08-03T04:13:25.041Z"
+last_updated: "2026-08-03T05:46:34.574Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 50
-  completed_plans: 43
+  completed_plans: 44
   percent: 22
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 03
-Plan: 5 of 11
+Plan: 6 of 11
 Status: Ready to execute
 Last activity: 2026-08-03
 
@@ -59,6 +59,7 @@ Progress: [███░░░░░░░] 36% (4/11 reja)
 | Phase 02 P23 | 115min | 3 tasks | 8 files |
 | Phase 03 P01 | 65min | 3 tasks | 12 files |
 | Phase 03 P04 | 110min | 3 tasks | 12 files |
+| Phase 03 P05 | 115min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,10 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-04: xususiylik is_global bo'yicha tekshiriladi (is_private EMAS) — CGNAT 100.64/10 yagona ajratuvchi holat va u sabotaj bilan o'lchandi
 - [Phase 03]: 03-04: SC#2 ning uch qoidasi ON CONFLICT ning SET ifodasida, ilova mantig'ida EMAS — parallel skanda poyga bo'lmasin; channels_added esa RETURNING (xmax = 0) bilan sanaladi
 - [Phase 03]: 03-04: ilova kodida simulyator NOMI izohda ham yozilmaydi — 03-02 darvozasi kodni izohdan ajratmaydi va bu ataylab; nomga bog'langan regressiya testi test faylida qoladi
+- [Phase 03]: 03-05: ISAPI xato taksonomiyasi BITTA reyestrda: kodlar HTTP javobiga ham, nvr_discovery_runs.error_code ustuniga ham xizmat qiladi
+- [Phase 03]: 03-05: retry predikati TESKARI (D-03): httpx.HTTPStatusError ATAYIN qamralmaydi — sabotaj urinishlar sonini 0 dan 5 ga (Hikvision qulflash chegarasi) chiqardi
+- [Phase 03]: 03-05: Basic auth diagnostikasi challenge SXEMASI bo'yicha bajariladi, nvr_bad_credentials xulosasidan oldin EMAS — aks holda urinishlar sanog'i 2 bo'lardi
+- [Phase 03]: 03-05: device_not_supported sharti: manufacturer BOR VA Hikvision emas — DS-7732NI-M4 dumpida bu maydon umuman yo'q
 
 ### Pending Todos
 
@@ -122,6 +127,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-03T04:13:25.015Z
+Last session: 2026-08-03T05:46:10.614Z
 Stopped at: Completed 03-04-PLAN.md (sir, RTSP URL, manzil darvozasi, idempotent upsert)
 Resume file: None
