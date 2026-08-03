@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-01-PLAN.md (Wave 0 blokerlari)
-last_updated: "2026-08-03T00:30:00.000Z"
-last_activity: 2026-08-03 -- 03-01 bajarildi (Wave 0)
+stopped_at: Completed 03-04-PLAN.md (sir, RTSP URL, manzil darvozasi, idempotent upsert)
+last_updated: "2026-08-03T04:13:25.041Z"
+last_activity: 2026-08-03
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 50
-  completed_plans: 40
+  completed_plans: 43
   percent: 22
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 03
-Plan: 2 of 11
-Status: executing
-Last activity: 2026-08-03 -- 03-01 (Wave 0 blokerlari) bajarildi
+Plan: 5 of 11
+Status: Ready to execute
+Last activity: 2026-08-03
 
-Progress: [█░░░░░░░░░] 9% (1/11 reja)
+Progress: [███░░░░░░░] 36% (4/11 reja)
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -58,6 +58,7 @@ Progress: [█░░░░░░░░░] 9% (1/11 reja)
 | Phase 02 P24 | 195min | 3 tasks | 29 files |
 | Phase 02 P23 | 115min | 3 tasks | 8 files |
 | Phase 03 P01 | 65min | 3 tasks | 12 files |
+| Phase 03 P04 | 110min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,10 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-01: `CAMERA_MANAGE` `CAMERA_VIEW` dan ajratildi (D-07) — bitta huquq ikkalasini qamrasa «direktor ko'rsin» so'rovi «NVR parolini yangilay olsin» ga aylanardi
 - [Phase 03]: 03-01: teskari aloqa ikki lentaga bo'lindi va 2-fazadan meros band yopildi — `gate:fast` 32 s (chegara 180 s, KO'TARILMADI), `gate` 515 s (nomzod chegara 618 s, 03-11 yakunlaydi)
 - [Phase 03]: 03-01: talablar (CAM-01/03/08/09) ATAYIN `Pending` qoldirildi — ular faza darajasida, dalil bilan, 03-11 da belgilanadi
+- [Phase 03]: 03-04: NVR shifr kaliti Settings'da SecretStr va MAJBURIY — repr/Sentry lokal-o'zgaruvchi yo'lini yopadi, yo'q kalit esa startup'da yiqitadi (birinchi kamera qo'shilganda emas)
+- [Phase 03]: 03-04: xususiylik is_global bo'yicha tekshiriladi (is_private EMAS) — CGNAT 100.64/10 yagona ajratuvchi holat va u sabotaj bilan o'lchandi
+- [Phase 03]: 03-04: SC#2 ning uch qoidasi ON CONFLICT ning SET ifodasida, ilova mantig'ida EMAS — parallel skanda poyga bo'lmasin; channels_added esa RETURNING (xmax = 0) bilan sanaladi
+- [Phase 03]: 03-04: ilova kodida simulyator NOMI izohda ham yozilmaydi — 03-02 darvozasi kodni izohdan ajratmaydi va bu ataylab; nomga bog'langan regressiya testi test faylida qoladi
 
 ### Pending Todos
 
@@ -117,6 +122,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-03T00:30:00.000Z
-Stopped at: Completed 03-01-PLAN.md (Wave 0 — 7 bandning hammasi; W0-7 faqat mexanizm yarmi)
+Last session: 2026-08-03T04:13:25.015Z
+Stopped at: Completed 03-04-PLAN.md (sir, RTSP URL, manzil darvozasi, idempotent upsert)
 Resume file: None
