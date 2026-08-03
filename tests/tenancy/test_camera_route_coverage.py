@@ -222,6 +222,35 @@ def test_every_camera_get_route_requires_camera_view() -> None:
     )
 
 
+def test_every_camera_route_declares_a_camera_permission() -> None:
+    """Yuzadagi HAR marshrut (metoddan qat'i nazar) kamera huquqi ostida.
+
+    ⚠ BU TEST SABOTAJ NATIJASIDA QO'SHILDI. Yuqoridagi darvoza faqat
+      `GET` larni qamrardi, `POST /cameras/{id}/live-token` esa —
+      fazaning eng nozik marshruti — undan TASHQARIDA qolardi. Sabotaj
+      (huquq darvozasi butunlay olib tashlandi) `test_live_view.py` ni
+      qizartirdi, LEKIN bu fayl yashil qoldi: ya'ni STRUKTURAVIY darvoza
+      xulq testiga tayanib turardi.
+
+      Ikkalasi ham kerak: xulq testi «kassir 403 oladi» ni o'lchaydi,
+      bu esa «yangi marshrut huquqsiz tug'ilmasin» ni. Ikkinchisi
+      YANGI endpoint uchun ishlaydi — u hali birorta xulq testiga ega
+      emas va aynan o'shanda unutish ehtimoli eng yuqori.
+    """
+    camera_perms = {Permission.CAMERA_VIEW, Permission.CAMERA_MANAGE}
+    missing = sorted(
+        f"{method} {path}"
+        for (method, path), route in SURFACE_ROUTES.items()
+        if path not in EXEMPT_ROUTES and not camera_perms & set(required_permissions(route))
+    )
+
+    assert not missing, (
+        "Quyidagi marshrutlar kamera yuzasida turibdi, lekin birorta kamera "
+        "huquqini ham talab qilmaydi. Dekoratorga `CAMERA_VIEW` (o'qish) yoki "
+        "`CAMERA_MANAGE` (o'zgartirish) qo'shing:\n  " + "\n  ".join(missing)
+    )
+
+
 def test_control_route_declares_no_read_audit() -> None:
     """NAZORAT: poll marshruti `CAMERA_VIEW` ostida, LEKIN auditsiz (T-02-148).
 
