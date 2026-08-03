@@ -1,14 +1,13 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryState } from "nuqs";
 
-import {
-  cameraEmptyKind,
-  isDiscoveryRunId,
-} from "@/components/cameras/camera-page-state";
+import { CameraList } from "@/components/cameras/camera-list";
+import { isDiscoveryRunId } from "@/components/cameras/camera-page-state";
+import { DiscoveryPanel } from "@/components/cameras/discovery-panel";
 import { NvrCard } from "@/components/cameras/nvr-card";
 import { NvrForm } from "@/components/cameras/nvr-form";
 import { Button } from "@/components/ui/button";
@@ -18,8 +17,7 @@ import type { NvrDevice } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import {
   discoveryRunIdOf,
-  EMPTY_CAMERA_FILTERS,
-  useCamerasQuery,
+  useDiscoveryRunQuery,
   useNvrDevicesQuery,
   useStartDiscovery,
 } from "@/lib/camera-queries";
@@ -140,13 +138,31 @@ function CamerasWorkspace() {
   );
 
   const devices = useNvrDevicesQuery();
-  const cameras = useCamerasQuery(EMPTY_CAMERA_FILTERS);
   const startDiscovery = useStartDiscovery();
 
   const [formOpen, setFormOpen] = useState(false);
   const [rescanError, setRescanError] = useState<string | null>(null);
 
   const device: NvrDevice | null = devices.data?.items[0] ?? null;
+
+  /*
+   * ⚠ AYNI `queryKey`, ya'ni AYNI kesh yozuvi: `DiscoveryPanel` ham shu
+   *   hookni shu argumentlar bilan chaqiradi va TanStack so'rovni
+   *   DEDUPLIKATSIYA qiladi — ikkinchi tarmoq so'rovi ketmaydi
+   *   (`stall-filters.tsx` da o'rnatilgan naqsh).
+   *
+   *   Nima uchun sahifaga ham kerak: yugurish `nvr_bad_credentials`
+   *   bilan yiqilganda KARTADAGI «Qayta skanerlash» tugmasi qulflanishi
+   *   shart (§6.2 -> §4.4). Aks holda admin bir necha bosishda NVR
+   *   hisobini 30 daqiqaga qulflardi va undan keyin TO'G'RI parol ham
+   *   ishlamasdi (D-03).
+   */
+  const activeRun = useDiscoveryRunQuery(
+    device?.id ?? null,
+    run === "" ? null : run,
+  );
+  const failedRun =
+    activeRun.data?.status === "failed" ? activeRun.data : null;
 
   /*
    * ⚠ YAROQSIZ `?run=` JIMGINA TOZALANADI va XATO KO'RSATILMAYDI
@@ -213,8 +229,16 @@ function CamerasWorkspace() {
         ) : (
           <NvrCard
             device={device}
+            errorCode={failedRun?.error_code ?? null}
+            errorDetail={failedRun?.error_detail ?? null}
             onDiagnose={() => setFormOpen(true)}
             onRescan={() => void beginDiscovery(device.id)}
+            /*
+             * Blokni KASHFIYOT PANELI chizadi (§5.2 S4) — kartada
+             * ikkinchi nusxa ikkita `role="alert"` hududini bir vaqtda
+             * faol qilardi (§12.3). Karta faqat QULFNI oladi.
+             */
+            showErrorBlock={false}
           />
         )}
       </section>
@@ -222,43 +246,34 @@ function CamerasWorkspace() {
       {/*
        * --- ZONA (B): kashfiyot paneli ---------------------------------
        *
-       * ⚠ JOY QOLDIRILDI — panelning o'zi 03-10 da (UI-SPEC §5.2/§5.3:
-       *   S1…S5 bosqichlari, poll va natija hisoblagichlari). Bu rejada
-       *   `?run=` PARSE QILINADI, TEKSHIRILADI va SAQLANADI, ya'ni
-       *   03-10 uni tayyor holatda oladi.
+       * ⚠ ZONA (C) NING O'RNINI EGALLAMAYDI: panel paydo bo'lganda
+       *   ro'yxat O'Z JOYIDA qoladi (§3.2). Qayta skanerlash paytida
+       *   mavjud ro'yxatning yo'qolishi «kameralarim yo'qolib
+       *   ketdimi?» degan qo'rquv tug'diradi.
        *
-       *   Bu yerda oraliq «Boshlanmoqda» matni ATAYIN chizilmaydi:
-       *   03-09 yugurishni poll QILMAYDI, ya'ni allaqachon tugagan
-       *   yugurish uchun ham «boshlanmoqda» deb turaverardi — YOLG'ON
-       *   holat ko'rsatishdan ko'ra hech narsa ko'rsatmaslik halolroq.
+       * ⚠ `?run=` YAROQSIZ bo'lsa yuqoridagi effekt uni JIMGINA
+       *   tozalaydi, ya'ni bu yerga faqat tekshirilgan qiymat keladi.
        */}
+      {device !== null && run !== "" && isDiscoveryRunId(run) ? (
+        <section aria-label={t("cameras.discover")}>
+          <DiscoveryPanel
+            nvrId={device.id}
+            onClose={() => void setRun(null)}
+            runId={run}
+          />
+        </section>
+      ) : null}
 
       {/* --- ZONA (C): kameralar ro'yxati -------------------------------- */}
-      <section aria-busy={cameras.isFetching} aria-label={t("cameras.title")}>
-        {cameras.isPending ? (
-          <div
-            aria-busy="true"
-            className="flex flex-col gap-3"
-            role="status"
-          >
-            <span className="sr-only">{t("common.loading")}</span>
-            {/* Uchta qator — REAL qator balandligida (§10.1). */}
-            <Skeleton className="h-16" />
-            <Skeleton className="h-16" />
-            <Skeleton className="h-16" />
-          </div>
-        ) : cameras.isError ? (
-          <LoadFailed onRetry={() => void cameras.refetch()} />
-        ) : (
-          <CameraListZone
-            canManage={canManage}
-            hasNvr={device !== null}
-            onDiscover={() => {
-              if (device !== null) void beginDiscovery(device.id);
-            }}
-            visibleCount={cameras.data?.items.length ?? 0}
-          />
-        )}
+      <section aria-label={t("cameras.title")}>
+        <CameraList
+          canManage={canManage}
+          hasNvr={device !== null}
+          nvrId={device?.id ?? null}
+          onDiscover={() => {
+            if (device !== null) void beginDiscovery(device.id);
+          }}
+        />
       </section>
     </div>
   );
@@ -319,75 +334,6 @@ function NvrZoneWithoutDevice({
       title={t("cameras.emptyNoNvr")}
     />
   );
-}
-
-/* --- Zona (C) ------------------------------------------------------------- */
-
-function CameraListZone({
-  canManage,
-  hasNvr,
-  onDiscover,
-  visibleCount,
-}: {
-  canManage: boolean;
-  hasNvr: boolean;
-  onDiscover: () => void;
-  visibleCount: number;
-}) {
-  const t = useTranslations();
-
-  const empty = cameraEmptyKind({
-    // Filtr qatori 03-10 da keladi; bugun filtr YO'Q, ya'ni E-3/E-4 ga
-    // kelinmaydi — lekin qaror shu yerda, bitta joyda yashaydi.
-    archivedOnly: false,
-    filtersActive: false,
-    hasNvr,
-    visibleCount,
-  });
-
-  if (empty === "no-cameras") {
-    return (
-      <EmptyState
-        action={
-          canManage ? (
-            <Button onClick={onDiscover} size="lg" variant="default">
-              <Search aria-hidden="true" />
-              {t("cameras.discover")}
-            </Button>
-          ) : null
-        }
-        description={t("cameras.emptyNoCamerasHint")}
-        title={t("cameras.emptyNoCameras")}
-      />
-    );
-  }
-
-  if (empty === "filtered") {
-    return (
-      <EmptyState
-        description={t("cameras.emptyFilteredHint")}
-        title={t("cameras.emptyFiltered")}
-      />
-    );
-  }
-
-  if (empty === "archived") {
-    return (
-      <EmptyState
-        description={t("cameras.emptyArchivedHint")}
-        title={t("cameras.emptyArchived")}
-      />
-    );
-  }
-
-  /*
-   * ⚠ QATORLARNING O'ZI 03-10 DA (UI-SPEC §6). Bu rejaning yuzasi —
-   *   NVR ulash oqimi; kamera qatori esa o'z kontraktini (nom
-   *   o'zgartirish, arxivlash, jonli ko'rish) olib keladi va uni yarim
-   *   holatda chizish 03-10 uchun qayta yozishdan boshqa narsa
-   *   bermasdi. `empty === "none"` shoxi ATAYIN bo'sh.
-   */
-  return null;
 }
 
 /* --- Yordamchilar --------------------------------------------------------- */

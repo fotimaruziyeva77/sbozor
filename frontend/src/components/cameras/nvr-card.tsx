@@ -55,6 +55,21 @@ export type NvrCardProps = {
   /** Diagnostika — chaqiruvchi formani rekvizitlar bilan ochadi. */
   onDiagnose: () => void;
   onRescan: () => void;
+  /**
+   * Xato blokini KARTA chizadimi (standart — ha, 03-09 xulqi).
+   *
+   * ⚠ 03-10 da chaqiruvchi buni `false` qiladi va sabab aniq: kashfiyot
+   *   yugurishining nosozligini UI-SPEC §5.2 (S4) bo'yicha KASHFIYOT
+   *   PANELI chizadi. Ikkala joyda ham chizish bir xil matnni ikki
+   *   marta ko'rsatib, ikkita `role="alert"` hududini bir vaqtda faol
+   *   qilardi (§12.3 — ikkitadan ortiq bo'lmaydi).
+   *
+   *   ⚠ QULF ESA BARIBIR ARMLANADI: `errorCode` prop sifatida keladi,
+   *     `lock()` uni ko'radi va «Qayta skanerlash» tugmasi bloklanadi.
+   *     Aynan shu kerak — D-03 bo'yicha rekvizit o'zgarmasdan qayta
+   *     urinish NVR hisobini qulflaydi.
+   */
+  showErrorBlock?: boolean;
 };
 
 export function NvrCard({
@@ -64,6 +79,7 @@ export function NvrCard({
   errorDetail = null,
   onDiagnose,
   onRescan,
+  showErrorBlock = true,
 }: NvrCardProps) {
   const t = useTranslations();
   const format = useFormatter();
@@ -207,7 +223,7 @@ export function NvrCard({
           </p>
         ) : null}
 
-        {errorCode !== null ? (
+        {errorCode !== null && showErrorBlock ? (
           <NvrErrorBlock code={errorCode} detail={errorDetail} />
         ) : null}
 
