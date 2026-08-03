@@ -31,13 +31,13 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 
 - [x] **CAM-01**: Bozor admini kameralarni qo'shadi/sozlaydi; RTSP ma'lumotlari shifrlangan saqlanadi; "ulanishni tekshirish" tugmasi ishlaydi
 - [ ] **CAM-02**: Server NVR'ga faqat WireGuard VPN orqali kiradi; NVR internetga to'g'ridan-to'g'ri ochilmaydi
-- [ ] **CAM-03**: Direktor/admin panelda jonli kamera tasvirini ko'radi (go2rtc, avtorizatsiya ortida)
+- [x] **CAM-03**: Direktor/admin panelda jonli kamera tasvirini ko'radi (go2rtc, avtorizatsiya ortida)
 - [ ] **CAM-04**: Snapshot jadvali har bozor uchun sozlanadi va mavsumiy profilni qo'llaydi (standart: 06:00–08:00 har 30 daq + 16:00, 18:00)
 - [ ] **CAM-05**: Rejalashtirilgan kadr olish idempotent va retry'li; o'tkazib yuborilgan slot jurnalda ko'rinadi va alert yuboradi
 - [ ] **CAM-06**: Har kadr sifat filtridan o'tadi (qorong'i/buzuq/bo'sh kadr belgilanadi, `light_mode` saqlanadi) — yaroqsiz kadr billing'ga ta'sir qilmaydi
 - [ ] **CAM-07**: Kadrlar S3-mos omborda (SeaweedFS) bozor/kamera/sana bo'yicha saqlanadi; 90 kun to'liq, keyin siqilgan 1 yil (sozlanadigan)
 - [x] **CAM-08**: Admin **faqat** NVR manzili + login/parolni kiritadi; tizim Hikvision ISAPI orqali qurilmani aniqlaydi, barcha kanallarni sanab chiqadi va kameralarni (nom, kanal, asosiy/sub oqim URL'i) avtomat yaratadi. Qayta skanerlash idempotent (yangi kanal qo'shiladi, yo'qolgani `offline`, mavjudi tegilmaydi). Ulanish xatosi **sababi va tuzatish yo'li** bilan ko'rsatiladi: parol xato / NVR soati >5 daq farqi → NTP / firmware `digest/basic` talab qiladi / kanal offline / sessiya limitiga yetildi
-- [ ] **CAM-09**: Simulyatsiya qilingan Hikvision NVR (ISAPI mock + go2rtc RTSP manbasi) compose profili sifatida mavjud; kamera kashfiyoti, ulanish testi, jonli ko'rish va kadr olish yo'li real uskunasiz uchidan-uchiga ishlaydi va CI'da o'lchanadi
+- [x] **CAM-09**: Simulyatsiya qilingan Hikvision NVR (ISAPI mock + go2rtc RTSP manbasi) compose profili sifatida mavjud; kamera kashfiyoti, ulanish testi, jonli ko'rish va kadr olish yo'li real uskunasiz uchidan-uchiga ishlaydi va CI'da o'lchanadi
 
 ### AI tahlil (AI)
 
@@ -150,14 +150,14 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | MARKET-06 | Phase 2 | Done |
 | MARKET-07 | Phase 2 | Done |
 | CAM-01 | Phase 3 | Done |
-| CAM-02 | Phase 3 | Blocked (2-da'vo o'lchandi, 1-da'vo emas: «server NVR'ga FAQAT tunnel orqali kiradi» CI'da tunnel bo'lmagani uchun sinalmaydi — egasi Ops, tetigi VPS deploy'i, vositasi ops/scripts/verify-tunnel.sh) |
-| CAM-03 | Phase 3 | Blocked (avtorizatsiya va oqim ro'yxati o'lchandi, «tasvirni KO'RADI» qismi emas: jsdom WebRTC bermaydi va go2rtc-sim oqimini birorta test iste'mol qilmaydi — yopilishi 4-fazada) |
+| CAM-02 | Phase 3 | Blocked (2-da'vo o'lchandi, 1-da'vo emas: «server NVR'ga FAQAT tunnel orqali kiradi» CI'da tunnel bo'lmagani uchun sinalmaydi — egasi Ops, tetigi VPS deploy'i, vositasi ops/scripts/verify-tunnel.sh, bandi 03-HUMAN-UAT.md #1 va #2) |
+| CAM-03 | Phase 3 | Done |
 | CAM-04 | Phase 4 | Pending |
 | CAM-05 | Phase 4 | Pending |
 | CAM-06 | Phase 4 | Pending |
 | CAM-07 | Phase 4 | Pending |
 | CAM-08 | Phase 3 | Done |
-| CAM-09 | Phase 3 | Blocked (uchala bandi o'lchandi — profil, kashfiyot, ulanish testi; qolgan ikkitasi emas: «jonli ko'rish» sim ustida uchidan-uchiga sinalmagan va «kadr olish yo'li» 4-fazaning mavzusi) |
+| CAM-09 | Phase 3 | Done |
 | AI-01 | Phase 5 | Pending |
 | AI-02 | Phase 5 | Pending |
 | AI-03 | Phase 5 | Pending |
@@ -224,6 +224,32 @@ takrori bo'lardi (890 yashil test ortida to'rtta haqiqiy bo'shliq).
 emas va yetishmayotgan dalil NOMLANGAN» degani. Uchala bandning ham
 yopilish yo'li o'z qatorida yozilgan (Ops deploy'i, 4-faza).
 
+### Qoidaning qayta qo'llanishi (2026-08-03, `03-14`) — DALIL BILAN
+
+`03-VERIFICATION.md` GAP-1 va GAP-2 yopilgach uchta `Blocked` banddan
+**ikkitasi** `Done` ga o'tdi. Har birining dalili NOMMA-NOM:
+
+| Talab | Yangi holat | Nima o'lchandi va QAYSI test bilan | Nima o'lchanMAGAN |
+|---|---|---|---|
+| **CAM-03** | `Blocked` -> **`Done`** | (a) avtorizatsiya — `test_live_view.py` (rad etish matritsasi) va `test_phase3_criteria.py::test_sc6_live_view_requires_authorization`; (b) **media yo'li** — `tests/integration/test_live_view_e2e.py::test_a_frame_arrives_through_the_discovered_stream`: kashfiyot hosil qilgan `cam_<uuid4>` oqimi uchun `/api/frame.jpeg` **99 681 baytli HAQIQIY JPEG** qaytardi (mock'siz, mahsulot `Go2rtcClient` i bilan) | **Brauzerdagi ijro va IDROK** — tasvir keladi, lekin uning ekranda qanday ko'rinishi, kechikishi va sifati o'lchanmagan (jsdom `RTCPeerConnection` bermaydi). Bandi: `03-HUMAN-UAT.md` #5, egasi direktor, tetigi pilot tayyorgarligi haftasi |
+| **CAM-09** | `Blocked` -> **`Done`** | Beshala bandi ham o'lchanadi: profil (`--profile sim`, `test_compose_sim_env.py`), kashfiyot (`test_nvr_discovery.py`, `test_sc1`/`test_sc2`), ulanish testi (`test_nvr_api.py`, `test_nvr_errors.py`), **jonli ko'rish** va **kadr olish yo'li** — ikkalasi ham `test_live_view_e2e.py` da, aynan `/api/frame.jpeg` orqali (4-fazaning STANDART mexanizmi, `CLAUDE.md` § «Snapshot capture») | Sim RTSP sessiya LIMITINI (D-05) modellamaydi va real firmware chetlanishlarini ko'rsatmaydi — bular `03-HUMAN-UAT.md` #3 va #4 |
+| **CAM-02** | **`Blocked` BO'LIB QOLADI** | «NVR internetga to'g'ridan-to'g'ri ochilmaydi» o'lchangan: ommaviy IP -> `422 nvr_host_public_blocked`; `wg0.conf.example` da butun-internet CIDR'i YO'Q (D-13) | «Server NVR'ga **FAQAT** tunnel orqali kiradi» — CI konteynerida `wg0` interfeysi UMUMAN YO'Q. Bunday test har doim «tunnel uzilgan» shoxidan o'tib yashil bo'lardi va HECH NIMA isbotlamasdi (Pitfall 10). **Egasi: Ops. Tetigi: VPS deploy'i.** Vositasi `ops/scripts/verify-tunnel.sh`; bandlari `03-HUMAN-UAT.md` #1 va #2 |
+
+⚠ **CAM-09 ning matnidagi «go2rtc RTSP manbasi» endi HARFMA-HARF to'g'ri
+emas va bu ochiq aytiladi.** `03-12` sim'ning RTSP oyog'ini `go2rtc-sim`
+dan **MediaMTX** ga ko'chirdi (sabab: Hikvision yo'li `/Streaming/
+Channels/102` ichida SLESH bor va go2rtc'ning oqim nomi <-> URL yo'li
+moslashuvi sleshli nom uchun hujjatlashtirilmagan). Talabning MAZMUNI —
+«real uskunasiz uchidan-uchiga ishlaydigan sim RTSP manbasi» —
+bajarildi; o'zgargan narsa implementatsiya tafsiloti. go2rtc esa
+MAHSULOT yo'lida, ISTE'MOLCHI sifatida qoladi va aynan u kadrni beradi.
+
+⚠ **`Done` NIMANI ANGLATMAYDI.** Ikkala bandning ham dalili
+SIMULYATOR ustida olingan. Real Hikvision NVR'ning firmware chetlanishlari
+va haqiqiy sessiya limiti `03-HUMAN-UAT.md` da, egasi va tetigi bilan
+yozilgan; ular fazani bloklamaydi (2026-08-01 self-service direktivasi),
+lekin «real qurilmada ishlaydi» degan da'vo BERILMAGAN.
+
 ⚠ **Faza mezonlari (SC#1…SC#8) bundan MUSTAQIL** va ularning sakkiztasi
 ham yashil (`tests/integration/test_phase3_criteria.py`). Mezonlar
 fazaning yetkazib berish mahsulotini o'lchaydi, talablar esa v1 relizining
@@ -265,7 +291,13 @@ yashab qolmadi.
 
 ---
 *Requirements defined: 2026-07-29*
-*Last updated: 2026-08-03 — `03-11`: CAM-01 va CAM-08 o'lchangan dalil bilan
+*Last updated: 2026-08-03 — `03-14`: GAP-1 va GAP-2 mock'siz uchidan-uchiga
+o'lchov bilan yopilgach CAM-03 va CAM-09 `Blocked` -> `Done`
+(dalil: `tests/integration/test_live_view_e2e.py` — kashfiyot hosil qilgan
+oqimdan HAQIQIY JPEG kadr); CAM-02 `Blocked` bo'lib QOLDI va sababi,
+egasi (Ops), tetigi (VPS deploy'i) hamda bandi (`03-HUMAN-UAT.md` #1, #2)
+nomlandi. Sanoq: Done 11 · Blocked 1.*
+*Oldingi: 2026-08-03 — `03-11`: CAM-01 va CAM-08 o'lchangan dalil bilan
 `Done`; CAM-02, CAM-03, CAM-09 yetishmayotgan dalili NOMLANGAN holda
 `Blocked`; «Faza kesimida» jadvalidagi 3-qator ROADMAP'dagi faza nomiga
 moslandi (eskirgan sarlavha 2026-08-01 dagi qayta nomlashdan keyin

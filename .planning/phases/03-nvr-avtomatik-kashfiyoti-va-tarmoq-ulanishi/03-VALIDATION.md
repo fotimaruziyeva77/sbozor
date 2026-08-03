@@ -44,10 +44,10 @@ automated_replacements:
   - was: "Talab holatini checkbox ro'yxati va Traceability jadvalida qo'lda sinxronlash"
     now: "npm run requirements:check"
 open_items:
-  - "TO'LQIN DARAJASIDAGI KECHIKISH (egasi: 4-FAZA). Chegara o'lchov bilan belgilandi, lekin u KATTA va sabab strukturaviy: `npm run test` `npm run test:tenancy` va `npm run test:sim` ning testlarini QAYTA bajaradi (testpaths=[\"tests\"] hammasini qamraydi). Batafsil raqamlar va taklif «Kechikish bandining yopilishi» bo'limida."
-  - "JONLI OQIM SIM USTIDA ISTE'MOL QILINMAYDI (egasi: 4-FAZA). `go2rtc-sim` haqiqiy RTSP test-oqimlarini beradi, lekin birorta test undan kadr olmaydi — CAM-03 va CAM-09 aynan shu sababdan `Blocked`. Yopilish yo'li: `-m sim` ostida go2rtc-sim'dan bitta kadr olib JPEG ekanini tekshirish (4-fazaning kadr olish yo'li bilan bir xil mexanizm)."
+  - "TO'LQIN DARAJASIDAGI KECHIKISH — QAYTA BAJARISH QISMI YOPILDI, CHEGARANI QAYTA BELGILASH OCHIQ (egasi: 4-FAZA). Strukturaviy sabab (`npm run test` `test:tenancy` va `test:sim` ni QAYTA bajarardi — darvozaning 31 % i) `03-12` da yo'q qilindi: `sim:up` zanjir boshiga chiqdi, ikkala buyruq mustaqil yorliq bo'lib qoldi, qamrov kamaymadi (1520 ⊃ 412 ⊃ 76). `03-14` da bir marta, toza sharoitda o'lchandi: `npm run gate` = **538 s**, `exit 0` (03-11 da 1000 s edi). ⚠ QOLGAN BAND: chegara hamon **1200 s** va u 538 s ga 2.2× zaxira beradi — signal bo'shashgan. Chegarani tushirish ALOHIDA qaror va u bir necha yugurishning o'lchoviga tayanishi kerak; shu sababdan bu rejada jimgina o'zgartirilmadi. Batafsil raqamlar «Kechikish bandining yopilishi» bo'limida."
+  - "✅ YOPILDI 2026-08-03 (`03-14`). Band ilgari shunday yozilgan edi: «JONLI OQIM SIM USTIDA ISTE'MOL QILINMAYDI (egasi: 4-FAZA) — `go2rtc-sim` haqiqiy RTSP test-oqimlarini beradi, lekin birorta test undan kadr olmaydi; yopilish yo'li: `-m sim` ostida go2rtc-sim'dan bitta kadr olib JPEG ekanini tekshirish». ⚠ TAKLIF QILINGAN YO'L ISHLATILMADI va sabab `03-VERIFICATION.md` da: u mahsulot yo'lini CHETLAB O'TARDI (kashfiyot `cam_<uuid4>` nomini hosil qiladi, sim esa boshqa nomlarni e'lon qilardi) — ya'ni aynan Pitfall 4, simulyatorning o'zini o'zi tasdiqlashi. Haqiqiy yopilish: `tests/integration/test_live_view_e2e.py` — kadr KASHFIYOT hosil qilgan `stream_name` bilan, jonli ko'rish chiptasi berilgandan KEYIN, MAHSULOT go2rtc'i orqali olinadi va `Go2rtcClient` mock QILINMAYDI. O'lchov: `/api/frame.jpeg` -> 99 681 baytli JPEG, birinchi urinishda, 0.26 s. O'lchovning mavjudligi `test_phase3_criteria.py::test_the_mockless_end_to_end_measurement_exists_and_runs` meta-darvozasi bilan qulflangan (modul bor, `sim` markeri bor, go2rtc mock'i YO'Q). CAM-03 va CAM-09 shu dalil bilan `Done` ga o'tdi."
   - "AUDIT HAJMI QABUL QILINDI (egasi: 4-FAZA, past ustuvorlik). `cameras.last_seen_at` har skanda va jonli ko'rish har yangilanishda `audit_log` ga qator yozadi. O'lchov: Karmana miqyosida (25 kamera) kuniga ~75 qator, yiliga ~27k qator ~14 MB — 400 GB diskda ahamiyatsiz. Remediatsiya (ustun bilan cheklangan trigger) MA'LUM va arzon, lekin u `migrations/helpers.py` ni va BARCHA audit ostidagi jadvallarni o'zgartiradi. Qayta ochish sharti: skan CRON'ga o'tganda (4-faza) yoki bozorlar soni o'ntadan oshganda."
-  - "Go2rtcClient.remove_stream CHAQIRILMAYDI va bu QABUL QILINDI. Qoldiq ta'sir o'lchangan va chegaralangan: arxivlangan kamera `POST /cameras/{id}/live-token` dan 404 oladi (`test_live_view.py::test_archived_camera_has_no_live_token`), ya'ni YANGI oqim ochilmaydi; go2rtc ro'yxati XOTIRADA yashaydi va servis qayta ishga tushganda yo'qoladi; `rtsp_url()` parolni umuman olmaydi, ya'ni yetim yozuvda sir yo'q. Arxivlash yo'liga tarmoq chaqiruvini qo'shish uni go2rtc ning MAVJUDLIGIGA bog'lardi — yomonroq savdo. To'g'ri shakl — 4-fazada reconciliation (faol kameralar ro'yxati bilan go2rtc oqimlarini davriy moslashtirish)."
+  - "Go2rtcClient.remove_stream MAHSULOT yo'lida hamon chaqirilmaydi; QISMAN YANGILANDI 2026-08-03 (`03-14`). YANGI: metod endi HAQIQATAN bajariladi — `test_live_view_e2e.py` uni `finally` da chaqiradi (T-03-95: ochilib qolgan oqimlar va ular ortidagi RTSP sessiyalari to'planmasin), ya'ni uning tarmoq xulqi BIRINCHI marta o'lchandi va shu o'lchov `:ro` config tufayli `DELETE` ning **400** qaytarishini ochdi (tuzatish: natijadan o'lchash, `app/services/go2rtc.py`). O'ZGARMAGANI: arxivlash MARSHRUTI hamon go2rtc'ga chiqmaydi va bu ATAYIN — qoldiq ta'sir chegaralangan (arxivlangan kamera `POST /cameras/{id}/live-token` dan 404 oladi: `test_live_view.py::test_archived_camera_has_no_live_token` va endi haqiqiy go2rtc ustida `test_live_view_e2e.py::test_an_archived_camera_never_reaches_the_real_go2rtc` — go2rtc ro'yxati O'ZGARMAYDI), ro'yxat XOTIRADA yashaydi va servis qayta ishga tushganda yo'qoladi. ⚠ 03-13 dan keyin yetim yozuvda SIR BOR (manba rekvizitli), ya'ni bu endi shunchaki tozalik emas, sir muddati masalasi. To'g'ri shakl — 4-fazada reconciliation (faol kameralar ro'yxati bilan go2rtc oqimlarini davriy moslashtirish); egasi: 4-FAZA."
 ---
 
 # Phase 3 — Validation Strategy
@@ -115,6 +115,49 @@ open_items:
 
 Oltala o'lchovning ham har bir qadami `exit 0`. «Sovuq kesh» — `frontend/.next` va `frontend/node_modules/.vite` o'chirilgandan keyingi birinchi yugurish; «issiq» — undan keyingi ketma-ket ikkitasi. Test sanog'i: **1457** backend (shundan 412 tenancy, 70 sim) + **86** node:test + **246** vitest + i18n **576 × 3**.
 
+#### QAYTA O'LCHOV (2026-08-03, `03-14`, bo'shliq yopilgandan KEYIN)
+
+⚠ **ESKI JADVALLAR O'CHIRILMAYDI** — o'sish ham, kamayish ham byudjet
+muhokamasi uchun kerak. Bu — **bir marta, toza sharoitda** olingan
+o'lchov (reja aynan shuni talab qiladi: `03-12` ning 716 s i PARALLEL
+YUK ostida olingan va u chegarani qayta belgilash uchun yaroqsiz edi).
+
+| O'lchov | Sana / reja | Qiymat | Chegara | Holat |
+|---|---|---:|---|---|
+| `npm run gate` | 2026-08-03 · `03-11` (eski zanjir, 3 yugurish) | **1000 / 994 / 983 s** | 1200 s | ✅ |
+| `npm run gate` | 2026-08-03 · `03-12` (de-dup, **parallel yuk ostida**) | **716 s** | 1200 s | ✅ — chegara uchun ISHLATILMAGAN |
+| **`npm run gate`** | **2026-08-03 · `03-14` (bir marta, toza)** | **538 s** — `exit 0` | **1200 s — KO'TARILMADI, TUSHIRILMADI** | ✅ **2.2× zaxira** |
+
+Yugurish `2026-08-03T18:36:38Z` da boshlanib `18:45:36Z` da tugadi;
+zanjirning **sakkizala** qadami `exit 0`. Kuzatilgan sanoqlar:
+`sim:up` uchala konteyner `healthy` · `ruff` + `ruff format` + `mypy`
+toza (**202 fayl formatlangan**, **196 manbada muammo yo'q**) · pytest
+**1520 test** (5 `hardware` deselected) · i18n **576 kalit × 3 til** ·
+`node --test` **86 pass / 0 fail** · vitest **246 passed (20 fayl)** ·
+`typecheck`, `eslint`, `next build` — uchalasi ham o'tdi.
+
+**Ikki qarama-qarshi kuch va ularning O'LCHANGAN natijasi:**
+
+| Kuch | Bashorat | Kuzatilgan |
+|---|---|---|
+| `03-12` `test:tenancy` (249 s) va `test:sim` (67 s) ni zanjirdan chiqardi | **−316 s** | 1000 -> 538 = **−462 s** |
+| Bu rejalar to'plami HAQIQIY media quvurini qo'shdi (ffmpeg ishga tushishi + kadr kutish) | **+** noma'lum | Amalda **sezilmaydi**: quvur LAZY (`runOnDemand` faqat birinchi tomoshabinda ishga tushadi) va e2e testda kadr **birinchi urinishda, 0.26 s** da keldi |
+
+⚠ **Farq bashoratdan 146 s KATTA va buni «bonus» deb yozish noto'g'ri
+bo'lardi.** Ikki o'lchov bir xil sharoitda olinmagan: `03-11` **uchta**
+yugurishning eng yomonini oldi (sovuq `frontend/.next` keshi bilan
+birinchisi ham ichida), bugungi son esa **bitta** yugurish va unda
+Docker image'lari hamda frontend keshi ISSIQ edi. Ya'ni de-duplikatsiya
+tejaganining aniq ulushi bu jadvaldan ajratib olinmaydi; ishonch bilan
+aytiladigan narsa — **zanjir chegaradan ikki barobardan ko'proq pastda**
+va **media quvuri uni sezilarli qimmatlashtirmadi**.
+
+⚠ **Chegara TUSHIRILMADI ham.** 538 s ga 1200 s chegarasi 2.2× zaxira
+beradi, ya'ni signal juda bo'shashgan. Buni jimgina qattiqlashtirish shu
+rejaning ishi emas (chegarani o'zgartirish alohida qarordir va u ikki
+tomonga ham amal qiladi); **4-fazaga band:** `gate` bir necha marta
+o'lchansin va chegara o'sha yangi bazadan qayta belgilansin.
+
 #### Qaysi qadam qancha turadi (eng yomon qiymat bo'yicha)
 
 | Qadam | Eng yomon | Ulush | Nima qiladi |
@@ -147,6 +190,12 @@ Ya'ni zanjirdagi `test:tenancy` (**249 s**) va `test:sim` (**67 s**) — jami **
 2. **`test:tenancy` ning NOMLANGAN signali.** Yiqilganda «tenant izolyatsiyasi buzildi» xabari darhol ko'rinadi; umumiy to'plam ichida u boshqa yuzta xato orasida yo'qolardi.
 
 **Taklif (egasi: 4-FAZA, `03-VALIDATION.md` `open_items` da qayd etilgan):** `sim:up` ni zanjirning BOSHIGA chiqarish va `gate` dan `test:tenancy` bilan `test:sim` ni olib tashlash — **~316 s (31 %)** tejaydi va qamrovni **umuman kamaytirmaydi**. Ikkala buyruq ham mustaqil yorliq sifatida QOLADI (`npm run test:tenancy` — nosozlikni lokalizatsiya qilish uchun).
+
+> ✅ **YOPILDI 2026-08-03 — taklif `03-12` ning 3-taskida BAJARILDI va u 4-fazani KUTMADI.** Bajarilgan ish aynan yuqoridagi taklif: `sim:up` zanjirning BOSHIGA chiqdi (`package.json::gate`), `test:tenancy` va `test:sim` esa zanjirdan olib tashlanib **mustaqil yorliq** bo'lib qoldi — ikkalasi ham hamon `exit 0` beradi va nosozlikni lokalizatsiya qilish uchun ishlatiladi.
+>
+> **Nima uchun qamrov kamaymadi:** `1520 ⊃ 412 ⊃ 76` — `pytest -q` (`testpaths = ["tests"]`) tenancy va sim testlarining HAMMASINI o'z ichiga oladi, `sim:up` ning zanjir boshiga chiqishi esa `test:sim` olib tashlanganda yo'qoladigan YAGONA haqiqiy xususiyatni (sim konteynerlarining ko'tarilgan bo'lishi, T-03-10) saqlab qoldi. Ya'ni sim testlari hamon **JIMGINA SKIP BO'LA OLMAYDI**.
+>
+> **Tejalgan HAQIQIY qiymat:** bashorat **−316 s (31 %)** edi; o'lchangan farq **1000 s -> 538 s = −462 s (−46 %)**. ⚠ Ikki son bir xil sharoitda olinmagani yuqorida («QAYTA O'LCHOV» bo'limi) ochiq yozilgan — de-duplikatsiyaning aniq ulushini bu farqdan ajratib olib bo'lmaydi. `03-12` ning oraliq o'lchovi (**716 s**, parallel yuk ostida) esa faqat «de-duplikatsiya ishladi» faktini tasdiqlash uchun olingan edi va u chegara uchun ishlatilmadi.
 
 > ⚠ **Jimgina oshib ketish qabul qilinmadi.** Chegara 618 s dan 1200 s ga **ko'tarildi**, lekin sababsiz emas: yuqoridagi jadval har qadamning narxini sanaydi, o'sishning **31 % i** nomlangan va uni yopish yo'li taklif bilan yozilgan. Qolgan o'sish — fazaning O'Z hajmi: backend 1021 → **1457** test (+43 %), vitest 74 → **246** (+232 %), i18n 574 → **576** kalit × 3 til, ustiga `--profile sim` ning ikkita konteyneri.
 >
@@ -195,11 +244,21 @@ Ya'ni zanjirdagi `test:tenancy` (**249 s**) va `test:sim` (**67 s**) — jami **
 | T03-11-1 | 03-11 | 10 | CAM-01, CAM-02, CAM-03, CAM-08, CAM-09 | T-03-76, T-03-77 | Sakkizala mezon bitta zanjirda; SC#1 da `rtsp://` literali yo'q | integration (sim) | `npm run test:sim` (`test_phase3_criteria.py`) | ✅ mavjud | ✅ green |
 | T03-11-2 | 03-11 | 10 | CAM-02, CAM-08 | T-03-81 | `hardware` markeri standart zanjirdan tashqarida; runbookda SSH qadami yo'q | collect-only + shell | `pytest -m hardware -q --collect-only && bash -n ops/scripts/verify-real-nvr.sh` | ✅ mavjud | ✅ green |
 | T03-11-3 | 03-11 | 10 | CAM-01, CAM-02, CAM-03, CAM-08, CAM-09 | T-03-78, T-03-79, T-03-80 | `nyquist_compliant` hisoblanadi; talablar dalil bilan belgilanadi; `REQUIREMENTS.md` «Faza kesimida» jadvalidagi eskirgan faza nomi va soni **qayta hisoblanadi** | script | `npm run validation:check && npm run requirements:check` | ✅ mavjud | ✅ green |
+| T03-12-1 | 03-12 | 11 | CAM-09 | T-03-82, T-03-SC | Yangi uchinchi tomon image'i ta'minot zanjiri tekshiruvidan KOD YOZILISHIDAN OLDIN o'tadi; teg emas, **digest** qadaladi (teg ko'chirilishi mumkin) | checkpoint + shell | `docker image inspect --format '{{index .RepoDigests 0}}' bluenviron/mediamtx:1.19.3-ffmpeg \| grep -q 'sha256:e8eda6a884bbb2eaebf0c0454200ddc8087f428e091bae10d20e330a08558778'` | ✅ `compose.yaml` da digest bilan | ✅ green |
+| T03-12-2 | 03-12 | 11 | CAM-09, CAM-03 | T-03-83, T-03-84, T-03-85 | Sim NVR **O'Z manzilida** (`nvr-sim:554`) RTSP xizmat qiladi; anonim `DESCRIBE` **401** oladi; RTSP dan boshqa hamma server o'chirilgan | integration (sim) | `docker compose --profile test run --rm tests pytest tests/integration/test_rtsp_source.py` | ✅ 3 test | ✅ green |
+| T03-12-3 | 03-12 | 11 | CAM-09 | T-03-10, T-03-86 | `sim:up` prod `go2rtc` ni ham ko'taradi; `gate` dan qayta bajarish chiqariladi va `sim:up` ning YAGONA haqiqiy xususiyati saqlanadi | shell + gate | `npm run sim:up && npm run test:tenancy && npm run test:sim` | ✅ `package.json` | ✅ green |
+| T03-12-4 | 03-12 | 11 | CAM-09 | T-03-SC | O'lik `SIM_*` konfiguratsiyasi CI'da qizaradi; sim paroli compose va MediaMTX configida MEXANIK teng | unit | `docker compose --profile test run --rm tests pytest tests/unit/test_compose_sim_env.py` | ✅ 4 test | ✅ green |
+| T03-13-1 | 03-13 | 11 | CAM-03, CAM-01 | T-03-88 | Parolda `@`/`/`/`:` bo'lsa ham avtoritet O'ZGARMAYDI: `quote(safe="")` + natijani QAYTA AJRATIB tenglik talabi (fail-closed) | unit (TDD) | `docker compose --profile test run --rm tests pytest tests/unit/test_live_source.py` | ✅ 24 test | ✅ green |
+| T03-13-2 | 03-13 | 11 | CAM-03 | T-03-87, T-03-90 | `ensure_stream(src: SecretStr)`; istisno matni so'rov URL'ini ham, parolni ham TASHIMAYDI; `GET` javob tanasi jurnalga tushmaydi | unit (TDD) | `docker compose --profile test run --rm tests pytest tests/unit/test_go2rtc_client.py` | ✅ 30 test | ✅ green |
+| T03-13-3 | 03-13 | 11 | CAM-03, CAM-01 | T-03-89, T-03-91, T-03-92 | `decrypt_nvr_password` ning IKKINCHI chaqiruv joyi jonli ko'rish yo'lida; Sentry `before_send` + `before_breadcrumb` + freym lokallari maskalanadi; test xabari sirni chiqarmaydi | integration + unit | `docker compose --profile test run --rm tests pytest tests/integration/test_live_view.py tests/unit/test_sentry_scrub.py` | ✅ 42 test | ✅ green |
+| T03-14-1 | 03-14 | 12 | CAM-03, CAM-09 | T-03-94, T-03-95, T-03-97 | Zanjir KADR bilan tugaydi: kashfiyot hosil qilgan `stream_name` bilan `/api/frame.jpeg` HAQIQIY JPEG beradi; mock YO'Q; sir CI jurnaliga chiqmaydi; oqim `finally` da yopiladi; meta-darvoza o'lchovni saqlaydi | integration (sim) | `npm run sim:up && docker compose --profile test run --rm tests pytest tests/integration/test_live_view_e2e.py tests/integration/test_phase3_criteria.py` | ✅ 12 test | ✅ green |
+| T03-14-2 | 03-14 | 12 | CAM-02, CAM-03, CAM-09 | T-03-96 | Darvoza vaqti BIR MARTA, toza sharoitda o'lchanadi va chegara jimgina surilmaydi; talab holati faqat dalil bilan ko'tariladi | script + gate | `npm run gate && npm run validation:check -- .planning/phases/03-nvr-avtomatik-kashfiyoti-va-tarmoq-ulanishi/03-VALIDATION.md && npm run requirements:check` | ✅ `03-VALIDATION.md`, `REQUIREMENTS.md`, `ROADMAP.md` | ✅ green |
+| T03-14-3 | 03-14 | 12 | CAM-02, CAM-03, CAM-08, CAM-09 | T-03-96 | Uskuna/deploy talab qiladigan oltala band egasi va TETIGI bilan yozilgan; birortasi «o'lchandi» deb ko'rsatilmaydi | script | `npm run validation:check -- .planning/phases/03-nvr-avtomatik-kashfiyoti-va-tarmoq-ulanishi/03-VALIDATION.md && grep -c 'result: \[pending\]' .planning/phases/03-nvr-avtomatik-kashfiyoti-va-tarmoq-ulanishi/03-HUMAN-UAT.md` | ✅ `03-HUMAN-UAT.md` (6 band) | ✅ green |
 
 *Status lug'ati: ✅ green · ❌ red · ⚠️ flaky · ⬜ hali o'lchanmagan.*
-**2026-08-03 holati: 33/33 ✅** — barcha qatorlar o'lchandi va yashil.
+**2026-08-03 holati: 43/43 ✅** — barcha qatorlar o'lchandi va yashil (33 ta reja bo'yicha + 10 ta bo'shliq yopish taski).
 
-**Namuna uzluksizligi:** 33 taskning **hammasida** `<automated>` verify bor — ketma-ket uchta avtomatik verifysiz task holati **yo'q**.
+**Namuna uzluksizligi:** 43 taskning **hammasida** `<automated>` verify bor — ketma-ket uchta avtomatik verifysiz task holati **yo'q**. `T03-12-1` `checkpoint:human-verify` bo'lgani holda ham avtomatik buyruqqa ega: inson TANLOVI (image'ni qabul qilish) avtomatlashtirilmaydi, uning NATIJASI (aynan o'sha digest compose'da) esa mexanik tekshiriladi.
 
 ### Reja va bajarilgan ish orasidagi farqlar
 
