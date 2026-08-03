@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import field_validator
+from cryptography.fernet import Fernet
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # PyJWT 2.11+ HS256 uchun kalit uzunligini majburiy tekshiradi
@@ -77,9 +78,82 @@ class Settings(BaseSettings):
     #      chiqish imkonini berardi.
     import_max_staff_rows: int = 200
 
+    # --- NVR rekvizitlari (03-04, SC#4) ---
+    #
+    # Shifr kaliti `JWT_SECRET` DAN ALOHIDA va bu ATAYIN — ikki xil xavf
+    # modeli. JWT kaliti almashtirilsa sessiyalar tushadi (arzon, o'z-o'zidan
+    # tuzaladi); shifr kaliti almashtirilsa MA'LUMOT YO'QOLADI (qimmat,
+    # tuzalmaydi). Bitta sirdan ikkalasiga foydalanish birinchisining
+    # arzon rotatsiyasini ikkinchisining qimmat rotatsiyasiga bog'lab
+    # qo'yardi.
+    #
+    # STANDART QIYMAT YO'Q va bu ham ATAYIN: bo'sh standart bilan ilova
+    # shifrlashsiz KO'TARILARDI va xato faqat birinchi rekvizit yozilganda
+    # ko'rinardi (T-03-22 aynan shu xulqni rad etadi).
+    #
+    # ⚠ TIP `SecretStr`, ODDIY `str` EMAS — va bu O'LCHANGAN qaror.
+    #   `BaseSettings` ning `repr` i BARCHA maydonlarni chop etadi, Sentry
+    #   esa istisno paytida LOKAL O'ZGARUVCHILARNI yig'adi. `lifespan` da
+    #   `settings` aynan lokal o'zgaruvchi (`main.py:99`), ya'ni ilova
+    #   ko'tarilayotganda yuz bergan har qanday istisno butun shifr kalitini
+    #   Sentry'ga yuborardi. Kalit oshkor bo'lsa BARCHA NVR parollari —
+    #   o'tmishdagilari ham — ochiladi, ya'ni bu yagona eng qimmat sir.
+    #   `SecretStr` uni `repr` da `**********` ga aylantiradi
+    #   (`03-RESEARCH.md` C.10 ni ichki qiymatlar uchun aynan shu tavsiya).
+    #   Qiymatga borish faqat `.get_secret_value()` orqali — ya'ni chegara
+    #   grep bilan topiladigan va ko'zga tashlanadigan bo'ladi.
+    nvr_credential_key: SecretStr
+    # Iste'foga chiqqan kalitlar, VERGUL bilan ajratilgan (ixtiyoriy).
+    # Rotatsiya hali bo'lmagan o'rnatmada bo'sh — majburiy qilinsa har bir
+    # yangi o'rnatma soxta qiymat yozishga majbur bo'lardi.
+    # Semantikasi: `app/security/secrets.py::build_cipher` — birinchi kalit
+    # YOZADI, hammasi O'QIYDI. Tip yuqoridagi bilan bir xil sababdan
+    # `SecretStr`: bu ham AYNAN o'sha kalit materiali.
+    nvr_credential_keys_retired: SecretStr = SecretStr("")
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"
+
+    @field_validator("nvr_credential_key")
+    @classmethod
+    def _validate_nvr_credential_key(cls, value: SecretStr) -> SecretStr:
+        """Kalit formatini ISHGA TUSHISHDA tekshiradi (`_validate_jwt_secret` naqshi).
+
+        Noto'g'ri kalit bilan ilova ko'tarilib, birinchi kamera qo'shilganda
+        yiqilishi eng yomon variant bo'lardi: xato NVR bilan bog'liqday
+        ko'rinardi va operator tarmoqni, parolni va NVR ni tekshirib
+        vaqt yo'qotardi.
+
+        Xato matni kalitning O'ZINI TAKRORLAMAYDI — faqat format talabi va
+        hosil qilish buyrug'i beriladi.
+
+        ⚠ O'LCHANGAN CHEKLOV, YASHIRILMAYDI: pydantic ning O'ZI
+          `ValidationError.__str__` ga `input_value=...` ni qo'shadi, ya'ni
+          RAD ETILGAN qiymat baribir xabarga tushadi. Bu bizning matnimizga
+          bog'liq emas va uni yozib bo'lmaydi: `SecretStr` ham, `mode=
+          "after"` model validatori ham buni to'sib qololmadi (ikkalasi ham
+          empirik sinaldi — pydantic XOM kiritmani chop etadi). Xuddi shu
+          xulq `_validate_jwt_secret` da ham bor, ya'ni bu shu maydon
+          kiritgan yangi teshik emas.
+          Amaliy oqibati TOR: chop etiladigan qiymat ta'rifi bo'yicha
+          ISHLAMAYDIGAN kalit va bu yo'l faqat ilova ko'tarilmaganda ochiladi
+          (Sentry hali sozlanmagan — `main.py` uni sozlamalardan KEYIN
+          ishga tushiradi, ya'ni xabar faqat konteyner stderr'iga boradi).
+          `SecretStr` esa MUVAFFAQIYATLI ko'tarilgan holatdagi ancha kengroq
+          yo'lni — `repr(settings)` va Sentry ning lokal o'zgaruvchilar
+          yig'ishini — yopadi.
+        """
+        try:
+            Fernet(value.get_secret_value().encode())
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                "NVR_CREDENTIAL_KEY — Fernet kaliti bo'lishi kerak "
+                "(base64url, 32 bayt). Hosil qilish: "
+                'python -c "from cryptography.fernet import Fernet;'
+                'print(Fernet.generate_key().decode())"'
+            ) from exc
+        return value
 
     @field_validator("jwt_secret")
     @classmethod

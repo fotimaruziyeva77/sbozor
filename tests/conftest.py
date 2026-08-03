@@ -41,6 +41,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from app.settings import Settings
+from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fixtures import TenantSessionFactory, TokenFactory
 from fixtures.admin_api import session_headers
@@ -53,6 +54,7 @@ from fixtures.market_domain import (
 from fixtures.two_markets import TwoMarketSeed, cleanup_two_markets, seed_two_markets
 from psycopg import Connection, sql
 from psycopg.rows import TupleRow
+from pydantic import SecretStr
 from redis.asyncio import Redis
 from sbozor_core.db import make_sessionmaker
 from sbozor_core.enums import ActorKind
@@ -489,6 +491,15 @@ def test_settings(app_url: str, valkey_url: str) -> Settings:
         database_url=app_url,
         valkey_url=valkey_url,
         jwt_secret=secrets.token_urlsafe(48),
+        # NVR shifr kaliti (03-04). HAR SESSIYADA YANGI va bu `jwt_secret`
+        # bilan aynan bir xil qaror: qotirilgan kalit repozitoriyga tushgan
+        # sir bo'lardi va kimdir uni prod'da ishlatishi mumkin edi.
+        #
+        # ⚠ Maydon MAJBURIY (standart qiymatsiz) — usiz ilova shifrlashsiz
+        #   ko'tarilardi. Shuning uchun u shu yerda ham berilishi SHART:
+        #   aks holda `test_settings` ni ishlatadigan BARCHA API testlari
+        #   "Field required" bilan yiqilardi.
+        nvr_credential_key=SecretStr(Fernet.generate_key().decode()),
         cookie_secure=False,
     )
 

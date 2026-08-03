@@ -136,6 +136,12 @@ services:
       ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-15}
       REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-30}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # NVR rekvizitlarining Fernet kaliti (03-04, SC#4). STANDART QIYMAT
+      # ATAYIN YO'Q: `:-` bilan bo'sh qiymat berish ilovani shifrlashsiz
+      # ko'tarardi. Berilmasa `Settings` ISHGA TUSHISHDA yiqiladi va xato
+      # matni kalit hosil qilish buyrug'ini beradi (T-03-22).
+      NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
+      NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: Asia/Tashkent
