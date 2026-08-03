@@ -24,7 +24,7 @@ updated: 2026-08-03
 | **Quick run command** | `npm run gate:fast` (`03-01` da yaratiladi) |
 | **Full suite command** | `npm run gate` (`test:sim` bilan — `03-02` da zanjirga qo'shiladi) |
 | **Slow lane** | `npm run test:sim:slow` (`-m "sim and slow"`) — D-09 ning 25 kanalli stsenariysi; `gate` dan **ataylab tashqarida**, faza yopilishidan oldin bir marta bajariladi |
-| **Estimated runtime** | ~470–590 s to'liq (2-fazada o'lchangan: 464 s / 571 s / 585 s); `--profile sim` ikkita konteyner qo'shadi → **`03-01` da qayta o'lchanadi** |
+| **Estimated runtime** | **496–515 s** (03-01 da o'lchandi 2026-08-03: 515 / 502 / 496); `gate:fast` — **31–32 s**. `--profile sim` ikkita konteyner qo'shadi → 03-11 da qayta o'lchanadi |
 
 **Yangi infratuzilma (bu fazada tug'iladi):**
 
@@ -59,10 +59,16 @@ updated: 2026-08-03
 
 | O'lchov | Sovuq kesh | Issiq #1 | Issiq #2 | Eng yomon | Belgilangan chegara |
 |---------|-----------|----------|----------|-----------|---------------------|
-| `npm run gate:fast` | *(03-01 to'ldiradi)* | | | | 180 s |
-| `npm run gate` | *(03-01 to'ldiradi)* | | | | *(03-11 asoslaydi)* |
+| `npm run gate:fast` | **32 s** | **32 s** | **31 s** | **32 s** | 180 s ✅ (5.6× zaxira) |
+| `npm run gate` | **515 s** | **502 s** | **496 s** | **515 s** | nomzod: **618 s** (515 + 20 %) — *03-11 `test:sim` bilan qayta o'lchab yakunlaydi* |
+
+**O'lchov sharti (2026-08-03, 03-01 yakunidagi holat).** «Sovuq kesh» — `frontend/.next` va `frontend/node_modules/.vite` o'chirilgandan keyingi birinchi ishga tushirish; «issiq» — undan keyingi ketma-ket ikkita. Oltala o'lchov ham `exit 0`. Test sanog'i: **1021** backend + **322** tenancy + **60** node:test + **74** vitest.
 
 > ⚠ **Jimgina oshib ketish qabul qilinmaydi.** Agar `gate:fast` ham 180 s dan oshsa, bu **topilma** sifatida yoziladi: qaysi qadam qancha vaqt olgani sanab o'tiladi va qisqartirish yo'li taklif qilinadi. Chegarani sababsiz ko'tarish taqiqlanadi.
+>
+> ✅ **2-fazadan meros qolgan band YOPILDI.** O'shanda to'lqin darajasidagi kechikish 225 s o'lchanib, chegara 180 s edi — ya'ni band ochiq qolgan. Ikki lentaga ajratish ishladi: task darajasidagi `gate:fast` **32 s** (180 s chegarasiga 5.6× zaxira bilan sig'adi), to'lqin darajasidagi `gate` esa o'z chegarasini **o'lchovdan** oladi. `gate:fast` chegarasi KO'TARILMADI va ko'tarishga ehtiyoj ham bo'lmadi.
+>
+> ⚠ `gate` ning 618 s nomzodi `test:sim` **QO'SHILMASDAN OLDINGI** holatga tegishli. `--profile sim` ikkita konteyner qo'shadi (03-02), ya'ni bu raqam **oshadi** va yakuniy chegarani 03-11 qayta o'lchagan qiymat asosida belgilaydi. Bu yerdagi qiymat — asos, yakun emas.
 
 ---
 
@@ -72,9 +78,9 @@ updated: 2026-08-03
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| T03-01-1 | 03-01 | 1 | CAM-08, CAM-09 | T-03-01, T-03-06, T-03-SC | Prod image ISAPI klientini import qila oladi; `redis` pini pasaymaydi; `sim`/`slow`/`hardware` markerlari e'lon qilingan (D-09) | unit | `pytest tests/unit/test_runtime_deps.py -q` | ❌ yaratiladi | ⬜ pending |
-| T03-01-2 | 03-01 | 1 | CAM-01, CAM-03 | T-03-02, T-03-03, T-03-04 | Platforma admini kamera ko'radi va boshqaradi; direktor faqat ko'radi; NVR paroli maskalanadi | unit | `pytest tests/unit/test_rbac_matrix.py tests/unit/test_logging.py -q` | ⚠ mavjud (kengaytiriladi) | ⬜ pending |
-| T03-01-3 | 03-01 | 1 | CAM-08 | T-03-05, T-03-18 | Yangi tenant jadvali kaskaddan tushib qolsa CI qizaradi | integration | `pytest tests/integration/test_market_delete_guard.py -q` | ❌ yaratiladi | ⬜ pending |
+| T03-01-1 | 03-01 | 1 | CAM-08, CAM-09 | T-03-01, T-03-06, T-03-SC | Prod image ISAPI klientini import qila oladi; `redis` pini pasaymaydi; `sim`/`slow`/`hardware` markerlari e'lon qilingan (D-09) | unit | `pytest tests/unit/test_runtime_deps.py -q` | ✅ 15 test | ✅ green |
+| T03-01-2 | 03-01 | 1 | CAM-01, CAM-03 | T-03-02, T-03-03, T-03-04 | Platforma admini kamera ko'radi va boshqaradi; direktor faqat ko'radi; NVR paroli maskalanadi | unit | `pytest tests/unit/test_rbac_matrix.py tests/unit/test_logging.py -q` | ✅ 18 + 25 test | ✅ green |
+| T03-01-3 | 03-01 | 1 | CAM-08 | T-03-05, T-03-18 | Yangi tenant jadvali kaskaddan tushib qolsa CI qizaradi | integration | `pytest tests/integration/test_market_delete_guard.py -q` | ✅ 4 test | ✅ green |
 | T03-02-1 | 03-02 | 2 | CAM-09 | T-03-09 | Sim haqiqiy RFC 7616 `response` ni hisoblab tekshiradi; noto'g'ri parol o'tmaydi | lint+type | `ruff check services/nvr-sim && mypy services/nvr-sim` | ❌ yaratiladi | ⬜ pending |
 | T03-02-2 | 03-02 | 2 | CAM-09 | T-03-11, T-03-31 | Fixture'lar real dumpdan; namespace va manba izohi mavjud; **sessiya limiti D-05 ning ikkala shaklida** (`reject` / `silent`) modellashtirilgan | unit | `pytest tests/unit/test_sim_fixtures.py -q` + `grep -n stream_claims services/nvr-sim/sim/isapi.py` | ❌ yaratiladi | ⬜ pending |
 | T03-02-3 | 03-02 | 2 | CAM-09 | T-03-07, T-03-08, T-03-10, T-03-12 | Sim prodga chiqmaydi; ilova kodida sim tarmoqlanishi yo'q; CI'da skip emas; sekin lenta (`test:sim:slow`) standart zanjirdan ajratilgan | unit + integration (sim) | `pytest tests/unit/test_no_sim_branching.py -q` va `npm run test:sim` | ❌ yaratiladi | ⬜ pending |
@@ -125,15 +131,15 @@ updated: 2026-08-03
 
 `03-PATTERNS.md` §5 yetti bandni sanaydi; ulardan uchtasi **jimgina yiqiladigan** turdagi — testlar yashil bo'lgani holda ishlab chiqarish buziladi.
 
-- [ ] **W0-1** *(03-01 T1)* — `httpx` ni `[dependency-groups] dev` dan `[project] dependencies` ga ko'chirish. **Aks holda 24 test fayli yashil qoladi va deploy'da import xatosi beradi.** (D-16)
-- [ ] **W0-2** *(03-01 T2)* — `rbac.py` da `CAMERA_MANAGE` + `PLATFORM_ADMIN` ga `CAMERA_VIEW`/`CAMERA_MANAGE`. Self-service onboarding'da bozorni aynan platforma admini ulaydi, ya'ni u o'zi topgan kameralarni ko'ra olmasdi. (D-15)
-- [ ] **W0-3** *(03-01 T2)* — `frontend/src/lib/rbac.ts` ko'zgusi **birga** o'zgaradi. Unutish ma'lumot ochmaydi, lekin tugma ko'rinib turib 403 beradigan UI hosil qiladi.
-- [ ] **W0-4** *(03-01 T2)* — `MARKET_ADMIN` ga `CAMERA_MANAGE`; `DIRECTOR` **olmaydi** (D-07 — o'qish roli).
-- [ ] **W0-5** *(03-01 T1)* — `pyproject.toml` ga `sim` va `hardware` markerlari. `--strict-markers` tufayli marker e'lon qilinmasa `-m sim` yig'ilishda yiqiladi.
-- [ ] **W0-6** *(03-01 T2)* — `SENSITIVE_KEYS` ni **tasdiqlash** (o'zgartirmaslik). ✅ 2026-08-03 da kod o'qildi: `rtsp_password` va `nvr_password` `logging.py:59-61` da allaqachon bor. Bu band **kod o'zgarishini talab qilmaydi** — u ichma-ich `error_detail` holati uchun test bilan o'lchanadi. (D-12)
-- [ ] **W0-7** — `market_delete_draft()` kaskadi. **Ikkiga bo'lingan va sababi bilan:**
-  - *(03-01 T3)* **muddatni majburlaydigan darvoza** — `pg_catalog` dan tenant jadvallarini o'qib funksiya tanasi bilan solishtiradi; bugun yashil (12 jadval), `0012` qo'ngan zahoti qizaradi;
-  - *(03-03 T3)* **kengaytirishning o'zi** — `0012` bilan **bir oynada**, chunki mavjud bo'lmagan jadvalga `DELETE` yozish `market_delete_draft()` ni chaqiradigan bugungi testlarni darhol qizartirardi, ya'ni yashil darvozani sindirardi. WR-02 (D-17) DB darajasidagi cheklovi `0013` da.
+- [x] **W0-1** *(03-01 T1)* — `httpx` ni `[dependency-groups] dev` dan `[project] dependencies` ga ko'chirish. **Aks holda 24 test fayli yashil qoladi va deploy'da import xatosi beradi.** (D-16) — ✅ **O'LCHANDI 2026-08-03:** o'zgarishdan oldingi `--no-dev` runtime image'da `import httpx` → `ModuleNotFoundError: No module named 'httpx'`; keyin → `0.28.1`. Da'vo taxmin emas, ikki image ustida solishtirilgan fakt.
+- [x] **W0-2** *(03-01 T2)* — `rbac.py` da `CAMERA_MANAGE` + `PLATFORM_ADMIN` ga `CAMERA_VIEW`/`CAMERA_MANAGE`. Self-service onboarding'da bozorni aynan platforma admini ulaydi, ya'ni u o'zi topgan kameralarni ko'ra olmasdi. (D-15)
+- [x] **W0-3** *(03-01 T2)* — `frontend/src/lib/rbac.ts` ko'zgusi **birga** o'zgaradi. Unutish ma'lumot ochmaydi, lekin tugma ko'rinib turib 403 beradigan UI hosil qiladi. — ⚠ **Topilma:** ko'zguni tekshiradigan darvoza MAVJUD EMAS edi (`role-gate.test.mjs` faqat rol YORLIQLARINI solishtirardi). G-8 darvozasi shu rejada yaratildi; usiz sabotaj testi qizarmasdi.
+- [x] **W0-4** *(03-01 T2)* — `MARKET_ADMIN` ga `CAMERA_MANAGE`; `DIRECTOR` **olmaydi** (D-07 — o'qish roli).
+- [x] **W0-5** *(03-01 T1)* — `pyproject.toml` ga `sim` va `hardware` markerlari (+ `slow` — D-09). `--strict-markers` tufayli marker e'lon qilinmasa `-m sim` yig'ilishda yiqiladi. — ✅ **O'LCHANDI:** e'lon qilinmagan `@pytest.mark.X` → `'X' not found in markers configuration option`, pytest exit **2**; uchala yangi marker esa to'plandi va `-m` bilan filtrlandi.
+- [x] **W0-6** *(03-01 T2)* — `SENSITIVE_KEYS` ni **tasdiqlash** (o'zgartirmaslik). ✅ 2026-08-03 da kod o'qildi: `rtsp_password` va `nvr_password` `logging.py:59-61` da allaqachon bor. Bu band **kod o'zgarishini talab qilmaydi** — u ichma-ich `error_detail` holati uchun test bilan o'lchandi (5 test; `git diff --exit-code logging.py` toza). Qoldiq xavf ham qulflandi: **formatlangan matn ichidagi parol maskalanMAYDI** va bu alohida test bilan hujjatlashtirilgan. (D-12)
+- [~] **W0-7** — `market_delete_draft()` kaskadi. **Ikkiga bo'lingan va sababi bilan:**
+  - [x] *(03-01 T3)* **muddatni majburlaydigan darvoza** — `pg_catalog` dan tenant jadvallarini o'qib funksiya tanasi bilan solishtiradi; bugun yashil (12 jadval), `0012` qo'ngan zahoti qizaradi. ✅ Bajarildi. ⚠ **Topilma:** jadvallar `market_id` USTUNI bo'yicha emas, `markets` ga CHET EL KALITI bo'yicha topiladi — o'lchandi, `audit_log` da ustun bor, FK yo'q, ya'ni ustun bo'yicha izlash darvozani bugunoq yolg'on-qizil qilardi.
+  - [ ] *(03-03 T3)* **kengaytirishning o'zi** — `0012` bilan **bir oynada**, chunki mavjud bo'lmagan jadvalga `DELETE` yozish `market_delete_draft()` ni chaqiradigan bugungi testlarni darhol qizartirardi, ya'ni yashil darvozani sindirardi. WR-02 (D-17) DB darajasidagi cheklovi `0013` da.
 
 **Frontend Wave 0** (`03-UI-SPEC.md` §13.1) — ekranlardan **oldin**, `03-08` da: RBAC ko'zgusi (03-01 da), `NAV_ITEMS`, `uz-Cyrl.overrides.json` (20 yozuv), `gen-cyrillic` assertion'lari (G-5), `error-codes` parity (G-1), `nvr-copy` (G-3/G-4/G-6), vendored pleyer + SHA-256 (G-7).
 
@@ -160,7 +166,7 @@ updated: 2026-08-03
 - [ ] Namuna uzluksizligi: ketma-ket 3 taskda avtomatik verify yo'qligi holati yo'q
 - [ ] Wave 0 barcha MISSING havolalarni qoplaydi
 - [ ] Watch-mode bayrog'i yo'q
-- [ ] Teskari aloqa kechikishi o'lchangan va chegara asoslangan (2-fazadan meros qolgan 225 s / 180 s bandi hal qilingan)
+- [x] Teskari aloqa kechikishi o'lchangan va chegara asoslangan (2-fazadan meros qolgan 225 s / 180 s bandi hal qilingan) — `gate:fast` 32 s / 180 s; `gate` 515 s (nomzod chegara 618 s, 03-11 `test:sim` bilan yakunlaydi)
 - [ ] `nyquist_compliant: true` skript bilan **hisoblangan**, qo'lda yozilmagan
 - [ ] Per-Task Map ning barcha 33 qatori holat oldi
 - [ ] `NVR_ERROR_CODES` ning o'n ikkitasi ham funksional test bilan qoplangan (yuqoridagi jadval)
