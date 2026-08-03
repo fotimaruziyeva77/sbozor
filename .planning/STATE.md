@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-04-PLAN.md (sir, RTSP URL, manzil darvozasi, idempotent upsert)
-last_updated: "2026-08-03T05:46:34.574Z"
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-08-03T07:43:58.641Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 50
-  completed_plans: 44
+  completed_plans: 45
   percent: 22
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 03
-Plan: 6 of 11
+Plan: 7 of 11
 Status: Ready to execute
 Last activity: 2026-08-03
 
-Progress: [███░░░░░░░] 36% (4/11 reja)
+Progress: [█████░░░░░] 55% (6/11 reja)
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -60,6 +60,7 @@ Progress: [███░░░░░░░] 36% (4/11 reja)
 | Phase 03 P01 | 65min | 3 tasks | 12 files |
 | Phase 03 P04 | 110min | 3 tasks | 12 files |
 | Phase 03 P05 | 115min | 3 tasks | 11 files |
+| Phase 03 P06 | 195min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-05: retry predikati TESKARI (D-03): httpx.HTTPStatusError ATAYIN qamralmaydi — sabotaj urinishlar sonini 0 dan 5 ga (Hikvision qulflash chegarasi) chiqardi
 - [Phase 03]: 03-05: Basic auth diagnostikasi challenge SXEMASI bo'yicha bajariladi, nvr_bad_credentials xulosasidan oldin EMAS — aks holda urinishlar sanog'i 2 bo'lardi
 - [Phase 03]: 03-05: device_not_supported sharti: manufacturer BOR VA Hikvision emas — DS-7732NI-M4 dumpida bu maydon umuman yo'q
+- [Phase ?]: 03-06: redis-py 8 ning socket_timeout=5 standarti ListQueueBroker ning BRPOP ini har 5 soniyada uzadi — bloklanuvchi navbat o'quvchisida socket_timeout=None MAJBURIY
+- [Phase ?]: 03-06: create_run ning IntegrityError idan KEYIN o'qish uchun SAVEPOINT (begin_nested) shart — abort holatidagi tranzaksiya 409+run_id ni 500 ga aylantirardi
+- [Phase ?]: 03-06: fon jobi tenant kontekstini O'ZI o'rnatadi (ActorKind.SYSTEM); kontekstsiz job HTTP qatlamidan KO'RINMAYDI va NVR ni queued qator bilan qulflaydi
 
 ### Pending Todos
 
@@ -127,6 +131,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-03T05:46:10.614Z
-Stopped at: Completed 03-04-PLAN.md (sir, RTSP URL, manzil darvozasi, idempotent upsert)
+Last session: 2026-08-03T07:43:33.330Z
+Stopped at: Completed 03-06-PLAN.md
 Resume file: None

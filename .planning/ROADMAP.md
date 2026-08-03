@@ -236,7 +236,7 @@ Plans:
 
 - [x] 03-04-PLAN.md — Fernet sirlari va rotatsiya, RTSP URL fabrikasi, xususiy-tarmoq validatsiyasi, idempotent upsert (W3)
 - [x] 03-05-PLAN.md — ISAPI klienti: xato taksonomiyasi, namespace-agnostik parser, Digest, teskari retry siyosati, kashfiyot orkestratsiyasi (W4)
-- [ ] 03-06-PLAN.md — taskiq navbati, kashfiyot jobi (tenant konteksti) va NVR API: test-connection, 202 + poll (W5)
+- [x] 03-06-PLAN.md — taskiq navbati, kashfiyot jobi (tenant konteksti) va NVR API: test-connection, 202 + poll (W5)
 - [ ] 03-07-PLAN.md — Kamera API, jonli ko'rish tokeni va `auth_request`, go2rtc allow-listi, nginx bloklari, WireGuard split-tunnel (W6)
 
 **Wave 7–9** *(frontend)*
