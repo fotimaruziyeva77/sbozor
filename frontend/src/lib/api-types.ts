@@ -834,5 +834,19 @@ export const ERROR_CODES = [
   "import_conflict",
   // --- 2-faza: xodimlar rosteri (02-24) ---
   "staff_roster_too_large",
+  // --- 3-faza: NVR qurilmalari va kashfiyot (03-06) ---
+  //
+  // ⚠ ISAPI TAKSONOMIYASINING O'N IKKI KODI BU YERDA ATAYIN YO'Q.
+  //   Ular boshqa yuzada yashaydi: `error_code` maydoni sifatida
+  //   kelib, `cameras.errorCause.*` kalitlari orqali sabab + tuzatish
+  //   yo'li bloki bo'lib chiziladi (UI-SPEC §7). Bu massiv esa
+  //   `detail` KODLARI uchun — ya'ni to'g'ridan-to'g'ri 4xx javobi.
+  //   Ikkalasini aralashtirish "ulanmadi" xatosini oddiy toast
+  //   sifatida ko'rsatib, D-02 ning butun mazmunini yo'qotardi.
+  "nvr_host_taken",
+  "nvr_host_public_blocked",
+  "nvr_address_invalid",
+  "discovery_already_running",
+  "nvr_not_found",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

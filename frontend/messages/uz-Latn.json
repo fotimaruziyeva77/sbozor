@@ -162,6 +162,13 @@
     "inUse": "Bu zonada rastalar bor. Avval ularni boshqa zonaga o'tkazing",
     "deleteConfirm": "Bu zona o'chirilsinmi? Unda birorta rasta qolmagan bo'lishi kerak."
   },
+  "cameras": {
+    "nvrHostTaken": "Bu manzil allaqachon qo'shilgan",
+    "nvrHostPublicBlocked": "Ommaviy manzil qabul qilinmaydi — tunnel ichidagi manzilni kiriting",
+    "nvrAddressInvalid": "Manzilni o'qib bo'lmadi. Namuna: 192.168.1.64 yoki 192.168.1.64:8080",
+    "discoveryAlreadyRunning": "Kashfiyot allaqachon ketmoqda",
+    "nvrNotFound": "Qurilma topilmadi"
+  },
   "categories": {
     "title": "Toifalar",
     "create": "Toifa qo'shish",

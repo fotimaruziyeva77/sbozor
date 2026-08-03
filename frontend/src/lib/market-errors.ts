@@ -58,6 +58,11 @@ export type MarketErrorMessageKey =
   | "import.validationFailed"
   | "import.fileTooLarge"
   | "import.fileTooComplex"
+  | "cameras.nvrHostTaken"
+  | "cameras.nvrHostPublicBlocked"
+  | "cameras.nvrAddressInvalid"
+  | "cameras.discoveryAlreadyRunning"
+  | "cameras.nvrNotFound"
   | "import.unsupportedType"
   | "import.conflict"
   | "import.staffRosterTooLarge";
@@ -146,6 +151,26 @@ export function marketErrorMessageKey(
       // "faylni soddalashtiring" emas, "ro'yxatni bo'laklarga bo'ling".
       case "staff_roster_too_large":
         return "import.staffRosterTooLarge";
+
+      /* --- NVR qurilmalari va kashfiyot (03-06) --- */
+      case "nvr_host_taken":
+        return "cameras.nvrHostTaken";
+      // `nvr_address_invalid` DAN AJRATILGAN va bu ataylab: birinchisi
+      // TERISH xatosi (yechim — qayta yozish), ikkinchisi ARXITEKTURA
+      // qoidasi (yechim — tunnel ichidagi manzilni topish). Bitta matn
+      // ikkalasiga ham noto'g'ri maslahat berardi.
+      case "nvr_host_public_blocked":
+        return "cameras.nvrHostPublicBlocked";
+      case "nvr_address_invalid":
+        return "cameras.nvrAddressInvalid";
+      // ⚠ UI BU HOLATNI XATO SIFATIDA KO'RSATMAYDI (UI-SPEC §5.6): javob
+      // tanasidagi mavjud `run_id` qabul qilinadi va o'sha yugurish poll
+      // qilinadi. Kalit shu sababdan FAQAT zaxira yo'l uchun — `run_id`
+      // kutilmaganda bo'lmasa.
+      case "discovery_already_running":
+        return "cameras.discoveryAlreadyRunning";
+      case "nvr_not_found":
+        return "cameras.nvrNotFound";
 
       default:
         break;
