@@ -43,6 +43,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
+    Index,
     Integer,
     LargeBinary,
     PrimaryKeyConstraint,
@@ -60,11 +61,16 @@ from sbozor_core.enums import CameraStatus, DiscoveryRunStatus
 from sbozor_core.models.base import Base, TenantMixin, TimestampMixin, uuid_pk
 
 __all__ = [
+    "CAMERA_NVR_INDEX",
     "CAMERA_STATUS_CHECK",
     "CAMERA_STATUS_VALUES",
+    "DISCOVERY_ACTIVE_RUN_INDEX",
+    "DISCOVERY_RUN_ACTIVE_PREDICATE",
     "DISCOVERY_RUN_ACTIVE_STATUSES",
     "DISCOVERY_RUN_STATUS_CHECK",
     "DISCOVERY_RUN_STATUS_VALUES",
+    "TUNNEL_SUBNET_INDEX",
+    "TUNNEL_SUBNET_PREDICATE",
     "Camera",
     "NvrCredential",
     "NvrDevice",
@@ -103,6 +109,32 @@ CAMERA_STATUS_CHECK = f"status IN ({_quoted(CAMERA_STATUS_VALUES)})"
 
 DISCOVERY_RUN_STATUS_CHECK = f"status IN ({_quoted(DISCOVERY_RUN_STATUS_VALUES)})"
 """`nvr_discovery_runs.status` faqat ma'lum holatlardan biri (ifoda enum'dan HOSILA)."""
+
+DISCOVERY_RUN_ACTIVE_PREDICATE = f"status IN ({_quoted(DISCOVERY_RUN_ACTIVE_STATUSES)})"
+"""Qisman UNIQUE indeksning predikati — `DISCOVERY_RUN_ACTIVE_STATUSES` dan HOSILA."""
+
+TUNNEL_SUBNET_PREDICATE = "tunnel_subnet IS NOT NULL"
+"""D-07 indeksining predikati — subnet HALI e'lon qilinmagan qurilmalar qamralmaydi."""
+
+# ===========================================================================
+# QISMAN / GLOBAL INDEKS NOMLARI — MODEL VA MIGRATSIYA UCHUN YAGONA MANBA
+# ===========================================================================
+#
+# ⚠ NEGA INDEKSLAR MODELDA HAM E'LON QILINADI (o'lchangan, 03-03):
+# `op.create_index(...)` yolg'iz o'zi yetarli EMAS. Alembic autogenerate
+# model metadata'sini baza bilan solishtiradi va modelda e'lon qilinmagan
+# indeksni "o'chirilgan" deb hisoblaydi — `test_autogenerate_is_empty`
+# uchta `remove_index` bilan QIZARDI (birinchi o'lchov). Ya'ni migratsiyada
+# indeks yaratish uni sxemaga qo'shadi, LEKIN keyingi `alembic revision
+# --autogenerate` uni O'CHIRISHNI taklif qilardi va kimdir buni "tozalash"
+# deb qabul qilishi mumkin edi.
+#
+# Nomlar va predikatlar shu yerda, ikkala tomon (model `Index(...)` va
+# `0012_nvr_domain`) SHU KONSTANTALARDAN oladi — literal takrorlanmaydi.
+
+DISCOVERY_ACTIVE_RUN_INDEX = "uq_nvr_discovery_runs_market_id_nvr_id_active"
+TUNNEL_SUBNET_INDEX = "uq_nvr_devices_tunnel_subnet_global"
+CAMERA_NVR_INDEX = "ix_cameras_market_id_nvr_id"
 
 
 class NvrDevice(Base, TenantMixin, TimestampMixin):
@@ -149,6 +181,20 @@ class NvrDevice(Base, TenantMixin, TimestampMixin):
         # bilan bir xil sabab).
         CheckConstraint("length(btrim(host)) > 0", name="host_not_blank"),
         CheckConstraint("length(btrim(username)) > 0", name="username_not_blank"),
+        # D-07 — BOZORLAR ARO (global) noyoblik. Qisman: subnet hali e'lon
+        # qilinmagan qurilmalar bir-biriga xalaqit bermaydi.
+        #
+        # ⚠ `market_id` BILAN BOSHLANMAYDI VA BU ATAYIN — indeks nomi
+        #   `tests/tenancy/test_meta.py::INDEX_EXCEPTIONS` ga sabab bilan
+        #   qo'shilgan. Noyoblikni `(market_id, tunnel_subnet)` ga tushirish
+        #   himoyani BUTUNLAY yo'q qilardi: to'qnashuv aynan bozorlar
+        #   ORASIDA yuz beradi (T-03-19).
+        Index(
+            TUNNEL_SUBNET_INDEX,
+            "tunnel_subnet",
+            unique=True,
+            postgresql_where=text(TUNNEL_SUBNET_PREDICATE),
+        ),
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -338,6 +384,9 @@ class Camera(Base, TenantMixin, TimestampMixin):
         CheckConstraint(CAMERA_STATUS_CHECK, name="status_allowed"),
         CheckConstraint("length(btrim(name)) > 0", name="name_not_blank"),
         CheckConstraint("length(btrim(stream_name)) > 0", name="stream_name_not_blank"),
+        # «Shu NVR ning kameralari» — kashfiyot upsert'i va ro'yxat
+        # so'rovining asosiy yo'li. `market_id` bilan BOSHLANADI.
+        Index(CAMERA_NVR_INDEX, "market_id", "nvr_id"),
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -428,6 +477,19 @@ class NvrDiscoveryRun(Base, TenantMixin):
         CheckConstraint(
             "channels_marked_offline IS NULL OR channels_marked_offline >= 0",
             name="channels_marked_offline_non_negative",
+        ),
+        # ⚠ BIR VAQTDA IKKI KASHFIYOT BO'LOLMAYDI (T-03-16).
+        #   Qisman: yakunlangan yugurishlar (`succeeded`/`failed`) indeksga
+        #   TUSHMAYDI, ya'ni tarix cheksiz to'planaveradi va faqat FAOL
+        #   qator qulflanadi. API 409 ni AYNAN shu konstrayt buzilishidan
+        #   hosil qiladi (03-06) — «tekshir-keyin-yoz» poygasi yo'q.
+        #   `market_id` bilan BOSHLANADI (tenant invarianti #5).
+        Index(
+            DISCOVERY_ACTIVE_RUN_INDEX,
+            "market_id",
+            "nvr_id",
+            unique=True,
+            postgresql_where=text(DISCOVERY_RUN_ACTIVE_PREDICATE),
         ),
     )
 
