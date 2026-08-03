@@ -229,8 +229,8 @@ Plans:
 
 **Wave 2** *(parallel — fayllar kesishmaydi)*
 
-- [ ] 03-02-PLAN.md — Hikvision NVR simulyatori: RFC 7616 server tomoni, real dump fixture'lari, `--profile sim`, sizib ketmaslik darvozasi (W2)
-- [ ] 03-03-PLAN.md — To'rt tenant jadvali, `0012_nvr_domain`, `0013_market_delete_guard` (WR-02) va NVR domenining meta-invariantlari (W2)
+- [x] 03-02-PLAN.md — Hikvision NVR simulyatori: RFC 7616 server tomoni, real dump fixture'lari, `--profile sim`, sizib ketmaslik darvozasi (W2)
+- [x] 03-03-PLAN.md — To'rt tenant jadvali, `0012_nvr_domain`, `0013_market_delete_guard` (WR-02) va NVR domenining meta-invariantlari (W2)
 
 **Wave 3–6** *(backend zanjiri — ketma-ket)*
 
