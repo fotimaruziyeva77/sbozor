@@ -66,6 +66,8 @@ kontekstisiz yoza oladi.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
@@ -85,7 +87,9 @@ __all__ = [
     "NVR_USERNAME",
     "MarketNvrRows",
     "NvrDomainSeed",
+    "add_discovery_run",
     "cleanup_nvr_domain",
+    "nvr_rows",
     "seed_nvr_domain",
 ]
 
@@ -362,3 +366,59 @@ def cleanup_nvr_domain(conn: Connection[TupleRow], seed: NvrDomainSeed) -> None:
             f"DELETE FROM {table} WHERE market_id = ANY(%s::uuid[])",  # noqa: S608
             (market_ids,),
         )
+
+
+def add_discovery_run(
+    conn: Connection[TupleRow],
+    rows: MarketNvrRows,
+    *,
+    status: str = "succeeded",
+) -> UUID:
+    """Berilgan NVR ga QO'SHIMCHA kashfiyot yugurishini yozadi va `id` ni qaytaradi.
+
+    Seed B bozoriga ATAYIN birorta yugurish yozmaydi (modul docstringi:
+    «yugurishlar ro'yxati bo'sh» holati ham sinalishi kerak). Lekin ba'zi
+    testlarga IKKALA bozorda ham qator kerak — masalan kaskadning
+    cross-tenant nazorati: «A o'chdi, B ning qatorlari joyida» da'vosi B da
+    qator BO'LMASA hech nimani o'lchamaydi.
+
+    Shuning uchun asimmetriya seed'da SAQLANADI, kerak bo'lgan test esa
+    qatorni O'ZI qo'shadi. Teskari yechim (seed'ni simmetrik qilish)
+    «bo'sh ro'yxat» stsenariysini butunlay yo'q qilardi.
+
+    ⚠ `status="queued"`/`"running"` bilan chaqirilganda `0012` dagi qisman
+    UNIQUE indeks ishga tushadi: shu NVR uchun IKKINCHI faol yugurish
+    `23505` beradi. 03-06 dagi 409 testi aynan shu yo'ldan boradi.
+
+    Tozalash ALOHIDA kerak emas — `cleanup_nvr_domain()` `nvr_discovery_runs`
+    ni `market_id` bo'yicha butunlay bo'shatadi.
+    """
+    run_id = uuid4()
+    conn.execute(
+        "INSERT INTO nvr_discovery_runs (id, market_id, nvr_id, status) VALUES (%s, %s, %s, %s)",
+        (str(run_id), str(rows.market_id), str(rows.nvr_id), status),
+    )
+    return run_id
+
+
+@contextmanager
+def nvr_rows(conn: Connection[TupleRow], base: TwoMarketSeed) -> Iterator[NvrDomainSeed]:
+    """`seed_nvr_domain()` + kafolatlangan tozalash — `with` bloki uchun.
+
+    ATAYIN pytest fixture EMAS, `contextmanager` (`fixtures/auth_api.py::
+    draft_market` bilan bir xil naqsh). Sabab bog'liqlik yo'nalishida:
+    fixture `tests/conftest.py` da yashashi kerak bo'lardi, o'sha faylni esa
+    shu to'lqinda BOSHQA reja ham tahrirlaydi (03-02 ning `sim_url` fixture'i)
+    — ikkalasi bir faylga tegsa merge to'qnashuvi bo'lardi. Kontekst
+    menejeri esa chaqiruvchi faylda ishlatiladi va hech qanday umumiy
+    faylni talab qilmaydi.
+
+    ⚠ TOZALASH BLOK O'CHIRILGAN BOZOR USTIDA HAM XAVFSIZ: `market_delete_
+    draft()` ni sinaydigan test bozorni butunlay o'chiradi va o'shanda
+    `DELETE ... WHERE market_id = ...` shunchaki 0 qatorga tegadi.
+    """
+    seed = seed_nvr_domain(conn, base)
+    try:
+        yield seed
+    finally:
+        cleanup_nvr_domain(conn, seed)

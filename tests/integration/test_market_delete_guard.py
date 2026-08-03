@@ -43,9 +43,17 @@ savolni o'lchaydi, "nima o'xshab turibdi" ni emas.
 from __future__ import annotations
 
 import re
+from uuid import UUID
 
+import psycopg
+import pytest
+from fixtures.nvr_domain import add_discovery_run, nvr_rows
+from fixtures.two_markets import TwoMarketSeed
 from psycopg import Connection
 from psycopg.rows import TupleRow
+
+NVR_TABLES: tuple[str, ...] = ("cameras", "nvr_discovery_runs", "nvr_credentials", "nvr_devices")
+"""03-03 qo'shgan to'rt jadval — kaskad TO'LIQ qamrashi kerak bo'lganlari."""
 
 TABLES_REFERENCING_MARKETS = """
 SELECT DISTINCT c.relname
@@ -224,3 +232,184 @@ def test_audit_log_deliberately_survives_market_deletion(
         "`market_delete_draft()` audit jurnalini o'chiryapti — bozor "
         "o'chirilganda uning butun DALIL IZI yo'qoladi"
     )
+
+
+# ===========================================================================
+# 03-03 — WR-02 NING IKKINCHI YARMI: KAFOLAT ENDI O'LCHANADI, SANALMAYDI
+# ===========================================================================
+#
+# Yuqoridagi to'rt test funksiyaning TANASINI o'qiydi, ya'ni ular
+# "ro'yxat to'liqmi?" degan savolga javob beradi. Quyidagi uchtasi esa
+# funksiyani HAQIQATAN CHAQIRADI va natijani qatorlar bo'yicha o'lchaydi —
+# ikki xil savol va ikkalasi ham kerak: to'liq ro'yxat noto'g'ri TARTIBDA
+# bo'lsa yuqoridagilar yashil qolardi-yu, chaqiruv FK buzilishi bilan
+# yiqilardi.
+
+
+def _rows_for_market(conn: Connection[TupleRow], table: str, market_id: UUID) -> int:
+    row = conn.execute(
+        f"SELECT count(*) FROM {table} WHERE market_id = %s",  # noqa: S608
+        (str(market_id),),
+    ).fetchone()
+    assert row is not None
+    return int(row[0])
+
+
+def _delete_draft(conn: Connection[TupleRow], market_id: UUID) -> bool:
+    row = conn.execute("SELECT market_delete_draft(%s)", (str(market_id),)).fetchone()
+    assert row is not None
+    return bool(row[0])
+
+
+def test_draft_market_deletion_covers_the_nvr_domain(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    migrated: None,
+) -> None:
+    """Qoralama bozor to'rtala NVR jadvali bilan birga o'chadi; B bozori TEGILMAYDI.
+
+    Bu `0013` ning ASOSIY da'vosi va u yuqoridagi statik darvozadan
+    MUSTAQIL: u yerda funksiya MATNI o'qiladi, bu yerda esa funksiya
+    CHAQIRILADI. Tartib noto'g'ri bo'lsa (masalan `nvr_devices` bolalaridan
+    OLDIN o'chirilsa) matn baribir to'liq ko'rinardi, chaqiruv esa FK
+    buzilishi bilan yiqilardi.
+
+    ⚠ IKKINCHI BOZOR NAZORAT SIFATIDA: A o'chirilgandan keyin B ning
+    qatorlari JOYIDA qolishi tekshiriladi. Usiz `WHERE market_id = ...`
+    predikati butunlay yo'qolgan taqdirda ham (ya'ni kaskad HAMMA bozorni
+    tozalab yuborganda) test yashil bo'lardi.
+    """
+    with nvr_rows(sync_owner_conn, two_markets) as seed:
+        a, b = seed.market_a, seed.market_b
+        # Seed B bozoriga ATAYIN yugurish yozmaydi («bo'sh ro'yxat»
+        # stsenariysi uchun). Pastdagi cross-tenant nazorati esa B da
+        # HAR TO'RT jadvalda ham qator bo'lishini talab qiladi — aks holda
+        # `nvr_discovery_runs` bo'yicha predikat yo'qolgan taqdirda ham
+        # test yashil qolardi.
+        add_discovery_run(sync_owner_conn, b)
+
+        for table in NVR_TABLES:
+            assert _rows_for_market(sync_owner_conn, table, a.market_id) > 0, (
+                f"seed `{table}` ga A bozori uchun qator yozmagan — test "
+                "o'chirishni emas, bo'sh jadvalni o'lchagan bo'lardi"
+            )
+
+        # Bozor QORALAMAGA qaytariladi: `market_delete_draft()` faol bozorga
+        # ATAYIN tegmaydi (keyingi test aynan shuni o'lchaydi).
+        sync_owner_conn.execute(
+            "UPDATE markets SET is_active = false WHERE id = %s", (str(a.market_id),)
+        )
+
+        assert _delete_draft(sync_owner_conn, a.market_id) is True, (
+            "`market_delete_draft()` qoralama bozor uchun `false` qaytardi"
+        )
+
+        for table in NVR_TABLES:
+            remaining = _rows_for_market(sync_owner_conn, table, a.market_id)
+            assert remaining == 0, f"`{table}` da A bozorining {remaining} ta YETIM qatori qoldi"
+
+        row = sync_owner_conn.execute(
+            "SELECT count(*) FROM markets WHERE id = %s", (str(a.market_id),)
+        ).fetchone()
+        assert row is not None and int(row[0]) == 0, "qoralama bozor qatori o'chmadi"
+
+        # NAZORAT: B bozori butunlay tegilmagan.
+        for table in NVR_TABLES:
+            assert _rows_for_market(sync_owner_conn, table, b.market_id) > 0, (
+                f"`{table}` da B bozorining qatorlari ham o'chib ketdi — kaskad "
+                "`WHERE market_id = ...` predikatini yo'qotgan bo'lishi mumkin"
+            )
+
+
+def test_active_market_survives_market_delete_draft(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    migrated: None,
+) -> None:
+    """FAOL bozorda `market_delete_draft()` `false` qaytaradi VA hech nima o'chmaydi.
+
+    Ikki da'vo, ikkalasi ham kerak: `false` qaytarib, lekin baribir bir
+    nechta jadvalni tozalab yuborgan funksiya eng yomon holat bo'lardi —
+    chaqiruvchi "o'chmadi" deb hisoblardi, ma'lumot esa yo'qolgan bo'lardi.
+    """
+    with nvr_rows(sync_owner_conn, two_markets) as seed:
+        b = seed.market_b
+        # Seed B ga yugurish yozmaydi — to'rtala jadvalni ham o'lchash uchun
+        # qator shu yerda qo'shiladi (`add_discovery_run()` docstringi).
+        add_discovery_run(sync_owner_conn, b)
+
+        before = {
+            table: _rows_for_market(sync_owner_conn, table, b.market_id) for table in NVR_TABLES
+        }
+        assert all(count > 0 for count in before.values()), before
+
+        assert _delete_draft(sync_owner_conn, b.market_id) is False, (
+            "`market_delete_draft()` FAOL bozor uchun `true` qaytardi — "
+            "jonli bozorni o'chirish yo'li ochilib qolgan"
+        )
+
+        after = {
+            table: _rows_for_market(sync_owner_conn, table, b.market_id) for table in NVR_TABLES
+        }
+        assert after == before, f"faol bozorda qatorlar o'zgardi: {before} -> {after}"
+
+        row = sync_owner_conn.execute(
+            "SELECT count(*) FROM markets WHERE id = %s", (str(b.market_id),)
+        ).fetchone()
+        assert row is not None and int(row[0]) == 1, "faol bozor qatori o'chib ketdi"
+
+
+def test_active_market_cannot_be_deleted_by_raw_sql(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    migrated: None,
+) -> None:
+    """SC#8 / WR-02 NING YAGONA TO'G'RIDAN-TO'G'RI ISBOTI (T-03-17).
+
+    =========================================================================
+    Bu test ilova qatlamini BUTUNLAY chetlab o'tadi: u `market_delete_draft()`
+    ni chaqirmaydi, HTTP so'rov yubormaydi — u to'g'ridan-to'g'ri
+    `DELETE FROM markets` yozadi, aynan `psql` dan yozilganidek.
+
+    `0013` gacha bu urinish MUVAFFAQIYATLI bo'lardi: "faol bozorni o'chirib
+    bo'lmaydi" kafolati faqat `market_delete_draft()` tanasidagi `IF` da
+    yashardi va o'sha `IF` ni chetlab o'tish uchun funksiyani chaqirmaslik
+    kifoya edi. Ya'ni kafolat ilova qatlamining odob-axloqiga tayanardi,
+    SXEMAGA emas. Xato yozilgan kelajakdagi `SECURITY DEFINER` funksiya
+    ham xuddi shu teshikdan o'tardi.
+
+    ⚠ ULANISH ROLI AHAMIYATLI: test `sbozor_owner` bilan yozadi — ya'ni
+    MIGRATSIYA huquqiga ega rol bilan. Trigger `SECURITY DEFINER` emas va
+    hech qanday rolga istisno bermaydi, shuning uchun ega ham undan
+    o'tolmaydi. `sbozor_app` bilan sinash zaifroq bo'lardi: unga `markets`
+    ustida `DELETE` grant'i umuman berilmagan, ya'ni urinish TRIGGERGA
+    yetib bormasdan `permission denied` bilan tugardi va biz butunlay
+    boshqa mexanizmni o'lchagan bo'lardik.
+    =========================================================================
+    """
+    with nvr_rows(sync_owner_conn, two_markets) as seed:
+        b = seed.market_b
+
+        # `CheckViolation` = SQLSTATE `23514` — `markets_delete_guard()` ning
+        # `USING ERRCODE` i. Kod `tariff_past_immutable()` /
+        # `category_period_past_immutable()` bilan AYNAN bir xil va bu
+        # ataylab: uchalasi ham "domen qoidasi buzildi" sinfida va
+        # chaqiruvchi ularni bitta yo'lda 409 ga aylantiradi.
+        with pytest.raises(psycopg.errors.CheckViolation) as exc:
+            sync_owner_conn.execute("DELETE FROM markets WHERE id = %s", (str(b.market_id),))
+
+        assert exc.value.sqlstate == "23514", (
+            f"kutilgan `23514` (check_violation), olindi {exc.value.sqlstate}"
+        )
+        message = str(exc.value)
+        assert str(b.market_id) in message, (
+            f"xato xabari qaysi bozor rad etilganini aytmayapti: {message!r}"
+        )
+
+        row = sync_owner_conn.execute(
+            "SELECT count(*) FROM markets WHERE id = %s", (str(b.market_id),)
+        ).fetchone()
+        assert row is not None and int(row[0]) == 1, (
+            "istisno ko'tarildi, lekin bozor baribir o'chib ketdi — trigger "
+            "`BEFORE` emas, `AFTER` bo'lib qolgan bo'lishi mumkin"
+        )

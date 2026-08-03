@@ -286,10 +286,37 @@ def seed_two_markets(conn: Connection[TupleRow]) -> TwoMarketSeed:
 
 
 def cleanup_two_markets(conn: Connection[TupleRow], seed: TwoMarketSeed) -> None:
-    """Seed'ni to'liq o'chiradi (FK tartibida)."""
+    """Seed'ni to'liq o'chiradi (FK tartibida).
+
+    ⚠ AVVAL BOZORLAR QORALAMAGA QAYTARILADI VA BUSIZ TOZALASH YIQILADI
+    (`0013_market_delete_guard`, WR-02).
+
+    Seed bozorlarni `INSERT INTO markets (id, name)` bilan yaratadi va
+    `markets.is_active` `DEFAULT true` — ya'ni ular FAOL. `0013` esa
+    `markets` ga `BEFORE DELETE` trigger qo'ydi: faol bozorni o'chirishga
+    urinish `23514` (`market ... is active and cannot be deleted`) beradi.
+    Ya'ni tozalash oxirgi `DELETE FROM markets` da yiqilardi va har bir
+    test qoldiq bozor qoldirardi.
+
+    Bu ZAIFLASHTIRISH EMAS, MAHSULOT QOIDASINING O'ZI: faol bozorni
+    o'chirish yo'li ATAYIN yo'q (`market_deactivate()` funksiyasi
+    yaratilmagan — sabab `migrations/entities/functions.py::MARKET_ACTIVATE`
+    docstringida), va endi bu sxemada ham majburlanadi. Bayroqni tushirish
+    bu yerda semantik jihatdan HALOL: qator bir necha satr keyin butunlay
+    o'chiriladi.
+
+    Naqsh YANGI EMAS — `fixtures/market_domain.py::cleanup_market_domain()`
+    aynan shu qadamni o'zgarmaslik triggerlari uchun 02-04 dan beri
+    bajaradi. Farqi shundaki, u yerda `is_active = false` `tariffs`
+    o'chirilishi uchun kerak edi, bu yerda esa `markets` ning o'zi uchun.
+    """
     market_ids = [str(market.id) for market in seed.markets]
     user_ids = [str(user_id) for user_id in seed.all_user_ids]
 
+    conn.execute(
+        "UPDATE markets SET is_active = false WHERE id = ANY(%s::uuid[])",
+        (market_ids,),
+    )
     conn.execute("DELETE FROM refresh_tokens WHERE market_id = ANY(%s::uuid[])", (market_ids,))
     conn.execute("DELETE FROM user_market_roles WHERE market_id = ANY(%s::uuid[])", (market_ids,))
     conn.execute("DELETE FROM users WHERE id = ANY(%s::uuid[])", (user_ids,))

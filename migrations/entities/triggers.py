@@ -45,7 +45,9 @@ __all__ = [
     "AUDIT_TRIGGER_FUNCTIONS",
     "CATEGORY_PERIOD_PAST_IMMUTABLE",
     "FN_AUDIT_ROW",
+    "MARKETS_DELETE_GUARD",
     "MARKET_DOMAIN_TRIGGER_FUNCTIONS",
+    "NVR_DOMAIN_TRIGGER_FUNCTIONS",
     "STALL_CODE_CLAIM",
     "TARIFF_PAST_IMMUTABLE",
 ]
@@ -325,6 +327,82 @@ Qoralama bozor istisnosi va uning nega xavfsiz ekani —
 `TARIFF_PAST_IMMUTABLE` docstringida.
 """
 
+# ===========================================================================
+# 0013 — FAOL BOZORNI O'CHIRISH TAQIG'I (3-faza, WR-02 / D-17, T-03-17)
+# ===========================================================================
+
+MARKETS_DELETE_GUARD = PGFunction(
+    schema="public",
+    signature="markets_delete_guard()",
+    definition="""
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF OLD.is_active IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'market % is active and cannot be deleted (WR-02)', OLD.id
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN OLD;
+END $$
+""",
+)
+"""`BEFORE DELETE ON markets` — FAOL bozor DB darajasida o'chirilmaydi.
+
+=============================================================================
+NEGA `market_delete_draft()` DAGI `IF` YETARLI EMAS EDI.
+
+O'sha shart FAQAT o'z yo'lini qo'riqlaydi. `psql` dan yuborilgan bitta
+`DELETE FROM markets WHERE id = ...` uni BUTUNLAY chetlab o'tardi — ya'ni
+"faol bozorni o'chirib bo'lmaydi" kafolati ilova qatlamining odob-axloqiga
+tayanardi, SXEMAGA emas. Xato yozilgan kelajakdagi `SECURITY DEFINER`
+funksiya ham xuddi shu teshikdan o'tardi (T-03-17).
+
+Zarari qaytarilmas: bozor bilan birga `market_delete_draft()` kaskadidagi
+o'n oltita jadvalning qatorlari ham FK bo'yicha... aslida YO'Q — kaskad
+qo'lda yozilgan, ya'ni xom `DELETE` FK buzilishi bilan yiqilardi. Lekin
+kaskad TO'LIQ bo'lgan kunda (bugun) u muvaffaqiyatli bajarilardi va
+`audit_log` dagi izlar YETIM qolardi: jurnal saqlanadi, lekin u ishora
+qilayotgan bozor endi mavjud emas.
+=============================================================================
+
+⚠ BU TRIGGER `market_delete_draft()` NI BLOKLAMAYDI.
+Funksiya `is_active IS DISTINCT FROM false` bo'lganda `false` qaytaradi va
+BIRORTA qatorga tegmaydi, ya'ni uning `DELETE FROM markets` iga faqat
+QORALAMA bozor yetib keladi va triggerning sharti hech qachon otilmaydi.
+Buni ikki tomondan o'lchash SHART (`tests/integration/
+test_market_delete_guard.py`): qoralama o'chadi VA faol o'chmaydi. Faqat
+ikkinchisini tekshirish "cheklov ishlayapti" ni emas, "hech narsa
+o'chmayapti" ni isbotlagan bo'lardi.
+
+`ERRCODE = '23514'` (check_violation) — `TARIFF_PAST_IMMUTABLE` va
+`CATEGORY_PERIOD_PAST_IMMUTABLE` bilan AYNAN bir xil kod va bu ataylab:
+uchalasi ham "domen qoidasi buzildi" sinfiga tegishli va chaqiruvchi
+ularni bitta yo'lda 409 ga aylantiradi. Yangi konvensiya KIRITILMAYDI.
+
+`SECURITY DEFINER` YO'Q: trigger birorta jadvalga murojaat qilmaydi, u
+faqat `OLD.is_active` ni o'qiydi. `SECURITY DEFINER` bu yerda hech qanday
+huquq bermasdi va uni `tests/tenancy/test_meta.py::
+EXPECTED_DEFINER_FUNCTIONS` ro'yxatiga qo'shishni talab qilardi — ya'ni
+faqat yuza kengaytirardi.
+
+`RETURN OLD` — `BEFORE DELETE` trigger'i `NULL` qaytarsa o'chirish JIMGINA
+bekor qilinadi (xatosiz!). Bu eng yomon variant bo'lardi: qoralama bozor
+"o'chirildi" deb ko'rinardi-yu, aslida joyida qolardi.
+"""
+
+NVR_DOMAIN_TRIGGER_FUNCTIONS: list[PGFunction] = [
+    MARKETS_DELETE_GUARD,
+]
+"""3-faza qo'riqchisi — `0013_market_delete_guard` yaratadi.
+
+Trigger FUNKSIYASI bu yerda, trigger'ning O'ZI esa migratsiyada xom
+`op.execute("CREATE TRIGGER ...")` bilan (`0002_audit.py` dagi naqsh —
+`alembic-utils` triggerlarni boshqarmaydi).
+"""
+
 AUDIT_TRIGGER_FUNCTIONS: list[PGFunction] = [
     FN_AUDIT_ROW,
     AUDIT_IMMUTABLE,
@@ -360,6 +438,7 @@ boshqarmaydi — `0002_audit.py` dagi naqsh).
 ALL_TRIGGER_FUNCTIONS: list[PGFunction] = [
     *AUDIT_TRIGGER_FUNCTIONS,
     *MARKET_DOMAIN_TRIGGER_FUNCTIONS,
+    *NVR_DOMAIN_TRIGGER_FUNCTIONS,
 ]
 """BARCHA trigger funksiyalari — autogenerate reyestri (`ALL_ENTITIES`) uchun.
 
