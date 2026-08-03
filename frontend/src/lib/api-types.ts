@@ -763,6 +763,234 @@ export const staffImportResultSchema = z.object({
 });
 export type StaffImportResult = z.infer<typeof staffImportResultSchema>;
 
+/* --- 3-faza: NVR qurilmalari, kashfiyot va kameralar (CAM-01/02/03) ------- */
+
+/*
+ * =============================================================================
+ * MAYDONMA-MAYDON BACKEND BILAN MOS (`app/schemas.py:1480-1856`).
+ *
+ * IKKI MAYDON BU YERDA ATAYIN YO'Q va ikkalasi BOSHQA-BOSHQA sababdan:
+ *
+ *   `password`     — NVR paroli javob modellarida UMUMAN yo'q (D-12) va
+ *                    backend buni har marshrut uchun rekursiv skaner bilan
+ *                    tekshiradi (`test_camera_route_coverage.py`). Uni
+ *                    zodga `.optional()` qilib qo'shish "balki keladi"
+ *                    degan yolg'on kutish tug'dirardi.
+ *
+ *   `stream_name` / `rtsp_url` — go2rtc oqimining BEVOSITA nishoni va
+ *                    RTSP manzili. Ular javobda ko'ringan zahoti UI'da
+ *                    ko'rsatiladi, nusxa olinadi va `/live/...?src=<nom>`
+ *                    shaklida qo'lda yig'iladi — ya'ni `auth_request`
+ *                    darvozasi ma'nosini yo'qotadi (UI-SPEC §8.7, D-11).
+ *
+ * Ular zodda paydo bo'lishi DRIFT belgisi: backend ularni qo'shgan yoki
+ * kimdir sxemani "har ehtimolga qarshi" kengaytirgan.
+ * =============================================================================
+ */
+
+/**
+ * `cameras.status` — AYNAN uchta qiymat (`sbozor_core.enums.CameraStatus`).
+ *
+ * `unknown` `offline` NING SINONIMI EMAS: `offline` — kanal ro'yxatda bor,
+ * lekin javob bermayapti; `unknown` — kanal yozildi, holati HALI
+ * o'lchanmagan. Ikkalasini bitta qiymatga yig'ish birinchi skandan oldin
+ * "kamera buzuq" degan YOLG'ON dalilni yozardi (UI-SPEC §2.5 — badge
+ * matni ham har ikkisida boshqa).
+ */
+export const CAMERA_STATUSES = ["online", "offline", "unknown"] as const;
+export type CameraStatusValue = (typeof CAMERA_STATUSES)[number];
+export const cameraStatusSchema = z.enum(CAMERA_STATUSES);
+
+/**
+ * `nvr_discovery_runs.status` — AYNAN to'rtta (`DiscoveryRunStatus`).
+ *
+ * `queued` va `running` — FAOL to'plam; poll aynan shu ikkitasida davom
+ * etadi (UI-SPEC §5.3). Bo'linish bitta `is_finished` bayrog'iga
+ * yig'ilmaydi: operator uchun "navbatda" va "ishlayapti" boshqa-boshqa
+ * holat va ular ekranda ham boshqacha ko'rinadi (S1 / S2a / S2b).
+ */
+export const DISCOVERY_RUN_STATUSES = [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+] as const;
+export type DiscoveryRunStatusValue = (typeof DISCOVERY_RUN_STATUSES)[number];
+export const discoveryRunStatusSchema = z.enum(DISCOVERY_RUN_STATUSES);
+
+/** Terminal holatda poll BUTUNLAY to'xtaydi (UI-SPEC §5.3). */
+export function isTerminalRunStatus(
+  status: DiscoveryRunStatusValue | undefined,
+): boolean {
+  return status === "succeeded" || status === "failed";
+}
+
+/**
+ * `GET`/`POST`/`PATCH /nvr-devices` javobi — QURILMA PASPORTI, sirsiz.
+ *
+ * `rtsp_port === null` — hali skan qilinmagan; `rtsp_port_assumed === true`
+ * — 554 fallback ishlatilgan va u jonli ko'rish yiqilganda BIRINCHI
+ * tekshiriladigan gumondor (UI-SPEC §4.6).
+ *
+ * `has_password` — paroldan qolgan YAGONA iz: u parolning MAVJUDLIGINI
+ * aytadi, qiymati haqida hech narsa demaydi.
+ */
+export const nvrDeviceSchema = z.object({
+  id: z.uuid(),
+  host: z.string(),
+  port: z.number().int(),
+  use_tls: z.boolean(),
+  username: z.string(),
+  model: z.string().nullable(),
+  serial_number: z.string().nullable(),
+  firmware_version: z.string().nullable(),
+  device_type: z.string().nullable(),
+  rtsp_port: z.number().int().nullable(),
+  rtsp_port_assumed: z.boolean(),
+  tunnel_subnet: z.string().nullable(),
+  last_discovery_at: z.string().nullable(),
+  has_password: z.boolean(),
+});
+export type NvrDevice = z.infer<typeof nvrDeviceSchema>;
+
+/** `GET /nvr-devices` — TO'LIQ ro'yxat, sahifalash YO'Q (backend kontrakti). */
+export const nvrDeviceListResponseSchema = z.object({
+  items: z.array(nvrDeviceSchema),
+});
+
+/**
+ * `POST /nvr-devices/test-connection` javobi — HAR DOIM HTTP 200.
+ *
+ * ⚠ XATO HOLATIDA HAM 200 va bu ataylab: UI xatoni FORMA ICHIDAGI blok
+ *   sifatida chizadi (sabab + tuzatish yo'li, D-02). HTTP xatosi bo'lganda
+ *   TanStack Query uni tarmoq nosozligi deb QAYTA URINARDI — aynan D-03
+ *   taqiqlagan xulq, chunki har urinish NVR ning qulflash hisoblagichini
+ *   oshiradi.
+ *
+ * `auth_locked` BACKENDDA hisoblanadi (`AUTH_LOCKING_CODES` o'sha yerda
+ * yashaydi). Frontend uni qayta hisoblamaydi — ikkinchi haqiqat manbai
+ * bo'lardi; `lib/nvr-errors.ts` dagi ko'zgu esa `error_code` KELMAGAN
+ * (masalan poll natijasidagi) holatlar uchun.
+ */
+export const nvrTestConnectionResponseSchema = z.object({
+  ok: z.boolean(),
+  model: z.string().nullable().optional(),
+  device_type: z.string().nullable().optional(),
+  serial_number: z.string().nullable().optional(),
+  channels_preview: z.number().int().nullable().optional(),
+  clock_drift_seconds: z.number().nullable().optional(),
+  rtsp_port: z.number().int().nullable().optional(),
+  rtsp_port_assumed: z.boolean().default(false),
+  error_code: z.string().nullable().optional(),
+  error_detail: z.record(z.string(), z.unknown()).nullable().optional(),
+  auth_locked: z.boolean().default(false),
+});
+export type NvrTestConnectionResponse = z.infer<
+  typeof nvrTestConnectionResponseSchema
+>;
+
+/** `POST /nvr-devices/{id}/discover` javobi (202) — yagona maydon. */
+export const discoveryStartResponseSchema = z.object({ run_id: z.uuid() });
+
+/**
+ * `409 discovery_already_running` javobining TANASI.
+ *
+ * UI buni XATO deb ko'rsatMAYDI (UI-SPEC §5.6): ikki admin (yoki bitta
+ * admin ikki tabda) tugmani bir vaqtda bosishi — normal ish jarayoni.
+ * Javobdagi `run_id` QABUL QILINADI va o'sha yugurish poll qilinadi.
+ */
+export const discoveryConflictSchema = z.object({
+  detail: z.string(),
+  run_id: z.uuid(),
+});
+
+/**
+ * `GET /nvr-devices/{id}/discovery-runs/{run_id}` — poll javobi.
+ *
+ * ⚠ `channels_found` `null` BO'LA OLADI va bu S2a («qurilma
+ *   aniqlanmoqda») bilan S2b («{n} kanal topildi») ni ajratadigan YAGONA
+ *   belgi. Uni `0` bilan almashtirish "0 ta kanal topildi" degan YOLG'ON
+ *   natija berardi (UI-SPEC §5.2).
+ *
+ * `error_detail` — ochiq shakldagi `record`, LEKIN UI undan FAQAT
+ * `ERROR_DETAIL_KEYS` dagi kalitlarni iste'mol qiladi (UI-SPEC §7.4).
+ * Maskalash va filtrlash BACKENDNING kafolati: `NvrError` konstruktori
+ * ruxsat etilmagan kalitni `ValueError` bilan rad etadi va
+ * `nvr_repo.finish_run()` yozishdan oldin `mask_sensitive()` dan
+ * o'tkazadi. UI ikkinchi maskalash qatlamini QURMAYDI — u yolg'on
+ * xotirjamlik berardi ("backend nima yozsa ham xavfsiz").
+ */
+export const discoveryRunSchema = z.object({
+  id: z.uuid(),
+  nvr_id: z.uuid(),
+  status: discoveryRunStatusSchema,
+  started_at: z.string(),
+  finished_at: z.string().nullable(),
+  channels_found: z.number().int().nullable(),
+  channels_added: z.number().int().nullable(),
+  channels_marked_offline: z.number().int().nullable(),
+  error_code: z.string().nullable(),
+  error_detail: z.record(z.string(), z.unknown()).nullable(),
+});
+export type DiscoveryRun = z.infer<typeof discoveryRunSchema>;
+
+/**
+ * `GET /cameras` qatori (UI-SPEC §6.1).
+ *
+ * `name` — DB KONTENTI va TARJIMA QILINMAYDI (1-faza D-16).
+ * `name_overridden === true` — nom qo'lda kiritilgan va qayta skanerlash
+ * uni almashtirmaydi; admin buni bilishi SHART, aks holda u nomini
+ * yo'qotishdan qo'rqib qayta skanerlamaydi (§6.5).
+ *
+ * `source_ip` — backendda `inet` (`192.168.1.10/32`), javobda esa
+ * prefikssiz normallashtirilgan manzil (`api/v1/cameras.py::_source_ip`).
+ */
+export const cameraSchema = z.object({
+  id: z.uuid(),
+  nvr_id: z.uuid(),
+  channel_no: z.number().int(),
+  name: z.string(),
+  name_overridden: z.boolean(),
+  status: cameraStatusSchema,
+  is_archived: z.boolean(),
+  has_substream: z.boolean(),
+  source_ip: z.string().nullable(),
+  source_model: z.string().nullable(),
+  last_seen_at: z.string(),
+});
+export type Camera = z.infer<typeof cameraSchema>;
+
+/**
+ * `GET /cameras` — keyset sahifa.
+ *
+ * `next_cursor` bugun HAR DOIM `null` (03-07 ziddiyat C): bitta NVR eng
+ * ko'pi 32 kanal beradi. Maydon KONTRAKTDA turadi — uni olib tashlash
+ * chegara oshganda klient shartnomasini buzardi.
+ */
+export const cameraListResponseSchema = z.object({
+  items: z.array(cameraSchema),
+  next_cursor: z.string().nullable(),
+});
+
+/**
+ * `POST /cameras/{id}/live-token` javobi — ULANISH CHIPTASI.
+ *
+ * ⚠ `url` OPAQUE: unda oqim nomi va qisqa muddatli token bor, lekin
+ *   ikkalasi ham UI uchun TUZILMASIZ satr. U `<video>` manbaiga
+ *   beriladi, ekranga CHIQARILMAYDI va ulashish tugmasi
+ *   RENDER QILINMAYDI (UI-SPEC §8.7).
+ *
+ * ⚠ `expires_in` — TOKENNING muddati, SESSIYANING emas. 60 soniyalik
+ *   token 60 soniyalik ko'rish sessiyasini ANGLATMAYDI (UI-SPEC §8.3);
+ *   sessiya chegarasini UI o'zi qo'yadi — `LIVE_SESSION_MAX_MS`.
+ */
+export const liveTokenSchema = z.object({
+  url: z.string(),
+  expires_in: z.number().int(),
+  transport_hint: z.string(),
+});
+export type LiveToken = z.infer<typeof liveTokenSchema>;
+
 /**
  * Xato tanasi. FastAPI validatsiya xatosida (`422`) `detail` MASSIV bo'ladi,
  * shuning uchun `z.string()` emas, `z.unknown()`: shaklni `api-client`
@@ -848,5 +1076,17 @@ export const ERROR_CODES = [
   "nvr_address_invalid",
   "discovery_already_running",
   "nvr_not_found",
+  // --- 03-07: jonli ko'rish chiptasi ---
+  //
+  // ⚠ BU KOD `MARKET_ERROR_CODES` DA YO'Q va u yerga qo'shilmadi:
+  //   `live_view_unavailable` — 503, ya'ni BIZNING kodimizdagi xato emas,
+  //   tashqi servisning (go2rtc) holati. Reyestr esa domen RAD JAVOBLARI
+  //   uchun (4xx). Ko'zguga baribir kerak: usiz 503 `errors.generic` ga
+  //   tushardi va admin "Kutilmagan xato" dan keyin NIMA qilishni
+  //   bilmasdi — D-02 ning aynan buzilishi.
+  //   ⚠ Bu yo'l NVR hisobiga urinish YUBORMAYDI, ya'ni §4.4 qulfi bu
+  //   yerga QO'LLANMAYDI va "Qayta urinish" affordansi XAVFSIZ
+  //   (UI-SPEC §8.5).
+  "live_view_unavailable",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

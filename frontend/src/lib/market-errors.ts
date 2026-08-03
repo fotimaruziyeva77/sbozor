@@ -63,6 +63,7 @@ export type MarketErrorMessageKey =
   | "cameras.nvrAddressInvalid"
   | "cameras.discoveryAlreadyRunning"
   | "cameras.nvrNotFound"
+  | "cameras.liveUnavailable"
   | "import.unsupportedType"
   | "import.conflict"
   | "import.staffRosterTooLarge";
@@ -171,6 +172,14 @@ export function marketErrorMessageKey(
         return "cameras.discoveryAlreadyRunning";
       case "nvr_not_found":
         return "cameras.nvrNotFound";
+
+      /* --- jonli ko'rish (03-07) --- */
+      // 503: go2rtc javob bermadi. Bu BIZNING xatomiz emas va shuning
+      // uchun matn "qayta urinib ko'ring" deydi — bu yo'l NVR hisobiga
+      // autentifikatsiya urinishi YUBORMAYDI (UI-SPEC §8.5), ya'ni §4.4
+      // ning auth qulfi bu yerga qo'llanmaydi.
+      case "live_view_unavailable":
+        return "cameras.liveUnavailable";
 
       default:
         break;
