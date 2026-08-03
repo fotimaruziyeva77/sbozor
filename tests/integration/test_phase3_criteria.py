@@ -65,12 +65,14 @@ import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote, urlsplit
 from uuid import UUID, uuid4
 
 import psycopg
 import pytest
 from app.jobs.discovery import discover_nvr
 from app.security.ratelimit import NVR_TEST_LIMIT
+from app.security.secrets import encrypt_nvr_password
 from app.services.rtsp import rtsp_url
 from fixtures.admin_api import session_headers
 from fixtures.auth_api import audit_rows
@@ -87,6 +89,7 @@ if TYPE_CHECKING:
     import httpx
     from fastapi import FastAPI
     from fixtures import TenantSessionFactory
+    from fixtures.nvr_domain import MarketNvrRows
     from fixtures.two_markets import TwoMarketSeed
     from psycopg import Connection
     from psycopg.rows import TupleRow
@@ -380,6 +383,29 @@ def _read(path: Path) -> str:
 def _catalog(locale: str) -> dict[str, Any]:
     data: dict[str, Any] = json.loads(_read(MESSAGES_ROOT / f"{locale}.json"))
     return data
+
+
+SEED_DEVICE_PASSWORD = "SeedQurilmaParoli-42"  # noqa: S105 - test uskunasi
+
+
+def _store_real_credential(conn: Connection[TupleRow], rows: MarketNvrRows) -> str:
+    """Seed'ning PLACEHOLDER tokenini HAQIQIY Fernet tokeni bilan almashtiradi.
+
+    ⚠ SEED'NING O'ZI O'ZGARMAYDI (`fixtures/nvr_domain.py`). Uning
+      `NVR_PASSWORD_PLACEHOLDER` i ATAYIN Fernet tokeni EMAS, va
+      `test_nvr_discovery_job.py` aynan shu faktga tayanib `InvalidToken`
+      shoxini o'lchaydi — placeholder'ni almashtirish o'sha testni
+      jimgina ma'nosiz qilardi.
+
+    03-13 dan boshlab jonli ko'rish yo'li rekvizitni OCHADI, ya'ni
+    muvaffaqiyat yo'lidagi test ochilishi MUMKIN bo'lgan token talab
+    qiladi. Almashtirish shuning uchun TEST DOIRASIDA, seed'da emas.
+    """
+    conn.execute(
+        "UPDATE nvr_credentials SET password_encrypted = %s WHERE market_id = %s AND nvr_id = %s",
+        (encrypt_nvr_password(SEED_DEVICE_PASSWORD), str(rows.market_id), str(rows.nvr_id)),
+    )
+    return SEED_DEVICE_PASSWORD
 
 
 def _app_sources() -> list[Path]:
@@ -851,6 +877,10 @@ async def test_sc6_live_view_requires_authorization(
     with nvr_rows(sync_owner_conn, two_markets) as seed:
         market_a = seed.market_a
         camera_id = market_a.active_camera_ids[0]
+        # Chipta yo'li endi rekvizitni OCHADI (03-13): seed'ning placeholder
+        # tokeni Fernet'niki emas va usiz bu test 503 olardi — sabab esa
+        # avtorizatsiyada emas, test uskunasida bo'lardi.
+        _store_real_credential(sync_owner_conn, market_a)
 
         # --- 1. Direktor chipta oladi ---
         issued = await api_client.post(
@@ -947,12 +977,40 @@ async def test_sc7_the_whole_flow_runs_against_a_simulator(
 
     # Oqim manbasi KASHF ETILGAN qiymatlardan qurildi — «sozlama o'zgarishi»
     # da'vosining bevosita o'lchovi: manzil ham, port ham bazadan keladi.
-    assert len(go2rtc_calls) == 1, go2rtc_calls
+    #
+    # =======================================================================
+    # ⚠⚠ BU BLOKDA `source` NING O'ZI XATO XABARIGA QO'YILMAYDI (T-03-91).
+    #
+    # 03-13 dan boshlab manba REKVIZITLI (`<sxema>://<user>:<PAROL>@...`),
+    # ya'ni yiqilgan assert parolni CI JURNALIGA chiqarardi va testning
+    # o'zi sizish yo'liga aylanardi (D-12 ning bevosita buzilishi). Xabar
+    # faqat NIMA KUTILGANINI aytadi.
+    #
+    # ⚠ SXEMA LITERALI BU FAYLDA UMUMAN YOZILMAYDI — SC#1 ning usul
+    #   qulfi (fayl boshidagi izoh) izohlarni ham skanerlaydi.
+    # =======================================================================
+    assert len(go2rtc_calls) == 1, f"`ensure_stream` {len(go2rtc_calls)} marta chaqirildi"
     _stream_name, source = go2rtc_calls[0]
-    assert source.startswith(FORBIDDEN_SCHEME), source
-    assert created["host"] in source, (
-        f"oqim manbasida admin kiritgan host yo'q: {source} — manzil qayerdandir "
-        "BOSHQA joydan kelgan"
+    parts = urlsplit(source)
+
+    assert source.startswith(FORBIDDEN_SCHEME), "manba RTSP sxemasi bilan boshlanmaydi"
+    assert parts.hostname == created["host"].lower(), (
+        "oqim manbasining xosti admin kiritgan manzil EMAS — u qayerdandir BOSHQA joydan kelgan"
+    )
+
+    # --- REKVIZIT OYOG'I: `decrypt_nvr_password` ning IKKINCHI chaqiruv joyi ---
+    #
+    # `03-VERIFICATION.md` GAP-1 aynan shu bo'g'inni «mexanizm KODDA YO'Q»
+    # deb belgilagan: rekvizitsiz `src` real Hikvision NVR'da `401` oladi,
+    # ya'ni zanjir chiptada tugab, TASVIRGA yetib bormasdi.
+    username, _password = sim_credentials
+    assert parts.username == quote(username, safe=""), (
+        "oqim manbasida NVR foydalanuvchi nomi yo'q — rekvizit oyog'i ulanmagan "
+        "va go2rtc real qurilmada 401 olardi (GAP-1)"
+    )
+    assert parts.password, "oqim manbasida parol qismi yo'q"
+    assert source.count("@") == 1, (
+        "manbada bittadan ortiq `@` bor — rekvizit foizli kodlanmagan (T-03-88)"
     )
 
     # --- «Kod o'zgarishi emas»: ilova kodida sim izi YO'Q ---

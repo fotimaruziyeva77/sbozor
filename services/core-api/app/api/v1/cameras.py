@@ -53,8 +53,8 @@ from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 import structlog
+from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import SecretStr
 from sbozor_core.enums import CameraStatus
 
 from app.deps import Principal, TenantSessionDep, require_permission
@@ -68,8 +68,10 @@ from app.schemas import (
 )
 from app.security.audit import TABLE_CAMERAS, AuditReadIntent, audit_read
 from app.security.rbac import Permission
+from app.security.secrets import decrypt_nvr_password
 from app.security.tokens import LIVE_TOKEN_MAX_TTL_SECONDS, issue_live_token
 from app.services.go2rtc import TRANSPORT_HINT, Go2rtcClient, Go2rtcError, live_view_url
+from app.services.live_source import authenticated_rtsp_source
 from app.services.rtsp import rtsp_url
 
 if TYPE_CHECKING:
@@ -369,8 +371,28 @@ _DEFAULT_RTSP_PORT = 554
 _LIVE_UNAVAILABLE = "live_view_unavailable"
 
 
-async def _ensure_stream(state: object, camera: Camera, device: NvrDevice) -> None:
-    """Oqimni go2rtc'da LAZY ro'yxatga oladi (RESEARCH D.13).
+def _live_unavailable() -> HTTPException:
+    """**503**, 500 EMAS — jonli ko'rish hozir ishlamayapti (D-02).
+
+    ⚠ REKVIZIT NOSOZLIGI UCHUN YANGI XATO KODI KIRITILMAYDI. Admin uchun
+      sabab bir xil («jonli ko'rish hozir ishlamayapti») va UI bir xil
+      «Qayta urinish» affordansini beradi. Alohida kod faqat NVR hisobiga
+      urinish yuborilganda ma'noli bo'lardi — bu yo'l esa NVR'ga UMUMAN
+      chiqmaydi, ya'ni §4.4 qulfi bu yerga qo'llanmaydi (UI-SPEC §8.5).
+    """
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=_LIVE_UNAVAILABLE,
+    )
+
+
+async def _ensure_stream(
+    state: object,
+    camera: Camera,
+    device: NvrDevice,
+    repo: NvrRepository,
+) -> None:
+    """Oqimni go2rtc'da LAZY ro'yxatga oladi — REKVIZIT BILAN (RESEARCH D.13).
 
     Ro'yxatga olish AYNAN shu yerda — startup'da EMAS. Sabab ikkita:
     startup'da 25 ta so'rov ilovaning ko'tarilishini NVR ning holatiga
@@ -378,13 +400,38 @@ async def _ensure_stream(state: object, camera: Camera, device: NvrDevice) -> No
     yo'qolardi (`PUT /api/streams` XOTIRAGA yozadi). Lazy yo'lda DB
     YAGONA HAQIQAT MANBAI bo'lib qoladi.
 
+    =======================================================================
+    ⚠⚠ `decrypt_nvr_password` NING ILOVADAGI IKKINCHI CHAQIRUV JOYI.
+
+    Birinchisi — `jobs/discovery.py` (ISAPI kashfiyoti). `03-RESEARCH.md`
+    D.13 esa aynan shu ikkinchisini talab qiladi: «parol URL'ga hech
+    qachon kirmaydi — u alohida, shifrlangan holda turadi va FAQAT go2rtc
+    konfiguratsiyasi hosil qilinayotganda ochiladi».
+
+    Ketma-ketlik ATAYIN shu tartibda:
+
+        rtsp_url()                 -> rekvizitSIZ manzil (saqlanadi, jurnalga
+                                      tushadi, T-03-24 ostida)
+        repo.get_credential()      -> Fernet TOKENI
+        decrypt_nvr_password()     -> ochiq matn, FAQAT shu tanada
+        authenticated_rtsp_source()-> `SecretStr`, foizli kodlangan
+        client.ensure_stream()     -> allow-list + `PUT`
+
+    Ochiq matn parol HECH QAYERGA yozilmaydi va hech qanday oraliq
+    strukturaga tushmaydi — u to'g'ridan-to'g'ri sir tashuvchiga o'tadi.
+    =======================================================================
+
     ⚠ `src` FOYDALANUVCHI KIRITMASIDAN QURILMAYDI: u `rtsp_url()` ning
-      chiqishi, ya'ni bizning kodimiz hosil qilgan satr. Allow-list
-      (`assert_safe_go2rtc_src`) baribir qo'llanadi — u `ensure_stream`
-      ichida, tarmoqqa chiqishdan OLDIN.
+      chiqishi + bazadagi rekvizit. Allow-list (`assert_safe_go2rtc_src`)
+      baribir qo'llanadi — u `ensure_stream` ichida, tarmoqqa chiqishdan
+      OLDIN, ochilgan qiymat ustida.
+
+    Raises:
+        HTTPException: rekvizit qatori yo'q yoki uni joriy kalit bilan
+            ochib bo'lmasa — **503** (`_live_unavailable()`).
     """
     settings: Settings = state.settings  # type: ignore[attr-defined]
-    source = rtsp_url(
+    url = rtsp_url(
         device.host,
         device.rtsp_port if device.rtsp_port is not None else _DEFAULT_RTSP_PORT,
         camera.channel_no,
@@ -394,8 +441,36 @@ async def _ensure_stream(state: object, camera: Camera, device: NvrDevice) -> No
         # asosiy oqimga tushiladi — kashfiyot buni o'lchagan.
         substream=camera.has_substream,
     )
+
+    token = await repo.get_credential(camera.nvr_id)
+    if token is None:
+        # ⚠ JURNALGA NA TOKEN, NA UNING BO'LAGI TUSHADI (`jobs/discovery.py`
+        #   dagi izohning aynan takrori). Xabar operatorga QAYERGA
+        #   qarashni aytadi, qiymatni emas.
+        log.warning(
+            "live_view_credential_missing",
+            camera_id=str(camera.id),
+            nvr_id=str(camera.nvr_id),
+        )
+        raise _live_unavailable()
+
+    try:
+        password = decrypt_nvr_password(token)
+    except InvalidToken:
+        log.error(
+            "live_view_credential_decrypt_failed",
+            camera_id=str(camera.id),
+            nvr_id=str(camera.nvr_id),
+        )
+        # `from None`: `InvalidToken` ning o'zi bo'sh, LEKIN sabab zanjirini
+        # ochiq qoldirish keyingi tahrirlovchiga «token bilan birga
+        # ko'tarish mumkin» degan namuna berardi.
+        raise _live_unavailable() from None
+
+    source = authenticated_rtsp_source(url, device.username, password)
+
     async with Go2rtcClient(settings.go2rtc_url) as client:
-        await client.ensure_stream(camera.stream_name, SecretStr(source))
+        await client.ensure_stream(camera.stream_name, source)
 
 
 @router.post(
@@ -437,18 +512,22 @@ async def issue_live_token_for_camera(
         raise _not_found()
 
     try:
-        await _ensure_stream(request.app.state, camera, device)
+        await _ensure_stream(request.app.state, camera, device, repo)
     except Go2rtcError as exc:
         # ⚠ 503, 500 EMAS: bu bizning kodimizdagi xato emas, TASHQI
         #   servisning holati. UI uni «jonli ko'rish hozir ishlamayapti»
         #   deb ko'rsatadi va «Qayta urinish» affordansini beradi (D-02)
         #   — bu yo'l NVR hisobiga urinish YUBORMAYDI, ya'ni §4.4 qulfi
         #   bu yerga qo'llanmaydi (UI-SPEC §8.5).
-        log.warning("go2rtc_unavailable", camera_id=str(camera_id), error=str(exc))
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=_LIVE_UNAVAILABLE,
-        ) from exc
+        #
+        # ⚠⚠ `error=` MAYDONIGA ISTISNO SINFINING NOMI YOZILADI, `str(exc)`
+        #   EMAS (T-03-87). `_ensure_stream` endi go2rtc'ga REKVIZITLI
+        #   manba yuboradi, ya'ni istisno matni printsipial jihatdan sirni
+        #   jurnalga olib chiqadigan kanal. `go2rtc.py::_failure()` matnni
+        #   allaqachon tozalaydi — bu esa IKKINCHI qatlam va u
+        #   birinchisining kelajakdagi regressiyasidan mustaqil.
+        log.warning("go2rtc_unavailable", camera_id=str(camera_id), error=type(exc).__name__)
+        raise _live_unavailable() from exc
 
     settings: Settings = request.app.state.settings
     token = issue_live_token(

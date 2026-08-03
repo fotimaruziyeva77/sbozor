@@ -52,19 +52,24 @@ client.post(...)` tugagach yozuv allaqachon bazada
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import pytest
+from app.security.secrets import encrypt_nvr_password
 from app.security.tokens import LIVE_TOKEN_AUDIENCE, issue_live_token
 from app.services.go2rtc import assert_safe_go2rtc_src
 from fixtures.admin_api import bearer, session_headers
 from fixtures.auth_api import audit_rows
-from fixtures.nvr_domain import nvr_rows
+from fixtures.nvr_domain import NVR_USERNAME, nvr_rows
 from fixtures.two_markets import SEED_PASSWORD
 from pydantic import SecretStr
 from sbozor_core.enums import AuditAction
 from sbozor_core.security import encode_live
+from sqlalchemy import text
+from structlog.testing import capture_logs
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -89,6 +94,13 @@ CAMERA_VIEW = "camera_view"
 ochildi» ikki xil hodisa (`api/v1/cameras.py` dagi alias docstringlari).
 Bir xil qiymat bilan jurnal bu farqni ko'rsata olmasdi."""
 
+DEVICE_PASSWORD = "JonliKorishParoli-91"  # noqa: S105 - test uskunasi
+"""Qurilma paroli — SIZISH testlarida IZLANADIGAN qiymat.
+
+Noyob va uzun: qisqa yoki keng tarqalgan satr (`admin`, `1234`) audit
+JSON'ida yoki jurnal satrida TASODIFAN uchrab, testni yolg'on-qizil
+qilardi."""
+
 
 # ---------------------------------------------------------------------------
 # Seed, sessiyalar va go2rtc mock'i
@@ -103,6 +115,41 @@ def nvr_seed(
     """`two_markets` ustiga NVR + kamera qatlami."""
     with nvr_rows(sync_owner_conn, two_markets) as seed:
         yield seed
+
+
+@pytest.fixture
+def real_credentials(
+    sync_owner_conn: Connection[TupleRow],
+    nvr_seed: NvrDomainSeed,
+) -> str:
+    """Seed'ning PLACEHOLDER tokenini HAQIQIY Fernet tokeni bilan almashtiradi.
+
+    =======================================================================
+    ⚠ SEED'NING O'ZI O'ZGARMAYDI (`fixtures/nvr_domain.py`).
+
+    Uning `NVR_PASSWORD_PLACEHOLDER` i ATAYIN Fernet tokeni EMAS va
+    `test_nvr_discovery_job.py` aynan shu faktga tayanib `InvalidToken`
+    shoxini o'lchaydi. Placeholder'ni seed'da almashtirish o'sha testni
+    JIMGINA ma'nosiz qilardi — u yashil qolib, hech nimani sinamasdi.
+
+    03-13 dan boshlab jonli ko'rish yo'li rekvizitni OCHADI
+    (`decrypt_nvr_password` ning ikkinchi chaqiruv joyi), ya'ni
+    MUVAFFAQIYAT yo'lidagi testlar ochilishi MUMKIN bo'lgan token talab
+    qiladi. Almashtirish shuning uchun shu yerda, TEST DOIRASIDA.
+    =======================================================================
+
+    Shifr kaliti `tests/conftest.py::_process_settings_env` da har
+    sessiyada yangidan hosil qilinadi va ilova ham, bu fixture ham AYNAN
+    shu instansdan o'tadi — ya'ni ular o'zaro mos.
+    """
+    token = encrypt_nvr_password(DEVICE_PASSWORD)
+    for market in nvr_seed.markets:
+        sync_owner_conn.execute(
+            "UPDATE nvr_credentials SET password_encrypted = %s "
+            "WHERE market_id = %s AND nvr_id = %s",
+            (token, str(market.market_id), str(market.nvr_id)),
+        )
+    return DEVICE_PASSWORD
 
 
 @pytest.fixture
@@ -191,6 +238,39 @@ async def _camera_reads(
     ]
 
 
+async def _audit_blobs(tenant_session: TenantSessionFactory, market_id: UUID) -> list[str]:
+    """Bozorning HAR audit qatori -> JSON matni (`old_value` BILAN birga).
+
+    ⚠ `fixtures.auth_api.audit_rows()` ISHLATILMAYDI: u `old_value` ni
+      TANLAMAYDI (ustunlar ro'yxati sobit). Sir «eski -> yangi» juftligining
+      ESKI tomonida qolishi eng ehtimolli shakl — parol almashtirilganda
+      trigger avvalgi qiymatni `old_value` ga ko'chirardi
+      (`test_phase3_criteria.py::_audit_blobs` bilan bir xil qoida).
+    """
+    async with tenant_session(market_id) as session:
+        result = await session.execute(
+            text(
+                "SELECT table_name, action, changed_keys, old_value, new_value "
+                "FROM audit_log WHERE market_id = :market_id ORDER BY id"
+            ),
+            {"market_id": str(market_id)},
+        )
+        return [
+            json.dumps(
+                {
+                    "table": row.table_name,
+                    "action": row.action,
+                    "changed_keys": row.changed_keys,
+                    "old": row.old_value,
+                    "new": row.new_value,
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+            for row in result
+        ]
+
+
 def _token_url(camera_id: UUID) -> str:
     return f"{CAMERAS_URL}/{camera_id}/live-token"
 
@@ -205,6 +285,7 @@ async def test_director_receives_a_live_token(
     viewer_headers: dict[str, str],
     nvr_seed: NvrDomainSeed,
     go2rtc_calls: list[tuple[str, str]],
+    real_credentials: str,
 ) -> None:
     """`CAMERA_VIEW` bilan 200 + opaque URL; `stream_name` OCHIQ KO'RINMAYDI.
 
@@ -232,6 +313,7 @@ async def test_live_token_is_audited_with_its_own_reason(
     nvr_seed: NvrDomainSeed,
     tenant_session: TenantSessionFactory,
     go2rtc_calls: list[tuple[str, str]],
+    real_credentials: str,
 ) -> None:
     """Jonli ko'rish `reason='live_view'` bilan jurnalga tushadi (RESEARCH E.15).
 
@@ -263,8 +345,9 @@ async def test_stream_registered_dynamically(
     viewer_headers: dict[str, str],
     nvr_seed: NvrDomainSeed,
     go2rtc_calls: list[tuple[str, str]],
+    real_credentials: str,
 ) -> None:
-    """Oqim go2rtc'ga RESTART'SIZ, ko'rish so'ralganda qo'shiladi (RESEARCH D.13).
+    """Oqim go2rtc'ga RESTART'SIZ, REKVIZIT bilan qo'shiladi (RESEARCH D.13).
 
     Restart QABUL QILIB BO'LMAYDI: u boshqa bozorlarning ko'rishini
     uzardi. Shuning uchun ro'yxatga olish LAZY va `PUT /api/streams`
@@ -273,17 +356,115 @@ async def test_stream_registered_dynamically(
     ⚠ UZATILGAN `src` `rtsp://` BILAN BOSHLANADI — bu D-11 ning
       MAHSULOT YO'LIDAGI isboti: `assert_safe_go2rtc_src` ning unit
       testi funksiyani sinaydi, bu esa uni haqiqatan CHAQIRILISHINI.
+
+    =======================================================================
+    ⚠⚠ «`@` YO'Q» ASSERTI 03-13 DA TESKARISIGA AYLANDI — VA T-03-24
+      BUZILMADI.
+
+    T-03-24 ning kafolati `rtsp_url()` NING IMZOSIDA yashaydi: u parol
+    parametrini umuman qabul qilmaydi va uning chiqishi (saqlanadigan,
+    jurnalga tushadigan manzil) hamon rekvizitsiz. Buni
+    `tests/unit/test_rtsp_url.py` ikkita alohida test bilan qulflaydi.
+
+    go2rtc'ga boradigan manba esa BOSHQA qiymat: u
+    `live_source.authenticated_rtsp_source()` ning chiqishi, `SecretStr`
+    ichida tashiladi va hech qayerda saqlanmaydi. Rekvizitsiz manba
+    real Hikvision NVR'da `401` olardi — `03-VERIFICATION.md` GAP-1
+    aynan shu uzilishni belgilagan.
+
+    Shuning uchun bu yerdagi tekshiruv «`@` yo'q» dan «AYNAN BITTA `@`»
+    ga o'zgardi: ikkitasi foizli kodlash buzilganini bildirardi (T-03-88).
+    =======================================================================
     """
     camera_id = nvr_seed.market_a.active_camera_ids[0]
 
     response = await api_client.post(_token_url(camera_id), headers=viewer_headers)
     assert response.status_code == 200, response.text
 
-    assert len(go2rtc_calls) == 1, f"`ensure_stream` chaqirilmadi: {go2rtc_calls}"
+    assert len(go2rtc_calls) == 1, f"`ensure_stream` {len(go2rtc_calls)} marta chaqirildi"
     stream_name, src = go2rtc_calls[0]
+    parts = urlsplit(src)
+
     assert stream_name in nvr_seed.market_a.stream_names
-    assert src.startswith("rtsp://"), src
-    assert "@" not in src, "RTSP URL'ida userinfo bo'limi paydo bo'ldi (T-03-24)"
+    assert src.startswith("rtsp://"), "manba `rtsp://` bilan boshlanmaydi"
+    assert parts.hostname == nvr_seed.market_a.host, (
+        "manbaning xosti `nvr_devices.host` EMAS — u boshqa joydan kelgan"
+    )
+    assert parts.username == NVR_USERNAME, (
+        "manbada NVR foydalanuvchi nomi yo'q — rekvizit oyog'i ulanmagan (GAP-1)"
+    )
+    assert src.count("@") == 1, (
+        "manbada bittadan ortiq `@` bor — rekvizit foizli kodlanmagan (T-03-88)"
+    )
+
+
+async def test_live_token_never_leaks_the_device_password(
+    api_client: httpx.AsyncClient,
+    viewer_headers: dict[str, str],
+    nvr_seed: NvrDomainSeed,
+    tenant_session: TenantSessionFactory,
+    go2rtc_calls: list[tuple[str, str]],
+    real_credentials: str,
+) -> None:
+    """D-12 JONLI KO'RISH YO'LIDA: parol javobda, jurnalda va auditda YO'Q.
+
+    =======================================================================
+    SC#4 ning shakli, LEKIN BOSHQA YO'L USTIDA.
+
+    SC#4 (`test_phase3_criteria.py`) qurilma YARATISH va KASHFIYOT yo'lini
+    o'lchaydi. 03-13 esa PAROLNI OCHADIGAN IKKINCHI joyni qo'shdi —
+    `POST /cameras/{id}/live-token`. Yangi ochilish nuqtasi o'z o'lchoviga
+    ega bo'lishi kerak: SC#4 ning testi bu yo'lga UMUMAN tegmaydi va
+    o'sha yerdagi yashil rang bu yerda hech nimani isbotlamaydi.
+
+    UCH JOY, UCHALASI HAM MUSTAQIL SIZISH YO'LI:
+
+      1. **HTTP javob tanasi** — XOM MATN o'qiladi (javob modelidagi
+         `exclude` serializatsiyada qaytib chiqishi mumkin edi);
+      2. **`structlog` yozuvlari** — `capture_logs()` protsessor
+         zanjirini ALMASHTIRADI, ya'ni `censor_secrets` GACHA bo'lgan
+         xom kwargs ko'rinadi. Bu QASDDAN qattiqroq o'lchov: ilova
+         parolni loggerga BERMASLIGI kerak, uni maskalanishiga
+         tayanmasligi kerak;
+      3. **`audit_log`** — bozorning BARCHA qatorlari, `old_value` va
+         `new_value` birga.
+    =======================================================================
+
+    ⚠ NAZORAT BANDI OXIRIDA: yozib olingan manbada parol BOR. Usiz
+      rekvizit oyog'ini olib tashlash bu testni JIMGINA yashil qoldirardi —
+      izlanayotgan qiymat hech qayerda mavjud bo'lmasdi.
+    """
+    market = nvr_seed.market_a
+    camera_id = market.active_camera_ids[0]
+
+    with capture_logs() as logs:
+        response = await api_client.post(_token_url(camera_id), headers=viewer_headers)
+
+    # --- 1. HTTP javob tanasi ---
+    assert response.status_code == 200, response.text
+    assert real_credentials not in response.text, "parol HTTP javob tanasida ko'rindi"
+
+    # --- 2. `structlog` yozuvlari ---
+    rendered = json.dumps(logs, ensure_ascii=False, default=str)
+    assert rendered != "[]", (
+        "birorta jurnal yozuvi ushlanmadi — «jurnalda yo'q» da'vosi bo'sh "
+        "to'plam ustida o'lchangan bo'lardi"
+    )
+    assert real_credentials not in rendered, "parol `structlog` yozuvida ko'rindi"
+
+    # --- 3. `audit_log` (`old_value` bilan birga) ---
+    audited = await _audit_blobs(tenant_session, market.market_id)
+    assert audited, "audit jurnali bo'sh — «auditda yo'q» da'vosi o'lchanmasdi"
+    for blob in audited:
+        assert real_credentials not in blob, "parol audit jurnalida ko'rindi"
+
+    # --- NAZORAT: parol HAQIQATAN mavjud edi ---
+    assert len(go2rtc_calls) == 1, f"`ensure_stream` {len(go2rtc_calls)} marta chaqirildi"
+    _stream_name, source = go2rtc_calls[0]
+    assert real_credentials in source, (
+        "go2rtc'ga uzatilgan manbada parol yo'q — rekvizit oyog'i ulanmagan va "
+        "yuqoridagi uchala da'vo BO'SH qiymat ustida o'lchangan bo'lardi"
+    )
 
 
 # ---------------------------------------------------------------------------
