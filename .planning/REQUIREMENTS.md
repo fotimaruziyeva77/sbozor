@@ -30,7 +30,7 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 ### Kamera va suratga olish (CAM)
 
 - [x] **CAM-01**: Bozor admini kameralarni qo'shadi/sozlaydi; RTSP ma'lumotlari shifrlangan saqlanadi; "ulanishni tekshirish" tugmasi ishlaydi
-- [ ] **CAM-02**: Server NVR'ga faqat WireGuard VPN orqali kiradi; NVR internetga to'g'ridan-to'g'ri ochilmaydi
+- [x] **CAM-02**: Server NVR'ga faqat WireGuard VPN orqali kiradi; NVR internetga to'g'ridan-to'g'ri ochilmaydi
 - [x] **CAM-03**: Direktor/admin panelda jonli kamera tasvirini ko'radi (go2rtc, avtorizatsiya ortida)
 - [ ] **CAM-04**: Snapshot jadvali har bozor uchun sozlanadi va mavsumiy profilni qo'llaydi (standart: 06:00–08:00 har 30 daq + 16:00, 18:00)
 - [ ] **CAM-05**: Rejalashtirilgan kadr olish idempotent va retry'li; o'tkazib yuborilgan slot jurnalda ko'rinadi va alert yuboradi
