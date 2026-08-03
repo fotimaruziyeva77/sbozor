@@ -253,12 +253,12 @@ Plans:
 
 *Bo'shliq to'lqini 1 (parallel — fayllar kesishmaydi)*
 
-- [ ] 03-12-PLAN.md — Sim NVR o'z manzilida RTSP xizmat qiladi (autentifikatsiya majburiy), o'lik `SIM_*` konfiguratsiyasi olib tashlanadi, darvoza zanjiridagi 31 % qayta bajarish yo'q qilinadi (BW1)
-- [ ] 03-13-PLAN.md — go2rtc'ga RTSP rekvizitini yetkazish: `decrypt_nvr_password` ning ikkinchi chaqiruv joyi, `SecretStr` tashuvchisi va uchta oqish yo'lining yopilishi (BW1)
+- [x] 03-12-PLAN.md — Sim NVR o'z manzilida RTSP xizmat qiladi (autentifikatsiya majburiy), o'lik `SIM_*` konfiguratsiyasi olib tashlanadi, darvoza zanjiridagi 31 % qayta bajarish yo'q qilinadi (BW1)
+- [x] 03-13-PLAN.md — go2rtc'ga RTSP rekvizitini yetkazish: `decrypt_nvr_password` ning ikkinchi chaqiruv joyi, `SecretStr` tashuvchisi va uchta oqish yo'lining yopilishi (BW1)
 
 *Bo'shliq to'lqini 2*
 
-- [ ] 03-14-PLAN.md — Mock'siz uchidan-uchiga jonli ko'rish o'lchovi (kadr keladi), meta-darvoza, talab holatlari va `03-HUMAN-UAT.md` (BW2)
+- [x] 03-14-PLAN.md — Mock'siz uchidan-uchiga jonli ko'rish o'lchovi (kadr keladi), meta-darvoza, talab holatlari va `03-HUMAN-UAT.md` (BW2)
 
 **UI hint**: yes
 **Research flag**: yes — `/gsd-plan-phase 3 --research-phase 3`. Tadqiqot **simulyator-birinchi** yondashuvda o'tkaziladi: Hikvision ISAPI kashfiyot endpointlari (`/ISAPI/System/deviceInfo`, `/ISAPI/ContentMgmt/InputProxy/channels`, `/ISAPI/System/Video/inputs/channels`), kanal raqamlash qoidasi (`{ch}01` asosiy / `{ch}02` sub), Digest autentifikatsiyasining soat farqiga sezgirligi, firmware'ning `digest/basic` talabi, NVR'ning bir vaqtdagi masofaviy sessiya limiti (odatda 6–16) va CGNAT ostidagi WireGuard topologiyasi. Bularning har biri simulyatorda modellashtiriladi, real qurilmada esa tasdiqlanadi.

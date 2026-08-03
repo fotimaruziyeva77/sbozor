@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 03-11-PLAN.md
-last_updated: "2026-08-03T15:38:47.264Z"
+stopped_at: Completed 03-14-PLAN.md
+last_updated: "2026-08-03T18:54:33.977Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 50
-  completed_plans: 50
+  total_plans: 53
+  completed_plans: 53
   percent: 33
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 03
-Plan: 11 of 11
+Plan: 14 of 14
 Status: Phase complete — ready for verification
 Last activity: 2026-08-03
 
-Progress: [██████████] 100% (11/11 reja — faza yopildi, tekshiruv kutilyapti)
+Progress: [██████████] 100% (14/14 reja — 11 ta asosiy + 3 ta bo'shliq yopish; 03-VERIFICATION.md ning GAP-1/GAP-2 si yopildi, qayta tekshiruv kutilyapti)
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -66,6 +66,7 @@ Progress: [██████████] 100% (11/11 reja — faza yopildi, te
 | Phase 03 P09 | 105min | 3 tasks | 15 files |
 | Phase 03 P10 | 70min | 3 tasks | 18 files |
 | Phase 03 P11 | 150min | 3 tasks | 8 files |
+| Phase 3 P14 | 95min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,9 @@ Recent decisions affecting current work:
 - [Phase ?]: 03-10: jonli sessiya chegarasi UI tomonda (5 daq), avtorizatsiyadan qat'i nazar; [Davom ettirish] pleyerni qayta mount qiladi
 - [Phase ?]: 03-10: vendored pleyerning ikki majburiy sozlamasi applyPlayerPolicy() sof funksiyasida va testga bog'langan: tashqi STUN yo'q, audio so'ralmaydi
 - [Phase ?]: 03-10: NvrCard.showErrorBlock — kashfiyot nosozligini faqat panel chizadi (ikkita role=alert oldi olindi)
+- [Phase 03]: 03-14: go2rtc PUT/DELETE natijasi status kodidan emas, oqimlar RO'YXATIDAN o'lchanadi — :ro config (D-11) tufayli go2rtc har doim 400 qaytaradi, amalning o'zi esa bajariladi
+- [Phase 03]: 03-14: uchidan-uchiga o'lchov nomlarni MAHSULOTDAN oladi (kashfiyot hosil qilgan cam_<uuid4>, chipta URL'idan) — o'z nomini o'ylab topgan test Pitfall 4 bo'lardi
+- [Phase 03]: 03-14: gate chegarasi 1200 s da qoldi — o'lchov 538 s bo'lsa ham na ko'tarildi, na tushirildi; qayta belgilash 4-fazaga band
 
 ### Pending Todos
 
@@ -141,6 +145,7 @@ None yet.
 - ~~03-11: npm run gate 950 s ga chiqdi (03-01 nomzod chegarasi 618 s)~~ — **YOPILDI 03-11 da:** uch martadan o'lchandi (1000/994/983 s), sovuq va issiq yugurish ajratildi, chegara 1200 s qilib asoslandi; qolgan band — quyidagi 31 % qayta bajarish
 - [Phase 4] npm run gate — 1000 s, shundan 316 s (31 %) qayta bajarish; taklif: sim:up ni zanjir boshiga, test:tenancy va test:sim ni gate'dan olib tashlash
 - [Phase 4] go2rtc-sim oqimini birorta test iste'mol qilmaydi — CAM-03 va CAM-09 aynan shu sababdan Blocked; yopilish yo'li: -m sim ostida go2rtc-sim'dan bitta kadr olish
+- CAM-02 Blocked: CI konteynerida wg0 yo'q — «server NVR'ga FAQAT tunnel orqali kiradi» o'lchanmaydi (Pitfall 10). Egasi Ops, tetigi VPS deploy'i, bandlari 03-HUMAN-UAT.md #1 va #2
 
 ## Deferred Items
 
@@ -152,6 +157,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-03T15:38:09.860Z
-Stopped at: Completed 03-11-PLAN.md
+Last session: 2026-08-03T18:54:11.588Z
+Stopped at: Completed 03-14-PLAN.md
 Resume file: None
