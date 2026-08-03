@@ -387,7 +387,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 0. Dala treki va tashqi bog'liqliklar | N/A | Not started | - |
 | 1. Poydevor va tenant xavfsizligi | 0/10 | Planned | - |
 | 2. Bozor domeni va ustasi | 0/17 | Planned | - |
-| 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 0/11 | Planned | - |
+| 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 0/TBD | Not started | - |
 | 5. Kamera zonalari, CV va HITL | 0/TBD | Not started | - |
 | 6. Billing va kassir | 0/TBD | Not started | - |
