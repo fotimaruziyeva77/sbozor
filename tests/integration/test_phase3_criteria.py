@@ -59,6 +59,7 @@ va hech nimani isbotlamasdi (Pitfall 10). Uning egasi (Ops) va tetigi
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import json
 import os
@@ -70,13 +71,19 @@ from uuid import UUID, uuid4
 
 import psycopg
 import pytest
-from app.jobs.discovery import discover_nvr
 from app.security.ratelimit import NVR_TEST_LIMIT
 from app.security.secrets import encrypt_nvr_password
 from app.services.rtsp import rtsp_url
 from fixtures.admin_api import session_headers
 from fixtures.auth_api import audit_rows
 from fixtures.nvr_domain import CLEANUP_ORDER, add_discovery_run, nvr_rows
+from fixtures.nvr_flow import (
+    CAMERAS_URL,
+    NVR_URL,
+    create_device,
+    list_cameras,
+    run_discovery,
+)
 from fixtures.nvr_sim import sim_mode, sim_patch
 from fixtures.two_markets import SEED_PASSWORD
 from pydantic import SecretStr
@@ -84,10 +91,7 @@ from sbozor_core.enums import AuditAction, CameraStatus
 from sqlalchemy import text
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
     import httpx
-    from fastapi import FastAPI
     from fixtures import TenantSessionFactory
     from fixtures.nvr_domain import MarketNvrRows
     from fixtures.two_markets import TwoMarketSeed
@@ -97,8 +101,6 @@ if TYPE_CHECKING:
 
 pytestmark = [pytest.mark.sim, pytest.mark.usefixtures("migrated")]
 
-NVR_URL = "/api/v1/nvr-devices"
-CAMERAS_URL = "/api/v1/cameras"
 AUTHZ_URL = "/internal/live-authz"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -122,6 +124,22 @@ uchun `test_sc1_...` ning oxirgi asserti o'z-o'zini yolg'on-yashil
 qilmaydi va sxema o'zgarsa naqsh ham o'zi bilan ko'chadi.
 """
 
+E2E_MODULE = "test_live_view_e2e"
+"""Mock'siz uchidan-uchiga o'lchovning moduli (GAP-1 va GAP-2 ning yopilishi).
+
+Nomi SHU YERDA yagona joyda turadi: `test_the_mockless_end_to_end_
+measurement_exists_and_runs` uni import qiladi, SC#6 va SC#7 ning
+docstringlari esa unga havola qiladi.
+"""
+
+MOCK_FIXTURE = "go2rtc_calls"
+"""Shu fayldagi go2rtc mock'ining nomi — meta-darvoza uni E2E modulida IZLAYDI.
+
+Qiymat shu modulda HAQIQATAN fixture bo'lishi darvozaning o'zida
+tekshiriladi, ya'ni fixture qayta nomlanganda darvoza jimgina bo'sh
+naqsh izlab qolmaydi.
+"""
+
 SIM_LEAK_NEEDLES = ("nvr-sim", "__sim__", "SIM_")
 """SC#7 ning «kod o'zgarishi emas» yarmi — ilova kodida sim izi BO'LMAYDI.
 
@@ -134,63 +152,14 @@ tayanadi.
 
 # ---------------------------------------------------------------------------
 # Zanjir yordamchilari
+#
+# ⚠ ZANJIRNING O'ZI `fixtures/nvr_flow.py` DA (`create_device`,
+#   `run_discovery`, `list_cameras`) va `nvr_cleanup` / `enqueued`
+#   fixture'lari `tests/integration/conftest.py` da. Sabab: zanjir endi
+#   IKKI modulda kesib o'tiladi (bu fayl — chiptagacha, mock bilan;
+#   `test_live_view_e2e.py` — kadrgacha, mock'siz) va ikki nusxa jimgina
+#   ajralib ketardi.
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def nvr_cleanup(
-    sync_owner_conn: Connection[TupleRow],
-    two_markets: TwoMarketSeed,
-) -> Iterator[None]:
-    """API orqali YARATILGAN NVR qatorlarini o'chiradi.
-
-    ⚠ USIZ `cleanup_two_markets()` YIQILADI: u `DELETE FROM markets` bilan
-      tugaydi, `nvr_devices` esa `markets` ga chet el kaliti bilan tayanadi.
-      Ya'ni bu fixture qulaylik emas — usiz butun fayl birinchi testdan
-      keyin bazani buzilgan holatda qoldirardi.
-
-    Tozalash `fixtures.nvr_domain.CLEANUP_ORDER` bilan: tartib SHU YERDA
-    QAYTA YOZILMAYDI, aks holda yangi jadval qo'shilganda ikki ro'yxat
-    jimgina ajralib ketardi.
-    """
-    try:
-        yield
-    finally:
-        market_ids = [str(market.id) for market in two_markets.markets]
-        for table in CLEANUP_ORDER:
-            # Jadval nomlari sobit ro'yxatdan keladi — tashqi kirish emas
-            # (`fixtures/nvr_domain.py::cleanup_nvr_domain` bilan bir xil naqsh).
-            sync_owner_conn.execute(
-                f"DELETE FROM {table} WHERE market_id = ANY(%s::uuid[])",  # noqa: S608
-                (market_ids,),
-            )
-
-
-@pytest.fixture
-def enqueued(api_app: FastAPI) -> Iterator[list[dict[str, Any]]]:
-    """Navbatga qo'yishni YOZIB OLADI — job javobdan KEYIN chaqiriladi.
-
-    ⚠ JOB SO'ROV ICHIDA BAJARILMAYDI VA BU ATAYIN. `POST /discover`
-      `queued` qatorini o'z tranzaksiyasida yozadi va u javob
-      qaytarilgandagina COMMIT bo'ladi. Jobni so'rov ichida chaqirish
-      boshqa ulanishdan hali ko'rinmaydigan qatorni o'qishga urinardi —
-      ya'ni test HAQIQIY navbat semantikasidan (worker xabarni commitdan
-      keyin oladi) chetga chiqib, o'zi yaratgan poygani o'lchagan bo'lardi.
-
-    ⚠ TOZALASH MAJBURIY: `api_app` — modul darajasidagi YAGONA obyekt,
-      qoldirilgan atribut boshqa test modullariga sizib o'tardi (03-06
-      Issue 2).
-    """
-    calls: list[dict[str, Any]] = []
-
-    async def _record(**kwargs: Any) -> None:
-        calls.append(kwargs)
-
-    api_app.state.enqueue_discovery = _record
-    try:
-        yield calls
-    finally:
-        del api_app.state.enqueue_discovery
 
 
 @pytest.fixture
@@ -248,71 +217,6 @@ async def director_headers(
 ) -> dict[str, str]:
     """A bozori DIREKTORI — `CAMERA_VIEW` bor, `CAMERA_MANAGE` yo'q (D-07)."""
     return await session_headers(api_client, two_markets.market_a.director_phone, SEED_PASSWORD)
-
-
-async def _create_device(
-    client: httpx.AsyncClient,
-    headers: dict[str, str],
-    address: str,
-    credentials: tuple[str, str],
-) -> dict[str, Any]:
-    """«Forma» — ADMIN YUBORADIGAN YAGONA UCH MAYDON.
-
-    Tana shu yerda quriladi va uning kalitlari testda ALOHIDA assert bilan
-    tekshiriladi: SC#1 «faqat manzil + login/parol» deydi, ya'ni to'rtinchi
-    maydonning paydo bo'lishi mezonning buzilishi bo'lardi.
-    """
-    username, password = credentials
-    payload = {"address": address, "username": username, "password": password}
-    assert set(payload) == {"address", "username", "password"}, (
-        f"forma tanasida ortiqcha maydon bor: {sorted(payload)} — SC#1 «FAQAT "
-        "NVR manzili + login/parol» deydi"
-    )
-    response = await client.post(NVR_URL, json=payload, headers=headers)
-    assert response.status_code == 201, response.text
-    body: dict[str, Any] = response.json()
-    return body
-
-
-async def _discover(
-    client: httpx.AsyncClient,
-    headers: dict[str, str],
-    nvr_id: UUID,
-    enqueued_calls: list[dict[str, Any]],
-    sessionmaker: async_sessionmaker[AsyncSession],
-) -> dict[str, Any]:
-    """202 -> (worker) -> poll — MAHSULOT ZANJIRINING O'ZI.
-
-    Uch bo'g'in ham bu yerda: HTTP tugmasi, fon vazifasi va poll javobi.
-    Ularni ajratib olish (masalan `discover_nvr` ni to'g'ridan-to'g'ri
-    chaqirish) `run_id` ning API'dan jobga UZATILISHINI sinovdan chiqarib
-    yuborardi — aynan zanjirning eng nozik bo'g'ini.
-    """
-    started = await client.post(f"{NVR_URL}/{nvr_id}/discover", headers=headers)
-    assert started.status_code == 202, started.text
-    run_id = UUID(started.json()["run_id"])
-
-    assert len(enqueued_calls) == 1, f"navbatga aynan bitta xabar kutilgan edi: {enqueued_calls}"
-    message = enqueued_calls.pop()
-    assert message["run_id"] == run_id, (
-        f"navbatdagi `run_id` ({message['run_id']}) javobdagidan ({run_id}) FARQ QILADI — "
-        "poll qiladigan mijoz boshqa yugurishni kuzatardi"
-    )
-    await discover_nvr(sessionmaker, **message)
-
-    polled = await client.get(f"{NVR_URL}/{nvr_id}/discovery-runs/{run_id}", headers=headers)
-    assert polled.status_code == 200, polled.text
-    run: dict[str, Any] = polled.json()
-    return run
-
-
-async def _cameras(
-    client: httpx.AsyncClient, headers: dict[str, str], nvr_id: UUID
-) -> list[dict[str, Any]]:
-    response = await client.get(CAMERAS_URL, params={"nvr_id": str(nvr_id)}, headers=headers)
-    assert response.status_code == 200, response.text
-    items: list[dict[str, Any]] = response.json()["items"]
-    return items
 
 
 async def _device(
@@ -446,7 +350,7 @@ async def test_sc1_admin_enters_only_the_address_and_credentials(
 
     MEZON TO'RT NARSANI SANAYDI VA TO'RTALASI HAM ALOHIDA O'LCHANADI:
 
-      1. **kirish yuzasi uchta maydon** — `_create_device()` tanani o'zi
+      1. **kirish yuzasi uchta maydon** — `create_device()` tanani o'zi
          quradi va kalitlar to'plamini tekshiradi;
       2. **model aniqlanadi** — qurilma pasportidagi `model`/`device_type`
          forma tanasida YO'Q edi, ya'ni ular ISAPI'dan keldi;
@@ -461,7 +365,7 @@ async def test_sc1_admin_enters_only_the_address_and_credentials(
     natija bo'yicha yashil bo'lib, testning o'zi URL yozib turgan holatda
     ham o'tib ketardi (fayl boshidagi izoh).
     """
-    created = await _create_device(api_client, admin_headers, sim, sim_credentials)
+    created = await create_device(api_client, admin_headers, sim, sim_credentials)
     nvr_id = UUID(created["id"])
 
     # --- 2-da'vo: model FORMA TANASIDA YO'Q edi ---
@@ -470,7 +374,7 @@ async def test_sc1_admin_enters_only_the_address_and_credentials(
         "ya'ni kimdir uni taxmin qilib yozgan"
     )
 
-    run = await _discover(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
+    run = await run_discovery(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
     assert run["status"] == "succeeded", run
     assert run["error_code"] is None, run
 
@@ -481,7 +385,7 @@ async def test_sc1_admin_enters_only_the_address_and_credentials(
         f"qo'shilishi kerak: {run}"
     )
 
-    cameras = await _cameras(api_client, admin_headers, nvr_id)
+    cameras = await list_cameras(api_client, admin_headers, nvr_id)
     assert [row["channel_no"] for row in cameras] == list(range(1, SIM_CHANNEL_COUNT + 1))
     assert all(row["name"] for row in cameras), (
         f"nomsiz kamera yozuvi bor — mezon «nom» ni ochiq sanaydi: {cameras}"
@@ -552,12 +456,14 @@ async def test_sc2_rescan_is_idempotent(
     ⚠ NOM O'ZGARTIRISH KANALI ATAYIN 1: yo'qoladigan kanal (5) bilan
       to'qnashmaydi, ya'ni ikki qoida bir-birining natijasini niqoblamaydi.
     """
-    created = await _create_device(api_client, admin_headers, sim, sim_credentials)
+    created = await create_device(api_client, admin_headers, sim, sim_credentials)
     nvr_id = UUID(created["id"])
 
-    first = await _discover(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
+    first = await run_discovery(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
     assert first["channels_added"] == SIM_CHANNEL_COUNT, first
-    before = {row["channel_no"]: row for row in await _cameras(api_client, admin_headers, nvr_id)}
+    before = {
+        row["channel_no"]: row for row in await list_cameras(api_client, admin_headers, nvr_id)
+    }
 
     # --- Admin nomni O'ZGARTIRADI (mahsulot yo'li) ---
     renamed = await api_client.patch(
@@ -569,22 +475,26 @@ async def test_sc2_rescan_is_idempotent(
     assert renamed.json()["name_overridden"] is True
 
     # --- Ikkinchi skan: HECH NIMA O'ZGARMAYDI ---
-    second = await _discover(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
+    second = await run_discovery(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
     assert second["channels_added"] == 0, f"ikkinchi skan yangi kamera qo'shdi: {second}"
     assert second["channels_found"] == SIM_CHANNEL_COUNT, second
 
-    middle = {row["channel_no"]: row for row in await _cameras(api_client, admin_headers, nvr_id)}
+    middle = {
+        row["channel_no"]: row for row in await list_cameras(api_client, admin_headers, nvr_id)
+    }
     assert len(middle) == len(before), "qator soni o'zgardi — takroriy yoki yo'qolgan yozuv"
     for channel_no, row in before.items():
         assert middle[channel_no]["id"] == row["id"], f"kanal {channel_no}: `id` o'zgardi"
 
     # --- Uchinchi skan: 5-kanal NVR'dan yo'qoldi ---
     sim_patch(sim, mode="channel_removed", removed_channels=[5])
-    third = await _discover(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
+    third = await run_discovery(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
     assert third["channels_found"] == SIM_CHANNEL_COUNT - 1, third
     assert third["channels_marked_offline"] == 1, third
 
-    after = {row["channel_no"]: row for row in await _cameras(api_client, admin_headers, nvr_id)}
+    after = {
+        row["channel_no"]: row for row in await list_cameras(api_client, admin_headers, nvr_id)
+    }
     assert len(after) == len(before), (
         f"qator soni {len(before)} -> {len(after)} ga kamaydi — kamera O'CHIRILDI, "
         "holbuki 4- va 5-fazalar `cameras.id` ga tayanadi"
@@ -728,7 +638,7 @@ async def test_sc4_password_never_leaves_the_cipher(
     username, _ = sim_credentials
     secret = f"ParolFaqatShuTestda-{uuid4().hex}"  # noqa: S105 - test uskunasi
 
-    created = await _create_device(api_client, admin_headers, sim, (username, secret))
+    created = await create_device(api_client, admin_headers, sim, (username, secret))
     nvr_id = UUID(created["id"])
 
     # --- 1. BAZA: xom bayt ---
@@ -754,7 +664,7 @@ async def test_sc4_password_never_leaves_the_cipher(
     #   parolning sizib ketishi uchun eng qulay joy (03-05 uni allowlist
     #   ostiga oldi), shuning uchun MUVAFFAQIYATLI yo'l emas, XATO yo'li
     #   o'lchanadi.
-    run = await _discover(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
+    run = await run_discovery(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
     assert run["status"] == "failed", (
         f"soxta parol bilan kashfiyot MUVAFFAQIYATLI bo'ldi: {run} — bu holda "
         "`error_detail` umuman yozilmasdi va sizish yo'li o'lchanmasdi"
@@ -873,6 +783,13 @@ async def test_sc6_live_view_requires_authorization(
       Zanjirning o'zi (yaratilgan qurilmadan tug'ilgan kamera uchun chipta)
       SC#7 da kesib o'tiladi va ikkalasini bir testga yig'ish qaysi bo'g'in
       buzilganini ayta olmas holga keltirardi.
+
+    ⚠⚠ MEZONNING «TASVIRNI KO'RADI» QISMI BU YERDA O'LCHANMAYDI.
+      Bu test go2rtc'ni MOCK bilan almashtiradi, ya'ni media oqmaydi.
+      Kadrning HAQIQATAN kelishi `test_live_view_e2e.py` da, mahsulot
+      yo'lidan o'tib va birorta mock'siz o'lchanadi
+      (`03-VERIFICATION.md` GAP-1). Ikkala o'lchov bir-birini
+      to'ldiradi: bu yerda «kim ololmaydi», u yerda «keladimi».
     """
     with nvr_rows(sync_owner_conn, two_markets) as seed:
         market_a = seed.market_a
@@ -956,15 +873,24 @@ async def test_sc7_the_whole_flow_runs_against_a_simulator(
     BO'LMASLIGI kerak. Aks holda «real qurilmaga o'tish» kodni tahrirlashni
     talab qilardi. `test_no_sim_branching.py` (03-02) buni o'z darvozasi
     sifatida o'lchaydi; bu yerda u MEZON darajasida qayta tasdiqlanadi.
+
+    ⚠⚠ ZANJIR BU TESTDA CHIPTADA TUGAYDI — `go2rtc_calls` mock'i media
+      serverini almashtiradi va `ensure_stream` ga UZATILGAN satr
+      tekshiriladi, go2rtc ning JAVOBI emas. Oxirgi bo'g'in
+      (`/api/frame.jpeg` dan HAQIQIY kadr) `test_live_view_e2e.py` da,
+      mock'siz kesib o'tiladi — `03-VERIFICATION.md` GAP-2 aynan shu
+      bo'g'inni «yagona yopilmagan» deb nomlagan edi. Uning mavjudligi
+      shu fayldagi META darvozasi bilan qulflangan
+      (`test_the_mockless_end_to_end_measurement_exists_and_runs`).
     """
     # --- Zanjir: forma -> ... -> jonli ko'rish ---
-    created = await _create_device(api_client, admin_headers, sim, sim_credentials)
+    created = await create_device(api_client, admin_headers, sim, sim_credentials)
     nvr_id = UUID(created["id"])
 
-    run = await _discover(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
+    run = await run_discovery(api_client, admin_headers, nvr_id, enqueued, api_sessionmaker)
     assert run["status"] == "succeeded", run
 
-    cameras = await _cameras(api_client, admin_headers, nvr_id)
+    cameras = await list_cameras(api_client, admin_headers, nvr_id)
     assert len(cameras) == SIM_CHANNEL_COUNT, cameras
 
     # ⚠ CHIPTANI DIREKTOR SO'RAYDI, ADMIN EMAS: mezon aynan direktorni
@@ -1138,3 +1064,61 @@ def test_every_criterion_has_its_own_test() -> None:
 
     criteria = [name for name in names if name.startswith("test_sc")]
     assert len(criteria) == 8, f"mezon testlari soni 8 emas: {criteria}"
+
+
+def test_the_mockless_end_to_end_measurement_exists_and_runs() -> None:
+    """Mock'siz uchidan-uchiga o'lchov MAVJUD, `sim` lentasida va MOCK'SIZ.
+
+    =======================================================================
+    NEGA BU DARVOZA KERAK.
+
+    `03-VERIFICATION.md` GAP-2 ning YAGONA `missing[]` bandi — «zanjirning
+    oxirgi bo'g'inini mock'siz kesib o'tadigan o'lchov». Uni yozish bir
+    marta bajariladigan ish; SAQLASH esa doimiy. Darvozasiz o'sha o'lchov
+    fayl qayta tashkil qilinganda, ko'chirilganda yoki unga
+    «qulaylik uchun» go2rtc mock'i qo'shilganda JIMGINA yo'qolardi va
+    bo'shliq IKKINCHI marta ochilardi — bu safar hech kim sezmasdan.
+
+    UCH DA'VO VA UCHALASI HAM MUSTAQIL:
+
+      1. **modul bor va IMPORT QILINADI** — sintaksis xatosi yoki
+         yo'qolgan import bu yerda darhol ko'rinadi;
+      2. **`sim` markeri bor** — ya'ni u `npm run test:sim` va
+         `npm run gate` zanjirida HAQIQATAN bajariladi. Markersiz modul
+         to'planardi-yu, `-m sim` filtri ostida chetlab o'tilardi;
+      3. **birorta testining parametrida go2rtc mock'i YO'Q** — o'lchov
+         mahsulot klientini ishlatadi. Bu darvozaning O'ZAK bandi:
+         mock qaytib kelsa test yashil qolib, media esa oqmasdi.
+
+    ⚠ NOMI `test_sc` BILAN BOSHLANMAYDI — aks holda yuqoridagi
+      `test_every_criterion_has_its_own_test` mezon testlari sonini 9 deb
+      hisoblab qizarardi.
+    =======================================================================
+    """
+    assert hasattr(sys.modules[__name__], MOCK_FIXTURE), (
+        f"`{MOCK_FIXTURE}` shu modulda topilmadi — mock qayta nomlangan va bu "
+        "darvoza endi MAVJUD BO'LMAGAN naqshni izlab, jimgina yashil qolardi"
+    )
+
+    module_name = f"{__package__}.{E2E_MODULE}" if __package__ else E2E_MODULE
+    module = importlib.import_module(module_name)
+
+    marks = getattr(module, "pytestmark", [])
+    mark_names = {getattr(mark, "name", "") for mark in marks}
+    assert "sim" in mark_names, (
+        f"`{E2E_MODULE}` moduli `sim` markerisiz: {sorted(mark_names)} — u "
+        "`test:sim` va `gate` zanjirlarida BAJARILMASDI"
+    )
+
+    tests = [
+        (name, obj)
+        for name, obj in inspect.getmembers(module, inspect.isfunction)
+        if name.startswith("test_") and obj.__module__ == module.__name__
+    ]
+    assert tests, f"`{E2E_MODULE}` da birorta `test_` funksiyasi yo'q"
+
+    mocked = [name for name, obj in tests if MOCK_FIXTURE in inspect.signature(obj).parameters]
+    assert mocked == [], (
+        f"`{E2E_MODULE}` dagi {mocked} testi go2rtc mock'ini so'rayapti — mock'siz "
+        "o'lchov aynan shu bilan yo'q qilinadi va GAP-2 qayta ochilardi"
+    )

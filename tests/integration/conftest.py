@@ -18,14 +18,20 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import pytest
 from fixtures import MarketScope
 from fixtures.admin_api import cleanup_test_users
 from fixtures.financial import FinancialProbe, create_financial_probe, drop_financial_probe
+from fixtures.nvr_flow import cleanup_api_nvr_rows, record_enqueue
 from psycopg import Connection
 from psycopg.rows import TupleRow
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+    from fixtures.two_markets import TwoMarketSeed
 
 SET_MARKET_GUC = "SELECT set_config('app.market_id', %s, false)"
 """Sessiya darajasidagi tenant konteksti — `fixtures/two_markets.py` bilan bir xil.
@@ -76,6 +82,35 @@ def financial_probe(
         yield probe
     finally:
         drop_financial_probe(sync_owner_conn)
+
+
+@pytest.fixture
+def enqueued(api_app: FastAPI) -> Iterator[list[dict[str, Any]]]:
+    """Kashfiyot navbatiga qo'yilgan xabarlar (`fixtures.nvr_flow.record_enqueue`).
+
+    ⚠ REYESTRDA, TEST MODULIDA EMAS: zanjirni kesib o'tadigan IKKI modul
+      bor (`test_phase3_criteria.py` va `test_live_view_e2e.py`) va
+      fixture'ning ikki nusxasi jimgina ajralib ketardi — o'shanda
+      mock'siz o'lchov mahsulot zanjirining boshqa variantini kesib
+      o'tgan bo'lardi.
+    """
+    with record_enqueue(api_app) as calls:
+        yield calls
+
+
+@pytest.fixture
+def nvr_cleanup(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+) -> Iterator[None]:
+    """API orqali YARATILGAN NVR qatorlarini o'chiradi (FK tartibida).
+
+    Sabab va tartib — `fixtures.nvr_flow.cleanup_api_nvr_rows` docstringida.
+    """
+    try:
+        yield
+    finally:
+        cleanup_api_nvr_rows(sync_owner_conn, [str(market.id) for market in two_markets.markets])
 
 
 @pytest.fixture
