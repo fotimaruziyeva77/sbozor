@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-06-PLAN.md
-last_updated: "2026-08-03T07:43:58.641Z"
+stopped_at: Completed 03-07-PLAN.md
+last_updated: "2026-08-03T10:05:43.528Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 50
-  completed_plans: 45
+  completed_plans: 46
   percent: 22
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 03
-Plan: 7 of 11
+Plan: 8 of 11
 Status: Ready to execute
 Last activity: 2026-08-03
 
-Progress: [█████░░░░░] 55% (6/11 reja)
+Progress: [██████░░░░] 64% (7/11 reja)
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -61,6 +61,7 @@ Progress: [█████░░░░░] 55% (6/11 reja)
 | Phase 03 P04 | 110min | 3 tasks | 12 files |
 | Phase 03 P05 | 115min | 3 tasks | 11 files |
 | Phase 03 P06 | 195min | 3 tasks | 16 files |
+| Phase 03 P07 | 205min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,10 @@ Recent decisions affecting current work:
 - [Phase ?]: 03-06: redis-py 8 ning socket_timeout=5 standarti ListQueueBroker ning BRPOP ini har 5 soniyada uzadi — bloklanuvchi navbat o'quvchisida socket_timeout=None MAJBURIY
 - [Phase ?]: 03-06: create_run ning IntegrityError idan KEYIN o'qish uchun SAVEPOINT (begin_nested) shart — abort holatidagi tranzaksiya 409+run_id ni 500 ga aylantirardi
 - [Phase ?]: 03-06: fon jobi tenant kontekstini O'ZI o'rnatadi (ActorKind.SYSTEM); kontekstsiz job HTTP qatlamidan KO'RINMAYDI va NVR ni queued qator bilan qulflaydi
+- [Phase 03]: 03-07: jonli ko'rish chiptasi RESURSGA bog'lanadi — auth_request src ni chiptadagi camera_id ning stream_name i bilan solishtiradi (T-03-46; faqat chiptani tekshirish begona bozor oqimini ochiq qoldirardi)
+- [Phase 03]: 03-07: go2rtc API'si IKKI yo'lda bloklanadi (/api/... va /live/api/...) — /live/ bloki prefiksni olib tashlab uzatgani uchun ikkinchisi majburiy
+- [Phase 03]: 03-07: kamera yuzasining strukturaviy darvozasi METOD bo'yicha cheklanmaydi — GET ga qadalgan qamrov eng nozik POST (live-token) ni tashqarida qoldirgan edi (sabotaj bilan topildi)
+- [Phase 03]: 03-07: taqiqlangan literal konfiguratsiya faylida IZOHDA ham yozilmaydi — shunda sodda grep darvozasi istisnosiz tirik qoladi va parser bilan birga ikki qatlam beradi
 
 ### Pending Todos
 
@@ -131,6 +136,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-03T07:43:33.330Z
-Stopped at: Completed 03-06-PLAN.md
+Last session: 2026-08-03T10:05:43.517Z
+Stopped at: Completed 03-07-PLAN.md
 Resume file: None
