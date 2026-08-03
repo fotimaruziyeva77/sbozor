@@ -54,6 +54,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import SecretStr
 from sbozor_core.enums import CameraStatus
 
 from app.deps import Principal, TenantSessionDep, require_permission
@@ -394,7 +395,7 @@ async def _ensure_stream(state: object, camera: Camera, device: NvrDevice) -> No
         substream=camera.has_substream,
     )
     async with Go2rtcClient(settings.go2rtc_url) as client:
-        await client.ensure_stream(camera.stream_name, source)
+        await client.ensure_stream(camera.stream_name, SecretStr(source))
 
 
 @router.post(

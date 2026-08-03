@@ -77,6 +77,7 @@ from fixtures.auth_api import audit_rows
 from fixtures.nvr_domain import CLEANUP_ORDER, add_discovery_run, nvr_rows
 from fixtures.nvr_sim import sim_mode, sim_patch
 from fixtures.two_markets import SEED_PASSWORD
+from pydantic import SecretStr
 from sbozor_core.enums import AuditAction, CameraStatus
 from sqlalchemy import text
 
@@ -216,8 +217,11 @@ def go2rtc_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
         async def __aexit__(self, *_: object) -> None:
             return None
 
-        async def ensure_stream(self, stream_name: str, src: str) -> bool:
-            calls.append((stream_name, src))
+        async def ensure_stream(self, stream_name: str, src: SecretStr) -> bool:
+            # ⚠ IMZO `SecretStr` (03-13) — mahsulot klientining kontrakti.
+            #   Yozib olinadigan qiymat OCHILGAN satr: SC#7 rekvizit
+            #   oyog'ining ulanganini aynan shu satrdan o'lchaydi.
+            calls.append((stream_name, src.get_secret_value()))
             return True
 
     monkeypatch.setattr("app.api.v1.cameras.Go2rtcClient", _RecordingClient)

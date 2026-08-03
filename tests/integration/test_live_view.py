@@ -62,6 +62,7 @@ from fixtures.admin_api import bearer, session_headers
 from fixtures.auth_api import audit_rows
 from fixtures.nvr_domain import nvr_rows
 from fixtures.two_markets import SEED_PASSWORD
+from pydantic import SecretStr
 from sbozor_core.enums import AuditAction
 from sbozor_core.security import encode_live
 
@@ -132,13 +133,18 @@ def go2rtc_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
         async def __aexit__(self, *_: object) -> None:
             return None
 
-        async def ensure_stream(self, stream_name: str, src: str) -> bool:
+        async def ensure_stream(self, stream_name: str, src: SecretStr) -> bool:
             # ⚠ ALLOW-LIST MOCK'DA HAM QO'LLANADI. Aks holda test
             #   `assert_safe_go2rtc_src` ni butunlay chetlab o'tardi va
             #   «mahsulot yo'li xavfsiz `src` yuboradi» da'vosi
             #   sinalmasdan qolardi.
-            assert_safe_go2rtc_src(src)
-            calls.append((stream_name, src))
+            #
+            # ⚠ IMZO `SecretStr` (03-13): mahsulot klienti sirni aynan shu
+            #   tipda oladi va mock uni `str` deb qabul qilsa test
+            #   MAHSULOTDAN BOSHQA kontraktni o'lchagan bo'lardi.
+            opened = src.get_secret_value()
+            assert_safe_go2rtc_src(opened)
+            calls.append((stream_name, opened))
             return True
 
     monkeypatch.setattr("app.api.v1.cameras.Go2rtcClient", _RecordingClient)
