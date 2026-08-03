@@ -29,14 +29,14 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 
 ### Kamera va suratga olish (CAM)
 
-- [ ] **CAM-01**: Bozor admini kameralarni qo'shadi/sozlaydi; RTSP ma'lumotlari shifrlangan saqlanadi; "ulanishni tekshirish" tugmasi ishlaydi
+- [x] **CAM-01**: Bozor admini kameralarni qo'shadi/sozlaydi; RTSP ma'lumotlari shifrlangan saqlanadi; "ulanishni tekshirish" tugmasi ishlaydi
 - [ ] **CAM-02**: Server NVR'ga faqat WireGuard VPN orqali kiradi; NVR internetga to'g'ridan-to'g'ri ochilmaydi
 - [ ] **CAM-03**: Direktor/admin panelda jonli kamera tasvirini ko'radi (go2rtc, avtorizatsiya ortida)
 - [ ] **CAM-04**: Snapshot jadvali har bozor uchun sozlanadi va mavsumiy profilni qo'llaydi (standart: 06:00–08:00 har 30 daq + 16:00, 18:00)
 - [ ] **CAM-05**: Rejalashtirilgan kadr olish idempotent va retry'li; o'tkazib yuborilgan slot jurnalda ko'rinadi va alert yuboradi
 - [ ] **CAM-06**: Har kadr sifat filtridan o'tadi (qorong'i/buzuq/bo'sh kadr belgilanadi, `light_mode` saqlanadi) — yaroqsiz kadr billing'ga ta'sir qilmaydi
 - [ ] **CAM-07**: Kadrlar S3-mos omborda (SeaweedFS) bozor/kamera/sana bo'yicha saqlanadi; 90 kun to'liq, keyin siqilgan 1 yil (sozlanadigan)
-- [ ] **CAM-08**: Admin **faqat** NVR manzili + login/parolni kiritadi; tizim Hikvision ISAPI orqali qurilmani aniqlaydi, barcha kanallarni sanab chiqadi va kameralarni (nom, kanal, asosiy/sub oqim URL'i) avtomat yaratadi. Qayta skanerlash idempotent (yangi kanal qo'shiladi, yo'qolgani `offline`, mavjudi tegilmaydi). Ulanish xatosi **sababi va tuzatish yo'li** bilan ko'rsatiladi: parol xato / NVR soati >5 daq farqi → NTP / firmware `digest/basic` talab qiladi / kanal offline / sessiya limitiga yetildi
+- [x] **CAM-08**: Admin **faqat** NVR manzili + login/parolni kiritadi; tizim Hikvision ISAPI orqali qurilmani aniqlaydi, barcha kanallarni sanab chiqadi va kameralarni (nom, kanal, asosiy/sub oqim URL'i) avtomat yaratadi. Qayta skanerlash idempotent (yangi kanal qo'shiladi, yo'qolgani `offline`, mavjudi tegilmaydi). Ulanish xatosi **sababi va tuzatish yo'li** bilan ko'rsatiladi: parol xato / NVR soati >5 daq farqi → NTP / firmware `digest/basic` talab qiladi / kanal offline / sessiya limitiga yetildi
 - [ ] **CAM-09**: Simulyatsiya qilingan Hikvision NVR (ISAPI mock + go2rtc RTSP manbasi) compose profili sifatida mavjud; kamera kashfiyoti, ulanish testi, jonli ko'rish va kadr olish yo'li real uskunasiz uchidan-uchiga ishlaydi va CI'da o'lchanadi
 
 ### AI tahlil (AI)
@@ -149,15 +149,15 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | MARKET-05 | Phase 2 | Done |
 | MARKET-06 | Phase 2 | Done |
 | MARKET-07 | Phase 2 | Done |
-| CAM-01 | Phase 3 | Pending |
-| CAM-02 | Phase 3 | Pending |
-| CAM-03 | Phase 3 | Pending |
+| CAM-01 | Phase 3 | Done |
+| CAM-02 | Phase 3 | Blocked (2-da'vo o'lchandi, 1-da'vo emas: «server NVR'ga FAQAT tunnel orqali kiradi» CI'da tunnel bo'lmagani uchun sinalmaydi — egasi Ops, tetigi VPS deploy'i, vositasi ops/scripts/verify-tunnel.sh) |
+| CAM-03 | Phase 3 | Blocked (avtorizatsiya va oqim ro'yxati o'lchandi, «tasvirni KO'RADI» qismi emas: jsdom WebRTC bermaydi va go2rtc-sim oqimini birorta test iste'mol qilmaydi — yopilishi 4-fazada) |
 | CAM-04 | Phase 4 | Pending |
 | CAM-05 | Phase 4 | Pending |
 | CAM-06 | Phase 4 | Pending |
 | CAM-07 | Phase 4 | Pending |
-| CAM-08 | Phase 3 | Pending |
-| CAM-09 | Phase 3 | Pending |
+| CAM-08 | Phase 3 | Done |
+| CAM-09 | Phase 3 | Blocked (uchala bandi o'lchandi — profil, kashfiyot, ulanish testi; qolgan ikkitasi emas: «jonli ko'rish» sim ustida uchidan-uchiga sinalmagan va «kadr olish yo'li» 4-fazaning mavzusi) |
 | AI-01 | Phase 5 | Pending |
 | AI-02 | Phase 5 | Pending |
 | AI-03 | Phase 5 | Pending |
@@ -210,6 +210,26 @@ chalkashtirish mumkin bo'lgan uchta joy bor:
    tasdiqlash) `02-VALIDATION.md` ning «Manual-Only Verifications» jadvalida
    yuritiladi va bu jadvalda AKS ETMAYDI.
 
+**Qoidaning 3-fazadagi qo'llanishi** (2026-08-03, `03-11`). Beshta CAM
+bandidan **ikkitasi** `Done` bo'ldi (CAM-01, CAM-08) — ularning har bir
+jumlasi o'lchangan test bilan qoplangan. Qolgan **uchtasi** `Blocked`
+bo'lib qoldi va sabab har birida ochiq yozilgan. Bu **ataylab**: uchalasi
+ham amalda ISHLAYDI va katta qismi o'lchangan, lekin talab MATNIDAGI
+bitta jumla CI'da bajarilmaydi. `Done` qo'yish o'sha jumlani
+«isbotlangan» qilib ko'rsatardi va keyingi faza uning ustiga qurilardi —
+2-fazaning `02-VERIFICATION.md` da hujjatlashtirilgan xatosining aynan
+takrori bo'lardi (890 yashil test ortida to'rtta haqiqiy bo'shliq).
+
+⚠ **`Blocked` bu yerda «ish to'xtadi» degani EMAS** — u «dalil to'liq
+emas va yetishmayotgan dalil NOMLANGAN» degani. Uchala bandning ham
+yopilish yo'li o'z qatorida yozilgan (Ops deploy'i, 4-faza).
+
+⚠ **Faza mezonlari (SC#1…SC#8) bundan MUSTAQIL** va ularning sakkiztasi
+ham yashil (`tests/integration/test_phase3_criteria.py`). Mezonlar
+fazaning yetkazib berish mahsulotini o'lchaydi, talablar esa v1 relizining
+jumlalarini — CAM-09 ning «kadr olish yo'li» bandi, masalan, 4-fazaning
+mavzusi va u SC#7 ning da'vosidan kengroq.
+
 Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 `node scripts/check-requirements-sync.mjs` — qo'lda, har faza yopilishida
 (doimiy CI darvozasi emas; sabab skript boshida yozilgan).
@@ -226,7 +246,7 @@ Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 |-------|------|---------------|
 | 1 | Poydevor va tenant xavfsizligi | 5 |
 | 2 | Bozor domeni va "Yangi bozor" ustasi | 7 |
-| 3 | Kamera va tarmoq ulanishi | 5 |
+| 3 | NVR avtomatik kashfiyoti va tarmoq ulanishi | 5 |
 | 4 | Snapshot pipeline | 5 |
 | 5 | Kamera zonalari, CV va nazoratchi tasdig'i | 6 |
 | 6 | Billing va kassir | 9 |
@@ -245,7 +265,13 @@ yashab qolmadi.
 
 ---
 *Requirements defined: 2026-07-29*
-*Last updated: 2026-08-02 — `02-24`: MARKET-07 (xodimlar rosteri importi)
+*Last updated: 2026-08-03 — `03-11`: CAM-01 va CAM-08 o'lchangan dalil bilan
+`Done`; CAM-02, CAM-03, CAM-09 yetishmayotgan dalili NOMLANGAN holda
+`Blocked`; «Faza kesimida» jadvalidagi 3-qator ROADMAP'dagi faza nomiga
+moslandi (eskirgan sarlavha 2026-08-01 dagi qayta nomlashdan keyin
+qolib ketgan edi — oldingi qiymati `03-11-SUMMARY.md` da) va soni (5)
+Traceability qatorlaridan qayta hisoblandi.*
+*Oldingi: 2026-08-02 — `02-24`: MARKET-07 (xodimlar rosteri importi)
 o'lchangan dalil bilan `Done` qilindi va 2-faza talablari to'liq yopildi;
 `**Coverage:**` hamda `Faza kesimida` sanoqlari faylning O'Z mazmunidan
 qayta hisoblandi (46 -> 49)*
