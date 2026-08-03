@@ -95,7 +95,7 @@ completed: 2026-08-03
 - **Fixture'lar real dumpdan olindi va uchta kutilmagan fakt topildi** (namespace ikki xil, `@size` yolg'on bo'lishi mumkin, NVR'da `Video/inputs/channels` = 403). Uchalasi ham qo'lda yozilgan XML'da hech qachon paydo bo'lmasdi.
 - **D-05 ning ikkala shakli ham ishlaydi va sinaladi** — `reject` (503 + `Maximum number of streams`) va `silent` (`RemoteProtocolError`, status kodi yo'q).
 - **go2rtc RTSP oqimi uchidan-uchiga tekshirildi:** `sim_cam_03` dan olingan kadrda kanal nomi va Toshkent vaqti ko'rinadi.
-- **Bazaviy darvoza qizarmadi:** 1021 → **1069** backend (+48), **322** tenancy (o'zgarmadi), `services/core-api/pyproject.toml` **tegilmadi** (T-03-SC: yangi paket yo'q).
+- **Bazaviy darvoza qizarmadi:** 1021 → **1069** backend (+48), **322** tenancy (o'zgarmadi), **74** vitest va **60** node:test (ikkalasi ham o'zgarmadi), `npm run gate` → **exit 0 / 534 s**, `services/core-api/pyproject.toml` **tegilmadi** (T-03-SC: yangi paket yo'q).
 
 ## Task Commits
 
@@ -319,7 +319,7 @@ Yo'q. Yangi ishonch chegarasi ochilmadi — aksincha, ikkitasi **yopildi**:
 
 **03-11 (yakuniy darvoza) uchun ochiq bandlar:**
 1. `npm run test:sim:slow` (25 kanalli stsenariy) — test 03-05 Task 3 da yoziladi; sim tomonidagi mexanizm tayyor va o'lchangan (`channel_count=25` ish paytida ishlaydi).
-2. `npm run gate` ning yakuniy chegarasi qayta o'lchanishi kerak — `test:sim` zanjirga qo'shildi.
+2. `npm run gate` **534 s** da o'lchandi (`test:sim` bilan) va 618 s lik nomzod chegaraga sig'adi — 03-11 uni `03-VALIDATION.md` chegara jadvalida rasmiylashtiradi. ⚠ Worktree'da ishlaydigan agent frontend bosqichlaridan oldin `npm ci --prefix frontend` bajarishi kerak.
 3. Sim testlarini `pg_container` dan ajratish (yuqoridagi chetlanish C) — ixtiyoriy, ~4–6 s.
 
 ## Bazaviy darvoza — o'lchangan holat
@@ -333,21 +333,25 @@ Yo'q. Yangi ishonch chegarasi ochilmadi — aksincha, ikkitasi **yopildi**:
 | `pytest tests/unit/test_sim_fixtures.py tests/unit/test_no_sim_branching.py` | ✅ **39** test |
 | `frontend i18n:check` | ✅ 439 kalit × 3 til |
 | `frontend node --test scripts/*.test.mjs` | ✅ **60** test (o'zgarmadi) |
+| `frontend vitest run` | ✅ **74** test / 11 fayl (o'zgarmadi) |
+| `frontend typecheck` (`tsc --noEmit`) | ✅ toza |
+| `frontend lint` (`eslint .`) | ✅ toza |
+| `frontend build` (`next build`) | ✅ 3 til uchun to'liq prerender |
+| **`npm run gate`** | ✅ **exit 0** — **534 s** |
 | `git diff --exit-code services/core-api/pyproject.toml` | ✅ toza — yangi paket yo'q (T-03-SC) |
 
-### ⚠ `npm run gate` bu WORKTREE'da oxirigacha bormaydi — sabab MUHIT, kod EMAS
+### `gate` kechikishi — o'lchangan qiymat
 
-`npm run gate` zanjirining oltita bosqichi yashil o'tdi va `vitest run` da to'xtadi:
+| O'lchov | Qiymat |
+|---|---|
+| 03-01 asosi (`test:sim` siz) | 496–515 s |
+| **Bu reja (`test:sim` bilan)** | **534 s** |
+| Qo'shimcha | **~+19…+38 s** |
+| 03-01 belgilagan nomzod chegara | 618 s — **sig'adi** (zaxira ~84 s) |
 
-```
-'vitest' is not recognized as an internal or external command
-```
+Zanjir tartibi ham tasdiqlandi: `lint` → `test` → `test:tenancy` → **`test:sim`** → `i18n:check` → `vitest` → `typecheck` → `eslint` → `build`.
 
-**Sabab:** bu ijro git worktree'da (`.claude/worktrees/agent-…`) ketmoqda va `frontend/node_modules` — `.gitignore` da, ya'ni worktree'da **umuman yo'q**. `vitest`, `next`, `tsc` va `eslint` shu sababdan topilmaydi. `node --test` bosqichi esa o'tdi, chunki u faqat stdlib'ga tayanadi.
-
-**Bu regressiya EMAS va `test:sim` bilan bog'liq emas** — jurnal buni aniq ko'rsatadi: `test:sim` zanjir ichida **muvaffaqiyatli bajarildi** (9 test), keyin `i18n:check` va 60 ta `node:test` ham o'tdi, va faqat undan keyin `vitest` binari topilmadi. Zanjir tartibi ham tasdiqlandi: `lint` → `test` → `test:tenancy` → **`test:sim`** → frontend bosqichlari.
-
-Worktree birlashtirilgandan keyin `npm run gate` asosiy checkout'da (u yerda `node_modules` bor) to'liq bajariladi. **`gate` ning yakuniy kechikish chegarasi 03-11 ning zimmasida** (03-01 asosi: 515 s; nomzod 618 s; endi `test:sim` ham ichida — o'lchangan qo'shimcha ~25–30 s).
+⚠ **Birinchi `gate` urinishi bu worktree'da `vitest` topilmagani uchun to'xtagan edi** (`'vitest' is not recognized…`). Sabab kod emas, muhit: git worktree'da `frontend/node_modules` yo'q (u `.gitignore` da). `npm ci --prefix frontend` dan keyin zanjir to'liq yashil bo'ldi. Bu 03-11 uchun ham amaliy qayd: worktree'da ishlaydigan har qanday agent frontend bosqichlaridan oldin `npm ci` bajarishi kerak.
 
 ## Self-Check: PASSED
 
