@@ -187,9 +187,24 @@ test("G-3: boshqa HECH BIR `errorCause.*` hedge so'zini ishlatmaydi", () => {
  *
  *   Apostrof variantlari (`'`, `ʻ`, `ʼ`, `'`, `’`) qamraladi — matn
  *   fayllarida uchalasi ham uchraydi.
+ *
+ * ⚠ CHAP SO'Z CHEGARASI (`\b`) MAJBURIY — 03-09 da O'LCHANGAN.
+ *   Usiz naqsh `ko'chirish` («ko'chirmoq», «nusxa ko'chirish») ni ham
+ *   ushlaydi, chunki u `o'chirish` ni SO'Z ICHIDA topadi. Bu D-10 ga
+ *   umuman aloqasi yo'q, kundalik o'zbekcha fe'l va u izohda ham,
+ *   matnda ham muqarrar uchraydi. Chegarasiz darvoza keyingi
+ *   ishlovchini uni «chetlab o'tishga» majbur qilardi — bu esa G-4 ning
+ *   o'z docstringi ogohlantirgan sinf (darvoza o'zi himoya qilayotgan
+ *   matn ustida qizaradi).
+ *
+ *   Chegara HECH NARSANI BO'SHASHTIRMAYDI: u faqat `o'chirish` dan
+ *   OLDIN so'z belgisi turgan hollarni chiqarib tashlaydi, ya'ni
+ *   BOSHQA so'zning oxirini. Buyruq fe'lining o'zi («Kamerani
+ *   o'chirish», «O'chirish») baribir ushlanadi va bu quyidagi ijobiy
+ *   VA salbiy nazorat testida qulflangan.
  */
 const FORBIDDEN_DELETE_VERBS = [
-  /o['ʻʼ‘’]chirish/iu,
+  /\bo['ʻʼ‘’]chirish/iu,
   /удалить/iu,
   /\bdelete\b/iu,
 ];
@@ -211,6 +226,19 @@ test("G-4: matcher AYNAN buyruq shaklini ushlaydi (nazorat)", () => {
   assert.ok(!hasDeleteVerb("Камера и её история не удаляются"));
   assert.ok(!hasDeleteVerb("onDelete"));
   assert.ok(!hasDeleteVerb("useDeleteZone"));
+
+  /*
+   * CHAP CHEGARANING salbiy nazorati (03-09 da o'lchandi): `ko'chirish`
+   * — «ko'chirmoq», D-10 ga aloqasi yo'q. Chegarasiz naqsh uni ushlab,
+   * darvozani `nvr-form.tsx` ning izohi ustida qizartirgan edi.
+   */
+  assert.ok(!hasDeleteVerb("Fokus parol maydoniga ko'chirish"));
+  assert.ok(!hasDeleteVerb("nusxa ko'chirish"));
+  assert.ok(!hasDeleteVerb("Ko'chirish"));
+
+  // …lekin buyruq fe'lining O'ZI baribir ushlanadi.
+  assert.ok(hasDeleteVerb("O'chirish"));
+  assert.ok(hasDeleteVerb("«O'chirish» tugmasi"));
 });
 
 test("G-4: `cameras.*` QIYMATLARIDA «o'chirish» fe'li yo'q", () => {
