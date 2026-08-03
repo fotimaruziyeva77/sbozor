@@ -5,6 +5,10 @@ import { Plus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryState } from "nuqs";
 
+import {
+  cameraEmptyKind,
+  isDiscoveryRunId,
+} from "@/components/cameras/camera-page-state";
 import { NvrCard } from "@/components/cameras/nvr-card";
 import { NvrForm } from "@/components/cameras/nvr-form";
 import { Button } from "@/components/ui/button";
@@ -151,7 +155,7 @@ function CamerasWorkspace() {
    *   bo'lmagan muammoni qidirishga majbur qilardi.
    */
   useEffect(() => {
-    if (run !== "" && !isUuid(run)) void setRun(null);
+    if (run !== "" && !isDiscoveryRunId(run)) void setRun(null);
   }, [run, setRun]);
 
   async function beginDiscovery(nvrId: string): Promise<void> {
@@ -410,38 +414,6 @@ function LoadFailed({ onRetry }: { onRetry: () => void }) {
         {t("common.retry")}
       </Button>
     </div>
-  );
-}
-
-/**
- * TO'RTTA bo'sh holatning YAGONA qarori (§10.2).
- *
- * ⚠ E-1 VA E-2 STRUKTURAVIY RAVISHDA ARALASHA OLMAYDI: birinchisining
- *   sharti `!hasNvr`, ikkinchisiniki esa `hasNvr`. Ikkalasini alohida
- *   `if` lar bilan ikki joyda hal qilish aynan «qurilma yo'q, lekin
- *   Kameralarni topish tugmasi turibdi» holatini tug'dirardi.
- *
- * ⚠ FUNKSIYA EKSPORT QILINMAYDI: Next 16 marshrut fayllarida
- *   tanilmagan eksportni rad etadi. 03-10 filtr qatorini qo'shganda uni
- *   `components/cameras/` ga ko'chiradi va birlik testi bilan qamraydi.
- */
-function cameraEmptyKind(input: {
-  archivedOnly: boolean;
-  filtersActive: boolean;
-  hasNvr: boolean;
-  visibleCount: number;
-}): "none" | "no-nvr" | "no-cameras" | "filtered" | "archived" {
-  if (input.visibleCount > 0) return "none";
-  if (!input.hasNvr) return "no-nvr";
-  if (input.archivedOnly) return "archived";
-  if (input.filtersActive) return "filtered";
-  return "no-cameras";
-}
-
-/** `?run=` qiymati UUID shaklidami (§5.4). */
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(
-    value,
   );
 }
 
