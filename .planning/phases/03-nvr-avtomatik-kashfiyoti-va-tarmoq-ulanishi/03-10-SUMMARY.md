@@ -334,7 +334,7 @@ Vendored qobiq `oninit()` da native boshqaruvlarni **yoqib qo'yadi**. §12.4 ula
 
 ---
 
-**Total deviations:** 8 auto-fixed (2 × Rule 1 + 1 × Rule 1, 4 × Rule 2, 1 × Rule 3 — jami 3 × Rule 1, 4 × Rule 2, 1 × Rule 3) + 6 ta rejadagi ziddiyat + 3 ta hujjatlashtirilgan chetlanish
+**Total deviations:** 8 auto-fixed (3 × Rule 1, 4 × Rule 2, 1 × Rule 3) + 6 ta rejadagi ziddiyat + 3 ta hujjatlashtirilgan chetlanish
 **Impact on plan:** Scope creep yo'q. To'rtala Rule 2 tuzatishi ham **qoidaning jimgina buzilish yo'lini** yopdi (o'lchanmagan L0 da'vosi, mangu poll, ulanmagan yuzalar, yetishmagan kalitlar); Rule 1 tuzatishlari ikkita haqiqiy xatoni (`status` maydoni, ikkilangan xato bloki) va bitta darvoza-ziddiyatini tuzatdi.
 
 ## Issues Encountered
