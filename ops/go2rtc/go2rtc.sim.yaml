@@ -1,0 +1,93 @@
+# go2rtc — SIMULYATSIYA oqimlari (CAM-09). `--profile sim` ortida.
+#
+# =============================================================================
+# (a) FFMPEG BAYROQLARI — nega aynan shular
+#
+#   -re            MAJBURIY. Usiz ffmpeg sintetik manbani real vaqt tezligida
+#                  emas, IMKON QADAR TEZ "o'ynab" tugatadi: oqim bir zumda
+#                  yopiladi va go2rtc uni qayta-qayta ishga tushiraveradi.
+#   -g 25          Har 25 kadrda keyframe. WebRTC ham, `/api/frame.jpeg` ham
+#                  keyframe kutadi — oraliq katta bo'lsa birinchi kadr
+#                  soniyalab kelmaydi va jonli ko'rish "ishlamayapti" ko'rinadi.
+#   -an            Audio yo'q — bozor kamerasida audio ishlatilmaydi.
+#   -preset ultrafast / -tune zerolatency
+#                  CI'da CPU byudjeti. Sifat bu yerda umuman muhim emas.
+#   drawtext       Kadrga KANAL RAQAMI va SOAT yoziladi. Bu diagnostik jihatdan
+#                  qimmatli: "kanal 7 ni so'radim, kadrda 3 yozilgan" xatosi
+#                  darhol ko'rinadi — bu aynan `{ch}01` raqamlash xatosining
+#                  alomati (A.2).
+#
+# Manba SINTETIK (`lavfi testsrc2`): git'ga binar video fayl QO'SHILMAYDI.
+# Dev'da real fayl kerak bo'lsa `ops/sim/media/` (gitignore) ishlatiladi —
+# bu fazada kerak emas (`03-RESEARCH.md` B.6 "video manbai" jadvali).
+#
+# =============================================================================
+# (b) D-11 CHEGARASI — `exec:` qayerda xavfsiz, qayerda RCE
+#
+# Bu yerdagi `exec:` **STATIK, `:ro` mount qilingan config fayldan** keladi.
+# Uni faqat repoga commit qila oladigan odam o'zgartira oladi — ya'ni u
+# oddiy kod, bajariladigan kirish ma'lumoti emas.
+#
+# go2rtc'ning HTTP API'si orqali `exec:` YOZISH esa butunlay boshqa narsa:
+#   PUT /api/streams?src=exec:<buyruq>   ->  ixtiyoriy buyruq ijrosi
+#   GHSA-wwww-5h25-jf98, CVSS 9.1
+#
+# Shuning uchun:
+#   * API `127.0.0.1:1984` ga bog'lanadi — u KONTEYNER ICHIDAN tashqarida
+#     umuman ko'rinmaydi (compose tarmog'idagi boshqa konteynerdan ham emas);
+#   * xost portiga hech narsa publish qilinmaydi (compose.yaml, T-01-04);
+#   * `core-api` sim go2rtc'iga UMUMAN bormaydi.
+# =============================================================================
+
+api:
+  # ⚠ Faqat loopback. Sim go2rtc'ining API'si hech kimga kerak emas, RCE
+  # yuzasi esa haqiqiy — shuning uchun u compose tarmog'idan ham yopiladi.
+  listen: "127.0.0.1:1984"
+
+rtsp:
+  # go2rtc'ning standart RTSP porti. `nvr-sim` uni `SIM_RTSP_PORT` orqali
+  # biladi va `adminAccesses` javobida e'lon qiladi (A.2 — port KASHF ETILADI).
+  listen: ":8554"
+
+log:
+  level: info
+
+streams:
+  # Kanal nomlari `nvr-sim` ning kanal raqamlari bilan mos: D-09 bo'yicha
+  # CI'da 6 kanal. 25 kanalli sekin stsenariy ISAPI darajasida ishlaydi
+  # (`POST /__sim__/state {"channel_count": 25}`) va RTSP oqimi talab qilmaydi.
+  sim_cam_01: >-
+    exec:ffmpeg -hide_banner -loglevel error -re -f lavfi
+    -i testsrc2=size=1280x720:rate=12
+    -vf "drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=sim_cam_01:x=24:y=24:fontsize=44:fontcolor=white:box=1:boxcolor=black@0.6,drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=%{localtime}:x=24:y=88:fontsize=32:fontcolor=white:box=1:boxcolor=black@0.6"
+    -c:v libx264 -preset ultrafast -tune zerolatency -g 25 -an -f rtsp {output}
+
+  sim_cam_02: >-
+    exec:ffmpeg -hide_banner -loglevel error -re -f lavfi
+    -i testsrc2=size=1280x720:rate=12
+    -vf "drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=sim_cam_02:x=24:y=24:fontsize=44:fontcolor=white:box=1:boxcolor=black@0.6,drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=%{localtime}:x=24:y=88:fontsize=32:fontcolor=white:box=1:boxcolor=black@0.6"
+    -c:v libx264 -preset ultrafast -tune zerolatency -g 25 -an -f rtsp {output}
+
+  sim_cam_03: >-
+    exec:ffmpeg -hide_banner -loglevel error -re -f lavfi
+    -i testsrc2=size=1280x720:rate=12
+    -vf "drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=sim_cam_03:x=24:y=24:fontsize=44:fontcolor=white:box=1:boxcolor=black@0.6,drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=%{localtime}:x=24:y=88:fontsize=32:fontcolor=white:box=1:boxcolor=black@0.6"
+    -c:v libx264 -preset ultrafast -tune zerolatency -g 25 -an -f rtsp {output}
+
+  sim_cam_04: >-
+    exec:ffmpeg -hide_banner -loglevel error -re -f lavfi
+    -i testsrc2=size=1280x720:rate=12
+    -vf "drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=sim_cam_04:x=24:y=24:fontsize=44:fontcolor=white:box=1:boxcolor=black@0.6,drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=%{localtime}:x=24:y=88:fontsize=32:fontcolor=white:box=1:boxcolor=black@0.6"
+    -c:v libx264 -preset ultrafast -tune zerolatency -g 25 -an -f rtsp {output}
+
+  sim_cam_05: >-
+    exec:ffmpeg -hide_banner -loglevel error -re -f lavfi
+    -i testsrc2=size=1280x720:rate=12
+    -vf "drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=sim_cam_05:x=24:y=24:fontsize=44:fontcolor=white:box=1:boxcolor=black@0.6,drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=%{localtime}:x=24:y=88:fontsize=32:fontcolor=white:box=1:boxcolor=black@0.6"
+    -c:v libx264 -preset ultrafast -tune zerolatency -g 25 -an -f rtsp {output}
+
+  sim_cam_06: >-
+    exec:ffmpeg -hide_banner -loglevel error -re -f lavfi
+    -i testsrc2=size=1280x720:rate=12
+    -vf "drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=sim_cam_06:x=24:y=24:fontsize=44:fontcolor=white:box=1:boxcolor=black@0.6,drawtext=fontfile=/usr/share/fonts/droid/DroidSans.ttf:text=%{localtime}:x=24:y=88:fontsize=32:fontcolor=white:box=1:boxcolor=black@0.6"
+    -c:v libx264 -preset ultrafast -tune zerolatency -g 25 -an -f rtsp {output}
