@@ -1567,11 +1567,39 @@ Bu fazada **birinchi marta** uchinchi tomon kodi bundlga kiradi. Registry darvoz
 | **Yangilash** | Faqat go2rtc versiyasi CLAUDE.md da o'zgarganda; yangilash **alohida PR**, diff **to'liq o'qiladi**, SHA-256 yangilanadi |
 | **Yozuv** | Ushbu bo'lim yangilash sanasi va tekshiruv natijasi bilan to'ldiriladi (quyidagi jadval) |
 
-| Sana | Versiya | SHA-256 | Ko'rik natijasi |
-|------|---------|---------|-----------------|
-| *(reja bajarilishida to'ldiriladi)* | v1.9.14 | *(hisoblanadi)* | *(to'ldiriladi)* |
+| Sana | Versiya | Fayl | SHA-256 | Ko'rik natijasi |
+|------|---------|------|---------|-----------------|
+| 2026-08-03 | `v1.9.14` | `video-stream.js` (2 574 bayt) | `86b4b69001242c3c71f9aedceabff06a6bc58155d8a0fe27970834aefc670b16` | ✅ toza — quyidagi jadvalga qarang |
+| 2026-08-03 | `v1.9.14` | `video-rtc.js` (22 089 bayt) | `d48ce627baf7c341a92c0f5844a3c546431f9db873ff21489671aba2ecfe64fb` | ✅ toza — quyidagi jadvalga qarang |
+| 2026-08-03 | `v1.9.14` | `LICENSE` (1 068 bayt) | `b0dcf4855af5a72b4dfbd9117c207b330f4cc35658576a0b5351d6e2becac546` | MIT, `Copyright (c) 2022 Alexey Khit` |
 
-> ⚠ **Bu jadval `gsd-executor` tomonidan to'ldiriladi.** Bo'sh qolgan holda G-7 testi yiqiladi va faza tugallanmagan hisoblanadi.
+**Olish yo'li va ikki tomonlama tasdiq (03-08 da bajarildi):**
+
+| Yo'l | Natija |
+|------|--------|
+| 1. `raw.githubusercontent.com/AlexxIT/go2rtc/v1.9.14/www/{video-stream,video-rtc}.js` | HTTP 200, yuqoridagi xeshlar |
+| 2. `alexxit/go2rtc:1.9.14` image'i (`docker run` + `GET /video-stream.js`, `/video-rtc.js`) | **AYNAN o'sha xeshlar** |
+
+> ⚠ `docker cp` ISHLAMAYDI: go2rtc statik fayllarni Go `embed` bilan **binarning ichida** olib yuradi (`find / -name video-stream.js` → 0 natija). Shuning uchun ikkinchi yo'l konteynerning o'z HTTP yuzasidan olish bilan bajarildi — versiya kafolati o'zgarmadi (image **tegi** bilan qulflangan). Ikki mustaqil manba bayt-ba-bayt mos kelgani — bu **yetkazib berish zanjiri tasdiqi**, oddiy nusxa emas.
+
+**Ko'rik natijasi — naqsh bo'yicha (ikkala fayl ham to'liq o'qildi):**
+
+| Naqsh | `video-stream.js` | `video-rtc.js` |
+|-------|-------------------|----------------|
+| `eval(` | yo'q | yo'q |
+| `new Function` | yo'q | yo'q |
+| `document.write` | yo'q | yo'q |
+| `fetch(` | yo'q | yo'q |
+| Obfuskatsiya / minifikatsiya | yo'q — o'qiladigan, izohli manba | yo'q |
+| Tashqi tarmoq ulanishi | yo'q | ⚠ **`pcConfig.iceServers`** — `stun:stun.cloudflare.com:3478`, `stun:stun.l.google.com:19302` |
+| Mikrofon / `getUserMedia` | yo'q | faqat `media` da `microphone` bo'lganda; standart qiymat `"video,audio"` — **chaqirilmaydi** |
+
+⚠ **Ikkita band 03-10 uchun majburiy sozlama:**
+
+1. **STUN serverlari** — `VideoRTC` ning standart `pcConfig` i uchinchi tomon STUN xizmatlariga (Cloudflare, Google) murojaat qiladi. Bu kod bajarish xavfi **emas**, lekin bozor tarmog'idan tashqariga chiqadigan **ko'rinmas bog'liqlik**. `live-player.tsx` `player.pcConfig` ni **o'zi belgilaydi** (yoki `iceServers: []` qiladi) — tunnel ichidagi topologiyada tashqi STUN baribir foyda bermaydi.
+2. **`media = "video"`** qilib qo'yiladi — oqim **ovozsiz** (§12.4) va `audio` ni so'rash NVR ning bitreyt byudjetini bekorga yeydi.
+
+> ⚠ **Bu jadval `gsd-executor` tomonidan to'ldirildi (03-08, Task 3).** Bo'sh qolgan holda G-7 testi yiqiladi va faza tugallanmagan hisoblanadi.
 
 ---
 

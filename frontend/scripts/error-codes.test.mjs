@@ -21,6 +21,17 @@
  * Oxirgi ikkitasi MA'LUMOTDAN keladigan kalitlar (kod ichida yozilmaydi),
  * ya'ni ular aynan `audit.actions.*` bilan bir xil sinfda — o'sha yerdagi
  * darvoza naqshi shu yerda takrorlanadi.
+ *
+ * 3-FAZA (G-1 va G-2) — TO'RTINCHI ro'yxat va u BOSHQA SINFDAN:
+ *   * `NVR_ERROR_CODES`  -> `lib/nvr-errors.ts` -> `cameras.errorCause.*`
+ *                           VA `cameras.errorFix.*`
+ *
+ * Farqi shundaki, bu yerda har kod uchun IKKITA matn talab qilinadi.
+ * D-02 aytadi: «xato hech qachon quruq "ulanmadi" bo'lmaydi — sababi VA
+ * tuzatish yo'li ko'rsatiladi». Qoidaning mexanik shakli aynan shu:
+ * `errorCause.{kod}` bor-u `errorFix.{kod}` yo'q bo'lsa test yiqiladi.
+ * Usiz D-02 hujjatdagi niyat bo'lib qolardi va birinchi shoshilinch
+ * PR'da jimgina buzilardi.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -33,12 +44,22 @@ const LOCALES = ["uz-Latn", "uz-Cyrl", "ru"];
 
 const API_TYPES = path.join(FRONTEND_ROOT, "src", "lib", "api-types.ts");
 const MARKET_ERRORS = path.join(FRONTEND_ROOT, "src", "lib", "market-errors.ts");
+const NVR_ERRORS = path.join(FRONTEND_ROOT, "src", "lib", "nvr-errors.ts");
 const BACKEND_SCHEMAS = path.join(
   REPO_ROOT,
   "services",
   "core-api",
   "app",
   "schemas.py",
+);
+const BACKEND_ISAPI_ERRORS = path.join(
+  REPO_ROOT,
+  "services",
+  "core-api",
+  "app",
+  "services",
+  "isapi",
+  "errors.py",
 );
 
 function read(file) {
@@ -61,6 +82,35 @@ function readTsStringArray(source, name) {
  */
 function readPythonFrozenset(source, name) {
   const start = source.indexOf(`${name}: Final[frozenset[str]] = frozenset(`);
+  assert.ok(start !== -1, `${name} backend faylida topilmadi`);
+
+  const rest = source.slice(start);
+  const end = rest.indexOf("\n)");
+  assert.ok(end !== -1, `${name} bloki yopilmagan`);
+
+  return rest
+    .slice(0, end)
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .map((line) => /^\s*"([a-z_]+)",\s*$/u.exec(line))
+    .filter(Boolean)
+    .map((match) => match[1]);
+}
+
+/**
+ * `NAME: Final[tuple[str, ...]] = ( ... )` ichidagi kodlar.
+ *
+ * `readPythonFrozenset` bilan bir xil naqsh, LEKIN alohida funksiya:
+ * `NVR_ERROR_CODES` ATAYIN `tuple` (tartib ma'noli — guruhlar izohlar
+ * bilan mos keladi), `MARKET_ERROR_CODES` esa `frozenset`. Bitta
+ * "universal" parser ikkala e'lonni ham yumshoq o'qib, biri
+ * o'zgarganda jimgina bo'sh ro'yxat qaytarardi.
+ *
+ * IZOH QATORLARI OLDIN TASHLANADI: blok ichidagi izohlarda qo'shtirnoqli
+ * o'zbekcha matn bor va uni kod deb o'qish testni yolg'on qizartirardi.
+ */
+function readPythonTuple(source, name) {
+  const start = source.indexOf(`${name}: Final[tuple[str, ...]] = (`);
   assert.ok(start !== -1, `${name} backend faylida topilmadi`);
 
   const rest = source.slice(start);
@@ -217,4 +267,98 @@ test("import.errors.* backend `ImportIssue.code` bilan BIR-BIRGA mos", () => {
       `${locale}.json da import.errors ro'yxati backend bilan mos emas`,
     );
   }
+});
+
+/* ---------------------------------------------------------------------------
+ * G-1 va G-2 — NVR XATO TAKSONOMIYASI (3-faza).
+ *
+ * Zanjir uch bo'g'inli va har bo'g'in BOSHQA TILDA yozilgan:
+ *
+ *   errors.py::NVR_ERROR_CODES   (Python, reyestr)
+ *        -> lib/nvr-errors.ts    (TypeScript, ko'zgu + tone/retry qarori)
+ *        -> messages/*.json      (JSON, uch tildagi SABAB va TUZATISH)
+ *
+ * Kompilyator bu bo'g'inlarni solishtira olmaydi va `i18n:check` ham
+ * ushlamaydi: u uchala faylning bir-biriga mosligini tekshiradi, TO'PLAM
+ * TO'LIQLIGINI emas — kalit uchala tilda ham yo'q bo'lsa parity baribir
+ * yashil.
+ * ------------------------------------------------------------------------ */
+
+const nvrCodes = readPythonTuple(read(BACKEND_ISAPI_ERRORS), "NVR_ERROR_CODES");
+
+test("NVR reyestri bo'sh emas (parser haqiqatan ishlayapti)", () => {
+  // Nazorat: `readPythonTuple` sinsa (masalan e'lon `list` ga
+  // aylantirilsa) quyidagi ikkala darvoza ham JIMGINA yashil bo'lardi.
+  assert.equal(
+    nvrCodes.length,
+    12,
+    `NVR_ERROR_CODES dan ${nvrCodes.length} kod o'qildi, kutilgan 12`,
+  );
+});
+
+test("G-2: har backend NVR kodi `lib/nvr-errors.ts` da mavjud", () => {
+  const source = read(NVR_ERRORS);
+  const mirrored = new Set(
+    [...source.matchAll(/^\s{2}"?([a-z_]+)"?:\s*\{\s*tone:/gmu)].map(
+      (match) => match[1],
+    ),
+  );
+
+  assert.ok(
+    mirrored.size >= 12,
+    `nvr-errors.ts dan atigi ${mirrored.size} yozuv o'qildi — parser sinigan bo'lishi mumkin`,
+  );
+
+  const missing = nvrCodes.filter((code) => !mirrored.has(code));
+  assert.deepEqual(
+    missing,
+    [],
+    `lib/nvr-errors.ts da yozuv yo'q: ${missing.join(", ")}. ` +
+      "Kod backendда bor, frontendda esa u `errors.generic` ga tushadi va " +
+      "admin NIMA qilishni bilmaydi (D-02).",
+  );
+
+  // Teskari yo'nalish ham muhim: ko'zguda ORTIQCHA kod bo'lsa, u hech
+  // qachon kelmaydigan xato uchun matn va qoida saqlab yurardi.
+  const extra = [...mirrored].filter((code) => !nvrCodes.includes(code));
+  assert.deepEqual(
+    extra,
+    [],
+    `lib/nvr-errors.ts da backendда YO'Q kod bor: ${extra.join(", ")}`,
+  );
+});
+
+test("G-1: har kod uchun SABAB va TUZATISH matni UCHALA tilda bor (D-02)", () => {
+  const problems = [];
+
+  for (const locale of LOCALES) {
+    const cameras = loadMessages(locale).cameras ?? {};
+    const causes = cameras.errorCause ?? {};
+    const fixes = cameras.errorFix ?? {};
+
+    for (const code of nvrCodes) {
+      if (typeof causes[code] !== "string" || causes[code].trim() === "") {
+        problems.push(`${locale}.json: cameras.errorCause.${code} YO'Q`);
+      }
+      if (typeof fixes[code] !== "string" || fixes[code].trim() === "") {
+        problems.push(`${locale}.json: cameras.errorFix.${code} YO'Q`);
+      }
+    }
+
+    // Teskari yo'nalish: matn bor, kod yo'q — o'lik kalit.
+    for (const code of Object.keys(causes)) {
+      if (!nvrCodes.includes(code)) {
+        problems.push(
+          `${locale}.json: cameras.errorCause.${code} backend reyestrida YO'Q`,
+        );
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "D-02 buzilgan — sabab va tuzatish JUFT bo'lishi SHART:\n  " +
+      problems.join("\n  "),
+  );
 });

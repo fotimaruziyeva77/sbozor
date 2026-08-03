@@ -14,6 +14,17 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Generatsiya artefakti — qo'lda tahrirlanmaydi (D-14).
     "messages/uz-Cyrl.json",
+    /*
+     * VENDORED UCHINCHI TOMON KODI — BAYT-BA-BAYT upstream nusxasi.
+     *
+     * Uni lint qilish TUZATISHGA majburlardi (`--fix` yoki qo'lda), va
+     * har tuzatish SHA-256 ni o'zgartirib, `scripts/vendor-integrity.
+     * test.mjs` ning butun mazmunini yo'q qilardi: qayd etilgan xesh
+     * endi `AlexxIT/go2rtc` ning `v1.9.14` tegidagi fayl bilan
+     * solishtirib bo'lmaydigan holga kelardi. Uslub darvozasi bu yerda
+     * YAXLITLIK darvozasidan past turadi.
+     */
+    "public/vendor/**",
   ]),
 ]);
 
