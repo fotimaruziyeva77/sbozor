@@ -53,17 +53,28 @@ from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sbozor_core.enums import CameraStatus
 
 from app.deps import Principal, TenantSessionDep, require_permission
 from app.repositories.nvr_repo import NvrRepository
-from app.schemas import CameraListResponse, CameraQuery, CameraRead, CameraUpdateRequest
+from app.schemas import (
+    CameraListResponse,
+    CameraQuery,
+    CameraRead,
+    CameraUpdateRequest,
+    LiveTokenResponse,
+)
 from app.security.audit import TABLE_CAMERAS, AuditReadIntent, audit_read
 from app.security.rbac import Permission
+from app.security.tokens import LIVE_TOKEN_MAX_TTL_SECONDS, issue_live_token
+from app.services.go2rtc import TRANSPORT_HINT, Go2rtcClient, Go2rtcError, live_view_url
+from app.services.rtsp import rtsp_url
 
 if TYPE_CHECKING:
-    from sbozor_core.models import Camera
+    from sbozor_core.models import Camera, NvrDevice
+
+    from app.settings import Settings
 
 log = structlog.get_logger(__name__)
 
@@ -337,3 +348,121 @@ async def restore_camera(
     await repo.restore_camera(camera_id)
     log.info("camera_restored", camera_id=str(camera_id))
     return _read(await camera_or_404(repo, camera_id))
+
+
+# ===========================================================================
+# Jonli ko'rish chiptasi (SC#6, D-08, D-11)
+# ===========================================================================
+
+
+_DEFAULT_RTSP_PORT = 554
+"""Kashfiyot RTSP portini topa olmagan holatdagi zaxira (03-04, A.2).
+
+⚠ TAXMIN QILINGANI QATORDA BELGILANADI (`nvr_devices.rtsp_port_assumed`)
+  va u jonli ko'rish yiqilganda BIRINCHI tekshiriladigan gumondor
+  (UI-SPEC §4.6). Bu yerda faqat `None` holati yopiladi: portsiz URL
+  umuman qurib bo'lmasdi va admin «jonli ko'rish ishlamayapti» degan
+  sababsiz xato olardi.
+"""
+
+_LIVE_UNAVAILABLE = "live_view_unavailable"
+
+
+async def _ensure_stream(state: object, camera: Camera, device: NvrDevice) -> None:
+    """Oqimni go2rtc'da LAZY ro'yxatga oladi (RESEARCH D.13).
+
+    Ro'yxatga olish AYNAN shu yerda — startup'da EMAS. Sabab ikkita:
+    startup'da 25 ta so'rov ilovaning ko'tarilishini NVR ning holatiga
+    bog'lab qo'yardi, va go2rtc qayta ishga tushganda ro'yxat baribir
+    yo'qolardi (`PUT /api/streams` XOTIRAGA yozadi). Lazy yo'lda DB
+    YAGONA HAQIQAT MANBAI bo'lib qoladi.
+
+    ⚠ `src` FOYDALANUVCHI KIRITMASIDAN QURILMAYDI: u `rtsp_url()` ning
+      chiqishi, ya'ni bizning kodimiz hosil qilgan satr. Allow-list
+      (`assert_safe_go2rtc_src`) baribir qo'llanadi — u `ensure_stream`
+      ichida, tarmoqqa chiqishdan OLDIN.
+    """
+    settings: Settings = state.settings  # type: ignore[attr-defined]
+    source = rtsp_url(
+        device.host,
+        device.rtsp_port if device.rtsp_port is not None else _DEFAULT_RTSP_PORT,
+        camera.channel_no,
+        # SUB-OQIM AFZAL: jonli ko'rish uchun to'liq HD oqim NVR ning
+        # bitreyt byudjetini yeydi (RESEARCH A.5) va ekrandagi kichik
+        # oynada farq ko'rinmaydi. `has_substream=False` bo'lgan kanalda
+        # asosiy oqimga tushiladi — kashfiyot buni o'lchagan.
+        substream=camera.has_substream,
+    )
+    async with Go2rtcClient(settings.go2rtc_url) as client:
+        await client.ensure_stream(camera.stream_name, source)
+
+
+@router.post(
+    "/{camera_id}/live-token",
+    response_model=LiveTokenResponse,
+    dependencies=[Depends(require_permission(Permission.CAMERA_VIEW))],
+)
+async def issue_live_token_for_camera(
+    camera_id: UUID,
+    request: Request,
+    principal: CameraViewerDep,
+    intent: LiveViewIntentDep,
+    session: TenantSessionDep,
+) -> LiveTokenResponse:
+    """Qisqa muddatli ULANISH CHIPTASI (`CAMERA_VIEW` + `live_view` auditi).
+
+    ⚠ HUQUQ DEKORATORDA (fayl boshidagi izoh): 403 olgan so'rov bu
+      tanaga YETIB KELMAYDI va jurnalda «ko'rdi» degan YOLG'ON DALIL
+      qolmaydi. O'lchov — `test_live_view.py::
+      test_forbidden_live_token_is_not_audited`.
+
+    ⚠ ARXIVLANGAN KAMERA UCHUN 404 (UI-SPEC §8.5): arxivlangan kanalning
+      oqimi go2rtc'da ro'yxatga olinmaydi (§6.6), ya'ni chipta berish
+      ishlamaydigan URL qaytarardi va UI xatoni transport nosozligi deb
+      ko'rsatardi. To'g'ri matn — «bu kamera topilmadi, u arxivlangan
+      bo'lishi mumkin».
+
+    ⚠ JAVOBDA `stream_name` OCHIQ KO'RINMAYDI (UI-SPEC §8.7) — u faqat
+      opaque `url` ning ichida.
+    """
+    market_id = _market_id(principal)
+    repo = NvrRepository(session, market_id)
+    camera = await camera_or_404(repo, camera_id)
+    if camera.is_archived:
+        raise _not_found()
+
+    device = await repo.get_device(camera.nvr_id)
+    if device is None:  # pragma: no cover - composite FK buni imkonsiz qiladi
+        raise _not_found()
+
+    try:
+        await _ensure_stream(request.app.state, camera, device)
+    except Go2rtcError as exc:
+        # ⚠ 503, 500 EMAS: bu bizning kodimizdagi xato emas, TASHQI
+        #   servisning holati. UI uni «jonli ko'rish hozir ishlamayapti»
+        #   deb ko'rsatadi va «Qayta urinish» affordansini beradi (D-02)
+        #   — bu yo'l NVR hisobiga urinish YUBORMAYDI, ya'ni §4.4 qulfi
+        #   bu yerga qo'llanmaydi (UI-SPEC §8.5).
+        log.warning("go2rtc_unavailable", camera_id=str(camera_id), error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_LIVE_UNAVAILABLE,
+        ) from exc
+
+    settings: Settings = request.app.state.settings
+    token = issue_live_token(
+        camera_id=camera_id,
+        market_id=market_id,
+        user_id=principal.user_id,
+        settings=settings,
+    )
+
+    intent.filters = {"camera_id": str(camera_id)}
+    intent.result_count = 1
+
+    log.info("live_token_issued", camera_id=str(camera_id))
+    return LiveTokenResponse(
+        url=live_view_url(camera.stream_name, token),
+        expires_in=LIVE_TOKEN_MAX_TTL_SECONDS,
+        transport_hint=TRANSPORT_HINT,
+    )

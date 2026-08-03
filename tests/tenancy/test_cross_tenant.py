@@ -144,6 +144,17 @@ EXEMPT_ROUTES: dict[str, str] = {
         "javob natijasida tug'iladi), ya'ni unda 'boshqa bozorning obyekti' tushunchasining "
         "o'zi yo'q"
     ),
+    "/internal/live-authz": (
+        "global — nginx `auth_request` nishoni: uni FOYDALANUVCHI emas, proxy "
+        "chaqiradi va unda `Authorization` sarlavhasi UMUMAN bo'lmaydi. Kontrakti "
+        "ham boshqa: 204 yoki 403, hech qachon 401/404 emas — ya'ni matritsaning "
+        "uchala token da'vosi (tokensiz/buzilgan/muddati o'tgan -> 401) bu yerda "
+        "MA'NOSIZ bo'lardi. Bozor konteksti imzolangan CHIPTADAN keladi, tokendan "
+        "emas. QAMROVI TO'LIQ QAYTA TIKLANGAN: `tests/integration/test_live_view.py` "
+        "tokensiz -> 403, muddati o'tgan -> 403, ODDIY access token -> 403, begona "
+        "bozor kamerasi -> 403 va boshqa kameraning oqim nomi -> 403 holatlarini "
+        "alohida o'lchaydi"
+    ),
     "/api/v1/audit/platform": (
         "global — platforma-global (`market_id IS NULL`) audit qatorlari, ya'ni "
         "HECH QAYSI bozorga tegishli bo'lmagan yozuvlar; tenant qatorlari undan "

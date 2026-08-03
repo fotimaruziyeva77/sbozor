@@ -40,6 +40,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.api.internal.live_authz import router as live_authz_router
 from app.api.v1.assignments import router as assignments_router
 from app.api.v1.assignments import stall_router as stall_assignments_router
 from app.api.v1.audit import router as audit_router
@@ -213,6 +214,23 @@ app.include_router(nvr_router, prefix=f"{API_V1_PREFIX}/nvr-devices")
 # `test_no_unclassified_routes` va `test_cross_tenant_object_returns_404`
 # qizaradi (yuqoridagi 2-faza izohidagi IKKI QO'LDA QADAM).
 app.include_router(cameras_router, prefix=f"{API_V1_PREFIX}/cameras")
+# --- 03-07: nginx `auth_request` nishoni (SC#6, D-11) ---
+#
+# ⚠ PREFIKSSIZ VA `API_V1_PREFIX` DAN TASHQARIDA — `/healthz` bilan bir
+# xil naqsh va bir xil sabab: bu marshrut MAHSULOT kontrakti emas, u
+# INFRASTRUKTURA (nginx) chaqiradigan ichki yuza. `/api/v1` ostiga
+# qo'yilsa u avtomatik ravishda cross-tenant matritsasidan 401/404
+# xulqini talab qilib qolardi, uning kontrakti esa 204/403.
+#
+# `include_in_schema=False` (router darajasida): OpenAPI mijozlar uchun
+# yoziladi va bu yerda mijoz YO'Q. `test_route_walker_matches_openapi`
+# faqat `documented <= walked` ni talab qiladi, ya'ni sxemadan
+# chiqarish darvozani buzmaydi.
+#
+# Matritsadan chiqarilishi `tests/tenancy/test_cross_tenant.py::
+# EXEMPT_ROUTES` da SABAB bilan yozilgan va qamrovi
+# `tests/integration/test_live_view.py` da TO'LIQ qayta tiklangan.
+app.include_router(live_authz_router)
 
 
 @app.exception_handler(DBAPIError)

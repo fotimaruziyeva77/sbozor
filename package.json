@@ -4,7 +4,7 @@
   "private": true,
   "description": "SBOZOR — root orkestratsiya skriptlari. Xostda `make` yo'q (Windows), shuning uchun barcha yorliqlar shu yerda.",
   "scripts": {
-    "up": "docker compose up -d db cache core-api --wait",
+    "up": "docker compose up -d db cache core-api worker go2rtc --wait",
     "down": "docker compose down",
     "logs": "docker compose logs -f",
     "migrate": "docker compose --profile migrate run --rm migrate alembic upgrade head",

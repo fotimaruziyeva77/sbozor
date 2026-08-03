@@ -2,7 +2,7 @@
 # Xost mashinasida `make` YO'Q (Windows) — barcha yorliqlar root `package.json` da.
 #
 # Profillar:
-#   (yo'q)   -> db, cache, core-api, worker : `npm run up`
+#   (yo'q)   -> db, cache, core-api, worker, go2rtc : `npm run up`
 #   migrate  -> Alembic one-shot job   : `npm run migrate`
 #   web      -> frontend (01-02 rejasi Dockerfile'ni yaratadi)
 #   proxy    -> nginx
@@ -229,6 +229,54 @@ services:
       cache:
         condition: service_healthy
     # DIQQAT: xost portiga publish QILINMAYDI — worker HTTP yuzasi bermaydi.
+    restart: unless-stopped
+
+  go2rtc:
+    # JONLI KO'RISHNING MEDIA SERVERI (03-07, CAM-03).
+    #
+    # ⚠ PROFILSIZ — `worker` bilan bir xil sabab: bu ISHLAB CHIQARISH
+    # komponenti va `npm run up` uni ham ko'taradi. Profil ortiga
+    # yashirilsa `POST /cameras/{id}/live-token` 503 qaytarardi va
+    # sabab «tarmoq nosozligi» bo'lib ko'rinardi.
+    #
+    # BESHINCHI KONTEYNER, TO'RTINCHI SERVIS EMAS: go2rtc — TAYYOR
+    # image, biz yozgan kod emas (`nginx`, `db`, `cache` bilan bir xil
+    # toifa). CLAUDE.md ning «aynan 3 ta servis» cheklovi BIZNING
+    # servislarimizga tegishli va u buzilmaydi.
+    image: alexxit/go2rtc:1.9.14
+    environment:
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      # ⚠ `:ro` MAJBURIY. go2rtc `PATCH /api/config` bilan o'z YAML'iga
+      # YOZA OLADI va o'sha yo'l `exec:` ni faylga muhrlab qo'yardi —
+      # ya'ni RCE qayta ishga tushirishdan keyin ham SAQLANIB qolardi.
+      # Faqat-o'qish mount bu yo'lni butunlay yopadi (D-11).
+      - ./ops/go2rtc/go2rtc.yaml:/config/go2rtc.yaml:ro
+    # =====================================================================
+    # ⚠⚠ `ports:` BLOKI ATAYIN YO'Q — VA U QO'SHILMAYDI.
+    #
+    # go2rtc ning HTTP API'si (1984) `PUT /api/streams?src=exec:<buyruq>`
+    # bilan konteynerda root sifatida IXTIYORIY BUYRUQ bajaradi
+    # (GHSA-wwww-5h25-jf98, CVSS 9.1). Portni xostga publish qilish shu
+    # yuzani internetga ochardi.
+    #
+    # WebRTC ning UDP 8555 i ham SHU YERDA emas, FIREWALL darajasida
+    # ochiladi (`03-PATTERNS.md` §3.11): compose `ports:` bandi Docker'ning
+    # `iptables` qoidalarini yozadi va u host firewall'ini CHETLAB O'TADI —
+    # ya'ni «UFW da yopiq» degan ishonch yolg'on bo'lib qolardi.
+    #
+    # Media yo'li: brauzer -> nginx `/live/...` (auth_request) -> go2rtc.
+    # =====================================================================
+    healthcheck:
+      # `/api/streams` EMAS: healthcheck aynan biz bloklayotgan yuzani
+      # so'rab turardi va u konfiguratsiyada «bu yo'l normal» degan
+      # taassurot qoldirardi. `nc` port ochiqligini tekshiradi — bu
+      # «jarayon tirikmi?» savoliga to'liq javob (`go2rtc-sim` bilan
+      # bir xil qaror).
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8554"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   frontend:

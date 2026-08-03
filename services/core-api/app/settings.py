@@ -111,6 +111,18 @@ class Settings(BaseSettings):
     # `SecretStr`: bu ham AYNAN o'sha kalit materiali.
     nvr_credential_keys_retired: SecretStr = SecretStr("")
 
+    # --- Jonli ko'rish (03-07, D-11) ---
+    #
+    # go2rtc ning ICHKI manzili — u compose tarmog'idan tashqarida
+    # MAVJUD EMAS va xost portiga publish qilinmaydi (`compose.yaml`).
+    #
+    # ⚠ STANDART QIYMAT BOR va bu `nvr_credential_key` bilan qarama-qarshi
+    #   emas: bu maydon SIR emas, u compose xizmatining nomi. Majburiy
+    #   qilinsa har bir test/CI muhiti uni takrorlashga majbur bo'lardi,
+    #   bo'sh qoldirilsa esa jonli ko'rish yo'li ish paytida tushunarsiz
+    #   xato berardi. Standart — mahsulot topologiyasining o'zi.
+    go2rtc_url: str = "http://go2rtc:1984"
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"

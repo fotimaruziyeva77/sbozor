@@ -1,0 +1,72 @@
+# go2rtc — ISHLAB CHIQARISH konfiguratsiyasi (CAM-03, D-11).
+#
+# =============================================================================
+# ⚠⚠ BU FAYLGA `exec:` YOZILMAYDI. HECH QACHON.
+#
+# `ops/go2rtc/go2rtc.sim.yaml` da `exec:` BOR va u xavfsiz: o'sha fayl
+# `--profile sim` ortida turadi va sintetik test oqimlarini hosil qiladi.
+# Bu fayl esa ISHLAB CHIQARISHDA, WireGuard tunneliga ulangan xostda
+# ishlaydi — u yerda ixtiyoriy buyruq ijrosi NVR ning butun tarmog'iga
+# ochilgan darvoza bo'lardi.
+#
+# `exec:` ning API orqali yozilishi — GHSA-wwww-5h25-jf98 (CVSS 9.1):
+#     PUT /api/streams?src=exec:<buyruq>  ->  konteynerda root sifatida RCE
+#
+# Uch qatlam bilan yopiladi (`app/services/go2rtc.py` modul docstringi):
+#   1. API porti xost portiga PUBLISH QILINMAYDI (`compose.yaml`);
+#   2. nginx `/api/streams|config|restart` ni `return 403` qiladi;
+#   3. `core-api` ning O'ZI faqat `rtsp://` manba yubora oladi.
+# =============================================================================
+#
+# =============================================================================
+# `streams:` BLOKI ATAYIN BO'SH — VA U SHUNDAY QOLADI.
+#
+# Oqimlar ISH PAYTIDA, ko'rish so'ralganda qo'shiladi
+# (`Go2rtcClient.ensure_stream` -> `PUT /api/streams`, RESEARCH D.13).
+# Sabab: `cameras` jadvali YAGONA HAQIQAT MANBAI va go2rtc
+# konfiguratsiyasi undan HOSILA bo'lishi kerak. Oqimlarni bu faylga
+# yozish ikkinchi manbani tug'dirardi — kamera arxivlanadi, YAML esa
+# eskirgan qatorni ushlab turaverardi va nomuvofiqlik faqat dala
+# nosozligida ko'rinardi.
+#
+# `PUT /api/streams` oqimni XOTIRAGA qo'shadi: go2rtc qayta ishga tushsa
+# ro'yxat yo'qoladi va keyingi ko'rish so'rovi uni QAYTA qo'shadi. Bu
+# NUQSON EMAS, u lazy ro'yxatga olishning to'g'ridan-to'g'ri natijasi
+# va u startup'dagi 25 ta so'rovni ham, drift'ni ham yo'q qiladi.
+# =============================================================================
+
+api:
+  # ⚠ FAQAT COMPOSE TARMOG'I. `0.0.0.0` bo'lsa ham xost portiga publish
+  # qilinmagani uchun API internetdan ko'rinmaydi, lekin `:1984` shakli
+  # "hamma interfeys" degani va host tarmog'i qo'shilgan kunda u jimgina
+  # ochilib qolardi. Aniq nom (`go2rtc`) — compose DNS'idagi shu
+  # konteynerning o'zi.
+  listen: "go2rtc:1984"
+
+  # ⚠ Basic-auth ATAYIN SOZLANMAGAN va bu xavfsizlik nuqsoni EMAS.
+  # go2rtc'da faqat GLOBAL parol bor va unda BOZOR tushunchasi yo'q —
+  # ya'ni u A bozori direktorini B bozori kamerasidan ajrata olmaydi
+  # (T-03-46). Avtorizatsiya butunlay nginx `auth_request` ->
+  # `core-api /internal/live-authz` zanjirida hal qilinadi. Bu yerga
+  # parol qo'yish "himoya bor" degan YOLG'ON hissini berardi va
+  # o'sha yolg'on ishonch tufayli haqiqiy darvoza keyinchalik
+  # "ortiqcha" deb olib tashlanishi mumkin edi.
+
+rtsp:
+  # NVR'ga chiquvchi RTSP mijozi uchun. Kiruvchi RTSP serveri kerak
+  # emas — bu yo'nalishda hech kim go2rtc'ga ulanmaydi.
+  listen: ":8554"
+
+webrtc:
+  # ⚠ UDP 8555 `compose.yaml` DA PUBLISH QILINMAYDI — u FIREWALL
+  # darajasida ochiladi (03-PATTERNS §3.11). WebRTC media HTTP
+  # proxy'dan O'TMAYDI, ya'ni bu port to'g'ridan-to'g'ri kerak.
+  # UDP bloklangan tarmoqda go2rtc ning veb-komponenti MSE'ga
+  # (WebSocket, nginx orqali) o'zi tushadi — UI o'zgarmaydi.
+  listen: ":8555"
+
+log:
+  level: info
+
+# Oqimlar ish paytida qo'shiladi (yuqoridagi izoh).
+streams: {}

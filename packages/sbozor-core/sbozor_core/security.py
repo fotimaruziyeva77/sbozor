@@ -32,10 +32,13 @@ __all__ = [
     "ALG",
     "MIN_SECRET_BYTES",
     "REQUIRED_CLAIMS",
+    "LiveClaims",
     "TokenClaims",
+    "decode_live",
     "decode_token",
     "dummy_verify",
     "encode_access",
+    "encode_live",
     "encode_refresh",
     "hash_password",
     "verify_password",
@@ -118,6 +121,16 @@ tekshiriladi (`decode_token` oxiri).
 
 _ACCESS = "access"
 _REFRESH = "refresh"  # noqa: S105 — claim qiymati, sir emas
+_LIVE = "live"
+"""Jonli ko'rish chiptasining `typ` claim'i (03-07, D-08).
+
+`typ` VA `aud` NING IKKALASI HAM AJRATILADI va bu takror emas: `typ`
+bir auditoriya ichidagi tur almashtirishni (T-01-13), `aud` esa
+BUTUNLAY boshqa iste'molchiga mo'ljallangan tokenning qabul qilinishini
+bloklaydi. Jonli chipta 60 soniyalik va u hech qachon 15 daqiqalik
+access token o'rnida ishlamasligi kerak — aks holda `/live/` ga
+kirish huquqi butun API'ga kirish huquqiga aylanardi.
+"""
 
 
 @dataclass(frozen=True)
@@ -286,4 +299,127 @@ def decode_token(
         jti=str(claims["jti"]),
         token_type=str(actual_type),
         family_id=str(raw_family_id) if raw_family_id else None,
+    )
+
+
+@dataclass(frozen=True)
+class LiveClaims:
+    """Jonli ko'rish chiptasidan olingan tekshirilgan da'volar (03-07, D-08).
+
+    `TokenClaims` DAN ALOHIDA SINF — va bu ataylab. Ikkalasi bir sinf
+    bo'lganda `roles` / `is_platform_admin` maydonlari jonli chiptada ham
+    ko'rinardi (bo'sh qiymat bilan) va chaqiruvchi ularga qarab huquq
+    qarori qabul qilishi mumkin edi. Jonli chiptada HUQUQ YO'Q: u
+    «shu foydalanuvchi shu kamerani ko'rishga ruxsat oldi» degan bir
+    martalik faktni tashiydi, boshqa hech nimani emas.
+
+    `market_id` MAJBURIY (`TokenClaims` da u `None` bo'lishi mumkin):
+    chipta bozor tanlangandan keyin beriladi va bozorsiz jonli ko'rish
+    tushunchasi yo'q.
+    """
+
+    user_id: UUID
+    market_id: UUID
+    camera_id: UUID
+    jti: str
+
+
+def encode_live(
+    *,
+    user_id: UUID,
+    market_id: UUID,
+    camera_id: UUID,
+    secret: str,
+    issuer: str,
+    audience: str,
+    ttl_seconds: int,
+) -> str:
+    """Jonli ko'rish uchun QISQA MUDDATLI chipta (D-08: `exp <= 60s`).
+
+    `encode_access` bilan bir xil shakl, uchta farq bilan:
+
+      * `ttl_seconds` (daqiqa emas) — 60 soniyalik muddatni daqiqada
+        ifodalab bo'lmaydi va `ttl_minutes=1` ni yaxlitlash chegara
+        haqidagi da'voni noaniq qilardi;
+      * `aud` chaqiruvchidan keladi va u API auditoriyasidan BOSHQA
+        bo'lishi kerak (`app.security.tokens.LIVE_TOKEN_AUDIENCE`);
+      * HUQUQQA OID CLAIM YO'Q (`roles`, `pa`): chipta avtorizatsiya
+        NATIJASI, uning kirishi emas. Rollarni yozish 60 soniya davomida
+        bekor qilingan huquq bilan ishlaydigan ikkinchi yo'l ochardi.
+
+    `cam` — kamera identifikatori. `mid` `encode_access` dagi bilan
+    AYNAN bir kalit: nginx `auth_request` nishoni ikkala tokenni ham
+    bir xil shaklda o'qiy oladi.
+    """
+    _assert_secret_length(secret)
+    now = datetime.now(UTC)
+    return jwt.encode(
+        {
+            "sub": str(user_id),
+            "iss": issuer,
+            "aud": audience,
+            "iat": now,
+            "exp": now + timedelta(seconds=ttl_seconds),
+            "jti": uuid4().hex,
+            "typ": _LIVE,
+            "mid": str(market_id),
+            "cam": str(camera_id),
+        },
+        secret,
+        algorithm=ALG,
+    )
+
+
+def decode_live(
+    token: str,
+    *,
+    secret: str,
+    issuer: str,
+    audience: str,
+) -> LiveClaims:
+    """Jonli chiptani tekshiradi va `LiveClaims` qaytaradi.
+
+    `decode_token` NING QOBIG'I EMAS, MUSTAQIL YO'L — sabab qaytariladigan
+    SHAKLDA: `decode_token` `TokenClaims` beradi va unda `cam` uchun joy
+    yo'q. `TokenClaims` ga ixtiyoriy `camera_id` qo'shish esa access
+    tokenni ham «kamera tokeni bo'lishi mumkin» degan shaklga
+    keltirardi va ikkala yo'lni chalkashtirardi.
+
+    Tekshiruvlar `decode_token` dagi bilan AYNAN bir xil ro'yxatdan
+    boradi (`REQUIRED_CLAIMS`, `algorithms=["HS256"]` LITERAL,
+    `verify_aud`/`verify_iss`/`verify_exp`) — ya'ni bu yo'l birorta
+    darvozani ham yumshatmaydi.
+
+    Raises:
+        jwt.ExpiredSignatureError: muddat tugagan (D-08 ning butun mazmuni).
+        jwt.InvalidTokenError: imzo, algoritm, `iss`/`aud`, majburiy claim
+            yoki token TURI mos kelmasa.
+    """
+    claims = jwt.decode(
+        token,
+        secret,
+        # ANIQ ro'yxat — token header'idagi `alg` E'TIBORGA OLINMAYDI.
+        algorithms=["HS256"],
+        audience=audience,
+        issuer=issuer,
+        options={
+            "require": [*REQUIRED_CLAIMS, "mid", "cam"],
+            "verify_exp": True,
+            "verify_aud": True,
+            "verify_iss": True,
+            "enforce_minimum_key_length": True,
+        },
+    )
+
+    actual_type = claims.get("typ")
+    if actual_type != _LIVE:
+        raise jwt.InvalidTokenError(
+            f"wrong token type: kutilgan {_LIVE!r}, kelgani {actual_type!r}"
+        )
+
+    return LiveClaims(
+        user_id=UUID(claims["sub"]),
+        market_id=UUID(claims["mid"]),
+        camera_id=UUID(claims["cam"]),
+        jti=str(claims["jti"]),
     )
