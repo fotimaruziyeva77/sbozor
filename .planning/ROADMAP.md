@@ -221,7 +221,7 @@ Plans:
   7. **Butun yuqoridagi oqim real uskunasiz, simulyatsiya qilingan Hikvision NVR ustida uchidan-uchiga ishlaydi va CI'da o'lchanadi** — real qurilmaga o'tish sozlama o'zgarishi bo'ladi, kod o'zgarishi emas
   8. **WR-02 (2-fazadan eskalatsiya, YUQORI ustuvorlik):** `market_delete_draft()` o'n ikki jadval bo'ylab kaskad o'chiradi va uning yagona chegarasi ilova qatlamida — DB darajasida hech narsa uni to'xtatmaydi. Bu fazada u migratsiya bilan DB darajasida cheklanadi (qoralama bo'lmagan bozorni o'chirish imkonsiz bo'lishi test bilan isbotlanadi). 2-fazada tuzatilmadi, chunki `0011` bilan bir oynaga tiqish downgrade'ni ishonchsiz qilardi
 
-**Plans**: 11 plans in 10 waves
+**Plans**: 14 plans in 12 waves (11 ta asosiy + 3 ta bo'shliq yopish, `03-VERIFICATION.md` 5/8)
 Plans:
 **Wave 1** *(Wave 0 darvozalari — birinchi migratsiyadan OLDIN, yolg'iz)*
 
@@ -248,6 +248,17 @@ Plans:
 **Wave 10**
 
 - [x] 03-11-PLAN.md — Sakkizala mezonning yagona darvozasi, bloklanmaydigan `hardware` to'plami, runbook va validatsiya imzosi (W10)
+
+**Bo'shliq yopish** *(`03-VERIFICATION.md` GAP-1/GAP-2 — SC#6 ning ikkinchi yarmi ulanmagan edi)*
+
+*Bo'shliq to'lqini 1 (parallel — fayllar kesishmaydi)*
+
+- [ ] 03-12-PLAN.md — Sim NVR o'z manzilida RTSP xizmat qiladi (autentifikatsiya majburiy), o'lik `SIM_*` konfiguratsiyasi olib tashlanadi, darvoza zanjiridagi 31 % qayta bajarish yo'q qilinadi (BW1)
+- [ ] 03-13-PLAN.md — go2rtc'ga RTSP rekvizitini yetkazish: `decrypt_nvr_password` ning ikkinchi chaqiruv joyi, `SecretStr` tashuvchisi va uchta oqish yo'lining yopilishi (BW1)
+
+*Bo'shliq to'lqini 2*
+
+- [ ] 03-14-PLAN.md — Mock'siz uchidan-uchiga jonli ko'rish o'lchovi (kadr keladi), meta-darvoza, talab holatlari va `03-HUMAN-UAT.md` (BW2)
 
 **UI hint**: yes
 **Research flag**: yes — `/gsd-plan-phase 3 --research-phase 3`. Tadqiqot **simulyator-birinchi** yondashuvda o'tkaziladi: Hikvision ISAPI kashfiyot endpointlari (`/ISAPI/System/deviceInfo`, `/ISAPI/ContentMgmt/InputProxy/channels`, `/ISAPI/System/Video/inputs/channels`), kanal raqamlash qoidasi (`{ch}01` asosiy / `{ch}02` sub), Digest autentifikatsiyasining soat farqiga sezgirligi, firmware'ning `digest/basic` talabi, NVR'ning bir vaqtdagi masofaviy sessiya limiti (odatda 6–16) va CGNAT ostidagi WireGuard topologiyasi. Bularning har biri simulyatorda modellashtiriladi, real qurilmada esa tasdiqlanadi.
