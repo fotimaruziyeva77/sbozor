@@ -1,0 +1,172 @@
+# MediaMTX — sim NVR'ning RTSP OYOG'I (CAM-09, CAM-03). `--profile sim` ortida.
+#
+# =============================================================================
+# (a) BU FAYL ISHLAB CHIQARISHGA HECH QACHON CHIQMAYDI
+#
+# Uni faqat `nvr-sim-rtsp` konteyneri o'qiydi, u esa `profiles: ["sim"]`
+# ortida turadi: profilsiz `docker compose up` bu konteynerni UMUMAN
+# ko'rmaydi (T-03-07). Prod media serveri — `ops/go2rtc/go2rtc.yaml`, va
+# unda `exec:` YO'Q.
+#
+# =============================================================================
+# (b) D-11 CHEGARASI — buyruq QAYERDAN kelsa xavfsiz
+#
+# Quyidagi `runOnDemand` buyrug'i **statik, `:ro` mount qilingan fayldan**
+# keladi. Uni faqat repoga commit qila oladigan odam o'zgartira oladi —
+# ya'ni u oddiy kod, bajariladigan kirish ma'lumoti EMAS.
+#
+# Buyruqni ISH PAYTIDA API orqali yozish esa butunlay boshqa narsa
+# (go2rtc'da: `PUT /api/streams?src=exec:<buyruq>` -> GHSA-wwww-5h25-jf98,
+# CVSS 9.1). Shuning uchun bu yerda `api:` O'CHIRILGAN va konteynerda
+# hech qanday port publish qilinmaydi.
+#
+# =============================================================================
+# (c) NEGA `nvr-sim` NING TARMOQ FAZASIDA (compose.yaml: network_mode)
+#
+# Real NVR'da ISAPI ham, RTSP ham **BITTA manzilda** yashaydi va kashfiyot
+# hosil qiladigan URL'ning xosti `nvr_devices.host` dan keladi. Ikki xil
+# xost (eski `go2rtc-sim`) aynan shu sababdan bo'shliq edi: mahsulot
+# yo'lidan boradigan test yozilganda ulanadigan joy yo'q edi (03-VERIFICATION
+# GAP-1). Shuning uchun bu server `nvr-sim` bilan bitta netns'da turadi va
+# `nvr-sim:554` shu yerga tushadi.
+#
+# =============================================================================
+# (d) `drawtext` ATAYIN YO'Q — VA BU REGRESSIYA EMAS
+#
+# Eski `go2rtc.sim.yaml` kadrga kanal raqamini `drawtext` bilan yozardi va
+# u SHRIFT YO'LIGA bog'liq edi (`/usr/share/fonts/droid/DroidSans.ttf`).
+# Bu image'da shriftning borligi kafolatlanmagan, yo'q shrift esa ffmpeg'ni
+# **jimgina** yiqitardi: oqim ochilmasdi, sabab esa faqat konteyner
+# jurnalida ko'rinardi.
+#
+# Kanal identifikatorining to'g'riligi endi vizual emas, **STRUKTURAVIY**
+# kafolatlanadi: `paths:` dagi regulyar ifoda har bir yo'l uchun ALOHIDA
+# talab bo'yicha instansiya ochadi va ffmpeg chiqishi `$MTX_PATH` ga
+# qaytariladi — ya'ni "kanal 7 ni so'radim, kanal 3 ning oqimini oldim"
+# holati tuzilma darajasida mumkin emas.
+# =============================================================================
+
+logLevel: info
+logDestinations: [stdout]
+
+###############################################
+# FAQAT RTSP. Qolgan HAMMA server o'chirilgan (T-03-83).
+#
+# Bu konteyner `nvr-sim` ning tarmoq fazasida turadi, ya'ni bu yerda ochiq
+# qolgan har qanday tinglovchi sim'ning hujum yuzasiga QO'SHILADI. Server
+# bitta ish bajaradi — RTSP xizmat qiladi.
+
+rtsp: true
+
+# ⚠ 554 — `compose.yaml` dagi `SIM_RTSP_PORT_ADVERTISED` ning STANDART
+# qiymati bilan bir xil bo'lishi SHART: kashfiyot portni `adminAccesses`
+# javobidan oladi va `rtsp://<host>:<o'sha port>/...` ni quradi.
+# `tests/integration/test_phase3_criteria.py` aynan 554 ni talab qiladi.
+rtspAddress: :554
+
+# `multicast` OLIB TASHLANDI: u bu yerda hech kimga kerak emas, lekin
+# standart ro'yxatda turgani uchun server multicast guruhlariga qo'shilardi.
+# `tcp` va `udp` — mijoz (go2rtc, ffmpeg) qaysi birini tanlasa ham ishlaydi.
+rtspTransports: [tcp, udp]
+
+# Real Hikvision NVR RTSP'da **Digest** so'raydi; MediaMTX ning standarti
+# esa faqat `basic`. Ikkalasi ham e'lon qilinadi — aks holda sim mijozdan
+# real qurilmadan KAMROQ narsa talab qilardi va "rekvizit uzatiladi"
+# da'vosi prodda boshqacha xulq ustida yashil bo'lardi.
+rtspAuthMethods: [basic, digest]
+
+rtmp: false
+hls: false
+webrtc: false
+srt: false
+moq: false
+api: false
+metrics: false
+pprof: false
+playback: false
+
+###############################################
+# AUTENTIFIKATSIYA — BU FAYLNING ENG MUHIM QISMI
+#
+# ⚠ Anonim O'QISH RAD ETILADI. Bu qulaylik masalasi emas: manba anonim
+#   o'qishga ruxsat bersa, rekvizit uzatish oyog'i (03-13) UMUMAN
+#   o'lchanmasdan qolardi va uchidan-uchiga test (03-14) rekvizit
+#   tashlab yuborilgan holatda ham yashil bo'lardi.
+
+authMethod: internal
+
+authInternalUsers:
+  # (1) HAR QANDAY manzildan keladigan anonim foydalanuvchi — HUQUQSIZ.
+  #     Bo'sh `permissions` ro'yxati "hech nima mumkin emas" degani;
+  #     yozuvning o'zi kerak, chunki u standart `any/publish+read+playback`
+  #     yozuvini ALMASHTIRADI (ro'yxat butunlay qayta yoziladi).
+  - user: any
+    pass:
+    ips: []
+    permissions: []
+
+  # (2) Kashfiyot bazaga yozadigan rekvizit — FAQAT O'QISH.
+  #     ⚠ Parol `compose.yaml` dagi `SIM_PASSWORD` ning standart qiymati
+  #     bilan bir xil bo'lishi SHART. Ikkalasi ajralib ketsa go2rtc to'g'ri
+  #     parol yuborib ham `401` olardi va sabab "kod buzilgan" bo'lib
+  #     ko'rinardi. Nomuvofiqlikni `tests/unit/test_compose_sim_env.py`
+  #     mexanik ravishda to'sadi.
+  - user: admin
+    pass: Sim12345
+    ips: []
+    permissions:
+      - action: read
+
+  # (3) LOOPBACK'dan keladigan anonim foydalanuvchi — FAQAT PUBLISH.
+  #     Buni `runOnDemand` ichidagi ffmpeg ishlatadi: u o'z oqimini
+  #     `rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH` ga QAYTARIB beradi. Bu
+  #     yozuvsiz publish rad etilardi va yo'l "hech qachon tayyor
+  #     bo'lmaydi" holatida qotib qolardi.
+  #     Loopback bu netns ichida `nvr-sim` + `nvr-sim-rtsp` juftligining
+  #     ICHI demakdir — compose tarmog'idagi boshqa konteyner bu yozuvga
+  #     tusha OLMAYDI.
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: publish
+
+###############################################
+# YO'LLAR
+
+pathDefaults:
+  # ffmpeg birinchi tomoshabin kelganda ishga tushadi va oxirgisi ketgach
+  # yopiladi — jarayonlar to'planib qolmaydi (T-03-86).
+  runOnDemandStartTimeout: 15s
+  runOnDemandCloseAfter: 15s
+
+paths:
+  # Hikvision `{kanal}{oqim}` shakli: `/Streaming/Channels/101` (kanal 1,
+  # asosiy oqim), `/Streaming/Channels/102` (sub-oqim), `/Streaming/
+  # Channels/1601` (kanal 16). `~` prefiksi MediaMTX'da regulyar ifodani
+  # bildiradi (o'rnatilgan versiyaning mos yozuvlar konfiguratsiyasi:
+  # «It's possible to use regular expressions by using a tilde as prefix»).
+  #
+  # ⚠ Yo'lda SLESH bor — aynan shu sababdan bu server tanlandi: go2rtc'ning
+  #   oqim nomi <-> URL yo'li moslashuvi sleshli nom uchun HUJJATLASHTIRILMAGAN
+  #   va darvozani hujjatsiz xulqqa bog'lash mumkin emas edi.
+  #
+  # ⚠ Bitta yozuv — kanal sonidan MUSTAQIL. `SIM_CHANNEL_COUNT` 6 dan 25 ga
+  #   o'zgarsa bu fayl TEGILMAYDI (D-09 ning sekin stsenariysi).
+  "~^Streaming/Channels/[0-9]+$":
+    # Sintetik manba: git'ga binar video fayl QO'SHILMAYDI.
+    #   -re                 MAJBURIY — usiz ffmpeg sintetik manbani real vaqt
+    #                       tezligida emas, imkon qadar tez "o'ynab" tugatadi:
+    #                       oqim bir zumda yopiladi va server uni qayta-qayta
+    #                       ishga tushiraveradi.
+    #   -g 24               Har 24 kadrda keyframe. `/api/frame.jpeg` ham,
+    #                       WebRTC ham keyframe kutadi — oraliq katta bo'lsa
+    #                       birinchi kadr soniyalab kelmaydi va jonli ko'rish
+    #                       "ishlamayapti" ko'rinadi.
+    #   -an                 Audio yo'q — bozor kamerasida audio ishlatilmaydi.
+    #   ultrafast/zerolatency  CI'dagi CPU byudjeti. Sifat bu yerda muhim emas.
+    runOnDemand: >-
+      ffmpeg -hide_banner -loglevel error -re -f lavfi
+      -i testsrc2=size=1280x720:rate=12
+      -c:v libx264 -preset ultrafast -tune zerolatency -g 24 -an
+      -f rtsp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH

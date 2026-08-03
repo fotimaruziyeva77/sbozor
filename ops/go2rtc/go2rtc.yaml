@@ -3,8 +3,9 @@
 # =============================================================================
 # ⚠⚠ BU FAYLGA `exec:` YOZILMAYDI. HECH QACHON.
 #
-# `ops/go2rtc/go2rtc.sim.yaml` da `exec:` BOR va u xavfsiz: o'sha fayl
-# `--profile sim` ortida turadi va sintetik test oqimlarini hosil qiladi.
+# `ops/mediamtx/mediamtx.yml` da oqim hosil qiluvchi BUYRUQ bor
+# (`runOnDemand`) va u xavfsiz: o'sha fayl `--profile sim` ortida turadi
+# va sintetik test oqimlarini hosil qiladi.
 # Bu fayl esa ISHLAB CHIQARISHDA, WireGuard tunneliga ulangan xostda
 # ishlaydi — u yerda ixtiyoriy buyruq ijrosi NVR ning butun tarmog'iga
 # ochilgan darvoza bo'lardi.
