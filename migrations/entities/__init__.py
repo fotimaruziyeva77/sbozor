@@ -37,6 +37,8 @@ __all__ = [
     "ALL_TENANT_TABLES",
     "CALENDAR_TENANT_TABLES",
     "MARKET_DOMAIN_TENANT_TABLES",
+    "NVR_AUDITED_TABLES",
+    "NVR_TENANT_TABLES",
     "RLS_TABLES",
     "TEMPORAL_TENANT_TABLES",
     "TENANT_TABLES",
@@ -123,12 +125,68 @@ boshlanadi (Pitfall 1).
 CALENDAR_TENANT_TABLES: tuple[str, ...] = ("market_calendar_exceptions",)
 """`0010_calendar` — yopiq kun istisnolari (MARKET-05, D-18)."""
 
+
+# ===========================================================================
+# 3-FAZA — NVR DOMENI
+# ===========================================================================
+
+NVR_TENANT_TABLES: tuple[str, ...] = (
+    "nvr_devices",
+    "nvr_credentials",
+    "cameras",
+    "nvr_discovery_runs",
+)
+"""`0012_nvr_domain` yaratadigan tenant jadvallari (CAM-01/CAM-08).
+
+TARTIB — FK bo'yicha OTA-ONADAN bolalarga: `nvr_devices` birinchi, chunki
+qolgan uchtasi unga composite FK `(market_id, nvr_id)` bilan tayanadi.
+`0012` shu ro'yxat ustidan `enable_tenant_rls` + `tenant_policy` +
+`owner_bootstrap_policy` tsiklini bajaradi, `downgrade()` esa
+`reversed(...)` bilan yuradi.
+
+BU RO'YXAT AUDIT UCHUN EMAS. Trigger faqat `NVR_AUDITED_TABLES` ga ulanadi
+(pastda) va farq ATAYIN — `nvr_credentials` RLS ostida bo'lishi SHART, audit
+triggeri ostida esa BO'LMASLIGI shart.
+
+QARORLAR (`03-CONTEXT.md`):
+  * D-07 — `nvr_devices.tunnel_subnet` bozorlar ARO noyob. Bu shu domendagi
+    YAGONA tenant chegarasidan tashqaridagi cheklov va u `0012` da qisman
+    UNIQUE indeks sifatida, sababi bilan yoziladi.
+  * D-10 — kamera SOFT-DELETE (`cameras.is_archived`). Qattiq `DELETE`
+    faqat `market_delete_draft()` kaskadida (qoralama bozor).
+"""
+
+NVR_AUDITED_TABLES: tuple[str, ...] = ("nvr_devices", "cameras")
+"""`0012_nvr_domain` da `attach_audit_trigger()` ULANADIGAN jadvallar.
+
+⚠ `nvr_credentials` BU RO'YXATDA ATAYIN YO'Q — ikki mustaqil sabab
+(`sbozor_core.schema_contract.AUDITED_TABLES` docstringining to'rtinchi
+bandi va `sbozor_core.models.nvr.NvrCredential` docstringi):
+
+  (a) `fn_audit_row()` `to_jsonb(NEW)` yozadi -> Fernet shifrmatni
+      `audit_log` ga tushardi va kalit buzilganda TARIXIY parollarni berardi;
+  (b) `attach_audit_trigger()` `id uuid` PK talab qiladi, bu 1:1 jadvalda
+      esa PK — `nvr_id`.
+
+`nvr_discovery_runs` ham ro'yxatda YO'Q, lekin BOSHQA sababdan: u
+hodisa jurnali va faqat QO'SHILADI (tahrirlanmaydi) — uning ustiga audit
+qo'yish `audit_log` ga o'sha ma'lumotning ikkinchi nusxasini yozardi.
+Kashfiyotning ishga tushishi va yakuni ILOVA qatlamida auditga tushadi
+(`03-PATTERNS.md` §S-6).
+
+Ro'yxat ALOHIDA, chunki `0012` ikki xil tsikl qiladi: RLS `NVR_TENANT_TABLES`
+bo'yicha, audit esa shu yerdan. Bitta ro'yxat bo'lganda istisnoni
+migratsiyaning ichida `if table != "nvr_credentials"` shaklida yozishga
+to'g'ri kelardi — ya'ni qaror kodning ichiga yashiringan bo'lardi.
+"""
+
 ALL_TENANT_TABLES: tuple[str, ...] = (
     *TENANT_TABLES,
     *MARKET_DOMAIN_TENANT_TABLES,
     *TEMPORAL_TENANT_TABLES,
     *VENDOR_TENANT_TABLES,
     *CALENDAR_TENANT_TABLES,
+    *NVR_TENANT_TABLES,
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 

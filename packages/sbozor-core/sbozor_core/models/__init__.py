@@ -43,10 +43,26 @@ from sbozor_core.models.market import (
     Vendor,
     Zone,
 )
+from sbozor_core.models.nvr import (
+    CAMERA_STATUS_CHECK,
+    CAMERA_STATUS_VALUES,
+    DISCOVERY_RUN_ACTIVE_STATUSES,
+    DISCOVERY_RUN_STATUS_CHECK,
+    DISCOVERY_RUN_STATUS_VALUES,
+    Camera,
+    NvrCredential,
+    NvrDevice,
+    NvrDiscoveryRun,
+)
 from sbozor_core.models.ops import AUDIT_BUSINESS_DATE_EXPR, AuditLog
 
 __all__ = [
     "AUDIT_BUSINESS_DATE_EXPR",
+    "CAMERA_STATUS_CHECK",
+    "CAMERA_STATUS_VALUES",
+    "DISCOVERY_RUN_ACTIVE_STATUSES",
+    "DISCOVERY_RUN_STATUS_CHECK",
+    "DISCOVERY_RUN_STATUS_VALUES",
     "LOCALE_CHECK",
     "LOCALE_VALUES",
     "NAMING_CONVENTION",
@@ -59,9 +75,13 @@ __all__ = [
     "TARIFF_BUSINESS_DATE_EXPR",
     "AuditLog",
     "Base",
+    "Camera",
     "Market",
     "MarketCalendarException",
     "MarketProfile",
+    "NvrCredential",
+    "NvrDevice",
+    "NvrDiscoveryRun",
     "RefreshToken",
     "Stall",
     "StallAssignment",

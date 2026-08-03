@@ -45,6 +45,24 @@ INDEX_EXCEPTIONS = {
     # Refresh cookie kelganda bozor HALI noma'lum: token aynan shu global
     # kalit bo'yicha topiladi va bozor undan keyin aniqlanadi.
     "uq_refresh_tokens_jti",
+    # --- 3-faza, `0012_nvr_domain`. IKKALASI HAM ATAYIN GLOBAL. ---
+    #
+    # D-07: ikkita bozor bir xil `tunnel_subnet` e'lon qilsa VPS ning
+    # marshrut jadvali chalkashadi va A bozorining trafigi B ga ketishi
+    # mumkin — ya'ni tenant izolyatsiyasi TARMOQ darajasida buzilardi
+    # (T-03-19). To'qnashuv aynan bozorlar ORASIDA yuz beradi, shuning
+    # uchun noyoblikni `(market_id, tunnel_subnet)` ga tushirish himoyani
+    # BUTUNLAY yo'q qilardi: har bozor o'z ichida noyob bo'lardi va
+    # muammo sezilmasdan qolardi. Indeks qisman (`IS NOT NULL`) — subnet
+    # hali e'lon qilinmagan qurilmalar bir-biriga xalaqit bermaydi.
+    "uq_nvr_devices_tunnel_subnet_global",
+    # go2rtc BITTA jarayon va uning oqim nomlari fazosi BARCHA bozorlar
+    # uchun UMUMIY (`03-RESEARCH.md` D.13). Ya'ni `stream_name` ning
+    # noyobligi tenant ichida emas, PLATFORMA bo'yicha bo'lishi shart —
+    # aks holda ikki bozorning oqimi go2rtc'da bir-birining ustiga
+    # yozilardi va B bozorining direktori A bozorining kamerasini ko'rib
+    # qolishi mumkin edi. Nom `cam_<uuid>` shaklida hosil qilinadi.
+    "uq_cameras_stream_name",
 }
 
 EXPECTED_DEFINER_FUNCTIONS = {

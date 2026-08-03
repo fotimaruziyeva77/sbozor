@@ -94,6 +94,26 @@ def _is_open(conn: Connection[TupleRow], market_id: UUID, day: date) -> bool:
     return bool(_one(conn, IS_OPEN, (market_id, day))[0])
 
 
+def _drop_probe_market(conn: Connection[TupleRow], market_id: UUID) -> None:
+    """Probe bozorini o'chiradi — AVVAL QORALAMAGA QAYTARIB.
+
+    Quyidagi ikkala fixture ham bozorni ATAYIN FAOL holda yaratadi (xom
+    `INSERT INTO markets`, `is_active` `DEFAULT true`): ular ifodalaydigan
+    nosozlik — yarim ko'chirilgan yoki qo'lda buzilgan ma'lumot — aynan
+    JONLI bozorda yuz beradi, qoralamada emas. Bayroqni yaratishda tushirish
+    testning o'z holatini soxtalashtirardi.
+
+    Lekin `0013_market_delete_guard` faol bozorni o'chirishni DB darajasida
+    taqiqlaydi (WR-02), ya'ni teardown `23514` bilan yiqilardi. Yechim
+    mahsulotning O'Z yechimi bilan bir xil va `fixtures/two_markets.py::
+    cleanup_two_markets()` hamda `fixtures/market_domain.py::
+    cleanup_market_domain()` da AYNAN shu naqsh ishlatiladi: bayroq
+    o'chirishdan bir satr oldin tushiriladi.
+    """
+    conn.execute("UPDATE markets SET is_active = false WHERE id = %s", (str(market_id),))
+    conn.execute("DELETE FROM markets WHERE id = %s", (str(market_id),))
+
+
 @pytest.fixture
 def market_without_profile(sync_owner_conn: Connection[TupleRow], migrated: None) -> Iterator[UUID]:
     """`market_profile` qatori BO'LMAGAN bozor — fail-closed'ning 1-tarmog'i.
@@ -116,7 +136,7 @@ def market_without_profile(sync_owner_conn: Connection[TupleRow], migrated: None
     try:
         yield market_id
     finally:
-        sync_owner_conn.execute("DELETE FROM markets WHERE id = %s", (str(market_id),))
+        _drop_probe_market(sync_owner_conn, market_id)
 
 
 @pytest.fixture
@@ -152,7 +172,7 @@ def market_with_unchosen_weekdays(
         sync_owner_conn.execute(
             "DELETE FROM market_profile WHERE market_id = %s", (str(market_id),)
         )
-        sync_owner_conn.execute("DELETE FROM markets WHERE id = %s", (str(market_id),))
+        _drop_probe_market(sync_owner_conn, market_id)
 
 
 # ===========================================================================

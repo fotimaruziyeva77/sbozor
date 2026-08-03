@@ -81,6 +81,13 @@ qolganda jadval tug'ilgan kuni meta-test `stall_assignments: CHECK
 soxta pul ustuni qo'shish bo'lardi — ya'ni reyestr sxemani noto'g'ri
 shaklga majburlagan bo'lardi. Uning o'rniga u `AUDITED_TABLES` ga
 qo'shilgan: D-10 aynan AUDITni talab qiladi, pul konstraytini emas.
+
+3-FAZA BU REYESTRGA HECH NIMA QO'SHMAYDI va bu ATAYIN (`03-PATTERNS.md` §0).
+`nvr_devices`, `nvr_credentials`, `cameras`, `nvr_discovery_runs` —
+to'rtalasida ham pul ustuni YO'Q. Birortasini qo'shish 2-fazadagi Pitfall 3
+ni takrorlardi: `test_financial_tables_have_guards` undan
+`CHECK (amount_soum > 0)` talab qilardi va yagona "tuzatish" yo'li soxta
+pul ustuni qo'shish bo'lardi.
 """
 
 AUDITED_TABLES: frozenset[str] = frozenset(
@@ -111,6 +118,16 @@ AUDITED_TABLES: frozenset[str] = frozenset(
         # Yopiq kun istisnolari (MARKET-05) — `market_profile` bilan bir xil
         # sababdan: bitta qator butun kunlik hisobni o'chiradi.
         "market_calendar_exceptions",
+        # --- 3-faza NVR domeni (0012_nvr_domain) ---
+        # NVR qurilmasi: manzil (`host`/`port`) va `username` o'zgarishi
+        # butun bozorning kameralarga kirish yo'lini boshqa qurilmaga
+        # burib yuborardi — "kim va qachon burdi" izsiz qolmasligi kerak.
+        "nvr_devices",
+        # Kamera (kanal): `name_overridden`/`is_archived`/`status` bayroqlari
+        # 5-fazadagi zona va 4-fazadagi snapshot zanjirining kirishi. Kanal
+        # jimgina arxivlansa o'sha rastaning "band, lekin to'lovsiz"
+        # dalili yo'qoladi (SC#2).
+        "cameras",
     }
 )
 """`fn_audit_row()` triggeri O'RNATILGAN jadvallar (hozirgi holat, kutilgan emas).
@@ -137,4 +154,14 @@ RO'YXATGA KIRMAYDIGANLAR va sababi:
     unda `id uuid` ustuni YO'Q. `fn_audit_row()` esa `row_id` ni `uuid` ga
     keltiradi va bunday jadvalda ishga tushirilsa har DML da yiqilardi
     (`attach_audit_trigger()` docstringidagi TALAB).
+  * `nvr_credentials` — IKKI MUSTAQIL sabab, bir xil qaror (3-faza, SC#4):
+      (a) `fn_audit_row()` `to_jsonb(NEW)` yozadi, ya'ni Fernet SHIFRMATNI
+          `audit_log.new_value` ga tushardi. Kalit buzilganda bu TARIXIY
+          parollarni beradi va `audit_log` (append-only, o'chirib
+          bo'lmaydigan) eng uzoq yashaydigan sir omboriga aylanardi;
+      (b) birlamchi kaliti `nvr_id`, ya'ni `id uuid` ustuni YO'Q — yuqoridagi
+          `stall_code_registry` bilan aynan bir xil texnik to'siq.
+    Audit izi yo'qolmaydi: parol o'zgarishining FAKTI ilova qatlamida
+    `nvr_devices` ustiga QIYMATSIZ yoziladi
+    (`action='nvr_credentials_updated'`).
 """

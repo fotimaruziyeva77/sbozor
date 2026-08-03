@@ -1047,6 +1047,17 @@ BEGIN
     RETURN false;
   END IF;
 
+  -- 3-faza NVR domeni (0012_nvr_domain). TARTIB MAJBURIY va u composite FK
+  -- zanjiridan kelib chiqadi: uchala bolasi ham `nvr_devices` ga
+  -- `(market_id, nvr_id)` bilan tayanadi, ya'ni ota-ona ULARDAN KEYIN
+  -- o'chiriladi. `ON DELETE CASCADE` bu yerda ham ATAYIN ishlatilmadi —
+  -- sabab pastdagi docstringda (u 4-fazadagi snapshotlarga ham JIMGINA
+  -- tarqalardi va rasm-dalil izini o'chirib yuborardi).
+  DELETE FROM public.cameras                    WHERE market_id = p_market_id;
+  DELETE FROM public.nvr_discovery_runs         WHERE market_id = p_market_id;
+  DELETE FROM public.nvr_credentials            WHERE market_id = p_market_id;
+  DELETE FROM public.nvr_devices                WHERE market_id = p_market_id;
+
   DELETE FROM public.stall_assignments          WHERE market_id = p_market_id;
   DELETE FROM public.stall_category_periods     WHERE market_id = p_market_id;
   DELETE FROM public.tariffs                    WHERE market_id = p_market_id;
@@ -1081,8 +1092,9 @@ ANIQ ro'yxat esa yangi jadval qo'shilganda KO'RINADIGAN qarz qoldiradi:
 jadval ro'yxatga qo'shilmasa `DELETE FROM markets` FK xatosi bilan yiqiladi
 va sabab darhol ma'lum bo'ladi.
 
-TARTIB — FK bo'yicha bolalardan ota-onaga: biriktirishlar -> toifa davrlari
--> tariflar -> kod reyestri -> rastalar -> sotuvchilar -> zonalar ->
+TARTIB — FK bo'yicha bolalardan ota-onaga: kameralar -> kashfiyot
+yugurishlari -> NVR sirlari -> NVR qurilmalari -> biriktirishlar -> toifa
+davrlari -> tariflar -> kod reyestri -> rastalar -> sotuvchilar -> zonalar ->
 toifalar -> kalendar -> profil -> a'zoliklar -> tokenlar -> bozor.
 
 ⚠ `tariffs` va `stall_category_periods` ustidagi `DELETE` o'zgarmaslik
@@ -1105,17 +1117,26 @@ Ya'ni: yangi tenant jadvali qo'shgan odam bu funksiyani ham yangilashi
 shart va uni unutish darhol qizil test beradi, yetishmayotgan jadval nomi
 esa xato xabarida turadi.
 
-⚠ `0012_nvr_domain` (03-03) to'rtta jadval olib keladi — `nvr_devices`,
-`cameras`, `nvr_credentials`, `nvr_discovery_runs`. Ular bu tanaga
-`0012` BILAN BIR OYNADA qo'shiladi, oldin EMAS: hali mavjud bo'lmagan
-jadvalga `DELETE` yozish shu funksiyani chaqiradigan bugungi usta
-testlarini DARHOL qizartirardi, ya'ni "yashil darvoza" o'z ma'nosini
-to'lqinlar orasida yo'qotardi.
+✅ BAJARILDI (03-03): `0012_nvr_domain` to'rtta jadval olib keldi va
+darvoza AYTGANIDEK QIZARDI — xato xabarida to'rtala nom ham turdi
+(`['cameras', 'nvr_credentials', 'nvr_devices', 'nvr_discovery_runs']`).
+Kaskad `0013_market_delete_guard` da, AYNAN O'SHA REJANING oynasida
+kengaytirildi va darvoza qayta yashil bo'ldi. Ya'ni mexanizm o'zi uchun
+mo'ljallangan ishni bajardi: qarz to'lqinlar ORASIDA emas, ICHIDA yopildi.
 
-WR-02 ning holati: bu yerdagi kafolat faqat TO'LIQLIK. Faol bozorni
-o'chirib bo'lmasligining DB darajasidagi cheklovi alohida —
-`0013_market_delete_guard` (03-03 rejasi). Bugun u ilova qatlamida va
-yuqoridagi `IS DISTINCT FROM false` fail-closed shartida.
+=============================================================================
+WR-02 — IKKI QATLAM, IKKALASI HAM KERAK (03-03 da yopildi).
+
+Bu funksiya tanasidagi `IS DISTINCT FROM false` sharti FAQAT SHU YO'LNI
+qo'riqlaydi. `psql` dan yuborilgan `DELETE FROM markets` uni BUTUNLAY
+chetlab o'tardi — ya'ni "faol bozorni o'chirib bo'lmaydi" da'vosi ilova
+qatlamining odob-axloqiga tayanardi, sxemaga emas (T-03-17).
+
+Ikkinchi qatlam `0013_market_delete_guard` da: `markets` jadvaliga
+`BEFORE DELETE` trigger qo'yiladi (`markets_delete_guard()`), u
+`OLD.is_active IS DISTINCT FROM false` bo'lganda `RAISE EXCEPTION` qiladi.
+Trigger BU FUNKSIYANI BLOKLAMAYDI: u faqat qoralama bozorga yetib keladi,
+ya'ni triggerning sharti hech qachon otilmaydi.
 =============================================================================
 """
 
