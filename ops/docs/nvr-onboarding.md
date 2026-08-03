@@ -149,7 +149,7 @@ Chiqish — **JSON**. U qurilmani **o'zgartirmaydi** (faqat `GET`).
 | `channels.size_attribute_matches_count` | `size="14"` vs 18 element (03-02) | `@size` ga ishonmaslik qarori |
 | `rtsp.port` / `rtsp.discovered` | `*-adminAccesses.xml` | `false` bo'lsa mahsulot 554 ga tushadi va `rtsp_port_assumed` qo'yadi |
 | `frames[].is_jpeg` / `bytes` | sim `TINY_JPEG` (160 bayt) qaytaradi | 4-fazaning kadr olish yo'li |
-| `rtsp.concurrent_failed` | sim RTSP tinglamaydi | **Sessiya limiti** — bugun o'lchanmagan qiymat (D-05) |
+| `rtsp.concurrent_failed` | sim `nvr-sim:554` da RTSP xizmat qiladi (`nvr-sim-rtsp`), lekin sessiya limitini modellamaydi | **Sessiya limiti** — bugun o'lchanmagan qiymat (D-05) |
 
 Xuddi shu savollarni `pytest -m hardware` ham beradi va u xulosani
 **assert** shaklida chiqaradi:

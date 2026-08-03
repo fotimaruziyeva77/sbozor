@@ -7,7 +7,7 @@
 #   web      -> frontend (01-02 rejasi Dockerfile'ni yaratadi)
 #   proxy    -> nginx
 #   test     -> pytest + testcontainers: `npm run test`
-#   sim      -> nvr-sim + go2rtc-sim (CAM-09)  : `npm run test:sim`
+#   sim      -> nvr-sim + nvr-sim-rtsp (CAM-09): `npm run test:sim`
 
 name: sbozor
 
@@ -271,7 +271,7 @@ services:
       # `/api/streams` EMAS: healthcheck aynan biz bloklayotgan yuzani
       # so'rab turardi va u konfiguratsiyada «bu yo'l normal» degan
       # taassurot qoldirardi. `nc` port ochiqligini tekshiradi — bu
-      # «jarayon tirikmi?» savoliga to'liq javob (`go2rtc-sim` bilan
+      # «jarayon tirikmi?» savoliga to'liq javob (`nvr-sim-rtsp` bilan
       # bir xil qaror).
       test: ["CMD", "nc", "-z", "127.0.0.1", "8554"]
       interval: 10s
@@ -342,10 +342,22 @@ services:
       # alohida sekin test va u konteynerni qayta ko'tarmasdan, ish paytida
       # `POST /__sim__/state {"channel_count": 25}` bilan o'rnatiladi.
       SIM_CHANNEL_COUNT: "${SIM_CHANNEL_COUNT:-6}"
-      SIM_RTSP_HOST: go2rtc-sim
-      SIM_RTSP_PORT: "8554"
-      # `adminAccesses` javobida E'LON QILINADIGAN port (A.2). U go2rtc'ning
-      # haqiqiy portidan ATAYIN ajratilgan: `port_moved` stsenariysi aynan
+      #
+      # ⚠ BU YERDA «RTSP XOSTI» KALITI YO'Q — VA U QAYTA QO'SHILMAYDI.
+      #
+      # Ilgari shu blokda ikkita kalit turardi: RTSP serverining alohida
+      # konteyner nomi va uning porti. Ularni HECH KIM o'qimasdi
+      # (03-VERIFICATION GAP-1: «RTSP oyog'i hech qachon ulanmaganining
+      # bevosita dalili»). Sabab tuzatilganda kalitlarga ehtiyoj ham
+      # yo'qoldi: to'g'ri modelda alohida «RTSP xosti» tushunchasi UMUMAN
+      # MAVJUD EMAS — RTSP NVR'ning O'Z manzilida turadi, xuddi real
+      # qurilmadagidek (`nvr-sim-rtsp` xizmati, `network_mode`).
+      #
+      # Takrorlanishi `tests/unit/test_compose_sim_env.py` bilan to'silgan:
+      # compose'dagi HAR BIR `SIM_*` kalitining iste'molchisi bo'lishi shart.
+      #
+      # `adminAccesses` javobida E'LON QILINADIGAN port (A.2). U tinglash
+      # portidan ATAYIN ajratilgan: `port_moved` stsenariysi aynan
       # "e'lon qilingan port 554 emas" holatini sinaydi.
       SIM_RTSP_PORT_ADVERTISED: "${SIM_RTSP_PORT_ADVERTISED:-554}"
       SIM_USERNAME: "${SIM_USERNAME:-admin}"
@@ -369,23 +381,52 @@ services:
     # DIQQAT: xost portiga publish QILINMAYDI (T-01-04, T-03-12) — ichki test
     # yuzasi tarmoqqa ochilmaydi; sim faqat compose tarmog'idan ko'rinadi.
 
-  go2rtc-sim:
-    # Sim NVR'ning RTSP manbai. PROD go2rtc'dan ATAYIN ajratilgan: sim NVR
-    # "tashqi qurilma" bo'lib qolishi kerak, aks holda prod konfiguratsiyasi
-    # test oqimlari bilan aralashardi.
+  nvr-sim-rtsp:
+    # SIM NVR'NING RTSP OYOG'I (CAM-09, CAM-03; 03-VERIFICATION GAP-1).
     #
-    # ⚠ D-11: `exec:` FAQAT `:ro` mount qilingan statik configdan keladi.
-    # go2rtc'ning HTTP API'si orqali `exec:` yozish — RCE
-    # (GHSA-wwww-5h25-jf98, CVSS 9.1); shuning uchun API config'da
-    # `127.0.0.1` ga bog'langan va bu yerda hech qanday port publish qilinmaydi.
+    # =====================================================================
+    # ⚠⚠ `network_mode: service:nvr-sim` — BU REJANING MARKAZIY QARORI,
+    #    QULAYLIK EMAS.
+    #
+    # Real NVR'da ISAPI ham, RTSP ham BITTA manzilda yashaydi. Kashfiyot
+    # `rtsp://<nvr_devices.host>:<kashf-etilgan-port>/Streaming/Channels/<id>`
+    # ni quradi, ya'ni xost ISAPI so'ralgan xost bilan AYNAN BIR XIL.
+    # Ilgari RTSP alohida konteynerda (`go2rtc-sim`), alohida xostda va
+    # `sim_cam_01…06` degan BOSHQA nomlar bilan turardi — mahsulot
+    # yo'lidan boradigan test yozilgan taqdirda ham ulanadigan joyi yo'q
+    # edi. Tarmoq fazasini bo'lishish shu bo'shliqni tuzilma darajasida
+    # yopadi: `nvr-sim:554` aynan shu serverga tushadi.
+    #
+    # `network_mode` ishlatilgani uchun bu xizmatda:
+    #   * `ports:`    YOZILMAYDI — netns `nvr-sim` niki, u esa publish
+    #                 qilinmagan (T-01-04, T-03-12);
+    #   * `networks:` YOZILMAYDI — compose ikkalasini birga qabul qilmaydi;
+    #   * `depends_on:` KERAK EMAS — `network_mode: service:` bog'liqlikni
+    #                 o'zi hosil qiladi.
+    # =====================================================================
+    #
+    # ⚠ IMAGE DIGEST BILAN QADALGAN (T-03-82, T-03-SC). Teg ko'chirilishi
+    #   mumkin, digest — yo'q. Ta'minot zanjiri tekshiruvi (2026-08-03):
+    #   `bluenviron/mediamtx` — MIT, arxivlanmagan, 19 711 yulduz, oxirgi
+    #   release `v1.19.3` (2026-07-23). Faqat `--profile sim` ostida
+    #   ishlaydi va prodga hech qachon chiqmaydi.
+    #
+    # ⚠ D-11: `runOnDemand` buyrug'i FAQAT `:ro` mount qilingan STATIK
+    #   configdan keladi; `api:` konfiguratsiyada butunlay o'chirilgan,
+    #   ya'ni ish paytida buyruq yozish yo'li YO'Q.
     profiles: ["sim"]
-    image: alexxit/go2rtc:1.9.14
+    image: bluenviron/mediamtx:1.19.3-ffmpeg@sha256:e8eda6a884bbb2eaebf0c0454200ddc8087f428e091bae10d20e330a08558778
+    network_mode: "service:nvr-sim"
     environment:
       TZ: ${TZ:-Asia/Tashkent}
     volumes:
-      - ./ops/go2rtc/go2rtc.sim.yaml:/config/go2rtc.yaml:ro
+      # `:ro` MAJBURIY — server o'z konfiguratsiyasini QAYTA YOZA OLMASLIGI
+      # kerak (go2rtc'dagi `PATCH /api/config` sinfidagi yo'l).
+      - ./ops/mediamtx/mediamtx.yml:/mediamtx.yml:ro
     healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "8554"]
+      # 554 ga TCP ulanish — «jarayon tirikmi?» savoliga to'liq javob.
+      # `-ffmpeg` variant Alpine asosida va busybox `nc` ni beradi.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "554"]
       interval: 5s
       timeout: 3s
       retries: 10

@@ -42,7 +42,7 @@ _PROBE_TIMEOUT = httpx.Timeout(3.0, connect=2.0)
 
 SIM_MISSING_HINT = (
     "nvr-sim ishlamayapti. Ishga tushirish: "
-    "`docker compose --profile sim up -d nvr-sim go2rtc-sim --wait` "
+    "`docker compose --profile sim up -d nvr-sim nvr-sim-rtsp --wait` "
     "yoki to'liq zanjir bilan `npm run test:sim`."
 )
 
