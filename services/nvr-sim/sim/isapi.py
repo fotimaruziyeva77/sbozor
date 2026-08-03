@@ -403,6 +403,12 @@ def handle_isapi(state: SimState, path: str, request: Request) -> Response:
     """`/ISAPI/<path>` marshrutlari (B.7 jadvalidagi o'n ikkitasi)."""
     del request  # yuza faqat yo'lga qarab tarmoqlanadi
 
+    # So'rovlar sanog'i — `state.endpoint_hits` docstringida sababi bilan.
+    # ⚠ Autentifikatsiyadan KEYIN sanaladi: `401` bilan rad etilgan so'rov
+    #   qurilma yuzasiga UMUMAN yetib bormagan va uni «endpoint chaqirildi»
+    #   deb hisoblash D-04 o'lchovini ifloslantirardi.
+    state.endpoint_hits[path] = state.endpoint_hits.get(path, 0) + 1
+
     if path == "System/deviceInfo":
         return xml_response(_device_info(state))
 
@@ -450,8 +456,14 @@ def _streaming(state: SimState, stream_id: int, *, picture: bool) -> Response:
         or channel_no > state.channel_count
         or channel_no in state.removed_channels
         or stream_index not in {1, 2}
+        # A.2: sub-oqim mavjudligi HAR KANALDA KAFOLATLANMAGAN. Bu yo'lsiz
+        # `has_substream = False` shoxini umuman sinab bo'lmasdi: sim
+        # BARCHA mavjud kanallar uchun `{ch}02` ni beradi va kod «sub-oqim
+        # yo'q» holatini hech qachon ko'rmasdi. Maydon `mode` EMAS —
+        # `offline_channels` bilan bir xil tabiat: u qurilmaning xato
+        # REJIMI emas, KONFIGURATSIYASI.
+        or (stream_index == 2 and channel_no in state.no_substream_channels)
     ):
-        # A.2: sub-oqim mavjudligi KAFOLATLANMAGAN -> `substream_url = NULL` yo'li.
         return xml_response(
             hikvision_error_xml(status_code=4, status_string="Invalid Operation"),
             status_code=404,

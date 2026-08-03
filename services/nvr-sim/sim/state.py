@@ -106,11 +106,26 @@ class SimState:
     drift_seconds: int = 0
     offline_channels: set[int] = field(default_factory=set)
     removed_channels: set[int] = field(default_factory=set)
+    no_substream_channels: set[int] = field(default_factory=set)
     delay_ms: int = 0
     stream_limit: int = DEFAULT_STREAM_LIMIT
     stream_limit_mode: str = STREAM_LIMIT_REJECT
     stream_claims: int = 0
     auth_attempts: int = 0
+    endpoint_hits: dict[str, int] = field(default_factory=dict)
+    """Qaysi `/ISAPI/*` yo'li NECHA MARTA chaqirildi — SANAGICH, sozlama emas.
+
+    ⚠ NEGA BU KERAK: D-04 ning tarmoqlanishi («IP-kamerada `InputProxy`
+      CHAQIRILMAYDI») ni natijadan o'lchab bo'lmaydi — `InputProxy` ni
+      chaqirib, `404` ni yutib, keyin to'g'ri yo'ldan borgan kod ham
+      AYNAN BIR XIL kamera yozuvlarini yaratardi. Ya'ni «chaqirilmadi»
+      da'vosining yagona dalili — so'rovlar sanog'i.
+
+    Nima uchun bu qurilma fidelity'sini buzmaydi: sanoq FAQAT
+    `/__sim__/state` da ko'rinadi, ISAPI javoblariga umuman ta'sir
+    qilmaydi. Real qurilma ham so'rovlarni sanaydi (jurnalida), biz esa
+    o'sha jurnalning test uchun o'qiladigan shaklini beramiz.
+    """
 
     # `camera_swapped` rejimi uchun (B.8): kanalning manba kamerasi almashtirildi.
     swapped_channel: int | None = None
@@ -135,11 +150,15 @@ class SimState:
             "drift_seconds": self.drift_seconds,
             "offline_channels": sorted(self.offline_channels),
             "removed_channels": sorted(self.removed_channels),
+            "no_substream_channels": sorted(self.no_substream_channels),
             "delay_ms": self.delay_ms,
             "stream_limit": self.stream_limit,
             "stream_limit_mode": self.stream_limit_mode,
             "stream_claims": self.stream_claims,
             "auth_attempts": self.auth_attempts,
+            # Nusxa: chaqiruvchi qaytgan lug'atni o'zgartirsa sanoq
+            # buzilardi va sabab test kodida ko'rinmasdi.
+            "endpoint_hits": dict(self.endpoint_hits),
             "swapped_channel": self.swapped_channel,
             "swapped_ip": self.swapped_ip,
             "swapped_model": self.swapped_model,
@@ -147,11 +166,11 @@ class SimState:
 
 
 _INT_FIELDS = ("channel_count", "rtsp_port", "drift_seconds", "delay_ms", "stream_limit")
-_SET_FIELDS = ("offline_channels", "removed_channels")
+_SET_FIELDS = ("offline_channels", "removed_channels", "no_substream_channels")
 _OPTIONAL_INT_FIELDS = ("swapped_channel",)
 _OPTIONAL_STR_FIELDS = ("swapped_ip", "swapped_model")
 
-READ_ONLY_FIELDS: frozenset[str] = frozenset({"stream_claims", "auth_attempts"})
+READ_ONLY_FIELDS: frozenset[str] = frozenset({"stream_claims", "auth_attempts", "endpoint_hits"})
 """SANAGICHLAR — tashqaridan o'rnatilmaydi.
 
 Aks holda test o'zi o'lchayotgan qiymatni o'zi yozib qo'yardi. Ularni nolga

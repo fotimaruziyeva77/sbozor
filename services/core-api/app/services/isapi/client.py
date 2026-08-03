@@ -86,8 +86,10 @@ __all__ = [
     "MAX_RETRY_ATTEMPTS",
     "NVR_DEVICE_TYPES",
     "RTSP_FALLBACK_PORT",
+    "SUPPORTED_MANUFACTURER",
     "IsapiClient",
     "ProbeResult",
+    "assert_supported_device",
     "resolve_rtsp_port",
 ]
 
@@ -131,6 +133,42 @@ NVR_DEVICE_TYPES: Final[frozenset[str]] = frozenset({"NVR", "DVR", "HDVR"})
 Qolganlari (`IPCamera`, `IPDome`, …) standalone yo'lidan boradi: ularda
 `InputProxy` UMUMAN YO'Q va u `404` beradi (A.1, 2-qadam-B).
 """
+
+SUPPORTED_MANUFACTURER: Final[str] = "hikvision"
+"""MVP'da faqat Hikvision ISAPI (T-03-33, A.3 ning oxirgi qatori)."""
+
+
+def assert_supported_device(device: DeviceInfo) -> None:
+    """Qurilma qo'llab-quvvatlanadimi — YAGONA joyda (T-03-33).
+
+    ⚠⚠ RAD ETISH SHARTI «`manufacturer != "hikvision"`» EMAS, «`manufacturer`
+       BOR VA U Hikvision EMAS». Farq O'LCHANGAN faktdan chiqadi:
+
+           DS-7616NI-K2 dumpi  ->  <manufacturer>hikvision</manufacturer>
+           DS-7732NI-M4 dumpi  ->  maydon UMUMAN YO'Q          (!)
+
+       Ikkalasi ham HAQIQIY Hikvision NVR va ikkalasi ham yozib olingan
+       dumpdan. Ya'ni «maydon yo'q» = «boshqa ishlab chiqaruvchi» degan
+       tenglama 32 kanalli NVR ni — Karmananing 25 kanaliga eng yaqin
+       modelni — rad etardi. Nosozlik CI'da ko'rinmasdi: 6 kanalli
+       standart stsenariy `DS-7616NI-K2` fixture'ini ishlatadi va unda
+       maydon BOR.
+
+    Qoldiq xavf ATAYIN qabul qilinadi va u kichik: `manufacturer` ni
+    e'lon qilmaydigan, LEKIN `DeviceInfo`, `InputProxy` va `adminAccesses`
+    ni Hikvision shaklida qaytaradigan qurilma bilan kashfiyot BARIBIR
+    ishlaydi — u qaysi yorliq bilan sotilgani ahamiyatsiz. Soxta qurilma
+    esa (sim'ning `not_hikvision` rejimi) o'zini BOSHQA ishlab chiqaruvchi
+    deb ATAYIN e'lon qiladi va u rad etiladi.
+
+    Raises:
+        NvrError: `device_not_supported`, `detail.model` bilan — admin
+            QAYSI qurilma rad etilganini bilishi kerak.
+    """
+    manufacturer = device.manufacturer.strip().lower()
+    if manufacturer and SUPPORTED_MANUFACTURER not in manufacturer:
+        raise NvrError("device_not_supported", {"model": device.model})
+
 
 _STREAM_PATH_PREFIX: Final[str] = "Streaming/channels/"
 
@@ -569,8 +607,7 @@ class IsapiClient:
             await self._assert_digest_is_offered(greeting)
 
             device = parse_device_info(await self.get_xml("System/deviceInfo"))
-            if device.manufacturer.strip().lower() != "hikvision":
-                raise NvrError("device_not_supported", {"model": device.model})
+            assert_supported_device(device)
 
             ports = parse_admin_accesses(await self.get_xml("Security/adminAccesses"))
             rtsp_port, assumed = resolve_rtsp_port(ports)
