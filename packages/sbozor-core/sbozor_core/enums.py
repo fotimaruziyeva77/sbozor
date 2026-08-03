@@ -13,7 +13,16 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-__all__ = ["ActorKind", "AuditAction", "AuditSource", "Locale", "Role", "StallStatus"]
+__all__ = [
+    "ActorKind",
+    "AuditAction",
+    "AuditSource",
+    "CameraStatus",
+    "DiscoveryRunStatus",
+    "Locale",
+    "Role",
+    "StallStatus",
+]
 
 
 class Role(StrEnum):
@@ -73,6 +82,58 @@ class StallStatus(StrEnum):
     ACTIVE = "active"
     MAINTENANCE = "maintenance"
     CLOSED = "closed"
+
+
+class CameraStatus(StrEnum):
+    """`cameras.status` qiymatlari — AYNAN uchta (3-faza, `03-RESEARCH.md` E.15).
+
+    Qiymatlar DB KONTENTI va ATAYIN BITTA TILDA (`StallStatus` bilan bir xil
+    qoida): ular `cameras.status` ustunida matn sifatida yashaydi va audit
+    triggeri (`fn_audit_row()`) ularni `audit_log.new_value` ga TO'G'RIDAN-
+    TO'G'RI yozadi. Ya'ni qiymat o'zgarishi audit tarixini ikkiga bo'lardi —
+    eski qatorlar eski matn bilan qolardi va "kamera qachon offline bo'ldi"
+    savoliga ikki xil kalit bilan javob berishga to'g'ri kelardi.
+
+    UI ularni tarjima QILMAYDI — u `nvr.camera.status.*` i18n kalitlari
+    orqali uch tilda ko'rsatadi (CLAUDE.md "3 til majburiy").
+
+    `unknown` ALOHIDA HOLAT va u `offline` ning sinonimi EMAS:
+      `online`  — kashfiyot kanalni topdi va u ishlayapti;
+      `offline` — kanal RO'YXATDA bor, lekin javob bermayapti (D-10 bo'yicha
+                  qator O'CHIRILMAYDI — 4-fazadagi snapshotlar va 5-fazadagi
+                  zonalar `cameras.id` ga bog'lanadi);
+      `unknown` — kanal yozildi, lekin holati HALI o'lchanmagan. Boshlang'ich
+                  qiymat aynan shu: `offline` ni standart qilish "kamera
+                  buzuq" degan YOLG'ON dalilni birinchi skandan oldin
+                  yozardi.
+    """
+
+    ONLINE = "online"
+    OFFLINE = "offline"
+    UNKNOWN = "unknown"
+
+
+class DiscoveryRunStatus(StrEnum):
+    """`nvr_discovery_runs.status` qiymatlari — AYNAN to'rtta (3-faza).
+
+    Qiymatlar DB KONTENTI: `nvr_discovery_runs.status` ustunida matn sifatida
+    yashaydi va `0012_nvr_domain` dagi QISMAN UNIQUE indeksning predikati
+    (`status IN ('queued','running')`) AYNAN shu ikkitasiga tayanadi. Ya'ni
+    a'zo qiymatini o'zgartirish migratsiya talab qiladi — indeks predikati
+    jimgina hech nimani qamramay qolardi va bir NVR uchun ikkita parallel
+    kashfiyot bloklanmasdi (T-03-16).
+
+    `queued` va `running` — "FAOL" to'plami; `succeeded` va `failed` —
+    yakunlangan. Bo'linish qasddan ikkita qiymatga tayanadi, bitta
+    `is_finished` bayrog'iga emas: navbatda turgan va ishlayotgan yugurish
+    operator uchun boshqa-boshqa holat, lekin ikkinchi skanni IKKALASI ham
+    bloklashi kerak.
+    """
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
 
 
 class AuditAction(StrEnum):
