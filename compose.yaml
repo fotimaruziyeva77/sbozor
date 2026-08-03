@@ -7,6 +7,7 @@
 #   web      -> frontend (01-02 rejasi Dockerfile'ni yaratadi)
 #   proxy    -> nginx
 #   test     -> pytest + testcontainers: `npm run test`
+#   sim      -> nvr-sim + go2rtc-sim (CAM-09)  : `npm run test:sim`
 
 name: sbozor
 
@@ -177,6 +178,96 @@ services:
       - "${PROXY_HOST_PORT:-8080}:80"
     restart: unless-stopped
 
+  nvr-sim:
+    # SIMULYATSIYA QILINGAN HIKVISION NVR (CAM-09).
+    #
+    # `profiles: ["sim"]` — bu YAGONA va STRUKTURAVIY himoya (T-03-07):
+    # prod deploy profilsiz ishlaydi, ya'ni profilsiz `docker compose up`
+    # bu konteynerni umuman KO'RMAYDI. Intizomga (".env da o'chirib qo'yamiz")
+    # tayanadigan yechim ertami-kechmi buziladi, profil esa buzilmaydi.
+    #
+    # `core-api` Dockerfile'ining `dev` target'i QAYTA ISHLATILADI (B.9):
+    # yangi Dockerfile yo'q, CI'da yangi build qatlami yo'q, yangi paket yo'q.
+    # Bu TO'RTINCHI KONTEYNER, uchinchi servis emas — `migrate` va `tests`
+    # bilan aynan bir xil naqsh, ya'ni CLAUDE.md ning "aynan 3 ta servis"
+    # cheklovi buzilmaydi.
+    profiles: ["sim"]
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: dev
+    # ⚠ `--no-date-header` MAJBURIY. uvicorn o'z `Date` sarlavhasini ASGI
+    # javobidan OLDIN qo'yadi; sim esa siljitilgan `Date` ni qo'yadi (A.3
+    # soat-farqi yo'lining yagona sinov vositasi). Bayroqsiz javobda IKKITA
+    # `Date` bo'lardi, `httpx` ularni vergul bilan qo'shib berardi va
+    # `parsedate_to_datetime` yiqilardi — ya'ni drift o'lchovi jimgina
+    # ishlamay qolardi.
+    #
+    # `--workers` BERILMAYDI: holat jarayon xotirasida yashaydi va ikkinchi
+    # ishchi bo'lsa `POST /__sim__/state` ularning faqat bittasiga tegardi.
+    command:
+      - "uvicorn"
+      - "sim.main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "--no-date-header"
+    working_dir: /app/services/nvr-sim
+    environment:
+      # D-09: CI'da 6 kanal (tez, `DS-7616NI-K2` fixture'iga mos). 25 kanal —
+      # alohida sekin test va u konteynerni qayta ko'tarmasdan, ish paytida
+      # `POST /__sim__/state {"channel_count": 25}` bilan o'rnatiladi.
+      SIM_CHANNEL_COUNT: "${SIM_CHANNEL_COUNT:-6}"
+      SIM_RTSP_HOST: go2rtc-sim
+      SIM_RTSP_PORT: "8554"
+      # `adminAccesses` javobida E'LON QILINADIGAN port (A.2). U go2rtc'ning
+      # haqiqiy portidan ATAYIN ajratilgan: `port_moved` stsenariysi aynan
+      # "e'lon qilingan port 554 emas" holatini sinaydi.
+      SIM_RTSP_PORT_ADVERTISED: "${SIM_RTSP_PORT_ADVERTISED:-554}"
+      SIM_USERNAME: "${SIM_USERNAME:-admin}"
+      SIM_PASSWORD: "${SIM_PASSWORD:-Sim12345}"
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      - .:/app
+    healthcheck:
+      # Nishon ATAYIN `/__sim__/state`: u Digest talab qilmaydi va
+      # `mode="slow"` da HECH QACHON kechiktirilmaydi. `/ISAPI/*` ni
+      # tekshirsak, `slow` yoki `bad_password` testi konteynerni
+      # `unhealthy` qilib butun stack'ni yiqitardi.
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request;urllib.request.urlopen('http://localhost:8080/__sim__/state')
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # DIQQAT: xost portiga publish QILINMAYDI (T-01-04, T-03-12) — ichki test
+    # yuzasi tarmoqqa ochilmaydi; sim faqat compose tarmog'idan ko'rinadi.
+
+  go2rtc-sim:
+    # Sim NVR'ning RTSP manbai. PROD go2rtc'dan ATAYIN ajratilgan: sim NVR
+    # "tashqi qurilma" bo'lib qolishi kerak, aks holda prod konfiguratsiyasi
+    # test oqimlari bilan aralashardi.
+    #
+    # ⚠ D-11: `exec:` FAQAT `:ro` mount qilingan statik configdan keladi.
+    # go2rtc'ning HTTP API'si orqali `exec:` yozish — RCE
+    # (GHSA-wwww-5h25-jf98, CVSS 9.1); shuning uchun API config'da
+    # `127.0.0.1` ga bog'langan va bu yerda hech qanday port publish qilinmaydi.
+    profiles: ["sim"]
+    image: alexxit/go2rtc:1.9.14
+    environment:
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      - ./ops/go2rtc/go2rtc.sim.yaml:/config/go2rtc.yaml:ro
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8554"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   tests:
     profiles: ["test"]
     build:
@@ -190,6 +281,14 @@ services:
       # host.docker.internal orqali boramiz.
       TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
       TESTCONTAINERS_RYUK_DISABLED: "true"
+      # Sim testlari (`-m sim`) unga HAQIQIY TCP orqali boradi — `ASGITransport`
+      # EMAS. Sabab: `ASGITransport` tarmoqni chetlab o'tadi, ya'ni "kod NVR
+      # bilan gaplasha oladi" da'vosi umuman sinalmasdan qolardi. Konteyner
+      # ko'tarilmagan bo'lsa `sim_url` fixture'i CI'da `fail` beradi (skip emas).
+      NVR_SIM_BASE_URL: "http://nvr-sim:8080"
+      SIM_USERNAME: "${SIM_USERNAME:-admin}"
+      SIM_PASSWORD: "${SIM_PASSWORD:-Sim12345}"
+      CI: "${CI:-}"
       TZ: Asia/Tashkent
     extra_hosts:
       - "host.docker.internal:host-gateway"

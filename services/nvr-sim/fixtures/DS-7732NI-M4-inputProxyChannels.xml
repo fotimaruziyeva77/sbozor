@@ -1,0 +1,403 @@
+<!--
+  MANBA (yozib olingan dump, QO'LDA YOZILMAGAN):
+    repozitoriy : github.com/maciej-or/hikvision_next
+    fayl        : tests/fixtures/devices/DS-7732NI-M4.json
+    ISAPI yo'li : /ISAPI/ContentMgmt/InputProxy/channels
+    upstream    : c5f6cb85f6e8 (2024-12-04)
+    blob sha1   : 92c315bd8dc163efe15ec0491f52bdcfa72232b6
+    olingan     : 2026-08-03
+    qurilma     : DS-7732NI-M4
+
+  O'ZGARTIRISH: yo'q. Element tartibi, atributlar, namespace va qiymatlar
+  dumpdan VERBATIM. Yagona qo'shimcha — shu izoh.
+
+  NEGA BU MUHIM (Pitfall 4, `simulator-confirms-itself`): agar bu XML bizning
+  parserimiz kutgan shaklda O'YLAB TOPILSA, test faqat "kod o'z taxminiga mos"
+  ekanini isbotlardi — CI yashil, real qurilma qora.
+
+  Yuqoridagi dump anonimlashtirilgan holda yuqori oqimda saqlanadi (IP'lar
+  `1.0.0.x`, seriya raqamlari nollangan, MAC almashtirilgan) — ya'ni bu yerda
+  hech kimning haqiqiy tarmoq ma'lumoti yo'q.
+-->
+<InputProxyChannelList version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema" size="14">
+  <InputProxyChannel>
+    <id>1</id>
+    <name>Cucina</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.94</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2055FWD-I</model>
+      <serialNumber>DS-2CD2055FWD-I00000000AAWR000000000</serialNumber>
+      <firmwareVersion>V5.6.6 build 210625</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>5486A709F607429CB300CD5FFD0F6116</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>2</id>
+    <name>Portico1 EXT</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.68</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2342WD-I</model>
+      <serialNumber>DS-2CD2342WD-I00000000BBWR000000000</serialNumber>
+      <firmwareVersion>V5.5.82 build 190909</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>C031FB1940EC48F88C9ECE409A74532A</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>3</id>
+    <name>Portico2 EXT</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.60</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2046G2-IU</model>
+      <serialNumber>DS-2CD2046G2-IU00000000AAWRAA0000000</serialNumber>
+      <firmwareVersion>V5.7.18 build 240826</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>E1043ABA5C7E4CF8BE519F04311F82DB</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>4</id>
+    <name>Cortile</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.189</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2385FWD-I</model>
+      <serialNumber>DS-2CD2385FWD-I00000000AAWR000000000</serialNumber>
+      <firmwareVersion>V5.6.6 build 210625</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>78FDBDB2DB5541A5861E28C1A6B1120B</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>5</id>
+    <name>Facciata</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.146</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2342WD-I</model>
+      <serialNumber>DS-2CD2342WD-I00000000BBWR000000000</serialNumber>
+      <firmwareVersion>V5.5.82 build 190909</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>7EABD08A63174649B7BFEFA4FA419178</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>6</id>
+    <name>Tetto</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.18</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2346G2-I</model>
+      <serialNumber>DS-2CD2346G2-I00000000AAWRE00000000</serialNumber>
+      <firmwareVersion>V5.5.801 build 211105</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>166DEA8135A54FA98A78869FA42AE6EA</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>7</id>
+    <name>Terrazzo P2</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.200</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>IPC-T620-Z</model>
+      <serialNumber>IPC-T000-Z00000000AAWR000000000</serialNumber>
+      <firmwareVersion>V5.4.6 build 170629</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>BF2C773C54E94260BABA685A0FE54075</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>8</id>
+    <name>Garage1 PT</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.253</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>IPC-T620-Z</model>
+      <serialNumber>IPC-T000-Z00000000AAWR000000000</serialNumber>
+      <firmwareVersion>V5.4.6 build 170629</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>5A6B9562DA6842878B4EBE4C39D6ED5F</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>9</id>
+    <name>Ingresso PT</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>ONVIF</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.214</ipAddress>
+      <managePortNo>6688</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>JVSWO708-PO300M2</model>
+      <serialNumber>00000000000000000000</serialNumber>
+      <firmwareVersion>V1.0.0014 - 20210517 15:00:00</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableTiming>true</enableTiming>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>10</id>
+    <name>Tavernetta1 PT</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>ONVIF</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.191</ipAddress>
+      <managePortNo>6688</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>JVSWO708-PO300M2</model>
+      <serialNumber>00000000000000000000</serialNumber>
+      <firmwareVersion>V1.0.0014 - 20210517 15:00:00</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableTiming>true</enableTiming>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>11</id>
+    <name>Tavernetta2 PT</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>ONVIF</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.234</ipAddress>
+      <managePortNo>6688</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>JVSWO708-PO300M2</model>
+      <serialNumber>00000000000000000000</serialNumber>
+      <firmwareVersion>V1.0.0014 - 20210517 15:00:00</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableTiming>true</enableTiming>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>12</id>
+    <name>Salone1 P1</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>ONVIF</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.66</ipAddress>
+      <managePortNo>6688</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>JVSWO708-PO300M2</model>
+      <serialNumber>00000000000000000000</serialNumber>
+      <firmwareVersion>V1.0.0014 - 20210517 15:00:00</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableTiming>true</enableTiming>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>13</id>
+    <name>Salone2 P1</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>ONVIF</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.127</ipAddress>
+      <managePortNo>6688</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>JVSWO708-PO300M2</model>
+      <serialNumber>00000000000000000000</serialNumber>
+      <firmwareVersion>V1.0.0014 - 20210517 15:00:00</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableTiming>true</enableTiming>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>14</id>
+    <name>Cucina P1</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>ONVIF</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.103</ipAddress>
+      <managePortNo>6688</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>JVSWO708-PO300M2</model>
+      <serialNumber>00000000000000000000</serialNumber>
+      <firmwareVersion>V1.0.0014 - 20210517 15:00:00</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableTiming>true</enableTiming>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>15</id>
+    <name>Ingresso P1</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>ONVIF</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.113</ipAddress>
+      <managePortNo>6688</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>JVSWO708-PO300M2</model>
+      <serialNumber>00000000000000000000</serialNumber>
+      <firmwareVersion>V1.0.0014 - 20210517 15:00:00</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableTiming>true</enableTiming>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>16</id>
+    <name>Studio P1</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>ONVIF</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.153</ipAddress>
+      <managePortNo>6688</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>JVSWO708-PO300M2</model>
+      <serialNumber>00000000000000000000</serialNumber>
+      <firmwareVersion>V1.0.0014 - 20210517 15:00:00</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableTiming>true</enableTiming>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>17</id>
+    <name>Spogliatoio P1</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.62</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2046G2-IU</model>
+      <serialNumber>DS-2CD2046G2-IU00000000AAWRAA0000000</serialNumber>
+      <firmwareVersion>V5.7.18 build 240826</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>2FBAAFC6E83348EC9C6D6DF794BC107B</devIndex>
+  </InputProxyChannel>
+  <InputProxyChannel>
+    <id>18</id>
+    <name>Letto P1</name>
+    <sourceInputPortDescriptor>
+      <proxyProtocol>HIKVISION</proxyProtocol>
+      <addressingFormatType>ipaddress</addressingFormatType>
+      <ipAddress>1.0.0.112</ipAddress>
+      <managePortNo>8000</managePortNo>
+      <srcInputPort>1</srcInputPort>
+      <userName>admin</userName>
+      <streamType>auto</streamType>
+      <model>DS-2CD2046G2-IU</model>
+      <serialNumber>DS-2CD2046G2-IU00000000AAWRAA0000000</serialNumber>
+      <firmwareVersion>V5.7.18 build 240826</firmwareVersion>
+      <deviceID/>
+    </sourceInputPortDescriptor>
+    <certificateValidationEnabled>false</certificateValidationEnabled>
+    <defaultAdminPortEnabled>false</defaultAdminPortEnabled>
+    <enableAnr>false</enableAnr>
+    <enableTiming>true</enableTiming>
+    <devIndex>DC201AAA42D64AC0B756FA4A7136C933</devIndex>
+  </InputProxyChannel>
+</InputProxyChannelList>

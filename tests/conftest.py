@@ -71,6 +71,22 @@ from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
+pytest_plugins = ["fixtures.nvr_sim"]
+"""`nvr-sim` fixture'lari (CAM-09) — `sim_url`, `sim`, `sim_credentials`.
+
+⚠ ULAR `api_app`/`api_client` BILAN ARALASHTIRILMAYDI. Bu ikki qatlam turli
+maqsadga xizmat qiladi:
+
+  * `api_client`  -> `httpx.ASGITransport`: ilovaning O'ZIGA to'g'ridan-to'g'ri
+                     boradi, tarmoq/port/uvicorn YO'Q. Tez va hermetik, lekin
+                     tarmoqni chetlab o'tadi.
+  * `sim_url`     -> HAQIQIY TCP: `nvr-sim` konteyneriga boradi. Faqat shu
+                     yo'lda `httpx.DigestAuth` ning RFC 7616 handshake'i
+                     haqiqatan bajariladi (A.3) — `ASGITransport` bilan ham
+                     bajarilardi, lekin "kod NVR bilan gaplasha oladi"
+                     da'vosi (SC#7) tarmoqsiz isbotlanmaydi.
+"""
+
 # CLAUDE.md da qulflangan — PG 19 EMAS (hali 19beta2).
 POSTGRES_IMAGE = "postgres:18.4-trixie"
 VALKEY_IMAGE = "valkey/valkey:9.1.1-alpine"
