@@ -330,15 +330,28 @@ describe("LiveViewDialog — DOM", () => {
     clearSession();
   });
 
-  test("⚠ L0: dialog ochilishida OQIM BOSHLANMAYDI va TOKEN SO'RALMAYDI", () => {
+  test("⚠ L0: dialog ochilishida OQIM BOSHLANMAYDI va TOKEN SO'RALMAYDI", async () => {
     apiFetch.mockResolvedValue(TICKET);
 
     renderDialog();
+
+    /*
+     * ⚠ MIKROTASK NAVBATI BO'SHATILADI — VA BU O'LCHOV BILAN TOPILGAN
+     *   TALAB. Sinxron `expect(apiFetch).not.toHaveBeenCalled()` YOLG'ON
+     *   YASHIL beradi: avtomatik boshlanish `setPhase("authorizing")` ni
+     *   sinxron bajarib, so'rovni KEYINGI mikrotaskka qoldiradi, ya'ni
+     *   L0 chetlab o'tilgan holatda ham assert o'tib ketardi.
+     *   Sabotaj aynan shu bo'shliqni ko'rsatdi.
+     */
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
 
     // Token so'rovi umuman yuborilmadi — NVR bitreyt byudjeti tegilmadi.
     expect(apiFetch).not.toHaveBeenCalled();
     // Pleyer DOM'da yo'q.
     expect(screen.queryByTestId("live-player")).toBeNull();
+    expect(playerMock.mounts).toBe(0);
     // Ekranda esa aniq taklif turadi.
     expect(screen.getByText(IDLE_LABEL)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: VIEW_LABEL })).toBeInTheDocument();
