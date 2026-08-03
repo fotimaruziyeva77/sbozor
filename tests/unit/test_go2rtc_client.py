@@ -327,6 +327,117 @@ async def test_ensure_stream_failure_carries_neither_the_url_nor_the_password(
     assert "400" in str(failure.value)
 
 
+async def test_ensure_stream_survives_the_read_only_config_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`PUT` **400** bersa ham, oqim ro'yxatda paydo bo'lgan bo'lsa — MUVAFFAQIYAT.
+
+    =======================================================================
+    BU NAZARIY HOLAT EMAS, MAHSULOT YO'LINING KUNDALIK XULQI.
+
+    go2rtc `PUT /api/streams` ni ikki qadamda bajaradi: oqimni XOTIRAGA
+    qo'shadi, keyin uni `/config/go2rtc.yaml` ga yozib qo'ymoqchi bo'ladi.
+    Bizda fayl `:ro` mount qilingan (D-11 — `exec:` ning konfiguratsiyaga
+    muhrlanishiga qarshi qatlam), ya'ni ikkinchi qadam HAR DOIM yiqiladi
+    va javob **400** bo'ladi. Oqim esa RO'YXATDA.
+
+    O'lchandi (03-14, haqiqiy konteynerlar ustida): `PUT` -> 400
+    `"yaml: line 38: did not find expected key"`, keyin `GET /api/streams`
+    -> oqim BOR, `/api/frame.jpeg` -> 99 681 baytli JPEG.
+
+    Bu nosozlikni `go2rtc_calls` mock'i YASHIRGAN edi: klientning tarmoq
+    xulqi hech qachon haqiqiy go2rtc ustida bajarilmagan. Statusga
+    so'zsiz ishonish jonli ko'rishni ISHLAB TURGAN holatda 503 qilardi.
+    =======================================================================
+    """
+    registry: dict[str, object] = {}
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "PUT":
+            # Oqim xotirada ro'yxatga OLINADI, keyin konfiguratsiyaga
+            # yozish yiqiladi — go2rtc ning haqiqiy ketma-ketligi.
+            registry[STREAM_NAME] = {"producers": []}
+            return httpx.Response(400, text="yaml: did not find expected key")
+        return httpx.Response(200, json=registry)
+
+    seen = _mocked(monkeypatch, _handler)
+
+    async with Go2rtcClient(BASE_URL) as client:
+        added = await client.ensure_stream(STREAM_NAME, SecretStr(CREDENTIALED_SOURCE))
+
+    assert added is True
+    # GET (bor-yo'qligi) -> PUT -> GET (NATIJANI o'lchash) — uchinchi
+    # chaqiruv aynan shu tuzatishning o'zi.
+    assert [request.method for request in seen] == ["GET", "PUT", "GET"], [
+        request.method for request in seen
+    ]
+
+
+async def test_remove_stream_survives_the_read_only_config_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`DELETE` **400** bersa ham, oqim ro'yxatdan chiqqan bo'lsa — MUVAFFAQIYAT.
+
+    `ensure_stream` bilan bir xil sabab: `DELETE` ham konfiguratsiyani
+    qayta yozmoqchi bo'ladi va `:ro` mount ostida
+    `open /config/go2rtc.yaml: read-only file system` xatosini beradi
+    (o'lchandi 2026-08-03), oqim esa ro'yxatdan CHIQADI.
+
+    ⚠ NAZORAT: `test_remove_stream_failure_carries_no_url` (pastda) oqim
+      ro'yxatda QOLGAN holatni o'lchaydi — ya'ni bu yumshatish
+      «har qanday 400 ni yutish» ga aylanmaydi.
+    """
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "DELETE":
+            return httpx.Response(400, text="read-only file system")
+        return httpx.Response(200, json={})
+
+    seen = _mocked(monkeypatch, _handler)
+
+    async with Go2rtcClient(BASE_URL) as client:
+        await client.remove_stream(STREAM_NAME)
+
+    assert [request.method for request in seen] == ["DELETE", "GET"], [
+        request.method for request in seen
+    ]
+
+
+async def test_ensure_stream_fails_when_the_registry_cannot_confirm_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tekshiruvning O'ZI yiqilsa — FAIL-CLOSED, `Go2rtcError` ko'tariladi.
+
+    ⚠ NEGA ALOHIDA TEST: `_registered()` uch holatli (`True`/`False`/
+      `None` = «ayta olmadim») va o'rta holatni «hammasi joyida» deb
+      talqin qilish yumshatishni jimgina «har qanday 400 ni yutish» ga
+      aylantirardi. Bu yerda `GET` ham yiqiladi va natija baribir
+      nosozlik bo'lishi kerak.
+
+    Sirsizlik ham qayta tekshiriladi: xabar `PUT` ning nosozligini
+    aytadi va so'rov URL'ini TASHIMAYDI (T-03-87).
+    """
+    gets: list[int] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "PUT":
+            return httpx.Response(400, text="bad request")
+        gets.append(1)
+        # Birinchi `GET` — «oqim bormi» zondi (bo'sh ro'yxat), ikkinchisi
+        # — natijani o'lchash; aynan ikkinchisi yiqiladi.
+        return httpx.Response(200, json={}) if len(gets) == 1 else httpx.Response(500)
+
+    _mocked(monkeypatch, _handler)
+
+    async with Go2rtcClient(BASE_URL) as client:
+        with pytest.raises(Go2rtcError) as failure:
+            await client.ensure_stream(STREAM_NAME, SecretStr(CREDENTIALED_SOURCE))
+
+    assert "PUT" in str(failure.value), str(failure.value)
+    assert SECRET not in f"{failure.value!s}|{failure.value!r}"
+    assert failure.value.__cause__ is None
+
+
 async def test_has_stream_failure_carries_no_response_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
