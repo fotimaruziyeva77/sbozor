@@ -559,7 +559,23 @@ async def start_discovery(
     await _device_or_404(repo, nvr_id)
 
     try:
-        run_id = await repo.create_run(nvr_id, triggered_by=principal.user_id)
+        # ⚠⚠ SAVEPOINT MAJBURIY VA BU O'LCHANGAN FAKT, EHTIYOTKORLIK EMAS.
+        #
+        #    `IntegrityError` PostgreSQL tranzaksiyasini ABORT holatiga
+        #    qo'yadi va undan keyingi HAR QANDAY operator
+        #
+        #      InFailedSQLTransactionError: current transaction is aborted
+        #
+        #    beradi. Ya'ni savepoint'siz quyidagi `active_run_id()` o'qishi
+        #    yiqilardi va UI-SPEC §5.6 [TALAB] talab qilgan `run_id` li 409
+        #    o'rniga foydalanuvchi **500** olardi — global handler uni
+        #    `internal_error` ga aylantirib, sababni butunlay yo'qotardi.
+        #
+        #    `begin_nested()` konstrayt buzilishini SAVEPOINT ichida ushlab
+        #    qoladi: u orqaga qaytariladi, tashqi tranzaksiya esa TIRIK
+        #    qoladi va keyingi o'qish ishlaydi.
+        async with session.begin_nested():
+            run_id = await repo.create_run(nvr_id, triggered_by=principal.user_id)
     except IntegrityError as exc:
         raise await _discovery_conflict(repo, nvr_id, exc) from exc
 
@@ -571,19 +587,26 @@ async def start_discovery(
             actor_id=principal.user_id,
         )
     except Exception as exc:  # noqa: BLE001 - sabab quyida, yo'l yopilishi SHART
-        # ⚠ NAVBATGA TUSHMAGAN YUGURISH `failed` DEB YOPILADI VA BU
-        #   MAJBURIY. Aks holda qator MANGU `queued` bo'lib qolardi va
-        #   qisman UNIQUE indeks shu NVR uchun HAR QANDAY keyingi
-        #   kashfiyotni bloklardi — foydalanuvchi uchun bu "tugma
-        #   ishlamay qoldi" bo'lib ko'rinardi va sababi hech qayerda
-        #   yozilmasdi.
+        # ⚠ ISTISNO KO'TARILISHI YUGURISH QATORINI HAM OLIB KETADI — VA BU
+        #   AYNAN KERAKLI XULQ.
+        #
+        #   `get_tenant_session` sessiyani `async with session.begin():`
+        #   ichida beradi, ya'ni endpointdan chiqqan istisno butun
+        #   tranzaksiyani ROLLBACK qiladi va yuqoridagi `create_run`
+        #   INSERT'i BEKOR BO'LADI.
+        #
+        #   Natija: navbatga tushmagan kashfiyotdan hech qanday qator
+        #   qolmaydi. Bu MUHIM, chunki `0012` dagi qisman UNIQUE indeks
+        #   `status IN ('queued','running')` ustida: qolib ketgan
+        #   `queued` qator shu NVR uchun HAR QANDAY keyingi kashfiyotni
+        #   MANGU bloklardi va foydalanuvchi uni "tugma ishlamay qoldi"
+        #   deb ko'rardi.
+        #
+        #   ⚠ SHUNING UCHUN BU YERDA `finish_run(failed)` YOZILMAYDI: u
+        #     o'sha rollback bilan birga yo'qolardi va faqat "yozdik"
+        #     degan YOLG'ON xotirjamlik qolardi. Urinishning izi
+        #     jurnalda (`log.exception`) qoladi.
         log.exception("nvr_discovery_enqueue_failed", nvr_id=str(nvr_id), run_id=str(run_id))
-        await repo.finish_run(
-            run_id,
-            DiscoveryRunStatus.FAILED.value,
-            error_code=JOB_INTERNAL_ERROR,
-            error_detail={"raw": "kashfiyotni navbatga qo'yib bo'lmadi"},
-        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=JOB_INTERNAL_ERROR,
