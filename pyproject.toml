@@ -24,7 +24,19 @@ testpaths = ["tests"]
 # Bu ATAYIN aniq yozilgan: pytest'ning rootdir'ga qarab sys.path ni o'zi
 # to'ldirishi test faylining qayerda turishiga bog'liq va jimgina o'zgaradi.
 pythonpath = [".", "tests", "services/core-api"]
-addopts = "-q --strict-markers"
+# ⚠ `-m "not hardware"` STANDART HOLAT (03-11). Real qurilma talab qiladigan
+#   to'plam (`tests/integration/test_real_nvr.py`) FAZANI BLOKLAMAYDI —
+#   ROADMAP ning self-service qoidasi: «tashqi bog'liqlik hech qachon
+#   `Blocks:` bo'lmaydi». Filtr AYNAN SHU YERDA, `package.json` da emas:
+#   `npm run test` ham, xostdagi yalang'och `pytest` ham, IDE ham bir xil
+#   standartni olishi kerak — uchta joyda takrorlangan filtr ikkitasida
+#   unutilardi.
+#
+#   Buyruq qatoridagi `-m` bu qiymatni TO'LIQ ALMASHTIRADI (pytest'da `-m`
+#   `store` turidagi opsiya), ya'ni `pytest -m hardware` va
+#   `pytest -m "sim and not slow"` kutilgandek ishlaydi. O'lchandi:
+#   `-m hardware --collect-only` -> 5 test, `-m "not hardware"` -> 0.
+addopts = "-q --strict-markers -m \"not hardware\""
 markers = [
     "tenancy: tenant izolyatsiyasi (RLS) invariantlari — faza darvozasi, majburiy yashil",
     # 3-FAZA. `--strict-markers` ostida e'lon qilinmagan marker YIG'ILISH
