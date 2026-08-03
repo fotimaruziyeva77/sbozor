@@ -3,10 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 
-import { apiFetch } from "@/lib/api-client";
+import { ApiError, apiFetch } from "@/lib/api-client";
 import {
   cameraListResponseSchema,
   cameraSchema,
+  discoveryConflictSchema,
   discoveryRunSchema,
   discoveryStartResponseSchema,
   emptyResponseSchema,
@@ -283,6 +284,24 @@ export function useStartDiscovery() {
       }),
     onSuccess: () => invalidate(client, [nvrDevicesKey(marketId)]),
   });
+}
+
+/**
+ * `409 discovery_already_running` -> MAVJUD yugurishning `run_id` i.
+ *
+ * ⚠ `null` — bu 409 EMAS (yoki tanasi kutilgan shaklda emas), ya'ni
+ *   chaqiruvchi xatoni haqiqiy xato sifatida ko'rsatishi kerak.
+ *
+ * Yuqoridagi `useStartDiscovery` izohi bu funksiyani NOMI BILAN
+ * kutgan edi: shakl ajratish mutatsiyaning `onError` shartnomasini
+ * yashirmasligi uchun CHAQIRUVCHI tomonda turadi. Ikki chaqiruvchi bor
+ * (NVR formasi va `/cameras` sahifasidagi «Qayta skanerlash»), shuning
+ * uchun u shu yerda — komponentda emas.
+ */
+export function discoveryRunIdOf(error: unknown): string | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+  const parsed = discoveryConflictSchema.safeParse(error.body);
+  return parsed.success ? parsed.data.run_id : null;
 }
 
 /* --- Kashfiyot yugurishi: kodbazadagi BIRINCHI poll ----------------------- */

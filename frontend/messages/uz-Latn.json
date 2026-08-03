@@ -618,7 +618,9 @@
     "network": "Tarmoq bilan aloqa yo'q",
     "forbidden": "Bu amal uchun ruxsat yo'q",
     "notFound": "Topilmadi",
-    "required": "Bu maydon to'ldirilishi shart"
+    "required": "Bu maydon to'ldirilishi shart",
+    "loadFailedTitle": "Ma'lumot yuklanmadi",
+    "loadFailedBody": "Sahifani yangilang yoki bir oz kutib qayta urinib ko'ring. Saqlangan ma'lumot o'zgarmadi."
   },
   "staffCredentials": {
     "title": "Vaqtinchalik parollar",

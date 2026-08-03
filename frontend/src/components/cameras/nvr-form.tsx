@@ -15,10 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ApiError } from "@/lib/api-client";
 import type { NvrDevice, NvrTestConnectionResponse } from "@/lib/api-types";
-import { discoveryConflictSchema } from "@/lib/api-types";
 import {
+  discoveryRunIdOf,
   useCreateNvr,
   useStartDiscovery,
   useTestConnection,
@@ -432,7 +431,7 @@ export function NvrForm({
          * ikki tabda) tugmani bir vaqtda bosishi — normal ish jarayoni.
          * Javob tanasidagi MAVJUD yugurishning `run_id` i qabul qilinadi.
          */
-        runId = conflictRunId(error);
+        runId = discoveryRunIdOf(error);
         if (runId === null) throw error;
       }
 
@@ -673,13 +672,4 @@ export function PasswordInput({
       </button>
     </div>
   );
-}
-
-/* --- 409 poyga holati ----------------------------------------------------- */
-
-/** `409 discovery_already_running` tanasidagi MAVJUD yugurish. */
-function conflictRunId(error: unknown): string | null {
-  if (!(error instanceof ApiError) || error.status !== 409) return null;
-  const parsed = discoveryConflictSchema.safeParse(error.body);
-  return parsed.success ? parsed.data.run_id : null;
 }
