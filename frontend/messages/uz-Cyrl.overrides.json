@@ -2,6 +2,8 @@
   "_comment": "YAGONA qo'lda tahrirlanadigan kirill fayli (D-14). `uz-Cyrl.json` bundan va `uz-Latn.json` dan avtomatik hosil qilinadi — unga qo'l tegizilmaydi. Ustuvorlik: messages > words > mapping. `messages` — to'liq kalit (`audit.resultCount`) → to'liq kirillcha xabar; transliterator butunlay chetlab o'tiladi, shuning uchun ICU platsholderlarini O'ZINGIZ to'g'ri ko'chiring. `words` — bitta so'z → kirillcha shakl; bosh harf holati manbadan ko'chiriladi (`Protsent` → `Процент`).",
   "_comment_agglutination": "DIQQAT: o'zbek tili AGGLYUTINATIV — har qo'shimchali shakl ALOHIDA yozuv talab qiladi. `filtr` yozuvi `filtrga` ni QAMRAMAYDI, chunki lug'at butun so'zni (token) qidiradi, o'zakni emas. Shu sababli bu ro'yxat yangi kalit qo'shilgan sayin o'sadi. Yangi kalitda lug'atdagi so'zning yangi qo'shimchali shakli paydo bo'lsa, uni shu yerga qo'shing va `npm --prefix frontend test` bilan tekshiring.",
   "_comment_excel": "COPY QOIDASI (override YETARLI EMAS): Excel va xlsx so'zlariga APOSTROFLI qo'shimcha ulanmaydi — apostrofli shakl boshqa token bo'lgani uchun override uni qutqarmaydi va apostrof tutuq belgisiga aylanadi. To'g'ri shakl: `Excel fayldan yuklash`, `xlsx fayl`. To'liq qoida va o'lchangan misollar: `frontend/messages/README.md` (Qoida 1). Darvoza: `scripts/gen-cyrillic.test.mjs`.",
+  "_comment_acronyms": "AKRONIMLAR KIRILLGA O'GIRILMAYDI (3-faza, UI-SPEC §11.7 Qoida 3): admin bu satrni NVR qurilmasining O'Z interfeysi bilan solishtiradi va u yerda `NVR`, `NTP`, `RTSP` lotin yozuvida turadi. `НВР` foydalanuvchini qurilma bilan bog'lay olmaydigan YANGI atama tug'dirardi. Rus tilida ham shu sabab: `NVR` saqlanadi. DIQQAT — bu ro'yxat `scripts/gen-cyrillic.test.mjs` dagi `allowed` regexi bilan JUFT yuritiladi: biri to'ldirilib ikkinchisi unutilsa, o'sha test qizaradi va bu KUTILGAN xulq.",
+  "_comment_semantic": "SEMANTIK DEFEKT (3-faza, UI-SPEC §11.7 Qoida 2): sof kirill chiqish ham NOTO'G'RI bo'lishi mumkin va skript tekshiruvi buni USHLAMAYDI. O'lchangan: `autentifikatsiya` -> `аутентификатсия` (to'g'risi `аутентификация`) va `Asia/Tashkent` -> `Асиа/Ташкент`. Birinchisi override bilan tuzatiladi (`ts` birikmasi qoidasi), ikkinchisi esa COPY qoidasi bilan: IANA identifikatori matnga umuman kiritilmaydi, o'rniga `Toshkent` yoziladi.",
   "messages": {},
   "words": {
     "SBOZOR": "SBOZOR",
@@ -23,6 +25,29 @@
     "filtrlash": "фильтрлаш",
     "filtrga": "фильтрга",
     "filtrni": "фильтрни",
-    "filtrdan": "фильтрдан"
+    "filtrdan": "фильтрдан",
+    "filtrini": "фильтрини",
+
+    "NVR": "NVR",
+    "NTP": "NTP",
+    "RTSP": "RTSP",
+    "ISAPI": "ISAPI",
+    "IP": "IP",
+    "VPN": "VPN",
+    "GMT": "GMT",
+    "Hikvision": "Hikvision",
+    "WireGuard": "WireGuard",
+    "WebRTC": "WebRTC",
+    "MSE": "MSE",
+    "HLS": "HLS",
+    "digest": "digest",
+    "basic": "basic",
+    "firmware": "firmware",
+    "http": "http",
+    "https": "https",
+    "web": "веб",
+    "Web": "Веб",
+    "autentifikatsiya": "аутентификация",
+    "autentifikatsiyasini": "аутентификациясини"
   }
 }

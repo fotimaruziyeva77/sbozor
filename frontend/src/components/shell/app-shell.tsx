@@ -11,6 +11,7 @@ import {
   Store,
   UserRound,
   Users,
+  Video,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -58,6 +59,7 @@ type NavItem = {
     | "/vendors"
     | "/tariffs"
     | "/calendar"
+    | "/cameras"
     | "/users"
     | "/audit"
     | "/markets/new";
@@ -68,6 +70,7 @@ type NavItem = {
     | "vendors"
     | "tariffs"
     | "calendar"
+    | "cameras"
     | "users"
     | "audit"
     | "newMarket";
@@ -125,6 +128,32 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "calendar",
     icon: CalendarDays,
     permission: "market_data_view",
+    group: "market",
+  },
+  /*
+   * "Kameralar" — 3-fazaning YAGONA yangi bo'limi (UI-SPEC §3.3).
+   *
+   * `market` GURUHIDA: kamera — bozor ICHIDAGI obyekt (xarita, rasta va
+   * tarif bilan bir qatorda), platforma amali emas. "Yangi bozor" ning
+   * `system` guruhida turishi bilan izchil.
+   *
+   * `/calendar` DAN KEYIN TURISHI ATAYIN: yuqoridagi izohga ko'ra
+   * ro'yxatning BOSHI mobil pastki panelning birinchi to'rttasini beradi
+   * (`MOBILE_PRIMARY_COUNT`). Kamerani yuqoriga ko'chirish kassir va
+   * admin eng ko'p ishlatadigan bo'limni paneldan siqib chiqarardi —
+   * jonli ko'rish esa KUNLIK amal emas, u nizo yoki tekshiruvda
+   * ochiladi. Element "Ko'proq" varag'iga tushadi va mobil kontrakt
+   * (eng ko'pi 5 element) BUZILMAYDI.
+   *
+   * `camera_view` faqat menyuni yashiradi (fayl boshidagi DIQQAT
+   * bandiga qarang). Haqiqiy darvoza — `require_permission(CAMERA_VIEW)`
+   * (03-06/03-07).
+   */
+  {
+    href: "/cameras",
+    labelKey: "cameras",
+    icon: Video,
+    permission: "camera_view",
     group: "market",
   },
   { href: "/users", labelKey: "users", icon: Users, permission: "user_view", group: "system" },

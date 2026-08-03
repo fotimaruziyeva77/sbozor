@@ -130,19 +130,25 @@ export const WIZARD_STEPS: readonly WizardStep[] = [
 ];
 
 /**
- * Kamera — QADAM EMAS (D-16).
+ * Kamera — QADAM EMAS (D-16), lekin endi MAVJUD BO'LIM.
  *
  * U `WIZARD_STEPS` massivida ATAYIN yo'q. Massivga qo'shilsa avtomatik
  * ravishda progress sanog'iga, `blockedBy` grafiga va "bajarilganmi?"
  * savoliga tushardi — ya'ni bozor kamerasiz HECH QACHON "to'liq"
  * ko'rinmasdi, holbuki D-16 aynan teskarisini talab qiladi: usta
- * kamerasiz YAKUNLANADI.
+ * kamerasiz YAKUNLANADI. Bu qaror 3-fazada ham O'ZGARMAYDI.
  *
- * Bu — qadam emas, `aria-disabled` ko'rsatkich: u tizim kameralarni
- * "biladi" degan xabarni beradi va admin ularni izlab yurmaydi.
+ * 3-FAZA DELTASI (UI-SPEC §3.4, U-1): `href` qo'shildi. Ilgari yozuv
+ * "keyinroq" deb turardi va bu ROST edi — bo'lim yo'q edi. Endi bo'lim
+ * bor, ya'ni bosilmaydigan ko'rsatkich YOLG'ONGA aylanardi: admin
+ * kameralarni izlab, topolmay qolardi.
+ *
+ * ⚠ `href` QADAM MAQOMINI BERMAYDI. Yozuv hamon sanoqdan, `blockedBy`
+ * grafidan va `blocking[]` dan TASHQARIDA; u faqat yo'l ko'rsatadi.
  */
 export const CAMERA_PLACEHOLDER = {
   labelKey: "wizard.step.cameras",
+  href: "/cameras",
 } as const;
 
 export type WizardStepState = "completed" | "current" | "blocked" | "pending";

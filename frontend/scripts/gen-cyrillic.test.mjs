@@ -301,6 +301,128 @@ describe("copy qoidasi — `Excel` apostrofli qo'shimcha bilan yozilmaydi", () =
 });
 
 /*
+ * =============================================================================
+ * G-5 — 3-FAZANING O'LCHANGAN TRANSLITERATSIYA HOLATLARI (UI-SPEC §11.7).
+ *
+ * Beshta holat `03-UI-SPEC.md` §0.2 da 53 ta nomzod matn ustida O'LCHANGAN
+ * (M-1/M-2/M-10) va shu yerda kutilgan chiqishi bilan qulflanadi.
+ *
+ * ⚠ BU ASSERTION'LAR TAQIQNI EMAS, KUTILGAN CHIQISHNI YOZADI. Ya'ni
+ *   transliterator yaxshilanganda (masalan `ts -> ц` qoidasi aniqroq
+ *   bo'lganda) ular YANGILANADI va bu NORMAL. Ularning vazifasi —
+ *   bugungi natijani tasodifiy o'zgarishdan saqlash, kelajakni
+ *   muzlatib qo'yish emas.
+ *
+ * ⚠ HAQIQIY override fayli o'qiladi (yuqoridagi bloklar bilan bir xil
+ *   sabab): savol "transliterator lug'atni qo'llay oladimi?" emas,
+ *   "YETKAZILAYOTGAN konfiguratsiya shu beshta holatni yopadimi?".
+ * =============================================================================
+ */
+describe("transliterate — G-5: 3-fazaning o'lchangan holatlari", () => {
+  test("T-05: akronim + qo'shimchali so'z (`NVR qurilmasiga`)", () => {
+    assert.equal(
+      transliterate("NVR qurilmasiga ulanib bo'lmadi", OVERRIDE_WORDS),
+      "NVR қурилмасига уланиб бўлмади",
+    );
+  });
+
+  test("T-06: akronim gap o'rtasida (`NTP xizmatini`)", () => {
+    assert.equal(
+      transliterate("NTP xizmatini yoqing", OVERRIDE_WORDS),
+      "NTP хизматини ёқинг",
+    );
+  });
+
+  test("T-07: aralash registrli brend nomi (`WireGuard`)", () => {
+    // Overridesiz natija `WиреГуард` edi — lotin va kirill ARALASHGAN
+    // holda, ya'ni o'qib bo'lmaydigan shakl (§0.2 (1)).
+    assert.equal(
+      transliterate("WireGuard tunneli yoqilganini tekshiring", OVERRIDE_WORDS),
+      "WireGuard туннели ёқилганини текширинг",
+    );
+  });
+
+  test("T-08: kichik harfli texnik atama juftligi (`digest/basic`)", () => {
+    // Overridesiz `дигест/басиc` chiqardi — oxirgi `c` LOTIN bo'lib
+    // qolardi, chunki `c` o'zbek lotin alifbosida yakka harf emas.
+    assert.equal(
+      transliterate(
+        "autentifikatsiya rejimini digest/basic qilib belgilang",
+        OVERRIDE_WORDS,
+      ),
+      "аутентификация режимини digest/basic қилиб белгиланг",
+    );
+  });
+
+  test("T-09: `ts` birikmali o'zlashma (`autentifikatsiyasini`)", () => {
+    /*
+     * SEMANTIK DEFEKT (§11.7 Qoida 2): overridesiz chiqish
+     * `аутентификатсиясини` bo'ladi — u SOF KIRILL, ya'ni "lotin harfi
+     * qolmagan" darvozasi uni KO'RMAYDI. To'g'ri shakl `ц` bilan va u
+     * faqat lug'at orqali keladi.
+     */
+    assert.equal(
+      transliterate(
+        "digest autentifikatsiyasini qabul qilmayapti",
+        OVERRIDE_WORDS,
+      ),
+      "digest аутентификациясини қабул қилмаяпти",
+    );
+  });
+});
+
+/*
+ * COPY QOIDALARI — override YETARLI EMASLIGINI hujjatlashtiradi (§11.7).
+ *
+ * Ikkalasi ham `Excel'dan` qoidasining aynan davomi: yechim KODDA emas,
+ * MATNDA. Shuning uchun darvoza transliteratorni emas, tarjima
+ * fayllarini tekshiradi.
+ */
+describe("copy qoidasi — akronim va IANA identifikatori", () => {
+  test("Qoida 1: apostrofli shakl HAMON buziladi — qoidaning mavjudlik sababi", () => {
+    assert.equal(
+      transliterate("NVR'ga ulanmadi", OVERRIDE_WORDS),
+      "НВРъга уланмади",
+    );
+    assert.equal(
+      transliterate("NTP'ni yoqing", OVERRIDE_WORDS),
+      "НТПъни ёқинг",
+    );
+  });
+
+  test("Qoida 2: IANA identifikatori buziladi, `Toshkent` esa to'g'ri chiqadi", () => {
+    // Chiqish SOF KIRILL va shuning uchun skript tekshiruvidan O'TIB
+    // KETADI — aynan shu sababdan qoida COPY darajasida yashaydi.
+    assert.equal(transliterate("Asia/Tashkent", OVERRIDE_WORDS), "Асиа/Ташкент");
+    assert.ok(!/[A-Za-z]/u.test(transliterate("Asia/Tashkent", OVERRIDE_WORDS)));
+
+    assert.equal(transliterate("Toshkent", OVERRIDE_WORDS), "Тошкент");
+  });
+
+  for (const file of ["uz-Latn.json", "ru.json"]) {
+    test(`${file} da akronimga apostrofli qo'shimcha ulanmagan`, () => {
+      const raw = readFileSync(path.join(MESSAGES_DIR, file), "utf8");
+
+      for (const acronym of ["NVR", "NTP", "RTSP", "ISAPI", "VPN", "GMT"]) {
+        assert.ok(
+          !new RegExp(`${acronym}['ʻʼ‘’]`, "u").test(raw),
+          `${file}: \`${acronym}'…\` topildi — o'rniga \`${acronym} qurilmasiga\` / \`${acronym} xizmatini\` shaklini yozing (README Qoida 1)`,
+        );
+      }
+    });
+
+    test(`${file} da IANA vaqt mintaqasi identifikatori yo'q`, () => {
+      const raw = readFileSync(path.join(MESSAGES_DIR, file), "utf8");
+
+      assert.ok(
+        !/Asia\//u.test(raw),
+        `${file}: \`Asia/…\` topildi — o'rniga shahar nomini yozing (\`Toshkent\`), README Qoida 5`,
+      );
+    });
+  }
+});
+
+/*
  * Hosil qilingan `uz-Cyrl.json` ning O'ZI tekshiriladi: yuqoridagi
  * testlar sof funksiyani qulflaydi, bu esa YETKAZILAYOTGAN faylni.
  */
@@ -308,10 +430,40 @@ describe("uz-Cyrl.json — yetkazilayotgan fayl toza", () => {
   test("buzuq transliteratsiya izlari yo'q", () => {
     const raw = readFileSync(path.join(MESSAGES_DIR, "uz-Cyrl.json"), "utf8");
 
-    for (const broken of ["Эхcэл", "хлсх", "Филтр", "филтр"]) {
+    /*
+     * Ro'yxat ikki avloddan iborat va ikkalasi ham O'LCHANGAN:
+     *
+     *   2-faza (T-01…T-04): `Эхcэл`, `хлсх`, `Филтр` — override
+     *     yetishmasligi yoki lug'atdan tushib qolish.
+     *
+     *   3-faza (UI-SPEC §11.7): akronimning kirillga o'girilishi
+     *     (`НВР`/`РТСП`/`НТП`), apostrofli qo'shimchaning tutuq
+     *     belgisiga aylanishi (`ъга`/`ъни`), IANA identifikatorining
+     *     buzilishi (`Асиа`) va `ts` birikmasining `тс` bo'lib
+     *     qolishi (`аутентификатсия`).
+     *
+     * ⚠ OXIRGI IKKITASI SEMANTIK: chiqishda na lotin harfi, na `ъ` bor,
+     *   ya'ni pastdagi "lotin harfi qolmagan" testi ularni KO'RMAYDI.
+     *   Ular faqat shu ro'yxat orqali ushlanadi.
+     */
+    const broken = [
+      "Эхcэл",
+      "хлсх",
+      "Филтр",
+      "филтр",
+      "НВР",
+      "РТСП",
+      "НТП",
+      "ъга",
+      "ъни",
+      "Асиа",
+      "аутентификатсия",
+    ];
+
+    for (const form of broken) {
       assert.ok(
-        !raw.includes(broken),
-        `uz-Cyrl.json ichida buzuq shakl topildi: ${broken}`,
+        !raw.includes(form),
+        `uz-Cyrl.json ichida buzuq shakl topildi: ${form}`,
       );
     }
   });
@@ -325,7 +477,16 @@ describe("uz-Cyrl.json — yetkazilayotgan fayl toza", () => {
     // bo'lmas holga kelardi. Ro'yxat `uz-Cyrl.overrides.json` -> `words`
     // bilan JUFT yuritiladi — biri yangilanib, ikkinchisi unutilsa
     // AYNAN shu test qizaradi.
-    const allowed = /SBOZOR|Excel|xlsx|CSV|csv|https?:\/\/\S+|[\w.%+-]+@[\w.-]+/gu;
+    //
+    // ⚠ 3-FAZA: NVR domenining atamalari qo'shildi (UI-SPEC §11.7
+    // Qoida 3). Akronimlar KIRILLGA O'GIRILMAYDI, chunki admin bu
+    // satrni NVR qurilmasining O'Z interfeysi bilan solishtiradi va u
+    // yerda ular lotin yozuvida turadi; `НВР` yangi, hech qayerda
+    // uchramaydigan atama tug'dirardi. `\b` chegaralari ATAYIN: 2-faza
+    // yozuvlari chegarasiz va ular so'z ICHIDA ham mos kelib, darvozani
+    // sekin bo'shatib borardi.
+    const allowed =
+      /SBOZOR|Excel|xlsx|CSV|csv|https?:\/\/\S+|[\w.%+-]+@[\w.-]+|\b(?:Hikvision|WireGuard|WebRTC|ISAPI|RTSP|HLS|MSE|NVR|NTP|VPN|GMT|IP)\b|\b(?:firmware|digest|basic|https|http)\b/gu;
 
     const walk = (node, prefix) => {
       for (const [key, value] of Object.entries(node)) {

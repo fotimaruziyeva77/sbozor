@@ -103,17 +103,26 @@ export function WizardStepper({
          * Kamera — massivning SAKKIZINCHI a'zosi EMAS (`wizard-steps.ts`
          * dagi sababga qarang), shuning uchun u shu yerda alohida
          * chiziladi va hech qanday sanoqqa qo'shilmaydi.
+         *
+         * 3-FAZA DELTASI (UI-SPEC §3.4, U-2): endi HAQIQIY HAVOLA va
+         * `aria-disabled` OLIB TASHLANDI — bo'lim mavjud, ya'ni bloklangan
+         * ko'rinish yolg'on bo'lardi.
+         *
+         * ⚠ QADAM RAQAMI VA HOLAT BELGISI ATAYIN BERILMAYDI. `StepItem`
+         * dagi doira/`Check`/`Lock` uchligi shu yerda TAKRORLANMAYDI: ular
+         * "bajarilganmi?" savoliga javob beradi, kamera esa o'sha savolning
+         * ostida turmaydi (D-16). Ikonka neytral qoladi.
          */}
         <li className="snap-center">
-          <span
-            aria-disabled="true"
-            className="flex min-h-11 min-w-11 items-center gap-2 rounded-md px-3 py-2 text-sm text-text-muted"
+          <Link
+            className="flex min-h-11 min-w-11 items-center gap-2 rounded-md px-3 py-2 text-sm text-text-muted hover:bg-surface-muted hover:text-text"
+            href={CAMERA_PLACEHOLDER.href}
           >
             <Camera aria-hidden="true" className="size-4 text-text-muted" />
             <span className="whitespace-nowrap md:whitespace-normal">
               {t(CAMERA_PLACEHOLDER.labelKey)}
             </span>
-          </span>
+          </Link>
         </li>
       </ol>
     </nav>

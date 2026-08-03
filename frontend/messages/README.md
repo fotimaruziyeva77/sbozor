@@ -20,7 +20,7 @@ npm --prefix frontend test             # transliteratsiya SIFATI (quyidagi qoida
 
 ---
 
-## Qoida 1 — `Excel` hech qachon apostrofli qo'shimcha bilan yozilmaydi
+## Qoida 1 — lotin so'z/akronim hech qachon apostrofli qo'shimcha bilan yozilmaydi
 
 Transliteratorda `Excel` va `xlsx` uchun override bor
 (`uz-Cyrl.overrides.json` → `words`), lekin **override apostrofli shaklni
@@ -42,8 +42,24 @@ Shuning uchun matn yozishda:
 - ❌ `Excel'ga eksport` → ✅ **`Excel faylga eksport`**
 - ❌ `.xlsx fayl` → ✅ **`xlsx fayl`**
 
+**3-faza kengaytmasi — NVR domenining akronimlari** (o'lchandi: 03-UI-SPEC
+§0.2, 53 ta nomzod matn):
+
+| uz-Latn | uz-Cyrl (hosila) | |
+|---------|------------------|---|
+| `NVR'ga ulanmadi` | `НВРъга уланмади` | ❌ override BOR bo'lsa ham buziladi |
+| `NVR qurilmasiga ulanib bo'lmadi` | `NVR қурилмасига уланиб бўлмади` | ✅ |
+| `NTP'ni yoqing` | `НТПъни ёқинг` | ❌ |
+| `NTP xizmatini yoqing` | `NTP хизматини ёқинг` | ✅ |
+| `RTSP'ni tekshiring` | `РТСПъни текширинг` | ❌ |
+| `RTSP portini tekshiring` | `RTSP портини текширинг` | ✅ |
+
+Qoida bitta jumlada: **akronimdan keyin apostrof emas, SO'Z qo'ying**
+(`qurilmasiga`, `xizmatini`, `portini`, `sozlamalarida`).
+
 Bu qoida `gen-cyrillic.test.mjs` da qulflangan: `uz-Latn.json` yoki
-`ru.json` ichida apostrofli `Excel'` shakli paydo bo'lsa test qizaradi.
+`ru.json` ichida apostrofli `Excel'`, `NVR'`, `NTP'`, `RTSP'`, `ISAPI'`,
+`VPN'` yoki `GMT'` shakli paydo bo'lsa test qizaradi.
 
 ---
 
@@ -64,7 +80,40 @@ qo'shing va `npm --prefix frontend test` bilan tekshiring.
 
 Hozir qamralgan o'zaklar: `filtr`, `protsent`, `protsess`, `litsenziya`,
 `aktsiya`, `sertifikat`, `terminal`, `Excel`, `xlsx`, `SBOZOR`,
-`Karmana`, `Navoiy`.
+`Karmana`, `Navoiy`, `autentifikatsiya` (3-faza).
+
+---
+
+## Qoida 5 — sof kirill chiqish ham NOTO'G'RI bo'lishi mumkin (semantik defekt)
+
+Yuqoridagi qoidalar **ko'rinadigan** defektlar haqida: matnda lotin harfi
+yoki tutuq belgisi qolib ketadi va uni skript ushlaydi. **Uchinchi sinf
+esa ko'rinmaydi** — chiqish sof kirill bo'ladi, lekin ma'nosi buziladi
+(o'lchandi: 03-UI-SPEC §0.2 (3)):
+
+| uz-Latn | uz-Cyrl (hosila) | |
+|---------|------------------|---|
+| `Asia/Tashkent` | `Асиа/Ташкент` | ❌ IANA identifikatori buzildi |
+| `Toshkent` | `Тошкент` | ✅ |
+| `autentifikatsiya` (overridesiz) | `аутентификатсия` | ❌ to'g'risi `аутентификация` |
+| `autentifikatsiya` (override bilan) | `аутентификация` | ✅ |
+
+Ikkala natijada ham na lotin harfi, na `ъ` bor — ya'ni **mavjud skript
+darvozasi ularni ko'rmaydi**. Shuning uchun ikkita qoida:
+
+1. **IANA vaqt mintaqasi identifikatori matnga umuman kiritilmaydi.**
+   `Asia/Tashkent` o'rniga shahar nomi — `Toshkent`. (Identifikatorning
+   o'zi kerak bo'lsa u DB kontenti yoki texnik qiymat, tarjima matni
+   emas.)
+2. **`ts` birikmasi bo'lgan har o'zlashma override talab qiladi**
+   (`ts` → `ц`, `тс` emas). Lug'atda `protsent`, `protsess`, `litsenziya`,
+   `aktsiya` shu sababdan bor; 3-faza `autentifikatsiya` bilan ro'yxatni
+   davom ettirdi.
+
+Darvoza: `gen-cyrillic.test.mjs` — buzuq shakllar ro'yxati
+(`Асиа`, `аутентификатсия`) va `Asia/` ning tarjima fayllarida
+bo'lmasligi. Ikkalasi ham **matn** darajasidagi tekshiruv, chunki
+transliteratorni tuzatish bu sinfni yopmaydi.
 
 ---
 

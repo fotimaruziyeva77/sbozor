@@ -196,9 +196,27 @@ describe("Usta relsi — to'rt holat, uch kanal (§6.3)", () => {
     expect(camera.querySelector("[role='alert']")).toBeNull();
     expect(camera.innerHTML).not.toMatch(/bg-(warning|danger)/iu);
 
-    // Ko'rsatkich HAVOLA emas: bosadigan joy yo'q, izlab yuriladigan ham.
-    expect(within(camera).queryByRole("link")).toBeNull();
-    expect(camera.querySelector("[aria-disabled='true']")).not.toBeNull();
+    /*
+     * 3-FAZA DELTASI (UI-SPEC §3.4, U-2): ko'rsatkich endi HAQIQIY
+     * HAVOLA va `aria-disabled` YO'Q.
+     *
+     * Da'vo TESKARISIGA o'zgardi va bu ataylab: 2-fazada bo'lim MAVJUD
+     * EMAS edi, ya'ni bloklangan ko'rinish ROST edi. 3-fazadan keyin
+     * `/cameras` bor — bosilmaydigan ko'rsatkich adminni kameralarni
+     * izlab yurishga majburlardi.
+     *
+     * ⚠ QADAM MAQOMI BERILMAGANI HAMON QULFLANGAN (pastdagi ikki
+     *   assert): havola qadam raqamini ham, `Check`/`Lock` belgisini
+     *   ham OLMAYDI — D-16 shu ikkisi orqali buzilardi.
+     */
+    const link = within(camera).getByRole("link");
+    expect(link).toHaveAttribute("href", "/cameras");
+    expect(link).not.toHaveAttribute("aria-disabled");
+    expect(camera.querySelector("[aria-disabled='true']")).toBeNull();
+
+    // Qadam maqomi berilmagan: sanoq doirasi ham, holat belgisi ham yo'q.
+    expect(text).not.toMatch(/\d/u);
+    expect(camera.querySelector("[aria-current]")).toBeNull();
 
     // Butun relsda ham shoshilinch e'lon yo'q.
     expect(screen.queryByRole("alert")).toBeNull();

@@ -74,6 +74,16 @@ type ChecklistRow = {
    * ko'rsatilmaydi va `·` belgisi bilan chiziladi.
    */
   readonly neutral: boolean;
+  /**
+   * Ustadan TASHQARIDAGI bo'limga havola (UI-SPEC §3.4, U-3).
+   *
+   * `step` dan AJRATILGAN va bu ataylab: `step` ustaning O'Z marshrutiga
+   * (`?step=N`) ketadi va faqat BAJARILMAGAN bandda ochiladi; bu esa
+   * doimiy yo'l ko'rsatkichi va u band "bajarilmagan" bo'lishini talab
+   * QILMAYDI. Ikkalasini bitta maydonga yig'ish neytral bandni to'siqqa
+   * aylantirardi.
+   */
+  readonly href?: string;
 };
 
 export function ActivationPanel() {
@@ -200,12 +210,25 @@ export function ActivationPanel() {
       neutral: true,
     },
     {
-      // D-16: kamera qadam ham emas, to'siq ham emas.
+      /*
+       * D-16: kamera qadam ham emas, to'siq ham emas. 3-fazadan keyin u
+       * MAVJUD BO'LIM, shuning uchun qator havolaga aylandi (U-3).
+       *
+       * ⚠ SANOQ ATAYIN `—`, `status.cameras` EMAS. Server bu maydonni
+       * HAR DOIM `0` qaytaradi (`markets.py::_setup_status_response` —
+       * u D-16 ning "ilgagi" bo'lib qo'yilgan va haqiqiy sanoq hali
+       * ulanmagan). "0 ta" yozish kameralar ulangandan keyin ham
+       * ekranda turar va u YOLG'ON dalil bo'lardi; `—` esa "hali
+       * o'lchanmagan" degan halol qiymat (UI-SPEC §3.4 U-3 ikkalasiga
+       * ham ruxsat beradi). Sanoq ulanganda shu qatorning bitta
+       * qiymatini almashtirish kifoya.
+       */
       labelKey: "wizard.step.cameras",
       step: null,
       codes: [],
       value: "—",
       neutral: true,
+      href: "/cameras",
     },
   ];
 
@@ -306,6 +329,7 @@ export function ActivationPanel() {
 
             return (
               <ChecklistLine
+                href={row.href}
                 key={row.labelKey}
                 label={t(row.labelKey)}
                 linkRef={
@@ -363,14 +387,21 @@ export function ActivationPanel() {
         {/*
          * §6.7: kamera haqidagi bitta NEYTRAL jumla — ramkasiz, fonsiz,
          * ikonkasiz.
+         *
+         * 3-FAZA DELTASI: kalit `wizard.cameraLater` dan `wizard.cameraNote`
+         * ga ko'chdi va matn "keyinroq ulanadi" dan "istalgan vaqtda
+         * ulanadi" ga o'zgardi (UI-SPEC §11.5). "Keyinroq" bo'lim
+         * mavjud bo'lmaganda ROST edi; endi u kutish holatini bildirib,
+         * kamerasiz bozorni chala ko'rsatardi.
          */}
-        <p className="text-sm text-text-muted">{t("wizard.cameraLater")}</p>
+        <p className="text-sm text-text-muted">{t("wizard.cameraNote")}</p>
       </CardContent>
     </Card>
   );
 }
 
 function ChecklistLine({
+  href,
   label,
   linkRef,
   neutral,
@@ -378,6 +409,7 @@ function ChecklistLine({
   unmet,
   value,
 }: {
+  href?: string;
   label: string;
   linkRef?: React.Ref<HTMLAnchorElement>;
   neutral: boolean;
@@ -412,6 +444,27 @@ function ChecklistLine({
         >
           {body}
           <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+        </Link>
+      </li>
+    );
+  }
+
+  /*
+   * Ustadan tashqaridagi bo'limga doimiy havola (U-3).
+   *
+   * ⚠ `ArrowRight` ATAYIN QO'YILMAYDI. Yuqoridagi tarmoqda u "shu yerni
+   * to'ldiring" degan chaqiruv; bu yerda esa band to'ldirishni TALAB
+   * QILMAYDI va o'sha strelka uni to'siqqa o'xshatib qo'yardi (D-16).
+   * Belgi `·` bo'lib qoladi — hech qachon `✓` yoki `✗`.
+   */
+  if (href !== undefined) {
+    return (
+      <li>
+        <Link
+          className="flex min-h-11 items-center gap-2 rounded-md px-2 text-sm hover:bg-surface-muted"
+          href={href}
+        >
+          {body}
         </Link>
       </li>
     );
