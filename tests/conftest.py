@@ -132,6 +132,65 @@ def _psycopg_dsn(user: str, password: str, endpoint: PgEndpoint) -> str:
     )
 
 
+_PROCESS_ENV_DEFAULTS: dict[str, str] = {
+    "DATABASE_URL": "postgresql+asyncpg://sbozor_app:x@db:5432/sbozor",
+    "VALKEY_URL": "redis://cache:6379/0",
+    "JWT_SECRET": "test-only-secret-not-used-for-signing-anywhere",
+}
+"""`get_settings()` ning MAJBURIY maydonlari — faqat u qurilishi uchun.
+
+⚠ BU QIYMATLAR HECH NIMANI IMZOLAMAYDI VA HECH QAYERGA ULANMAYDI. Ilova
+`app.state.settings` dan o'qiydi (`test_settings` fixture'i), ya'ni HTTP
+testlari haqiqiy `jwt_secret` ni o'sha yerdan oladi.
+"""
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _process_settings_env() -> Iterator[None]:
+    """MODUL DARAJASIDAGI `get_settings()` uchun muhit — 03-06 ning majburiy qadami.
+
+    =======================================================================
+    NEGA KERAK: `app/security/secrets.py::nvr_cipher()` sozlamani
+    `app.state.settings` DAN EMAS, GLOBAL `get_settings()` dan o'qiydi
+    (03-04 ning qarori: kalit `lru_cache` ostidagi bitta instansda
+    yashaydi). Ya'ni `POST /nvr-devices` yo'lidagi `encrypt_nvr_password()`
+    `Settings()` ni QURADI va u to'rtta majburiy maydonni talab qiladi.
+
+    `tests` konteynerida bu maydonlar YO'Q (`compose.yaml` ularni faqat
+    `core-api` va `worker` ga beradi), ya'ni usiz butun NVR API to'plami
+    `ValidationError` bilan yiqilardi — va sabab kod xatosi kabi
+    ko'rinardi.
+
+    ⚠ SHIFR KALITI HAR SESSIYADA YANGI (`test_settings` bilan aynan bir
+      xil qaror): qotirilgan kalit repozitoriyga tushgan sir bo'lardi.
+      Shifrlash ham, deshifrlash ham AYNAN shu instansdan o'tadi, ya'ni
+      ular o'zaro mos.
+
+    ⚠ `setdefault` EMAS, ANIQ O'RNATISH: qiymatlar oldindan berilgan
+      bo'lsa ham test to'plami o'z kaliti bilan ishlashi kerak, aks holda
+      natija xost muhitiga bog'lanib qolardi.
+    =======================================================================
+    """
+    from app.security.secrets import nvr_cipher
+    from app.settings import get_settings as _get_settings
+
+    values = {**_PROCESS_ENV_DEFAULTS, "NVR_CREDENTIAL_KEY": Fernet.generate_key().decode()}
+    previous = {name: os.environ.get(name) for name in values}
+    os.environ.update(values)
+    _get_settings.cache_clear()
+    nvr_cipher.cache_clear()
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        _get_settings.cache_clear()
+        nvr_cipher.cache_clear()
+
+
 @pytest.fixture(scope="session")
 def pg_container() -> Iterator[PgEndpoint]:
     """Haqiqiy `postgres:18.4-trixie`.

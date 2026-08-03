@@ -258,6 +258,22 @@ class NvrRepository(TenantScopedRepository):
             )
         )
 
+    async def devices_with_credentials(self) -> frozenset[UUID]:
+        """Paroli SAQLANGAN qurilmalarning `id` lari — BITTA so'rov bilan.
+
+        ⚠ SHIFRMATN UMUMAN O'QILMAYDI: so'rov faqat `nvr_id` ustunini
+          tanlaydi. `has_password` bayrog'i uchun tokenning O'ZI kerak
+          emas va uni tarmoqdan olib kelish sirni keraksiz joyga —
+          ilova xotirasiga — chiqarardi.
+
+        ⚠ NEGA RO'YXAT UCHUN ALOHIDA METOD: har qurilma uchun
+          `get_credential()` chaqirish N+1 hosil qilardi. Bir bozorda
+          NVR soni kichik (Karmanada bitta), lekin naqsh 4-fazaga meros
+          bo'lib o'tardi va u yerda kameralar soni yuzlab bo'ladi.
+        """
+        result = await self.session.execute(self.scoped(select(NvrCredential.nvr_id)))
+        return frozenset(result.scalars().all())
+
     async def get_credential(self, nvr_id: UUID) -> bytes | None:
         """Shifrlangan parol yoki `None`.
 

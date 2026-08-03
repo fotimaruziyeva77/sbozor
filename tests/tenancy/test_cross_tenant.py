@@ -32,6 +32,7 @@ qayta ishlatiladi va tasniflanmagan marshrut CI'ni yiqitadi.
 from __future__ import annotations
 
 import io
+from dataclasses import replace
 from datetime import date, timedelta
 from itertools import count
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -42,6 +43,7 @@ import xlsxwriter
 from app.main import app as fastapi_app
 from fixtures.admin_api import AUDIT_URL, USERS_URL, bearer, session_headers
 from fixtures.market_domain import A_CATEGORY_NAMES, A_ZONE_NAMES
+from fixtures.nvr_domain import add_discovery_run, nvr_rows
 from fixtures.two_markets import SEED_PASSWORD
 from sbozor_core.security import encode_access
 
@@ -52,7 +54,10 @@ if TYPE_CHECKING:
     from app.settings import Settings
     from fastapi import FastAPI
     from fixtures.market_domain import MarketDomainSeed
+    from fixtures.nvr_domain import NvrDomainSeed
     from fixtures.two_markets import TwoMarketSeed
+    from psycopg import Connection
+    from psycopg.rows import TupleRow
 
 pytestmark = pytest.mark.tenancy
 
@@ -102,6 +107,16 @@ class TenantSeed(NamedTuple):
 
     base: TwoMarketSeed
     domain: MarketDomainSeed
+    nvr: NvrDomainSeed
+    """3-faza qatlami: NVR qurilmasi, kameralar va kashfiyot yugurishlari.
+
+    ⚠ B BOZORIDA KASHFIYOT YUGURISHI SEED'DA YO'Q (`fixtures/nvr_domain.py`
+      ataylab asimmetrik: «yugurishlar ro'yxati bo'sh» holati ham
+      sinalishi kerak). Matritsaga esa `run_id` uchun HAQIQIY B qatori
+      KERAK — tasodifiy UUID bilan 404 hech nimani isbotlamasdi. Shuning
+      uchun uni `nvr_domain` fixture'i O'ZI qo'shadi (`add_discovery_run`),
+      seed'ning asimmetriyasi esa saqlanadi.
+    """
 
 
 EXEMPT_ROUTES: dict[str, str] = {
@@ -202,6 +217,13 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # obyektga emas — `markets` da `market_id` ustuni yo'q, tenant kaliti
     # `id` ning o'zi (`MARKETS_PREDICATE`).
     "market_id": lambda seed: str(seed.base.market_b.id),
+    # --- 03-06: NVR qurilmasi va kashfiyot yugurishi ---
+    #
+    # ⚠ IKKALASI HAM B BOZORINING HAQIQIY QATORI. `run_id` uchun qator
+    # `nvr_domain` fixture'ida qo'shiladi (`TenantSeed.nvr` docstringi):
+    # seed B ga ATAYIN yugurish yozmaydi va u asimmetriya saqlanadi.
+    "nvr_id": lambda seed: str(seed.nvr.market_b.nvr_id),
+    "run_id": lambda seed: str(seed.nvr.market_b.discovery_run_ids[0]),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -234,6 +256,19 @@ MATRIX_VENDOR_PHONE = "+998909990001"
 raqam ikkalasiga ham tegmaydi, ya'ni `POST /api/v1/vendors` matritsa
 chaqiruvida kutilmagan `409 vendor_phone_taken` olmaydi — 409 esa
 matritsani "404 kutilgan edi" o'rniga sababsiz yiqitardi.
+"""
+
+
+MATRIX_NVR_PASSWORD = "MatritsaNvr123"  # noqa: S105 - test uskunasi, sir emas
+"""Matritsa yuboradigan NVR paroli — hech qanday haqiqiy qurilmaga tegishli emas."""
+
+_MATRIX_NVR_PORTS = count(9001)
+"""NVR manzillari uchun O'SUVCHI port — `_MATRIX_STAFF_PHONES` bilan bir xil sabab.
+
+Filler lambda'si HAR SO'ROVDA qayta chaqiriladi va `POST /nvr-devices`
+HAQIQIY qator yozadi. Qotirilgan port ikkinchi chaqiruvda
+`409 nvr_host_taken` berardi (`uq_nvr_devices_market_id_host_port`) va
+marshrutning YOZISH yo'li faqat birinchi testda bajarilardi.
 """
 
 
@@ -320,6 +355,41 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
     # uchun ahamiyatlisi uning ISHLAB KETISHI. Bo'sh ro'yxat ham yaroqli
     # `.xlsx` beradi (`test_empty_error_report_is_still_a_valid_file`).
     RouteSpec("POST", "/api/v1/imports/errors.xlsx"): lambda _: {"errors": []},
+    # --- 03-06: NVR qurilmalari ---
+    #
+    # `address` HAR CHAQIRUVDA BOSHQA (`_MATRIX_NVR_PORTS`): marshrut
+    # HAQIQIY qator yozadi va `uq_nvr_devices_market_id_host_port` ikkinchi
+    # chaqiruvda `409 nvr_host_taken` berardi. 409 matritsani yiqitmasdi,
+    # lekin `POST` ning YOZISH yo'li faqat birinchi testda bajarilardi —
+    # ya'ni "javobda B ning izi yo'q" da'vosi qolganlarida shakli boshqa
+    # javob ustida tekshirilardi (`MATRIX_STALL_CODE` bilan bir xil sinf).
+    RouteSpec("POST", "/api/v1/nvr-devices"): lambda _: {
+        "address": f"192.168.77.7:{next(_MATRIX_NVR_PORTS)}",
+        "username": "matritsa",
+        "password": MATRIX_NVR_PASSWORD,
+    },
+    RouteSpec("PATCH", "/api/v1/nvr-devices/{nvr_id}"): lambda _: {"username": "matritsa"},
+    RouteSpec("POST", "/api/v1/nvr-devices/{nvr_id}/password"): lambda _: {
+        "password": MATRIX_NVR_PASSWORD,
+    },
+    # ⚠ `test-connection` MATRITSADAN CHIQARILMAYDI — VA BU O'YLANGAN QAROR.
+    #
+    # Reja uni `EXEMPT_ROUTES` ga qo'yishga ruxsat bergan («u resurs `id`
+    # si qabul qilmaydi, ya'ni cross-tenant ma'nosi yo'q»), lekin istisno
+    # marshrutni matritsadan TO'LIQ chiqarardi: tokensiz -> 401, buzilgan
+    # token -> 401 va "javobda B ning izi yo'q" da'volari ham yo'qolardi.
+    # Ular esa BU marshrut uchun juda ma'noli — u parol qabul qiladi.
+    #
+    # Buning o'rniga manzil ATAYIN DARHOL RAD ETILADIGAN qilib tanlandi:
+    # `127.0.0.1:1` xususiylik darvozasidan o'tadi (loopback global emas)
+    # va TCP darajasida DARHOL `ECONNREFUSED` beradi. Natija — 200 +
+    # `ok=false` + `nvr_unreachable`, hech qanday tarmoq kutishi yo'q va
+    # simulyatorga bog'liqlik ham yo'q.
+    RouteSpec("POST", "/api/v1/nvr-devices/test-connection"): lambda _: {
+        "address": "127.0.0.1:1",
+        "username": "matritsa",
+        "password": MATRIX_NVR_PASSWORD,
+    },
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
 
@@ -627,6 +697,7 @@ def foreign_markers(seed: TenantSeed) -> tuple[str, ...]:
     """
     market_b = seed.base.market_b
     domain_b = seed.domain.market_b
+    nvr_b = seed.nvr.market_b
     return (
         str(market_b.id),
         *(str(user_id) for user_id in market_b.user_ids),
@@ -639,6 +710,15 @@ def foreign_markers(seed: TenantSeed) -> tuple[str, ...]:
         *(str(tariff_id) for tariff_id in domain_b.tariff_ids),
         *(str(exception_id) for exception_id in domain_b.calendar_exception_ids),
         *(str(assignment_id) for assignment_id in domain_b.assignment_ids),
+        # --- 03-06: NVR qatlami ---
+        #
+        # `stream_names` ATAYIN QO'SHILMAYDI: ular kamera qatorining
+        # ichida `cam_<uuid>` shaklida va `camera_ids` allaqachon o'sha
+        # UUID'ni qamraydi — ikkinchi marker bir xil qiymatni ikki xil
+        # shaklda sanardi va nosozlik xabari chalkash bo'lardi.
+        str(nvr_b.nvr_id),
+        *(str(camera_id) for camera_id in nvr_b.camera_ids),
+        *(str(run_id) for run_id in nvr_b.discovery_run_ids),
     )
 
 
@@ -650,14 +730,51 @@ def assert_no_foreign_data(response: httpx.Response, seed: TenantSeed, label: st
 
 
 @pytest.fixture
-def tenant_seed(two_markets: TwoMarketSeed, market_domain: MarketDomainSeed) -> TenantSeed:
-    """A'zolik va domen qatlamlarini bitta obyektga bog'laydi.
+def nvr_domain(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+) -> Iterator[NvrDomainSeed]:
+    """`two_markets` USTIGA 3-fazaning NVR qatlami (CAM-01/CAM-08).
+
+    `market_domain` bilan aynan bir xil naqsh va aynan bir xil sabab:
+    `two_markets` ARGUMENT sifatida olinadi, ya'ni pytest fixture'larni
+    teskari tartibda yopganda NVR qatlami bozorlardan OLDIN tozalanadi
+    (aks holda `DELETE FROM markets` composite FK bilan yiqilardi).
+
+    ⚠ B BOZORIGA KASHFIYOT YUGURISHI SHU YERDA QO'SHILADI. Seed unga
+      ataylab yozmaydi («yugurishlar ro'yxati bo'sh» holati ham sinalishi
+      kerak — `fixtures/nvr_domain.py` modul docstringi), matritsaga esa
+      `run_id` uchun HAQIQIY B qatori kerak. Holat `succeeded`: `queued`/
+      `running` qoldirilsa `0012` dagi qisman UNIQUE indeks shu NVR uchun
+      har qanday yangi yugurishni bloklardi va 409 stsenariysi umuman
+      sinalmasdi.
+    """
+    with nvr_rows(sync_owner_conn, two_markets) as seed:
+        run_id = add_discovery_run(sync_owner_conn, seed.market_b, status="succeeded")
+        # `MarketNvrRows` — MUZLATILGAN dataclass, ya'ni nusxa
+        # `dataclasses.replace()` bilan olinadi. Qatorni yozib, uni
+        # seed obyektiga QO'SHMASLIK eng jimgina xato bo'lardi:
+        # `PARAM_FILLERS["run_id"]` bo'sh kortejga murojaat qilib
+        # `IndexError` berardi va sabab matritsa mantig'ida ko'rinardi.
+        yield replace(
+            seed,
+            market_b=replace(seed.market_b, discovery_run_ids=(run_id,)),
+        )
+
+
+@pytest.fixture
+def tenant_seed(
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+    nvr_domain: NvrDomainSeed,
+) -> TenantSeed:
+    """A'zolik, domen va NVR qatlamlarini bitta obyektga bog'laydi.
 
     `market_domain` `two_markets` ni O'ZI argument sifatida oladi, ya'ni
     ikkalasi AYNI bozorlarni tavsiflaydi va teardown tartibi ham to'g'ri
     qoladi (domen qatlami bozorlardan OLDIN tozalanadi).
     """
-    return TenantSeed(base=two_markets, domain=market_domain)
+    return TenantSeed(base=two_markets, domain=market_domain, nvr=nvr_domain)
 
 
 @pytest.fixture
@@ -976,6 +1093,7 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
     """
     market_b = tenant_seed.base.market_b
     domain_b = tenant_seed.domain.market_b
+    nvr_b = tenant_seed.nvr.market_b
     foreign_values = {
         str(value)
         for value in (
@@ -989,6 +1107,10 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             *domain_b.tariff_ids,
             *domain_b.calendar_exception_ids,
             *domain_b.assignment_ids,
+            # --- 03-06 ---
+            nvr_b.nvr_id,
+            *nvr_b.camera_ids,
+            *nvr_b.discovery_run_ids,
         )
     }
 

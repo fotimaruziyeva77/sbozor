@@ -49,12 +49,14 @@ from app.api.v1.categories import router as categories_router
 from app.api.v1.imports import router as imports_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
+from app.api.v1.nvr import router as nvr_router
 from app.api.v1.stalls import router as stalls_router
 from app.api.v1.tariffs import router as tariffs_router
 from app.api.v1.users import router as users_router
 from app.api.v1.vendors import router as vendors_router
 from app.api.v1.zones import router as zones_router
 from app.settings import Settings, get_settings
+from app.worker import broker, enqueue_discovery
 
 log = structlog.get_logger(__name__)
 
@@ -105,13 +107,27 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     engine: AsyncEngine = make_engine(settings.database_url)
     cache: Redis = Redis.from_url(settings.valkey_url)
 
+    # 3-faza: navbatning KLIENT tomoni (`app/worker.py`). API job'ni
+    # bajarmaydi — u faqat navbatga qo'yadi, ya'ni bu yerda `startup()`
+    # ulanish pulini ochadi va boshqa hech nima qilmaydi.
+    #
+    # ⚠ EGALIK SHAKLI `engine`/`cache` BILAN AYNAN BIR XIL: bir marta
+    #   ochiladi, `finally` da yopiladi. Broker'ni har so'rovda ochish
+    #   `LPUSH` ga TCP qo'l siqishini qo'shardi.
+    await broker.startup()
+
     application.state.settings = settings
     application.state.engine = engine
     application.state.sessionmaker = make_sessionmaker(engine)
     application.state.cache = cache
+    # Marshrut qatlami navbatga SHU maydon orqali boradi, moduldan
+    # to'g'ridan-to'g'ri emas — sabab `api/v1/nvr.py::_enqueue` da
+    # (`sessionmaker`/`cache` bilan bir xil almashtirish nuqtasi).
+    application.state.enqueue_discovery = enqueue_discovery
     try:
         yield
     finally:
+        await broker.shutdown()
         await cache.aclose()
         await engine.dispose()
 
@@ -173,6 +189,15 @@ app.include_router(stall_assignments_router, prefix=API_V1_PREFIX)
 # o'tkazib yuborardi (02-08 dagi `BODY_FILLERS` bilan aynan bir xil
 # sinf xato).
 app.include_router(imports_router, prefix=f"{API_V1_PREFIX}/imports")
+# --- 3-faza: NVR qurilmalari va kashfiyot (CAM-01/CAM-08) ---
+#
+# Yettita marshrut ham yuqoridagi 2-faza izohidagi IKKI QO'LDA QADAMga
+# tushadi: `PARAM_FILLERS` ga `nvr_id` va `run_id`, `BODY_FILLERS` ga esa
+# `POST ""`, `PATCH /{nvr_id}`, `POST /{nvr_id}/password` va
+# `POST /test-connection` uchun namuna tana. Ikkalasini ham 03-06
+# qo'shdi; unutilganda `test_no_unclassified_routes` va
+# `test_cross_tenant_object_returns_404` qizaradi.
+app.include_router(nvr_router, prefix=f"{API_V1_PREFIX}/nvr-devices")
 
 
 @app.exception_handler(DBAPIError)

@@ -306,18 +306,38 @@ def test_settings_repr_masks_the_credential_keys(configure_keys: Callable[..., N
     assert "**********" in rendered
 
 
-def test_missing_key_fails_at_settings_construction() -> None:
+def test_missing_key_fails_at_settings_construction(monkeypatch: pytest.MonkeyPatch) -> None:
     """Kalit UMUMAN berilmasa ham ilova ko'tarilmaydi.
 
     Maydon ATAYIN standart qiymatsiz. Bo'sh standart berilsa ilova
     shifrlashsiz ko'tarilardi va birinchi rekvizit yozuvida yiqilardi —
     aynan yuqoridagi testda rad etilgan xulq.
+
+    ⚠ IKKALA AMBIENT MANBA HAM YOPILADI (03-06 da qo'shildi) VA ULAR
+      IKKITA ALOHIDA YO'L:
+
+        muhit o'zgaruvchisi  ->  `monkeypatch.delenv`
+        `.env` FAYLI         ->  `_env_file=None`
+
+      `Settings` — `BaseSettings`, ya'ni u aniq argumentlardan tashqari
+      MUHITNI ham, `model_config` dagi `env_file` ni ham o'qiydi. Test
+      avval "ikkalasida ham kalit yo'q" degan AYTILMAGAN taxminga
+      tayanardi. Taxmin ikki marta buzildi: `tests/conftest.py::
+      _process_settings_env` (NVR API testlariga kerak) birinchi yo'lni,
+      operator mashinasidagi to'ldirilgan `.env` esa ikkinchisini ochdi.
+
+      Yopish da'voni KUCHAYTIRADI: endi test "kalit HECH QAYERDAN
+      kelmasa" holatini o'lchaydi. Aks holda `.env` fayli to'ldirilgan
+      mashinada u JIMGINA yashil bo'lardi — hech nimani sinamagan holda.
     """
+    monkeypatch.delenv("NVR_CREDENTIAL_KEY", raising=False)
+
     with pytest.raises(ValidationError) as excinfo:
         Settings(  # type: ignore[call-arg]
             database_url=_REQUIRED_ENV["DATABASE_URL"],
             valkey_url=_REQUIRED_ENV["VALKEY_URL"],
             jwt_secret=_REQUIRED_ENV["JWT_SECRET"],
+            _env_file=None,
         )
 
     (error,) = excinfo.value.errors()

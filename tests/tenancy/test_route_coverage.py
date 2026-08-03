@@ -46,7 +46,7 @@ from tenancy.test_cross_tenant import (
 
 pytestmark = pytest.mark.tenancy
 
-MINIMUM_MATRIX_ROUTES = 35
+MINIMUM_MATRIX_ROUTES = 42
 """Matritsada kamida shuncha marshrut bo'lishi shart.
 
 01-07 holatida qamrovda 7 marshrut bor edi (`/users` GET+POST,
@@ -60,6 +60,15 @@ rastalar 6) va chegara 12 ga ko'tarildi. 02-09 yana 8 tasini qo'shdi
 import marshrutini qo'shdi (`template`, `stalls`, `vendors`,
 `errors.xlsx`) — amaldagi son 43, chegara 34. 02-24 esa bittasini
 (`POST /imports/staff`, MARKET-07) — amaldagi son 44, chegara 35.
+03-06 yettita NVR marshrutini qo'shdi (`POST`/`GET /nvr-devices`,
+`POST /test-connection`, `PATCH /{nvr_id}`, `POST /{nvr_id}/password`,
+`POST /{nvr_id}/discover`, `GET /{nvr_id}/discovery-runs/{run_id}`) —
+amaldagi son 51, chegara 42.
+
+⚠ Yettitasidan IKKITASI (`{nvr_id}` va `{run_id}`) matritsaga FAQAT
+`PARAM_FILLERS` ga B bozorining HAQIQIY qatorlari qo'shilgani uchun
+tushadi. `run_id` uchun qator seed'da YO'Q va uni `nvr_domain` fixture'i
+o'zi yozadi — sabab `test_cross_tenant.TenantSeed.nvr` docstringida.
 
 ⚠ Import marshrutlarining UCHTASI `multipart/form-data` va ular
 matritsaga FAQAT `FILE_FILLERS` tufayli haqiqiy yo'ldan tushadi. Filler

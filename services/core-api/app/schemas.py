@@ -26,19 +26,15 @@ from typing import Annotated, Any, Final
 from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints, field_validator
-from sbozor_core.enums import Locale, Role, StallStatus
+from sbozor_core.enums import DiscoveryRunStatus, Locale, Role, StallStatus
 from sbozor_core.money import MAX_SAFE_SOUM
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
+from app.jobs.discovery import DISCOVERY_JOB_ERROR_CODES
+from app.services.isapi.errors import NVR_ERROR_CODES
+
 __all__ = [
     "AUDIT_PAGE_SIZE_MAX",
-    "IMPORT_ERROR_REPORT_MAX",
-    "ISO_WEEKDAYS",
-    "MARKET_ERROR_CODES",
-    "MIN_PASSWORD_LENGTH",
-    "STALL_PAGE_SIZE_MAX",
-    "VENDOR_PAGE_SIZE_MAX",
-    "VENDOR_STALL_CODES_MAX",
     "AssignmentCloseRequest",
     "AssignmentCreateRequest",
     "AssignmentItem",
@@ -56,6 +52,11 @@ __all__ = [
     "ChangePasswordRequest",
     "CreateUserRequest",
     "CreateUserResponse",
+    "DiscoveryConflictResponse",
+    "DiscoveryRunRead",
+    "DiscoveryStartResponse",
+    "IMPORT_ERROR_REPORT_MAX",
+    "ISO_WEEKDAYS",
     "ImportErrorItem",
     "ImportErrorReportRequest",
     "ImportErrorResponse",
@@ -63,6 +64,8 @@ __all__ = [
     "LocaleResponse",
     "LoginRequest",
     "LoginResponse",
+    "MARKET_ERROR_CODES",
+    "MIN_PASSWORD_LENGTH",
     "MapCell",
     "MapZone",
     "MarketCreateRequest",
@@ -70,9 +73,17 @@ __all__ = [
     "MarketListItem",
     "MarketRef",
     "MeResponse",
+    "NvrDeviceCreateRequest",
+    "NvrDeviceListResponse",
+    "NvrDeviceRead",
+    "NvrDeviceUpdateRequest",
+    "NvrPasswordRequest",
+    "NvrTestConnectionRequest",
+    "NvrTestConnectionResponse",
     "ProfileResponse",
     "RefreshResponse",
     "ResetPasswordResponse",
+    "STALL_PAGE_SIZE_MAX",
     "SelectMarketRequest",
     "SessionResponse",
     "SetupStatusResponse",
@@ -93,6 +104,8 @@ __all__ = [
     "UpdateProfileRequest",
     "UserListItem",
     "UserListResponse",
+    "VENDOR_PAGE_SIZE_MAX",
+    "VENDOR_STALL_CODES_MAX",
     "VendorListItem",
     "VendorListResponse",
     "VendorQuery",
@@ -521,6 +534,31 @@ MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
         # soddalashtiring" degan foydasiz maslahat berardi, holbuki
         # yagona to'g'ri harakat — ro'yxatni bo'laklarga bo'lish.
         "staff_roster_too_large",
+        # --- NVR domeni (03-06, CAM-01/CAM-08) ---
+        #
+        # Bu to'rttasi HTTP chegarasida tug'iladi va ISAPI muloqotiga
+        # umuman bog'liq emas — shuning uchun ular quyidagi IKKI
+        # IMPORT QILINGAN to'plamdan alohida, literal sifatida turadi.
+        "nvr_host_taken",
+        "nvr_host_public_blocked",
+        "discovery_already_running",
+        "nvr_not_found",
+        # `nvr_host_public_blocked` DAN ATAYIN AJRATILGAN (03-04 ning ochiq
+        # talabi): `NvrAddressError` va `NvrHostNotPrivateError` ikki
+        # ALOHIDA sinf, chunki admin uchun ular butunlay boshqa-boshqa
+        # muammolar. "Manzilni o'qib bo'lmadi" — TERISH xatosi va yechimi
+        # qayta yozish; "ommaviy IP taqiqlangan" — ARXITEKTURA qoidasi va
+        # unga javob boshqa manzil sinash EMAS, tunnel ichidagi manzilni
+        # topish. Bitta kod ikkalasiga ham noto'g'ri maslahat berardi.
+        "nvr_address_invalid",
+        # --- ISAPI taksonomiyasi (03-05) va job kodlari (03-06) ---
+        #
+        # ⚠ IKKALASI HAM IMPORT QILINADI, QO'LDA TAKRORLANMAYDI (§S-5).
+        #   Nusxa ko'chirilganda ikki HAQIQAT MANBAI paydo bo'lardi: job
+        #   bazaga `nvr_clock_drift` yozib, API uni tanimay `errors.generic`
+        #   ko'rsatardi va nosozlik FAQAT foydalanuvchi ekranida ko'rinardi.
+        *NVR_ERROR_CODES,
+        *DISCOVERY_JOB_ERROR_CODES,
     }
 )
 """2-faza qaytaradigan BARCHA `detail` kodlari — yigirma to'rtta.
@@ -1385,3 +1423,271 @@ class ImportErrorReportRequest(BaseModel):
     """
 
     errors: Annotated[list[ImportErrorItem], Field(max_length=IMPORT_ERROR_REPORT_MAX)]
+
+
+# ---------------------------------------------------------------------------
+# NVR qurilmalari va kashfiyot (03-06, CAM-01/CAM-08)
+#
+# =============================================================================
+# PAROL MAYDONI JAVOB MODELLARIDA UMUMAN E'LON QILINMAYDI (SC#4, T-03-39).
+#
+# `Field(exclude=True)` YETARLI EMAS va bu farq nozik: `exclude` — bu
+# SERIALIZATSIYA SOZLAMASI, kafolat emas. U `model_dump()` ning ayrim
+# chaqiruvlarida (`model_dump(exclude=None)` yoki `mode="python"` bilan
+# qo'lda yig'ilgan lug'atda) e'tiborsiz qolishi mumkin va o'shanda parol
+# javobga tushardi. Maydonning UMUMAN BO'LMASLIGI esa yagona chegara:
+# mavjud bo'lmagan maydon hech qanday sozlama bilan qaytmaydi.
+#
+# `has_password: bool` uning O'RNINI BOSADI — UI ga "parol saqlanganmi?"
+# savoliga javob kerak, parolning O'ZI emas.
+# =============================================================================
+#
+# =============================================================================
+# `market_id` SO'ROV MODELLARIDA HAM YO'Q (T-03-44, `stalls.py:47-49`).
+#
+# Bozor FAQAT `principal.market_id` dan olinadi. Aks holda A bozorining
+# admini `{"market_id": "<B>"}` yuborib B bozorida NVR yarata olardi va
+# yagona to'siq RLS `WITH CHECK` bo'lardi — ya'ni himoya bitta migratsiya
+# xatosidan narida qolardi.
+# =============================================================================
+# ---------------------------------------------------------------------------
+
+_NVR_ADDRESS_MAX = 255
+"""Manzil satrining chegarasi — `nvr_devices.host` `text` bo'lsa ham.
+
+Chegara DB uchun emas, PARSER uchun: `split_address()` ga cheksiz satr
+berish uni sababsiz ishga soladi va xato matni javobga xom kirishni
+qaytarardi.
+"""
+
+_NvrAddressStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+_NvrSecretStr = Annotated[str, StringConstraints(min_length=1, max_length=128)]
+"""Parol maydoni — `strip_whitespace` ATAYIN YO'Q.
+
+NVR paroli bo'shliq bilan boshlanishi yoki tugashi MUMKIN va uni
+jimgina kesib tashlash "parol noto'g'ri" degan tushuntirib bo'lmaydigan
+`401` beradi. Foydalanuvchi nomi bilan farq shu yerda: u ISAPI da
+bo'shliqsiz.
+"""
+
+
+class NvrDeviceCreateRequest(BaseModel):
+    """`POST /nvr-devices` tanasi — D-01 ning butun kirish yuzasi.
+
+    ⚠ UCHTA MAYDON, BOSHQA HECH NIMA. Admin RTSP portini ham, kanal
+      sonini ham, model nomini ham KIRITMAYDI — ularning hammasi
+      kashfiyot natijasida to'ldiriladi (D-01: "muhandis aralashuvi
+      talab qiladigan har qanday yechim fazani buzadi").
+
+    `address` — XOM satr (`192.168.1.64`, `192.168.1.64:8080`,
+    `https://nvr.local:8443`). Uni `host`/`port`/`use_tls` ga ajratish
+    server tomonda (`app/services/nvr_host.py::split_address`), chunki
+    klientdagi ajratish QULAYLIK, bu yerdagisi esa KONTRAKT.
+    """
+
+    address: Annotated[_NvrAddressStr, Field(max_length=_NVR_ADDRESS_MAX)]
+    username: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+    password: _NvrSecretStr
+
+
+class NvrDeviceUpdateRequest(BaseModel):
+    """`PATCH /nvr-devices/{id}` tanasi.
+
+    ⚠ `address` BU YERDA YO'Q (UI-SPEC §4.6): u `UNIQUE (market_id, host,
+      port)` kalitining bir qismi va uni tahrirlash idempotentlik
+      semantikasini ochib yuborardi — "bu o'sha qurilmami yoki
+      boshqasimi?" savoliga javob qolmasdi. Manzil o'zgarsa NVR qayta
+      qo'shiladi.
+
+    ⚠ `tunnel_subnet` HAM BU YERDA YO'Q. D-07 uni bozorlar ARO noyob
+      qiladi (qisman UNIQUE indeks), ya'ni uni tahrirlash `23505` ni va
+      u bilan birga YANGI xato kodini keltirardi. Tunnel onboarding'i —
+      WireGuard yuzasining bir qismi va u o'z rejasida keladi; shu
+      fazada maydon FAQAT O'QISH uchun (`NvrDeviceRead`).
+
+    Natijada bu modelda bitta maydon qoladi va bu ataylab: qolgan
+    hamma narsa yo KASHFIYOT natijasi (model, seriya, portlar), yo
+    o'zining ALOHIDA endpointi (parol) ostida.
+    """
+
+    username: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)] | None
+    ) = None
+
+
+class NvrPasswordRequest(BaseModel):
+    """`POST /nvr-devices/{id}/password` tanasi.
+
+    ⚠ ESKI PAROL SO'RALMAYDI (UI-SPEC §4.6) va bu ataylab: u bizda ochiq
+      matnda YO'Q, ya'ni uni tekshirish uchun avval deshifrlash kerak
+      bo'lardi. Darvoza boshqa joyda — `CAMERA_MANAGE` huquqi.
+    """
+
+    password: _NvrSecretStr
+
+
+class NvrTestConnectionRequest(BaseModel):
+    """`POST /nvr-devices/test-connection` tanasi — YOZUV YARATMAYDI.
+
+    Shakli `NvrDeviceCreateRequest` bilan bir xil va bu ataylab: UI
+    aynan bir xil formadan ikkala endpointni ham chaqiradi (§4.3).
+    Meros olinmaydi — ikkala model mustaqil o'zgarishi mumkin va
+    "tekshiruv" ning kirishi "yaratish" ning kirishiga BOG'LANIB
+    qolmasligi kerak.
+    """
+
+    address: Annotated[_NvrAddressStr, Field(max_length=_NVR_ADDRESS_MAX)]
+    username: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+    password: _NvrSecretStr
+
+
+class NvrDeviceRead(BaseModel):
+    """`GET`/`POST`/`PATCH` javobi — QURILMA PASPORTI, sirsiz.
+
+    ⚠ `password` NOMLI MAYDON BU YERDA YO'Q va u hech qachon
+      qo'shilmaydi (bo'lim boshidagi izoh). `test_password_never_in_any_
+      response` buni HAR marshrut uchun XOM javob tanasida tekshiradi.
+
+    `rtsp_port` `None` — hali skan qilinmagan; `rtsp_port_assumed=True` —
+    554 fallback ishlatilgan va u jonli ko'rish yiqilganda BIRINCHI
+    tekshiriladigan gumondor (UI-SPEC §4.6).
+    """
+
+    id: UUID
+    host: str
+    port: int
+    use_tls: bool
+    username: str
+    model: str | None
+    serial_number: str | None
+    firmware_version: str | None
+    device_type: str | None
+    rtsp_port: int | None
+    rtsp_port_assumed: bool
+    tunnel_subnet: str | None
+    last_discovery_at: datetime | None
+    has_password: bool
+
+
+class NvrDeviceListResponse(BaseModel):
+    """`GET /nvr-devices` — TO'LIQ ro'yxat, sahifalash YO'Q.
+
+    `ZoneListResponse` bilan bir xil qaror: bozorda NVR soni bir-ikkita
+    (Karmanada bitta), ya'ni kursor mexanikasi hech qanday muammoni hal
+    qilmasdi-yu, klientga doimiy "yana sahifa bormi?" savolini yuklardi.
+    """
+
+    items: list[NvrDeviceRead]
+
+
+class NvrTestConnectionResponse(BaseModel):
+    """`POST /nvr-devices/test-connection` javobi — HAR DOIM HTTP 200.
+
+    ⚠ XATO HOLATIDA HAM 200 (UI-SPEC §4.3/§7): UI xatoni FORMA ICHIDAGI
+      blok sifatida chizadi va unda sabab + tuzatish yo'li bo'ladi
+      (D-02). HTTP xatosi bo'lganda TanStack Query uni tarmoq nosozligi
+      deb qayta urinardi — aynan D-03 taqiqlagan xulq.
+
+    Muvaffaqiyatda TO'RTALA maydon ham MAJBURIY (UI-SPEC §4.5):
+    `model`, `device_type`, `channels_preview`, `clock_drift_seconds`.
+    Kanallar soni adminning "to'g'ri qurilmaga ulandimmi?" savoliga
+    YAGONA javobi; soat farqi esa 300 s dan kichik bo'lsa ham
+    ko'rsatiladi — 250 soniyalik farq bugun ishlaydi va ertaga sinadi.
+    """
+
+    ok: bool
+    model: str | None = None
+    device_type: str | None = None
+    serial_number: str | None = None
+    channels_preview: int | None = None
+    clock_drift_seconds: float | None = None
+    rtsp_port: int | None = None
+    rtsp_port_assumed: bool = False
+    error_code: str | None = None
+    error_detail: dict[str, Any] | None = None
+    auth_locked: bool = False
+    """`error_code ∈ AUTH_LOCKING_CODES` (UI-SPEC §4.4 ning backend tomoni).
+
+    Bayroq BACKENDDA hisoblanadi, frontendda EMAS: to'plamning o'zi
+    `app/services/isapi/errors.py` da yashaydi va uni klientda qayta
+    yozish ikkinchi haqiqat manbai bo'lardi. `true` bo'lganda UI "Qayta
+    urinish" affordansini RENDER QILMAYDI (yashirmaydi — u umuman
+    yo'q).
+    """
+
+
+class DiscoveryStartResponse(BaseModel):
+    """`POST /nvr-devices/{id}/discover` javobi (202).
+
+    Yagona maydon — `run_id`. Mijoz undan keyin
+    `GET /nvr-devices/{id}/discovery-runs/{run_id}` ni poll qiladi
+    (UI-SPEC §5.3: 2 soniyada bir, terminal holatda TO'XTAYDI).
+    """
+
+    run_id: UUID
+
+
+class DiscoveryConflictResponse(BaseModel):
+    """`409 discovery_already_running` javobining TANASI — `run_id` BILAN.
+
+    ⚠ UI-SPEC §5.6 [TALAB]: javob tanasi MAVJUD yugurishning `run_id`
+      sini o'z ichiga OLISHI SHART. Aks holda UI ikkinchi so'rov qilishga
+      majbur bo'lardi — poyga holatining o'zida yana bitta poyga.
+
+    UI buni XATO deb ko'rsatmaydi: ikki admin (yoki bitta admin ikki
+    tabda) tugmani bir vaqtda bosishi normal ish jarayoni. U shunchaki
+    qaytgan `run_id` ni poll qila boshlaydi.
+
+    ⚠ MODEL FAQAT OPENAPI UCHUN E'LON QILINGAN — `HTTPException` javob
+      modelidan o'tmaydi. Shakl `main.py` dagi global handler bilan mos
+      bo'lishi uchun `detail` kalitini SAQLAYDI va `run_id` uning
+      YONIDA turadi, ICHIDA emas: `detail` ni obyektga aylantirish
+      frontendning mavjud `detail: string` shartnomasini buzardi
+      (`lib/market-errors.ts`).
+    """
+
+    detail: str
+    run_id: UUID
+
+
+class DiscoveryRunRead(BaseModel):
+    """`GET /nvr-devices/{id}/discovery-runs/{run_id}` — poll javobi.
+
+    Oltita UI holati (UI-SPEC §5.2) AYNAN shu maydonlardan hosil bo'ladi::
+
+        S1  queued
+        S2a running + channels_found IS NULL   ("qurilma aniqlanmoqda")
+        S2b running + channels_found > 0       ("{n} kanal topildi")
+        S3  succeeded
+        S4  failed
+        S5  180 s ichida terminal holat kelmadi (KLIENT tomonda)
+
+    ⚠ `channels_found` `None` bo'la OLISHI SHART — u S2a va S2b ni
+      ajratadigan YAGONA belgi. Nolga tenglashtirish "0 ta kanal
+      topildi" degan YOLG'ON natija berardi.
+    """
+
+    id: UUID
+    nvr_id: UUID
+    status: DiscoveryRunStatus
+    started_at: datetime
+    finished_at: datetime | None
+    channels_found: int | None
+    channels_added: int | None
+    channels_marked_offline: int | None
+    error_code: str | None
+    error_detail: dict[str, Any] | None
+    """Xom diagnostika — FAQAT `ERROR_DETAIL_KEYS` dagi kalitlar (UI-SPEC §7.4).
+
+    ⚠ MASKALASH VA FILTRLASH BACKENDNING KAFOLATI, UI NING ISHI EMAS.
+      Ikkita mustaqil qatlam:
+
+        1. `NvrError` KONSTRUKTORI allowlist'dan tashqari kalitni
+           `ValueError` bilan rad etadi (`errors.py`);
+        2. `nvr_repo.finish_run()` yozishdan OLDIN `mask_sensitive()`
+           dan o'tkazadi (§S-7, T-03-28).
+
+      UI noma'lum kalitni RENDER QILMAYDI, lekin u FILTRGA aylanmasligi
+      kerak: filtrni klientga topshirish "backend nima yozsa ham
+      xavfsiz" degan yolg'on xotirjamlik berardi.
+    """
