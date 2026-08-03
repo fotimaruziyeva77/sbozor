@@ -79,7 +79,7 @@ SBOZOR — O'zbekiston an'anaviy bozorlarini raqamlashtiruvchi universal SaaS pl
 | `sentry-sdk[fastapi]` | 2.66.1 | Error tracking | Spec §5 explicitly requires Sentry. |
 | `tenacity` | 9.1.4 | In-request retry (HTTP to go2rtc / ISAPI) | Apache-2.0. Different layer from arq's job retries — use both. |
 | `httpx` | 0.28.1 | Async HTTP client | Talking to go2rtc, Hikvision ISAPI (`httpx.DigestAuth`), Telegram. **⚠ As of 2026-08-02 `httpx` sits in core-api's `[dependency-groups] dev`, not `[project] dependencies`.** That is correct only while it is test-only. Phase 3's ISAPI client is production code — it MUST be promoted to `[project] dependencies` in that phase, or the service will import-fail at deploy while every test passes. |
-| `boto3` / `aioboto3` | 1.43.57 / 15.5.0 | S3 access to SeaweedFS | **Use the S3 API, not `minio-py`.** This is what makes the storage backend a config change (SeaweedFS → Garage → AWS S3 → Uzbek cloud) instead of a refactor. |
+| `aiobotocore` | **3.9.0** (2026-08-01) | Async S3 access to SeaweedFS | **Replaces `aioboto3` (2026-08-04).** `aioboto3 15.5.0` hard-pins `aiobotocore[boto3]==2.25.1`, which drags `boto3` down from 1.43.62 to 1.40.61 — so the `aioboto3 15.5.0` + `boto3 1.43.57` pairing this table previously listed **cannot be installed**. Verified against PyPI metadata and reproduced with a real install. `aioboto3`'s last release was 2025-10-30. Use `aiobotocore` directly; `aiohttp` is already present transitively via `taskiq`, so no new HTTP stack. **Still the S3 API, never `minio-py`** — that is what keeps the storage backend a config change (SeaweedFS → Garage → AWS S3 → Uzbek cloud) instead of a refactor. |
 | `tzdata` | 2026.3 | Asia/Tashkent in slim images | Python 3.13 on `python:3.13-slim` has **no** tzdata — `ZoneInfo("Asia/Tashkent")` raises without this. Bites you the first time a report boundary is wrong. |
 | `prometheus-fastapi-instrumentator` | 8.1.0 | Metrics | Optional for MVP. Add if you want snapshot-success-rate dashboards beyond Telegram alerts. |
 
@@ -93,7 +93,7 @@ SBOZOR — O'zbekiston an'anaviy bozorlarini raqamlashtiruvchi universal SaaS pl
 | `opencv-python-headless` | **4.14.0.94** (2026-07-28) | Image decode/resize/crop, reference-frame differencing | **`-headless`** = no GTK/X11 in the container (≈70 MB smaller, no missing-`libGL` crash). **Not 5.0.0.93** — OpenCV 5.0 shipped 2026-07-02 with API breaks; 4.14 was released 3 weeks *later*, so 4.x is still the actively maintained line. |
 | `numpy` | 2.5.1 | Array math | Transitive. Requires Python ≥3.12 — another reason for 3.13. |
 | `Pillow` | 12.3.0 | JPEG re-encode for the 90-day → 1-year compression policy (spec §5) | Cheaper than OpenCV for pure re-encode; controls quality/subsampling precisely. |
-| `aioboto3` | 15.5.0 | Async S3 puts of snapshots | Non-blocking upload inside the arq worker. |
+| `aiobotocore` | **3.9.0** | Async S3 puts of snapshots | Non-blocking upload inside the taskiq worker. **Not `aioboto3`** — see the core-api table: its `aiobotocore[boto3]==2.25.1` pin is incompatible with the project's `boto3`, and it has been unreleased since 2025-10-30. |
 
 #### Backend — CV training (separate image, rented GPU, month 2)
 
@@ -253,7 +253,8 @@ SBOZOR — O'zbekiston an'anaviy bozorlarini raqamlashtiruvchi universal SaaS pl
 | **Ultralytics YOLO** (all versions, incl. YOLO11/YOLO26) | **AGPL-3.0** — network-service source disclosure or a paid commercial licence. Hard project constraint. | RF-DETR 1.8.3 (Apache-2.0 code + weights) |
 | **RF-DETR XLarge / 2XLarge** | **PML 1.0**, not Apache-2.0, gated behind `rfdetr[plus]`. Easy to grab by accident. | RF-DETR Nano/Small/Medium/**Large** only |
 | **MinIO** (server) | Repo **archived 2026-04-25**, read-only, no further security patches. Storing personal data on an abandoned daemon. | SeaweedFS 4.40 |
-| **`minio-py` SDK** | Couples you to one vendor's client and to a dead server. | `boto3` / `aioboto3` against the S3 API |
+| **`minio-py` SDK** | Couples you to one vendor's client and to a dead server. | `aiobotocore` against the S3 API |
+| **`aioboto3`** (any version) | 15.5.0 hard-pins `aiobotocore[boto3]==2.25.1`, which downgrades `boto3` below this project's pin — the combination is uninstallable. Unreleased since 2025-10-30. Confirmed against PyPI 2026-08-04. | `aiobotocore` 3.9.0 |
 | **passlib** | Last release **2020-10-08**; unmaintained; imports the `crypt` stdlib module **removed in Python 3.13** — it will not import on your runtime. Still recommended by stale FastAPI tutorials. | `pwdlib[argon2]` 0.3.0 |
 | **python-jose** | Last release 2025-05-28; effectively unmaintained; has a history of unpatched CVEs. Also common in old tutorials. | `PyJWT` 2.13.0 |
 | **APScheduler 4.x** | Still `4.0.0a6` (April 2025). Maintainer: "should NOT be used in production", may break without a migration path. | arq 0.28.0 (or APScheduler 3.11.3) |
