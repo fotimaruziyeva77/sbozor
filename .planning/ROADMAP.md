@@ -225,7 +225,7 @@ Plans:
 Plans:
 **Wave 1** *(Wave 0 darvozalari — birinchi migratsiyadan OLDIN, yolg'iz)*
 
-- [ ] 03-01-PLAN.md — `03-PATTERNS.md` §5 ning yetti bandi: httpx prod'ga, `CAMERA_MANAGE`, markerlar, kaskad darvozasi, tez teskari aloqa yo'li (W1)
+- [x] 03-01-PLAN.md — `03-PATTERNS.md` §5 ning yetti bandi: httpx prod'ga, `CAMERA_MANAGE`, markerlar, kaskad darvozasi, tez teskari aloqa yo'li (W1)
 
 **Wave 2** *(parallel — fayllar kesishmaydi)*
 
