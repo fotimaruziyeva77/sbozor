@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 03-09-PLAN.md
-last_updated: "2026-08-03T12:19:01.846Z"
+last_updated: "2026-08-03T13:41:22.675Z"
 last_activity: 2026-08-03
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 50
-  completed_plans: 48
+  completed_plans: 49
   percent: 22
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 03
-Plan: 10 of 11
+Plan: 11 of 11
 Status: Ready to execute
 Last activity: 2026-08-03
 
@@ -64,6 +64,7 @@ Progress: [████████░░] 82% (9/11 reja)
 | Phase 03 P07 | 205min | 3 tasks | 21 files |
 | Phase 03 P08 | 95 | 3 tasks | 29 files |
 | Phase 03 P09 | 105min | 3 tasks | 15 files |
+| Phase 03 P10 | 70min | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -115,6 +116,10 @@ Recent decisions affecting current work:
 - [Phase ?]: 03-08: poll chegarasi SERVER started_at iga tayanadi, klient taymeriga emas — ?run= bilan yangilanganda taymer noldan boshlanib qotgan yugurishni mangu poll qilardi
 - [Phase ?]: 03-08: parity darvozasi (i18n:check) to'plam TO'LIQLIGINI ko'rmaydi — kalit uchala tildan olib tashlanganda u yashil qoladi va D-02 ni faqat G-1 ushlaydi (sabotaj bilan o'lchandi)
 - [Phase ?]: 03-08: G-4 BUYRUQ FE'LINI izlaydi, o'zakni emas — «o'chirilmaydi» taqiqning teskarisi va u matnda BO'LISHI kerak; chegara ijobiy va salbiy nazorat testi bilan qulflandi
+- [Phase ?]: 03-10: SC#2 ning UI isboti: uch hisoblagich nol bilan birga ko'rinadi; «o'zgarish topilmadi» jumlasining sharti added===0 && offline===0
+- [Phase ?]: 03-10: jonli sessiya chegarasi UI tomonda (5 daq), avtorizatsiyadan qat'i nazar; [Davom ettirish] pleyerni qayta mount qiladi
+- [Phase ?]: 03-10: vendored pleyerning ikki majburiy sozlamasi applyPlayerPolicy() sof funksiyasida va testga bog'langan: tashqi STUN yo'q, audio so'ralmaydi
+- [Phase ?]: 03-10: NvrCard.showErrorBlock — kashfiyot nosozligini faqat panel chizadi (ikkita role=alert oldi olindi)
 
 ### Pending Todos
 
@@ -132,6 +137,7 @@ None yet.
 - **[Phase 1–2 parallel] Huquqiy ko'rik** — kvitansiya maydonlari, CCTV shaxsiy ma'lumot, KKM/UzQR talablari avtomatik xulosadan olingan; mahalliy yurist tasdig'i launch'gacha kerak.
 - **[Phase 0] 7 ochiq buyurtmachi savoli** — javoblar Phase 2 va Phase 6 batafsil rejasidan oldin kerak.
 - **Stek yangilanishi:** MinIO arxivlangan → SeaweedFS; detektor RF-DETR (Nano→Large, Apache-2.0). PROJECT.md Key Decisions yangilanishi kerak.
+- 03-11: npm run gate 950 s ga chiqdi (03-01 nomzod chegarasi 618 s) — chegara qayta o'lchansin, sovuq/issiq yugurish ajratilsin
 
 ## Deferred Items
 
@@ -143,6 +149,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-03T12:19:01.838Z
+Last session: 2026-08-03T13:40:21.173Z
 Stopped at: Completed 03-09-PLAN.md
 Resume file: None
