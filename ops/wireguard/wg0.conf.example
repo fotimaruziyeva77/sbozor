@@ -1,0 +1,71 @@
+# =============================================================================
+# SBOZOR — VPS tomonidagi WireGuard konfiguratsiyasi (CAM-02, D-13, SC#5)
+#
+# ⚠⚠ BU FAYL NAMUNA. HAQIQIY KALIT GITGA HECH QACHON TUSHMAYDI.
+#
+# Barcha kalitlar `<...>` shaklidagi o'rin egallovchilar. Deploy paytida
+# ular VPS'dagi `/etc/wireguard/wg0.conf` ga yoziladi. Kalit juftini
+# hosil qilish:
+#
+#     wg genkey | tee privatekey | wg pubkey > publickey
+#
+# ⚠⚠ `AllowedIPs` DA TO'LIQ TUNNEL (butun-internet CIDR'i) HECH QACHON
+#    YOZILMAYDI. Taqiqlangan qiymatlar `tests/unit/test_wireguard_config.py::
+#    FULL_TUNNEL_MARKERS` da NOMMA-NOM sanalgan (IPv4 va IPv6).
+#
+# To'liq tunnel VPS'ning BUTUN chiquvchi trafigini bozor DSL'idan
+# o'tkazardi — Telegram, Let's Encrypt va foydalanuvchilar trafigi
+# BIRGA o'lardi. Bu shunchaki sekinlik emas: sertifikat yangilanmasa
+# platforma HTTPS'siz qoladi. Batafsil: `README.md` §1.
+#
+# ⚠ TAQIQLANGAN QIYMAT SHU FAYLDA IZOHDA HAM YOZILMAYDI — va bu ataylab.
+#   Grep KODNI IZOHDAN AJRATMAYDI (shu fazada uch marta takrorlangan
+#   dars: 03-04, 03-05, 03-06). Literal izohga tushishi bilan sodda
+#   `grep -c` darvozasi mangu ishlamas holga kelardi va uni tirik
+#   saqlash uchun istisnolar ro'yxati kerak bo'lardi. Literal FAQAT
+#   testda va `README.md` da (u parse qilinmaydi) turadi — natijada
+#   IKKI mustaqil darvoza ishlaydi: parser (izohsiz) va oddiy grep.
+#
+# Qoida CI'DA O'LCHANADI: `tests/unit/test_wireguard_config.py` shu
+# faylni HAM, `README.md` dagi bozor tomoni namunasini HAM parse qiladi
+# va har `[Peer]` blokini tekshiradi. `AllowedIPs` ning IKKI VAZIFASI
+# (marshrutlash va kripto-marshrutlash) `README.md` §1 da.
+#
+# ⚠ BOZOR TOMONI SHU FAYLDA EMAS — u `README.md` §2 da, `ini` bloki
+#   sifatida. Sabab: ikkita `[Interface]` bo'lgan fayl `wg-quick` uchun
+#   YAROQSIZ va uni nusxa olgan odam sababsiz xatoga urilardi. Ikkala
+#   tomon ham BIR XIL darvoza ostida (yuqoridagi test ikkalasini ham
+#   o'qiydi).
+# =============================================================================
+
+[Interface]
+PrivateKey = <VPS-maxfiy-kaliti>
+Address    = 10.10.0.1/24
+ListenPort = 51820
+
+# --- Peer: Karmana bozori ---
+[Peer]
+PublicKey  = <karmana-qurilmasining-ochiq-kaliti>
+# Ikkita CIDR va faqat ikkitasi:
+#   10.10.0.2/32     — tunnel ichidagi peer manzili
+#   192.168.1.0/24   — Karmana NVR subneti (`nvr_devices.tunnel_subnet`)
+AllowedIPs = 10.10.0.2/32, 192.168.1.0/24
+#
+# ⚠ `Endpoint` BU YERDA ATAYIN YO'Q (D-14, CGNAT).
+#   Bozorning ommaviy IP'si yo'q va u o'zgaruvchan — VPS uni BILMAYDI va
+#   bilishi ham shart emas. Bozor tomoni birinchi paketni yuboradi,
+#   WireGuard esa peer manzilini handshake'dan O'RGANADI. `Endpoint`
+#   yozilsa VPS mavjud bo'lmagan manzilga urinib turardi va tunnel
+#   FAQAT statik IP'li bozorlarda ishlardi.
+
+# --- Peer: keyingi bozor (NAMUNA — hozircha ulanmagan) ---
+#
+# Har bozor: ALOHIDA peer, ALOHIDA `10.10.<N>.0/24` va ALOHIDA NVR
+# subneti. Ikkala bozor ham `192.168.1.0/24` ishlatsa VPS marshrut
+# jadvali chalkashadi — D-07 to'qnashuvi va uning yechimi `README.md` §3
+# da. Blok IZOH ostida: ulanmagan peer WireGuard'ni ishga tushirishda
+# xato bermaydi, lekin `wg show` da tushunarsiz holat qoldiradi.
+#
+# [Peer]
+# PublicKey  = <ikkinchi-bozor-qurilmasining-ochiq-kaliti>
+# AllowedIPs = 10.10.1.2/32, 192.168.5.0/24
