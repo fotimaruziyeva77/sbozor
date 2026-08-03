@@ -60,6 +60,7 @@ from typing import Self
 
 import httpx
 import structlog
+from pydantic import SecretStr
 
 __all__ = [
     "GO2RTC_STREAMS_PATH",
@@ -123,7 +124,40 @@ class Go2rtcError(RuntimeError):
     500 emas, TUSHUNARLI xatoga aylantirishi kerak — «jonli ko'rish
     hozir ishlamayapti» admin uchun «ichki xato» dan ancha foydali
     (D-02).
+
+    ⚠ MATNIGA `httpx` ISTISNOSI INTERPOLYATSIYA QILINMAYDI (T-03-87).
+      Sabab `_failure()` docstringida.
     """
+
+
+def _failure(method: str, exc: httpx.HTTPError) -> Go2rtcError:
+    """`httpx` istisnosini SIRSIZ `Go2rtcError` ga aylantiradi (T-03-87).
+
+    =========================================================================
+    ⚠⚠ `{exc}` INTERPOLYATSIYASI — HAQIQIY OQISH YO'LI EDI.
+
+    `httpx.HTTPStatusError` ning matni TO'LIQ so'rov URL'ini o'z ichiga
+    oladi::
+
+        Client error '400 Bad Request' for url
+        'http://go2rtc:1984/api/streams?name=cam_...&src=rtsp://admin:PAROL@...'
+
+    `PUT /api/streams` ning `src` i esa REKVIZITLI manba. Ya'ni eski
+    xabar parolni `Go2rtcError` ga, u yerdan `api/v1/cameras.py` dagi
+    `log.warning(..., error=str(exc))` orqali JURNALGA, jurnaldan esa
+    Sentry'ga olib chiqardi (D-12 ning bevosita buzilishi).
+
+    Diagnostika uchun UCHTA fakt yetadi va uchalasi ham sirsiz: qaysi
+    AMAL, qaysi XATO TURI, qaysi STATUS. «Qaysi oqim» savoliga
+    `go2rtc_stream_registered` / chaqiruvchining jurnal qatori javob
+    beradi — u `stream_name` ni yozadi, `src` ni emas.
+    =========================================================================
+    """
+    status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+    detail = f"status={status}" if status is not None else "javob yo'q"
+    return Go2rtcError(
+        f"go2rtc `{method} {GO2RTC_STREAMS_PATH}` yiqildi: {type(exc).__name__} ({detail})"
+    )
 
 
 def assert_safe_go2rtc_src(src: str) -> None:
@@ -189,18 +223,36 @@ class Go2rtcClient:
         (`?src=<nom>`) ham mumkin, lekin javob shakli go2rtc versiyasiga
         bog'liq va yo'q oqim uchun 404 emas, bo'sh obyekt qaytishi
         mumkin — ro'yxat esa bir xil shaklda qoladi.
+
+        ⚠⚠ JAVOB TANASI JURNALGA YOZILMAYDI VA BU TALAB, KUZATUV EMAS
+          (T-03-90). Ro'yxat BARCHA bozorlarning oqimlarini, ya'ni
+          ularning REKVIZITLI `src` larini qaytaradi — bitta
+          `log.debug(payload=...)` butun o'rnatmaning NVR parollarini
+          bitta satrga chiqarardi. Xato yo'lida ham shu qoida amal
+          qiladi: `_failure()` javob tanasiga umuman tegmaydi.
         """
         try:
             response = await self._client.get(GO2RTC_STREAMS_PATH)
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise Go2rtcError(f"go2rtc `GET {GO2RTC_STREAMS_PATH}` yiqildi: {exc}") from exc
+            raise _failure("GET", exc) from exc
 
         payload = response.json()
         return isinstance(payload, dict) and stream_name in payload
 
-    async def ensure_stream(self, stream_name: str, src: str) -> bool:
+    async def ensure_stream(self, stream_name: str, src: SecretStr) -> bool:
         """Oqim yo'q bo'lsa qo'shadi (LAZY ro'yxatga olish, RESEARCH D.13).
+
+        ⚠ `src` — `SecretStr`, ODDIY `str` EMAS. `PUT /api/streams` ning
+          `src` i REKVIZITLI manba (`live_source.authenticated_rtsp_source`
+          ning chiqishi), ya'ni u sir. Sir tashuvchi tip `repr()` orqali
+          sizishni STRUKTURAVIY ravishda yopadi (`03-04` standarti).
+
+        ⚠ ALLOW-LIST OCHILGAN QIYMAT USTIDA ISHLAYDI va u `SecretStr`
+          ortiga YASHIRINMAYDI: «bu sir, demak bizniki» degan mulohaza
+          bilan tekshiruvni tushirib qoldirish aynan GHSA-wwww-5h25-jf98
+          (CVSS 9.1) ning yo'li bo'lardi. Rekvizitli manba ham `rtsp://`
+          bilan boshlanadi, ya'ni darvoza buzilmaydi.
 
         Returns:
             `True` — oqim SHU chaqiruvda qo'shildi; `False` — allaqachon
@@ -212,11 +264,16 @@ class Go2rtcClient:
             ValueError: `src` allow-listdan o'tmasa.
             Go2rtcError: go2rtc javob bermasa.
         """
+        # `get_secret_value()` SHU YERDA VA BOSHQA HECH QAYERDA (03-04
+        # dagi `nvr_cipher()` bilan bir xil qoida): ochiq qiymatga borish
+        # ATAYIN ko'rinadigan, grep bilan topiladigan BITTA qadam.
+        source = src.get_secret_value()
+
         # ⚠ DARVOZA ENG BOSHIDA — tarmoqqa chiqishdan OLDIN. Keyin
         #   tekshirilsa xavfli qiymat allaqachon go2rtc'ga yuborilgan
         #   bo'lardi (T-03-37 dagi «chegara qurilmaga borishdan oldin»
         #   bilan aynan bir xil mulohaza).
-        assert_safe_go2rtc_src(src)
+        assert_safe_go2rtc_src(source)
 
         if await self.has_stream(stream_name):
             return False
@@ -224,11 +281,23 @@ class Go2rtcClient:
         try:
             response = await self._client.put(
                 GO2RTC_STREAMS_PATH,
-                params={"name": stream_name, "src": src},
+                params={"name": stream_name, "src": source},
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise Go2rtcError(f"go2rtc `PUT {GO2RTC_STREAMS_PATH}` yiqildi: {exc}") from exc
+            # ⚠⚠ `from None` — VA U QOLGAN IKKI BLOKDAN ATAYIN FARQ QILADI.
+            #
+            #   SHU chaqiruvning URL'ida sir bor (`?src=rtsp://admin:PAROL@...`),
+            #   `httpx` istisnosining matni esa o'sha URL'ni to'liq tashiydi.
+            #   `from exc` bilan u `__cause__` da qolardi va `traceback`,
+            #   Sentry ning zanjir yuruvchisi hamda har qanday
+            #   `format_exc()` uni chop etardi.
+            #
+            #   Yo'qotilgan narsa faqat httpx ning O'Z matni; qaysi amal,
+            #   qaysi xato TURI va qaysi STATUS `_failure()` da saqlanadi.
+            #   `has_stream`/`remove_stream` da esa URL sirsiz, shuning
+            #   uchun u yerda kontekst TO'LIQ qoladi.
+            raise _failure("PUT", exc) from None
 
         log.info("go2rtc_stream_registered", stream_name=stream_name)
         return True
@@ -246,7 +315,7 @@ class Go2rtcClient:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise Go2rtcError(f"go2rtc `DELETE {GO2RTC_STREAMS_PATH}` yiqildi: {exc}") from exc
+            raise _failure("DELETE", exc) from exc
 
         log.info("go2rtc_stream_removed", stream_name=stream_name)
 
