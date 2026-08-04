@@ -278,7 +278,21 @@ Plans:
   4. Kadrlar S3-mos omborda bozor/kamera/sana bo'yicha topiladi; 90 kun to'liq, keyin siqilgan saqlash siyosati amalda ishlaydi
   5. Kamera offline bo'lsa, slot o'tkazib yuborilsa yoki backup xato bersa — platforma adminiga Telegram-alert keladi va xato Sentry'da ko'rinadi
 
-**Plans**: TBD
+**Plans**: 12 plans (8 to'lqin)
+
+- [ ] `04-01-PLAN.md` — Wave 0/A: prod bog'liqliklari, `scheduler` va `storage` konteynerlari, reyestrlar, D-23 o'lchovi
+- [ ] `04-02-PLAN.md` — Wave 0/B: sintetik JPEG generatori, sim `frame_mode` + `/picture`, frontend darvozalari (W0-F1…F7)
+- [ ] `04-03-PLAN.md` — Sxema: beshta model, `0014_snapshot_domain`, `0015` kaskadi, `capture_due_markets()`, meta-invariantlar
+- [ ] `04-04-PLAN.md` — Sof xizmatlar: `Settings`, sifat filtri (`Pillow`), obyekt kaliti, xato taksonomiyasi
+- [ ] `04-05-PLAN.md` — Repozitoriylar: `capture_repo` (`SKIP LOCKED` + lease), `schedule_repo`, `snapshot_repo`
+- [ ] `04-06-PLAN.md` — Ombor: `aiobotocore` qobig'i va haqiqiy SeaweedFS ustidagi kalit tartibi
+- [ ] `04-07-PLAN.md` — Kadr olish oqimi: `frame_source`, ISAPI `/picture`, `capture_tick`/`capture_batch`, planer
+- [ ] `04-08-PLAN.md` — Saqlash siyosati va alertlar: `retention.daily`, Telegram jo'natuvchisi, `alert_sweep`, `ops/docs/monitoring.md`
+- [ ] `04-09-PLAN.md` — API: jadval CRUD, ijro jurnali, kadr rasmi proxysi (`audit_read`), `/internal/self-check`
+- [ ] `04-10-PLAN.md` — Frontend A: so'rov qatlami, `/snapshots` sahifasi, jadval kartasi va dialoglar
+- [ ] `04-11-PLAN.md` — Frontend B: kun xulosasi, ijro matritsasi (9 holat), kadr detali, ogohlantirishlar
+- [ ] `04-12-PLAN.md` — Faza darvozasi: `test_phase4_criteria.py`, chegara qarori, talab holatlari
+
 **Research flag**: yes — `/gsd-plan-phase 4 --research-phase 4`. **Kadr olish usuli endi kutilmaydi — standart tanlov: go2rtc `/api/frame.jpeg`, zaxira: Hikvision ISAPI `/picture`, oxirgi chora: ffmpeg** (tadqiqot tavsiyasi, CLAUDE.md da qat'iylashtirilgan). Uchala yo'l ham sozlanadigan qilib quriladi va simulyatorda o'lchanadi; real NVR ma'lumoti kelganda tanlov **sozlama** bilan o'zgaradi, qayta loyihalash talab qilmaydi. Hal qilinmagan qolgani: job-orchestration mexanizmi (DB-materialized `capture_runs` + `SKIP LOCKED` vs `arq`) bitta aniq qaror talab qiladi; sifat va `light_mode` chegaralari simulyatorda standart qiymat oladi, pilot ma'lumotida aniqlashtiriladi.
 
 ### Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i
