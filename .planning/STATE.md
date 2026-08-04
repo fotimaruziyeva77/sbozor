@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-14-PLAN.md
-last_updated: "2026-08-04T12:08:46.847Z"
-last_activity: 2026-08-04 -- Phase 04 planning complete
+stopped_at: Completed 04-07-PLAN.md
+last_updated: "2026-08-04T19:18:11.895Z"
+last_activity: "2026-08-05 -- 04-07 bajarildi: kadr olish quvuri (tik + batch + uchta usul)"
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 65
-  completed_plans: 53
+  completed_plans: 60
   percent: 33
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-28)
 
 **Core value:** Bozor ma'muriyati har bir band rastadan patta to'liq yig'ilayotganini raqamlar va rasm-dalil bilan ko'radi — "band, lekin to'lovsiz" rastalar kunlik hisobotda avtomatik fosh bo'ladi.
-**Current focus:** Phase 03 — nvr-avtomatik-kashfiyoti-va-tarmoq-ulanishi
+**Current focus:** Phase 04 — snapshot-pipeline
 
 ## Current Position
 
 Phase: 4
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-08-04 -- Phase 04 planning complete
+Plan: 7 of 12 complete
+Status: Ready to execute 04-08
+Last activity: 2026-08-05 -- 04-07 bajarildi: kadr olish quvuri (tik + batch + uchta usul)
 
-Progress: [██████████] 100% (14/14 reja — 11 ta asosiy + 3 ta bo'shliq yopish; 03-VERIFICATION.md ning GAP-1/GAP-2 si yopildi, qayta tekshiruv kutilyapti)
+Progress: [██████░░░░] 58% (7/12 reja — 04-01…04-07)
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -67,6 +67,7 @@ Progress: [██████████] 100% (14/14 reja — 11 ta asosiy + 3
 | Phase 03 P10 | 70min | 3 tasks | 18 files |
 | Phase 03 P11 | 150min | 3 tasks | 8 files |
 | Phase 3 P14 | 95min | 3 tasks | 10 files |
+| Phase 04 P07 | 125min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,11 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-14: go2rtc PUT/DELETE natijasi status kodidan emas, oqimlar RO'YXATIDAN o'lchanadi — :ro config (D-11) tufayli go2rtc har doim 400 qaytaradi, amalning o'zi esa bajariladi
 - [Phase 03]: 03-14: uchidan-uchiga o'lchov nomlarni MAHSULOTDAN oladi (kashfiyot hosil qilgan cam_<uuid4>, chipta URL'idan) — o'z nomini o'ylab topgan test Pitfall 4 bo'lardi
 - [Phase 03]: 03-14: gate chegarasi 1200 s da qoldi — o'lchov 538 s bo'lsa ham na ko'tarildi, na tushirildi; qayta belgilash 4-fazaga band
+- [Phase ?]: 04-07: succeeded+corrupt ziddiyati YOPILDI — (a) va (b) IKKALASI ham kerak, ular ikki xil qatlamda hal bo'ladi (0016)
+- [Phase ?]: 04-07: D-07 endi koddagi mexanizm — _claims_rtsp_session() /picture ni RTSP oqim da'vosidan chiqaradi; usiz eng xavfsiz usul o'zini chegara qurboni deb belgilardi
+- [Phase ?]: 04-07: capture_due_markets() ga uchinchi disjunkt (0017) — ijarasi tugagan running qatorli bozor ham tikda ko'rinadi; usiz ijara AYNAN o'zi qoplashi kerak bo'lgan holatda ishlamasdi
+- [Phase ?]: 04-07: navbat nomi sbozor:discovery -> sbozor:jobs; ikkinchi navbat OCHILMAYDI — u ikkinchi broker va ikkinchi worker konteynerini talab qilardi
+- [Phase ?]: 04-07: yurak urishi except Exception ni yutadi — o'lchandi: socket.gaierror SQLAlchemyError ga o'ralmaydi va tikni ENG OXIRIDA yiqitardi
 
 ### Pending Todos
 
@@ -157,6 +163,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-03T18:54:11.588Z
-Stopped at: Completed 03-14-PLAN.md
+Last session: 2026-08-04T19:18:11.886Z
+Stopped at: Completed 04-07-PLAN.md
 Resume file: None
