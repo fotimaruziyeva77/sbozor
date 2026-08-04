@@ -61,6 +61,15 @@ const BACKEND_ISAPI_ERRORS = path.join(
   "isapi",
   "errors.py",
 );
+const CAPTURE_ERRORS = path.join(FRONTEND_ROOT, "src", "lib", "capture-errors.ts");
+const BACKEND_CAPTURE_ERRORS = path.join(
+  REPO_ROOT,
+  "services",
+  "core-api",
+  "app",
+  "services",
+  "capture_errors.py",
+);
 
 function read(file) {
   return readFileSync(file, "utf8");
@@ -452,6 +461,186 @@ test("G-5: har `snapshots.errorCause.{kod}` uchun `errorFix.{kod}` UCHALA tilda 
     problems,
     [],
     "D-02 buzilgan — sabab va tuzatish JUFT bo'lishi SHART:\n  " + problems.join("\n  "),
+  );
+});
+
+/* ---------------------------------------------------------------------------
+ * ⛔ G-5 NING BACKEND LANGARI — 04-10 da QO'SHILDI.
+ *
+ * Yuqoridagi ikki test `Object.keys(causes)` ga, ya'ni MATN KATALOGINING
+ * O'ZIGA tayanadi. Bu to'plamning ICHKI izchilligini o'lchaydi, lekin
+ * TO'LIQLIGINI emas: backend o'n ikkinchi kodni qo'shsa-yu, uchala
+ * tilda ham matn yozilmasa — sabab↔tuzatish parity BUZILMAYDI va
+ * `>= 11` sharti ham o'tadi. Ya'ni darvoza YASHIL qolardi, admin esa
+ * yangi xato uchun «Kutilmagan xato» ni ko'rardi (§S-5 sinfi).
+ *
+ * Aynan shu sinf 04-09 da HAQIQATAN ro'y berdi: olti yangi
+ * `MARKET_ERROR_CODES` kodi qo'shildi, `ERROR_CODES` ko'zgusi esa
+ * unutildi. U yerda darvoza ushladi, chunki `MARKET_ERROR_CODES`
+ * uchun langar BOR edi. `capture_*` reyestrida u YO'Q edi.
+ *
+ * Zanjir to'rt bo'g'inli va har bo'g'in boshqa tilda:
+ *
+ *   capture_errors.py::CAPTURE_ERROR_META   (Python — kod + AKTOR)
+ *     -> lib/api-types.ts::CAPTURE_ERROR_CODES  (TypeScript — reyestr)
+ *     -> lib/capture-errors.ts::CAPTURE_ERROR_META (TypeScript — tone + aktor)
+ *     -> messages/*.json                      (JSON — sabab, tuzatish, aktor)
+ *
+ * ⚠ AKTOR HAM SOLISHTIRILADI, faqat kodlar emas: `actor` xato matnining
+ *   UCHINCHI qatori (§10.5) va u ikki tomonda mustaqil yozilgan. Backend
+ *   `platform` deb, frontend `admin` deb hisoblasa admin soatlab NVR
+ *   sozlamalarini titkilardi — kod nomi esa ikkalasida ham bir xil
+ *   bo'lgani uchun hech qanday darvoza qizarmasdi.
+ * ------------------------------------------------------------------------ */
+
+/** `NAME: Final[str] = "kod"` konstantalari -> `{NAME: kod}`. */
+function readPythonStrConstants(source) {
+  return new Map(
+    [...source.matchAll(/^([A-Z_0-9]+): Final\[str\] = "([a-z_]+)"/gmu)].map(
+      (match) => [match[1], match[2]],
+    ),
+  );
+}
+
+/**
+ * `CaptureErrorMeta(NAME, ..., "actor")` qatorlari -> `{kod: aktor}`.
+ *
+ * ⚠ Konstruktor POZITSION chaqiriladi va `actor` — OXIRGI argument.
+ *   Shuning uchun naqsh oxirgi qo'shtirnoqli qiymatni oladi; ikkinchi
+ *   qo'shtirnoqli argument bu chaqiruvda umuman yo'q (qolganlari
+ *   `True`/`False`).
+ */
+function readCaptureActors(source, constants) {
+  const out = new Map();
+  for (const match of source.matchAll(
+    /CaptureErrorMeta\(\s*([A-Z_0-9]+),[^)]*"([a-z]+)"\s*\)/gu,
+  )) {
+    const code = constants.get(match[1]);
+    if (code !== undefined) out.set(code, match[2]);
+  }
+  return out;
+}
+
+/** `kod: { tone: "...", actor: "..." },` — `capture-errors.ts` ning jadvali. */
+function readTsCaptureMeta(source) {
+  return new Map(
+    [
+      ...source.matchAll(
+        /^\s{2}([a-z_]+):\s*\{\s*tone:\s*"([a-z]+)",\s*actor:\s*"([a-z]+)"\s*\}/gmu,
+      ),
+    ].map((match) => [match[1], { tone: match[2], actor: match[3] }]),
+  );
+}
+
+const backendCaptureActors = readCaptureActors(
+  read(BACKEND_CAPTURE_ERRORS),
+  readPythonStrConstants(read(BACKEND_CAPTURE_ERRORS)),
+);
+
+test("G-5: kadr olish reyestri o'qildi va AYNAN o'n bitta kod (nazorat)", () => {
+  /*
+   * Nazorat: parser sinsa (masalan `CaptureErrorMeta` kalit-so'zli
+   * chaqiruvga o'tsa) quyidagi uchala darvoza ham JIMGINA yashil
+   * bo'lardi — bo'sh to'plam bo'yicha aylanish hech nimani tekshirmaydi.
+   */
+  assert.equal(
+    backendCaptureActors.size,
+    MIN_SNAPSHOT_ERROR_CODES,
+    `capture_errors.py dan ${backendCaptureActors.size} kod o'qildi, kutilgan ` +
+      `${MIN_SNAPSHOT_ERROR_CODES} (04-UI-SPEC §11.8)`,
+  );
+});
+
+test("G-5: `api-types.ts::CAPTURE_ERROR_CODES` backend reyestrining TO'LIQ ko'zgusi", () => {
+  const mirrored = readTsStringArray(read(API_TYPES), "CAPTURE_ERROR_CODES");
+  const backend = [...backendCaptureActors.keys()];
+
+  assert.deepEqual(
+    backend.filter((code) => !mirrored.includes(code)),
+    [],
+    "api-types.ts::CAPTURE_ERROR_CODES da yetishmaydi — kod backendда bor, " +
+      "frontendда esa u `errors.generic` ga tushadi va admin NIMA qilishni bilmaydi (D-02)",
+  );
+  // Teskari yo'nalish: ko'zguda ORTIQCHA kod — hech qachon kelmaydigan
+  // xato uchun matn va qoida saqlab yurish.
+  assert.deepEqual(
+    mirrored.filter((code) => !backendCaptureActors.has(code)),
+    [],
+    "api-types.ts::CAPTURE_ERROR_CODES da backendда YO'Q kod bor",
+  );
+});
+
+test("G-5: `capture-errors.ts` har kodga tone BERADI va AKTOR backend bilan MOS", () => {
+  const meta = readTsCaptureMeta(read(CAPTURE_ERRORS));
+
+  assert.ok(
+    meta.size >= MIN_SNAPSHOT_ERROR_CODES,
+    `capture-errors.ts dan atigi ${meta.size} yozuv o'qildi — parser sinigan bo'lishi mumkin`,
+  );
+
+  const problems = [];
+  for (const [code, actor] of backendCaptureActors) {
+    const view = meta.get(code);
+    if (view === undefined) {
+      problems.push(`capture-errors.ts: ${code} uchun yozuv YO'Q`);
+      continue;
+    }
+    if (view.actor !== actor) {
+      problems.push(
+        `${code}: aktor backendда «${actor}», frontendда «${view.actor}»`,
+      );
+    }
+    if (!SNAPSHOT_ACTORS.includes(view.actor)) {
+      problems.push(`${code}: noma'lum aktor «${view.actor}»`);
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "«BUNI KIM TUZATADI?» javobi ikki tomonda AJRALIB KETGAN (§10.5):\n  " +
+      problems.join("\n  "),
+  );
+});
+
+test("G-5: HAR BACKEND kodi uchun sabab va tuzatish UCHALA tilda bor", () => {
+  if (snapshotsCopyMissing()) {
+    console.log(
+      "[G-5] `snapshots.errorCause.*` hali uchala tilda ham yo'q — langar " +
+        "copy qo'shilishi bilan AVTOMATIK kuchga kiradi.",
+    );
+    return;
+  }
+
+  const problems = [];
+  for (const locale of LOCALES) {
+    const snapshots = loadMessages(locale).snapshots ?? {};
+    const causes = snapshots.errorCause ?? {};
+    const fixes = snapshots.errorFix ?? {};
+
+    for (const code of backendCaptureActors.keys()) {
+      if (typeof causes[code] !== "string" || causes[code].trim() === "") {
+        problems.push(`${locale}.json: snapshots.errorCause.${code} YO'Q`);
+      }
+      if (typeof fixes[code] !== "string" || fixes[code].trim() === "") {
+        problems.push(`${locale}.json: snapshots.errorFix.${code} YO'Q`);
+      }
+    }
+    // Teskari yo'nalish: matn bor, kod yo'q — o'lik kalit.
+    for (const code of Object.keys(causes)) {
+      if (!backendCaptureActors.has(code)) {
+        problems.push(
+          `${locale}.json: snapshots.errorCause.${code} backend reyestrida YO'Q`,
+        );
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "kadr olish xatosining matni backend reyestri bilan ajralib ketgan:\n  " +
+      problems.join("\n  "),
   );
 });
 

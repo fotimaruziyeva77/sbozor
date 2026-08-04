@@ -1109,3 +1109,333 @@ export const ERROR_CODES = [
   "snapshot_storage_unavailable",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
+
+/* ===========================================================================
+ * 4-FAZA — KADR OLISH JADVALI, KUN JURNALI, KADR DETALI VA OGOHLANTIRISHLAR
+ * (04-09 marshrutlarining kontrakti, `04-UI-SPEC.md` §4.3 / §6.3 / §6.4 /
+ *  §6.6 / §6.7).
+ *
+ * ⛔⛔ BU BO'LIMDAGI BIRORTA SXEMADA `object_key` MAYDONI YO'Q VA HECH
+ *     QACHON QO'SHILMAYDI (§14.3). Backend ham uni bermaydi
+ *     (`schemas.py::SnapshotDetailOut` ning darvozasi:
+ *     `"object_key" not in model_fields`). Ombor manzili, bucket nomi va
+ *     obyekt kaliti brauzerga hech qanday ko'rinishda chiqmaydi; kadr
+ *     FAQAT `GET /snapshots/{id}/image` proxysi orqali keladi.
+ *
+ * ⚠ ENUM QIYMATLARI `z.enum` BILAN QULFLANMAYDI — bu ATAYIN va u
+ *   `cameraStatusSchema` dan FARQ QILADI.
+ *
+ *   Sabab ikkita va ikkalasi ham o'lchanadigan:
+ *     1. 04-09 javob modellarida bu maydonlar `str` (`CaptureRunOut.status`,
+ *        `quality_verdict`, `SnapshotDetailOut.light_mode`,
+ *        `capture_method`, `storage_tier`, `AlertEventOut.severity`,
+ *        `alert_key`). Sxema javobga AYNAN mos bo'lishi kerak.
+ *     2. `z.enum` bo'lsa backend reyestriga BITTA yangi a'zo qo'shilishi
+ *        butun kun jurnalini chegarada yiqitardi — 175 hujayrali jadval
+ *        o'rniga xato bloki chiqardi. Noma'lum qiymat esa BITTA hujayrani
+ *        «noma'lum» qilib qo'yishi kerak, kunni emas.
+ *
+ *   Shuning uchun ro'yxatlar KONSTANTA sifatida eksport qilinadi va
+ *   tegishli tip qo'riqchisi (`isCaptureRunStatus`, ...) bilan tor
+ *   tiplashtirish CHIZISH joyida bajariladi.
+ * ======================================================================== */
+
+/** `capture_runs.status` — AYNAN oltita (`sbozor_core.enums.CaptureRunStatus`). */
+export const CAPTURE_RUN_STATUSES = [
+  "pending",
+  "running",
+  "succeeded",
+  "failed",
+  "missed",
+  "skipped",
+] as const;
+export type CaptureRunStatusValue = (typeof CAPTURE_RUN_STATUSES)[number];
+
+export function isCaptureRunStatus(value: string): value is CaptureRunStatusValue {
+  return (CAPTURE_RUN_STATUSES as readonly string[]).includes(value);
+}
+
+/** `snapshots.quality_verdict` — AYNAN to'rtta (`SnapshotQuality`, D-14/D-16). */
+export const SNAPSHOT_QUALITY_VERDICTS = [
+  "ok",
+  "dark",
+  "blank",
+  "corrupt",
+] as const;
+export type SnapshotQualityValue = (typeof SNAPSHOT_QUALITY_VERDICTS)[number];
+
+/** `snapshots.light_mode` — AYNAN to'rtta (`SnapshotLightMode`, D-12). */
+export const SNAPSHOT_LIGHT_MODES = [
+  "day",
+  "low_light",
+  "ir_night",
+  "unknown",
+] as const;
+export type SnapshotLightModeValue = (typeof SNAPSHOT_LIGHT_MODES)[number];
+
+/**
+ * `snapshots.storage_tier` — uchta (`SnapshotTier`, D-18).
+ *
+ * ⚠ `purged` UI'da «To'liq»/«Siqilgan» juftligining uchinchisi EMAS:
+ *   baytlar o'chirilgan, METAMA'LUMOT esa joyida. Rasm so'ralganda
+ *   marshrut `410 snapshot_object_purged` beradi — ya'ni bu holat
+ *   xato yo'lida ko'rinadi, badge sifatida emas.
+ */
+export const SNAPSHOT_STORAGE_TIERS = ["full", "compressed", "purged"] as const;
+export type SnapshotStorageTierValue =
+  (typeof SNAPSHOT_STORAGE_TIERS)[number];
+
+/** `snapshots.capture_method` — uchta (`CaptureMethod`, 04-RESEARCH §B.1). */
+export const SNAPSHOT_CAPTURE_METHODS = ["go2rtc", "isapi", "ffmpeg"] as const;
+export type SnapshotCaptureMethodValue =
+  (typeof SNAPSHOT_CAPTURE_METHODS)[number];
+
+/** `alert_events.severity` — uchta (`AlertSeverity`, D-22). */
+export const ALERT_SEVERITIES = ["info", "warning", "critical"] as const;
+export type AlertSeverityValue = (typeof ALERT_SEVERITIES)[number];
+
+/** Profil rejimi — BUGUNGA nisbatan hisoblanadi, ustunda saqlanmaydi (§4.5). */
+export const SCHEDULE_MODES = ["past", "active", "future"] as const;
+export type ScheduleModeValue = (typeof SCHEDULE_MODES)[number];
+export const scheduleModeSchema = z.enum(SCHEDULE_MODES);
+
+/**
+ * Bitta mavsumiy profil (`ScheduleProfileOut`).
+ *
+ * ⚠ `mode` bu yerda `z.enum` — yuqoridagi qoidaning ISTISNOSI va u
+ *   ataylab: backend uni `Literal["past","active","future"]` deb e'lon
+ *   qilgan, ya'ni to'plam KONTRAKTNING o'zida yopiq. Qolgan maydonlar
+ *   esa `str` va ular uchun qoida yuqoridagicha qoladi.
+ *
+ * `name` — DB KONTENTI va TARJIMA QILINMAYDI (1-faza D-16).
+ * `ends_on === null` — ochiq oxirli profil.
+ */
+export const snapshotScheduleProfileSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  starts_on: z.string(),
+  ends_on: z.string().nullable(),
+  mode: scheduleModeSchema,
+});
+export type SnapshotScheduleProfile = z.infer<
+  typeof snapshotScheduleProfileSchema
+>;
+
+/**
+ * Bitta kunning rejasi — SANA va VAQTLAR BIRGA.
+ *
+ * ⚠ `times` `HH:MM:SS` shaklida keladi (Pydantic `time` seriyalashi,
+ *   04-09 SUMMARY'da o'lchangan), UI esa `HH:mm` ko'rsatadi. Format
+ *   CHIZISH joyida qisqartiriladi — sxemada emas: xom javobni
+ *   o'zgartirish keyingi iste'molchini «nega serverdagi qiymat boshqa?»
+ *   savoliga tashlardi.
+ */
+export const snapshotScheduleDaySchema = z.object({
+  date: z.string(),
+  times: z.array(z.string()),
+});
+export type SnapshotScheduleDay = z.infer<typeof snapshotScheduleDaySchema>;
+
+/**
+ * `GET /snapshot-schedules/today` — BITTA so'rovdagi butun holat (D-05).
+ *
+ * ⛔ «BUGUN» VA «ERTAGA» BITTA JAVOBDA. Ikki so'rovga bo'linsa ular turli
+ *    lahzada olinardi va yarim tun atrofida ikkalasi bir kunni
+ *    ko'rsatardi — ya'ni D-05 ning yagona ko'rsatkichi aynan eng muhim
+ *    daqiqada yolg'on bo'lardi.
+ *
+ * `differs` PROFIL bo'yicha hisoblanadi, vaqtlar ro'yxati bo'yicha emas:
+ * ikki profilning vaqtlari tasodifan bir xil bo'lishi mumkin, lekin
+ * ogohlantirish «jadval o'zgaradi» haqida.
+ */
+export const snapshotScheduleTodaySchema = z.object({
+  profile: snapshotScheduleProfileSchema.nullable(),
+  today: snapshotScheduleDaySchema,
+  tomorrow: snapshotScheduleDaySchema,
+  differs: z.boolean(),
+  capture_on_closed_days: z.boolean(),
+  uncovered_days: z.number().int(),
+  uncovered_horizon_days: z.number().int(),
+});
+export type SnapshotScheduleToday = z.infer<
+  typeof snapshotScheduleTodaySchema
+>;
+
+/** Ro'yxat elementi — profil + uning vaqtlari (`ScheduleItemOut`, DL-2). */
+export const snapshotScheduleSchema = snapshotScheduleProfileSchema.extend({
+  times: z.array(z.string()),
+});
+export type SnapshotSchedule = z.infer<typeof snapshotScheduleSchema>;
+
+/** `GET /snapshot-schedules` — TO'LIQ ro'yxat, sahifalash YO'Q. */
+export const snapshotScheduleListResponseSchema = z.object({
+  items: z.array(snapshotScheduleSchema),
+});
+
+/**
+ * `capture_runs.error_code` reyestri — O'N BIRTA kod (§11.8).
+ *
+ * Manba: `services/core-api/app/services/capture_errors.py::CAPTURE_ERROR_CODES`.
+ * Ikkisi QO'LDA sinxron saqlanadi (til chegarasi tufayli kompilyator
+ * tekshiruvi yo'q — `ERROR_CODES` va `rbac.ts` bilan aynan bir xil holat)
+ * va drift `frontend/scripts/error-codes.test.mjs` da qulflangan.
+ *
+ * ⚠ BU RO'YXAT YUQORIDAGI `ERROR_CODES` GA QO'SHILMAYDI va bu ATAYIN —
+ *   `nvr-errors.ts:37-43` dagi ikkilikning aynan takrori. U yerdagi
+ *   kodlar HTTP `detail` sifatida keladi (to'g'ridan-to'g'ri 4xx),
+ *   bulari esa javob TANASIDAGI `error_code` maydoni
+ *   (`CaptureRunOut.error_code`). Ikkalasini bitta ro'yxatga yig'ish
+ *   «kadr olinmadi» ni oddiy toast sifatida ko'rsatib, D-02 ning butun
+ *   mazmunini yo'qotardi.
+ *
+ * ⚠ TONE / ACTOR QARORI BU YERDA EMAS — u `lib/capture-errors.ts` da.
+ *   Bu modul HTTP kontraktining ko'zgusi; u yerdagisi esa KO'RINISH
+ *   qarori. `CAPTURE_ERROR_META` ni `Record<CaptureErrorCode, ...>` deb
+ *   e'lon qilish ikkalasini kompilyator darajasida bog'lab turadi:
+ *   yetishmagan kod ham, ortiqcha kod ham TS xatosi.
+ */
+export const CAPTURE_ERROR_CODES = [
+  /* 1-guruh — ORKESTRATSIYA. Sabab BIZDA, NVR da emas. */
+  "capture_slot_missed",
+  "capture_worker_lost",
+  "capture_plan_created_late",
+  /* 2-guruh — TARMOQ va QURILMA. */
+  "capture_source_unreachable",
+  "capture_camera_offline",
+  "capture_timeout",
+  "capture_invalid_response",
+  /* 3-guruh — AUTENTIFIKATSIYA. */
+  "capture_bad_credentials",
+  /* 4-guruh — RESURS (retry emas, kechiktirish). */
+  "capture_stream_limit",
+  /* 5-guruh — PLATFORMA NOSOZLIGI. */
+  "capture_storage_unavailable",
+  "capture_credential_unreadable",
+] as const;
+export type CaptureErrorCode = (typeof CAPTURE_ERROR_CODES)[number];
+
+/**
+ * Kun jurnali matritsasining BITTA hujayrasi (`CaptureRunOut`, §6.4).
+ *
+ * To'qqizala hujayra holati `status` + `quality_verdict` juftligidan
+ * chiziladi; `tone` va ikonka javobda YO'Q (D-20 naqshi: API xom
+ * faktlarni beradi, ko'rinishni frontend hosil qiladi).
+ */
+export const captureRunSchema = z.object({
+  run_id: z.uuid(),
+  camera_id: z.uuid(),
+  channel_no: z.number().int(),
+  camera_name: z.string(),
+  slot_time: z.string(),
+  scheduled_at: z.string(),
+  status: z.string(),
+  attempts: z.number().int(),
+  error_code: z.string().nullable(),
+  quality_verdict: z.string().nullable(),
+  snapshot_id: z.uuid().nullable(),
+});
+export type CaptureRun = z.infer<typeof captureRunSchema>;
+
+/**
+ * Kunning OLTALA hisoblagichi + `planned`/`done` (`DaySummaryOut`, §6.3).
+ *
+ * ⛔ NOL QIYMAT — NATIJA, UNING YO'QLIGI EMAS: barcha maydonlar HAR DOIM
+ *    keladi va birortasi ham ixtiyoriy EMAS.
+ */
+export const captureDaySummarySchema = z.object({
+  planned: z.number().int(),
+  done: z.number().int(),
+  ok: z.number().int(),
+  dark: z.number().int(),
+  blank: z.number().int(),
+  corrupt: z.number().int(),
+  failed: z.number().int(),
+  missed: z.number().int(),
+});
+export type CaptureDaySummary = z.infer<typeof captureDaySummarySchema>;
+
+/**
+ * `GET /capture-runs?day=` — kun jurnali (`CaptureDayOut`).
+ *
+ * `archived_present` — BAYROQ, ro'yxat emas: arxivlangan kameraning
+ * qatorlari `rows` da yo'q (xulosa ham ularni sanamaydi), lekin
+ * MAVJUDLIGI aytiladi. Bayroqsiz admin «kecha 25 kamera bor edi, bugun
+ * 24» farqini nosozlik deb o'ylardi.
+ */
+export const captureDaySchema = z.object({
+  day: z.string(),
+  summary: captureDaySummarySchema,
+  rows: z.array(captureRunSchema),
+  archived_present: z.boolean(),
+});
+export type CaptureDay = z.infer<typeof captureDaySchema>;
+
+/**
+ * `GET /snapshots/{id}` — kadrning METAMA'LUMOTI (DL-3, §6.6).
+ *
+ * ⛔ `object_key` MAYDONI YO'Q — bo'lim boshidagi izohga qarang.
+ *
+ * ⚠ UCHALA O'LCHOV HAM (`quality_mean`/`quality_stddev`/
+ *   `quality_saturation`) `null` BO'LISHI MUMKIN va bu AYNAN BITTA
+ *   holatni anglatadi: `corrupt` kadr — buzuq JPEG dekodlanmaydi, ya'ni
+ *   o'lchovni OLIB BO'LMAYDI. Sentinel `0` «o'lchandi va nol chiqdi»
+ *   ma'nosini berardi (`0016` migratsiyasi).
+ */
+export const snapshotDetailSchema = z.object({
+  id: z.uuid(),
+  camera_id: z.uuid(),
+  business_date: z.string(),
+  slot_time: z.string(),
+  scheduled_at: z.string(),
+  captured_at: z.string(),
+  size_bytes: z.number().int(),
+  width: z.number().int().nullable(),
+  height: z.number().int().nullable(),
+  quality_verdict: z.string(),
+  light_mode: z.string(),
+  capture_method: z.string(),
+  storage_tier: z.string(),
+  is_billable: z.boolean(),
+  quality_mean: z.number().nullable(),
+  quality_stddev: z.number().nullable(),
+  quality_saturation: z.number().nullable(),
+  quality_thresholds_version: z.number().int(),
+});
+export type SnapshotDetail = z.infer<typeof snapshotDetailSchema>;
+
+/**
+ * Ochiq yoki yopilgan ogohlantirish (`AlertEventOut`, §6.7, D-19/D-22).
+ *
+ * ⛔ `snapshot_id` VA RASM HAVOLASI BU YERDA YO'Q — jadvalda ham bunday
+ *    ustun yo'q. Dalil-kadr bozor tashrifchilarining shaxsiy ma'lumoti,
+ *    Telegram serverlari esa O'zR data-rezidentlik chegarasidan
+ *    tashqarida. Mexanik darvoza: G-3.
+ *
+ * ⚠ `notified_at === null` BO'LSA HAM QAYTADI va UI uni YASHIRMAYDI:
+ *   «Telegram xabari yuborilmadi» qatori aynan shu joyda tug'iladigan
+ *   «alert bor deb o'ylash» yolg'onining oldini oladi.
+ *
+ * `detail` — ochiq shakldagi `record`, LEKIN allowlist BACKENDDA
+ * (`AlertEventOut._filter_detail`): noma'lum kalit javobga umuman
+ * chiqmaydi. Klientda ikkinchi filtr qurilmaydi — u «backend nima yozsa
+ * ham xavfsiz» degan yolg'on xotirjamlik berardi (`nvr-errors.ts:141`
+ * dagi bilan aynan bir xil chegara).
+ */
+export const alertEventSchema = z.object({
+  id: z.uuid(),
+  alert_key: z.string(),
+  severity: z.string(),
+  subject_id: z.uuid().nullable(),
+  first_seen_at: z.string(),
+  last_seen_at: z.string(),
+  occurrences: z.number().int(),
+  notified_at: z.string().nullable(),
+  resolved_at: z.string().nullable(),
+  detail: z.record(z.string(), z.unknown()),
+});
+export type AlertEvent = z.infer<typeof alertEventSchema>;
+
+/** `GET /alerts?closed=0|1` — `last_seen_at` bo'yicha kamayish tartibida. */
+export const alertListResponseSchema = z.object({
+  items: z.array(alertEventSchema),
+});
