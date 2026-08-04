@@ -167,6 +167,18 @@ EXEMPT_ROUTES: dict[str, str] = {
         "bozor kamerasi -> 403 va boshqa kameraning oqim nomi -> 403 holatlarini "
         "alohida o'lchaydi"
     ),
+    "/internal/self-check": (
+        "global — TASHQI KUZATUVCHI (healthchecks.io / UptimeRobot) chaqiradigan "
+        "o'z-o'zini kuzatish nishoni: unda `Authorization` sarlavhasi UMUMAN "
+        "bo'lmaydi va u ATAYIN autentifikatsiyasiz. Kontrakti ham boshqa — 200 "
+        "yoki 503, hech qachon 401/404 emas, ya'ni matritsaning uchala token "
+        "da'vosi bu yerda MA'NOSIZ bo'lardi. Javobda bozor identifikatori, nomi "
+        "yoki topologiyasi UMUMAN yo'q (faqat komponent nomlari va bayroq), ya'ni "
+        "cross-tenant sizish yuzasi ham yo'q. QAMROVI TO'LIQ QAYTA TIKLANGAN: "
+        "`tests/integration/test_capture_schedule.py` yangi heartbeat -> 200, "
+        "eskirgan -> 503, hech qachon yozilmagan -> 503, javob yuzasining torligi "
+        "va konteyner healthcheck'iga ULANMAGANI holatlarini alohida o'lchaydi"
+    ),
     "/api/v1/audit/platform": (
         "global — platforma-global (`market_id IS NULL`) audit qatorlari, ya'ni "
         "HECH QAYSI bozorga tegishli bo'lmagan yozuvlar; tenant qatorlari undan "

@@ -43,6 +43,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.internal.live_authz import router as live_authz_router
+from app.api.internal.self_check import router as self_check_router
 from app.api.v1.assignments import router as assignments_router
 from app.api.v1.assignments import stall_router as stall_assignments_router
 from app.api.v1.audit import router as audit_router
@@ -372,6 +373,18 @@ app.include_router(alerts_router, prefix=f"{API_V1_PREFIX}/alerts")
 # EXEMPT_ROUTES` da SABAB bilan yozilgan va qamrovi
 # `tests/integration/test_live_view.py` da TO'LIQ qayta tiklangan.
 app.include_router(live_authz_router)
+# --- 04-09: o'z-o'zini kuzatish (FOUND-06, D-20) ---
+#
+# ⚠ `live-authz` BILAN BIR XIL SABABDAN `API_V1_PREFIX` DAN TASHQARIDA:
+# uni FOYDALANUVCHI emas, TASHQI KUZATUVCHI chaqiradi va unda
+# `Authorization` sarlavhasi umuman bo'lmaydi. Kontrakti ham boshqa —
+# 200 yoki 503, hech qachon 401/404 emas.
+#
+# ⛔ BU MARSHRUT `compose.yaml` DAGI KONTEYNER `healthcheck` IGA
+#    ULANMAYDI (Pitfall 14): worker'ning yurak urishi eskirgani uchun
+#    SOG'LOM API ni qayta ishga tushirish hech nimani tuzatmasdi.
+#    Sabab to'liq `self_check.py` modul docstringida.
+app.include_router(self_check_router)
 
 
 @app.exception_handler(DBAPIError)

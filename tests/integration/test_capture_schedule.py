@@ -1,4 +1,4 @@
-"""Snapshot jadvalining HTTP yuzasi (CAM-04, D-05).
+"""Snapshot jadvalining HTTP yuzasi (CAM-04, D-05) + `/internal/self-check` (FOUND-06).
 
 =============================================================================
 BU FAYLDAGI ENG MUHIM TEST — «403 JURNALDA IZ QOLDIRMAYDI».
@@ -24,10 +24,16 @@ qatori PAYDO BO'LMAYDI. Da'vo har ikkala mexanizmdan ham mustaqil.
   kelajakdan o'tmishga aylanadi va D-05 darvozasining shoxi JIMGINA
   almashardi. Shuning uchun seed davri `_cover_from()` bilan
   kengaytiriladi va har bir da'vo `market_today` dan quriladi.
+
+⚠ `/internal/self-check` TESTLARI SHU FAYLDA va bu ATAYIN (04-09 Task 3):
+  endpoint kichik va u jadval oqimining KUZATUV JUFTI — jadval «reja
+  qanday bo'lishi kerak» ni, self-check esa «rejani bajaradigan jarayon
+  tirikmi» ni aytadi. Alohida fayl ikkalasini bir-biridan uzoqlashtirardi.
 """
 
 from __future__ import annotations
 
+import pathlib
 from contextlib import contextmanager
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any
@@ -56,11 +62,25 @@ if TYPE_CHECKING:
 
 SCHEDULES_URL = "/api/v1/snapshot-schedules"
 TODAY_URL = f"{SCHEDULES_URL}/today"
+SELF_CHECK_URL = "/internal/self-check"
 TABLE_SCHEDULES = "snapshot_schedules"
 TABLE_SLOTS = "snapshot_schedule_slots"
 
 _WIDEN_SCHEDULE = "UPDATE snapshot_schedules SET period = daterange(%s, NULL, '[)') WHERE id = %s"
 _SET_PERIOD = "UPDATE snapshot_schedules SET period = daterange(%s, %s, '[)') WHERE id = %s"
+_HEARTBEAT_UPSERT = (
+    "INSERT INTO system_heartbeats (component, last_seen_at) "
+    "VALUES (%s, now() - make_interval(mins => %s)) "
+    "ON CONFLICT (component) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at"
+)
+"""⚠ INTERVAL SQL ICHIDA HISOBLANADI, PYTHON'DA EMAS.
+
+`datetime.now()` bilan qurilgan qiymat TEST konteynerining soatiga
+tayanardi, endpoint esa BAZANING soatiga qaraydi. Ikki soat orasidagi
+bir necha soniyalik farq 10 daqiqalik chegara atrofidagi testni
+tasodifan flaky qilardi.
+"""
+_HEARTBEAT_CLEAR = "DELETE FROM system_heartbeats"
 SLOT_TIMES = ["06:00", "06:30", "07:00"]
 """Testlar YUBORADIGAN vaqtlar — seedning YETTITASIDAN farqli SON.
 
@@ -651,3 +671,173 @@ async def test_the_response_never_carries_an_object_key(
         raw = response.text.lower()
         for marker in ("object_key", "x-amz", "presign", ":8333", "seaweed"):
             assert marker not in raw, f"javobda `{marker}` bor"
+
+
+# ---------------------------------------------------------------------------
+# `/internal/self-check` — WORKER O'LGANINI BOSHQA JARAYONDAN KO'RISH
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def heartbeats(sync_owner_conn: Connection[TupleRow]) -> Iterator[Callable[[str, int], None]]:
+    """`system_heartbeats` ni testdan yozadi va oxirida TOZALAYDI.
+
+    Jadval GLOBAL (`market_id` ustuni yo'q), ya'ni uni `two_markets`
+    teardown'i tozalamaydi — qolgan qator keyingi testda «komponent
+    tirik» degan yolg'on javob berardi.
+    """
+    sync_owner_conn.execute(_HEARTBEAT_CLEAR)
+
+    def _beat(component: str, minutes_ago: int) -> None:
+        sync_owner_conn.execute(_HEARTBEAT_UPSERT, (component, minutes_ago))
+
+    try:
+        yield _beat
+    finally:
+        sync_owner_conn.execute(_HEARTBEAT_CLEAR)
+
+
+async def test_self_check_is_ok_when_the_heartbeat_is_fresh(
+    api_client: httpx.AsyncClient,
+    heartbeats: Callable[[str, int], None],
+) -> None:
+    """Yangi yurak urishi -> `200 {"ok": true}`.
+
+    ⚠ `never_seen` KOMPONENTLAR BOR BO'LSA HAM 200 BO'LISHI SHART
+      (`backup` 8-fazada yoziladi). Aks holda endpoint birinchi kundan
+      `503` bo'lib turardi va tashqi kuzatuvchi uni O'CHIRIB qo'yardi —
+      ya'ni darvoza o'z ma'nosini yo'qotardi.
+    """
+    heartbeats("capture_tick", 1)
+    heartbeats("alert_sweep", 2)
+    heartbeats("retention", 3)
+
+    response = await api_client.get(SELF_CHECK_URL)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ok"] is True
+    assert body["stale"] == []
+    assert "backup" in body["never_seen"], (
+        "hech qachon yozilmagan komponent javobda KO'RINISHI kerak — "
+        "jimgina yashirish uni abadiy ko'rinmas qilardi"
+    )
+
+
+async def test_self_check_reports_a_stale_component_with_503(
+    api_client: httpx.AsyncClient,
+    heartbeats: Callable[[str, int], None],
+) -> None:
+    """Eskirgan yurak urishi -> `503` va komponent NOMI `stale` ro'yxatida.
+
+    Bu FOUND-06 ning butun mazmuni: `capture_tick` worker jarayonida,
+    `core-api` esa BOSHQA konteynerda — ya'ni worker o'lganda bu javob
+    baribir keladi va sukunat KO'RINADIGAN bo'ladi.
+    """
+    heartbeats("capture_tick", 120)
+    heartbeats("alert_sweep", 1)
+    heartbeats("retention", 1)
+
+    response = await api_client.get(SELF_CHECK_URL)
+
+    assert response.status_code == 503, response.text
+    body = response.json()
+    assert body["ok"] is False
+    assert body["stale"] == ["capture_tick"]
+
+
+async def test_self_check_needs_no_authentication_and_leaks_no_tenant_data(
+    api_client: httpx.AsyncClient,
+    heartbeats: Callable[[str, int], None],
+    two_markets: TwoMarketSeed,
+) -> None:
+    """Autentifikatsiyasiz ishlaydi, lekin javobi AXBOROT YUZASI emas (§E.12).
+
+    Endpoint tashqi kuzatuvchi (healthchecks.io / UptimeRobot) uchun,
+    ya'ni unda `Authorization` sarlavhasi umuman bo'lmaydi. Aynan
+    shuning uchun javobda bozor nomi, kamera soni yoki topologiya
+    BO'LMASLIGI shart — u faqat komponent NOMLARINI va bayroqni beradi.
+    """
+    heartbeats("capture_tick", 1)
+
+    response = await api_client.get(SELF_CHECK_URL)
+
+    assert response.status_code in {200, 503}
+    body = response.json()
+    assert set(body) == {"ok", "stale", "never_seen"}
+    raw = response.text
+    for market in two_markets.markets:
+        assert str(market.id) not in raw
+        assert market.name not in raw
+
+
+async def test_self_check_is_stale_when_the_heartbeat_was_never_written(
+    api_client: httpx.AsyncClient,
+    heartbeats: Callable[[str, int], None],
+) -> None:
+    """Butunlay bo'sh jadval -> `503` va HAMMA komponent `never_seen` da.
+
+    ⚠ Bu holat `stale` DAN AJRATILGAN va ajratish JAVOB SHAKLIDA
+      ko'rinadi, `ok` bayrog'ida esa YO'Q: `ok` faqat `stale` bo'yicha
+      hisoblanadi. Sabab — birinchi test docstringida.
+
+    Lekin BIRORTA yurak urishi bo'lmasa `ok` HAM `false` bo'lishi kerak:
+    bu «hali yozilmagan» emas, «hech nima ishlamayapti» holati.
+    """
+    # `heartbeats` fixture'i jadvalni allaqachon tozaladi.
+    _ = heartbeats
+
+    response = await api_client.get(SELF_CHECK_URL)
+
+    assert response.status_code == 503, response.text
+    body = response.json()
+    assert body["ok"] is False
+    assert set(body["never_seen"]) == {"capture_tick", "alert_sweep", "retention", "backup"}
+
+
+def test_self_check_is_not_wired_into_the_container_healthcheck() -> None:
+    """`compose.yaml` dagi `core-api` healthcheck'i bu endpointga TEGMAYDI.
+
+    Pitfall 14: liveness probe'ni BOG'LIQLIK holatidan bog'lash klassik
+    anti-naqsh — worker'ning yurak urishi eskirgani uchun SOG'LOM API
+    qayta ishga tushirilardi va bu hech nimani tuzatmasdi (aksincha,
+    kadr olish yo'lini ham uzardi).
+
+    Test `compose.yaml` ni MATN sifatida o'qiydi: bu qoida kod emas,
+    KONFIGURATSIYA qarori va uni faqat shu yerdan qo'riqlash mumkin.
+
+    ⚠ IZOH QATORLARI FILTRLANADI — VA BU O'LCHANGAN TUZATISH. Birinchi
+      variant butun faylda `self-check` satrini qidirardi va u
+      `scheduler` blokidagi IZOHNI topib qizarardi — o'sha izoh esa
+      aynan SHU QOIDANI tushuntiradi («yagona ishonchli signal
+      bazadagi natija, konteyner healthcheck'ida emas»). Ya'ni darvoza
+      o'zining eng yaxshi hujjatini buzilish deb belgilagan bo'lardi.
+
+      Bu `stalls.py:82-84` da o'rnatilgan qoidaning aynan o'zi: matn
+      darvozasi sababni yozishga TO'SQINLIK QILMASLIGI kerak.
+    """
+    compose = pathlib.Path("compose.yaml").read_text(encoding="utf-8")
+    config = [line for line in compose.splitlines() if not line.lstrip().startswith("#")]
+    offenders = [line for line in config if "self-check" in line or "self_check" in line]
+
+    assert not offenders, (
+        "`compose.yaml` ning KONFIGURATSIYASIDA `/internal/self-check` uchraydi — "
+        f"konteyner healthcheck'iga ulangan bo'lishi mumkin: {offenders}"
+    )
+
+
+def test_self_check_response_surface_stays_narrow() -> None:
+    """Modul matnida taqiqlangan maydon nomlari YO'Q (§E.12 ning mexanik shakli).
+
+    Darvoza faylni MATN sifatida o'qiydi, ya'ni izohda ham literal
+    yozilmasligi kerak — `self_check.py` docstringi taqiqni «bozor nomi
+    va kamera soni» deb ta'riflaydi.
+    """
+    source = pathlib.Path("services/core-api/app/api/internal/self_check.py").read_text(
+        encoding="utf-8"
+    )
+    body = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
+
+    assert "market_name" not in body
+    assert "camera_count" not in body
+    assert "stale" in body
