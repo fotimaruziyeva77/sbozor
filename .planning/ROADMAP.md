@@ -277,8 +277,7 @@ Plans:
   3. Qorong'i / buzuq / bo'sh kadr avtomatik belgilanadi va `light_mode` bilan saqlanadi — bunday kadr hech qachon hisob-kitobga ta'sir qilmaydi
   4. Kadrlar S3-mos omborda bozor/kamera/sana bo'yicha topiladi; 90 kun to'liq, keyin siqilgan saqlash siyosati amalda ishlaydi
   5. Kamera offline bo'lsa, slot o'tkazib yuborilsa yoki backup xato bersa — platforma adminiga Telegram-alert keladi va xato Sentry'da ko'rinadi
-
-**Plans**: 12 plans (8 to'lqin)
+**Plans**: 12 plans (8 to'lqin)
 
 - [ ] `04-01-PLAN.md` — Wave 0/A: prod bog'liqliklari, `scheduler` va `storage` konteynerlari, reyestrlar, D-23 o'lchovi
 - [ ] `04-02-PLAN.md` — Wave 0/B: sintetik JPEG generatori, sim `frame_mode` + `/picture`, frontend darvozalari (W0-F1…F7)
