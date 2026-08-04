@@ -63,6 +63,24 @@ INDEX_EXCEPTIONS = {
     # yozilardi va B bozorining direktori A bozorining kamerasini ko'rib
     # qolishi mumkin edi. Nom `cam_<uuid>` shaklida hosil qilinadi.
     "uq_cameras_stream_name",
+    # --- 4-faza, `0014_snapshot_domain` (W0-8). ---
+    #
+    # Kechikkan kadr olishning WATCHDOG'i BARCHA BOZORLAR ustidan
+    # yuradi: u «`scheduled_at` + grace o'tgan, lekin hamon `pending`
+    # yoki `running`» qatorlarni izlaydi va bu so'rovda `market_id`
+    # UMUMAN YO'Q — chunki savol «qaysi bozorda?» emas, «umuman
+    # nimadir osilib qoldimi?». Indeksni `market_id` bilan boshlash uni
+    # o'sha so'rov uchun BUTUNLAY FOYDASIZ qilardi (rejalashtiruvchi
+    # birinchi ustunsiz undan foydalana olmaydi) va watchdog bozorlar
+    # soni o'sgani sari to'liq skanga o'tardi.
+    #
+    # Bu `uq_nvr_devices_tunnel_subnet_global` bilan BIR XIL SINF, lekin
+    # farqi bor va u yozib qo'yilishi kerak: tunnel subneti — TENANT
+    # IZOLYATSIYASINING chegarasi (T-03-19), bu esa ISH REJASINING
+    # chegarasi. Ya'ni bu istisno xavfsizlik da'vosini SUSAYTIRMAYDI:
+    # watchdog faqat identifikatorlarni oladi va har qanday keyingi
+    # o'qish odatdagidek RLS ostidan o'tadi (04-07).
+    "ix_capture_runs_overdue",
 }
 
 EXPECTED_DEFINER_FUNCTIONS = {
@@ -139,15 +157,41 @@ EXPECTED_DEFINER_FUNCTIONS = {
 #
 # Bu `INDEX_EXCEPTIONS` va `POLICY_TENANT_GUC_EXCEPTIONS` bilan bir xil naqsh:
 # istisno testda, sababi yozma, o'zgartirish code review'da ko'zga tashlanadi.
-PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset()
-"""BO'SH — 02-06 (`0010_calendar`) qarzni to'liq yopdi.
+PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset(
+    {
+        # --- 4-faza, W0-5 (04-01). Ikkalasi ham `0014_snapshot_domain` da
+        # tug'iladi va `attach_audit_trigger()` o'sha yerda, `04-03` ning
+        # T2 taskida chaqiriladi — reyestr esa ATAYIN undan OLDIN
+        # to'ldiriladi (`AUDITED_TABLES` docstringi buni talab qiladi).
+        #
+        # ⛔ QARZNING EGASI ANIQ: `04-03` / T2. O'sha reja `0014` bilan
+        #    BIR OYNADA ikkala nomni ham shu ro'yxatdan O'CHIRADI, aks
+        #    holda pastdagi `closed` asserti qizaradi va uni o'chirishga
+        #    majbur qiladi. Ya'ni qarz jimgina "yopilib" ketolmaydi.
+        #
+        # Bu aynan yuqoridagi docstring tasvirlagan yagona qonuniy holat
+        # («jadval KEYINGI migratsiyada tug'iladi»), ya'ni oxirgi chora
+        # shartlari bajarilgan: bugun `attach_audit_trigger()` ni chaqirib
+        # bo'lmaydi, chunki chaqiriladigan jadval hali mavjud emas.
+        "snapshot_schedules",
+        "snapshot_schedule_slots",
+    }
+)
+"""`AUDITED_TABLES` da bor, lekin jadval hali TUG'ILMAGAN nomlar (04-01, W0-5).
 
 ⚠ BU RO'YXATGA YANGI NOM QO'SHISH — OXIRGI CHORA, ODATIY QADAM EMAS.
 Reyestrga (`AUDITED_TABLES`) jadval qo'shilgan, lekin
 `attach_audit_trigger()` hali chaqirilmagan HOLAT faqat jadval KEYINGI
 migratsiyada tug'ilganda ma'noli (2-fazada aynan shunday edi: reyestr
 birinchi migratsiyadan OLDIN to'ldirilgan). Bir migratsiya ichida ikkalasini
-ham qilish mumkin bo'lsa, ro'yxat BO'SH qolishi kerak."""
+ham qilish mumkin bo'lsa, ro'yxat BO'SH qolishi kerak.
+
+⛔ SHUNING UCHUN BU YERDA «KUTILGAN QIZIL» HOLAT YO'Q. Reyestr va bu
+ro'yxat AYNI COMMITDA to'ldiriladi, ya'ni `test_audited_tables_have_trigger`
+`04-01` dan `04-03` gacha YASHIL turadi. 2-fazada qarz o'n olti reja
+davomida darvozani qizil qilib turgan va o'sha o'n olti reja uchun darvoza
+SIGNAL BERMAY qolgan edi — yuqoridagi izohdagi «Buzilgan darvoza —
+darvoza emas» bandi aynan shu haqda."""
 
 # Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun
 # sabab SHU YERDA yozilishi SHART — istisno qo'shish code review'da ko'zga
@@ -829,6 +873,181 @@ def test_audited_tables_have_trigger(sync_app_conn: Connection[TupleRow], migrat
         f"{sorted(closed)} jadval(lar)iga audit triggeri ULANGAN, lekin ular hamon "
         "`PENDING_AUDIT_TRIGGERS` ro'yxatida — nomni o'sha ro'yxatdan O'CHIRING. "
         "Aks holda kelajakda trigger yo'qolsa bu test buni SEZMAY qolardi."
+    )
+
+
+CASCADE_REGISTRY_HINT = (
+    "Tushib qolgan jadval `0014` qo'ngandan keyin qoralama bozorni o'chirishni "
+    "chet el kaliti buzilishi bilan yiqitardi (W0-6) va sabab faqat ish paytida, "
+    "admin ekranida ko'rinardi."
+)
+"""Tuzatish yo'riqnomasi ALOHIDA konstantada, assert ichidagi f-satrda EMAS.
+
+`test_market_delete_guard.py::CASCADE_FIX_HINT` da o'rnatilgan qoida: ruff'ning
+`S608` qoidasi SQL kalit so'zi bo'lgan formatlangan satrni «so'rov qurilishi»
+deb hisoblaydi va bu yerda YOLG'ON-MUSBAT berardi (bu — xato XABARI, so'rov
+emas). Matnni oddiy satrga ko'chirish qoidani chetlab o'tmaydi, uni
+QO'LLANILMAYDIGAN qiladi.
+"""
+
+TENANT_REGISTRY_HINT = (
+    "`ALL_ENTITIES` aynan `ALL_TENANT_TABLES` dan quriladi, ya'ni tushib qolgan "
+    "jadval `tenant_isolation` policy'sisiz — RLS himoyasisiz — qolardi. "
+    "Qo'shish `0014` bilan BIR OYNADA bajariladi (`04-03` / T2)."
+)
+
+
+def test_snapshot_registries_are_self_consistent(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """4-faza reyestrlari o'zaro MOS — jadval tug'ilishidan OLDIN (W0-5/W0-6).
+
+    Uchta ro'yxat uch xil savolga javob beradi va ular AJRALIB KETISHI
+    mumkin, chunki uchalasi qo'lda yuritiladi:
+
+      * `SNAPSHOT_TENANT_TABLES`  -> RLS + policy tsikli (`0014`);
+      * `SNAPSHOT_AUDITED_TABLES` -> audit triggeri (`AUDITED_TABLES` ning kichik to'plami);
+      * `SNAPSHOT_DELETE_ORDER`   -> `market_delete_draft()` kaskadi (`0015`).
+
+    ⚠ `ALL_TENANT_TABLES` TEKSHIRUVI SHARTLI va bu O'LCHOVGA asoslangan
+      qaror — batafsili quyida, o'sha assertning yonida.
+
+    ⚠ NEGA BU DARVOZA `test_market_delete_guard.py` NI TAKRORLAMAYDI. U
+      yerdagi darvoza BAZANI o'qiydi (`pg_get_functiondef`), ya'ni u
+      `0014` jadvallarni YARATGANDAN KEYIN ishlaydi. Bu esa REYESTRNI
+      o'qiydi va BUGUNDAN ishlaydi: `SNAPSHOT_DELETE_ORDER` dan tushib
+      qolgan jadval `04-03` da `0015` yozilayotganda emas, HOZIR
+      ko'rinadi. Ikkalasi ketma-ket turadi, biri ikkinchisini yopadi.
+
+    ⚠ IMPORT TEST FUNKSIYASINING ICHIDA — bu ataylab. Reyestr hali
+      tug'ilmagan bosqichda modul darajasidagi import BUTUN FAYLNING
+      yig'ilishini yiqitardi, ya'ni W0-5 ning ikki tomonlama qulfi
+      (`test_audited_tables_have_trigger`) o'sha bosqichda umuman
+      ishlamas va o'lchab bo'lmasdi.
+    """
+    from migrations.entities import (
+        ALL_TENANT_TABLES,
+        SNAPSHOT_AUDITED_TABLES,
+        SNAPSHOT_DELETE_ORDER,
+        SNAPSHOT_TENANT_TABLES,
+    )
+
+    assert len(SNAPSHOT_TENANT_TABLES) == 5, (
+        f"`SNAPSHOT_TENANT_TABLES` da {len(SNAPSHOT_TENANT_TABLES)} jadval: "
+        f"{list(SNAPSHOT_TENANT_TABLES)}. Kutilgani beshta (`04-PATTERNS.md` §S-1)."
+    )
+    assert len(set(SNAPSHOT_TENANT_TABLES)) == len(SNAPSHOT_TENANT_TABLES), (
+        f"`SNAPSHOT_TENANT_TABLES` da dublikat bor: {list(SNAPSHOT_TENANT_TABLES)}"
+    )
+
+    # ⚠ O'ZI QUROLLANADIGAN DARVOZA — shartsiz `<=` EMAS, va bu ATAYIN.
+    #
+    # `ALL_ENTITIES` `ALL_TENANT_TABLES` dan quriladi, `alembic_utils` ning
+    # komparatori esa har bir policy'ni HAQIQATAN yaratib ko'radi
+    # (`simulate_entity`). Ya'ni jadval TUG'ILMASDAN OLDIN uni ro'yxatga
+    # qo'shish `test_autogenerate_is_empty` ni `UndefinedTable` bilan
+    # yiqitadi — O'LCHANGAN, 2026-08-04.
+    #
+    # Shuning uchun shart BAZAGA bog'lanadi: jadval bazada paydo bo'lgan
+    # zahoti u ro'yxatda ham TALAB qilinadi. Bugun — yashil (jadvallar
+    # yo'q); `0014` qo'ngan kuni — `04-03` ro'yxatni kengaytirmaguncha
+    # QIZIL. Qarzning egasi ham, tetigi ham shu yerda.
+    existing = {
+        row[0]
+        for row in sync_app_conn.execute(
+            "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'public' AND c.relkind = 'r'"
+        ).fetchall()
+    }
+    born = set(SNAPSHOT_TENANT_TABLES) & existing
+    assert born <= set(ALL_TENANT_TABLES), (
+        f"jadval BAZADA bor, lekin `ALL_TENANT_TABLES` da yo'q: "
+        f"{sorted(born - set(ALL_TENANT_TABLES))}. " + TENANT_REGISTRY_HINT
+    )
+
+    assert set(SNAPSHOT_DELETE_ORDER) == set(SNAPSHOT_TENANT_TABLES), (
+        "kaskad tartibi tenant reyestriga mos emas.\n"
+        f"  kaskadda yo'q: {sorted(set(SNAPSHOT_TENANT_TABLES) - set(SNAPSHOT_DELETE_ORDER))}\n"
+        f"  ortiqcha:      {sorted(set(SNAPSHOT_DELETE_ORDER) - set(SNAPSHOT_TENANT_TABLES))}\n"
+        + CASCADE_REGISTRY_HINT
+    )
+    assert len(SNAPSHOT_DELETE_ORDER) == len(set(SNAPSHOT_DELETE_ORDER)), (
+        f"`SNAPSHOT_DELETE_ORDER` da dublikat bor: {list(SNAPSHOT_DELETE_ORDER)}"
+    )
+
+    # Tartib — bolalardan ota-onaga. `snapshots` `capture_runs` ga,
+    # `capture_runs` `cameras` ga, `snapshot_schedule_slots` esa
+    # `snapshot_schedules` ga tayanadi, ya'ni bola HAR DOIM oldinroq
+    # turishi shart — aks holda funksiya o'z FK'siga urilib yiqilardi.
+    order = list(SNAPSHOT_DELETE_ORDER)
+    for child, parent in (
+        ("snapshots", "capture_runs"),
+        ("snapshot_schedule_slots", "snapshot_schedules"),
+    ):
+        assert order.index(child) < order.index(parent), (
+            f"`{child}` `{parent}` dan KEYIN o'chirilyapti — kaskad o'z chet el "
+            "kalitiga uriladi. Tartib bolalardan ota-onaga bo'lishi shart."
+        )
+
+    assert set(SNAPSHOT_AUDITED_TABLES) < set(SNAPSHOT_TENANT_TABLES), (
+        "`SNAPSHOT_AUDITED_TABLES` tenant reyestrining QAT'IY kichik to'plami "
+        f"bo'lishi shart. Topilgani: {list(SNAPSHOT_AUDITED_TABLES)}. Uchta "
+        "hodisa jurnali (`capture_runs`, `snapshots`, `alert_events`) auditdan "
+        "ATAYIN chiqarilgan — sabab `schema_contract.AUDITED_TABLES` docstringida."
+    )
+    assert set(SNAPSHOT_AUDITED_TABLES) <= AUDITED_TABLES, (
+        f"audit reyestriga tushmagan nom(lar): "
+        f"{sorted(set(SNAPSHOT_AUDITED_TABLES) - AUDITED_TABLES)} — "
+        "`SNAPSHOT_AUDITED_TABLES` va `AUDITED_TABLES` ajralib ketgan."
+    )
+
+
+def test_markets_all_use_tashkent_timezone(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """BARCHA bozorlar `Asia/Tashkent` da — biznes-kun JIMGINA siljimasin (W0-7).
+
+    =====================================================================
+    ASSIMETRIYA — VA U ATAYIN:
+
+      * `capture_runs.scheduled_at` bozorning O'Z mintaqasidan hisoblanadi
+        (`markets.timezone`), ya'ni «06:00» har bozorda o'zining mahalliy
+        soati bo'ladi;
+      * `business_date` esa `GENERATED` ifodasida **LITERAL**
+        `'Asia/Tashkent'` dan hisoblanadi, chunki `GENERATED ... STORED`
+        ustun `IMMUTABLE` ifoda talab qiladi va boshqa jadvaldan o'qish
+        (`markets.timezone`) bu shartni buzadi. Cheklov
+        `models/identity.py` da hujjatlashtirilgan.
+
+    Bugun ikkalasi bir xil natija beradi, chunki hamma bozor bitta
+    mintaqada. Ikkinchi mintaqadagi bozor qo'shilgan kuni ular AJRALADI
+    va nosozlik shakli o'ta yomon bo'lardi: kadr to'g'ri vaqtda olinardi,
+    lekin BOSHQA KUNGA yozilardi — ya'ni 6-fazada pul chegarasi bir kunga
+    surilardi va buni hech kim ko'rmasdi.
+
+    Shuning uchun bu invariant CI'da turadi: ikkinchi mintaqa qo'shilgan
+    kuni test QIZARADI va qaror (ikkalasini ham mintaqadan hisoblash yoki
+    `business_date` ni ilova qatlamiga ko'chirish) ATAYIN qabul qilinadi.
+    =====================================================================
+
+    ⚠ QUYI CHEGARA ATAYIN QO'SHILMAGAN. `markets` bo'sh bo'lsa ham assert
+      ma'noli (0 = 0): invariant «noto'g'ri qiymat YO'Q» shaklida, «kamida
+      N qator BOR» shaklida emas. Quyi chegara qo'shish testni seed
+      tartibiga bog'lab, flaky qilardi.
+    """
+    row = sync_app_conn.execute(
+        "SELECT count(*), coalesce(string_agg(DISTINCT timezone, ', '), '') "
+        "FROM markets WHERE timezone <> 'Asia/Tashkent'"
+    ).fetchone()
+    assert row is not None
+
+    assert row[0] == 0, (
+        f"{row[0]} ta bozor boshqa mintaqada ({row[1]}). `business_date` "
+        "`GENERATED` ifodasida LITERAL `'Asia/Tashkent'` dan hisoblanadi, "
+        "`scheduled_at` esa `markets.timezone` dan — ikkinchi mintaqa "
+        "qo'shilishi biznes-kun chegarasini JIMGINA siljitadi. Qarorni "
+        "ATAYIN qabul qiling: yoki `business_date` ni ilova qatlamiga "
+        "ko'chiring, yoki bu invariantni sabab bilan yumshating (W0-7)."
     )
 
 

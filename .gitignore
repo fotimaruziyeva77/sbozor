@@ -3,6 +3,11 @@
 .env.local
 .env.*.local
 !.env.example
+# SeaweedFS S3 rekviziti (04-01). SeaweedFS `s3.json` ichida muhit
+# o'zgaruvchisini INTERPOLATSIYA QILMAYDI, ya'ni kalitlar faylga LITERAL
+# yoziladi. Repoda faqat `.example` qoladi — `.env` bilan aynan bir xil
+# naqsh (`ops/seaweedfs/README.md`).
+ops/seaweedfs/s3.json
 
 # --- Python ---
 .venv/

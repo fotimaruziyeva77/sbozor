@@ -49,13 +49,36 @@ created: 2026-08-04
 
 **Bu fazaning qarori:** chegara **bir necha yugurish o'lchovi** asosida qayta belgilanadi, bitta o'lchov bilan emas. Bu faza `storage` va `scheduler` konteynerlarini qo'shadi, ya'ni bazaviy vaqt o'sadi — shuning uchun:
 
-| Qadam | Kim | Nima |
-|---|---|---|
-| 1 | Wave 0 rejasi | 3× o'lchov (sovuq / issiq / issiq) **yangi konteynerlar bilan** |
-| 2 | Yakuniy reja | Yana 3× o'lchov, chegara = eng yomon + 20 % |
-| 3 | — | Agar yangi chegara 1200 s dan past bo'lsa — **tushiriladi**; oshsa — sabab bilan asoslanadi |
+| Qadam | Kim | Nima | Holat |
+|---|---|---|---|
+| 1 | Wave 0 rejasi | 3× o'lchov (sovuq / issiq / issiq) **yangi konteynerlar bilan** | ✅ **BAJARILDI (04-01)** — pastdagi jadval |
+| 2 | Yakuniy reja | Yana 3× o'lchov, chegara = eng yomon + 20 % | ⬜ `04-12` |
+| 3 | — | Agar yangi chegara 1200 s dan past bo'lsa — **tushiriladi**; oshsa — sabab bilan asoslanadi | ⬜ `04-12` |
 
 ⚠ **Jimgina oshib ketish yoki jimgina bo'sh qoldirish — ikkalasi ham qabul qilinmaydi.**
+
+### 1-qadam o'lchovlari (04-01, 2026-08-04) — `storage` + `scheduler` bilan
+
+| # | Holat | `npm run gate` | Chiqish kodi |
+|---|---|---|---|
+| 1 | **sovuq** (`frontend/.next` yo'q, `node_modules` yangi o'rnatilgan) | **490 s** | 0 |
+| 2 | issiq | **466 s** | 0 |
+| 3 | issiq | **461 s** | 0 |
+
+`npm run gate:fast` — **49 s** (chegara **180 s**, o'zgarmadi; 3.7× zaxira).
+
+**O'lchov sharti:** `sim:up` endi `storage` ni ham ko'taradi (SeaweedFS 4.40) va
+`compose` da `scheduler` ta'rifi bor, lekin u `gate` zanjirida ishga
+**tushirilmaydi** (planer obyekti `04-07` da tug'iladi), ya'ni bu qiymatlar
+`storage` ning narxini o'z ichiga oladi, `scheduler` ning narxini **emas**.
+`04-12` ning uchta o'lchovi to'liq zanjirda olinadi va farq shu bandda ko'rinadi.
+
+**Kuzatuv:** uchala qiymat ham 3-fazaning 538 s bazasidan **past** (461–490 s),
+ya'ni ikkita yangi konteyner qo'shilgani bilan zanjir sekinlashmadi. Sabab
+o'lchanmagan (ehtimol docker qatlamlarining issiqligi va xost holati), shuning
+uchun chegara **bu rejada o'zgartirilmaydi** — bitta seriya bir seansda
+olingan va u chegarani qayta belgilash uchun yetarli emas. Qaror `04-12` da,
+olti o'lchov asosida.
 
 ---
 
@@ -65,9 +88,9 @@ created: 2026-08-04
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 04-01/T1 | 04-01 | 1 | CAM-07 | T-04-01…05, T-04-SC | Prod bog'liqliklari to'g'ri guruhda; `storage`/`scheduler` profilsiz; `s3.json` da `anonymous` yo'q; ombor porti publish qilinmagan | unit | `pytest tests/unit/test_runtime_deps.py tests/unit/test_storage_config.py -q` | yangi | ⬜ pending |
-| 04-01/T2 | 04-01 | 1 | CAM-06 | T-04-17 | `GENERATED STORED` ustun kompozit FK nishoni bo'la oladimi — haqiqiy `postgres:18.4` da o'lchanadi (D-23) | tenancy | `pytest tests/tenancy/test_billable_anchor_probe.py -q` | yangi | ⬜ pending |
-| 04-01/T3 | 04-01 | 1 | CAM-05 | T-04-06, T-04-07, T-04-08 | Besh jadval reyestrlari va kaskad tartibi migratsiyadan oldin; `PENDING_AUDIT_TRIGGERS` ikki tomonlama qulfi (darvoza **yashil** qoladi); `markets.timezone` invarianti; `ix_capture_runs_overdue` istisnosi | tenancy | `pytest tests/tenancy/test_meta.py tests/integration/test_market_delete_guard.py -q` | mavjud (kengaytiriladi) | ⬜ pending |
+| 04-01/T1 | 04-01 | 1 | CAM-07 | T-04-01…05, T-04-SC | Prod bog'liqliklari to'g'ri guruhda; `storage`/`scheduler` profilsiz; `s3.json` da `anonymous` yo'q; ombor porti publish qilinmagan | unit | `pytest tests/unit/test_runtime_deps.py tests/unit/test_storage_config.py -q` | yangi | ✅ green |
+| 04-01/T2 | 04-01 | 1 | CAM-06 | T-04-17 | `GENERATED STORED` ustun kompozit FK nishoni bo'la oladimi — haqiqiy `postgres:18.4` da o'lchanadi (D-23) | tenancy | `pytest tests/tenancy/test_billable_anchor_probe.py -q` | yangi | ✅ green — **`BILLABLE_ANCHOR_SUPPORTED = true`** |
+| 04-01/T3 | 04-01 | 1 | CAM-05 | T-04-06, T-04-07, T-04-08 | Besh jadval reyestrlari va kaskad tartibi migratsiyadan oldin; `PENDING_AUDIT_TRIGGERS` ikki tomonlama qulfi (darvoza **yashil** qoladi); `markets.timezone` invarianti; `ix_capture_runs_overdue` istisnosi | tenancy | `pytest tests/tenancy/test_meta.py tests/integration/test_market_delete_guard.py -q` | mavjud (kengaytiriladi) | ✅ green |
 | 04-02/T1 | 04-02 | 1 | CAM-06 | T-04-09 | Sintetik kadr fizik xususiyat bilan yasaladi (`mean`/`stddev`/to'yinganlik), determinstik va JPEG tolerans kodda | unit | `pytest tests/unit/test_frame_fixtures.py -q` | yangi | ⬜ pending |
 | 04-02/T2 | 04-02 | 1 | CAM-06 | T-04-10, T-04-13 | Sim buzuq/kesilgan/bo'sh/HTML javobni buyurtma bilan beradi; noma'lum `frame_mode` rad etiladi; yangi rekvizit qo'shilmaydi | integration (`sim`) + unit | `pytest tests/integration/test_nvr_sim.py tests/unit/test_compose_sim_env.py -q` | mavjud (kengaytiriladi) | ⬜ pending |
 | 04-02/T3 | 04-02 | 1 | CAM-04, FOUND-06 | T-04-11, T-04-12, T-04-14, T-04-15 | G-1…G-4, G-10 darvozalari; `IR`/`Telegram` override; `ъ` ning ikki ma'nosi; hedging ikkala reyestrda | node gate | `node --test frontend/scripts/snapshot-copy.test.mjs frontend/scripts/gen-cyrillic.test.mjs frontend/scripts/error-codes.test.mjs frontend/scripts/nvr-copy.test.mjs` | yangi + mavjud | ⬜ pending |
@@ -125,8 +148,8 @@ created: 2026-08-04
 - [ ] **W0-2** — 🔇 `aiobotocore==3.9.0` va `Pillow==12.3.0` ni `[project] dependencies` ga. **3-fazadagi `httpx` epizodining aynan takrori:** `dev` guruhida qolsa hamma test yashil, deploy'da `ModuleNotFoundError`. `tests/unit/test_runtime_deps.py` kengaytiriladi.
 - [ ] **W0-3** — 🔇 `taskiq scheduler` ni `compose.yaml` ga + `npm run up` yorlig'ini yangilash. Planer profil ortida qolsa slotlar **hech qachon** materializatsiya bo'lmasdi **va hech qanday xato chiqmasdi**.
 - [ ] **W0-4** — `storage` (SeaweedFS) xizmati + `ops/seaweedfs/s3.json.example`. `anonymous` yozuvining **yo'qligi** grep-darvoza bilan qulflanadi.
-- [ ] **W0-5** — `AUDITED_TABLES` ga `snapshot_schedules`, `snapshot_schedule_slots`. Reyestr **migratsiyadan oldin** yoziladi va `test_audited_tables_have_trigger` vaqtincha qizil turadi — bu **kutilgan** (1-fazadagi `FINANCIAL_TABLES` naqshi).
-- [ ] **W0-6** — 🔇 `market_delete_draft()` kaskadini beshta yangi jadval bilan kengaytirish + `0015` migratsiyasi. **3-fazadagi `0012`→`0013` juftligining aynan takrori:** kengaytirilmasa `0014` dan keyin bozor o'chirish FK buzilishi bilan yiqiladi. Tartib: `snapshots` → `capture_runs` → `snapshot_schedule_slots` → `snapshot_schedules`.
+- [ ] **W0-5** — `AUDITED_TABLES` ga `snapshot_schedules`, `snapshot_schedule_slots`. Reyestr **migratsiyadan oldin** yoziladi. ⚠ **TUZATILDI (04-01):** bu bandning avvalgi matni «`test_audited_tables_have_trigger` vaqtincha qizil turadi — bu kutilgan» degan edi va u **NOTO'G'RI**. `test_meta.py:794-832` `not missing` ni emas, **ikki tomonlama tenglikni** tekshiradi (`missing == PENDING_AUDIT_TRIGGERS`), ya'ni ikkala nom `PENDING_AUDIT_TRIGGERS` ga ham qo'shilganda darvoza **YASHIL** qoladi. `test_meta.py:127-131` buni so'zma-so'z talab qiladi: «Buzilgan darvoza — darvoza emas». Amalda: darvoza `04-01` dan `04-03` gacha yashil; `04-03`/T2 `0014` bilan bir oynada ikkala nomni ro'yxatdan o'chiradi.
+- [ ] **W0-6** — 🔇 `market_delete_draft()` kaskadini beshta yangi jadval bilan kengaytirish + `0015` migratsiyasi. **3-fazadagi `0012`→`0013` juftligining aynan takrori:** kengaytirilmasa `0014` dan keyin bozor o'chirish FK buzilishi bilan yiqiladi. ⚠ **TUZATILDI (04-01):** avvalgi matn «beshta jadval» deb yozib, tartibda **to'rttasini** sanagan edi. To'liq tartib — `migrations/entities/__init__.py::SNAPSHOT_DELETE_ORDER`: `snapshots` → `capture_runs` → `snapshot_schedule_slots` → `snapshot_schedules` → **`alert_events`**, va butun blok mavjud NVR blokidan **OLDIN** turishi shart (`capture_runs` `cameras` ga kompozit FK bilan tayanadi, `cameras` esa funksiyaning birinchi `DELETE` i).
 - [ ] **W0-7** — `tests/tenancy/test_meta.py` ga `markets.timezone = 'Asia/Tashkent'` invarianti. `scheduled_at` `markets.timezone` dan, `business_date` esa **literal**dan hisoblanadi — ikkinchi mintaqa qo'shilgan kuni test qizarsin, biznes-kun **jimgina siljimasin**.
 - [ ] **W0-8** — `ix_capture_runs_overdue` uchun `INDEX_EXCEPTIONS` ga **sabab bilan** yozuv. Watchdog barcha bozorlar ustidan yuradi, indeks `market_id` bilan boshlanmaydi.
 - [ ] **W0-9** — `tests/fixtures/frames.py`: sintetik JPEG generatori (`mean`/`stddev`/to'yinganlik bo'yicha). Fixture nomlari **fizik xususiyat** bilan (`frame_mean_8_stddev_2`), detektor chegarasi bilan **emas** — aks holda test o'z chegarasini tasdiqlaydi.

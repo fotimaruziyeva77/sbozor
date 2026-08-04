@@ -1125,6 +1125,32 @@ kengaytirildi va darvoza qayta yashil bo'ldi. Ya'ni mexanizm o'zi uchun
 mo'ljallangan ishni bajardi: qarz to'lqinlar ORASIDA emas, ICHIDA yopildi.
 
 =============================================================================
+⏳ KUTILAYOTGAN QARZ (4-faza, W0-6) — TANA HALI TEGILMAGAN VA BU ATAYIN.
+
+`0014_snapshot_domain` beshta yangi tenant jadvalini olib keladi va
+o'shanda yuqoridagi darvoza YANA QIZARADI — bu KUTILGAN va rejalashtirilgan
+xulq, xuddi 03-03 dagidek. Kengaytirish `0015` bilan, `04-03` rejasining
+AYNI OYNASIDA bajariladi.
+
+Kengaytiriladigan tartib `migrations/entities/__init__.py::SNAPSHOT_DELETE_ORDER`
+da yozilgan — ⚠ u BU YERDA TAKRORLANMAYDI. Ikki sabab:
+
+  1. Reyestr YAGONA manba bo'lishi kerak; nusxa ajralib ketardi va
+     `0015` qaysi biriga qarashini hech kim ayta olmasdi.
+  2. `04-01` ning qabul mezoni `git diff` ni o'qiydi va u IZOHNI KODDAN
+     AJRATMAYDI: bu yerga kaskad qatorlarining LITERAL shaklini yozish
+     "tana o'zgardi" degan YOLG'ON-QIZIL signal berardi (3-fazadagi
+     `test_no_sim_branching` epizodlarining aynan o'sha sinfi — u ham
+     izoh va docstringni kod deb hisoblagan va to'rt marta otilgan).
+
+⚠ TANANI BUGUN KENGAYTIRIB BO'LMAYDI: `snapshots` va qolgan to'rttasi hali
+MAVJUD EMAS, ya'ni ularga o'chirish qatori yozilgan funksiya
+`op.replace_entity(...)` da `relation does not exist` bilan yiqilar va
+BUGUNGI usta oqimi testlarini DARHOL qizartirardi. Bu 3-fazadagi
+03-01 -> 03-03 juftligining aynan takrori va u o'sha yerda ham shu
+tartibda hal qilingan: reyestr oldin, tana migratsiya bilan birga.
+
+=============================================================================
 WR-02 — IKKI QATLAM, IKKALASI HAM KERAK (03-03 da yopildi).
 
 Bu funksiya tanasidagi `IS DISTINCT FROM false` sharti FAQAT SHU YO'LNI

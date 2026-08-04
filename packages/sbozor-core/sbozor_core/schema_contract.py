@@ -32,6 +32,26 @@ GLOBAL_TABLES: frozenset[str] = frozenset(
         "markets",
         # Alembic ning o'z buxgalteriyasi — ilova ma'lumoti emas.
         "alembic_version",
+        # --- 4-faza (0014_snapshot_domain, FOUND-06) ---
+        # Fon komponentlarining «oxirgi marta qachon ishladi» yozuvi
+        # (`capture_tick`, `retention`, `backup`). Unda `market_id` ustuni
+        # ATAYIN YO'Q, chunki komponent BOZORGA TEGISHLI EMAS: tik butun
+        # platforma uchun bitta jarayonda ishlaydi va uning to'xtagani
+        # hamma bozorga birdan tegadi.
+        #
+        # Bu FOUND-06 ning eng pastki qatlami — «detektorning O'ZI
+        # bajarilmadi» holati. Uni tenant-scoped qilish mantiqiy xato
+        # bo'lardi: tik umuman ishlamayotgan bo'lsa, uning yo'qligini
+        # bozor kontekstida qidirish 0 qator berardi va sukunat
+        # «hammasi joyida» bilan bir xil ko'rinardi (D-20).
+        #
+        # ⚠ `alert_events` bu ro'yxatda ATAYIN YO'Q va bo'lmasligi ham
+        # kerak: unda `market_id NOT NULL` bor (ogohlantirish har doim
+        # aniq bir bozorning kamerasiga tegishli) va UI uni bozor
+        # sahifasida ko'rsatadi. `04-RESEARCH.md` §E.13 uni "global" deb
+        # atagan, lekin o'sha yerdayoq unga `market_id` bergan — ikkisi
+        # bir vaqtda to'g'ri bo'la olmaydi.
+        "system_heartbeats",
     }
 )
 """`market_id` ustuni va standart tenant policy'si BO'LMASLIGI kutilgan jadvallar.
@@ -88,6 +108,21 @@ to'rtalasida ham pul ustuni YO'Q. Birortasini qo'shish 2-fazadagi Pitfall 3
 ni takrorlardi: `test_financial_tables_have_guards` undan
 `CHECK (amount_soum > 0)` talab qilardi va yagona "tuzatish" yo'li soxta
 pul ustuni qo'shish bo'lardi.
+
+4-FAZA HAM BU REYESTRGA HECH NIMA QO'SHMAYDI va bu ATAYIN. Beshala
+snapshot jadvalida (`snapshot_schedules`, `snapshot_schedule_slots`,
+`capture_runs`, `snapshots`, `alert_events`) pul ustuni YO'Q — bu faza
+kadrni yetkazib beradi va sifatini belgilaydi, undan XULOSA CHIQARMAYDI
+(billing 6-fazada). `snapshots` ni bu yerga qo'shish 3-fazadagi bilan
+aynan bir xil tuzoqni ochardi: test undan `CHECK (amount_soum > 0)` va
+`business_date` ni talab qilardi, birinchisining yagona "tuzatishi" esa
+soxta pul ustuni bo'lardi.
+
+⚠ CHALKASHTIRMANG: `snapshots` da `business_date` HAQIQATAN bo'ladi
+(D-16), lekin u `FINANCIAL_TABLES` ning talabi sifatida emas —
+idempotentlik kaliti `(market_id, camera_id, slot, business_date)` ning
+qismi sifatida. Billing kafolati bu yerda BOSHQA mexanizm bilan
+quriladi: `UNIQUE (id, is_billable)` langari va 5-fazadagi kompozit FK.
 """
 
 AUDITED_TABLES: frozenset[str] = frozenset(
@@ -128,6 +163,17 @@ AUDITED_TABLES: frozenset[str] = frozenset(
         # jimgina arxivlansa o'sha rastaning "band, lekin to'lovsiz"
         # dalili yo'qoladi (SC#2).
         "cameras",
+        # --- 4-faza snapshot quvuri (0014_snapshot_domain) ---
+        # Bozorning kadr olish jadvali: qaysi kunlarda, qaysi soatlarda
+        # kadr olinadi. Slot olib tashlansa o'sha vaqtdagi "band, lekin
+        # to'lovsiz" dalili UMUMAN tug'ilmaydi va hisobot kamaygani
+        # bilinmaydi — ya'ni jadvalni tahrirlash nazoratni JIMGINA
+        # o'chirishning eng arzon yo'li.
+        "snapshot_schedules",
+        # Jadvalning aniq vaqtlari (`06:00`, `06:30`, ...). Bitta slotni
+        # o'chirish yuqoridagi bilan aynan bir xil oqibatga olib keladi,
+        # faqat mayda donadorlikda — shuning uchun ikkalasi ham auditda.
+        "snapshot_schedule_slots",
     }
 )
 """`fn_audit_row()` triggeri O'RNATILGAN jadvallar (hozirgi holat, kutilgan emas).
@@ -164,4 +210,18 @@ RO'YXATGA KIRMAYDIGANLAR va sababi:
     Audit izi yo'qolmaydi: parol o'zgarishining FAKTI ilova qatlamida
     `nvr_devices` ustiga QIYMATSIZ yoziladi
     (`action='nvr_credentials_updated'`).
+  * `capture_runs`, `snapshots`, `alert_events` — IKKI MUSTAQIL sabab,
+    bir xil qaror (4-faza):
+      (a) uchalasi ham HODISA JURNALI va faqat QO'SHILADI (odam
+          tahrirlamaydi) — audit ularning ustiga o'sha ma'lumotning
+          IKKINCHI NUSXASINI yozardi (`nvr_discovery_runs` bilan bir xil
+          sinf);
+      (b) HAJM: 175 kadr/kun/bozor × har holat o'tishi
+          (`pending`->`running`->`succeeded`) ≈ kuniga 525 audit qatori
+          BITTA bozordan; o'nta bozorda yiliga ~1.9 mln qator. `audit_log`
+          append-only, ya'ni u hech qachon kichraymaydi.
+    Audit izi yo'qolmaydi: JADVAL o'zgarishi (kim kadr olish rejasini
+    o'zgartirdi) `snapshot_schedules`/`snapshot_schedule_slots` orqali
+    auditda, KUNLIK YUGURISHLAR esa `capture_runs` ning O'ZIDA tarixga
+    ega (`status`, `attempt_count`, `error_code`, vaqt tamg'alari).
 """

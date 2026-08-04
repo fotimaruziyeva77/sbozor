@@ -1,0 +1,19 @@
+{
+  "identities": [
+    {
+      "name": "sbozor-core-api",
+      "credentials": [
+        {
+          "accessKey": "NAMUNA-ALMASHTIRING-access",
+          "secretKey": "NAMUNA-ALMASHTIRING-secret"
+        }
+      ],
+      "actions": [
+        "Read:sbozor-snapshots",
+        "Write:sbozor-snapshots",
+        "List:sbozor-snapshots",
+        "Tagging:sbozor-snapshots"
+      ]
+    }
+  ]
+}

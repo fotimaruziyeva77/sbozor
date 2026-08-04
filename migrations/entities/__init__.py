@@ -40,6 +40,9 @@ __all__ = [
     "NVR_AUDITED_TABLES",
     "NVR_TENANT_TABLES",
     "RLS_TABLES",
+    "SNAPSHOT_AUDITED_TABLES",
+    "SNAPSHOT_DELETE_ORDER",
+    "SNAPSHOT_TENANT_TABLES",
     "TEMPORAL_TENANT_TABLES",
     "TENANT_TABLES",
     "VENDOR_TENANT_TABLES",
@@ -180,6 +183,109 @@ migratsiyaning ichida `if table != "nvr_credentials"` shaklida yozishga
 to'g'ri kelardi — ya'ni qaror kodning ichiga yashiringan bo'lardi.
 """
 
+# ===========================================================================
+# 4-FAZA — SNAPSHOT QUVURI
+# ===========================================================================
+
+SNAPSHOT_TENANT_TABLES: tuple[str, ...] = (
+    "snapshot_schedules",
+    "snapshot_schedule_slots",
+    "capture_runs",
+    "snapshots",
+    "alert_events",
+)
+"""`0014_snapshot_domain` yaratadigan tenant jadvallari (CAM-04/05/06/07).
+
+TARTIB — FK bo'yicha OTA-ONADAN bolalarga, `NVR_TENANT_TABLES` bilan aynan
+bir xil qoida:
+  * `snapshot_schedule_slots` -> `snapshot_schedules` ga `(market_id, schedule_id)`;
+  * `capture_runs`            -> `cameras` ga `(market_id, camera_id)` (3-fazadan);
+  * `snapshots`               -> `capture_runs` ga `(market_id, capture_run_id)`.
+`0014` shu ro'yxat ustidan `enable_tenant_rls` + `tenant_policy` +
+`owner_bootstrap_policy` tsiklini bajaradi, `downgrade()` esa
+`reversed(...)` bilan yuradi.
+
+⚠ BU RO'YXAT HOZIRCHA `ALL_TENANT_TABLES` GA QO'SHILMAGAN — sabab o'sha
+konstantaning yonidagi izohda (o'lchangan `UndefinedTable`). Qo'shish
+`0014` bilan BIR OYNADA, `04-03` / T2 da bajariladi va uni unutish
+mumkin emas: `test_snapshot_registries_are_self_consistent` jadvallar
+bazada paydo bo'lgan zahoti buni TALAB qiladi.
+
+BU RO'YXAT AUDIT UCHUN EMAS. Trigger faqat `SNAPSHOT_AUDITED_TABLES` ga
+ulanadi (pastda) va farq ATAYIN — beshala jadval RLS ostida bo'lishi SHART,
+audit triggeri ostida esa faqat ikkitasi.
+
+`alert_events` — TENANT jadvali (`market_id NOT NULL`), `04-PATTERNS.md`
+§S-1. `04-RESEARCH.md` §E.13 uni `GLOBAL_TABLES` deb atagan, lekin
+`GLOBAL_TABLES` ning ta'rifi — «`market_id` ustuni BO'LMASLIGI kutilgan
+jadvallar», research esa unga `market_id` beradi: ikkisi bir vaqtda to'g'ri
+bo'la olmaydi. Tenant varianti tanlandi, chunki UI ogohlantirishlarni BOZOR
+sahifasida ko'rsatadi. `GLOBAL_TABLES` ga faqat `system_heartbeats` qo'shildi
+(unda `market_id` ustuni yo'q).
+
+QARORLAR (`04-CONTEXT.md`):
+  * D-16 — `snapshots` da `UNIQUE (id, is_billable)` langari; `is_billable`
+    `GENERATED ALWAYS AS (quality_verdict = 'ok') STORED`. Bu shakl W0-1
+    zondi bilan HAQIQIY `postgres:18.4` da O'LCHANGAN
+    (`tests/fixtures/billable_probe.py`, natija: qo'llab-quvvatlanadi).
+  * D-05 — jadval kun o'rtasida o'zgartirilsa BUGUNGI rejaga ta'sir
+    qilmaydi: reja kunning birinchi tikida materializatsiya qilinadi.
+"""
+
+SNAPSHOT_AUDITED_TABLES: tuple[str, ...] = ("snapshot_schedules", "snapshot_schedule_slots")
+"""`0014_snapshot_domain` da `attach_audit_trigger()` ULANADIGAN jadvallar.
+
+⚠ UCHTASI ATAYIN CHIQARILGAN va sabab `nvr_discovery_runs` niki bilan bir
+xil sinfda, lekin unga IKKINCHI (mustaqil) argument qo'shiladi:
+
+  * `capture_runs`, `snapshots`, `alert_events` — HODISA JURNALLARI: ular
+    faqat QO'SHILADI (odam tomonidan tahrirlanmaydi), ya'ni audit ularning
+    ustiga o'sha ma'lumotning IKKINCHI NUSXASINI yozardi;
+  * HAJM: 175 qator/kun/bozor × har holat o'tishi
+    (`pending`->`running`->`succeeded`) ≈ kuniga 525 audit qatori BITTA
+    bozordan. O'nta bozorda bu yiliga ~1.9 mln qator — `audit_log`
+    append-only, ya'ni u hech qachon kichraymaydi.
+
+IZ YO'QOLMAYDI va bu shu qarorning sharti: JADVAL o'zgarishi
+(`snapshot_schedules` — kim jadvalni o'zgartirdi) auditda, KUNLIK
+YUGURISHLAR esa `capture_runs` ning O'ZIDA tarixga ega (`status`,
+`attempt_count`, `error_code`, vaqt tamg'alari).
+
+Ro'yxat ALOHIDA, chunki `0014` ikki xil tsikl qiladi: RLS
+`SNAPSHOT_TENANT_TABLES` bo'yicha, audit esa shu yerdan.
+"""
+
+SNAPSHOT_DELETE_ORDER: tuple[str, ...] = (
+    "snapshots",
+    "capture_runs",
+    "snapshot_schedule_slots",
+    "snapshot_schedules",
+    "alert_events",
+)
+"""`market_delete_draft()` kaskadiga qo'shiladigan tartib (W0-6, `0015`).
+
+⚠ IKKI FAKT, IKKALASI HAM MAJBURIY:
+
+**(a) Tartib BOLALARDAN OTA-ONAGA** — ya'ni bu `SNAPSHOT_TENANT_TABLES`
+ning oddiy teskarisi EMAS va uni `reversed(...)` bilan hosil qilib
+bo'lmaydi: `alert_events` FK zanjirida umuman turmaydi (u hech kimga
+tayanmaydi va unga hech kim tayanmaydi), shuning uchun uning o'rni
+ixtiyoriy va oxirida turadi. Ro'yxat ALOHIDA e'lon qilinishining butun
+sababi shu — hosila qiymat noto'g'ri natija berardi.
+
+**(b) BUTUN BLOK MAVJUD NVR BLOKIDAN OLDIN TURISHI SHART.** `capture_runs`
+`cameras` ga kompozit FK `(market_id, camera_id)` bilan tayanadi,
+`cameras` esa `MARKET_DELETE_DRAFT` ning BIRINCHI `DELETE` i
+(`migrations/entities/functions.py`). Blok NVR blokidan keyin qo'yilsa
+kaskad o'z chet el kalitiga urilib yiqilardi — va bu faqat qoralama
+bozorni o'chirmoqchi bo'lgan admin ekranida ko'rinardi.
+
+`0015` va `MARKET_DELETE_DRAFT` kengaytmasi qiymatni SHUNDAN oladi
+(`04-03` / T3), reyestr esa ATAYIN `0014` dan OLDIN yoziladi: shunda
+`test_cascade_covers_every_table_referencing_markets` qizargan zahoti
+tuzatish ro'yxati tayyor turadi.
+"""
+
 ALL_TENANT_TABLES: tuple[str, ...] = (
     *TENANT_TABLES,
     *MARKET_DOMAIN_TENANT_TABLES,
@@ -187,6 +293,32 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     *VENDOR_TENANT_TABLES,
     *CALENDAR_TENANT_TABLES,
     *NVR_TENANT_TABLES,
+    # ⚠⚠ `*SNAPSHOT_TENANT_TABLES` BU YERDA ATAYIN YO'Q — VA U `0014` BILAN
+    # BIR OYNADA (`04-03` / T2) QO'SHILADI. Sabab O'LCHANGAN, taxmin emas:
+    #
+    #   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable)
+    #   relation "public.snapshot_schedules" does not exist
+    #   [SQL: CREATE POLICY tenant_isolation on public.snapshot_schedules ...]
+    #
+    # `ALL_ENTITIES` aynan shu ro'yxatdan quriladi, `alembic_utils` ning
+    # "schema" komparatori esa solishtirish uchun har bir entity'ni
+    # HAQIQATAN yaratib ko'radi (`simulate_entity`). Ya'ni hali mavjud
+    # bo'lmagan jadvalga policy ro'yxatga olinishi
+    # `tests/tenancy/test_market_domain_meta.py::test_autogenerate_is_empty`
+    # ni DARHOL qizartiradi — va o'sha testning O'Z docstringi buni
+    # oldindan aytib qo'ygan («⚠ REYESTR BO'SHATISHNI QAYTA TIKLAMANG...
+    # To'g'ri yechim — migratsiyani YOZISH»).
+    #
+    # 3-fazada bu qarz PLAN ICHIDA yopilgan (03-03 reyestrni va `0012` ni
+    # ketma-ket ikki commitda bergan). 4-fazada `0014` BOSHQA REJADA va
+    # BOSHQA TO'LQINDA (`04-03`, 2-to'lqin), ya'ni bu yerda qo'shish
+    # darvozani to'lqinlar ORASIDA qizil qoldirardi — bu esa
+    # `PENDING_AUDIT_TRIGGERS` docstringi taqiqlagan holatning o'zi
+    # («Buzilgan darvoza — darvoza emas»).
+    #
+    # QARZ UNUTILMAYDI: `test_meta.py::test_snapshot_registries_are_self_consistent`
+    # jadvallar bazada PAYDO BO'LGAN zahoti ularni shu ro'yxatda ham talab
+    # qiladi, ya'ni darvoza O'ZI QUROLLANADI.
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 

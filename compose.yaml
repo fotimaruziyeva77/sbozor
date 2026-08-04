@@ -2,7 +2,7 @@
 # Xost mashinasida `make` YO'Q (Windows) — barcha yorliqlar root `package.json` da.
 #
 # Profillar:
-#   (yo'q)   -> db, cache, core-api, worker, go2rtc : `npm run up`
+#   (yo'q)   -> db, cache, storage, core-api, worker, scheduler, go2rtc : `npm run up`
 #   migrate  -> Alembic one-shot job   : `npm run migrate`
 #   web      -> frontend (01-02 rejasi Dockerfile'ni yaratadi)
 #   proxy    -> nginx
@@ -49,6 +49,72 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+
+  storage:
+    # DALIL-KADRLARNING S3-MOS ARXIVI (04-01, CAM-07, W0-4).
+    #
+    # ⚠ PROFILSIZ — `worker` va `go2rtc` bilan bir xil sabab: bu ISHLAB
+    # CHIQARISH komponenti. Profil ortiga yashirilsa kadr olish zanjiri
+    # yuklash bosqichida yiqilardi va sabab «tarmoq nosozligi» bo'lib
+    # ko'rinardi.
+    #
+    # OLTINCHI KONTEYNER, UCHINCHI SERVIS EMAS: SeaweedFS — TAYYOR image,
+    # biz yozgan kod emas (`db`, `cache`, `go2rtc`, `nginx` bilan bir
+    # toifa). CLAUDE.md ning «aynan 3 ta servis» cheklovi BIZNING
+    # servislarimizga tegishli va u buzilmaydi.
+    #
+    # MinIO EMAS: repo 2026-04-25 da ARXIVLANGAN (read-only, xavfsizlik
+    # yamog'i yo'q) va bu yerda shaxsiy ma'lumot saqlanadi. Garage ham
+    # emas — AGPL-3.0 (CLAUDE.md taqig'i). SeaweedFS 4.40 — Apache-2.0.
+    image: chrislusf/seaweedfs:4.40
+    command:
+      - "server"
+      - "-dir=/data"
+      - "-s3"
+      # ⚠ 8333 — SeaweedFS ning STANDART qiymati, lekin u ANIQ beriladi:
+      # standartga tayanish keyingi major versiyada jimgina buzilardi va
+      # healthcheck bilan ilova ikkalasi birdan boshqa portga qarardi.
+      - "-s3.port=8333"
+      - "-s3.config=/etc/seaweedfs/s3.json"
+      # Ko'p mayda fayl (175 JPEG/kun/bozor) — SeaweedFS ning maqsadli
+      # holati. 1 GB volume fayllari zaxira nusxa uchun qulay.
+      - "-master.volumeSizeLimitMB=1024"
+    volumes:
+      - seaweed:/data
+      # ⚠ `:ro` MAJBURIY — `go2rtc.yaml` va `mediamtx.yml` bilan bir xil
+      # qoida: server o'z konfiguratsiyasini QAYTA YOZA OLMASLIGI kerak.
+      #
+      # ⚠ BU FAYL REPODA YO'Q va bo'lmasligi ham kerak — unda S3 sirlari
+      # bor. Repoda `ops/seaweedfs/s3.json.example` turadi (`.env.example`
+      # va `wg0.conf.example` bilan aynan bir xil naqsh):
+      #     cp ops/seaweedfs/s3.json.example ops/seaweedfs/s3.json
+      # va ichidagi namunaviy kalitlarni haqiqiylari bilan almashtiring
+      # (yo'riqnoma — `ops/seaweedfs/README.md`).
+      - ./ops/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    environment:
+      TZ: ${TZ:-Asia/Tashkent}
+    # =====================================================================
+    # ⚠⚠ `ports:` BLOKI ATAYIN YO'Q — VA U QO'SHILMAYDI (T-04-02).
+    #
+    # `go2rtc` dagi ogohlantirish (pastda, 8555/udp bandi) SO'ZMA-SO'Z shu
+    # yerga tegishli: compose `ports:` bandi Docker'ning `iptables`
+    # qoidalarini yozadi va u host firewall'ini CHETLAB O'TADI — ya'ni
+    # «UFW da yopiq» degan ishonch YOLG'ON bo'lib qolardi.
+    #
+    # Bu ombor BARCHA bozorlarning dalil-kadrlarini saqlaydi; ular bozor
+    # tashrifchilarining shaxsiy ma'lumoti va O'zR qonuni ostidagi
+    # ma'lumot. Rasmga yagona yo'l — `core-api` ning proxy endpointi
+    # (04-09), presigned URL EMAS.
+    # =====================================================================
+    healthcheck:
+      # `nc` — `go2rtc` va `nvr-sim-rtsp` bilan BIR XIL qaror: «jarayon
+      # tinglayaptimi?» savoliga to'liq javob va u tekshirilmagan
+      # endpointga tayanmaydi.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8333"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   migrate:
@@ -142,6 +208,18 @@ services:
       # matni kalit hosil qilish buyrug'ini beradi (T-03-22).
       NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
       NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
+      # --- Snapshot ombori (04-01, CAM-07) ---
+      #
+      # ⚠ `S3_ACCESS_KEY`/`S3_SECRET_KEY` da `:-` BILAN BO'SH STANDART
+      # ATAYIN BERILMAGAN — `NVR_CREDENTIAL_KEY` (worker bloki, T-03-22)
+      # bilan AYNAN bir xil qaror. Bo'sh standart bilan servis muvaffaqiyatli
+      # KO'TARILARDI va xato faqat BIRINCHI KADRNI yuklashda — ya'ni
+      # ertalab 06:00 da, hech kim qaramayotgan paytda — chiqardi.
+      # Berilmasa `Settings` ISHGA TUSHISHDA yiqiladi (04-04).
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://storage:8333}
+      S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: Asia/Tashkent
@@ -149,6 +227,8 @@ services:
       db:
         condition: service_healthy
       cache:
+        condition: service_healthy
+      storage:
         condition: service_healthy
     healthcheck:
       test:
@@ -220,6 +300,23 @@ services:
       # chiqardi (T-03-22).
       NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
       NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
+      # --- Snapshot ombori (04-01, CAM-07) — `core-api` bloki bilan bir xil ---
+      # Kadr olish va saqlash siyosati AYNAN shu jarayonda ishlaydi, ya'ni
+      # sirlar bu yerda ham majburiy va `:-` bilan bo'sh standart YO'Q.
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://storage:8333}
+      S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # --- Telegram alertlari (04-08, FOUND-06) ---
+      #
+      # ⚠ BU IKKISI YUQORIDAGI S3 KALITLARIDAN TESKARI: `:-` bilan bo'sh
+      # standart ATAYIN beriladi. Bo'sh token — QONUNIY holat: «alertlar
+      # o'chiq» degani va u `log.warning` bilan bir marta e'lon qilinadi.
+      # Sabab operatsion: bot tokeni bozorga o'rnatishdan OLDIN ba'zan
+      # mavjud bo'lmaydi va o'shanda kadr olish TO'XTAMASLIGI kerak —
+      # alertsiz kadr alertli kadrsizlikdan yaxshiroq (D-19, §S-11).
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: Asia/Tashkent
@@ -228,7 +325,82 @@ services:
         condition: service_healthy
       cache:
         condition: service_healthy
+      storage:
+        condition: service_healthy
     # DIQQAT: xost portiga publish QILINMAYDI — worker HTTP yuzasi bermaydi.
+    restart: unless-stopped
+
+  scheduler:
+    # SNAPSHOT QUVURINING PLANERI (04-01/04-07, D-02, W0-3).
+    #
+    # ⚠⚠ PROFILSIZ — VA BU BU BLOKDAGI ENG MUHIM QATOR. `worker` bilan
+    # bir xil sabab, lekin oqibati BATTAR: planer profil ortida qolsa
+    # kunlik reja HECH QACHON materializatsiya bo'lmasdi va HECH QANDAY
+    # XATO CHIQMASDI — `docker compose ps` toza, jurnal bo'sh, jadval
+    # jimgina bo'sh. Bu «jimgina yolg'on» sinfining eng qimmat namunasi:
+    # nosozlik faqat kun oxirida, hisobot bo'sh chiqqanda sezilardi.
+    #
+    # YETTINCHI KONTEYNER, UCHINCHI SERVIS EMAS: `core-api` kod bazasining
+    # boshqa entrypoint'i — `worker`, `migrate` va `tests` bilan aynan bir
+    # xil naqsh (`target: runtime`, boshqa `command`).
+    #
+    # D-02: planer FAQAT holatsiz 1-daqiqalik tik beradi. Reja, ijara
+    # (lease), idempotentlik va yo'qlik yozuvi Postgres `capture_runs` da
+    # yashaydi. taskiq'ning cron holati (`SchedulerLoop.cron_tasks_last_run`)
+    # — jarayon xotirasidagi oddiy `dict`, taqsimlangan qulf yo'q.
+    # `RedisScheduleSource` ham yaroqsiz: `cache` `--save "" --appendonly no`
+    # bilan ishlaydi, ya'ni qayta ko'tarilganda hamma bozorning jadvali
+    # jimgina yo'qolardi.
+    #
+    # D-03: tik IDEMPOTENT, shuning uchun taskiq'ning uchala nosozlik
+    # rejimi (dublikat ishga tushish, o'tkazib yuborish, qayta ishga
+    # tushish) zararsiz — «aynan bitta planer» operatsion talabi YO'Q.
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: runtime
+    # ⚠ `app.worker:scheduler` obyekti 04-07 da tug'iladi (`app/worker.py`
+    # o'sha rejaning fayli). Konteyner ta'rifi ATAYIN OLDIN yoziladi —
+    # W0-3 ning butun mazmuni «profilsizlik migratsiyadan va koddan OLDIN
+    # qulflansin» degani. Shu sababli `docker compose up scheduler` 04-07
+    # gacha import xatosi beradi; `docker compose config` esa bugundan
+    # profilsizlikni isbotlaydi (`tests/unit/test_storage_config.py`).
+    command: ["taskiq", "scheduler", "app.worker:scheduler"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      VALKEY_URL: ${VALKEY_URL:-redis://cache:6379/0}
+      # `worker` bloki bilan bir xil sabab (`Settings` — SERVISGA yagona
+      # sozlama obyekti va uni har bir entrypoint TO'LIQ quradi).
+      JWT_SECRET: ${JWT_SECRET}
+      NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
+      NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://storage:8333}
+      S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: Asia/Tashkent
+    depends_on:
+      cache:
+        condition: service_healthy
+    # =====================================================================
+    # ⚠⚠ `healthcheck` ATAYIN YOZILMAGAN — VA U SOXTALASHTIRILMAYDI.
+    #
+    # `taskiq scheduler` HTTP yuzasi bermaydi, jarayon tirikligi esa
+    # «tik ketyaptimi?» savoliga JAVOB BERMAYDI. Aynan shu nosozlik sinfi
+    # 3-fazada o'lchangan (`worker.py:136-144`): konteyner `Up`,
+    # `docker compose ps` sog'lom ko'rsatadi va BIRORTA vazifa hech qachon
+    # bajarilmaydi. `CMD true` yoki `pgrep taskiq` kabi healthcheck
+    # aynan o'sha holatni «sog'lom» deb belgilab, YOLG'ON ISHONCH berardi.
+    #
+    # Yagona ishonchli signal — BAZADAGI natija. U `alert_sweep` va
+    # `/internal/self-check` zimmasida (04-07/04-08), konteyner
+    # healthcheck'ida emas (RESEARCH Pitfall 14).
+    # =====================================================================
+    # DIQQAT: xost portiga publish QILINMAYDI — planer HTTP yuzasi bermaydi.
     restart: unless-stopped
 
   go2rtc:
@@ -452,6 +624,20 @@ services:
       NVR_SIM_BASE_URL: "http://nvr-sim:8080"
       SIM_USERNAME: "${SIM_USERNAME:-admin}"
       SIM_PASSWORD: "${SIM_PASSWORD:-Sim12345}"
+      # `-m sim` ostidagi ombor testlari (04-06/04-08) HAQIQIY SeaweedFS
+      # konteyneriga boradi — S3 mock'i ishlatilmaydi. Sabab 03-14 da
+      # o'lchangan: mock'langan qatlam «kod ombor bilan gaplasha oladi»
+      # da'vosini umuman sinamaydi va yashil bo'lib turaveradi.
+      #
+      # ⚠ BU YERDA `:-` BILAN STANDART BERILGAN va bu `core-api`/`worker`
+      # bloklaridan ATAYIN farq qiladi: sim rekviziti SIR EMAS, u test
+      # uskunasining qismi (`SIM_PASSWORD` bilan aynan bir xil qaror).
+      # Prod bloklarida esa bo'sh standart yiqilishni deploy paytiga
+      # surib qo'yardi.
+      S3_ENDPOINT_URL: "${S3_ENDPOINT_URL:-http://storage:8333}"
+      S3_BUCKET: "${S3_BUCKET:-sbozor-snapshots}"
+      S3_ACCESS_KEY: "${S3_ACCESS_KEY:-sbozor-local-access-key}"
+      S3_SECRET_KEY: "${S3_SECRET_KEY:-sbozor-local-secret-key}"
       CI: "${CI:-}"
       TZ: Asia/Tashkent
     extra_hosts:
@@ -463,3 +649,8 @@ services:
 
 volumes:
   pgdata:
+  # SeaweedFS ning master + volume + filer holati. NOMLANGAN VOLUME
+  # (bind mount emas): dalil arxivi konteyner qayta qurilganda ham
+  # saqlanib qolishi shart va u `pgdata` bilan bir xil toifada — 8-fazadagi
+  # zaxira nusxa siyosati ikkalasini ham qamraydi.
+  seaweed:
