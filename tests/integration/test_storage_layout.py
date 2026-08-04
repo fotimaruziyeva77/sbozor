@@ -48,7 +48,7 @@ import pytest
 from app.services import storage
 from app.services.object_key import KEY_PREFIX_FOR_DAY, object_key
 from app.services.storage import SnapshotStorage, StorageError
-from botocore.exceptions import EndpointConnectionError
+from botocore.exceptions import EndpointConnectionError  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:
     from app.settings import Settings
@@ -193,7 +193,9 @@ async def test_a_second_put_overwrites_the_same_object(
         "yaratilgan bo'lishi mumkin"
     )
 
-    keys = await s3_client.list_prefix(KEY_PREFIX_FOR_DAY(market_id=s3_markets[0], business_date=DAY))
+    keys = await s3_client.list_prefix(
+        KEY_PREFIX_FOR_DAY(market_id=s3_markets[0], business_date=DAY)
+    )
     assert keys == [key], f"ustiga yozish {len(keys)} ta obyekt qoldirdi, bitta kutilgan edi"
 
 
@@ -243,9 +245,7 @@ async def test_the_day_prefix_finds_every_camera_of_that_day_only(
         slots=(SLOTS[0],),
     )
 
-    found = await s3_client.list_prefix(
-        KEY_PREFIX_FOR_DAY(market_id=market_id, business_date=DAY)
-    )
+    found = await s3_client.list_prefix(KEY_PREFIX_FOR_DAY(market_id=market_id, business_date=DAY))
 
     assert sorted(found) == sorted(today_keys), (
         "kun prefiksi o'sha kunning barcha kameralarini bermadi — kalit "
@@ -266,12 +266,8 @@ async def test_a_market_prefix_never_lists_another_market(
     struktura bor.
     """
     market_a, market_b = s3_markets
-    keys_a = await _write_slots(
-        s3_client, market_id=market_a, business_date=DAY, camera_id=uuid4()
-    )
-    keys_b = await _write_slots(
-        s3_client, market_id=market_b, business_date=DAY, camera_id=uuid4()
-    )
+    keys_a = await _write_slots(s3_client, market_id=market_a, business_date=DAY, camera_id=uuid4())
+    keys_b = await _write_slots(s3_client, market_id=market_b, business_date=DAY, camera_id=uuid4())
 
     found_a = await s3_client.list_prefix(f"{market_a}/")
     found_b = await s3_client.list_prefix(f"{market_b}/")
@@ -341,9 +337,7 @@ async def test_list_prefix_returns_every_key_beyond_the_first_page(
 
     await asyncio.gather(*(write(key) for key in keys))
 
-    found = await s3_client.list_prefix(
-        KEY_PREFIX_FOR_DAY(market_id=market_id, business_date=DAY)
-    )
+    found = await s3_client.list_prefix(KEY_PREFIX_FOR_DAY(market_id=market_id, business_date=DAY))
 
     assert len(found) == OVER_ONE_PAGE, (
         f"{OVER_ONE_PAGE} obyektdan {len(found)} tasi qaytdi — sahifalash bir "
@@ -368,9 +362,7 @@ async def test_a_storage_error_never_carries_the_endpoint_url(
     Sentry ning zanjir yuruvchisi ham xom matnga bora olmaydi.
     """
     unreachable = s3_settings.model_copy(update={"s3_endpoint_url": UNREACHABLE_ENDPOINT})
-    key = object_key(
-        market_id=uuid4(), business_date=DAY, camera_id=uuid4(), slot_time=SLOTS[0]
-    )
+    key = object_key(market_id=uuid4(), business_date=DAY, camera_id=uuid4(), slot_time=SLOTS[0])
 
     # NAZORAT: xom istisno manzilni HAQIQATAN tashiydi.
     raw = EndpointConnectionError(endpoint_url=f"{UNREACHABLE_ENDPOINT}/{key}")
@@ -395,8 +387,7 @@ async def test_a_storage_error_never_carries_the_endpoint_url(
     assert error.__cause__ is None, "istisno zanjiri uzilmagan (`from None` yo'q)"
     assert error.__suppress_context__ is True
     assert "EndpointConnectionError" in message, (
-        "xato matnida istisno TURI yo'q — diagnostikaning uchta faktidan biri "
-        "yo'qolgan bo'lardi"
+        "xato matnida istisno TURI yo'q — diagnostikaning uchta faktidan biri yo'qolgan bo'lardi"
     )
 
 
