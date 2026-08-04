@@ -8,14 +8,34 @@ kalit nomlari).
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
 
 from cryptography.fernet import Fernet
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.services.quality import QUALITY_THRESHOLDS_VERSION, QualityThresholds
 
 # PyJWT 2.11+ HS256 uchun kalit uzunligini majburiy tekshiradi
 # (RFC 7518 §3.2: kalit >= hash chiqishi = 256 bit = 32 bayt).
 MIN_JWT_SECRET_BYTES = 32
+
+MAX_TIMES_PER_DAY = 12
+"""Kuniga eng ko'p slot — SERVERDAGI qattiq shift (`04-UI-SPEC.md` §4.6).
+
+Arifmetika: 12 x 25 kamera = 300 kadr/kun ~ 6,5 GB/yil. Chegarasiz «har 5
+daqiqada» esa 4 225 kadr/kun beradi va bu Contabo diskini bir necha oyda
+to'ldirardi.
+
+⚠ MIJOZDAGI CHEGARA XAVFSIZLIK CHEGARASI EMAS. UI 12 tani ko'rsatadi,
+  lekin API'ga to'g'ridan-to'g'ri so'rov yuborish uni butunlay chetlab
+  o'tadi. Shuning uchun ayni son SERVERDA ham majburlanadi.
+
+⚠ `SNAPSHOT_MAX_TIMES_PER_DAY` bu sondan YUQORI qo'yilishi mumkin EMAS —
+  faqat pasaytiriladi. Shiftni ko'tarish UI va serverni BIRGA o'zgartirishni
+  talab qiladi, ya'ni u kod qarori, muhit o'zgaruvchisining qarori emas.
+  Aks holda ikkalasi jimgina ajralib ketardi.
+"""
 
 
 class Settings(BaseSettings):
@@ -123,9 +143,182 @@ class Settings(BaseSettings):
     #   xato berardi. Standart — mahsulot topologiyasining o'zi.
     go2rtc_url: str = "http://go2rtc:1984"
 
+    # --- Snapshot ombori (04-01/04-06, CAM-07) ---
+    #
+    # S3-mos ombor — `storage` xizmati (SeaweedFS). Endpoint compose
+    # tarmog'ining ICHIDA: ombor xost portiga publish QILINMAYDI (T-04-02).
+    #
+    # ⚠ MANZIL VA BUCKET DA STANDART QIYMAT BOR, KALITLARDA — YO'Q. Bu
+    #   `go2rtc_url` bilan bir xil ajratish: manzil mahsulot TOPOLOGIYASI
+    #   (sir emas, har CI muhitida takrorlanishi bekorchilik), kalitlar esa
+    #   SIR. Bo'sh standart bilan servis ko'tarilardi va nosozlik ertalab
+    #   06:00 da, birinchi yuklashda `SignatureDoesNotMatch` bo'lib chiqardi
+    #   — ya'ni butun kunlik reja yo'qolgandan KEYIN (T-04-29).
+    s3_endpoint_url: str = "http://storage:8333"
+    s3_bucket: str = "sbozor-snapshots"
+    s3_access_key: str
+    s3_secret_key: SecretStr
+    # SeaweedFS mintaqani E'TIBORSIZ qoldiradi, lekin `botocore` uni
+    # TALAB qiladi (`region_name` siz klient umuman qurilmaydi). Ya'ni bu
+    # qiymat SeaweedFS uchun ma'nosiz va klient uchun majburiy — u
+    # o'zgaradigan yagona holat AWS S3 yoki O'zbekiston bulutiga ko'chish.
+    s3_region: str = "us-east-1"
+
+    # --- Kadr olish orkestratsiyasi (04-05/04-07, CAM-05) ---
+    #
+    # Slot vaqti o'tgach kadr olish uchun beriladigan muhlat. Undan keyin
+    # slot `missed` bo'lib YO'QLIK YOZUVI sifatida qoladi.
+    #
+    # ⚠ SABAB MAHSULOTDA, TEXNIKADA EMAS: 06:00 sloti 07:05 da olingan kadr
+    #   «06:00 da rasta band edimi?» savoliga JAVOB BERMAYDI. Kechikkan kadr
+    #   yo'q kadrdan YOMONROQ — u savolga javob bermaydi, lekin javob
+    #   berganday ko'rinadi. 600 s — D-08 arifmetikasi: 25 kamera to'liq
+    #   ketma-ket ~100 s, ya'ni oltibarobar zaxira.
+    capture_grace_seconds: Annotated[int, Field(ge=1)] = 600
+    # Bitta NVR ga bir vaqtda nechta kadr so'rovi ketadi (D-08). Standart 1
+    # (ketma-ket): NVR ning O'LCHANMAGAN sessiya chegarasi shu bilan fazani
+    # HECH QACHON bloklay olmaydi, faqat kechikish narxini beradi.
+    capture_global_concurrency: Annotated[int, Field(ge=1)] = 1
+    # ⚠ `401`/`403` da retry QILINMAYDI — Hikvision hisobni ~5 urinishdan
+    #   keyin qulflaydi (03-05 dan meros teskari retry siyosati). Ro'yxat
+    #   `app/services/capture_errors.py::CAPTURE_AUTH_LOCKING_CODES` da.
+    capture_max_attempts: Annotated[int, Field(ge=1)] = 3
+    # `capture_runs` qatorining ijarasi: worker yiqilsa qator shu muddatdan
+    # keyin qayta olinadigan bo'ladi. `capture_grace_seconds` dan KICHIK
+    # bo'lishi kerak, aks holda yiqilgan worker slotni grace oynasi
+    # tugagunicha ushlab turardi.
+    capture_lease_seconds: Annotated[int, Field(ge=1)] = 120
+    # Bitta tikda olinadigan qator soni — bazani bir marta uzoq
+    # bloklamaslik uchun.
+    capture_batch_size: Annotated[int, Field(ge=1)] = 50
+    # Server tomonidagi qattiq chegara (yuqoridagi `MAX_TIMES_PER_DAY`).
+    snapshot_max_times_per_day: Annotated[int, Field(ge=1, le=MAX_TIMES_PER_DAY)] = (
+        MAX_TIMES_PER_DAY
+    )
+
+    # --- Saqlash siyosati (04-08, CAM-07, D-18) ---
+    #
+    # 90 kun to'liq sifat + 365 kun siqilgan = 455 kun. IKKALA QIYMAT HAM
+    # SOZLAMA va bu D-18 ning butun mazmuni: buyurtmachi javobiga qarab
+    # BITTA SON o'zgaradi, kod emas.
+    #
+    # ⚠ `0` QONUNIY qiymat («to'liq sifatda umuman saqlanmasin»), manfiy —
+    #   emas. Manfiy muddat retention so'rovini kelajakka yo'naltirib,
+    #   hali olinmagan kadrlarni o'chirishga urinardi.
+    retention_full_days: Annotated[int, Field(ge=0)] = 90
+    retention_compressed_days: Annotated[int, Field(ge=0)] = 365
+    # Siqishdan keyingi JPEG sifati. Yuqori chegara 95 — Pillow shkalasi
+    # (`tests/fixtures/frames.py::_validate` bilan bir xil chegara).
+    retention_jpeg_quality: Annotated[int, Field(ge=1, le=95)] = 60
+    retention_batch_size: Annotated[int, Field(ge=1)] = 200
+
+    # --- Sifat filtri chegaralari (04-04, CAM-06, D-14/D-15) ---
+    #
+    # ⚠ BU QIYMATLAR ATAYIN `LOW CONFIDENCE`. Real Karmana kadri HALI YO'Q,
+    #   ya'ni har qanday raqam TAXMIN. Lekin qoidaning SHAKLI (ikki shartli
+    #   `dark`, `stddev` ga tayangan `blank`) ma'lumotsiz ham himoyalanadi —
+    #   u qonuniy qish-tong kadri argumentidan kelib chiqadi, o'lchovdan
+    #   emas.
+    #
+    # ⚠ SOZLASH QAYTA KADR OLISHNI TALAB QILMAYDI (D-15): o'lchovlarning
+    #   O'ZI (`snapshots.quality_mean`, `quality_stddev`, `quality_
+    #   saturation`) saqlanadi. Phase 0 ning real kadrlari kelganda chegara
+    #   `percentile_cont` bilan TAQSIMOTDAN olinadi va bu bitta SQL
+    #   so'rovi bo'ladi.
+    #
+    # ⚠ CHEGARANI O'ZGARTIRISH O'TMISHNI QAYTA YOZMAYDI: verdikt yozish
+    #   paytida qo'yiladi va `quality_thresholds_version` u qaysi to'plam
+    #   bilan qo'yilganini yozadi.
+    quality_min_bytes: Annotated[int, Field(ge=1)] = 4096
+    quality_max_bytes: Annotated[int, Field(ge=1)] = 8 * 1024 * 1024
+    quality_blank_stddev_max: Annotated[float, Field(ge=0.0)] = 3.0
+    quality_dark_mean_max: Annotated[float, Field(ge=0.0)] = 25.0
+    quality_dark_stddev_max: Annotated[float, Field(ge=0.0)] = 12.0
+    quality_ir_saturation: Annotated[float, Field(ge=0.0, le=1.0)] = 0.05
+    quality_night_mean: Annotated[float, Field(ge=0.0)] = 110.0
+
+    # --- Telegram alertlari (04-08, FOUND-06) ---
+    #
+    # ⚠ S3 KALITLARIDAN TESKARI: bo'sh qiymat — QONUNIY holat. Bo'sh token
+    #   «alertlar o'chiq» degani, jarayon bir marta `log.warning` yozadi va
+    #   kadr olish DAVOM ETADI. Alertsiz kadr — alertli kadrsizlikdan
+    #   yaxshiroq (D-19): token ustida yiqilish butun quvurni to'xtatardi.
+    #
+    # ⚠ LEKIN JIMGINA ISHLAMAYDI. Bo'sh token bilan `log.warning` siz
+    #   ishlash aynan «alert bor deb o'ylash» yolg'onini tug'diradi va u
+    #   D-20 ning («alert muvaffaqiyat signalining YO'QLIGIGA qo'yiladi»)
+    #   bevosita buzilishi bo'lardi. Ogohlantirishni `04-08` ning
+    #   jo'natuvchisi yozadi va uning darvozasi o'sha rejada.
+    #
+    # ⚠ TIP `SecretStr`: bot tokeni bilan istalgan odam bot nomidan xabar
+    #   yubora oladi va uning yozishmalarini o'qiy oladi.
+    telegram_bot_token: SecretStr = SecretStr("")
+    telegram_chat_id: str = ""
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"
+
+    @property
+    def alerts_enabled(self) -> bool:
+        """Alert jo'natish MUMKINMI — HOSILA qiymat, alohida bayroq EMAS.
+
+        ⚠ Alohida `ALERTS_ENABLED` bayrog'i uchinchi holatni ochardi:
+          «yoqilgan, lekin tokensiz». O'shanda tizim alert jo'natishga
+          urinib, har safar yiqilardi va nosozlik jurnalda ko'milib
+          qolardi. Hosila qiymatda bunday holat MAVJUD EMAS.
+
+        Ikkala qiymat ham talab qilinadi: chat ID'siz token bilan xabar
+        yuborib bo'lmaydi va teskarisi ham.
+        """
+        return bool(self.telegram_bot_token.get_secret_value() and self.telegram_chat_id)
+
+    def quality_thresholds(self) -> QualityThresholds:
+        """Sifat filtri uchun chegaralar to'plami.
+
+        ⚠ IMPORT YO'NALISHI: `settings.py` -> `services/quality.py`, aksincha
+          EMAS. Sof modul sozlamani BILMAYDI — shunda uni testda argument
+          bilan chaqirish mumkin bo'ladi va test muhitga bog'lanmaydi
+          (`test_quality_filter.py` docstringi).
+        """
+        return QualityThresholds(
+            min_bytes=self.quality_min_bytes,
+            max_bytes=self.quality_max_bytes,
+            blank_stddev=self.quality_blank_stddev_max,
+            dark_mean=self.quality_dark_mean_max,
+            dark_stddev=self.quality_dark_stddev_max,
+            ir_saturation=self.quality_ir_saturation,
+            night_mean=self.quality_night_mean,
+            version=QUALITY_THRESHOLDS_VERSION,
+        )
+
+    @field_validator("s3_access_key")
+    @classmethod
+    def _validate_s3_access_key(cls, value: str) -> str:
+        """Bo'sh ombor kalitini ISHGA TUSHISHDA rad etadi (T-04-29).
+
+        `_validate_jwt_secret` naqshi. Xato matnida KALIT NOMI bor, lekin
+        QIYMAT yo'q — rad etilgan qiymat ta'rifi bo'yicha ishonchsiz.
+        """
+        if not value.strip():
+            raise ValueError(
+                "S3_ACCESS_KEY bo'sh bo'lishi mumkin emas. U "
+                "`ops/seaweedfs/s3.json` dagi qiymat bilan AYNAN bir xil "
+                "bo'lishi shart (`ops/seaweedfs/README.md`)."
+            )
+        return value
+
+    @field_validator("s3_secret_key")
+    @classmethod
+    def _validate_s3_secret_key(cls, value: SecretStr) -> SecretStr:
+        """Bo'sh ombor maxfiy kalitini ISHGA TUSHISHDA rad etadi (T-04-29)."""
+        if not value.get_secret_value().strip():
+            raise ValueError(
+                "S3_SECRET_KEY bo'sh bo'lishi mumkin emas. U "
+                "`ops/seaweedfs/s3.json` dagi qiymat bilan AYNAN bir xil "
+                "bo'lishi shart (`ops/seaweedfs/README.md`)."
+            )
+        return value
 
     @field_validator("nvr_credential_key")
     @classmethod
