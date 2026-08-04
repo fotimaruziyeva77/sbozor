@@ -53,6 +53,7 @@ standart beradi). Namuna — `migrations/versions/0006_membership_active.py`.
 from __future__ import annotations
 
 from alembic_utils.pg_function import PGFunction
+from sbozor_core.models.snapshot import DEFAULT_SNAPSHOT_SLOTS
 
 __all__ = [
     "ALL_FUNCTIONS",
@@ -75,6 +76,9 @@ __all__ = [
     "AUTH_SUPPORT_GRANT_SIGNATURES",
     "AUTH_UPDATE_PASSWORD_HASH",
     "AUTH_USER_STATE",
+    "CAPTURE_DUE_MARKETS",
+    "DEFAULT_SCHEDULE_NAME",
+    "DEFAULT_SLOT_VALUES",
     "GRANT_SIGNATURES",
     "MARKET_ACTIVATE",
     "MARKET_CALENDAR_FUNCTIONS",
@@ -89,6 +93,8 @@ __all__ = [
     "MARKET_RENAME",
     "PLATFORM_AUDIT_FUNCTIONS",
     "PLATFORM_AUDIT_GRANT_SIGNATURES",
+    "SNAPSHOT_FUNCTIONS",
+    "SNAPSHOT_GRANT_SIGNATURES",
     "USER_ADMIN_FUNCTIONS",
     "USER_ADMIN_GRANT_SIGNATURES",
 ]
@@ -967,24 +973,120 @@ yettala kun oldindan belgilangan holda, lekin QIYMAT SIFATIDA yuboriladi.
 Ya'ni DB taxmin qilmaydi, UI esa oqilona taklif qiladi.
 """
 
+DEFAULT_SCHEDULE_NAME = "Standart"
+"""Faollashtirishda yoziladigan standart profilning nomi (D-01).
+
+DB KONTENTI va ATAYIN BITTA TILDA (`StallStatus` bilan bir xil qoida): UI
+uni tarjima QILMAYDI. Nom shu yerda konstanta, chunki uni ikki joy oladi —
+`MARKET_ACTIVATE` ning tanasi va `0015` ning backfill'i — va ikki literal
+ajralib ketsa backfill boshqa nomli profil yozardi.
+"""
+
+DEFAULT_SLOT_VALUES = ", ".join(f"('{slot.isoformat()}'::time)" for slot in DEFAULT_SNAPSHOT_SLOTS)
+"""Standart slotlarning SQL `VALUES` ro'yxati — `DEFAULT_SNAPSHOT_SLOTS` dan HOSILA.
+
+⚠ LITERAL QO'LDA TAKRORLANMAYDI. `PGFunction` ning ta'rifi oddiy Python
+satri, ya'ni u QURILADI: yagona manba
+`sbozor_core.models.snapshot.DEFAULT_SNAPSHOT_SLOTS` bo'lib qoladi va
+ro'yxatni o'zgartirish funksiya tanasini AVTOMATIK o'zgartiradi. Nusxa
+yozilganda esa model bilan DB ajralib ketardi va «admin hech nima
+kiritmaydi» (D-01) da'vosi bir kuni jimgina boshqa jadval berardi.
+
+Yon ta'siri FOYDALI: tana o'zgargani uchun `alembic check` keyingi safar
+`replace_entity` ni O'ZI taklif qiladi — ya'ni ro'yxatni o'zgartirgan odam
+migratsiya yozishga majbur bo'ladi.
+"""
+
 MARKET_ACTIVATE = PGFunction(
     schema="public",
     signature="market_activate(p_market_id uuid)",
-    definition="""
+    definition=f"""
 RETURNS void
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 VOLATILE
 AS $$
-    UPDATE public.markets
-       SET is_active = true,
-           updated_at = now()
-     WHERE id = p_market_id
-$$
-""",
+DECLARE
+  v_schedule_id uuid;
+BEGIN
+  UPDATE public.markets
+     SET is_active = true,
+         updated_at = now()
+   WHERE id = p_market_id;
+
+  INSERT INTO public.snapshot_schedules (market_id, name, period)
+  SELECT p_market_id,
+         '{DEFAULT_SCHEDULE_NAME}',
+         daterange(current_date, NULL, '[)')
+  WHERE NOT EXISTS (
+      SELECT 1
+        FROM public.snapshot_schedules AS existing
+       WHERE existing.market_id = p_market_id
+  )
+  RETURNING id INTO v_schedule_id;
+
+  IF v_schedule_id IS NOT NULL THEN
+    INSERT INTO public.snapshot_schedule_slots (market_id, schedule_id, slot_time)
+    SELECT p_market_id, v_schedule_id, defaults.slot_time
+      FROM (VALUES {DEFAULT_SLOT_VALUES}) AS defaults(slot_time)
+    ON CONFLICT DO NOTHING;
+  END IF;
+END $$
+""",  # noqa: S608 -- SQL literallari `DEFAULT_SNAPSHOT_SLOTS` (`tuple[time, ...]`)
+    # va `DEFAULT_SCHEDULE_NAME` dan quriladi; ikkalasi ham modul konstantasi,
+    # tashqi kirish EMAS. Bu `PGFunction` ta'rifi — bajariladigan so'rov emas.
 )
-"""Qoralama bozorni JONLI holatga o'tkazadi (usta oxirgi qadami).
+"""Qoralama bozorni JONLI holatga o'tkazadi VA standart kadr jadvalini yozadi.
+
+=============================================================================
+D-01 — ADMIN SNAPSHOT JADVALI UCHUN HECH NIMA KIRITMAYDI.
+
+Bozor faollashtirilganda bitta ochiq oxirli profil («Standart») va
+`DEFAULT_SNAPSHOT_SLOTS` dan yettita slot AVTOMATIK yoziladi. Admin
+ertasi kuniyoq ishlaydigan jadvalga ega bo'ladi va xohlasa uni
+tahrirlaydi — self-service qoidasining bevosita natijasi.
+
+⚠ USTAGA YANGI QADAM QO'SHILMAYDI (`04-UI-SPEC.md` §4.9). «Snapshot
+jadvali» qadami usta oqimiga qo'shilsa `completedStepCount` ni buzardi va
+2-fazaning butun usta holati qayta hisoblanishi kerak bo'lardi. Jadval —
+faollashtirishning YON MAHSULOTI, alohida qadam emas.
+
+IDEMPOTENT — `WHERE NOT EXISTS` VA `ON CONFLICT DO NOTHING`:
+funksiya ikkinchi marta chaqirilsa (qayta faollashtirish, `0015` ning
+backfill'i, testdagi takroriy chaqiruv) IKKINCHI profil YARATILMAYDI. Bu
+shunchaki tozalik emas: ikkita profil `ex_snapshot_schedules_no_overlap`
+ni buzib, faollashtirishni SQLSTATE `23P01` bilan yiqitardi — ya'ni usta
+oxirgi qadamda to'xtab qolardi.
+
+`current_date` dan boshlanadi, `operating_since` dan EMAS: jadval «bugundan
+boshlab kadr olamiz» degani, «bozor qachondan beri ishlaydi» degani emas.
+Retroaktiv profil o'tmishdagi kunlar uchun reja materializatsiya qilishga
+urinardi va ularning hammasi darhol `missed` bo'lardi.
+=============================================================================
+
+⚠ `LANGUAGE plpgsql`, `sql` EMAS — VA BU MAJBURIY, USLUB TANLOVI EMAS
+   (o'lchangan, 04-03/T3).
+
+`LANGUAGE sql` funksiyaning tanasi `CREATE FUNCTION` PAYTIDA parse va
+validatsiya qilinadi (`check_function_bodies` standart `on`). Bu funksiyani
+esa `0007_market_domain` yaratadi — `MARKET_CORE_FUNCTIONS` ustidan tsikl
+qilib, MODULNING JORIY ta'rifidan. Ya'ni `sql` variantida `0007`
+`relation "public.snapshot_schedules" does not exist` bilan yiqilardi va
+NOL HOLATDAN qilingan har bir migratsiya to'xtardi (o'lchandi: butun
+tenancy va integration to'plami `ERROR at setup` bilan tushdi).
+
+`plpgsql` tanasi esa CREATE paytida tekshirilmaydi, ya'ni `0007` uni
+muammosiz yaratadi va `0015` almashtiradi. Bu YANGI nayrang emas —
+`MARKET_DELETE_DRAFT` `0010_calendar` dan beri AYNAN shu xususiyatga
+tayanadi: uning tanasi `cameras`/`snapshots` ga havola qiladi, o'sha
+jadvallar esa `0012`/`0014` da tug'iladi.
+
+NARXI HALOL YOZILADI: `0007` bilan `0015` orasidagi oynada funksiya
+tanasi hali mavjud bo'lmagan jadvallarga havola qiladi va CHAQIRILSA
+ish paytida yiqilardi. U oynada uni hech kim chaqirmaydi (migratsiya
+`head` gacha bitta buyruqda boradi, usta oqimi esa to'liq migratsiyalangan
+bazani talab qiladi) — `market_delete_draft()` bilan aynan bir xil holat.
 
 TO'LIQLIK TEKSHIRUVI BU YERDA ATAYIN YO'Q. U ilova qatlamida (02-11),
 chunki javob "yo'q" emas, `409` + YETISHMAYOTGAN QADAMLAR RO'YXATI bo'lishi
@@ -1046,6 +1148,25 @@ BEGIN
   IF v_is_active IS DISTINCT FROM false THEN
     RETURN false;
   END IF;
+
+  -- 4-faza snapshot domeni (0014_snapshot_domain). BLOK NVR BLOKIDAN
+  -- OLDIN TURISHI SHART va bu O'LCHANGAN, taxmin emas: `capture_runs`
+  -- `cameras` ga kompozit FK `(market_id, camera_id)` bilan tayanadi,
+  -- `cameras` esa pastdagi BIRINCHI o'chirish. Blok keyinga qo'yilganda
+  -- chaqiruv `ForeignKeyViolation: update or delete on table "cameras"
+  -- violates foreign key constraint "fk_capture_runs_market_id_camera_id_
+  -- cameras"` bilan yiqiladi — va statik darvoza buni SEZMAYDI (matnda
+  -- beshala jadval baribir bor).
+  --
+  -- Ichki tartib `SNAPSHOT_DELETE_ORDER` dan: `snapshots` ->
+  -- `capture_runs` -> slotlar -> profillar -> `alert_events`.
+  -- `alert_events` FK zanjirida umuman turmaydi, shuning uchun uning o'rni
+  -- ixtiyoriy va u oxirida.
+  DELETE FROM public.snapshots                  WHERE market_id = p_market_id;
+  DELETE FROM public.capture_runs               WHERE market_id = p_market_id;
+  DELETE FROM public.snapshot_schedule_slots    WHERE market_id = p_market_id;
+  DELETE FROM public.snapshot_schedules         WHERE market_id = p_market_id;
+  DELETE FROM public.alert_events               WHERE market_id = p_market_id;
 
   -- 3-faza NVR domeni (0012_nvr_domain). TARTIB MAJBURIY va u composite FK
   -- zanjiridan kelib chiqadi: uchala bolasi ham `nvr_devices` ga
@@ -1125,30 +1246,28 @@ kengaytirildi va darvoza qayta yashil bo'ldi. Ya'ni mexanizm o'zi uchun
 mo'ljallangan ishni bajardi: qarz to'lqinlar ORASIDA emas, ICHIDA yopildi.
 
 =============================================================================
-⏳ KUTILAYOTGAN QARZ (4-faza, W0-6) — TANA HALI TEGILMAGAN VA BU ATAYIN.
+✅ 4-FAZA QARZI YOPILDI (W0-6, `0015_market_delete_snapshots`, 04-03/T3).
 
-`0014_snapshot_domain` beshta yangi tenant jadvalini olib keladi va
-o'shanda yuqoridagi darvoza YANA QIZARADI — bu KUTILGAN va rejalashtirilgan
-xulq, xuddi 03-03 dagidek. Kengaytirish `0015` bilan, `04-03` rejasining
-AYNI OYNASIDA bajariladi.
+`0014_snapshot_domain` beshta yangi tenant jadvalini olib keldi va yuqoridagi
+darvoza AYTGANIDEK QIZARDI — xato xabarida beshala nom ham turdi
+(`['alert_events', 'capture_runs', 'snapshot_schedule_slots',
+'snapshot_schedules', 'snapshots']`). Kaskad `0015` da, AYNAN O'SHA
+REJANING oynasida kengaytirildi va darvoza qayta yashil bo'ldi. Mexanizm
+o'zi uchun mo'ljallangan ishni ikkinchi marta bajardi: qarz to'lqinlar
+ORASIDA emas, REJA ICHIDA yopildi.
 
-Kengaytiriladigan tartib `migrations/entities/__init__.py::SNAPSHOT_DELETE_ORDER`
-da yozilgan — ⚠ u BU YERDA TAKRORLANMAYDI. Ikki sabab:
+⚠ TARTIB STATIK DARVOZA BILAN O'LCHANMAYDI va bu muhim: matnda beshala
+jadval bo'lsa-yu, blok NVR blokidan KEYIN tursa,
+`test_cascade_covers_every_table_referencing_markets` YASHIL qolardi,
+chaqiruv esa `ForeignKeyViolation` bilan yiqilardi (`capture_runs` ->
+`cameras`). Aynan shuning uchun `test_draft_market_deletion_covers_the_
+snapshot_domain` funksiyani HAQIQATAN chaqiradi — u ikkinchi, mustaqil
+darvoza.
 
-  1. Reyestr YAGONA manba bo'lishi kerak; nusxa ajralib ketardi va
-     `0015` qaysi biriga qarashini hech kim ayta olmasdi.
-  2. `04-01` ning qabul mezoni `git diff` ni o'qiydi va u IZOHNI KODDAN
-     AJRATMAYDI: bu yerga kaskad qatorlarining LITERAL shaklini yozish
-     "tana o'zgardi" degan YOLG'ON-QIZIL signal berardi (3-fazadagi
-     `test_no_sim_branching` epizodlarining aynan o'sha sinfi — u ham
-     izoh va docstringni kod deb hisoblagan va to'rt marta otilgan).
-
-⚠ TANANI BUGUN KENGAYTIRIB BO'LMAYDI: `snapshots` va qolgan to'rttasi hali
-MAVJUD EMAS, ya'ni ularga o'chirish qatori yozilgan funksiya
-`op.replace_entity(...)` da `relation does not exist` bilan yiqilar va
-BUGUNGI usta oqimi testlarini DARHOL qizartirardi. Bu 3-fazadagi
-03-01 -> 03-03 juftligining aynan takrori va u o'sha yerda ham shu
-tartibda hal qilingan: reyestr oldin, tana migratsiya bilan birga.
+Ichki tartib `migrations/entities/__init__.py::SNAPSHOT_DELETE_ORDER` dan
+olingan; reyestr yagona manba bo'lib qoladi va uning o'zi
+`test_meta.py::test_snapshot_registries_are_self_consistent` bilan
+qulflangan.
 
 =============================================================================
 WR-02 — IKKI QATLAM, IKKALASI HAM KERAK (03-03 da yopildi).
@@ -1284,3 +1403,120 @@ MARKET_DOMAIN_GRANT_SIGNATURES: tuple[str, ...] = (
     *MARKET_CALENDAR_GRANT_SIGNATURES,
 )
 """`MARKET_DOMAIN_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari)."""
+
+
+# ===========================================================================
+# 0015_market_delete_snapshots — SNAPSHOT QUVURINING TIK YUZASI (4-faza)
+# ===========================================================================
+#
+# NEGA TIKKA ALOHIDA `SECURITY DEFINER` FUNKSIYA KERAK (§S-3, A.3):
+#
+# Bu 3-fazada BO'LMAGAN muammo. Kashfiyot jobi BITTA `market_id` bilan
+# chaqirilgan — u navbat xabaridan kelgan. Tik esa HAMMA bozorlar ustida
+# ishlashi kerak, `sbozor_app` roli esa tenant kontekstisiz BIRORTA bozorni
+# ko'rmaydi (`markets` policy'si `id = app.market_id`).
+#
+# Loyihada bu muammoning ALLAQACHON yechilgan shakli bor:
+# `auth_list_markets_full()` (`services/core-api/app/repositories/
+# market_repo.py:111-165`). Quyidagi funksiya uning JUFTI va u AYNAN o'sha
+# qoidaga bo'ysunadi: yuza iloji boricha TOR bo'ladi.
+
+CAPTURE_DUE_MARKETS = PGFunction(
+    schema="public",
+    signature="capture_due_markets()",
+    definition="""
+RETURNS TABLE (market_id uuid, due_count integer)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT m.id,
+           COALESCE(due.total, 0)::integer
+      FROM public.markets AS m
+      LEFT JOIN LATERAL (
+          SELECT count(*)::integer AS total
+            FROM public.capture_runs AS r
+           WHERE r.market_id = m.id
+             AND r.status = 'pending'
+             AND r.scheduled_at <= now()
+      ) AS due ON true
+     WHERE m.is_active
+       AND (
+           COALESCE(due.total, 0) > 0
+           OR NOT EXISTS (
+               SELECT 1
+                 FROM public.capture_runs AS planned
+                WHERE planned.market_id = m.id
+                  AND planned.business_date = ((now() AT TIME ZONE 'Asia/Tashkent')::date)
+           )
+       )
+$$
+""",
+)
+"""Tik uchun TOR yuza: qaysi bozorda ish bor (FAQAT identifikator va soni).
+
+=============================================================================
+YUZANING TORLIGI — BU FUNKSIYANING BUTUN XAVFSIZLIK DA'VOSI (T-04-16).
+
+Funksiya `SECURITY DEFINER`, ya'ni u RLS'ni CHETLAB O'TADI. Qaytaradigan
+yuzasi qanchalik keng bo'lsa, chetlab o'tish shunchalik keng — shuning
+uchun u AYNAN ikkita ustun beradi: bozor identifikatori va muddati kelgan
+slotlar soni. Bozor NOMI ham, kamera ham, sotuvchi ham, kadr ham YO'Q.
+
+Tik keyin HAR BOZOR uchun ALOHIDA tranzaksiya ochadi va unda
+`set_tenant_context(market_id=..., actor_kind=ActorKind.SYSTEM)` chaqiradi
+(`jobs/discovery.py::_system_transaction()` naqshi) — ya'ni keyingi BARCHA
+so'rovlar odatdagidek RLS ostidan o'tadi. Bitta tranzaksiyada ikki bozorni
+aralashtirish tenant sizib chiqishining eng qisqa yo'li bo'lardi, chunki
+GUC'lar `SET LOCAL` bilan qo'yiladi va `COMMIT` da tozalanadi.
+
+⚠ SQL TANASIDAGI IZOHLARDA BOZOR NOMI YOKI SOTUVCHI HAQIDA YOZMANG:
+darvoza `pg_get_functiondef()` chiqishini o'qiydi va u SQL izohlarini HAM
+o'z ichiga oladi (bu Python docstringi esa kirmaydi — u xavfsiz).
+=============================================================================
+
+IKKINCHI SHART (`NOT EXISTS`) — «REJANING O'ZI YARATILMADI» HOLATI.
+
+Bozor faqat `pending` qatorlari bo'lgani uchun qaytarilsa, BIRINCHI tik
+hech qachon reja yaratmasdi: reja yo'q -> `pending` yo'q -> bozor
+ko'rinmaydi -> reja yana yaratilmaydi. Bu KLASSIK JIM YIQILISH
+(`04-RESEARCH.md` §B.5): hech qanday xato chiqmaydi, hech qanday alert
+bo'lmaydi, bozor esa kadrsiz qoladi.
+
+Shuning uchun ikkinchi shart bugungi biznes-kunga rejasi HALI
+materializatsiya qilinmagan faol bozorlarni ham qaytaradi. Bugungi kun
+`(now() AT TIME ZONE 'Asia/Tashkent')::date` bilan hisoblanadi, ya'ni
+`capture_runs.business_date` ning generated ifodasi bilan AYNAN bir xil
+mintaqada.
+
+`STABLE` (`VOLATILE` emas): funksiya YOZMAYDI, faqat o'qiydi. `now()` ham
+tranzaksiya ichida barqaror.
+
+USTUN HAVOLALARI ALIAS BILAN: `RETURNS TABLE (market_id ...)` chiqish nomi
+SQL tanasida ko'rinadigan o'zgaruvchi bo'lib qoladi, ya'ni `r.market_id`
+o'rniga `market_id` yozish `column reference is ambiguous` xatosini
+berardi (fayl boshidagi umumiy qoida).
+"""
+
+SNAPSHOT_FUNCTIONS: list[PGFunction] = [CAPTURE_DUE_MARKETS]
+"""`0015_market_delete_snapshots` YARATADIGAN to'plam.
+
+⚠ `ALL_FUNCTIONS` GA QO'SHILMAYDI va bu ATAYIN (o'sha ro'yxatning o'z
+docstringi buni taqiqlaydi): `ALL_FUNCTIONS` — `0001_identity` ning
+MUZLATILGAN to'plami va `0001` uning ustidan tsikl qiladi. Yangi nomni u
+yerga qo'shish nol holatdan qilingan migratsiyani mavjud bo'lmagan
+obyektga `GRANT` berishga majburlab yiqitardi.
+
+Naqsh `AUTH_SUPPORT_FUNCTIONS` / `USER_ADMIN_FUNCTIONS` /
+`PLATFORM_AUDIT_FUNCTIONS` bilan aynan bir xil: har migratsiya O'Z
+scope'li ro'yxatini oladi.
+"""
+
+SNAPSHOT_GRANT_SIGNATURES: tuple[str, ...] = ("capture_due_markets()",)
+"""`SNAPSHOT_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari).
+
+`REVOKE ALL ... FROM PUBLIC` MAJBURIY: `CREATE FUNCTION` dan keyin Postgres
+yangi funksiyaga `EXECUTE TO PUBLIC` ni STANDART beradi, ya'ni bazadagi HAR
+QANDAY rol RLS'ni chetlab o'tadigan bu funksiyani chaqira olardi.
+"""

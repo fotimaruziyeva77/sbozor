@@ -19,6 +19,7 @@ from migrations.entities.functions import (
     AUTH_SUPPORT_FUNCTIONS,
     MARKET_DOMAIN_FUNCTIONS,
     PLATFORM_AUDIT_FUNCTIONS,
+    SNAPSHOT_FUNCTIONS,
     USER_ADMIN_FUNCTIONS,
 )
 from migrations.entities.policies import (
@@ -365,6 +366,12 @@ ALL_ENTITIES: list[Any] = [
     # Bozor hayot sikli (0007): yaratish/faollashtirish/nomlash/o'chirish
     # `SECURITY DEFINER`, `market_is_open()` esa ATAYIN INVOKER.
     *MARKET_DOMAIN_FUNCTIONS,
+    # Snapshot quvurining tik yuzasi (0015): `capture_due_markets()` —
+    # tenant kontekstisiz FAQAT identifikator qaytaradigan tor `SECURITY
+    # DEFINER` funksiya (§S-3). Reyestrga tushishi MAJBURIY: usiz tananing
+    # keyingi o'zgarishi autogenerate'da ko'rinmasdi va bazadagi ta'rif
+    # koddagisidan jimgina ajralib ketardi.
+    *SNAPSHOT_FUNCTIONS,
     # Audit yozuvchisi + append-only qo'riqchisi (D-10) + 2-faza domen
     # qoidalari (kod reyestri, tarif/toifa daxlsizligi).
     *ALL_TRIGGER_FUNCTIONS,

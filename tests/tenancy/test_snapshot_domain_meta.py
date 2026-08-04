@@ -31,13 +31,34 @@ va ular avtomatik invariantlar (`test_meta.py` ning beshtasi) bilan
 QOPLANMAYDI: o'sha yerdagi testlar `market_id` + RLS + policy + indeks
 tartibini tekshiradi, bu yerdagilar esa domenning O'Z qarorlarini.
 =============================================================================
+
+FAYLNING IKKINCHI YARMI — `0015` NING IKKI FUNKSIYA XULQI.
+
+Yuqoridagi oltitasi SXEMANI o'lchaydi (`pg_catalog` dan o'qiladi, hech
+nima chaqirilmaydi). Quyidagi ikkitasi esa funksiyani HAQIQATAN CHAQIRADI
+va bu ATAYIN boshqa sinf:
+
+  7. `market_activate()` standart 7 slotli profilni yozadi va IKKINCHI
+     chaqiruvda ikkinchi profil YARATMAYDI (D-01).
+  8. `capture_due_markets()` yuzasi TOR va predikati to'g'ri (T-04-16).
+
+Ular sxemadan o'lchab bo'lmaydi: «funksiya tanasida `INSERT` bor» degan
+matn tekshiruvi `WHERE NOT EXISTS` shartini ham, slotlar SONINI ham
+isbotlamaydi.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+from uuid import UUID
+
 import pytest
+from fixtures.nvr_domain import MarketNvrRows, nvr_rows
+from fixtures.two_markets import TwoMarketSeed
 from psycopg import Connection
 from psycopg.rows import TupleRow
+from sbozor_core.models.snapshot import DEFAULT_SNAPSHOT_SLOTS
+from sbozor_core.timeutil import now_tz
 
 from migrations.helpers import audit_trigger_name
 
@@ -407,4 +428,215 @@ def test_both_business_date_expressions_are_identical(
         f"  snapshots:    {snapshot_expr!r}\n"
         "Yarim tunga yaqin olingan kadr ikki jadvalda ikki xil biznes-kunga "
         "tushadi va 6-fazada dalil hisobda 'yo'q' bo'lib qoladi (Pitfall 3)."
+    )
+
+
+# ===========================================================================
+# `0015` — FUNKSIYA XULQI (chaqiriladi, sxemadan o'qilmaydi)
+# ===========================================================================
+
+
+def _schedule_shape(conn: Connection[TupleRow], market_id: UUID) -> tuple[int, int]:
+    """`(profillar soni, slotlar soni)` — bozor bo'yicha."""
+    row = conn.execute(
+        "SELECT (SELECT count(*) FROM snapshot_schedules WHERE market_id = %s), "
+        "       (SELECT count(*) FROM snapshot_schedule_slots WHERE market_id = %s)",
+        (str(market_id), str(market_id)),
+    ).fetchone()
+    assert row is not None
+    return int(row[0]), int(row[1])
+
+
+def test_activation_writes_the_default_schedule_idempotently(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    migrated: None,
+) -> None:
+    """`market_activate()` 7 slotli standart profil yozadi; IKKINCHI chaqiruv YO'Q (D-01).
+
+    =========================================================================
+    ADMIN SNAPSHOT JADVALI UCHUN HECH NIMA KIRITMAYDI.
+
+    Bu D-01 ning yagona bajarilish yo'li: usta oqimiga «snapshot jadvali»
+    qadami QO'SHILMAYDI (u `completedStepCount` ni buzardi), profil esa
+    faollashtirishning YON MAHSULOTI sifatida tug'iladi. Usiz yangi bozor
+    JIMGINA kadrsiz qolardi — `capture_due_markets()` uni qaytarardi,
+    materializatsiya 0 slot topib 0 qator yozardi va HECH QANDAY xato
+    chiqmasdi.
+
+    IDEMPOTENTLIK ALOHIDA O'LCHANADI va u tozalik emas: ikkinchi profil
+    `ex_snapshot_schedules_no_overlap` ni buzib, faollashtirishni SQLSTATE
+    `23P01` bilan yiqitardi — ya'ni admin ustaning OXIRGI qadamida
+    to'xtab qolardi. `WHERE NOT EXISTS` aynan shuni to'sadi.
+
+    ⚠ SLOT SONI `DEFAULT_SNAPSHOT_SLOTS` DAN OLINADI, qo'lda `7` deb
+      yozilmaydi: funksiya tanasi ham o'sha ro'yxatdan QURILADI, ya'ni
+      ikkalasi bitta manbadan keladi va ro'yxat o'zgarganda test
+      «yangilanishi» kerak bo'lmaydi — u baribir to'g'ri savolni beradi.
+    =========================================================================
+    """
+    market_id = two_markets.market_b.id
+    assert _schedule_shape(sync_owner_conn, market_id) == (0, 0), (
+        "seed allaqachon profil yozgan — test faollashtirishni emas, seedni o'lchagan bo'lardi"
+    )
+
+    sync_owner_conn.execute("SELECT market_activate(%s)", (str(market_id),))
+    schedules, slots = _schedule_shape(sync_owner_conn, market_id)
+
+    assert schedules == 1, (
+        f"faollashtirishdan keyin {schedules} ta profil bor, kutilgani 1 — "
+        "`market_activate()` standart profilni yozmayapti va admin jadvalni "
+        "QO'LDA kiritishi kerak bo'lib qoladi (D-01 buziladi)"
+    )
+    assert slots == len(DEFAULT_SNAPSHOT_SLOTS), (
+        f"profilda {slots} ta slot bor, kutilgani {len(DEFAULT_SNAPSHOT_SLOTS)} "
+        "(`DEFAULT_SNAPSHOT_SLOTS`). Slot INSERT'i tushib qolgan bo'lsa profil "
+        "bor-u, kadr olinmaydi — eng yomon holat, chunki UI 'jadval sozlangan' "
+        "deb ko'rsatadi."
+    )
+
+    # IKKINCHI CHAQIRUV — idempotentlik.
+    sync_owner_conn.execute("SELECT market_activate(%s)", (str(market_id),))
+    assert _schedule_shape(sync_owner_conn, market_id) == (1, len(DEFAULT_SNAPSHOT_SLOTS)), (
+        "ikkinchi `market_activate()` chaqiruvi jadvalni o'zgartirdi — "
+        "`WHERE NOT EXISTS` shartisiz u `ex_snapshot_schedules_no_overlap` ni "
+        "buzib SQLSTATE `23P01` beradi va usta oxirgi qadamda to'xtaydi"
+    )
+
+    sync_owner_conn.execute(
+        "DELETE FROM snapshot_schedule_slots WHERE market_id = %s", (str(market_id),)
+    )
+    sync_owner_conn.execute(
+        "DELETE FROM snapshot_schedules WHERE market_id = %s", (str(market_id),)
+    )
+
+
+def test_capture_due_markets_exposes_only_identifiers(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    migrated: None,
+) -> None:
+    """`capture_due_markets()` yuzasi TOR va predikati to'g'ri (T-04-16, §S-3).
+
+    =========================================================================
+    UCHTA MUSTAQIL DA'VO, UCHALASI HAM ALOHIDA BUZILISHI MUMKIN:
+
+    1. **YUZA TOR.** Funksiya `SECURITY DEFINER`, ya'ni u RLS'ni CHETLAB
+       O'TADI — qaytaradigan yuzasi qanchalik keng bo'lsa, chetlab o'tish
+       shunchalik keng. `market_repo.py:111-165` dagi
+       `auth_list_markets_full()` bilan bir xil qoida. Ta'rifi
+       `pg_get_functiondef()` dan o'qiladi, ya'ni SQL izohlari HAM
+       tekshiriladi (Python docstringi esa unga kirmaydi).
+
+    2. **MUDDATI KELMAGAN SLOT — ISH EMAS.** Rejasi bor, lekin
+       `scheduled_at > now()` bo'lgan bozor qaytarilmasligi kerak; aks
+       holda tik har daqiqada BARCHA bozorlarni qayta ko'rib chiqardi.
+
+    3. **REJASI YO'Q BOZOR — ISH BOR.** Bu «jim yiqilish» ning oldini
+       oladi (`04-RESEARCH.md` §B.5): faqat `pending` bo'yicha filtrlansa
+       BIRINCHI tik hech qachon reja yaratmasdi — reja yo'q -> `pending`
+       yo'q -> bozor ko'rinmaydi -> reja yana yaratilmaydi. Xato yo'q,
+       alert yo'q, kadr ham yo'q.
+    =========================================================================
+    """
+    definition = sync_owner_conn.execute(
+        "SELECT pg_get_functiondef('public.capture_due_markets()'::regprocedure)"
+    ).fetchone()
+    assert definition is not None, "`capture_due_markets()` bazada topilmadi"
+    body = str(definition[0])
+
+    assert "SECURITY DEFINER" in body, (
+        "`capture_due_markets()` `SECURITY DEFINER` emas — tik tenant kontekstisiz "
+        "birorta bozorni ko'ra olmaydi va materializatsiya JIMGINA 0 qator yozadi"
+    )
+    assert "search_path" in body, (
+        "`SET search_path` yo'q — `SECURITY DEFINER` funksiyada bu klassik "
+        "privilege-escalation vektori"
+    )
+    for forbidden in ("market_name", "vendor"):
+        assert forbidden not in body, (
+            f"`capture_due_markets()` ta'rifida `{forbidden}` uchraydi. Funksiya "
+            "RLS'ni chetlab o'tadi, ya'ni uning yuzasi FAQAT identifikator va "
+            "sanoqdan iborat bo'lishi shart (T-04-16)."
+        )
+
+    with nvr_rows(sync_owner_conn, two_markets) as nvr:
+        a = nvr.market_a
+        sync_owner_conn.execute(
+            "UPDATE markets SET is_active = true WHERE id = %s", (str(a.market_id),)
+        )
+        # (3) REJASI YO'Q -> QAYTARILADI (birinchi tik reja yaratishi kerak).
+        assert a.market_id in _due_market_ids(sync_owner_conn), (
+            "rejasi hali materializatsiya qilinmagan FAOL bozor qaytarilmadi — "
+            "birinchi tik hech qachon reja yaratmasdi va bozor JIMGINA kadrsiz "
+            "qolardi (`04-RESEARCH.md` §B.5)"
+        )
+
+        # (2) BUGUNGI REJA BOR, LEKIN MUDDATI KELMAGAN -> QAYTARILMAYDI.
+        _insert_run(sync_owner_conn, a, when=now_tz() + _NEAR, slot_index=0)
+        assert a.market_id not in _due_market_ids(sync_owner_conn), (
+            "muddati KELMAGAN slotlari bor bozor qaytarildi — tik har daqiqada "
+            "barcha bozorlarni qayta ko'rib chiqardi va `scheduled_at <= now()` "
+            "predikati ma'nosini yo'qotardi"
+        )
+
+        # (1') MUDDATI KELGAN SLOT -> QAYTARILADI, `due_count` bilan.
+        _insert_run(sync_owner_conn, a, when=now_tz() - _NEAR, slot_index=1)
+        due = dict(_due_rows(sync_owner_conn))
+        assert due.get(a.market_id) == 1, (
+            f"muddati kelgan bitta slot uchun `due_count` {due.get(a.market_id)} — "
+            "kutilgani 1. Tik bu sonni fan-out o'lchami uchun ishlatadi."
+        )
+
+        sync_owner_conn.execute(
+            "DELETE FROM capture_runs WHERE market_id = %s", (str(a.market_id),)
+        )
+
+
+_NEAR = timedelta(minutes=5)
+"""«Hozirga yaqin» oyna — `scheduled_at` ni `now()` ning ikki tomoniga suradi.
+
+ATAYIN KICHIK: qiymat `business_date` ni ham belgilaydi (u generated ustun
+va `scheduled_at` dan hisoblanadi), ya'ni katta siljish yarim tundan o'tib
+qatorni BOSHQA biznes-kunga yozardi va «bugungi reja bor» sharti jimgina
+buzilardi. Besh daqiqa bilan test faqat yarim tunning atigi o'n daqiqalik
+oynasida nozik bo'lib qoladi.
+"""
+
+
+def _due_rows(conn: Connection[TupleRow]) -> list[tuple[UUID, int]]:
+    rows = conn.execute("SELECT market_id, due_count FROM capture_due_markets()").fetchall()
+    return [(row[0], int(row[1])) for row in rows]
+
+
+def _due_market_ids(conn: Connection[TupleRow]) -> set[UUID]:
+    return {market_id for market_id, _ in _due_rows(conn)}
+
+
+def _insert_run(
+    conn: Connection[TupleRow],
+    rows: MarketNvrRows,
+    *,
+    when: datetime,
+    slot_index: int,
+) -> None:
+    """BITTA `pending` `capture_runs` qatorini yozadi.
+
+    `scheduled_at` ATAYIN argument va u IKKI narsani birdan belgilaydi:
+    qator qaysi biznes-kunga tegishli (generated ustun) va uning muddati
+    kelganmi. Ikkalasi bitta qiymatdan kelgani uchun test ularni ALOHIDA
+    o'lchaydi — avval «bugungi, lekin muddati kelmagan», keyin «bugungi va
+    muddati kelgan».
+    """
+    conn.execute(
+        "INSERT INTO capture_runs "
+        "(market_id, camera_id, nvr_id, slot_time, scheduled_at, status, is_market_open) "
+        "VALUES (%s, %s, %s, %s, %s, 'pending', true)",
+        (
+            str(rows.market_id),
+            str(rows.active_camera_ids[0]),
+            str(rows.nvr_id),
+            DEFAULT_SNAPSHOT_SLOTS[slot_index],
+            when,
+        ),
     )
