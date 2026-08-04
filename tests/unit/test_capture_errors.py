@@ -83,15 +83,15 @@ def test_auth_locking_codes_are_derived_from_the_metadata() -> None:
     """
     expected = {code for code, meta in CAPTURE_ERROR_META.items() if meta.locks_account}
 
-    assert CAPTURE_AUTH_LOCKING_CODES == expected
-    assert CAPTURE_AUTH_LOCKING_CODES <= set(CAPTURE_ERROR_CODES)
+    assert expected == CAPTURE_AUTH_LOCKING_CODES
+    assert set(CAPTURE_ERROR_CODES) >= CAPTURE_AUTH_LOCKING_CODES
 
 
 def test_defer_codes_are_derived_from_the_metadata() -> None:
     """Xuddi shu qoida `defer` o'lchami uchun ham."""
     expected = {code for code, meta in CAPTURE_ERROR_META.items() if meta.defer}
 
-    assert CAPTURE_DEFER_CODES == expected
+    assert expected == CAPTURE_DEFER_CODES
 
 
 def test_bad_credentials_locks_the_account_and_is_not_retried() -> None:
@@ -143,7 +143,7 @@ def test_job_error_codes_is_the_whole_registry() -> None:
     Ikki nusxa bo'lganda job bazaga kod yozib, API uni tanimasdi va
     frontend `errors.generic` ko'rsatib sababni yo'qotardi (§S-5/§S-7).
     """
-    assert CAPTURE_JOB_ERROR_CODES == frozenset(CAPTURE_ERROR_CODES)
+    assert frozenset(CAPTURE_ERROR_CODES) == CAPTURE_JOB_ERROR_CODES
 
 
 def test_platform_owns_the_codes_the_admin_cannot_fix() -> None:
