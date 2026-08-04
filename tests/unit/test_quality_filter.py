@@ -33,8 +33,6 @@ import io
 from typing import Final
 
 import pytest
-from PIL import Image, ImageFile
-
 from app.services.quality import (
     LIGHT_DAY,
     LIGHT_IR_NIGHT,
@@ -54,6 +52,7 @@ from app.services.quality import (
     analyze,
 )
 from fixtures.frames import HTML_ERROR_PAGE, frame_bytes, truncate
+from PIL import Image, ImageFile
 
 _RULE: Final = QualityThresholds(
     min_bytes=2_000,
@@ -108,9 +107,20 @@ def _png_body() -> bytes:
     HTML sahifa yoki bo'sh tana magic darvozasisiz ham `corrupt` bo'lardi
     (`Image.open` ularni umuman tanimaydi), ya'ni ular darvozani
     O'LCHAMAYDI — ular faqat natijani takrorlaydi. PNG esa muvaffaqiyatli
-    dekodlanadi va statistikasi hisoblanadi: magic darvozasi olib
-    tashlansa bu tana `ok` bo'lib chiqadi. Shuning uchun aynan u sabotaj
-    o'lchovi bo'ladi.
+    dekodlanadi va statistikasi hisoblanadi: SOI darvozasi olib tashlansa
+    bu tana `ok` bo'lib chiqadi. Shuning uchun aynan u sabotaj o'lchovi.
+
+    ⚠ OXIRIGA JPEG NING EOI MARKERI QO'SHILADI — VA BU O'LCHOV NATIJASI.
+      Usiz PNG oxirgi ikki bayti `\\xff\\xd9` emasligi uchun KEYINGI
+      (EOI) darvozada to'xtardi va SOI darvozasi olib tashlanganda
+      verdikt baribir `corrupt` bo'lib qolardi (o'lchandi 2026-08-04:
+      sabotaj `reason` ni `not_a_jpeg` dan `missing_end_of_image` ga
+      o'zgartirdi, VERDIKTNI emas). Marker qo'shilgach tana IKKALA
+      keyingi darvozadan ham o'tadi va SOI qadami YAGONA to'sqinlik
+      bo'lib qoladi.
+
+      PNG dekoderi `IEND` bo'lagida to'xtaydi, ya'ni ortiqcha ikki bayt
+      tasvirni buzmaydi — bu ham o'lchandi.
 
     1280x720 tanlangan: o'lchandi — 320x180 PNG 643 bayt, ya'ni u
     `min_bytes` polida to'xtardi va yana darvozani o'lchamasdi.
@@ -118,7 +128,7 @@ def _png_body() -> bytes:
     source = Image.open(io.BytesIO(frame_bytes(mean=140, stddev=45, size=(1280, 720))))
     buffer = io.BytesIO()
     source.save(buffer, "PNG")
-    return buffer.getvalue()
+    return buffer.getvalue() + b"\xff\xd9"
 
 
 # ---------------------------------------------------------------------------
