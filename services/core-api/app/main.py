@@ -55,6 +55,8 @@ from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
 from app.api.v1.nvr import router as nvr_router
 from app.api.v1.schedules import router as schedules_router
+from app.api.v1.snapshots import alerts_router, capture_runs_router
+from app.api.v1.snapshots import router as snapshots_router
 from app.api.v1.stalls import router as stalls_router
 from app.api.v1.tariffs import router as tariffs_router
 from app.api.v1.users import router as users_router
@@ -339,6 +341,20 @@ app.include_router(cameras_router, prefix=f"{API_V1_PREFIX}/cameras")
 # Yangi yo'l parametri (`schedule_id`) cross-tenant matritsasining
 # `PARAM_FILLERS` iga, `POST`/`PATCH` esa `BODY_FILLERS` ga qo'shildi.
 app.include_router(schedules_router, prefix=f"{API_V1_PREFIX}/snapshot-schedules")
+# --- 04-09: kun jurnali, kadr detali, RASM PROXYSI va ogohlantirishlar ---
+#
+# ⚠ UCHTA ROUTER, UCHTA PREFIKS — VA U ATAYIN. Ular bitta faylda yashaydi
+# (`snapshots.py`: bitta mahsulot ekranining uch zonasi), lekin UCH XIL
+# resurs. Umumiy prefiks (`/snapshots/capture-runs`) kun jurnalini
+# kadrning BOLASI qilib ko'rsatardi — holbuki jurnalning yarmida kadr
+# umuman yo'q (`missed`, `failed`, `pending`).
+#
+# ⛔ `GET /snapshots/{id}/image` — OMBOR YUZASINING YAGONA chiqish nuqtasi.
+# Presigned URL BERILMAYDI va uning to'rt sababi `snapshots.py` modul
+# docstringida (audit, RLS, manzil oshkorligi, data-rezidentlik).
+app.include_router(capture_runs_router, prefix=f"{API_V1_PREFIX}/capture-runs")
+app.include_router(snapshots_router, prefix=f"{API_V1_PREFIX}/snapshots")
+app.include_router(alerts_router, prefix=f"{API_V1_PREFIX}/alerts")
 # --- 03-07: nginx `auth_request` nishoni (SC#6, D-11) ---
 #
 # ⚠ PREFIKSSIZ VA `API_V1_PREFIX` DAN TASHQARIDA — `/healthz` bilan bir
