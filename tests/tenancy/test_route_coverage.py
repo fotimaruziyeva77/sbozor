@@ -46,7 +46,7 @@ from tenancy.test_cross_tenant import (
 
 pytestmark = pytest.mark.tenancy
 
-MINIMUM_MATRIX_ROUTES = 42
+MINIMUM_MATRIX_ROUTES = 48
 """Matritsada kamida shuncha marshrut bo'lishi shart.
 
 01-07 holatida qamrovda 7 marshrut bor edi (`/users` GET+POST,
@@ -63,7 +63,19 @@ import marshrutini qo'shdi (`template`, `stalls`, `vendors`,
 03-06 yettita NVR marshrutini qo'shdi (`POST`/`GET /nvr-devices`,
 `POST /test-connection`, `PATCH /{nvr_id}`, `POST /{nvr_id}/password`,
 `POST /{nvr_id}/discover`, `GET /{nvr_id}/discovery-runs/{run_id}`) —
-amaldagi son 51, chegara 42.
+amaldagi son 51, chegara 42. 03-07 kameralarning oltitasini qo'shdi.
+04-09 esa TO'QQIZTASINI: jadval beshta (`GET /today`, `GET ""`,
+`POST ""`, `PATCH /{schedule_id}`, `DELETE /{schedule_id}`) va kadr
+yuzasi to'rtta (`GET /capture-runs`, `GET /snapshots/{snapshot_id}`,
+`GET /snapshots/{snapshot_id}/image`, `GET /alerts`) — chegara 48.
+
+⚠ To'qqiztadan UCHTASI matritsaga FAQAT `PARAM_FILLERS` ga B bozorining
+HAQIQIY `schedule_id` va `snapshot_id` qatorlari qo'shilgani uchun
+tushadi. Ikkala qator ham `fixtures/snapshot_domain.py` seedida
+mavjud va ular `TenantSeed.snapshot` qatlami orqali keladi.
+
+⚠ `/internal/self-check` bu sanoqqa KIRMAYDI: u `EXEMPT_ROUTES` da va
+sabab o'sha yerda yozilgan (`live-authz` bilan bir xil toifa).
 
 ⚠ Yettitasidan IKKITASI (`{nvr_id}` va `{run_id}`) matritsaga FAQAT
 `PARAM_FILLERS` ga B bozorining HAQIQIY qatorlari qo'shilgani uchun

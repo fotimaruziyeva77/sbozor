@@ -21,20 +21,24 @@ to'sqinlik qilmaydi — shakllar bo'lim izohlari ostida guruhlangan.
 
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Annotated, Any, Final
+from datetime import date, datetime, time
+from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from sbozor_core.enums import CameraStatus, DiscoveryRunStatus, Locale, Role, StallStatus
 from sbozor_core.money import MAX_SAFE_SOUM
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
 from app.jobs.discovery import DISCOVERY_JOB_ERROR_CODES
+from app.services.capture_errors import CAPTURE_JOB_ERROR_CODES
 from app.services.isapi.errors import NVR_ERROR_CODES
 
 __all__ = [
+    "ALERT_DETAIL_KEYS",
     "AUDIT_PAGE_SIZE_MAX",
+    "AlertEventOut",
+    "AlertListResponse",
     "AssignmentCloseRequest",
     "AssignmentCreateRequest",
     "AssignmentItem",
@@ -51,12 +55,15 @@ __all__ = [
     "CameraQuery",
     "CameraRead",
     "CameraUpdateRequest",
+    "CaptureDayOut",
+    "CaptureRunOut",
     "CategoryItem",
     "CategoryListResponse",
     "CategoryRequest",
     "ChangePasswordRequest",
     "CreateUserRequest",
     "CreateUserResponse",
+    "DaySummaryOut",
     "DiscoveryConflictResponse",
     "DiscoveryRunRead",
     "DiscoveryStartResponse",
@@ -89,10 +96,20 @@ __all__ = [
     "ProfileResponse",
     "RefreshResponse",
     "ResetPasswordResponse",
+    "SCHEDULE_NAME_MAX",
+    "SCHEDULE_TIMES_PAYLOAD_MAX",
     "STALL_PAGE_SIZE_MAX",
+    "ScheduleCreateIn",
+    "ScheduleDayOut",
+    "ScheduleItemOut",
+    "ScheduleListResponse",
+    "ScheduleProfileOut",
+    "ScheduleSlotsIn",
+    "ScheduleTodayOut",
     "SelectMarketRequest",
     "SessionResponse",
     "SetupStatusResponse",
+    "SnapshotDetailOut",
     "StaffCredentialItem",
     "StaffImportResponse",
     "StallCategoryRequest",
@@ -565,6 +582,33 @@ MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
         #   ko'rsatardi va nosozlik FAQAT foydalanuvchi ekranida ko'rinardi.
         *NVR_ERROR_CODES,
         *DISCOVERY_JOB_ERROR_CODES,
+        # --- snapshot jadvali (04-09, CAM-04, D-05) ---
+        #
+        # To'rttasi HTTP chegarasida tug'iladi: repozitoriyning to'rt xato
+        # sinfi (`schedule_repo`) shu kodlarga o'giriladi. Ular kadr olish
+        # taksonomiyasiga TUSHMAYDI — o'sha reyestr `capture_runs.error_code`
+        # ustuni uchun (§S-7 ning ikkilikka bo'lish qoidasi).
+        "schedule_starts_too_soon",
+        "schedule_slots_invalid",
+        "schedule_not_editable",
+        "schedule_period_overlaps",
+        # --- kadr yuzasi (04-09, CAM-06) ---
+        #
+        # Kadr obyekti arxivdan CHIQARILGAN (`storage_tier='purged'`,
+        # D-18): qator joyida, bayt yo'q. `not_found` DAN ATAYIN AJRATILGAN —
+        # 404 «bunday kadr bo'lmagan» deydi va admin dalilni izlashda
+        # davom etardi; bu kod esa «bor edi, 455 kun o'tdi» deydi.
+        "snapshot_object_purged",
+        "snapshot_storage_unavailable",
+        # --- kadr olish taksonomiyasi (04-04) ---
+        #
+        # ⚠ IMPORT QILINADI, QO'LDA TAKRORLANMAYDI (§S-7). Nusxa
+        #   ko'chirilganda job bazaga `capture_stream_limit` yozib, API uni
+        #   tanimay `errors.generic` ko'rsatardi va sabab FAQAT
+        #   foydalanuvchi ekranida yo'qolardi. Bu kodlar `capture_runs.
+        #   error_code` ustunida yashaydi va kun jurnali (`CaptureRunOut`)
+        #   ularni AYNAN shu satr bilan qaytaradi.
+        *CAPTURE_JOB_ERROR_CODES,
     }
 )
 """2-faza qaytaradigan BARCHA `detail` kodlari — yigirma to'rtta.
@@ -1854,3 +1898,385 @@ class LiveTokenResponse(BaseModel):
     url: str
     expires_in: int
     transport_hint: str
+
+
+# ===========================================================================
+# 4-FAZA — SNAPSHOT JADVALI, KUN JURNALI VA KADR DETALI (04-09)
+# ===========================================================================
+#
+# ⛔⛔ BU BO'LIMDAGI BIRORTA MODELDA `object_key` MAYDONI YO'Q VA HECH
+#     QACHON QO'SHILMAYDI (`04-UI-SPEC.md` §14.3).
+#
+# Ombor (SeaweedFS) manzili, bucket nomi va obyekt kaliti brauzerga
+# HECH QANDAY KO'RINISHDA chiqmaydi — na maydon, na sarlavha, na
+# `<details>` bloki sifatida. Kadr FAQAT `GET /snapshots/{id}/image`
+# proxysi orqali beriladi.
+#
+# To'rt sabab (`app/api/v1/snapshots.py` modul docstringida to'liq):
+# auditni buzadi, RLS'ni chetlab o'tadi, ombor manzilini oshkor qiladi
+# va data-rezidentlik ko'chishini refaktoringga aylantiradi.
+#
+# Mexanik darvoza: `SnapshotDetailOut.model_fields` da `object_key`
+# yo'qligi 04-09 ning qabul mezonida tekshiriladi.
+# ===========================================================================
+
+SCHEDULE_NAME_MAX = 40
+"""Mavsumiy profil nomining uzunligi (`04-UI-SPEC.md` §4.7)."""
+
+SCHEDULE_TIMES_PAYLOAD_MAX = 100
+"""So'rov tanasidagi vaqtlar ro'yxatining SUISTE'MOL shifti.
+
+⚠ BU BIZNES CHEGARASI EMAS. Kunlik slot chegarasi —
+  `Settings.snapshot_max_times_per_day` va u `ScheduleRepository.
+  _normalize()` da majburlanadi (`04-UI-SPEC.md` §4.6 `[TALAB]`).
+
+Ikkisi ATAYIN ajratilgan: agar DTO ning O'ZI `MAX_TIMES_PER_DAY` bilan
+chegaralansa, sozlama PASAYTIRILGANDA (masalan 5 ga) haqiqiy darvoza
+UMUMAN ISHGA TUSHMASDI — Pydantic 12 tagacha ruxsat berardi va
+sozlamaga tayangan tekshiruv o'lik kod bo'lib qolardi. Bu yerdagi son
+esa faqat cheksiz ro'yxat bilan xotira yeyishni to'sadi.
+"""
+
+_ScheduleNameStr = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=SCHEDULE_NAME_MAX),
+]
+
+ALERT_DETAIL_KEYS: Final[frozenset[str]] = frozenset(
+    {"market_name", "camera_count", "error_code", "slot_time", "stale_hours", "disk_pct"}
+)
+"""`alert_events.detail` dan UI'ga CHIQADIGAN kalitlar — ALLOWLIST (§6.7).
+
+⚠ ALLOWLIST, DENYLIST EMAS. `detail` — `jsonb` ustuni, ya'ni unga
+  kelajakdagi har qanday alert yozuvchisi istalgan kalitni yozishi
+  mumkin. Denylist bilan har yangi kalit UI'ga JIMGINA chiqib ketardi
+  va D-19 ning «faqat matn va sonlar» qoidasi birinchi e'tiborsizlikda
+  buzilardi.
+
+Filtr `AlertEventOut` ning O'ZIDA (`_filter_detail` validatori),
+marshrutda EMAS: marshrutda bo'lsa ikkinchi chaqiruvchi uni chetlab
+o'tardi.
+"""
+
+
+class ScheduleProfileOut(BaseModel):
+    """Bitta mavsumiy profil (`04-UI-SPEC.md` §4.3 ning `profile` obyekti).
+
+    `mode` HISOBLANADI, ustunda saqlanmaydi (`schedule_repo._mode_of`):
+    profil faqat davrni biladi, «o'tmishmi yoki kelajakmi» esa BUGUNGA
+    nisbatan aniqlanadi. Ustun sifatida saqlansa har kuni yarim tunda
+    migratsiya talab qilardi.
+
+    `ends_on` `None` — ochiq oxirli («hozircha amaldagi profil»).
+    """
+
+    id: UUID
+    name: str
+    starts_on: date
+    ends_on: date | None
+    mode: Literal["past", "active", "future"]
+
+
+class ScheduleDayOut(BaseModel):
+    """Bitta kunning vaqtlari — SANA va VAQTLAR BIRGA.
+
+    Sana ATAYIN shu obyektning ichida (`schedule_repo.DayPlan` bilan bir
+    xil qaror): `times` yolg'iz qaytarilsa UI uning QAYSI kunga tegishli
+    ekanini o'zi hisoblab olardi va yarim tunda server bilan bir kun
+    farq qilardi.
+    """
+
+    date: date
+    times: list[time]
+
+
+class ScheduleTodayOut(BaseModel):
+    """`GET /snapshot-schedules/today` — BITTA so'rovdagi butun holat.
+
+    =======================================================================
+    ⛔ «BUGUN» VA «ERTAGA» BITTA JAVOBDA — VA BU SHAKLNING BUTUN SABABI.
+
+    Ikki so'rovga bo'linsa ular TURLI lahzada olinardi va yarim tun
+    atrofida ikkalasi BIR KUNNI ko'rsatib qolardi. Ya'ni D-05 ning yagona
+    ko'rsatkichi («bugun 7 slot · ertaga 5 slot») aynan eng muhim
+    daqiqada yolg'on bo'lardi — va admin jadvalni tahrirlagandan keyin
+    «o'zgarish qachon kuchga kiradi?» savoliga noto'g'ri javob olardi.
+
+    Repozitoriy tomonda bu kafolat BITTA `SELECT` bilan qulflangan
+    (`schedule_repo._TODAY_AND_TOMORROW`: ikkala sana ham AYNI `now()` dan).
+    =======================================================================
+
+    `profile` `None` bo'lishi mumkin — bozorda birorta profil bo'lmasa.
+    Bugun QOPLANMAGAN bo'lsa `profile` eng yaqin profilni beradi va `mode`
+    uning qaysi tomonda ekanini aytadi, shunda UI «keyingi jadval {sana}
+    da boshlanadi» deya oladi.
+
+    `differs` PROFIL bo'yicha hisoblanadi, vaqtlar ro'yxati bo'yicha emas:
+    ikki profilning vaqtlari tasodifan bir xil bo'lishi mumkin, lekin UI
+    ogohlantirishi «jadval o'zgaradi» haqida.
+    """
+
+    profile: ScheduleProfileOut | None
+    today: ScheduleDayOut
+    tomorrow: ScheduleDayOut
+    differs: bool
+    capture_on_closed_days: bool
+    uncovered_days: int
+    uncovered_horizon_days: int
+
+
+class ScheduleItemOut(ScheduleProfileOut):
+    """Ro'yxat elementi — profil + uning vaqtlari (DL-2, `04-UI-SPEC.md` §4.4).
+
+    `ScheduleProfileOut` dan MEROS OLADI, nusxa emas: `/today` va ro'yxat
+    bir xil profil shaklini ko'rsatishi kerak, aks holda UI ikki xil
+    obyektga moslashardi.
+    """
+
+    times: list[time]
+
+
+class ScheduleListResponse(BaseModel):
+    """Bozorning BARCHA profillari — davr boshlanishi bo'yicha o'sish tartibida.
+
+    Sahifalash YO'Q: mavsumiy profil yiliga bir necha marta qo'shiladi
+    («Qishki», «Ramazon»), ya'ni ro'yxat tabiiy ravishda o'nlab qatorda
+    qoladi. Kursorli sahifalash bu yerda faqat klient murakkabligini
+    oshirardi (`TariffListResponse` bilan bir xil qaror).
+    """
+
+    items: list[ScheduleItemOut]
+
+
+class ScheduleCreateIn(BaseModel):
+    """`POST /snapshot-schedules` tanasi — mavsumiy profil (`04-UI-SPEC.md` §4.7).
+
+    ⚠ `market_id` MAYDONI YO'Q (T-02-54 ning literal qoidasi): bozor
+      FAQAT `principal.market_id` dan olinadi.
+
+    ⚠ `starts_on` ENG ERTA ERTAGA (D-05). Bugundan boshlanadigan profil
+      bugungi rejani IKKI XIL holatda qoldirardi — ertalabki slotlar eski
+      jadvaldan, kechkilari yangisidan — va o'sha kunning hisoboti hech
+      qaysi profil bilan tushuntirilmasdi. Darvoza SERVERDA
+      (`ScheduleRepository.create_seasonal`), bu yerda EMAS: sana
+      taqqoslash «bugun» ni bilishni talab qiladi va u bozor
+      mintaqasidan keladi.
+
+    `ends_on` `None` — ochiq oxirli profil.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: _ScheduleNameStr
+    starts_on: date
+    ends_on: date | None = None
+    times: Annotated[list[time], Field(min_length=1, max_length=SCHEDULE_TIMES_PAYLOAD_MAX)]
+
+
+class ScheduleSlotsIn(BaseModel):
+    """`PATCH /snapshot-schedules/{id}` tanasi — FAQAT vaqtlar (`04-UI-SPEC.md` §4.5).
+
+    =======================================================================
+    ⛔ `extra="forbid"` — VA U SHU YERDAGI YAGONA MEXANIZM.
+
+    `active` profilda faqat VAQTLAR tahrirlanadi: davrni siljitish
+    o'tmishdagi `capture_runs` qatorlarini tushuntirmay qo'yardi («o'sha
+    kuni nega faqat 5 kadr bor?» savolining javobi aynan profilning
+    davri).
+
+    `extra="forbid"` bo'lmasa `{"times": [...], "starts_on": "2026-01-01"}`
+    so'rovi 200 qaytarardi va `starts_on` JIMGINA e'tiborsiz qolardi —
+    ya'ni klient «davrni o'zgartirdim» deb o'ylab, hech nima
+    o'zgarmagan bo'lardi. Jim e'tiborsizlik — rad etishdan yomonroq.
+    =======================================================================
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    times: Annotated[list[time], Field(min_length=1, max_length=SCHEDULE_TIMES_PAYLOAD_MAX)]
+
+
+class CaptureRunOut(BaseModel):
+    """Kun jurnali matritsasining BITTA hujayrasi (`04-UI-SPEC.md` §6.4).
+
+    ⛔ TO'QQIZTA HUJAYRA HOLATINING HAMMASI SHU YERDAN CHIZILADI va
+       ulardan biri — `missed` — YO'QLIK yozuvi: qator MAVJUD, lekin unda
+       hech qachon urinish bo'lmagan. Aynan shu holat SC#2 ning o'zagi:
+       «bizning tizimimiz ishlamadi» (`missed`) bilan «NVR javob
+       bermadi» (`failed`) operatsion jihatdan butunlay boshqa va ular
+       BIR XIL ko'rinishi dala diagnostikasini o'ldirardi.
+
+    Ya'ni javob NIMA SODIR BO'LGANINI emas, NIMA SODIR BO'LISHI KERAK
+    EDIni ham ifodalaydi — `status` + `quality_verdict` juftligi UI'ga
+    to'qqizala holatni ajratish uchun yetadi:
+
+        succeeded + ok      -> olindi       succeeded + dark    -> qorong'i
+        succeeded + blank   -> bo'sh        succeeded + corrupt -> buzuq
+        failed              -> xato         missed              -> OLINMADI
+        pending             -> kutilmoqda   running             -> olinmoqda
+        skipped             -> rejaga kirmagan
+
+    `tone` va ikonka BU YERDA YO'Q (D-20 naqshi): API xom faktlarni
+    beradi, ko'rinishni frontend hosil qiladi.
+
+    `is_archived` HAM YO'Q — arxivlangan kameraning qatorlari javobga
+    umuman kirmaydi va uning O'RNIGA `CaptureDayOut.archived_present`
+    bayrog'i turadi.
+    """
+
+    run_id: UUID
+    camera_id: UUID
+    channel_no: int
+    camera_name: str
+    slot_time: time
+    scheduled_at: datetime
+    status: str
+    attempts: int
+    error_code: str | None
+    quality_verdict: str | None
+    snapshot_id: UUID | None
+
+
+class DaySummaryOut(BaseModel):
+    """Kunning OLTALA hisoblagichi + `planned`/`done` (`04-UI-SPEC.md` §6.3).
+
+    ⛔ NOL QIYMAT — NATIJA, UNING YO'QLIGI EMAS. Barcha maydonlar HAR
+       DOIM to'ldiriladi va ixtiyoriy EMAS: `corrupt: 0` bilan «corrupt
+       umuman sanalmagan» UI'da bir xil ko'rinishi 3-fazadagi «uch
+       hisoblagich» qoidasining aynan buzilishi bo'lardi.
+
+    Repozitoriy tomonda bu `count(*) FILTER (WHERE ...)` bilan
+    kafolatlangan (`capture_repo.day_summary`), `GROUP BY` bilan emas.
+    """
+
+    planned: int
+    done: int
+    ok: int
+    dark: int
+    blank: int
+    corrupt: int
+    failed: int
+    missed: int
+
+
+class CaptureDayOut(BaseModel):
+    """`GET /capture-runs?day=...` — kun jurnali (xulosa + matritsa qatorlari).
+
+    ⚠ `archived_present` — BAYROQ, RO'YXAT EMAS. Arxivlangan kameraning
+      qatorlari `rows` da YO'Q (ular xulosa sanog'iga ham kirmaydi:
+      `day_summary()` va `list_day()` BIR XIL to'plamni ko'radi), lekin
+      ularning MAVJUDLIGI aytiladi — UI «Arxivlangan kameralar hisobga
+      kirmaydi» qatorini aynan shundan chizadi (`04-UI-SPEC.md` §6.4).
+
+      Bayroqsiz admin «kecha 25 kamera bor edi, bugun 24» farqini
+      ko'rib, uni nosozlik deb o'ylardi.
+    """
+
+    day: date
+    summary: DaySummaryOut
+    rows: list[CaptureRunOut]
+    archived_present: bool
+
+
+class SnapshotDetailOut(BaseModel):
+    """Bitta kadrning METAMA'LUMOTI (DL-3, `04-UI-SPEC.md` §6.6).
+
+    =======================================================================
+    ⛔ `object_key` MAYDONI BU MODELDA YO'Q VA QO'SHILMAYDI (§14.3).
+
+    Ombor yuzasi foydalanuvchiga HECH QANDAY KO'RINISHDA chiqmaydi.
+    Kadr baytlari faqat `GET /snapshots/{id}/image` proxysi orqali
+    keladi va o'sha marshrut `audit_read` yozuvini qoldiradi — imzolangan
+    havola esa muddati tugagunicha AUDIT YOZUVISIZ ishlab turardi.
+
+    Mexanik darvoza: `"object_key" not in SnapshotDetailOut.model_fields`.
+    =======================================================================
+
+    ⚠ UCHALA O'LCHOV HAM (`quality_mean`/`quality_stddev`/
+      `quality_saturation`) `None` BO'LISHI MUMKIN va bu AYNAN BITTA
+      holatni anglatadi: `corrupt` kadr (`0016` migratsiyasi). Buzuq JPEG
+      dekodlanmaydi, ya'ni o'lchovni OLIB BO'LMAYDI. Sentinel `0` bazada
+      «o'lchandi va nol chiqdi» ma'nosini berardi va D-15 ning
+      `percentile_cont` bilan chegara chiqarish yo'lini jimgina buzardi.
+
+      UI ularni `<details>` «Texnik tafsilot» blokida FAQAT qiymat
+      mavjud bo'lganda chizadi.
+    """
+
+    id: UUID
+    camera_id: UUID
+    business_date: date
+    slot_time: time
+    scheduled_at: datetime
+    captured_at: datetime
+    size_bytes: int
+    width: int | None
+    height: int | None
+    quality_verdict: str
+    light_mode: str
+    capture_method: str
+    storage_tier: str
+    is_billable: bool
+    quality_mean: float | None
+    quality_stddev: float | None
+    quality_saturation: float | None
+    quality_thresholds_version: int
+
+
+class AlertEventOut(BaseModel):
+    """Ochiq yoki yopilgan ogohlantirish (`04-UI-SPEC.md` §6.7, D-22).
+
+    ⛔ `snapshot_id` VA RASM HAVOLASI BU YERDA YO'Q (D-19) — jadvalda ham
+       bunday ustun yo'q. Dalil-kadrlar bozor tashrifchilarining shaxsiy
+       ma'lumoti, Telegram serverlari esa loyiha zimmasiga olgan O'zR
+       data-rezidentlik chegarasidan tashqarida.
+
+    ⚠ `notified_at` `None` BO'LSA HAM QAYTARILADI va UI uni YASHIRMAYDI:
+      «Telegram xabari yuborilmadi» qatori aynan shu joyda tug'iladigan
+      «alert bor deb o'ylash» yolg'onining oldini oladi.
+
+    `occurrences > 1` — bo'g'ilgan takrorlar soni. D-22 ning guruhlashi
+    ma'lumot YO'QOTMAYDI: son qaytadi va UI «so'nggi soatda yana {n}
+    marta» deb chizadi.
+    """
+
+    id: UUID
+    alert_key: str
+    severity: str
+    subject_id: UUID | None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    occurrences: int
+    notified_at: datetime | None
+    resolved_at: datetime | None
+    detail: dict[str, Any]
+
+    @field_validator("detail", mode="before")
+    @classmethod
+    def _filter_detail(cls, value: dict[str, Any] | None) -> dict[str, Any]:
+        """`ALERT_DETAIL_KEYS` dan tashqaridagi kalitlarni TASHLAB YUBORADI.
+
+        ⚠ FILTR MODELDA, MARSHRUTDA EMAS. Marshrutda bo'lsa ikkinchi
+          chaqiruvchi (masalan kelajakdagi dayjest endpointi) uni chetlab
+          o'tardi va `detail` ning yangi kaliti UI'ga jimgina chiqib
+          ketardi.
+
+        `None` -> bo'sh `dict`: `detail` javobda HAR DOIM obyekt bo'ladi
+        va UI `null` bilan `{}` ni ajratishga majbur emas.
+        """
+        if not value:
+            return {}
+        return {key: item for key, item in value.items() if key in ALERT_DETAIL_KEYS}
+
+
+class AlertListResponse(BaseModel):
+    """`GET /alerts?closed=0|1` javobi — `last_seen_at` bo'yicha kamayish tartibida.
+
+    ⛔ YOPISH/BOSTIRISH MARSHRUTI YO'Q (`04-UI-SPEC.md` §6.7): ogohlantirishni
+       faqat TIKLANISH yopadi (`resolved_at` ni fon jarayoni qo'yadi).
+       Qo'lda yopish tugmasi adminga muammoni KO'RMASDAN yashirish
+       imkonini berardi — va aynan shu bosqichda «hammasi yaxshi»
+       ko'rinishi mahsulotning butun mazmunini yo'q qilardi.
+    """
+
+    items: list[AlertEventOut]

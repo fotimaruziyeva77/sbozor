@@ -9,7 +9,17 @@ imzolangan CHIPTAGA tayanadi.
 Ajratish kod tashkilotining qulayligi emas, TASNIF: `v1` ostidagi har
 bir marshrut avtomatik ravishda cross-tenant matritsasiga tushadi va
 undan 401/404 xulqi kutiladi. Bu yerdagi marshrutlar boshqa
-kontraktda (403/204) ishlaydi va ular o'z testlariga ega bo'lishi
-SHART — matritsadan chiqarilishi `tests/tenancy/test_cross_tenant.py::
-EXEMPT_ROUTES` da SABAB bilan yozilgan.
+kontraktda (403/204, 200/503) ishlaydi va ular o'z testlariga ega
+bo'lishi SHART — matritsadan chiqarilishi `tests/tenancy/
+test_cross_tenant.py::EXEMPT_ROUTES` da SABAB bilan yozilgan.
+
+Paketda IKKI marshrut bor va ularning CHAQIRUVCHISI ham har xil:
+
+  * `live_authz`  — nginx `auth_request` subso'rovi (204 / 403);
+  * `self_check`  — TASHQI KUZATUVCHI (healthchecks.io, UptimeRobot),
+                    ya'ni compose tarmog'idan TASHQARIDAGI xizmat
+                    (200 / 503).
+
+Ikkinchisining butun ma'nosi shundaki, u worker'dan BOSHQA JARAYONDA
+ishlaydi — batafsil `self_check.py` modul docstringida.
 """

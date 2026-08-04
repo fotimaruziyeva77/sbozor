@@ -43,6 +43,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.internal.live_authz import router as live_authz_router
+from app.api.internal.self_check import router as self_check_router
 from app.api.v1.assignments import router as assignments_router
 from app.api.v1.assignments import stall_router as stall_assignments_router
 from app.api.v1.audit import router as audit_router
@@ -54,6 +55,9 @@ from app.api.v1.imports import router as imports_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
 from app.api.v1.nvr import router as nvr_router
+from app.api.v1.schedules import router as schedules_router
+from app.api.v1.snapshots import alerts_router, capture_runs_router
+from app.api.v1.snapshots import router as snapshots_router
 from app.api.v1.stalls import router as stalls_router
 from app.api.v1.tariffs import router as tariffs_router
 from app.api.v1.users import router as users_router
@@ -326,6 +330,32 @@ app.include_router(nvr_router, prefix=f"{API_V1_PREFIX}/nvr-devices")
 # `test_no_unclassified_routes` va `test_cross_tenant_object_returns_404`
 # qizaradi (yuqoridagi 2-faza izohidagi IKKI QO'LDA QADAM).
 app.include_router(cameras_router, prefix=f"{API_V1_PREFIX}/cameras")
+# --- 04-09: snapshot jadvali (CAM-04, D-05) ---
+#
+# ⚠ ALOHIDA PREFIKS, `cameras` OSTIDA EMAS — `cameras` ning `nvr-devices`
+# ostida turmasligi bilan AYNAN bir xil mulohaza. Jadval BOZORGA
+# tegishli (bitta profil butun bozorning barcha kameralariga amal
+# qiladi), ya'ni uni `/cameras/{camera_id}/schedule` ostiga qo'yish
+# resursni noto'g'ri joyga bog'lardi va «qaysi kameraning jadvali?»
+# degan ma'nosiz savolni tug'dirardi.
+#
+# Yangi yo'l parametri (`schedule_id`) cross-tenant matritsasining
+# `PARAM_FILLERS` iga, `POST`/`PATCH` esa `BODY_FILLERS` ga qo'shildi.
+app.include_router(schedules_router, prefix=f"{API_V1_PREFIX}/snapshot-schedules")
+# --- 04-09: kun jurnali, kadr detali, RASM PROXYSI va ogohlantirishlar ---
+#
+# ⚠ UCHTA ROUTER, UCHTA PREFIKS — VA U ATAYIN. Ular bitta faylda yashaydi
+# (`snapshots.py`: bitta mahsulot ekranining uch zonasi), lekin UCH XIL
+# resurs. Umumiy prefiks (`/snapshots/capture-runs`) kun jurnalini
+# kadrning BOLASI qilib ko'rsatardi — holbuki jurnalning yarmida kadr
+# umuman yo'q (`missed`, `failed`, `pending`).
+#
+# ⛔ `GET /snapshots/{id}/image` — OMBOR YUZASINING YAGONA chiqish nuqtasi.
+# Presigned URL BERILMAYDI va uning to'rt sababi `snapshots.py` modul
+# docstringida (audit, RLS, manzil oshkorligi, data-rezidentlik).
+app.include_router(capture_runs_router, prefix=f"{API_V1_PREFIX}/capture-runs")
+app.include_router(snapshots_router, prefix=f"{API_V1_PREFIX}/snapshots")
+app.include_router(alerts_router, prefix=f"{API_V1_PREFIX}/alerts")
 # --- 03-07: nginx `auth_request` nishoni (SC#6, D-11) ---
 #
 # ⚠ PREFIKSSIZ VA `API_V1_PREFIX` DAN TASHQARIDA — `/healthz` bilan bir
@@ -343,6 +373,18 @@ app.include_router(cameras_router, prefix=f"{API_V1_PREFIX}/cameras")
 # EXEMPT_ROUTES` da SABAB bilan yozilgan va qamrovi
 # `tests/integration/test_live_view.py` da TO'LIQ qayta tiklangan.
 app.include_router(live_authz_router)
+# --- 04-09: o'z-o'zini kuzatish (FOUND-06, D-20) ---
+#
+# ⚠ `live-authz` BILAN BIR XIL SABABDAN `API_V1_PREFIX` DAN TASHQARIDA:
+# uni FOYDALANUVCHI emas, TASHQI KUZATUVCHI chaqiradi va unda
+# `Authorization` sarlavhasi umuman bo'lmaydi. Kontrakti ham boshqa —
+# 200 yoki 503, hech qachon 401/404 emas.
+#
+# ⛔ BU MARSHRUT `compose.yaml` DAGI KONTEYNER `healthcheck` IGA
+#    ULANMAYDI (Pitfall 14): worker'ning yurak urishi eskirgani uchun
+#    SOG'LOM API ni qayta ishga tushirish hech nimani tuzatmasdi.
+#    Sabab to'liq `self_check.py` modul docstringida.
+app.include_router(self_check_router)
 
 
 @app.exception_handler(DBAPIError)

@@ -44,6 +44,7 @@ from app.main import app as fastapi_app
 from fixtures.admin_api import AUDIT_URL, USERS_URL, bearer, session_headers
 from fixtures.market_domain import A_CATEGORY_NAMES, A_ZONE_NAMES
 from fixtures.nvr_domain import add_discovery_run, nvr_rows
+from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import SEED_PASSWORD
 from sbozor_core.security import encode_access
 
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from fixtures.market_domain import MarketDomainSeed
     from fixtures.nvr_domain import NvrDomainSeed
+    from fixtures.snapshot_domain import SnapshotDomainSeed
     from fixtures.two_markets import TwoMarketSeed
     from psycopg import Connection
     from psycopg.rows import TupleRow
@@ -118,6 +120,16 @@ class TenantSeed(NamedTuple):
       seed'ning asimmetriyasi esa saqlanadi.
     """
 
+    snapshot: SnapshotDomainSeed
+    """4-faza qatlami: mavsumiy profil, kunlik reja, kadrlar va alertlar.
+
+    ⚠ B BOZORIDA HAM QATOR BOR va bu MAJBURIY: `schedule_id` va
+      `snapshot_id` fillerlari HAQIQIY B qatorlarini ko'rsatishi kerak.
+      Tasodifiy UUID bilan 404 hech nimani isbotlamasdi — biz aynan
+      «obyekt BOR, lekin boshqa bozorniki» holatini sinayapmiz
+      (`PARAM_FILLERS` docstringidagi umumiy qoida).
+    """
+
 
 EXEMPT_ROUTES: dict[str, str] = {
     # --- health: autentifikatsiyasiz, hech qanday tenant ma'lumoti yo'q ---
@@ -154,6 +166,18 @@ EXEMPT_ROUTES: dict[str, str] = {
         "tokensiz -> 403, muddati o'tgan -> 403, ODDIY access token -> 403, begona "
         "bozor kamerasi -> 403 va boshqa kameraning oqim nomi -> 403 holatlarini "
         "alohida o'lchaydi"
+    ),
+    "/internal/self-check": (
+        "global — TASHQI KUZATUVCHI (healthchecks.io / UptimeRobot) chaqiradigan "
+        "o'z-o'zini kuzatish nishoni: unda `Authorization` sarlavhasi UMUMAN "
+        "bo'lmaydi va u ATAYIN autentifikatsiyasiz. Kontrakti ham boshqa — 200 "
+        "yoki 503, hech qachon 401/404 emas, ya'ni matritsaning uchala token "
+        "da'vosi bu yerda MA'NOSIZ bo'lardi. Javobda bozor identifikatori, nomi "
+        "yoki topologiyasi UMUMAN yo'q (faqat komponent nomlari va bayroq), ya'ni "
+        "cross-tenant sizish yuzasi ham yo'q. QAMROVI TO'LIQ QAYTA TIKLANGAN: "
+        "`tests/integration/test_capture_schedule.py` yangi heartbeat -> 200, "
+        "eskirgan -> 503, hech qachon yozilmagan -> 503, javob yuzasining torligi "
+        "va konteyner healthcheck'iga ULANMAGANI holatlarini alohida o'lchaydi"
     ),
     "/api/v1/audit/platform": (
         "global — platforma-global (`market_id IS NULL`) audit qatorlari, ya'ni "
@@ -243,6 +267,18 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # boshqa yo'ldan yuborardi va 404 ning sababi tenant chegarasi emas,
     # holat bo'lib qolardi.
     "camera_id": lambda seed: str(seed.nvr.market_b.camera_ids[0]),
+    # --- 04-09: snapshot jadvali va kadr ---
+    #
+    # ⚠ IKKALASI HAM B BOZORINING HAQIQIY QATORI (`fixtures/
+    # snapshot_domain.py`): profil `[SEED_BUSINESS_DATE, ∞)` davri bilan
+    # va `B_RUN_PLAN` ning YAGONA `succeeded` qatoriga biriktirilgan kadr.
+    #
+    # ⚠ `snapshot_id` uchun kadr MAVJUD bo'lishi ayniqsa muhim:
+    # `GET /snapshots/{id}/image` marshruti begona bozorning kadri uchun
+    # 404 berishi shart, «bunday kadr yo'q» uchun ham AYNAN o'sha 404 —
+    # ikkalasi farq qilsa javobning O'ZI enumeration signali bo'lardi.
+    "schedule_id": lambda seed: str(seed.snapshot.market_b.schedule_id),
+    "snapshot_id": lambda seed: str(seed.snapshot.market_b.snapshot_ids[0]),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -289,6 +325,21 @@ HAQIQIY qator yozadi. Qotirilgan port ikkinchi chaqiruvda
 `409 nvr_host_taken` berardi (`uq_nvr_devices_market_id_host_port`) va
 marshrutning YOZISH yo'li faqat birinchi testda bajarilardi.
 """
+
+
+_MATRIX_SCHEDULE_DAYS = count(200)
+"""Mavsumiy profilning `starts_on` i uchun O'SUVCHI kun siljishi.
+
+`_MATRIX_NVR_PORTS` bilan bir xil sabab (filler lambda'si HAR SO'ROVDA
+qayta chaqiriladi), ikki qo'shimcha shart bilan: (1) 200-kundan
+boshlanadi, ya'ni seedning ochiq oxirli profilidan ancha uzoqda va
+undan qisqartirish qadamiga tushmaydi; (2) qadam 5 kun, ya'ni ketma-ket
+chaqiruvlar bir-birining davriga kirmaydi.
+"""
+
+
+def _matrix_schedule_start() -> str:
+    return (date.today() + timedelta(days=next(_MATRIX_SCHEDULE_DAYS) * 5)).isoformat()
 
 
 def _free_stall(seed: TenantSeed) -> str:
@@ -413,6 +464,26 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
         "address": "127.0.0.1:1",
         "username": "matritsa",
         "password": MATRIX_NVR_PASSWORD,
+    },
+    # --- 04-09: snapshot jadvali ---
+    #
+    # `starts_on` HAR CHAQIRUVDA BOSHQA (`_MATRIX_SCHEDULE_STARTS`) —
+    # `_MATRIX_NVR_PORTS` bilan aynan bir xil sabab: `POST` HAQIQIY
+    # profil yozadi va bir xil sana ikkinchi chaqiruvda
+    # `409 schedule_period_overlaps` berardi (`create_seasonal()`
+    # `starts_on` da BOSHLANADIGAN profilni rad etadi). O'shanda `POST`
+    # ning YOZISH yo'li faqat birinchi testda bajarilardi.
+    #
+    # ⚠ Sana KELAJAKDA (`_future_date()` dan ham uzoqroq): `starts_on <=
+    #   bugun` D-05 darvozasiga urilib 422 berardi va matritsa 404
+    #   kutayotgan joyda validatsiya xatosini ko'rardi.
+    RouteSpec("POST", "/api/v1/snapshot-schedules"): lambda _: {
+        "name": "Matritsa jadvali",
+        "starts_on": _matrix_schedule_start(),
+        "times": ["06:00", "18:00"],
+    },
+    RouteSpec("PATCH", "/api/v1/snapshot-schedules/{schedule_id}"): lambda _: {
+        "times": ["06:00", "18:00"],
     },
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
@@ -722,6 +793,7 @@ def foreign_markers(seed: TenantSeed) -> tuple[str, ...]:
     market_b = seed.base.market_b
     domain_b = seed.domain.market_b
     nvr_b = seed.nvr.market_b
+    snapshot_b = seed.snapshot.market_b
     return (
         str(market_b.id),
         *(str(user_id) for user_id in market_b.user_ids),
@@ -743,6 +815,17 @@ def foreign_markers(seed: TenantSeed) -> tuple[str, ...]:
         str(nvr_b.nvr_id),
         *(str(camera_id) for camera_id in nvr_b.camera_ids),
         *(str(run_id) for run_id in nvr_b.discovery_run_ids),
+        # --- 04-09: snapshot qatlami ---
+        #
+        # `slot_ids` ATAYIN QO'SHILMAYDI: slot qatorining identifikatori
+        # HECH QANDAY javobda ko'rinmaydi (jadval javobi `times` ni
+        # beradi, `id` ni emas), ya'ni marker hech qachon ishlamaydigan
+        # tekshiruv bo'lib qolardi (`stream_names` bilan bir xil qaror).
+        str(snapshot_b.schedule_id),
+        *(str(run_id) for run_id in snapshot_b.run_ids),
+        *(str(snapshot_id) for snapshot_id in snapshot_b.snapshot_ids),
+        str(snapshot_b.open_alert_id),
+        str(snapshot_b.resolved_alert_id),
     )
 
 
@@ -787,18 +870,44 @@ def nvr_domain(
 
 
 @pytest.fixture
+def snapshot_domain(
+    sync_owner_conn: Connection[TupleRow],
+    nvr_domain: NvrDomainSeed,
+) -> Iterator[SnapshotDomainSeed]:
+    """`nvr_domain` USTIGA 4-fazaning snapshot qatlami (04-09).
+
+    ⚠ `nvr_domain` ARGUMENT sifatida olinadi va bu TARTIB MASALASI, uslub
+      emas: pytest fixture'larni TESKARI tartibda yopadi, ya'ni bu
+      qatlamning tozalashi NVR qatlamidan OLDIN ishlaydi. Teskari
+      joylashuvda `cameras` hali `capture_runs` va `snapshots` tayanib
+      turganda o'chirilardi va teardown FK buzilishi bilan yiqilardi
+      (`fixtures/snapshot_domain.py::snapshot_rows` docstringidagi
+      «TARTIB MUHIM» bandi).
+    """
+    with snapshot_rows(sync_owner_conn, nvr_domain) as seed:
+        yield seed
+
+
+@pytest.fixture
 def tenant_seed(
     two_markets: TwoMarketSeed,
     market_domain: MarketDomainSeed,
     nvr_domain: NvrDomainSeed,
+    snapshot_domain: SnapshotDomainSeed,
 ) -> TenantSeed:
-    """A'zolik, domen va NVR qatlamlarini bitta obyektga bog'laydi.
+    """A'zolik, domen, NVR va snapshot qatlamlarini bitta obyektga bog'laydi.
 
-    `market_domain` `two_markets` ni O'ZI argument sifatida oladi, ya'ni
-    ikkalasi AYNI bozorlarni tavsiflaydi va teardown tartibi ham to'g'ri
-    qoladi (domen qatlami bozorlardan OLDIN tozalanadi).
+    `market_domain` `two_markets` ni, `snapshot_domain` esa `nvr_domain`
+    ni O'ZI argument sifatida oladi, ya'ni to'rtalasi AYNI bozorlarni
+    tavsiflaydi va teardown tartibi ham to'g'ri qoladi (har qatlam
+    o'zidan pastdagisidan OLDIN tozalanadi).
     """
-    return TenantSeed(base=two_markets, domain=market_domain, nvr=nvr_domain)
+    return TenantSeed(
+        base=two_markets,
+        domain=market_domain,
+        nvr=nvr_domain,
+        snapshot=snapshot_domain,
+    )
 
 
 @pytest.fixture
@@ -1118,6 +1227,7 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
     market_b = tenant_seed.base.market_b
     domain_b = tenant_seed.domain.market_b
     nvr_b = tenant_seed.nvr.market_b
+    snapshot_b = tenant_seed.snapshot.market_b
     foreign_values = {
         str(value)
         for value in (
@@ -1135,6 +1245,15 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             nvr_b.nvr_id,
             *nvr_b.camera_ids,
             *nvr_b.discovery_run_ids,
+            # --- 04-09 ---
+            #
+            # ⚠ RO'YXAT `foreign_markers()` DAN MUSTAQIL TUZILGAN va bu
+            # ATAYIN: u yerdagi ro'yxat «javobda uchramasin» uchun,
+            # bu yerdagisi esa «filler AYNAN B ni ko'rsatsin» uchun.
+            # Ikkalasini bitta funksiyaga birlashtirish darvozani
+            # o'z-o'zini tekshiradigan holga keltirardi.
+            snapshot_b.schedule_id,
+            *snapshot_b.snapshot_ids,
         )
     }
 

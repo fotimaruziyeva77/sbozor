@@ -213,6 +213,22 @@ class Settings(BaseSettings):
     snapshot_max_times_per_day: Annotated[int, Field(ge=1, le=MAX_TIMES_PER_DAY)] = (
         MAX_TIMES_PER_DAY
     )
+    # Jadval sahifasi «keyingi {n} kunda qoplanmagan kun bormi?» savolini
+    # shu ufq ichida beradi (`04-UI-SPEC.md` §4.3 — `uncovered_horizon_days`).
+    #
+    # ⚠ UFQ JAVOBDA HAM QAYTADI, faqat sanoq emas. «3 kun qoplanmagan»
+    #   jumlasi qaysi oyna ustida aytilganini bilmasa ma'nosiz bo'lardi:
+    #   90 kunlik oynadagi 3 kun bilan 7 kunlik oynadagi 3 kun butunlay
+    #   boshqa shoshilinchlik darajasi.
+    schedule_horizon_days: Annotated[int, Field(ge=1)] = 90
+
+    # --- O'z-o'zini kuzatish (04-09, FOUND-06, D-20) ---
+    #
+    # `system_heartbeats.last_seen_at` shu muddatdan eski bo'lsa komponent
+    # ESKIRGAN hisoblanadi. `capture_tick` har DAQIQADA uradi, ya'ni 10
+    # daqiqa — o'nbarobar zaxira: bitta o'tkazib yuborilgan tik (deploy,
+    # qisqa tarmoq uzilishi) alert bermaydi, o'lgan worker esa beradi.
+    self_check_stale_minutes: Annotated[int, Field(ge=1)] = 10
 
     # --- Saqlash siyosati (04-08, CAM-07, D-18) ---
     #

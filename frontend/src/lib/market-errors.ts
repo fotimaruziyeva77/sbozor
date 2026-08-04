@@ -66,7 +66,14 @@ export type MarketErrorMessageKey =
   | "cameras.liveUnavailable"
   | "import.unsupportedType"
   | "import.conflict"
-  | "import.staffRosterTooLarge";
+  | "import.staffRosterTooLarge"
+  // --- 4-faza: snapshot jadvali va kadr yuzasi (04-09) ---
+  | "snapshots.scheduleStartsTooSoon"
+  | "snapshots.scheduleTimesInvalid"
+  | "snapshots.scheduleNotEditable"
+  | "snapshots.schedulePeriodOverlaps"
+  | "snapshots.objectPurged"
+  | "snapshots.storageUnavailable";
 
 /**
  * `ApiError.detail` -> tarjima kaliti (2-faza domeni).
@@ -180,6 +187,37 @@ export function marketErrorMessageKey(
       // ning auth qulfi bu yerga qo'llanmaydi.
       case "live_view_unavailable":
         return "cameras.liveUnavailable";
+
+      /* --- snapshot jadvali (04-09, D-05) --- */
+      // ⚠ TO'RTTASI TO'RT XIL MATN OLADI va ular birlashtirilmaydi:
+      // admin uchun «bugundan boshlab bo'lmaydi», «vaqtlar ro'yxati
+      // yaroqsiz», «o'tmishdagi jadval tahrirlanmaydi» va «davrlar
+      // kesishadi» BUTUNLAY boshqa-boshqa muammolar va har birining
+      // yechimi ham boshqa. Bitta umumiy matn to'rttasiga ham noto'g'ri
+      // maslahat berardi (`nvr_host_taken` / `nvr_address_invalid`
+      // juftligi bilan aynan bir xil mulohaza).
+      case "schedule_starts_too_soon":
+        return "snapshots.scheduleStartsTooSoon";
+      // ⚠ KALIT NOMIDA `slot` YO'Q (`scheduleTimesInvalid`) va bu ataylab:
+      // `04-UI-SPEC.md` §10.2 orkestratsiya atamasini mahsulot tiliga
+      // kiritishni taqiqlaydi va G-1 darvozasi `snapshots.*` ni aynan shu
+      // so'z bo'yicha tekshiradi. Backend kodi (`schedule_slots_invalid`)
+      // esa TEXNIK reyestr — u foydalanuvchiga hech qachon ko'rinmaydi.
+      case "schedule_slots_invalid":
+        return "snapshots.scheduleTimesInvalid";
+      case "schedule_not_editable":
+        return "snapshots.scheduleNotEditable";
+      case "schedule_period_overlaps":
+        return "snapshots.schedulePeriodOverlaps";
+
+      /* --- kadr yuzasi (04-09, D-18) --- */
+      // ⚠ «Kadr o'chirilgan» EMAS, «saqlash muddati o'tgan»: kadr HECH
+      // QACHON qo'lda o'chirilmaydi (04-RESEARCH §D.10) va matnda
+      // o'chirish fe'lini ishlatish o'sha qoidani jimgina buzardi.
+      case "snapshot_object_purged":
+        return "snapshots.objectPurged";
+      case "snapshot_storage_unavailable":
+        return "snapshots.storageUnavailable";
 
       default:
         break;

@@ -1088,5 +1088,24 @@ export const ERROR_CODES = [
   //   yerga QO'LLANMAYDI va "Qayta urinish" affordansi XAVFSIZ
   //   (UI-SPEC §8.5).
   "live_view_unavailable",
+  // --- 4-faza: snapshot jadvali (04-09) ---
+  //
+  // ⚠ KADR OLISH TAKSONOMIYASINING O'N BIR KODI BU YERDA ATAYIN YO'Q —
+  //   ISAPI kodlari bilan AYNAN bir xil sabab (yuqoridagi 3-faza izohi).
+  //   Ular `capture_runs.error_code` maydoni sifatida kelib,
+  //   `snapshots.errorCause.*` kalitlari orqali sabab + tuzatish bloki
+  //   bo'lib chiziladi. Bu massiv esa `detail` KODLARI uchun.
+  "schedule_starts_too_soon",
+  "schedule_slots_invalid",
+  "schedule_not_editable",
+  "schedule_period_overlaps",
+  // --- 4-faza: kadr yuzasi (04-09) ---
+  //
+  // ⚠ `snapshot_object_purged` — 410 va u `not_found` DAN AJRATILGAN:
+  //   404 «bunday kadr bo'lmagan» deydi va admin dalilni izlashda davom
+  //   etardi; bu kod esa «bor edi, saqlash muddati o'tdi» deydi va
+  //   qidiruvni to'xtatadi.
+  "snapshot_object_purged",
+  "snapshot_storage_unavailable",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
