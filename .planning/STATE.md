@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-08-04T19:18:11.895Z"
-last_activity: "2026-08-05 -- 04-07 bajarildi: kadr olish quvuri (tik + batch + uchta usul)"
+stopped_at: Completed 04-10-PLAN.md
+last_updated: "2026-08-04T22:33:46.121Z"
+last_activity: 2026-08-05
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 65
-  completed_plans: 60
+  completed_plans: 63
   percent: 33
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 4
-Plan: 7 of 12 complete
-Status: Ready to execute 04-08
-Last activity: 2026-08-05 -- 04-07 bajarildi: kadr olish quvuri (tik + batch + uchta usul)
+Plan: 11 of 12
+Status: Ready to execute
+Last activity: 2026-08-05
 
-Progress: [██████░░░░] 58% (7/12 reja — 04-01…04-07)
+Progress: [████████░░] 83% (10/12 reja — 04-01…04-10)
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -68,6 +68,7 @@ Progress: [██████░░░░] 58% (7/12 reja — 04-01…04-07)
 | Phase 03 P11 | 150min | 3 tasks | 8 files |
 | Phase 3 P14 | 95min | 3 tasks | 10 files |
 | Phase 04 P07 | 125min | 3 tasks | 17 files |
+| Phase 04 P10 | 140 | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,11 @@ Recent decisions affecting current work:
 - [Phase ?]: 04-07: capture_due_markets() ga uchinchi disjunkt (0017) — ijarasi tugagan running qatorli bozor ham tikda ko'rinadi; usiz ijara AYNAN o'zi qoplashi kerak bo'lgan holatda ishlamasdi
 - [Phase ?]: 04-07: navbat nomi sbozor:discovery -> sbozor:jobs; ikkinchi navbat OCHILMAYDI — u ikkinchi broker va ikkinchi worker konteynerini talab qilardi
 - [Phase ?]: 04-07: yurak urishi except Exception ni yutadi — o'lchandi: socket.gaierror SQLAlchemyError ga o'ralmaydi va tikni ENG OXIRIDA yiqitardi
+- [Phase 04]: 04-10: kalit fabrikasining birinchi argumenti marketId — LEKIN tip tizimi yolg'iz yetarli emas, kalit shakli birlik testi bilan qiymat bo'yicha qulflandi
+- [Phase 04]: 04-10: ko'zgu darvozasi MATN KATALOGIGA emas, BACKEND REYESTRIGA langarlanadi — aks holda u ichki izchillikni o'lchab TO'LIQLIKNI o'lchamaydi (04-09 12-deviatsiyasi bilan bir sinf)
+- [Phase 04]: 04-10: darvozaning TETIGI artefakt chegarasidan o'tishi kerak — «katalog mavjud» tetigi ikki to'lqinga bo'lingan katalogda yolg'on-qizil beradi
+- [Phase 04]: 04-10: javob enumlari z.enum bilan qulflanmaydi — bitta yangi backend a'zosi butun 175 hujayrali kunni chegarada yiqitardi
+- [Phase 04]: 04-10: DL-1 da future profilning nomi/davri tahrirlanmaydi (PATCH faqat times) — yo'l o'chirib qayta qo'shish; backend yuzasi frontend rejasida kengaytirilmadi
 
 ### Pending Todos
 
@@ -163,6 +169,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-04T19:18:11.886Z
-Stopped at: Completed 04-07-PLAN.md
+Last session: 2026-08-04T22:33:08.674Z
+Stopped at: Completed 04-10-PLAN.md
 Resume file: None
