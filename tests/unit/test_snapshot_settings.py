@@ -159,6 +159,24 @@ def build(monkeypatch: pytest.MonkeyPatch) -> Iterator[BuildSettings]:
       `S3_*` qiymatini oladi (`compose.yaml:637-640`). Ular tozalanmasa
       «standart qiymat» testlari konteyner muhitini o'lchardi va xost
       sozlamasi o'zgarganda sabab topilmasdi.
+
+    ⚠⚠ `_env_file=None` — VA U TOZALASHNING IKKINCHI YARMI (04-07 da
+       qo'shildi, O'LCHANGAN sabab bilan). `Settings.model_config` da
+       `env_file=".env"` turadi va `tests` konteyneri repozitoriyni
+       `/app` ga mount qiladi, ya'ni DASTURCHINING `.env` FAYLI bu
+       testlarga KO'RINADI.
+
+       Muhit o'zgaruvchisi fayldan ustun turgani uchun `monkeypatch.setenv`
+       bilan berilgan qiymatlar himoyalangan — LEKIN «o'zgaruvchi UMUMAN
+       yo'q» yo'lida fayl yagona manba bo'lib qoladi. O'lchandi: `.env` ga
+       haqiqiy `S3_ACCESS_KEY` yozilgan dasturchida (bu `worker` va
+       `scheduler` konteynerlari uchun MAJBURIY —
+       `compose.yaml` ularga `${S3_ACCESS_KEY}` ni standartsiz beradi)
+       `test_a_missing_empty_s3_key_env_var_fails_the_same_way` QIZARARDI.
+
+       Ya'ni darvoza kodni emas, dasturchining mahalliy faylini o'lchardi.
+       `_env_file=None` bilan u AYNAN maydonning STANDARTINI o'lchaydi va
+       muhitdan mustaqil bo'ladi.
     """
 
     def _build(**overrides: str) -> Settings:
@@ -171,7 +189,7 @@ def build(monkeypatch: pytest.MonkeyPatch) -> Iterator[BuildSettings]:
         for name, value in overrides.items():
             monkeypatch.setenv(name, value)
         get_settings.cache_clear()
-        return Settings()  # type: ignore[call-arg]
+        return Settings(_env_file=None)  # type: ignore[call-arg]
 
     get_settings.cache_clear()
     yield _build
@@ -303,6 +321,11 @@ def test_a_missing_empty_s3_key_env_var_fails_the_same_way(
     ochildi — «o'zgaruvchi umuman yo'q» — va u ALOHIDA o'lchanishi kerak:
     aks holda validator faqat BO'SH SATRNI tekshirib, yetishmayotgan
     o'zgaruvchini jimgina o'tkazib yuborishi mumkin edi.
+
+    ⚠ `_env_file=None` — `build` fixture'idagi bilan AYNAN bir xil sabab va
+      u AYNAN SHU TESTDA hal qiluvchi: «o'zgaruvchi umuman yo'q» yo'lida
+      dasturchining `.env` fayli yagona qolgan manba bo'lardi va darvoza
+      kodni emas, o'sha faylni o'lchardi.
     """
     for name in ("S3_ACCESS_KEY", "S3_SECRET_KEY"):
         monkeypatch.delenv(name, raising=False)
@@ -314,7 +337,7 @@ def test_a_missing_empty_s3_key_env_var_fails_the_same_way(
     get_settings.cache_clear()
 
     with pytest.raises(ValidationError, match="S3_ACCESS_KEY"):
-        Settings()  # type: ignore[call-arg]
+        Settings(_env_file=None)  # type: ignore[call-arg]
 
     get_settings.cache_clear()
 
