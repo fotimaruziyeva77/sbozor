@@ -67,7 +67,7 @@ const LOCALES = ["uz-Latn", "uz-Cyrl", "ru"];
 const MIN_SCANNED_SOURCE_FILES = 40;
 
 /**
- * `components/snapshots/` katalogi mavjud bo'lsa MAJBURIY fayllar.
+ * Jurnal va ogohlantirish yuzalari qurilgan bo'lsa MAJBURIY fayllar.
  *
  * ⚠ NEGA RO'YXAT: fayl qayta nomlanganda (masalan `capture-cell.tsx` ->
  *   `capture-tile.tsx`) G-2 jimgina BO'SH to'plamda ishlab qolardi —
@@ -80,6 +80,37 @@ const REQUIRED_SNAPSHOT_COMPONENTS = [
   "alert-list.tsx",
   "alert-row.tsx",
 ];
+
+/**
+ * ⛔ TETIK KATALOG MAVJUDLIGI EMAS, MATN KATALOGI — 04-10 da O'LCHANGAN.
+ *
+ * Dastlabki shakl «`components/snapshots/` katalogi bor -> to'rtala fayl
+ * ham bo'lsin» degan edi va u BITTA taxminga tayanardi: butun katalog
+ * bitta rejada tug'iladi. Taxmin noto'g'ri chiqdi — `04-10` katalogni
+ * zona A (jadval kartasi) bilan ochadi, jurnal va ogohlantirish yuzalari
+ * esa `04-11` da keladi. O'lchov: `schedule-card.tsx` yaratilishi bilan
+ * bu darvoza QIZARDI, holbuki hech narsa buzilmagan edi.
+ *
+ * Yangi tetik — `snapshots.cell.*` matn guruhi. U to'qqizta hujayra
+ * holatining lug'ati (§11.6) va u AYNAN o'sha komponentlar bilan birga
+ * keladi; ularsiz matnning iste'molchisi yo'q.
+ *
+ * ⚠ BU KUCHSIZLANTIRISH EMAS, KUCHAYTIRISH. Eski tetik katalog
+ *   O'CHIRILGANDA jimgina yashil bo'lardi (katalog yo'q -> tekshiruv
+ *   yo'q). Matn katalogi esa boshqa artefaktda yashaydi: to'rtala faylni
+ *   birdaniga qayta nomlash yoki o'chirish `snapshots.cell.*` ni olib
+ *   tashlamaydi, ya'ni darvoza baribir QIZARADI.
+ */
+const LOG_SURFACE_COPY_KEY = "cell";
+
+/** Jurnal/ogohlantirish yuzalarining matni uchala tilda ham hali yo'qmi. */
+function logSurfaceCopyMissing() {
+  return LOCALES.every(
+    (locale) =>
+      Object.keys(loadMessages(locale).snapshots?.[LOG_SURFACE_COPY_KEY] ?? {})
+        .length === 0,
+  );
+}
 
 function loadMessages(locale) {
   return JSON.parse(readFileSync(path.join(MESSAGES_DIR, `${locale}.json`), "utf8"));
@@ -256,15 +287,21 @@ const FORBIDDEN_GRID_TOKENS = ["<img", "next/image", "background-image"];
 const ALERT_FILES = ["alert-list.tsx", "alert-row.tsx"];
 const FORBIDDEN_ALERT_TOKENS = ["<img", "next/image", "/image"];
 
-test("G-2/G-3 QAMROVI: katalog mavjud bo'lsa TO'RTALA fayl ham mavjud", () => {
-  if (!existsSync(SNAPSHOT_COMPONENTS_DIR)) {
+test("G-2/G-3 QAMROVI: jurnal matni bor bo'lsa TO'RTALA fayl ham mavjud", () => {
+  if (logSurfaceCopyMissing()) {
     console.log(
-      "[G-2/G-3] `src/components/snapshots/` hali yaratilmagan (yuzalar 04-08…04-10 da " +
-        "keladi) — tekshiriladigan fayl yo'q. Katalog paydo bo'lishi bilan bu test " +
-        "to'rtala faylni TALAB qiladi.",
+      "[G-2/G-3] `snapshots.cell.*` hali uchala tilda ham yo'q (jurnal va " +
+        "ogohlantirish yuzalari 04-11 da keladi) — tekshiriladigan komponent yo'q. " +
+        "Matn qo'shilishi bilan bu test to'rtala faylni TALAB qiladi.",
     );
     return;
   }
+
+  assert.ok(
+    existsSync(SNAPSHOT_COMPONENTS_DIR),
+    "`snapshots.cell.*` matni bor, lekin `src/components/snapshots/` katalogi YO'Q — " +
+      "matnning iste'molchisi yo'qolgan, ya'ni G-2/G-3 bo'sh to'plam ustida ishlardi",
+  );
 
   const present = new Set(readdirSync(SNAPSHOT_COMPONENTS_DIR));
   const missing = REQUIRED_SNAPSHOT_COMPONENTS.filter((name) => !present.has(name));
