@@ -734,6 +734,28 @@
       "capture_storage_unavailable": "Tizim keyingi urinishda kadrni qayta yozadi. Takrorlansa, platforma jamoasiga xabar bering.",
       "capture_credential_unreadable": "Bu sozlama nosozligi va u o'zi tuzalmaydi. Platforma jamoasiga darhol xabar bering."
     },
-    "time": "Vaqt"
+    "time": "Vaqt",
+    "day": "Kun",
+    "dayToday": "Bugun",
+    "dayPrev": "Oldingi kun",
+    "dayNext": "Keyingi kun",
+    "noFutureDays": "Kelajakdagi kun tanlanmaydi — reja o'sha kunning ertalabida tuziladi",
+    "captured": "Olindi",
+    "capturedOf": "{done} / {planned}",
+    "countOk": "yaroqli",
+    "countDark": "qorong'i",
+    "countBlank": "bo'sh",
+    "countCorrupt": "buzuq",
+    "countFailed": "xato",
+    "countMissed": "olinmadi",
+    "missedCallout": "{count} ta kadr umuman olinmadi.",
+    "showIssuesLink": "Muammolilarni ko'rsatish",
+    "showIssues": "Faqat muammolilarni ko'rsatish",
+    "issuesHidden": "{count} ta qator yashirilgan",
+    "clearFilter": "Filtrni tozalash",
+    "archivedNote": "Arxivlangan kameralar hisobga kirmaydi",
+    "emptyNoPlan": "Bu kunda kadr rejalashtirilmagan",
+    "emptyNoPlanHint": "Jadval bu kunni qoplamaydi, shuning uchun kadr olinmagan.",
+    "viewSchedule": "Jadvalni ko'rish"
   }
 }
