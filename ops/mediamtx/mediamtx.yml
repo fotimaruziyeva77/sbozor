@@ -141,6 +141,76 @@ pathDefaults:
   runOnDemandCloseAfter: 15s
 
 paths:
+  ###############################################
+  # (1) SIFAT-SSENARIYLARI — 4-FAZA (W0-10, CAM-06)
+  #
+  # ⚠ TARTIB MAJBURIY: MediaMTX yo'llarni E'LON TARTIBIDA sinaydi va
+  #   BIRINCHI mos kelganini oladi. Quyidagi umumiy regex barcha raqamli
+  #   kanallarni qamraydi, ya'ni u YUQORIDA tursa 90xx/91xx/92xx ni ham
+  #   yutib yuborardi va sifat-ssenariylari JIMGINA oddiy `testsrc2`
+  #   oqimini berardi — sifat filtri esa "hammasi yaroqli" deb hisobot
+  #   qilardi. Yangi maxsus yo'l HAR DOIM umumiy regexdan OLDIN qo'yiladi.
+  #   Tartibni `tests/unit/test_compose_sim_env.py` mexanik to'sadi.
+  #
+  # ⚠ KANAL RAQAMLARI 90/91/92 — `SIM_CHANNEL_COUNT` DIAPAZONIDAN
+  #   TASHQARIDA (CI'da 6, sekin stsenariyda 25). Ya'ni kashfiyot bu
+  #   kanallar uchun kamera yozuvi YARATMAYDI va sifat-ssenariylari
+  #   haqiqiy kameralarning oqimi bilan aralashmaydi. Diapazon ichidan
+  #   raqam olinsa, bitta kamera mangu qorong'i kadr berib turardi va
+  #   sabab kashfiyot natijasida emas, media konfiguratsiyasida bo'lardi.
+  #
+  # ⚠ YANGI `authInternalUsers` YOZUVI QO'SHILMAYDI. Mavjud `admin`
+  #   yozuvi bu yo'llarni ham qamraydi (`permissions: read` yo'lga
+  #   bog'lanmagan), loopback publish yozuvi esa `runOnDemand` ffmpeg'ining
+  #   qaytarish oyog'ini. Yangi rekvizit `SIM_PASSWORD` bilan ikkinchi
+  #   haqiqat manbai tug'dirardi (T-04-13).
+  #
+  # ⚠ BU YO'LLAR BUZUQ KADR BERMAYDI VA BERA OLMAYDI — ular YAROQLI
+  #   oqimning SIFATSIZ mazmunini beradi (qorong'i, axborotsiz, past
+  #   kontrastli). Buzuq BAYTLAR butunlay boshqa qatlamda:
+  #   `SimState.frame_mode` + ISAPI `/picture` (`sim/frames.py`).
+
+  # Qorong'i kadr — 06:00 dagi yorug'liksiz sahna analogi.
+  # D-14 ning BIRINCHI sharti (`mean` past) shu manbadan keladi.
+  "~^Streaming/Channels/900[12]$":
+    runOnDemand: >-
+      ffmpeg -hide_banner -loglevel error -re -f lavfi
+      -i color=c=black:size=1280x720:rate=12
+      -c:v libx264 -preset ultrafast -tune zerolatency -g 24 -an
+      -f rtsp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+
+  # Axborotsiz kulrang kadr — «signal yo'q» / obyektiv yopilgan holat.
+  # D-14 ning IKKINCHI sharti (`stddev` past) shu manbadan keladi:
+  # o'rtacha yorug'lik NORMAL, lekin kadrda hech qanday tuzilma yo'q.
+  "~^Streaming/Channels/910[12]$":
+    runOnDemand: >-
+      ffmpeg -hide_banner -loglevel error -re -f lavfi
+      -i color=c=gray:size=1280x720:rate=12
+      -c:v libx264 -preset ultrafast -tune zerolatency -g 24 -an
+      -f rtsp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+
+  # ⛔ ENG MUHIM YO'L: past kontrastli, LEKIN TUZILMALI kadr — qonuniy
+  #    qish-tong sahnasining analogi.
+  #
+  #    D-14 aynan shuning uchun IKKI SHARTLI qoidani talab qiladi. Faqat
+  #    o'rtachaga qaragan qoida bu oqimni «qorong'i» deb RAD ETARDI va
+  #    bozor qishda har kuni ertalab OYLAB jimgina kadrsiz qolardi —
+  #    hech qanday xato chiqmasdan, chunki filtr o'z ishini "bajargan"
+  #    bo'lardi. Ya'ni bu yo'l darvozaning SALBIY NAZORAT holati.
+  #
+  #    `eq` filtri diapazonni siqadi: `testsrc2` ning tuzilmasi SAQLANADI
+  #    (stddev nolga tushmaydi), yorug'lik esa pasayadi.
+  "~^Streaming/Channels/920[12]$":
+    runOnDemand: >-
+      ffmpeg -hide_banner -loglevel error -re -f lavfi
+      -i testsrc2=size=1280x720:rate=12
+      -vf eq=contrast=0.10:brightness=-0.25
+      -c:v libx264 -preset ultrafast -tune zerolatency -g 24 -an
+      -f rtsp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+
+  ###############################################
+  # (2) UMUMIY YO'L — HAR DOIM OXIRIDA (yuqoridagi tartib izohiga qarang)
+  #
   # Hikvision `{kanal}{oqim}` shakli: `/Streaming/Channels/101` (kanal 1,
   # asosiy oqim), `/Streaming/Channels/102` (sub-oqim), `/Streaming/
   # Channels/1601` (kanal 16). `~` prefiksi MediaMTX'da regulyar ifodani

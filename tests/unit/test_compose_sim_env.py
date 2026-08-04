@@ -225,3 +225,99 @@ def test_sim_password_matches_between_compose_and_rtsp_config() -> None:
         f"parol ikki joyda AJRALIB KETDI: MediaMTX `{mediamtx_passwords[0]}`, "
         "compose'dagi `SIM_PASSWORD` standarti boshqa"
     )
+
+
+# =============================================================================
+# 4-FAZA (W0-10): MediaMTX SIFAT-YO'LLARINING IKKI DARVOZASI.
+#
+# `mediamtx.yml` ga qorong'i / kulrang / past-kontrastli oqim yo'llari
+# qo'shildi. Ular ikki narsani JIMGINA buzishi mumkin va ikkalasi ham
+# faqat ODAM o'qiganda ko'rinardi — shuning uchun ikkalasi ham shu yerda
+# mexanik tekshiriladi.
+# =============================================================================
+
+_PATH_KEY_RE = re.compile(r'^  "([^"]+)":', re.MULTILINE)
+"""`paths:` bo'limidagi yo'l kalitlari — FAYLDAGI TARTIBDA.
+
+⚠ YAML PARSERI ATAYIN ISHLATILMAYDI: bu yerdagi savol qiymatlar haqida
+  emas, ularning TARTIBI haqida, va tartib matn darajasidagi xususiyat.
+  Parser bu faylni lug'atga aylantirib, keyingi o'quvchida «tartib
+  ahamiyatsiz» degan noto'g'ri taassurot qoldirardi. Ikkinchi sabab
+  amaliy: `pyyaml` bu repoda bog'liqlik EMAS va faqat shu test uchun
+  paket qo'shish T-04-SC ga zid bo'lardi.
+"""
+
+_QUALITY_PATH_MARKER = "900[12]"
+"""Sifat-ssenariylarining BIRINCHISI (qorong'i kadr, kanal 90)."""
+
+_CATCH_ALL_MARKER = "[0-9]+"
+"""Umumiy yo'lning ajratuvchi belgisi.
+
+⚠ To'liq regex SHU YERDA TAKRORLANMAYDI va u `mediamtx.yml` ning
+  IZOHIDA ham takrorlanmaydi: skaner faylni MATN sifatida o'qiydi va
+  birinchi uchrashuvni oladi, ya'ni izohdagi nusxa darvozani
+  yolg'on-qizil qilardi (`nvr-copy.test.mjs` dagi bilan bir xil sinf).
+"""
+
+
+def test_quality_paths_precede_the_catch_all_path() -> None:
+    """Sifat-yo'llari umumiy yo'ldan OLDIN turadi — aks holda ular O'LIK.
+
+    MediaMTX yo'llarni E'LON TARTIBIDA sinaydi va birinchi mos kelganini
+    oladi. Umumiy regex barcha raqamli kanallarni qamraydi, ya'ni u
+    yuqorida tursa 90xx/91xx/92xx ni ham yutib yuborardi va sifat
+    ssenariylari JIMGINA oddiy `testsrc2` oqimini berardi.
+
+    ⚠ NOSOZLIK SHAKLI ENG YOMONI: hech nima yiqilmaydi. Oqim ochiladi,
+      kadr keladi, sifat filtri «yaroqli» deydi — va CAM-06 ning butun
+      isboti o'z-o'ziga qaytadi.
+    """
+    keys = _PATH_KEY_RE.findall(MEDIAMTX_CONF.read_text(encoding="utf-8"))
+
+    # QUYI CHEGARA (03-01 naqshi): kalitlar o'qilmasa quyidagi assert
+    # bo'sh ro'yxatda jimgina o'tib ketardi.
+    assert len(keys) >= 4, (
+        f"`{MEDIAMTX_CONF.name}` dan atigi {len(keys)} yo'l kaliti o'qildi ({keys}) — "
+        "kutilgan >= 4 (uchta sifat-ssenariysi + umumiy yo'l). Kalit shakli "
+        "o'zgargan bo'lsa bu darvoza ham yangilanishi kerak."
+    )
+
+    quality = [index for index, key in enumerate(keys) if _QUALITY_PATH_MARKER in key]
+    catch_all = [index for index, key in enumerate(keys) if _CATCH_ALL_MARKER in key]
+
+    assert quality, f"sifat-ssenariysi yo'li topilmadi ({_QUALITY_PATH_MARKER}): {keys}"
+    assert catch_all, f"umumiy yo'l topilmadi: {keys}"
+    assert max(quality) < min(catch_all), (
+        f"sifat-yo'llari umumiy yo'ldan KEYIN turibdi: {keys}. MediaMTX birinchi "
+        "mos kelgan yo'lni oladi, ya'ni bu tartibda ular hech qachon ishga tushmaydi."
+    )
+
+
+def test_quality_paths_did_not_add_a_new_credential() -> None:
+    """Yangi yo'l yangi rekvizit QO'SHMAYDI (T-04-13).
+
+    Mavjud `admin` yozuvi barcha yo'llarni qamraydi (`permissions` yo'lga
+    bog'lanmagan). Yangi rekvizit `compose.yaml` dagi `SIM_PASSWORD` bilan
+    IKKINCHI haqiqat manbai tug'dirardi va ajralib ketganda go2rtc to'g'ri
+    parol yuborib ham `401` olardi.
+
+    ⚠ `[ \\t]` — `\\s` EMAS. Yuqoridagi test bilan bir xil sabab: `\\s`
+      yangi qatorni ham yeydi va bo'sh `pass:` dan keyingi qatorni qiymat
+      deb olib ketadi (anonim yozuvlarning `pass:` i ATAYIN bo'sh).
+      `\\s` bilan yozilgan tekshiruv bu faylda AVVALDAN 3 natija berardi,
+      ya'ni u hech qachon o'ta olmasdi.
+    """
+    text = MEDIAMTX_CONF.read_text(encoding="utf-8")
+
+    users = re.findall(r"^  - user:\s*(\S+)\s*$", text, re.MULTILINE)
+    assert len(users) == 3, (
+        f"`authInternalUsers` yozuvlari soni {len(users)} ({users}), kutilgan 3: "
+        "anonim-huquqsiz, `admin`-o'qish, loopback-publish. Yangi yozuv qo'shilgan "
+        "bo'lsa avval T-04-13 qayta ko'rib chiqilishi kerak."
+    )
+
+    valued = re.findall(r"^[ \t]*pass:[ \t]+(\S+)[ \t]*$", text, re.MULTILINE)
+    assert len(valued) == 1, (
+        f"qiymatli `pass:` qatorlari: {valued}. Aynan bittasi bo'lishi SHART — "
+        "u `compose.yaml` dagi `SIM_PASSWORD` standarti bilan solishtiriladi."
+    )

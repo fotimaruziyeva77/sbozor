@@ -26,7 +26,6 @@ SANASHI kerak, `size` ga ishonmasligi. Sim buni qayta tug'diradi.
 
 from __future__ import annotations
 
-import base64
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -35,6 +34,7 @@ from defusedxml.ElementTree import fromstring as xml_fromstring
 from fastapi import Request, Response
 from starlette.types import Receive, Scope, Send
 
+from .frames import frame_bytes_for_mode
 from .state import (
     MODEL_DS_7616,
     MODEL_DS_7732,
@@ -52,15 +52,13 @@ NVR_MODELS = frozenset({MODEL_DS_7616, MODEL_DS_7732})
 SLOT_COUNT = {MODEL_DS_7616: 16, MODEL_DS_7732: 32}
 """Qurilmaning video-kirish SLOTLARI soni — ulangan kameralar soni EMAS (A.1)."""
 
-# 1x1 piksel JPEG (sintetik). CI'da rasm MAZMUNI muhim emas — B.7 #9 bo'yicha
-# bu 4-faza uchun ilgak va bu fazada faqat MAVJUDLIGI tekshiriladi. Git'ga
-# binar fayl qo'shilmaydi (B.6 "video manbai" jadvali bilan bir xil qoida).
-_TINY_JPEG_B64 = (
-    "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRof"
-    "Hh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAAB"
-    "AAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q=="
-)
-TINY_JPEG = base64.b64decode(_TINY_JPEG_B64)
+# ⚠ 4-FAZA (W0-10): `/picture` javobi endi 1x1 piksel `TINY_JPEG` EMAS.
+#   Baytlar `sim/frames.py` dan, `state.frame_mode` bo'yicha keladi
+#   (`ok` / `truncated` / `html` / `empty`). Sabab: 3-fazada rasm MAZMUNI
+#   muhim emas edi (faqat mavjudligi tekshirilardi), 4-fazada esa u
+#   sifat filtrining YAGONA kirish ma'lumoti — 1x1 piksel kadr
+#   `mean`/`stddev` haqida hech nima ayta olmasdi va filtr o'lchanmagan
+#   holda yashil qolardi.
 
 _COMMENT_RE = re.compile(r"<!--.*?-->\s*", re.DOTALL)
 _CHANNEL_RE = re.compile(r"<InputProxyChannel\b.*?</InputProxyChannel>", re.DOTALL)
@@ -438,7 +436,7 @@ def handle_isapi(state: SimState, path: str, request: Request) -> Response:
 
     stream = re.fullmatch(r"Streaming/channels/(\d+)(/picture)?", path)
     if stream is not None:
-        return _streaming(state, int(stream.group(1)), picture=bool(stream.group(2)))
+        return _streaming(state, stream.group(1), picture=bool(stream.group(2)))
 
     # B.7 #12 — noma'lum `/ISAPI/*`: Hikvision uslubidagi XML tanasi bilan 404.
     return xml_response(
@@ -447,8 +445,42 @@ def handle_isapi(state: SimState, path: str, request: Request) -> Response:
     )
 
 
-def _streaming(state: SimState, stream_id: int, *, picture: bool) -> Response:
+_STREAM_INDEXES = frozenset({"01", "02"})
+"""A.2: `{kanal}{oqim}` da oqim qismi FAQAT `01` (asosiy) yoki `02` (sub)."""
+
+
+def _has_stream_id_shape(token: str) -> bool:
+    """`101`, `102`, `1601` — HA; `7`, `10`, `103` — YO'Q.
+
+    ⚠ SHAKL va MAVJUDLIK ikki xil savol va ular ikki xil kod bilan
+      javob oladi (`/picture` yo'lida):
+
+        shakl buzuq        -> `400` — bunday identifikator UMUMAN yo'q
+        shakl to'g'ri,
+        kanal mavjud emas  -> `404` — identifikator yaroqli, qurilmada yo'q
+
+      Ularni bir xil kodga yig'ish 04-04 ning xato taksonomiyasini
+      ko'rlantirardi: «kod noto'g'ri URL quryapti» va «kamera qurilmadan
+      yo'qolgan» butunlay boshqa remediatsiyalar, birinchisi esa kod
+      xatosi bo'lgani uchun retry bilan HECH QACHON tuzalmaydi.
+    """
+    return len(token) >= 3 and token[-2:] in _STREAM_INDEXES
+
+
+def _streaming(state: SimState, token: str, *, picture: bool) -> Response:
     """`{kanal}{oqim}` — `101` = kanal 1 asosiy, `102` = sub (A.2)."""
+    if picture and not _has_stream_id_shape(token):
+        return xml_response(
+            hikvision_error_xml(
+                status_code=4,
+                status_string="Invalid Operation",
+                sub_status="badParameters",
+                detail=f"channel id {token!r} is not in {{channel}}{{stream}} form",
+            ),
+            status_code=400,
+        )
+
+    stream_id = int(token)
     channel_no, stream_index = divmod(stream_id, 100)
 
     if (
@@ -469,10 +501,21 @@ def _streaming(state: SimState, stream_id: int, *, picture: bool) -> Response:
             status_code=404,
         )
 
-    _claim_stream(state)
-
     if picture:
-        return Response(content=TINY_JPEG, media_type="image/jpeg")
+        # ⚠ `_claim_stream` ATAYIN CHAQIRILMAYDI (D-07). ISAPI `/picture`
+        #   NOL RTSP sessiyasi ochadi — u HTTP so'rovi, oqim da'vosi emas.
+        #   Aynan shu sababdan D-06/D-07 uni sessiya bosimi ostida ENG
+        #   XAVFSIZ usul deb belgilaydi.
+        #
+        #   Bu yerda oqim sanalsa sim o'z hujjatining TESKARISINI
+        #   modellagan bo'lardi: 04-04 ning «chegara to'lganda ham
+        #   `/picture` ishlaydi» yo'li sim ustida HECH QACHON yashil
+        #   bo'lmasdi va ijrochi kodni sim'ga moslashtirib, mahsulotni
+        #   noto'g'ri tomonga burardi.
+        body, content_type = frame_bytes_for_mode(state.frame_mode)
+        return Response(content=body, media_type=content_type)
+
+    _claim_stream(state)
 
     return xml_response(
         '<StreamingChannel version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">\n'
