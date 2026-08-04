@@ -154,10 +154,28 @@ class Settings(BaseSettings):
     #   SIR. Bo'sh standart bilan servis ko'tarilardi va nosozlik ertalab
     #   06:00 da, birinchi yuklashda `SignatureDoesNotMatch` bo'lib chiqardi
     #   — ya'ni butun kunlik reja yo'qolgandan KEYIN (T-04-29).
+    #
+    # ⚠ KALITLARDA STANDART QIYMAT `""` VA U `nvr_credential_key` NING
+    #   «standartsiz» QARORIDAN FARQ QILADI — sabab MEXANIK, xavfsizlik
+    #   emas, va kafolat AYNAN O'SHA:
+    #
+    #     standartsiz  -> pydantic "Field required" beradi;
+    #     `""` + validator -> BIZNING xabarimiz beriladi.
+    #
+    #   Ikkala yo'lda ham `Settings()` ISHGA TUSHISHDA yiqiladi (maydon
+    #   yetishmasa `""` ga tushadi, validator esa uni rad etadi), ya'ni
+    #   himoya bir xil. Farq FAQAT xabar sifatida: bizniki `ops/seaweedfs/
+    #   s3.json` ga yo'l ko'rsatadi, pydantic'niki esa yo'q.
+    #
+    #   Standartsiz variant BUNDAN TASHQARI mavjud `Settings(...)`
+    #   chaqiruvlarini (`tests/conftest.py`, `test_nvr_secrets.py`) mypy
+    #   darajasida buzardi — ular bu rejaning fayllari EMAS. Ya'ni
+    #   standartsiz shakl xavfsizlikni oshirmasdan begona fayllarga
+    #   o'zgarish talab qilardi.
     s3_endpoint_url: str = "http://storage:8333"
     s3_bucket: str = "sbozor-snapshots"
-    s3_access_key: str
-    s3_secret_key: SecretStr
+    s3_access_key: str = ""
+    s3_secret_key: SecretStr = SecretStr("")
     # SeaweedFS mintaqani E'TIBORSIZ qoldiradi, lekin `botocore` uni
     # TALAB qiladi (`region_name` siz klient umuman qurilmaydi). Ya'ni bu
     # qiymat SeaweedFS uchun ma'nosiz va klient uchun majburiy — u

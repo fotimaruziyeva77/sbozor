@@ -292,6 +292,33 @@ def test_empty_s3_key_fails_at_startup(build: BuildSettings) -> None:
         build(S3_SECRET_KEY="   ")
 
 
+def test_a_missing_empty_s3_key_env_var_fails_the_same_way(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⛔ KALIT UMUMAN BERILMAGAN yo'l ham AYNAN shu darvozaga tushadi.
+
+    Maydonlarning standarti `""` (sabab `settings.py` da: standartsiz
+    shakl bu rejaning fayllari BO'LMAGAN `Settings(...)` chaqiruvlarini
+    mypy darajasida buzardi). Standart qo'shilishi bilan YANGI yo'l
+    ochildi — «o'zgaruvchi umuman yo'q» — va u ALOHIDA o'lchanishi kerak:
+    aks holda validator faqat BO'SH SATRNI tekshirib, yetishmayotgan
+    o'zgaruvchini jimgina o'tkazib yuborishi mumkin edi.
+    """
+    for name in ("S3_ACCESS_KEY", "S3_SECRET_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in _BASELINE.items():
+        if name.startswith("S3_"):
+            continue
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("NVR_CREDENTIAL_KEY", Fernet.generate_key().decode())
+    get_settings.cache_clear()
+
+    with pytest.raises(ValidationError, match="S3_ACCESS_KEY"):
+        Settings()  # type: ignore[call-arg]
+
+    get_settings.cache_clear()
+
+
 def test_secrets_are_secret_str_and_do_not_appear_in_repr(build: BuildSettings) -> None:
     """`BaseSettings.__repr__` BARCHA maydonlarni chop etadi (03-04 o'lchovi).
 

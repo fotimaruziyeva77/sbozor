@@ -179,4 +179,4 @@ def test_arguments_are_keyword_only() -> None:
     qurilardi va kadrlar boshqa bozorning prefiksiga tushardi.
     """
     with pytest.raises(TypeError):
-        object_key(_MARKET, _DAY, _CAMERA, _SLOT)  # type: ignore[misc]
+        object_key(_MARKET, _DAY, _CAMERA, _SLOT)  # type: ignore[call-arg]
