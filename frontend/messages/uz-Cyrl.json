@@ -789,6 +789,22 @@
     "alertStaleHours": "{count} соатдан бери янгиланмаган",
     "alertDiskUsed": "Диск банд: {percent} фоиз",
     "emptyClosedAlerts": "Ёпилган огоҳлантириш йўқ",
-    "emptyClosedAlertsHint": "Ёпилган огоҳлантиришлар шу ерда кўринади."
+    "emptyClosedAlertsHint": "Ёпилган огоҳлантиришлар шу ерда кўринади.",
+    "legend": "Белгилар",
+    "cell": {
+      "ok": "Олинди",
+      "dark": "Қоронғи",
+      "blank": "Бўш",
+      "corrupt": "Бузуқ",
+      "failed": "Хато",
+      "missed": "Олинмади",
+      "pending": "Кутилмоқда",
+      "running": "Олинмоқда",
+      "skipped": "Режага кирмаган"
+    },
+    "cellLabel": "{time} · {camera} · {state}",
+    "gridCaption": "Кадр олиш натижалари: камералар ва вақтлар",
+    "gridRegion": "Кадр олиш жадвали — горизонтал айлантирилади",
+    "camera": "Камера"
   }
 }

@@ -789,6 +789,22 @@
     "alertStaleHours": "Не обновлялось {count} ч",
     "alertDiskUsed": "Диск занят: {percent} процентов",
     "emptyClosedAlerts": "Закрытых оповещений нет",
-    "emptyClosedAlertsHint": "Закрытые оповещения появятся здесь."
+    "emptyClosedAlertsHint": "Закрытые оповещения появятся здесь.",
+    "legend": "Обозначения",
+    "cell": {
+      "ok": "Снято",
+      "dark": "Тёмный",
+      "blank": "Пустой",
+      "corrupt": "Повреждён",
+      "failed": "Ошибка",
+      "missed": "Не снято",
+      "pending": "Ожидается",
+      "running": "Снимается",
+      "skipped": "Вне плана"
+    },
+    "cellLabel": "{time} · {camera} · {state}",
+    "gridCaption": "Результаты съёмки: камеры и времена",
+    "gridRegion": "Таблица съёмки — прокручивается по горизонтали",
+    "camera": "Камера"
   }
 }

@@ -789,6 +789,22 @@
     "alertStaleHours": "{count} soatdan beri yangilanmagan",
     "alertDiskUsed": "Disk band: {percent} foiz",
     "emptyClosedAlerts": "Yopilgan ogohlantirish yo'q",
-    "emptyClosedAlertsHint": "Yopilgan ogohlantirishlar shu yerda ko'rinadi."
+    "emptyClosedAlertsHint": "Yopilgan ogohlantirishlar shu yerda ko'rinadi.",
+    "legend": "Belgilar",
+    "cell": {
+      "ok": "Olindi",
+      "dark": "Qorong'i",
+      "blank": "Bo'sh",
+      "corrupt": "Buzuq",
+      "failed": "Xato",
+      "missed": "Olinmadi",
+      "pending": "Kutilmoqda",
+      "running": "Olinmoqda",
+      "skipped": "Rejaga kirmagan"
+    },
+    "cellLabel": "{time} · {camera} · {state}",
+    "gridCaption": "Kadr olish natijalari: kameralar va vaqtlar",
+    "gridRegion": "Kadr olish jadvali — gorizontal aylantiriladi",
+    "camera": "Kamera"
   }
 }
