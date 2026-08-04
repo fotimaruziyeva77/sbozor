@@ -59,9 +59,50 @@ SENSITIVE_KEYS = frozenset(
         # NVR rekvizitlari (spec §5 — RTSP parollari shifrlangan saqlanadi)
         "rtsp_password",
         "nvr_password",
+        # ==============================================================
+        # 4-FAZA SIRLARI — 04-04 DA O'LCHANGAN OQISH, 04-08 DA YOPILDI.
+        #
+        # `04-04-SUMMARY.md` («Topilma — `censor_secrets` yangi sir
+        # nomlarini QAMRAMAYDI») bu uch nomni AYNAN o'lchagan edi:
+        #
+        #     censor_secrets(None, "info", {
+        #         "s3_access_key": ..., "s3_secret_key": ...,
+        #         "telegram_bot_token": ...,
+        #     })   ->   covered == set()   (uchalasi ham SENZURADAN O'TDI)
+        #
+        # Ya'ni `log.info("upload_failed", s3_secret_key=...)` sirni
+        # stdout'ga VA Sentry'ga yuborardi. `SecretStr` bu yo'lni
+        # YOPMAYDI — u `repr(settings)` ni yopadi, structlog kalitini
+        # emas: qiymat kalit sifatida uzatilganda `SecretStr` ning
+        # `__str__` i emas, `censor_secrets` javobgar bo'ladi.
+        #
+        # Band 04-04 -> 04-06 -> 04-08 zanjiri bo'ylab ochiq yozib
+        # kelingan va u AYNAN shu yerda yopiladi: 04-08 — Telegram
+        # tokenini ISHLATADIGAN birinchi reja.
+        # ==============================================================
+        "telegram_bot_token",
+        "s3_access_key",
+        "s3_secret_key",
     }
 )
-"""Log'ga HECH QACHON tushmasligi kerak bo'lgan kalitlar (kichik harfda)."""
+"""Log'ga HECH QACHON tushmasligi kerak bo'lgan kalitlar (kichik harfda).
+
+⚠⚠ RO'YXAT — ANIQ NOMLAR, NAQSH EMAS (`_is_sensitive`: `str(key).lower()
+   in SENSITIVE_KEYS`). Ya'ni `*_key` / `*_token` / `*_secret` shakli
+   AVTOMATIK qamrab olinmaydi va HAR YANGI SIR NOMI shu ro'yxatga QO'LDA
+   qo'shilishi kerak.
+
+Naqshga o'tish ATAYIN rad etilgan va sabab ikki tomonlama: `*_key` shakli
+`object_key`, `idempotency_key` va `alert_key` ni ham maskalardi (ular
+sir emas va ularsiz diagnostika imkonsiz bo'lardi), `*_token` esa
+`csrf_token` bilan bir qatorda `token_type` ni ham yutardi. Yolg'on-musbat
+senzura xatoni topib bo'lmaydigan qiladi — bu esa sirni oshkor qilishdan
+farqli, LEKIN jimgina zarar.
+
+⚠ SHUNING UCHUN YANGI SIR QO'SHGAN HAR BIR REJA SHU RO'YXATNI HAM
+  YANGILAYDI. Qarz `tests/unit/test_snapshot_settings.py::test_log_filter_
+  covers_the_phase_four_secret_names` bilan qulflangan.
+"""
 
 
 def _is_sensitive(key: object) -> bool:
