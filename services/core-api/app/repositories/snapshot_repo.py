@@ -84,7 +84,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sbozor_core.enums import SnapshotTier
+from sbozor_core.enums import SnapshotQuality, SnapshotTier
 from sbozor_core.models import CaptureRun, Snapshot
 from sbozor_core.tenancy import TenantScopedRepository
 from sqlalchemy import func, insert, select, update
@@ -118,38 +118,45 @@ PURGEABLE_TIERS: tuple[str, ...] = (SnapshotTier.FULL.value, SnapshotTier.COMPRE
 
 
 class SnapshotMeasurementMissingError(ValueError):
-    """`quality_mean`/`quality_stddev` `None` bo'lib keldi — SXEMA CHEGARASI.
+    """O'lchovsiz kadr `corrupt` DAN BOSHQA verdikt bilan yozilmoqchi bo'ldi.
 
-    ⛔ BU IKKI REJANING O'ZARO ZID QARORI VA U SHU YERDA OCHIQ AYTILADI.
+    =========================================================================
+    ⛔ `04-05` OCHIQ QOLDIRGAN ZIDDIYAT SHU YERDA YOPILDI (qarorning egasi
+       `04-07`, migratsiya `0016`).
 
-    `04-03` (sxema) `snapshots.quality_mean` va `quality_stddev` ni
-    `NOT NULL` qilib yozgan. `04-04` (sof modul) esa `corrupt` kadr uchun
-    o'lchovlarni `None` qaytaradi va buni ATAYIN qilgan: nol qiymat
-    «o'lchandi va nol chiqdi» ma'nosini berardi va D-15 ning
-    `percentile_cont` bilan chegara chiqarish yo'lini buzardi.
+    Ziddiyatning eski shakli: `04-03` ustunlarni `NOT NULL` qilgan,
+    `04-04` esa `corrupt` kadr uchun o'lchovlarni `None` qaytaradi, ya'ni
+    UI-SPEC §6.4 ning C4 hujayrasi (`succeeded` + `corrupt`) YOZIB
+    BO'LMAYDIGAN bo'lib qolgan edi. Ikki taklif qilingan yechim —
+    «(a) `corrupt` umuman yozilmaydi» va «(b) ustunlar NULLABLE» — bir
+    vaqtda to'g'ri bo'la olmaydi deb baholangan edi.
 
-    Ya'ni `corrupt` verdiktli kadrni bu jadvalga YOZIB BO'LMAYDI. Ikki
-    to'g'ri yechim bor va ikkalasi ham SHU REJADAN TASHQARIDA:
+    **O'LCHOV KO'RSATDIKI, SAVOL NOTO'G'RI QO'YILGAN EDI: ikkala yo'l ham
+    kerak, chunki ular IKKI XIL nosozlikni ifodalaydi va ular IKKI XIL
+    QATLAMDA hal bo'ladi.**
 
-      (a) `corrupt` kadr `snapshots` ga umuman YOZILMAYDI — u
-          `capture_repo.finish_failed(capture_invalid_response)` bilan
-          yopiladi. Xato reyestrida bu kod AYNAN shu holat uchun bor
-          («Javob keldi, lekin ichida TASVIR YO'Q»), ya'ni taksonomiyaning
-          O'Z dizayni shu yo'lni ko'rsatadi.
+        javob UMUMAN kadr emas (HTML sahifa, bo'sh tana, JPEG bo'lmagan
+        bayt) -> `frame_source` ning magic-bayt darvozasi uni sifat
+        tahliliga QO'YMAYDI -> `capture_invalid_response`, qator `failed`,
+        `snapshots` qatori YO'Q                                  <- (a)
 
-      (b) Migratsiya uchala `quality_*` ustunini NULLABLE qiladi — u holda
-          `04-UI-SPEC.md` §6.4 dagi C4 hujayrasi («Buzuq» = `succeeded` +
-          `corrupt`) haqiqatan mumkin bo'ladi.
+        javob KADR, lekin YAROQSIZ (kesilgan JPEG, dekod xatosi)
+        -> `quality.analyze()` uni `corrupt` deydi va o'lchovlar `None`
+        -> qator `succeeded`, `snapshots` qatori BOR, `is_billable=false`,
+           C4 hujayrasi CHIZILADI                                <- (b)
 
-    (a) va (b) BIR VAQTDA to'g'ri bo'la olmaydi: birinchisida C4 hujayrasi
-    HECH QACHON chizilmaydi, ikkinchisida esa `capture_invalid_response`
-    kodi ishlatilmaydi. Qarorni `04-07` (kadr olish oqimi) qabul qiladi —
-    u ikkala yuzani ham ko'radigan birinchi reja.
+    Ya'ni `capture_invalid_response` HAM ishlatiladi, C4 hujayrasi HAM
+    mavjud bo'ladi.
+    =========================================================================
 
-    Bu istisno o'sha qarorni ERTA va ANIQ joyda ko'rsatadi. Usiz nosozlik
-    `NotNullViolation` bo'lib worker ichida, birinchi buzuq kadrda —
-    ya'ni ehtimol ertalabki 06:00 slotida — chiqardi va xabar hech nimani
-    tushuntirmasdi.
+    ⚠ DARVOZA OLIB TASHLANMADI, TORAYTIRILDI. `corrupt` dan boshqa verdikt
+      uchun o'lchov MAJBURIY bo'lib qoladi: `ok` kadrni o'lchovsiz yozish
+      D-15 ning butun mexanizmini (chegaralarni haqiqiy taqsimotdan
+      chiqarish) jimgina buzardi va nosozlik faqat Phase 0 da, chegara
+      sozlanayotganda ko'rinardi.
+
+    ⚠ SENTINEL NOL EMAS: `0` bazada «o'lchandi va nol chiqdi» degan
+      MA'NOGA ega bo'lardi va `percentile_cont` ni pastga tortardi.
     """
 
 
@@ -228,21 +235,24 @@ class SnapshotRepository(TenantScopedRepository):
           qatlamidan ko'tarib bo'lmaydi (D-16).
 
         Raises:
-            SnapshotMeasurementMissingError: o'lchov `None` bo'lsa — o'sha
-                sinf docstringidagi ikki rejaning zid qarorini o'qing.
+            SnapshotMeasurementMissingError: o'lchov `None`, LEKIN verdikt
+                `corrupt` EMAS. `corrupt` kadr uchun `None` — qonuniy
+                holat (`0016` migratsiyasi); o'sha sinf docstringiga
+                qarang.
             IntegrityError: shu `capture_run_id` uchun ikkinchi kadr
                 (`uq_snapshots_market_id_capture_run_id`, `23505`) yoki
                 takroriy `object_key`. Chaqiruvchi uni 409 ga aylantiradi;
                 ikkinchi kadr «qaysi biri dalil?» savolini javobsiz
                 qoldirardi va 5-faza tasodifiy birini tanlardi.
         """
-        if quality_mean is None or quality_stddev is None:
+        measured = quality_mean is not None and quality_stddev is not None
+        if not measured and quality_verdict != SnapshotQuality.CORRUPT.value:
             raise SnapshotMeasurementMissingError(
                 f"quality_verdict={quality_verdict!r} uchun o'lchovlar yo'q "
-                f"(mean={quality_mean}, stddev={quality_stddev}), lekin "
-                "`snapshots.quality_mean`/`quality_stddev` NOT NULL. "
-                "Yechim `SnapshotMeasurementMissingError` docstringida — "
-                "qarorni 04-07 qabul qiladi."
+                f"(mean={quality_mean}, stddev={quality_stddev}). O'lchovsiz "
+                f"yozish faqat {SnapshotQuality.CORRUPT.value!r} verdiktida "
+                "ruxsat etiladi (`0016` migratsiyasi) — qolgan verdiktlarda "
+                "D-15 ning chegara chiqarish yo'li o'lchovga TAYANADI."
             )
 
         result = await self.session.execute(

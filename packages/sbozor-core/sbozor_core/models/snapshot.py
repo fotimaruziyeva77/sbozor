@@ -754,8 +754,21 @@ class Snapshot(Base, TenantMixin):
     #   Phase 0 ning real Karmana kadrlari chegaralarni SQL bilan sozlaydi,
     #   qayta kadr olish bilan emas — chegaralar bugun LOW confidence,
     #   chunki real kadr hali yo'q.
-    quality_mean: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
-    quality_stddev: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+    #
+    # ⚠⚠ `NULL` MUMKIN VA U AYNAN BITTA HOLATNI ANGLATADI: `corrupt` kadr
+    #    (`0016` migratsiyasi). Buzuq JPEG dekodlanmaydi, ya'ni o'lchovni
+    #    OLIB BO'LMAYDI — sentinel `0` esa bazada «o'lchandi va nol chiqdi»
+    #    ma'nosini berardi va D-15 ning `percentile_cont` bilan chegara
+    #    chiqarish yo'lini jimgina buzardi.
+    #
+    #    Qolgan uchala verdikt (`ok`/`dark`/`blank`) uchun o'lchov MAJBURIY
+    #    va uni `snapshot_repo.record()` ning darvozasi ta'minlaydi — DB
+    #    darajasidagi shartli `CHECK` (`quality_verdict = 'corrupt' OR
+    #    quality_mean IS NOT NULL`) ATAYIN qo'yilmadi: u `0014` ning
+    #    jadvalini qayta yozadigan ikkinchi migratsiya talab qilardi va
+    #    kafolatning O'ZINI kuchaytirmasdi (yagona yozuvchi — o'sha metod).
+    quality_mean: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    quality_stddev: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
     # IR aniqlash uchun — deyarli monoxrom kadrda to'yinganlik nolga yaqin.
     # `NULL` = o'lchanmadi (kadr buzuq yoki bir kanalli).
     quality_saturation: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
