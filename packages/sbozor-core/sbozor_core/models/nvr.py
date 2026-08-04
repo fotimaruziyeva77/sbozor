@@ -59,11 +59,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from sbozor_core.enums import CameraStatus, DiscoveryRunStatus
 from sbozor_core.models.base import Base, TenantMixin, TimestampMixin, uuid_pk
+from sbozor_core.models.snapshot import CAPTURE_METHOD_CHECK
 
 __all__ = [
     "CAMERA_NVR_INDEX",
     "CAMERA_STATUS_CHECK",
     "CAMERA_STATUS_VALUES",
+    "CAPTURE_STREAM_CHECK",
+    "CAPTURE_STREAM_VALUES",
     "DISCOVERY_ACTIVE_RUN_INDEX",
     "DISCOVERY_RUN_ACTIVE_PREDICATE",
     "DISCOVERY_RUN_ACTIVE_STATUSES",
@@ -115,6 +118,19 @@ DISCOVERY_RUN_ACTIVE_PREDICATE = f"status IN ({_quoted(DISCOVERY_RUN_ACTIVE_STAT
 
 TUNNEL_SUBNET_PREDICATE = "tunnel_subnet IS NOT NULL"
 """D-07 indeksining predikati — subnet HALI e'lon qilinmagan qurilmalar qamralmaydi."""
+
+CAPTURE_STREAM_VALUES: tuple[str, ...] = ("main", "sub")
+"""`cameras.capture_stream` — kadr QAYSI oqimdan olinadi (D-09).
+
+Enum sifatida `sbozor_core.enums` ga chiqarilmadi va bu ATAYIN: qiymatlar
+Hikvision kanal raqamlashining O'ZIDAN kelib chiqadi (`<camera>01` = asosiy,
+`<camera>02` = sub-oqim) va ular loyihaning domen tushunchasi emas, NVR
+protokolining fakti. `cameras.has_substream` bilan juftlikda ishlaydi:
+sub-oqimi yo'q kamerada `'sub'` tanlash kadr olishni yiqitardi.
+"""
+
+CAPTURE_STREAM_CHECK = f"capture_stream IN ({_quoted(CAPTURE_STREAM_VALUES)})"
+"""`cameras.capture_stream` faqat `'main'` yoki `'sub'` (ifoda ro'yxatdan HOSILA)."""
 
 # ===========================================================================
 # QISMAN / GLOBAL INDEKS NOMLARI — MODEL VA MIGRATSIYA UCHUN YAGONA MANBA
@@ -181,6 +197,16 @@ class NvrDevice(Base, TenantMixin, TimestampMixin):
         # bilan bir xil sabab).
         CheckConstraint("length(btrim(host)) > 0", name="host_not_blank"),
         CheckConstraint("length(btrim(username)) > 0", name="username_not_blank"),
+        # --- 4-faza: kadr olish sozlamalari (`0014_snapshot_domain`) ---
+        CheckConstraint(CAPTURE_METHOD_CHECK, name="capture_method_allowed"),
+        # Nol yoki manfiy chegara semaforni butunlay yopib, o'sha NVR ning
+        # BARCHA kameralarini jimgina kadrsiz qoldirardi.
+        CheckConstraint("max_concurrent_captures > 0", name="max_concurrent_captures_positive"),
+        CheckConstraint("capture_stagger_ms >= 0", name="capture_stagger_ms_non_negative"),
+        CheckConstraint(
+            "observed_stream_limit IS NULL OR observed_stream_limit > 0",
+            name="observed_stream_limit_positive",
+        ),
         # D-07 — BOZORLAR ARO (global) noyoblik. Qisman: subnet hali e'lon
         # qilinmagan qurilmalar bir-biriga xalaqit bermaydi.
         #
@@ -234,6 +260,50 @@ class NvrDevice(Base, TenantMixin, TimestampMixin):
     last_discovery_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # ===================================================================
+    # 4-FAZA: KADR OLISH SOZLAMALARI (D-06/D-07/D-08)
+    # ===================================================================
+    #
+    # `sbozor_core.enums.CaptureMethod`. UCHALA yo'l ham bitta protokol
+    # ortida quriladi (D-06), ya'ni tanlov MA'LUMOT, kod emas: yangi
+    # bozorda usulni almashtirish uchun deploy ham, shart ham kerak emas.
+    #
+    # ⚠ `isapi` — «ZAXIRA» EMAS (D-07). ISAPI `/picture` NOL RTSP
+    #   sessiyasi ochadi, go2rtc esa sessiyani ochiq ushlab turadi. Ya'ni
+    #   NVR ning o'lchanmagan sessiya chegarasiga yaqinlashganda `isapi`
+    #   eng XAVFSIZ yo'l bo'lib qoladi va tanlov ataylab unga o'tkaziladi.
+    #   Standart `go2rtc` bo'lishining sababi boshqa: u jonli ko'rish uchun
+    #   baribir ishlab turadi, ya'ni kadr olish qo'shimcha ulanish ochmaydi.
+    capture_method: Mapped[str] = mapped_column(
+        Text(), nullable=False, server_default=text("'go2rtc'")
+    )
+    # D-08 — STANDART 1, ya'ni KETMA-KET. `04-RESEARCH.md` §B.6 dagi 4
+    # taklifi ATAYIN rad etilgan va sabab ARIFMETIKADA: sovuq kadr ~4 s,
+    # 25 kamera to'liq ketma-ket = 100 s, grace oynasi esa 600 s. Ya'ni
+    # NVR ning O'LCHANMAGAN sessiya chegarasi bu fazani HECH QACHON
+    # bloklay olmaydi — u faqat kechikish narxini beradi. Parallellikni
+    # oshirish real NVR'da o'lchangandan KEYIN qilinadi, taxmin bilan emas
+    # (simulyator sessiya chegarasini umuman modellashtirmaydi).
+    max_concurrent_captures: Mapped[int] = mapped_column(
+        SmallInteger(), nullable=False, server_default=text("1")
+    )
+    # Ketma-ket kadrlar orasidagi pauza. Cho'qqini yumshatadi: 7 slotning
+    # har biri AYNI BIR daqiqada 25 kadr talab qiladi va o'rtacha yuk bu
+    # yerda yolg'on gapiradi.
+    capture_stagger_ms: Mapped[int] = mapped_column(
+        Integer(), nullable=False, server_default=text("500")
+    )
+    # ADAPTIV PASAYTIRISH uchun: `nvr_stream_limit` xatosi kelganda tizim
+    # kuzatilgan chegarani shu yerga yozadi va keyingi urinishlarni unga
+    # moslaydi.
+    #
+    # ⚠ AVTOMATIK OSHIRISH YO'Q va bu ATAYIN. Chegarani muvaffaqiyatdan
+    #   keyin ko'tarish tebranish (oscillation) beradi: tizim chegaraga
+    #   uriladi -> pasaytiradi -> muvaffaqiyat -> ko'taradi -> yana
+    #   uriladi. Har tsikl NVR ga muvaffaqiyatsiz sessiya urinishi va
+    #   kadrsiz slot narxida tushardi. Qiymatni ko'tarish — ODAMNING
+    #   qarori.
+    observed_stream_limit: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
 
 
 class NvrCredential(Base, TenantMixin):
@@ -384,6 +454,8 @@ class Camera(Base, TenantMixin, TimestampMixin):
         CheckConstraint(CAMERA_STATUS_CHECK, name="status_allowed"),
         CheckConstraint("length(btrim(name)) > 0", name="name_not_blank"),
         CheckConstraint("length(btrim(stream_name)) > 0", name="stream_name_not_blank"),
+        # --- 4-faza: kadr QAYSI oqimdan olinadi (`0014_snapshot_domain`) ---
+        CheckConstraint(CAPTURE_STREAM_CHECK, name="capture_stream_allowed"),
         # «Shu NVR ning kameralari» — kashfiyot upsert'i va ro'yxat
         # so'rovining asosiy yo'li. `market_id` bilan BOSHLANADI.
         Index(CAMERA_NVR_INDEX, "market_id", "nvr_id"),
@@ -427,6 +499,32 @@ class Camera(Base, TenantMixin, TimestampMixin):
     # bu ustun esa o'lchov QACHON bo'lganini.
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # ===================================================================
+    # 4-FAZA: KADR QAYSI OQIMDAN OLINADI (D-09)
+    # ===================================================================
+    #
+    # `'main'` STANDART va bu tanlovning IKKALA yuzi ham yozib qo'yilishi
+    # kerak, chunki ular qarama-qarshi tomonga tortadi:
+    #
+    #   `'sub'`  omborni ~12× KAMAYTIRADI (sub-oqim ancha kichik kadr) va
+    #            NVR ning chiquvchi bitreytini ham shuncha yengillashtiradi;
+    #   `'sub'`  5-fazaning ANIQLIK SHIFTINI PASAYTIRADI — kichik kadrda
+    #            uzoq rastadagi mollar detektor uchun bir necha pikselga
+    #            aylanadi va «band» qarori ishonchsiz bo'lib qoladi.
+    #
+    # Ikkinchisi qaytarib bo'lmaydigan yo'qotish (arxivdagi kadr qayta
+    # olinmaydi), birinchisi esa faqat pul — shuning uchun standart
+    # `'main'`. QAROR REAL KADRDA O'LCHANADI (Phase 0/pilot), taxmin bilan
+    # emas, va bu ustun o'sha o'lchovdan keyin BITTA `UPDATE` bilan
+    # o'zgaradi.
+    #
+    # `has_substream = false` bo'lgan kamerada `'sub'` tanlash kadr olishni
+    # yiqitadi — bog'liqlik ilova qatlamida tekshiriladi, DB'da emas:
+    # `has_substream` kashfiyot bilan O'ZGARADI va CHECK ikkalasini
+    # muzlatib qo'yardi.
+    capture_stream: Mapped[str] = mapped_column(
+        Text(), nullable=False, server_default=text("'main'")
     )
 
 
