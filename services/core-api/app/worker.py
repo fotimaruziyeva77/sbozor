@@ -86,13 +86,17 @@ from uuid import UUID
 import structlog
 from sbozor_core.db import make_engine, make_sessionmaker
 from sbozor_core.logging import configure_logging
+from sbozor_core.timeutil import business_today
 from taskiq import Context, TaskiqDepends, TaskiqEvents, TaskiqScheduler, TaskiqState
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 
+from app.jobs.alerting import alert_sweep, daily_digest
 from app.jobs.capture import BatchRequest, CapturePolicy, capture_batch, capture_tick
 from app.jobs.discovery import discover_nvr
+from app.jobs.retention import RetentionPolicy, retention_daily
 from app.services import storage as storage_module
+from app.services.alerts import AlertSender
 from app.services.frame_source import FrameSourcePool
 from app.settings import get_settings
 
@@ -104,14 +108,21 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 __all__ = [
+    "DIGEST_CRON",
     "DISCOVERY_QUEUE",
     "JOBS_QUEUE",
+    "MARKET_CRON_OFFSET",
+    "RETENTION_CRON",
+    "SWEEP_CRON",
     "TICK_CRON",
+    "alert_sweep_task",
     "broker",
     "capture_batch_task",
     "capture_tick_task",
+    "daily_digest_task",
     "discover_nvr_task",
     "enqueue_discovery",
+    "retention_daily_task",
     "scheduler",
 ]
 
@@ -263,6 +274,47 @@ TICK_CRON: Final[str] = "* * * * *"
   «bitta planer talab qilinmaydi» da'vosini shubha ostiga qo'yardi.
 """
 
+MARKET_CRON_OFFSET: Final[str] = "Asia/Tashkent"
+"""⚠⚠ HAR BIR JADVALDA MAJBURIY (Pitfall 12) — VA U «QULAYLIK» EMAS.
+
+`taskiq` cronni **UTC'da** baholaydi (`is_cron_task_now()` ->
+`now.astimezone(ZoneInfo(offset))`). Ya'ni `cron_offset` siz yozilgan
+`"20 3 * * *"` Toshkentda **08:20** da ishga tushardi — ertalabki kadr
+olish cho'qqisining O'RTASIDA. Retention esa arxiv bo'ylab o'qish va
+yozish qiladi, ya'ni u aynan o'sha daqiqalarda disk I/O si uchun
+`capture_batch` bilan raqobat qilardi.
+
+⚠ `TICK_CRON` DA U ATAYIN YO'Q va bu ziddiyat emas: daqiqalik cron
+  mintaqadan MUSTAQIL — «har daqiqada» har qanday mintaqada bir xil
+  ma'noga ega. Qolgan uchtasi esa SOATGA bog'langan.
+
+Darvoza: `worker.py` da `cron_offset` literali kamida uch marta uchraydi.
+"""
+
+RETENTION_CRON: Final[str] = "20 3 * * *"
+"""Saqlash siyosati — kechasi 03:20 (Toshkent).
+
+Kadr olish oynasi 06:00-18:00, ya'ni 03:20 undan ANIQ tashqarida va
+arxiv bo'ylab yuriladigan I/O hech kimga xalaqit bermaydi.
+"""
+
+SWEEP_CRON: Final[str] = "*/5 * * * *"
+"""Alert supurgisi — har 5 daqiqada.
+
+⚠ HAR DAQIQADA EMAS: supurgi har yugurishda har bozor uchun bir necha
+  so'rov qiladi va uning tezligi hech nimani yaxshilamaydi — debounce
+  oynasi baribir 60 daqiqa. Besh daqiqa «nosozlikni sezish» va «bazani
+  bekorga bandi qilish» orasidagi muvozanat.
+"""
+
+DIGEST_CRON: Final[str] = "0 20 * * *"
+"""Kunlik dayjest — 20:00 (Toshkent), oxirgi slotdan (18:00) KEYIN.
+
+⚠ VAQT TASODIFIY EMAS: dayjest kunning TO'LIQ xulosasini berishi kerak,
+  ya'ni u oxirgi slotning grace oynasi yopilgandan keyin ishlashi shart.
+  18:00 + 10 daqiqa grace + zaxira = 20:00.
+"""
+
 scheduler: TaskiqScheduler = TaskiqScheduler(broker=broker, sources=[LabelScheduleSource(broker)])
 """`taskiq scheduler app.worker:scheduler` IMPORT QILADIGAN obyekt.
 
@@ -312,8 +364,22 @@ async def _open_worker_resources(state: TaskiqState) -> None:
     resources.push_async_callback(sources.aclose)
     state.sources = sources
     state.policy = _capture_policy(settings)
+    state.retention = _retention_policy(settings)
 
-    log.info("worker_started", queue=JOBS_QUEUE)
+    # ⚠ ALERT JO'NATUVCHISI HAM SHU YERDA (04-08). `alert_sweep` har 5
+    #   daqiqada ishlaydi, ya'ni har safar yangi TLS qo'l siqishi narxini
+    #   to'lash keraksiz. Bo'sh token bilan qurilganda klient UMUMAN
+    #   ochilmaydi va konstruktor bir marta `log.warning("alerts_disabled")`
+    #   yozadi — jim ishlash aynan «alert bor deb o'ylash» yolg'onidir.
+    sender = AlertSender(
+        token=settings.telegram_bot_token,
+        chat_id=settings.telegram_chat_id,
+        enabled=settings.alerts_enabled,
+    )
+    resources.push_async_callback(sender.aclose)
+    state.sender = sender
+
+    log.info("worker_started", queue=JOBS_QUEUE, alerts=settings.alerts_enabled)
 
 
 def _capture_policy(settings: Settings) -> CapturePolicy:
@@ -330,6 +396,22 @@ def _capture_policy(settings: Settings) -> CapturePolicy:
         batch_size=settings.capture_batch_size,
         global_concurrency=settings.capture_global_concurrency,
         quality=settings.quality_thresholds(),
+    )
+
+
+def _retention_policy(settings: Settings) -> RetentionPolicy:
+    """`Settings` -> `RetentionPolicy` — TARJIMA SHU YERDA, jobda EMAS.
+
+    `_capture_policy` bilan aynan bir xil qaror va bir xil sabab: job
+    sozlamalar obyektining butun yuzasini ko'rmasligi kerak, shunda uni
+    testda `full_days=0` bilan qurish BITTA qatorga tushadi va u
+    `DATABASE_URL`/`JWT_SECRET` talab qilmaydi.
+    """
+    return RetentionPolicy(
+        full_days=settings.retention_full_days,
+        compressed_days=settings.retention_compressed_days,
+        jpeg_quality=settings.retention_jpeg_quality,
+        batch_size=settings.retention_batch_size,
     )
 
 
@@ -438,6 +520,56 @@ async def capture_tick_task(context: Annotated[Context, TaskiqDepends()]) -> Non
     """
     state = context.state
     await capture_tick(state.sessionmaker, policy=state.policy, enqueue=_enqueue_batch)
+
+
+@broker.task(
+    task_name="retention.daily",
+    schedule=[{"cron": RETENTION_CRON, "cron_offset": MARKET_CRON_OFFSET}],
+)
+async def retention_daily_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — saqlash siyosati (04-08, CAM-07).
+
+    ⚠ `today` BERILMAYDI: mahsulot yo'lida u `business_today()` ga
+      tushadi. Argument FAQAT test uchun mavjud, ya'ni qobiq ham, job ham
+      AYNAN bir xil funksiyani chaqiradi.
+
+    ⚠ RETENTION KONVERGENT VAZIFA (`retention.py` ning cron bo'limi):
+      o'tkazib yuborilgan yugurish ertaga o'zi tutib olinadi, ya'ni
+      planerning xotiradagi cron holati bu yerda AHAMIYATSIZ.
+    """
+    state = context.state
+    await retention_daily(state.sessionmaker, state.storage, policy=state.retention)
+
+
+@broker.task(
+    task_name="alert.sweep",
+    schedule=[{"cron": SWEEP_CRON, "cron_offset": MARKET_CRON_OFFSET}],
+)
+async def alert_sweep_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — alert supurgisi (04-08, FOUND-06).
+
+    ⛔ SUPURGI `capture.tick` NING TRANZAKSIYASIDAN TASHQARIDA VA ALOHIDA
+       VAZIFADA. Aks holda Telegram uzilishi kadr olishni to'xtatardi —
+       kuzatuv vositasi kuzatilayotgan tizimni yiqitardi (`alerting.py`
+       ning 3-qoidasi).
+    """
+    state = context.state
+    await alert_sweep(state.sessionmaker, state.sender)
+
+
+@broker.task(
+    task_name="alert.digest",
+    schedule=[{"cron": DIGEST_CRON, "cron_offset": MARKET_CRON_OFFSET}],
+)
+async def daily_digest_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — kunlik dayjest (04-08, FOUND-06).
+
+    ⚠ BIZNES-KUN QOBIQDA HISOBLANADI, jobda emas: job uni ARGUMENT
+      sifatida oladi va shu bilan «qaysi kun?» savoli testda bitta
+      qiymatga aylanadi (`retention_daily` bilan bir xil qoida).
+    """
+    state = context.state
+    await daily_digest(state.sessionmaker, state.sender, business_date=business_today())
 
 
 async def enqueue_discovery(

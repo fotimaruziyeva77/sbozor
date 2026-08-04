@@ -135,6 +135,8 @@ __all__ = [
     "RETENTION_COMPONENT",
     "RetentionPolicy",
     "RetentionResult",
+    "active_market_ids",
+    "disk_usage_percent",
     "retention_daily",
 ]
 
@@ -286,7 +288,7 @@ async def retention_daily(
     result = RetentionResult()
 
     try:
-        market_ids = await _active_market_ids(sessionmaker)
+        market_ids = await active_market_ids(sessionmaker)
     except SQLAlchemyError:
         # Yugurish BOSHLANA olmadi. Iz jurnalda qoladi; ertangi yugurish
         # AYNAN shu ishni bajaradi (konvergentlik), ya'ni yo'qotish yo'q.
@@ -342,8 +344,25 @@ async def retention_daily(
 # ===========================================================================
 
 
-async def _active_market_ids(sessionmaker: async_sessionmaker[AsyncSession]) -> list[UUID]:
-    """Faol bozorlar — FAQAT identifikator, tenant kontekstisiz."""
+async def active_market_ids(sessionmaker: async_sessionmaker[AsyncSession]) -> list[UUID]:
+    """Faol bozorlar — FAQAT identifikator, tenant kontekstisiz.
+
+    =========================================================================
+    ⚠⚠ OMMAVIY VA `app/jobs/alerting.py` UNI IMPORT QILADI — NEGA NUSXA EMAS.
+
+    Bu chaqiruv `SECURITY DEFINER` funksiyaga boradi, ya'ni u RLS'ni CHETLAB
+    O'TADI. Xavfsizlik yuzasi esa AYNAN BITTA chaqiruv nuqtasiga ega
+    bo'lishi kerak: yuzani toraytirish (masalan `is_active` dan tashqari
+    yana bir shart qo'shish) kelajakda BITTA qatorlik o'zgarish bo'lib
+    qolsin va u ikkinchi, unutilgan nusxada eskirmasin.
+
+    ⚠ BU `_tenant_session` DAN FARQ QILADI va farq ataylab: o'sha kontekst
+      menejeri xavfsizlik YUZASI emas, STRUKTURAVIY naqsh — u
+      `discovery.py`, `capture.py` va bu ikki modulda ATAYIN takrorlangan
+      (jobning O'ZI hech kimga bog'lanmasligi uchun). Chetlab o'tuvchi
+      so'rov esa takrorlanmaydi.
+    =========================================================================
+    """
     async with sessionmaker() as session, session.begin():
         result = await session.execute(_ACTIVE_MARKETS)
         return [row.market_id for row in result]
