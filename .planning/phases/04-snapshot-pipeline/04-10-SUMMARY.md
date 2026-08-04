@@ -75,6 +75,9 @@ patterns-established:
   - "Darvoza o'lchanadi, taxmin qilinmaydi: `components/snapshots/` katalogini yaratib G-2/G-3 QAMROV testi qizarishi AVVAL o'lchandi, keyin tuzatildi"
   - "Darvozani tuzatish uni BO'SHASHTIRMASLIGI kerak — yangi tetik (matn katalogi) eskisidan (katalog mavjudligi) KUCHLIROQ: katalogni o'chirish eski tetikni jimgina qondirardi"
 
+# ⚠ CAM-04 ning UI yarmi shu rejada yetkazildi, LEKIN `REQUIREMENTS.md`
+#   da belgilanMADI: talab faza darajasida, dalil bilan `04-12` da
+#   belgilanadi (`03-01` qarori va `04-12` ning `files_modified` i).
 requirements-completed: [CAM-04]
 
 # Metrics
@@ -221,9 +224,19 @@ Mexanik artefakt mezonlari:
 - **Sabab:** kadr olishda qayta urinish qarori **TIKDA** qabul qilinadi va foydalanuvchiga umuman ko'rinmaydi — «hozir kadr ol» tugmasi bu fazada **qurilmaydi** (§16.2: slot vaqti biznes identifikatori, kechikkan kadr «o'sha payt rasta band edimi?» savoliga javob bermaydi). Hech qanday UI qarorini boshqarmaydigan bayroqni ko'zguga ko'chirish faqat drift manbai bo'lardi.
 - **Bu 3-fazadan ATAYIN farq:** u yerda `retrySafe` «Qayta urinish» tugmasi render qilinadimi degan savolni boshqaradi va shuning uchun `nvr-errors.ts` da bor.
 
+**9. [Rule 1 — bug] `requirements mark-complete` REQUIREMENTS.md ni darvoza tanimaydigan holatga keltirdi**
+
+- **Topildi:** yakuniy metama'lumot commitidan keyin, `npm run requirements:check` bilan.
+- **Ikki muammo, ikkalasi ham o'lchandi:**
+  1. **Lug'at:** SDK jadvalga `Complete` yozdi, `02-22` esa holat lug'atini **uchta qiymat** bilan qulflagan (`Done` / `Pending` / `Blocked (<sabab>)`) va uni `scripts/check-requirements-sync.mjs` bilan mexanik majburlaydi. Darvoza darhol qizardi: *«CAM-04: jadvaldagi holat "Complete" tanilmadi»*.
+  2. **Egalik:** talablar bu loyihada **faza darajasida, dalil bilan** belgilanadi (`03-01` qarori: *«talablar ATAYIN Pending qoldirildi — ular faza darajasida, 03-11 da belgilanadi»*), va `04-12` ning `files_modified` ida `.planning/REQUIREMENTS.md` **bor**. `04-09` ham CAM-04 ni `requirements-completed` da sanagan, lekin faylga **tegmagan** — aynan shu sababdan.
+- **Yechim:** CAM-04 `[ ]` / `Pending` holatiga qaytarildi. Bu rejaning frontmatteridagi `requirements: [CAM-04]` **saqlanadi** — u `04-12` uchun dalil manbai bo'lib qoladi.
+- **⚠ Qolgan bitta nomuvofiqlik MENIKI EMAS:** `CAM-02` ning ro'yxat↔jadval farqi 3-fazadan kelgan (`Blocked (…)` sababi bilan) va u shu rejadan **oldin ham** mavjud edi — diff faqat CAM-04 qatorlariga tegdi.
+- **Fayllar:** `.planning/REQUIREMENTS.md`
+
 ---
 
-**Total deviations:** 8 (2× Rule 3 bloklovchi, 1× Rule 2 yetishmayotgan funksiya, 1× o'z-o'ziga zid mezon, 4× qamrov qarori)
+**Total deviations:** 9 (2× Rule 3 bloklovchi, 1× Rule 2 yetishmayotgan funksiya, 1× Rule 1 bug, 1× o'z-o'ziga zid mezon, 4× qamrov qarori)
 **Impact on plan:** Hech biri qamrovni kengaytirmadi. Ikkitasi (1, 2) **darvozalarning o'zidagi** bo'shliq edi va ikkalasi ham darvozani **kuchaytirish** bilan yopildi; bittasi (3) `04-09` ochiq qoldirgan qarzning bu rejadagi javobi; bittasi (4) darvoza matni bilan spetsifikatsiyaning to'qnashuvi va u niyat bo'yicha hal qilindi.
 
 ## TDD gate compliance
