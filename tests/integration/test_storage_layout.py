@@ -47,7 +47,12 @@ from uuid import UUID, uuid4
 import pytest
 from app.services import storage
 from app.services.object_key import KEY_PREFIX_FOR_DAY, object_key
-from app.services.storage import SnapshotStorage, StorageError
+from app.services.storage import (
+    FREE_PREFIX_REJECTED,
+    SnapshotStorage,
+    StorageError,
+    orphan_keys,
+)
 from botocore.exceptions import EndpointConnectionError  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:
@@ -115,6 +120,15 @@ _MOCK_MODULE_ROOTS = frozenset({"moto", "respx", "aioresponses", "mock", "unitte
 
 _MOCK_NAMES = frozenset({"Stubber", "patch", "MagicMock", "AsyncMock"})
 """Ildiz darajasida tutilmaydigan nomlar: ular ruxsat etilgan paketlar ichida yashaydi."""
+
+FREE_PREFIXES = ("", "sbozor/", f"{uuid4()}/", f"{uuid4()}/2026-09-01")
+"""`orphan_keys` RAD ETISHI shart bo'lgan prefikslar.
+
+To'rtta shakl to'rt xil xatoni ifodalaydi va ular ATAYIN turlicha:
+bo'sh prefiks (butun ombor), erkin matn, kun SEGMENTISIZ bozor prefiksi
+(bitta bozorning butun tarixi) va AJRATUVCHISIZ kun (`2026-09-1` qo'shni
+`2026-09-10` ni ham ushlab olardi — `KEY_PREFIX_FOR_DAY` docstringi).
+"""
 
 _MODULE_PATH = Path(__file__)
 
@@ -392,6 +406,68 @@ async def test_a_storage_error_never_carries_the_endpoint_url(
     assert "EndpointConnectionError" in message, (
         "xato matnida istisno TURI yo'q — diagnostikaning uchta faktidan biri yo'qolgan bo'lardi"
     )
+
+
+async def test_orphan_keys_finds_the_object_the_database_never_recorded(
+    s3_client: SnapshotStorage, s3_markets: tuple[UUID, UUID]
+) -> None:
+    """Yetim obyekt — omborda bor, bazada yo'q (§B.4).
+
+    Bu holat §B.4 ning tartibidan KELIB CHIQADI: avval S3 `PUT`, keyin
+    baza qatori. Ikkalasining orasida jarayon yiqilsa obyekt yetim qoladi.
+    U MUAMMO EMAS — deterministik kalit tufayli topish arzon — lekin
+    topilishi SHART, aks holda arxiv hech kim bilmagan obyektlarni 455 kun
+    saqlab yurardi.
+    """
+    market_id = s3_markets[0]
+    camera_id = uuid4()
+    keys = await _write_slots(
+        s3_client, market_id=market_id, business_date=DAY, camera_id=camera_id
+    )
+    recorded, orphan = keys[:-1], keys[-1]
+
+    found = await orphan_keys(
+        s3_client,
+        prefix=KEY_PREFIX_FOR_DAY(market_id=market_id, business_date=DAY),
+        expected=recorded,
+    )
+
+    assert found == [orphan], f"yetim kalit topilmadi yoki ortiqcha kalit qaytdi: {found}"
+
+
+async def test_orphan_keys_never_reports_a_recorded_key(
+    s3_client: SnapshotStorage, s3_markets: tuple[UUID, UUID]
+) -> None:
+    """YOLG'ON-MUSBAT YO'Q — nazorat holati.
+
+    Usiz oldingi test "hammasini yetim deb e'lon qilamiz" degan sodda
+    (va halokatli) amalga oshirish bilan ham yashil bo'lardi: supurgi
+    `04-08` da o'chirishga ulanadi, ya'ni yolg'on-musbat DALIL kadrini
+    o'chirardi.
+    """
+    market_id = s3_markets[0]
+    keys = await _write_slots(s3_client, market_id=market_id, business_date=DAY, camera_id=uuid4())
+
+    found = await orphan_keys(
+        s3_client,
+        prefix=KEY_PREFIX_FOR_DAY(market_id=market_id, business_date=DAY),
+        expected=keys,
+    )
+
+    assert found == [], f"bazada YOZILGAN kalitlar yetim deb belgilandi: {found}"
+
+
+@pytest.mark.parametrize("prefix", FREE_PREFIXES)
+async def test_orphan_keys_rejects_a_free_prefix(s3_client: SnapshotStorage, prefix: str) -> None:
+    """Erkin prefiks — `ValueError`, ya'ni chegara IZOHDA emas, KODDA.
+
+    ⚠ Rad etish tarmoqqa CHIQISHDAN OLDIN bo'ladi: `s3_client` haqiqiy
+      omborga ulangan, ya'ni tekshiruv kechikkanda listing ALLAQACHON
+      bajarilgan bo'lardi va chegara faqat natijani yashirardi
+      (`assert_safe_go2rtc_src` ning "darvoza eng boshida" qoidasi).
+    """
+    with pytest.raises(ValueError, match=FREE_PREFIX_REJECTED):
+        await orphan_keys(s3_client, prefix=prefix, expected=())
 
 
 def test_storage_layout_uses_no_mock() -> None:

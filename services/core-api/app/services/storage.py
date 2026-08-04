@@ -91,25 +91,35 @@ joyda bir xil shaklni "izchillik uchun" majburlardi.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Sequence
+import re
+from collections.abc import AsyncIterator, Awaitable, Collection, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import date
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
+import structlog
 from aiobotocore.config import AioConfig  # type: ignore[import-untyped]
 from aiobotocore.session import get_session  # type: ignore[import-untyped]
 from botocore.exceptions import BotoCoreError, ClientError  # type: ignore[import-untyped]
+
+from app.services.object_key import KEY_PREFIX_FOR_DAY
 
 if TYPE_CHECKING:
     from app.settings import Settings
 
 __all__ = [
+    "FREE_PREFIX_REJECTED",
     "HeadResult",
     "PutResult",
     "SnapshotStorage",
     "StorageError",
     "open",
+    "orphan_keys",
 ]
+
+log = structlog.get_logger(__name__)
 
 _CONNECT_TIMEOUT_SECONDS = 5.0
 _READ_TIMEOUT_SECONDS = 15.0
@@ -419,3 +429,102 @@ async def open(settings: Settings) -> AsyncIterator[SnapshotStorage]:
         ),
     ) as client:
         yield SnapshotStorage(client, bucket=settings.s3_bucket)
+
+
+FREE_PREFIX_REJECTED = "storage_free_prefix_rejected"
+"""`ValueError` ning matni — testda ham, jurnalda ham AYNAN shu satr."""
+
+_DAY_PREFIX_PATTERN = re.compile(
+    r"(?P<market_id>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+    r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/(?P<business_date>\d{4}-\d{2}-\d{2})/"
+)
+"""Kun prefiksining shakli — `orphan_keys` qabul qiladigan YAGONA kirish."""
+
+
+def _assert_day_prefix(prefix: str) -> None:
+    """Prefiks AYNAN `KEY_PREFIX_FOR_DAY()` ning chiqishimi — aks holda `ValueError`.
+
+    ⚠ TEKSHIRUV IKKI QADAMLI VA IKKINCHISI MUHIMROQ. Birinchisi shaklni
+      regex bilan o'qiydi; ikkinchisi esa o'qilgan bo'laklardan prefiksni
+      FABRIKA orqali QAYTA QURADI va natijani kirish bilan solishtiradi.
+
+      Faqat regex qoldirilsa u bir kun kalit fabrikasidan JIMGINA ajralib
+      ketardi (`KEY_PREFIX_FOR_DAY` ning O'Z docstringi aynan shu sinfni
+      nomlaydi: mustaqil yozilgan prefiks retention'ni hech nima
+      topmaydigan qilib qo'yadi). Qayta qurish bu ajralishni imkonsiz
+      qiladi — satr shu yerda QO'LDA qurilmaydi.
+
+    ⚠ CHEGARANING O'ZI NIMA UCHUN BOR: erkin prefiks `orphan_keys` ni
+      "ombor bo'ylab qidiruv" quroliga aylantirardi va modul
+      docstringining 2-majburiyati BIRINCHI qulay chaqiruvda buzilardi.
+      Narxi ham o'lchanadigan: 455 kunlik arxivda bitta bozor ~80 000
+      obyekt tutadi va prefikssiz skan ularning HAMMASINI o'qirdi
+      (T-04-46).
+
+    Raises:
+        ValueError: `FREE_PREFIX_REJECTED` matni bilan. Tip ataylab oddiy
+            `ValueError` — bunday chaqiruv mahsulot yo'lidan HECH QACHON
+            kelmaydi va u kelishi KODDAGI xatoni bildiradi
+            (`assert_safe_go2rtc_src` bilan bir xil qaror).
+    """
+    match = _DAY_PREFIX_PATTERN.fullmatch(prefix)
+    if match is None:
+        raise ValueError(FREE_PREFIX_REJECTED)
+
+    try:
+        rebuilt = KEY_PREFIX_FOR_DAY(
+            market_id=UUID(match["market_id"]),
+            business_date=date.fromisoformat(match["business_date"]),
+        )
+    except ValueError as exc:
+        # Shakl to'g'ri, qiymat esa yo'q (masalan `2026-02-31`).
+        raise ValueError(FREE_PREFIX_REJECTED) from exc
+
+    if rebuilt != prefix:
+        raise ValueError(FREE_PREFIX_REJECTED)
+
+
+async def orphan_keys(
+    storage: SnapshotStorage, *, prefix: str, expected: Collection[str]
+) -> list[str]:
+    """Omborda BOR, lekin kutilganlar to'plamida YO'Q kalitlar (§B.4).
+
+    ⚠ BU SOF TAQQOSLASH: `expected` bazadan CHAQIRUVCHI tomonidan keladi va
+      bu funksiya bazaga UMUMAN tegmaydi. Aks holda ombor qatlami
+      repozitoriy qatlamiga bog'lanib qolardi va uni haqiqiy ombor ustida
+      yolg'iz o'lchab bo'lmasdi.
+
+    §B.4 ning bahosi bu funksiyaning SHAKLINI ham belgilaydi: yetim obyekt
+    (obyekt bor, baza qatori yo'q) MUAMMO EMAS — kalit deterministik
+    bo'lgani uchun uni topish arzon, ustuvorligi past va bitta 60 KB obyekt
+    hech kimga zarar bermaydi. Shuning uchun u ALOHIDA job emas: u
+    retention'ning kunlik supurgisi ichida chaqiriladi (`04-08`) va o'sha
+    yerda allaqachon ochilgan kun prefiksidan foydalanadi.
+
+    Args:
+        storage: ochiq ombor qobig'i.
+        prefix: FAQAT `KEY_PREFIX_FOR_DAY()` ning chiqishi
+            (`_assert_day_prefix` docstringi).
+        expected: shu kun uchun bazada YOZILGAN kalitlar.
+
+    Returns:
+        Tartiblangan yetim kalitlar ro'yxati.
+
+    Raises:
+        ValueError: prefiks kun prefiksi bo'lmasa.
+        StorageError: ombor ro'yxatni bera olmasa.
+    """
+    _assert_day_prefix(prefix)
+
+    found = await storage.list_prefix(prefix)
+    orphans = sorted(set(found) - set(expected))
+    # ⚠ FAQAT SANOQLAR: kalitlarning O'ZI jurnalga yozilmaydi. Bitta kunlik
+    #   supurgi 175 kalit beradi va ular jurnalni foydasiz to'ldirardi;
+    #   ro'yxat chaqiruvchiga QAYTARILADI, ya'ni u yo'qolmaydi.
+    log.info(
+        "storage_orphan_sweep",
+        found=len(found),
+        expected=len(expected),
+        orphans=len(orphans),
+    )
+    return orphans
