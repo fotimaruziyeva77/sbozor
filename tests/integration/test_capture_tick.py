@@ -539,12 +539,64 @@ def test_the_scheduler_has_exactly_one_minute_cron() -> None:
 
       Mezonning NIYATI («ikkinchi daqiqalik cron qo'shilsa darvoza
       qizarsin») KUCHLIROQ shaklda bajarildi: satr sanog'i BILAN BIRGA
-      `schedule=[` bloklarining soni ham tekshiriladi — ya'ni BOSHQA
-      literal bilan yozilgan ikkinchi jadval ham ushlanadi.
+      har bir jadvalning KIRISHI ham tekshiriladi — ya'ni BOSHQA literal
+      bilan yozilgan ikkinchi daqiqalik jadval ham ushlanadi.
+
+    =====================================================================
+    ⚠⚠ DARVOZA `04-08` DA TORAYTIRILDI — SABAB BILAN.
+
+    `04-07` bu yerda `len(re.findall(r"schedule=\\[", body)) == 1` deb
+    yozgan edi va o'shanda u to'g'ri qiymat berardi: planerda bitta
+    jadval bor edi. `04-08` esa REJA BO'YICHA yana uchtasini qo'shadi
+    (`retention.daily` 03:20, `alert.sweep` har 5 daqiqa, `alert.digest`
+    20:00), ya'ni eski shakl o'sha rejani BAJARIB BO'LMAYDIGAN qilardi.
+
+    Darvozaning HAQIQIY da'vosi hech qachon «jadval bitta» bo'lmagan —
+    u «DAQIQALIK cron oqimi bitta» edi (D-02/D-03: ikkinchi tik oqimi
+    «bitta planer talab qilinmaydi» da'vosini shubha ostiga qo'yardi).
+    Shuning uchun sanoq endi JADVAL KIRISHLARI bo'yicha yuradi va
+    daqiqalik namunaga mos keladiganini AYNAN BITTA deb talab qiladi.
+
+    Darvoza SUSAYMADI, kuchaydi: u endi `"*/1 * * * *"` va `"* * * * *"`
+    ning har qanday bo'shliqli variantini ham ushlaydi, holbuki eski
+    shakl faqat literalning aynan bir ko'rinishini sanardi.
+    =====================================================================
     """
     body = WORKER_PATH.read_text(encoding="utf-8")
     assert len(re.findall(r'"\* \* \* \* \*"', body)) == 1, "daqiqalik cron satri bittadan ko'p"
-    assert len(re.findall(r"schedule=\[", body)) == 1, "ikkinchi cron jadvali qo'shilgan"
+
+    crons = re.findall(r'"cron"\s*:\s*([A-Za-z_][A-Za-z_0-9]*|"[^"]*")', body)
+    assert crons, "planerda birorta jadval topilmadi"
+
+    resolved = [
+        _CRON_CONSTANTS[name] if name in _CRON_CONSTANTS else name.strip('"') for name in crons
+    ]
+    minute_crons = [value for value in resolved if _IS_MINUTE_CRON.fullmatch(value)]
+    assert len(minute_crons) == 1, f"ikkinchi DAQIQALIK cron oqimi ochilgan: {resolved}"
+
+
+_IS_MINUTE_CRON = re.compile(r"(\*|\*/1)(\s+\*){4}")
+"""«Har daqiqada» ni bildiruvchi cron namunasi — literaldan KENGROQ."""
+
+
+def _cron_constants() -> dict[str, str]:
+    """`worker.py` dagi cron KONSTANTALARI — nom -> qiymat.
+
+    Jadval dekoratorda konstantani ishlatadi (`schedule=[{"cron":
+    TICK_CRON, ...}]`), ya'ni matn darvozasi qiymatni ko'rish uchun
+    konstantani YECHISHI kerak. Yechish MAHSULOT modulidan olinadi, qo'lda
+    takrorlanmaydi.
+    """
+    from app import worker
+
+    return {
+        name: value
+        for name, value in vars(worker).items()
+        if name.endswith("_CRON") and isinstance(value, str)
+    }
+
+
+_CRON_CONSTANTS = _cron_constants()
 
 
 def test_the_scheduler_object_is_built_without_settings() -> None:

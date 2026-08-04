@@ -363,32 +363,68 @@ def test_secrets_are_secret_str_and_do_not_appear_in_repr(build: BuildSettings) 
     assert settings.telegram_bot_token.get_secret_value() == telegram
 
 
-def test_log_filter_coverage_of_the_new_secret_names_is_measured() -> None:
-    """⚠ O'LCHOV, DA'VO EMAS: `censor_secrets` bu nomlarni QAMRAMAYDI.
+def test_log_filter_covers_the_phase_four_secret_names() -> None:
+    """`censor_secrets` fazaning uchala sirini MASKALAYDI (T-04-28, T-04-59).
 
-    `sbozor_core.logging::SENSITIVE_KEYS` — ANIQ NOMLAR ro'yxati, naqsh
-    emas (`_is_sensitive`: `str(key).lower() in SENSITIVE_KEYS`). Ya'ni
+    =====================================================================
+    BU TEST `04-04` DA TESKARI DA'VO BILAN TUG'ILGAN VA `04-08` DA AG'DARILDI.
+
+    `04-04` o'lchagan edi: `SENSITIVE_KEYS` — ANIQ NOMLAR ro'yxati, naqsh
+    emas (`_is_sensitive`: `str(key).lower() in SENSITIVE_KEYS`), ya'ni
     `*_key` / `*_token` / `*_secret` shakli avtomatik QAMRAB OLINMAYDI va
-    `log.info("x", s3_secret_key=...)` senzuradan O'TMASDAN jurnalga va
-    Sentry'ga ketardi.
+    uchala nom ham senzuradan O'TIB KETARDI (`covered == set()`).
+    `logging.py` esa o'sha rejaning `files_modified` ida YO'Q edi.
 
-    `logging.py` bu rejaning `files_modified` ida YO'Q, shuning uchun bu
-    yerda faqat HOZIRGI HOLAT o'lchanadi va u `04-08` (alert jo'natuvchisi)
-    ga band sifatida o'tkaziladi.
+    Shuning uchun `04-04` bu yerga O'ZINI BEKOR QILADIGAN test qoldirgan:
+    u hozirgi holatni qulflardi va QAMROV PAYDO BO'LGANDA QIZARARDI.
+    `04-08` — Telegram tokenini ISHLATADIGAN birinchi reja — bandni yopdi
+    va shu bilan birga bu testni AG'DARDI: endi u qamrovning MAVJUDLIGINI
+    talab qiladi.
 
-    ⚠ Test qamrov PAYDO BO'LGANDA ham QIZARADI — bu ataylab: o'shanda
-      band yopilgan bo'ladi va bu yerdagi «qamramaydi» matni eskirgan
-      bo'lardi.
+    ⚠ Endi test TESKARI yo'nalishda qo'riqlaydi: `SENSITIVE_KEYS` dan
+      uchala nomdan biri olib tashlansa (yoki yangi sozlama nomi bilan
+      almashtirilsa) darvoza QIZARADI.
+    =====================================================================
+
+    ⚠ `SecretStr` BU YO'LNI YOPMAYDI va u yuqoridagi testning o'rnini
+      bosmaydi: `SecretStr` `repr(settings)` ni yopadi, structlog
+      kalitini emas. Ikki himoya IKKI XIL yo'lni to'sadi va ikkalasi ham
+      kerak.
     """
     candidates = ("s3_access_key", "s3_secret_key", "telegram_bot_token")
 
     censored = censor_secrets(None, "info", dict.fromkeys(candidates, "leak-me"))
-    covered = {name for name in candidates if censored[name] == CENSORED}
+    uncovered = sorted(name for name in candidates if censored[name] != CENSORED)
 
-    assert covered == set(), (
-        f"`censor_secrets` endi {sorted(covered)} ni qamrab oldi — ya'ni "
-        "`SENSITIVE_KEYS` kengaytirilgan. Bu YAXSHI xabar: `04-08` bandi "
-        "yopilgan. Testning docstringini va SUMMARY dagi topilmani yangilang."
+    assert uncovered == [], (
+        f"`censor_secrets` {uncovered} ni MASKALAMADI — ya'ni bu nom(lar) "
+        "`SENSITIVE_KEYS` dan tushib qolgan. `log.info(..., <nom>=...)` "
+        "shaklidagi har qanday chaqiruv sirni stdout'ga va Sentry'ga "
+        "yuboradi. Ro'yxat: `packages/sbozor-core/sbozor_core/logging.py`."
+    )
+
+
+def test_the_secret_filter_still_ignores_non_secret_key_shaped_names() -> None:
+    """NAZORAT HOLATI: `*_key` shakli O'Z-O'ZIDAN sir emas.
+
+    ⚠ BU TEST YUQORIDAGISINING JUFTI VA U YOLG'ON-MUSBAT SENZURANI
+      TO'SADI. `SENSITIVE_KEYS` ni naqshga («har qanday `*_key`»)
+      aylantirish vasvasasi tabiiy, lekin u `object_key` ni ham
+      maskalardi — retention, dalil zanjiri va ombor diagnostikasining
+      HAMMASI o'sha kalitga tayanadi va ular jurnalda `***` bo'lib
+      qolardi.
+
+    Ya'ni bu yerda o'lchanadigan narsa — ro'yxat naqshga AYLANMAGANI.
+    """
+    benign = ("object_key", "alert_key", "idempotency_key")
+
+    censored = censor_secrets(None, "info", dict.fromkeys(benign, "ko'rinishi-shart"))
+    masked = sorted(name for name in benign if censored[name] == CENSORED)
+
+    assert masked == [], (
+        f"{masked} sababsiz maskalandi — `SENSITIVE_KEYS` naqshga "
+        "aylantirilgan bo'lsa kerak. Yolg'on-musbat senzura nosozlikni "
+        "topib bo'lmaydigan qiladi."
     )
 
 
