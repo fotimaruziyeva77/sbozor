@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Banknote,
+  CalendarClock,
   CalendarDays,
   Ellipsis,
   LayoutDashboard,
@@ -60,6 +61,7 @@ type NavItem = {
     | "/tariffs"
     | "/calendar"
     | "/cameras"
+    | "/snapshots"
     | "/users"
     | "/audit"
     | "/markets/new";
@@ -71,6 +73,7 @@ type NavItem = {
     | "tariffs"
     | "calendar"
     | "cameras"
+    | "snapshots"
     | "users"
     | "audit"
     | "newMarket";
@@ -153,6 +156,32 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/cameras",
     labelKey: "cameras",
     icon: Video,
+    permission: "camera_view",
+    group: "market",
+  },
+  /*
+   * "Kadr olish" — 4-fazaning YAGONA yangi bo'limi (04-UI-SPEC §4.8).
+   *
+   * `/cameras` DAN BEVOSITA KEYIN: kadr olish — kameraning bevosita
+   * davomi va huquqi ham AYNAN BIR XIL (`camera_view`), ya'ni ikkala
+   * yozuv bir vaqtda paydo bo'ladi va bir vaqtda yo'qoladi. Yangi
+   * `Permission` QO'SHILMAYDI (04-PATTERNS §3.9) — `lib/rbac.ts` va
+   * `rbac.py` matritsalari bu fazada TEGILMAYDI.
+   *
+   * MOBIL KONTRAKT BUZILMAYDI [O'LCHANDI: 04-UI-SPEC M-7]: ro'yxat
+   * 10 -> 11 ga o'sdi, `MOBILE_PRIMARY_COUNT` esa 4 bo'lib qoladi, ya'ni
+   * pastki panel 4 + "Ko'proq" = 5 element. Yozuv "Ko'proq" varag'iga
+   * tushadi — kadr olish jurnali KUNLIK amal emas, u nizo yoki
+   * tekshiruvda ochiladi (kameralar bilan bir xil mulohaza).
+   *
+   * `CalendarClock` ATAYIN: reja (kalendar) + vaqt (soat) — fazaning
+   * ikkala mazmuni. `Camera` ishlatilmaydi, u `/cameras` da band va
+   * ikki bo'limni bir xil ko'rsatardi.
+   */
+  {
+    href: "/snapshots",
+    labelKey: "snapshots",
+    icon: CalendarClock,
     permission: "camera_view",
     group: "market",
   },

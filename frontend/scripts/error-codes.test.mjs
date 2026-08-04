@@ -362,3 +362,129 @@ test("G-1: har kod uchun SABAB va TUZATISH matni UCHALA tilda bor (D-02)", () =>
       problems.join("\n  "),
   );
 });
+
+/* ---------------------------------------------------------------------------
+ * G-5 — 4-FAZA: DARVOZA IKKI NAMESPACE USTIDA ISHLAYDI.
+ *
+ * 3-fazada zanjir bitta reyestrdan (`NVR_ERROR_CODES`) boshlanardi.
+ * 4-fazada IKKINCHI reyestr qo'shiladi (`snapshots.errorCause.*`,
+ * 04-UI-SPEC §11.8 ning o'n bitta kodi) va u BOSHQA manbaga tayanadi:
+ * kadr olish xatolari NVR ning ISAPI kodlari EMAS.
+ *
+ * ⚠ ⛔ `actor` USTUNI — 4-FAZANING YANGI TALABI (§10.5).
+ *   Har xato uchun «BUNI KIM TUZATADI?» degan savolga javob bo'lishi
+ *   shart: `admin` (bozor ma'muriyati), `platform` (platforma jamoasi)
+ *   yoki `none` (hech kim — bu holat o'z-o'zidan tiklanadi). Usiz admin
+ *   sababni va tuzatishni O'QIYDI, lekin bu ISH O'ZINIKIMI yoki
+ *   qo'ng'iroq qilish kerakmi — BILMAYDI.
+ *
+ * ⚠ QUYI CHEGARA SHARTLI. `snapshots` copy'si `04-08…04-10` da keladi.
+ *   Hozir u yo'q va test O'TADI — lekin SABABNI CHOP ETIB. Jimgina
+ *   o'tish «darvoza bor» degan yolg'on da'voni qoldirardi, qattiq
+ *   chegara esa bugundan qizil bo'lib, keyingi ijrochini uni «chetlab
+ *   o'tishga» majbur qilardi.
+ * ------------------------------------------------------------------------ */
+
+/** Xato reyestri bo'lgan namespace'lar — 3-fazada bitta, 4-fazada ikkita. */
+const ERROR_NAMESPACES = ["cameras", "snapshots"];
+
+/** §11.8 — kadr olish xatolarining o'n bitta kodi. */
+const MIN_SNAPSHOT_ERROR_CODES = 11;
+
+/** §10.5 — `actor` ustunining AYNAN uchta qiymati. */
+const SNAPSHOT_ACTORS = ["admin", "none", "platform"];
+
+function snapshotCauses(locale) {
+  return loadMessages(locale).snapshots?.errorCause ?? {};
+}
+
+function snapshotsCopyMissing() {
+  return LOCALES.every((locale) => Object.keys(snapshotCauses(locale)).length === 0);
+}
+
+test("G-5: darvoza IKKALA xato namespace'ini biladi (nazorat)", () => {
+  /*
+   * Bu assert arzon, lekin u aynan W0-F7 bilan bir xil sinfdagi
+   * xavfni yopadi: ro'yxat bitta namespace bilan qolib ketsa, ikkinchisi
+   * hech qachon tekshirilmasdi va HECH BIR test qizarmasdi — «jim
+   * qamrovsizlik».
+   */
+  assert.deepEqual(ERROR_NAMESPACES, ["cameras", "snapshots"]);
+});
+
+test("G-5: har `snapshots.errorCause.{kod}` uchun `errorFix.{kod}` UCHALA tilda bor", () => {
+  if (snapshotsCopyMissing()) {
+    console.log(
+      "[G-5] `snapshots.errorCause.*` hali uchala tilda ham yo'q (copy 04-08…04-10 da " +
+        `keladi) — darvoza kodlar qo'shilishi bilan >= ${MIN_SNAPSHOT_ERROR_CODES} ` +
+        "kodni va sabab↔tuzatish juftligini TALAB qiladi.",
+    );
+    return;
+  }
+
+  const problems = [];
+  for (const locale of LOCALES) {
+    const snapshots = loadMessages(locale).snapshots ?? {};
+    const causes = snapshots.errorCause ?? {};
+    const fixes = snapshots.errorFix ?? {};
+    const codes = Object.keys(causes);
+
+    assert.ok(
+      codes.length >= MIN_SNAPSHOT_ERROR_CODES,
+      `${locale}.json: snapshots.errorCause da atigi ${codes.length} kod bor ` +
+        `(kutilgan >= ${MIN_SNAPSHOT_ERROR_CODES}, 04-UI-SPEC §11.8)`,
+    );
+
+    for (const code of codes) {
+      if (typeof fixes[code] !== "string" || fixes[code].trim() === "") {
+        problems.push(`${locale}.json: snapshots.errorFix.${code} YO'Q`);
+      }
+    }
+    // Teskari yo'nalish: tuzatish bor, sabab yo'q — o'lik kalit.
+    for (const code of Object.keys(fixes)) {
+      if (!(code in causes)) {
+        problems.push(`${locale}.json: snapshots.errorCause.${code} YO'Q (tuzatish bor)`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "D-02 buzilgan — sabab va tuzatish JUFT bo'lishi SHART:\n  " + problems.join("\n  "),
+  );
+});
+
+test("G-5: `snapshots.actor.*` uchala tilda va AYNAN uchta qiymat (§10.5)", () => {
+  const present = LOCALES.filter(
+    (locale) => Object.keys(loadMessages(locale).snapshots?.actor ?? {}).length > 0,
+  );
+
+  if (present.length === 0) {
+    console.log(
+      "[G-5] `snapshots.actor.*` hali uchala tilda ham yo'q — darvoza copy qo'shilishi " +
+        `bilan AYNAN uchta qiymatni TALAB qiladi: ${SNAPSHOT_ACTORS.join(", ")}.`,
+    );
+    return;
+  }
+
+  // ⚠ QISMAN mavjudlik ALOHIDA nosozlik: bir tilda bor, ikkinchisida
+  //   yo'q holat `i18n:check` dan O'TADI (u parity'ni tekshiradi, lekin
+  //   bu kalitlar MA'LUMOTDAN quriladi va uchala faylda ham bo'lmasa
+  //   parity baribir yashil).
+  assert.deepEqual(
+    present.sort(),
+    [...LOCALES].sort(),
+    `\`snapshots.actor.*\` faqat ${present.join(", ")} da bor — QISMAN tarjima ` +
+      "qolgan tillarda tarjimasiz texnik identifikator ko'rsatardi",
+  );
+
+  for (const locale of LOCALES) {
+    assert.deepEqual(
+      Object.keys(loadMessages(locale).snapshots.actor).sort(),
+      SNAPSHOT_ACTORS,
+      `${locale}.json: snapshots.actor ro'yxati §10.5 bilan mos emas. Har xato ` +
+        "«BUNI KIM TUZATADI?» savoliga javob berishi SHART.",
+    );
+  }
+});

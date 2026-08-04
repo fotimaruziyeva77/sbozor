@@ -4,6 +4,8 @@
   "_comment_excel": "COPY QOIDASI (override YETARLI EMAS): Excel va xlsx so'zlariga APOSTROFLI qo'shimcha ulanmaydi — apostrofli shakl boshqa token bo'lgani uchun override uni qutqarmaydi va apostrof tutuq belgisiga aylanadi. To'g'ri shakl: `Excel fayldan yuklash`, `xlsx fayl`. To'liq qoida va o'lchangan misollar: `frontend/messages/README.md` (Qoida 1). Darvoza: `scripts/gen-cyrillic.test.mjs`.",
   "_comment_acronyms": "AKRONIMLAR KIRILLGA O'GIRILMAYDI (3-faza, UI-SPEC §11.7 Qoida 3): admin bu satrni NVR qurilmasining O'Z interfeysi bilan solishtiradi va u yerda `NVR`, `NTP`, `RTSP` lotin yozuvida turadi. `НВР` foydalanuvchini qurilma bilan bog'lay olmaydigan YANGI atama tug'dirardi. Rus tilida ham shu sabab: `NVR` saqlanadi. DIQQAT — bu ro'yxat `scripts/gen-cyrillic.test.mjs` dagi `allowed` regexi bilan JUFT yuritiladi: biri to'ldirilib ikkinchisi unutilsa, o'sha test qizaradi va bu KUTILGAN xulq.",
   "_comment_semantic": "SEMANTIK DEFEKT (3-faza, UI-SPEC §11.7 Qoida 2): sof kirill chiqish ham NOTO'G'RI bo'lishi mumkin va skript tekshiruvi buni USHLAMAYDI. O'lchangan: `autentifikatsiya` -> `аутентификатсия` (to'g'risi `аутентификация`) va `Asia/Tashkent` -> `Асиа/Ташкент`. Birinchisi override bilan tuzatiladi (`ts` birikmasi qoidasi), ikkinchisi esa COPY qoidasi bilan: IANA identifikatori matnga umuman kiritilmaydi, o'rniga `Toshkent` yoziladi.",
+  "_comment_alphanumeric": "RAQAM ARALASHGAN TOKEN OVERRIDE BILAN TUZALMAYDI (4-faza, 04-UI-SPEC §11.11 Qoida 1) [O'LCHANDI: M-3]. Lug'at TOKENni qidiradi, `S3` esa harf va raqam aralashmasi bo'lgani uchun boshqa token sifatida bo'linadi: `words[\"S3\"] = \"S3\"` bo'lsa ham chiqish `С3` bo'lib qoladi. Sof harfli token (`SeaweedFS`) esa TUZALADI. Shuning uchun yechim override emas, COPY: `S3 omborida` -> `omborda`, `JPEG fayli` -> `kadr`, `H.264 oqimi` -> `oqim`, `IPv4 manzili` -> `manzil`. Darvoza: `scripts/gen-cyrillic.test.mjs` `messages/*.json` da `[A-Za-z]+[0-9]` naqshini UMUMAN taqiqlaydi.",
+  "_comment_units": "KIRILL BIRLIKLARIGA TEGILMAYDI (4-faza, 04-UI-SPEC §11.11 Qoida 3) [O'LCHANDI: M-2]. `MB` -> `МБ`, `GB` -> `ГБ` — bular AKRONIM emas, O'LCHOV BIRLIGI va kirill yozuvining standart qisqartmalari. 3-fazaning `akronim lotinda qoladi` qoidasi ularga QO'LLANMAYDI: admin `МБ` ni qurilma interfeysi bilan solishtirmaydi. Ularga override QO'YILMAYDI va bu `gen-cyrillic.test.mjs` da ijobiy nazorat sifatida qulflangan.",
   "messages": {},
   "words": {
     "SBOZOR": "SBOZOR",
@@ -48,6 +50,9 @@
     "web": "веб",
     "Web": "Веб",
     "autentifikatsiya": "аутентификация",
-    "autentifikatsiyasini": "аутентификациясини"
+    "autentifikatsiyasini": "аутентификациясини",
+
+    "IR": "IR",
+    "Telegram": "Telegram"
   }
 }

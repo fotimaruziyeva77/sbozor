@@ -37,7 +37,8 @@
     "groupMarket": "Рынок",
     "groupSystem": "Система",
     "logout": "Выход",
-    "cameras": "Камеры"
+    "cameras": "Камеры",
+    "snapshots": "Съёмка кадров"
   },
   "auth": {
     "phoneLabel": "Номер телефона",

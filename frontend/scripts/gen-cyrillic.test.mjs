@@ -485,8 +485,22 @@ describe("uz-Cyrl.json — yetkazilayotgan fayl toza", () => {
     // uchramaydigan atama tug'dirardi. `\b` chegaralari ATAYIN: 2-faza
     // yozuvlari chegarasiz va ular so'z ICHIDA ham mos kelib, darvozani
     // sekin bo'shatib borardi.
+    //
+    // ⚠ 4-FAZA: `IR` va `Telegram` qo'shildi (04-UI-SPEC §11.11 Qoida 2).
+    //   `IR` — tungi rejimning akronimi va admin uni kamera menyusida
+    //   AYNAN shu shaklda ko'radi; `ИР` hech qayerda uchramaydigan yangi
+    //   atama tug'dirardi. `Telegram` — brend nomi.
+    //
+    //   ⛔ `JPEG`, `Sentry`, `S3`, `SeaweedFS`, `UTC` ATAYIN QO'SHILMADI.
+    //      Ular copy'ga UMUMAN kirmaydi (Qoida 1/3): foydalanuvchi uchun
+    //      ombor va format texnologiyasining nomi ahamiyatsiz. Ro'yxatga
+    //      qo'shish ularni matnga kiritishga "ruxsat" bergan bo'lardi.
+    //
+    //   ⚠ `MB`/`GB` ham QO'SHILMAYDI va bu BOSHQA sabab bilan: ular
+    //      kirillda TO'G'RI o'giriladi (`МБ`/`ГБ`) — bu akronim emas,
+    //      o'lchov birligi (Qoida 3). Pastdagi ijobiy nazoratga qarang.
     const allowed =
-      /SBOZOR|Excel|xlsx|CSV|csv|https?:\/\/\S+|[\w.%+-]+@[\w.-]+|\b(?:Hikvision|WireGuard|WebRTC|ISAPI|RTSP|HLS|MSE|NVR|NTP|VPN|GMT|IP)\b|\b(?:firmware|digest|basic|https|http)\b/gu;
+      /SBOZOR|Excel|xlsx|CSV|csv|https?:\/\/\S+|[\w.%+-]+@[\w.-]+|\b(?:Hikvision|WireGuard|WebRTC|ISAPI|RTSP|HLS|MSE|NVR|NTP|VPN|GMT|IP|IR|Telegram)\b|\b(?:firmware|digest|basic|https|http)\b/gu;
 
     const walk = (node, prefix) => {
       for (const [key, value] of Object.entries(node)) {
@@ -509,6 +523,322 @@ describe("uz-Cyrl.json — yetkazilayotgan fayl toza", () => {
     };
 
     walk(tree, "");
+  });
+});
+
+/*
+ * =============================================================================
+ * G-6 — 4-FAZANING O'LCHANGAN HOLATLARI (04-UI-SPEC §11.11).
+ *
+ * Uchta yangi qoida va ularning har biri BOSHQA sinfdan:
+ *
+ *   Qoida 1 (M-3)  RAQAM ARALASHGAN token override bilan TUZALMAYDI —
+ *                  yechim COPY darajasida. Darvoza uni KIRISHIDA to'sadi.
+ *   Qoida 2 (M-2)  Sof harfli akronim/brend override TALAB QILADI.
+ *   Qoida 3 (M-2)  Kirill BIRLIKLARI to'g'ri — ularga override QO'YILMAYDI.
+ *   Qoida 6 (M-9)  `ъ` ning IKKI ma'nosi ajratiladi.
+ * =============================================================================
+ */
+describe("transliterate — G-6: 4-fazaning o'lchangan holatlari", () => {
+  test("Qoida 2 / T-10: `IR` akronimi lotin holida qoladi", () => {
+    const out = transliterate("Tungi IR rejimi", OVERRIDE_WORDS);
+
+    assert.equal(out, "Тунги IR режими");
+    assert.ok(out.includes("IR"), "`IR` lotin holida qolishi kerak");
+    assert.ok(!out.includes("ИР"), "buzuq `ИР` qaytib kelgan — override tushib qolgan");
+  });
+
+  test("Qoida 2 / T-11: `Telegram` brendi lotin holida qoladi", () => {
+    const out = transliterate("Telegram xabari", OVERRIDE_WORDS);
+
+    assert.equal(out, "Telegram хабари");
+    assert.ok(out.includes("Telegram"), "`Telegram` lotin holida qolishi kerak");
+    assert.ok(!out.includes("Телеграм"), "buzuq `Телеграм` qaytib kelgan");
+  });
+
+  test("Qoida 3 / T-12: kirill BIRLIGI to'g'ri chiqadi (IJOBIY NAZORAT)", () => {
+    /*
+     * ⚠ BU TAQIQ EMAS, KUTILGAN CHIQISH. `МБ`/`ГБ` — kirill yozuvining
+     *   STANDART o'lchov birliklari va ularga override QO'YILMAYDI.
+     *
+     *   Test aynan shuning uchun bor: 3-fazaning «akronim lotinda
+     *   qoladi» qoidasi mexanik ravishda qo'llansa, keyingi ishlovchi
+     *   `words["MB"] = "MB"` yozib, adminlarga o'zbek matnida
+     *   lotincha birlik ko'rsatgan bo'lardi. Farq shu yerda qulflangan.
+     */
+    assert.equal(transliterate("Ombor: 84 MB", OVERRIDE_WORDS), "Омбор: 84 МБ");
+    assert.equal(transliterate("1,2 GB", OVERRIDE_WORDS), "1,2 ГБ");
+
+    assert.ok(!("MB" in OVERRIDE_WORDS), "`MB` override'ga qo'shilgan — Qoida 3 ga zid");
+    assert.ok(!("GB" in OVERRIDE_WORDS), "`GB` override'ga qo'shilgan — Qoida 3 ga zid");
+  });
+
+  test("Qoida 2: override ro'yxati AYNAN ikki yangi yozuv oladi", () => {
+    assert.equal(OVERRIDE_WORDS.IR, "IR");
+    assert.equal(OVERRIDE_WORDS.Telegram, "Telegram");
+
+    // ⛔ Qoida 1/3 bo'yicha copy'ga umuman kirmaydigan tokenlar
+    //    override'ga ham KIRMAYDI — aks holda ro'yxat ularni matnga
+    //    kiritishga "ruxsat" bergan bo'lardi.
+    for (const forbidden of ["JPEG", "Sentry", "S3", "SeaweedFS", "UTC"]) {
+      assert.ok(
+        !(forbidden in OVERRIDE_WORDS),
+        `\`${forbidden}\` override'ga qo'shilgan — u copy'ga umuman kirmasligi kerak ` +
+          "(04-UI-SPEC §11.11 Qoida 1/3)",
+      );
+    }
+  });
+
+  test("Qoida 1: raqam aralashgan token override bilan TUZALMAYDI (qoidaning sababi)", () => {
+    /*
+     * O'LCHANGAN [M-3]: lug'at TOKENni qidiradi, `S3` esa harf va raqam
+     * aralashmasi bo'lgani uchun boshqa token sifatida bo'linadi — ya'ni
+     * `words["S3"] = "S3"` yozilsa ham chiqish buzuq qoladi. Sof harfli
+     * token esa TUZALADI (`SeaweedFS`), lekin u ham copy'ga kirmaydi.
+     *
+     * Shuning uchun yechim KODDA emas, MATNDA — va quyidagi darvoza
+     * buni kirishida to'sadi.
+     */
+    const withOverride = transliterate("S3 omborida", { ...OVERRIDE_WORDS, S3: "S3" });
+
+    assert.equal(
+      withOverride,
+      "С3 омборида",
+      "agar bu shakl tuzalgan bo'lsa, Qoida 1 va bu test qayta ko'rib chiqilsin",
+    );
+    assert.ok(!withOverride.includes("S3"), "raqamli token override bilan tuzalib qolibdi");
+
+    // Sof harfli token override bilan TUZALADI — farqning isboti.
+    assert.equal(
+      transliterate("SeaweedFS omborida", { ...OVERRIDE_WORDS, SeaweedFS: "SeaweedFS" }),
+      "SeaweedFS омборида",
+    );
+  });
+});
+
+/*
+ * COPY QOIDASI — 4-faza (§11.11 Qoida 1).
+ *
+ * Yuqoridagi test raqamli tokenning override bilan TUZALMASLIGINI
+ * hujjatlashtiradi; bu blok esa uni MATNGA kiritishni to'sadi.
+ */
+describe("copy qoidasi — raqam aralashgan lotin token matnga kiritilmaydi", () => {
+  /**
+   * ICU tuzilmasi OLIB TASHLANADI, keyin taqiq qo'llanadi.
+   *
+   * ⚠ CHEGARA ANIQ VA U ATAYIN: taqiq FOYDALANUVCHI KO'RADIGAN matnga
+   *   tegishli, platsholder NOMIGA emas. `{value1}` degan argument nomi
+   *   ekranda hech qachon ko'rinmaydi — uni taqiqlash darvozani
+   *   ICU nomlash uslubi ustida qizartirardi va keyingi ishlovchi uni
+   *   "chetlab o'tishga" majbur bo'lardi (bu repoda uch marta
+   *   takrorlangan sinf).
+   */
+  const stripIcu = (value) => value.replace(/\{[^{}]*\}/gu, "");
+
+  /**
+   * Raqam aralashgan lotin token.
+   *
+   * ⚠ `\.?` — 04-UI-SPEC ning naqshiga (`/[A-Za-z]+[0-9]/`) QO'SHILGAN va
+   *   sabab o'lchangan: o'sha spetsifikatsiyaning O'Z taqiq jadvalida
+   *   `H.264 oqimi` turibdi, lekin nuqtasiz naqsh uni USHLAMAYDI
+   *   (`H` va `264` orasida `.` bor). Ya'ni darvoza o'zi himoya
+   *   qilishi kerak bo'lgan uch holatdan faqat ikkitasini ko'rardi.
+   *
+   *   Kengaytma SUPERSET: nuqtasiz naqsh ushlagan hamma narsa bu yerda
+   *   ham ushlanadi. Yolg'on-ijobiy o'lchandi (2026-08-04, uchala
+   *   `messages/*.json` ustida): 0 natija. `84 MB`, `1,2 GB`,
+   *   `06:00 dan 08:00 gacha` va `NVR qurilmasi. 2 ta kamera`
+   *   ushlanMAYDI — bo'shliq va vergul naqshni uzadi.
+   */
+  const ALPHANUMERIC = /[A-Za-z]+\.?[0-9]/u;
+
+  test("matcher AYNAN aralash tokenni ushlaydi (nazorat)", () => {
+    assert.ok(ALPHANUMERIC.test("S3 omborida"));
+    assert.ok(ALPHANUMERIC.test("H.264 oqimi"));
+    assert.ok(ALPHANUMERIC.test("IPv4 manzili"));
+
+    // Salbiy nazorat: bular MATNDA BO'LISHI mumkin.
+    assert.ok(!ALPHANUMERIC.test("Ombor: 84 MB"));
+    assert.ok(!ALPHANUMERIC.test("1,2 GB"));
+    assert.ok(!ALPHANUMERIC.test("06:00 dan 08:00 gacha"));
+    assert.ok(!ALPHANUMERIC.test(stripIcu("{count} ta kadr")));
+  });
+
+  for (const file of ["uz-Latn.json", "ru.json", "uz-Cyrl.json"]) {
+    test(`${file} da raqam aralashgan lotin token yo'q`, () => {
+      const offenders = [];
+      const walk = (node, prefix) => {
+        for (const [key, value] of Object.entries(node)) {
+          const full = prefix ? `${prefix}.${key}` : key;
+          if (value && typeof value === "object") {
+            walk(value, full);
+          } else if (typeof value === "string" && ALPHANUMERIC.test(stripIcu(value))) {
+            offenders.push(`${full}: ${JSON.stringify(value)}`);
+          }
+        }
+      };
+      walk(readJson(file), "");
+
+      assert.deepEqual(
+        offenders,
+        [],
+        `${file}: raqam aralashgan lotin token topildi — override uni TUZATA OLMAYDI ` +
+          "(04-UI-SPEC §11.11 Qoida 1). O'rniga texnologiyasiz so'z yozing " +
+          `(\`S3 omborida\` -> \`omborda\`, \`JPEG fayli\` -> \`kadr\`):\n  ${offenders.join("\n  ")}`,
+      );
+    });
+  }
+});
+
+/*
+ * =============================================================================
+ * ⛔ QOIDA 6 — `ъ` NING IKKI MA'NOSI [O'LCHANDI: 04-UI-SPEC §11.11, M-9].
+ *
+ * `ъ` chiqishda IKKI XIL sababdan paydo bo'ladi va ular TESKARI bahoga ega:
+ *
+ *   TO'G'RI  `ma'lumot` -> `маълумот`, `ta'sir` -> `таъсир`
+ *            Apostrof O'ZAK ICHIDA, sof o'zbek so'zida — bu TUTUQ BELGISI
+ *            va u o'zbek kirill imlosining to'g'ri shakli.
+ *
+ *   DEFEKT   `NVR'ga` -> `НВРъга`
+ *            Apostrof LOTIN AKRONIMIDAN keyingi qo'shimcha ajratgichi;
+ *            `ъ` u yerda ma'nosiz (3-faza Qoida 5).
+ *
+ * ⚠ «Chiqishda `ъ` bor -> yiqil» degan SODDA qoida `маълумот` va `таъсир`
+ *   ni YOLG'ON-DEFEKT deb belgilardi va ijrochi uni "tuzatish" uchun
+ *   TO'G'RI o'zbek so'zini almashtirgan bo'lardi. Ya'ni sodda darvoza
+ *   matnni himoya qilish o'rniga uni BUZARDI.
+ *
+ * -----------------------------------------------------------------------------
+ * ⛔ O'LCHANGAN TUZATISH (2026-08-04, bu darvoza yozilishida).
+ *
+ * `04-UI-SPEC.md` §11.11 Qoida 6 ikki naqshni beradi:
+ *
+ *     DEFEKT := /[A-Za-z]ъ/         TO'G'RI := /[а-яёқғҳўъ]ъ/i
+ *
+ * Ular CHIQISH ustida ISHLAMAYDI va buni o'lchash oson. Haqiqiy defekt:
+ *
+ *     transliterate("NVR'ga ulanmadi")  ->  "НВРъга уланмади"
+ *     kod nuqtalari:  Н=U+41D  В=U+412  Р=U+420  ъ=U+44A
+ *
+ * `Р` — KIRILL Er (U+0420), lotin `R` EMAS: transliterator akronimni
+ * allaqachon kirillga o'girib bo'lgan va faqat SHUNDAN KEYIN apostrof
+ * `ъ` ga aylangan. Ya'ni:
+ *
+ *     /[A-Za-z]ъ/          defektni HECH QACHON ushlamaydi (o'lchandi: false)
+ *     /[а-яёқғҳўъ]ъ/i      defektni TO'G'RI deb belgilaydi  (o'lchandi: true)
+ *
+ * Spetsifikatsiyaning niyati aniq va u SAQLANADI: darvoza tutuq belgisini
+ * defektdan ajratishi shart. O'zgargani — MEXANIKASI. Ishlaydigan farq
+ * BOSH HARF YUGURISHIDA:
+ *
+ *     defekt   `НВРъга`, `НТПъни`, `РТСПъда`  — `ъ` dan oldin IKKI YOKI
+ *              UNDAN KO'P bosh harf (akronimning qoldig'i)
+ *     to'g'ri  `маълумот`, `таъсир`, `санъат`, `қалъа`, `Санъат`
+ *
+ * ⚠ «`ъ` dan oldin UNLI bo'lsa to'g'ri» degan muqobil qoida ham NOTO'G'RI
+ *   bo'lardi: `санъат` va `қалъа` da `ъ` dan oldin UNDOSH turadi va
+ *   ikkalasi ham to'g'ri shakl. Bosh harf yugurishi esa ikkalasida ham
+ *   yo'q — shuning uchun aynan u tanlandi (beshala nazorat holati
+ *   quyidagi testda).
+ *
+ * Spetsifikatsiyaning literal sharti ham SAQLANADI (pastdagi ikkinchi
+ * assert) — u bugun bo'sh, lekin transliterator lotin tokenni saqlab
+ * qolgan holatda apostrof qo'shilsa yagona ushlagich bo'lib qoladi.
+ * =============================================================================
+ */
+describe("uz-Cyrl.json — Qoida 6: `ъ` ning ikki ma'nosi ajratiladi", () => {
+  /** Akronim qoldig'i: `ъ` dan oldin ikki yoki undan ko'p BOSH harf. */
+  const ACRONYM_DEFECT = /[A-ZА-ЯЁҚҒҲЎ]{2,}ъ/u;
+
+  /** Spetsifikatsiyaning literal sharti — lotin harfidan keyingi `ъ`. */
+  const LATIN_DEFECT = /[A-Za-z]ъ/u;
+
+  /** Tutuq belgisi — `ъ` dan oldin kichik kirill harfi. */
+  const TUTUQ = /[а-яёқғҳў]ъ/u;
+
+  const collect = (tree, pattern) => {
+    const hits = [];
+    const walk = (node, prefix) => {
+      for (const [key, value] of Object.entries(node)) {
+        const full = prefix ? `${prefix}.${key}` : key;
+        if (value && typeof value === "object") {
+          walk(value, full);
+        } else if (typeof value === "string" && pattern.test(value)) {
+          hits.push(`${full}: ${JSON.stringify(value)}`);
+        }
+      }
+    };
+    walk(tree, "");
+    return hits;
+  };
+
+  test("matcher defektni tutuq belgisidan AJRATADI (nazorat)", () => {
+    // --- Defekt: akronim + apostrofli qo'shimcha ---
+    assert.ok(ACRONYM_DEFECT.test("НВРъга"));
+    assert.ok(ACRONYM_DEFECT.test("НТПъни"));
+    assert.ok(
+      ACRONYM_DEFECT.test(transliterate("NVR'ga ulanmadi", OVERRIDE_WORDS)),
+      "HAQIQIY transliterator chiqishi ushlanmadi — darvoza ma'nosiz",
+    );
+    assert.ok(ACRONYM_DEFECT.test(transliterate("NTP'ni yoqing", OVERRIDE_WORDS)));
+
+    // --- To'g'ri: tutuq belgisi. Bular MATNDA BO'LISHI kerak ---
+    //
+    // ⚠ `санъат` va `қалъа` — ATAYIN: ikkalasida ham `ъ` dan oldin
+    //   UNDOSH turadi, ya'ni «unli bo'lsa to'g'ri» degan muqobil qoida
+    //   ularni yolg'on-defekt qilardi.
+    for (const correct of ["маълумот", "таъсир", "санъат", "қалъа", "Санъат"]) {
+      assert.ok(
+        !ACRONYM_DEFECT.test(correct),
+        `«${correct}» tutuq belgisi defekt deb belgilandi — darvoza to'g'ri ` +
+          "o'zbek so'zini buzishga majbur qilardi",
+      );
+      assert.ok(TUTUQ.test(correct), `«${correct}» da tutuq belgisi topilmadi`);
+    }
+
+    // Ikkala to'g'ri shakl ham HAQIQIY transliterator chiqishidan keladi.
+    assert.equal(transliterate("ma'lumot", OVERRIDE_WORDS), "маълумот");
+    assert.equal(transliterate("ta'sir", OVERRIDE_WORDS), "таъсир");
+  });
+
+  test("yetkazilayotgan faylda AKRONIM + `ъ` shakli YO'Q", () => {
+    const offenders = collect(readJson("uz-Cyrl.json"), ACRONYM_DEFECT);
+
+    assert.deepEqual(
+      offenders,
+      [],
+      "akronimdan keyingi `ъ` topildi — bu manba matnda akronimga apostrofli " +
+        "qo'shimcha ulanganining izi (`NVR'ga` -> `НВРъга`). Yechim KODDA emas, " +
+        `MATNDA: \`NVR qurilmasiga\` (Qoida 5).\n  ${offenders.join("\n  ")}`,
+    );
+  });
+
+  test("yetkazilayotgan faylda LOTIN harfidan keyingi `ъ` YO'Q", () => {
+    /*
+     * Spetsifikatsiyaning literal sharti. Bugun u BO'SH to'plamda ishlaydi
+     * (yuqoridagi o'lchovga qarang) va bu OCHIQ yozilgan — «darvoza bor»
+     * degan da'vo shu bilan aniq chegaralangan. U kerak bo'lib qoladigan
+     * holat: override tokenni LOTIN holida saqlab qolsa-yu, unga apostrofli
+     * qo'shimcha ulansa.
+     */
+    assert.deepEqual(collect(readJson("uz-Cyrl.json"), LATIN_DEFECT), []);
+  });
+
+  test("tutuq belgisi yetkazilayotgan faylda MAVJUD (quyi chegara)", () => {
+    /*
+     * Usiz yuqoridagi ikkala darvoza `ъ` UMUMAN yo'q bo'lgan faylda ham
+     * yashil bo'lardi — ya'ni kimdir tutuq belgisini butunlay yo'q qilib
+     * yuborgan taqdirda ular jimgina o'tib ketardi.
+     */
+    const raw = readFileSync(path.join(MESSAGES_DIR, "uz-Cyrl.json"), "utf8");
+    const hits = raw.match(new RegExp(TUTUQ.source, "gu")) ?? [];
+
+    assert.ok(
+      hits.length >= 3,
+      `uz-Cyrl.json da tutuq belgisi atigi ${hits.length} marta uchradi — ` +
+        "kutilgan >= 3. Yuqoridagi darvozalar bo'sh to'plamda ishlayotgan bo'lishi mumkin.",
+    );
   });
 });
 
