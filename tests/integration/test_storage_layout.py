@@ -193,9 +193,12 @@ async def test_a_second_put_overwrites_the_same_object(
         "yaratilgan bo'lishi mumkin"
     )
 
-    keys = await s3_client.list_prefix(
-        KEY_PREFIX_FOR_DAY(market_id=s3_markets[0], business_date=DAY)
-    )
+    # ⚠ ATAYIN BOZOR PREFIKSI, KUN PREFIKSI EMAS. Bu test IDEMPOTENTLIKNI
+    #   o'lchaydi; kun prefiksining o'zi esa alohida testda o'lchanadi. Kun
+    #   prefiksi bu yerda ishlatilsa kalit TARTIBI o'zgarganda IKKALA test
+    #   ham qizarardi va sabotaj natijasi "qaysi darvoza nimani o'lchaydi"
+    #   savoliga javob bermasdi (04-04 ning 2a/2b darsi).
+    keys = await s3_client.list_prefix(f"{s3_markets[0]}/")
     assert keys == [key], f"ustiga yozish {len(keys)} ta obyekt qoldirdi, bitta kutilgan edi"
 
 
