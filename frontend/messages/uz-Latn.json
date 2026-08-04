@@ -633,5 +633,13 @@
     "copyAll": "Hammasini nusxalash",
     "download": "Parollarni csv faylga saqlash",
     "noName": "Ismi ko'rsatilmagan"
+  },
+  "snapshots": {
+    "scheduleStartsTooSoon": "Mavsumiy jadval eng erta ertadan boshlanishi mumkin — bugungi reja allaqachon tuzilgan.",
+    "scheduleTimesInvalid": "Vaqtlar ro’yxati yaroqsiz: kamida bitta vaqt bo’lishi va takrorlanmasligi kerak.",
+    "scheduleNotEditable": "Bu jadval o’tgan kunlarga tegishli va tahrirlanmaydi — u o’sha kunlardagi kadrlarni tushuntiradi.",
+    "schedulePeriodOverlaps": "Bu davr mavjud jadval bilan kesishadi. Boshqa boshlanish sanasini tanlang.",
+    "objectPurged": "Kadr rasmi endi mavjud emas — uning saqlash muddati tugagan. Ma’lumotlari joyida qoladi.",
+    "storageUnavailable": "Kadr rasmini olishning iloji bo’lmadi. Biroz o’tgach qayta urinib ko’ring."
   }
 }
