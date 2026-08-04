@@ -276,6 +276,19 @@ _ENSURE_PLAN = text(
      ) late
      WHERE cam.market_id = :market_id
        AND cam.is_archived = false
+       AND (
+             NOT EXISTS (
+                 SELECT 1 FROM capture_runs r
+                  WHERE r.market_id = :market_id
+                    AND r.business_date = :business_date
+             )
+             OR EXISTS (
+                 SELECT 1 FROM capture_runs r
+                  WHERE r.market_id = :market_id
+                    AND r.business_date = :business_date
+                    AND r.slot_time = slot.slot_time
+             )
+           )
     ON CONFLICT ON CONSTRAINT uq_capture_runs_market_id_camera_id_business_date_slot_time
     DO NOTHING
     RETURNING status
@@ -325,6 +338,34 @@ KO'RINISHI shart — `schedule_repo.uncovered_days()` aynan shuning uchun bor.
 ⚠ `ON CONFLICT` NISHONI — KONSTRAYT NOMI, ustunlar ro'yxati emas:
   `business_date` HISOBLANADIGAN ustun va uni `ON CONFLICT (...)` ifodasida
   qayta yozish ifodani ikkinchi marta ta'riflashni talab qilardi.
+
+⛔ D-05 — SLOT O'LCHOVI BO'YICHA MUZLATISH (`AND (NOT EXISTS ... OR EXISTS ...)`).
+
+  `capture_tick` HAR DAQIQADA ishlaydi va uning 1-qadami aynan shu so'rov
+  (`04-PATTERNS.md` §3.3). Ya'ni admin soat 12:00 da jadvalga `10:00`
+  vaqtini qo'shsa, keyingi tik uni BUGUNGI rejaga yozib qo'yardi — D-05
+  esa buni ochiq TAQIQLAYDI («jadval kun o'rtasida o'zgartirilsa bugungi
+  rejaga ta'sir qilmaydi») va SC#1 aynan shunga tayanadi («**ertasi kuni**
+  aynan o'sha slotlarda»). UI ham DL-1 da doimiy izoh chizadi: «Yangi
+  vaqtlar ERTADAN boshlab ishlaydi».
+
+  Shart AYNAN SLOT o'lchovida, kun o'lchovida EMAS — va bu farq ataylab:
+
+    * kun BO'SH bo'lsa (birinchi tik) — hamma narsa yoziladi;
+    * kun ALLAQACHON materializatsiya qilingan bo'lsa — faqat BUGUNGI
+      rejada MAVJUD BO'LGAN `slot_time` lar uchun yoziladi.
+
+  Ikkinchi shox mid-day kashf etilgan KAMERANI qamrab qoladi: u bugungi
+  slotlarni oladi (o'tib ketganlari `skipped` bo'lib tug'iladi va alert
+  bermaydi), lekin YANGI VAQT ertagacha kutadi. Kun o'lchovidagi muzlatish
+  bunday kamerani butun kunga ko'rinmas qilardi.
+
+⚠ BU «TEKSHIR-KEYIN-YOZ» EMAS va 3-majburiyatga ZID KELMAYDI. Shart
+  so'rovning O'ZI ichida — alohida `SELECT` yo'q, ya'ni poyga oynasi ham
+  yo'q. Ikki parallel tik: ikkalasi ham bo'sh kunni ko'rsa ikkalasi ham
+  yozadi va `ON CONFLICT` dublikatni yutadi; biri qatorlarni ko'rsa u
+  yangi vaqt yozmaydi. Uchala interleaving ham to'g'ri natija beradi.
+  Idempotentlik hamon `UNIQUE` konstraytida, bu shartda EMAS.
 
 ⚠ `:business_date` DA XOM `::date` KASTI YO'Q VA U QO'SHILMASLIGI KERAK
   (o'lchandi). SQLAlchemy ning `text()` bind-parametr regexida `(?!:)`

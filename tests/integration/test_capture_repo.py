@@ -277,9 +277,10 @@ def capture_fixture(
 
     @contextmanager
     def _open() -> Iterator[_Fixture]:
-        with nvr_rows(sync_owner_conn, two_markets) as nvr, snapshot_rows(
-            sync_owner_conn, nvr
-        ) as snap:
+        with (
+            nvr_rows(sync_owner_conn, two_markets) as nvr,
+            snapshot_rows(sync_owner_conn, nvr) as snap,
+        ):
             yield _build(nvr, snap, market_today)
 
     return _open
@@ -487,6 +488,116 @@ async def test_ensure_plan_without_tenant_context_writes_nothing_and_never_raise
                 day, grace_seconds=GRACE
             )
         assert sighted.created == fx.planned_rows
+
+
+async def test_a_slot_added_after_materialisation_waits_until_tomorrow(
+    sync_owner_conn: Connection[TupleRow],
+    capture_fixture: Callable[[], AbstractContextManager[_Fixture]],
+    tenant_session: TenantSessionFactory,
+) -> None:
+    """⛔ D-05: KUN O'RTASIDAGI JADVAL TAHRIRI BUGUNGI REJAGA TA'SIR QILMAYDI.
+
+    `capture_tick` HAR DAQIQADA `ensure_plan(bugun)` ni chaqiradi
+    (`04-PATTERNS.md` §3.3). Shartsiz so'rov soat 12:00 da qo'shilgan
+    `23:45` vaqtini BUGUNGI rejaga yozib qo'yardi va SC#1 ning «**ertasi
+    kuni** aynan o'sha slotlarda» da'vosi yolg'onga aylanardi. UI ham
+    DL-1 da buni doimiy izoh bilan va'da qiladi.
+
+    NAZORAT: AYNAN o'sha yangi vaqt ERTANGI rejada BOR — ya'ni «bugunga
+    tushmadi» javobi slotning umuman ishlamasligidan kelib chiqmagan.
+    """
+    with capture_fixture() as fx:
+        _cover_from(sync_owner_conn, fx.schedule_id, fx.today - timedelta(days=30))
+        tomorrow = fx.today + timedelta(days=1)
+
+        async with tenant_session(fx.market_id) as session:
+            await CaptureRepository(session, fx.market_id).ensure_plan(
+                fx.today, grace_seconds=GRACE
+            )
+        materialised = await _count_runs(tenant_session, fx.market_id, fx.today)
+        assert materialised == fx.planned_rows
+
+        # Admin kun o'rtasida yangi vaqt qo'shdi.
+        new_slot = time(23, 45)
+        sync_owner_conn.execute(
+            "INSERT INTO snapshot_schedule_slots (id, market_id, schedule_id, slot_time) "
+            "VALUES (%s, %s, %s, %s)",
+            (str(uuid4()), str(fx.market_id), str(fx.schedule_id), new_slot),
+        )
+
+        async with tenant_session(fx.market_id) as session:
+            repeat = await CaptureRepository(session, fx.market_id).ensure_plan(
+                fx.today, grace_seconds=GRACE
+            )
+            future = await CaptureRepository(session, fx.market_id).ensure_plan(
+                tomorrow, grace_seconds=GRACE
+            )
+
+        assert repeat.created == 0
+        assert await _count_runs(tenant_session, fx.market_id, fx.today) == materialised
+
+        rows = await _rows_by_id(tenant_session, fx.market_id)
+        today_slots = {
+            row["slot_time"] for row in rows.values() if row["business_date"] == fx.today
+        }
+        tomorrow_slots = {
+            row["slot_time"] for row in rows.values() if row["business_date"] == tomorrow
+        }
+        assert new_slot not in today_slots
+        assert new_slot in tomorrow_slots
+        assert future.created == len(fx.camera_ids) * (len(DEFAULT_SNAPSHOT_SLOTS) + 1)
+
+
+async def test_a_camera_discovered_after_materialisation_still_gets_todays_slots(
+    sync_owner_conn: Connection[TupleRow],
+    capture_fixture: Callable[[], AbstractContextManager[_Fixture]],
+    tenant_session: TenantSessionFactory,
+) -> None:
+    """NAZORAT BANDI: D-05 muzlatishi SLOT o'lchovida, KUN o'lchovida EMAS.
+
+    Kun o'lchovidagi muzlatish («kunda qator bo'lsa umuman hech nima
+    qo'shma») mid-day kashf etilgan kamerani BUTUN KUNGA ko'rinmas
+    qilardi: uning birorta `capture_runs` qatori bo'lmasdi, ya'ni jurnalda
+    ham, yo'qlik yozuvida ham iz qolmasdi.
+
+    Usiz yuqoridagi test «hech qachon hech nima qo'shilmaydi» degan xato
+    implementatsiyada ham yashil qolardi.
+    """
+    with capture_fixture() as fx:
+        _cover_from(sync_owner_conn, fx.schedule_id, fx.today - timedelta(days=30))
+
+        async with tenant_session(fx.market_id) as session:
+            await CaptureRepository(session, fx.market_id).ensure_plan(
+                fx.today, grace_seconds=GRACE
+            )
+
+        newcomer = uuid4()
+        sync_owner_conn.execute(
+            "INSERT INTO cameras (id, market_id, nvr_id, channel_no, stream_name, name, status) "
+            "VALUES (%s, %s, %s, %s, %s, %s, 'online')",
+            (
+                str(newcomer),
+                str(fx.market_id),
+                str(fx.nvr_id),
+                77,
+                f"cam_{newcomer.hex}",
+                "Kech kashf etilgan kanal",
+            ),
+        )
+
+        async with tenant_session(fx.market_id) as session:
+            result = await CaptureRepository(session, fx.market_id).ensure_plan(
+                fx.today, grace_seconds=GRACE
+            )
+
+        assert result.created == len(DEFAULT_SNAPSHOT_SLOTS)
+        rows = await _rows_by_id(tenant_session, fx.market_id)
+        newcomer_slots = {
+            row["slot_time"]
+            for row in rows.values()
+            if row["camera_id"] == newcomer and row["business_date"] == fx.today
+        }
+        assert newcomer_slots == set(DEFAULT_SNAPSHOT_SLOTS)
 
 
 # ---------------------------------------------------------------------------
@@ -1130,9 +1241,7 @@ async def test_day_summary_reports_every_counter_including_the_zeros(
     """
     with capture_fixture() as fx:
         async with tenant_session(fx.market_id) as session:
-            summary = await CaptureRepository(session, fx.market_id).day_summary(
-                SEED_BUSINESS_DATE
-            )
+            summary = await CaptureRepository(session, fx.market_id).day_summary(SEED_BUSINESS_DATE)
 
         assert summary.planned == 7
         assert summary.done == 2
