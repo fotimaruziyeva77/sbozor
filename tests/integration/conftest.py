@@ -15,19 +15,25 @@ ikkinchisidan oladi.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import secrets
+from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from datetime import date
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
+from app.services import storage
+from app.services.storage import SnapshotStorage, StorageError
+from app.settings import Settings
+from cryptography.fernet import Fernet
 from fixtures import MarketScope
 from fixtures.admin_api import cleanup_test_users
 from fixtures.financial import FinancialProbe, create_financial_probe, drop_financial_probe
 from fixtures.nvr_flow import cleanup_api_nvr_rows, record_enqueue
 from psycopg import Connection
 from psycopg.rows import TupleRow
+from pydantic import SecretStr
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -51,6 +57,114 @@ UTC bo'lardi va mahalliy 00:00–04:59 oralig'ida bir kun farq qilardi) —
 u DB'dan AYNAN o'sha javobni oladi, ya'ni "kelajak" deb yozilgan sana
 trigger uchun ham kelajak bo'lishi KAFOLATLANADI.
 """
+
+
+STORAGE_UNAVAILABLE_HINT = (
+    "`{bucket}` bucketiga yetib bo'lmadi. Ikkita ehtimol bor va ikkalasining ham "
+    "yechimi `ops/seaweedfs/README.md` da: (1) `storage` konteyneri ko'tarilmagan — "
+    "`npm run sim:up`; (2) bucket hali yaratilmagan — `printf 's3.bucket.create "
+    "-name {bucket}\\n' | docker compose exec -T storage weed shell`."
+)
+"""Ombor topilmaganda beriladigan ANIQ matn.
+
+⚠ BU YERDA TEST O'TKAZIB YUBORILMAYDI, YIQILADI — VA BU QARORNING SABABI
+  `fixtures/nvr_sim.py` DAGIDAN FARQ QILADI.
+
+`nvr-sim` fixture'i dev mashinasida `skip` beradi, chunki `--profile sim`
+konteynerlari ixtiyoriy qo'shimcha. `storage` esa PROFILSIZ (04-01, W0-4):
+u `npm run up` va `npm run sim:up` ning ikkalasida ham ko'tariladi, ya'ni
+"ko'tarilmagan" holati normal ish oqimi emas, KONFIGURATSIYA XATOSI.
+
+Va narxi ham boshqa: o'tkazib yuborilgan test yashil darvozada UMUMAN
+KO'RINMAYDI — CAM-07 ning "kadr omborga yoziladi va topiladi" da'vosi
+sanoq nolga tushgan holda ham "yashil" bo'lib turaverardi (T-03-10 bilan
+bir xil sinf, boshqa yo'ldan).
+"""
+
+
+@pytest.fixture(scope="session")
+def s3_settings() -> Settings:
+    """Ombor qatlami uchun `Settings` — `S3_*` qiymatlari MUHITDAN keladi.
+
+    ⚠ `get_settings()` CHAQIRILMAYDI (`tests/conftest.py::test_settings` bilan
+      bir xil sabab): u `lru_cache` ostida va testda almashtirib bo'lmasdi.
+
+    ⚠ `S3_*` MAYDONLARI BU YERDA QO'LDA BERILMAYDI. `BaseSettings` ularni
+      muhitdan o'qiydi va aynan shu — MAHSULOT yo'li: `compose.yaml` ning
+      `tests` bloki `S3_ENDPOINT_URL`/`S3_BUCKET`/`S3_ACCESS_KEY`/
+      `S3_SECRET_KEY` ni beradi va ular HAQIQIY `storage` konteyneriga
+      ishora qiladi. Qiymatlarni bu yerda takrorlash o'sha zanjirni ikkiga
+      bo'lardi va test compose sozlamasi buzilganini sezmasdi.
+
+    Qolgan uch maydon (`database_url`, `valkey_url`, `jwt_secret`,
+    `nvr_credential_key`) `Settings` ning KONSTRUKTORI uchun majburiy,
+    ombor qatlami uchun esa ahamiyatsiz — u faqat `s3_*` maydonlarini
+    o'qiydi. Shuning uchun ular bu yerda o'rnini bosuvchi qiymat oladi va
+    bu fixture Postgres/Valkey konteynerlariga UMUMAN bog'lanmaydi: ombor
+    o'lchovi baza qatlamining ko'tarilishini kutmasligi kerak.
+    """
+    return Settings(
+        database_url="postgresql+asyncpg://storage-testi-bazaga-tegmaydi/none",
+        valkey_url="redis://storage-testi-keshga-tegmaydi:6379/0",
+        jwt_secret=secrets.token_urlsafe(48),
+        nvr_credential_key=SecretStr(Fernet.generate_key().decode()),
+    )
+
+
+@pytest.fixture
+async def s3_client(s3_settings: Settings) -> AsyncIterator[SnapshotStorage]:
+    """HAQIQIY SeaweedFS konteyneriga ulangan `SnapshotStorage` (04-06, CAM-07).
+
+    ⚠⚠ BU MOCK EMAS VA HECH QACHON MOCK BO'LMAYDI. `S3_ENDPOINT_URL`
+      `compose.yaml` dagi `storage` xizmatiga ishora qiladi va har bir
+      `put`/`head`/`get`/`list`/`delete` haqiqiy S3 imzosi bilan tarmoq
+      orqali ketadi. Sabab 03-14 da o'lchangan: `go2rtc` ning
+      `PUT /api/streams` xulqi mock ostida BUTUNLAY yashiringan edi va uni
+      faqat birinchi mock'siz o'lchov ochdi. S3 da yashirinadigan qatlam
+      undan ham kattaroq — imzolash, endpoint kelishuvi va sahifalash
+      semantikasi mock'da UMUMAN bajarilmaydi.
+
+    Bucket mavjudligi fixture ochilishida tekshiriladi: `head()` mavjud
+    bo'lmagan kalit uchun `None` qaytaradi, ombor yoki bucket topilmasa esa
+    `StorageError` beradi (o'lchandi: qadalgan rekvizit bilan begona bucket
+    `403`, yetib bo'lmaydigan manzil `EndpointConnectionError`). Ikkinchi
+    holatda test ANIQ matn bilan YIQILADI.
+    """
+    async with storage.open(s3_settings) as client:
+        probe_key = f"bucket-zondi/{uuid4()}.jpg"
+        try:
+            await client.head(probe_key)
+        except StorageError as exc:
+            raise AssertionError(
+                STORAGE_UNAVAILABLE_HINT.format(bucket=s3_settings.s3_bucket)
+            ) from exc
+        yield client
+
+
+@pytest.fixture
+async def s3_markets(s3_client: SnapshotStorage) -> AsyncIterator[tuple[UUID, UUID]]:
+    """Testga IKKI bozor identifikatori beradi va ularning kalitlarini TOZALAYDI.
+
+    ⚠ BOZOR IDENTIFIKATORI FAQAT SHU FIXTURE'DAN OLINADI. Test o'zi
+      `uuid4()` chaqirsa uning yozgan kalitlari tozalanmasdi va arxivda
+      abadiy qolib ketardi — 455 kunlik saqlash siyosati bo'lgan omborda
+      bu jimgina to'planadigan qarz.
+
+    ⚠ IKKITA, BITTA EMAS: prefiks izolyatsiyasi (§D.9 — bitta rekvizit
+      barcha bozorlarni ochadi) faqat IKKI bozorli holatda o'lchanadi.
+
+    Tozalash `list_prefix` + `delete_many` bilan, ya'ni fixture ham AYNAN
+    o'sha kontraktdan foydalanadi — testdan tashqarida qolgan yashirin yo'l
+    yo'q.
+    """
+    markets = (uuid4(), uuid4())
+    try:
+        yield markets
+    finally:
+        for market_id in markets:
+            keys = await s3_client.list_prefix(f"{market_id}/")
+            if keys:
+                await s3_client.delete_many(keys)
 
 
 @pytest.fixture(autouse=True)
