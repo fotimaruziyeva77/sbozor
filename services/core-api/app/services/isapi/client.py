@@ -61,6 +61,7 @@ from typing import TYPE_CHECKING, Any, Final, Self
 import httpx
 import structlog
 from defusedxml.ElementTree import fromstring as xml_fromstring
+from sbozor_core.models.nvr import CAPTURE_STREAM_VALUES
 from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.services.isapi.errors import NvrError
@@ -73,6 +74,7 @@ from app.services.isapi.parser import (
     parse_input_proxy_channels,
     parse_video_input_channels,
 )
+from app.services.rtsp import stream_id
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -171,6 +173,51 @@ def assert_supported_device(device: DeviceInfo) -> None:
 
 
 _STREAM_PATH_PREFIX: Final[str] = "Streaming/channels/"
+
+_PICTURE_SUFFIX: Final[str] = "/picture"
+"""Kadr olish yo'lining oxiri — `Streaming/channels/<id>/picture`."""
+
+_MAIN_STREAM_NAME, _SUB_STREAM_NAME = CAPTURE_STREAM_VALUES
+"""`cameras.capture_stream` ning ikkala qiymati — RO'YXATDAN OCHIB OLINADI.
+
+Qo'lda `"main"` deb yozish bugungi qiymatda to'g'ri ishlardi, lekin
+ro'yxatga uchinchi a'zo qo'shilgan kunda bu satr JIMGINA eskirardi:
+`stream != "main"` shartida yangi qiymat sub-oqim deb talqin qilinardi.
+Ochib olish esa o'sha kunda IMPORT paytida yiqiladi — ya'ni nosozlik
+kadr olishda emas, ishga tushishda ko'rinadi.
+"""
+
+_JPEG_MAGIC: Final[bytes] = b"\xff\xd8\xff"
+"""JPEG boshlanishi (SOI + birinchi marker bayti) — `quality.py` bilan bir xil qiymat.
+
+Bu yerdagi nusxa `quality.py` ni IMPORT QILMAYDI va bu ataylab: ISAPI
+klienti sifat filtriga bog'lanmasligi kerak (u kashfiyot yo'lida ham
+ishlaydi va u yerda sifat qoidalari umuman yo'q). Uch bayt — protokol
+fakti, loyihaning qarori emas.
+"""
+
+
+def _claims_rtsp_session(path: str) -> bool:
+    """Bu yo'l NVR da RTSP SESSIYASINI da'vo qiladimi (D-07).
+
+    ⚠⚠ `/picture` YO'Q VA BU FARQ D-07 NING BUTUN MAZMUNI. ISAPI ning
+       kadr olish yo'li NVR'dan JPEG ni HTTP orqali oladi va **birorta
+       RTSP sessiyasini ochmaydi** — shuning uchun sessiya bosimi ostida
+       u zaxira emas, ENG XAVFSIZ usul.
+
+    Sanagich `_classify()` ning `nvr_stream_limit` evristikasiga kiradi
+    («shu klientda kamida bitta oqim da'vosi o'tgan edi»). `/picture` u
+    yerga sanalsa, keyingi tarmoq uzilishi «NVR chegarasi to'ldi» deb
+    talqin qilinardi — ya'ni adaptiv pasaytirish (04-07) chegarani
+    tunnel uzilishi tufayli tushirib yuborardi va eng xavfsiz usul o'zini
+    chegara qurboni deb e'lon qilardi.
+
+    Simulyator ham AYNAN shu shaklda tuzatilgan (04-02): 3-fazadagi kod
+    `/picture` yo'lida ham oqim da'vosini sanardi va u D-07 ning
+    TESKARISINI modellardi.
+    """
+    return path.startswith(_STREAM_PATH_PREFIX) and not path.endswith(_PICTURE_SUFFIX)
+
 
 _STREAM_LIMIT_MARKERS: Final[tuple[str, ...]] = (
     "maximum number of streams",
@@ -417,7 +464,7 @@ class IsapiClient:
         # ⚠ U retry predikatidan TASHQARIDA qoladi (D-03).
         response.raise_for_status()
 
-        if path.startswith(_STREAM_PATH_PREFIX):
+        if _claims_rtsp_session(path):
             self._stream_claims += 1
         return response
 
@@ -450,7 +497,7 @@ class IsapiClient:
             # chegaradan ajratadigan yagona narsa — XULQ (A.5): shu
             # klientda kamida bitta oqim da'vosi O'TGAN va endi keyingisi
             # uzilyapti.
-            if path.startswith(_STREAM_PATH_PREFIX) and self._stream_claims >= 1:
+            if _claims_rtsp_session(path) and self._stream_claims >= 1:
                 return NvrError(
                     "nvr_stream_limit",
                     {
@@ -514,6 +561,18 @@ class IsapiClient:
     # Ommaviy yuza
     # ------------------------------------------------------------------
 
+    @property
+    def stream_claims(self) -> int:
+        """Shu klient NVR da nechta RTSP sessiyasini da'vo qilgani (D-07).
+
+        Ommaviy — chunki bu son `_classify()` ning `nvr_stream_limit`
+        evristikasining kirishi va uning `/picture` yo'lida NOL bo'lishi
+        alohida o'lchanadigan da'vo (`test_frame_source.py::
+        test_the_isapi_path_claims_no_rtsp_session`). Xususiy maydonga
+        test orqali tegish o'lchovni mahsulot yuzasidan uzib qo'yardi.
+        """
+        return self._stream_claims
+
     async def get_xml(self, path: str) -> bytes:
         """`GET /ISAPI/{path}` — xom baytlar yoki `NvrError`.
 
@@ -525,6 +584,94 @@ class IsapiClient:
         except (httpx.HTTPError, _TransientServerError) as exc:
             raise self._classify(exc, path) from exc
         return response.content
+
+    async def fetch_picture(self, channel_no: int, stream: str = "main") -> bytes:
+        """`GET /ISAPI/Streaming/channels/{kanal}{oqim}/picture` — XOM JPEG baytlari.
+
+        Hikvision oqim identifikatorini `{kanal}{oqim}` shaklida quradi:
+        `01` — asosiy oqim, `02` — sub-oqim (`rtsp.py::stream_id` bilan
+        AYNAN bir xil qoida va aynan o'sha funksiyadan olinadi — ikkinchi
+        nusxa bir kun ajralib ketardi).
+
+        ⚠⚠ BU METOD XML PARSERIDAN O'TMAYDI. `get_xml()` javobni XML deb
+           kutadi va uni `defusedxml` ga beradi; bu yerda esa javob —
+           `image/jpeg`, ya'ni baytlar O'ZGARTIRILMASDAN qaytariladi.
+
+        ⛔ LOGIN VA PAROLNI SO'ROV PARAMETRIDA YUBORADIGAN ISAPI VARIANTI
+           ISHLATILMAYDI (§S-9). Hikvision firmware'i bunday shaklni ham
+           qabul qiladi va u «bir chaqiruvga arzon» ko'rinadi — lekin
+           parolni so'rov satriga, u yerdan nginx access-log'iga va
+           `sentry-sdk` ning httpx breadcrumb'iga (`data` da to'liq URL
+           turadi) olib chiqardi. Yagona ruxsat etilgan yo'l —
+           `httpx.DigestAuth`, ya'ni parol SARLAVHADA va u hech qayerga
+           yozilmaydi.
+
+        ⚠ D-07: bu yo'l NVR da **birorta RTSP sessiyasini ochmaydi**
+          (`_claims_rtsp_session` docstringi).
+
+        ⚠ RETRY SIYOSATI QAYTA YOZILMAYDI: `_send()` ning mavjud
+          `AsyncRetrying` qatlami (`_should_retry` — `401` HECH QACHON
+          qayta urinilmaydi) shu yerda ham amal qiladi. Ikkinchi retry
+          qatlami urinishlar sonini ko'paytirib, D-03 ning qulflash
+          arifmetikasini ishga tushirardi.
+
+        Args:
+            channel_no: NVR dagi kanal raqami (1 dan boshlanadi).
+            stream: `"main"` yoki `"sub"` (`cameras.capture_stream`).
+
+        Returns:
+            JPEG baytlari — HECH QANDAY o'zgartirishsiz.
+
+        Raises:
+            NvrError: `channel_offline` (kanal yo'q — `404`),
+                `nvr_isapi_unavailable` (javob keldi, lekin ichida TASVIR
+                YO'Q) yoki `_classify()` ning qolgan kodlari.
+        """
+        if stream not in CAPTURE_STREAM_VALUES:
+            raise ValueError(
+                f"noma'lum capture_stream={stream!r}. Ruxsat etilganlar: "
+                f"{list(CAPTURE_STREAM_VALUES)} (`cameras.capture_stream` CHECK'i)."
+            )
+        path = (
+            f"{_STREAM_PATH_PREFIX}"
+            f"{stream_id(channel_no, substream=stream == _SUB_STREAM_NAME)}"
+            f"{_PICTURE_SUFFIX}"
+        )
+        try:
+            response = await self._send(path, auth=self._auth)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == httpx.codes.NOT_FOUND:
+                # ⚠ `nvr_isapi_unavailable` DAN AJRATILADI: `/picture`
+                #   yo'lida `404` «endpoint yo'q» emas, «bu KANAL yo'q»
+                #   degani (sim buni ATAYIN 400 dan ajratadi — shakl
+                #   buzuq bo'lsa 400, kanal yo'q bo'lsa 404). Admin uchun
+                #   ikkalasi butunlay boshqa ish: birinchisi bizning
+                #   kodimiz, ikkinchisi uning kamerasi.
+                raise NvrError("channel_offline", {"raw": _snippet(exc.response)}) from exc
+            raise self._classify(exc, path) from exc
+        except (httpx.HTTPError, _TransientServerError) as exc:
+            raise self._classify(exc, path) from exc
+
+        body = response.content
+        # ⚠ `Content-Type` O'QILADI, LEKIN UNGA ISHONILMAYDI. Ba'zi
+        #   firmware va proxy xato sahifasini `image/jpeg` sarlavhasi
+        #   bilan qaytaradi (T-04-25). Sarlavhaga ishonadigan tekshiruv
+        #   HTML sahifani yaroqli kadr deb qabul qilardi, ya'ni yagona
+        #   ishonchli darvoza — BAYTLARNING O'ZI. Bu §C.7 ning magic-bayt
+        #   zanjirining IKKINCHI qatlami (birinchisi `frame_source`,
+        #   uchinchisi `quality.analyze`).
+        if not body.startswith(_JPEG_MAGIC):
+            content_type = response.headers.get("Content-Type", "?")
+            raise NvrError(
+                "nvr_isapi_unavailable",
+                {
+                    "raw": (
+                        f"`{_PICTURE_SUFFIX.lstrip('/')}` javobi JPEG emas "
+                        f"(Content-Type={content_type}, {len(body)} bayt)"
+                    )
+                },
+            )
+        return body
 
     async def greet(self) -> _Greeting:
         """REKVIZITSIZ birinchi so'rov — soat farqi va auth rejimi BIR borishda.

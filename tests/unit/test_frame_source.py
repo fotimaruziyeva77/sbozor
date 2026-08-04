@@ -91,7 +91,7 @@ DEVICE = DeviceEndpoint(base_url=NVR_URL, username="admin", password=SECRET)
 
 # 1280x720 — `QUALITY_MIN_BYTES` polidan (4 096) baland kadr, ya'ni bu
 # baytlar sifat filtridan ham o'tadi (04-04 ning o'lchovi).
-GOOD_JPEG = frame_bytes(mean=140, stddev=45, width=1280, height=720)
+GOOD_JPEG = frame_bytes(mean=140, stddev=45, size=(1280, 720))
 
 PICTURE_PATH = f"/ISAPI/Streaming/channels/{CHANNEL_NO}01/picture"
 SUB_PICTURE_PATH = f"/ISAPI/Streaming/channels/{CHANNEL_NO}02/picture"
@@ -410,7 +410,9 @@ async def test_the_isapi_path_keeps_the_password_out_of_the_query_string() -> No
     assert seen, "Digest handshake umuman bajarilmadi"
     for request in seen:
         assert SECRET not in str(request.url), "parol so'rov satrida"
-        assert request.url.params.multi_items() == [], "ISAPI kadr so'rovida parametr bo'lmasligi kerak"
+        assert request.url.params.multi_items() == [], (
+            "ISAPI kadr so'rovida parametr bo'lmasligi kerak"
+        )
         assert request.headers.get("Authorization", "").startswith("Digest ")
 
 
@@ -570,9 +572,7 @@ class _FakeProcess:
         return self.returncode or 0
 
 
-def _fake_exec(
-    monkeypatch: pytest.MonkeyPatch, process: _FakeProcess
-) -> list[tuple[str, ...]]:
+def _fake_exec(monkeypatch: pytest.MonkeyPatch, process: _FakeProcess) -> list[tuple[str, ...]]:
     calls: list[tuple[str, ...]] = []
 
     async def _exec(*argv: str, **_kwargs: Any) -> _FakeProcess:
