@@ -1,4 +1,4 @@
-"""Snapshot domenining META-INVARIANTLARI — oltita, hammasi `pg_catalog` dan.
+"""Snapshot domenining META-INVARIANTLARI — yettita, hammasi `pg_catalog` dan.
 
 =============================================================================
 NEGA BU FAYL MODELNI IMPORT QILMAYDI.
@@ -25,6 +25,15 @@ OLTITA INVARIANT VA HAR BIRI QAYSI DA'VONI QULFLAYDI:
      profil» (Alembic uni KO'RMAYDI, ya'ni bu YAGONA darvoza).
   6. `snapshots.business_date` ifodasi `capture_runs` niki bilan AYNAN bir
      xil — Pitfall 3 ning invarianti.
+  7. `capture_runs` da `UNIQUE (market_id, camera_id, business_date,
+     slot_time)` — CAM-05 ning idempotentligi.
+
+⚠ YETTINCHI BAND SABOTAJ O'LCHOVIDAN KEYIN QO'SHILDI (04-03/T3). Konstrayt
+modeldan olib tashlanganda YAGONA qizargan darvoza `alembic check` bo'lib
+chiqdi («Detected removed unique constraint …»), ya'ni CAM-05 ning DB
+kafolati faqat MODEL/BAZA DRIFTI orqali qo'riqlanardi. Bu yetarli emas:
+`alembic check` model va baza AJRALGANINI aytadi, «kafolat BOR» ni emas —
+ikkalasidan birdan olib tashlangan konstraytni u sezmasdi.
 
 Ikkinchi va oltinchi banddan tashqari hammasi INKOR yoki MAVJUDLIK da'vosi
 va ular avtomatik invariantlar (`test_meta.py` ning beshtasi) bilan
@@ -428,6 +437,56 @@ def test_both_business_date_expressions_are_identical(
         f"  snapshots:    {snapshot_expr!r}\n"
         "Yarim tunga yaqin olingan kadr ikki jadvalda ikki xil biznes-kunga "
         "tushadi va 6-fazada dalil hisobda 'yo'q' bo'lib qoladi (Pitfall 3)."
+    )
+
+
+CAM05_KEY_COLUMNS = ["market_id", "camera_id", "business_date", "slot_time"]
+"""CAM-05 idempotentlik kalitining ustunlari — TARTIBI bilan."""
+
+
+def test_capture_runs_key_makes_a_slot_unrepeatable(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """`UNIQUE (market_id, camera_id, business_date, slot_time)` MAVJUD (CAM-05).
+
+    =========================================================================
+    BU DARVOZA SABOTAJ O'LCHOVIDAN KEYIN QO'SHILDI va sabab o'lchovning
+    O'ZIDA (04-03/T3).
+
+    Konstrayt MODELDAN olib tashlanganda:
+      * Task 1 ning metadata tekshiruvlari  -> YASHIL qoldi;
+      * qolgan meta-invariantlar            -> YASHIL qoldi;
+      * `alembic check`                     -> QIZARDI («Detected removed
+        unique constraint 'uq_capture_runs_market_id_camera_id_business_
+        date_slot_time' on 'capture_runs'»).
+
+    Ya'ni kafolat FAQAT model/baza drifti orqali qo'riqlanardi. Bu yetarli
+    emas va farq nozik: `alembic check` «model va baza AJRALDI» deydi,
+    «kafolat BOR» demaydi — konstrayt IKKALASIDAN BIRDAN olib tashlansa
+    (migratsiya + model bir commitda) u jimgina yashil qolardi.
+
+    Kafolatning O'ZI esa fazaning ikkinchi eng qimmat da'vosi: ilova
+    qatlami `ON CONFLICT DO NOTHING` bilan poygani DB'ga TOPSHIRADI, ya'ni
+    u bu konstraytga TAYANADI va uni takrorlamaydi. Yo'qolsa ikki parallel
+    tik bitta slot uchun IKKITA qator yozardi va 6-fazada bitta kun ikki
+    marta hisoblanardi (T-04-18) — hech qanday xato chiqmasdan.
+
+    TARTIB ham tekshiriladi: `market_id` BIRINCHI bo'lishi tenant
+    invarianti #5 ning sharti (`test_meta.py::
+    test_tenant_indexes_lead_with_market_id`), `business_date` esa
+    `scheduled_at` O'RNIGA kalitda — `timestamptz` yarim tun atrofida bir
+    xil biznes-kunning ikki xil qiymati bo'lishi mumkin edi.
+    =========================================================================
+    """
+    constraints = _unique_constraints(sync_app_conn, "capture_runs")
+    matching = [name for name, cols in constraints.items() if cols == CAM05_KEY_COLUMNS]
+
+    assert matching, (
+        f"`capture_runs` da {CAM05_KEY_COLUMNS} ustidagi UNIQUE konstrayt YO'Q. "
+        f"Mavjudlari: {constraints}. Busiz ikki parallel tik bitta slot uchun "
+        "ikkita qator yozadi va 6-fazada o'sha kun IKKI MARTA hisoblanadi "
+        "(CAM-05 / T-04-18) — ilova qatlami bu konstraytga TAYANADI, uni "
+        "takrorlamaydi."
     )
 
 
