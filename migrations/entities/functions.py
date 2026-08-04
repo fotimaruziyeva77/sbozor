@@ -1450,6 +1450,13 @@ AS $$
                 WHERE planned.market_id = m.id
                   AND planned.business_date = ((now() AT TIME ZONE 'Asia/Tashkent')::date)
            )
+           OR EXISTS (
+               SELECT 1
+                 FROM public.capture_runs AS stuck
+                WHERE stuck.market_id = m.id
+                  AND stuck.status = 'running'
+                  AND (stuck.locked_until IS NULL OR stuck.locked_until <= now())
+           )
        )
 $$
 """,
@@ -1489,6 +1496,38 @@ materializatsiya qilinmagan faol bozorlarni ham qaytaradi. Bugungi kun
 `(now() AT TIME ZONE 'Asia/Tashkent')::date` bilan hisoblanadi, ya'ni
 `capture_runs.business_date` ning generated ifodasi bilan AYNAN bir xil
 mintaqada.
+
+=============================================================================
+UCHINCHI SHART (`EXISTS ... status = 'running'`) — WATCHDOG NING KIRISH
+YO'LI. U `0017` DA QO'SHILDI VA SABAB O'LCHANGAN, TAXMIN EMAS.
+
+Birinchi ikki shart bilan qurilgan funksiya IJARA MEXANIZMINI aynan u
+mavjud bo'lgan holatda o'chirib qo'yardi:
+
+    06:00 slotida worker batch o'rtasida o'ldi -> 25 qator `running`
+    06:01 tik: `pending` va muddati kelgan qator YO'Q (keyingisi 06:30 da)
+             VA bugungi reja BOR
+          -> bozor `capture_due_markets()` dan CHIQMAYDI
+          -> `release_expired()` UMUMAN chaqirilmaydi
+          -> ijara tugagan qatorlar `running` bo'lib QOLAVERADI
+    06:30 tik: bozor qaytadi, qatorlar bo'shatiladi — LEKIN grace oynasi
+             (600 s) allaqachon o'tgan, ya'ni ular `missed` bo'ladi
+
+Natija: ijara (lease) mexanizmi AYNAN o'zi qoplashi kerak bo'lgan holatda
+— «worker o'rtada o'ldi» — ishlamasdi va qayta urinish uchun qolgan 9
+daqiqa JIMGINA yo'qolardi. CAM-05 ning «kadr olish uzilsa urinish qayta
+bajariladi» talabi bajarilmasdi va hech qanday xato chiqmasdi.
+
+Shart ATAYIN TOR: u faqat ijarasi TUGAGAN (`locked_until <= now()`) yoki
+umuman qo'yilmagan `running` qatorni qidiradi. Har qanday `running` qator
+bo'yicha filtrlash normal kadr olish davomida barcha bozorlarni qaytarib,
+ikkinchi shartning («muddati kelmagan slot — ish emas») ma'nosini
+yo'qotardi.
+
+⚠ `due_count` BU SHART BO'YICHA OSHMAYDI: u `pending` qatorlarni sanaydi
+va uning ma'nosi «fan-out o'lchami». Watchdog ishi FAN-OUT emas —
+u tikning birinchi qadami va sonini bilishi shart emas.
+=============================================================================
 
 `STABLE` (`VOLATILE` emas): funksiya YOZMAYDI, faqat o'qiydi. `now()` ham
 tranzaksiya ichida barqaror.

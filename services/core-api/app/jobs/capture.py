@@ -552,6 +552,16 @@ async def _write_heartbeat(
     ⚠ TENANT KONTEKSTI YO'Q va bu ZIDDIYAT EMAS: `system_heartbeats` —
       GLOBAL jadval (`0014`), unda `market_id` ustuni yo'q va RLS
       qo'yilmagan. Kontekst o'rnatish bu yerda hech nimani himoya qilmasdi.
+
+    ⚠⚠ `except Exception` — `SQLAlchemyError` EMAS, VA BU O'LCHANGAN
+       QAROR. `discovery.py::_publish_channels_found` `SQLAlchemyError`
+       bilan cheklanadi, lekin u tranzaksiya O'RTASIDA chaqiriladi va
+       ulanish allaqachon o'rnatilgan bo'ladi. Bu chaqiruv esa tikning
+       ENG OXIRIDA yangi ulanish ochadi va o'lchandi: baza xosti
+       yechilmasa `socket.gaierror` `SQLAlchemyError` ga O'RALMAYDI —
+       u to'g'ridan-to'g'ri chiqadi va butun tikni yiqitardi. Reja
+       allaqachon yozilgan, batch'lar allaqachon navbatga qo'yilgan
+       bo'lardi, ya'ni yiqilish faqat monitoring yozuvi tufayli bo'lardi.
     """
     try:
         async with sessionmaker() as session, session.begin():
@@ -578,8 +588,8 @@ async def _write_heartbeat(
                     },
                 )
             )
-    except SQLAlchemyError as exc:
-        log.warning("capture_tick_heartbeat_not_written", error=str(exc))
+    except Exception as exc:  # noqa: BLE001 - yurak urishi tikni yiqita olmaydi
+        log.warning("capture_tick_heartbeat_not_written", error=type(exc).__name__)
 
 
 # ===========================================================================

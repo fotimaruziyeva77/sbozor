@@ -264,9 +264,24 @@ services:
       context: .
       dockerfile: services/core-api/Dockerfile
       target: runtime
-    # `--workers 1` — `core-api` dagi bilan bir xil sabab: ikkinchi jarayon
-    # 4-fazada qo'shiladigan cron vazifalarini IKKI MARTA ishga tushirardi.
-    # Bitta NVR uchun kunlik bitta skan bu chegaraga hech qachon urilmaydi.
+    # `--workers 1` — endi bu SAMARADORLIK talabi, KORREKTLIK talabi EMAS
+    # (04-07 da yangilandi).
+    #
+    # 3-fazada bu qator «ikkinchi jarayon cron vazifalarini IKKI MARTA
+    # ishga tushirardi» deb yozilgan edi. D-03 o'sha xavfni STRUKTURAVIY
+    # ravishda yopdi: tik IDEMPOTENT (`ensure_plan` -> `ON CONFLICT DO
+    # NOTHING`, `claim_due` -> `FOR UPDATE SKIP LOCKED` + ijara), ya'ni
+    # ikkinchi jarayon dublikat qator ham, dublikat kadr ham yarata
+    # olmaydi.
+    #
+    # Qator SAQLANADI, chunki ikkinchi jarayon ORTIQCHA: u bir xil
+    # qatorlar ustida qulf raqobatini va NVR ga qo'shimcha bosimni
+    # tug'dirardi, foyda esa nol — kunlik ~175 vazifa bitta jarayonda
+    # bemalol bajariladi. Ya'ni bu chegara endi ishonch emas, TEJAMKORLIK.
+    #
+    # ⚠ `app/jobs/capture.py` ning `_GLOBAL_SEMAPHORES` i JARAYON
+    #   darajasida ishlaydi: ikkinchi jarayon global konkurentlik
+    #   chegarasini AMALDA ikki barobar qilardi (D-08).
     command: ["taskiq", "worker", "app.worker:broker", "--workers", "1"]
     environment:
       DATABASE_URL: ${DATABASE_URL}

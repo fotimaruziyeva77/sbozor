@@ -48,43 +48,114 @@ RESURS EGALIGI `app/main.py:96-117` (`lifespan`) SHAKLI BILAN BIR XIL:
 `engine` bir marta ochiladi, `shutdown` ilgagida yopiladi. Farq —
 saqlanadigan joy: worker jarayonida `app.state` YO'Q, uning o'rniga
 `TaskiqState` (`03-PATTERNS.md` §3.8).
+
+=============================================================================
+PLANER HAM SHU FAYLDA VA U HOLATSIZ (D-02/D-03, 04-07).
+
+`taskiq scheduler app.worker:scheduler` obyektni IMPORT QILADI, ya'ni
+uning qurilishi ham `get_settings()` ga bog'lanmasligi shart (yuqoridagi
+bo'lim bilan aynan bir xil sabab).
+
+⚠ PLANERNING HOLATIGA ISHONILMAYDI. `SchedulerLoop.cron_tasks_last_run` —
+  jarayon XOTIRASIDAGI oddiy `dict` va taqsimlangan qulf YO'Q. Shuning
+  uchun bu yerda AYNAN BITTA jadval bor va u eng arzon narsani qiladi:
+  har daqiqada holatsiz `capture.tick` ni navbatga qo'yadi. Reja, ijara,
+  idempotentlik va yo'qlik yozuvi Postgres'da (`capture_runs`).
+
+  Natijada taskiq'ning UCHALA nosozlik rejimi ham zararsiz bo'ladi:
+  o'tkazib yuborilgan tik keyingi daqiqada qoplanadi, takroriy tik
+  `ON CONFLICT DO NOTHING` + `SKIP LOCKED` ga uriladi, ikkita planer esa
+  bir xil natija beradi. «Aynan bitta planer» operatsion talabi YO'Q.
+
+⚠ `RedisScheduleSource` YAROQSIZ: u jadvalni Valkey'da saqlaydi, Valkey
+  esa `--save "" --appendonly no` bilan ishlaydi — kesh qayta ko'tarilganda
+  HAMMA bozorning jadvali jimgina yo'q bo'lardi va hech qanday xato
+  chiqmasdi. `LabelScheduleSource` jadvalni KODDAN oladi, ya'ni u
+  konteyner bilan birga keladi.
+=============================================================================
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Annotated, Any, Final
 from uuid import UUID
 
 import structlog
 from sbozor_core.db import make_engine, make_sessionmaker
 from sbozor_core.logging import configure_logging
-from taskiq import Context, TaskiqDepends, TaskiqEvents, TaskiqState
+from taskiq import Context, TaskiqDepends, TaskiqEvents, TaskiqScheduler, TaskiqState
+from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 
+from app.jobs.capture import BatchRequest, CapturePolicy, capture_batch, capture_tick
 from app.jobs.discovery import discover_nvr
+from app.services import storage as storage_module
+from app.services.frame_source import FrameSourcePool
 from app.settings import get_settings
 
 if TYPE_CHECKING:
     from taskiq import AsyncBroker
 
+    from app.settings import Settings
+
 log = structlog.get_logger(__name__)
 
-__all__ = ["DISCOVERY_QUEUE", "broker", "discover_nvr_task", "enqueue_discovery"]
+__all__ = [
+    "DISCOVERY_QUEUE",
+    "JOBS_QUEUE",
+    "TICK_CRON",
+    "broker",
+    "capture_batch_task",
+    "capture_tick_task",
+    "discover_nvr_task",
+    "enqueue_discovery",
+    "scheduler",
+]
 
 
 VALKEY_URL_ENV: Final[str] = "VALKEY_URL"
 DEFAULT_VALKEY_URL: Final[str] = "redis://cache:6379/0"
 """`compose.yaml` dagi `${VALKEY_URL:-redis://cache:6379/0}` bilan BIR XIL standart."""
 
-DISCOVERY_QUEUE: Final[str] = "sbozor:discovery"
-"""Navbat ro'yxatining nomi.
+JOBS_QUEUE: Final[str] = "sbozor:jobs"
+"""Navbat ro'yxatining nomi — BITTA navbat, TO'RT TURDAGI vazifa.
 
 `taskiq` ning standart nomi (`taskiq`) ATAYIN ishlatilmaydi: bitta Valkey
 nusxasi rate-limit sanagichlari va sessiya keshini ham saqlaydi (`db 0`),
 ya'ni kalitlar prefiksi kimga tegishli ekanini AYTISHI kerak. `rl:login:*`
 bilan bir xil qoida.
+
+=============================================================================
+NOM `sbozor:discovery` DAN QAYTA NOMLANDI (04-07) — VA QAROR SHU YERDA.
+
+3-fazada navbatda BITTA vazifa turi bor edi (`nvr.discover`) va nom uni
+aniq ta'riflardi. 4-faza uchtasini qo'shadi (`capture.tick`,
+`capture.batch` va 04-08 dagi supurgi), ya'ni eski nom navbatning
+mazmunidan ARZONROQ ma'lumot beradigan bo'lib qoldi.
+
+⚠ IKKINCHI NAVBAT OCHILMADI va bu ATAYIN. Ikkinchi navbat ikkinchi
+  BROKER obyektini va ikkinchi WORKER KONTEYNERINI talab qilardi
+  (`taskiq worker` bitta brokerni tinglaydi). Kunlik ~175 vazifa uchun bu
+  ajratish keraksiz: prioritet muammosi yo'q, chunki tik 1 sekunddan
+  qisqa va batch'lar semafor bilan allaqachon cheklangan
+  (`04-PATTERNS.md` §3.10).
+
+⚠ QAYTA NOMLASH `compose.yaml` GA TEGMAYDI: navbat nomi KODDA yashaydi,
+  konteyner ta'rifida emas. Deploy paytida eski navbatda qolgan vazifalar
+  YO'QOLADI — bu qabul qilinadigan xavf, chunki kashfiyot yugurishi
+  bazada `queued` bo'lib qoladi va uni admin qayta bosadi; kadr olish esa
+  keyingi tikda (<=60 s) qaytadan navbatga tushadi.
+=============================================================================
+"""
+
+DISCOVERY_QUEUE: Final[str] = JOBS_QUEUE
+"""ESKI NOM — `JOBS_QUEUE` ning aliasi (deprecated, 04-07).
+
+Mavjud testlar va 3-fazadagi chaqiruvchilar shu nomni import qiladi.
+Alias BITTA relizga mo'ljallangan: yangi kod `JOBS_QUEUE` ni ishlatadi.
 """
 
 CONNECT_TIMEOUT_SECONDS: Final[float] = 5.0
@@ -128,7 +199,7 @@ def _broker_url() -> str:
 
 broker: AsyncBroker = ListQueueBroker(
     _broker_url(),
-    queue_name=DISCOVERY_QUEUE,
+    queue_name=JOBS_QUEUE,
     # ==================================================================
     # ⚠⚠ `socket_timeout=None` MAJBURIY VA U "QULAYLIK" EMAS — USIZ
     #    WORKER HAR 5 SONIYADA YIQILADI. Bu O'LCHANGAN fakt:
@@ -178,9 +249,37 @@ to'sadi, lekin ikkinchi himoya qatlamiga tayanmaslik afzal. Yuk oshsa
 """
 
 
+TICK_CRON: Final[str] = "* * * * *"
+"""Planerning YAGONA jadvali — har daqiqada bir marta (D-02).
+
+⚠ LITERAL KONSTANTA, SOZLAMA EMAS. `LabelScheduleSource` jadvalni KOD
+  dekoratoridan oladi, ya'ni u bozorga qarab o'zgara olmaydi — va bu
+  ATAYIN: bozorga xos jadval `snapshot_schedules` jadvalida yashaydi va
+  tik uni HAR DAQIQADA o'qiydi. Cron satrini sozlanadigan qilish ikkinchi
+  haqiqat manbaini tug'dirardi.
+
+⚠ SATR AYNAN BITTA MARTA UCHRAYDI (dekoratorda) va buni matn darvozasi
+  sanaydi: ikkinchi daqiqalik cron ikkinchi tik oqimini ochib, D-03 ning
+  «bitta planer talab qilinmaydi» da'vosini shubha ostiga qo'yardi.
+"""
+
+scheduler: TaskiqScheduler = TaskiqScheduler(broker=broker, sources=[LabelScheduleSource(broker)])
+"""`taskiq scheduler app.worker:scheduler` IMPORT QILADIGAN obyekt.
+
+⚠ QURILISH `get_settings()` GA BOG'LANMAYDI — `broker` bilan aynan bir xil
+  sabab (modul docstringi): planerni import qilishning O'ZI to'liq muhitni
+  talab qilardi va `app.main` ni ham olib ketardi.
+
+⚠ `LabelScheduleSource` — jadval KODDAN, Redis'dan EMAS. Sabab modul
+  docstringining planer bo'limida: Valkey `--save "" --appendonly no`
+  bilan ishlaydi va `RedisScheduleSource` bilan kesh qayta ko'tarilganda
+  jadval JIMGINA yo'qolardi.
+"""
+
+
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
 async def _open_worker_resources(state: TaskiqState) -> None:
-    """`engine` va `sessionmaker` — jarayon boshida BIR MARTA.
+    """`engine`, ombor va kadr-manba puli — jarayon boshida BIR MARTA.
 
     `app/main.py::lifespan` bilan aynan bir xil egalik shakli; farqi
     saqlanadigan joyda (`app.state` -> `TaskiqState`) va bu farq
@@ -190,6 +289,14 @@ async def _open_worker_resources(state: TaskiqState) -> None:
       kaliti berilmagan bo'lsa jarayon SHU YERDA, ishga tushishda
       yiqiladi va `docker compose logs worker` da sabab ochiq ko'rinadi.
       Import paytida yiqilish esa `app.main` ni ham olib ketardi.
+
+    ⚠ OMBOR VA KADR MANBALARI HAM SHU YERDA (04-07). `storage.open()` —
+      `@asynccontextmanager`, ya'ni uni ushlab turish uchun
+      `AsyncExitStack` kerak; `aiobotocore` ning puli jimgina yopilmaydi va
+      yopilmagan pul `aiohttp` ning "Unclosed connector" ogohlantirishi
+      bilan tugardi. Kadr manbalari esa har chaqiruvda qayta ochilsa har
+      kadrga yangi TCP ulanishi va yangi Digest handshake narxini
+      qo'shardi (`frame_source.py` ning 2-majburiyati).
     """
     settings = get_settings()
     configure_logging(settings.log_level)
@@ -197,14 +304,41 @@ async def _open_worker_resources(state: TaskiqState) -> None:
     engine = make_engine(settings.database_url)
     state.engine = engine
     state.sessionmaker = make_sessionmaker(engine)
-    log.info("worker_started", queue=DISCOVERY_QUEUE)
+
+    resources = AsyncExitStack()
+    state.resources = resources
+    state.storage = await resources.enter_async_context(storage_module.open(settings))
+    sources = FrameSourcePool(go2rtc_url=settings.go2rtc_url)
+    resources.push_async_callback(sources.aclose)
+    state.sources = sources
+    state.policy = _capture_policy(settings)
+
+    log.info("worker_started", queue=JOBS_QUEUE)
+
+
+def _capture_policy(settings: Settings) -> CapturePolicy:
+    """`Settings` -> `CapturePolicy` — TARJIMA SHU YERDA, jobda EMAS.
+
+    Job sozlamalar obyektining butun yuzasini ko'rmasligi kerak
+    (`CapturePolicy` docstringi): shunda uni testda qurish uchun
+    `DATABASE_URL`/`JWT_SECRET`/`NVR_CREDENTIAL_KEY` kerak bo'lmaydi.
+    """
+    return CapturePolicy(
+        grace_seconds=settings.capture_grace_seconds,
+        lease_seconds=settings.capture_lease_seconds,
+        max_attempts=settings.capture_max_attempts,
+        batch_size=settings.capture_batch_size,
+        global_concurrency=settings.capture_global_concurrency,
+        quality=settings.quality_thresholds(),
+    )
 
 
 @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
 async def _close_worker_resources(state: TaskiqState) -> None:
-    """Pulni yopadi — `lifespan` ning `finally` bandi bilan bir xil vazifa."""
+    """Barcha resurslarni yopadi — `lifespan` ning `finally` bandi bilan bir xil vazifa."""
+    await state.resources.aclose()
     await state.engine.dispose()
-    log.info("worker_stopped", queue=DISCOVERY_QUEUE)
+    log.info("worker_stopped", queue=JOBS_QUEUE)
 
 
 @broker.task(task_name="nvr.discover")
@@ -237,6 +371,73 @@ async def discover_nvr_task(
         run_id=UUID(run_id),
         actor_id=UUID(actor_id) if actor_id is not None else None,
     )
+
+
+@broker.task(task_name="capture.batch")
+async def capture_batch_task(
+    context: Annotated[Context, TaskiqDepends()],
+    *,
+    market_id: str,
+    nvr_id: str,
+    run_ids: list[str],
+) -> None:
+    """YUPQA QOBIQ — `discover_nvr_task` bilan aynan bir xil shakl (S-4).
+
+    `str` -> `UUID` konversiyasi CHEGARADA; resurslar (`sessionmaker`,
+    `storage`, `sources`, `policy`) `TaskiqState` dan. Mantiq YO'Q.
+    """
+    state = context.state
+    await capture_batch(
+        state.sessionmaker,
+        state.storage,
+        state.sources,
+        policy=state.policy,
+        market_id=UUID(market_id),
+        nvr_id=UUID(nvr_id),
+        run_ids=[UUID(run_id) for run_id in run_ids],
+    )
+
+
+async def _enqueue_batch(batch: BatchRequest) -> None:
+    """`capture.batch` ni navbatga qo'yadi — tikning 4-qadami.
+
+    ⚠ CHAQIRUV TIKGA ARGUMENT SIFATIDA BERILADI (`capture_tick(...,
+      enqueue=...)`), ya'ni `app/jobs/capture.py` navbat kutubxonasini
+      umuman ko'rmaydi (S-4). Bu funksiya — o'sha chegaraning yagona
+      o'tish nuqtasi.
+
+    ⚠ `UUID` LAR MATNGA O'GIRILADI: `taskiq` ning serializatori JSON va
+      `json.dumps(UUID(...))` `TypeError` beradi (`enqueue_discovery`
+      bilan bir xil qoida).
+    """
+    payload: dict[str, Any] = {
+        "market_id": str(batch.market_id),
+        "nvr_id": str(batch.nvr_id),
+        "run_ids": [str(run_id) for run_id in batch.run_ids],
+    }
+    # ⚠ `kicker()` — `enqueue_discovery` bilan bir xil yo'l: u `Context`
+    #   in'ektsiyasini chetlab o'tadi (dekorator uni ijro paytida beradi)
+    #   va chegara `asyncio.timeout` bilan qo'yiladi. Chegarasiz `LPUSH`
+    #   broker pulining `socket_timeout=None` i tufayli CHEKSIZ kutardi va
+    #   osilgan tik keyingi daqiqadagi tikni ham to'sardi.
+    async with asyncio.timeout(ENQUEUE_TIMEOUT_SECONDS):
+        await capture_batch_task.kicker().kiq(**payload)
+
+
+@broker.task(task_name="capture.tick", schedule=[{"cron": TICK_CRON}])
+async def capture_tick_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — planer har daqiqada AYNAN shuni navbatga qo'yadi (D-02).
+
+    ⚠ ARGUMENT YO'Q VA BU ATAYIN: tik HOLATSIZ. Unga «qaysi bozor» yoki
+      «qaysi slot» berilsa planer holatiga ishonish boshlanardi va D-02
+      ning butun mazmuni (o'tkazib yuborilgan slot IZ QOLDIRADI) yo'qolardi.
+
+    ⚠ `now` HAM BERILMAYDI: mahsulot yo'lida u `now_tz()` ga tushadi.
+      Argument test uchun mavjud (`capture_tick(..., now=...)`), ya'ni
+      qobiq ham, job ham bir xil funksiyani chaqiradi.
+    """
+    state = context.state
+    await capture_tick(state.sessionmaker, policy=state.policy, enqueue=_enqueue_batch)
 
 
 async def enqueue_discovery(
