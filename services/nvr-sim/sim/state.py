@@ -24,6 +24,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
+from .frames import FRAME_MODES
+
 MODEL_DS_7616 = "DS-7616NI-K2"
 MODEL_DS_7732 = "DS-7732NI-M4"
 MODEL_IPCAMERA = "DS-2CD2346G2-ISU"
@@ -84,6 +86,24 @@ jimgina qabul qilib "hech nima qilmaydigan" rejim bo'lib qolmaydi.
 
 UNSETTABLE_MODES: frozenset[str] = frozenset({"unreachable"})
 
+# ⚠ `frame_mode` ATAYIN `SIM_MODES` GA QO'SHILMADI — bu IKKINCHI O'LCHAM.
+#
+#   `mode`       — ULANISH va AUTENTIFIKATSIYA o'lchami: so'rov qurilma
+#                  yuzasiga YETIB BORDIMI (`bad_password`, `clock_drift`,
+#                  `unreachable`, …).
+#   `frame_mode` — JAVOB BAYTLARI o'lchami: yetib borgan so'rov QANDAY
+#                  tana oldi (`ok`, `truncated`, `html`, `empty`).
+#
+# Ikkalasini bitta enumga yig'ish «noto'g'ri parol VA buzuq kadr»
+# kombinatsiyasini ifodalab bo'lmas qilardi. Holbuki 04-04 ning retry
+# siyosati aynan shu ikkisini AJRATISHI shart: `401` da qayta urinish
+# hisobni qulflaydi (D-03, ZARARLI), buzuq kadrda esa qayta urinish
+# aynan TO'G'RI amal. Bitta o'lcham bo'lganda bu farqni sinab bo'lmasdi.
+#
+# `FRAME_MODES` ning O'ZI `sim/frames.py` da yashaydi — baytlar bilan
+# birga, ya'ni yangi rejim qo'shilganda reyestr va uning tanasi
+# ajralib ketmaydi.
+
 
 def _env_int(name: str, default: int) -> int:
     raw = os.environ.get(name)
@@ -100,6 +120,12 @@ class SimState:
     """Sim'ning butun kuzatiladigan xulqi shu yerdan boshqariladi."""
 
     mode: str = "ok"
+    frame_mode: str = "ok"
+    """`/picture` javobining BAYTLARI — yuqoridagi izohdagi ikkinchi o'lcham.
+
+    Standart `"ok"`: `POST /__sim__/reset` shu qiymatga qaytaradi, ya'ni
+    buzuq kadr keyingi testga SIZIB O'TMAYDI.
+    """
     model: str = MODEL_DS_7616
     channel_count: int = 6
     rtsp_port: int = 554
@@ -144,6 +170,7 @@ class SimState:
     def as_dict(self) -> dict[str, Any]:
         return {
             "mode": self.mode,
+            "frame_mode": self.frame_mode,
             "model": self.model,
             "channel_count": self.channel_count,
             "rtsp_port": self.rtsp_port,
@@ -178,7 +205,7 @@ qaytarishning yagona yo'li — `POST /__sim__/reset`.
 """
 
 PATCHABLE_FIELDS: frozenset[str] = frozenset(
-    {"mode", "model", "stream_limit_mode", *_INT_FIELDS, *_SET_FIELDS}
+    {"mode", "frame_mode", "model", "stream_limit_mode", *_INT_FIELDS, *_SET_FIELDS}
     | set(_OPTIONAL_INT_FIELDS)
     | set(_OPTIONAL_STR_FIELDS)
 )
@@ -216,6 +243,20 @@ def apply_patch(state: SimState, patch: dict[str, Any]) -> SimState:
                 "`docker compose stop nvr-sim`"
             )
         state.mode = mode
+
+    if "frame_mode" in patch:
+        # NOMA'LUM QIYMAT — noma'lum KALIT bilan bir xil mulohaza (yuqoridagi
+        # docstring): test "buzuq kadr rejimini o'rnatdim" deb o'ylab, aslida
+        # YAROQLI kadr ustida ishlab, sifat filtri umuman sinalmagan holda
+        # yashil qolishi — aynan shu fazadagi eng qimmat yolg'on-yashil.
+        # Kalit tekshiruvi buni USHLAMAYDI: `frame_mode` PATCHABLE_FIELDS da
+        # bor, ya'ni `{"frame_mode": "corrupt"}` kalit darvozasidan O'TADI.
+        frame_mode = str(patch["frame_mode"])
+        if frame_mode not in FRAME_MODES:
+            raise SimStateError(
+                f"noma'lum frame_mode={frame_mode!r}; ruxsat etilganlar: {sorted(FRAME_MODES)}"
+            )
+        state.frame_mode = frame_mode
 
     if "model" in patch:
         model = str(patch["model"])

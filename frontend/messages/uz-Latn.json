@@ -37,7 +37,8 @@
     "groupMarket": "Bozor",
     "groupSystem": "Tizim",
     "logout": "Chiqish",
-    "cameras": "Kameralar"
+    "cameras": "Kameralar",
+    "snapshots": "Kadr olish"
   },
   "auth": {
     "phoneLabel": "Telefon raqami",

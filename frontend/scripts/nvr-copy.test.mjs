@@ -109,30 +109,100 @@ const HEDGE_WORD = {
   ru: "Возможно",
 };
 
-/** YAGONA hedged kod — o'n ikkitasidan bittasi. */
-const HEDGED_CODE = "nvr_stream_limit";
+/*
+ * =============================================================================
+ * ⛔ W0-F7 — DARVOZA IKKI XATO REYESTRI USTIDA UMUMLASHTIRILDI (4-faza).
+ *
+ * O'LCHANGAN FAKT (2026-08-04) va u `04-UI-SPEC.md` W0-F7 ning tavsifidan
+ * FARQ QILADI — farq shu yerda ochiq yoziladi.
+ *
+ * UI-SPEC shunday deydi: 4-faza `snapshots.errorCause.capture_stream_limit`
+ * ni aynan o'sha hedge so'zi bilan qo'shganda «darvoza birinchi kunning
+ * o'zida QIZARADI».
+ *
+ * U QIZARMAYDI. Darvozaning ikkala testi ham `cameras.errorCause` ni
+ * QATTIQ QADAGAN edi (`loadMessages(locale).cameras?.errorCause`), ya'ni
+ * `snapshots.*` ni umuman KO'RMASDI. Haqiqiy xavf — qizil darvoza emas,
+ * **JIM QAMROVSIZLIK**: 4-fazaning xato reyestrida hedging invarianti
+ * hech qachon o'lchanmagan bo'lib qolardi va uni HECH BIR test
+ * oshkor qilmasdi.
+ *
+ * Shuning uchun darvoza «tuzatilmadi» — u UMUMLASHTIRILDI:
+ *   * `HEDGED_NAMESPACES` — skanerlanadigan reyestrlar ro'yxati,
+ *   * `HEDGED_KEYS`       — to'liq kalitli allowlist (namespace bilan).
+ *
+ * ⛔ HEDGING ARZONLASHSA, MA'NOSINI YO'QOTADI. 23 ta xato kodidan faqat
+ *    IKKITASI hedged va ikkalasi ham AYNAN BIR XIL fizik hodisani
+ *    tasvirlaydi: NVR sessiya chegarasiga yetish — bu HEURISTIKA,
+ *    qurilma javobidan tasdiqlanmaydi (A.5 ning LOW ishonchi).
+ *    Uchinchi kalit qo'shilsa, darvoza qayta ko'rib chiqilishi SHART.
+ * =============================================================================
+ */
 
-test("G-3: `nvr_stream_limit` sababi hedge so'zi bilan BOSHLANADI", () => {
+/** Hedging invarianti qo'llanadigan xato reyestrlari. */
+const HEDGED_NAMESPACES = ["cameras", "snapshots"];
+
+/**
+ * Hedge so'zi RUXSAT ETILGAN kalitlar — TO'LIQ nom bilan.
+ *
+ * ⚠ To'liq nom (namespace bilan) ATAYIN: qisqa kod (`nvr_stream_limit`)
+ *   bilan yozilgan allowlist ikki namespace'da bir xil nomli kod paydo
+ *   bo'lganda ikkalasini ham jimgina oqlab yuborardi.
+ */
+const HEDGED_KEYS = new Set([
+  "cameras.errorCause.nvr_stream_limit",
+  "snapshots.errorCause.capture_stream_limit",
+]);
+
+/** `{namespace}.errorCause` — mavjud bo'lsa, aks holda bo'sh obyekt. */
+function errorCauses(locale, namespace) {
+  return loadMessages(locale)[namespace]?.errorCause ?? {};
+}
+
+test("G-3: `HEDGED_KEYS` dagi MAVJUD har bir kalit hedge so'zi bilan BOSHLANADI", () => {
+  const checked = [];
+
   for (const locale of LOCALES) {
-    const causes = loadMessages(locale).cameras?.errorCause ?? {};
-    const text = causes[HEDGED_CODE];
+    for (const namespace of HEDGED_NAMESPACES) {
+      const causes = errorCauses(locale, namespace);
+      for (const code of Object.keys(causes)) {
+        const full = `${namespace}.errorCause.${code}`;
+        if (!HEDGED_KEYS.has(full)) continue;
 
-    assert.equal(
-      typeof text,
-      "string",
-      `${locale}.json: cameras.errorCause.${HEDGED_CODE} yo'q`,
-    );
-    assert.ok(
-      text.startsWith(HEDGE_WORD[locale]),
-      `${locale}.json: cameras.errorCause.${HEDGED_CODE} «${HEDGE_WORD[locale]}» bilan ` +
-        `boshlanishi SHART (D-05). Hozirgi boshi: ${JSON.stringify(text.slice(0, 40))}`,
+        assert.ok(
+          causes[code].startsWith(HEDGE_WORD[locale]),
+          `${locale}.json: ${full} «${HEDGE_WORD[locale]}» bilan boshlanishi SHART ` +
+            `(D-05). Hozirgi boshi: ${JSON.stringify(causes[code].slice(0, 40))}`,
+        );
+        checked.push(`${locale}:${full}`);
+      }
+    }
+  }
+
+  // QUYI CHEGARA: `cameras` kaliti UCHALA tilda ham mavjud bo'lishi SHART
+  // (u 3-fazada yetkazilgan). `snapshots` kaliti hali yo'q — u qo'shilgan
+  // kunning o'zida bu sikl uni AVTOMATIK qamrab oladi.
+  const cameraChecks = checked.filter((item) => item.includes("cameras.")).length;
+  assert.equal(
+    cameraChecks,
+    LOCALES.length,
+    `cameras.errorCause.nvr_stream_limit uchala tilda ham tekshirilishi kerak edi, ` +
+      `tekshirilgani: ${cameraChecks} (${checked.join(", ")})`,
+  );
+
+  const snapshotChecks = checked.filter((item) => item.includes("snapshots.")).length;
+  if (snapshotChecks === 0) {
+    console.log(
+      "[G-3] `snapshots.errorCause.capture_stream_limit` hali yo'q (copy 04-08…04-10 da " +
+        "keladi) — allowlist uni OLDINDAN biladi, ya'ni kalit qo'shilgan kuni " +
+        "darvoza uni avtomatik qamrab oladi va yolg'on-qizil BERMAYDI.",
     );
   }
 });
 
-test("G-3: boshqa HECH BIR `errorCause.*` hedge so'zini ishlatmaydi", () => {
+test("G-3: `HEDGED_KEYS` dan tashqari HECH BIR `errorCause.*` hedge so'zini ishlatmaydi", () => {
   /*
-   * ⚠ TEKSHIRUV FAQAT `cameras.errorCause.*` USTIDA ishlaydi va bu
+   * ⚠ TEKSHIRUV FAQAT `{namespace}.errorCause.*` USTIDA ishlaydi va bu
    *   chegara O'LCHANGAN, taxmin emas: `cameras.errorFix.
    *   nvr_isapi_unavailable` ning ruscha matni «Возможно, введён адрес
    *   камеры или роутера» deydi va u TO'G'RI — u sababni emas,
@@ -143,27 +213,40 @@ test("G-3: boshqa HECH BIR `errorCause.*` hedge so'zini ishlatmaydi", () => {
    *   to'g'ri satr ustida qizartirardi — ya'ni keyingi ishlovchi
    *   darvozani "chetlab o'tishga" majbur bo'lardi. D-05 ning qoidasi
    *   SABAB matni haqida va tekshiruv ham aynan shu yerda turadi.
+   *
+   * ⚠ 4-FAZA (W0-F7): sikl endi IKKALA namespace ustidan yuradi.
+   *   `cameras` uchun quyi chegara (>= 12) SAQLANADI; `snapshots` uchun
+   *   u SHARTLI, chunki copy `04-08…04-10` da keladi.
    */
   for (const locale of LOCALES) {
-    const causes = loadMessages(locale).cameras?.errorCause ?? {};
-    const codes = Object.keys(causes);
-
-    assert.ok(
-      codes.length >= 12,
-      `${locale}.json: cameras.errorCause da atigi ${codes.length} kod bor`,
-    );
-
     const word = HEDGE_WORD[locale].toLowerCase();
-    const offenders = codes.filter(
-      (code) => code !== HEDGED_CODE && causes[code].toLowerCase().includes(word),
-    );
+    const offenders = [];
+
+    for (const namespace of HEDGED_NAMESPACES) {
+      const causes = errorCauses(locale, namespace);
+      const codes = Object.keys(causes);
+
+      if (namespace === "cameras") {
+        assert.ok(
+          codes.length >= 12,
+          `${locale}.json: cameras.errorCause da atigi ${codes.length} kod bor`,
+        );
+      }
+
+      for (const code of codes) {
+        const full = `${namespace}.errorCause.${code}`;
+        if (!HEDGED_KEYS.has(full) && causes[code].toLowerCase().includes(word)) {
+          offenders.push(full);
+        }
+      }
+    }
 
     assert.deepEqual(
       offenders,
       [],
-      `${locale}.json: hedge so'zi («${HEDGE_WORD[locale]}») boshqa kodlarda ham ` +
-        `ishlatilgan: ${offenders.join(", ")}. Hedging arzonlashsa ma'nosini ` +
-        "yo'qotadi (UI-SPEC §7.5) — bu kodlar ANIQ gapirishi kerak.",
+      `${locale}.json: hedge so'zi («${HEDGE_WORD[locale]}») allowlist'dan tashqari ` +
+        `kodlarda ham ishlatilgan: ${offenders.join(", ")}. Hedging arzonlashsa ` +
+        "ma'nosini yo'qotadi (UI-SPEC §7.5) — bu kodlar ANIQ gapirishi kerak.",
     );
   }
 });
