@@ -48,12 +48,29 @@ from uuid import UUID
 import psycopg
 import pytest
 from fixtures.nvr_domain import add_discovery_run, nvr_rows
+from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import TwoMarketSeed
 from psycopg import Connection
 from psycopg.rows import TupleRow
 
 NVR_TABLES: tuple[str, ...] = ("cameras", "nvr_discovery_runs", "nvr_credentials", "nvr_devices")
 """03-03 qo'shgan to'rt jadval — kaskad TO'LIQ qamrashi kerak bo'lganlari."""
+
+SNAPSHOT_TABLES: tuple[str, ...] = (
+    "snapshots",
+    "capture_runs",
+    "snapshot_schedule_slots",
+    "snapshot_schedules",
+    "alert_events",
+)
+"""04-03 qo'shgan besh jadval — `0015` kaskadga qo'shishi kerak bo'lganlari.
+
+TARTIB `migrations.entities.SNAPSHOT_DELETE_ORDER` bilan bir xil, lekin bu
+yerda u faqat O'QISH uchun: test qatorlarni SANAYDI, o'chirmaydi. Ro'yxat
+reyestrdan IMPORT QILINMAYDI — `tests/integration/` `migrations` paketiga
+bog'lanmaydi va, muhimrog'i, reyestrdan olingan ro'yxat reyestrning O'ZI
+xato bo'lganda test bilan BIRGA xato bo'lardi.
+"""
 
 TABLES_REFERENCING_MARKETS = """
 SELECT DISTINCT c.relname
@@ -79,9 +96,13 @@ sababsiz yashil bo'lib qolardi.
 
 FUNCTION_BODY = "SELECT pg_get_functiondef('public.market_delete_draft(uuid)'::regprocedure)"
 
-# 2026-08-03 holati: `ALL_TENANT_TABLES` ning o'n ikkitasi. Quyi chegara
-# `0012` dan keyin ham to'g'ri bo'lib qolaveradi (jadvallar faqat qo'shiladi).
-KNOWN_TENANT_TABLE_COUNT = 12
+# 2026-08-04 holati: `ALL_TENANT_TABLES` ning o'n yettitasi (12 + `0014` ning
+# beshtasi). Quyi chegara jadvallar faqat QO'SHILGANI uchun to'g'ri bo'lib
+# qolaveradi; uni ko'tarish esa MAJBURIY, aks holda `0014` ning beshta
+# jadvali tushib qolgan taqdirda ham quyi chegara qanoatlanardi va
+# `test_reference_query_actually_finds_the_tenant_tables` darvozasi o'z
+# vazifasini bajarmasdi.
+KNOWN_TENANT_TABLE_COUNT = 17
 
 # Tuzatish yo'riqnomasi ALOHIDA konstantada, f-satr ICHIDA emas: ruff'ning
 # `S608` qoidasi SQL kalit so'zi bo'lgan formatlangan satrni "so'rov
@@ -315,6 +336,85 @@ def test_draft_market_deletion_covers_the_nvr_domain(
 
         # NAZORAT: B bozori butunlay tegilmagan.
         for table in NVR_TABLES:
+            assert _rows_for_market(sync_owner_conn, table, b.market_id) > 0, (
+                f"`{table}` da B bozorining qatorlari ham o'chib ketdi — kaskad "
+                "`WHERE market_id = ...` predikatini yo'qotgan bo'lishi mumkin"
+            )
+
+
+def test_draft_market_deletion_covers_the_snapshot_domain(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    migrated: None,
+) -> None:
+    """Qoralama bozor BESHALA snapshot jadvali bilan birga o'chadi; B TEGILMAYDI.
+
+    Bu `0015` ning ASOSIY da'vosi va u yuqoridagi statik darvozadan
+    MUSTAQIL: u yerda funksiya MATNI o'qiladi, bu yerda esa funksiya
+    CHAQIRILADI.
+
+    ⚠ TARTIB AYNAN SHU YERDA O'LCHANADI. `capture_runs` `cameras` ga
+    kompozit FK bilan tayanadi, `cameras` esa kaskadning BIRINCHI `DELETE`
+    i (3-fazadan). Ya'ni snapshot bloki NVR blokidan KEYIN qo'yilsa matn
+    baribir TO'LIQ ko'rinardi (statik darvoza yashil), chaqiruv esa chet el
+    kaliti buzilishi bilan yiqilardi — va bu faqat qoralama bozorni
+    o'chirmoqchi bo'lgan admin ekranida ko'rinardi.
+
+    ⚠ IKKINCHI BOZOR NAZORAT SIFATIDA: A o'chirilgandan keyin B ning
+    qatorlari JOYIDA qolishi tekshiriladi. Usiz `WHERE market_id = ...`
+    predikati butunlay yo'qolgan taqdirda ham (ya'ni kaskad HAMMA bozorni
+    tozalab yuborganda) test yashil bo'lardi.
+    """
+    # ⚠ TARTIB MUHIM VA U `with` NING CHIQISH TARTIBIDA QULFLANGAN: snapshot
+    #   seed'i NVR seed'ining ICHIDA ochiladi, ya'ni tozalash TESKARI ketadi
+    #   (avval `capture_runs`, keyin `cameras`). Teskari joylashuv
+    #   `nvr_domain` ning tozalashini `cameras` ga hali `capture_runs` tayanib
+    #   turgan paytda ishga tushirardi va FK buzilishi bilan yiqilardi.
+    with (
+        nvr_rows(sync_owner_conn, two_markets) as nvr,
+        snapshot_rows(sync_owner_conn, nvr) as seed,
+    ):
+        a, b = seed.market_a, seed.market_b
+
+        for table in SNAPSHOT_TABLES:
+            assert _rows_for_market(sync_owner_conn, table, a.market_id) > 0, (
+                f"seed `{table}` ga A bozori uchun qator yozmagan — test "
+                "o'chirishni emas, bo'sh jadvalni o'lchagan bo'lardi"
+            )
+
+        # Bozor QORALAMAGA qaytariladi: `market_delete_draft()` faol bozorga
+        # ATAYIN tegmaydi (quyidagi test aynan shuni o'lchaydi).
+        sync_owner_conn.execute(
+            "UPDATE markets SET is_active = false WHERE id = %s", (str(a.market_id),)
+        )
+
+        assert _delete_draft(sync_owner_conn, a.market_id) is True, (
+            "`market_delete_draft()` qoralama bozor uchun `false` qaytardi — "
+            "beshta yangi jadval kaskadga qo'shilmagan bo'lishi mumkin"
+        )
+
+        for table in SNAPSHOT_TABLES:
+            remaining = _rows_for_market(sync_owner_conn, table, a.market_id)
+            assert remaining == 0, (
+                f"`{table}` da A bozorining {remaining} ta YETIM qatori qoldi — "
+                "kadr metama'lumoti bozor tashrifchilarining shaxsiy "
+                "ma'lumotiga havola qiladi (T-04-20)"
+            )
+        # NVR domeni ham o'chgan bo'lishi shart: snapshot bloki uni
+        # BLOKLAMASLIGI kerak (tartib to'g'ri bo'lsa ikkalasi ham ketadi).
+        for table in NVR_TABLES:
+            assert _rows_for_market(sync_owner_conn, table, a.market_id) == 0, (
+                f"`{table}` da A bozorining qatorlari qoldi — snapshot bloki "
+                "NVR blokini bloklab qo'ygan bo'lishi mumkin"
+            )
+
+        row = sync_owner_conn.execute(
+            "SELECT count(*) FROM markets WHERE id = %s", (str(a.market_id),)
+        ).fetchone()
+        assert row is not None and int(row[0]) == 0, "qoralama bozor qatori o'chmadi"
+
+        # NAZORAT: B bozori butunlay tegilmagan.
+        for table in SNAPSHOT_TABLES:
             assert _rows_for_market(sync_owner_conn, table, b.market_id) > 0, (
                 f"`{table}` da B bozorining qatorlari ham o'chib ketdi — kaskad "
                 "`WHERE market_id = ...` predikatini yo'qotgan bo'lishi mumkin"
