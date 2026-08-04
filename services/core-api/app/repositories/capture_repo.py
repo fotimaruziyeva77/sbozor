@@ -940,6 +940,58 @@ class CaptureRepository(TenantScopedRepository):
     # 5. O'qish — UI va dayjest
     # ------------------------------------------------------------------
 
+    async def running_by_ids(self, run_ids: Sequence[UUID]) -> list[ClaimedRun]:
+        """`claim_due()` bergan qatorlarni IDENTIFIKATORI bo'yicha qayta o'qiydi.
+
+        ⚠ NEGA QAYTA O'QISH KERAK: fan-out vazifasi navbatdan FAQAT
+          identifikatorlarni olib keladi (`04-07`, D-04). Slot vaqti va
+          `business_date` ni navbat xabariga solish ularni JSON'da ikkinchi
+          haqiqat manbaiga aylantirardi — vazifa navbatda turgan paytda
+          `release_expired()` qatorni qaytarib yuborishi mumkin va o'shanda
+          worker ESKIRGAN qiymatlar bilan kadr yozardi.
+
+        ⛔ `status = 'running'` PREDIKATI DARVOZA, TOZALIK EMAS. Navbat
+           vazifani «kamida bir marta» yetkazadi, ya'ni ikkinchi chaqiruv
+           MUMKIN — o'shanda qator allaqachon `succeeded`/`failed` bo'ladi
+           va bu metod uni BERMAYDI, ya'ni batch jimgina no-op bo'ladi.
+           Predikatsiz ikkinchi yetkazish NVR ga ikkinchi marta borardi.
+
+        Returns:
+            Faqat HALI ham `running` bo'lgan qatorlar. Tartib
+            `scheduled_at` bo'yicha — stagger o'sha tartibda yoyiladi.
+        """
+        if not run_ids:
+            return []
+        result = await self.session.execute(
+            select(
+                CaptureRun.id,
+                CaptureRun.camera_id,
+                CaptureRun.nvr_id,
+                CaptureRun.slot_time,
+                CaptureRun.scheduled_at,
+                CaptureRun.business_date,
+                CaptureRun.attempts,
+            )
+            .where(
+                CaptureRun.market_id == self.market_id,
+                CaptureRun.id.in_(list(run_ids)),
+                CaptureRun.status == CaptureRunStatus.RUNNING.value,
+            )
+            .order_by(CaptureRun.scheduled_at, CaptureRun.id)
+        )
+        return [
+            ClaimedRun(
+                id=row.id,
+                camera_id=row.camera_id,
+                nvr_id=row.nvr_id,
+                slot_time=row.slot_time,
+                scheduled_at=row.scheduled_at,
+                business_date=row.business_date,
+                attempts=row.attempts,
+            )
+            for row in result
+        ]
+
     async def day_summary(self, business_date: date) -> DaySummary:
         """Kunning oltala hisoblagichi + `planned`/`done` (`04-UI-SPEC.md` §6.3).
 
