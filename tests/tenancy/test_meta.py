@@ -81,6 +81,37 @@ INDEX_EXCEPTIONS = {
     # watchdog faqat identifikatorlarni oladi va har qanday keyingi
     # o'qish odatdagidek RLS ostidan o'tadi (04-07).
     "ix_capture_runs_overdue",
+    # --- 4-faza, `0014_snapshot_domain` (D-16 / T-04-17). ---
+    #
+    # ⚠ BU ISTISNO OPTIMIZATSIYA EMAS — U TUZILMAVIY ZARURAT.
+    #
+    # `uq_snapshots_billable_anchor` `(id, is_billable)` ustida va u
+    # BOSHQA FAZA uchun mavjud: 5-fazada `occupancy_events` AYNAN shu
+    # juftlikka kompozit FK qo'yadi
+    #
+    #     FOREIGN KEY (snapshot_id, snapshot_is_billable)
+    #         REFERENCES snapshots (id, is_billable)
+    #
+    # va `CHECK (snapshot_is_billable)` bilan birga yaroqsiz kadrga
+    # bandlik dalilini bog'lashni IMKONSIZ qiladi. FK NISHONI esa
+    # havola qiluvchi ustunlar bilan AYNAN mos kelishi shart — ya'ni
+    # konstraytga `market_id` ni oldindan qo'shish uni 5-fazaning FK'si
+    # UCHUN YAROQSIZ qilardi. Boshqacha aytganda: bu indeksni «tuzatish»
+    # ning yagona yo'li D-16 ning butun kafolatini olib tashlash bo'lardi.
+    #
+    # Yuqoridagi ikkita istisnodan FARQI: ular SO'ROV YO'LI (indeks
+    # rejalashtiruvchi uchun), bu esa umuman so'rov yo'li EMAS —
+    # `snapshots` ni `market_id` bo'yicha izlaydigan har bir so'rov
+    # `uq_snapshots_market_id_capture_run_id` yoki
+    # `uq_snapshots_market_id_object_key` dan foydalanadi, ikkalasi ham
+    # `market_id` bilan BOSHLANADI. Bu konstrayt esa faqat FK nishoni
+    # sifatida o'qiladi va tenant filtrlash uchun HECH QACHON
+    # ishlatilmaydi, ya'ni istisno P9 ning ishlash da'vosini ham
+    # susaytirmaydi.
+    #
+    # Shakl `04-01` ning W0-1 zondi bilan HAQIQIY `postgres:18.4` da
+    # o'lchangan (`BILLABLE_ANCHOR_SUPPORTED = true`).
+    "uq_snapshots_billable_anchor",
 }
 
 EXPECTED_DEFINER_FUNCTIONS = {
@@ -157,27 +188,14 @@ EXPECTED_DEFINER_FUNCTIONS = {
 #
 # Bu `INDEX_EXCEPTIONS` va `POLICY_TENANT_GUC_EXCEPTIONS` bilan bir xil naqsh:
 # istisno testda, sababi yozma, o'zgartirish code review'da ko'zga tashlanadi.
-PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset(
-    {
-        # --- 4-faza, W0-5 (04-01). Ikkalasi ham `0014_snapshot_domain` da
-        # tug'iladi va `attach_audit_trigger()` o'sha yerda, `04-03` ning
-        # T2 taskida chaqiriladi — reyestr esa ATAYIN undan OLDIN
-        # to'ldiriladi (`AUDITED_TABLES` docstringi buni talab qiladi).
-        #
-        # ⛔ QARZNING EGASI ANIQ: `04-03` / T2. O'sha reja `0014` bilan
-        #    BIR OYNADA ikkala nomni ham shu ro'yxatdan O'CHIRADI, aks
-        #    holda pastdagi `closed` asserti qizaradi va uni o'chirishga
-        #    majbur qiladi. Ya'ni qarz jimgina "yopilib" ketolmaydi.
-        #
-        # Bu aynan yuqoridagi docstring tasvirlagan yagona qonuniy holat
-        # («jadval KEYINGI migratsiyada tug'iladi»), ya'ni oxirgi chora
-        # shartlari bajarilgan: bugun `attach_audit_trigger()` ni chaqirib
-        # bo'lmaydi, chunki chaqiriladigan jadval hali mavjud emas.
-        "snapshot_schedules",
-        "snapshot_schedule_slots",
-    }
-)
-"""`AUDITED_TABLES` da bor, lekin jadval hali TUG'ILMAGAN nomlar (04-01, W0-5).
+PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset()
+"""BO'SH — `AUDITED_TABLES` dagi HAR BIR jadvalning triggeri ULANGAN.
+
+✅ OXIRGI QARZ `0014_snapshot_domain` DA YOPILDI (`04-03` / T2, 2026-08-04).
+`04-01` bu ro'yxatga `snapshot_schedules` va `snapshot_schedule_slots` ni
+qo'ygan edi (jadvallar hali mavjud emas edi, ya'ni
+`attach_audit_trigger()` ni chaqirib bo'lmasdi); `0014` ikkala triggerni
+ham ulagach nomlar SHU MIGRATSIYA BILAN BIR COMMITDA o'chirildi.
 
 ⚠ BU RO'YXATGA YANGI NOM QO'SHISH — OXIRGI CHORA, ODATIY QADAM EMAS.
 Reyestrga (`AUDITED_TABLES`) jadval qo'shilgan, lekin
@@ -186,12 +204,13 @@ migratsiyada tug'ilganda ma'noli (2-fazada aynan shunday edi: reyestr
 birinchi migratsiyadan OLDIN to'ldirilgan). Bir migratsiya ichida ikkalasini
 ham qilish mumkin bo'lsa, ro'yxat BO'SH qolishi kerak.
 
-⛔ SHUNING UCHUN BU YERDA «KUTILGAN QIZIL» HOLAT YO'Q. Reyestr va bu
-ro'yxat AYNI COMMITDA to'ldiriladi, ya'ni `test_audited_tables_have_trigger`
-`04-01` dan `04-03` gacha YASHIL turadi. 2-fazada qarz o'n olti reja
-davomida darvozani qizil qilib turgan va o'sha o'n olti reja uchun darvoza
-SIGNAL BERMAY qolgan edi — yuqoridagi izohdagi «Buzilgan darvoza —
-darvoza emas» bandi aynan shu haqda."""
+⛔ SHUNING UCHUN BU YERDA «KUTILGAN QIZIL» HOLAT YO'Q. Ro'yxat va amaldagi
+triggerlar AYNI COMMITDA tenglashadi, ya'ni `test_audited_tables_have_trigger`
+`04-01` dan `04-03` gacha YASHIL turdi va `0014` dan keyin ham yashil
+qoldi. 2-fazada qarz o'n olti reja davomida darvozani qizil qilib turgan
+va o'sha o'n olti reja uchun darvoza SIGNAL BERMAY qolgan edi —
+yuqoridagi izohdagi «Buzilgan darvoza — darvoza emas» bandi aynan shu
+haqda."""
 
 # Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun
 # sabab SHU YERDA yozilishi SHART — istisno qo'shish code review'da ko'zga

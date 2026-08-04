@@ -1,4 +1,4 @@
-"""Operatsion jadvallar — hozircha `audit_log` (FOUND-03).
+"""Operatsion jadvallar: `audit_log` (FOUND-03) va `system_heartbeats` (FOUND-06).
 
 =============================================================================
 `audit_log` APPEND-ONLY. Bu ORM konvensiyasi emas, DB darajasidagi kafolat.
@@ -41,7 +41,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from sbozor_core.models.base import Base
 
-__all__ = ["AUDIT_BUSINESS_DATE_EXPR", "AuditLog"]
+__all__ = ["AUDIT_BUSINESS_DATE_EXPR", "AuditLog", "SystemHeartbeat"]
 
 AUDIT_BUSINESS_DATE_EXPR = "((at AT TIME ZONE 'Asia/Tashkent')::date)"
 """`audit_log.business_date` generated column ifodasi.
@@ -132,3 +132,61 @@ class AuditLog(Base):
     ip: Mapped[str | None] = mapped_column(INET(), nullable=True)
     # `sbozor_core.enums.AuditSource` — `db_trigger` yoki `app`.
     source: Mapped[str] = mapped_column(Text(), nullable=False)
+
+
+class SystemHeartbeat(Base):
+    """Fon komponentining «oxirgi marta qachon ishladi» yozuvi (FOUND-06, D-20).
+
+    =========================================================================
+    ⚠ `market_id` USTUNI ATAYIN YO'Q — JADVAL `GLOBAL_TABLES` DA.
+
+    Komponent (`capture_tick`, `retention`, `backup`) BOZORGA TEGISHLI
+    EMAS: tik butun platforma uchun BITTA jarayonda ishlaydi va uning
+    to'xtagani hamma bozorga birdan tegadi.
+
+    Uni tenant-scoped qilish MANTIQIY XATO bo'lardi: tik umuman
+    ishlamayotgan bo'lsa, uning yo'qligini bozor kontekstida qidirish 0
+    qator berardi va sukunat «hammasi joyida» bilan bir xil ko'rinardi —
+    ya'ni D-20 («alert MUVAFFAQIYAT SIGNALINING YO'QLIGIGA qo'yiladi»)
+    ning aynan buziladigan joyi.
+
+    Bu FOUND-06 ning eng pastki qatlami — «detektorning O'ZI bajarilmadi»
+    holati. Tik ichidagi watchdog kadr olishning yiqilishini qoplaydi;
+    worker VA planer ikkalasi ham o'lik bo'lsa esa hech kim hech nimani
+    `missed` deb belgilamaydi va JIMLIK HUKM SURADI. Bu jadval o'sha
+    bo'shliqni yopadi: `core-api` BOSHQA jarayon, u tirik qoladi va
+    `/internal/self-check` orqali yurak urishining eskirganini ko'rsatadi.
+    =========================================================================
+
+    ⚠ `/healthz` GA ULAMANG (Pitfall 14). Konteyner healthcheck'i —
+    *liveness*: u yiqilsa Docker konteynerni QAYTA ISHGA TUSHIRADI.
+    Worker'ning yurak urishi eskirgani uchun sog'lom API'ni qayta ishga
+    tushirish klassik anti-naqsh. `/internal/self-check` ALOHIDA endpoint
+    va u `compose.yaml` dagi healthcheck'da ISHLATILMAYDI.
+
+    RLS QO'YILMAYDI va bu ZIDDIYAT EMAS: jadvalda tenant ma'lumoti yo'q
+    (komponent nomi + vaqt tamg'asi), tenant predikati esa yozib
+    bo'lmaydigan bo'lardi — `market_id` ustuni yo'q. Ilova roliga to'liq
+    DML `0014` da `grant_app_dml()` bilan beriladi: worker yurak urishini
+    YOZISHI, `core-api` esa O'QISHI kerak.
+
+    `TimestampMixin` YO'Q: `created_at` ma'nosiz (qator bir marta
+    tug'iladi va mangu yashaydi), `updated_at` esa `last_seen_at` ning
+    dublikati bo'lardi.
+    """
+
+    __tablename__ = "system_heartbeats"
+
+    # KOMPONENT NOMI — BIRLAMCHI KALITNING O'ZI (surrogat `id` YO'Q).
+    # Har komponentga AYNAN bitta qator va yozuv `ON CONFLICT (component)
+    # DO UPDATE` bilan ketadi. Surrogat kalit ikkinchi `capture_tick`
+    # qatorini yozishga yo'l ochardi va «oxirgi urish qaysi?» savoli
+    # javobsiz qolardi.
+    component: Mapped[str] = mapped_column(Text(), primary_key=True)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # Ixtiyoriy diagnostika: oxirgi tikda nechta bozor ko'rildi, nechta
+    # qator materializatsiya qilindi. Alert QARORI bu maydonga tayanmaydi —
+    # u faqat `last_seen_at` ning eskirishiga qaraydi.
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB(), nullable=True)

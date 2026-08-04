@@ -267,6 +267,29 @@ class MarketProfile(Base, TenantMixin, TimestampMixin):
     bank_account: Mapped[str | None] = mapped_column(Text(), nullable=True)
     bank_mfo: Mapped[str | None] = mapped_column(Text(), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # ===================================================================
+    # 4-FAZA: YOPIQ KUNLARDA HAM KADR OLINADIMI (D-10, `0014_snapshot_domain`)
+    # ===================================================================
+    #
+    # STANDART `true` va bu ATAYIN, «e'tiborsizlikdan» emas: YOPIQ deb
+    # e'lon qilingan kunda ko'ringan BAND RASTA — aynan mahsulot izlaydigan
+    # anomaliya («ro'yxatga olinmagan savdo», BILL-04 ning qo'shnisi).
+    # Yopiq kunda kadr olishni to'xtatish o'sha anomaliyani KO'RINMAS
+    # qilardi. Narxi kichik: yiliga ~15 bayram kuni × 175 kadr ≈ 2 600 kadr.
+    #
+    # ⚠ BAYROQ KADR OLISHNI boshqaradi, BILLINGNI EMAS. Yopiq kunning
+    #   `capture_runs` qatorlari `is_market_open = false` bilan tug'iladi
+    #   (`market_is_open()` dan) va 6-faza ularni HISOBDAN chiqaradi,
+    #   HISOBOTDAN esa chiqarmaydi. Ikkalasini aralashtirish yopiq kundagi
+    #   dalilni ham yo'qotardi.
+    #
+    # ⚠ UI'DA TAHRIRLANMAYDI (`04-UI-SPEC.md` §16): D-10 uni `true` qilib
+    #   qulflagan va jadval sahifasida faqat O'QISH uchun qatori bor. Bitta
+    #   checkbox uchun boshqa fazaning sozlamalar yuzasini ochish — noto'g'ri
+    #   egalik; qiymat kerak bo'lsa `UPDATE` bilan o'zgaradi.
+    capture_on_closed_days: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("true")
+    )
 
 
 class Zone(Base, TenantMixin, TimestampMixin):

@@ -19,6 +19,7 @@ from migrations.entities.functions import (
     AUTH_SUPPORT_FUNCTIONS,
     MARKET_DOMAIN_FUNCTIONS,
     PLATFORM_AUDIT_FUNCTIONS,
+    SNAPSHOT_FUNCTIONS,
     USER_ADMIN_FUNCTIONS,
 )
 from migrations.entities.policies import (
@@ -205,11 +206,10 @@ bir xil qoida:
 `owner_bootstrap_policy` tsiklini bajaradi, `downgrade()` esa
 `reversed(...)` bilan yuradi.
 
-⚠ BU RO'YXAT HOZIRCHA `ALL_TENANT_TABLES` GA QO'SHILMAGAN — sabab o'sha
-konstantaning yonidagi izohda (o'lchangan `UndefinedTable`). Qo'shish
-`0014` bilan BIR OYNADA, `04-03` / T2 da bajariladi va uni unutish
-mumkin emas: `test_snapshot_registries_are_self_consistent` jadvallar
-bazada paydo bo'lgan zahoti buni TALAB qiladi.
+✅ RO'YXAT `ALL_TENANT_TABLES` GA QO'SHILDI (`04-03` / T2, `0014` bilan bir
+commitda). U `04-01` da ATAYIN qoldirilgan edi — sabab o'sha konstantaning
+yonidagi izohda (o'lchangan `UndefinedTable`) — va qarzni
+`test_snapshot_registries_are_self_consistent` mexanik ushlab turdi.
 
 BU RO'YXAT AUDIT UCHUN EMAS. Trigger faqat `SNAPSHOT_AUDITED_TABLES` ga
 ulanadi (pastda) va farq ATAYIN — beshala jadval RLS ostida bo'lishi SHART,
@@ -293,8 +293,9 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     *VENDOR_TENANT_TABLES,
     *CALENDAR_TENANT_TABLES,
     *NVR_TENANT_TABLES,
-    # ⚠⚠ `*SNAPSHOT_TENANT_TABLES` BU YERDA ATAYIN YO'Q — VA U `0014` BILAN
-    # BIR OYNADA (`04-03` / T2) QO'SHILADI. Sabab O'LCHANGAN, taxmin emas:
+    # ✅ QARZ YOPILDI (`04-03` / T2, 2026-08-04) — `0014_snapshot_domain`
+    # BILAN BIR COMMITDA. `04-01` bu qatorni ATAYIN qoldirmagan edi va
+    # sabab O'LCHANGAN, taxmin emas:
     #
     #   sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedTable)
     #   relation "public.snapshot_schedules" does not exist
@@ -305,20 +306,16 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     # HAQIQATAN yaratib ko'radi (`simulate_entity`). Ya'ni hali mavjud
     # bo'lmagan jadvalga policy ro'yxatga olinishi
     # `tests/tenancy/test_market_domain_meta.py::test_autogenerate_is_empty`
-    # ni DARHOL qizartiradi — va o'sha testning O'Z docstringi buni
-    # oldindan aytib qo'ygan («⚠ REYESTR BO'SHATISHNI QAYTA TIKLAMANG...
-    # To'g'ri yechim — migratsiyani YOZISH»).
+    # ni DARHOL qizartirardi. `0014` jadvallarni endi yaratadi, ya'ni
+    # splice AYNAN shu commitda va faqat shu commitda to'g'ri bo'ladi.
     #
     # 3-fazada bu qarz PLAN ICHIDA yopilgan (03-03 reyestrni va `0012` ni
-    # ketma-ket ikki commitda bergan). 4-fazada `0014` BOSHQA REJADA va
-    # BOSHQA TO'LQINDA (`04-03`, 2-to'lqin), ya'ni bu yerda qo'shish
-    # darvozani to'lqinlar ORASIDA qizil qoldirardi — bu esa
-    # `PENDING_AUDIT_TRIGGERS` docstringi taqiqlagan holatning o'zi
-    # («Buzilgan darvoza — darvoza emas»).
-    #
-    # QARZ UNUTILMAYDI: `test_meta.py::test_snapshot_registries_are_self_consistent`
-    # jadvallar bazada PAYDO BO'LGAN zahoti ularni shu ro'yxatda ham talab
-    # qiladi, ya'ni darvoza O'ZI QUROLLANADI.
+    # ketma-ket bergan) — bu yerda ham xuddi shunday, faqat qarz ikki REJA
+    # (`04-01` -> `04-03`) orasida turdi va uni `test_meta.py::
+    # test_snapshot_registries_are_self_consistent` mexanik ushlab turdi:
+    # shart BAZAGA bog'langan, ya'ni jadval tug'ilgan zahoti darvoza O'ZI
+    # QUROLLANADI.
+    *SNAPSHOT_TENANT_TABLES,
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 
@@ -369,6 +366,12 @@ ALL_ENTITIES: list[Any] = [
     # Bozor hayot sikli (0007): yaratish/faollashtirish/nomlash/o'chirish
     # `SECURITY DEFINER`, `market_is_open()` esa ATAYIN INVOKER.
     *MARKET_DOMAIN_FUNCTIONS,
+    # Snapshot quvurining tik yuzasi (0015): `capture_due_markets()` —
+    # tenant kontekstisiz FAQAT identifikator qaytaradigan tor `SECURITY
+    # DEFINER` funksiya (§S-3). Reyestrga tushishi MAJBURIY: usiz tananing
+    # keyingi o'zgarishi autogenerate'da ko'rinmasdi va bazadagi ta'rif
+    # koddagisidan jimgina ajralib ketardi.
+    *SNAPSHOT_FUNCTIONS,
     # Audit yozuvchisi + append-only qo'riqchisi (D-10) + 2-faza domen
     # qoidalari (kod reyestri, tarif/toifa daxlsizligi).
     *ALL_TRIGGER_FUNCTIONS,

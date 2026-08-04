@@ -15,12 +15,18 @@ from enum import StrEnum
 
 __all__ = [
     "ActorKind",
+    "AlertSeverity",
     "AuditAction",
     "AuditSource",
     "CameraStatus",
+    "CaptureMethod",
+    "CaptureRunStatus",
     "DiscoveryRunStatus",
     "Locale",
     "Role",
+    "SnapshotLightMode",
+    "SnapshotQuality",
+    "SnapshotTier",
     "StallStatus",
 ]
 
@@ -134,6 +140,187 @@ class DiscoveryRunStatus(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+
+
+class CaptureRunStatus(StrEnum):
+    """`capture_runs.status` qiymatlari — AYNAN oltita (4-faza, `04-RESEARCH.md` §A.2).
+
+    Qiymatlar DB KONTENTI va ATAYIN BITTA TILDA (`CameraStatus` bilan bir xil
+    qoida): ular `capture_runs.status` ustunida matn sifatida yashaydi va
+    `0014_snapshot_domain` dagi IKKALA qisman indeksning predikati ham AYNAN
+    shu a'zolardan HOSILA. Qiymatni o'zgartirish migratsiya talab qiladi —
+    indeks predikati jimgina hech nimani qamramay qolardi va muddati kelgan
+    slotlar tanlanmasdan, watchdog esa osilib qolgan qatorlarni ko'rmasdan
+    qolardi.
+
+    ⚠ `missed` VA `failed` NI ARALASHTIRMANG — bu enum'ning eng qimmat
+    qarori (`04-RESEARCH.md` §B.5):
+
+      `missed` — «BIZNING tizimimiz ishlamadi». Slot uchun kadr olish hech
+                 qachon boshlanmadi: planer, worker yoki butun stek o'lik
+                 edi. Muammo BIZDA.
+      `failed` — «NVR javob bermadi». Kadr olish HAQIQATAN urinildi va
+                 `error_code` sababni aytadi (tarmoq, autentifikatsiya,
+                 sessiya chegarasi). Muammo DALADA.
+
+    Ikkalasini bitta kodga yig'ish dala diagnostikasini o'ldiradi: «bugun 12
+    slot yiqildi» xabari operatorga nima qilishni aytmasdi — VPS'ga qarash
+    kerakmi yoki bozorga borish kerakmi. Aynan shu farq `04-UI-SPEC.md`
+    §6.4 dagi C5/C6 ikonkalarining ikki xilligining sababi ham.
+
+    `skipped` UCHINCHI, ALOHIDA holat va u `missed` ning sinonimi EMAS:
+    bozor kun o'rtasida faollashtirilganda o'sha kunning o'tib ketgan
+    slotlari `skipped` (`capture_plan_created_late`) bo'lib tug'iladi va
+    ALERT BERMAYDI. Ularni `missed` qilish platforma adminiga birinchi
+    kunidayoq beshta soxta alert yuborardi va u alertga ishonishni
+    to'xtatardi (`04-RESEARCH.md` §B.5).
+
+    `pending`   — reja qatori yozilgan, vaqti hali kelmagan yoki navbatda
+    `running`   — worker ijara (lease) oldi va kadr olyapti
+    `succeeded` — kadr olindi va omborga yozildi (`snapshot_id` to'ldirilgan)
+    `failed`    — urinildi, NVR/tarmoq javob bermadi (`error_code` bor)
+    `missed`    — hech qachon urinilmadi, grace oynasi o'tdi (BIZNING nosozlik)
+    `skipped`   — ataylab o'tkazib yuborildi (reja kech tuzildi)
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    MISSED = "missed"
+    SKIPPED = "skipped"
+
+
+class SnapshotQuality(StrEnum):
+    """`snapshots.quality_verdict` qiymatlari — AYNAN to'rtta (D-14/D-16).
+
+    ⚠ BU ENUM BILLING KAFOLATINING KIRISHI. `snapshots.is_billable`
+    `GENERATED ALWAYS AS (quality_verdict = 'ok') STORED`, ya'ni `'ok'`
+    LITERALI sxemaga qadalgan. A'zoning QIYMATINI o'zgartirish generated
+    ifodani ham o'zgartirishni talab qiladi — bu jadvalni qayta yozadigan
+    migratsiya, «bir satrlik tuzatish» emas.
+
+    Verdikt YOZISH PAYTIDA qo'yiladi va hech qachon qayta hisoblanmaydi
+    (T-04-23): chegara to'plami `quality_thresholds_version` da qayd
+    etiladi. Aks holda chegarani sozlash o'tmishdagi kadrlarning billing
+    yaroqliligini RETROAKTIV o'zgartirardi.
+
+    `ok`      — kadr yaroqli; `is_billable = true` va 5-faza unga bandlik
+                dalilini bog'lay OLADI
+    `dark`    — IKKI SHARTLI qoida bo'yicha qorong'i (`mean < X` VA
+                `stddev < Y`, D-14). Faqat o'rtachaga tayangan qoida
+                qonuniy qish-tong kadrlarini oylab jimgina tashlardi
+    `blank`   — tuzilmasiz, bir tekis kadr (obyektiv yopilgan, signal yo'q)
+    `corrupt` — dekodlanmadi yoki kesilgan (`OSError: Truncated File Read`)
+    """
+
+    OK = "ok"
+    DARK = "dark"
+    BLANK = "blank"
+    CORRUPT = "corrupt"
+
+
+class SnapshotLightMode(StrEnum):
+    """`snapshots.light_mode` qiymatlari — AYNAN to'rtta (D-12).
+
+    ⚠ `quality_verdict` NING DUBLIKATI EMAS va bu ATAYIN (D-12: «superset»).
+    Ikki savol butunlay boshqa:
+
+      `quality_verdict` — «bu kadrni ISHLATSA bo'ladimi?» (billing qarori)
+      `light_mode`      — «bu kadr QANDAY yorug'likda olingan?» (kontekst)
+
+    Qonuniy IR-tungi kadr `quality_verdict='ok'` VA `light_mode='ir_night'`
+    bo'lishi mumkin — ya'ni u to'liq yaroqli, lekin 5-fazadagi detektor
+    uchun boshqa ishonch darajasiga ega. Ikkalasini bitta ustunga yig'ish
+    `dark` ni «yaroqsiz» va «tungi» ma'nolarini birlashtirib, 5-fazada
+    fine-tuning to'plamini tanlashni imkonsiz qilardi (narxi ~15 qator).
+
+    `day`       — kunduzgi yorug'lik
+    `low_light` — tong/shom, rangli lekin past yorug'lik
+    `ir_night`  — IR yorituvchi yoqilgan (deyarli monoxrom — `quality_saturation`)
+    `unknown`   — o'lchash imkoni bo'lmadi (kadr buzuq yoki metrika yo'q)
+    """
+
+    DAY = "day"
+    LOW_LIGHT = "low_light"
+    IR_NIGHT = "ir_night"
+    UNKNOWN = "unknown"
+
+
+class SnapshotTier(StrEnum):
+    """`snapshots.storage_tier` qiymatlari — AYNAN uchta (D-18, CAM-07).
+
+    ⚠ UCHINCHI A'ZO (`purged`) MAJBURIY va u «kelajak uchun zaxira» EMAS.
+    `04-RESEARCH.md` §B.4 ikkitasini sanaydi, §D.10 esa uchtasini — va
+    uchtalik to'g'ri, chunki saqlash siyosati 455 kundan keyin OBYEKTNI
+    o'chiradi, QATORNI esa qoldiradi:
+
+        0–90 kun    `full`        — original JPEG
+        91–455 kun  `compressed`  — qayta kodlangan, AYNAN O'SHA kalit
+        455+ kun    `purged`      — obyekt o'chirildi, qator qoldi
+
+    Qatorning qolishi 6-fazaning talabi: `daily_charges` dalil-kadrga
+    bog'lanadi (BILL-02), ya'ni `snapshots` qatorini o'chirish hisob
+    yozuvining dalil havolasini uzardi. `purged` qator «kadr mavjud edi,
+    arxivdan chiqarildi» deb HALOL ko'rsatiladi (`object_deleted_at` sana
+    beradi) va `is_billable` O'ZGARMAYDI — o'sha paytda qilingan hisob
+    retroaktiv bekor qilinmaydi.
+
+    ⚠ O'TISH BIR YO'NALISHLI: `full` -> `compressed` -> `purged`. Retention
+    jobi `WHERE storage_tier = 'full'` bilan filtrlanadi, aks holda bir
+    xil kadr har kuni qayta kodlanib avlod yo'qotishi to'planardi va dalil
+    bir yildan keyin o'qib bo'lmas holga kelardi (Pitfall 13).
+    """
+
+    FULL = "full"
+    COMPRESSED = "compressed"
+    PURGED = "purged"
+
+
+class AlertSeverity(StrEnum):
+    """`alert_events.severity` qiymatlari — AYNAN uchta (D-22).
+
+    Daraja ESKALATSIYA o'qi, chastota emas (`04-RESEARCH.md` §E.13):
+    muammo davom etsa xabar CHASTOTASI oshmaydi, uning DARAJASI oshadi
+    (1-soat `warning`, 3-soat `critical`). Teskarisi — takroriy xabar
+    yuborish — alert kanalini birinchi haftadayoq o'ldirardi.
+
+    `info`     — kuzatuv uchun; Telegram'ga chiqmasligi mumkin
+    `warning`  — e'tibor talab qiladi, lekin bozor hali ishlayapti
+    `critical` — kunlik hisobning asosi yo'qolyapti (bozor ko'r bo'ldi,
+                 backup eskirdi, hisob qulflandi) — HECH QACHON bo'g'ilmaydi
+    """
+
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
+class CaptureMethod(StrEnum):
+    """Kadr olish YO'LI — AYNAN uchta (D-06/D-07).
+
+    Qiymat UCH JOYDA yashaydi va uchalasi ham bitta CHECK ifodasidan
+    oziqlanadi: `nvr_devices.capture_method` (SOZLAMA — qaysi yo'l
+    ishlatiladi), `capture_runs.capture_method` va
+    `snapshots.capture_method` (DALIL — qaysi yo'l HAQIQATAN ishladi).
+    Sozlama va dalilni ajratish majburiy: fallback ishga tushganda
+    ikkalasi FARQ qiladi va aynan shu farq dala diagnostikasining
+    birinchi savoliga javob beradi.
+
+    ⚠ `isapi` — «zaxira» EMAS, u SESSIYA BOSIMIDA ENG XAVFSIZ yo'l (D-07):
+    ISAPI `/picture` NOL RTSP sessiyasi ochadi, go2rtc esa sessiyani ochiq
+    ushlab turadi. Hikvision NVR'ining o'lchanmagan sessiya chegarasiga
+    yaqinlashganda tanlov ataylab `isapi` ga o'tkaziladi — ya'ni ro'yxat
+    tartibi ustuvorlik emas, u shunchaki uchta imkoniyat.
+
+    `go2rtc` — `/api/frame.jpeg`, standart (jonli ko'rish bilan bir xil komponent)
+    `isapi`  — Hikvision `/ISAPI/Streaming/channels/<ch>01/picture`, nol sessiya
+    `ffmpeg` — bir martalik RTSP handshake, oxirgi chora va diagnostika
+    """
+
+    GO2RTC = "go2rtc"
+    ISAPI = "isapi"
+    FFMPEG = "ffmpeg"
 
 
 class AuditAction(StrEnum):
