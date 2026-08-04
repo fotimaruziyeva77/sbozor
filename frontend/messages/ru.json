@@ -756,6 +756,39 @@
     "archivedNote": "Архивные камеры не учитываются",
     "emptyNoPlan": "На этот день съёмка не планировалась",
     "emptyNoPlanHint": "Расписание не покрывает этот день, поэтому кадры не снимались.",
-    "viewSchedule": "Посмотреть расписание"
+    "viewSchedule": "Посмотреть расписание",
+    "severity": {
+      "info": "Информация",
+      "warning": "Предупреждение",
+      "critical": "Критично"
+    },
+    "alertKey": {
+      "captureStopped": "Съёмка кадров остановилась",
+      "captureMissed": "Кадры пропущены",
+      "cameraOffline": "Камера долго не отвечает",
+      "backupStale": "Резервная копия не обновлялась",
+      "retentionStale": "Политика хранения не выполнялась",
+      "diskPressure": "Диск заполняется",
+      "credentialUnreadable": "Пароль NVR не читается",
+      "nvrAccountLocked": "Учётная запись NVR заблокирована",
+      "captureRecovered": "Съёмка кадров восстановлена"
+    },
+    "alertOpenCount": "Открытых: {count}",
+    "alertFirstSeen": "Впервые: {time}",
+    "alertLastSeen": "Последний раз: {time}",
+    "alertRepeated": "За последний час ещё {count} раз",
+    "alertNotified": "Сообщение в Telegram отправлено: {time}",
+    "alertNotNotified": "Сообщение в Telegram не отправлено",
+    "alertNotNotifiedWhy": "Telegram не настроен либо при отправке произошла ошибка.",
+    "showClosed": "Показать закрытые",
+    "alertResolvedAt": "Закрыто: {time}",
+    "alertDuration": "Длилось {duration}",
+    "alertCameraCount": "Камер: {count}",
+    "alertMarket": "Рынок: {name}",
+    "alertTime": "Время: {time}",
+    "alertStaleHours": "Не обновлялось {count} ч",
+    "alertDiskUsed": "Диск занят: {percent} процентов",
+    "emptyClosedAlerts": "Закрытых оповещений нет",
+    "emptyClosedAlertsHint": "Закрытые оповещения появятся здесь."
   }
 }

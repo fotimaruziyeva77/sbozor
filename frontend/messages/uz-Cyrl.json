@@ -756,6 +756,39 @@
     "archivedNote": "Архивланган камералар ҳисобга кирмайди",
     "emptyNoPlan": "Бу кунда кадр режалаштирилмаган",
     "emptyNoPlanHint": "Жадвал бу кунни қопламайди, шунинг учун кадр олинмаган.",
-    "viewSchedule": "Жадвални кўриш"
+    "viewSchedule": "Жадвални кўриш",
+    "severity": {
+      "info": "Маълумот",
+      "warning": "Огоҳлантириш",
+      "critical": "Жиддий"
+    },
+    "alertKey": {
+      "captureStopped": "Кадр олиш тўхтади",
+      "captureMissed": "Кадрлар ўтказиб юборилди",
+      "cameraOffline": "Камера узоқ вақт жавоб бермаяпти",
+      "backupStale": "Захира нусха янгиланмади",
+      "retentionStale": "Сақлаш сиёсати бажарилмади",
+      "diskPressure": "Диск тўлиб бормоқда",
+      "credentialUnreadable": "NVR пароли ўқилмади",
+      "nvrAccountLocked": "NVR ҳисоби қулфланди",
+      "captureRecovered": "Кадр олиш тикланди"
+    },
+    "alertOpenCount": "Очиқ: {count}",
+    "alertFirstSeen": "Биринчи марта: {time}",
+    "alertLastSeen": "Охирги марта: {time}",
+    "alertRepeated": "Сўнгги соатда яна {count} марта",
+    "alertNotified": "Telegram хабари юборилди: {time}",
+    "alertNotNotified": "Telegram хабари юборилмади",
+    "alertNotNotifiedWhy": "Telegram созланмаган ёки хабар юборишда хато бўлган.",
+    "showClosed": "Ёпилганларни ҳам кўрсатиш",
+    "alertResolvedAt": "Ёпилди: {time}",
+    "alertDuration": "{duration} давом этди",
+    "alertCameraCount": "{count} та камера",
+    "alertMarket": "Бозор: {name}",
+    "alertTime": "Вақт: {time}",
+    "alertStaleHours": "{count} соатдан бери янгиланмаган",
+    "alertDiskUsed": "Диск банд: {percent} фоиз",
+    "emptyClosedAlerts": "Ёпилган огоҳлантириш йўқ",
+    "emptyClosedAlertsHint": "Ёпилган огоҳлантиришлар шу ерда кўринади."
   }
 }

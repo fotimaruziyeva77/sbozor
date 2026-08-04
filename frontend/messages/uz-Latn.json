@@ -756,6 +756,39 @@
     "archivedNote": "Arxivlangan kameralar hisobga kirmaydi",
     "emptyNoPlan": "Bu kunda kadr rejalashtirilmagan",
     "emptyNoPlanHint": "Jadval bu kunni qoplamaydi, shuning uchun kadr olinmagan.",
-    "viewSchedule": "Jadvalni ko'rish"
+    "viewSchedule": "Jadvalni ko'rish",
+    "severity": {
+      "info": "Ma'lumot",
+      "warning": "Ogohlantirish",
+      "critical": "Jiddiy"
+    },
+    "alertKey": {
+      "captureStopped": "Kadr olish to'xtadi",
+      "captureMissed": "Kadrlar o'tkazib yuborildi",
+      "cameraOffline": "Kamera uzoq vaqt javob bermayapti",
+      "backupStale": "Zaxira nusxa yangilanmadi",
+      "retentionStale": "Saqlash siyosati bajarilmadi",
+      "diskPressure": "Disk to'lib bormoqda",
+      "credentialUnreadable": "NVR paroli o'qilmadi",
+      "nvrAccountLocked": "NVR hisobi qulflandi",
+      "captureRecovered": "Kadr olish tiklandi"
+    },
+    "alertOpenCount": "Ochiq: {count}",
+    "alertFirstSeen": "Birinchi marta: {time}",
+    "alertLastSeen": "Oxirgi marta: {time}",
+    "alertRepeated": "So'nggi soatda yana {count} marta",
+    "alertNotified": "Telegram xabari yuborildi: {time}",
+    "alertNotNotified": "Telegram xabari yuborilmadi",
+    "alertNotNotifiedWhy": "Telegram sozlanmagan yoki xabar yuborishda xato bo'lgan.",
+    "showClosed": "Yopilganlarni ham ko'rsatish",
+    "alertResolvedAt": "Yopildi: {time}",
+    "alertDuration": "{duration} davom etdi",
+    "alertCameraCount": "{count} ta kamera",
+    "alertMarket": "Bozor: {name}",
+    "alertTime": "Vaqt: {time}",
+    "alertStaleHours": "{count} soatdan beri yangilanmagan",
+    "alertDiskUsed": "Disk band: {percent} foiz",
+    "emptyClosedAlerts": "Yopilgan ogohlantirish yo'q",
+    "emptyClosedAlertsHint": "Yopilgan ogohlantirishlar shu yerda ko'rinadi."
   }
 }

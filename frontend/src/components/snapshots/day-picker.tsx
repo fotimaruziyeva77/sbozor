@@ -42,6 +42,8 @@ import { Button } from "@/components/ui/button";
 export const DAY_PARAM = "day";
 /** `?issues=1` — jurnalda faqat muammoli qatorlar (Z-10). */
 export const ISSUES_PARAM = "issues";
+/** `?closed=1` — yopilgan ogohlantirishlar ham ko'rinadi (Z-4). */
+export const CLOSED_PARAM = "closed";
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/u;
 
@@ -137,6 +139,23 @@ export function useDaySelection(): DaySelection {
 export function useIssuesOnly(): [boolean, (next: boolean) => void] {
   const [value, setValue] = useQueryState(
     ISSUES_PARAM,
+    parseAsBoolean.withDefault(false).withOptions({ history: "push" }),
+  );
+  return [value, (next: boolean) => void setValue(next ? true : null)];
+}
+
+/**
+ * `?closed=1` — yopilgan ogohlantirishlar tarixi (§6.7). Standart: o'chiq.
+ *
+ * ⚠ HOLAT SAHIFANIKI, ZONANIKI EMAS va u ATAYIN shu modulda: zona
+ *   `AlertList` uni PROP bo'lib oladi, ya'ni checkbox va ro'yxat bir
+ *   manbadan o'qiydi va hech qachon ajralib qola olmaydi
+ *   (`stalls/stall-filters.tsx` ning «panel ham, ro'yxat ham bir hookdan»
+ *   qoidasi).
+ */
+export function useShowClosedAlerts(): [boolean, (next: boolean) => void] {
+  const [value, setValue] = useQueryState(
+    CLOSED_PARAM,
     parseAsBoolean.withDefault(false).withOptions({ history: "push" }),
   );
   return [value, (next: boolean) => void setValue(next ? true : null)];
