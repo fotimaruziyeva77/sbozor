@@ -733,6 +733,7 @@
       "capture_stream_limit": "Boshqa dasturlarda ochiq turgan oqimlarni yoping. Takrorlansa, quyidagi texnik tafsilotni yordam xizmatiga yuboring.",
       "capture_storage_unavailable": "Tizim keyingi urinishda kadrni qayta yozadi. Takrorlansa, platforma jamoasiga xabar bering.",
       "capture_credential_unreadable": "Bu sozlama nosozligi va u o'zi tuzalmaydi. Platforma jamoasiga darhol xabar bering."
-    }
+    },
+    "time": "Vaqt"
   }
 }

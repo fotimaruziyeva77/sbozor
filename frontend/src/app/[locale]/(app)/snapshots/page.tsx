@@ -1,9 +1,11 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { ScheduleCard } from "@/components/snapshots/schedule-card";
+import { ScheduleDialog } from "@/components/snapshots/schedule-dialog";
+import type { ScheduleDialogRequest } from "@/components/snapshots/schedule-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { EMPTY_CAMERA_FILTERS, useCamerasQuery } from "@/lib/camera-queries";
 import { useAuthStore } from "@/lib/auth-store";
@@ -114,6 +116,15 @@ function SnapshotsWorkspace() {
   const hasNoCameras = cameras.isSuccess && cameras.data.items.length === 0;
 
   /*
+   * ⚠ DIALOG HOLATI URL'DA EMAS (§4.4, 02-UI-SPEC §7.1 dan meros):
+   *   URL'da faqat `?day=`, `?issues=`, `?closed=` yashaydi. Jadval
+   *   tahririni ulashiladigan havolaga aylantirish uni sahifa holatidan
+   *   marshrutga ko'chirardi va «orqaga» tugmasi yarim to'ldirilgan
+   *   formani qaytarardi.
+   */
+  const [dialog, setDialog] = useState<ScheduleDialogRequest | null>(null);
+
+  /*
    * ⛔ E-1 ZONALARNING O'RNINI EGALLAYDI, ular yonida turmaydi.
    *
    * Kamerasiz bozorda jadval kartasi «Bugun 7 marta» deb turardi,
@@ -145,8 +156,26 @@ function SnapshotsWorkspace() {
     <div className="flex flex-col gap-6">
       {/* --- ZONA (A): jadval kartasi ------------------------------------ */}
       <section aria-label={t("snapshots.scheduleTitle")}>
-        <ScheduleCard canManage={canManage} />
+        <ScheduleCard
+          canManage={canManage}
+          onAddSeasonal={() => setDialog({ kind: "create" })}
+          onEdit={(profile) =>
+            setDialog({ kind: "edit", scheduleId: profile?.id ?? null })
+          }
+        />
       </section>
+
+      {/*
+       * DL-1 va DL-2 — bitta qobiq. Dialog ZONA EMAS: u sahifa holati
+       * bo'lib, zonalarning tartibiga umuman ta'sir qilmaydi (§4.2 —
+       * zonalar hech qachon almashmaydi).
+       */}
+      <ScheduleDialog
+        onOpenChange={(open) => {
+          if (!open) setDialog(null);
+        }}
+        request={dialog}
+      />
     </div>
   );
 }
