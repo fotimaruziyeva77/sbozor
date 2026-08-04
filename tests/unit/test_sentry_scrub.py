@@ -33,7 +33,15 @@ import inspect
 from typing import Any, cast
 
 import pytest
-from app.main import _PII_KEYS, MASKED, _scrub_breadcrumb, _scrub_event, lifespan
+from app.main import lifespan
+from app.observability import (
+    MASKED,
+    PII_KEYS,
+    init_sentry,
+    scrub_breadcrumb,
+    scrub_event,
+)
+from app.worker import _open_worker_resources
 from sentry_sdk.types import Breadcrumb, BreadcrumbHint, Event, Hint
 
 SECRET = "Sekret123"  # noqa: S105 - test uskunasi
@@ -69,7 +77,7 @@ def _breadcrumb_hint() -> BreadcrumbHint:
 
 
 def _scrubbed(crumb: Breadcrumb) -> Breadcrumb:
-    result = _scrub_breadcrumb(crumb, _breadcrumb_hint())
+    result = scrub_breadcrumb(crumb, _breadcrumb_hint())
     assert result is not None, "breadcrumb butunlay tashlab yuborildi"
     return result
 
@@ -152,17 +160,41 @@ def test_non_http_breadcrumb_passes_through_untouched() -> None:
 
 
 def test_sentry_init_wires_both_hooks() -> None:
-    """`lifespan` `before_send` VA `before_breadcrumb` ni BIRGA ulaydi.
+    """`init_sentry` `before_send` VA `before_breadcrumb` ni BIRGA ulaydi.
 
     ⚠ FUNKSIYALARNING O'ZI to'g'ri ishlashi yetarli emas: ulanmagan ilmoq
       har bir testda yashil bo'lib, mahsulotda umuman chaqirilmasdi. Bu
       `test_go2rtc_client.py` dagi konfiguratsiya darvozalari bilan bir
       xil naqsh — manba matni o'qiladi va majburiy satr izlanadi.
     """
-    source = inspect.getsource(lifespan)
+    source = inspect.getsource(init_sentry)
 
-    assert "before_send=_scrub_event" in source
-    assert "before_breadcrumb=_scrub_breadcrumb" in source
+    assert "before_send=scrub_event" in source
+    assert "before_breadcrumb=scrub_breadcrumb" in source
+
+
+def test_both_processes_install_sentry() -> None:
+    """API VA WORKER jarayonlari — IKKALASI HAM `init_sentry()` ni chaqiradi.
+
+    =======================================================================
+    ⛔ 04-12 GACHA IKKINCHISI YO'Q EDI VA HECH QANDAY TEST BUNI KO'RSATMASDI.
+
+    `compose.yaml` `SENTRY_DSN` ni uchala konteynerga beradi, ya'ni
+    tashqaridan qaraganda «xatolar Sentry'da» bajarilgandek ko'rinardi.
+    Amalda esa `sentry_sdk.init()` faqat API jarayonida chaqirilardi —
+    kadr olish, saqlash siyosati va alert supurgisi esa WORKER jarayonida
+    ishlaydi, ya'ni FOUND-06 ning jumlasi 4-fazaning O'Z xatolari uchun
+    yolg'on edi.
+
+    Nosozlik JIM: `init()` chaqirilmasa `sentry_sdk` hech qanday xato
+    bermaydi — konteyner sog'lom, jurnal toza, hodisa esa jo'natilmaydi.
+    =======================================================================
+    """
+    for entrypoint in (lifespan, _open_worker_resources):
+        assert "init_sentry(" in inspect.getsource(entrypoint), (
+            f"`{entrypoint.__module__}.{entrypoint.__name__}` Sentry'ni o'rnatmaydi — "
+            "o'sha jarayondagi istisnolar FAQAT konteyner jurnalida qolardi"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +206,7 @@ def test_request_body_and_cookies_are_dropped() -> None:
     """So'rov tanasi va cookie'lar Sentry'ga UMUMAN bormaydi (ASVS V14)."""
     event = _event(request={"data": {"password": SECRET}, "cookies": {"session": "x"}})
 
-    result = _scrub_event(event, _hint())
+    result = scrub_event(event, _hint())
 
     request = result["request"]
     assert isinstance(request, dict)
@@ -188,7 +220,7 @@ def test_authorization_and_cookie_headers_are_masked() -> None:
         request={"headers": {"Authorization": "Bearer abc", "Cookie": "s=1", "X-Request-ID": "r1"}}
     )
 
-    result = _scrub_event(event, _hint())
+    result = scrub_event(event, _hint())
 
     request = result["request"]
     assert isinstance(request, dict)
@@ -204,7 +236,7 @@ def test_pii_keys_in_extra_are_masked(key: str) -> None:
     """`extra` dagi sir kalitlari maskalanadi — `src`/`source` 03-13 da qo'shildi."""
     event = _event(extra={key: SECRET, "camera_id": "c1"})
 
-    result = _scrub_event(event, _hint())
+    result = scrub_event(event, _hint())
 
     extra = result["extra"]
     assert isinstance(extra, dict)
@@ -214,8 +246,8 @@ def test_pii_keys_in_extra_are_masked(key: str) -> None:
 
 def test_pii_key_registry_covers_the_stream_source() -> None:
     """`src` reyestrda BOR — `PUT /api/streams` ning parametri endi sir tashiydi."""
-    assert "src" in _PII_KEYS
-    assert all(key == key.lower() for key in _PII_KEYS), (
+    assert "src" in PII_KEYS
+    assert all(key == key.lower() for key in PII_KEYS), (
         "taqqoslash `key.lower()` bilan — reyestrdagi kalit ham kichik bo'lishi shart"
     )
 
@@ -239,7 +271,7 @@ def test_exception_value_loses_the_request_url() -> None:
         }
     )
 
-    result = _scrub_event(event, _hint())
+    result = scrub_event(event, _hint())
 
     rendered = str(result["exception"])
     assert SECRET not in rendered
@@ -250,7 +282,7 @@ def test_request_query_string_is_masked() -> None:
     """IKKINCHI OQISH YO'LI: kiruvchi so'rovning query satri."""
     event = _event(request={"query_string": ENCODED_QUERY})
 
-    result = _scrub_event(event, _hint())
+    result = scrub_event(event, _hint())
 
     request = result["request"]
     assert isinstance(request, dict)
@@ -284,7 +316,7 @@ def test_stack_frame_locals_lose_the_raw_source() -> None:
         }
     )
 
-    result = _scrub_event(event, _hint())
+    result = scrub_event(event, _hint())
 
     rendered = str(result["exception"])
     assert SECRET not in rendered, "freym lokalidagi ochiq manba Sentry'ga ketdi"
@@ -304,7 +336,7 @@ def test_masking_leaves_credential_free_sources_alone() -> None:
     clean = "rtsp://nvr.invalid:554/Streaming/Channels/102"
     event = _event(extra={"detail": clean})
 
-    result = _scrub_event(event, _hint())
+    result = scrub_event(event, _hint())
 
     extra = result["extra"]
     assert isinstance(extra, dict)

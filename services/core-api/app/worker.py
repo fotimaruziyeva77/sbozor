@@ -95,6 +95,7 @@ from app.jobs.alerting import alert_sweep, daily_digest
 from app.jobs.capture import BatchRequest, CapturePolicy, capture_batch, capture_tick
 from app.jobs.discovery import discover_nvr
 from app.jobs.retention import RetentionPolicy, retention_daily
+from app.observability import init_sentry
 from app.services import storage as storage_module
 from app.services.alerts import AlertSender
 from app.services.frame_source import FrameSourcePool
@@ -349,9 +350,17 @@ async def _open_worker_resources(state: TaskiqState) -> None:
       bilan tugardi. Kadr manbalari esa har chaqiruvda qayta ochilsa har
       kadrga yangi TCP ulanishi va yangi Digest handshake narxini
       qo'shardi (`frame_source.py` ning 2-majburiyati).
+
+    ⚠ SENTRY HAM SHU YERDA (04-12) VA U «QO'SHIMCHA» EMAS. Kadr olish,
+      saqlash siyosati va alert supurgisi AYNAN shu jarayonda ishlaydi;
+      API jarayonidagi o'rnatish ularning istisnolarini UMUMAN ko'rmaydi.
+      Usiz FOUND-06 ning «xatolar Sentry'da» jumlasi 4-fazaning O'Z
+      xatolari uchun yolg'on bo'lardi va nosozlik faqat konteyner
+      jurnalida qolardi (`app/observability.py` docstringi).
     """
     settings = get_settings()
     configure_logging(settings.log_level)
+    sentry_enabled = init_sentry(settings.sentry_dsn)
 
     engine = make_engine(settings.database_url)
     state.engine = engine
@@ -379,7 +388,12 @@ async def _open_worker_resources(state: TaskiqState) -> None:
     resources.push_async_callback(sender.aclose)
     state.sender = sender
 
-    log.info("worker_started", queue=JOBS_QUEUE, alerts=settings.alerts_enabled)
+    log.info(
+        "worker_started",
+        queue=JOBS_QUEUE,
+        alerts=settings.alerts_enabled,
+        sentry=sentry_enabled,
+    )
 
 
 def _capture_policy(settings: Settings) -> CapturePolicy:

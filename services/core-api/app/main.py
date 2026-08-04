@@ -24,12 +24,9 @@ test prod kodining nusxasini emas, PROD KODINI ishga tushiradi.
 
 from __future__ import annotations
 
-import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
 
-import sentry_sdk
 import structlog
 from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI, Request
@@ -37,7 +34,6 @@ from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 from sbozor_core.db import make_engine, make_sessionmaker
 from sbozor_core.logging import configure_logging
-from sentry_sdk.types import Breadcrumb, BreadcrumbHint, Event, Hint
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -63,6 +59,7 @@ from app.api.v1.tariffs import router as tariffs_router
 from app.api.v1.users import router as users_router
 from app.api.v1.vendors import router as vendors_router
 from app.api.v1.zones import router as zones_router
+from app.observability import init_sentry
 from app.settings import Settings, get_settings
 from app.worker import broker, enqueue_discovery
 
@@ -76,133 +73,6 @@ RLS_VIOLATION_SQLSTATE = "42501"
 RLS_VIOLATION_MARKER = "row-level security policy"
 """Postgres xabaridagi belgi: `new row violates row-level security policy for table ...`."""
 
-MASKED = "***"
-"""Maskalangan qiymatning YAGONA ko'rinishi — testda ham shu satr izlanadi."""
-
-_PII_KEYS = frozenset(
-    {"password", "current_password", "new_password", "phone", "token", "src", "source"}
-)
-"""Sentry `extra` sida maskalanadigan kalitlar.
-
-⚠ `src`/`source` 03-13 da QO'SHILDI: `PUT /api/streams` ning `src` i endi
-  REKVIZITLI RTSP manbai (`live_source.authenticated_rtsp_source` ning
-  chiqishi), ya'ni u nomi bo'yicha zararsiz ko'ringan holda parol tashiydi.
-"""
-
-_SRC_PARAM = re.compile(r"(?i)(\bsrc=)[^&\s'\"]*")
-"""Query satridagi `src=<qiymat>` — QIYMAT butunlay maskalanadi.
-
-⚠ QIYMAT PERCENT-ENCODED HOLDA KELADI. `httpx` chiquvchi so'rovda uni
-  `src=rtsp%3A%2F%2Fadmin%3APAROL%40nvr...` ko'rinishiga o'giradi, ya'ni
-  `rtsp://` naqshi bilan izlash bu shaklni TOPMASDI (o'lchandi). Shuning
-  uchun bu yerda butun qiymat `&` gacha kesiladi — shakl ahamiyatsiz.
-"""
-
-_RTSP_USERINFO = re.compile(r"(?i)(rtsp://)[^/@\s'\"]+@")
-"""XOM `rtsp://user:pass@host` shakli — ZAXIRA qatlam.
-
-⚠ BU QATLAM STACK FRAME'DAGI LOKAL O'ZGARUVCHILAR UCHUN. Sentry
-  `include_local_variables` bilan har freymning lokallarini `repr` qilib
-  yuboradi, `go2rtc.py::ensure_stream` da esa ochilgan manba lokal
-  o'zgaruvchida yotadi. Query naqshi u yerda ishlamasdi: qiymat `src=`
-  siz, yalang'och satr sifatida turadi.
-"""
-
-
-def _mask_secrets(value: str) -> str:
-    """Satrdagi RTSP rekvizitini maskalaydi — MATN darajasida.
-
-    ⚠ URL QAYTA QURILMAYDI (parse -> tahrir -> unparse). Maqsad qiymatni
-      SAQLAB QOLISH emas, sirni CHIQARMASLIK: qayta qurish har bir
-      kutilmagan shaklda (bo'sh port, ikkinchi `@`, buzilgan kodlash)
-      istisno berardi va o'sha istisnoning matni yana sirni tashirdi.
-    """
-    return _RTSP_USERINFO.sub(rf"\g<1>{MASKED}@", _SRC_PARAM.sub(rf"\g<1>{MASKED}", value))
-
-
-def _mask_deep(node: Any) -> Any:
-    """Hodisadagi HAR satr qiymatiga `_mask_secrets()` ni qo'llaydi.
-
-    ⚠ NEGA CHUQUR VA NEGA MAYDON RO'YXATI EMAS: sir Sentry hodisasiga
-      KAMIDA UCH xil joydan tushadi — istisno matni (`exception.values[].
-      value`), so'rov query satri (`request.query_string`) va stack
-      freymlarning lokal o'zgaruvchilari (`stacktrace.frames[].vars`).
-      Ro'yxat bilan yurish to'rtinchi joy paydo bo'lganda jimgina
-      eskirardi; matn darajasidagi bitta qoida esa hammasini qamraydi.
-    """
-    if isinstance(node, str):
-        return _mask_secrets(node)
-    if isinstance(node, dict):
-        return {key: _mask_deep(value) for key, value in node.items()}
-    if isinstance(node, list):
-        return [_mask_deep(item) for item in node]
-    return node
-
-
-def _scrub_event(event: Event, _hint: Hint) -> Event:
-    """Sentry `before_send` — shaxsiy ma'lumot va sirlarni olib tashlaydi (ASVS V14).
-
-    Sentry hodisasi ilova chegarasidan CHIQADI (uchinchi tomon xizmati),
-    shuning uchun so'rov tanasi va cookie'lar u yerga umuman bormasligi
-    kerak. `structlog` tomonida bir xil vazifani `censor_secrets` bajaradi.
-
-    03-13 dan boshlab BU YERDA IKKINCHI VAZIFA HAM BOR: jonli ko'rish yo'li
-    go2rtc'ga REKVIZITLI RTSP manbaini yuboradi (`?src=rtsp://admin:PAROL@...`),
-    ya'ni sir istisno matniga, so'rov query satriga va freym lokallariga
-    tushishi mumkin. `_mask_deep()` uchalasini ham matn darajasida yopadi.
-    """
-    request = event.get("request")
-    if isinstance(request, dict):
-        request.pop("data", None)
-        request.pop("cookies", None)
-        headers = request.get("headers")
-        if isinstance(headers, dict):
-            for key in list(headers):
-                if key.lower() in {"authorization", "cookie"}:
-                    headers[key] = MASKED
-    extra = event.get("extra")
-    if isinstance(extra, dict):
-        for key in list(extra):
-            if key.lower() in _PII_KEYS:
-                extra[key] = MASKED
-    masked: Event = _mask_deep(event)
-    return masked
-
-
-def _scrub_breadcrumb(crumb: Breadcrumb, _hint: BreadcrumbHint) -> Breadcrumb | None:
-    """Sentry `before_breadcrumb` — CHIQUVCHI so'rov URL'ini maskalaydi (T-03-89).
-
-    =========================================================================
-    ⚠⚠ BU ALOHIDA ILMOQ KERAK — `before_send` YETMAYDI.
-
-    `sentry-sdk[fastapi]` ning httpx integratsiyasi har CHIQUVCHI so'rovni
-    breadcrumb sifatida yozadi va breadcrumb `data` sida TO'LIQ URL, query
-    satri bilan turadi. Bizning `PUT /api/streams?name=...&src=rtsp://admin:PAROL@...`
-    aynan shunday so'rov — ya'ni parol hodisa YUZ BERMASDAN OLDIN, oddiy
-    muvaffaqiyatli chaqiruvda ham navbatga tushardi va keyingi ISTALGAN
-    xato bilan Sentry'ga ketardi.
-
-    `before_send` uni ushlamasdi: breadcrumb'lar hodisaga u yerdan
-    KEYIN qo'shiladi.
-    =========================================================================
-
-    Faqat `http` turidagi breadcrumb qaraladi: qolganlarida URL yo'q va
-    ularni ham qayta ishlash har log satrida ikkita regex yurgizardi.
-    """
-    if crumb.get("type") != "http" and crumb.get("category") != "httplib":
-        return crumb
-
-    data = crumb.get("data")
-    if isinstance(data, dict):
-        for key, value in list(data.items()):
-            if isinstance(value, str):
-                data[key] = _mask_secrets(value)
-
-    message = crumb.get("message")
-    if isinstance(message, str):
-        crumb["message"] = _mask_secrets(message)
-    return crumb
-
 
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -210,17 +80,13 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     settings: Settings = get_settings()
     configure_logging(settings.log_level)
 
-    if settings.sentry_dsn:
-        sentry_sdk.init(
-            dsn=settings.sentry_dsn,
-            before_send=_scrub_event,
-            # ⚠ IKKALASI HAM MAJBURIY (T-03-89): `before_send` hodisani,
-            #   `before_breadcrumb` esa undan OLDIN yig'ilgan chiquvchi
-            #   so'rovlar izini tozalaydi. Bittasini qoldirish ikkinchisini
-            #   bir chaqiruvdan narida qoldirardi.
-            before_breadcrumb=_scrub_breadcrumb,
-            send_default_pii=False,
-        )
+    # ⚠ ILMOQLAR VA O'RNATISH `app/observability.py` DA (04-12). Ular shu
+    #   faylda yashaganda `worker` jarayoni ularga UMUMAN yeta olmasdi
+    #   (`app.main` ni import qilish butun ilovani worker'ga tortib
+    #   kelardi), ya'ni kadr olish, saqlash siyosati va alert supurgisining
+    #   istisnolari Sentry'ga hech qachon bormasdi — modul docstringiga
+    #   qarang.
+    log.info("sentry", enabled=init_sentry(settings.sentry_dsn))
 
     engine: AsyncEngine = make_engine(settings.database_url)
     cache: Redis = Redis.from_url(settings.valkey_url)
