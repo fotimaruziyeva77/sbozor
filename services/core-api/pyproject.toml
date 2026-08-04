@@ -64,6 +64,38 @@ dependencies = [
     "openpyxl==3.1.5",
     "defusedxml==0.7.1",
     "XlsxWriter==3.2.9",
+    # --- Snapshot quvuri: S3 ombori va sifat filtri (04-01, W0-2, D-17/D-13) ---
+    #
+    # IKKALASI HAM 04-RESEARCH ning "Package Legitimacy Audit" jadvalida
+    # `slopcheck install -e pypi` bilan tekshirilgan va `[OK]` verdikti
+    # olgan (2026-08-04); `[ASSUMED]`/`[SUS]`/`[SLOP]` paket YO'Q, ya'ni
+    # bloklovchi inson checkpointi talab qilinmaydi.
+    #
+    # ⚠ IKKALASI HAM PROD GURUHIDA — VA BU AYNAN `httpx` EPIZODINING
+    # (D-16, yuqoridagi izoh) TAKRORI. `app/services/storage.py` (04-06) va
+    # `app/services/quality.py` (04-04) — ISHLAB CHIQARISH kodi, `Dockerfile`
+    # ning `runtime` target'i esa `uv sync --frozen --no-dev` bilan quriladi.
+    # `dev` guruhida qolganda BUTUN TEST TO'PLAMI YASHIL bo'lardi (u `dev`
+    # target'da ishlaydi) va xato FAQAT DEPLOY paytida
+    # `ModuleNotFoundError: aiobotocore` bo'lib chiqardi — servis umuman
+    # ko'tarilmasdi (T-04-03). `tests/unit/test_runtime_deps.py` ikkala
+    # yo'nalishni ham qulflaydi.
+    #
+    # `aioboto3` ATAYIN QO'SHILMADI (D-17). U `aiobotocore[boto3]==2.25.1`
+    # ni QATTIQ qadaydi, ya'ni `aiobotocore` ni 3.9.0 dan bitta major
+    # ORQAGA va `boto3` ni uch minor pastga tortadi. Bu `arq` epizodining
+    # IKKINCHI NUSXASI va u EMPIRIK kuzatilgan, taxmin qilingan emas
+    # (04-RESEARCH §D.9.2, PyPI bilan 2026-08-04 da tasdiqlangan; paketning
+    # oxirgi relizi — 2025-10-30). `minio-py` ham ishlatilmaydi: S3 API
+    # omborni REFAKTOR emas, SOZLAMA o'zgarishi qilib saqlaydi (CLAUDE.md).
+    #
+    # `opencv-python-headless` BU YERGA QO'SHILMAYDI (D-13). Sifat filtri
+    # uchun `Pillow` ning `ImageStat` i yetadi; `opencv` — `cv-service`
+    # ning bog'liqligi va u 5-fazada tug'iladi. Uni bu yerda "har ehtimolga
+    # qarshi" saqlash runtime image'ga ~70 MB va keraksiz hujum yuzasini
+    # qo'shardi.
+    "aiobotocore==3.9.0",
+    "Pillow==12.3.0",
     "sbozor-core",
 ]
 

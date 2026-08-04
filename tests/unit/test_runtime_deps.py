@@ -62,6 +62,41 @@ REQUIRED_RUNTIME_PACKAGES = {
     # 03-05: TARMOQ xatolarida qayta urinish. `401` da HECH QACHON
     # (D-03 — Hikvision hisobni ~5 urinishdan keyin qulflaydi).
     "tenacity",
+    # 04-06: `app/services/storage.py` — SeaweedFS ga async S3 yozish/o'qish
+    # (D-17). `httpx` bilan AYNAN bir xil sinf: kadr olish zanjiri prod
+    # image'da import paytida yiqilardi (T-04-03).
+    "aiobotocore",
+    # 04-04 + 04-08: `app/services/quality.py` sifat metrikalari
+    # (`ImageStat`) va saqlash siyosatining JPEG qayta siqishi (D-13).
+    "pillow",
+}
+
+# HECH BIR guruhda bo'lmasligi kerak bo'lgan paketlar — har biri uchun
+# sabab MUSTAQIL, lekin qaror bir xil. `arq` ham shu sinfda, lekin unga
+# alohida test bor (pastda, `redis` pini bilan birga o'lchanadi).
+FORBIDDEN_PACKAGES = {
+    # D-17: `aiobotocore[boto3]==2.25.1` ni QATTIQ qadaydi, ya'ni
+    # `aiobotocore` ni 3.9.0 dan 2.25.1 ga va `boto3` ni pindan pastga
+    # tortadi. `arq` epizodining ikkinchi nusxasi, EMPIRIK tasdiqlangan
+    # (04-RESEARCH §D.9.2, PyPI 2026-08-04). Oxirgi relizi 2025-10-30.
+    "aioboto3",
+    # `boto3` ning O'ZI ham kerak emas: `aiobotocore` `botocore` ga
+    # to'g'ridan-to'g'ri tayanadi. `boto3` qo'shilishi yuqoridagi
+    # pasaytirish zanjirining birinchi belgisi bo'lardi.
+    "boto3",
+    # CLAUDE.md taqig'i: `minio-py` mijozni BITTA vendorga va ARXIVLANGAN
+    # serverga bog'lab qo'yardi. S3 API omborni REFAKTOR emas, SOZLAMA
+    # o'zgarishi qilib saqlaydi (SeaweedFS -> Garage -> AWS -> O'zbek buluti).
+    "minio",
+    # D-13: sifat filtri uchun `Pillow` yetadi. `opencv` — `cv-service`
+    # ning bog'liqligi (5-faza) va u runtime image'ga ~70 MB qo'shardi.
+    "opencv-python",
+    "opencv-python-headless",
+    # `aiogram` `pydantic<2.14` va `redis<8` ni qadaydi, core-api esa
+    # `pydantic==2.13.4` va `redis==8.0.1` da. U bot-service'ning
+    # bog'liqligi va servislar bo'yicha AJRATILGAN qolishi shart
+    # (CLAUDE.md Version Compatibility). Telegram alerti `httpx` bilan.
+    "aiogram",
 }
 
 # Faqat testdan chaqiriladigan, ya'ni prodga TUSHMASLIGI kerak bo'lgan
@@ -184,6 +219,24 @@ def test_redis_pin_is_not_downgraded(core_api_manifest: dict[str, Any]) -> None:
         f"`redis` pini o'zgargan: {specs}. Kutilgan qiymat "
         "`redis[hiredis]==8.0.1` — pasayish `arq` sinfidagi to'qnashuv "
         "sodir bo'lganini bildiradi (D-06, 03-RESEARCH Pitfall 1)."
+    )
+
+
+@pytest.mark.parametrize("package", sorted(FORBIDDEN_PACKAGES))
+def test_forbidden_package_is_absent_from_both_groups(
+    package: str, runtime_packages: set[str], dev_packages: set[str]
+) -> None:
+    """Taqiqlangan paket IKKALA guruhda ham yo'q (D-13/D-17, T-04-05).
+
+    `dev` guruhi ham qamraladi va bu ATAYIN: `uv add --dev aioboto3`
+    ham `uv.lock` ni qayta hal qiladi, ya'ni `aiobotocore` va `boto3`
+    pinlarini AYNAN o'sha tarzda pastga tortardi. Guruh farqi bu
+    to'qnashuvni umuman yumshatmaydi — lock bitta.
+    """
+    assert package not in runtime_packages | dev_packages, (
+        f"`{package}` bog'liqliklarga qo'shilgan — u shu faylning "
+        "`FORBIDDEN_PACKAGES` ro'yxatida, sababi esa o'sha yerda yozilgan. "
+        "Qaror `services/core-api/pyproject.toml` izohida ham takrorlangan."
     )
 
 
