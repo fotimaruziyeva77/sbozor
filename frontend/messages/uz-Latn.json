@@ -805,6 +805,53 @@
     "cellLabel": "{time} · {camera} · {state}",
     "gridCaption": "Kadr olish natijalari: kameralar va vaqtlar",
     "gridRegion": "Kadr olish jadvali — gorizontal aylantiriladi",
-    "camera": "Kamera"
+    "camera": "Kamera",
+    "detailTitle": "{time} · {camera} · kanal {channel}",
+    "detailDescription": "Kadr tafsiloti: sifat hukmi, o'lchovlar va saqlash holati.",
+    "verdict": {
+      "okDay": "Kadr yaroqli — kunduzgi yorug'lik.",
+      "okLowLight": "Kadr yaroqli — kam yorug'lik.",
+      "okIrNight": "Kadr yaroqli — kamera tungi IR rejimida.",
+      "darkIrNight": "Qorong'i kadr — kamera tungi rejimda edi. Bu normal holat.",
+      "darkLowLight": "Qorong'i kadr — yorug'lik kam edi.",
+      "darkDay": "Qorong'i kadr — kamera kunduzgi rejimda edi. Bu kutilmagan holat: linzani va yoritishni tekshiring.",
+      "blank": "Bo'sh kadr — tasvirda hech qanday ma'lumot yo'q. Kamera signalini tekshiring.",
+      "corrupt": "Kadr buzuq holda keldi — u to'liq yuklanmagan."
+    },
+    "notBillable": "Hisobga kirmaydi",
+    "notBillableWhy": "Sifat tekshiruvidan o'tmagan kadr kunlik hisobga kirmaydi.",
+    "tierFull": "To'liq saqlangan",
+    "tierCompressed": "Siqilgan",
+    "tierCompressedWhy": "90 kundan oshgan kadrlar siqilgan holda saqlanadi",
+    "tierPurged": "Arxivdan chiqarilgan",
+    "tierPurgedWhy": "Saqlash muddati tugagan — rasmning o'zi endi ochilmaydi, kadrning ma'lumotlari esa joyida qoladi.",
+    "lightMode": {
+      "day": "Kunduzgi yorug'lik",
+      "lowLight": "Kam yorug'lik",
+      "irNight": "Tungi IR rejimi",
+      "unknown": "Aniqlanmadi"
+    },
+    "method": {
+      "stream": "Oqimdan",
+      "device": "NVR qurilmasidan",
+      "fallback": "Zaxira yo'l bilan"
+    },
+    "methodLabel": "Usul",
+    "capturedAt": "Olingan",
+    "size": "Hajmi",
+    "sizeKb": "{value} KB",
+    "dimensions": "O'lchami",
+    "attempts": "Urinishlar",
+    "qualityMean": "O'rtacha yorug'lik",
+    "qualityStddev": "Kontrast",
+    "qualitySaturation": "To'yinganlik",
+    "thresholdsVersion": "Chegaralar to'plami",
+    "lightModeLabel": "Yorug'lik rejimi",
+    "technicalDetails": "Texnik tafsilot",
+    "imageUnavailable": "Rasm ochilmadi",
+    "prevSlot": "Oldingi vaqt",
+    "nextSlot": "Keyingi vaqt",
+    "emptyFiltered": "Muammoli qator topilmadi",
+    "emptyFilteredHint": "Bu kunda barcha kadrlar yaroqli."
   }
 }
