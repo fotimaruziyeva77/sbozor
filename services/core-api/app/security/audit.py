@@ -51,6 +51,9 @@ __all__ = [
     "TABLE_NVR_DEVICES",
     "TABLE_NVR_DISCOVERY_RUNS",
     "TABLE_REFRESH_TOKENS",
+    "TABLE_SNAPSHOTS",
+    "TABLE_SNAPSHOT_SCHEDULES",
+    "TABLE_SNAPSHOT_SCHEDULE_SLOTS",
     "TABLE_STALLS",
     "TABLE_TARIFFS",
     "TABLE_USERS",
@@ -146,6 +149,56 @@ Trigger `cameras` ni allaqachon qamraydi, ya'ni O'ZGARISHLAR uchun bu
 konstanta ishlatilmaydi. U 03-07 ning O'QISH yuzasi uchun oldindan
 e'lon qilinadi (`TABLE_VENDORS` bilan aynan bir xil naqsh: nom bir
 joyda turadi va router fayllariga literal satr bo'lib tarqalmaydi).
+"""
+
+# ---------------------------------------------------------------------------
+# 4-faza snapshot domeni.
+#
+# ⚠ UCHTASI UCH XIL SABABDAN BOR VA ULAR ALMASHTIRIB BO'LMAYDI — 3-faza
+# blokidagi bilan aynan bir xil tuzilma, boshqa mazmun bilan.
+#
+# `snapshot_schedules` va `snapshot_schedule_slots` DB TRIGGERI ostida
+# (`0014_snapshot_domain` -> `SNAPSHOT_AUDITED_TABLES`), ya'ni jadvalning
+# HAR o'zgarishi o'zi auditga tushadi va `write_app_audit()` ikkinchi qator
+# yozardi. Konstantalar baribir kerak: nom bir joyda turgani uchun u
+# router fayllariga literal satr bo'lib tarqalmaydi va `audit.table_name`
+# filtri bilan mos qoladi.
+#
+# `snapshots` da esa trigger ATAYIN YO'Q (u hodisa jurnali, faqat
+# qo'shiladi) — lekin kadr rasmining O'QILISHI `source='app'` yozuvini
+# TALAB qiladi (`04-UI-SPEC.md` §6.6 [TALAB]) va uni faqat ilova qatlami
+# qoldira oladi.
+# ---------------------------------------------------------------------------
+
+TABLE_SNAPSHOT_SCHEDULES = "snapshot_schedules"
+"""Mavsumiy profil — DB triggeri ostidagi jadval (`SNAPSHOT_AUDITED_TABLES`).
+
+⚠ `app/api/v1/schedules.py` DA `audit_read` YO'Q va bu ATAYIN: jadval
+shaxsiy ma'lumot emas (nom, davr va `HH:MM` vaqtlar). Jadvalning
+O'ZGARISHI esa triggerdan o'tadi, ya'ni «nazoratni jimgina kamaytirish»
+yo'li baribir yopiq. Nazorat holati — `stalls.py:348-369`.
+"""
+
+TABLE_SNAPSHOT_SCHEDULE_SLOTS = "snapshot_schedule_slots"
+"""Profil vaqtlari — profil bilan BIR XIL trigger ostida.
+
+Alohida konstanta, chunki `update_slots()` eski qatorlarni O'CHIRIB
+yangilarini yozadi: auditda bu `snapshot_schedules` emas, AYNAN shu
+jadval ustidagi `delete` + `insert` bo'lib ko'rinadi va jurnalni
+o'qiyotgan odam «vaqtlar o'zgardi» ni shu nom orqali topadi.
+"""
+
+TABLE_SNAPSHOTS = "snapshots"
+"""`GET /snapshots/{id}/image` — SHAXSIY MA'LUMOT o'qishi (D-09 naqshi).
+
+⚠ BU UCHALASI ORASIDAGI YAGONA `audit_read` MANBAI. Kadr — bozor
+TASHRIFCHILARINING tasviri, ya'ni ularning shaxsiy ma'lumoti; uning
+o'qilishi iz qoldirishi SHART (`04-UI-SPEC.md` §6.6 [TALAB], 2-faza
+D-09). Presigned URL aynan shu izni yo'q qilardi — havola muddati
+tugagunicha audit yozuvisiz ishlardi (`04-UI-SPEC.md` §14.3).
+
+`snapshots` da DB triggeri YO'Q, ya'ni `SELECT` ni yozib qo'yadigan
+yagona qatlam — ilova.
 """
 
 _INSERT_AUDIT = text(

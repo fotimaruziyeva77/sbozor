@@ -501,6 +501,65 @@ class ScheduleRepository(TenantScopedRepository):
             uncovered_horizon_days=horizon_days,
         )
 
+    async def list_profiles(self, *, today: date) -> list[tuple[ScheduleProfile, list[time]]]:
+        """BARCHA profillar + har birining vaqtlari, davr boshi bo'yicha o'sish tartibida.
+
+        DL-2 (`04-UI-SPEC.md` §4.4) ro'yxati: admin qaysi mavsumiy
+        jadvallar borligini va qaysi biri o'chirilishi mumkinligini
+        (`mode == 'future'`) shu yerdan ko'radi.
+
+        ⚠ `mode` ARGUMENTDAGI `today` dan hisoblanadi, DB soatidan EMAS —
+          bu yozish metodlari bilan bir xil qoida (`update_slots`,
+          `delete_future`): bitta HTTP so'rovi ichidagi har bir qaror
+          AYNAN bir xil biznes-kunga tayanishi kerak. Aks holda ro'yxatda
+          `future` deb ko'rsatilgan profil o'sha zahoti yuborilgan
+          `DELETE` da `active` bo'lib chiqishi mumkin edi.
+
+        ⚠ VAQTLAR IKKINCHI SO'ROV BILAN OLINADI, `JOIN` bilan emas: `JOIN`
+          har profilni slotlari soniga ko'paytirib qaytarardi va Python
+          tomonda guruhlash kerak bo'lardi. Profillar soni o'nlab, ya'ni
+          ikkinchi so'rovning narxi yo'q.
+        """
+        result = await self.session.execute(
+            self.scoped(
+                select(
+                    SnapshotSchedule.id,
+                    SnapshotSchedule.name,
+                    func.lower(SnapshotSchedule.period).label("starts_on"),
+                    func.upper(SnapshotSchedule.period).label("ends_on"),
+                ).order_by(func.lower(SnapshotSchedule.period))
+            )
+        )
+        profiles = [
+            ScheduleProfile(
+                id=row.id,
+                name=row.name,
+                starts_on=row.starts_on,
+                ends_on=row.ends_on,
+                mode=_mode_of(row.starts_on, row.ends_on, today),
+            )
+            for row in result
+        ]
+        if not profiles:
+            return []
+
+        slots = await self.session.execute(
+            self.scoped(
+                select(SnapshotScheduleSlot.schedule_id, SnapshotScheduleSlot.slot_time).order_by(
+                    SnapshotScheduleSlot.schedule_id, SnapshotScheduleSlot.slot_time
+                )
+            )
+        )
+        by_schedule: dict[UUID, list[time]] = {profile.id: [] for profile in profiles}
+        for row in slots:
+            # Begona profilning sloti bu yerga TUSHA OLMAYDI (`scoped()` +
+            # RLS), lekin `setdefault` o'rniga tekshiruv qo'yilgan: noma'lum
+            # kalit jimgina yangi yozuv ochib, ro'yxatda ko'rinmaydigan
+            # profil hosil qilardi.
+            if row.schedule_id in by_schedule:
+                by_schedule[row.schedule_id].append(row.slot_time)
+        return [(profile, by_schedule[profile.id]) for profile in profiles]
+
     async def active_profile(self, on: date) -> ScheduleProfile | None:
         """Berilgan kunni QOPLAYDIGAN profil yoki `None` (bo'shliq).
 

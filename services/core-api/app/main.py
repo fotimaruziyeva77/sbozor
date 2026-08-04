@@ -54,6 +54,7 @@ from app.api.v1.imports import router as imports_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
 from app.api.v1.nvr import router as nvr_router
+from app.api.v1.schedules import router as schedules_router
 from app.api.v1.stalls import router as stalls_router
 from app.api.v1.tariffs import router as tariffs_router
 from app.api.v1.users import router as users_router
@@ -326,6 +327,18 @@ app.include_router(nvr_router, prefix=f"{API_V1_PREFIX}/nvr-devices")
 # `test_no_unclassified_routes` va `test_cross_tenant_object_returns_404`
 # qizaradi (yuqoridagi 2-faza izohidagi IKKI QO'LDA QADAM).
 app.include_router(cameras_router, prefix=f"{API_V1_PREFIX}/cameras")
+# --- 04-09: snapshot jadvali (CAM-04, D-05) ---
+#
+# ⚠ ALOHIDA PREFIKS, `cameras` OSTIDA EMAS — `cameras` ning `nvr-devices`
+# ostida turmasligi bilan AYNAN bir xil mulohaza. Jadval BOZORGA
+# tegishli (bitta profil butun bozorning barcha kameralariga amal
+# qiladi), ya'ni uni `/cameras/{camera_id}/schedule` ostiga qo'yish
+# resursni noto'g'ri joyga bog'lardi va «qaysi kameraning jadvali?»
+# degan ma'nosiz savolni tug'dirardi.
+#
+# Yangi yo'l parametri (`schedule_id`) cross-tenant matritsasining
+# `PARAM_FILLERS` iga, `POST`/`PATCH` esa `BODY_FILLERS` ga qo'shildi.
+app.include_router(schedules_router, prefix=f"{API_V1_PREFIX}/snapshot-schedules")
 # --- 03-07: nginx `auth_request` nishoni (SC#6, D-11) ---
 #
 # ⚠ PREFIKSSIZ VA `API_V1_PREFIX` DAN TASHQARIDA — `/healthz` bilan bir
