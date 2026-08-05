@@ -259,3 +259,90 @@ describe("buildMatrix", () => {
     expect(cells()).toHaveLength(6);
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * ⛔ SC#2 — `missed` MATRITSA ICHIDA HAM BO'SH EMAS
+ *
+ * 04-11 ning IKKINCHI SABOTAJI o'lchagan bo'shliq: `capture-cell.tsx` da
+ * `missed` holati butunlay chizilmay qo'yilganda `capture-cell.test.tsx`
+ * ning beshta testi qizardi, BU FAYLNING O'N IKKALASI esa YASHIL qoldi.
+ * Sabab shakl emas, FIXTURE edi — `makeRows()` da `missed` qator YO'Q,
+ * ya'ni matritsa to'plami «o'tkazib yuborilgan slot jurnalda ochiq
+ * ko'rinadi» da'vosini UMUMAN o'lchamasdi. Bu «bo'sh to'plam ustida
+ * yashil» sinfining komponent darajasidagi ko'rinishi.
+ *
+ * ⚠ `makeRows()` NING O'ZI O'ZGARTIRILMADI va bu ataylab: yuqoridagi
+ *   roving-tabindex va semantika testlari BIR XIL holatdagi olti hujayra
+ *   ustida o'lchaydi va ularga `missed` ning ranglari, ikonkasi hamda
+ *   punktir chegarasi KERAK EMAS. Aralashtirish ikki mustaqil da'voni
+ *   bitta fixture'ga bog'lardi.
+ * ------------------------------------------------------------------------ */
+
+describe("SC#2: `missed` hujayra MATRITSADA ham ko'rinadi", () => {
+  /** Bitta hujayrasi `missed` bo'lgan olti katakli matritsa. */
+  function rowsWithMissed(): CaptureRun[] {
+    return makeRows().map((row) =>
+      row.camera_id === CAMERA_A && row.slot_time === "06:30:00"
+        ? {
+            ...row,
+            status: "missed" as const,
+            attempts: 0,
+            quality_verdict: null,
+            snapshot_id: null,
+            error_code: "capture_slot_missed",
+          }
+        : row,
+    );
+  }
+
+  test("⛔ `missed` katak CHIZILADI va uning nomi BO'SH EMAS", () => {
+    renderGrid(rowsWithMissed());
+
+    const all = cells();
+    expect(all).toHaveLength(6);
+
+    const missed = all.filter((node) =>
+      (node.getAttribute("aria-label") ?? "").includes(messages.snapshots.cell.missed),
+    );
+    expect(missed).toHaveLength(1);
+    expect(missed[0].getAttribute("aria-label")?.trim()).not.toBe("");
+  });
+
+  test("⛔ `missed` katak `succeeded` bilan BIR XIL NISHON o'lchamini egallaydi", () => {
+    renderGrid(rowsWithMissed());
+
+    const all = cells();
+    const missed = all.find((node) =>
+      (node.getAttribute("aria-label") ?? "").includes(messages.snapshots.cell.missed),
+    );
+    const other = all.find((node) => node !== missed);
+    expect(missed).toBeDefined();
+    expect(other).toBeDefined();
+
+    // ⚠ SINFLARNING TENGLIGI TEKSHIRILMAYDI — ranglar ATAYIN farq qiladi.
+    //   O'lchanadigan da'vo — NISHON O'LCHAMI (§12.4): «yo'qlik» hujayrasi
+    //   kichrayib ketsa u matritsada TESHIK bo'lib ko'rinardi va admin uni
+    //   «ma'lumot yo'q» deb o'qirdi.
+    //
+    // ⚠ `getBoundingClientRect()` ISHLATILMAYDI: jsdom layout hisoblamaydi
+    //   va u har doim 0 qaytaradi — ya'ni bunday assertion BO'SH TO'PLAM
+    //   ustida yashil bo'lardi, aynan bu blok yopayotgan sinf.
+    for (const token of ["min-h-11", "min-w-11"]) {
+      expect(missed?.className.split(/\s+/)).toContain(token);
+      expect(other?.className.split(/\s+/)).toContain(token);
+    }
+
+    // Ajratuvchi UCHINCHI kanal (§11.6) matritsada ham saqlanadi.
+    expect(missed?.className.split(/\s+/)).toContain("border-dashed");
+    expect(other?.className.split(/\s+/)).not.toContain("border-dashed");
+  });
+
+  test("`buildMatrix` `missed` qatorini YO'QOTMAYDI", () => {
+    const matrix = buildMatrix(rowsWithMissed());
+    const camera = matrix.cameras.find((item) => item.cameraId === CAMERA_A);
+
+    expect(camera?.cells).toHaveLength(3);
+    expect(camera?.cells[1]?.status).toBe("missed");
+    expect(camera?.cells[1]?.attempts).toBe(0);
+  });
+});

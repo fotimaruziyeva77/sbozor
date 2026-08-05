@@ -112,6 +112,58 @@ tug'dirardi (`test_route_coverage.py::MINIMUM_MATRIX_ROUTES` bilan bir
 xil mulohaza).
 """
 
+BINARY_PERSONAL_ROUTES: dict[str, str] = {
+    "/api/v1/snapshots/{snapshot_id}/image": (
+        "dalil-kadr BAYTLARI — bozor tashrifchilarining tasviri, ya'ni O'zR "
+        "shaxsiy ma'lumotlar qonuni ostidagi ma'lumot. Javob modeli YO'Q, "
+        "shuning uchun `PERSONAL_FIELDS` uni HECH QACHON topa olmaydi."
+    ),
+}
+"""Javobi MODEL EMAS, BAYT bo'lgan va o'sha baytlarning O'ZI shaxsiy ma'lumot.
+
+=============================================================================
+⛔ NEGA BU RO'YXAT KERAK — VA U 04-09 NING OCHIQ TOPILMASI EDI.
+
+Yuqoridagi darvoza shaxsiy ma'lumotni `response_model` ning MAYDON NOMI
+bo'yicha topadi (`vendor_name`, `phone`, `full_name`). Kadr rasmida esa
+maydon YO'Q — shaxsiy ma'lumot BAYTLARNING O'ZI. `04-09` buni darvozaning
+o'z funksiyalarini chaqirib O'LCHADI va xulq bilan tasdiqladi: `audit_read`
+butunlay olib tashlanganda ham bu fayl YASHIL qolgan.
+
+Ya'ni rasm marshrutining kafolati uchta NOMLANGAN testda yashardi
+(`test_snapshot_api.py`) va DARVOZA ostida emas — testlar o'chirilsa yoki
+qayta yozilsa kafolat jimgina yo'qolardi.
+
+⚠ RO'YXAT O'ZI DRIFT MANBAI BO'LMASIN degan shart quyidagi YOPIQLIK
+  testida: har bir `response_model` siz `GET` marshruti IKKALA ro'yxatdan
+  BIRIDA bo'lishi SHART. Ya'ni yangi bayt-marshrut qo'shgan odam tanlov
+  qilishga MAJBUR — «unutish» yo'li yopiq.
+=============================================================================
+"""
+
+NON_PERSONAL_BINARY_ROUTES: dict[str, str] = {
+    "/api/v1/imports/template": (
+        "BO'SH shablon — sarlavha qatori va namunaviy qator. Bozorning "
+        "birorta qatori bu faylga tushmaydi, ya'ni shaxsiy ma'lumot YO'Q."
+    ),
+    "/internal/live-authz": (
+        "nginx `auth_request` sub-so'rovi. Javob TANASIZ (204/403) va u "
+        "brauzerga umuman yetib bormaydi."
+    ),
+    "/internal/self-check": (
+        "yurak urishlari holati (`{ok, stale[]}`). Tenant ma'lumoti YO'Q va "
+        "bu ALOHIDA test bilan qulflangan (`test_capture_schedule.py::"
+        "test_self_check_needs_no_authentication_and_leaks_no_tenant_data`)."
+    ),
+    "/readyz": "DB/Valkey ping natijasi — sog'liq signali, ma'lumot emas.",
+}
+"""Javobi model EMAS, lekin shaxsiy ma'lumot ham EMAS — sabab bilan.
+
+Har yozuv `BINARY_PERSONAL_ROUTES` ning teskarisi: u «audit kerak emas»
+degan da'vo va u ham NOMLANADI. Ikkala ro'yxat birgalikda YOPIQ to'plam
+hosil qiladi (pastdagi test).
+"""
+
 MAP_ROUTE = "/api/v1/stalls/map"
 """NAZORAT MARSHRUTI: shaxsiy maydoni YO'Q va shuning uchun talabdan ozod.
 
@@ -323,6 +375,93 @@ def test_map_route_is_free_of_the_requirement() -> None:
     assert not audit_resources(routes[MAP_ROUTE]), (
         f"{MAP_ROUTE} o'qish auditini e'lon qilibdi — jurnal shovqin bilan to'ladi"
     )
+
+
+# ---------------------------------------------------------------------------
+# BAYT JAVOBLI MARSHRUTLAR — `response_model` YO'Q, ya'ni maydon nomi ham yo'q
+# ---------------------------------------------------------------------------
+
+
+def binary_routes(app: FastAPI) -> dict[str, APIRoute]:
+    """`response_model` E'LON QILMAGAN `GET` marshrutlari.
+
+    Aynan shu to'plam yuqoridagi maydon-nomi darvozasining KO'R NUQTASI:
+    modeli yo'q javobda tekshiriladigan maydon ham yo'q.
+    """
+    return {path: route for path, route in get_routes(app).items() if route.response_model is None}
+
+
+def test_every_binary_response_route_is_classified() -> None:
+    """Model'siz har `GET` marshruti IKKI ro'yxatdan BIRIDA — YOPIQLIK sharti.
+
+    =========================================================================
+    ⛔ BU TESTSIZ `BINARY_PERSONAL_ROUTES` QO'LDA YOZILGAN RO'YXAT BO'LARDI
+       va u BIRINCHI unutilgan marshrutda jimgina eskirardi — ya'ni
+       darvoza 04-09 topgan bo'shliqni FAQAT BUGUNGI bitta marshrut uchun
+       yopardi.
+
+    Yopiqlik sharti tanlovni MAJBURIY qiladi: bayt qaytaradigan yangi
+    `GET` qo'shgan odam yo uni shaxsiy deb belgilaydi (va audit + huquq
+    talabini oladi), yo sababini yozib ozod qiladi. Uchinchi yo'l —
+    «hech nima qilmaslik» — CI'ni qizartiradi.
+
+    Ro'yxatlarning ESKIRISHI ham shu yerda tutiladi: o'chirilgan marshrut
+    ro'yxatda qolib ketolmaydi.
+    =========================================================================
+    """
+    found = set(binary_routes(fastapi_app))
+    classified = set(BINARY_PERSONAL_ROUTES) | set(NON_PERSONAL_BINARY_ROUTES)
+
+    assert found, (
+        "birorta model'siz `GET` marshruti topilmadi — marshrut yurishi yoki "
+        "`response_model` o'qilishi buzilgan bo'lsa bu darvoza BO'SH to'plam "
+        "ustida jimgina yashil bo'lardi"
+    )
+
+    unclassified = sorted(found - classified)
+    assert not unclassified, (
+        "Quyidagi `GET` marshrutlari BAYT qaytaradi va tasniflanmagan:\n  "
+        + "\n  ".join(unclassified)
+        + "\n\nJavobning O'ZI shaxsiy ma'lumotmi? Ha -> `BINARY_PERSONAL_ROUTES` "
+        "(va marshrutga `audit_read` + `CAMERA_VIEW`). Yo'q -> "
+        "`NON_PERSONAL_BINARY_ROUTES` ga SABAB bilan."
+    )
+
+    stale = sorted(classified - found)
+    assert not stale, (
+        f"tasnif ro'yxatlarida MAVJUD BO'LMAGAN marshrutlar qoldi: {stale} — "
+        "ro'yxat eskirgan va u endi hech nimani qo'riqlamaydi"
+    )
+
+    overlap = sorted(set(BINARY_PERSONAL_ROUTES) & set(NON_PERSONAL_BINARY_ROUTES))
+    assert not overlap, f"marshrut IKKALA ro'yxatda ham: {overlap}"
+
+
+def test_binary_personal_routes_declare_read_audit_and_permission() -> None:
+    """Bayt-shaxsiy marshrut o'qish auditini VA kamera huquqini e'lon qiladi.
+
+    ⚠ IKKI DA'VO BITTA TESTDA va bu yuqoridagi juftlikdan ATAYIN farq
+      qiladi: u yerda ikkalasi ALOHIDA o'lchanadi, chunki ro'yxatda beshta
+      marshrut bor va «qaysi biri qaysi talabni bajarmadi» savoli amaliy.
+      Bu yerda ro'yxat bitta marshrutdan iborat, ya'ni ajratish faqat
+      ikkinchi nusxa berardi.
+
+    `CAMERA_VIEW` — `VENDOR_VIEW` EMAS: kadr sotuvchining reyestr yozuvi
+    emas, kamera tasviri. `VENDOR_VIEW` ni talab qilish ikkita bog'liq
+    bo'lmagan huquqni birlashtirardi (`EXEMPT_ROUTES` dagi `/users`
+    mulohazasi bilan bir xil).
+    """
+    routes = binary_routes(fastapi_app)
+
+    for path in sorted(BINARY_PERSONAL_ROUTES):
+        route = routes[path]
+        assert audit_resources(route), (
+            f"{path} shaxsiy BAYT qaytaradi, lekin o'qish auditini e'lon "
+            "qilmaydi — `Depends(audit_read(<resurs>, reason=...))` qo'shing"
+        )
+        assert Permission.CAMERA_VIEW in required_permissions(route), (
+            f"{path} `CAMERA_VIEW` talab qilmaydi — dalil-kadr huquqsiz o'qilardi"
+        )
 
 
 # ---------------------------------------------------------------------------

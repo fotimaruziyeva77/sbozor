@@ -655,6 +655,29 @@ services:
       S3_SECRET_KEY: "${S3_SECRET_KEY:-sbozor-local-secret-key}"
       CI: "${CI:-}"
       TZ: Asia/Tashkent
+    # =====================================================================
+    # ⚠ `storage` BOG'LIQLIGI E'LON QILINGAN (04-12, 04-06 ning ochiq bandi).
+    #
+    # O'lchangan holat: `storage` ko'tarilmagan bo'lsa yalang'och
+    # `npm run test` 16 ta testni HARD FAIL bilan yiqitadi (`s3_client`
+    # fixture'i bucketga yeta olmaydi). `npm run gate` buni qoplaydi —
+    # u `sim:up` bilan boshlanadi — lekin `npm run test` ni to'g'ridan-
+    # to'g'ri chaqirgan dasturchi sababni faqat 16 ta stack trace'dan
+    # o'qib topardi.
+    #
+    # ⚠ `db`/`cache` bu yerda YO'Q va bu ATAYIN: baza testcontainers bilan
+    # test jarayonining O'ZI tomonidan ko'tariladi (`tests/conftest.py::
+    # pg_container`), ya'ni compose darajasida ularga bog'lanish ikkinchi,
+    # ishlatilmaydigan Postgres ko'tarardi.
+    #
+    # ⚠ `nvr-sim` ham YO'Q: u `sim` profilida va uning yo'qligi TO'G'RI
+    # xulqqa ega — `sim_url` fixture'i dev mashinasida `skip`, CI'da
+    # `fail` beradi (`tests/fixtures/nvr_sim.py`). Bu farq ataylab
+    # saqlanadi.
+    # =====================================================================
+    depends_on:
+      storage:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     working_dir: /app

@@ -1150,8 +1150,17 @@ Aksent rang **faqat** quyidagilarda:
 | `snapshots.method.stream` | Oqimdan | Из потока |
 | `snapshots.method.device` | NVR qurilmasidan | С устройства NVR |
 | `snapshots.method.fallback` | Zaxira yo'l bilan | Резервным способом |
+
+> ⚠ **TUZATILDI (04-12).** Bu jadval avval `snapshots.method` ni IKKI ma'noda
+> ishlatardi: yuqoridagi **enum xaritasi** (`method.stream`/`.device`/
+> `.fallback`) va pastdagi **yorliq** («Usul»). JSON bitta kalitda satr va
+> obyektni birga ushlay olmaydi, ya'ni spetsifikatsiya o'sha holida
+> **bajarilmasdi** — buni `04-11` amalga oshirish paytida topdi va yorliqni
+> `snapshots.methodLabel` ga ko'chirdi. Kod shu shaklda ishlaydi; jadval
+> endi kodga MOS. Enum xaritasi ATAYIN ko'chirilmadi: uni ko'chirish uchala
+> tildagi uch kalitni ham qayta nomlashni talab qilardi.
 | `snapshots.capturedAt` | Olingan | Снято в |
-| `snapshots.method` | Usul | Способ |
+| `snapshots.methodLabel` | Usul | Способ |
 | `snapshots.size` | Hajmi | Размер |
 | `snapshots.dimensions` | O'lchami | Разрешение |
 | `snapshots.attempts` | Urinishlar | Попыток |
@@ -1265,6 +1274,7 @@ Aksent rang **faqat** quyidagilarda:
 | `snapshots.alertKey.retentionStale` | Saqlash siyosati bajarilmadi | Политика хранения не выполнялась |
 | `snapshots.alertKey.diskPressure` | Disk to'lib bormoqda | Диск заполняется |
 | `snapshots.alertKey.credentialUnreadable` | NVR paroli o'qilmadi | Пароль NVR не читается |
+| **`snapshots.alertKey.nvrAccountLocked`** | **NVR hisobi qulflandi** | **Учётная запись NVR заблокирована** |
 | `snapshots.alertKey.captureRecovered` | Kadr olish tiklandi | Съёмка кадров восстановлена |
 | `snapshots.alertOpenCount` | Ochiq: {count} | Открытых: {count} |
 | `snapshots.alertFirstSeen` | Birinchi marta: {time} | Впервые: {time} |

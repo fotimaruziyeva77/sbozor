@@ -631,6 +631,21 @@ def test_capture_due_markets_exposes_only_identifiers(
             "qolardi (`04-RESEARCH.md` §B.5)"
         )
 
+        # ⚠ BUGUNGI KUNGA LANGAR QATOR — 04-12 da QO'SHILDI, o'lchangan
+        #   nosozlikdan keyin. Quyidagi «muddati kelmagan» qatorning
+        #   `business_date` i `now() + _NEAR` dan HISOBLANADI, ya'ni
+        #   yarim tundan `_NEAR` dan kam qolganda u ERTANGI kunga
+        #   tushardi va bozorda «bugungi reja» UMUMAN qolmasdi —
+        #   funksiyaning IKKINCHI disjunkti rost bo'lib, bozor
+        #   qaytarilardi. Test 23:59:33 da aynan shu bilan qizargan
+        #   (`deferred-items.md` #1).
+        #
+        #   Langar qator O'TMISHDA va `succeeded`, ya'ni u na birinchi
+        #   disjunktni (`pending` + muddati kelgan), na uchinchisini
+        #   (`running` + ijara tugagan) qo'zg'atadi. U FAQAT «bugungi
+        #   reja bor» faktini beradi va shu bilan oyna NOLGA tushadi.
+        _anchor_today(sync_owner_conn, a)
+
         # (2) BUGUNGI REJA BOR, LEKIN MUDDATI KELMAGAN -> QAYTARILMAYDI.
         _insert_run(sync_owner_conn, a, when=now_tz() + _NEAR, slot_index=0)
         assert a.market_id not in _due_market_ids(sync_owner_conn), (
@@ -657,10 +672,45 @@ _NEAR = timedelta(minutes=5)
 
 ATAYIN KICHIK: qiymat `business_date` ni ham belgilaydi (u generated ustun
 va `scheduled_at` dan hisoblanadi), ya'ni katta siljish yarim tundan o'tib
-qatorni BOSHQA biznes-kunga yozardi va «bugungi reja bor» sharti jimgina
-buzilardi. Besh daqiqa bilan test faqat yarim tunning atigi o'n daqiqalik
-oynasida nozik bo'lib qoladi.
+qatorni BOSHQA biznes-kunga yozardi.
+
+⚠ BU YETARLI EMAS EDI VA U O'LCHANDI (2026-08-04 23:59:33, `deferred-
+items.md` #1): yarim tundan besh daqiqa qolganda `now() + _NEAR` ertangi
+kunga tushib, bozorda «bugungi reja» qolmasdi va test qizarardi. Oynani
+KICHRAYTIRISH yechim emas — u nosozlik ehtimolini pasaytiradi, YO'Q
+QILMAYDI. Shuning uchun `_anchor_today()` qo'shildi va oyna NOLGA tushdi:
+langar qator bugungi kunga QAT'IY bog'langan va u `now()` ning qayerda
+turishiga umuman bog'liq emas.
 """
+
+
+def _anchor_today(conn: Connection[TupleRow], rows: MarketNvrRows) -> None:
+    """Bozorga BUGUNGI biznes-kunga tegishli, MUDDATI KELMAYDIGAN qator yozadi.
+
+    `succeeded` + o'tmish: funksiyaning uchala disjunktidan HECH BIRI
+    qo'zg'almaydi (`pending` emas, `running` emas), lekin ikkinchisining
+    `NOT EXISTS (... business_date = bugun)` sharti YOLG'ONGA aylanadi.
+
+    ⚠ Vaqt `now()` dan emas, KUN BOSHIDAN quriladi (`date_trunc`), ya'ni
+      qator yarim tun atrofida ham bugungi kunda qoladi. `now() - interval`
+      shakli 00:00–00:05 oralig'ida KECHAGI kunga tushardi va bu xuddi
+      tuzatilayotgan nosozlikning ko'zgudagi aksi bo'lardi.
+    """
+    conn.execute(
+        "INSERT INTO capture_runs "
+        "(market_id, camera_id, nvr_id, slot_time, scheduled_at, status, attempts, "
+        " capture_method, is_market_open) "
+        "VALUES (%s, %s, %s, %s, "
+        "        date_trunc('day', now() AT TIME ZONE 'Asia/Tashkent') "
+        "          AT TIME ZONE 'Asia/Tashkent', "
+        "        'succeeded', 1, 'isapi', true)",
+        (
+            str(rows.market_id),
+            str(rows.active_camera_ids[0]),
+            str(rows.nvr_id),
+            DEFAULT_SNAPSHOT_SLOTS[-1],
+        ),
+    )
 
 
 def _due_rows(conn: Connection[TupleRow]) -> list[tuple[UUID, int]]:
