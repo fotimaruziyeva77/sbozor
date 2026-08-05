@@ -278,7 +278,7 @@ Plans:
   4. Kadrlar S3-mos omborda bozor/kamera/sana bo'yicha topiladi; 90 kun to'liq, keyin siqilgan saqlash siyosati amalda ishlaydi
   5. Kamera offline bo'lsa, slot o'tkazib yuborilsa yoki backup xato bersa — platforma adminiga Telegram-alert keladi va xato Sentry'da ko'rinadi
 
-**Plans**: 12 plans (8 to'lqin)
+**Plans**: 14 plans (9 to'lqin — `04-13`/`04-14` bo'shliq yopish to'lqini)
 
 - [x] `04-01-PLAN.md` — Wave 0/A: prod bog'liqliklari, `scheduler` va `storage` konteynerlari, reyestrlar, D-23 o'lchovi
 - [x] `04-02-PLAN.md` — Wave 0/B: sintetik JPEG generatori, sim `frame_mode` + `/picture`, frontend darvozalari (W0-F1…F7)
@@ -292,6 +292,11 @@ Plans:
 - [x] `04-10-PLAN.md` — Frontend A: so'rov qatlami, `/snapshots` sahifasi, jadval kartasi va dialoglar
 - [x] `04-11-PLAN.md` — Frontend B: kun xulosasi, ijro matritsasi (9 holat), kadr detali, ogohlantirishlar
 - [x] `04-12-PLAN.md` — Faza darvozasi: `test_phase4_criteria.py`, chegara qarori, talab holatlari
+
+**Bo'shliq yopish to'lqini** *(`04-VERIFICATION.md` — `4/5`, SC#5 qisman)*
+
+- [ ] `04-13-PLAN.md` — `scheduler` jarayonida Sentry (`CLIENT_STARTUP`), planerning yutilgan `on_ready` istisnosi va `compose.yaml` dan HOSILA qilingan jarayon darvozasi (W1)
+- [ ] `04-14-PLAN.md` — `.env.example` ↔ `s3.json.example` juftligi (`deferred-items.md` #2), FOUND-06 dalilining hujjatlardagi aksi, to'liq darvoza va bazaviy jadval (W2)
 
 **Research flag**: yes — `/gsd-plan-phase 4 --research-phase 4`. **Kadr olish usuli endi kutilmaydi — standart tanlov: go2rtc `/api/frame.jpeg`, zaxira: Hikvision ISAPI `/picture`, oxirgi chora: ffmpeg** (tadqiqot tavsiyasi, CLAUDE.md da qat'iylashtirilgan). Uchala yo'l ham sozlanadigan qilib quriladi va simulyatorda o'lchanadi; real NVR ma'lumoti kelganda tanlov **sozlama** bilan o'zgaradi, qayta loyihalash talab qilmaydi.
 
