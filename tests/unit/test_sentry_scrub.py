@@ -25,6 +25,18 @@ bermasdan turib.
   EMAS. Haqiqiy SDK'ni ko'tarish tarmoq transporti va global holat
   qo'shardi; o'lchanayotgan narsa esa AYNAN ikkita sof funksiya.
   Ularning `init()` ga ULANGANI alohida test bilan qulflanadi.
+
+⚠ JARAYON DARVOZASI BU FAYLDA EMAS (04-13). «Qaysi jarayonlarda Sentry
+  o'rnatiladi?» savoli endi `tests/unit/test_sentry_processes.py` da
+  o'lchanadi va u javobni `compose.yaml` dan HOSILA qiladi. Bu yerdagi
+  oldingi shakl AYNAN IKKITA kod kirish nuqtasini sanardi va uchinchi
+  JARAYONNI struktura jihatidan ko'ra olmasdi — nosozlikni `04-
+  VERIFICATION.md` testdan emas, konteynerdan o'lchab topgan.
+
+  ⚠ IKKALASI BIR VAQTDA SAQLANMADI: ikkita da'vo turganda «qaysinisi
+    haqiqat manbai?» savoli har regressiyada qaytadan so'ralardi.
+    `test_sentry_init_wires_both_hooks` esa QOLADI — u ILMOQLAR haqida,
+    jarayonlar haqida emas, va bu boshqa da'vo.
 """
 
 from __future__ import annotations
@@ -33,7 +45,6 @@ import inspect
 from typing import Any, cast
 
 import pytest
-from app.main import lifespan
 from app.observability import (
     MASKED,
     PII_KEYS,
@@ -41,7 +52,6 @@ from app.observability import (
     scrub_breadcrumb,
     scrub_event,
 )
-from app.worker import _open_worker_resources
 from sentry_sdk.types import Breadcrumb, BreadcrumbHint, Event, Hint
 
 SECRET = "Sekret123"  # noqa: S105 - test uskunasi
@@ -171,30 +181,6 @@ def test_sentry_init_wires_both_hooks() -> None:
 
     assert "before_send=scrub_event" in source
     assert "before_breadcrumb=scrub_breadcrumb" in source
-
-
-def test_both_processes_install_sentry() -> None:
-    """API VA WORKER jarayonlari — IKKALASI HAM `init_sentry()` ni chaqiradi.
-
-    =======================================================================
-    ⛔ 04-12 GACHA IKKINCHISI YO'Q EDI VA HECH QANDAY TEST BUNI KO'RSATMASDI.
-
-    `compose.yaml` `SENTRY_DSN` ni uchala konteynerga beradi, ya'ni
-    tashqaridan qaraganda «xatolar Sentry'da» bajarilgandek ko'rinardi.
-    Amalda esa `sentry_sdk.init()` faqat API jarayonida chaqirilardi —
-    kadr olish, saqlash siyosati va alert supurgisi esa WORKER jarayonida
-    ishlaydi, ya'ni FOUND-06 ning jumlasi 4-fazaning O'Z xatolari uchun
-    yolg'on edi.
-
-    Nosozlik JIM: `init()` chaqirilmasa `sentry_sdk` hech qanday xato
-    bermaydi — konteyner sog'lom, jurnal toza, hodisa esa jo'natilmaydi.
-    =======================================================================
-    """
-    for entrypoint in (lifespan, _open_worker_resources):
-        assert "init_sentry(" in inspect.getsource(entrypoint), (
-            f"`{entrypoint.__module__}.{entrypoint.__name__}` Sentry'ni o'rnatmaydi — "
-            "o'sha jarayondagi istisnolar FAQAT konteyner jurnalida qolardi"
-        )
 
 
 # ---------------------------------------------------------------------------
