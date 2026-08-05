@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 04-11-PLAN.md
-last_updated: "2026-08-04T23:33:21.781Z"
-last_activity: 2026-08-04
+last_updated: "2026-08-05T03:27:57.859Z"
+last_activity: 2026-08-05
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 65
-  completed_plans: 64
+  total_plans: 67
+  completed_plans: 66
   percent: 33
 ---
 
@@ -26,11 +26,16 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 4
-Plan: 12 of 12
+Plan: 14 of 14
 Status: Ready to execute
-Last activity: 2026-08-04
+Last activity: 2026-08-05
 
-Progress: [████████░░] 83% (10/12 reja — 04-01…04-10)
+Progress: [█████████░] 93% (13/14 reja — 04-01…04-13)
+
+⚠ **04-13 gap-closure rejasi edi.** `04-VERIFICATION.md` fazani
+`gaps_found` (4/5) deb yopgan; yagona bo'shliq — `scheduler` jarayonida
+`init_sentry()` chaqirilmasligi — 04-13 da yopildi va uch mustaqil
+qatlamda o'lchandi. `04-14` qayta tekshiruv/yakunlash rejasi.
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -70,6 +75,7 @@ Progress: [████████░░] 83% (10/12 reja — 04-01…04-10)
 | Phase 04 P07 | 125min | 3 tasks | 17 files |
 | Phase 04 P10 | 140 | 3 tasks | 16 files |
 | Phase 04 P11 | 1h 45m | 3 tasks | 17 files |
+| Phase 04 P13 | 125min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -141,6 +147,12 @@ Recent decisions affecting current work:
 - [Phase ?]: 04-11: yo'q kadr UCH mustaqil kanalda ko'rsatiladi (ikonka + to'liq jumlali aria-label + punktir chegara) va 44x44 nishonda — bo'sh katak SC#2 ni jimgina buzardi
 - [Phase ?]: 04-11: 175 hujayrali matritsa native table semantikasida qoladi — matritsa roli QO'YILMAYDI; roving tabindex usiz ham ishlaydi va native th-scope skrinriderda kuchliroq
 - [Phase ?]: 04-11: dalil-kadr baytlari sessiya tokeni bilan proxydan olinadi (tasvir elementi sarlavha qo'sha olmaydi) — har ochilish audit_read yozadi, imzolangan havola so'ralmaydi
+- [Phase 04]: 04-13: planer jarayoni CLIENT_STARTUP ni ateshlaydi (taskiq cli/scheduler/run.py:392 BOSHQA bayroqni o'rnatadi) — WORKER_STARTUP ilmog'i u yerda ISHLAMAYDI; init_sentry() endi uchinchi jarayonda ham chaqiriladi
+- [Phase 04]: 04-13: Sentry darvozasi KOD kirish nuqtalarini emas, compose.yaml dagi JARAYONlarni sanaydi — ro'yxatga uchinchi nom qo'shish nosozlikni n+1 da qaytadan tug'dirardi
+- [Phase 04]: 04-13: kuzatuv ilmog'i get_settings() ni CHAQIRMAYDI — settings.py:329 bo'sh S3_ACCESS_KEY ni rad etadi va planer bugun Settings ni qurmaydi; aks holda kuzatuv qatlami o'zi kuzatishi kerak bo'lgan nosozlikdan yiqilardi
+- [Phase 04]: 04-13: init_sentry() ning O'ZI yetarli emas — taskiq send() da try/except yo'q (cli/scheduler/run.py:157-174), add_done_callback esa istisnoni o'qimaydi (:346-350); ObservedScheduler.on_ready log.exception + capture_exception qiladi va QAYTA KO'TARADI
+- [Phase 04]: 04-13: global holat (sentry_sdk.init) SUBPROCESS da o'lchanadi va har zondga NAZORAT yugurishi juft — DSN'siz False bermasa da'vo bo'sh bo'lardi
+- [Phase 04]: 04-13: O'LCHOV — inspect.getsource(app.router.lifespan_context) FastAPI ning merged_lifespan ini beradi, __wrapped__ ham; bizning lifespan closure zanjirining oxirida (8 va 40 chuqurlikda TOPILMADI)
 
 ### Pending Todos
 
@@ -173,6 +185,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-04T23:33:21.774Z
+Last session: 2026-08-05T03:26:49.683Z
 Stopped at: Completed 04-11-PLAN.md
 Resume file: None
