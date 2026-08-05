@@ -295,8 +295,8 @@ Plans:
 
 **Bo'shliq yopish to'lqini** *(`04-VERIFICATION.md` — `4/5`, SC#5 qisman)*
 
-- [ ] `04-13-PLAN.md` — `scheduler` jarayonida Sentry (`CLIENT_STARTUP`), planerning yutilgan `on_ready` istisnosi va `compose.yaml` dan HOSILA qilingan jarayon darvozasi (W1)
-- [ ] `04-14-PLAN.md` — `.env.example` ↔ `s3.json.example` juftligi (`deferred-items.md` #2), FOUND-06 dalilining hujjatlardagi aksi, to'liq darvoza va bazaviy jadval (W2)
+- [x] `04-13-PLAN.md` — `scheduler` jarayonida Sentry (`CLIENT_STARTUP`), planerning yutilgan `on_ready` istisnosi va `compose.yaml` dan HOSILA qilingan jarayon darvozasi (W1)
+- [x] `04-14-PLAN.md` — `.env.example` ↔ `s3.json.example` juftligi (`deferred-items.md` #2), FOUND-06 dalilining hujjatlardagi aksi, to'liq darvoza va bazaviy jadval (W2)
 
 **Research flag**: yes — `/gsd-plan-phase 4 --research-phase 4`. **Kadr olish usuli endi kutilmaydi — standart tanlov: go2rtc `/api/frame.jpeg`, zaxira: Hikvision ISAPI `/picture`, oxirgi chora: ffmpeg** (tadqiqot tavsiyasi, CLAUDE.md da qat'iylashtirilgan). Uchala yo'l ham sozlanadigan qilib quriladi va simulyatorda o'lchanadi; real NVR ma'lumoti kelganda tanlov **sozlama** bilan o'zgaradi, qayta loyihalash talab qilmaydi.
 
@@ -428,7 +428,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 1. Poydevor va tenant xavfsizligi | 0/10 | Planned | - |
 | 2. Bozor domeni va ustasi | 0/17 | Planned | - |
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
-| 4. Snapshot pipeline | 13/14 | In Progress | - |
+| 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va HITL | 0/TBD | Not started | - |
 | 6. Billing va kassir | 0/TBD | Not started | - |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |

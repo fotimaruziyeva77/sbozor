@@ -183,6 +183,66 @@ va `tests` konteyneri `storage` ni kutadi. 2.6× hali ham sog'lom va
 chegarani qisqartirish flakiga olib kelardi (xost yuki bu zanjirga
 kuchliroq ta'sir qiladi — u qisqa).
 
+### ⛔ 3-qadam o'lchovlari (04-14, 2026-08-05) — CHEGARADAN OSHDI
+
+**Bu bo'lim yomon xabarni yozadi va uni yumshatmaydi.**
+
+| # | Holat | `npm run gate` | Chiqish kodi |
+|---|---|---|---|
+| 7 | issiq, seansning O'RTASIDA (oldidan to'liq `pytest`, `tenancy`, `vitest`, `node`, `i18n` va `gate:fast` yugurgan) | **1 009 s** | 0 |
+| 8 | issiq, 7-yugurishdan darhol keyin, **AYNAN o'sha kod ustida** | **1 174 s** | 0 |
+
+**Ikkalasi ham 900 s chegarasidan YUQORI (+12 % va +30 %).**
+
+⚠ **CHEGARA KO'TARILMAYDI.** 900 s qarori olti o'lchovga tayanadi
+(yuqoridagi jadval) va uni bitta ifloslangan seans bilan qayta belgilash
+darvozani mazmunsiz qilardi — aynan «bo'shashgan signal» muammosining
+qaytishi bo'lardi.
+
+#### Nega bu REGRESSIYA DEB YOZILADI, lekin sabab BU FAZANING KODIDA EMAS
+
+7- va 8-yugurishlar orasida **kod umuman o'zgarmagan** (`git status` faqat
+bitta hujjat qatorini ko'rsatgan), shunga qaramay **zanjirning HAR bosqichi
+sekinlashdi** — shu jumladan bu fazaga umuman aloqasi yo'q bosqichlar:
+
+| Bosqich | 7-yugurish | 8-yugurish | Farq |
+|---|---|---|---|
+| `vitest` umumiy davomiyligi | 58.47 s | 79.55 s | **+36 %** |
+| `vitest` `environment` (jsdom) | 225.94 s | 282.90 s | **+25 %** |
+| `next build` — `Compiled successfully` | 10.9 s | 13.5 s | **+24 %** |
+| `next build` — `Finished TypeScript` | 18.7 s | 20.9 s | **+12 %** |
+| 51 statik sahifa generatsiyasi | 1 894 ms | 2 500 ms | **+32 %** |
+
+**Hal qiluvchi nazorat o'lchovi** — `gate:fast`, AYNAN bir xil ish hajmi
+ustida (uchala yangi unit test ikkala o'lchovda ham mavjud edi):
+
+| Qachon | `gate:fast` |
+|---|---|
+| Seans BOSHIDA (ikkala `gate` dan OLDIN) | **68 s** — `04-12` bazasi bilan AYNAN teng |
+| Seans OXIRIDA (ikkala `gate` dan KEYIN) | **129 s** — **+90 %** |
+
+Ya'ni o'zgarmagan ish hajmi bir seans ichida ikki barobarga sekinlashdi.
+Bu **xost tomonidagi PROGRESSIV degradatsiya** (Windows ustidagi Docker
+Desktop uzluksiz og'ir IO ostida) va u o'lchovni ifloslantiradi.
+
+#### Bundan kelib chiqadigan halol xulosa
+
+1. ✅ **Darvozaning O'ZI yashil:** `npm run gate` ikki marta ham **exit 0**;
+   to'plam mazmuni bo'yicha regressiya YO'Q (sonlar pastdagi bazaviy
+   jadvalda).
+2. ⛔ **Davomiylik bo'yicha «regressiya yo'q» degan da'vo BU SEANSDA
+   BERIB BO'LMAYDI** — o'lchov vositasining o'zi ishonchsiz ekani
+   o'lchandi. Buni «yashil» deb yozish `04-12` ning olti o'lchovli
+   qaroriga yolg'on ustun qo'shish bo'lardi.
+3. 📌 **Ochiq band (egasi: 5-fazaning validatsiya rejasi):** chegara
+   TINCH xostda, seansning boshida, kamida uch o'lchov bilan qayta
+   tekshirilsin. Agar tinch xostda ham 900 s dan oshsa — sabab qidiriladi;
+   oshmasa — chegara o'z joyida qoladi va bu bo'lim tarix bo'lib qoladi.
+   ⚠ Chegarani ko'tarish faqat SHU o'lchovdan keyin muhokama qilinadi.
+4. ⚠ **Amaliy ogohlantirish:** xost shu holatda qolsa `npm run gate`
+   dasturchining mashinasida ham chegaraga urilishi mumkin. Bu darvozaning
+   nosozligi emas — u aynan shu narsani ko'rsatish uchun qo'yilgan.
+
 ---
 
 ## Per-Task Verification Map
@@ -232,6 +292,7 @@ kuchliroq ta'sir qiladi — u qisqa).
 | 04-13/T3 | 04-13 | BW1 | CAM-04, CAM-05, CAM-06, CAM-07, FOUND-06 | T-04-96, T-04-SC | SC#5 ning Sentry yarmi manba matnidan emas, HAQIQIY subprocess'dan o'lchanadi (nazorat yugurishi DSN'siz `False`); mezonlar soni o'zgarmaydi va meta-test buni talab qiladi | integration (`sim`) | `pytest tests/integration/test_phase4_criteria.py -q` | mavjud (kengaytirildi) | ✅ green |
 | 04-14/T1 | 04-14 | BW2 | CAM-07 | T-04-101 | `.env.example` ↔ `s3.json.example` AYNAN teng va bo'sh emas; da'vo TENGLIK (yo'qlik emas); darvoza dasturchining `.env` ini O'QIMAYDI; `compose.yaml` ning `:-` siz qarori tegilmaydi | unit | `pytest tests/unit/test_storage_config.py tests/unit/test_snapshot_settings.py -q` | mavjud (kengaytirildi) | ✅ green |
 | 04-14/T2 | 04-14 | BW2 | CAM-07, FOUND-06 | T-04-102, T-04-103 | FOUND-06 dalili sanoq emas, hosila darvozaga tayanadi; ro'yxat ↔ Traceability parity; `human_only_verifications` ↔ `04-HUMAN-UAT.md` bir xil to'plam va tartib; `Automated Command` katagida quvur belgisi yo'q | script gate | `node scripts/check-requirements-sync.mjs && node scripts/check-validation-signoff.mjs .planning/phases/04-snapshot-pipeline/04-VALIDATION.md` | mavjud (kengaytirildi) | ✅ green |
+| 04-14/T3 | 04-14 | BW2 | CAM-04, CAM-05, CAM-06, CAM-07, FOUND-06 | T-04-101, T-04-104, T-04-SC | S4 sabotaji juftlik darvozasini AYNAN BITTA testda qizartiradi; to'liq zanjir yashil va to'plam sonlari bazadan past emas; yangi paket yo'q | full gate | `npm run gate` | mavjud | ✅ green — ⚠ **exit 0, LEKIN 1 009 s / 1 174 s — 900 s chegarasidan YUQORI.** Sabab bu faza kodida EMAS (yuqoridagi 3-qadam o'lchovlari: o'zgarmagan kod ustida har bosqich 12–36 % sekinlashdi, `gate:fast` 68 s -> 129 s). Chegara KO'TARILMADI |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -287,14 +348,15 @@ kuchliroq ta'sir qiladi — u qisqa).
 
 ## Validation Sign-Off
 
-- [x] Har taskda `<automated>` verify yoki Wave 0 bog'liqligi bor — 41/41 qatorda `Automated Command` to'ldirilgan (skript majburlaydi; bo'shliq yopish to'lqini `04-13` ning uchta va `04-14` ning ikkita qatorini qo'shdi)
+- [x] Har taskda `<automated>` verify yoki Wave 0 bog'liqligi bor — 42/42 qatorda `Automated Command` to'ldirilgan (skript majburlaydi; bo'shliq yopish to'lqini `04-13` va `04-14` ning uch-uchtadan qatorini qo'shdi)
 - [x] Namuna uzluksizligi: ketma-ket 3 taskda avtomatik verify yo'qligi holati yo'q
 - [x] Wave 0 ning 12 bandi (11 + W0-F7) qoplangan; uchala 🔇 bandi **birinchi migratsiyadan oldin** (`04-01`/`04-02`, `0014` dan oldin)
 - [x] W0-1 o'lchandi (`BILLABLE_ANCHOR_SUPPORTED = true`) va `0014` FK variantida yozildi — trigger variantiga ehtiyoj bo'lmadi
 - [x] Watch-mode bayrog'i yo'q
 - [x] Sifat filtri sintetik kadrlar bilan **darvoza**, konventsiya emas (W0-9 + W0-10) — `test_quality_filter.py` + `test_snapshot_quality.py` + `test_sc3_...`
 - [x] To'lqin chegarasi 6 o'lchov asosida qayta belgilandi: **1200 s -> 900 s** (eng yomon 745 s + 20 %); `gate:fast` 180 s da qoldi, joriy o'lchov 68 s
-- [x] `nyquist_compliant: true` skript bilan **hisoblangan**: `node scripts/check-validation-signoff.mjs .planning/phases/04-snapshot-pipeline/04-VALIDATION.md` exit 0 (41 qator · 7 inson bandi). ⚠ Argumentsiz `npm run validation:check` **2-faza** fayliga ishora qiladi (`DEFAULT_FILE` qadalgan) va bu faylni QAMRAMAYDI
+- [x] `nyquist_compliant: true` skript bilan **hisoblangan**: `node scripts/check-validation-signoff.mjs .planning/phases/04-snapshot-pipeline/04-VALIDATION.md` exit 0 (42 qator · 7 inson bandi). Hisob IKKI YO'NALISHDA tekshirildi — bayroq `false` ga o'zgartirilganda skript exit 1 berdi (`04-14`), ya'ni u qiymatni O'QIMAYDI, HISOBLAYDI. ⚠ Argumentsiz `npm run validation:check` **2-faza** fayliga ishora qiladi (`DEFAULT_FILE` qadalgan) va bu faylni QAMRAMAYDI
+- [ ] ⛔ **`npm run gate` DAVOMIYLIGI CHEGARADAN OSHDI:** 1 009 s va 1 174 s (chegara 900 s). Ikkalasi ham **exit 0** va to'plam mazmuni bo'yicha regressiya yo'q, lekin davomiylik bo'yicha «regressiya yo'q» degan da'vo bu seansda BERILMAYDI — o'lchov vositasining o'zi ifloslangani o'lchandi (yuqoridagi «3-qadam o'lchovlari»). **Chegara ko'tarilmadi.** Egasi: 5-fazaning validatsiya rejasi; tetigi: tinch xostda uch o'lchov
 - [x] Bo'shliq yopish to'lqini yozildi: `04-VERIFICATION.md` ning YAGONA bo'shlig'i (`scheduler` jarayonida Sentry) `04-13` da uch mustaqil qatlamda yopildi; `04-14` uning atrofidagi ochiq bandlarni (`deferred-items.md` #2/#3) yopdi va regressiyasiz ekanini o'lchadi
 - [x] Yettinchi inson bandi qo'shildi (`04-HUMAN-UAT.md` #7 — hodisaning haqiqiy Sentry loyihasiga yetib borishi, egasi Ops). ⚠ **90 kunlik saqlash bandi (#2) O'ZGARMADI va YOPILMADI** — vaqtni kutib bo'lmaydi; mexanizm dalili siyosat dalili sifatida ko'rsatilmaydi
 
