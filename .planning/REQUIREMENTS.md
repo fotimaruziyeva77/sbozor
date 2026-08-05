@@ -14,7 +14,7 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 - [ ] **FOUND-03**: Har moliyaviy/ma'muriy harakat audit jurnaliga yoziladi (kim, qachon, nima, eski→yangi); jurnal o'zgartirib bo'lmaydigan
 - [ ] **FOUND-04**: Interfeys 3 tilda (o'zbek-lotin asosiy, o'zbek-kirill, rus); til bir bosishda almashadi
 - [ ] **FOUND-05**: Biznes-kun Asia/Tashkent bo'yicha hisoblanadi (`business_date`); pul qiymatlari butun so'mda (BIGINT)
-- [ ] **FOUND-06**: Tizim o'zini kuzatadi: kamera offline, o'tkazib yuborilgan snapshot, backup xatosi — platforma adminiga Telegram-alert; xatolar Sentry'da
+- [x] **FOUND-06**: Tizim o'zini kuzatadi: kamera offline, o'tkazib yuborilgan snapshot, backup xatosi — platforma adminiga Telegram-alert; xatolar Sentry'da
 - [ ] **FOUND-07**: Kunlik avtomatik backup (Postgres + obyekt-ombor) boshqa lokatsiyaga; tiklash mashqi kamida bir marta o'tkazilgan
 
 ### Bozor boshqaruvi (MARKET)
@@ -30,12 +30,12 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 ### Kamera va suratga olish (CAM)
 
 - [x] **CAM-01**: Bozor admini kameralarni qo'shadi/sozlaydi; RTSP ma'lumotlari shifrlangan saqlanadi; "ulanishni tekshirish" tugmasi ishlaydi
-- [x] **CAM-02**: Server NVR'ga faqat WireGuard VPN orqali kiradi; NVR internetga to'g'ridan-to'g'ri ochilmaydi
+- [ ] **CAM-02**: Server NVR'ga faqat WireGuard VPN orqali kiradi; NVR internetga to'g'ridan-to'g'ri ochilmaydi
 - [x] **CAM-03**: Direktor/admin panelda jonli kamera tasvirini ko'radi (go2rtc, avtorizatsiya ortida)
-- [ ] **CAM-04**: Snapshot jadvali har bozor uchun sozlanadi va mavsumiy profilni qo'llaydi (standart: 06:00–08:00 har 30 daq + 16:00, 18:00)
-- [ ] **CAM-05**: Rejalashtirilgan kadr olish idempotent va retry'li; o'tkazib yuborilgan slot jurnalda ko'rinadi va alert yuboradi
-- [ ] **CAM-06**: Har kadr sifat filtridan o'tadi (qorong'i/buzuq/bo'sh kadr belgilanadi, `light_mode` saqlanadi) — yaroqsiz kadr billing'ga ta'sir qilmaydi
-- [ ] **CAM-07**: Kadrlar S3-mos omborda (SeaweedFS) bozor/kamera/sana bo'yicha saqlanadi; 90 kun to'liq, keyin siqilgan 1 yil (sozlanadigan)
+- [x] **CAM-04**: Snapshot jadvali har bozor uchun sozlanadi va mavsumiy profilni qo'llaydi (standart: 06:00–08:00 har 30 daq + 16:00, 18:00)
+- [x] **CAM-05**: Rejalashtirilgan kadr olish idempotent va retry'li; o'tkazib yuborilgan slot jurnalda ko'rinadi va alert yuboradi
+- [x] **CAM-06**: Har kadr sifat filtridan o'tadi (qorong'i/buzuq/bo'sh kadr belgilanadi, `light_mode` saqlanadi) — yaroqsiz kadr billing'ga ta'sir qilmaydi
+- [x] **CAM-07**: Kadrlar S3-mos omborda (SeaweedFS) bozor/kamera/sana bo'yicha saqlanadi; 90 kun to'liq, keyin siqilgan 1 yil (sozlanadigan)
 - [x] **CAM-08**: Admin **faqat** NVR manzili + login/parolni kiritadi; tizim Hikvision ISAPI orqali qurilmani aniqlaydi, barcha kanallarni sanab chiqadi va kameralarni (nom, kanal, asosiy/sub oqim URL'i) avtomat yaratadi. Qayta skanerlash idempotent (yangi kanal qo'shiladi, yo'qolgani `offline`, mavjudi tegilmaydi). Ulanish xatosi **sababi va tuzatish yo'li** bilan ko'rsatiladi: parol xato / NVR soati >5 daq farqi → NTP / firmware `digest/basic` talab qiladi / kanal offline / sessiya limitiga yetildi
 - [x] **CAM-09**: Simulyatsiya qilingan Hikvision NVR (ISAPI mock + go2rtc RTSP manbasi) compose profili sifatida mavjud; kamera kashfiyoti, ulanish testi, jonli ko'rish va kadr olish yo'li real uskunasiz uchidan-uchiga ishlaydi va CI'da o'lchanadi
 
@@ -140,7 +140,7 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | FOUND-03 | Phase 1 | Pending |
 | FOUND-04 | Phase 1 | Pending |
 | FOUND-05 | Phase 1 | Pending |
-| FOUND-06 | Phase 4 | Pending |
+| FOUND-06 | Phase 4 | Done |
 | FOUND-07 | Phase 8 | Pending |
 | MARKET-01 | Phase 2 | Done |
 | MARKET-02 | Phase 2 | Done |
@@ -152,10 +152,10 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | CAM-01 | Phase 3 | Done |
 | CAM-02 | Phase 3 | Blocked (2-da'vo o'lchandi, 1-da'vo emas: «server NVR'ga FAQAT tunnel orqali kiradi» CI'da tunnel bo'lmagani uchun sinalmaydi — egasi Ops, tetigi VPS deploy'i, vositasi ops/scripts/verify-tunnel.sh, bandi 03-HUMAN-UAT.md #1 va #2) |
 | CAM-03 | Phase 3 | Done |
-| CAM-04 | Phase 4 | Pending |
-| CAM-05 | Phase 4 | Pending |
-| CAM-06 | Phase 4 | Pending |
-| CAM-07 | Phase 4 | Pending |
+| CAM-04 | Phase 4 | Done |
+| CAM-05 | Phase 4 | Done |
+| CAM-06 | Phase 4 | Done |
+| CAM-07 | Phase 4 | Done |
 | CAM-08 | Phase 3 | Done |
 | CAM-09 | Phase 3 | Done |
 | AI-01 | Phase 5 | Pending |
@@ -256,6 +256,37 @@ fazaning yetkazib berish mahsulotini o'lchaydi, talablar esa v1 relizining
 jumlalarini — CAM-09 ning «kadr olish yo'li» bandi, masalan, 4-fazaning
 mavzusi va u SC#7 ning da'vosidan kengroq.
 
+### Qoidaning 4-fazadagi qo'llanishi (2026-08-05, `04-12`) — DALIL BILAN
+
+Beshala band `Done` bo'ldi va HAR BIRINING dalili nomma-nom. ⚠ `Done`
+bu yerda ham «faza to'liq yopildi» degani EMAS: har qatorning oxirgi
+ustuni nima o'lchanMAGANini ochiq aytadi va uning egasi
+`04-HUMAN-UAT.md` da turadi.
+
+| Talab | Yangi holat | Nima o'lchandi va QAYSI test bilan | Nima o'lchanMAGAN |
+|---|---|---|---|
+| **CAM-04** | `Pending` -> **`Done`** | `test_phase4_criteria.py::test_sc1_schedule_produces_slots` — admin HTTP orqali mavsumiy profilni sozlaydi (uchta vaqt, standart YETTILIK emas) va ERTANGI kunning materializatsiyasi AYNAN o'sha slotlarni beradi; BUGUNGI reja esa o'zgarmaydi (D-05). Standart profil (`DEFAULT_SNAPSHOT_SLOTS`) talab matnidagi ro'yxatga harfma-harf teng: 06:00/06:30/07:00/07:30/08:00 + 16:00/18:00. Yuzaning qolgani — `test_capture_schedule.py` (26 test) | Mavsumiy profillarning REAL yil davomidagi almashinuvi (yozgi -> qishki) kalendar bilan sinalmagan — davr semantikasi `test_schedule_repo.py` da o'lchangan, KALENDAR o'tishi emas |
+| **CAM-05** | `Pending` -> **`Done`** | `test_sc2_interruption_leaves_no_duplicate_and_missed_is_visible` — uchala bo'lak bitta zanjirda: takroriy tik dublikat bermaydi (qator IDENTITETI bilan), ijarasi tugagan `running` qator qaytariladi (urinish qayta bajariladi) va `missed` qator `GET /capture-runs` JAVOBIDA ko'rinadi. Alert qismi — `test_sc5_...` | REAL NVR'ning sessiya limiti ostidagi xulq: simulyator uni UMUMAN modellamaydi (`04-HUMAN-UAT.md` #6, egasi Ops) |
+| **CAM-06** | `Pending` -> **`Done`** | `test_sc3_quality_verdict_never_reaches_billing` — sim buzuq kadr beradi, u `corrupt` deb belgilanadi, `light_mode='unknown'` bilan SAQLANADI va `is_billable=false` bo'ladi; unga bandlik dalilini bog'lash **DB darajasida** rad etiladi (`uq_snapshots_billable_anchor` + kompozit FK + CHECK). Nazorat holati: yaroqli kadr o'tadi. `dark`/`blank` verdiktlari — `tests/unit/test_quality_filter.py` (sintetik kadrlar, fizik xususiyat bo'yicha) | Chegaralarning QIYMATI — hozir LOW confidence, real Karmana kadri yo'q. Mexanizm o'lchangan, qiymat emas (`04-HUMAN-UAT.md` #1, egasi nazoratchi + ijrochi). Agar real kadrlarda chegaralar butunlay noto'g'ri chiqsa CAM-06 `Blocked` ga QAYTARILADI |
+| **CAM-07** | `Pending` -> **`Done`** | `test_sc4_storage_layout_and_retention_policy` — HAQIQIY SeaweedFS ustida: kalit `bozor/sana/kamera/slot` tartibida topiladi, qo'shni bozorning prefiksi uni KO'RSATMAYDI, chegara kelganda kadr AYNAN o'sha kalitda siqiladi (o'lcham saqlanadi, `size_bytes` kamayadi, obyekt qayta o'qib dekodlanadi) va QATOR o'chirilmaydi. Mexanizmning qolgani — `test_storage_layout.py` + `test_retention.py` | «90 kun» ning KALENDAR bo'yicha kechishi. Test chegarani SOZLAMA (`full_days=0`), vaqtni ARGUMENT (`today=`) qiladi — ikkalasi ham mahsulot yo'lidagi haqiqiy parametrlar, lekin 90 kunni faqat vaqt isbotlaydi (`04-HUMAN-UAT.md` #2, egasi Ops) |
+| **FOUND-06** | `Pending` -> **`Done`** | `test_sc5_absence_reaches_telegram_and_sentry` — uchala tetik (o'tkazib yuborilgan slot · kamera javob bermayapti · zaxira yangilanmagan) xabar beradi va ular GURUHLANADI (bozor bo'yicha bitta, platforma bo'yicha bitta); birorta so'rovda rasm, havola yoki obyekt kaliti YO'Q (D-19). **«Xatolar Sentry'da»** — `app/observability.py::init_sentry` IKKALA jarayonda ham chaqiriladi (`app/main.py::lifespan` va `app/worker.py::_open_worker_resources`); ⚠ ikkinchisi `04-12` da QO'SHILDI — undan oldin kadr olish, saqlash siyosati va alert supurgisining istisnolari Sentry'ga HECH QACHON bormasdi | Telegram xabarining HAQIQATAN yetib borishi (token va chat ID CI'da yo'q) va tashqi dead-man's switch. ⚠ Ikkalasi ham `04-HUMAN-UAT.md` #4 va #5 da **ega (Ops) va tetik bilan** yozilgan — `Done` aynan shu shartga bog'liq edi va shart bajarildi (2026-08-01 self-service direktivasi: tashqi bog'liqlik `Blocks:` bo'lmaydi) |
+
+⛔ **YO'L-YO'LAKAY TOPILDI: bu skript `03-14` dan beri QIZIL turgan.**
+`CAM-02` ro'yxatda `- [x]`, jadvalda esa `Blocked` edi — ya'ni fayl ikki
+xil haqiqat aytardi va `node scripts/check-requirements-sync.mjs` buni
+har chaqiruvda ko'rsatib turardi. Sabab mexanik: skript CI darvozasi
+EMAS (o'z docstringida ochiq yozilgan — «qo'lda, har faza yopilishida»)
+va 3-faza uni oxirgi marta chaqirmasdan yopilgan. Belgi jadvalga
+moslandi (`- [ ]`), chunki **jadval to'g'ri**: CAM-02 ning bitta jumlasi
+hamon o'lchanmagan. Bu «darvoza bor, lekin hech kim bosmaydi» sinfining
+namunasi va u 4-fazada AYNAN shu skript bilan tutildi.
+
+⚠ **HAMMASI SIMULYATOR USTIDA.** Beshala bandning ham dalili
+`nvr-sim` (haqiqiy TCP + Digest), haqiqiy SeaweedFS va haqiqiy Postgres
+ustida olingan. Real Hikvision NVR, real kadrlar va kalendar vaqti
+`04-HUMAN-UAT.md` da, ega va tetigi bilan; ular fazani bloklamaydi,
+lekin «real bozorda ishlaydi» degan da'vo BERILMAGAN.
+
 Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 `node scripts/check-requirements-sync.mjs` — qo'lda, har faza yopilishida
 (doimiy CI darvozasi emas; sabab skript boshida yozilgan).
@@ -291,7 +322,14 @@ yashab qolmadi.
 
 ---
 *Requirements defined: 2026-07-29*
-*Last updated: 2026-08-03 — `03-14`: GAP-1 va GAP-2 mock'siz uchidan-uchiga
+*Last updated: 2026-08-05 — `04-12`: 4-fazaning beshala talabi (CAM-04,
+CAM-05, CAM-06, CAM-07, FOUND-06) o'lchangan dalil bilan `Done`; har
+birining dalili va CHEGARASI yuqoridagi jadvalda nomma-nom. FOUND-06
+ning holati oldindan yozilgan shart bo'yicha qo'yildi: `04-HUMAN-UAT.md`
+ning #4 va #5 bandlari ega (Ops) va tetik bilan yozilgani uchun `Done`
+(aks holda `Blocked` bo'lardi). Sanoq: Done 16 · Blocked 1 (CAM-02,
+3-fazadan).*
+*Oldingi: 2026-08-03 — `03-14`: GAP-1 va GAP-2 mock'siz uchidan-uchiga
 o'lchov bilan yopilgach CAM-03 va CAM-09 `Blocked` -> `Done`
 (dalil: `tests/integration/test_live_view_e2e.py` — kashfiyot hosil qilgan
 oqimdan HAQIQIY JPEG kadr); CAM-02 `Blocked` bo'lib QOLDI va sababi,

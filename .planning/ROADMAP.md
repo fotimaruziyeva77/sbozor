@@ -44,7 +44,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Poydevor va tenant xavfsizligi** - Rol, izolyatsiya, audit, biznes-kun, 3 til — retrofit qilinmaydigan qatlam (completed 2026-07-29)
 - [x] **Phase 2: Bozor domeni va "Yangi bozor" ustasi** - Rasta, toifa, tarixiy tarif, sotuvchi, ish kunlari, sxematik plan-xarita (24/24 reja bajarildi; 02-VERIFICATION.md ning to'rtala bo'shlig'i 16–20-to'lqinlarda yopildi — qayta tekshiruv kutilyapti) (plans completed 2026-08-03)
 - [x] **Phase 3: NVR avtomatik kashfiyoti va tarmoq ulanishi** - Simulyator, ISAPI kashfiyoti, Fernet rekvizitlari, WireGuard tunnel, jonli ko'rish (14/14 reja bajarildi; sakkizala mezon `tests/integration/test_phase3_criteria.py` bilan bitta buyruqda o'lchanadi. Qayta tekshiruv **5/8** (`gaps_found`) berdi va ikkala bo'shliq ham 03-12/03-13/03-14 bilan YOPILDI: jonli ko'rish yo'li endi rekvizit uzatadi va kadr mock'siz keladi — `tests/integration/test_live_view_e2e.py`. CAM-03 va CAM-09 dalil bilan `Done`; **CAM-02 `Blocked` bo'lib qoldi** — CI'da `wg0` yo'q, egasi Ops, tetigi VPS deploy'i, bandi `03-HUMAN-UAT.md` #1–#2) (plans completed 2026-08-03)
-- [ ] **Phase 4: Snapshot pipeline** - Mavsumiy jadval, idempotent kadr olish, sifat filtri, S3 arxiv, alertlar
+- [x] **Phase 4: Snapshot pipeline** - Mavsumiy jadval, idempotent kadr olish, sifat filtri, S3 arxiv, alertlar (12/12 reja bajarildi; beshala mezon `tests/integration/test_phase4_criteria.py` bilan BITTA buyruqda o'lchanadi va uchala darvozasi — mezon boshiga bitta test, meta-test, mock'siz o'lchov — yashil. CAM-04…CAM-07 va FOUND-06 dalil bilan `Done`; hammasi SIMULYATOR ustida o'lchangan va real uskuna/kalendar talab qiladigan oltita band `04-HUMAN-UAT.md` da ega hamda tetik bilan. `npm run gate` chegarasi olti o'lchov asosida 1200 s dan **900 s** ga tushirildi. Qayta tekshiruv kutilyapti) (plans completed 2026-08-05)
 - [ ] **Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i** - Poligon muharriri, RF-DETR aniqlash, noaniq navbati, ko'r audit
 - [ ] **Phase 6: Billing va kassir** - O'zgarmas kunlik patta, dalil bog'lash, qarz, ≤3 bosishli kassir, smena hisobi
 - [ ] **Phase 7: Nomuvofiqlik, bildirishnoma va botlar** - "Band, lekin to'lovsiz" case oqimi, sotuvchi va direktor botlari
@@ -277,22 +277,33 @@ Plans:
   3. Qorong'i / buzuq / bo'sh kadr avtomatik belgilanadi va `light_mode` bilan saqlanadi — bunday kadr hech qachon hisob-kitobga ta'sir qilmaydi
   4. Kadrlar S3-mos omborda bozor/kamera/sana bo'yicha topiladi; 90 kun to'liq, keyin siqilgan saqlash siyosati amalda ishlaydi
   5. Kamera offline bo'lsa, slot o'tkazib yuborilsa yoki backup xato bersa — platforma adminiga Telegram-alert keladi va xato Sentry'da ko'rinadi
-**Plans**: 12 plans (8 to'lqin)
 
-- [ ] `04-01-PLAN.md` — Wave 0/A: prod bog'liqliklari, `scheduler` va `storage` konteynerlari, reyestrlar, D-23 o'lchovi
-- [ ] `04-02-PLAN.md` — Wave 0/B: sintetik JPEG generatori, sim `frame_mode` + `/picture`, frontend darvozalari (W0-F1…F7)
-- [ ] `04-03-PLAN.md` — Sxema: beshta model, `0014_snapshot_domain`, `0015` kaskadi, `capture_due_markets()`, meta-invariantlar
-- [ ] `04-04-PLAN.md` — Sof xizmatlar: `Settings`, sifat filtri (`Pillow`), obyekt kaliti, xato taksonomiyasi
-- [ ] `04-05-PLAN.md` — Repozitoriylar: `capture_repo` (`SKIP LOCKED` + lease), `schedule_repo`, `snapshot_repo`
-- [ ] `04-06-PLAN.md` — Ombor: `aiobotocore` qobig'i va haqiqiy SeaweedFS ustidagi kalit tartibi
-- [ ] `04-07-PLAN.md` — Kadr olish oqimi: `frame_source`, ISAPI `/picture`, `capture_tick`/`capture_batch`, planer
-- [ ] `04-08-PLAN.md` — Saqlash siyosati va alertlar: `retention.daily`, Telegram jo'natuvchisi, `alert_sweep`, `ops/docs/monitoring.md`
-- [ ] `04-09-PLAN.md` — API: jadval CRUD, ijro jurnali, kadr rasmi proxysi (`audit_read`), `/internal/self-check`
-- [ ] `04-10-PLAN.md` — Frontend A: so'rov qatlami, `/snapshots` sahifasi, jadval kartasi va dialoglar
-- [ ] `04-11-PLAN.md` — Frontend B: kun xulosasi, ijro matritsasi (9 holat), kadr detali, ogohlantirishlar
-- [ ] `04-12-PLAN.md` — Faza darvozasi: `test_phase4_criteria.py`, chegara qarori, talab holatlari
+**Plans**: 12 plans (8 to'lqin)
 
-**Research flag**: yes — `/gsd-plan-phase 4 --research-phase 4`. **Kadr olish usuli endi kutilmaydi — standart tanlov: go2rtc `/api/frame.jpeg`, zaxira: Hikvision ISAPI `/picture`, oxirgi chora: ffmpeg** (tadqiqot tavsiyasi, CLAUDE.md da qat'iylashtirilgan). Uchala yo'l ham sozlanadigan qilib quriladi va simulyatorda o'lchanadi; real NVR ma'lumoti kelganda tanlov **sozlama** bilan o'zgaradi, qayta loyihalash talab qilmaydi. Hal qilinmagan qolgani: job-orchestration mexanizmi (DB-materialized `capture_runs` + `SKIP LOCKED` vs `arq`) bitta aniq qaror talab qiladi; sifat va `light_mode` chegaralari simulyatorda standart qiymat oladi, pilot ma'lumotida aniqlashtiriladi.
+- [x] `04-01-PLAN.md` — Wave 0/A: prod bog'liqliklari, `scheduler` va `storage` konteynerlari, reyestrlar, D-23 o'lchovi
+- [x] `04-02-PLAN.md` — Wave 0/B: sintetik JPEG generatori, sim `frame_mode` + `/picture`, frontend darvozalari (W0-F1…F7)
+- [x] `04-03-PLAN.md` — Sxema: beshta model, `0014_snapshot_domain`, `0015` kaskadi, `capture_due_markets()`, meta-invariantlar
+- [x] `04-04-PLAN.md` — Sof xizmatlar: `Settings`, sifat filtri (`Pillow`), obyekt kaliti, xato taksonomiyasi
+- [x] `04-05-PLAN.md` — Repozitoriylar: `capture_repo` (`SKIP LOCKED` + lease), `schedule_repo`, `snapshot_repo`
+- [x] `04-06-PLAN.md` — Ombor: `aiobotocore` qobig'i va haqiqiy SeaweedFS ustidagi kalit tartibi
+- [x] `04-07-PLAN.md` — Kadr olish oqimi: `frame_source`, ISAPI `/picture`, `capture_tick`/`capture_batch`, planer
+- [x] `04-08-PLAN.md` — Saqlash siyosati va alertlar: `retention.daily`, Telegram jo'natuvchisi, `alert_sweep`, `ops/docs/monitoring.md`
+- [x] `04-09-PLAN.md` — API: jadval CRUD, ijro jurnali, kadr rasmi proxysi (`audit_read`), `/internal/self-check`
+- [x] `04-10-PLAN.md` — Frontend A: so'rov qatlami, `/snapshots` sahifasi, jadval kartasi va dialoglar
+- [x] `04-11-PLAN.md` — Frontend B: kun xulosasi, ijro matritsasi (9 holat), kadr detali, ogohlantirishlar
+- [x] `04-12-PLAN.md` — Faza darvozasi: `test_phase4_criteria.py`, chegara qarori, talab holatlari
+
+**Research flag**: yes — `/gsd-plan-phase 4 --research-phase 4`. **Kadr olish usuli endi kutilmaydi — standart tanlov: go2rtc `/api/frame.jpeg`, zaxira: Hikvision ISAPI `/picture`, oxirgi chora: ffmpeg** (tadqiqot tavsiyasi, CLAUDE.md da qat'iylashtirilgan). Uchala yo'l ham sozlanadigan qilib quriladi va simulyatorda o'lchanadi; real NVR ma'lumoti kelganda tanlov **sozlama** bilan o'zgaradi, qayta loyihalash talab qilmaydi.
+
+**Faza yopilgandagi holat (2026-08-05, `04-12`).** Rejalashtirish paytida ochiq qolgan uch band yopildi va ularning har biri o'zgargan holda YOZILDI, jimgina qoldirilmadi:
+
+| Ochiq band | Holat | Nima o'zgardi |
+|---|---|---|
+| Kadr olish usuli | **Yopiq** (2026-08-01) | Uchala yo'l qurildi va `nvr_devices.capture_method` bilan tanlanadi. Real qurilmaga o'tish — MA'LUMOT o'zgarishi (`test_snapshot_quality.py` uni aynan shu yo'l bilan o'lchaydi) |
+| Job orchestration | **Yopiq** (2026-08-04; quyidagi ochiq qarorlar jadvalining 2-bandi) | Ikkalasi ham kerak edi: `taskiq scheduler` holatsiz 1-daqiqalik tik beradi, reja/ijara/idempotentlik/yo'qlik yozuvi Postgres `capture_runs` da (`SKIP LOCKED` + lease) |
+| Sifat va `light_mode` chegaralari | **Ochiq, LEKIN EGA VA TETIK BILAN** | Simulyatorda standart qiymat oldi va MEXANIZM o'lchandi; QIYMAT real Karmana kadri bilan sozlanadi — `04-HUMAN-UAT.md` #1, egasi nazoratchi + ijrochi, tetigi Phase 0 kadrlari. D-15 bo'yicha o'lchovlar qatorda saqlanadi, ya'ni sozlash SQL bilan bo'ladi |
+
+⚠ **3-fazadan meros qolgan `gate` bandi ham shu fazada yopildi:** chegara **olti o'lchov** asosida qayta belgilandi (`04-VALIDATION.md`) va 1200 s dan **900 s** ga TUSHIRILDI. `gate:fast` 180 s da qoldi.
 
 ### Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i
 
@@ -396,8 +407,8 @@ Yetim (orphan) talab yo'q, dublikat biriktirish yo'q.
 | # | Qaror | Qachon |
 |---|-------|--------|
 | 1 | ~~Kadr olish usuli~~ — **HAL QILINDI 2026-08-01**: standart `go2rtc /api/frame.jpeg`, zaxira ISAPI `/picture`, oxirgi chora ffmpeg. Uchalasi ham sozlanadigan qilib quriladi; real NVR ma'lumoti tanlovni **sozlama** bilan o'zgartiradi | — (dala testini kutmaydi) |
-| 2 | ~~Job orchestration~~ — **HAL QILINDI 2026-08-04**: bu yolg'on dilemma edi, ikkalasi ham kerak. `taskiq scheduler` faqat **holatsiz 1-daqiqalik tik** beradi; reja, ijara (lease), idempotentlik va **yo'qlik yozuvi** Postgres `capture_runs` da yashaydi (`SKIP LOCKED`). Sabab o'lchangan: taskiq'ning cron «oxirgi ijro» holati oddiy xotiradagi `dict`, taqsimlangan qulf yo'q — ya'ni slot-boshiga cron o'tkazib yuborilgan slotni **izsiz** yo'qotadi va bu CAM-05 ning o'z talabiga zid. `RedisScheduleSource` esa umuman yaroqsiz: loyihaning Valkey'i `--save "" --appendonly no` bilan ishlaydi, ya'ni kesh qayta ishga tushganda hamma bozorning jadvali jimgina yo'q bo'lardi | — (Phase 4 da amalga oshiriladi) |
-| 3 | Obyekt-ombor nomi: MinIO arxivlangan → SeaweedFS (S3 API bir xil) | Phase 4 rejasi; PROJECT.md Key Decisions yangilanadi |
+| 2 | ~~Job orchestration~~ — **HAL QILINDI 2026-08-04**: bu yolg'on dilemma edi, ikkalasi ham kerak. `taskiq scheduler` faqat **holatsiz 1-daqiqalik tik** beradi; reja, ijara (lease), idempotentlik va **yo'qlik yozuvi** Postgres `capture_runs` da yashaydi (`SKIP LOCKED`). Sabab o'lchangan: taskiq'ning cron «oxirgi ijro» holati oddiy xotiradagi `dict`, taqsimlangan qulf yo'q — ya'ni slot-boshiga cron o'tkazib yuborilgan slotni **izsiz** yo'qotadi va bu CAM-05 ning o'z talabiga zid. `RedisScheduleSource` esa umuman yaroqsiz: loyihaning Valkey'i `--save "" --appendonly no` bilan ishlaydi, ya'ni kesh qayta ishga tushganda hamma bozorning jadvali jimgina yo'q bo'lardi. **Resolved 2026-08-05 (`04-12`)**: amalga oshirildi va o'lchandi — `taskiq scheduler` holatsiz tik + Postgres `capture_runs` + `SKIP LOCKED` + lease (D-02); `test_capture_tick.py`, `test_capture_repo.py` va `test_sc2_...` | ✅ Phase 4 da bajarildi |
+| 3 | ~~Obyekt-ombor nomi~~ — **Resolved 2026-08-05 (`04-12`)**: SeaweedFS 4.40 `storage` xizmati sifatida ishlaydi (profilsiz), kalit tartibi `bozor/sana/kamera/slot`, kirish faqat `aiobotocore` orqali. `test_storage_layout.py` va `test_sc4_...` HAQIQIY konteynerga yozadi — mock yo'q | ✅ Phase 4 da bajarildi |
 | 4 | Detektor: RF-DETR (Apache-2.0, Nano→Large) — XLarge/2XLarge PML litsenziyasi TAQIQ | Phase 5 rejasi; PROJECT.md Key Decisions yangilanadi |
 | 5 | O'zbek huquqiy talablari (kvitansiya maydonlari, CCTV shaxsiy ma'lumot, KKM) — mahalliy yurist ko'rigi | Phase 1–2 bilan parallel, launch'gacha |
 
@@ -412,7 +423,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 1. Poydevor va tenant xavfsizligi | 0/10 | Planned | - |
 | 2. Bozor domeni va ustasi | 0/17 | Planned | - |
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
-| 4. Snapshot pipeline | 11/12 | In Progress | - |
+| 4. Snapshot pipeline | 12/12 | Complete | 2026-08-05 |
 | 5. Kamera zonalari, CV va HITL | 0/TBD | Not started | - |
 | 6. Billing va kassir | 0/TBD | Not started | - |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
