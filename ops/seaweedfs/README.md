@@ -54,6 +54,15 @@ tasdiqlaydi.
 cp ops/seaweedfs/s3.json.example ops/seaweedfs/s3.json
 ```
 
+> ⛔ **BU QADAM `npm run up` DAN OLDIN BAJARILISHI SHART.** `s3.json`
+> `compose.yaml` da bind-mount manbai, va Docker mavjud bo'lmagan manbani
+> **KATALOG** qilib yaratadi. O'shanda `storage` konteyneri
+> `-s3.config=/etc/seaweedfs/s3.json` ni katalog sifatida ko'radi va
+> rekvizitlarni umuman o'qimaydi. Bir marta yuz bergan
+> (`.planning/phases/04-snapshot-pipeline/deferred-items.md` #3);
+> tuzatish — `rmdir ops/seaweedfs/s3.json` va yuqoridagi `cp` ni qayta
+> bajarish.
+
 So'ng **uchta joyda bir xil** qiymat turishi shart:
 
 | Joy | Kalit |
@@ -73,6 +82,19 @@ python -c "import secrets;print('S3_SECRET_KEY=' + secrets.token_urlsafe(48))"
 > qilmaydi** — `${S3_ACCESS_KEY}` yozuvi so'zma-so'z kalit sifatida
 > qabul qilinadi. Qiymat faylga **literal** yoziladi va aynan shu
 > sababdan fayl `.gitignore` da.
+
+### Ikkala NAMUNA fayl — JUFTLIK
+
+`.env.example` va `s3.json.example` **aynan bir xil**
+`NAMUNA-ALMASHTIRING-*` qiymatlarini tashiydi va biri o'zgarsa ikkinchisi
+ham o'zgaradi; juftlik `tests/unit/test_storage_config.py` da **tenglik**
+sifatida qulflangan (darvoza faqat shu ikki namunani solishtiradi,
+dasturchining mahalliy `.env` ini **hech qachon** o'qimaydi).
+
+Sabab nosozlikning **shaklida**: ajralib ketgan rekvizit bilan
+konteynerlar bemalol **ko'tariladi**, `docker compose ps` toza turadi va
+xato faqat **birinchi `PUT`** da — ertalabki birinchi kadrda —
+`SignatureDoesNotMatch` bo'lib chiqadi.
 
 ---
 
@@ -98,6 +120,17 @@ printf 's3.bucket.list\n' | docker compose exec -T storage weed shell
 > `-c` bayrog'i mavjud emas va buyruq o'rniga `weed shell` ning
 > yordam matni chiqadi — hech qanday xato kodisiz. Buyruqlar
 > **stdin** dan o'qiladi, shuning uchun `printf ... | ... -T` shakli.
+
+> ⛔ **`docker compose down -v` BUCKETNI HAM O'CHIRADI.** `-v` bayrog'i
+> nomlangan volume'larni, shu jumladan `seaweed` ni yo'q qiladi — bucket
+> esa o'sha volume'da yashaydi. Ilova uni **qayta yaratmaydi**:
+> `create_bucket` chaqiruvi yo'q va `Admin` amali ataylab berilmagan
+> (yuqoridagi §1). Ya'ni keyingi `npm run up` dan **oldin** yuqoridagi
+> `s3.bucket.create` buyrug'ini qo'lda takrorlash shart, aks holda
+> birinchi kadr yuklashi `NoSuchBucket` bilan yiqiladi.
+>
+> Bu `04-12` ning «sovuq» o'lchovida amalda bajarilgan qadam
+> (`04-VALIDATION.md` § 2-qadam o'lchovlari, 1-izoh).
 
 **Bitta bucket, `market_id` — birinchi prefiks** (bozor boshiga bucket
 EMAS): yangi bozor onboardingiga «bucket yarat + IAM yozuvi qo'sh»

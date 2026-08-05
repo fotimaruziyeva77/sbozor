@@ -261,9 +261,21 @@ def test_env_example_values_equal_the_settings_defaults(build: BuildSettings) ->
     `.env.example` dan nusxalagan operator KODDAGI standartdan BOSHQA
     xulq oladi va ikkalasi ham «to'g'ri» ko'rinadi.
 
-    ⚠ `S3_ACCESS_KEY`/`S3_SECRET_KEY` chetlab o'tiladi: ular `.env.example`
-      da ATAYIN BO'SH (sir) va `Settings` da standart qiymatga EGA EMAS.
-      Ularning o'z darvozasi — `test_empty_s3_key_fails_at_startup`.
+    ⚠ `S3_ACCESS_KEY`/`S3_SECRET_KEY` chetlab o'tiladi: ular SIR va
+      `Settings` da ma'noli standart qiymatga EGA EMAS (maydon standarti
+      `""` — u faqat validator uchun mavjud), ya'ni «kod standarti ==
+      `.env.example` qiymati» tengligi ular uchun ma'nosiz bo'lardi.
+
+      ⚠ ULAR ENDI BO'SH EMAS (`04-14`): `.env.example` da
+      `ops/seaweedfs/s3.json.example` bilan AYNAN bir xil
+      `NAMUNA-ALMASHTIRING-*` juftligi turadi, chunki bo'sh qiymat
+      `cp .env.example .env` qilgan yangi klonda `worker`/`scheduler` ni
+      ISHGA TUSHISHDA yiqitardi (`deferred-items.md` #2).
+
+      Ularning O'Z darvozalari IKKITA va ular boshqa narsani o'lchaydi:
+        * `test_empty_s3_key_fails_at_startup` — bo'sh qiymat rad etiladi;
+        * `tests/unit/test_storage_config.py::test_env_example_matches_the_s3_config_example`
+          — ikki namuna fayl AYNAN teng (juftlik).
     """
     raw = _env_example_keys()
     secrets_without_default = {"S3_ACCESS_KEY", "S3_SECRET_KEY"}

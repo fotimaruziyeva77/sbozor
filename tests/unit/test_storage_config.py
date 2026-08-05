@@ -43,6 +43,7 @@ quyi chegara bilan qo'riqlanadi (pastdagi birinchi test).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -50,7 +51,37 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 S3_CONFIG_EXAMPLE = REPO_ROOT / "ops" / "seaweedfs" / "s3.json.example"
+ENV_EXAMPLE = REPO_ROOT / ".env.example"
 COMPOSE = REPO_ROOT / "compose.yaml"
+
+ENV_LINE = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
+"""`.env.example` ning yagona qabul qilinadigan shakli — `KEY=VALUE`.
+
+`test_snapshot_settings.py` bilan AYNAN bir xil regex: ikki darvoza bir xil
+faylni bir xil qoida bilan o'qiydi, ya'ni format o'zgarsa ikkalasi ham
+qizaradi va «qaysi biri to'g'ri?» savoli tug'ilmaydi.
+"""
+
+PAIRED_CREDENTIALS: dict[str, str] = {
+    "S3_ACCESS_KEY": "accessKey",
+    "S3_SECRET_KEY": "secretKey",
+}
+"""`.env.example` kaliti -> `s3.json.example` dagi rekvizit maydoni.
+
+Ikkala fayl ham NAMUNA va ular JUFTLIK: biri o'zgarsa ikkinchisi ham
+o'zgarishi shart. Ajralib ketsa nosozlik shakli yomon — konteynerlar
+muvaffaqiyatli KO'TARILADI, `docker compose ps` toza bo'ladi va xato faqat
+BIRINCHI `PUT` da (ertalab 06:00 da, hech kim qaramayotgan paytda)
+`SignatureDoesNotMatch` bo'lib chiqadi.
+"""
+
+MIN_ENV_EXAMPLE_KEYS = 20
+"""Quyi chegara — parser buzilganda darvoza JIMGINA yo'q bo'lardi.
+
+`.env.example` formati o'zgarsa (masalan `export KEY=VALUE` shakliga) parser
+BO'SH lug'at qaytarardi. Bo'sh to'plam ustidagi da'vo — darvoza emas;
+`MIN_COMPOSE_SERVICES` bilan aynan bir xil qaror.
+"""
 
 BUCKET = "sbozor-snapshots"
 """Yagona bucket. Bozor boshiga bucket EMAS — yangi bozor onboardingiga
@@ -127,6 +158,34 @@ def s3_config() -> dict[str, Any]:
     )
     data: dict[str, Any] = json.loads(S3_CONFIG_EXAMPLE.read_text(encoding="utf-8"))
     return data
+
+
+def _env_example_values() -> dict[str, str]:
+    """`.env.example` -> `{KALIT: xom qiymat}`.
+
+    ⚠⚠ FAQAT `.env.example` O'QILADI, HECH QACHON `.env` EMAS.
+
+    `tests` konteyneri repozitoriyni `/app` ga mount qiladi, ya'ni
+    dasturchining mahalliy `.env` fayli bu testga KO'RINADI. Uni o'qish
+    darvozani mahalliy holatga bog'lardi va u koddagi qarorni emas, xost
+    sozlamasini o'lchardi — `deferred-items.md` #2 da o'lchangan aynan shu
+    sinf (`test_snapshot_settings.py` ni `_env_file=None` bilan tuzatishga
+    majbur qilgan nosozlik).
+    """
+    values: dict[str, str] = {}
+    for line in ENV_EXAMPLE.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        match = ENV_LINE.match(stripped)
+        if match:
+            values[match.group(1)] = match.group(2).strip()
+    return values
+
+
+@pytest.fixture(scope="module")
+def env_example() -> dict[str, str]:
+    return _env_example_values()
 
 
 @pytest.fixture(scope="module")
@@ -219,6 +278,96 @@ def test_no_admin_action(s3_config: dict[str, Any]) -> None:
         f"`Admin` amali berilgan: {admin_actions}. Ilovaga bucket yaratish/"
         "o'chirish kerak emas — bucket bir marta qo'lda yaratiladi "
         "(`ops/seaweedfs/README.md` §3)."
+    )
+
+
+# --------------------------------------------------------------------------
+# T-04-101: `.env.example` <-> `s3.json.example` JUFTLIGI (04-14)
+# --------------------------------------------------------------------------
+
+
+def test_env_example_parser_actually_sees_the_keys(env_example: dict[str, str]) -> None:
+    """QUYI CHEGARA: bo'sh lug'at ustidagi tenglik hech nimani isbotlamaydi.
+
+    `.env.example` formati o'zgarsa (`export KEY=`, YAML, bo'linma fayllar)
+    parser bo'sh qaytarardi va quyidagi juftlik testi `KeyError` bilan
+    yiqilgan bo'lardi — sabab esa «juftlik buzildi» deb o'qilardi. Bu test
+    sababni AJRATADI: parser buzilgani alohida, juftlik buzilgani alohida.
+    """
+    assert ENV_EXAMPLE.is_file(), f"`{ENV_EXAMPLE}` topilmadi — yo'l eskirgan"
+    assert len(env_example) >= MIN_ENV_EXAMPLE_KEYS, (
+        f"`.env.example` dan faqat {len(env_example)} kalit o'qildi "
+        f"({sorted(env_example)}), kamida {MIN_ENV_EXAMPLE_KEYS} kutilgan. "
+        "Bu deyarli har doim PARSER buzilganini bildiradi, kalitlar "
+        "o'chirilganini emas."
+    )
+    # Nazorat qiymati: parser haqiqatan QIYMATNI ham o'qiyapti, faqat
+    # kalitni emas — aks holda quyidagi tenglik `"" == ""` bo'lib qolardi.
+    assert env_example.get("S3_BUCKET") == "sbozor-snapshots", (
+        "`S3_BUCKET` ning qiymati o'qilmadi — parser kalitni ko'rib, qiymatni "
+        "tashlab yuboryapti, ya'ni juftlik testi ham hech nimani o'lchamasdi"
+    )
+
+
+def test_env_example_credentials_are_not_empty(env_example: dict[str, str]) -> None:
+    """Bo'sh NAMUNA rekviziti = yangi klonda ISHGA TUSHISHDA yiqilish (T-04-29).
+
+    `compose.yaml` `core-api`, `worker` va `scheduler` ga `${S3_ACCESS_KEY}`
+    ni `:-` STANDARTSIZ uzatadi (bu ATAYIN va o'zgarmaydi — kalitni butunlay
+    o'chirgan deploy ishga tushishda yiqilishi KERAK), `Settings` esa bo'sh
+    qiymatni rad etadi (`settings.py:329`). Ya'ni `cp .env.example .env`
+    qilgan yangi klonda `npm run up` ikkala fon jarayonini ham yiqitardi va
+    sabab faqat `docker compose logs` da qolardi.
+    """
+    for env_key in PAIRED_CREDENTIALS:
+        assert env_key in env_example, (
+            f"`.env.example` da `{env_key}` qatori umuman yo'q. "
+            "`compose.yaml` uni uchala servisga standartsiz uzatadi, ya'ni "
+            "`cp .env.example .env` dan keyin `npm run up` yiqiladi."
+        )
+        assert env_example[env_key] != "", (
+            f"`.env.example` da `{env_key}` BO'SH. `Settings` bo'sh S3 kalitini "
+            "ISHGA TUSHISHDA rad etadi (T-04-29), ya'ni namunani nusxalagan "
+            "dasturchining `worker` va `scheduler` konteynerlari ko'tarilmaydi. "
+            f"`ops/seaweedfs/s3.json.example` dagi NAMUNA qiymatni yozing "
+            f"({PAIRED_CREDENTIALS[env_key]})."
+        )
+
+
+def test_env_example_matches_the_s3_config_example(
+    env_example: dict[str, str], s3_config: dict[str, Any]
+) -> None:
+    """⛔ IKKI NAMUNA FAYL AYNAN BIR XIL REKVIZIT TASHIYDI.
+
+    Da'vo TENGLIK sifatida yozilgan (yo'qlik sifatida emas): «bo'sh S3 satri
+    yo'q» shaklidagi darvoza `.env.example` ning O'Z izoh matni bilan
+    to'qnashardi — izohda `S3_ACCESS_KEY` so'zi bor. Tenglik to'qnashmaydi
+    va kuchliroq: u qiymat ALMASHTIRILGANINI ham ushlaydi.
+
+    Nosozlik SHAKLI shuning uchun muhim: ajralib ketgan rekvizit bilan
+    konteynerlar muvaffaqiyatli KO'TARILADI, `docker compose ps` toza turadi
+    va xato faqat BIRINCHI `PUT` da `SignatureDoesNotMatch` bo'lib chiqadi —
+    ya'ni ertalabki birinchi kadr yo'qolgandan KEYIN.
+    """
+    credentials = s3_config["identities"][0]["credentials"]
+    assert len(credentials) == 1, (
+        f"`s3.json.example` ning identity'sida {len(credentials)} ta rekvizit bor, "
+        "kutilgani — AYNAN BITTA. Juftlik faqat bitta manba bo'lganda ma'noga ega."
+    )
+
+    mismatched = {
+        env_key: (env_example.get(env_key), credentials[0].get(field))
+        for env_key, field in PAIRED_CREDENTIALS.items()
+        if env_example.get(env_key) != credentials[0].get(field)
+    }
+
+    assert not mismatched, (
+        "`.env.example` va `ops/seaweedfs/s3.json.example` AJRALIB KETDI: "
+        f"{mismatched} (chapda — `.env.example`, o'ngda — `s3.json.example`).\n"
+        "Bu ikki fayl JUFTLIK — biri o'zgarsa ikkinchisi ham o'zgaradi. "
+        "Mos kelmasa konteynerlar bemalol KO'TARILADI va xato faqat birinchi "
+        "`PUT` da `SignatureDoesNotMatch` bo'lib chiqadi. "
+        "To'liq yo'riqnoma: `ops/seaweedfs/README.md` §2."
     )
 
 
