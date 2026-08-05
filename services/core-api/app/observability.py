@@ -1,4 +1,4 @@
-"""Sentry ilmoqlari va uning O'RNATILISHI — HAR IKKALA JARAYON uchun BIR joyda.
+"""Sentry ilmoqlari va uning O'RNATILISHI — UCHALA JARAYON uchun BIR joyda.
 
 =============================================================================
 NEGA BU MODUL ALOHIDA (04-12 da tug'ildi va sabab O'LCHANGAN).
@@ -21,6 +21,19 @@ ko'rinardi.
    `init()` ni HECH KIM chaqirmasa ham HECH QANDAY xato bermaydi. Ya'ni
    bu «jimgina yolg'on» sinfi — konteyner sog'lom, jurnal toza, hodisa
    esa hech qachon jo'natilmaydi.
+
+⛔ 04-12 WORKER'NI YOPDI, `scheduler` ESA OCHIQ QOLDI (04-13 da yopildi).
+   `04-VERIFICATION.md` uni TAXMIN bilan emas, KONTEYNERDA o'lchab topdi:
+   `taskiq scheduler` jarayonida `broker.is_worker_process` `False` bo'lib
+   qoladi (CLI `cli/scheduler/run.py:392` da BOSHQA bayroqni —
+   `is_scheduler_process` ni — o'rnatadi), ya'ni `AsyncBroker.startup()`
+   (`abc/broker.py:187-191`) `WORKER_STARTUP` emas, `CLIENT_STARTUP` ni
+   ateshlaydi va reyestrda uning ilmog'i UMUMAN yo'q edi.
+
+   Oqibati kosmetik emas: planer 4-fazaning HAMMA jobini tetiklaydi va
+   `alert_sweep` ham uning boshqaruvida, ya'ni planer yiqilsa Telegram
+   yo'li ham to'xtaydi. Qolgan yagona detektor — `/internal/self-check`,
+   uning tashqi kuzatuvchisi esa D-21 bo'yicha ataylab kod EMAS.
 =============================================================================
 
 ⚠ NEGA `app/main.py` DAN IMPORT QILINMAYDI. `app/main.py` ning O'ZI
@@ -46,10 +59,12 @@ from sentry_sdk.types import Breadcrumb, BreadcrumbHint, Event, Hint
 __all__ = [
     "MASKED",
     "PII_KEYS",
+    "capture_exception",
     "init_sentry",
     "mask_secrets",
     "scrub_breadcrumb",
     "scrub_event",
+    "sentry_installed",
 ]
 
 MASKED = "***"
@@ -189,12 +204,21 @@ def init_sentry(dsn: str) -> bool:
       narida qoldirardi — parol hodisa yuz bermasdan turib navbatga
       tushardi.
 
-    ⚠ CHAQIRUV JOYI BITTA EMAS, IKKITA: `app/main.py::lifespan` (API) va
-      `app/worker.py::_open_worker_resources` (kadr olish, saqlash
-      siyosati, alert supurgisi). Modul docstringiga qarang — ikkinchisi
-      04-12 gacha YO'Q edi va aynan u FOUND-06 ning jumlasini ushlab
-      turadi. Ikkalasining ham mavjudligi `test_phase4_criteria.py::
-      test_sc5_...` da mexanik tekshiriladi.
+    ⚠ CHAQIRUV JOYI BITTA EMAS, UCHTA — VA SANOQ KOD KIRISH NUQTASI EMAS,
+      JARAYON bo'yicha yuritiladi (04-12 ning hisobi «ikkita kirish
+      nuqtasi» edi va aynan shu shakl uchinchi JARAYONNI ko'rmay qolgan):
+
+        1. `app/main.py::lifespan`                    — `core-api` jarayoni
+        2. `app/worker.py::_open_worker_resources`    — `worker` jarayoni
+           (`WORKER_STARTUP` ilmog'i; kadr olish, saqlash siyosati, alert
+           supurgisi)
+        3. `app/worker.py::_install_client_observability` — `scheduler`
+           jarayoni (`CLIENT_STARTUP` ilmog'i; 04-13 da qo'shildi)
+
+      Uchalasining ham mavjudligi `tests/unit/test_sentry_processes.py` da
+      tekshiriladi va u ro'yxatni SANAMAYDI — `compose.yaml` da `SENTRY_DSN`
+      oladigan har servisdan HOSILA qiladi, ya'ni to'rtinchi jarayon
+      qo'shilganda darvoza jimgina eskirmaydi, u YIQILADI.
 
     Args:
         dsn: Sentry DSN. Bo'sh satr — o'rnatish O'TKAZIB YUBORILADI va bu
@@ -215,3 +239,40 @@ def init_sentry(dsn: str) -> bool:
         send_default_pii=False,
     )
     return True
+
+
+def sentry_installed() -> bool:
+    """Shu JARAYONDA `sentry_sdk.init()` allaqachon bajarilganmi.
+
+    =========================================================================
+    NEGA BU QOBIQ KERAK — IKKI SABAB, IKKALASI HAM STRUKTURAVIY.
+
+    **1. `CLIENT_STARTUP` API jarayonida HAM ateshlanadi.** `app/main.py::
+    lifespan` avval `init_sentry()` ni chaqiradi, keyin `broker.startup()`
+    ni — va o'sha `startup()` `is_worker_process` `False` bo'lgani uchun
+    aynan `CLIENT_STARTUP` ni ateshlaydi (`abc/broker.py:187-191`). Ya'ni
+    planer uchun yozilgan ilmoq API jarayonida ham ishga tushadi va u
+    yerda ikkinchi marta `init()` qilmasligi kerak.
+
+    **2. `sentry_sdk` `app/worker.py` GA IMPORT QILINMAYDI.** SDK ning
+    yagona chaqiruvchisi shu modul bo'lib qolsin — shunda `before_send`/
+    `before_breadcrumb` siz o'rnatish yo'li UMUMAN ochilmaydi (T-04-98).
+    =========================================================================
+    """
+    return bool(sentry_sdk.is_initialized())
+
+
+def capture_exception(exc: BaseException) -> None:
+    """Istisnoni Sentry'ga yuboradi — SDK ga yagona tashqi eshik.
+
+    ⚠ `sentry_sdk.capture_exception` NING RE-EKSPORTI EMAS, QOBIG'I: SDK
+      hodisa ID sini qaytaradi, chaqiruvchiga esa u kerak emas va uni
+      qaytarish chaqiruv joyida «ID bilan nima qilamiz?» savolini
+      tug'dirardi. Qaytish tipi `None` — qatlam faqat XABAR BERADI.
+
+    ⚠ `init()` chaqirilmagan jarayonda bu no-op: `sentry_sdk` mijoz
+      qurilmagan bo'lsa hodisani jimgina tashlab yuboradi va XATO
+      BERMAYDI. Shuning uchun chaqiruv joyida `log.exception` ham bo'lishi
+      SHART — jurnal yagona kafolatlangan yo'l.
+    """
+    sentry_sdk.capture_exception(exc)

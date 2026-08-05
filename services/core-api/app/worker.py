@@ -73,6 +73,29 @@ bo'lim bilan aynan bir xil sabab).
   chiqmasdi. `LabelScheduleSource` jadvalni KODDAN oladi, ya'ni u
   konteyner bilan birga keladi.
 =============================================================================
+
+=============================================================================
+PLANER JARAYONI BOSHQA HODISANI ATESHLAYDI (04-13, FOUND-06).
+
+`taskiq worker` va `taskiq scheduler` — IKKI BOSHQA JARAYON va ular
+BOSHQA hodisani ateshlaydi. Bu taskiq ning tanlovi, bizniki emas, va u
+`04-VERIFICATION.md` da KONTEYNERDA o'lchangan:
+
+    cli/scheduler/run.py:392   `scheduler.broker.is_scheduler_process = True`
+    cli/worker/run.py:148      `broker.is_worker_process = True`  <- BOSHQA bayroq
+    abc/broker.py:187-191      `is_worker_process` yolg'on -> CLIENT_STARTUP
+
+Ya'ni `WORKER_STARTUP` ilmog'i (`_open_worker_resources`) planer
+jarayonida HECH QACHON ishlamaydi. Shuning uchun bu faylda IKKI ilmoq
+bor va ularning vazifasi ham har xil:
+
+    WORKER_STARTUP  -> og'ir resurslar (engine, ombor, kadr manbalari)
+    CLIENT_STARTUP  -> FAQAT kuzatuv (jurnal + Sentry), resurs YO'Q
+
+⚠ IKKINCHI ILMOQ RESURS OCHMAYDI VA BU ATAYIN: planer hech qanday jobni
+  O'ZI bajarmaydi — u faqat navbatga qo'yadi (D-02). Unga engine ham,
+  ombor ham, kadr manbai ham kerak emas.
+=============================================================================
 """
 
 from __future__ import annotations
@@ -95,27 +118,31 @@ from app.jobs.alerting import alert_sweep, daily_digest
 from app.jobs.capture import BatchRequest, CapturePolicy, capture_batch, capture_tick
 from app.jobs.discovery import discover_nvr
 from app.jobs.retention import RetentionPolicy, retention_daily
-from app.observability import init_sentry
+from app.observability import capture_exception, init_sentry, sentry_installed
 from app.services import storage as storage_module
 from app.services.alerts import AlertSender
 from app.services.frame_source import FrameSourcePool
 from app.settings import get_settings
 
 if TYPE_CHECKING:
-    from taskiq import AsyncBroker
+    from taskiq import AsyncBroker, ScheduledTask, ScheduleSource
 
     from app.settings import Settings
 
 log = structlog.get_logger(__name__)
 
 __all__ = [
+    "DEFAULT_LOG_LEVEL",
     "DIGEST_CRON",
     "DISCOVERY_QUEUE",
     "JOBS_QUEUE",
+    "LOG_LEVEL_ENV",
     "MARKET_CRON_OFFSET",
     "RETENTION_CRON",
+    "SENTRY_DSN_ENV",
     "SWEEP_CRON",
     "TICK_CRON",
+    "ObservedScheduler",
     "alert_sweep_task",
     "broker",
     "capture_batch_task",
@@ -131,6 +158,33 @@ __all__ = [
 VALKEY_URL_ENV: Final[str] = "VALKEY_URL"
 DEFAULT_VALKEY_URL: Final[str] = "redis://cache:6379/0"
 """`compose.yaml` dagi `${VALKEY_URL:-redis://cache:6379/0}` bilan BIR XIL standart."""
+
+SENTRY_DSN_ENV: Final[str] = "SENTRY_DSN"
+LOG_LEVEL_ENV: Final[str] = "LOG_LEVEL"
+DEFAULT_LOG_LEVEL: Final[str] = "info"
+"""Kuzatuv sozlamalari — muhitdan TO'G'RIDAN-TO'G'RI, `VALKEY_URL` bilan bir xil qoida.
+
+=============================================================================
+IKKI SABAB, VA IKKINCHISI PLANERGA XOS.
+
+**(a) `_broker_url()` BILAN BIR XIL QOIDA.** Bu `settings.py` ning NUSXASI
+emas: qiymat AYNAN o'sha muhit o'zgaruvchisidan va AYNAN o'sha standart
+bilan olinadi (`compose.yaml`: `SENTRY_DSN: ${SENTRY_DSN:-}`,
+`LOG_LEVEL: ${LOG_LEVEL:-info}`), farqi faqat O'QISH PAYTIDA. Nomlarning
+`Settings` bilan mosligi `tests/unit/test_scheduler_observability.py::
+test_scheduler_env_names_agree_with_settings` da QULFLANADI — nom ayrilsa
+darvoza qizaradi.
+
+**(b) `Settings` PLANERNI OMBOR REKVIZITIGA BOG'LAB QO'YARDI.**
+`settings.py:329` bo'sh `S3_ACCESS_KEY` ni RAD ETADI, `scheduler`
+jarayoni esa bugun `get_settings()` ni UMUMAN chaqirmaydi (u faqat
+`_open_worker_resources` da, ya'ni WORKER jarayonida chaqiriladi). Ilmoqni
+`get_settings()` ustiga qurish planerni YANGIDAN ombor rekvizitiga
+bog'lardi va kuzatuv qatlami o'zi kuzatishi kerak bo'lgan nosozlikdan
+yiqilardi — «ombor sozlamasi buzildi» hodisasi hech qachon Sentry'ga
+yetib bormasdi.
+=============================================================================
+"""
 
 JOBS_QUEUE: Final[str] = "sbozor:jobs"
 """Navbat ro'yxatining nomi — BITTA navbat, TO'RT TURDAGI vazifa.
@@ -316,7 +370,61 @@ DIGEST_CRON: Final[str] = "0 20 * * *"
   18:00 + 10 daqiqa grace + zaxira = 20:00.
 """
 
-scheduler: TaskiqScheduler = TaskiqScheduler(broker=broker, sources=[LabelScheduleSource(broker)])
+
+class ObservedScheduler(TaskiqScheduler):
+    """`on_ready` ni o'rab oladigan planer — YUTILGAN ISTISNONI E'LON QILADI.
+
+    =========================================================================
+    ⛔ NIMA UCHUN KERAK — O'LCHANGAN VENDOR XULQI (taskiq 0.12.4).
+
+      cli/scheduler/run.py:157-174  `send()` da `try/except` UMUMAN yo'q:
+                                    u to'g'ridan-to'g'ri
+                                    `await scheduler.on_ready(...)` qiladi
+      cli/scheduler/run.py:346-350  `send_task.add_done_callback(...)` faqat
+                                    nomni reyestrdan O'CHIRADI — `.result()`
+                                    ham, `.exception()` ham chaqirilmaydi
+
+    Ya'ni Valkey yetib bo'lmaganda:
+
+      * tik navbatga TUSHMAYDI -> kadr olinmaydi;
+      * `alert_sweep` ham planer boshqaruvida -> TELEGRAM YO'LI HAM
+        TO'XTAYDI, ya'ni nosozlikni aytadigan kanalning o'zi o'chadi;
+      * istisno faqat asyncio ning «Task exception was never retrieved»
+        satriga aylanadi va Sentry'ga HECH QACHON bormaydi.
+
+    Qolgan yagona detektor — `/internal/self-check`, uning tashqi
+    kuzatuvchisi esa D-21 bo'yicha ataylab kod EMAS (hujjat + ops bandi).
+    =========================================================================
+
+    ⚠ ISTISNO QAYTA KO'TARILADI VA BU ATAYIN: taskiq semantikasi
+      O'ZGARMAYDI (M-6 bo'yicha uni `send()` ushlamaydi va bu bizning
+      ishimiz emas). Bu qatlam faqat QO'SHADI — jurnal va Sentry.
+
+    ⚠ `sentry_sdk` BU FAYLGA IMPORT QILINMAYDI: `app/observability.py`
+      SDK ning yagona uyi bo'lib qoladi, ya'ni `before_send`/
+      `before_breadcrumb` siz o'rnatish yo'li umuman ochilmaydi (T-04-98).
+
+    ⚠ MONKEY-PATCH TALAB QILINMAYDI: `TaskiqScheduler.on_ready` — oddiy
+      `async def` metod (`scheduler/scheduler.py:36-60`), ya'ni meros
+      olib override qilish YETADI va uni taskiq ning o'zi hujjatlaydi.
+    """
+
+    async def on_ready(self, source: ScheduleSource, task: ScheduledTask) -> None:
+        """Vazifani navbatga qo'yadi; yiqilsa — jurnal + Sentry, keyin QAYTA KO'TARADI."""
+        try:
+            await super().on_ready(source, task)
+        except Exception as exc:
+            log.exception(
+                "scheduler_send_failed",
+                task_name=task.task_name,
+                schedule_id=task.schedule_id,
+                source=type(source).__name__,
+            )
+            capture_exception(exc)
+            raise
+
+
+scheduler: TaskiqScheduler = ObservedScheduler(broker=broker, sources=[LabelScheduleSource(broker)])
 """`taskiq scheduler app.worker:scheduler` IMPORT QILADIGAN obyekt.
 
 ⚠ QURILISH `get_settings()` GA BOG'LANMAYDI — `broker` bilan aynan bir xil
@@ -327,7 +435,58 @@ scheduler: TaskiqScheduler = TaskiqScheduler(broker=broker, sources=[LabelSchedu
   docstringining planer bo'limida: Valkey `--save "" --appendonly no`
   bilan ishlaydi va `RedisScheduleSource` bilan kesh qayta ko'tarilganda
   jadval JIMGINA yo'qolardi.
+
+⚠ TUR `ObservedScheduler`, LEKIN SHARTNOMA O'ZGARMAYDI: taskiq CLI
+  `isinstance(scheduler, TaskiqScheduler)` ni tekshiradi
+  (`cli/scheduler/run.py:386-391`) va meros bu shartni saqlaydi.
 """
+
+
+# ==========================================================================
+# ⚠⚠ NEGA AYNAN `CLIENT_STARTUP` — ZANJIR SATR RAQAMLARI BILAN (04-13).
+#
+#   cli/scheduler/run.py:392   `scheduler.broker.is_scheduler_process = True`
+#   cli/worker/run.py:148      `broker.is_worker_process = True` <- BOSHQA bayroq
+#   cli/scheduler/run.py:406   `await scheduler.startup()`
+#   scheduler/scheduler.py:34  -> `await self.broker.startup()`
+#   abc/broker.py:187-191      `event = CLIENT_STARTUP`; u `WORKER_STARTUP`
+#                              ga FAQAT `is_worker_process` rost bo'lganda
+#                              almashadi
+#
+# Ya'ni planer jarayonida `is_worker_process` `False` bo'lib qoladi va
+# `WORKER_STARTUP` ilmog'i HECH QACHON ishlamaydi.
+#
+# ⚠ `_open_worker_resources` GA TEGILMAYDI — u TO'G'RI jarayonda TO'G'RI
+#   ishlayapti. Bu ilmoq uni almashtirmaydi, YONIGA qo'shiladi.
+# ==========================================================================
+@broker.on_event(TaskiqEvents.CLIENT_STARTUP)
+async def _install_client_observability(state: TaskiqState) -> None:
+    """Planer jarayonining kuzatuvi — jurnal + Sentry, RESURS YO'Q.
+
+    ⚠ API JARAYONIDA HAM ATESHLANADI VA U YERDA NO-OP: `app/main.py::
+      lifespan` avval `init_sentry()` ni chaqiradi, keyin `broker.startup()`
+      ni — o'sha `startup()` esa `is_worker_process` yolg'on bo'lgani uchun
+      aynan shu hodisani ateshlaydi. `sentry_installed()` ikkinchi
+      `sentry_sdk.init()` ni to'sadi (`app/observability.py` docstringi).
+
+    ⚠ `get_settings()` CHAQIRILMAYDI: sabab `SENTRY_DSN_ENV` konstantasi
+      docstringining (b) bandida — `Settings` bo'sh `S3_ACCESS_KEY` ni rad
+      etadi va planer bugun ombor rekvizitisiz ham ko'tariladi.
+
+    ⚠ JIM ISHLASH TAQIQLANGAN — `_open_worker_resources` ning
+      `worker_started` satri bilan AYNAN bir xil qoida: «Sentry o'chiq»
+      holati jurnal satrida ochiq turishi kerak, aks holda uni
+      «ishlayapti» deb o'ylash mumkin.
+    """
+    del state  # planer holatsiz (D-02): bu ilmoq `TaskiqState` ga hech nima yozmaydi
+
+    if sentry_installed():
+        log.info("client_observability_skipped", queue=JOBS_QUEUE, reason="already_installed")
+        return
+
+    configure_logging(os.environ.get(LOG_LEVEL_ENV) or DEFAULT_LOG_LEVEL)
+    installed = init_sentry(os.environ.get(SENTRY_DSN_ENV) or "")
+    log.info("scheduler_started", queue=JOBS_QUEUE, sentry=installed)
 
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
