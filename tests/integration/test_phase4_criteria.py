@@ -62,7 +62,11 @@ import importlib
 import inspect
 import io
 import json
+import os
+import subprocess
 import sys
+import textwrap
+import tomllib
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -214,25 +218,84 @@ ya'ni fixture qayta nomlanganda darvoza jimgina bo'sh naqsh izlab qolmaydi.
 OBSERVABILITY_MODULE = "app.observability"
 """Sentry ilmoqlarining YAGONA uyi — SC#5 ning ikkinchi yarmi shu yerdan o'lchanadi.
 
-Nomi SHU YERDA yagona joyda turadi. ⚠ Modul LAZY import qilinadi (`importlib`)
-va bu ataylab: modul yo'q bo'lishi AYNAN o'lchanayotgan nosozlik: yuqorida
-yozilgan `import` esa butun faylning yig'ilishini yiqitib, QAYSI da'vo
-buzilganini yashirardi. `test_phase3_criteria.py` ning mock'siz o'lchov
-darvozasi bilan bir xil naqsh va bir xil sabab.
+Nomi SHU YERDA yagona joyda turadi (jarayon zondi ham shu qiymatni oladi).
+⚠ Modul LAZY import qilinadi (`importlib`) va bu ataylab: modul yo'q bo'lishi
+AYNAN o'lchanayotgan nosozlik: yuqorida yozilgan `import` esa butun faylning
+yig'ilishini yiqitib, QAYSI da'vo buzilganini yashirardi.
+`test_phase3_criteria.py` ning mock'siz o'lchov darvozasi bilan bir xil
+naqsh va bir xil sabab.
 """
 
-SENTRY_ENTRYPOINTS: tuple[tuple[str, str], ...] = (
-    ("app.main", "lifespan"),
-    ("app.worker", "_open_worker_resources"),
-)
-"""Sentry o'rnatilishi SHART bo'lgan jarayon kirish nuqtalari.
+_REPO_ROOT = _MODULE_PATH.resolve().parents[2]
 
-⚠ IKKITA, BITTA EMAS — VA SHU FARQ SC#5 NING IKKINCHI YARMI. Kadr olish,
-saqlash siyosati va alert supurgisi WORKER jarayonida ishlaydi; API
-jarayoni ularning istisnolarini UMUMAN ko'rmaydi. Faqat API'da o'rnatilgan
-Sentry bilan «xato Sentry'da ko'rinadi» da'vosi aynan bu fazaning
-xatolari uchun YOLG'ON bo'lardi va nosozlik faqat konteyner jurnalida
-qolardi.
+PROBE_TIMEOUT_SECONDS = 120
+"""Jarayon zondining yuqori chegarasi — MAJBURIY.
+
+⚠ Chegarasiz `subprocess.run` osilib qolgan zondni CHEKSIZ kutardi va
+  mezon buyrug'i sababsiz muzlab qolardi. O'lchangan qiymat: ikkala
+  yugurish ham ~4 s (`tests` konteynerida), ya'ni chegarada ~30x zaxira.
+"""
+
+PROBE_DSN = "https://0123456789abcdef0123456789abcdef@sentry.invalid/1"
+"""Sintaktik TO'G'RI, lekin HECH QACHON marshrutlanmaydigan DSN.
+
+⚠ `.invalid` — RFC 6761 bo'yicha rezolv bo'lmasligi KAFOLATLANGAN TLD.
+  Haqiqiy xost yozilsa zond CI'dan tashqi tarmoqqa hodisa yuborardi.
+  `sentry_sdk.init()` DSN ni faqat PARSE qiladi, ya'ni o'rnatish uchun
+  xostga borish shart emas — o'lchanayotgan narsa aynan `init()` ning
+  BAJARILISHI.
+"""
+
+PROBE_VALKEY_URL = "redis://127.0.0.1:6399/0"
+"""Zond uchun ATAYIN yetib bo'lmaydigan broker manzili.
+
+⚠⚠ O'LCHANDI, TAXMIN QILINMADI (04-13). `AsyncBroker.startup()`
+   `result_backend.startup()` ni ham chaqiradi, lekin `taskiq-redis`
+   ulanishni YALQOV qiladi: zond bu manzil bilan exit 0 beradi va ~4 s da
+   tugaydi. Ya'ni mezon buyrug'i zond uchun QO'SHIMCHA konteyner
+   ko'tarmaydi va SC#5 ga `valkey_url` fixture'i KERAK BO'LMADI.
+
+   Yon foyda: shu bilan birga «broker yetib bo'lmasa ham kuzatuv qatlami
+   ko'tariladi» invarianti ham o'lchanadi — aks holda planer Sentry'siz
+   qolib, aynan o'sha nosozlikni ayta olmasdi.
+"""
+
+PROBE_MARKER = "SENTRY_ACTIVE="
+
+_SCHEDULER_PROBE = textwrap.dedent(
+    """\
+        import asyncio
+        import importlib
+
+        from app.worker import scheduler
+
+        observability = importlib.import_module("%s")
+
+        # taskiq `cli/scheduler/run.py:392` NING AYNAN O'ZI: planer CLI'si
+        # `is_scheduler_process` ni o'rnatadi, `is_worker_process` esa
+        # `False` bo'lib qoladi -> `abc/broker.py:187-191` CLIENT_STARTUP
+        # ni ateshlaydi.
+        scheduler.broker.is_scheduler_process = True
+        asyncio.run(scheduler.startup())
+
+        print("%s" + str(observability.sentry_installed()))
+        """
+) % (OBSERVABILITY_MODULE, PROBE_MARKER)
+"""HAQIQIY planer jarayonining zondi — `04-VERIFICATION.md` o'lchovining testdagi shakli.
+
+=============================================================================
+⚠⚠ NEGA SUBPROCESS, NEGA MANBA MATNI EMAS.
+
+**1. `sentry_sdk.init()` — GLOBAL holat.** Uni test jarayonida chaqirish
+butun to'plamning Sentry holatini o'zgartirardi va keyingi testlarni uni
+tozalashga majbur qilardi. Subprocess bu savolni butunlay yopadi.
+
+**2. O'LCHANAYOTGAN DA'VO AYNAN JARAYON CHEGARASI.** 04-12 ning darvozasi
+KOD kirish nuqtalarini sanardi va uchinchi JARAYONNI struktura jihatidan
+ko'ra olmasdi — nosozlik aynan shu bo'shliqda yashagan. Zond savolni
+boshqacha qo'yadi: «planer CLI'si qiladigan qadamlardan keyin Sentry
+TIRIKMI?»
+=============================================================================
 """
 
 _INSERT_RUN = (
@@ -1100,8 +1163,8 @@ async def test_sc5_absence_reaches_telegram_and_sentry(
     platforma adminiga Telegram-alert keladi va xato Sentry'da ko'rinadi».
 
     O'LCHANADIGAN DA'VO IKKI YARIM: (a) uchala tetik ham xabar beradi va
-    ular GURUHLANADI; (b) xato Sentry'ga BORADIGAN yo'l ikkala jarayonda
-    ham ulangan.
+    ular GURUHLANADI; (b) xato Sentry'ga BORADIGAN yo'l ilmoqlar bilan
+    ulangan VA u eng nozik jarayonda — planerda — HAQIQATAN tirik.
 
     =======================================================================
     ⚠ GURUHLASH — MEZONNING YOZILMAGAN, LEKIN MAJBURIY QISMI. Yomon kunda
@@ -1114,9 +1177,12 @@ async def test_sc5_absence_reaches_telegram_and_sentry(
       data-rezidentlik chegarasidan TASHQARIDA. Bir marta yuborilgan
       baytni qaytarib bo'lmaydi.
 
-    ⚠ IKKINCHI YARIM (`Sentry`) MANBA MATNIDAN o'lchanadi va u YETTI EMAS,
-      IKKI kirish nuqtasini talab qiladi — sabab `SENTRY_ENTRYPOINTS`
-      docstringida.
+    ⚠ IKKINCHI YARIM IKKI QATLAMDA O'LCHANADI: ilmoqlarning `init_sentry()`
+      ga ulangani MANBA MATNIDAN (`_assert_sentry_is_wired`), Sentry'ning
+      HAQIQATAN o'rnatilishi esa ALOHIDA JARAYONDA
+      (`_assert_sentry_reaches_every_process`). Ilgari bu joyda ikki
+      elementli kirish-nuqta ro'yxati turardi va u uchinchi jarayonni
+      ko'ra olmasdi — `04-VERIFICATION.md` ning yagona bo'shlig'i.
     =======================================================================
     """
     with nvr_rows(sync_owner_conn, two_markets) as nvr:
@@ -1198,14 +1264,19 @@ async def test_sc5_absence_reaches_telegram_and_sentry(
         assert ".jpg" not in line, f"xabarda obyekt kaliti bor: {line}"
 
     _assert_sentry_is_wired()
+    _assert_sentry_reaches_every_process()
 
 
 def _assert_sentry_is_wired() -> None:
-    """Sentry ilmoqlari IKKALA jarayonda ham ulangan (SC#5 ning ikkinchi yarmi).
+    """Sentry ILMOQLARI `init_sentry()` ga ulangan (SC#5 ning ikkinchi yarmi, 1/2).
 
     Manba matni o'qiladi (`test_go2rtc_client.py` da o'rnatilgan naqsh):
     ilmoqning O'ZI to'g'ri ishlashi YETARLI EMAS — ulanmagan ilmoq har
     testda yashil bo'lib, mahsulotda umuman chaqirilmasdi.
+
+    ⚠ BU YERDA JARAYONLAR HAQIDA HECH NIMA DEYILMAYDI. «Qaysi jarayonda
+      o'rnatiladi?» — boshqa savol va uni `_assert_sentry_reaches_every_
+      process()` HAQIQIY jarayonda o'lchaydi, manba matnidan emas.
     """
     module = importlib.import_module(OBSERVABILITY_MODULE)
     initialiser = module.init_sentry
@@ -1213,12 +1284,89 @@ def _assert_sentry_is_wired() -> None:
     assert "before_send=scrub_event" in source
     assert "before_breadcrumb=scrub_breadcrumb" in source
 
-    for module_name, function_name in SENTRY_ENTRYPOINTS:
-        entry = getattr(importlib.import_module(module_name), function_name)
-        assert "init_sentry(" in inspect.getsource(entry), (
-            f"`{module_name}.{function_name}` Sentry'ni o'rnatmaydi — o'sha "
-            "jarayondagi istisnolar FAQAT konteyner jurnalida qolardi"
-        )
+
+def _probe_pythonpath() -> list[str]:
+    """Zond jarayoni uchun `sys.path` — `pyproject.toml` dan HOSILA, nusxa emas.
+
+    ⚠ `pythonpath` ini-opsiyasi FAQAT pytest ichida amal qiladi: u
+      `PYTHONPATH` muhit o'zgaruvchisini O'ZGARTIRMAYDI, ya'ni subprocess
+      uni MEROS OLMAYDI va `import app.worker` topilmasdi (o'lchandi).
+
+    ⚠ RO'YXAT SHU YERDA TAKRORLANMAYDI: qadalgan uchta yo'l `pyproject.toml`
+      tahrirlanganda jimgina eskirardi. Quyi chegara buzilgan o'qishni
+      yashil qoldirmaydi.
+    """
+    config = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    paths = list(config["tool"]["pytest"]["ini_options"]["pythonpath"])
+    assert len(paths) >= 3, (
+        f"`pyproject.toml` dan faqat {paths} o'qildi — `pythonpath` shakli o'zgargan "
+        "va zond `app` paketini topa olmasdi"
+    )
+    return [str(_REPO_ROOT / path) for path in paths]
+
+
+def _run_scheduler_probe(dsn: str) -> str:
+    """Zondni HAQIQIY alohida jarayonda yugurtiradi va `SENTRY_ACTIVE=` ni qaytaradi."""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(_probe_pythonpath())
+    env["SENTRY_DSN"] = dsn
+    env["VALKEY_URL"] = PROBE_VALKEY_URL
+
+    completed = subprocess.run(  # noqa: S603 - argvda foydalanuvchi kiritmasi YO'Q, shell YO'Q
+        [sys.executable, "-c", _SCHEDULER_PROBE],
+        cwd=_REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=PROBE_TIMEOUT_SECONDS,
+        check=False,
+    )
+    assert completed.returncode == 0, (
+        "planer zondi yiqildi — ya'ni `taskiq scheduler` konteyneri ham shu joyda "
+        f"yiqilardi.\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
+    )
+    verdicts = [
+        line.removeprefix(PROBE_MARKER)
+        for line in completed.stdout.splitlines()
+        if line.startswith(PROBE_MARKER)
+    ]
+    assert len(verdicts) == 1, (
+        f"zond `{PROBE_MARKER}` satrini {len(verdicts)} marta chop etdi — chiqish "
+        f"shakli o'zgargan va natija o'qib bo'lmaydi.\nstdout:\n{completed.stdout}"
+    )
+    return verdicts[0]
+
+
+def _assert_sentry_reaches_every_process() -> None:
+    """Sentry HAQIQIY planer jarayonida TIRIK (SC#5 ning ikkinchi yarmi, 2/2).
+
+    =======================================================================
+    ⛔ BU O'LCHOV `04-VERIFICATION.md` NING BO'SHLIG'INI QAYTA TUG'DIRMASLIK
+       UCHUN. Ilgari bu joyda IKKI elementli kirish-nuqta ro'yxati turardi
+       va u `scheduler` jarayonini struktura jihatidan ko'ra olmasdi.
+
+    ⚠ NAZORAT YUGURISHI MAJBURIY: AYNAN o'sha zond bo'sh `SENTRY_DSN` bilan
+      `False` berishi SHART. Usiz zond doimiy `True` qaytaradigan bo'lib
+      qolsa test hech nimani o'lchamasdi — bu fazaning O'ZI qidirayotgan
+      «bo'sh to'plam ustida yashil» sinfi.
+
+    ⚠ KOD KIRISH NUQTALARINING to'liq ro'yxati bu yerda EMAS: uni
+      `tests/unit/test_sentry_processes.py` `compose.yaml` dan HOSILA
+      qiladi. Bu yerda mezonning O'Z jumlasi o'lchanadi — «xato Sentry'da
+      ko'rinadi» — va u eng nozik jarayonda o'lchanadi.
+    =======================================================================
+    """
+    assert _run_scheduler_probe(PROBE_DSN) == "True", (
+        "`SENTRY_DSN` berilgan holda ham planer jarayonida Sentry O'RNATILMADI — "
+        "`taskiq scheduler` `CLIENT_STARTUP` ni ateshlaydi (taskiq "
+        "cli/scheduler/run.py:392 + abc/broker.py:187-191), ya'ni `WORKER_STARTUP` "
+        "ilmog'i u yerda ISHLAMAYDI va planerning istisnolari faqat konteyner "
+        "jurnalida qolardi"
+    )
+    assert _run_scheduler_probe("") == "False", (
+        "zond DSN'siz ham `True` qaytardi — u Sentry'ning holatini emas, doimiy "
+        "qiymatni o'lchayapti va yuqoridagi da'vo BO'SH bo'lardi"
+    )
 
 
 # ===========================================================================
