@@ -26,7 +26,35 @@ kuzatuv uch qatlamli va har qatlam **boshqa turdagi jimlikni** ushlaydi.
 |---|--------|------------------|--------------------------|-------|
 | 1 | `capture_tick` + `alert_sweep` | **worker** konteyneri | «Ish umuman bajarilmadi» — reja materializatsiya qilingan, slot `missed` bo'lgan | ✅ qurilgan |
 | 2 | Kunlik dayjest (20:00) | **worker** konteyneri | «Butun stek o'lik» — xabar **kelmasa** bu ham signal | ✅ qurilgan |
-| 3 | Tashqi ping → `/internal/self-check` | **quti tashqarisida** | «VPS butunlay o'ldi» | ⚠ **ops ishi**, §4 |
+| 3 | Tashqi ping → `/internal/self-check` | **quti tashqarisida** | «VPS butunlay o'ldi» | ⚠ **ops ishi**, §5 |
+
+### 1.1 `scheduler` konteyneri — u ham Sentry'ni O'ZI o'rnatadi
+
+`scheduler` — 1- va 2-qatlamning **tetigi**: `capture.tick` (har daqiqada),
+`retention.daily`, `alert.sweep` (har 5 daqiqada) va `alert.digest` (20:00)
+navbatga aynan u qo'yadi. Ya'ni planer to'xtasa **`alert_sweep` ham u bilan
+to'xtaydi** — Telegram yo'li yopiladi va yuqoridagi ikkala qatlam birdan
+jim bo'ladi. D-21 bo'yicha tashqi kuzatuvchi esa **kod emas** (§5), demak
+o'sha holatda qolgan yagona avtomatik signal — planerning O'Z xato hisoboti.
+
+Shuning uchun:
+
+| Nima | Qayerda |
+|------|---------|
+| `scheduler` jarayoni ishga tushganda Sentry'ni O'ZI o'rnatadi | `taskiq` planer `CLIENT_STARTUP` hodisasini ateshlaydi (`WORKER_STARTUP` ni EMAS), ilmoq shu hodisaga ulangan |
+| Jadval yuborishdagi nosozlik | `schedule_send_failed` jurnal hodisasi **+ Sentry hodisasi**, istisno esa QAYTA KO'TARILADI (taskiq semantikasi o'zgarmaydi) |
+| Ishga tushish satri | `scheduler_started ... "sentry": true` yoki `false` — **jim ishlash taqiqlangan** |
+
+⚠ Bu qatlam `04-13` da qo'shildi: taskiq planer vazifani
+`asyncio.create_task` bilan yuboradi va `add_done_callback` istisnoni
+**O'QIMAYDI**, ya'ni broker yiqilsa (masalan Valkey yetib bo'lmasa) tik
+jimgina to'xtardi va Sentry'ga hech nima bormasdi.
+
+⚠ **Halol chegara:** bu yerda o'lchangani `init()` ning chaqirilishi va
+istisnoning `capture_exception` ga borishi. **Hodisaning haqiqiy Sentry
+loyihasiga yetib borishi** haqiqiy DSN talab qiladi va u ops bandi:
+`04-HUMAN-UAT.md` #7, egasi **Ops**, tetigi — `.env` ga haqiqiy
+`SENTRY_DSN` yozilgan kun.
 
 ### Halol chegara — buni yozib qo'yish shart
 

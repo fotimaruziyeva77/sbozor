@@ -19,15 +19,15 @@ bitta test · meta-test · mock'siz o'lchov) yashil. Ombor — HAQIQIY
 SeaweedFS konteyneri, NVR — HAQIQIY `nvr-sim` konteyneri (Digest auth
 bilan), baza — HAQIQIY Postgres.
 
-⛔ **LEKIN HAMMASI SIMULYATOR USTIDA O'LCHANGAN.** Quyidagi oltita band
-real uskuna, real vaqt yoki real odam talab qiladi. Ularning
-BIRORTASI ham «o'lchandi» deb ko'rsatilmaydi va ularning natijasi hech
-qayerda da'vo qilinmagan. Ular fazani **bloklamaydi** (2026-08-01
+⛔ **LEKIN HAMMASI SIMULYATOR USTIDA O'LCHANGAN.** Quyidagi yettita band
+real uskuna, real vaqt, real tashqi xizmat yoki real odam talab qiladi.
+Ularning BIRORTASI ham «o'lchandi» deb ko'rsatilmaydi va ularning natijasi
+hech qayerda da'vo qilinmagan. Ular fazani **bloklamaydi** (2026-08-01
 self-service direktivasi), lekin «real bozorda ishlaydi» degan da'vo
 BERILMAGAN.
 
 ⚠ Bu ro'yxat `04-VALIDATION.md` ning `human_only_verifications` bloki
-bilan **bir xil to'plam** (oltita band, tartibi bir xil) va
+bilan **bir xil to'plam** (yettita band, tartibi bir xil) va
 `nyquist_compliant` hisob-kitobi aynan o'sha blokdan o'qiladi — bu fayl
 unga kirmaydi, lekin unga ZID ham bo'lmasligi kerak.
 
@@ -197,12 +197,53 @@ umuman band qilmaydi). Ikkala yo'l ham bugun mavjud va ikkalasi ham
 test bilan qoplangan; o'zgaradigan narsa — MA'LUMOT.
 result: [pending]
 
+### 7. Planer istisnosi HAQIQIY Sentry loyihasida ko'rinadi
+
+**Nega avtomatlashtirib bo'lmaydi:** darvoza `sentry_sdk.init()` ning
+CHAQIRILGANINI va planerning yutilgan istisnosi `capture_exception` ga
+BORGANINI o'lchaydi — hodisaning haqiqiy Sentry loyihasiga **YETIB
+BORISHINI emas**. CI'da DSN yo'q, va uchinchi tomon xizmatiga boradigan
+test uni tarmoq hamda haqiqiy tokenga bog'lardi; bunday test soxta yashil
+bo'lib «xatolar Sentry'da» degan **yolg'on ishonch** berardi — bu #4
+(Telegram) bandi bilan AYNAN bir xil sabab, Pitfall 10.
+
+⚠ **Darvozaning chegarasi ochiq aytiladi.** Bugun o'lchanadigan narsalar:
+(a) `SENTRY_DSN` beriladigan HAR jarayon `init_sentry()` ni chaqiradi —
+`tests/unit/test_sentry_processes.py` buni `compose.yaml` dan HOSILA
+qiladi; (b) planer jarayonida `init()` HAQIQATAN bajariladi — `test_sc5_...`
+ning subprocess zondi `SENTRY_ACTIVE=True` beradi va nazorat yugurishi
+DSN'siz `False`; (c) `ObservedScheduler.on_ready` yutilgan istisnoni
+`capture_exception` ga uzatadi —
+`tests/unit/test_scheduler_observability.py`. O'lchanMAYDIGANI bitta va u
+zanjirning oxirgi bo'g'ini: **hodisa Sentry serveriga yetib bordimi.**
+
+**Egasi:** Ops
+**Tetigi:** `.env` ga haqiqiy `SENTRY_DSN` yozilgan kun (Sentry loyihasi
+ochilib, DSN olingandan keyin)
+
+expected: `docker compose up -d --build core-api worker scheduler` dan
+keyin uchala konteynerning jurnalida Sentry yoqilgani ko'rinadi
+(`worker_started ... sentry=True`, `scheduler_started ... "sentry": true`);
+so'ng planerga ataylab yetib bo'lmaydigan broker beriladi (masalan
+`VALKEY_URL` ni vaqtincha noto'g'ri manzilga o'zgartirish) va Sentry
+loyihasining **Issues** ro'yxatida `ObservedScheduler.on_ready` dan kelgan
+hodisa paydo bo'ladi — ichida `task_name` va `schedule_id` bor, shaxsiy
+ma'lumot YO'Q (jadval vazifalarining to'rttasi ham argumentsiz).
+⚠ Tekshiruvdan keyin `VALKEY_URL` qaytariladi. ⚠ `include_local_variables`
+qarori (`04-12` ning Threat Flags bandi) aynan shu kuni qayta ko'riladi —
+haqiqiy hodisa kelmaguncha uni baholab bo'lmaydi.
+
+⚠ Bu band ham **FOUND-06** ning chegarasida: `Done` holati «xato Sentry'da
+KO'RINADI» jumlasini CI'da isbotlanmagan holda qoldiradi va bu ochiq
+aytiladi.
+result: [pending]
+
 ## Summary
 
-total: 6
+total: 7
 passed: 0
 issues: 0
-pending: 6
+pending: 7
 skipped: 0
 blocked: 0
 
@@ -214,11 +255,19 @@ direktivasi bo'yicha ular fazani yoki jarayonni bloklamaydi.
 
 **Diqqat — talab holatlariga ta'siri:**
 
-* **4- va 5-bandlar FOUND-06 niki.** Ular bajarilmaguncha «alert
-  HAQIQATAN yetib boradi» degan da'vo BERILMAGAN bo'lib qoladi. Talabning
-  qolgan uch jumlasi (kamera offline, o'tkazib yuborilgan snapshot,
-  backup xatosi -> alert; xatolar Sentry'da) o'lchangan va dalili
-  `04-12-SUMMARY.md` da nomma-nom.
+* **4-, 5- va 7-bandlar FOUND-06 niki.** Ular bajarilmaguncha «alert
+  HAQIQATAN yetib boradi» va «xato HAQIQIY Sentry loyihasida ko'rinadi»
+  degan da'volar BERILMAGAN bo'lib qoladi. Talabning qolgan jumlalari
+  (kamera offline, o'tkazib yuborilgan snapshot, backup xatosi -> alert;
+  Sentry'ning `SENTRY_DSN` oladigan HAR jarayonda o'rnatilishi va
+  planerning yutilgan istisnosining `capture_exception` ga borishi)
+  o'lchangan va dalili `04-12-SUMMARY.md` hamda `04-13-SUMMARY.md` da
+  nomma-nom.
+
+  ⚠ **7-band 4- va 5-bandlardan BOSHQA narsani ochiq qoldiradi va bu farq
+  muhim:** #4 alertning YETKAZILISHI haqida, #5 tashqi kuzatuvchi haqida,
+  #7 esa xato-hisobot zanjirining OXIRGI bo'g'ini haqida. Uchtasi bir-birini
+  ALMASHTIRMAYDI.
 * **1-band CAM-06 ning `Done` holatini BEKOR QILMAYDI** — talab matni
   «qorong'i/buzuq/bo'sh kadr avtomatik belgilanadi va `light_mode` bilan
   saqlanadi» deydi va aynan shu o'lchangan. Sozlanadigan narsa —

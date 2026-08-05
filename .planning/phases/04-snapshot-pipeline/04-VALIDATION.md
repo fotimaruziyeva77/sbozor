@@ -32,6 +32,10 @@ human_only_verifications:
     why_not_automatable: Simulyator RTSP sessiya limitini umuman modellamaydi (3-faza tekshiruvida ochiq yozilgan). Chegara firmware va bitreytga bog'liq va sonning o'zi faqat qurilmada o'lchanadi
     owner: Ops
     trigger: real NVR ulanganda — WireGuard tunneli ko'tarilgach
+  - item: Planer istisnosi haqiqiy Sentry loyihasida ko'rinadi
+    why_not_automatable: Darvoza sentry_sdk.init() ning chaqirilishini va yutilgan on_ready istisnosining capture_exception ga borishini o'lchaydi — hodisaning haqiqiy Sentry loyihasiga YETIB BORISHINI emas. CI'da DSN yo'q; uchinchi tomon xizmatiga boradigan test soxta yashil ishonch berardi (Telegram bandi bilan aynan bir xil sabab, Pitfall 10)
+    owner: Ops
+    trigger: .env ga haqiqiy SENTRY_DSN yozilgan kun — Sentry loyihasi ochilib DSN olingandan keyin
 automated_replacements:
   - was: 90 kunni kutish (saqlash siyosati amalda ishlaydimi)
     now: pytest tests/integration/test_retention.py tests/integration/test_phase4_criteria.py -k sc4 -q — RetentionPolicy(full_days=0) + retention_daily(today=<sana>), haqiqiy SeaweedFS ustida
@@ -41,8 +45,10 @@ automated_replacements:
     now: pytest tests/integration/test_snapshot_quality.py -q — nvr-sim ning frame_mode boshqaruvi + tests/fixtures/frames.py sintetik JPEG generatori
   - was: Yarim tunda gate ni ishga tushirib flaky testni kutish
     now: pytest tests/tenancy/test_snapshot_domain_meta.py -q — _anchor_today() bugungi kunga qat'iy bog'langan qator yozadi, ya'ni soat holatiga bog'liqlik yo'q
-  - was: Deploy'da worker istisnosining Sentry'ga borishini kutish
-    now: pytest tests/unit/test_sentry_scrub.py -q — test_both_processes_install_sentry ikkala kirish nuqtasining manba matnini o'qiydi
+  - was: Deploy'da yangi jarayon kuzatuvsiz qolganini payqashni kutish
+    now: pytest tests/unit/test_sentry_processes.py -q — darvoza SANAMAYDI: compose.yaml da SENTRY_DSN oladigan HAR servis uchun kirish nuqtasini command dan chiqaradi va o'sha obyektning hodisa reyestrida init_sentry( bo'lishini talab qiladi; topilmagan har bosqich pytest.fail
+  - was: Deploy'da planer istisnosining Sentry'ga borishini kutish
+    now: pytest tests/integration/test_phase4_criteria.py -k sc5 tests/unit/test_scheduler_observability.py -q — subprocess zondi planer jarayonida SENTRY_ACTIVE=True beradi (nazorat yugurishi DSN'siz False) va ObservedScheduler.on_ready yutilgan istisnoni capture_exception ga uzatib qayta ko'taradi
 ---
 
 # Phase 4 — Validation Strategy
@@ -221,6 +227,11 @@ kuchliroq ta'sir qiladi — u qisqa).
 | 04-12/T1 | 04-12 | 8 | CAM-04, CAM-05, CAM-06, CAM-07, FOUND-06 | T-04-90, T-04-91, T-04-95 | Beshala mezon bitta buyruqda; meta-test mezon yo'qolishini tutadi; S3 mock'i to'silgan | integration (`sim`) | `npm run sim:up && pytest tests/integration/test_phase4_criteria.py -q` | yangi | ✅ green |
 | 04-12/T2 | 04-12 | 8 | CAM-06, CAM-07, FOUND-06 | T-04-92, T-04-94 | Chegara olti o'lchov asosida; `nyquist_compliant` hisoblangan; qo'lda bandlar ega va tetik bilan | script gate | `node scripts/check-validation-signoff.mjs .planning/phases/04-snapshot-pipeline/04-VALIDATION.md` | yangi | ✅ green |
 | 04-12/T3 | 04-12 | 8 | CAM-04, CAM-05, CAM-06, CAM-07, FOUND-06 | T-04-93 | Talab holatlari dalil bilan; ro'yxat ↔ Traceability parity; ROADMAP yakunlangan | script gate | `npm run requirements:check` | yangi | ✅ green |
+| 04-13/T1 | 04-13 | BW1 | FOUND-06 | T-04-96, T-04-97, T-04-98 | `taskiq scheduler` `CLIENT_STARTUP` ni ateshlaydi, ya'ni `init_sentry()` u yerda ilmoq bilan chaqiriladi; `ObservedScheduler.on_ready` taskiq yutib yuboradigan istisnoni jurnal + Sentry'ga chiqarib QAYTA KO'TARADI; ilmoq `Settings` ga BOG'LANMAYDI | unit | `pytest tests/unit/test_scheduler_observability.py -q` | yangi | ✅ green |
+| 04-13/T2 | 04-13 | BW1 | FOUND-06 | T-04-98, T-04-99, T-04-100 | Darvoza jarayonlarni SANAMAYDI — `compose.yaml` da `SENTRY_DSN` oladigan har servisdan HOSILA qiladi; noma'lum `command` shakli va topilmagan kirish nuqtasi YIQILADI; vendor xulqi manbadan qulflangan | unit | `pytest tests/unit/test_sentry_processes.py -q` | yangi | ✅ green |
+| 04-13/T3 | 04-13 | BW1 | CAM-04, CAM-05, CAM-06, CAM-07, FOUND-06 | T-04-96, T-04-SC | SC#5 ning Sentry yarmi manba matnidan emas, HAQIQIY subprocess'dan o'lchanadi (nazorat yugurishi DSN'siz `False`); mezonlar soni o'zgarmaydi va meta-test buni talab qiladi | integration (`sim`) | `pytest tests/integration/test_phase4_criteria.py -q` | mavjud (kengaytirildi) | ✅ green |
+| 04-14/T1 | 04-14 | BW2 | CAM-07 | T-04-101 | `.env.example` ↔ `s3.json.example` AYNAN teng va bo'sh emas; da'vo TENGLIK (yo'qlik emas); darvoza dasturchining `.env` ini O'QIMAYDI; `compose.yaml` ning `:-` siz qarori tegilmaydi | unit | `pytest tests/unit/test_storage_config.py tests/unit/test_snapshot_settings.py -q` | mavjud (kengaytirildi) | ✅ green |
+| 04-14/T2 | 04-14 | BW2 | CAM-07, FOUND-06 | T-04-102, T-04-103 | FOUND-06 dalili sanoq emas, hosila darvozaga tayanadi; ro'yxat ↔ Traceability parity; `human_only_verifications` ↔ `04-HUMAN-UAT.md` bir xil to'plam va tartib; `Automated Command` katagida quvur belgisi yo'q | script gate | `node scripts/check-requirements-sync.mjs && node scripts/check-validation-signoff.mjs .planning/phases/04-snapshot-pipeline/04-VALIDATION.md` | mavjud (kengaytirildi) | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -268,6 +279,7 @@ kuchliroq ta'sir qiladi — u qisqa).
 | Telegram alertining haqiqatan yetib borishi | FOUND-06 | Bot tokeni, chat id va tarmoq — CI'da yo'q. Soxta yashil test alert ishlayapti deb yolg'on ishonch berardi | Ops | Bot sozlanganda |
 | Tashqi dead-man's switch | FOUND-06 / D-21 | v1 da **kod yozilmaydi** — URL sozlash yo'riqnomasi va ops bandi | Ops | VPS deploy'idan keyin |
 | Real NVR'da sessiya chegarasining kadr olishga ta'siri | CAM-05 | Simulyator sessiya chegarasini modellashtirmaydi (3-faza tekshiruvida ochiq yozilgan). `max_concurrent=1` uni **bloklovchi emas**, faqat kechikish masalasi qiladi | Ops | Real NVR ulanganda |
+| Planer istisnosi haqiqiy Sentry loyihasida ko'rinadi | FOUND-06 | Darvoza `init()` ning chaqirilishini va yutilgan `on_ready` istisnosining `capture_exception` ga borishini o'lchaydi — hodisaning **yetib borishini emas**. CI'da DSN yo'q; haqiqiy Sentry'ga boradigan test soxta yashil ishonch berardi | Ops | `.env` ga haqiqiy `SENTRY_DSN` yozilgan kun |
 
 > Bu bandlar **fazani bloklamaydi** (2026-08-01 self-service direktivasi). `nyquist_compliant` ularning bajarilganini emas, **shaklini** tekshiradigan skript bilan hisoblanadi — 2-fazadagi `scripts/check-validation-signoff.mjs` naqshi.
 
@@ -275,19 +287,24 @@ kuchliroq ta'sir qiladi — u qisqa).
 
 ## Validation Sign-Off
 
-- [x] Har taskda `<automated>` verify yoki Wave 0 bog'liqligi bor — 36/36 qatorda `Automated Command` to'ldirilgan (skript majburlaydi)
+- [x] Har taskda `<automated>` verify yoki Wave 0 bog'liqligi bor — 41/41 qatorda `Automated Command` to'ldirilgan (skript majburlaydi; bo'shliq yopish to'lqini `04-13` ning uchta va `04-14` ning ikkita qatorini qo'shdi)
 - [x] Namuna uzluksizligi: ketma-ket 3 taskda avtomatik verify yo'qligi holati yo'q
 - [x] Wave 0 ning 12 bandi (11 + W0-F7) qoplangan; uchala 🔇 bandi **birinchi migratsiyadan oldin** (`04-01`/`04-02`, `0014` dan oldin)
 - [x] W0-1 o'lchandi (`BILLABLE_ANCHOR_SUPPORTED = true`) va `0014` FK variantida yozildi — trigger variantiga ehtiyoj bo'lmadi
 - [x] Watch-mode bayrog'i yo'q
 - [x] Sifat filtri sintetik kadrlar bilan **darvoza**, konventsiya emas (W0-9 + W0-10) — `test_quality_filter.py` + `test_snapshot_quality.py` + `test_sc3_...`
 - [x] To'lqin chegarasi 6 o'lchov asosida qayta belgilandi: **1200 s -> 900 s** (eng yomon 745 s + 20 %); `gate:fast` 180 s da qoldi, joriy o'lchov 68 s
-- [x] `nyquist_compliant: true` skript bilan **hisoblangan**: `node scripts/check-validation-signoff.mjs .planning/phases/04-snapshot-pipeline/04-VALIDATION.md` exit 0 (36 qator · 6 inson bandi)
+- [x] `nyquist_compliant: true` skript bilan **hisoblangan**: `node scripts/check-validation-signoff.mjs .planning/phases/04-snapshot-pipeline/04-VALIDATION.md` exit 0 (41 qator · 7 inson bandi). ⚠ Argumentsiz `npm run validation:check` **2-faza** fayliga ishora qiladi (`DEFAULT_FILE` qadalgan) va bu faylni QAMRAMAYDI
+- [x] Bo'shliq yopish to'lqini yozildi: `04-VERIFICATION.md` ning YAGONA bo'shlig'i (`scheduler` jarayonida Sentry) `04-13` da uch mustaqil qatlamda yopildi; `04-14` uning atrofidagi ochiq bandlarni (`deferred-items.md` #2/#3) yopdi va regressiyasiz ekanini o'lchadi
+- [x] Yettinchi inson bandi qo'shildi (`04-HUMAN-UAT.md` #7 — hodisaning haqiqiy Sentry loyihasiga yetib borishi, egasi Ops). ⚠ **90 kunlik saqlash bandi (#2) O'ZGARMADI va YOPILMADI** — vaqtni kutib bo'lmaydi; mexanizm dalili siyosat dalili sifatida ko'rsatilmaydi
 
-**Approval:** ✅ **2026-08-05, `04-12`** — beshala faza mezoni
+**Approval:** ✅ **2026-08-05, `04-14`** — beshala faza mezoni
 `tests/integration/test_phase4_criteria.py` bilan BITTA buyruqda
 o'lchanadi; `nyquist_compliant` skript bilan hisoblangan; chegara olti
-o'lchov asosida qayta belgilangan.
+o'lchov asosida qayta belgilangan; `04-VERIFICATION.md` ning bo'shlig'i
+yopilgan va uning regressiyasizligi o'lchangan.
+
+*Oldingi imzo: 2026-08-05, `04-12` — o'sha payt 36 qator · 6 inson bandi.*
 
 ⚠ **IMZO NIMANI ANGLATMAYDI.** U «hamma narsa tekshirildi» degani emas —
 u «tekshirilgan narsa NOMLANGAN, tekshirilmagani ham NOMLANGAN» degani.
