@@ -63,7 +63,7 @@ SENTRY_ENV_KEY: Final = "SENTRY_DSN"
 """Jarayonni «kuzatuv va'da qilingan» deb belgilaydigan YAGONA belgi.
 
 ⚠ Ro'yxat EMAS, PREDIKAT: darvoza servis NOMLARINI bilmaydi va bilishi
-  ham kerak emas. `compose.yaml` bu kalitni kimga berса, o'sha jarayon
+  ham kerak emas. `compose.yaml` bu kalitni kimga bersa, o'sha jarayon
   `init_sentry()` ni chaqirishi SHART.
 """
 
