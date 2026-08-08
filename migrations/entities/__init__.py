@@ -40,6 +40,9 @@ __all__ = [
     "MARKET_DOMAIN_TENANT_TABLES",
     "NVR_AUDITED_TABLES",
     "NVR_TENANT_TABLES",
+    "OCCUPANCY_AUDITED_TABLES",
+    "OCCUPANCY_DELETE_ORDER",
+    "OCCUPANCY_TENANT_TABLES",
     "RLS_TABLES",
     "SNAPSHOT_AUDITED_TABLES",
     "SNAPSHOT_DELETE_ORDER",
@@ -286,6 +289,139 @@ bozorni o'chirmoqchi bo'lgan admin ekranida ko'rinardi.
 tuzatish ro'yxati tayyor turadi.
 """
 
+# ===========================================================================
+# 5-FAZA — BANDLIK DOMENI (KAMERA ZONALARI, CV VA NAZORATCHI TASDIG'I)
+# ===========================================================================
+
+OCCUPANCY_TENANT_TABLES: tuple[str, ...] = (
+    "camera_zones",
+    "occupancy_events",
+    "audit_rounds",
+    "review_assignments",
+    "zone_reviews",
+    "stall_slot_occupancy",
+)
+"""`0018_occupancy_domain` yaratadigan tenant jadvallari (AI-01…AI-06).
+
+TARTIB — FK bo'yicha OTA-ONADAN bolalarga, `SNAPSHOT_TENANT_TABLES` bilan
+aynan bir xil qoida:
+  * `camera_zones`         -> `cameras` VA `stalls` ga (IKKITA kompozit FK);
+  * `occupancy_events`     -> `snapshots (id, is_billable)` va `camera_zones` ga;
+  * `review_assignments`   -> `occupancy_events` va `audit_rounds` ga;
+  * `zone_reviews`         -> `review_assignments` ga;
+  * `stall_slot_occupancy` -> `stalls` va `occupancy_events` ga.
+`0018` shu ro'yxat ustidan `enable_tenant_rls` + `tenant_policy` +
+`owner_bootstrap_policy` tsiklini bajaradi, `downgrade()` esa
+`reversed(...)` bilan yuradi.
+
+⚠ RO'YXAT `ALL_TENANT_TABLES` GA HALI QO'SHILMAGAN va bu ATAYIN — sabab
+o'sha konstantaning yonidagi izohda (`04-01` da O'LCHANGAN `UndefinedTable`).
+Qo'shish `0018` BILAN BIR COMMITDA bajariladi (`05-05` / T2), qarzni esa
+`test_meta.py::test_occupancy_registries_are_self_consistent` mexanik ushlab
+turadi: shart BAZAGA bog'langan, ya'ni jadval tug'ilgan zahoti darvoza O'ZI
+QUROLLANADI.
+
+BU RO'YXAT AUDIT UCHUN EMAS. Trigger faqat `OCCUPANCY_AUDITED_TABLES` ga
+ulanadi (pastda) va farq ATAYIN — oltala jadval RLS ostida bo'lishi SHART,
+audit triggeri ostida esa faqat ikkitasi.
+
+QARORLAR (`05-CONTEXT.md`):
+  * D-06 — NOM TO'QNASHUVI: jadval `camera_zones`, `zones` EMAS. `zones`
+    2-fazada bozor hududlari uchun BAND (`models/market.py::Zone`) va unga
+    `stalls.zone_id NOT NULL` tayanadi, ya'ni `zones` deb nomlash
+    migratsiyani to'qnashtirardi. Router ham `camera_zones.py`
+    (`zones.py` ga TEGILMAYDI), frontend papkasi ham `camera-zones/`.
+  * D-21 — BILLING LANGARI: `occupancy_events` 4-fazaning strukturaviy
+    langariga osiladi — `FOREIGN KEY (snapshot_id, snapshot_is_billable)
+    REFERENCES snapshots (id, is_billable)` + `CHECK (snapshot_is_billable)`.
+    Shunda yaroqsiz kadr (`quality_verdict <> 'ok'`) bandlik dalilini
+    UMUMAN yarata olmaydi — DB rad etadi, intizom emas. Langarning O'ZI
+    4-fazada HAQIQIY `postgres:18.4` da o'lchangan
+    (`tests/fixtures/billable_probe.py`, `BILLABLE_ANCHOR_SUPPORTED = true`)
+    va `uq_snapshots_billable_anchor` `INDEX_EXCEPTIONS` da shu sabab bilan
+    turadi. 5-faza langarni FAQAT ISHLATADI, qayta o'lchamaydi (§S-4).
+  * D-12 — `occupancy_events` O'ZGARMAS: AI natijasi hech qachon
+    tahrirlanmaydi, qayta ishlash YANGI qator yozadi
+    (`UNIQUE (market_id, snapshot_id, camera_zone_id, model_version)`).
+"""
+
+OCCUPANCY_AUDITED_TABLES: tuple[str, ...] = ("camera_zones", "zone_reviews")
+"""`0018_occupancy_domain` da `attach_audit_trigger()` ULANADIGAN jadvallar.
+
+⚠ AUDIT ASSIMETRIYASI — TO'RTTASI ATAYIN CHIQARILGAN.
+
+`occupancy_events` CHIQARILADI va sabab `SNAPSHOT_AUDITED_TABLES` niki bilan
+bir sinfda, lekin bu yerda IKKALA argument ham KUCHLIROQ:
+
+  * HAJM: 175 kadr/kun/bozor × ~30 zona ≈ **5 000 qator/kun/bozor** — bu
+    4-fazadagi ~525 audit qatorining o'n barobari. `audit_log` append-only,
+    ya'ni u hech qachon kichraymaydi;
+  * O'ZGARMASLIK: jadval D-12 bo'yicha SHARTSIZ o'zgarmas (`0018` unga
+    o'zgarmaslik triggerini qo'yadi). **O'zgarmas jadval uchun audit
+    ma'nosiz** — u faqat INSERT ni ko'rardi va bu o'sha ma'lumotning
+    IKKINCHI NUSXASI bo'lardi. 4-fazada bu argument «odam tahrirlamaydi»
+    shaklida edi; bu yerda u konventsiya emas, DB darajasidagi FAKT.
+
+`audit_rounds`, `review_assignments` ham chiqarilgan: birinchisi tortish
+FAKTINI (`frame_size`, `frame_predicate_hash`, `drawn_at`) o'z ichida
+MUZLATIB saqlaydi, ikkinchisi esa navbat yozuvi — ikkalasi ham hodisa
+jurnali sinfida.
+
+`zone_reviews` esa AUDITDA BO'LADI va bu ro'yxatning butun mazmuni:
+u INSONNING moliyaviy oqibatli qarori (nazoratchining verdikti kunlik
+patta hisobini o'zgartiradi), ya'ni `schema_contract.AUDITED_TABLES` dagi
+`tariffs` / `stall_assignments` bilan BIR OILADA. `camera_zones` ham
+auditda: poligon jimgina siljitilsa o'sha rastaning «band, lekin
+to'lovsiz» dalili YO'QOLADI — `cameras.is_archived` bilan aynan bir xil
+nazoratni jimgina o'chirish yo'li.
+
+Ro'yxat ALOHIDA, chunki `0018` ikki xil tsikl qiladi: RLS
+`OCCUPANCY_TENANT_TABLES` bo'yicha, audit esa shu yerdan.
+"""
+
+OCCUPANCY_DELETE_ORDER: tuple[str, ...] = (
+    "stall_slot_occupancy",
+    "zone_reviews",
+    "review_assignments",
+    "audit_rounds",
+    "occupancy_events",
+    "camera_zones",
+)
+"""`market_delete_draft()` kaskadiga qo'shiladigan tartib (W0-6, `0019`).
+
+⚠ IKKI FAKT, IKKALASI HAM MAJBURIY:
+
+**(a) RO'YXAT LITERAL — HOSILA EMAS.** Bugun u tasodifan
+`tuple(reversed(OCCUPANCY_TENANT_TABLES))` bilan USTMA-UST TUSHADI, chunki
+bu domenda FK zanjiridan chetda turgan jadval YO'Q (4-fazada `alert_events`
+aynan shunday edi va aynan shu sabab ikki ro'yxatni AJRATGAN edi).
+
+⛔ USTMA-USTLIK QIYMATNI HOSILA QILISH UCHUN SABAB EMAS —
+`OCCUPANCY_DELETE_ORDER = tuple(reversed(OCCUPANCY_TENANT_TABLES))` deb
+yozish §S-2 ning butun qoidasini buzardi: RLS tartibi (ota-onadan bolalarga)
+va o'chirish tartibi (bolalardan ota-onaga) IKKI XIL SAVOLGA javob beradi
+va ular BIR-BIRIDAN MUSTAQIL o'zgaradi. Zanjirdan tashqaridagi bitta jadval
+qo'shilgan kuni hosila qiymat JIMGINA noto'g'ri bo'lardi — kaskad o'z chet
+el kalitiga urilib yiqilardi va buni faqat qoralama bozorni o'chirmoqchi
+bo'lgan admin ekranida ko'rardi. Taqiq mexanik qulflangan:
+`test_meta.py::test_occupancy_delete_order_is_declared_not_derived` MANBA
+MATNINI o'qiydi va `reversed(OCCUPANCY_TENANT_TABLES)` iborasini topsa
+qizaradi (§S-10 — darvoza sanoq emas, manbadan hosila).
+
+**(b) BUTUN BLOK MAVJUD SNAPSHOT BLOKIDAN OLDIN TURISHI SHART.**
+`occupancy_events` `snapshots (id, is_billable)` ga kompozit FK bilan
+tayanadi, `snapshots` esa `SNAPSHOT_DELETE_ORDER` ning BIRINCHI `DELETE` i.
+Blok snapshot blokidan keyin qo'yilsa kaskad o'z chet el kalitiga urilib
+yiqilardi — `0012`→`0013` va `0014`→`0015` juftligining AYNAN UCHINCHI
+takrori.
+
+`0019` va `MARKET_DELETE_DRAFT` kengaytmasi qiymatni SHUNDAN oladi
+(`05-05` / T3). `market_delete_draft()` ning O'ZI bu rejada
+O'ZGARTIRILMAYDI: reyestr ATAYIN `0018` dan OLDIN yoziladi, shunda
+`test_cascade_covers_every_table_referencing_markets` qizargan zahoti
+tuzatish ro'yxati tayyor turadi.
+"""
+
 ALL_TENANT_TABLES: tuple[str, ...] = (
     *TENANT_TABLES,
     *MARKET_DOMAIN_TENANT_TABLES,
@@ -316,6 +452,21 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     # shart BAZAGA bog'langan, ya'ni jadval tug'ilgan zahoti darvoza O'ZI
     # QUROLLANADI.
     *SNAPSHOT_TENANT_TABLES,
+    # ⚠ `*OCCUPANCY_TENANT_TABLES` BU YERDA ATAYIN YO'Q (`05-01` / T1).
+    #
+    # Sabab yuqoridagi ✅ bandda O'LCHANGAN va u 5-fazada AYNAN takrorlanadi:
+    # `ALL_ENTITIES` shu ro'yxatdan quriladi, `alembic_utils` komparatori esa
+    # har bir entity'ni HAQIQATAN yaratib ko'radi (`simulate_entity`), ya'ni
+    # hali mavjud bo'lmagan `camera_zones` ga policy ro'yxatga olinishi
+    # `test_market_domain_meta.py::test_autogenerate_is_empty` ni
+    # `UndefinedTable` bilan DARHOL yiqitardi.
+    #
+    # Qo'shish `0018_occupancy_domain` BILAN BIR COMMITDA bajariladi
+    # (`05-05` / T2) — `04-03` ning `0014` bilan qilgani bilan bir xil qadam.
+    # Qarz ko'rinmas emas: `test_meta.py::
+    # test_occupancy_registries_are_self_consistent` shartni BAZAGA bog'laydi,
+    # ya'ni jadval tug'ilgan zahoti darvoza O'ZI QUROLLANADI va `05-05`
+    # ro'yxatni kengaytirmaguncha QIZIL turadi.
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 
