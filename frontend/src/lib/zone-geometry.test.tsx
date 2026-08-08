@@ -107,28 +107,67 @@ describe("normalize / denormalize (05-UI-SPEC §6.2)", () => {
     expect(denormalize([0.25, 0.75], 1280, 720)).toEqual([320, 540]);
   });
 
+  test("FIXTURE HAQIQIYLIGI — tanlangan piksel qo'pol arifmetikada YO'QOTADI", () => {
+    /*
+     * ⚠ BU ASSERT SABOTAJ BILAN TOPILDI VA U TESTNING ENG MUHIM QISMI.
+     *
+     *   Dastlabki aylanma testi [0,0], [1,1], [437,291], [1278,718],
+     *   [1279,719] juftlarini ishlatgan edi. `denormalize` dan
+     *   yaxlitlashni OLIB TASHLAGAN sabotaj hech nimani QIZARTIRMADI:
+     *   o'sha beshta qiymat IEEE754 da tasodifan aniq aylanadi. Ya'ni
+     *   test o'z farazini tasdiqlab, YO'QOTISHNI umuman o'lchamagan edi.
+     *
+     *   1279 kenglikda 1280 ta butun pikseldan 183 tasi qo'pol
+     *   arifmetikada yo'qotadi (o'lchandi), lekin 437 ular orasida
+     *   EMAS edi.
+     *
+     * Shuning uchun fixture endi O'LCHANGAN FIZIK FAKTGA tayanadi va bu
+     * assert uni har ishga tushishda qayta tekshiradi: agar bu qator
+     * yashil bo'lsa, keyingi assert HAQIQATAN yaxlitlashni o'lchayapti.
+     * Bu yerda `denormalize` ATAYIN chaqirilmaydi — bu RAD ETILGAN
+     * arifmetikaning o'zi.
+     */
+    expect((3 / 1279) * 1279).not.toBe(3);
+    expect((13 / 719) * 719).not.toBe(13);
+  });
+
   test("⚠ AYLANMA YO'QOTISHSIZ — butun pikselda `denormalize(normalize(p)) === p`", () => {
     /*
-     * ENG MUHIM ASSERT. Kenglik/balandlik ATAYIN ikkilik kasrga
-     * bo'linmaydigan qiymatlar (1279, 719 — tub sonlar emas, lekin 2 ning
-     * darajasi ham emas): 437/1279 ikkilik sanoqda aniq ifodalanmaydi,
-     * ya'ni qo'pol ko'paytirish 436.99999999999994 berardi.
-     *
-     * Bu aylanma yo'qotsa, poligon HAR SAFAR ochilib saqlanganda joyidan
-     * bir oz siljirdi va bir necha tahrirdan keyin zona rastadan
-     * "sirg'alib" chiqardi — hech qanday xato xabarisiz.
+     * ENG MUHIM ASSERT. Aylanma yo'qotsa, poligon HAR SAFAR ochilib
+     * saqlanganda joyidan bir oz siljirdi va bir necha tahrirdan keyin
+     * zona rastadan «sirg'alib» chiqardi — hech qanday xato xabarisiz,
+     * ya'ni bandlik jimgina boshqa maydondan o'lchanardi.
      */
-    for (const px of [
-      [0, 0],
-      [1, 1],
-      [437, 291],
-      [1278, 718],
+    // Yuqoridagi fixture assertida yo'qotishi O'LCHANGAN juft.
+    expect(denormalize(normalize([3, 13], 1279, 719), 1279, 719)).toEqual([
+      3, 13,
+    ]);
+  });
+
+  test("⚠ aylanma HAR BIR butun pikselda — sanab chiqilgan, tanlab olinmagan", () => {
+    /*
+     * Qo'lda tanlangan bir nechta juft yetarli emasligi yuqorida
+     * o'lchandi. Domen chekli (kadr kengligi ~1280), shuning uchun u
+     * TO'LIQ sanab chiqiladi — «omadli fixture» yo'li shu bilan
+     * butunlay yopiladi.
+     */
+    for (const [w, h] of [
       [1279, 719],
+      [1280, 720],
+      [704, 576],
     ] as const) {
-      expect(denormalize(normalize(px, 1279, 719), 1279, 719)).toEqual([
-        px[0],
-        px[1],
-      ]);
+      for (let x = 0; x <= w; x += 1) {
+        const [rx] = denormalize(normalize([x, 0], w, h), w, h);
+        if (rx !== x) {
+          throw new Error(`aylanma yo'qotdi: x=${x}, w=${w} -> ${rx}`);
+        }
+      }
+      for (let y = 0; y <= h; y += 1) {
+        const [, ry] = denormalize(normalize([0, y], w, h), w, h);
+        if (ry !== y) {
+          throw new Error(`aylanma yo'qotdi: y=${y}, h=${h} -> ${ry}`);
+        }
+      }
     }
   });
 
