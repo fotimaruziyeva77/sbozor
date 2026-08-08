@@ -73,7 +73,20 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-extend-exclude = [".venv", "node_modules", ".planning", "frontend", ".next"]
+# ⚠ `services/cv-service` — LOYIHANING IKKINCHI TOOLCHAIN'I (05-02, W0-2).
+#   U o'z `pyproject.toml` idagi ruff/mypy bloklari bilan `npm run cv:lint`
+#   ostida, `cv-tests` konteynerida tekshiriladi. Ikki konfiguratsiya bir
+#   xil fayllarni tekshirsa ular sekin-asta ajralib ketardi: `cv-service`
+#   ga qo'shilgan per-file-ignore `npm run cv:lint` da o'tib, `npm run
+#   lint` da yiqilardi va sabab kodda emas, ikki nusxada bo'lardi.
+extend-exclude = [
+    ".venv",
+    "node_modules",
+    ".planning",
+    "frontend",
+    ".next",
+    "services/cv-service",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S"]
@@ -87,7 +100,24 @@ select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S"]
 python_version = "3.13"
 strict = true
 plugins = []
-exclude = ["^frontend/", "^\\.planning/"]
+# ⚠⚠ `services/cv-service` ISTISNO QILINISHI MAJBURIY, XOHISH EMAS — VA
+#    BU O'LCHANGAN (2026-08-08):
+#
+#      services/cv-service/app/__init__.py: error: Duplicate module named
+#      "app" (also at "./services/core-api/app/__init__.py")
+#      Found 1 error in 1 file (errors prevented further checking)
+#
+#    Ikkala servisning ham paketi `app` deb ataladi (05-PATTERNS §1.2) va
+#    ular BOSHQA image'larda yashaydi, ya'ni ular hech qachon bitta
+#    jarayonda uchrashmaydi. `mypy .` esa butun reponi bitta ildizdan
+#    yuradi va ikkalasini bir vaqtda ko'radi — «errors prevented further
+#    checking» bilan BUTUN tekshiruv to'xtaydi.
+#
+#    `cv-service` o'z `mypy` ini `npm run cv:lint` ostida, O'Z
+#    konfiguratsiyasi va O'Z bog'liqliklari bilan yuritadi (u yerda
+#    `onnxruntime`/`supervision` stublari kerak, bu yerda esa ular
+#    o'rnatilmagan ham).
+exclude = ["^frontend/", "^\\.planning/", "^services/cv-service/"]
 # `tests/fixtures` paketi test modullaridan `fixtures.*` sifatida, `app` esa
 # `services/core-api` dan import qilinadi (pytest `pythonpath` bilan bir xil yo'l).
 mypy_path = "tests:services/core-api"

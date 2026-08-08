@@ -59,6 +59,56 @@ from taskiq.cli.scheduler.run import run_scheduler
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 COMPOSE: Final = REPO_ROOT / "compose.yaml"
 
+CORE_API_ROOT: Final = REPO_ROOT / "services" / "core-api"
+"""SHU KONTEYNER YURITADIGAN YAGONA KOD BAZASI.
+
+=============================================================================
+⚠⚠ 05-02 DA QO'SHILDI VA U «QULAYLIK» EMAS — U JIMGINA YOLG'ONNI YOPADI.
+
+5-faza loyihaning IKKINCHI Python servisini keltirdi (`cv-service`), va
+uning paketi ham `app` deb ataladi. Bu konteynerning `pythonpath` i esa
+`services/core-api` ni ko'radi, `services/cv-service` ni EMAS
+(`pyproject.toml:26`). Ya'ni `importlib.import_module("app.worker")`
+`cv-service` uchun ham `core-api` NING modulini qaytarardi — u yerda
+`init_sentry(` BOR, demak darvoza YASHIL bo'lardi va HECH NIMANI
+o'lchamasdi.
+
+Bu 04-12 nosozligining aynan takrori bo'lardi, faqat boshqa yo'ldan:
+o'shanda darvoza uchinchi JARAYONNI ko'rmagan, bu yerda esa u ikkinchi
+KOD BAZASINI ko'rmasdi.
+
+Shuning uchun darvoza endi har servisning KOD ILDIZINI `compose.yaml`
+dagi `build.dockerfile` dan chiqaradi va:
+
+    kod ildizi == `services/core-api`  -> IMPORT + obyekt introspeksiyasi
+    boshqa kod ildizi                  -> shu image'da import MUMKIN EMAS,
+                                          ya'ni MANBA darajasida tekshiriladi
+                                          (fayl bor, atribut bor, ilmoq bor,
+                                          `init_sentry(` bor)
+
+⛔ «O'TKAZIB YUBORISH» SHOXI YO'Q va u qo'shilmaydi: kod ildizi
+   topilmasa yoki fayl yo'q bo'lsa test YIQILADI.
+
+⚠ MANBA QATLAMI IMPORTDAN KUCHSIZROQ VA BU YASHIRILMAYDI: u ilmoqning
+  HAQIQATAN ro'yxatga tushganini emas, faylda yozilganini ko'radi.
+  Obyekt darajasidagi to'liq o'lchov begona kod bazasining O'Z
+  konteynerida yuradi —
+  `services/cv-service/tests/unit/test_sentry_entrypoints.py`.
+=============================================================================
+"""
+
+FOREIGN_HOOK_MARKERS: Final[tuple[str, ...]] = (
+    "TaskiqEvents.WORKER_STARTUP",
+    "TaskiqEvents.CLIENT_STARTUP",
+    "lifespan=",
+)
+"""Kirish nuqtasi faylida ISHGA TUSHISH reyestriga ulanish belgilari.
+
+Faqat `init_sentry(` ni izlash yetmasdi: chaqiruv hech qachon
+chaqirilmaydigan yordamchi funksiyada ham turishi mumkin. Bu belgilar
+faylda ishga tushish ilmog'i UMUMAN mavjudligini talab qiladi.
+"""
+
 SENTRY_ENV_KEY: Final = "SENTRY_DSN"
 """Jarayonni «kuzatuv va'da qilingan» deb belgilaydigan YAGONA belgi.
 
@@ -86,12 +136,22 @@ qo'shilganda qayta ko'rib chiqilmaydi.
 MIN_SENTRY_SERVICES: Final = 3
 """`SENTRY_DSN` oladigan jarayonlarning quyi chegarasi.
 
-2026-08-05 holati: `core-api`, `worker`, `scheduler`. ⚠ Bu QUYI chegara:
-to'rtinchi jarayon qo'shilsa test o'zgarmaydi, lekin (b)/(c) bosqichlari
-o'sha jarayonni ham TALAB QILADI.
+2026-08-08 holati: `core-api`, `worker`, `scheduler` va `cv-service`
+(05-02 da qo'shildi). ⚠ Bu QUYI chegara: yangi jarayon qo'shilsa test
+o'zgarmaydi, lekin (b)/(c) bosqichlari o'sha jarayonni ham TALAB QILADI —
+aynan shu `cv-service` da sodir bo'ldi.
 
 ⚠ Servis NOMLARI bu faylda ro'yxat sifatida YOZILMAGAN va bu ataylab —
   aynan nomlar ro'yxati 04-12 ning darvozasini eskirtirgan edi.
+"""
+
+MIN_BUILD_SERVICES: Final = 4
+"""`build.dockerfile` o'qilgan servislarning quyi chegarasi (05-02).
+
+Parser bu maydonni umuman ko'rmasa `_code_root_of` HAR servis uchun
+`pytest.fail` berardi — ya'ni nosozlik KO'RINARDI, lekin sababi noto'g'ri
+bo'lardi («compose'da `build` yo'q» deb o'qilardi). Bu chegara parserning
+o'zini o'lchaydi.
 """
 
 MIN_ENV_KEYS: Final = 40
@@ -114,6 +174,13 @@ class _Service(NamedTuple):
     environment: tuple[str, ...]
     command: tuple[str, ...]
     command_style: str | None
+    dockerfile: str | None = None
+    """`build.dockerfile` — servisning KOD ILDIZINI aytadigan yagona maydon.
+
+    Tayyor image'li servislarda (`db`, `cache`, `go2rtc`) u `None` bo'ladi
+    va bu TO'G'RI: ular bizning kodimizni yuritmaydi. Ular bu darvozaga
+    baribir tushmaydi — `SENTRY_DSN` ni olmaydi.
+    """
 
 
 def _strip_full_line_comments(text: str) -> list[str]:
@@ -207,6 +274,13 @@ def _compose_services() -> dict[str, _Service]:
             )
             continue
 
+        if section == "build" and indent == 6:
+            build_key, _, build_value = stripped.partition(":")
+            if build_key.strip() == "dockerfile":
+                entry = services[current]
+                services[current] = entry._replace(dockerfile=_unquote(build_value))
+            continue
+
         if section == "environment" and indent == 6:
             env_key = stripped.partition(":")[0].strip()
             if env_key:
@@ -214,6 +288,32 @@ def _compose_services() -> dict[str, _Service]:
                 services[current] = entry._replace(environment=(*entry.environment, env_key))
 
     return services
+
+
+def _code_root_of(service: _Service) -> Path:
+    """Servisning KOD ILDIZI — `build.dockerfile` dan chiqariladi.
+
+    `services/core-api/Dockerfile` -> `<repo>/services/core-api`.
+
+    ⛔ TOPILMASA `pytest.fail`: `SENTRY_DSN` olgan servis bizning kodimizni
+       yuritadi, ya'ni uning `build:` bloki BO'LISHI SHART. Tayyor image
+       bilan kelgan servis (`db`, `cache`) bu darvozaga umuman tushmaydi.
+    """
+    if not service.dockerfile:
+        pytest.fail(
+            f"`{service.name}` servisi `{SENTRY_ENV_KEY}` ni oladi, lekin uning "
+            "`build.dockerfile` maydoni `compose.yaml` da topilmadi — ya'ni "
+            "darvoza uning KOD ILDIZINI aniqlay olmaydi va qaysi kod bazasini "
+            "tekshirayotganini BILMAY qoladi. Tayyor image'li servisga "
+            f"`{SENTRY_ENV_KEY}` berilgan bo'lsa, sabab o'sha yerda."
+        )
+    root = (REPO_ROOT / service.dockerfile).resolve().parent
+    if not root.is_dir():
+        pytest.fail(
+            f"`{service.name}` uchun kod ildizi topilmadi: `{root}` "
+            f"(`build.dockerfile = {service.dockerfile}`)"
+        )
+    return root
 
 
 @pytest.fixture(scope="module")
@@ -255,6 +355,19 @@ def test_compose_parser_reads_both_command_shapes(compose_services: dict[str, _S
     assert "block" in styles, (
         'blok ro\'yxatli (`command:` + `- "..."`) buyruq UMUMAN parse qilinmadi — '
         "`core-api` shakli ko'rinmayapti"
+    )
+
+    built = [service for service in compose_services.values() if service.dockerfile]
+    assert len(built) >= MIN_BUILD_SERVICES, (
+        f"`build.dockerfile` faqat {len(built)} servisda o'qildi "
+        f"({[service.name for service in built]}), kamida {MIN_BUILD_SERVICES} "
+        "kutilgan — parser `build:` blokini ko'rmayapti va KOD ILDIZI bo'yicha "
+        "tarmoqlanish (05-02) hech qachon to'g'ri shoxga tushmasdi"
+    )
+    assert len({service.dockerfile for service in built}) >= 2, (
+        "barcha servislar BITTA Dockerfile'dan quriladi — 5-fazadan beri "
+        "loyihada IKKINCHI kod bazasi bor (`services/cv-service/Dockerfile`) "
+        "va aynan uni ajrata olish bu darvozaning yangi sharti"
     )
 
     total_env_keys = sum(len(service.environment) for service in compose_services.values())
@@ -354,6 +467,61 @@ def _handler_sources(broker: AsyncBroker, event: TaskiqEvents) -> list[str]:
     return [inspect.getsource(handler) for handler in broker.event_handlers[event]]
 
 
+def _assert_foreign_entrypoint_installs_sentry(
+    service: _Service, code_root: Path, module_name: str, attribute: str
+) -> None:
+    """BEGONA kod bazasi — MANBA darajasida, lekin «o'tkazib yuborish» YO'Q.
+
+    Bu shox `CORE_API_ROOT` konstantasining docstringida asoslangan: shu
+    konteynerda `cv-service` ning `app` paketini import qilib bo'lmaydi,
+    chunki `app` nomi `core-api` niki bilan TO'QNASHADI va import JIMGINA
+    noto'g'ri modulni qaytarardi.
+
+    To'rt shart ham tekshiriladi va har birining yiqilishi ALOHIDA sabab
+    beradi:
+
+      1. kirish nuqtasi FAYLI o'sha kod ildizida bor;
+      2. `command` da nomlangan ATRIBUT o'sha faylda e'lon qilingan;
+      3. faylda ishga tushish ilmog'i bor (`FOREIGN_HOOK_MARKERS`);
+      4. faylda `init_sentry(` chaqiruvi bor.
+
+    ⚠ CHEGARASI OCHIQ: bu qatlam ilmoqning REYESTRGA tushganini emas,
+      faylda YOZILGANINI ko'radi. Obyekt darajasidagi to'liq o'lchov o'sha
+      servisning O'Z konteynerida yuradi va u bu darvozaning o'rnini
+      BOSMAYDI — ikkalasi birga ishlaydi.
+    """
+    module_file = code_root.joinpath(*module_name.split(".")).with_suffix(".py")
+    label = f"`{service.name}` (`{module_name}:{attribute}`, kod ildizi `{code_root.name}`)"
+
+    assert module_file.is_file(), (
+        f"{label}: kirish nuqtasining fayli topilmadi — kutilgan yo'l "
+        f"`{module_file}`. `compose.yaml` dagi `command` shu servisning kod "
+        "ildizida MAVJUD bo'lmagan modulni ko'rsatyapti, ya'ni konteyner "
+        "ishga tushishda `ModuleNotFoundError` bilan yiqilardi."
+    )
+
+    source = module_file.read_text(encoding="utf-8")
+
+    assert re.search(rf"^{re.escape(attribute)}\s*[:=]", source, re.MULTILINE), (
+        f"{label}: `{attribute}` atributi `{module_file.name}` da modul darajasida "
+        "e'lon qilinmagan — `taskiq`/`uvicorn` uni import paytida topa olmasdi."
+    )
+
+    hooks = [marker for marker in FOREIGN_HOOK_MARKERS if marker in source]
+    assert hooks, (
+        f"{label}: faylda birorta ishga tushish ilmog'i topilmadi "
+        f"({list(FOREIGN_HOOK_MARKERS)}) — ya'ni `{INIT_MARKER}` chaqiruvi mavjud "
+        "bo'lsa ham u HECH QACHON ishga tushmasligi mumkin."
+    )
+
+    assert INIT_MARKER in source, (
+        f"{label}: `{SENTRY_ENV_KEY}` konteynerga BERILADI, lekin kirish "
+        f"nuqtasining faylida `{INIT_MARKER}` chaqiruvi YO'Q — bu «jimgina "
+        "yolg'on» sinfi: konteyner sog'lom, jurnal toza, hodisa esa hech qachon "
+        "jo'natilmaydi (04-VERIFICATION.md)"
+    )
+
+
 def test_every_sentry_process_installs_sentry(sentry_services: tuple[_Service, ...]) -> None:
     """(b) + (c): HAR bir `SENTRY_DSN` jarayoni O'Z reyestrida `init_sentry()` ni talab qiladi.
 
@@ -370,6 +538,16 @@ def test_every_sentry_process_installs_sentry(sentry_services: tuple[_Service, .
     """
     for service in sentry_services:
         module_name, attribute = _entrypoint_of(service)
+
+        # ⚠⚠ KOD ILDIZI BO'YICHA TARMOQLANISH (05-02) — sabab
+        #    `CORE_API_ROOT` konstantasining docstringida. Usiz `cv-service`
+        #    uchun `core-api` ning `app.worker` i tekshirilardi va darvoza
+        #    JIMGINA yashil bo'lardi.
+        code_root = _code_root_of(service)
+        if code_root != CORE_API_ROOT:
+            _assert_foreign_entrypoint_installs_sentry(service, code_root, module_name, attribute)
+            continue
+
         module = importlib.import_module(module_name)
         target = getattr(module, attribute)
         label = f"`{service.name}` (`{module_name}:{attribute}`)"

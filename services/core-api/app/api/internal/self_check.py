@@ -110,6 +110,7 @@ EXPECTED_COMPONENTS: Final[tuple[str, ...]] = (
     "alert_sweep",
     "retention",
     "backup",
+    "cv_detect",
 )
 """Yurak urishi KUTILADIGAN fon komponentlari.
 
@@ -123,6 +124,19 @@ EXPECTED_COMPONENTS: Final[tuple[str, ...]] = (
 ⚠ `backup` 8-fazada quriladi va bugun u DOIM `never_seen` da bo'ladi.
   Uni ro'yxatdan olib turish «keyin qo'shamiz» qarziga aylanardi va
   8-faza uni qo'shishni unutsa hech narsa qizarmasdi.
+
+⚠ `cv_detect` — AYNAN SHU HOLATNING IKKINCHI NAMUNASI (05-02, W0-11).
+  Komponent `cv-service` KONTEYNERIDA, ya'ni BOSHQA image'da ishlaydi va
+  yurak urishini 05-08 yozadigan qiladi; bugun u DOIM `never_seen` da.
+  Reyestrga BUGUN qo'shilishining sababi `backup` niki bilan bir xil va
+  bu yerda yanada o'tkir: `cv-service` — ALOHIDA konteyner, ya'ni uning
+  jimgina o'lishini `core-api` dan boshqa hech kim ko'rmaydi. Ro'yxatga
+  keyin qo'shish «05-08 unutsa hech narsa qizarmaydi» degani bo'lardi.
+
+⚠ QO'SHILISH `/internal/self-check` NI BUZMAYDI: `healthy = not stale and
+  bool(seen)` — `never_seen` `ok` ga TA'SIR QILMAYDI (fayl boshidagi
+  oxirgi blok). Ya'ni endpoint bugun ham `200` qaytaradi va javobda
+  `cv_detect` `never_seen` ro'yxatida OCHIQ ko'rinadi.
 """
 
 _OK = "ok"

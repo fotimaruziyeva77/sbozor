@@ -9,6 +9,15 @@
 # naqsh (`ops/seaweedfs/README.md`).
 ops/seaweedfs/s3.json
 
+# --- ML artefaktlari (05-02, D-24) ---
+# ONNX modeli yuzlab MB va `git-lfs` bu loyihada YO'Q. Artefaktni ops
+# qo'yadi, image esa uni build paytida `COPY` qiladi — ish paytida yuklab
+# olish YO'Q. Eksport retsepti va manba: `ops/models/README.md`.
+#
+# ⚠ `.gitattributes:31` dagi `*.onnx binary` O'ZGARTIRILMAYDI — u boshqa
+#   qaror (diff shovqinini oldini olish) va u bilan ziddiyat yo'q.
+ops/models/*.onnx
+
 # --- Python ---
 .venv/
 venv/

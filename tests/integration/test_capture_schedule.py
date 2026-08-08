@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
+from app.api.internal.self_check import EXPECTED_COMPONENTS
 from app.schemas import MARKET_ERROR_CODES
 from fixtures.admin_api import session_headers
 from fixtures.auth_api import audit_rows
@@ -783,6 +784,20 @@ async def test_self_check_is_stale_when_the_heartbeat_was_never_written(
 
     Lekin BIRORTA yurak urishi bo'lmasa `ok` HAM `false` bo'lishi kerak:
     bu «hali yozilmagan» emas, «hech nima ishlamayapti» holati.
+
+    ⚠⚠ KUTILGAN TO'PLAM REYESTRDAN OLINADI, QO'LDA TAKRORLANMAYDI (05-02).
+
+    Ilgari bu yerda to'rt nom LITERAL yozilgan edi va u
+    `EXPECTED_COMPONENTS` ning IKKINCHI NUSXASI bo'lib turardi. Reyestrga
+    beshinchi komponent (`cv_detect`) qo'shilgan zahoti test yiqildi — va
+    yiqilish O'RINLI EDI, lekin sabab MAHSULOTDA emas, nusxada bo'ldi.
+    Ikki manba saqlansa, har yangi komponentda «qaysi biri to'g'ri?»
+    savoli qaytadan so'ralardi (§S-10: «kim BO'LISHI KERAK?» savoliga
+    REYESTR javob beradi).
+
+    ⚠ HOSILA DA'VO BO'SH REYESTRDA MA'NOSIZ bo'lardi, shuning uchun quyi
+      chegara ALOHIDA turadi: shu test ataylab tekshiradigan uchta
+      komponent reyestrda BO'LISHI shart.
     """
     # `heartbeats` fixture'i jadvalni allaqachon tozaladi.
     _ = heartbeats
@@ -792,7 +807,10 @@ async def test_self_check_is_stale_when_the_heartbeat_was_never_written(
     assert response.status_code == 503, response.text
     body = response.json()
     assert body["ok"] is False
-    assert set(body["never_seen"]) == {"capture_tick", "alert_sweep", "retention", "backup"}
+    assert {"capture_tick", "alert_sweep", "retention"} <= set(EXPECTED_COMPONENTS), (
+        "reyestr bo'shab qolgan — quyidagi hosila da'vo hech nimani o'lchamasdi"
+    )
+    assert set(body["never_seen"]) == set(EXPECTED_COMPONENTS)
 
 
 def test_self_check_is_not_wired_into_the_container_healthcheck() -> None:
