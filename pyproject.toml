@@ -36,7 +36,22 @@ pythonpath = [".", "tests", "services/core-api"]
 #   `store` turidagi opsiya), ya'ni `pytest -m hardware` va
 #   `pytest -m "sim and not slow"` kutilgandek ishlaydi. O'lchandi:
 #   `-m hardware --collect-only` -> 5 test, `-m "not hardware"` -> 0.
-addopts = "-q --strict-markers -m \"not hardware\""
+#
+# ⚠ 5-FAZA FILTRNI `model` BILAN KENGAYTIRDI (05-01/T1, W0-10) va sabab
+#   `hardware` nikidan FARQ QILADI, shuning uchun u yozib qo'yiladi:
+#   `hardware` — tashqi QURILMA (real NVR) yo'qligi; `model` — repoda
+#   SAQLANMAYDIGAN artefakt. ONNX fayli image'ga build paytida `COPY`
+#   bilan kiradi (D-24 / W0-12) va `.gitignore` uni repoga kiritmaydi,
+#   ya'ni `tests` konteynerida u YO'Q.
+#
+#   NEGA FILTR, NEGA `pytest.skip` EMAS: skip JIMGINA o'tadi va «o'lchov
+#   bajarildi» degan yolg'on yashil beradi — artefakt bor deb o'ylangan
+#   holatda ham to'plam yashil bo'lardi. Filtr esa OCHIQ: testlar
+#   TANLANMAGANI `-m` qatorida ko'rinib turadi. Shuning uchun `model`
+#   markerli testning O'ZI artefakt yo'qligida YIQILADI (skip QILMAYDI) —
+#   `-m model` yozgan odam o'lchovni ATAYIN so'ragan bo'ladi va sukunat
+#   javob bo'la olmaydi.
+addopts = "-q --strict-markers -m \"not hardware and not model\""
 markers = [
     "tenancy: tenant izolyatsiyasi (RLS) invariantlari — faza darvozasi, majburiy yashil",
     # 3-FAZA. `--strict-markers` ostida e'lon qilinmagan marker YIG'ILISH
@@ -47,6 +62,12 @@ markers = [
     "sim: simulyatsiya qilingan Hikvision NVR ustidagi uchidan-uchiga testlar (CAM-09) — `--profile sim` talab qiladi",
     "hardware: faqat real NVR bilan ishlaydigan testlar — CI'da `-m \"not hardware\"` bilan chetlab o'tiladi, fazani BLOKLAMAYDI",
     "slow: uzoq davom etadigan sim stsenariylari (25 kanal) — standart `test:sim` zanjiridan chetda, `npm run test:sim:slow` bilan ishga tushadi",
+    # 5-FAZA (W0-10). Ikkalasi ham KOD YOZILISHIDAN OLDIN e'lon qilinadi —
+    # 3-fazadagi `sim`/`slow` bilan aynan bir xil sabab: `--strict-markers`
+    # ostida e'lon qilinmagan marker YIG'ILISHDA yiqiladi va butun fayl
+    # umuman ishga tushmaydi.
+    "golden: oltin to'plam harness'i — UXLAB YOTADIGAN aniqlik darvozasi; `source='karmana'` qatorlar paydo bo'lgan kuni KODSIZ uyg'onadi (D-01/D-02, W0-9)",
+    "model: HAQIQIY ONNX artefaktini talab qiladigan o'lchov — artefakt repoda saqlanmaydi (D-24: build paytida `COPY`), shuning uchun standart `addopts` uni OCHIQ filtr bilan chiqaradi; artefakt yo'qligida test SKIP emas, YIQILADI",
 ]
 
 [tool.ruff]

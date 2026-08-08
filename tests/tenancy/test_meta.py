@@ -22,6 +22,7 @@ Ro'yxat bu faylda TAKRORLANMAYDI.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -188,29 +189,40 @@ EXPECTED_DEFINER_FUNCTIONS = {
 #
 # Bu `INDEX_EXCEPTIONS` va `POLICY_TENANT_GUC_EXCEPTIONS` bilan bir xil naqsh:
 # istisno testda, sababi yozma, o'zgartirish code review'da ko'zga tashlanadi.
-PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset()
-"""BO'SH — `AUDITED_TABLES` dagi HAR BIR jadvalning triggeri ULANGAN.
+PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset({"camera_zones", "zone_reviews"})
+"""`AUDITED_TABLES` ga OLINGAN, lekin jadvali `0018` da TUG'ILADIGAN nomlar.
 
-✅ OXIRGI QARZ `0014_snapshot_domain` DA YOPILDI (`04-03` / T2, 2026-08-04).
-`04-01` bu ro'yxatga `snapshot_schedules` va `snapshot_schedule_slots` ni
-qo'ygan edi (jadvallar hali mavjud emas edi, ya'ni
-`attach_audit_trigger()` ni chaqirib bo'lmasdi); `0014` ikkala triggerni
-ham ulagach nomlar SHU MIGRATSIYA BILAN BIR COMMITDA o'chirildi.
+⏳ OCHIQ QARZ (`05-01` / T1, 2026-08-08) — EGASI VA TETIGI BOR:
+`0018_occupancy_domain` (`05-05` / T2) ikkala triggerni ULAGACH nomlar
+O'SHA MIGRATSIYA BILAN BIR COMMITDA bu yerdan O'CHIRILADI. Bu `04-01` →
+`04-03` juftligining (`snapshot_schedules`, `snapshot_schedule_slots`)
+AYNAN takrori va uchinchi marta qo'llanishi.
 
 ⚠ BU RO'YXATGA YANGI NOM QO'SHISH — OXIRGI CHORA, ODATIY QADAM EMAS.
 Reyestrga (`AUDITED_TABLES`) jadval qo'shilgan, lekin
 `attach_audit_trigger()` hali chaqirilmagan HOLAT faqat jadval KEYINGI
-migratsiyada tug'ilganda ma'noli (2-fazada aynan shunday edi: reyestr
-birinchi migratsiyadan OLDIN to'ldirilgan). Bir migratsiya ichida ikkalasini
-ham qilish mumkin bo'lsa, ro'yxat BO'SH qolishi kerak.
+migratsiyada tug'ilganda ma'noli — VA BU YERDA AYNAN SHU HOLAT: `05-01`
+birorta migratsiya YOZMAYDI (u Wave 0, ya'ni ta'rifi bo'yicha birinchi
+migratsiyadan OLDIN turadi), ya'ni `attach_audit_trigger("camera_zones")`
+ni chaqirishning FIZIK imkoni yo'q — jadval hali mavjud emas. Bir
+migratsiya ichida ikkalasini ham qilish mumkin bo'lsa, ro'yxat BO'SH
+qolishi kerak.
 
-⛔ SHUNING UCHUN BU YERDA «KUTILGAN QIZIL» HOLAT YO'Q. Ro'yxat va amaldagi
-triggerlar AYNI COMMITDA tenglashadi, ya'ni `test_audited_tables_have_trigger`
-`04-01` dan `04-03` gacha YASHIL turdi va `0014` dan keyin ham yashil
-qoldi. 2-fazada qarz o'n olti reja davomida darvozani qizil qilib turgan
-va o'sha o'n olti reja uchun darvoza SIGNAL BERMAY qolgan edi —
-yuqoridagi izohdagi «Buzilgan darvoza — darvoza emas» bandi aynan shu
-haqda."""
+⛔ SHUNING UCHUN BU YERDA HAM «KUTILGAN QIZIL» HOLAT YO'Q va bu farq
+butun mexanizmning mazmuni. Ro'yxat va amaldagi triggerlar AYNI COMMITDA
+tenglashadi:
+
+  * BUGUN — `AUDITED_TABLES` ga ikki nom qo'shildi VA ular shu yerda:
+    `missing == PENDING_AUDIT_TRIGGERS`, test YASHIL;
+  * `0018` DAN KEYIN — triggerlar ulanadi, `missing` bo'shaydi va nomlar
+    shu yerdan o'chiriladi: yana YASHIL.
+
+Ya'ni `test_audited_tables_have_trigger` `05-01` dan `05-05` gacha
+UZLUKSIZ yashil turadi va oraliqdagi to'rt reja uchun darvoza SIGNAL
+BERISHDA DAVOM ETADI. 2-fazada qarz o'n olti reja davomida darvozani
+qizil qilib turgan va o'sha o'n olti reja uchun darvoza SIGNAL BERMAY
+qolgan edi — yuqoridagi izohdagi «Buzilgan darvoza — darvoza emas» bandi
+aynan shu haqda."""
 
 # Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun
 # sabab SHU YERDA yozilishi SHART — istisno qo'shish code review'da ko'zga
@@ -1018,6 +1030,196 @@ def test_snapshot_registries_are_self_consistent(
         f"audit reyestriga tushmagan nom(lar): "
         f"{sorted(set(SNAPSHOT_AUDITED_TABLES) - AUDITED_TABLES)} — "
         "`SNAPSHOT_AUDITED_TABLES` va `AUDITED_TABLES` ajralib ketgan."
+    )
+
+
+OCCUPANCY_CASCADE_HINT = (
+    "Tushib qolgan jadval `0018` qo'ngandan keyin qoralama bozorni o'chirishni "
+    "chet el kaliti buzilishi bilan yiqitardi (W0-6) va sabab faqat ish paytida, "
+    "admin ekranida ko'rinardi. Kaskad `0019` da yoziladi (`05-05` / T3)."
+)
+"""Tuzatish yo'riqnomasi ALOHIDA konstantada — sabab `CASCADE_REGISTRY_HINT` da."""
+
+OCCUPANCY_TENANT_REGISTRY_HINT = (
+    "`ALL_ENTITIES` aynan `ALL_TENANT_TABLES` dan quriladi, ya'ni tushib qolgan "
+    "jadval `tenant_isolation` policy'sisiz — RLS himoyasisiz — qolardi. "
+    "Qo'shish `0018` bilan BIR OYNADA bajariladi (`05-05` / T2)."
+)
+
+
+def test_occupancy_registries_are_self_consistent(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """5-faza reyestrlari o'zaro MOS — jadval tug'ilishidan OLDIN (W0-4/W0-5/W0-6).
+
+    `test_snapshot_registries_are_self_consistent` ning AYNAN shakli, uchinchi
+    marta qo'llangan. Uchta ro'yxat uch xil savolga javob beradi va ular
+    AJRALIB KETISHI mumkin, chunki uchalasi qo'lda yuritiladi:
+
+      * `OCCUPANCY_TENANT_TABLES`  -> RLS + policy tsikli (`0018`);
+      * `OCCUPANCY_AUDITED_TABLES` -> audit triggeri (`AUDITED_TABLES` kichik to'plami);
+      * `OCCUPANCY_DELETE_ORDER`   -> `market_delete_draft()` kaskadi (`0019`).
+
+    ⚠ IMPORT TEST FUNKSIYASINING ICHIDA — 4-fazadagi bilan bir xil sabab:
+      reyestr hali tug'ilmagan bosqichda modul darajasidagi import BUTUN
+      FAYLNING yig'ilishini yiqitardi, ya'ni W0-5 ning ikki tomonlama qulfi
+      (`test_audited_tables_have_trigger`) o'sha bosqichda umuman
+      ishlamas va o'lchab bo'lmasdi.
+    """
+    from migrations.entities import (
+        ALL_TENANT_TABLES,
+        OCCUPANCY_AUDITED_TABLES,
+        OCCUPANCY_DELETE_ORDER,
+        OCCUPANCY_TENANT_TABLES,
+    )
+
+    assert len(OCCUPANCY_TENANT_TABLES) == 6, (
+        f"`OCCUPANCY_TENANT_TABLES` da {len(OCCUPANCY_TENANT_TABLES)} jadval: "
+        f"{list(OCCUPANCY_TENANT_TABLES)}. Kutilgani oltita (`05-PATTERNS.md` §S-1)."
+    )
+    assert len(set(OCCUPANCY_TENANT_TABLES)) == len(OCCUPANCY_TENANT_TABLES), (
+        f"`OCCUPANCY_TENANT_TABLES` da dublikat bor: {list(OCCUPANCY_TENANT_TABLES)}"
+    )
+
+    # 🔴 D-06 — NOM TO'QNASHUVI MEXANIK QULFLANDI. `zones` 2-fazada bozor
+    # hududlari uchun BAND va unga `stalls.zone_id NOT NULL` tayanadi. Reyestrga
+    # `zones` yozilishi `0018` ni «jadval allaqachon mavjud» bilan yiqitardi —
+    # yoki, bundan ham yomoni, mavjud jadvalga ikkinchi policy qo'yardi.
+    assert "zones" not in OCCUPANCY_TENANT_TABLES, (
+        "`zones` nomi 2-fazadan BAND (`models/market.py::Zone`, `stalls.zone_id "
+        "NOT NULL` unga tayanadi). Kamera zonasi jadvali `camera_zones` deb "
+        "nomlanadi (D-06)."
+    )
+    assert "camera_zones" in OCCUPANCY_TENANT_TABLES, (
+        "`camera_zones` reyestrda yo'q — D-06 ning butun mazmuni shu nomda."
+    )
+
+    # ⚠ O'ZI QUROLLANADIGAN DARVOZA — shartsiz `<=` EMAS, va bu ATAYIN.
+    # Sabab `test_snapshot_registries_are_self_consistent` da o'lchangan
+    # (`UndefinedTable`, 2026-08-04): jadval TUG'ILMASDAN OLDIN uni
+    # `ALL_TENANT_TABLES` ga qo'shish `test_autogenerate_is_empty` ni
+    # yiqitadi, chunki `alembic_utils` komparatori policy'ni HAQIQATAN
+    # yaratib ko'radi. Bugun — yashil (jadvallar yo'q); `0018` qo'ngan kuni
+    # — `05-05` ro'yxatni kengaytirmaguncha QIZIL.
+    existing = {
+        row[0]
+        for row in sync_app_conn.execute(
+            "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'public' AND c.relkind = 'r'"
+        ).fetchall()
+    }
+    born = set(OCCUPANCY_TENANT_TABLES) & existing
+    assert born <= set(ALL_TENANT_TABLES), (
+        f"jadval BAZADA bor, lekin `ALL_TENANT_TABLES` da yo'q: "
+        f"{sorted(born - set(ALL_TENANT_TABLES))}. " + OCCUPANCY_TENANT_REGISTRY_HINT
+    )
+
+    assert set(OCCUPANCY_DELETE_ORDER) == set(OCCUPANCY_TENANT_TABLES), (
+        "kaskad tartibi tenant reyestriga mos emas.\n"
+        f"  kaskadda yo'q: {sorted(set(OCCUPANCY_TENANT_TABLES) - set(OCCUPANCY_DELETE_ORDER))}\n"
+        f"  ortiqcha:      {sorted(set(OCCUPANCY_DELETE_ORDER) - set(OCCUPANCY_TENANT_TABLES))}\n"
+        + OCCUPANCY_CASCADE_HINT
+    )
+    assert len(OCCUPANCY_DELETE_ORDER) == len(set(OCCUPANCY_DELETE_ORDER)), (
+        f"`OCCUPANCY_DELETE_ORDER` da dublikat bor: {list(OCCUPANCY_DELETE_ORDER)}"
+    )
+
+    # Tartib — BOLALARDAN OTA-ONAGA. Har juftlik `05-RESEARCH.md` §A.2/§B.5/
+    # §C.8/§D.12 sxemalaridagi HAQIQIY FK ga mos keladi, ya'ni bu ro'yxat
+    # ixtiyoriy tartib emas — u `0019` ning `DELETE` ketma-ketligi.
+    order = list(OCCUPANCY_DELETE_ORDER)
+    for child, parent in (
+        ("stall_slot_occupancy", "occupancy_events"),
+        ("zone_reviews", "review_assignments"),
+        ("review_assignments", "occupancy_events"),
+        ("review_assignments", "audit_rounds"),
+        ("occupancy_events", "camera_zones"),
+    ):
+        assert order.index(child) < order.index(parent), (
+            f"`{child}` `{parent}` dan KEYIN o'chirilyapti — kaskad o'z chet el "
+            "kalitiga uriladi. Tartib bolalardan ota-onaga bo'lishi shart."
+        )
+
+    assert set(OCCUPANCY_AUDITED_TABLES) < set(OCCUPANCY_TENANT_TABLES), (
+        "`OCCUPANCY_AUDITED_TABLES` tenant reyestrining QAT'IY kichik to'plami "
+        f"bo'lishi shart. Topilgani: {list(OCCUPANCY_AUDITED_TABLES)}. To'rtta "
+        "jadval (`occupancy_events`, `audit_rounds`, `review_assignments`, "
+        "`stall_slot_occupancy`) auditdan ATAYIN chiqarilgan — sabab "
+        "`migrations/entities/__init__.py::OCCUPANCY_AUDITED_TABLES` docstringida."
+    )
+    assert set(OCCUPANCY_AUDITED_TABLES) <= AUDITED_TABLES, (
+        f"audit reyestriga tushmagan nom(lar): "
+        f"{sorted(set(OCCUPANCY_AUDITED_TABLES) - AUDITED_TABLES)} — "
+        "`OCCUPANCY_AUDITED_TABLES` va `AUDITED_TABLES` ajralib ketgan."
+    )
+
+
+ENTITIES_SOURCE = Path(__file__).resolve().parents[2] / "migrations" / "entities" / "__init__.py"
+
+DERIVED_ORDER_PATTERN = re.compile(r"^\s*OCCUPANCY_DELETE_ORDER[^=]*=\s*tuple\s*\(", re.MULTILINE)
+"""`OCCUPANCY_DELETE_ORDER = tuple(reversed(...))` shaklini topadigan naqsh.
+
+Faqat E'LON satri qidiriladi — docstring ichidagi tushuntirish matni
+(«bu `reversed()` i EMAS») darvozani qizartirmasligi kerak, aks holda
+yagona «tuzatish» yo'li SABABNI O'CHIRISH bo'lardi (3-fazada o'lchangan
+naqsh: taqiqlangan ibora skanerlanadigan faylning izohida ham yozilmaydi).
+"""
+
+
+def test_occupancy_delete_order_is_declared_not_derived() -> None:
+    """`OCCUPANCY_DELETE_ORDER` LITERAL e'lon qilinadi — hosila EMAS (§S-2).
+
+    =====================================================================
+    ⚠ BU TEST REJANING QABUL MEZONINI QAYTA SHAKLLANTIRADI VA SABAB O'LCHOV.
+
+    `05-01-PLAN.md` mezoni «`OCCUPANCY_DELETE_ORDER !=
+    tuple(reversed(OCCUPANCY_TENANT_TABLES))` — testda literal
+    tasdiqlanadi» deb yozilgan. Rejaning O'ZI bergan ikki ro'yxat esa
+    AYNAN bir-birining teskarisi:
+
+        tenant:  camera_zones, occupancy_events, audit_rounds,
+                 review_assignments, zone_reviews, stall_slot_occupancy
+        delete:  stall_slot_occupancy, zone_reviews, review_assignments,
+                 audit_rounds, occupancy_events, camera_zones
+
+    Ya'ni `!=` da'vosi bu ma'lumot ustida YOLG'ON va uni «qondirish»ning
+    yagona yo'li ro'yxatlardan birini ataylab NOTO'G'RI tartibda yozish
+    bo'lardi — o'sha holda `0019` ning kaskadi o'z chet el kalitiga
+    urilardi.
+
+    4-fazada `!=` ROST edi, chunki `alert_events` FK zanjirida umuman
+    turmasdi. Bu domenda zanjirdan chetda turgan jadval YO'Q, ya'ni
+    ustma-ustlik TASODIF.
+
+    ✅ MEZONNING NIYATI esa ustma-ustlikda emas: §S-2 «ALOHIDA RO'YXAT,
+    hosila emas» deydi. Shuning uchun bu test TENGSIZLIKNI emas,
+    MUSTAQILLIKNI o'lchaydi — qiymat `reversed()` dan HISOBLANMAGANINI.
+    Bu kuchliroq da'vo: ustma-ustlik tasodifan yo'qolganda ham u kuchda
+    qoladi, `!=` esa o'sha kundan boshlab hech nima demay qo'yardi.
+    =====================================================================
+
+    Darvoza MANBA MATNINI o'qiydi, import qilmaydi (§S-10): import qilingan
+    qiymat `tuple(reversed(...))` bilan LITERAL tuple'ni bir-biridan
+    ajrata olmaydi — ikkalasi ham bir xil obyekt beradi.
+    """
+    source = ENTITIES_SOURCE.read_text(encoding="utf-8")
+
+    # QUYI CHEGARA: fayl yo'li noto'g'ri bo'lsa yoki konstanta qayta
+    # nomlansa quyidagi "topilmadi" assert'i JIMGINA yashil qolardi.
+    assert "OCCUPANCY_DELETE_ORDER" in source, (
+        f"`OCCUPANCY_DELETE_ORDER` {ENTITIES_SOURCE} da topilmadi — darvoza "
+        "noto'g'ri faylni o'qiyapti yoki konstanta qayta nomlangan."
+    )
+
+    derived = DERIVED_ORDER_PATTERN.search(source)
+    assert derived is None, (
+        "`OCCUPANCY_DELETE_ORDER` HOSILA qiymat sifatida yozilgan: "
+        f"{derived.group(0).strip() if derived else ''!r}\n"
+        "RLS tartibi (ota-onadan bolalarga) va o'chirish tartibi (bolalardan "
+        "ota-onaga) IKKI XIL savolga javob beradi va MUSTAQIL o'zgaradi. "
+        "FK zanjiridan chetda turgan bitta jadval qo'shilgan kuni hosila "
+        "qiymat JIMGINA noto'g'ri bo'lardi — 4-fazada `alert_events` aynan "
+        "shunday edi (§S-2)."
     )
 
 

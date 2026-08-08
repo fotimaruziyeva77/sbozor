@@ -174,6 +174,31 @@ AUDITED_TABLES: frozenset[str] = frozenset(
         # o'chirish yuqoridagi bilan aynan bir xil oqibatga olib keladi,
         # faqat mayda donadorlikda — shuning uchun ikkalasi ham auditda.
         "snapshot_schedule_slots",
+        # --- 5-faza bandlik domeni (0018_occupancy_domain) ---
+        # ⚠ IKKALA NOM HAM JADVAL TUG'ILISHIDAN OLDIN qo'shildi (`05-01`/T1)
+        # va shuning uchun ular `tests/tenancy/test_meta.py::
+        # PENDING_AUDIT_TRIGGERS` da AYNI COMMITDA ro'yxatga olingan. Reyestr
+        # IKKI TOMONLAMA qulflangan (`missing == PENDING_AUDIT_TRIGGERS`):
+        # bu yerga qo'shib u yerga qo'shmaslik `regressed` bilan, `0018`
+        # triggerlarni ulagandan keyin u yerdan O'CHIRMASLIK esa `closed`
+        # bilan qizartiradi. Ya'ni darvoza `05-01` dan `05-05` gacha YASHIL
+        # turadi va qarz JIMGINA yopilib keta olmaydi.
+        #
+        # Kamera zonasi (poligon) — «band, lekin to'lovsiz» da'vosining
+        # GEOMETRIK asosi. Poligon jimgina siljitilsa yoki zona o'chirilsa
+        # o'sha rastaning dalili UMUMAN tug'ilmaydi va hisobot kamaygani
+        # bilinmaydi — `cameras.is_archived` bilan aynan bir xil sinf:
+        # nazoratni jimgina o'chirishning eng arzon yo'li.
+        "camera_zones",
+        # Nazoratchining verdikti — INSONNING moliyaviy oqibatli qarori:
+        # u AI ning javobini bekor qiladi va kunlik patta hisobini
+        # o'zgartiradi (AI-06). `tariffs` / `stall_assignments` bilan bir
+        # oilada. ⚠ `occupancy_events` bu ro'yxatda ATAYIN YO'Q — sabab
+        # `migrations/entities/__init__.py::OCCUPANCY_AUDITED_TABLES`
+        # docstringida (hajm: ~5000 qator/kun/bozor, VA jadval D-12
+        # bo'yicha SHARTSIZ o'zgarmas — o'zgarmas jadval uchun audit faqat
+        # INSERT ni ko'rardi, ya'ni ikkinchi nusxa yozardi).
+        "zone_reviews",
     }
 )
 """`fn_audit_row()` triggeri O'RNATILGAN jadvallar (hozirgi holat, kutilgan emas).
