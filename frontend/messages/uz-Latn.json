@@ -853,5 +853,49 @@
     "nextSlot": "Keyingi vaqt",
     "emptyFiltered": "Muammoli qator topilmadi",
     "emptyFilteredHint": "Bu kunda barcha kadrlar yaroqli."
+  },
+  "cameraZones": {
+    "errorCauseLabel": "Sabab",
+    "errorFixLabel": "Nima qilish kerak",
+    "errorCause": {
+      "zone_polygon_too_few_points": "Zonada uchtadan kam tepa qolgan.",
+      "zone_polygon_too_many_points": "Zonada tepalar soni ruxsat etilgan chegaradan oshib ketdi.",
+      "zone_polygon_out_of_range": "Zona tepasi kadr chegarasidan tashqariga chiqib qolgan.",
+      "zone_polygon_self_intersecting": "Zona o'zi bilan kesishgan — chegaralari bir-birini kesib o'tadi.",
+      "zone_limit_reached": "Bu kameradagi zonalar soni chegaraga yetdi.",
+      "zone_stall_already_covered": "Bu rastaning shu kameradagi zonasi allaqachon bor.",
+      "zone_camera_has_no_frame": "Bu kamerada hali yaroqli kadr yo'q, shuning uchun zona chizib bo'lmaydi.",
+      "zone_aspect_mismatch": "Kadr o'lchami zonalar chizilgandagidan farq qiladi."
+    },
+    "errorFix": {
+      "zone_polygon_too_few_points": "Tepa qo'shing yoki zonani o'chirib, qaytadan chizing.",
+      "zone_polygon_too_many_points": "Ortiqcha tepalarni o'chiring. Rasta chegarasi uchun odatda to'rt-besh tepa yetarli.",
+      "zone_polygon_out_of_range": "Tepani kadr ichiga qaytaring. Zona faqat kadrda ko'rinadigan joyni qamray oladi.",
+      "zone_polygon_self_intersecting": "Tepalarni shunday joylashtiringki, chegara chizig'i kesishmasin. Kesishgan zona qizil punktir bilan belgilangan.",
+      "zone_limit_reached": "Yangi zona qo'shish uchun keraksizini o'chiring yoki qolgan rastalarni boshqa kamerada belgilang.",
+      "zone_stall_already_covered": "Mavjud zonani tahrirlang yoki boshqa rastani tanlang. Bir rasta bir necha kamerada bo'lishi mumkin — bu normal.",
+      "zone_camera_has_no_frame": "Kadr olish bo'limida kamera holatini tekshiring. Birinchi yaroqli kadr kelgach, bu sahifa o'zi ochiladi.",
+      "zone_aspect_mismatch": "Zonalarni kadr bilan solishtiring va kerak bo'lsa tepalarni ko'chiring. Zonalar o'zi siljimaydi — joyini siz tekshirasiz."
+    }
+  },
+  "review": {
+    "errorCauseLabel": "Sabab",
+    "errorFixLabel": "Nima qilish kerak",
+    "errorCause": {
+      "review_queue_empty": "Navbatda ko'riladigan band qolmadi.",
+      "review_budget_exhausted": "Bugungi byudjet tugadi — {max} / {max}.",
+      "review_sample_not_drawn": "Bugungi namuna hali tortilmagan.",
+      "review_image_unavailable": "Dalil rasmi ochilmadi.",
+      "blind_answer_locked": "Bu bandga javob allaqachon yozilgan.",
+      "review_already_answered": "Bu bandga boshqa oynada javob berilgan."
+    },
+    "errorFix": {
+      "review_queue_empty": "Tizim bugun shubhalangan hamma rasta ko'rib chiqilgan. Yangi bandlar keyingi kadrlar kelgach paydo bo'ladi.",
+      "review_budget_exhausted": "Ertaga davom etadi. Byudjet diqqatni saqlash uchun qo'yilgan: shoshib berilgan javob ma'lumotni buzadi.",
+      "review_sample_not_drawn": "Namuna kunlik kadrlar yig'ilgandan keyin o'zi tortiladi. Qo'lda tortish mumkin emas — bu tanlovning tasodifiyligini saqlaydi.",
+      "review_image_unavailable": "«Qayta urinish» ni bosing. Rasm ochilmaguncha javob berilmaydi — ko'rilmagan rasta haqidagi javob o'lchovni buzadi.",
+      "blind_answer_locked": "Ko'rmasdan tekshirishda javob bir marta yoziladi va o'zgartirilmaydi — o'lchov shu bilan halol qoladi. Keyingi bandga o'ting.",
+      "review_already_answered": "Navbat yangilandi. Keyingi bandga o'ting."
+    }
   }
 }
