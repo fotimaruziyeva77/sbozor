@@ -2,11 +2,12 @@
 # Xost mashinasida `make` YO'Q (Windows) — barcha yorliqlar root `package.json` da.
 #
 # Profillar:
-#   (yo'q)   -> db, cache, storage, core-api, worker, scheduler, go2rtc : `npm run up`
+#   (yo'q)   -> db, cache, storage, core-api, worker, scheduler, cv-service, go2rtc : `npm run up`
 #   migrate  -> Alembic one-shot job   : `npm run migrate`
 #   web      -> frontend (01-02 rejasi Dockerfile'ni yaratadi)
 #   proxy    -> nginx
 #   test     -> pytest + testcontainers: `npm run test`
+#            -> cv-tests (IKKINCHI image, `services/cv-service/Dockerfile`): `npm run cv:test`
 #   sim      -> nvr-sim + nvr-sim-rtsp (CAM-09): `npm run test:sim`
 
 name: sbozor
@@ -417,6 +418,116 @@ services:
     # =====================================================================
     # DIQQAT: xost portiga publish QILINMAYDI — planer HTTP yuzasi bermaydi.
     restart: unless-stopped
+
+  cv-service:
+    # ZONA BANDLIGINI ANIQLASH WORKER'I (05-02, AI-02, D-23).
+    #
+    # ⚠⚠ UCHINCHI SERVIS — «yana bitta konteyner» EMAS. `worker`,
+    # `scheduler`, `migrate` va `tests` `core-api` IMAGE'ining boshqa
+    # entrypointlari edi; bu esa O'Z `pyproject.toml`, `uv.lock` va
+    # `Dockerfile` i bilan keladi (W0-2). Sabab bog'liqliklarda:
+    # `core-api` `opencv` ni ATAYIN rad etadi va taqiq MEXANIK
+    # (`tests/unit/test_runtime_deps.py:91-94` — ikkala guruhda ham).
+    # CLAUDE.md ning «aynan 3 ta servis» cheklovi BUZILMAYDI: `cv-service`
+    # allaqachon uchlikning a'zosi.
+    #
+    # ⚠ PROFILSIZ — `worker`/`scheduler`/`storage` bilan bir xil sabab: bu
+    # ISHLAB CHIQARISH komponenti. Profil ortiga yashirilsa kadr olingan,
+    # navbatga qo'yilgan va HECH QACHON aniqlanmagan bo'lardi — hech
+    # qanday xato bermasdan (aynan o'sha «jimgina yolg'on» sinfi).
+    #
+    # ⚠ SOF WORKER (05-08): `app/main.py` dagi minimal FastAPI bu
+    # konteynerda YURITILMAYDI. Sabab pastdagi healthcheck bandida.
+    build:
+      context: .
+      dockerfile: services/cv-service/Dockerfile
+      target: runtime
+    # `--workers 1`: aniqlash CPU'ga bog'liq va ONNX sessiyasi
+    # `intra_op_num_threads` bilan allaqachon parallel ishlaydi. Ikkinchi
+    # jarayon bir xil yadrolar uchun O'ZI bilan raqobatlashardi va har
+    # biri ikkinchi ONNX sessiyasini (yana ~model hajmi RAM) ochardi.
+    command: ["taskiq", "worker", "app.worker:broker", "--workers", "1"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      VALKEY_URL: ${VALKEY_URL:-redis://cache:6379/0}
+      # --- Aniqlagich (D-08/D-24) ---
+      #
+      # ⚠ `:-` bilan standart BERILGAN va bu S3 kalitlaridan ATAYIN farq
+      # qiladi: yo'lning O'ZI sir emas va u image ichidagi qat'iy joyga
+      # ishora qiladi (`Dockerfile`: `COPY ops/models/ /app/models/`).
+      # Artefaktning YO'QLIGI esa jimgina o'tmaydi — `Settings` ning
+      # `field_validator` i konteynerni ISHGA TUSHISHDA to'xtatadi
+      # (`ops/models/README.md`).
+      CV_MODEL_PATH: ${CV_MODEL_PATH:-/app/models/rfdetr-large.onnx}
+      CV_INTRA_OP_THREADS: ${CV_INTRA_OP_THREADS:-4}
+      # --- Snapshot ombori: FAQAT O'QISH rekviziti (T-05-06) ---
+      #
+      # ⚠ `S3_ACCESS_KEY`/`S3_SECRET_KEY` da `:-` BILAN BO'SH STANDART
+      # ATAYIN YO'Q — `core-api`/`worker` bloklari bilan aynan bir xil
+      # qaror. Bo'sh standart bilan servis muvaffaqiyatli KO'TARILARDI va
+      # xato faqat BIRINCHI kadrni o'qishda chiqardi.
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://storage:8333}
+      S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: Asia/Tashkent
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    # =====================================================================
+    # ⚠⚠ `healthcheck` ATAYIN YOZILMAGAN — VA U SOXTALASHTIRILMAYDI.
+    #
+    # `scheduler` blokidagi qaror so'zma-so'z shu yerga tegishli:
+    # `taskiq worker` HTTP yuzasi bermaydi va jarayon tirikligi «aniqlash
+    # bajarilyaptimi?» savoliga JAVOB BERMAYDI. `nc -z` uchun ataylab port
+    # ochish (yoki `app/main.py` ni shu konteynerda yuritish) o'z portiga
+    # o'zi javob beradigan yuza bo'lardi — ya'ni «sog'lom» degan YOLG'ON
+    # ISHONCH.
+    #
+    # Yagona ishonchli signal — BAZADAGI natija: `cv_detect` yurak urishi
+    # va uni o'qiydigan `/internal/self-check` (`core-api`,
+    # `EXPECTED_COMPONENTS`). Komponent bugundan reyestrda turadi va
+    # `never_seen` holatida — 05-08 uni yozadigan qiladi.
+    # =====================================================================
+    # DIQQAT: xost portiga publish QILINMAYDI (T-05-07) — worker tarmoq
+    # yuzasi bermaydi va u faqat compose tarmog'idan ko'rinadi.
+    restart: unless-stopped
+
+  cv-tests:
+    # `cv-service` NING TEST KONTEYNERI (W0-2).
+    #
+    # ⚠ NEGA MAVJUD `tests` KONTEYNERI YETMAYDI: u `core-api` image'ida
+    # ishlaydi va u yerda `onnxruntime`/`supervision`/`cv2` YO'Q — ularni
+    # o'sha muhitga qo'shish `test_runtime_deps.py:91-94` dagi
+    # O'LCHANGAN taqiqni bo'shatish bo'lardi. Naqsh esa AYNAN o'sha:
+    # `tests` `core-api` Dockerfile'ining `dev` target'ini qayta
+    # ishlatgani kabi, bu ham `cv-service` nikini qayta ishlatadi.
+    #
+    # ⚠ `SENTRY_DSN` ATAYIN BERILMAYDI: test jarayoni ishlab chiqarish
+    # kuzatuvi emas va `tests/unit/test_sentry_processes.py` ning
+    # predikati aynan shu kalit bo'yicha ishlaydi — uni bu yerga qo'yish
+    # darvozadan test konteyneri uchun ham `init_sentry()` talab qilardi.
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: services/cv-service/Dockerfile
+      target: dev
+    command: ["pytest", "-q"]
+    environment:
+      TZ: Asia/Tashkent
+    # ⚠ `/app` EMAS: `pytest`, `ruff` va `mypy` uchalasi ham
+    # `services/cv-service/pyproject.toml` ni topishi SHART. `/app` da
+    # ular repo ildizidagi konfiguratsiyani olib, `core-api` ning
+    # to'plamini shu image'da ishga tushirardi (u yerda `respx`/
+    # `testcontainers` yo'q, ya'ni nosozlik sababi butunlay boshqa joyda
+    # ko'rinardi).
+    working_dir: /app/services/cv-service
+    volumes:
+      - .:/app
 
   go2rtc:
     # JONLI KO'RISHNING MEDIA SERVERI (03-07, CAM-03).

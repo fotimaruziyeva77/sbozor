@@ -184,6 +184,33 @@ LICENSE_FIELD: Final = "License"
 CLASSIFIER_FIELD: Final = "Classifier"
 LICENSE_CLASSIFIER_PREFIX: Final = "License ::"
 
+MAX_IDENTIFIER_LENGTH: Final = 100
+"""Eski `License` maydoni FAQAT shu uzunlikkacha IDENTIFIKATOR deb o'qiladi.
+
+=============================================================================
+⚠⚠ BU CHEGARA O'LCHOVDAN TUG'ILDI, EHTIYOTKORLIKDAN EMAS (2026-08-08).
+
+`cv-service` ning ishlab chiqarish image'ida bu darvozaning predikati
+`scipy` ni AGPL deb belgiladi. Tekshirilganda:
+
+    scipy `License` maydonining uzunligi   = 47 567 belgi
+    'affero' shu matn ichida uchraydi      = True   (vendorlangan
+                                              uchinchi tomon litsenziyalari)
+    scipy `Classifier: License ::`         = "OSI Approved :: BSD License"
+
+Ya'ni `License` maydoni ba'zi paketlarda IDENTIFIKATOR ("MIT"), ba'zilarida
+esa BUTUN LITSENZIYA MATNI bo'ladi — va matn ichida boshqa litsenziyalarning
+NOMI uchrashi mutlaqo normal. Uni identifikator deb o'qish YOLG'ON-QIZIL
+beradi, yolg'on-qizil esa darvozani o'chirish bosimini tug'diradi.
+
+`License-Expression` (PEP 639, SPDX) va `Classifier: License ::` esa
+BOSHQARILADIGAN LUG'AT — ular hech qachon litsenziya matni bo'lolmaydi va
+shuning uchun TO'LIQ skanerlanadi. Qamrov YO'QOLMAYDI: `rfdetr-plus`
+o'z shartlarini `License-Expression` da, `ultralytics` esa
+klassifikatorda e'lon qiladi.
+=============================================================================
+"""
+
 _LOCK_PACKAGE_NAME = re.compile(r'^\s*name\s*=\s*"([^"]+)"\s*$', re.MULTILINE)
 """`uv.lock` — TOML, lekin u MATN sifatida o'qiladi.
 
@@ -372,8 +399,16 @@ def _license_tokens(dist: Distribution) -> list[str]:
     """
     metadata = dist.metadata
     tokens: list[str] = []
-    for field in (LICENSE_EXPRESSION_FIELD, LICENSE_FIELD):
-        tokens.extend(str(value).lower() for value in metadata.get_all(field) or ())
+    # (1) SPDX ifodasi — boshqariladigan lug'at, TO'LIQ o'qiladi.
+    tokens.extend(str(value).lower() for value in metadata.get_all(LICENSE_EXPRESSION_FIELD) or ())
+    # (2) Eski erkin matn maydoni — FAQAT identifikator shaklida
+    #     (`MAX_IDENTIFIER_LENGTH` docstringidagi o'lchov).
+    tokens.extend(
+        str(value).lower()
+        for value in metadata.get_all(LICENSE_FIELD) or ()
+        if len(str(value)) <= MAX_IDENTIFIER_LENGTH and "\n" not in str(value)
+    )
+    # (3) Trove klassifikatorlari — ular ham boshqariladigan lug'at.
     tokens.extend(
         str(value).lower()
         for value in metadata.get_all(CLASSIFIER_FIELD) or ()
