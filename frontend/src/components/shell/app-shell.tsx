@@ -5,6 +5,7 @@ import {
   Banknote,
   CalendarClock,
   CalendarDays,
+  ClipboardCheck,
   Ellipsis,
   LayoutDashboard,
   Map,
@@ -62,6 +63,8 @@ type NavItem = {
     | "/calendar"
     | "/cameras"
     | "/snapshots"
+    | "/review"
+    | "/occupancy"
     | "/users"
     | "/audit"
     | "/markets/new";
@@ -74,6 +77,8 @@ type NavItem = {
     | "calendar"
     | "cameras"
     | "snapshots"
+    | "review"
+    | "occupancy"
     | "users"
     | "audit"
     | "newMarket";
@@ -183,6 +188,62 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "snapshots",
     icon: CalendarClock,
     permission: "camera_view",
+    group: "market",
+  },
+  /*
+   * "Ko'rib chiqish" va "Bandlik" — 5-fazaning IKKITA yangi bo'limi
+   * (05-UI-SPEC §4.6).
+   *
+   * ⛔ ENG MUHIM NATIJA NAVIGATSIYADA. Bugungacha `inspector` roli FAQAT
+   * Boshqaruv panelini ko'rardi (bitta yozuv) — ya'ni nazoratchining ishi
+   * uchun ekran UMUMAN YO'Q edi. Shu ikki qatordan keyin u ikkita yozuv
+   * ko'radi va `/review` uning UYIGA aylanadi.
+   *
+   * `/snapshots` DAN BEVOSITA KEYIN: domen zanjiri shunday o'qiladi —
+   * kamera -> kadr -> ko'rib chiqish -> bandlik. Ikkalasi ham `market`
+   * guruhida, chunki bandlik bozor ICHIDAGI ma'lumot, platforma amali
+   * emas ("Yangi bozor" ning `system` guruhida turishi bilan izchil).
+   *
+   * ⛔ YANGI `Permission` O'YLAB TOPILMAYDI. `occupancy_review` va
+   * `report_view` IKKALA matritsada ham ALLAQACHON bor
+   * (`lib/rbac.ts:44-45`, `rbac.py`) va bu fazada ularning HECH BIRI
+   * TEGILMAYDI (05-UI-SPEC M-8). Yangi huquq qo'shish `rbac.py` bilan
+   * BIRGA qilinishi kerak bo'lardi, aks holda tugma ko'rinib turib 403
+   * berardi (`rbac.ts:62-67` dagi izoh).
+   *
+   * ⚠ O-03 (§16.4): `platform_admin` da `report_view` YO'Q, ya'ni u
+   * "Bandlik" ni ko'rmaydi. Bu fazada RBAC tegilmagani uchun QABUL
+   * QILINADI — rollar TO'PLAM (1-faza D-05), tekshirish uchun unga
+   * `market_admin` roli ham beriladi.
+   *
+   * MOBIL KONTRAKT BUZILMAYDI [O'LCHANDI: 05-UI-SPEC M-7]: ro'yxat
+   * 11 -> 13 ga o'sdi, `MOBILE_PRIMARY_COUNT` esa 4 bo'lib qoladi.
+   * Nazoratchida esa jami ikki yozuv bor, ya'ni "Ko'proq" tugmasi
+   * umuman chizilmaydi.
+   *
+   * ⛔ `/review/blind` NAVIGATSIYAGA QO'SHILMAYDI: u SESSIYA, bo'lim
+   * emas. Unga faqat ko'rib chiqish uyidan, OCHIQ NIYAT bilan kiriladi
+   * (§7.2). Menyuda turgan havola uni "yana bir ro'yxat" qilib
+   * ko'rsatib, ko'r auditning butun ma'nosini yo'qotardi.
+   *
+   * Ikonkalar: `ClipboardCheck` (ko'rib chiqish ro'yxati) va `Store`
+   * (rasta/bandlik). `Camera`, `Video`, `CalendarClock` BAND; `ScanEye`
+   * rad etildi — u "kuzatuv" ni anglatib, nazoratchini kameraga
+   * qaratardi. `Store` `/stalls` bilan BAHAM ko'riladi va bu ataylab:
+   * ikkala ekran ham RASTA haqida, faqat boshqa savol bilan.
+   */
+  {
+    href: "/review",
+    labelKey: "review",
+    icon: ClipboardCheck,
+    permission: "occupancy_review",
+    group: "market",
+  },
+  {
+    href: "/occupancy",
+    labelKey: "occupancy",
+    icon: Store,
+    permission: "report_view",
     group: "market",
   },
   { href: "/users", labelKey: "users", icon: Users, permission: "user_view", group: "system" },

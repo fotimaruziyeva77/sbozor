@@ -38,7 +38,9 @@
     "groupSystem": "Tizim",
     "logout": "Chiqish",
     "cameras": "Kameralar",
-    "snapshots": "Kadr olish"
+    "snapshots": "Kadr olish",
+    "review": "Ko'rib chiqish",
+    "occupancy": "Bandlik"
   },
   "auth": {
     "phoneLabel": "Telefon raqami",
@@ -855,6 +857,9 @@
     "emptyFilteredHint": "Bu kunda barcha kadrlar yaroqli."
   },
   "cameraZones": {
+    "title": "Kamera zonalari",
+    "uncovered": "Qamrovsiz rasta",
+    "uncoveredWhy": "Bu rastalarni birorta kamera ko'rmaydi. Ular haqida ma'lumot yig'ilmaydi.",
     "errorCauseLabel": "Sabab",
     "errorFixLabel": "Nima qilish kerak",
     "errorCause": {
@@ -879,6 +884,8 @@
     }
   },
   "review": {
+    "title": "Ko'rib chiqish",
+    "blindTitle": "Ko'rmasdan tekshirish",
     "errorCauseLabel": "Sabab",
     "errorFixLabel": "Nima qilish kerak",
     "errorCause": {
@@ -897,5 +904,10 @@
       "blind_answer_locked": "Ko'rmasdan tekshirishda javob bir marta yoziladi va o'zgartirilmaydi — o'lchov shu bilan halol qoladi. Keyingi bandga o'ting.",
       "review_already_answered": "Navbat yangilandi. Keyingi bandga o'ting."
     }
+  },
+  "occupancy": {
+    "title": "Bandlik",
+    "noCoverage": "Qamrov yo'q",
+    "noCoverageWhy": "Bu rastalarni birorta kamera ko'rmaydi. Ular bo'sh emas — ular haqida ma'lumot yo'q."
   }
 }

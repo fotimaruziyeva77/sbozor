@@ -20,7 +20,7 @@
  * serverda (`POST /markets`, 02-11).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import messages from "../../../messages/uz-Latn.json";
 import { AppShell } from "@/components/shell/app-shell";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
+import { ROLES } from "@/lib/rbac";
 
 /*
  * `@/i18n/navigation` Next.js router kontekstiga tayanadi va u jsdom'da yo'q
@@ -197,5 +198,164 @@ describe("AppShell — «Yangi bozor» navigatsiya yozuvi (CR-03)", () => {
         name: NEW_MARKET_LABEL,
       }),
     ).toHaveAttribute("href", NEW_MARKET_HREF);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * 5-FAZA — NAZORATCHINING UYI (W0-F1, W0-F5, 05-UI-SPEC §4.6).
+ *
+ * ⛔ NEGA BU TEST ENG MUHIMI. Bugungacha `inspector` roli navigatsiyada
+ * FAQAT Boshqaruv panelini ko'rardi — ya'ni nazoratchining ishi uchun
+ * ekran UMUMAN YO'Q edi. `/review` uning BIRINCHI ekrani; agar u
+ * `NAV_ITEMS` ga tushmasa, marshrut ochilgan taqdirda ham u
+ * TOPILMAYDIGAN bo'lib qolardi va nazoratchi URL'ni qo'lda terishi
+ * kerak bo'lardi. Bu 02-18 dagi `/markets/new` to'sig'ining aynan
+ * takrori va shuning uchun darvoza ham o'sha joyda.
+ *
+ * ⛔ W0-F5 — RBAC O'ZGARMAYDI, LEKIN TASDIQLANADI. `occupancy_review`
+ * va `report_view` IKKALA matritsada ham ALLAQACHON bor (M-8), ya'ni bu
+ * fazada `lib/rbac.ts` ham, `app/security/rbac.py` ham TEGILMAYDI. Bu
+ * bloknig vazifasi — keyingi ijrochi yangi `Permission` O'YLAB
+ * TOPMASLIGI: matritsani bir tomonlama o'zgartirish tugmani ko'rsatib
+ * turib 403 beradigan holat tug'dirardi (`rbac.ts:62-67`).
+ *
+ * ⚠ O-03 (05-UI-SPEC §16.4): `platform_admin` da `report_view` YO'Q, ya'ni
+ * u "Bandlik" ni KO'RMAYDI. Bu ataylab qabul qilingan: rollar TO'PLAM
+ * (1-faza D-05) va tekshirish uchun platforma adminiga `market_admin`
+ * roli ham beriladi. Shuning uchun quyida "Bandlik" ni `director`
+ * bo'yicha sinaymiz — unda `report_view` bor va u hisobotning ASOSIY
+ * iste'molchisi.
+ * ------------------------------------------------------------------------ */
+
+/** `nav.review` / `nav.occupancy` — uz-Latn qiymatlari. */
+const REVIEW_LABEL = "Ko'rib chiqish";
+const REVIEW_HREF = "/review";
+const OCCUPANCY_LABEL = "Bandlik";
+const OCCUPANCY_HREF = "/occupancy";
+/** `nav.dashboard` — "qobiq baribir chizildi" nazorati. */
+const DASHBOARD_LABEL = "Boshqaruv paneli";
+
+/**
+ * 05-UI-SPEC §12.3 KONTRAKTI: mobil pastki panelda eng ko'pi 5 element.
+ *
+ * `MOBILE_PRIMARY_COUNT + 1` sifatida HISOBLANMAYDI — yuqoridagi
+ * `MOBILE_MAX_PRIMARY` bilan aynan bir xil sabab: import qilingan
+ * konstanta testni implementatsiyaga o'ziga o'zi tasdiqlatardi.
+ */
+const MOBILE_MAX_ELEMENTS = 5;
+
+/**
+ * Mobil pastki panel — SINF bo'yicha, tugma bo'yicha EMAS.
+ *
+ * ⚠ Yuqoridagi `mobileBar()` "Ko'proq" TUGMASINI ajratuvchi belgi sifatida
+ *   ishlatadi va u HAR ROL uchun ishlamaydi: `inspector` da jami ikki
+ *   yozuv bor, ya'ni overflow BO'SH va tugma umuman chizilmaydi.
+ *   Sinf bo'yicha tanlash ikkala holatda ham ishlaydi, chunki `md:hidden`
+ *   faqat pastki panelda bor (yon panel — `hidden … md:flex`).
+ */
+function mobileBarByBreakpoint(): HTMLElement {
+  const bars = screen
+    .getAllByRole("navigation")
+    .filter((nav) => nav.className.includes("md:hidden"));
+  expect(bars, "mobil pastki panel AYNAN bitta bo'lishi kerak").toHaveLength(1);
+  return bars[0];
+}
+
+describe("AppShell — nazoratchining uyi va bandlik hisoboti (05-UI-SPEC §4.6)", () => {
+  test("`inspector` navigatsiyada «Ko'rib chiqish» ni KO'RADI", () => {
+    seedRoles(["inspector"]);
+    renderShell();
+
+    // Havola yon panelda ham, pastki panelda ham chiziladi — shuning uchun
+    // `getAllBy…`; muhimi UMUMAN mavjudligi va `href` ning to'g'riligi.
+    const links = screen.getAllByRole("link", { name: REVIEW_LABEL });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", REVIEW_HREF);
+    }
+  });
+
+  test("NAZORAT: `inspector` da «Bandlik» KO'RINMAYDI (`report_view` yo'q)", () => {
+    seedRoles(["inspector"]);
+    renderShell();
+
+    expect(
+      screen.queryByRole("link", { name: OCCUPANCY_LABEL }),
+    ).not.toBeInTheDocument();
+
+    /*
+     * NAZORAT MAJBURIY: usiz bu test qobiq UMUMAN chizilmagan holatda ham
+     * yashil ko'rinardi (`market_manage` testidagi bilan bir xil sabab).
+     */
+    expect(
+      screen.getAllByRole("link", { name: DASHBOARD_LABEL }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  test("`director` navigatsiyada «Bandlik» ni ko'radi (`report_view`)", () => {
+    seedRoles(["director"]);
+    renderShell();
+
+    const links = screen.getAllByRole("link", { name: OCCUPANCY_LABEL });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", OCCUPANCY_HREF);
+    }
+
+    // NAZORAT: direktorda `occupancy_review` YO'Q — ko'rib chiqish
+    // nazoratchining ishi, direktor esa NATIJANI o'qiydi.
+    expect(
+      screen.queryByRole("link", { name: REVIEW_LABEL }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("⛔ `/review/blind` navigatsiyada YO'Q — u sessiya, bo'lim emas (§7.2)", () => {
+    seedRoles(["inspector"]);
+    renderShell();
+
+    /*
+     * Menyudagi havola ko'r auditni "yana bir ro'yxat" qilib ko'rsatardi.
+     * Unga faqat `/review` uyidan, OCHIQ NIYAT bilan kiriladi — aks holda
+     * nazoratchi u yerga tasodifan tushib, o'zgartirib bo'lmaydigan javob
+     * berib qo'yardi (D-17, 4-himoya).
+     *
+     * Tekshiruv RENDER natijasida, manba faylida `grep` bilan emas: izohda
+     * yozilgan yo'l `grep` ni qizartirardi, holbuki u navigatsiyada emas.
+     */
+    const blind = screen
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("href")?.startsWith("/review/"));
+    expect(blind).toHaveLength(0);
+  });
+
+  test("HAR ROLDA mobil panelda eng ko'pi 5 element (§12.3, M-7)", () => {
+    /*
+     * ROLLAR RO'YXATI `rbac.ts` DAN OLINADI, bu yerda qo'lda
+     * yozilmaydi (§S-10): yangi rol qo'shilganda test uni AVTOMATIK
+     * qamraydi. Qo'lda yozilgan ro'yxat aynan yangi rolda jimgina
+     * bo'shab qolardi.
+     */
+    expect(ROLES.length).toBeGreaterThanOrEqual(5);
+
+    for (const role of ROLES) {
+      cleanup();
+      clearSession();
+      seedRoles([role]);
+      renderShell();
+
+      const bar = mobileBarByBreakpoint();
+      const elements =
+        within(bar).queryAllByRole("link").length +
+        within(bar).queryAllByRole("button").length;
+
+      expect(
+        elements,
+        `«${role}» rolida pastki panelda ${elements} element bor — 360px da ` +
+          "har biri 44px dan pastga tushardi (WCAG 2.5.8)",
+      ).toBeLessThanOrEqual(MOBILE_MAX_ELEMENTS);
+
+      // NAZORAT: panel BO'SH bo'lsa yuqoridagi assert jimgina o'tardi.
+      expect(elements, `«${role}» rolida pastki panel bo'sh`).toBeGreaterThan(0);
+    }
   });
 });
