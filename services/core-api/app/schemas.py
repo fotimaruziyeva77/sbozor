@@ -33,6 +33,7 @@ from sbozor_core.phone import InvalidPhoneError, normalize_phone
 from app.jobs.discovery import DISCOVERY_JOB_ERROR_CODES
 from app.services.capture_errors import CAPTURE_JOB_ERROR_CODES
 from app.services.isapi.errors import NVR_ERROR_CODES
+from app.services.occupancy_errors import OCCUPANCY_ERROR_CODES
 
 __all__ = [
     "ALERT_DETAIL_KEYS",
@@ -609,6 +610,17 @@ MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
         #   error_code` ustunida yashaydi va kun jurnali (`CaptureRunOut`)
         #   ularni AYNAN shu satr bilan qaytaradi.
         *CAPTURE_JOB_ERROR_CODES,
+        # --- bandlik domeni (05-04, AI-01/AI-03/AI-04) ---
+        #
+        # ⚠ IMPORT QILINADI, QO'LDA TAKRORLANMAYDI (§S-7). Bu reyestr
+        #   oldingilaridan bitta narsa bilan farq qiladi: `occupancy_events`
+        #   da xato ustuni YO'Q (u o'zgarmas hodisa jurnali, D-12), ya'ni bu
+        #   kodlarning YAGONA iste'molchisi — aynan shu allowlist. Nusxa
+        #   ko'chirilganda router `zone_polygon_self_intersecting` bilan
+        #   `HTTPException` ko'tarardi, allowlist esa uni tanimay
+        #   `errors.generic` ga tushirardi va admin poligonning QAYSI
+        #   qoidasini buzganini bilmasdi.
+        *OCCUPANCY_ERROR_CODES,
     }
 )
 """2-faza qaytaradigan BARCHA `detail` kodlari — yigirma to'rtta.
