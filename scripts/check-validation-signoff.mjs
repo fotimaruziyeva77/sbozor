@@ -47,18 +47,88 @@
  * Chiqish:    0 — bayroq hisob-kitobga mos; 1 — mos emas (AYNAN qaysi
  *             qoida buzilgani stderr'da).
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-const DEFAULT_FILE = path.join(
-  import.meta.dirname,
-  "..",
-  ".planning",
-  "phases",
-  "02-bozor-domeni-va-yangi-bozor-ustasi",
-  "02-VALIDATION.md",
-);
+const PHASES_DIR = path.join(import.meta.dirname, "..", ".planning", "phases");
+
+/**
+ * ⛔ D-27 — MEROS BAND, 4-FAZADAN QOLGAN.
+ *
+ * Bu yerda ilgari `02-bozor-domeni-va-yangi-bozor-ustasi/02-VALIDATION.md`
+ * QADALGAN edi. Nosozlik jimgina ishlaydi va aynan shuning uchun u ikki
+ * faza davomida sezilmadi: argumentsiz chaqiruv (`npm run validation:check`)
+ * HAR DOIM 2-fazani tekshirardi va YASHIL qaytardi. Ya'ni 3, 4 va 5-fazalar
+ * uchun darvoza mavjud bo'lib KO'RINARDI, lekin ularning birorta qatorini
+ * ham o'qimasdi.
+ *
+ * Tuzatish yo'nalishi (§3.11): `.planning/phases/` skanerlanadi va ENG
+ * KATTA RAQAMLI fazadagi `*-VALIDATION.md` olinadi.
+ *
+ * ⚠ TAQQOSLASH SON BO'YICHA, MATN BO'YICHA EMAS. Leksikografik tartibda
+ *   `10-...` `9-...` dan KICHIK bo'lardi, `02.1-...` esa `02-...` dan
+ *   oldin turardi. O'nlik faza raqami (`02.1`) shu loyihada real
+ *   ehtimol, shuning uchun `parseFloat` ishlatiladi.
+ *
+ * ⚠ «TOPILMADI = YIQILISH» (§S-10): faza katalogi yo'q bo'lsa yoki
+ *   birorta `*-VALIDATION.md` topilmasa — `exit 1`. Jimgina o'tib ketish
+ *   aynan yuqoridagi nosozlikning takrori bo'lardi.
+ */
+function resolveLatestValidationFile() {
+  let entries;
+  try {
+    entries = readdirSync(PHASES_DIR, { withFileTypes: true });
+  } catch {
+    return { error: `faza katalogi o'qilmadi: ${PHASES_DIR}` };
+  }
+
+  const phases = [];
+  const withoutValidation = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const match = /^(\d+(?:\.\d+)?)-/u.exec(entry.name);
+    if (!match) continue;
+
+    const number = Number.parseFloat(match[1]);
+    if (!Number.isFinite(number)) continue;
+
+    const dir = path.join(PHASES_DIR, entry.name);
+    const found = readdirSync(dir)
+      .filter((name) => name.endsWith("-VALIDATION.md"))
+      .sort();
+
+    if (found.length === 0) {
+      withoutValidation.push({ number, name: entry.name });
+      continue;
+    }
+    phases.push({ number, name: entry.name, file: path.join(dir, found.at(-1)) });
+  }
+
+  if (phases.length === 0) {
+    return {
+      error:
+        `${PHASES_DIR} da birorta \`*-VALIDATION.md\` topilmadi ` +
+        `(${entries.length} yozuv ko'rildi)`,
+    };
+  }
+
+  phases.sort((a, b) => b.number - a.number);
+  const chosen = phases[0];
+
+  /*
+   * ⚠ HUJJATSIZ FAZA JIMGINA O'TKAZIB YUBORILMAYDI. Yangi faza katalogi
+   *   yaratilib, `*-VALIDATION.md` hali yozilmagan bo'lsa skript ESKI
+   *   fazani tekshirardi va natija «yashil» ko'rinardi — bu aynan D-27
+   *   nosozligining yangi shakli. Shuning uchun ogohlantirish stderr'ga
+   *   chiqadi (chiqish kodi o'zgarmaydi: hujjat hali yozilmagani
+   *   XATO emas).
+   */
+  const newerWithout = withoutValidation.filter((item) => item.number > chosen.number);
+
+  return { file: chosen.file, phase: chosen.name, skipped: newerWithout };
+}
 
 const FLAG = "nyquist_compliant";
 const HUMAN_KEY = "human_only_verifications";
@@ -314,7 +384,37 @@ function check(file) {
   };
 }
 
-const file = process.argv[2] ? path.resolve(process.argv[2]) : DEFAULT_FILE;
+/*
+ * Argument berilgan holat O'ZGARMAYDI — u ataylab eng ustuvor yo'l:
+ * darvoza buyrug'i aniq faylni ko'rsatib chaqirilishi mumkin.
+ */
+let file;
+if (process.argv[2]) {
+  file = path.resolve(process.argv[2]);
+} else {
+  const resolved = resolveLatestValidationFile();
+  if (resolved.error) {
+    process.stderr.write(`check-validation-signoff: ${resolved.error}\n`);
+    process.exit(1);
+  }
+  file = resolved.file;
+  for (const item of resolved.skipped) {
+    process.stderr.write(
+      `check-validation-signoff: OGOHLANTIRISH — \`${item.name}\` fazasida ` +
+        "`*-VALIDATION.md` YO'Q, shuning uchun u tekshirilmadi\n",
+    );
+  }
+}
+
+/*
+ * ⛔ TANLANGAN FAYL BIRINCHI SATRDA CHOP ETILADI.
+ *
+ * Usiz «qaysi fayl tekshirildi?» savoli javobsiz qolardi va darvozaning
+ * TO'G'RI faylni tanlaganini tashqaridan o'lchab bo'lmasdi — ya'ni D-27
+ * nosozligi tuzatilgandan keyin ham ko'rinmas bo'lib qolaverardi.
+ */
+process.stdout.write(`check-validation-signoff: fayl — ${file}\n`);
+
 const outcome = check(file);
 
 if (outcome.fatal) {

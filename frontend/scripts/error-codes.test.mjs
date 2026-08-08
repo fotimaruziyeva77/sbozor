@@ -70,6 +70,15 @@ const BACKEND_CAPTURE_ERRORS = path.join(
   "services",
   "capture_errors.py",
 );
+const ZONE_ERRORS = path.join(FRONTEND_ROOT, "src", "lib", "zone-errors.ts");
+const BACKEND_OCCUPANCY_ERRORS = path.join(
+  REPO_ROOT,
+  "services",
+  "core-api",
+  "app",
+  "services",
+  "occupancy_errors.py",
+);
 
 function read(file) {
   return readFileSync(file, "utf8");
@@ -676,4 +685,249 @@ test("G-5: `snapshots.actor.*` uchala tilda va AYNAN uchta qiymat (§10.5)", () 
         "«BUNI KIM TUZATADI?» savoliga javob berishi SHART.",
     );
   }
+});
+
+/* ---------------------------------------------------------------------------
+ * G-17 — 5-FAZA: OLTINCHI REYESTR va IKKI NAMESPACE USTIDAGI PARITY.
+ *
+ * Zanjir uch bo'g'inli va har bo'g'in boshqa tilda:
+ *
+ *   occupancy_errors.py::ZONE_ERROR_CODES / REVIEW_ERROR_CODES
+ *     -> lib/zone-errors.ts::OCCUPANCY_ERROR_META   (kod + SIRT + tone)
+ *     -> messages/*.json                            (sabab va tuzatish)
+ *
+ * ⛔ NEGA LANGAR BACKENDDA, MATN KATALOGIDA EMAS — 04-10 NING DARSI.
+ *
+ *   G-5 ning dastlabki shakli `Object.keys(causes)` ga, ya'ni MATN
+ *   KATALOGINING O'ZIGA tayanardi. U to'plamning ICHKI izchilligini
+ *   o'lchardi, TO'LIQLIGINI emas: backend yangi kod qo'shsa-yu uchala
+ *   tilda ham matn yozilmasa, sabab<->tuzatish parity BUZILMASDI va
+ *   `>= N` sharti ham o'tardi. Darvoza YASHIL qolardi, admin esa
+ *   «Kutilmagan xato» ni ko'rardi. Aynan shu sinf 04-09 da HAQIQATAN
+ *   ro'y bergan.
+ *
+ *   Shuning uchun bu yerdagi HAR SIKL backend reyestridan boshlanadi.
+ *
+ * ⛔ SIRT HAM SOLISHTIRILADI, faqat kodlar emas — 04-10 dagi `actor`
+ *   ustunining aynan bir xil sinfi. Kod QAYSI EKRANDA ko'rsatilishi ikki
+ *   tomonda MUSTAQIL yozilgan fakt: backendda u REYESTR NOMI bilan
+ *   (`ZONE_ERROR_CODES` / `REVIEW_ERROR_CODES`), frontendda esa
+ *   `surface` maydoni bilan ifodalanadi. Ular ajralib ketsa, matn
+ *   MAVJUD BO'LMAGAN namespace'dan qidirilardi va foydalanuvchi
+ *   tarjimasiz texnik satrni ko'rardi — kod nomi esa ikkala tomonda ham
+ *   BIR XIL bo'lgani uchun hech qanday darvoza qizarmasdi.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * `NAME: Final[frozenset[str]] = frozenset({ ... })` ichidagi KONSTANTA
+ * NOMLARI -> ular ko'rsatayotgan kodlar.
+ *
+ * ⚠ NEGA MAVJUD `readPythonFrozenset` ISHLATILMAYDI. U qo'shtirnoqli
+ *   LITERALLARNI o'qiydi, `occupancy_errors.py` ning reyestrlari esa
+ *   KONSTANTALARDAN yig'ilgan — chunki §S-7 har kod uchun ALOHIDA
+ *   docstring talab qiladi va docstringni frozenset ichiga yozib
+ *   bo'lmaydi. Literal ro'yxat + konstantalar IKKI NUSXA bo'lardi.
+ *
+ *   Bu 04-10 dagi qarorning aynan takrori: u yerda ham `CAPTURE_ERROR_META`
+ *   uchun `readPythonStrConstants` + `readCaptureActors` YOZILGAN, chunki
+ *   umumiy parser reyestrni jimgina BO'SH deb o'qigan bo'lardi.
+ *
+ * ⚠ «TOPILMADI = YIQILISH» (§S-10): blok topilmasa yoki bo'sh chiqsa
+ *   `assert` yiqiladi, `[]` qaytarilmaydi.
+ */
+function readPythonFrozensetRefs(source, name, constants) {
+  const start = source.indexOf(`${name}: Final[frozenset[str]] = frozenset(`);
+  assert.ok(start !== -1, `${name} backend faylida topilmadi`);
+
+  const rest = source.slice(start);
+  const end = rest.indexOf("\n)");
+  assert.ok(end !== -1, `${name} bloki yopilmagan`);
+
+  const refs = rest
+    .slice(0, end)
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .map((line) => /^\s*([A-Z_0-9]+),\s*$/u.exec(line))
+    .filter(Boolean)
+    .map((match) => match[1]);
+
+  assert.ok(refs.length > 0, `${name} bloki BO'SH o'qildi — parser sinigan`);
+
+  return refs.map((ref) => {
+    const code = constants.get(ref);
+    assert.ok(code !== undefined, `${name}: ${ref} konstantasi topilmadi`);
+    return code;
+  });
+}
+
+/** `kod: { tone: "...", surface: "..." },` — `zone-errors.ts` ning jadvali. */
+function readTsZoneMeta(source) {
+  return new Map(
+    [
+      ...source.matchAll(
+        /^\s{2}([a-z_]+):\s*\{\s*tone:\s*"([a-z]+)",\s*surface:\s*"([A-Za-z]+)"\s*\}/gmu,
+      ),
+    ].map((match) => [match[1], { tone: match[2], surface: match[3] }]),
+  );
+}
+
+/** Reyestr nomi -> matn namespace'i. Backendda SIRT aynan shu tarzda yashaydi. */
+const OCCUPANCY_SURFACES = [
+  { registry: "ZONE_ERROR_CODES", surface: "cameraZones", expected: 8 },
+  { registry: "REVIEW_ERROR_CODES", surface: "review", expected: 6 },
+];
+
+const occupancySource = read(BACKEND_OCCUPANCY_ERRORS);
+const occupancyConstants = readPythonStrConstants(occupancySource);
+
+/** kod -> sirt (backend haqiqati). */
+const backendOccupancySurface = new Map();
+for (const { registry, surface } of OCCUPANCY_SURFACES) {
+  for (const code of readPythonFrozensetRefs(
+    occupancySource,
+    registry,
+    occupancyConstants,
+  )) {
+    backendOccupancySurface.set(code, surface);
+  }
+}
+
+test("G-17: bandlik reyestri o'qildi va AYNAN o'n to'rt kod (nazorat)", () => {
+  /*
+   * Nazorat: parser sinsa (masalan reyestr `tuple` ga aylantirilsa)
+   * quyidagi uchala darvoza ham JIMGINA yashil bo'lardi — bo'sh to'plam
+   * bo'yicha aylanish hech nimani tekshirmaydi.
+   */
+  assert.equal(
+    occupancyConstants.size,
+    14,
+    `occupancy_errors.py dan ${occupancyConstants.size} konstanta o'qildi, kutilgan 14`,
+  );
+
+  for (const { registry, surface, expected } of OCCUPANCY_SURFACES) {
+    const codes = readPythonFrozensetRefs(
+      occupancySource,
+      registry,
+      occupancyConstants,
+    );
+    assert.equal(
+      codes.length,
+      expected,
+      `${registry} dan ${codes.length} kod o'qildi, kutilgan ${expected} (sirt: ${surface})`,
+    );
+  }
+
+  assert.equal(backendOccupancySurface.size, 14, "ikki sirt reyestri kesishib qolgan");
+});
+
+test("G-17: `OCCUPANCY_ERROR_CODES` ikki reyestrdan HOSILA (uchinchi ro'yxat yo'q)", () => {
+  /*
+   * ⛔ Bu assert §S-5 ni MEXANIK qiladi. `OCCUPANCY_ERROR_CODES` qo'lda
+   *   uchinchi marta yozilsa, u ikki sirt reyestri bilan bir kun ajralib
+   *   ketardi va `app/schemas.py` ning allowlist'i reyestrdan KICHIK
+   *   bo'lib qolardi — router kod bilan `HTTPException` ko'tarardi,
+   *   allowlist esa uni tanimay `errors.generic` ga tushirardi.
+   *
+   *   Bu holatni yuqoridagi testlar KO'RMASDI: ular ikki sirt reyestrini
+   *   o'qiydi va uchinchi e'londan umuman bexabar.
+   */
+  assert.match(
+    occupancySource,
+    /OCCUPANCY_ERROR_CODES: Final\[frozenset\[str\]\] =\s*ZONE_ERROR_CODES \| REVIEW_ERROR_CODES/u,
+    "`OCCUPANCY_ERROR_CODES` ikki sirt reyestrining BIRLASHMASI bo'lishi SHART — " +
+      "qo'lda yozilgan uchinchi ro'yxat ikkinchi haqiqat manbai bo'lardi (§S-5)",
+  );
+});
+
+test("G-17: `lib/zone-errors.ts` backend reyestrining TO'LIQ ko'zgusi va SIRT MOS", () => {
+  const meta = readTsZoneMeta(read(ZONE_ERRORS));
+
+  assert.ok(
+    meta.size >= 14,
+    `zone-errors.ts dan atigi ${meta.size} yozuv o'qildi — parser sinigan bo'lishi mumkin`,
+  );
+
+  const problems = [];
+  for (const [code, surface] of backendOccupancySurface) {
+    const view = meta.get(code);
+    if (view === undefined) {
+      problems.push(
+        `zone-errors.ts: ${code} uchun yozuv YO'Q — kod backendда bor, frontendда ` +
+          "esa u `errors.generic` ga tushadi (D-02)",
+      );
+      continue;
+    }
+    if (view.surface !== surface) {
+      problems.push(
+        `${code}: sirt backendда «${surface}», frontendда «${view.surface}» — ` +
+          "matn mavjud bo'lmagan namespace'dan qidirilardi",
+      );
+    }
+    if (view.tone !== "danger" && view.tone !== "warning") {
+      problems.push(`${code}: noma'lum tone «${view.tone}» (uchinchisi YO'Q)`);
+    }
+  }
+
+  // Teskari yo'nalish: ko'zguda ORTIQCHA kod — hech qachon kelmaydigan
+  // xato uchun matn va qoida saqlab yurish.
+  for (const code of meta.keys()) {
+    if (!backendOccupancySurface.has(code)) {
+      problems.push(`zone-errors.ts: ${code} backend reyestrida YO'Q`);
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "bandlik xato taksonomiyasi ikki tomonda AJRALIB KETGAN:\n  " +
+      problems.join("\n  "),
+  );
+});
+
+test("G-17: HAR BACKEND kodi uchun sabab va tuzatish UCHALA tilda bor", () => {
+  const problems = [];
+
+  for (const locale of LOCALES) {
+    const messages = loadMessages(locale);
+
+    // OLDINGA: backend reyestridan boshlanadi (LANGAR).
+    for (const [code, surface] of backendOccupancySurface) {
+      const causes = messages[surface]?.errorCause ?? {};
+      const fixes = messages[surface]?.errorFix ?? {};
+
+      if (typeof causes[code] !== "string" || causes[code].trim() === "") {
+        problems.push(`${locale}.json: ${surface}.errorCause.${code} YO'Q`);
+      }
+      if (typeof fixes[code] !== "string" || fixes[code].trim() === "") {
+        problems.push(`${locale}.json: ${surface}.errorFix.${code} YO'Q`);
+      }
+    }
+
+    // TESKARI: matn bor, kod yo'q — o'lik kalit. Sirt ham tekshiriladi:
+    // kod TO'G'RI namespace'da bo'lishi shart.
+    for (const { surface } of OCCUPANCY_SURFACES) {
+      for (const group of ["errorCause", "errorFix"]) {
+        for (const code of Object.keys(messages[surface]?.[group] ?? {})) {
+          const actual = backendOccupancySurface.get(code);
+          if (actual === undefined) {
+            problems.push(
+              `${locale}.json: ${surface}.${group}.${code} backend reyestrida YO'Q`,
+            );
+          } else if (actual !== surface) {
+            problems.push(
+              `${locale}.json: ${surface}.${group}.${code} NOTO'G'RI namespace'da ` +
+                `(backend sirti: ${actual})`,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "D-02 buzilgan — sabab va tuzatish JUFT va TO'G'RI SIRTDA bo'lishi SHART:\n  " +
+      problems.join("\n  "),
+  );
 });
