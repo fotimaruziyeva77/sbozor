@@ -36,14 +36,20 @@ xil naqsh).
 from __future__ import annotations
 
 import os
-from typing import Final
+from contextlib import AsyncExitStack
+from typing import Annotated, Final
+from uuid import UUID
 
 import structlog
 from sbozor_core.logging import configure_logging
-from taskiq import AsyncBroker, TaskiqEvents, TaskiqState
+from taskiq import AsyncBroker, Context, TaskiqDepends, TaskiqEvents, TaskiqState
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 
+from app.db import open_sessionmaker
+from app.detector.session import DetectorSession
+from app.jobs.detect import assert_model_version_matches, detect, session_detector
 from app.observability import init_sentry
+from app.services import storage as storage_module
 from app.settings import get_settings
 
 log = structlog.get_logger(__name__)
@@ -54,6 +60,22 @@ CV_QUEUE: Final[str] = "sbozor:cv"
 Sabab modul docstringining birinchi blokida. Prefiks (`sbozor:`) saqlanadi:
 bitta Valkey nusxasi rate-limit sanagichlari va sessiya keshini ham
 saqlaydi, ya'ni kalit kimga tegishli ekanini AYTISHI kerak.
+"""
+
+DETECT_TASK_NAME: Final[str] = "cv.detect"
+"""Aniqlash vazifasining nomi — IKKI KOD BAZASI ORASIDAGI KONTRAKT.
+
+`core-api` bu vazifani BAJARMAYDI, faqat NASHR QILADI
+(`app/services/cv_queue.py`), ya'ni nom ikkala tarafda ham yozilishi
+SHART: `taskiq` xabarni nom bilan yo'naltiradi va nom mos kelmasa
+`cv-service` uni «noma'lum vazifa» deb tashlab yuborardi — hech qanday
+xatosiz, faqat jurnal satri bilan.
+
+⚠ NOM `CV_QUEUE` BILAN BIR XIL SABABDAN KODDA YASHAYDI, sozlamada
+  EMAS: muhit o'zgaruvchisiga chiqarilsa ikki servis jimgina boshqa
+  nomlarga qarab qolardi. Ikki nusxaning AJRALIB KETMASLIGI
+  `tests/integration/test_capture_enqueues_detect.py` da MANBA
+  DARAJASIDA tekshiriladi (§S-10: darvoza sanoq emas, MANBADAN hosila).
 """
 
 VALKEY_URL_ENV: Final = "VALKEY_URL"
@@ -140,16 +162,42 @@ async def _open_worker_resources(state: TaskiqState) -> None:
     ⚠ JIM ISHLASH TAQIQLANGAN: «Sentry o'chiq» holati jurnal satrida ochiq
       turishi kerak, aks holda uni «ishlayapti» deb o'ylash mumkin.
 
-    ⚠ OG'IR RESURSLAR (ONNX sessiyasi, ombor puli, `engine`) 05-08 da SHU
-      ILMOQQA qo'shiladi — `core-api` ning `_open_worker_resources` i
-      bilan aynan bir xil egalik shakli. Bugun ular YO'Q va bu holat
-      YASHIRILMAYDI: quvur hali qurilmagan.
+    ⚠⚠ OG'IR RESURSLAR SHU YERDA OCHILADI (05-08) — `core-api/app/worker.py`
+       ning `_open_worker_resources` i bilan AYNAN bir xil egalik shakli:
+
+         `engine`         — ulanish puli, `WORKER_SHUTDOWN` da `dispose()`
+         ombor klienti    — `aiobotocore` sessiyasi, `async with` ichida
+         `DetectorSession`— ONNX grafi, JARAYON-LOKAL
+
+       Uchalasi ham `AsyncExitStack` ga yopishtiriladi, ya'ni «ochdim,
+       yopishni unutdim» yo'li YO'Q: yopish tartibi ochish tartibining
+       teskarisi va u QO'LDA yozilmaydi.
+
+    ⚠ `DetectorSession` NI HAR VAZIFADA QURISH TAQIQ: ONNX grafi ~model
+      hajmi RAM oladi va uni 175 marta/kun qayta yuklash butun byudjetni
+      yeb qo'yardi. Sessiya jarayon-lokal, ya'ni yopiladigan TARMOQ
+      resursi yo'q — u `AsyncExitStack` da faqat egalikni ko'rsatish
+      uchun turadi.
     """
     settings = get_settings()
     configure_logging(settings.log_level)
     sentry_enabled = init_sentry(settings.sentry_dsn)
 
+    # ⚠ ARTEFAKT BILAN `MODEL_VERSION` NING MOSLIGI — ISHGA TUSHISHDA.
+    #   `Settings._validate_model_file` faylning MAVJUDLIGINI tekshiradi,
+    #   bu esa uning QAYSI ekanini: `occupancy_events.model_version`
+    #   kalitning bir qismi va u artefakt bilan birga o'zgarishi shart.
+    assert_model_version_matches(settings.cv_model_path)
+
+    stack = AsyncExitStack()
+    state.stack = stack
     state.settings = settings
+    state.sessionmaker = await stack.enter_async_context(open_sessionmaker(settings))
+    state.storage = await stack.enter_async_context(storage_module.open(settings))
+    state.detect_frame = session_detector(
+        DetectorSession(settings.cv_model_path, intra_op_num_threads=settings.cv_intra_op_threads)
+    )
+
     log.info(
         "cv_worker_started",
         queue=CV_QUEUE,
@@ -162,11 +210,47 @@ async def _open_worker_resources(state: TaskiqState) -> None:
 async def _close_worker_resources(state: TaskiqState) -> None:
     """Resurslarni yopadi — `lifespan` ning `finally` bandi bilan bir xil vazifa.
 
-    Bugun yopiladigan resurs YO'Q (yuqoridagi ilmoqning oxirgi bandi).
-    Ilmoq baribir mavjud va u JUFTLIKNI o'rnatadi: 05-08 resursni ochgan
-    joyda uni yopadigan joy allaqachon turadi va «yopishni unutish» yo'li
-    ochilmaydi (`aiobotocore` ning yopilmagan puli `aiohttp` ning
-    "Unclosed connector" ogohlantirishi bilan tugardi).
+    ⚠ `AsyncExitStack.aclose()` — BITTA chaqiruv, uchala resurs uchun.
+      Qo'lda yozilgan yopish zanjiri birinchi istisnoda to'xtardi va
+      qolgan resurslar ochiq qolardi (`aiobotocore` ning yopilmagan puli
+      `aiohttp` ning "Unclosed connector" ogohlantirishi bilan tugardi —
+      ya'ni resurs oqishi FAQAT jurnalda ko'rinadigan shaklda qolardi).
     """
-    del state
+    stack: AsyncExitStack | None = getattr(state, "stack", None)
+    if stack is not None:
+        await stack.aclose()
     log.info("cv_worker_stopped", queue=CV_QUEUE)
+
+
+@broker.task(task_name=DETECT_TASK_NAME)
+async def detect_task(
+    context: Annotated[Context, TaskiqDepends()],
+    *,
+    market_id: str,
+    snapshot_id: str,
+) -> None:
+    """YUPQA QOBIQ — `core-api/app/worker.py::capture_batch_task` bilan bir xil shakl (D-06).
+
+    Ikki ish bajaradi va ikkalasi ham CHEGARA ishi:
+
+      1. `str` -> `UUID`. Navbat xabari JSON, ya'ni `UUID` u yerdan MATN
+         bo'lib qaytadi. Konversiya shu yerda, jobda EMAS.
+      2. Resurslarni `TaskiqState` dan olib beradi — job ularni O'ZI
+         QURMAYDI (`jobs/detect.py` hammasini argument sifatida oladi).
+
+    ⚠ VAZIFA NOMI (`cv.detect`) — IKKI SERVIS ORASIDAGI KONTRAKT. Uni
+      `core-api/app/services/cv_queue.py` ham AYNAN shu satr bilan e'lon
+      qiladi va ikkalasining mos kelishi darvoza bilan tekshiriladi
+      (`tests/integration/test_capture_enqueues_detect.py`).
+
+    Mantiq bu funksiyada YO'Q va bo'lmasligi kerak: mexanizm
+    almashtirilganda ko'chiriladigan yagona qism aynan shu.
+    """
+    state = context.state
+    await detect(
+        state.sessionmaker,
+        state.storage,
+        state.detect_frame,
+        market_id=UUID(market_id),
+        snapshot_id=UUID(snapshot_id),
+    )
