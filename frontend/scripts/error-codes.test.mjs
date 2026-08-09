@@ -773,7 +773,7 @@ function readTsZoneMeta(source) {
 
 /** Reyestr nomi -> matn namespace'i. Backendda SIRT aynan shu tarzda yashaydi. */
 const OCCUPANCY_SURFACES = [
-  { registry: "ZONE_ERROR_CODES", surface: "cameraZones", expected: 8 },
+  { registry: "ZONE_ERROR_CODES", surface: "cameraZones", expected: 9 },
   { registry: "REVIEW_ERROR_CODES", surface: "review", expected: 6 },
 ];
 
@@ -792,7 +792,7 @@ for (const { registry, surface } of OCCUPANCY_SURFACES) {
   }
 }
 
-test("G-17: bandlik reyestri o'qildi va AYNAN o'n to'rt kod (nazorat)", () => {
+test("G-17: bandlik reyestri o'qildi va AYNAN o'n besh kod (nazorat)", () => {
   /*
    * Nazorat: parser sinsa (masalan reyestr `tuple` ga aylantirilsa)
    * quyidagi uchala darvoza ham JIMGINA yashil bo'lardi — bo'sh to'plam
@@ -800,8 +800,8 @@ test("G-17: bandlik reyestri o'qildi va AYNAN o'n to'rt kod (nazorat)", () => {
    */
   assert.equal(
     occupancyConstants.size,
-    14,
-    `occupancy_errors.py dan ${occupancyConstants.size} konstanta o'qildi, kutilgan 14`,
+    15,
+    `occupancy_errors.py dan ${occupancyConstants.size} konstanta o'qildi, kutilgan 15`,
   );
 
   for (const { registry, surface, expected } of OCCUPANCY_SURFACES) {
@@ -817,7 +817,7 @@ test("G-17: bandlik reyestri o'qildi va AYNAN o'n to'rt kod (nazorat)", () => {
     );
   }
 
-  assert.equal(backendOccupancySurface.size, 14, "ikki sirt reyestri kesishib qolgan");
+  assert.equal(backendOccupancySurface.size, 15, "ikki sirt reyestri kesishib qolgan");
 });
 
 test("G-17: `OCCUPANCY_ERROR_CODES` ikki reyestrdan HOSILA (uchinchi ro'yxat yo'q)", () => {

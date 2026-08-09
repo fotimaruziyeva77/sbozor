@@ -55,6 +55,7 @@ export type ZoneErrorCode =
   | "zone_polygon_too_many_points"
   | "zone_polygon_out_of_range"
   | "zone_polygon_self_intersecting"
+  | "zone_polygon_degenerate_edge"
   | "zone_limit_reached"
   | "zone_stall_already_covered"
   | "zone_camera_has_no_frame"
@@ -134,6 +135,15 @@ const OCCUPANCY_ERROR_META: Readonly<
   zone_polygon_too_many_points: { tone: "danger", surface: "cameraZones" },
   zone_polygon_out_of_range: { tone: "danger", surface: "cameraZones" },
   zone_polygon_self_intersecting: { tone: "danger", surface: "cameraZones" },
+  /*
+   * ⚠ `danger` va `zone_polygon_self_intersecting` DAN ALOHIDA KOD.
+   *   Sabab `occupancy_errors.py` da o'lchangan: `isSelfIntersecting`
+   *   takrorlangan tepani TOPA OLMAYDI (nol uzunlikdagi kesmada
+   *   orientatsiya determinanti har doim nol), ya'ni bu holat FAQAT
+   *   serverdan qaytadi va admin uni «kesishgan» deb o'qisa, kesishmani
+   *   qidirib topa olmasdi.
+   */
+  zone_polygon_degenerate_edge: { tone: "danger", surface: "cameraZones" },
   zone_limit_reached: { tone: "warning", surface: "cameraZones" },
   zone_stall_already_covered: { tone: "warning", surface: "cameraZones" },
   zone_camera_has_no_frame: { tone: "warning", surface: "cameraZones" },
