@@ -963,6 +963,7 @@
     "stallLine": "Раста {stall} · {zone}",
     "frameLine": "{date} · {time} · Канал {channel}",
     "vendorAttached": "Бу растада сотувчи бириктирилган",
+    "zoomFrame": "Кадрни катталаштириш",
     "frameAlt": "Далил кадри",
     "frameReady": "Расм тайёр",
     "imageUnavailable": "Расм очилмади — жавоб бера олмайсиз",

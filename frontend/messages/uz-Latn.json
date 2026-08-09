@@ -963,6 +963,7 @@
     "stallLine": "Rasta {stall} · {zone}",
     "frameLine": "{date} · {time} · Kanal {channel}",
     "vendorAttached": "Bu rastada sotuvchi biriktirilgan",
+    "zoomFrame": "Kadrni kattalashtirish",
     "frameAlt": "Dalil kadri",
     "frameReady": "Rasm tayyor",
     "imageUnavailable": "Rasm ochilmadi — javob bera olmaysiz",

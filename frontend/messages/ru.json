@@ -963,6 +963,7 @@
     "stallLine": "Место {stall} · {zone}",
     "frameLine": "{date} · {time} · Канал {channel}",
     "vendorAttached": "К этому месту привязан продавец",
+    "zoomFrame": "Увеличить кадр",
     "frameAlt": "Кадр-доказательство",
     "frameReady": "Изображение готово",
     "imageUnavailable": "Изображение не открылось — ответить нельзя",
