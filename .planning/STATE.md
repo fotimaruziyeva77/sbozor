@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-11-PLAN.md
-last_updated: "2026-08-08T17:39:07.705Z"
-last_activity: 2026-08-08 -- Phase 05 planning complete
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-08-09T03:31:44.474Z"
+last_activity: 2026-08-09 -- 05-05 bajarildi (bandlik domeni sxemasi, 0018 + 0019)
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 82
-  completed_plans: 67
+  completed_plans: 72
   percent: 44
 ---
 
@@ -21,21 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-28)
 
 **Core value:** Bozor ma'muriyati har bir band rastadan patta to'liq yig'ilayotganini raqamlar va rasm-dalil bilan ko'radi — "band, lekin to'lovsiz" rastalar kunlik hisobotda avtomatik fosh bo'ladi.
-**Current focus:** Phase 04 — snapshot-pipeline
+**Current focus:** Phase 05 — kamera zonalari, CV va nazoratchi tasdig'i
 
 ## Current Position
 
 Phase: 5
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-08-08 -- Phase 05 planning complete
+Plan: 5
+Total Plans in Phase: 15
+Status: Executing
+Last activity: 2026-08-09 -- 05-05 bajarildi (bandlik domeni sxemasi, 0018 + 0019)
 
-Progress: [█████████░] 93% (13/14 reja — 04-01…04-13)
+Progress: [███░░░░░░░] 33% (5/15 reja — 05-01…05-05)
 
-⚠ **04-13 gap-closure rejasi edi.** `04-VERIFICATION.md` fazani
-`gaps_found` (4/5) deb yopgan; yagona bo'shliq — `scheduler` jarayonida
-`init_sentry()` chaqirilmasligi — 04-13 da yopildi va uch mustaqil
-qatlamda o'lchandi. `04-14` qayta tekshiruv/yakunlash rejasi.
+⚠ **Wave 0 (05-01…05-04) va Wave 2 ning birinchi rejasi (05-05) yopildi.**
+`05-05` fazaning **sxema poydevorini** qo'ydi: oltita tenant jadvali,
+D-21 billing langari, D-17.3 ning ikki qatlamli ko'r-audit `CHECK` i va
+`market_delete_draft()` kaskadining uchinchi kengaytmasi. Keyingi rejalar
+(`05-06`…`05-15`) shu sxemaga tayanadi va **yangi kafolat mexanizmi o'ylab
+topmaydi**.
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -76,6 +79,7 @@ qatlamda o'lchandi. `04-14` qayta tekshiruv/yakunlash rejasi.
 | Phase 04 P10 | 140 | 3 tasks | 16 files |
 | Phase 04 P11 | 1h 45m | 3 tasks | 17 files |
 | Phase 04 P13 | 125min | 3 tasks | 6 files |
+| Phase 05 P05 | 185min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -185,6 +189,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-05T03:26:49.683Z
-Stopped at: Completed 04-11-PLAN.md
+Last session: 2026-08-09T03:31:44.461Z
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None

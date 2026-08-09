@@ -326,11 +326,11 @@ Plans:
 
 **Plans**: 15 plans (9 to'lqin)
 
-- [ ] 05-01-PLAN.md — Wave 0/A: reyestrlar, ko'r audit urug'ining zondi, markerlar, oltin to'plam skeleti
-- [ ] 05-02-PLAN.md — Wave 0/B: `cv-service` bog'liqlik to'plami, litsenziya devori, `sv.Detections` fixture'i
-- [ ] 05-03-PLAN.md — Wave 0/C: zona geometriyasi, Wilson oralig'i, ko'r-payload darvozasi
-- [ ] 05-04-PLAN.md — Wave 0/D: xato reyestrlari, navigatsiya, matn darvozalari, D-27
-- [ ] 05-05-PLAN.md — `0018` bandlik domeni + `0019` kaskad (billing langari, o'zgarmaslik)
+- [x] 05-01-PLAN.md — Wave 0/A: reyestrlar, ko'r audit urug'ining zondi, markerlar, oltin to'plam skeleti
+- [x] 05-02-PLAN.md — Wave 0/B: `cv-service` bog'liqlik to'plami, litsenziya devori, `sv.Detections` fixture'i
+- [x] 05-03-PLAN.md — Wave 0/C: zona geometriyasi, Wilson oralig'i, ko'r-payload darvozasi
+- [x] 05-04-PLAN.md — Wave 0/D: xato reyestrlari, navigatsiya, matn darvozalari, D-27
+- [x] 05-05-PLAN.md — `0018` bandlik domeni + `0019` kaskad (billing langari, o'zgarmaslik)
 - [ ] 05-06-PLAN.md — `camera_zones` API: server geometriyasi, versiyalash, qamrov (AI-01)
 - [ ] 05-07-PLAN.md — `cv-service` detektor yadrosi: ONNX, post-processing, zona verdicti (AI-02)
 - [ ] 05-08-PLAN.md — `detect` job: ombor klienti, orkestratsiya, `occupancy_events` (AI-02)
