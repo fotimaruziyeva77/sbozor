@@ -113,6 +113,40 @@ INDEX_EXCEPTIONS = {
     # Shakl `04-01` ning W0-1 zondi bilan HAQIQIY `postgres:18.4` da
     # o'lchangan (`BILLABLE_ANCHOR_SUPPORTED = true`).
     "uq_snapshots_billable_anchor",
+    # --- 5-faza, `0018_occupancy_domain` (D-17.3 / T-05-17). ---
+    #
+    # ⚠ UCHALASI HAM `uq_snapshots_billable_anchor` BILAN BIR SINFDA:
+    #   ular SO'ROV YO'LI EMAS, KAFOLAT KONSTRAYTI. Hech biri tenant
+    #   filtrlash uchun ishlatilmaydi — har bir o'qish so'rovi
+    #   `market_id` bilan boshlanadigan boshqa indeksdan foydalanadi
+    #   (`uq_review_assignments_market_id_id`,
+    #   `uq_occupancy_events_market_id_id` va h.k.).
+    #
+    # (a) «BITTA HODISA IKKI NAVBATDA BO'LA OLMAYDI». Da'vo tenant
+    #     chegarasiga bog'liq BO'LMASLIGI kerak: `(market_id,
+    #     occupancy_event_id)` shakli bugun bir xil natija berardi
+    #     (`occupancy_events.id` global noyob), lekin u kafolatni IKKINCHI
+    #     faktga bog'lab qo'yardi va o'sha fakt o'zgargan kuni «bir hodisa
+    #     — bir navbat» qoidasi JIMGINA bo'shardi. Poyga DB'ga topshirilgan
+    #     (`nvr_repo.py:509-517` naqshi), ya'ni bu konstrayt ilova
+    #     mantig'ining O'RNIGA turadi, uning yonida emas.
+    "uq_review_assignments_occupancy_event_id",
+    # (b) «BITTA TOPSHIRIQQA BITTA JAVOB» — (a) bilan bir xil sabab.
+    #     Ikkinchi javob o'zgarmaslik triggerini `INSERT` orqali chetlab
+    #     o'tish yo'li bo'lardi: tahrirlash o'rniga ikkinchi qator
+    #     yoziladi va «qaysi biri hisobga kiradi?» savoli javobsiz qoladi.
+    "uq_zone_reviews_review_assignment_id",
+    # (c) KO'R AUDIT LANGARI — `(id, queue_kind)`. Bu konstrayt
+    #     `uq_snapshots_billable_anchor` ning AYNAN takrori va u ham
+    #     TUZILMAVIY ZARURAT: `zone_reviews` `(review_assignment_id,
+    #     queue_kind)` juftligiga kompozit FK qo'yadi, FK NISHONI esa
+    #     havola qiluvchi ustunlar bilan AYNAN mos kelishi shart — ya'ni
+    #     konstraytga `market_id` ni qo'shish uni FK uchun YAROQSIZ
+    #     qilardi. Langar `zone_reviews.queue_kind` nusxasini HALOL
+    #     qiladi; usiz D-17.3 ning `CHECK` i o'z nusxasiga ishonardi va
+    #     nusxani `'uncertain'` deb yozish «ko'r, lekin ko'rsatilgan»
+    #     qatoriga yo'l ochardi.
+    "uq_review_assignments_queue_anchor",
 }
 
 EXPECTED_DEFINER_FUNCTIONS = {
@@ -189,40 +223,44 @@ EXPECTED_DEFINER_FUNCTIONS = {
 #
 # Bu `INDEX_EXCEPTIONS` va `POLICY_TENANT_GUC_EXCEPTIONS` bilan bir xil naqsh:
 # istisno testda, sababi yozma, o'zgartirish code review'da ko'zga tashlanadi.
-PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset({"camera_zones", "zone_reviews"})
-"""`AUDITED_TABLES` ga OLINGAN, lekin jadvali `0018` da TUG'ILADIGAN nomlar.
+PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset()
+"""`AUDITED_TABLES` ga OLINGAN, lekin jadvali hali TUG'ILMAGAN nomlar.
 
-⏳ OCHIQ QARZ (`05-01` / T1, 2026-08-08) — EGASI VA TETIGI BOR:
-`0018_occupancy_domain` (`05-05` / T2) ikkala triggerni ULAGACH nomlar
-O'SHA MIGRATSIYA BILAN BIR COMMITDA bu yerdan O'CHIRILADI. Bu `04-01` →
-`04-03` juftligining (`snapshot_schedules`, `snapshot_schedule_slots`)
-AYNAN takrori va uchinchi marta qo'llanishi.
+✅ QARZ YOPILDI (`05-05` / T2, 2026-08-09). `0018_occupancy_domain`
+`camera_zones` va `zone_reviews` ga audit triggerini ULADI, ya'ni ikkala
+nom O'SHA MIGRATSIYA BILAN BIR COMMITDA bu yerdan O'CHIRILDI va ro'yxat
+yana BO'SH. Bu `04-01` → `04-03` juftligining (`snapshot_schedules`,
+`snapshot_schedule_slots`) AYNAN takrori va uchinchi marta qo'llanishi.
+
+⚠ NOMNI UNUTIB QOLDIRISH TESTNI TESKARI YO'NALISHDAN QIZARTIRARDI:
+solishtiruv `missing == PENDING_AUDIT_TRIGGERS` (pastdagi `closed`
+asserti), ya'ni «trigger ulandi, lekin nom hamon ro'yxatda» holati ham
+qizil beradi. Qulf IKKI TOMONLAMA.
 
 ⚠ BU RO'YXATGA YANGI NOM QO'SHISH — OXIRGI CHORA, ODATIY QADAM EMAS.
 Reyestrga (`AUDITED_TABLES`) jadval qo'shilgan, lekin
 `attach_audit_trigger()` hali chaqirilmagan HOLAT faqat jadval KEYINGI
-migratsiyada tug'ilganda ma'noli — VA BU YERDA AYNAN SHU HOLAT: `05-01`
-birorta migratsiya YOZMAYDI (u Wave 0, ya'ni ta'rifi bo'yicha birinchi
-migratsiyadan OLDIN turadi), ya'ni `attach_audit_trigger("camera_zones")`
-ni chaqirishning FIZIK imkoni yo'q — jadval hali mavjud emas. Bir
-migratsiya ichida ikkalasini ham qilish mumkin bo'lsa, ro'yxat BO'SH
-qolishi kerak.
+migratsiyada tug'ilganda ma'noli — `05-01` da AYNAN shu holat edi: u
+Wave 0 reja va birorta migratsiya YOZMAYDI, ya'ni
+`attach_audit_trigger("camera_zones")` ni chaqirishning FIZIK imkoni
+yo'q edi (jadval hali mavjud emas). Bir migratsiya ichida ikkalasini ham
+qilish mumkin bo'lsa, ro'yxat BO'SH qolishi kerak.
 
-⛔ SHUNING UCHUN BU YERDA HAM «KUTILGAN QIZIL» HOLAT YO'Q va bu farq
-butun mexanizmning mazmuni. Ro'yxat va amaldagi triggerlar AYNI COMMITDA
-tenglashadi:
+⛔ «KUTILGAN QIZIL» HOLAT HECH QACHON BO'LMADI va bu farq butun
+mexanizmning mazmuni. Ro'yxat va amaldagi triggerlar AYNI COMMITDA
+tenglashdi:
 
-  * BUGUN — `AUDITED_TABLES` ga ikki nom qo'shildi VA ular shu yerda:
-    `missing == PENDING_AUDIT_TRIGGERS`, test YASHIL;
-  * `0018` DAN KEYIN — triggerlar ulanadi, `missing` bo'shaydi va nomlar
-    shu yerdan o'chiriladi: yana YASHIL.
+  * `05-01` / T1 — `AUDITED_TABLES` ga ikki nom qo'shildi VA ular shu
+    yerda: `missing == PENDING_AUDIT_TRIGGERS`, test YASHIL;
+  * `05-05` / T2 (`0018`) — triggerlar ulandi, `missing` bo'shadi va
+    nomlar shu yerdan o'chirildi: yana YASHIL.
 
 Ya'ni `test_audited_tables_have_trigger` `05-01` dan `05-05` gacha
-UZLUKSIZ yashil turadi va oraliqdagi to'rt reja uchun darvoza SIGNAL
-BERISHDA DAVOM ETADI. 2-fazada qarz o'n olti reja davomida darvozani
-qizil qilib turgan va o'sha o'n olti reja uchun darvoza SIGNAL BERMAY
-qolgan edi — yuqoridagi izohdagi «Buzilgan darvoza — darvoza emas» bandi
-aynan shu haqda."""
+UZLUKSIZ yashil turdi va oraliqdagi to'rt reja uchun darvoza SIGNAL
+BERISHDA DAVOM ETDI. 2-fazada qarz o'n olti reja davomida darvozani qizil
+qilib turgan va o'sha o'n olti reja uchun darvoza SIGNAL BERMAY qolgan
+edi — yuqoridagi izohdagi «Buzilgan darvoza — darvoza emas» bandi aynan
+shu haqda."""
 
 # Ilova roliga tenant predikatisiz ruxsat beruvchi policy'lar. Har biri uchun
 # sabab SHU YERDA yozilishi SHART — istisno qo'shish code review'da ko'zga

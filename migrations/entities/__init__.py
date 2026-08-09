@@ -18,6 +18,7 @@ from migrations.entities.functions import (
     ALL_FUNCTIONS,
     AUTH_SUPPORT_FUNCTIONS,
     MARKET_DOMAIN_FUNCTIONS,
+    OCCUPANCY_FUNCTIONS,
     PLATFORM_AUDIT_FUNCTIONS,
     SNAPSHOT_FUNCTIONS,
     USER_ADMIN_FUNCTIONS,
@@ -452,21 +453,23 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     # shart BAZAGA bog'langan, ya'ni jadval tug'ilgan zahoti darvoza O'ZI
     # QUROLLANADI.
     *SNAPSHOT_TENANT_TABLES,
-    # ⚠ `*OCCUPANCY_TENANT_TABLES` BU YERDA ATAYIN YO'Q (`05-01` / T1).
+    # ✅ QARZ YOPILDI (`05-05` / T2, 2026-08-09) — `0018_occupancy_domain`
+    # BILAN BIR COMMITDA, `04-03` ning `0014` bilan qilgani bilan AYNAN bir
+    # xil qadam va uchinchi marta qo'llanishi.
     #
-    # Sabab yuqoridagi ✅ bandda O'LCHANGAN va u 5-fazada AYNAN takrorlanadi:
-    # `ALL_ENTITIES` shu ro'yxatdan quriladi, `alembic_utils` komparatori esa
-    # har bir entity'ni HAQIQATAN yaratib ko'radi (`simulate_entity`), ya'ni
-    # hali mavjud bo'lmagan `camera_zones` ga policy ro'yxatga olinishi
-    # `test_market_domain_meta.py::test_autogenerate_is_empty` ni
-    # `UndefinedTable` bilan DARHOL yiqitardi.
+    # `05-01` bu qatorni ATAYIN qoldirmagan edi va sabab yuqoridagi ✅ bandda
+    # O'LCHANGAN (`UndefinedTable`, 2026-08-04): `ALL_ENTITIES` shu ro'yxatdan
+    # quriladi, `alembic_utils` komparatori esa har bir entity'ni HAQIQATAN
+    # yaratib ko'radi (`simulate_entity`), ya'ni hali mavjud bo'lmagan
+    # `camera_zones` ga policy ro'yxatga olinishi
+    # `test_market_domain_meta.py::test_autogenerate_is_empty` ni DARHOL
+    # yiqitardi. `0018` jadvallarni endi yaratadi, ya'ni splice AYNAN shu
+    # commitda va faqat shu commitda to'g'ri bo'ladi.
     #
-    # Qo'shish `0018_occupancy_domain` BILAN BIR COMMITDA bajariladi
-    # (`05-05` / T2) — `04-03` ning `0014` bilan qilgani bilan bir xil qadam.
-    # Qarz ko'rinmas emas: `test_meta.py::
-    # test_occupancy_registries_are_self_consistent` shartni BAZAGA bog'laydi,
-    # ya'ni jadval tug'ilgan zahoti darvoza O'ZI QUROLLANADI va `05-05`
-    # ro'yxatni kengaytirmaguncha QIZIL turadi.
+    # Qarz ko'rinmas emas edi: `test_meta.py::
+    # test_occupancy_registries_are_self_consistent` shartni BAZAGA bog'lagan —
+    # jadval tug'ilgan zahoti darvoza O'ZI QUROLLANDI.
+    *OCCUPANCY_TENANT_TABLES,
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 
@@ -523,7 +526,15 @@ ALL_ENTITIES: list[Any] = [
     # keyingi o'zgarishi autogenerate'da ko'rinmasdi va bazadagi ta'rif
     # koddagisidan jimgina ajralib ketardi.
     *SNAPSHOT_FUNCTIONS,
+    # Bandlik domenining ikki tik yuzasi (0018): `audit_draw_due_markets()`
+    # va `occupancy_day_close_markets()` — ikkalasi ham tenant kontekstisiz
+    # FAQAT identifikator va sanoq qaytaradigan tor `SECURITY DEFINER`
+    # funksiyalar (§S-5, T-05-19). Reyestrga tushishi MAJBURIY: usiz
+    # tananing keyingi o'zgarishi autogenerate'da ko'rinmasdi va bazadagi
+    # ta'rif koddagisidan jimgina ajralib ketardi.
+    *OCCUPANCY_FUNCTIONS,
     # Audit yozuvchisi + append-only qo'riqchisi (D-10) + 2-faza domen
-    # qoidalari (kod reyestri, tarif/toifa daxlsizligi).
+    # qoidalari (kod reyestri, tarif/toifa daxlsizligi) + 5-faza bandlik
+    # domenining ikki o'zgarmaslik qo'riqchisi (D-12/D-17.4).
     *ALL_TRIGGER_FUNCTIONS,
 ]

@@ -48,8 +48,11 @@ __all__ = [
     "MARKETS_DELETE_GUARD",
     "MARKET_DOMAIN_TRIGGER_FUNCTIONS",
     "NVR_DOMAIN_TRIGGER_FUNCTIONS",
+    "OCCUPANCY_EVENT_IMMUTABLE",
+    "OCCUPANCY_TRIGGER_FUNCTIONS",
     "STALL_CODE_CLAIM",
     "TARIFF_PAST_IMMUTABLE",
+    "ZONE_REVIEW_IMMUTABLE",
 ]
 
 FN_AUDIT_ROW = PGFunction(
@@ -393,6 +396,190 @@ bekor qilinadi (xatosiz!). Bu eng yomon variant bo'lardi: qoralama bozor
 "o'chirildi" deb ko'rinardi-yu, aslida joyida qolardi.
 """
 
+# ===========================================================================
+# 0018 — BANDLIK DOMENINING O'ZGARMASLIGI (5-faza, D-12 / D-17.4, T-05-17)
+# ===========================================================================
+#
+# ⚠⚠ SHAKL TANLOVI — BU FAZANING ENG OSON JIMGINA BUZILADIGAN QARORI.
+#
+# Yuqorida IKKI XIL o'zgarmaslik shakli bor va ular BIR-BIRIGA O'XSHAYDI:
+#
+#   SHARTSIZ  (`AUDIT_IMMUTABLE`)        -> har qanday UPDATE/DELETE rad etiladi
+#   SHARTLI   (`TARIFF_PAST_IMMUTABLE`)  -> faqat O'TMISHDAGI qator qulflanadi
+#                                           (`valid_from <= bugun`), qolgani ochiq
+#
+# 5-faza SHARTLI shaklning VAQT SHARTINI RAD ETADI (`05-PATTERNS.md` §S-3)
+# va sabab MA'NODA: `valid_from <= bugun` qo'riqchisi «bugungi» qatorni
+# OCHIQ qoldiradi, holbuki aynan bugungi javob — AI verdikti va nazoratchi
+# javobi — o'lchov natijasini belgilaydi. «Bugun yozilgan javobni bugun
+# to'g'rilash mumkin» qoidasi ostida xolis aniqlik da'vosi UMUMAN ma'noga
+# ega bo'lmasdi: ko'r auditda AI javobi OSHKOR QILINGANDAN KEYIN javobni
+# unga moslashtirish yo'li ochiq qolardi.
+#
+# =========================================================================
+# ⚠⚠ LEKIN QORALAMA-BOZOR ISTISNOSI SAQLANADI VA U O'LCHANGAN ZARURAT.
+#
+# `market_delete_draft()` (`0019`) bu ikkala jadvaldan ham `DELETE` qiladi.
+# Butunlay shartsiz qo'riqchi o'sha `DELETE` ni HAR DOIM `RAISE EXCEPTION`
+# bilan to'xtatardi, ya'ni rejaning ikki qismi bir-birini INKOR QILARDI:
+# tashlab ketilgan qoralama bozorlar bazada ABADIY to'planardi va yagona
+# "tuzatish" yo'li kaskadni buzish bo'lardi. Bu YANGI muammo emas —
+# `TARIFF_PAST_IMMUTABLE` docstringi uni 2-fazada AYNAN shu shaklda
+# o'lchagan va `fixtures/two_markets.py::cleanup_two_markets()` ham,
+# `cleanup_market_domain()` ham o'shandan beri `is_active = false` qadamini
+# bajaradi.
+#
+# ⛔ RAD ETILGAN UCH MUQOBIL VA HAR BIRI BOSHQA SABABDAN:
+#   * `session_replication_role = replica` — T-01-33 ning AYNAN o'zi:
+#     u BARCHA triggerlarni (audit ham) o'chiradi va `sbozor_app` uchun
+#     ataylab taqiqlangan;
+#   * `ALTER TABLE ... DISABLE TRIGGER` kaskad ichida — `ACCESS EXCLUSIVE`
+#     lock oladi va qo'riqchini butun baza uchun (boshqa sessiyalar uchun
+#     ham) tranzaksiya davomida o'chirardi;
+#   * `current_user = 'sbozor_owner'` sharti — EGANI ISTISNO QILARDI,
+#     holbuki `tests/integration/test_audit_immutable.py` butun falsafasi
+#     shundaki, qo'riqchi EGAGA QARSHI ham ishlashi kerak.
+#
+# ✅ TANLANGAN SHAKL — `TARIFF_PAST_IMMUTABLE` DAN KUCHLIROQ:
+#   * `UPDATE`  -> HAR DOIM rad etiladi (bozor faolmi yoki qoralamami —
+#                  farqi YO'Q). Tampering yo'li BUTUNLAY yopiq.
+#   * `DELETE`  -> faqat QORALAMA bozor uchun o'tadi (`market_delete_draft()`
+#                  ning yagona yo'li). Jonli bozorda rad etiladi.
+# `TARIFF_PAST_IMMUTABLE` istisnoni IKKALA amalga ham beradi; bu yerda u
+# faqat `DELETE` ga tegishli, ya'ni yuza IKKI BAROBAR TOR.
+#
+# NEGA BU XAVFSIZLIK ZAIFLASHUVI EMAS (`TARIFF_PAST_IMMUTABLE` bilan bir
+# xil dalil): `is_active` `false` dan `true` ga FAQAT `market_activate()`
+# orqali o'tadi va TESKARI yo'l YO'Q — `market_deactivate()` ataylab
+# yaratilmagan. Ya'ni bir marta jonli bo'lgan bozor hech qachon qoralamaga
+# qayta olmaydi va istisno unga HECH QACHON qo'llanmaydi. Qoralamada esa
+# na kadr olinadi (`capture_due_markets()` `WHERE m.is_active`), na hisob
+# yuritiladi — himoya qilinadigan o'lchov YO'Q.
+#
+# FAIL-CLOSED: `markets` o'qish `SECURITY DEFINER` siz, ya'ni RLS ostida
+# bajariladi. Tenant kontekstsiz sessiyada 0 qator qaytadi, `EXISTS`
+# yolg'on bo'ladi va qator QULFLANGAN deb hisoblanadi.
+# =========================================================================
+#
+# ⛔ `SECURITY DEFINER` YOZILMAYDI: `markets` ni CHAQIRUVCHI huquqi bilan
+# o'qish yuqoridagi fail-closed xulqning O'ZI. `tests/tenancy/test_meta.py`
+# uni `pg_proc.prosecdef` bo'yicha qulflaydi.
+
+OCCUPANCY_EVENT_IMMUTABLE = PGFunction(
+    schema="public",
+    signature="occupancy_event_immutable()",
+    definition="""
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE'
+     AND EXISTS (
+       SELECT 1 FROM public.markets AS m
+       WHERE m.id = OLD.market_id AND m.is_active = false
+     ) THEN
+    RETURN OLD;
+  END IF;
+
+  RAISE EXCEPTION 'occupancy_events is append-only (attempted %)', TG_OP;
+END $$
+""",
+)
+"""`BEFORE UPDATE OR DELETE ON occupancy_events` — AI JAVOBI TAHRIRLANMAYDI (D-12).
+
+Model bergan verdikt — O'LCHOVNING KIRISHI. Uni tahrirlash mumkin bo'lsa
+«model qanchalik to'g'ri edi?» savoliga javob beradigan yagona ma'lumot
+yo'qolardi va aniqlik hisoboti o'z natijasini o'zi yozardi. Qayta ishlash
+YANGI QATOR bo'ladi (`UNIQUE (market_id, snapshot_id, camera_zone_id,
+model_version)`), eskisi esa joyida qoladi va ikkalasi SOLISHTIRILADI —
+§E.15 dagi `timm` ilgagining butun mexanizmi shu.
+
+`UPDATE` uchun SHART UMUMAN YO'Q — bozor faolmi yoki qoralamami, farqi
+yo'q. `DELETE` uchun yagona istisno — QORALAMA bozor
+(`market_delete_draft()` yo'li) va uning sababi yuqoridagi blokda,
+rad etilgan muqobillari bilan birga.
+
+`TG_OP` xabarga qo'shiladi (`AUDIT_IMMUTABLE` bilan bir xil sabab): ikki
+xil urinish (UPDATE / DELETE) ikki xil tahdid modelidan keladi — birinchisi
+natijani MOSLASHTIRADI, ikkinchisi noqulay dalilni YO'Q QILADI — va log'da
+ular ajralib turishi kerak.
+
+`RETURN OLD` FAQAT istisno shoxida: `BEFORE DELETE` triggeri `NULL`
+qaytarsa amal JIMGINA bekor qilinadi (xatosiz!) va `market_delete_draft()`
+"o'chirdim" deb `true` qaytarardi-yu, qatorlar joyida qolardi — ya'ni
+kaskad yolg'on gapirardi. `RAISE` dan keyin esa qaytish nuqtasi umuman
+yo'q (`AUDIT_IMMUTABLE` ham yozmaydi).
+
+⚠ IKKI ALOHIDA FUNKSIYA, BITTA UMUMIY EMAS (`helpers.py:279-283` qoidasi):
+xato xabari QAYSI qoida buzilganini aytishi kerak. `TG_TABLE_NAME` bo'yicha
+shoxlanadigan umumiy funksiya ikkala jadvalni bir-biriga bog'lab qo'yardi
+va birining qoidasini o'zgartirish ikkinchisiga ham tegardi.
+"""
+
+ZONE_REVIEW_IMMUTABLE = PGFunction(
+    schema="public",
+    signature="zone_review_immutable()",
+    definition="""
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE'
+     AND EXISTS (
+       SELECT 1 FROM public.markets AS m
+       WHERE m.id = OLD.market_id AND m.is_active = false
+     ) THEN
+    RETURN OLD;
+  END IF;
+
+  RAISE EXCEPTION 'zone_reviews is append-only (attempted %)', TG_OP;
+END $$
+""",
+)
+"""`BEFORE UPDATE OR DELETE ON zone_reviews` — NAZORATCHI JAVOBI QULFLANADI (D-17.4).
+
+`OCCUPANCY_EVENT_IMMUTABLE` ning JUFTI va tana ataylab deyarli bir xil —
+bu takror emas, ZARURAT (`tariff_past_immutable()` /
+`category_period_past_immutable()` juftligi bilan bir xil qaror sinfi).
+
+Bu yerdagi tahdid boshqa va u kuchliroq: ko'r auditda nazoratchi javob
+berganidan KEYIN AI javobi oshkor bo'ladi (D-17). Javob o'sha paytda
+tahrirlanishi mumkin bo'lsa xolis o'lchov ma'nosini BUTUNLAY yo'qotardi —
+«to'g'rilash mumkin bo'lgan o'lchov o'lchov emas». Nosozlik jimgina
+bo'lardi: hamma qator to'g'ri ko'rinardi va aniqlik foizi o'z-o'zidan
+o'sardi.
+
+⚠ JADVALDA IKKALA TRIGGER HAM BOR (audit + o'zgarmaslik). Postgres ning
+tartib qoidasi (`helpers.py::attach_immutability_trigger` docstringi)
+aynan kerakli natijani beradi: `BEFORE` `AFTER` dan oldin yuradi, ya'ni bu
+qo'riqchi rad etgan `UPDATE` `audit_log` ga qator QOLDIRMAYDI. Rad etilgan
+urinish "o'zgardi" deb yozilmasin — aks holda audit jurnali hech qachon
+sodir bo'lmagan o'zgarishlarni ko'rsatardi.
+
+⚠ QORALAMA `DELETE` ISTISNOSI AUDITNI YO'QOTMAYDI: istisno shoxi `RETURN
+OLD` qiladi, ya'ni o'chirish HAQIQATAN sodir bo'ladi va `AFTER` audit
+triggeri unga `delete` qatorini yozadi. Iz `audit_log` da qoladi — u esa
+`market_delete_draft()` kaskadiga ATAYIN kiritilmagan (3-fazada
+o'lchangan tuzoq).
+"""
+
+OCCUPANCY_TRIGGER_FUNCTIONS: list[PGFunction] = [
+    OCCUPANCY_EVENT_IMMUTABLE,
+    ZONE_REVIEW_IMMUTABLE,
+]
+"""5-faza qo'riqchilari — `0018_occupancy_domain` yaratadi.
+
+Trigger FUNKSIYASI bu yerda, trigger'ning O'ZI esa migratsiyada
+`attach_immutability_trigger(...)` bilan (`0008_temporal.py` naqshi —
+`alembic-utils` triggerlarni boshqarmaydi).
+
+Ro'yxat ALOHIDA va u `AUDIT_TRIGGER_FUNCTIONS` / `MARKET_DOMAIN_TRIGGER_
+FUNCTIONS` bilan bir xil qoidaga bo'ysunadi: har migratsiya O'Z scope'li
+ro'yxatini oladi, `ALL_TRIGGER_FUNCTIONS` esa faqat KUZATUV aggregati.
+"""
+
 NVR_DOMAIN_TRIGGER_FUNCTIONS: list[PGFunction] = [
     MARKETS_DELETE_GUARD,
 ]
@@ -439,6 +626,7 @@ ALL_TRIGGER_FUNCTIONS: list[PGFunction] = [
     *AUDIT_TRIGGER_FUNCTIONS,
     *MARKET_DOMAIN_TRIGGER_FUNCTIONS,
     *NVR_DOMAIN_TRIGGER_FUNCTIONS,
+    *OCCUPANCY_TRIGGER_FUNCTIONS,
 ]
 """BARCHA trigger funksiyalari — autogenerate reyestri (`ALL_ENTITIES`) uchun.
 

@@ -75,6 +75,7 @@ __all__ = [
     "AUTH_SUPPORT_FUNCTIONS",
     "AUTH_SUPPORT_GRANT_SIGNATURES",
     "AUTH_UPDATE_PASSWORD_HASH",
+    "AUDIT_DRAW_DUE_MARKETS",
     "AUTH_USER_STATE",
     "CAPTURE_DUE_MARKETS",
     "DEFAULT_SCHEDULE_NAME",
@@ -91,6 +92,9 @@ __all__ = [
     "MARKET_DOMAIN_GRANT_SIGNATURES",
     "MARKET_IS_OPEN",
     "MARKET_RENAME",
+    "OCCUPANCY_DAY_CLOSE_MARKETS",
+    "OCCUPANCY_FUNCTIONS",
+    "OCCUPANCY_GRANT_SIGNATURES",
     "PLATFORM_AUDIT_FUNCTIONS",
     "PLATFORM_AUDIT_GRANT_SIGNATURES",
     "SNAPSHOT_FUNCTIONS",
@@ -1558,4 +1562,179 @@ SNAPSHOT_GRANT_SIGNATURES: tuple[str, ...] = ("capture_due_markets()",)
 `REVOKE ALL ... FROM PUBLIC` MAJBURIY: `CREATE FUNCTION` dan keyin Postgres
 yangi funksiyaga `EXECUTE TO PUBLIC` ni STANDART beradi, ya'ni bazadagi HAR
 QANDAY rol RLS'ni chetlab o'tadigan bu funksiyani chaqira olardi.
+"""
+
+
+# ===========================================================================
+# 0018_occupancy_domain — BANDLIK DOMENINING IKKI TIK YUZASI (5-faza)
+# ===========================================================================
+#
+# `CAPTURE_DUE_MARKETS` (yuqorida) bilan AYNAN bir xil muammo va aynan bir
+# xil yechim: ikkala fon-vazifa ham HAMMA bozorlar ustida ishlaydi,
+# `sbozor_app` roli esa tenant kontekstisiz BIRORTA bozorni ko'rmaydi
+# (`markets` policy'si `id = app.market_id`). Job keyin HAR BOZOR uchun
+# ALOHIDA tranzaksiya ochadi va unda `set_tenant_context(...)` chaqiradi
+# (§S-5) — bitta tranzaksiyada ikki bozor tenant sizib chiqishining eng
+# qisqa yo'li bo'lardi, chunki GUC'lar `SET LOCAL` bilan qo'yiladi.
+#
+# ⛔⛔ IKKALASI HAM FAQAT IDENTIFIKATOR VA SANOQ QAYTARADI. Bu 4-fazadagi
+# T-04-16 ning takrori, LEKIN bu yerda unga IKKINCHI, KUCHLIROQ sabab
+# qo'shiladi (D-17): namuna tortadigan funksiya `verdict`, `confidence`,
+# `model_version` yoki nazoratchi javobini qaytara olsa, ko'r auditning
+# NAMUNASINI OLDINDAN KO'RISH yo'li ochilardi — ya'ni xolis o'lchov
+# oldindan bilib olinadigan bo'lardi. Darvoza `pg_get_functiondef()`
+# chiqishini o'qiydi va u SQL izohlarini HAM qamraydi (Python docstringi
+# esa xavfsiz).
+#
+# ⚠ `LANGUAGE sql` XAVFSIZ, chunki ikkala tana ham `0018` YARATGAN
+# jadvallarga havola qiladi va funksiyalar o'sha migratsiyaning OXIRIDA,
+# jadvallardan KEYIN yaratiladi. `LANGUAGE sql` tanasi `CREATE FUNCTION`
+# PAYTIDA parse va validatsiya qilinadi (`check_function_bodies` standart
+# `on`) — kelajakdagi jadvalga havola qilingan `sql` tanasi butun
+# migratsiya zanjirini yiqitardi va bu 04-03/T3 da O'LCHANGAN
+# (`market_activate()` aynan shu sababdan `plpgsql` ga ko'chirilgan).
+
+AUDIT_DRAW_DUE_MARKETS = PGFunction(
+    schema="public",
+    signature="audit_draw_due_markets()",
+    definition="""
+RETURNS TABLE (market_id uuid, frame_size integer)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT m.id,
+           COALESCE(frame.total, 0)::integer
+      FROM public.markets AS m
+      LEFT JOIN LATERAL (
+          SELECT count(*)::integer AS total
+            FROM public.occupancy_events AS e
+           WHERE e.market_id = m.id
+             AND e.business_date = ((now() AT TIME ZONE 'Asia/Tashkent')::date)
+      ) AS frame ON true
+     WHERE m.is_active
+       AND COALESCE(frame.total, 0) > 0
+       AND NOT EXISTS (
+           SELECT 1
+             FROM public.audit_rounds AS r
+            WHERE r.market_id = m.id
+              AND r.business_date = ((now() AT TIME ZONE 'Asia/Tashkent')::date)
+       )
+$$
+""",
+)
+"""Ko'r audit doirasi HALI tortilmagan bozorlar (D-13, AI-04).
+
+=============================================================================
+QAYTISH YUZASI: `(market_id, frame_size)` — IKKALASI HAM «NAMUNA» EMAS.
+
+`frame_size` — bugungi NOMZODLAR SONI, ya'ni doiraning O'LCHAMI. U
+`audit_rounds.frame_size` ustuniga yoziladigan qiymatning O'ZI va u
+tortishdan KEYIN baribir saqlanadi, ya'ni bu yerda hech qanday yangi
+ma'lumot oshkor bo'lmaydi.
+
+⛔ QAYSI hodisalar nomzod ekani, ularning `verdict`/`confidence` i va
+tortilgan namunaning O'ZI bu funksiyadan CHIQMAYDI. Namuna hosila urug'
+bilan, TENANT KONTEKSTI ostida, `sample_ids()` orqali tortiladi
+(`tests/fixtures/audit_seed_probe.py`, 05-01/W0-3) — ya'ni u odatdagidek
+RLS ostidan o'tadi.
+=============================================================================
+
+IKKINCHI SHART (`NOT EXISTS ... audit_rounds`) — IDEMPOTENTLIK.
+Kunlik doira BIR MARTA tortiladi: `uq_audit_rounds_market_id_business_date_
+round_no` ikkinchi urinishni baribir `23505` bilan rad etardi, lekin
+o'shanda job HAR TIKDA istisno ko'targan bo'lardi va jurnal shovqinga
+to'lardi. Shart uni tikdan OLDIN chiqarib tashlaydi.
+
+BIRINCHI SHART (`frame.total > 0`) — BO'SH KUNGA DOIRA TORTILMAYDI.
+Nomzodsiz doira `frame_size = 0` bilan yozilardi va oylik hisobotda
+«tortildi, lekin hech nima chiqmadi» degan qatorlar to'planardi. Kadr
+olinmagan kun `alert_events` orqali ALLAQACHON ko'rinadi (4-faza) — bu
+yerda ikkinchi signal kerak emas.
+
+`STABLE` (`VOLATILE` emas): funksiya YOZMAYDI, faqat o'qiydi.
+
+USTUN HAVOLALARI ALIAS BILAN: `RETURNS TABLE (market_id ...)` chiqish nomi
+SQL tanasida ko'rinadigan o'zgaruvchi bo'lib qoladi, ya'ni `e.market_id`
+o'rniga `market_id` yozish `column reference is ambiguous` berardi.
+"""
+
+OCCUPANCY_DAY_CLOSE_MARKETS = PGFunction(
+    schema="public",
+    signature="occupancy_day_close_markets()",
+    definition="""
+RETURNS TABLE (market_id uuid, event_count integer)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT m.id,
+           COALESCE(day.total, 0)::integer
+      FROM public.markets AS m
+      LEFT JOIN LATERAL (
+          SELECT count(*)::integer AS total
+            FROM public.occupancy_events AS e
+           WHERE e.market_id = m.id
+             AND e.business_date = ((now() AT TIME ZONE 'Asia/Tashkent')::date)
+      ) AS day ON true
+     WHERE m.is_active
+$$
+""",
+)
+"""Kun yopilishi kerak bo'lgan bozorlar — BARCHA FAOL BOZORLAR (AI-06, D-22).
+
+=============================================================================
+⚠ SHART ATAYIN YO'Q VA BU ENG MUHIM QAROR.
+
+«Hodisasi bor bozorlar» deb filtrlash TABIIY ko'rinadi va AYNAN SHU
+JIM YIQILISHNI tug'dirardi: kameralari buzilgan (yoki birorta kamera
+zonasi chizilmagan) bozor uchun
+
+    hodisa yo'q -> bozor qaytarilmaydi -> `stall_slot_occupancy` ga 0 qator
+                -> hisobot BO'SH -> «hammasi joyida» ko'rinadi
+
+D-22 esa aynan buning teskarisini talab qiladi: qamrovsiz rasta
+`no_coverage` sifatida ALOHIDA ko'rinishi shart va u hech qachon «bo'sh»
+hisoblagichiga qo'shilmasligi kerak. Ya'ni kun yopilishi HAR FAOL BOZOR
+uchun ishlashi kerak — hodisasi bo'lmagan bozorda u BUTUN rasta ro'yxatini
+`no_coverage` qilib materializatsiya qiladi.
+
+Bu `capture_due_markets()` ning ikkinchi disjunkti (`NOT EXISTS ... reja`)
+bilan BIR XIL SINF dalil: yo'qlik hodisa qoldirmaydi, shuning uchun uni
+KO'RINADIGAN qator qilish kerak (D-20).
+=============================================================================
+
+`event_count` — FAN-OUT O'LCHAMI (`capture_due_markets.due_count` bilan bir
+xil ma'no), ya'ni job bir bozor uchun qancha ish borligini oldindan biladi
+va uni jurnalga yozadi. `0` qiymat XATO EMAS — u yuqoridagi holat.
+
+⛔ VERDICT, CONFIDENCE VA NAZORATCHI JAVOBI QAYTARILMAYDI: funksiya
+`SECURITY DEFINER`, ya'ni u RLS'ni chetlab o'tadi va yuzasi qanchalik keng
+bo'lsa, chetlab o'tish shunchalik keng (T-04-16 / T-05-19).
+"""
+
+OCCUPANCY_FUNCTIONS: list[PGFunction] = [
+    AUDIT_DRAW_DUE_MARKETS,
+    OCCUPANCY_DAY_CLOSE_MARKETS,
+]
+"""`0018_occupancy_domain` YARATADIGAN to'plam.
+
+⚠ `ALL_FUNCTIONS` GA QO'SHILMAYDI va bu ATAYIN (`SNAPSHOT_FUNCTIONS` bilan
+bir xil qoida): `ALL_FUNCTIONS` — `0001_identity` ning MUZLATILGAN to'plami
+va `0001` uning ustidan tsikl qiladi. Yangi nomni u yerga qo'shish nol
+holatdan qilingan migratsiyani mavjud bo'lmagan obyektga `GRANT` berishga
+majburlab yiqitardi.
+"""
+
+OCCUPANCY_GRANT_SIGNATURES: tuple[str, ...] = (
+    "audit_draw_due_markets()",
+    "occupancy_day_close_markets()",
+)
+"""`OCCUPANCY_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari).
+
+`REVOKE ALL ... FROM PUBLIC` MAJBURIY: `CREATE FUNCTION` dan keyin Postgres
+yangi funksiyaga `EXECUTE TO PUBLIC` ni STANDART beradi, ya'ni bazadagi HAR
+QANDAY rol RLS'ni chetlab o'tadigan bu funksiyalarni chaqira olardi.
 """

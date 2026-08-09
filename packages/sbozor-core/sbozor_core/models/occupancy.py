@@ -994,7 +994,12 @@ class StallSlotOccupancy(Base, TenantMixin):
             "stall_id",
             "business_date",
             "slot_time",
-            name="uq_stall_slot_occupancy_market_id_stall_id_business_date_slot_time",
+            # ⚠ NOM QISQARTIRILGAN va bu O'LCHANGAN zaruriyat: to'liq ustun
+            #   ro'yxati 66 belgi berardi, PostgreSQL esa identifikatorni 63
+            #   baytga kesadi — SQLAlchemy buni `IdentifierError` bilan
+            #   OLDINDAN to'xtatadi (`snapshot_schedule_slots` FK'sida
+            #   4-fazada aynan shu holat bo'lgan).
+            name="uq_stall_slot_occupancy_market_stall_day_slot",
         ),
         CheckConstraint(SLOT_VERDICT_CHECK, name="verdict_allowed"),
         CheckConstraint(RESOLUTION_SOURCE_CHECK, name="resolution_source_allowed"),

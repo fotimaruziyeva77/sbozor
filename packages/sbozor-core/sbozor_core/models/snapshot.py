@@ -678,6 +678,25 @@ class Snapshot(Base, TenantMixin):
         # ishora qilsa retention ulardan birini o'chirib, ikkinchisini
         # «mavjud» deb qoldirardi.
         UniqueConstraint("market_id", "object_key", name="uq_snapshots_market_id_object_key"),
+        # ⚠ KOMPOZIT FK NISHONI — `0018` DA QO'SHILDI (5-faza, 05-05/T2).
+        #
+        #   4-fazada bu jadval ZANJIRNING OXIRI edi: unga hech kim
+        #   tayanmasdi, shuning uchun `(market_id, id)` juftligi ham kerak
+        #   emasdi — `capture_runs`, `cameras`, `stalls` va boshqa har bir
+        #   tenant jadvalidan farqli o'laroq.
+        #
+        #   5-fazada `occupancy_events` unga IKKI XIL FK bilan tayanadi va
+        #   ular IKKI XIL savolga javob beradi:
+        #     * `(market_id, snapshot_id) -> (market_id, id)` — TENANT
+        #       chegarasi: A bozorining bandlik dalili B bozorining kadriga
+        #       bog'lana OLMAYDI (T-05-20);
+        #     * `(snapshot_id, snapshot_is_billable) -> (id, is_billable)` —
+        #       BILLING chegarasi (D-21, pastdagi langar).
+        #   Birinchisi ikkinchisidan KELIB CHIQMAYDI: billing langari
+        #   `market_id` ni umuman ko'rmaydi (u ko'rsa 5-fazaning FK'si
+        #   qurilmasdi — pastdagi izohga qarang), ya'ni tenant kafolati
+        #   ALOHIDA konstraytni talab qiladi.
+        UniqueConstraint("market_id", "id", name="uq_snapshots_market_id_id"),
         # ⚠⚠ D-16 NING YAGONA ILGAGI — BU KONSTRAYT BOSHQA FAZA UCHUN BOR.
         #
         #   5-fazada `occupancy_events` shunday quriladi:
