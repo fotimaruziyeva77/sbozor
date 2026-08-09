@@ -41,12 +41,12 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 
 ### AI tahlil (AI)
 
-- [ ] **AI-01**: Bozor admini har kamera kadrida rasta zonalarini poligon qilib chizadi (normalangan 0..1 koordinatalar, versiyalangan); bitta rasta bir necha kameraga bog'lanishi mumkin
+- [x] **AI-01**: Bozor admini har kamera kadrida rasta zonalarini poligon qilib chizadi (normalangan 0..1 koordinatalar, versiyalangan); bitta rasta bir necha kameraga bog'lanishi mumkin
 - [ ] **AI-02**: Detektor (RF-DETR Apache-2.0, ONNX Runtime CPU) har zonani band/bo'sh/noaniq deb baholaydi; AI natijasi confidence bilan saqlanadi va hech qachon o'zgartirilmaydi (nazoratchi qarori alohida yozuv)
-- [ ] **AI-03**: Nazoratchi noaniq navbatini ko'rib chiqadi — kunlik byudjet va ustuvorlik bilan, "hammasini tasdiqlash" tugmasisiz; tasdiqlangan javoblar fine-tuning dataseti bo'ladi
-- [ ] **AI-04**: Ko'r tasodifiy audit navbati: nazoratchi AI javobini ko'rmasdan tasodifiy tanlangan zonalarni baholaydi — aniqlik hisoboti faqat shu namunadan olinadi
-- [ ] **AI-05**: Rasta bir necha kamerada ko'rinsa — birortasi "band" desa rasta band (agregatsiya qoidasi)
-- [ ] **AI-06**: Kun oxirigacha tasdiqlanmagan noaniq → "bo'sh" (hisobotda alohida belgi bilan)
+- [x] **AI-03**: Nazoratchi noaniq navbatini ko'rib chiqadi — kunlik byudjet va ustuvorlik bilan, "hammasini tasdiqlash" tugmasisiz; tasdiqlangan javoblar fine-tuning dataseti bo'ladi
+- [x] **AI-04**: Ko'r tasodifiy audit navbati: nazoratchi AI javobini ko'rmasdan tasodifiy tanlangan zonalarni baholaydi — aniqlik hisoboti faqat shu namunadan olinadi
+- [x] **AI-05**: Rasta bir necha kamerada ko'rinsa — birortasi "band" desa rasta band (agregatsiya qoidasi)
+- [x] **AI-06**: Kun oxirigacha tasdiqlanmagan noaniq → "bo'sh" (hisobotda alohida belgi bilan)
 
 ### Billing (BILL)
 
@@ -158,12 +158,12 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | CAM-07 | Phase 4 | Done |
 | CAM-08 | Phase 3 | Done |
 | CAM-09 | Phase 3 | Done |
-| AI-01 | Phase 5 | Pending |
-| AI-02 | Phase 5 | Pending |
-| AI-03 | Phase 5 | Pending |
-| AI-04 | Phase 5 | Pending |
-| AI-05 | Phase 5 | Pending |
-| AI-06 | Phase 5 | Pending |
+| AI-01 | Phase 5 | Done |
+| AI-02 | Phase 5 | Blocked (2-da'vo o'lchandi, 1-da'vo YARIM: «AI natijasi confidence bilan saqlanadi va hech qachon o'zgartirilmaydi» to'liq o'lchangan (tests/integration/test_occupancy_immutable.py, test_phase5_criteria.py::test_sc2_*); «detektor har zonani baholaydi» esa faqat SINTETIK sv.Detections ustida — real ONNX artefakti CI'da YO'Q va `-m model` bandlari umuman chaqirilmaydi, modelning ANIQLIGI esa oltin to'plam bo'shligi uchun o'lchanmagan. Egasi: nazoratchi (yorliqlaydi) + Ops (artefakt), tetigi: Phase 0 real kadrlari va GPU ijarasi, bandlari 05-HUMAN-UAT.md #1, #2 va #3) |
+| AI-03 | Phase 5 | Done |
+| AI-04 | Phase 5 | Done |
+| AI-05 | Phase 5 | Done |
+| AI-06 | Phase 5 | Done |
 | BILL-01 | Phase 6 | Pending |
 | BILL-02 | Phase 6 | Pending |
 | BILL-03 | Phase 6 | Pending |
@@ -287,6 +287,45 @@ ustida olingan. Real Hikvision NVR, real kadrlar va kalendar vaqti
 `04-HUMAN-UAT.md` da, ega va tetigi bilan; ular fazani bloklamaydi,
 lekin «real bozorda ishlaydi» degan da'vo BERILMAGAN.
 
+### Qoidaning 5-fazadagi qo'llanishi (2026-08-10, `05-15`) — DALIL BILAN
+
+Oltita AI bandidan **beshtasi** `Done`, **bittasi** (`AI-02`) `Blocked`.
+Bu nisbat 3-fazaning shaklini takrorlaydi va ATAYIN: AI-02 amalda
+ISHLAYDI va katta qismi o'lchangan, lekin talab MATNIDAGI birinchi
+jumla — «detektor har zonani baholaydi» — CI'da **real og'irliklar
+bilan** bajarilmaydi.
+
+⚠ **Bu faza uchun `Done` ning ma'nosi oldingilaridan TOR va buni ochiq
+aytish shart.** Oldingi fazalarda «o'lchandi» degani mahsulot yo'lining
+haqiqiy komponent (Postgres, SeaweedFS, `nvr-sim`) ustida bajarilishi
+edi. Bu yerda ham shunday — LEKIN detektor o'rnida **SINTETIK
+`sv.Detections`** turadi va u kutilayotgan verdiktni UMUMAN bilmaydi
+(geometrik fakt bo'yicha nomlangan, W0-7). Ya'ni o'lchangan narsa —
+`sv.Detections` DAN KEYINGI butun zanjir; modelning o'zi emas.
+
+| Talab | Yangi holat | Nima o'lchandi va QAYSI test bilan | Nima o'lchanMAGAN |
+|---|---|---|---|
+| **AI-01** | `Pending` -> **`Done`** | `test_phase5_criteria.py::test_sc1_polygons_are_normalized_versioned_and_multi_camera` — admin HTTP orqali kontur chizadi va u AYNAN qaytadi; javobdagi har koordinata 0..1 da **va** piksel koordinatasi **422 bilan rad etiladi** (ya'ni normalanish DARVOZA, kelishuv emas); tahrir `version = 3` yaratadi va eskisi `is_active = false` bo'lib JOYIDA qoladi; bitta rasta ikki kamerada bir vaqtda FAOL. Yuzaning qolgani — `test_camera_zones_api.py` (versiyalash, qamrov, V5 geometriyasi) va Y-1 muharriri (`npm --prefix frontend run test:component`) | Chizishning **amalda bajariladiganligi** 300–1000 rasta uchun — vaqt faqat real bozor chizmasida o'lchanadi (`05-HUMAN-UAT.md` #5, egasi bozor admini). Shuningdek 60 poligonli kamerada sudrash tezligi (#7, D-05 chiqish yo'li) |
+| **AI-02** | `Pending` -> **`Blocked`** | **Ikkinchi jumla TO'LIQ o'lchangan:** `occupancy_events` ning `UPDATE` i baza darajasida rad etiladi (`test_occupancy_immutable.py`, `test_phase5_criteria.py::test_sc2_*` — xom `psycopg` bilan, `sbozor_owner` ulanishida), nazoratchi qarori `zone_reviews` da **ALOHIDA qator** bo'lib tug'iladi va AI qatori bayt-bayt o'zgarmaydi; uchala baho ham (`occupied`/`empty`/`uncertain`) `confidence` bilan saqlanadi. **Birinchi jumlaning MEXANIZMI** ham o'lchangan: xom tenzor arifmetikasi (`cv-tests::test_rfdetr_postprocess.py`), 0..1 ↔ piksel zona verdicti (`test_zone_verdict.py`), orkestratsiya va idempotentlik (`test_detect_job.py`), cross-servis enqueue (`test_capture_enqueues_detect.py`) | **Birinchi jumlaning O'ZI:** «RF-DETR ONNX Runtime CPU da har zonani baholaydi» CI'da **real artefakt bilan bajarilmaydi** — `.onnx` fayli yo'q va `-m model` bandlari umuman chaqirilmaydi. Modelning ANIQLIGI esa oltin to'plam bo'shligi uchun **umuman o'lchanmagan** va bu bo'shliq mexanika qatlamining yashilligi bilan YOPILMAYDI (D-01). **Egasi:** nazoratchi (yorliqlaydi) + Ops (artefakt). **Tetigi:** Phase 0 real kadrlari va GPU ijarasi. **Bandlari:** `05-HUMAN-UAT.md` #1, #2, #3 |
+| **AI-03** | `Pending` -> **`Done`** | `test_phase5_criteria.py::test_sc3_uncertain_queue_has_budget_priority_and_no_bulk_endpoint` — navbatga FAQAT `uncertain` tushadi; birinchi band biriktirilgan sotuvchisi BOR rastaniki (ustuvorlik tasodifiy emas); byudjet tugagach **409 `review_budget_exhausted`** va u «navbat bo'sh» dan boshqa kod (nazorat: byudjet ko'tarilgach o'sha band QAYTADI); javob `purpose='train'` bilan yig'iladi; **«hammasini tasdiqlash» marshruti YO'Q** — OpenAPI sxemasi bo'yicha nazoratchi yuzasining birorta marshruti massiv qabul qilmaydi (bo'sh sxema uchun quyi chegara bilan). Ekran — Y-2 (`review-session.tsx`), DOM'da `input[type=checkbox]` yo'q. ⚠ **`05-15` da yopilgan bo'shliq:** sof `inspector` roli dalil kadrini endi KO'RADI (`test_snapshot_api.py::test_a_pure_inspector_can_open_the_evidence_frame` — 200 va baytlar teng); ilgari u **403** olardi va navbatning oxirgi qadami o'z foydalanuvchisida bajarilmasdi | Kunlik byudjetning QIYMATI (30/50) real nazoratchi uchun realmi — charchash va tezlik inson o'lchovi (`05-HUMAN-UAT.md` #6). «Tasdiqlangan javoblar fine-tuning dataseti bo'ladi» — qatorlar YIG'ILADI (`purpose='train'`), lekin ular bilan model hali O'QITILMAGAN |
+| **AI-04** | `Pending` -> **`Done`** | `test_phase5_criteria.py::test_sc4_blind_audit_hides_the_system_answer_and_report_uses_only_that_sample` — ko'r payloadda tizim javobining birorta kaliti YO'Q **va** xom matnda verdikt so'zining o'zi ham uchramaydi (ikki mustaqil qatlam); hisobot BUTUN namuna javoblangandan keyin AYNAN `eval` lar sonini beradi, ya'ni ko'r namunaning `train` yarmi ham, noaniq navbatining javoblari ham unga KIRMAYDI. Namuna `audit_draw` bilan tortiladi va Python da MUSTAQIL qayta hisoblanadi (`test_blind_audit.py`); serializer maydonni **umuman e'lon qilmaydi** (D-17.2). Ekran — Y-3 va `blind-payload.test.mjs` katalog skani | Nazoratchining **amaliy** langarlanmasligi — strukturaviy himoyalar o'lchangan, odamning o'zi emas (`05-HUMAN-UAT.md` #4). ⛔ **D-16 (nazoratchining o'zi bilan ichki mosligi) QURILMADI** va u bugungi sxemada strukturaviy ravishda ifodalab bo'lmaydi: `audit_draw` har hodisani eng ko'pi bilan bir marta tortadi. Qator `05-UI-SPEC.md` §11.6 dan OLIB TASHLANDI va i18n kaliti YOZILMADI |
+| **AI-05** | `Pending` -> **`Done`** | `test_phase5_criteria.py::test_sc5_any_camera_occupied_wins_and_unreviewed_uncertain_defaults_to_empty` — zonasiz rastaga ikki kamerada uch zona qo'yiladi: kamera A da IKKITA `empty`, kamera B da BITTA `occupied`. Kun yopilgach rasta-slot `occupied` va manbasi `ai`. ⛔ Ikkita `empty` ATAYIN: bittasi bilan «birinchi zona g'olib», «kamera A g'olib» va «ko'pchilik ovozi» variantlari ham yashil qolardi. Sof funksiya jadvali — `test_aggregate_stall_slot.py` (120 holat) | Real kadrda bitta rasta ikki kamerada QANDAY ko'rinishi — burchak, yorug'lik va qisman to'silish. Agregatsiya QOIDASI o'lchangan, kirish MA'LUMOTINING sifati emas |
+| **AI-06** | `Pending` -> **`Done`** | O'sha testning 2- va 3-da'volari: javobsiz `uncertain` kun yopilganda `verdict='empty'` **va** `resolution_source='default_empty'` bo'ladi, `GET /occupancy` esa uni `empty` dan AJRATIB beradi (beshinchi hisoblagich). ⛔ `zone_reviews` ga SOXTA qator YOZILMAYDI — tizim «nazoratchi buni bo'sh deb tasdiqladi» deb yolg'on gapirardi va o'sha yolg'on keyin trening datasetiga tushardi. Mexanizmning qolgani — `test_day_close.py`; ekran — Y-4 ning besh hisoblagichi | Kun yopilishining REAL kalendar bo'yicha har kecha 03:40 da ishlashi — job argument sifatida `business_date` oladi, ya'ni mexanizm soat holatidan mustaqil, LEKIN planer tikining bir yil davomida uzilmasligi faqat vaqt bilan isbotlanadi (4-fazaning `retention` bandi bilan bir xil shakl) |
+
+⚠ **`Blocked` bu yerda ham «ish to'xtadi» degani EMAS.** AI-02 ning
+yopilish yo'li o'z qatorida yozilgan va u ikki bosqichli: (a) GPU
+ijarasida ONNX artefakti eksport qilinadi va `ops/models/` ga `COPY`
+bilan olib kiriladi (`-m model` bandlari uyg'onadi); (b) real Karmana
+kadrlari yorliqlanib `tests/fixtures/golden_set/manifest.jsonl` ga
+tushadi (`golden` darvozasi uyg'onadi). Ikkalasi ham QURILGAN va KUTIB
+TURIBDI — kod yozish talab qilinmaydi.
+
+⚠ **Faza mezonlari (SC#1…SC#5) bundan MUSTAQIL** va beshalasi ham yashil
+(`tests/integration/test_phase5_criteria.py`, bitta buyruq). Mezonlar
+fazaning yetkazib berish mahsulotini o'lchaydi, talablar esa v1
+relizining jumlalarini — AI-02 ning «RF-DETR» so'zi, masalan, birorta
+SC ning matnida YO'Q.
+
 Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 `node scripts/check-requirements-sync.mjs` — qo'lda, har faza yopilishida
 (doimiy CI darvozasi emas; sabab skript boshida yozilgan).
@@ -333,6 +372,13 @@ ko'ra olmaydi va aynan shu bo'shliq fazani `gaps_found` qilgan edi.
 Chegara ustuniga uchinchi inson bandi qo'shildi (`04-HUMAN-UAT.md` #7 —
 hodisaning haqiqiy Sentry loyihasiga yetib borishi, egasi Ops). Sanoq
 o'zgarmadi: Done 16 · Pending 32 · Blocked 1.*
+*Yangilandi: 2026-08-10 — `05-15`: 5-fazaning oltita talabidan beshtasi
+(AI-01, AI-03, AI-04, AI-05, AI-06) o'lchangan dalil bilan `Done`; AI-02
+`Blocked` — «detektor har zonani baholaydi» jumlasi CI'da REAL ONNX
+artefakti bilan bajarilmaydi va modelning aniqligi oltin to'plam
+bo'shligi uchun umuman o'lchanmagan (egasi nazoratchi + Ops, tetigi
+Phase 0 kadrlari va GPU ijarasi, bandlari `05-HUMAN-UAT.md` #1, #2, #3).
+Sanoq: Done 21 · Pending 26 · Blocked 2.*
 *Oldingi: 2026-08-05 — `04-12`: 4-fazaning beshala talabi (CAM-04,
 CAM-05, CAM-06, CAM-07, FOUND-06) o'lchangan dalil bilan `Done`; har
 birining dalili va CHEGARASI yuqoridagi jadvalda nomma-nom. FOUND-06

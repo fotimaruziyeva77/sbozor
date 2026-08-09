@@ -38,7 +38,7 @@ Belgilar 3 va 4-fazadagi bilan bir xil [MEROS: 04-UI-SPEC §0]:
 | **M-5** | ⛔ **YANGI DEFEKT SINFI — ARALASH ALIFBO.** `AI`, `CV`, `RF-DETR`, `ONNX`, `IoU`, `SVG`, `JSON` override**siz** o'tkazildi | **Beshta defekt, biri yangi sinf:** `AI`→`АИ`, `RF-DETR`→`РФ-ДЕТР`, `ONNX`→`ОННХ`, `JSON`→`ЖСОН` — bular 4-fazadagi `IR`→`ИР` bilan bir sinf. **`CV`→`CВ` esa YANGI**: `C` **lotin** qoldi, `V` **kirill** `В` bo'ldi — bitta tokenda ikki alifbo. Override ikkalasini ham tuzatadi (`AI жавоби` ✅), **lekin bu hujjat override o'rniga TAQIQNI tanlaydi** (§12.9) |
 | **M-6** | **`ru` / `uz-Latn` uzunlik nisbati** — 32 ta 5-faza yorlig'i | O'rtacha **1,03×**. Eng yomoni: `Dalil rasmi` (11) → `Снимок-доказательство` (21) = **1,91×**; `Bo'sh` (5) → `Свободно` (8) = **1,60×**; `Band` (4) → `Занято` (6) = **1,50×**. Eng qisqasi: `Sizning javobingiz` (18) → `Ваш ответ` (9) = **0,50×** |
 | **M-7** | **Navigatsiya sig'imi** — `NAV_ITEMS` + `ROLE_PERMISSIONS` matritsasi skript bilan hisoblandi [KOD: `app-shell.tsx:88-222`, `rbac.ts:55-109`] | Hozir **11 element**; 5-fazadan keyin **13**. Rol bo'yicha ko'rinadigan: `platform_admin` 11 (**o'zgarmaydi**), `director` 10→**11**, `market_admin` 10→**11**, `cashier` 1, ⛔ **`inspector` 1→2**. `MOBILE_PRIMARY_COUNT = 4` [KOD: `app-shell.tsx:222`] → mobil panel har rolda **≤5**. **Kontrakt saqlanadi** |
-| **M-8** | ⛔ **RBAC — kerakli huquq ALLAQACHON MAVJUD** — `grep occupancy_review src/` | `PERMISSIONS` da **`occupancy_review` bor** [KOD: `rbac.ts:45`] va `inspector: ["occupancy_review"]` [KOD: `rbac.ts:108`]. Ya'ni 5-faza **yangi `Permission` qo'shmaydi** va `rbac.py`/`rbac.ts` juftligi **tegilmaydi** (§5.1 W0-F5) |
+| **M-8** | ⛔ **RBAC — kerakli huquq ALLAQACHON MAVJUD** — `grep occupancy_review src/` | `PERMISSIONS` da **`occupancy_review` bor** [KOD: `rbac.ts:45`] va `inspector: ["occupancy_review"]` [KOD: `rbac.ts:108`]. Ya'ni 5-faza **yangi `Permission` qo'shmaydi** va `rbac.py`/`rbac.ts` juftligi **tegilmaydi** (§5.1 W0-F5). ⚠⚠ **CHEGARASI `05-15` DA ANIQLASHTIRILDI (2026-08-10) va bandning O'ZI HAMON ROST:** yangi `Permission` ham qo'shilmadi, `ROLE_PERMISSIONS` matritsasi ham (ya'ni `rbac.py`/`rbac.ts` juftligi) **tegilmadi**. Tegilgan narsa — BITTA MARSHRUTNING darvozasi: `GET /snapshots/{id}/image` endi `CAMERA_VIEW` **yoki** `OCCUPANCY_REVIEW` ni qabul qiladi. Sabab: M-8 «huquq mavjud» deb o'lchagan, LEKIN nazoratchi ekranining **asosiy manbai — dalil kadri** — o'sha huquq ostida EMAS edi va sof `inspector` **403** olardi (05-10 topdi, 05-11 yozdi, 05-13 qayta o'lchadi). Faza mezoni «nazoratchi kadrdan baholaydi» deganda, uni yopishdan oldin bu bo'shliq yopilishi shart edi |
 | **M-9** | ⚠ **Hedging darvozasining qamrovi** — `grep HEDGED scripts/nvr-copy.test.mjs` | `HEDGED_NAMESPACES = ["cameras", "snapshots"]` [KOD: `nvr-copy.test.mjs:143`]. 5-fazaning `cameraZones`/`review`/`occupancy` namespace'lari **skanerlanmaydi** → bu fazaning copy'si «Ehtimol» so'zini **umuman ishlatmaydi** va darvoza kengaytirilmaydi (§12.9 Qoida 3) |
 | **M-10** | **`ъ` diskriminatori — ishlaydigan shakl** [KOD: `gen-cyrillic.test.mjs:754-758`] | 04-UI-SPEC dagi `/[A-Za-z]ъ/` **hech qachon ishlamaydi** (4-fazada o'lchangan: transliterator akronimni allaqachon kirillga o'girgan). Ishlaydigan shart — **`/[A-ZА-ЯЁҚҒҲЎ]{2,}ъ/u`** (`ъ` dan oldin ≥2 bosh harf). 5-faza shu shaklni **qayta ishlatadi**, ikkinchi nusxa yozmaydi |
 | **M-11** | **Yangi bog'liqlik ehtiyoji** — `package.json` | `konva` va `react-konva` **o'rnatilmagan**. SVG muharriri **0 ta yangi paket** talab qiladi. Mavjud 18 ta prod bog'liqligi yetarli (§3.5) |
@@ -1135,13 +1135,24 @@ Bu **rasta darajasidagi** javob: kameralararo agregatsiya (D-20: birortasi «ban
 
 ### 11.6 (C) Namuna holati — o'lchovning o'zini ko'rsatadi
 
+> ⚠⚠ **BU BO'LIM `05-15` DA TUZATILDI (2026-08-10). ILGARI U QURILMAGAN
+> QATORNI TA'RIFLAB TURARDI.** Eski matnda **«Nazoratchining ichki
+> mosligi: 94 % (takroriy 3 banddan)»** qatori bor edi. U qurilmadi va
+> qurilmasligi **uch marta o'lchandi**: D-16 bugungi sxemada
+> **strukturaviy ravishda ifodalab bo'lmaydi** (05-11 — takroriy band
+> tortish mexanizmi yo'q), maydon **hisobot payloadida yo'q** (05-12 —
+> `OccupancyAccuracyResponse` uni e'lon qilmaydi va bu test bilan
+> qulflangan), ekranda esa **placeholder ham qo'yilmadi** (05-14).
+> Spetsifikatsiya qurilmagan narsani ta'riflab tursa, keyingi faza uni
+> **yo'qolgan funksiya** deb o'qirdi — shuning uchun qator matndan
+> **olib tashlandi** va sabab shu yerda qoldi.
+
 ```
 ┌ Namuna holati ──────────────────────────────────────────────┐
 │  Bugungi tur:  3-tur · 06:10 da tortilgan · 30 band          │
 │  Javob berildi: 26 · Javobsiz: 4                             │
 │  Aniq ayta olmadi: 2                                         │
-│  Nazoratchining ichki mosligi: 94 % (takroriy 3 banddan)     │
-│  Tez qaror: 1 ta (2 soniyadan tez)                           │
+│  Tez qaror: 1 ta                                             │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -1151,11 +1162,29 @@ Bu **rasta darajasidagi** javob: kameralararo agregatsiya (D-20: birortasi «ban
 | ⛔ **«Namunani qayta tortish» tugmasi YO'Q** | D-17, 1-himoya. §16.2 da aniq taqiq |
 | **Javobsiz** | 05-RESEARCH §C.8, 4-dushman: javobsiz band **namunadan chiqmaydi**, u «javobsiz» deb sanaladi. Nol bo'lsa ham ko'rsatiladi |
 | **Aniq ayta olmadi** | Uchinchi javobning agregati (§7.3). U **xato emas** — u kadr sifati haqidagi ma'lumot |
-| **Ichki moslik** (D-16) | 05-RESEARCH §C.8.5. `< 90 %` bo'lsa `bg-warning/20 text-text` + jumla: «Tizimning o'lchangan aniqligi shu darajadan yuqori bo'la olmaydi.» Takroriy band soni `< 3` bo'lsa: «Hali yetarli takroriy band yo'q» |
-| **Tez qaror** | 05-RESEARCH §C.9, 3-band: *«bloklamaydi, faqat hisobotda ko'rinadi»*. ⛔ Nazoratchiga **ko'rinmaydi** (§7.5) — u bu yerda, `report_view` ostida |
+| ~~**Ichki moslik** (D-16)~~ | ⛔ **QURILMADI VA QURILMAYDI** — yuqoridagi izohga qarang. D-16 takroriy band tortishni talab qiladi, `audit_draw` esa har hodisani **eng ko'pi bilan bir marta** tortadi (`UNIQUE(market_id, occupancy_event_id)`). Uni qo'shish **yangi mexanizm** (Rule 4), 8-faza yoki keyingi qarorga qoldirildi |
+| **Tez qaror** | 05-RESEARCH §C.9, 3-band: *«bloklamaydi, faqat hisobotda ko'rinadi»*. ⛔ Nazoratchiga **ko'rinmaydi** (§7.5) — u bu yerda, `report_view` ostida. ⚠ **CHEGARA (2 soniya) YORLIQDA NOMLANMAYDI** va bu ataylab: u `accuracy_report.is_fast_decision()` da yashaydi va `GET /occupancy/round` javobida **maydon sifatida yo'q**. Klientda yozish server konstantasining **ikkinchi nusxasi** bo'lardi — chegara o'zgargan kuni yorliq jimgina yolg'on gapirardi. Eng tor tuzatish (`fast_decision_ms` maydonini javobga qo'shish) `deferred-items.md` #4 da, egasi 8-faza |
 | `role="status"` | Hisobot |
 
 ### 11.7 (D) Rastalar ro'yxati va DL-5
+
+> ⚠⚠ **BU BO'LIM HAM `05-15` DA TUZATILDI (2026-08-10).** Eski matn
+> DL-5 dan **«kun davomidagi har vaqt uchun bitta qator: vaqt · kamera ·
+> natija · manba»** ni talab qilardi va har qatordan dalil kadri
+> ochilishini. **Bunday qator uchun MA'LUMOT MANBAI YO'Q va bu
+> o'lchandi** (05-14): `GET /occupancy` bitta rasta uchun
+> `OccupancyStallItem` beradi va unda **aynan yetti maydon** bor
+> (`stall_id`, `stall_code`, `zone_name`, `status`, `slots`,
+> `occupied_slots`, `human_confirmed`) — na slot vaqti, na kamera nomi,
+> na `snapshot_id`. `occupancy_repo.py` da rasta-slot qatorlarini
+> beradigan metod ham yozilmagan.
+>
+> **Rad etilgan ikki «tuzatish»:** qatorlarni klientda to'qib chiqarish
+> (soxta ma'lumot — eng yomon shakldagi stub) va «tez orada» degan
+> bo'sh jadval (va'da berib bajarmaydigan placeholder).
+>
+> Quyidagi jadval **bugun qurilganini** ta'riflaydi; slot qatorlari
+> **ochiq band** sifatida `deferred-items.md` #3 da, egasi 8-faza.
 
 | Element | Qoida |
 |---------|-------|
@@ -1163,9 +1192,10 @@ Bu **rasta darajasidagi** javob: kameralararo agregatsiya (D-20: birortasi «ban
 | Tartib | Bozor zonasi → `stall_number`, `/stalls` bilan **bir xil** |
 | Filtr | ⛔ Bu fazada **faqat bitta**: «Faqat qamrovsizlarni ko'rsatish» (`?nocov=1`). Boshqa filtrlar 8-fazada |
 | Holat badge'lari | §10.4 dagi besh holat; ⛔ `Ko'rilmagani uchun bo'sh` va `Qamrov yo'q` **to'liq matn bilan**, qisqartirilmaydi |
-| **DL-5 — rasta tafsiloti** | Kun davomidagi har vaqt uchun bitta qator: vaqt · kamera · natija · manba (`tizim` / `nazoratchi` / `ko'rilmadi`). Har qatordan **dalil kadri** ochiladi |
+| **DL-5 — rasta tafsiloti** | Rastaning **KUN bo'yicha** hukmi: zona nomi · holat · **manba** (`tizim` / `nazoratchi` / `ko'rilmadi`) · **slot nisbati** (`occupied_slots` / `slots`). ⛔ Per-slot QATORLAR **yo'q** — yuqoridagi izohga qarang |
 | ⛔ DL-5 da tizim javobi | **Ko'rsatiladi** — bu `report_view` yuzasi, nazoratchi yuzasi emas. Direktor uchun ankor xavfi **yo'q**, chunki u yorliq ishlab chiqarmaydi |
 | ⛔ DL-5 da patta/summa | **YO'Q** — 6-faza (§16.1) |
+| ⚠ DL-5 dan **dalil kadri** | Bu fazada **ochilmaydi**: per-slot qatorlar yo'q, ya'ni ochiladigan `snapshot_id` ham yo'q. ⚠ Slot qatorlari qo'shilganda **huquq bo'shlig'i YO'Q**: dalil-kadr marshruti `CAMERA_VIEW` **yoki** `OCCUPANCY_REVIEW` ostida (05-15) va direktorda `CAMERA_VIEW` bor |
 | Virtualizatsiya | ⛔ **Qurilmaydi** — 1000 `<li>` DOM uchun arzon [O'LCHANDI: M-12]. `content-visibility: auto` naqshi mavjud (`globals.css`) |
 
 ---
@@ -1345,10 +1375,11 @@ Bu **rasta darajasidagi** javob: kameralararo agregatsiya (D-20: birortasi «ban
 | `occupancy.answered` | Javob berildi | Отвечено |
 | `occupancy.unanswered` | Javobsiz | Без ответа |
 | `occupancy.unclearCount` | Aniq ayta olmadi | Не смог сказать точно |
-| `occupancy.selfConsistency` | Nazoratchining ichki mosligi: {value} % ({count} ta takroriy banddan) | Внутренняя согласованность контролёра: {value} % (по {count} повторным пунктам) |
-| **`occupancy.selfConsistencyLow`** | **Tizimning o'lchangan aniqligi shu darajadan yuqori bo'la olmaydi.** | **Измеренная точность системы не может быть выше этого уровня.** |
-| `occupancy.selfConsistencyNotEnough` | Hali yetarli takroriy band yo'q | Повторных пунктов пока недостаточно |
-| `occupancy.fastDecisions` | Tez qaror: {count} ta ({seconds} soniyadan tez) | Быстрых решений: {count} (быстрее {seconds} с) |
+| ~~`occupancy.selfConsistency`~~ | ⛔ **KALIT YOZILMADI** (05-15 tuzatishi) — D-16 strukturaviy ravishda ifodalab bo'lmaydi (§11.6 izohi). Iste'molchisiz kalit «bu ishlaydi» degan **yolg'on va'da** bo'lardi (05-11 ning `BLIND_AUDIT_REPEAT_RATIO` qarori bilan bir xil mantiq) |
+| ~~`occupancy.selfConsistencyLow`~~ | ⛔ **KALIT YOZILMADI** — yuqoridagi bilan bir xil sabab |
+| ~~`occupancy.selfConsistencyNotEnough`~~ | ⛔ **KALIT YOZILMADI** — yuqoridagi bilan bir xil sabab |
+| `occupancy.fastDecisions` | Tez qaror | Быстрых решений |
+| `occupancy.fastDecisionsWhy` | Juda tez berilgan javoblar. Ular bloklanmaydi — faqat shu hisobotda ko'rinadi. | Ответы, данные очень быстро. Они ничего не блокируют — видны только в этом отчёте. |
 | `occupancy.resolutionSource` | Manba | Источник |
 | `occupancy.sourceSystem` | Tizim | Система |
 | `occupancy.sourceHuman` | Nazoratchi | Контролёр |
