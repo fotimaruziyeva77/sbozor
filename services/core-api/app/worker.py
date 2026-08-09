@@ -103,6 +103,7 @@ from __future__ import annotations
 import asyncio
 import os
 from contextlib import AsyncExitStack
+from datetime import timedelta
 from typing import TYPE_CHECKING, Annotated, Any, Final
 from uuid import UUID
 
@@ -117,6 +118,7 @@ from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 from app.jobs.alerting import alert_sweep, daily_digest
 from app.jobs.audit_draw import QueueTickPolicy, daily_queue_tick
 from app.jobs.capture import BatchRequest, CapturePolicy, capture_batch, capture_tick
+from app.jobs.day_close import day_close
 from app.jobs.discovery import discover_nvr
 from app.jobs.retention import RetentionPolicy, retention_daily
 from app.observability import capture_exception, init_sentry, sentry_installed
@@ -133,6 +135,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 __all__ = [
+    "DAY_CLOSE_CRON",
     "DEFAULT_LOG_LEVEL",
     "DIGEST_CRON",
     "DISCOVERY_QUEUE",
@@ -150,6 +153,7 @@ __all__ = [
     "capture_batch_task",
     "capture_tick_task",
     "daily_digest_task",
+    "day_close_task",
     "daily_queue_tick_task",
     "discover_nvr_task",
     "enqueue_discovery",
@@ -401,6 +405,38 @@ kunning ikkinchi yarmi (16:00, 18:00) o'lchovga UMUMAN kirmasdi — ya'ni
 ⚠ NAZORATCHI KECHAGI NAVBATNI BUGUN KO'RADI va bu KUTILGAN xulq:
   byudjet `zone_reviews.decided_at` bo'yicha sanaladi (05-10), ya'ni
   kechagi qoldiq BUGUNGI diqqat byudjetini yeydi.
+"""
+
+DAY_CLOSE_CRON: Final[str] = "40 3 * * *"
+"""Kun yopilishi — KECHASI 03:40 (Toshkent) va u KECHAGI kunni yopadi.
+
+=============================================================================
+⛔⛔ VAQT «SHU KUNNING OXIRI» EMAS, «KEYINGI KUNNING ERTALABI» — VA BU
+    AI-06 NING TALABI.
+
+D-19: «kun oxirigacha tasdiqlanmagan `uncertain` -> bo'sh». Namuna va
+noaniq navbat 19:30 da quriladi (`QUEUE_TICK_CRON`), nazoratchi esa
+ularni ERTASI KUNI ko'radi (o'sha docstringning oxirgi bandi). Ya'ni
+kun 19:30 da yopilsa nazoratchining butun ish oynasi kesib tashlanardi:
+har bir band «ko'rilmagani uchun bo'sh» bo'lib qolardi va D-19 ning
+hisoblagichi HAR KUNI to'liq bo'lardi — signal doimiy shovqinga
+aylanardi.
+
+⚠ KECHAGI KUN YOPILADI (`business_today() - 1`), bugungisi EMAS: bugungi
+  kun 03:40 da hali BOSHLANMAGAN ham (birinchi slot 06:00).
+
+⚠ QAYTA HISOBLASH XATO EMAS. Nazoratchi kechagi bandga bugun javob
+  yozsa, o'sha kunning materializatsiyasi eskiradi — va u
+  `day_close(business_date=...)` ni qayta chaqirish bilan tuzatiladi
+  (`ON CONFLICT DO UPDATE`, `occupancy_repo._MATERIALIZE_SLOT`). Job
+  KONVERGENT, ya'ni o'tkazib yuborilgan yugurish yo'qotish EMAS.
+
+⚠ 03:40 — `RETENTION_CRON` (03:20) DAN KEYIN va u ataylab: ikkalasi ham
+  kechasi ishlaydi, lekin retention arxiv bo'ylab I/O qiladi. Bir
+  daqiqada boshlansalar disk uchun raqobat qilardilar; 20 daqiqa farq
+  ularni ajratadi. Kadr olish oynasi (06:00–18:00) ikkalasidan ham
+  uzoqda.
+=============================================================================
 """
 
 
@@ -819,6 +855,27 @@ async def daily_queue_tick_task(context: Annotated[Context, TaskiqDepends()]) ->
         business_date=business_today(),
         policy=state.queue_tick,
     )
+
+
+@broker.task(
+    task_name="occupancy.day_close",
+    schedule=[{"cron": DAY_CLOSE_CRON, "cron_offset": MARKET_CRON_OFFSET}],
+)
+async def day_close_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — kun yopilishi va rasta-slot materializatsiyasi (05-12, AI-05/AI-06).
+
+    ⛔ KECHAGI KUN YOPILADI, BUGUNGISI EMAS (`DAY_CLOSE_CRON` docstringi):
+       tik 03:40 da ishlaydi, bugungi kunning birinchi sloti esa 06:00 da.
+       `business_today()` berilsa job HAR KUNI BO'SH kunni yopardi va
+       kechagi kun HECH QACHON materializatsiya qilinmasdi — hisobot
+       doim bo'sh bo'lardi va birorta xato chiqmasdi.
+
+    ⚠ BIZNES-KUN QOBIQDA HISOBLANADI, jobda EMAS (`daily_digest_task`
+      bilan bir xil qoida): job uni ARGUMENT sifatida oladi va shu bilan
+      «qaysi kun?» savoli testda bitta qiymatga aylanadi.
+    """
+    state = context.state
+    await day_close(state.sessionmaker, business_date=business_today() - timedelta(days=1))
 
 
 async def enqueue_discovery(
