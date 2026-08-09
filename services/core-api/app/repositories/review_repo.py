@@ -429,11 +429,25 @@ beradi (`review_already_answered` va `blind_answer_locked`, 05-11) va
 ular AYNAN shu chegara tufayli aralashib ketmaydi.
 
 `INSERT` ga esa **`src.queue_kind`** ketadi — QATORDAN o'qilgan qiymat.
-Uni `:queue_kind` bilan almashtirish «soddalashtirish» bo'lib ko'rinardi
-(«baribir teng-ku») va DENORMALIZATSIYA MANBAINI chaqiruvchiga
-ko'chirardi: filtrni bo'shatgan kun (yoki ikki navbat uchun bitta
-marshrut yozilgan kun) yolg'on nusxa yozish yo'li OCHILARDI. Farq
-sabotaj bilan o'lchanadi.
+
+⚠⚠ BU FARQ BUGUN TEST BILAN O'LCHANMAYDI VA BUNI YOZIB QO'YISH SHART.
+
+    O'LCHANDI (05-10 sabotaj D): `src.queue_kind` -> `:queue_kind`
+    almashtirilganda 28 testning HAMMASI YASHIL qoldi. Sabab mantiqiy,
+    test nosozligi emas: yuqoridagi `WHERE ra.queue_kind = :queue_kind`
+    filtri ikkala ifodani TENG qilib qo'yadi, ya'ni ularni ajratadigan
+    holat MAVJUD EMAS — birorta test uni ajrata olmaydi.
+
+    Demak `src.queue_kind` ning qiymati BUGUNGI kafolatda emas,
+    KELAJAKDAGI o'zgarishga chidamlilikda: filtr bo'shatilgan kun (yoki
+    ikki navbat uchun bitta marshrut yozilgan kun) parametr shakli
+    DENORMALIZATSIYA MANBAINI chaqiruvchiga ko'chirardi va yolg'on nusxa
+    yo'li ochilardi. Qator shakli o'shanda ham to'g'ri qoladi.
+
+    O'LCHANADIGAN da'vo esa boshqa va u KUCHLIROQ: yozilgan qiymat
+    KONSTANTA EMAS. `src.queue_kind` -> `'uncertain'` sabotaji
+    `test_record_answer_copies_the_queue_kind_from_the_assignment` ni
+    QIZARTIRDI (langar FK `23503` bilan rad etdi).
 =============================================================================
 
 =============================================================================

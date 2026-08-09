@@ -35,11 +35,13 @@ yashil ko'rinardi.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import psycopg
 import pytest
+from app.main import app as fastapi_app
 from app.repositories.review_repo import ReviewRepository
 from app.schemas import AnswerRequest
 from fixtures.admin_api import session_headers
@@ -69,6 +71,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
 
     import httpx
+    from fastapi import FastAPI
     from fixtures import TenantSessionFactory
     from fixtures.auth_users import AuthSeed
     from psycopg import Connection
@@ -617,13 +620,24 @@ async def test_record_answer_copies_the_queue_kind_from_the_assignment(
     sync_owner_conn: Connection[TupleRow],
     env: Env,
 ) -> None:
-    """`queue_kind` TOPSHIRIQ QATORIDAN yoziladi — chaqiruvchi uni bera olmaydi.
+    """Yozilgan `queue_kind` KONSTANTA EMAS — u topshiriqning turiga ergashadi.
 
-    Ko'r audit topshirig'iga javob yozilganda qator `blind_audit` bo'lishi
-    SHART: aks holda `fk_zone_reviews_queue_kind_anchor` uni rad etardi.
-    Test AYNAN shu yo'lni yuradi — ya'ni u langarning ishlashini emas,
-    SERVER TO'G'RI NUSXA olayotganini o'lchaydi (05-05 deviatsiya #5 ning
-    05-10 dagi ochiq bandi).
+    =======================================================================
+    ⚠ DA'VO ATAYIN SHU SHAKLDA VA U O'LCHANGANIDAN KENGROQ EMAS.
+
+    «Server qiymatni QATORDAN o'qiydi (parametrdan emas)» degan kuchliroq
+    da'voni bu test — va umuman HECH QANDAY test — o'lchay olmaydi:
+    `_RECORD_ANSWER` ning `WHERE ra.queue_kind = :queue_kind` filtri
+    ikkala manbani TENG qilib qo'yadi. Sabotaj bilan tasdiqlandi
+    (05-10, sabotaj D): almashtirish 28 testni yashil qoldirdi.
+
+    O'LCHANADIGANI esa bu: ko'r audit topshirig'iga javob yozilganda
+    qator `blind_audit` bo'ladi, ya'ni yozilgan qiymat `'uncertain'`
+    literaliga qadalmagan. Qadalgan bo'lsa
+    `fk_zone_reviews_queue_kind_anchor` (05-05 deviatsiya #5) uni
+    `23503` bilan rad etadi va test QIZARADI — bu ham sabotaj bilan
+    tasdiqlandi (sabotaj D′).
+    =======================================================================
     """
     market_b = env.base.market_b.id
     blind_id = env.occupancy.market_b.blind_assignment_id
@@ -948,3 +962,474 @@ async def test_budget_endpoint_reports_both_queues(
     assert body["day"] == business_today().isoformat()
     assert body["uncertain"] == {"answered": 1, "budget": 50, "remaining": 49}
     assert body["blind_audit"] == {"answered": 0, "budget": 30, "remaining": 30}
+
+
+# ===========================================================================
+# 6. SC#3 DARVOZALARI
+# ===========================================================================
+
+MINIMUM_SCANNED_ROUTES = 20
+"""`test_no_bulk_approve_endpoint` skanerlashi SHART bo'lgan eng kam yozuv marshruti.
+
+⛔ QUYI CHEGARASIZ DARVOZA JIMGINA BO'SHARDI: `app.openapi()` bir kun
+   boshqacha tuzilma qaytarsa (yoki yurish nosozlansa) sxema bo'sh
+   bo'lardi va «massiv qabul qiluvchi marshrut yo'q» asserti TRIVIAL
+   ravishda o'tardi — aynan `test_runtime_deps.py::
+   test_manifest_actually_parsed` va `test_sentry_processes.py` ning
+   quyi chegarasi qo'riqlaydigan nosozlik sinfi.
+
+Bugungi son — **44**; chegara ATAYIN pastroq qo'yilgan: u «sxema
+o'qildimi?» ni o'lchaydi, marshrutlar SONINI emas. Aniq songa qadalganda
+har yangi endpoint bu faylni tahrirlashni talab qilardi va darvoza
+shovqinga aylanardi.
+"""
+
+REVIEW_ROUTER_MODULE = "app.api.v1.reviews"
+"""Nazoratchi yuzasining MODULI — marshrut NOMLARI ro'yxati emas.
+
+⚠ 04-12 ning darsi (§S-10): nomlar ro'yxati eskiradi va darvoza abadiy
+  yashil bo'lib qoladi. Modul esa `main.py` da router sifatida ulanadi,
+  ya'ni bu yuzaga qo'shilgan HAR QANDAY yangi marshrut — nomi qanday
+  bo'lishidan qat'i nazar — darvozaga AVTOMATIK tushadi.
+"""
+
+FORBIDDEN_ITEM_KEYS = frozenset(
+    {
+        "verdict",
+        "ai_verdict",
+        "aiverdict",
+        "system_verdict",
+        "system_answer",
+        "confidence",
+        "model_version",
+        "modelversion",
+        "thresholds_version",
+        "purpose",
+        "queue_kind",
+        "shown_ai_verdict",
+        "effective_verdict",
+        "resolution_source",
+    }
+)
+"""Navbat payloadida uchramasligi SHART bo'lgan kalitlar (UI-SPEC §14.3).
+
+⚠ BU RO'YXAT DARVOZANING YAGONA MEXANIZMI EMAS va bo'lishi ham mumkin
+  emas: u faqat BILINGAN nomlarni ushlaydi.
+  `test_next_item_has_no_system_answer` ning IKKINCHI qatlami — javob
+  matnida verdikt SO'ZINING o'zini qidirish — nomdan MUSTAQIL va aynan
+  shu ro'yxatda yo'q shakllarni (`meta.ai`, `debug.v`) qamraydi.
+"""
+
+
+def _resolve(schema: dict[str, Any], components: dict[str, Any], seen: frozenset[str]) -> Any:
+    """`$ref` ni `components/schemas` dan ochadi (rekursiv havolaga chidamli)."""
+    ref = schema.get("$ref")
+    if not isinstance(ref, str):
+        return schema
+    name = ref.rsplit("/", 1)[-1]
+    if name in seen:
+        return {}
+    return _resolve(components.get(name, {}), components, seen | {name})
+
+
+def _array_carrying_names(
+    schema: Any,
+    components: dict[str, Any],
+    seen: frozenset[str] = frozenset(),
+    *,
+    inside_array: bool = False,
+) -> set[str]:
+    """Massiv KO'TARADIGAN har bir nom — maydon nomi yoki `_ROOT`.
+
+    Uchala shaklni ham qamraydi va ularning HAMMASI «ommaviy tasdiqlash»
+    ning haqiqiy ko'rinishlari:
+
+        {"answers": [{"human_verdict": ...}]}  -> `answers`, `human_verdict`
+        {"assignment_ids": ["uuid", ...]}      -> `assignment_ids`
+        [{"human_verdict": ...}]               -> `_ROOT`, `human_verdict`
+
+    ⛔ FUNKSIYA QAROR QABUL QILMAYDI — u faqat TUZILMANI qaytaradi.
+       Nomlar bilan solishtirish chaqiruvchida va u AYNAN IKKI predikat
+       (`test_no_bulk_approve_endpoint`).
+    """
+    if not isinstance(schema, dict):
+        return set()
+    resolved = _resolve(schema, components, seen)
+    if not isinstance(resolved, dict):
+        return set()
+
+    names: set[str] = set()
+    if resolved.get("type") == "array" or "items" in resolved:
+        names.add("_ROOT")
+        names |= _array_carrying_names(
+            resolved.get("items", {}), components, seen, inside_array=True
+        )
+        return names
+
+    for keyword in ("anyOf", "oneOf", "allOf"):
+        for option in resolved.get(keyword) or []:
+            names |= _array_carrying_names(option, components, seen, inside_array=inside_array)
+
+    for key, sub in (resolved.get("properties") or {}).items():
+        child = _array_carrying_names(sub, components, seen, inside_array=inside_array)
+        if inside_array or "_ROOT" in child:
+            names.add(key)
+        names |= child - {"_ROOT"}
+    return names
+
+
+def _write_operations(spec: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
+    """Sxemadagi har bir `POST`/`PUT`/`PATCH` amali."""
+    return [
+        (path, method.upper(), operation)
+        for path, operations in spec["paths"].items()
+        for method, operation in operations.items()
+        if method.upper() in {"POST", "PUT", "PATCH"}
+    ]
+
+
+def _review_surface_paths() -> set[str]:
+    """`REVIEW_ROUTER_MODULE` funksiyalariga tegishli YO'LLAR — ILOVADAN hosila."""
+    found: set[str] = set()
+
+    def _walk(routes: Any, prefix: str) -> None:
+        for route in routes:
+            included = getattr(route, "original_router", None)
+            if included is not None:
+                context = getattr(route, "include_context", None)
+                _walk(included.routes, prefix + str(getattr(context, "prefix", "") or ""))
+                continue
+            endpoint = getattr(route, "endpoint", None)
+            path = getattr(route, "path", None)
+            if (
+                endpoint is not None
+                and path is not None
+                and getattr(endpoint, "__module__", "") == REVIEW_ROUTER_MODULE
+            ):
+                found.add(prefix + path)
+
+    _walk(fastapi_app.routes, "")
+    return found
+
+
+def test_no_bulk_approve_endpoint() -> None:
+    """⛔ OMMAVIY TASDIQLASH ENDPOINTI YO'Q — OpenAPI SXEMASIDAN HOSILA (D-18).
+
+    =======================================================================
+    DARVOZA IKKI MUSTAQIL PREDIKATDAN IBORAT VA IKKALASI HAM NOMDAN
+    EMAS, TUZILMADAN CHIQADI.
+
+      (1) YUZA: nazoratchi routerining (`REVIEW_ROUTER_MODULE`) birorta
+          yozuv marshruti massiv ko'taradigan tana QABUL QILMAYDI. Bu
+          `POST /review/answer-many` ni ham, `POST /review/batch` ni ham,
+          `PUT /review/answers` ni ham BIR XIL ushlaydi.
+
+      (2) LUG'AT: butun API'da `AnswerRequest` ning maydoni MASSIV
+          ICHIDA uchramaydi. Bu bulk yo'lni BOSHQA routerga ko'chirib
+          yashirishni ham yopadi.
+
+    ⛔ MARSHRUT NOMLARI RO'YXATI YOZILMAGAN va bu ataylab: aynan nomlar
+       ro'yxati 04-12 ning darvozasini eskirtirgan edi (§S-10).
+    =======================================================================
+    """
+    spec = fastapi_app.openapi()
+    components = spec.get("components", {}).get("schemas", {})
+    operations = _write_operations(spec)
+    review_paths = _review_surface_paths()
+    answer_field = next(iter(AnswerRequest.model_fields))
+
+    assert len(operations) >= MINIMUM_SCANNED_ROUTES, (
+        f"faqat {len(operations)} ta yozuv marshruti skanerlandi — sxema o'qilmadi"
+    )
+    assert review_paths, (
+        f"`{REVIEW_ROUTER_MODULE}` dan birorta marshrut topilmadi — darvoza bo'sh yugurdi"
+    )
+
+    bulk_on_review_surface: list[str] = []
+    bulk_answers_anywhere: list[str] = []
+    for path, method, operation in operations:
+        body = operation.get("requestBody", {}).get("content", {}).get("application/json", {})
+        names = _array_carrying_names(body.get("schema", {}), components)
+        if not names:
+            continue
+        if path in review_paths:
+            bulk_on_review_surface.append(f"{method} {path}")
+        if answer_field in names:
+            bulk_answers_anywhere.append(f"{method} {path}")
+
+    assert not bulk_on_review_surface, (
+        "nazoratchi yuzasida massiv qabul qiluvchi marshrut paydo bo'ldi (D-18): "
+        f"{sorted(bulk_on_review_surface)}"
+    )
+    assert not bulk_answers_anywhere, (
+        f"`{answer_field}` massiv ichida qabul qilinmoqda (D-18): {sorted(bulk_answers_anywhere)}"
+    )
+
+
+def _all_keys(payload: Any) -> set[str]:
+    """Ichma-ich joylashgan BARCHA kalitlar (`dict`/`list` bo'yicha rekursiv)."""
+    keys: set[str] = set()
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            keys.add(str(key).lower())
+            keys |= _all_keys(value)
+    elif isinstance(payload, list):
+        for item in payload:
+            keys |= _all_keys(item)
+    return keys
+
+
+async def test_next_item_has_no_system_answer(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """⛔ JAVOB REKURSIV SKANERLANADI — MA'LUM MAYDON TEKSHIRILMAYDI (T-05-45).
+
+    =======================================================================
+    NEGA REKURSIV SKAN, NEGA `assert "verdict" not in body` EMAS.
+
+    Ma'lum kalitni tekshiradigan test faqat O'ZI BILGAN nomni ko'radi.
+    Tizim javobi `meta.verdict`, `debug.confidence` yoki `ai.value` bo'lib
+    qaytsa u YASHIL qolardi — ya'ni darvoza o'zi qo'riqlayotgan xavfning
+    eng ehtimolli shaklini ko'rmasdi.
+
+    IKKI QATLAM VA ULAR MUSTAQIL:
+      (a) ichma-ich HAR BIR kalit `FORBIDDEN_ITEM_KEYS` ga solishtiriladi;
+      (b) javobning XOM MATNIDA verdikt SO'ZINING o'zi ham uchramaydi —
+          navbatdagi HAR BANDNING verdikti `uncertain`, ya'ni bu so'z
+          payloadda paydo bo'lsa u FAQAT tizim javobidan kelgan bo'lardi.
+          Bu qatlam KALIT NOMIDAN mutlaqo mustaqil.
+    =======================================================================
+    """
+    await build_queue(tenant_session, env)
+
+    response = await api_client.get(NEXT_URL, headers=inspector_headers)
+
+    assert response.status_code == 200, response.text
+    leaked = sorted(FORBIDDEN_ITEM_KEYS & _all_keys(response.json()))
+    assert not leaked, f"javobda tizim javobining kaliti bor: {leaked}"
+    assert OccupancyVerdict.UNCERTAIN.value not in response.text.lower(), (
+        "javob matnida tizim verdikti uchradi — payload ankor tashiydi"
+    )
+
+
+async def test_daily_budget_is_enforced(
+    api_app: FastAPI,
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """Byudjet tugagach **409 `review_budget_exhausted`** — «navbat bo'sh» EMAS.
+
+    ⛔ IKKI KOD ATAYIN AJRATILGAN (UI-SPEC §8.3, S-7/S-8):
+       `review_queue_empty` — ISH TUGADI;
+       `review_budget_exhausted` — ISH QOLGAN BO'LISHI MUMKIN.
+       Ularni bir xil ko'rsatish nazoratchida «hammasi bajarildi» degan
+       YOLG'ON hosil qilardi.
+
+    ⚠ NAZORAT: byudjet tugagan paytda navbatda BAND BOR (ikkinchi nomzod
+      ataylab qo'shilgan) va byudjet qaytarilgach u HAQIQATAN beriladi.
+      Usiz test byudjetni emas, navbat bo'shligini o'lchagan bo'lardi.
+    """
+    add_candidate(
+        sync_owner_conn,
+        env,
+        stall_id=env.unassigned_stall,
+        confidence=CONFIDENCE_0_45,
+        center=(0.20, 0.70),
+    )
+    await build_queue(tenant_session, env)
+
+    with _budget_of(api_app, uncertain=1):
+        item = (await api_client.get(NEXT_URL, headers=inspector_headers)).json()
+        answered = await api_client.post(
+            f"{REVIEW_URL}/{item['assignment_id']}/answer",
+            json={"human_verdict": "occupied"},
+            headers=inspector_headers,
+        )
+        exhausted = await api_client.get(NEXT_URL, headers=inspector_headers)
+
+    still_there = await api_client.get(NEXT_URL, headers=inspector_headers)
+
+    assert answered.status_code == 200, answered.text
+    assert exhausted.status_code == 409, exhausted.text
+    assert exhausted.json()["detail"] == "review_budget_exhausted"
+    assert still_there.status_code == 200, (
+        "byudjet ko'tarilgach navbat bo'sh chiqdi — yuqoridagi 409 byudjetdan EMAS edi"
+    )
+
+
+async def test_empty_queue_uses_a_different_code_than_the_budget(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """Navbat bo'shligi `review_queue_empty` beradi — byudjet kodidan BOSHQA."""
+    await build_queue(tenant_session, env)
+    _answer_directly(sync_owner_conn, env, env.seed_assignment)
+
+    response = await api_client.get(NEXT_URL, headers=inspector_headers)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "review_queue_empty"
+
+
+async def test_priority_puts_billing_impact_first(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """HTTP yuzasida ham billing ta'siri BIRINCHI — SOZLAMA ulangani bilan.
+
+    ⚠ `test_claim_next_prefers_the_stall_with_a_vendor` BILAN TAKROR EMAS:
+      u repozitoriyni STANDART o'lchov nuqtasi bilan chaqiradi, bu esa
+      `Settings.review_uncertain_midpoint` ning ROUTERGA ulanganini ham
+      o'lchaydi.
+    """
+    add_candidate(
+        sync_owner_conn,
+        env,
+        stall_id=env.unassigned_stall,
+        confidence=CONFIDENCE_0_45,
+        center=(0.20, 0.70),
+    )
+    await build_queue(tenant_session, env)
+
+    response = await api_client.get(NEXT_URL, headers=inspector_headers)
+
+    assert response.status_code == 200, response.text
+    assert UUID(response.json()["stall_id"]) == env.assigned_stall
+
+
+async def test_answer_is_recorded_once(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """Bitta javob = bitta qator; `shown_ai_verdict = false`, nusxa TOPSHIRIQDAN."""
+    await build_queue(tenant_session, env)
+    item = (await api_client.get(NEXT_URL, headers=inspector_headers)).json()
+
+    response = await api_client.post(
+        f"{REVIEW_URL}/{item['assignment_id']}/answer",
+        json={"human_verdict": "occupied"},
+        headers=inspector_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    rows = sync_owner_conn.execute(
+        "SELECT queue_kind, shown_ai_verdict, human_verdict, reviewer_id "
+        "FROM zone_reviews WHERE review_assignment_id = %s",
+        (item["assignment_id"],),
+    ).fetchall()
+    assert len(rows) == 1
+    queue_kind, shown, human, reviewer = rows[0]
+    assert queue_kind == ReviewQueueKind.UNCERTAIN.value
+    assert shown is False, "server `shown_ai_verdict` ni `true` yozdi"
+    assert human == OccupancyVerdict.OCCUPIED.value
+    assert UUID(str(reviewer)) == env.reviewer_id
+
+
+async def test_decision_ms_is_server_measured(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """⛔ KLIENT YUBORGAN `decision_ms` E'TIBORSIZ QOLDIRILADI (T-05-46).
+
+    Maydon `AnswerRequest` da UMUMAN e'lon qilinmagan, ya'ni Pydantic uni
+    JIMGINA tashlaydi. Bazadagi qiymat SERVER o'lchovi bo'lishi kerak:
+    testda band shu zahoti javoblanadi, ya'ni farq bir necha yuz
+    millisekunddan oshmaydi.
+
+    ⚠ NAZORAT: qiymat `NULL` HAM EMAS. Faqat «yuborilgan qiymat emas» ni
+      tekshirish o'lchov BUTUNLAY ishlamay qolganda ham yashil bo'lardi —
+      `NULL != 999999` ham rost.
+    """
+    client_value = 999_999
+    await build_queue(tenant_session, env)
+    item = (await api_client.get(NEXT_URL, headers=inspector_headers)).json()
+
+    response = await api_client.post(
+        f"{REVIEW_URL}/{item['assignment_id']}/answer",
+        json={"human_verdict": "occupied", "decision_ms": client_value},
+        headers=inspector_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    row = sync_owner_conn.execute(
+        "SELECT decision_ms FROM zone_reviews WHERE review_assignment_id = %s",
+        (item["assignment_id"],),
+    ).fetchone()
+    assert row is not None
+    measured = row[0]
+    assert measured != client_value, "klient yuborgan qiymat bazaga tushdi"
+    assert measured is not None, "server o'lchovi bajarilmadi — qiymat NULL"
+    assert 0 <= measured < 60_000, f"o'lchov mantiqsiz: {measured} ms"
+
+
+async def test_uncertain_queue_excludes_events_already_in_blind_audit(
+    tenant_session: TenantSessionFactory,
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+) -> None:
+    """⛔ IKKI NAVBAT O'ZARO ISTISNO — `UNIQUE (occupancy_event_id)` (§C.8.3).
+
+    Ko'r audit namunasi AVVAL tortiladi; noaniq navbat undan keyin
+    quriladi va allaqachon tortilgan hodisani QAYTA olmaydi. Teskari
+    tartibda xolis namuna aynan model IKKILANGAN holatlarsiz qolardi va
+    o'lchangan aniqlik SUN'IY ko'tarilardi.
+    """
+    drawn = add_candidate(
+        sync_owner_conn,
+        env,
+        stall_id=env.unassigned_stall,
+        confidence=CONFIDENCE_0_45,
+        center=(0.20, 0.70),
+    )
+    sync_owner_conn.execute(
+        "INSERT INTO review_assignments "
+        "(market_id, occupancy_event_id, audit_round_id, queue_kind, purpose) "
+        "VALUES (%s, %s, %s, 'blind_audit', 'eval')",
+        (str(env.market_a), str(drawn.event_id), str(env.occupancy.market_a.audit_round_id)),
+    )
+
+    written = await build_queue(tenant_session, env)
+
+    assert written == 0, "ko'r auditga tortilgan hodisa noaniq navbatga ham tushdi"
+    rows = sync_owner_conn.execute(
+        "SELECT queue_kind FROM review_assignments WHERE occupancy_event_id = %s",
+        (str(drawn.event_id),),
+    ).fetchall()
+    assert len(rows) == 1
+    assert rows[0][0] == ReviewQueueKind.BLIND_AUDIT.value
+
+
+@contextmanager
+def _budget_of(api_app: FastAPI, *, uncertain: int) -> Iterator[None]:
+    """Kunlik byudjetni VAQTINCHA pasaytiradi.
+
+    `test_settings` SESSIYA doirasida, ya'ni nusxa qaytariladi. Muqobil
+    (haqiqatan 50 ta javob yozish) testni sekin va mo'rt qilardi va
+    byudjetning SOZLAMA ekanini umuman o'lchamasdi.
+    """
+    original = api_app.state.settings
+    api_app.state.settings = original.model_copy(
+        update={"review_uncertain_daily_budget": uncertain}
+    )
+    try:
+        yield
+    finally:
+        api_app.state.settings = original
