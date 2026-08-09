@@ -58,7 +58,7 @@ from fixtures.nvr_domain import nvr_rows
 from pydantic import SecretStr
 from sbozor_core.enums import AlertSeverity, CaptureMethod, CaptureRunStatus
 from sbozor_core.models.snapshot import DEFAULT_SNAPSHOT_SLOTS
-from sbozor_core.timeutil import MARKET_TZ, business_today
+from sbozor_core.timeutil import MARKET_TZ, business_date, business_today
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -166,6 +166,7 @@ class _Bed:
         count: int = CAMERA_COUNT,
         status: str = CaptureRunStatus.MISSED.value,
         error_code: str | None = None,
+        days_ago: int = 0,
     ) -> None:
         """Bitta slotda `count` ta kamerani yiqitadi, qolganini muvaffaqiyatli qiladi.
 
@@ -180,6 +181,7 @@ class _Bed:
                 slot=slot,
                 status=status if broken else CaptureRunStatus.SUCCEEDED.value,
                 error_code=error_code if broken else None,
+                days_ago=days_ago,
             )
 
     def alerts(self) -> list[dict[str, Any]]:
@@ -418,14 +420,28 @@ async def test_an_old_alert_escalates_by_level_not_by_frequency(
     ⚠ 5 KAMERA — chegaradan past (20 % < 30 %), ya'ni stsenariyda YAGONA
       alert `capture_missed` bo'lib qoladi va eskalatsiya sanog'i AYNAN
       bittaga tegishli bo'ladi.
+
+    ⚠⚠ SIGNAL IKKI BIZNES-KUNGA YOZILADI va bu bezak emas. `moment` ni
+      QOTIRIB BO'LMAYDI: `first_seen_at` DB soatidan keladi (server
+      default), ya'ni eskalatsiya arifmetikasi (`first_seen_at <=
+      moment - 3s`) haqiqiy vaqtga langarlangan. Kech supurgi esa kunni
+      `business_date(moment + 3s01d)` dan oladi (`alerting.py:487,668`) —
+      Toshkent vaqti bilan 20:59 dan keyin u ERTANGI kun bo'ladi. Signal
+      faqat bugunga yozilsa, kech supurgi bo'sh kunni ko'rib alertni
+      eskalatsiya qilish o'rniga YOPARDI va test har kuni kechqurun
+      qizarardi — mahsulotda emas, o'lchov qurilmasida bo'lgan nosozlik.
     """
-    bed.fail_slot(DEFAULT_SNAPSHOT_SLOTS[0], count=5)
     moment = datetime.now(tz=MARKET_TZ)
+    late_moment = moment + timedelta(hours=3, minutes=1)
+
+    bed.fail_slot(DEFAULT_SNAPSHOT_SLOTS[0], count=5)
+    if business_date(late_moment) != bed.today:
+        bed.fail_slot(DEFAULT_SNAPSHOT_SLOTS[0], count=5, days_ago=-1)
 
     async with respx.mock(assert_all_called=False) as router:
         route = router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
         await _sweep(api_sessionmaker, sender, now=moment)
-        late = await _sweep(api_sessionmaker, sender, now=moment + timedelta(hours=3, minutes=1))
+        late = await _sweep(api_sessionmaker, sender, now=late_moment)
 
     rows = bed.alerts()
     assert late.escalated == 1, f"eskalatsiya bo'lmadi: {rows}"
