@@ -1764,3 +1764,186 @@ export const reviewYesterdaySummarySchema = z.object({
 export type ReviewYesterdaySummary = z.infer<
   typeof reviewYesterdaySummarySchema
 >;
+
+/* ---------------------------------------------------------------------------
+ * BANDLIK VA ANIQLIK HISOBOTI (05-12 kontrakti, UI-SPEC §11) — Y-4
+ *
+ * ⛔⛔ BU BLOKDA FOIZ HISOBLANMAYDI VA HISOBLANMAYDI HAM.
+ *
+ *     Uch nisbat ham, ularning oralig'i ham, bazaviy ulush ham SERVERDA
+ *     hisoblangan holda keladi (`app/services/accuracy_report.py`).
+ *     Klientda ularni QAYTA hisoblash ikkinchi javob tug'dirardi —
+ *     maxrajlari boshqacha, xatosi yo'q va aynan shuning uchun sezilmasdi
+ *     (05-12: `fp/(tp+fp)` -> 5,4 % va `fp/n` -> 3,8 %, ikkalasi ham
+ *     to'g'ri arifmetika, ikki BOSHQA savolga javob).
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Rasta-kunning TO'RT o'zaro inkor bo'lagi (`_PER_STALL_CTE` ning `bucket` i).
+ *
+ * ⛔ `uncertain` BU RO'YXATDA YO'Q va bu 05-12 ning o'lchangan qarori:
+ *    inson «aniq ayta olmadi» degan slot `empty` bo'lagiga tushadi va
+ *    `human_confirmed` ga ham kiradi. Uni beshinchi bo'lak qilish
+ *    yo'qotish signalini («ko'rilmagani uchun bo'sh») nazoratchi ISHLAGAN
+ *    holatlar bilan shishirardi.
+ */
+export const OCCUPANCY_STATUSES = [
+  "occupied",
+  "empty",
+  "default_empty",
+  "no_coverage",
+] as const;
+export type OccupancyStatus = (typeof OCCUPANCY_STATUSES)[number];
+
+/** `GET /occupancy` ro'yxatining bitta qatori. ⛔ Patta/summa maydoni YO'Q (§16.1). */
+export const occupancyStallItemSchema = z.object({
+  stall_id: z.uuid(),
+  stall_code: z.string(),
+  zone_name: z.string(),
+  status: z.enum(OCCUPANCY_STATUSES),
+  slots: z.number().int(),
+  occupied_slots: z.number().int(),
+  human_confirmed: z.boolean(),
+});
+export type OccupancyStallItem = z.infer<typeof occupancyStallItemSchema>;
+
+/**
+ * `GET /occupancy?day=…` — BESH hisoblagich va rastalar ro'yxati.
+ *
+ * =========================================================================
+ * ⛔ TO'RTTA BO'LAK O'ZARO INKOR VA ULARNING YIG'INDISI `stalls` GA TENG;
+ *    `human_confirmed` — KESISHUVCHI o'lcham va yig'indiga KIRMAYDI.
+ *
+ *    Shuning uchun sarlavhadagi «Rasta N ta» SHU MAYDONDAN olinadi va
+ *    klientda QAYTA JAMLANMAYDI (05-12, 3-ochiq band): ikkita mustaqil
+ *    yig'indi bir kun ajralib ketardi va nosozlik eng yomon shaklda —
+ *    ikkala son ham xatosiz bo'lib — ko'rinardi.
+ *
+ * ⚠ `stalls === 0` — «kun HALI YOPILMAGAN», «hamma rasta bo'sh» EMAS.
+ *   `day_summary` ning tashqi `SELECT` i agregat, ya'ni materializatsiya
+ *   qilinmagan kunda ham AYNAN bitta qator qaytadi va oltala son `0`
+ *   bo'ladi. Ekran buni E-6 bilan ajratadi (§8.4 O-3) — «0 band» EMAS.
+ *
+ * ⚠ `z.object`, `z.strictObject` EMAS: `reviewYesterdaySummarySchema` —
+ *   shu javobning TOR egizagi va u ataylab bitta maydonni o'qiydi. Ikki
+ *   sxema faqat maydon O'CHIRILGANDA ajralishi mumkin va u ikkalasini
+ *   ham BIR VAQTDA qizartiradi.
+ * =========================================================================
+ */
+export const occupancyDaySchema = z.object({
+  day: z.string(),
+  stalls: z.number().int(),
+  occupied: z.number().int(),
+  empty: z.number().int(),
+  /** ⛔ `empty` GA QO'SHILMAYDI (D-19) — «nazoratchi ulgurmadi» signali. */
+  default_empty: z.number().int(),
+  /** ⛔ `empty` GA QO'SHILMAYDI (D-22) — bu rasta haqida ma'lumot YO'Q. */
+  no_coverage: z.number().int(),
+  /** Kesishuvchi o'lcham: `occupied`/`empty` ICHIDA yashaydi. */
+  human_confirmed: z.number().int(),
+  items: z.array(occupancyStallItemSchema),
+});
+export type OccupancyDay = z.infer<typeof occupancyDaySchema>;
+
+/**
+ * Nisbat va uning Wilson oralig'i — SERVERDAN kelgan holda.
+ *
+ * ⛔ UCHALA MAYDON HAM `null` BO'LISHI MUMKIN va `null` «hali
+ *    o'lchanmadi» degani. Nuqta bahoni oraliqsiz ko'rsatish namuna
+ *    ko'tara olmaydigan aniqlikni va'da qilardi, shuning uchun ekran
+ *    ularni AJRATMAYDI: oraliq yo'q bo'lsa foiz ham chizilmaydi.
+ */
+export const proportionIntervalSchema = z.object({
+  point: z.number().nullable(),
+  lower: z.number().nullable(),
+  upper: z.number().nullable(),
+});
+export type ProportionIntervalPayload = z.infer<
+  typeof proportionIntervalSchema
+>;
+
+/** 2x2 chalkashlik matritsasi — «musbat» AYNAN `occupied`. To'rt katak XOM SON. */
+export const confusionMatrixSchema = z.object({
+  true_occupied: z.number().int(),
+  /** ⚠ Tizim band dedi, nazoratchi BO'SH dedi -> SOTUVCHI BILAN NIZO xavfi. */
+  false_occupied: z.number().int(),
+  /** ⚠ Tizim bo'sh dedi, nazoratchi BAND dedi -> YIG'ILMAGAN PATTA. */
+  false_empty: z.number().int(),
+  true_empty: z.number().int(),
+});
+export type ConfusionMatrixPayload = z.infer<typeof confusionMatrixSchema>;
+
+/**
+ * `GET /occupancy/accuracy` — matritsa, uch oraliq va BAZAVIY ULUSH.
+ *
+ * =========================================================================
+ * ⛔⛔ `z.strictObject` — VA SABAB AYNAN BITTA MAYDON HAQIDA.
+ *
+ *     NAZORATCHINING ICHKI MOSLIGI (D-16) BU JAVOBDA YO'Q: 05-11 uni
+ *     o'lchadi va bugungi sxemada IFODALAB BO'LMAYDI deb topdi
+ *     (`uq_review_assignments_occupancy_event_id` o'sha hodisaga ikkinchi
+ *     topshiriqni rad etadi), 05-12 esa uni javobdan NA SON, NA MAYDON
+ *     sifatida chiqarib tashladi.
+ *
+ *     `z.object` bo'lsa, server bir kun bunday maydonni qaytarganda u
+ *     JIMGINA brauzerga yetib borardi va keyingi ijrochi «ma'lumot bor
+ *     ekan» deb uni chizardi — o'lchanmagan miqdor ko'rilgan zahoti
+ *     o'lchangan deb o'qiladi (T-05-04). `strictObject` bu yo'lni
+ *     BALAND ovozda yopadi.
+ *
+ * ⛔ `min_sample` SERVERDAN KELADI va klient uni O'ZI YOZMAYDI (05-12,
+ *    2-ochiq band). `measured` ham serverniki: «foiz chizilsinmi?» degan
+ *    qarorni klientda `n >= 20` bilan takrorlash ikkinchi chegara
+ *    tug'dirardi.
+ * =========================================================================
+ */
+export const accuracyReportSchema = z.strictObject({
+  from_date: z.string(),
+  to_date: z.string(),
+  /** Namunaga tushgan `eval` bandlari — JAVOBSIZLARI BILAN. */
+  drawn: z.number().int(),
+  answered: z.number().int(),
+  /** ⛔ JAVOBSIZ BANDLAR NAMUNADAN CHIQMAYDI — ular «javobsiz» bo'lib sanaladi. */
+  unanswered: z.number().int(),
+  /** «Aniq ayta olmadi» — matritsadan TASHQARIDA (O-06). */
+  dont_know: z.number().int(),
+  matrix: confusionMatrixSchema,
+  /** Matritsaga tushgan javoblar soni — `drawn` dan KICHIK bo'lishi NORMAL. */
+  n: z.number().int(),
+  measured: z.boolean(),
+  min_sample: z.number().int(),
+  base_rate: z.number().nullable(),
+  correct: proportionIntervalSchema,
+  false_occupied: proportionIntervalSchema,
+  false_empty: proportionIntervalSchema,
+});
+export type AccuracyReport = z.infer<typeof accuracyReportSchema>;
+
+/**
+ * `GET /occupancy/round?day=…` — o'lchovning O'ZI haqidagi ma'lumot (§11.6).
+ *
+ * ⛔ URUG' QAYTARILMAYDI va «qayta tortish» yo'li YO'Q (D-17.1).
+ *
+ * ⚠ `drawn === false` — «tur TORTILMAGAN», «hammasi bajarildi» EMAS.
+ *   Qolgan maydonlar `null` bo'ladi va ekran ikkala holatni AJRATADI:
+ *   asbobning YO'QLIGI muvaffaqiyat bo'lib ko'rinmasligi kerak.
+ *
+ * ⛔ `z.strictObject` — `accuracyReportSchema` bilan AYNI sabab: «ichki
+ *    moslik» qatori tabiiy ravishda AYNAN «namuna holati» blokiga
+ *    yozilib qolishi mumkin edi (05-12 shu sababdan IKKALA javobni ham
+ *    skanerlagan).
+ */
+export const auditRoundSchema = z.strictObject({
+  day: z.string(),
+  drawn: z.boolean(),
+  round_no: z.number().int().nullable(),
+  drawn_at: z.string().nullable(),
+  frame_size: z.number().int().nullable(),
+  sample_size: z.number().int().nullable(),
+  answered: z.number().int().nullable(),
+  /** ⛔ NOL BO'LGANDA HAM KO'RSATILADI (§11.6). */
+  unanswered: z.number().int().nullable(),
+  dont_know: z.number().int().nullable(),
+  fast_decisions: z.number().int().nullable(),
+});
+export type AuditRound = z.infer<typeof auditRoundSchema>;

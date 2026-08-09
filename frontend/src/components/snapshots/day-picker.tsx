@@ -161,7 +161,40 @@ export function useShowClosedAlerts(): [boolean, (next: boolean) => void] {
   return [value, (next: boolean) => void setValue(next ? true : null)];
 }
 
-export function DayPicker() {
+/**
+ * Kun tanlagichi — 4-fazadagi shakl, 5-fazada QAYTA TA'RIFLANMAYDI.
+ *
+ * =========================================================================
+ * ⚠ YAGONA PARAMETR — «KELAJAK TANLANMAYDI» NING SABABI, XULQI EMAS.
+ *
+ *   Xulq ikkala sahifada ham AYNAN bir xil (`?day=`, `history:"push"`,
+ *   yaroqsiz qiymat jimgina bugunga tushadi, `max` bugun). Farq qiladigan
+ *   YAGONA narsa — foydalanuvchiga aytiladigan sabab:
+ *
+ *     `/snapshots`  «reja ertaga materializatsiya qilinadi»
+ *     `/occupancy`  «bandlik kun tugagach hisoblanadi»
+ *
+ *   Shu bitta matn uchun tanlagichning ikkinchi nusxasi yozilsa, ikki
+ *   nusxa `max` atributi yoki normallashtirish qoidasi bo'yicha ajralib
+ *   ketardi — ya'ni bittasida kelajakdagi kun TANLANADIGAN bo'lib qolardi
+ *   va buni hech qanday test ko'rmasdi (ikkinchi nusxa o'z testi bilan
+ *   kelardi).
+ *
+ * ⚠ STANDART QIYMAT 4-FAZANING XULQINI SAQLAYDI: `/snapshots` ning
+ *   chaqiruvi o'zgarmaydi va uning testlari ham.
+ * =========================================================================
+ */
+export function DayPicker({
+  noFutureDaysKey = "snapshots.noFutureDays",
+}: {
+  /**
+   * ⚠ TIP — ITTIFOQ, `string` EMAS: `useTranslations()` kalitlarni
+   *   `messages/uz-Latn.json` dan CHIQARADI, ya'ni `string` qabul qilinsa
+   *   mavjud bo'lmagan kalit ish vaqtida `IntlError` bo'lib chiqardi. Bu
+   *   yerdagi ikki qiymat — mavjud IKKALA iste'molchining kaliti.
+   */
+  noFutureDaysKey?: "snapshots.noFutureDays" | "occupancy.noFutureDays";
+} = {}) {
   const t = useTranslations();
   const selection = useDaySelection();
   const inputId = useId();
@@ -188,7 +221,7 @@ export function DayPicker() {
        *    bosilmayapti?» savoliga javob qolmaydi. Shuning uchun tugma
        *    BOSILADI, lekin so'rov yuborilmaydi va SABAB e'lon qilinadi.
        */
-      setNotice(t("snapshots.noFutureDays"));
+      setNotice(t(noFutureDaysKey));
       return;
     }
     setNotice("");
@@ -248,7 +281,7 @@ export function DayPicker() {
         aria-label={t("snapshots.dayNext")}
         onClick={goNext}
         size="sm"
-        title={selection.isToday ? t("snapshots.noFutureDays") : t("snapshots.dayNext")}
+        title={selection.isToday ? t(noFutureDaysKey) : t("snapshots.dayNext")}
         variant="secondary"
       >
         <ChevronRight aria-hidden="true" />

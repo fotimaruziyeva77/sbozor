@@ -1015,7 +1015,21 @@
   },
   "occupancy": {
     "title": "Bandlik",
+    "noFutureDays": "Kelajakdagi kun tanlanmaydi — bandlik kun tugagach hisoblanadi",
+    "summaryTitle": "Kunlik xulosa",
+    "stallCount": "Rasta {count} ta",
+    "occupied": "Band",
+    "empty": "Bo'sh",
+    "defaultEmpty": "Ko'rilmagani uchun bo'sh",
+    "defaultEmptyWhy": "{count} ta rasta ko'rilmadi va bo'sh deb hisoblandi. Ular uchun patta yozilmadi.",
     "noCoverage": "Qamrov yo'q",
-    "noCoverageWhy": "Bu rastalarni birorta kamera ko'rmaydi. Ular bo'sh emas — ular haqida ma'lumot yo'q."
+    "noCoverageWhy": "Bu rastalarni birorta kamera ko'rmaydi. Ular bo'sh emas — ular haqida ma'lumot yo'q.",
+    "humanConfirmed": "Nazoratchi tasdig'i bilan",
+    "humanConfirmedWhy": "Bu rastalar yuqoridagi «band» yoki «bo'sh» ichida sanalgan.",
+    "goToReview": "Ko'rib chiqishga o'tish",
+    "notBillingYet": "Bu — kun davomida kamida bir marta band ko'ringan rastalar. Patta hisobi alohida qoidaga ko'ra yuritiladi.",
+    "emptyDay": "Bu kunda bandlik hisoblanmagan",
+    "emptyDayHint": "Bu kunda yaroqli kadr yoki chizilgan zona bo'lmagan.",
+    "goToCameras": "Zona qamrovini ko'rish"
   }
 }
