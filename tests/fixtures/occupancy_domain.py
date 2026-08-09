@@ -60,6 +60,22 @@ SEED KONTRAKTI — HAR BIR ELEMENT ANIQ BIR TESTNI OZIQLANTIRADI.
     `occupied_has_winning_event` konstraytining IKKALA yo'nalishi ham
     seed'da mavjud bo'ladi.
 
+  * **A bozorining BIRINCHI rastasi IKKI KAMERADA.** `stall_ids[0]`
+    uchun ikkinchi faol kamerada ham faol zona bor (D-20: «birortasi
+    band desa — rasta band»). Usiz `uq_camera_zones_...` ning «kamera
+    bo'yicha ajraladi» xususiyati seed'da umuman ifodalanmasdi va
+    05-06 dagi «bir rastaga ikkinchi zona» taqiqi (u FAQAT bir kamera
+    ichida amal qiladi) noto'g'ri kengaytirilishi mumkin edi.
+
+  * **Ikkinchi kameradagi zona `640x480` kadrda chizilgan** (4:3),
+    birinchisi esa `1920x1080` da (16:9). Nisbat farqi darvozasining
+    (§6.8) kirish holati seed'da MAVJUD, ya'ni uni har testda qayta
+    yasash shart emas.
+
+  * **A bozorida ZONASI YO'Q faol rasta bor** (`stall_ids[2]`). D-22
+    ning kirish holati: qamrovsiz rasta qonuniy va u `no_coverage`.
+    Usiz `coverage().uncovered` hech qachon noldan farq qilmasdi.
+
   * **`market_delete_draft()` KASKADI UCHUN: B bozorida ham OLTALA
     jadvalda qator bor.** Cross-tenant nazorati («A o'chdi, B joyida»)
     B da qator BO'LMASA hech nimani o'lchamaydi.
@@ -104,7 +120,11 @@ __all__ = [
     "AUDIT_FRAME_PREDICATE_HASH",
     "CLEANUP_ORDER",
     "MODEL_VERSION",
+    "NARROW_SOURCE_HEIGHT",
+    "NARROW_SOURCE_WIDTH",
     "SEED_THRESHOLDS_VERSION",
+    "SOURCE_HEIGHT",
+    "SOURCE_WIDTH",
     "MarketOccupancyRows",
     "OccupancyDomainSeed",
     "cleanup_occupancy_domain",
@@ -161,6 +181,22 @@ def square_polygon(cx: float, cy: float) -> list[list[float]]:
 SOURCE_WIDTH = 1920
 SOURCE_HEIGHT = 1080
 """Poligon chizilgan kadr o'lchami — `cameras.capture_stream = 'main'` odatiysi."""
+
+NARROW_SOURCE_WIDTH = 640
+NARROW_SOURCE_HEIGHT = 480
+"""IKKINCHI kameradagi zonaning kadr o'lchami — 4:3, yuqoridagisi 16:9.
+
+⚠ FIZIK FAKT BO'YICHA NOMLANGAN (§S-9): `640x480` — kadr o'lchami, va
+  bu modul undan chiqadigan VERDIKTNI (`needs_review`, `zone_aspect_
+  mismatch`) bilmaydi. `mismatched_zone_id` deb nomlash fixture'ni
+  `aspect_ratio_matches()` ning aks-sadosiga aylantirardi: «mos
+  kelmaydigan» kadrni yasash uchun tolerans QIYMATINI bilish kerak
+  bo'lardi va tolerans noto'g'ri qo'yilganda ham test YASHIL qolardi.
+
+  4:3 va 16:9 nisbati o'rtasidagi farq 0,44 — har qanday oqilona
+  toleransdan ancha katta, ya'ni seed hech qanday chegarani o'z
+  chegarasi bilan tekshirmaydi.
+"""
 
 CLEANUP_ORDER: tuple[str, ...] = (
     "stall_slot_occupancy",
@@ -225,6 +261,29 @@ class MarketOccupancyRows:
     market_id: UUID
     superseded_zone_id: UUID | None
     """`is_active = false` bo'lgan ESKI versiya (D-07). B bozorida `None`."""
+    second_camera_id: UUID | None
+    """A bozorining IKKINCHI faol kamerasi (arxivlanmagan). B da `None`."""
+    second_camera_zone_id: UUID | None
+    """BIRINCHI rastaning IKKINCHI kameradagi zonasi. B bozorida `None`.
+
+    ⛔ BIR RASTA IKKI KAMERADA — BU NORMAL HOLAT, XATO EMAS, va u D-20
+       ning butun asosi («birortasi band desa — rasta band»). Seed'da
+       bo'lmasa `uq_camera_zones_market_id_camera_id_stall_id_version`
+       ning «kamera bo'yicha ajraladi» xususiyati umuman ifodalanmasdi
+       va «bir rastaga ikkinchi zona» taqiqi (u faqat BIR KAMERA ichida
+       amal qiladi) noto'g'ri kengaytirilib qo'yilishi mumkin edi.
+
+    Zona `640x480` kadrda chizilgan, birinchisi esa `1920x1080` da —
+    ya'ni bitta rasta ikki xil nisbatdagi ikki kadrda ko'rinadi.
+    """
+    stall_without_zone_id: UUID | None
+    """Birorta `camera_zones` qatori BO'LMAGAN faol rasta. B da `None`.
+
+    Bu D-22 ning kirish holati: qamrovsiz rasta MUTLAQO QONUNIY va u
+    `no_coverage` bo'ladi — «bo'sh» EMAS. Seed'da bunday rasta bo'lmasa
+    `coverage()` ning `uncovered` shoxi HECH QACHON noldan farq
+    qilmasdi va u nol qaytargan holatda ham yashil bo'lardi.
+    """
     active_zone_ids: tuple[UUID, ...]
     occupied_event_id: UUID
     """`verdict` i `occupied` bo'lgan hodisa — g'olib hodisa sifatida ishlatiladi."""
@@ -285,6 +344,7 @@ def _seed_market_occupancy(
     *,
     market_id: UUID,
     camera_id: UUID,
+    second_camera_id: UUID | None,
     stall_ids: tuple[UUID, ...],
     snapshot_ok: UUID,
     snapshot_dark: UUID | None,
@@ -359,6 +419,27 @@ def _seed_market_occupancy(
             ),
         )
         active_zone_ids.append(secondary_zone_id)
+
+    # BIRINCHI rastaning IKKINCHI kameradagi konturi — bir rasta ikki
+    # kamerada (D-20). Kadr o'lchami 4:3, birinchisiniki 16:9.
+    second_camera_zone_id: UUID | None = None
+    if with_uncertain and second_camera_id is not None:
+        second_camera_zone_id = uuid4()
+        conn.execute(
+            _INSERT_ZONE,
+            (
+                str(second_camera_zone_id),
+                str(market_id),
+                str(second_camera_id),
+                str(stall_ids[0]),
+                1,
+                _as_json(square_polygon(0.55, 0.45)),
+                NARROW_SOURCE_WIDTH,
+                NARROW_SOURCE_HEIGHT,
+                True,
+            ),
+        )
+        active_zone_ids.append(second_camera_zone_id)
 
     occupied_event_id = uuid4()
     conn.execute(
@@ -502,9 +583,19 @@ def _seed_market_occupancy(
             ),
         )
 
+    # ⚠ QAMROVSIZ RASTA HISOBLANMAYDI, TANLANADI: zonasi bor rastalar
+    #   yuqorida NOMMA-NOM yozilgan (`stall_ids[0]` va `stall_ids[1]`),
+    #   ya'ni uchinchisi ta'rifi bo'yicha qamrovsiz. Uni `coverage()` yoki
+    #   `camera_zones` so'rovi bilan topish seed'ni AYNAN o'sha
+    #   so'rovning aks-sadosiga aylantirardi.
+    stall_without_zone_id = stall_ids[2] if with_uncertain and len(stall_ids) > 2 else None
+
     return MarketOccupancyRows(
         market_id=market_id,
         superseded_zone_id=superseded_zone_id,
+        second_camera_id=second_camera_id if with_uncertain else None,
+        second_camera_zone_id=second_camera_zone_id,
+        stall_without_zone_id=stall_without_zone_id,
         active_zone_ids=tuple(active_zone_ids),
         occupied_event_id=occupied_event_id,
         uncertain_event_id=uncertain_event_id,
@@ -549,10 +640,12 @@ def seed_occupancy_domain(
     a_ok, a_dark = _split_by_quality(conn, snapshots.market_a.snapshot_ids)
     b_ok, b_dark = _split_by_quality(conn, snapshots.market_b.snapshot_ids)
 
+    a_camera = _camera_of(conn, a_ok)
     market_a = _seed_market_occupancy(
         conn,
         market_id=snapshots.market_a.market_id,
-        camera_id=_camera_of(conn, a_ok),
+        camera_id=a_camera,
+        second_camera_id=_other_active_camera(conn, snapshots.market_a.market_id, a_camera),
         stall_ids=domain.market_a.stall_ids,
         snapshot_ok=a_ok,
         snapshot_dark=a_dark,
@@ -563,6 +656,7 @@ def seed_occupancy_domain(
         conn,
         market_id=snapshots.market_b.market_id,
         camera_id=_camera_of(conn, b_ok),
+        second_camera_id=None,
         stall_ids=domain.market_b.stall_ids,
         snapshot_ok=b_ok,
         snapshot_dark=b_dark,
@@ -614,6 +708,29 @@ def _camera_of(conn: Connection[TupleRow], snapshot_id: UUID) -> UUID:
     assert row is not None, f"kadr {snapshot_id} topilmadi"
     camera_id: UUID = row[0]
     return camera_id
+
+
+def _other_active_camera(conn: Connection[TupleRow], market_id: UUID, exclude: UUID) -> UUID | None:
+    """Shu bozorning BOSHQA arxivlanmagan kamerasi — BAZADAN.
+
+    ⚠ `nvr_domain` NING RO'YXAT TARTIBIGA TAYANMAYDI (`_camera_of()` va
+      `_split_by_quality()` bilan aynan bir xil qoida). Indeks bo'yicha
+      olish qo'shni faylning kanal ro'yxati qayta tartiblangan kuni
+      ARXIVLANGAN kamerani tanlashi mumkin edi va o'shanda qamrov
+      sanog'i (u arxivlanganlarni chiqarib tashlaydi) seed bilan mos
+      kelmay, sabab butunlay boshqa faylda ko'rinardi.
+
+    `channel_no` bo'yicha tartib — DETERMINIZM uchun: tartibsiz `LIMIT 1`
+    har ishga tushirishda boshqa kamerani tanlab, seed'ni beqaror
+    qilardi.
+    """
+    row = conn.execute(
+        "SELECT id FROM cameras "
+        "WHERE market_id = %s AND id <> %s AND is_archived = false "
+        "ORDER BY channel_no LIMIT 1",
+        (str(market_id), str(exclude)),
+    ).fetchone()
+    return None if row is None else UUID(str(row[0]))
 
 
 def cleanup_occupancy_domain(conn: Connection[TupleRow], seed: OccupancyDomainSeed) -> None:
