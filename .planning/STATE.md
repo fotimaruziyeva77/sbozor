@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-08-09T03:31:44.474Z"
-last_activity: 2026-08-09 -- 05-05 bajarildi (bandlik domeni sxemasi, 0018 + 0019)
+last_updated: "2026-08-09T09:47:35.725Z"
+last_activity: "2026-08-09 -- 05-10 bajarildi (noaniq navbat: byudjet, ustuvorlik, ommaviy endpointning yo'qligi)"
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 82
-  completed_plans: 72
+  completed_plans: 77
   percent: 44
 ---
 
@@ -26,19 +26,23 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 5
-Plan: 5
+Plan: 10
 Total Plans in Phase: 15
 Status: Executing
-Last activity: 2026-08-09 -- 05-05 bajarildi (bandlik domeni sxemasi, 0018 + 0019)
+Last activity: 2026-08-09 -- 05-10 bajarildi (noaniq navbat: byudjet, ustuvorlik, ommaviy endpointning yo'qligi)
 
-Progress: [███░░░░░░░] 33% (5/15 reja — 05-01…05-05)
+Progress: [██████░░░░] 67% (10/15 reja — 05-01…05-10)
 
-⚠ **Wave 0 (05-01…05-04) va Wave 2 ning birinchi rejasi (05-05) yopildi.**
-`05-05` fazaning **sxema poydevorini** qo'ydi: oltita tenant jadvali,
-D-21 billing langari, D-17.3 ning ikki qatlamli ko'r-audit `CHECK` i va
-`market_delete_draft()` kaskadining uchinchi kengaytmasi. Keyingi rejalar
-(`05-06`…`05-15`) shu sxemaga tayanadi va **yangi kafolat mexanizmi o'ylab
-topmaydi**.
+⚠ **Wave 0 (05-01…05-04), sxema (05-05) va Wave 3/4/5 ning birinchi
+qismi (05-06…05-10) yopildi.** `05-10` AI-03 ning SERVER yuzasini
+yetkazdi: `review_repo` + `reviews.py` + uchta darvoza. D-18
+(«hammasini tasdiqlash» yo'q) endi **API qoidasi** va uni OpenAPI
+sxemasidan hosila ikki predikat o'lchaydi.
+
+⚠⚠ **OCHIQ XAVFSIZLIK BANDI (05-10 dan):** sof `inspector` roli dalil
+kadrini KO'RA OLMAYDI — `GET /snapshots/{id}/image` `CAMERA_VIEW`
+talab qiladi, nazoratchida esa aynan `{OCCUPANCY_REVIEW}` bor. Qaror
+`05-13` yoki `05-15` da (RBAC bu fazada ATAYIN tegilmagan — M-8).
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -80,6 +84,7 @@ topmaydi**.
 | Phase 04 P11 | 1h 45m | 3 tasks | 17 files |
 | Phase 04 P13 | 125min | 3 tasks | 6 files |
 | Phase 05 P05 | 185min | 3 tasks | 15 files |
+| Phase 05 P10 | 111 | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -157,6 +162,12 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-13: init_sentry() ning O'ZI yetarli emas — taskiq send() da try/except yo'q (cli/scheduler/run.py:157-174), add_done_callback esa istisnoni o'qimaydi (:346-350); ObservedScheduler.on_ready log.exception + capture_exception qiladi va QAYTA KO'TARADI
 - [Phase 04]: 04-13: global holat (sentry_sdk.init) SUBPROCESS da o'lchanadi va har zondga NAZORAT yugurishi juft — DSN'siz False bermasa da'vo bo'sh bo'lardi
 - [Phase 04]: 04-13: O'LCHOV — inspect.getsource(app.router.lifespan_context) FastAPI ning merged_lifespan ini beradi, __wrapped__ ham; bizning lifespan closure zanjirining oxirida (8 va 40 chuqurlikda TOPILMADI)
+- [Phase 05]: 05-10: D-18 API qoidasi — ommaviy endpoint YOZILMAYDI; yo'qligi OpenAPI sxemasidan hosila IKKI predikat bilan o'lchanadi (yuza: router moduli; lug'at: AnswerRequest maydoni massiv ichida)
+- [Phase 05]: 05-10: byudjet KUNI zone_reviews.decided_at dan olinadi (occupancy_events.business_date dan EMAS) — byudjet INSON diqqatiga qo'yilgan, ya'ni kechagi qoldiqni bugun ko'rish BUGUNGI byudjetni yeyishi kerak
+- [Phase 05]: 05-10: navbat ustuvorligi avval BILLING TA'SIRI, ichida chegaraga yaqinlik (RESEARCH C.9); tanlov bitta _PRIORITY_ORDER konstantasida va uni navbat qurish ham, band olish ham ishlatadi
+- [Phase 05]: 05-10 O'LCHANDI: src.queue_kind -> :queue_kind sabotaji 28 testni YASHIL qoldirdi (WHERE filtri ikkalasini teng qiladi) — da'vo 'yozilgan qiymat konstanta emas' shakliga toraytirildi va sabotaj D-prime bilan qizartirildi
+- [Phase 05]: 05-10: AnswerResponse.locked HAR DOIM true — UI-SPEC 7.1 noaniq javobni tahrirlanadigan deydi, 05-05 sxemasi esa buni imkonsiz qilgan (UNIQUE + shartsiz BEFORE UPDATE); sxema ustun olindi va UI-SPEC 7.1 ESKIRGAN deb belgilandi
+- [Phase 05]: 05-10: yo'l parametri review_assignment_id (assignment_id EMAS) — nom to'qnashuvi cross-tenant matritsasiga marshrutga begona OBYEKT TURINI berardi va u yashil turib hech nimani o'lchamasdi
 
 ### Pending Todos
 
@@ -178,6 +189,7 @@ None yet.
 - [Phase 4] npm run gate — 1000 s, shundan 316 s (31 %) qayta bajarish; taklif: sim:up ni zanjir boshiga, test:tenancy va test:sim ni gate'dan olib tashlash
 - [Phase 4] go2rtc-sim oqimini birorta test iste'mol qilmaydi — CAM-03 va CAM-09 aynan shu sababdan Blocked; yopilish yo'li: -m sim ostida go2rtc-sim'dan bitta kadr olish
 - CAM-02 Blocked: CI konteynerida wg0 yo'q — «server NVR'ga FAQAT tunnel orqali kiradi» o'lchanmaydi (Pitfall 10). Egasi Ops, tetigi VPS deploy'i, bandlari 03-HUMAN-UAT.md #1 va #2
+- 05-10: sof inspector roli dalil kadrini ko'ra olmaydi — GET /snapshots/{id}/image CAMERA_VIEW talab qiladi, ROLE_PERMISSIONS[INSPECTOR] esa aynan {OCCUPANCY_REVIEW}. RBAC bu fazada ATAYIN tegilmagan (M-8); qaror 05-13 yoki 05-15 da
 
 ## Deferred Items
 
@@ -189,6 +201,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-09T03:31:44.461Z
+Last session: 2026-08-09T09:45:31.661Z
 Stopped at: Completed 05-05-PLAN.md
 Resume file: None

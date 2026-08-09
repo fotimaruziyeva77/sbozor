@@ -331,11 +331,11 @@ Plans:
 - [x] 05-03-PLAN.md — Wave 0/C: zona geometriyasi, Wilson oralig'i, ko'r-payload darvozasi
 - [x] 05-04-PLAN.md — Wave 0/D: xato reyestrlari, navigatsiya, matn darvozalari, D-27
 - [x] 05-05-PLAN.md — `0018` bandlik domeni + `0019` kaskad (billing langari, o'zgarmaslik)
-- [ ] 05-06-PLAN.md — `camera_zones` API: server geometriyasi, versiyalash, qamrov (AI-01)
-- [ ] 05-07-PLAN.md — `cv-service` detektor yadrosi: ONNX, post-processing, zona verdicti (AI-02)
-- [ ] 05-08-PLAN.md — `detect` job: ombor klienti, orkestratsiya, `occupancy_events` (AI-02)
-- [ ] 05-09-PLAN.md — Frontend Y-1: zona muharriri (AI-01)
-- [ ] 05-10-PLAN.md — Noaniq navbat: byudjet, ustuvorlik, ommaviy endpointning yo'qligi (AI-03)
+- [x] 05-06-PLAN.md — `camera_zones` API: server geometriyasi, versiyalash, qamrov (AI-01)
+- [x] 05-07-PLAN.md — `cv-service` detektor yadrosi: ONNX, post-processing, zona verdicti (AI-02)
+- [x] 05-08-PLAN.md — `detect` job: ombor klienti, orkestratsiya, `occupancy_events` (AI-02)
+- [x] 05-09-PLAN.md — Frontend Y-1: zona muharriri (AI-01)
+- [x] 05-10-PLAN.md — Noaniq navbat: byudjet, ustuvorlik, ommaviy endpointning yo'qligi (AI-03)
 - [ ] 05-11-PLAN.md — Ko'r audit: namuna tortish, ko'r serializer, olti invariant (AI-04)
 - [ ] 05-12-PLAN.md — Agregatsiya, kun yopilishi va aniqlik hisoboti (AI-05, AI-06, AI-04)
 - [ ] 05-13-PLAN.md — Frontend Y-2/Y-3: navbat va ko'r audit sessiyalari (AI-03, AI-04)
