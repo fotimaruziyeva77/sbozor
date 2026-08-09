@@ -79,10 +79,30 @@ bilmasligi kerak).
   keyin audit jurnalida yangi qator qolmaganini o'lchaydi.
 -----------------------------------------------------------------------------
 
-MARSHRUT TARTIBI: statik segmentlar (`/uncertain/next`, `/budget`)
-`{review_assignment_id}` shablonidan OLDIN (`stalls.py:3-11` qoidasi).
-Bugun ular metod bo'yicha ham ajraladi, lekin `/budget` uchun `POST`
-qo'shilgan kuni tartib YAGONA himoya bo'lib qolardi.
+MARSHRUT TARTIBI: statik segmentlar (`/uncertain/next`, `/blind/next`,
+`/blind/{review_assignment_id}/answer`, `/budget`) `{review_assignment_id}`
+shablonidan OLDIN (`stalls.py:3-11` qoidasi).
+
+⚠⚠ `/blind/...` UCHUN BU TARTIB BUGUN HAM YAGONA HIMOYA:
+   `POST /review/{review_assignment_id}/answer` shabloni `blind` so'zini
+   UUID o'rniga qabul qilishga urinardi (422 bilan tugardi), lekin
+   `POST /review/blind/{id}/answer` ikki segmentli va u shablonga umuman
+   tushmaydi. Tartib buzilganda ham javob 422 bo'lardi, ya'ni nosozlik
+   «marshrut yo'q» emas, «noto'g'ri UUID» bo'lib ko'rinardi.
+
+=============================================================================
+⛔ KO'R AUDIT — ALOHIDA MARSHRUT, `?blind=true` PARAMETRI EMAS.
+
+Bitta marshrutni bayroq bilan ikki xulqqa bo'lish ikkala navbat uchun
+BITTA serializer degani bo'lardi va o'shanda «AI maydonlari payloadda
+UMUMAN yo'q» kafolati SHART BILAN himoyalangan bo'lardi — ya'ni
+konventsiyaga aylanardi. Ikki alohida tip (`ReviewItemResponse` va
+`BlindItemResponse`) esa uni STRUKTURAGA aylantiradi.
+
+⚠ Ajratishning IKKINCHI sababi frontendda: G-12 darvozasi FAYL
+  TO'PLAMINI skanerlaydi (`components/blind-audit/**`) va u faqat ko'r
+  audit alohida marshrut bo'lgandagina ma'noga ega (UI-SPEC §4.3).
+=============================================================================
 """
 
 from __future__ import annotations
@@ -105,15 +125,18 @@ from app.repositories.stall_repo import sqlstate_of
 from app.schemas import (
     AnswerRequest,
     AnswerResponse,
+    BlindItemResponse,
     QueueBudget,
     ReviewBudgetResponse,
     ReviewItemResponse,
 )
 from app.security.rbac import Permission
 from app.services.occupancy_errors import (
+    BLIND_ANSWER_LOCKED,
     REVIEW_ALREADY_ANSWERED,
     REVIEW_BUDGET_EXHAUSTED,
     REVIEW_QUEUE_EMPTY,
+    REVIEW_SAMPLE_NOT_DRAWN,
 )
 
 # `UUID` `if TYPE_CHECKING:` ostiga QO'YILMAYDI: FastAPI yo'l
@@ -249,6 +272,31 @@ async def _measure_decision(cache: CacheDep, key: str) -> int | None:
     return int(elapsed_ms)
 
 
+def _blind_item(claimed: ClaimedReview) -> BlindItemResponse:
+    """`ClaimedReview` -> KO'R payload.
+
+    ⛔ `has_active_vendor` KO'CHIRILMAYDI VA `BlindItemResponse` DA UNDAY
+       MAYDON UMUMAN YO'Q. Repozitoriy uni HAR IKKALA navbat uchun ham
+       hisoblaydi (bitta `_CLAIM_TEMPLATE`), lekin ko'r auditda u
+       ekranga chiqmaydi: band TASODIFIY tanlangan, ya'ni «bu qarorning
+       oqibati bor» qatori namunaning bir qismiga ko'proq e'tibor
+       berdirardi — xolis namunadagi notekis diqqat o'lchov asbobining
+       O'ZIDAGI og'ish (`app/schemas.py::BlindItemResponse`).
+    """
+    return BlindItemResponse(
+        assignment_id=claimed.assignment_id,
+        snapshot_id=claimed.snapshot_id,
+        stall_id=claimed.stall_id,
+        stall_code=claimed.stall_code,
+        zone_name=claimed.zone_name,
+        camera_name=claimed.camera_name,
+        channel_no=claimed.channel_no,
+        business_date=claimed.business_date,
+        slot_time=claimed.slot_time,
+        polygon=[(float(x), float(y)) for x, y in claimed.polygon],
+    )
+
+
 def _item(claimed: ClaimedReview) -> ReviewItemResponse:
     return ReviewItemResponse(
         assignment_id=claimed.assignment_id,
@@ -313,6 +361,144 @@ async def next_uncertain_item(
 
     await _remember_claim(cache, _claim_key(market_id, principal.user_id, claimed.assignment_id))
     return _item(claimed)
+
+
+@router.get("/blind/next", response_model=BlindItemResponse)
+async def next_blind_item(
+    principal: ReviewerDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    cache: CacheDep,
+) -> BlindItemResponse:
+    """KO'R AUDITNING navbatdagi BITTA bandi (`OCCUPANCY_REVIEW`, AI-04).
+
+    =======================================================================
+    ⛔ KLIENT QAYSI BAND KELISHINI TANLAY OLMAYDI — URL'DA IDENTIFIKATOR YO'Q.
+
+    Identifikatorli URL uch yo'lni ochardi va uchalasi ham NAMUNANI KEYIN
+    TAHRIRLASH (05-RESEARCH §C.8, 4-dushman): orqaga tugmasi bilan javob
+    berilgan bandga qaytish; havolani nusxalab qayta ochish; tarixdan
+    bandni topib qayta urinish. Sessiya holatining YAGONA manbai —
+    SERVER (UI-SPEC §4.5).
+
+    Sahifa yangilansa server O'SHA bandni qaytaradi (javob yozilmagan
+    bo'lsa) yoki KEYINGISINI — «yangilab qayta ko'raman» yo'li ham shu
+    bilan yopiladi.
+    =======================================================================
+
+    ⛔ BO'SHLIKNING IKKI SABABI IKKI XIL KOD BERADI (`_HAS_ANY_ROUND`):
+       namuna hali tortilmagan bo'lsa `review_sample_not_drawn`, tortilib
+       tugatilgan bo'lsa `review_queue_empty`. Bittaga yig'ish tortish
+       jobi butunlay o'lgan kunni «hammasi bajarildi» bilan bir xil
+       ko'rsatardi.
+
+    ⚠ BYUDJET NAVBAT BO'SHLIGIDAN OLDIN (`next_uncertain_item` bilan
+      bir xil tartib va bir xil sabab).
+    """
+    market_id = _market_id(principal)
+    repo = ReviewRepository(session, market_id)
+
+    answered = await repo.daily_answered_count(
+        principal.user_id,
+        business_today(),
+        queue_kind=ReviewQueueKind.BLIND_AUDIT.value,
+    )
+    if answered >= settings.review_blind_daily_budget:
+        log.info("blind_budget_exhausted", answered=answered)
+        raise _conflict(REVIEW_BUDGET_EXHAUSTED)
+
+    claimed = await repo.claim_next_blind()
+    if claimed is None:
+        drawn = await repo.has_any_round()
+        raise _conflict(REVIEW_QUEUE_EMPTY if drawn else REVIEW_SAMPLE_NOT_DRAWN)
+
+    await _remember_claim(cache, _claim_key(market_id, principal.user_id, claimed.assignment_id))
+    return _blind_item(claimed)
+
+
+@router.post("/blind/{review_assignment_id}/answer", response_model=AnswerResponse)
+async def answer_blind_item(
+    review_assignment_id: UUID,
+    payload: AnswerRequest,
+    principal: ReviewerDep,
+    session: TenantSessionDep,
+    cache: CacheDep,
+) -> AnswerResponse:
+    """Ko'r audit bandiga BITTA, O'ZGARMAS javob (`OCCUPANCY_REVIEW`, D-17.4).
+
+    =======================================================================
+    ⛔ IKKINCHI CHAQIRUV **409 `blind_answer_locked`** — `review_already_
+       answered` EMAS.
+
+    Ikkala kod ham «javob bor» deydi, lekin ular BOSHQA narsani anglatadi
+    va UI ular uchun BOSHQA narsa ko'rsatadi (`occupancy_errors.py`):
+
+        `review_already_answered` — POYGA (ikki oyna, ikki bosish).
+                                    Yechim: keyingi bandga o'tish.
+        `blind_answer_locked`     — taqiq STRUKTURAVIY. Tizim javobi
+                                    OSHKOR QILINGANDAN keyin tahrirlash
+                                    imkoniyati o'lchovni yo'q qilardi:
+                                    nazoratchi o'z javobini tizimnikiga
+                                    moslab qo'yardi va aniqlik 100% ga
+                                    intilardi.
+
+    ⛔ UI QAYTA URINISH TUGMASI BERMAYDI (UI-SPEC §4.5) — aynan shuning
+       uchun kod ajratilgan.
+    =======================================================================
+
+    ⚠ JAVOB OSHKOR MA'LUMOTNI TASHIYDI VA U FAQAT SHU YERDA MAVJUD:
+      birorta `GET` marshrut `AnswerResponse` ni qaytarmaydi, ya'ni
+      oldindan yuklab qo'yish (prefetch) yo'li yopiq (UI-SPEC §7.7).
+
+    ⚠ `AnswerResponse` QAYTA ISHLATILADI, ikkinchi sxema yozilmaydi:
+      uning to'rt maydoni (`system_answer`, `human_answer`, `matched`,
+      `locked`) 05-10 da AYNAN shu marshrut uchun tanlangan edi — nomlar
+      `verdict`/`confidence` dan ATAYIN farq qiladi, chunki G-12 darvozasi
+      `components/blind-audit/**` da o'sha nomlarni taqiqlaydi (§14.3).
+    """
+    market_id = _market_id(principal)
+    decision_ms = await _measure_decision(
+        cache, _claim_key(market_id, principal.user_id, review_assignment_id)
+    )
+
+    try:
+        answered = await ReviewRepository(session, market_id).record_answer(
+            review_assignment_id,
+            queue_kind=ReviewQueueKind.BLIND_AUDIT.value,
+            reviewer_id=principal.user_id,
+            human_verdict=payload.human_verdict.value,
+            # ⛔ SERVER YOZADI VA QIYMAT KO'R AUDIT UCHUN HAR DOIM `False`.
+            #    Klient bu maydonni YUBORA OLMAYDI (`AnswerRequest` da u
+            #    umuman yo'q), DB `CHECK (blind_audit_not_shown)` esa
+            #    IKKINCHI qatlam.
+            shown_ai_verdict=SHOWN_AI_VERDICT,
+            decision_ms=decision_ms,
+        )
+    except IntegrityError as exc:
+        if sqlstate_of(exc) == UNIQUE_VIOLATION:
+            log.info("blind_answer_locked", assignment_id=str(review_assignment_id))
+            raise _conflict(BLIND_ANSWER_LOCKED) from exc
+        raise
+
+    if answered is None:
+        raise _not_found()
+
+    system_answer = OccupancyVerdict(answered.system_verdict)
+    log.info(
+        "blind_answer_recorded",
+        assignment_id=str(review_assignment_id),
+        matched=system_answer == payload.human_verdict,
+        decision_measured=decision_ms is not None,
+    )
+    return AnswerResponse(
+        system_answer=system_answer,
+        human_answer=payload.human_verdict,
+        matched=system_answer == payload.human_verdict,
+        # ⛔ KO'R AUDITDA `locked` — SHARTSIZ FAKT: javob o'zgarmas
+        #    (`trg_zone_review_immutable`) va ikkinchi qator yozib
+        #    bo'lmaydi (`uq_zone_reviews_review_assignment_id`).
+        locked=True,
+    )
 
 
 @router.get("/budget", response_model=ReviewBudgetResponse)

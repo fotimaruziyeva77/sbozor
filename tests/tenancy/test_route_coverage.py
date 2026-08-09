@@ -46,7 +46,7 @@ from tenancy.test_cross_tenant import (
 
 pytestmark = pytest.mark.tenancy
 
-MINIMUM_MATRIX_ROUTES = 55
+MINIMUM_MATRIX_ROUTES = 57
 """Matritsada kamida shuncha marshrut bo'lishi shart.
 
 01-07 holatida qamrovda 7 marshrut bor edi (`/users` GET+POST,
@@ -70,7 +70,17 @@ yuzasi to'rtta (`GET /capture-runs`, `GET /snapshots/{snapshot_id}`,
 `GET /snapshots/{snapshot_id}/image`, `GET /alerts`) — chegara 48.
 05-06 esa kamera zonalarining TO'RTTASINI qo'shdi (`GET /camera-zones`,
 `PUT /camera-zones`, `GET /camera-zones/coverage`,
-`DELETE /camera-zones/{camera_zone_id}`) — chegara 52.
+`DELETE /camera-zones/{camera_zone_id}`) — chegara 52. 05-10 nazoratchi
+navbatining UCHTASINI (`GET /review/uncertain/next`, `GET /review/budget`,
+`POST /review/{review_assignment_id}/answer`) — chegara 55. 05-11 esa ko'r
+auditning IKKITASINI (`GET /review/blind/next`,
+`POST /review/blind/{review_assignment_id}/answer`) — chegara 57.
+
+⚠ Beshalasi ham `OCCUPANCY_REVIEW` talab qiladi, ya'ni ular matritsada
+FAQAT `INSPECTOR_ROUTES` ro'yxati tufayli HAQIQIY yo'ldan yuradi. Ro'yxatga
+qo'shilmagan yangi nazoratchi marshruti bozor admini sessiyasi bilan
+chaqirilib **403** olardi va `test_cross_tenant_object_returns_404`
+yiqilardi — ya'ni unutish JIMGINA emas, BALAND ovozda ko'rinadi.
 
 ⚠ To'rttadan FAQAT BITTASI (`DELETE`) 404 matritsasiga tushadi, chunki
 faqat unda yo'l parametri bor. Qolgan uchtasida `camera_id` QUERY

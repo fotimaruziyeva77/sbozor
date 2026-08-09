@@ -282,8 +282,33 @@ _BUILD_QUEUE = text(
   `ev.id` bo'yicha barqaror tartib vaqt-tartiblanganini yo'qotardi.
 """
 
-_CLAIM_NEXT = text(
-    f"""
+_BLIND_ORDER: Final[str] = """
+    ORDER BY ra.id
+"""
+"""⛔⛔ KO'R AUDIT USTUVORLIKKA EGA EMAS — VA BU O'LCHOV QARORI.
+
+`_PRIORITY_ORDER` NI BU YERDA QAYTA ISHLATISH XOLISLIKNI BUZARDI.
+
+Namuna tortilgandan keyin qat'iy: kimni ko'rish emas, QANDAY TARTIBDA
+ko'rish qoladi. Tartib ahamiyatsiz ko'rinadi, chunki kun oxirida
+hammasi ko'rilishi kerak — LEKIN nazoratchi ulgurmasa (kasal, band kun,
+byudjet) javobsiz qolgan QUYRUQ hisobotga «javobsiz» bo'lib kiradi.
+
+Quyruq billing ta'siri bo'yicha saralangan bo'lsa, u TIZIMLI ravishda
+sotuvchisi YO'Q rastalardan iborat bo'lardi — ya'ni javob berilgan
+qism namunaning XOLIS qismi bo'lmay qolardi va aniqlik aynan
+biriktirilgan rastalarda o'lchanardi. Bu 05-RESEARCH §C.8 ning
+2-dushmani (tanlanma tarafkashligi), faqat TORTISHDA emas, JAVOB
+BERISHDA.
+
+⚠ `ra.id` — `uuidv7()`, ya'ni topshiriqlar YOZILISH tartibida beriladi.
+  Yozilish tartibi esa `audit_draw` ning HOSILA URUG' bo'yicha hash
+  tartibi, ya'ni u billing ta'siri bilan bog'liq EMAS. Tartib barqaror
+  (sahifani yangilash o'sha bandni qaytaradi) va u hech qanday
+  mahsulot signalini tashimaydi.
+"""
+
+_CLAIM_TEMPLATE: Final[str] = f"""
     SELECT ra.id                         AS assignment_id,
            ev.snapshot_id                AS snapshot_id,
            ev.business_date              AS business_date,
@@ -318,16 +343,17 @@ _CLAIM_NEXT = text(
              FROM zone_reviews zr
             WHERE zr.review_assignment_id = ra.id
        )
-     {_PRIORITY_ORDER}
+     {{order_by}}
      LIMIT 1
     FOR UPDATE OF ra SKIP LOCKED
     """  # noqa: S608
-).bindparams(
-    bindparam("market_id", type_=PgUuid(as_uuid=True)),
-    bindparam("queue_kind", type_=Text()),
-    bindparam("midpoint", type_=Numeric(5, 4)),
-)
-"""JAVOBSIZ bandlardan BITTASINI qulflab oladi.
+"""JAVOBSIZ bandlardan BITTASINI qulflab oluvchi SO'ROVNING SHABLONI.
+
+⛔ `{{order_by}}` — YAGONA o'zgaruvchi qism va bu ATAYIN. Ikki navbat bir
+   xil ma'lumotni ko'radi (dalil kadri, rasta, kontur), lekin ularni BIR
+   XIL TARTIBDA ko'rsatish xolislikni buzardi (`_BLIND_ORDER`). Ikki
+   to'liq nusxa yozilganda esa `JOIN` zanjiri yoki `NOT EXISTS` predikati
+   BIR TOMONDA tuzatilib, ikkinchisida eskirib qolardi.
 
 ⛔ `FOR UPDATE OF ra` — FAQAT `review_assignments`. Qolgan beshta jadval
    (`occupancy_events`, `camera_zones`, `stalls`, `zones`, `cameras`)
@@ -340,6 +366,54 @@ _CLAIM_NEXT = text(
   `LEFT JOIN` hech qachon boshqa natija bermasdi-yu, `NULL` holatini
   boshqarish uchun O'LIK kod talab qilardi (`camera_zone_repo._rows()`
   da o'rnatilgan qoida).
+"""
+
+_CLAIM_NEXT = text(_CLAIM_TEMPLATE.format(order_by=_PRIORITY_ORDER)).bindparams(
+    bindparam("market_id", type_=PgUuid(as_uuid=True)),
+    bindparam("queue_kind", type_=Text()),
+    bindparam("midpoint", type_=Numeric(5, 4)),
+)
+"""NOANIQ navbat — ustuvorlik bo'yicha (billing ta'siri, ichida yaqinlik)."""
+
+_CLAIM_NEXT_BLIND = text(_CLAIM_TEMPLATE.format(order_by=_BLIND_ORDER)).bindparams(
+    bindparam("market_id", type_=PgUuid(as_uuid=True)),
+    bindparam("queue_kind", type_=Text()),
+)
+"""KO'R AUDIT — ustuvorlikSIZ (`_BLIND_ORDER`).
+
+⚠ `:midpoint` BU YERDA E'LON QILINMAGAN va u shablonda ham uchramaydi:
+  ustuvorlik ifodasi olib tashlanganda parametr ORTIQCHA bo'lib qolardi
+  va uni berish «bu yerda ham chegaraga yaqinlik hisobga olinadi» degan
+  YOLG'ON o'qishga yo'l ochardi.
+"""
+
+_HAS_ANY_ROUND = text(
+    """
+    SELECT EXISTS (
+        SELECT 1 FROM audit_rounds ar WHERE ar.market_id = :market_id
+    ) AS drawn
+    """
+).bindparams(bindparam("market_id", type_=PgUuid(as_uuid=True)))
+"""Bu bozorda ko'r audit UMUMAN tortilganmi.
+
+=============================================================================
+⛔ IKKI BO'SHLIK ADASHTIRILMASLIGI KERAK VA REYESTR IKKALASIGA HAM KOD BERADI.
+
+    `review_sample_not_drawn` — asbob HALI ISHLAMAGAN. Bu OPERATSION
+                                nosozlik: nazoratchi kutadi, lekin
+                                «ish yo'q» degan xulosa YOLG'ON bo'lardi.
+    `review_queue_empty`       — namuna bor va u TUGATILGAN. Bu
+                                MUVAFFAQIYAT holati.
+
+Ikkalasini bitta kodga yig'ish tortish jobi butunlay o'lgan kunni
+«hammasi bajarildi» bilan bir xil ko'rsatardi — ya'ni o'lchov asbobining
+YO'QLIGI muvaffaqiyat bo'lib ko'rinardi (D-20 ning aynan mantiqi).
+
+⚠ SHART KUNGA BOG'LANMAGAN: navbat bandlari kun oxirida tortiladi va
+  nazoratchi ularni ERTASI kuni ko'radi (`worker.py::QUEUE_TICK_CRON`).
+  «Bugungi tur bormi?» degan shart ertalab HAR KUNI `review_sample_not_
+  drawn` berardi — ya'ni kod o'zining butun ma'nosini yo'qotardi.
+=============================================================================
 """
 
 _DAILY_ANSWERED = text(
@@ -485,6 +559,31 @@ noto'g'ri berish uchun avval bu SQL ni o'zgartirish kerak bo'ladi.
 """
 
 
+def _claimed(row: Any) -> ClaimedReview | None:
+    """Xom qatorni `ClaimedReview` ga aylantiradi — IKKALA navbat uchun bir xil.
+
+    ⚠ IKKI NUSXA YOZILMAYDI: ikki navbat bir xil SHAKLDAGI bandni
+      qaytaradi va farq faqat TARTIBDA (`_CLAIM_TEMPLATE` docstringi).
+      Nusxa olinganda bir tomonga qo'shilgan yangi ustun ikkinchisida
+      jimgina yo'q bo'lardi.
+    """
+    if row is None:
+        return None
+    return ClaimedReview(
+        assignment_id=row["assignment_id"],
+        snapshot_id=row["snapshot_id"],
+        stall_id=row["stall_id"],
+        stall_code=row["stall_code"],
+        zone_name=row["zone_name"],
+        camera_name=row["camera_name"],
+        channel_no=row["channel_no"],
+        business_date=row["business_date"],
+        slot_time=row["slot_time"],
+        polygon=list(row["polygon"]),
+        has_active_vendor=bool(row["has_active_vendor"]),
+    )
+
+
 DEFAULT_MIDPOINT: Final[Decimal] = Decimal("0.45")
 """`Settings.review_uncertain_midpoint` NING JUFTI — repozitoriy standarti.
 
@@ -590,22 +689,35 @@ class ReviewRepository(TenantScopedRepository):
                 "midpoint": self.midpoint,
             },
         )
-        row = result.mappings().first()
-        if row is None:
-            return None
-        return ClaimedReview(
-            assignment_id=row["assignment_id"],
-            snapshot_id=row["snapshot_id"],
-            stall_id=row["stall_id"],
-            stall_code=row["stall_code"],
-            zone_name=row["zone_name"],
-            camera_name=row["camera_name"],
-            channel_no=row["channel_no"],
-            business_date=row["business_date"],
-            slot_time=row["slot_time"],
-            polygon=list(row["polygon"]),
-            has_active_vendor=bool(row["has_active_vendor"]),
+        return _claimed(result.mappings().first())
+
+    async def claim_next_blind(self) -> ClaimedReview | None:
+        """KO'R AUDIT navbatidan keyingi javobsiz bandni qulflab oladi.
+
+        ⛔ `queue_kind` ARGUMENT EMAS, KONSTANTA. `claim_next()` uni
+           argument sifatida oladi, chunki u ikki navbatga xizmat qilishi
+           MUMKIN bo'lgan shakl; bu metod esa AYNAN ko'r auditniki va
+           uning tartibi (`_BLIND_ORDER`) boshqa navbat uchun NOTO'G'RI
+           bo'lardi. Argument qoldirilganda chaqiruvchi noaniq navbatni
+           ustuvorlikSIZ olib, kunlik chegara eng qimmat bandlarni kesib
+           tashlagan bo'lardi.
+
+        ⚠ USTUVORLIK YO'QLIGI — `_BLIND_ORDER` docstringidagi o'lchov
+          qarori, «hali yozilmagan» emas.
+        """
+        result = await self.session.execute(
+            _CLAIM_NEXT_BLIND,
+            {
+                "market_id": self.market_id,
+                "queue_kind": ReviewQueueKind.BLIND_AUDIT.value,
+            },
         )
+        return _claimed(result.mappings().first())
+
+    async def has_any_round(self) -> bool:
+        """Bu bozorda ko'r audit tortilganmi (`_HAS_ANY_ROUND` docstringi)."""
+        result = await self.session.execute(_HAS_ANY_ROUND, {"market_id": self.market_id})
+        return bool(result.scalar_one())
 
     # ------------------------------------------------------------------
     # 3. Byudjet

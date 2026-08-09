@@ -46,7 +46,7 @@ import inspect
 import re
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import pytest
@@ -59,6 +59,10 @@ from app.jobs.audit_draw import (
     daily_queue_tick,
     eval_quota,
 )
+from app.main import app as fastapi_app
+from app.repositories.review_repo import ReviewRepository
+from app.schemas import AnswerResponse, BlindItemResponse, ReviewItemResponse
+from fixtures.admin_api import session_headers
 from fixtures.market_domain import MarketDomainSeed
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import (
@@ -71,15 +75,22 @@ from fixtures.occupancy_domain import (
     occupancy_rows,
 )
 from fixtures.snapshot_domain import SEED_BUSINESS_DATE, snapshot_rows
-from fixtures.two_markets import TwoMarketSeed
+from fixtures.two_markets import SEED_PASSWORD, TwoMarketSeed
 from sbozor_core.enums import OccupancyVerdict, ReviewPurpose, ReviewQueueKind
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    import httpx
+    from fixtures import TenantSessionFactory
+    from fixtures.auth_users import AuthSeed
     from psycopg import Connection
     from psycopg.rows import TupleRow
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+BLIND_NEXT_URL = "/api/v1/review/blind/next"
+BLIND_URL = "/api/v1/review/blind"
+REVIEW_URL = "/api/v1/review"
 
 SAMPLE_SIZE = 4
 """Test namunasining hajmi — doiradan ANCHA KICHIK.
@@ -136,10 +147,12 @@ class Env:
         base: TwoMarketSeed,
         domain: MarketDomainSeed,
         occupancy: OccupancyDomainSeed,
+        auth: AuthSeed,
     ) -> None:
         self.base = base
         self.domain = domain
         self.occupancy = occupancy
+        self.auth = auth
 
     @property
     def market_a(self) -> UUID:
@@ -169,21 +182,49 @@ class Env:
         assert stall_id is not None, "nazorat: `market_domain` da `unassigned_stall_id` yo'q"
         return stall_id
 
+    @property
+    def assigned_stall(self) -> UUID:
+        """Biriktirilgan sotuvchisi BOR rasta — ustuvorlik testining zid qutbi."""
+        stall_id = self.domain.market_a.gap_stall_id
+        assert stall_id is not None, "nazorat: `market_domain` da `gap_stall_id` yo'q"
+        return stall_id
+
 
 @pytest.fixture
 def env(
     sync_owner_conn: Connection[TupleRow],
     two_markets: TwoMarketSeed,
+    auth_seed: AuthSeed,
     market_domain: MarketDomainSeed,
     migrated: None,
 ) -> Iterator[Env]:
-    """To'rt qatlamli seed; tozalash TESKARI tartibda (FK zanjiri bo'yicha)."""
+    """Besh qatlamli seed; tozalash TESKARI tartibda (FK zanjiri bo'yicha).
+
+    ⚠ `auth_seed` `market_domain` DAN OLDIN so'raladi va bu ATAYIN
+      (`test_uncertain_queue.py` dagi jufti bilan bir xil sabab): pytest
+      fixture'larni teskari tartibda yopadi, ya'ni nazoratchi
+      foydalanuvchisi `zone_reviews` qatorlaridan KEYIN o'chiriladi.
+      Teskari tartibda `fk_zone_reviews_reviewer_id_users` tozalashni
+      yiqitardi.
+    """
     with (
         nvr_rows(sync_owner_conn, two_markets) as nvr,
         snapshot_rows(sync_owner_conn, nvr) as snaps,
         occupancy_rows(sync_owner_conn, two_markets, market_domain, snaps) as occupancy,
     ):
-        yield Env(two_markets, market_domain, occupancy)
+        yield Env(two_markets, market_domain, occupancy, auth_seed)
+
+
+@pytest.fixture
+async def inspector_headers(api_client: httpx.AsyncClient, env: Env) -> dict[str, str]:
+    """A bozori nazoratchisining sessiyasi — unda AYNAN `OCCUPANCY_REVIEW` bor."""
+    return await session_headers(api_client, env.auth.inspector.phone, SEED_PASSWORD)
+
+
+@pytest.fixture
+async def director_headers(api_client: httpx.AsyncClient, env: Env) -> dict[str, str]:
+    """Direktor sessiyasi — `REPORT_VIEW` BOR, `OCCUPANCY_REVIEW` YO'Q (D-07)."""
+    return await session_headers(api_client, env.base.market_a.director_phone, SEED_PASSWORD)
 
 
 # ===========================================================================
@@ -357,6 +398,67 @@ def grow_frame(conn: Connection[TupleRow], env: Env, *, total: int) -> list[Seed
             )
         )
     return created
+
+
+def add_candidate(
+    conn: Connection[TupleRow],
+    env: Env,
+    *,
+    stall_id: UUID,
+    center: tuple[float, float],
+    verdict: str = OccupancyVerdict.OCCUPIED.value,
+    confidence: str = CONFIDENCE_0_59,
+    version: int = 90,
+) -> SeededEvent:
+    """BITTA nomzod — `grow_frame()` dan farqli, aynan bitta va nomlangan."""
+    return add_zone_with_event(
+        conn,
+        market_id=env.market_a,
+        camera_id=env.camera_a,
+        stall_id=stall_id,
+        snapshot_id=env.snapshot_a,
+        verdict=verdict,
+        confidence=confidence,
+        center=center,
+        version=version,
+    )
+
+
+def _open_round(conn: Connection[TupleRow], env: Env) -> UUID:
+    """QO'LDA ochilgan tur — tartib testi tortish jobiga tayanmasligi uchun.
+
+    ⚠ Job topshiriqlarni HOSILA URUG' tartibida yozadi, ya'ni test
+      ularning YOZILISH tartibini boshqara olmasdi. `ORDER BY ra.id`
+      da'vosi esa aynan yozilish tartibiga qarshi o'lchanadi.
+    """
+    row = conn.execute(
+        "INSERT INTO audit_rounds "
+        "(market_id, business_date, round_no, frame_size, frame_predicate_hash) "
+        "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+        (str(env.market_a), SEED_BUSINESS_DATE, FIRST_ROUND_NO, 2, FRAME_PREDICATE_HASH),
+    ).fetchone()
+    assert row is not None
+    return UUID(str(row[0]))
+
+
+def _add_blind_assignment(
+    conn: Connection[TupleRow], env: Env, round_id: UUID, event_id: UUID
+) -> UUID:
+    """Ko'r audit topshirig'i — `purpose = 'train'` (kvota testidan MUSTAQIL)."""
+    row = conn.execute(
+        "INSERT INTO review_assignments "
+        "(market_id, occupancy_event_id, audit_round_id, queue_kind, purpose) "
+        "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+        (
+            str(env.market_a),
+            str(event_id),
+            str(round_id),
+            ReviewQueueKind.BLIND_AUDIT.value,
+            ReviewPurpose.TRAIN.value,
+        ),
+    ).fetchone()
+    assert row is not None
+    return UUID(str(row[0]))
 
 
 async def draw(
@@ -845,3 +947,451 @@ def test_the_tick_calls_the_draw_first_in_source_order() -> None:
     assert re.search(r"result\.draw\s*=\s*await audit_draw\(", source), (
         "ko'r audit `await` bilan chaqirilmayapti"
     )
+
+
+# ===========================================================================
+# 6. KO'R SERIALIZER — MAYDONNING UMUMAN YO'QLIGI (D-17.2)
+# ===========================================================================
+
+
+FORBIDDEN_BLIND_KEYS = frozenset(
+    {
+        "verdict",
+        "ai_verdict",
+        "aiverdict",
+        "system_verdict",
+        "system_answer",
+        "confidence",
+        "aiconfidence",
+        "model_version",
+        "modelversion",
+        "thresholds_version",
+        "thresholdsversion",
+        "purpose",
+        "queue_kind",
+        "shown_ai_verdict",
+        "effective_verdict",
+        "resolution_source",
+        "round_no",
+        "seed",
+        "matched",
+    }
+)
+"""Ko'r payloadda uchramasligi SHART bo'lgan kalitlar (UI-SPEC §14.3).
+
+⚠ RO'YXAT DARVOZANING YAGONA MEXANIZMI EMAS va bo'lishi ham mumkin emas:
+  u faqat BILINGAN nomlarni ushlaydi. Ikkinchi qatlam — javobning XOM
+  MATNIDA verdikt SO'ZINING o'zini qidirish — kalit NOMIDAN mutlaqo
+  mustaqil va `meta.v`, `debug.x` kabi shakllarni ham qamraydi.
+
+⚠ `round_no`/`seed` — 05-11 QO'SHGAN nomlar (UI-SPEC §7.5: tur raqami va
+  urug' Y-4 hisobotining yuzasi, sessiyaniki EMAS). `matched` esa OSHKOR
+  javobning maydoni: u `POST` javobida QONUNIY, `GET` da esa oldindan
+  yuklab qo'yish (prefetch) yo'lining ochilgani bo'lardi.
+"""
+
+
+def all_keys(payload: object) -> set[str]:
+    """Ichma-ich joylashgan BARCHA kalitlar (`dict`/`list` bo'yicha rekursiv)."""
+    keys: set[str] = set()
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            keys.add(str(key).lower())
+            keys |= all_keys(value)
+    elif isinstance(payload, list):
+        for item in payload:
+            keys |= all_keys(item)
+    return keys
+
+
+async def test_payload_has_no_verdict_keys(
+    api_client: httpx.AsyncClient,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """⛔ 1-INVARIANT — JAVOB REKURSIV SKANERLANADI, MA'LUM MAYDON EMAS.
+
+    =======================================================================
+    NEGA SKANER, NEGA `assert "verdict" not in body` EMAS.
+
+    Ma'lum kalitni tekshiradigan test faqat O'ZI BILGAN nomni ko'radi.
+    Tizim javobi `meta.verdict`, `debug.confidence` yoki `ai.value` bo'lib
+    qaytsa u YASHIL qolardi — ya'ni darvoza o'zi qo'riqlayotgan xavfning
+    eng ehtimolli shaklini ko'rmasdi. Bu 4-fazadagi «alertga kadr rasmi
+    biriktirilmaydi» testining aynan shakli.
+
+    IKKI MUSTAQIL QATLAM:
+      (a) ichma-ich HAR BIR kalit reyestrga solishtiriladi;
+      (b) javobning XOM MATNIDA verdikt so'zlarining O'ZI qidiriladi —
+          bu qatlam kalit nomidan MUTLAQO mustaqil.
+    =======================================================================
+    """
+    clear_review_state(sync_owner_conn, env.market_a)
+    grow_frame(sync_owner_conn, env, total=FRAME_TARGET)
+    await draw(app_sessionmaker)
+
+    response = await api_client.get(BLIND_NEXT_URL, headers=inspector_headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    leaked = sorted(FORBIDDEN_BLIND_KEYS & all_keys(body))
+    assert not leaked, f"ko'r payloadda tizim javobining kaliti bor: {leaked}"
+
+    lowered = response.text.lower()
+    verdict_words = sorted(value.value for value in OccupancyVerdict if value.value in lowered)
+    assert not verdict_words, f"javob matnida verdikt so'zi uchradi: {verdict_words}"
+
+    assert body["stall_code"], "nazorat: payload bo'sh — skan hech nimani o'lchamadi"
+    assert len(body["polygon"]) >= 3
+
+
+def test_the_blind_item_declares_none_of_the_eight_fields() -> None:
+    """`BlindItemResponse` da SAKKIZALA maydonning BIRORTASI ham yo'q.
+
+    ⚠ RUNTIME SKANIDAN MUSTAQIL IKKINCHI QATLAM: skan faqat SHU
+      chaqiruvdagi qiymatni ko'radi, bu esa TIPNI ko'radi — ya'ni maydoni
+      `None` bo'lib qaytgan holat ham ushlanadi.
+    """
+    declared = set(BlindItemResponse.model_fields)
+
+    for field in (
+        "verdict",
+        "confidence",
+        "model_version",
+        "thresholds_version",
+        "effective_verdict",
+        "resolution_source",
+        "shown_ai_verdict",
+        "purpose",
+    ):
+        assert field not in declared, f"`BlindItemResponse` da `{field}` e'lon qilingan"
+
+    assert declared == {
+        "assignment_id",
+        "snapshot_id",
+        "stall_id",
+        "stall_code",
+        "zone_name",
+        "camera_name",
+        "channel_no",
+        "business_date",
+        "slot_time",
+        "polygon",
+    }, f"kutilmagan maydon to'plami: {sorted(declared)}"
+    assert "has_active_vendor" in ReviewItemResponse.model_fields, (
+        "nazorat: `has_active_vendor` noaniq navbatda ham yo'q — farq o'lchanmayapti"
+    )
+
+
+def test_the_blind_route_is_visible_in_the_schema() -> None:
+    """⛔ MARSHRUT SXEMADAN YASHIRILMAGAN — YASHIRISH HIMOYA EMAS.
+
+    `include_in_schema=False` faqat hujjatni o'zgartiradi, BAYTLARNI emas:
+    marshrut baribir javob berardi va payloadning shakli o'zgarmasdi.
+    Himoya maydonning UMUMAN yo'qligida, ya'ni sxemani yashirish yo'liga
+    o'tish YOLG'ON xotirjamlik berardi.
+    """
+    paths = fastapi_app.openapi()["paths"]
+
+    assert BLIND_NEXT_URL in paths, "ko'r audit marshruti sxemadan yashirilgan"
+    assert "get" in paths[BLIND_NEXT_URL]
+    assert "/api/v1/review/blind/{review_assignment_id}/answer" in paths
+
+
+def _resolve(
+    schema: dict[str, Any], components: dict[str, Any], seen: frozenset[str]
+) -> dict[str, Any]:
+    """`$ref` ni `components/schemas` dan ochadi (rekursiv havolaga chidamli)."""
+    ref = schema.get("$ref")
+    if not isinstance(ref, str):
+        return schema
+    name = ref.rsplit("/", 1)[-1]
+    if name in seen:
+        return {}
+    resolved = components.get(name, {})
+    return _resolve(resolved, components, seen | {name}) if isinstance(resolved, dict) else {}
+
+
+def _schema_property_names(
+    schema: object, components: dict[str, Any], seen: frozenset[str] = frozenset()
+) -> set[str]:
+    """Sxemadagi BARCHA maydon nomlari — ichma-ich va `$ref` lar bo'ylab."""
+    if not isinstance(schema, dict):
+        return set()
+    resolved = _resolve(schema, components, seen)
+    if not isinstance(resolved, dict):
+        return set()
+    ref = schema.get("$ref")
+    seen = seen | {ref.rsplit("/", 1)[-1]} if isinstance(ref, str) else seen
+
+    names: set[str] = set()
+    for key, sub in (resolved.get("properties") or {}).items():
+        names.add(str(key))
+        names |= _schema_property_names(sub, components, seen)
+    for keyword in ("items", "additionalProperties"):
+        names |= _schema_property_names(resolved.get(keyword), components, seen)
+    for keyword in ("anyOf", "oneOf", "allOf"):
+        for option in resolved.get(keyword) or []:
+            names |= _schema_property_names(option, components, seen)
+    return names
+
+
+def test_no_get_route_returns_the_reveal() -> None:
+    """⛔ OSHKOR MA'LUMOT BIRORTA `GET` JAVOBIDA YO'Q — OpenAPI SKANI.
+
+    =======================================================================
+    NEGA BU DARVOZA KERAK: PREFETCH YO'LI.
+
+    Tizim javobi nazoratchi javob YOZGANDAN KEYIN oshkor bo'ladi. Agar
+    biror `GET` marshrut o'sha ma'lumotni qaytarsa, klient uni javobdan
+    OLDIN yuklab qo'ya olardi (`useQuery` + `prefetch`) — ya'ni 2-himoya
+    UI qatlamida buzilardi va server tomonda hech nima qizarmasdi
+    (UI-SPEC §7.7).
+
+    ⚠ KUTILGAN NOMLAR RO'YXATI YOZILMAGAN: nomlar `AnswerResponse` ning
+      O'ZIDAN olinadi, ya'ni sxemaga yangi maydon qo'shilsa darvoza uni
+      AVTOMATIK qo'riqlaydi (§S-5).
+    =======================================================================
+    """
+    spec = fastapi_app.openapi()
+    components = spec.get("components", {}).get("schemas", {})
+    reveal_fields = set(AnswerResponse.model_fields) - {"locked"}
+    assert reveal_fields, "nazorat: oshkor javobning maydonlari topilmadi"
+
+    scanned = 0
+    leaking: list[str] = []
+    for path, operations in spec["paths"].items():
+        operation = operations.get("get")
+        if operation is None:
+            continue
+        scanned += 1
+        for response in (operation.get("responses") or {}).values():
+            schema = (response.get("content") or {}).get("application/json", {}).get("schema", {})
+            if reveal_fields & _schema_property_names(schema, components):
+                leaking.append(f"GET {path}")
+
+    assert scanned >= 20, f"faqat {scanned} ta `GET` marshruti skanerlandi — sxema o'qilmadi"
+    assert not leaking, f"oshkor ma'lumot `GET` javobida qaytmoqda: {sorted(set(leaking))}"
+
+
+async def test_the_second_answer_is_locked_not_a_race(
+    api_client: httpx.AsyncClient,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """Ikkinchi javob -> **409 `blind_answer_locked`** (`review_already_answered` EMAS).
+
+    ⛔ KOD AJRATILGAN VA FARQ MAHSULOTDA: noaniq navbatda ikkinchi so'rov
+       shunchaki KECH QOLGAN (ikki oyna), ko'r auditda esa taqiq
+       STRUKTURAVIY va UI qayta urinish tugmasi BERMAYDI (UI-SPEC §4.5).
+
+    ⚠ NAZORAT: birinchi javob 200 va u OSHKOR ma'lumotni tashiydi.
+    """
+    clear_review_state(sync_owner_conn, env.market_a)
+    grow_frame(sync_owner_conn, env, total=FRAME_TARGET)
+    await draw(app_sessionmaker)
+
+    item = (await api_client.get(BLIND_NEXT_URL, headers=inspector_headers)).json()
+    target = f"{BLIND_URL}/{item['assignment_id']}/answer"
+
+    first = await api_client.post(
+        target, json={"human_verdict": "occupied"}, headers=inspector_headers
+    )
+    second = await api_client.post(
+        target, json={"human_verdict": "empty"}, headers=inspector_headers
+    )
+
+    assert first.status_code == 200, first.text
+    assert set(first.json()) == {"system_answer", "human_answer", "matched", "locked"}
+    assert first.json()["locked"] is True
+    assert second.status_code == 409, second.text
+    assert second.json()["detail"] == "blind_answer_locked"
+
+
+async def test_blind_rows_never_show_the_ai_verdict(
+    api_client: httpx.AsyncClient,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """`shown_ai_verdict` SERVERDA hisoblanadi va u BAZADAN o'qib tekshiriladi.
+
+    ⚠ KLIENT QIYMATI YUBORILADI VA U TASHLANISHI KERAK: `AnswerRequest`
+      da bunday maydon umuman e'lon qilinmagan, ya'ni Pydantic uni
+      JIMGINA tashlaydi (05-10 deviatsiya #9 — `extra="forbid"` ATAYIN
+      qo'yilmagan).
+    """
+    clear_review_state(sync_owner_conn, env.market_a)
+    grow_frame(sync_owner_conn, env, total=FRAME_TARGET)
+    await draw(app_sessionmaker)
+
+    item = (await api_client.get(BLIND_NEXT_URL, headers=inspector_headers)).json()
+    response = await api_client.post(
+        f"{BLIND_URL}/{item['assignment_id']}/answer",
+        json={"human_verdict": "occupied", "shown_ai_verdict": True},
+        headers=inspector_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    rows = sync_owner_conn.execute(
+        "SELECT shown_ai_verdict, queue_kind FROM zone_reviews WHERE market_id = %s",
+        (str(env.market_a),),
+    ).fetchall()
+    assert rows, "nazorat: javob umuman yozilmadi"
+    assert all(row[0] is False for row in rows), "ko'r yozuvda `shown_ai_verdict` rost"
+    assert {str(row[1]) for row in rows} == {ReviewQueueKind.BLIND_AUDIT.value}
+
+
+async def test_an_undrawn_market_says_so_instead_of_done(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """Namuna TORTILMAGAN bo'lsa -> `review_sample_not_drawn`, «tugadi» EMAS.
+
+    ⛔ IKKALASINI BITTA KODGA YIG'ISH tortish jobi butunlay o'lgan kunni
+       «hammasi bajarildi» bilan bir xil ko'rsatardi — o'lchov asbobining
+       YO'QLIGI muvaffaqiyat bo'lib ko'rinardi.
+
+    ⚠ NAZORAT JUFTI QUYIDA (`test_a_finished_sample_says_done`).
+    """
+    clear_review_state(sync_owner_conn, env.market_a)
+
+    response = await api_client.get(BLIND_NEXT_URL, headers=inspector_headers)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "review_sample_not_drawn"
+
+
+async def test_a_finished_sample_says_done(
+    api_client: httpx.AsyncClient,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """Namuna tortilgan va TUGATILGAN bo'lsa -> `review_queue_empty`.
+
+    ⚠ YUQORIDAGI TESTNING NAZORAT JUFTI: usiz `review_sample_not_drawn`
+      HAR DOIM qaytadigan holat ham yashil bo'lardi.
+    """
+    clear_review_state(sync_owner_conn, env.market_a)
+    grow_frame(sync_owner_conn, env, total=FRAME_TARGET)
+    await draw(app_sessionmaker, sample_size=1)
+
+    item = (await api_client.get(BLIND_NEXT_URL, headers=inspector_headers)).json()
+    answered = await api_client.post(
+        f"{BLIND_URL}/{item['assignment_id']}/answer",
+        json={"human_verdict": "empty"},
+        headers=inspector_headers,
+    )
+    exhausted = await api_client.get(BLIND_NEXT_URL, headers=inspector_headers)
+
+    assert answered.status_code == 200, answered.text
+    assert exhausted.status_code == 409, exhausted.text
+    assert exhausted.json()["detail"] == "review_queue_empty"
+
+
+async def test_the_blind_queue_has_no_priority(
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    tenant_session: TenantSessionFactory,
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+) -> None:
+    """⛔ KO'R NAVBAT USTUVORLIKKA EGA EMAS — `_PRIORITY_ORDER` ISHLATILMAYDI.
+
+    =======================================================================
+    IKKI TARTIB ATAYIN ZID QILIB QO'YILGAN.
+
+    Biriktirilmagan rastaning topshirig'i BIRINCHI yoziladi (`uuidv7()`
+    monoton, ya'ni uning `id` i kichik), biriktirilgani esa IKKINCHI.
+    `_BLIND_ORDER` (`ORDER BY ra.id`) birinchisini beradi;
+    `_PRIORITY_ORDER` esa billing ta'siri bo'yicha IKKINCHISINI berardi.
+
+    NEGA MUHIM: nazoratchi ulgurmasa javobsiz QUYRUQ hisobotga
+    «javobsiz» bo'lib kiradi. Quyruq billing ta'siri bo'yicha saralangan
+    bo'lsa, u TIZIMLI ravishda sotuvchisi YO'Q rastalardan iborat
+    bo'lardi va aniqlik faqat biriktirilgan rastalarda o'lchanardi.
+    =======================================================================
+    """
+    clear_review_state(sync_owner_conn, env.market_a)
+    round_id = _open_round(sync_owner_conn, env)
+
+    unassigned = add_candidate(sync_owner_conn, env, stall_id=env.stall_a, center=(0.60, 0.20))
+    assigned = add_candidate(sync_owner_conn, env, stall_id=env.assigned_stall, center=(0.20, 0.60))
+    _add_blind_assignment(sync_owner_conn, env, round_id, unassigned.event_id)
+    _add_blind_assignment(sync_owner_conn, env, round_id, assigned.event_id)
+
+    async with tenant_session(env.market_a) as session:
+        claimed = await ReviewRepository(session, env.market_a).claim_next_blind()
+
+    assert claimed is not None
+    assert claimed.has_active_vendor is False, (
+        "ko'r navbat billing ta'siri bo'yicha saraladi — `_PRIORITY_ORDER` ishlatilmoqda"
+    )
+    assert claimed.stall_id == unassigned.stall_id
+    assert assigned.stall_id != unassigned.stall_id, "nazorat: ikki rasta bir xil"
+
+
+async def test_the_uncertain_route_cannot_answer_a_blind_item(
+    api_client: httpx.AsyncClient,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """Ko'r topshirig'i NOANIQ marshrutda **404** va aksincha ham.
+
+    ⛔ 403 YOKI 409 EMAS: har ikkalasi ham «bunday topshiriq bor, lekin u
+       boshqa navbatda» degan ma'lumotni oshkor qilardi va nazoratchi
+       navbat a'zoligini javob KODI bo'yicha aniqlay olardi (D-14).
+    """
+    clear_review_state(sync_owner_conn, env.market_a)
+    grow_frame(sync_owner_conn, env, total=FRAME_TARGET)
+    await draw(app_sessionmaker)
+    blind_item = (await api_client.get(BLIND_NEXT_URL, headers=inspector_headers)).json()
+
+    wrong_route = await api_client.post(
+        f"{REVIEW_URL}/{blind_item['assignment_id']}/answer",
+        json={"human_verdict": "occupied"},
+        headers=inspector_headers,
+    )
+    right_route = await api_client.post(
+        f"{BLIND_URL}/{blind_item['assignment_id']}/answer",
+        json={"human_verdict": "occupied"},
+        headers=inspector_headers,
+    )
+
+    assert wrong_route.status_code == 404, wrong_route.text
+    assert wrong_route.json()["detail"] == "not_found"
+    assert right_route.status_code == 200, right_route.text
+
+
+async def test_the_director_cannot_reach_the_blind_queue(
+    api_client: httpx.AsyncClient,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    director_headers: dict[str, str],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """`report_view` bor, `occupancy_review` yo'q -> **403**.
+
+    NAZORAT: o'sha navbatni nazoratchi 200 bilan oladi — usiz «endpoint
+    umuman ishlamayapti» holati ham yashil bo'lardi.
+    """
+    clear_review_state(sync_owner_conn, env.market_a)
+    grow_frame(sync_owner_conn, env, total=FRAME_TARGET)
+    await draw(app_sessionmaker)
+
+    denied = await api_client.get(BLIND_NEXT_URL, headers=director_headers)
+    allowed = await api_client.get(BLIND_NEXT_URL, headers=inspector_headers)
+
+    assert denied.status_code == 403, denied.text
+    assert allowed.status_code == 200, allowed.text

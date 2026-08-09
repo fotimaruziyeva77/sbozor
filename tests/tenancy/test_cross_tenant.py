@@ -547,6 +547,22 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
     RouteSpec("POST", "/api/v1/review/{review_assignment_id}/answer"): lambda _: {
         "human_verdict": "occupied",
     },
+    # --- 05-11: ko'r audit javobi ---
+    #
+    # ⚠ TANA AYNAN BIR XIL va bu ATAYIN: ikki marshrut BITTA
+    #   `AnswerRequest` ni ishlatadi (ikkinchi sxema YOZILMAGAN). Alohida
+    #   tana yozilsa matritsa ikki lug'atni solishtirib turardi va
+    #   ulardan biri jimgina eskirardi.
+    #
+    # ⚠⚠ BU MARSHRUT UCHUN `review_assignment_id` FILLERI AYNAN TO'G'RI
+    #   TURDAGI OBYEKT: B bozorining KO'R AUDIT topshirig'i
+    #   (`market_b.blind_assignment_id`). Ya'ni 404 «bunday topshiriq
+    #   yo'q» dan emas, TENANT chegarasidan keladi va matritsa haqiqatan
+    #   o'lchaydi (05-10 deviatsiya #2 ogohlantirgan holat bu yerda
+    #   MAVJUD EMAS).
+    RouteSpec("POST", "/api/v1/review/blind/{review_assignment_id}/answer"): lambda _: {
+        "human_verdict": "occupied",
+    },
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
 
@@ -686,6 +702,9 @@ INSPECTOR_ROUTES: frozenset[RouteSpec] = frozenset(
         RouteSpec("GET", "/api/v1/review/uncertain/next"),
         RouteSpec("GET", "/api/v1/review/budget"),
         RouteSpec("POST", "/api/v1/review/{review_assignment_id}/answer"),
+        # --- 05-11: ko'r audit ---
+        RouteSpec("GET", "/api/v1/review/blind/next"),
+        RouteSpec("POST", "/api/v1/review/blind/{review_assignment_id}/answer"),
     }
 )
 """Matritsa NAZORATCHI sessiyasi bilan chaqiradigan marshrutlar (05-10).

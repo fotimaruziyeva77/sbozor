@@ -74,6 +74,7 @@ __all__ = [
     "CategoryRequest",
     "AnswerRequest",
     "AnswerResponse",
+    "BlindItemResponse",
     "ChangePasswordRequest",
     "CreateUserRequest",
     "CreateUserResponse",
@@ -2509,6 +2510,57 @@ class ReviewItemResponse(BaseModel):
     slot_time: time
     polygon: list[tuple[float, float]]
     has_active_vendor: bool
+
+
+class BlindItemResponse(BaseModel):
+    """`GET /review/blind/next` — KO'R audit bandi (AI-04, D-17.2).
+
+    =======================================================================
+    ⛔⛔ SAKKIZ MAYDONNING BIRORTASI HAM E'LON QILINMAGAN VA BU
+        «YASHIRISH» EMAS.
+
+        verdict · confidence · model_version · thresholds_version
+        effective_verdict · resolution_source · shown_ai_verdict · purpose
+
+    `None` qilib yuborish YETARLI EMAS bo'lardi: kalit javobda tursa uni
+    to'ldirish BIR SATRLIK o'zgarish bo'lardi. Sxemadan YASHIRISH
+    (`include_in_schema=False`) esa umuman himoya emas — u faqat
+    hujjatni o'zgartiradi, baytlarni emas.
+
+    ⚠ MARSHRUTNING O'ZI SXEMADA KO'RINADI VA BU ATAYIN: himoya
+      payloadning SHAKLIDA, hujjatning yo'qligida emas. `test_the_blind_
+      route_is_visible_in_the_schema` buni qulflaydi — yashirish yo'liga
+      o'tish darvozani qizartiradi.
+    =======================================================================
+
+    ⛔ `purpose` HAM RO'YXATDA (D-14). `eval`/`train` belgisi ko'rinsa,
+       «bu baholash uchun ekan» degan E'TIBOR FARQI tug'ilardi va 70/30
+       bo'linishining butun ma'nosi yo'qolardi.
+
+    ⛔ `has_active_vendor` BU YERDA YO'Q — VA U `ReviewItemResponse` DA BOR.
+
+       Farq ataylab va u DEVIATSIYA sifatida yozilgan. Noaniq navbatda
+       o'sha qator MOTIVATSIYA: band ustuvorlik bo'yicha tanlangan, ya'ni
+       «bu qarorning oqibati bor» degan xabar HALOL. Ko'r auditda esa
+       band TASODIFIY tanlangan va o'sha qator namunaning bir qismiga
+       ko'proq, qolganiga kamroq e'tibor beriladigan holat yaratardi —
+       ya'ni DIQQAT namuna bo'ylab notekis taqsimlanardi. Xolis
+       namunadagi notekis diqqat — o'lchov asbobining O'ZIDAGI og'ish.
+
+    ⛔ TUR RAQAMI, URUG', TAKRORIYLIK BELGISI VA KUNLIK HISOBLAGICH HAM
+       YO'Q (UI-SPEC §7.5): ular Y-4 hisobotining yuzasi.
+    """
+
+    assignment_id: UUID
+    snapshot_id: UUID
+    stall_id: UUID
+    stall_code: str
+    zone_name: str
+    camera_name: str
+    channel_no: int
+    business_date: date
+    slot_time: time
+    polygon: list[tuple[float, float]]
 
 
 class AnswerRequest(BaseModel):
