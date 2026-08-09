@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 05-14-PLAN.md
-last_updated: "2026-08-09T20:15:17.790Z"
-last_activity: "2026-08-10 -- 05-14 bajarildi (bandlik va aniqlik hisoboti: besh hisoblagich, chalkashlik matritsasi, namuna holati, rastalar ro'yxati)"
+status: Phase 5 ijrosi TUGADI — qayta tekshiruv kutilmoqda
+stopped_at: Completed 05-15-PLAN.md
+last_updated: "2026-08-09T22:12:18.916Z"
+last_activity: "2026-08-10 -- 05-15 bajarildi (faza darvozasi: beshala mezon bitta buyruqda; dalil-kadr huquq bo'shligi YOPILDI; gate byudjeti 900 -> 1250 s)"
 progress:
   total_phases: 9
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 82
-  completed_plans: 81
-  percent: 44
+  completed_plans: 82
+  percent: 56
 ---
 
 # Project State
@@ -26,56 +26,81 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 5
-Plan: 14
+Plan: 15
 Total Plans in Phase: 15
-Status: Executing
-Last activity: 2026-08-10 -- 05-14 bajarildi (bandlik va aniqlik hisoboti: besh hisoblagich, chalkashlik matritsasi, namuna holati, rastalar ro'yxati)
+Status: Phase 5 ijrosi TUGADI — qayta tekshiruv kutilmoqda
+Last activity: 2026-08-10 -- 05-15 bajarildi (faza darvozasi: beshala mezon bitta buyruqda; dalil-kadr huquq bo'shligi YOPILDI; gate byudjeti 900 -> 1250 s)
 
-Progress: [█████████░] 93% (14/15 reja — 05-01…05-14)
+Progress: [██████████] 100% (15/15 reja — 05-01…05-15)
 
-⚠ **Wave 0 (05-01…05-04), sxema (05-05) va Wave 3…8 (05-06…05-14)
-yopildi.** `05-14` AI-04/AI-05/AI-06 ning DIREKTOR yuzasini yetkazdi:
-`/occupancy` — besh qo'shilmaydigan hisoblagich, chalkashlik matritsasi
-(bazaviy ulush va uch Wilson oralig'i bilan), namuna holati va rastalar
-ro'yxati + DL-5. **Barcha foizlar SERVER hisoblagan holda chiziladi** va
-`confusion-matrix.tsx` da birorta bo'lish amali yo'q: 05-12 o'lchagan
-ikki maxraj (`fp/(tp+fp)` vs `fp/n`) **ikkalasi ham to'g'ri arifmetika**,
-lekin boshqa savolga javob. `measured` va `min_sample` ham serverdan.
-Faqat `05-15` (faza darvozasi) qoldi.
+✅ **5-FAZANING IJROSI TUGADI (15/15 reja).** `05-15` fazani yopdi:
+beshala ROADMAP mezoni `tests/integration/test_phase5_criteria.py` da
+**BITTA buyruqda** o'lchanadi va uchala darvozasi (mezon boshiga bitta
+test · meta-test · soxtalashtirishsiz o'lchov) yashil.
 
-⚠⚠ **D-16 (~10% takroriy band) BUGUNGI SXEMADA IFODALAB BO'LMAYDI**
-va bu o'lchandi: ikkita `UNIQUE` (3- va 4-himoya) uni rad etadi, ya'ni
-5-himoyani qurish ularni bo'shatishni talab qilardi. Mexanizm ATAYIN
-qurilmadi. **`05-12` da:** hisobotda NA SON, NA MAYDON. **`05-14` da
-YAKUNLANDI:** ekranda ham na qator, na «—», na nol, na `occupancy.
-selfConsistency*` kaliti. Yo'qlik IKKI QATLAMDA o'lchanadi — sxema
-javobni RAD ETADI (`z.strictObject`) va `<dt>` yorliqlari TO'PLAMI
-literal qulflangan. **⚠ UI-SPEC §11.6 ESKIRGAN va uni tuzatish `05-15`
-ning bandi.**
+⚠ **ROADMAP dagi faza belgisi HAMON `- [ ]`** va bu ataylab: fazani
+yopish qarori **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas.
+4-fazada ham aynan shunday saqlangan.
 
-⚠⚠ **OCHIQ XAVFSIZLIK BANDI (05-10 dan, 05-11 va 05-13 da ham kuchda):**
-sof `inspector` roli dalil kadrini KO'RA OLMAYDI —
-`GET /snapshots/{id}/image` `CAMERA_VIEW` talab qiladi, nazoratchida esa
-aynan `{OCCUPANCY_REVIEW}` bor (`rbac.py:217`). RBAC bu fazada ATAYIN
-tegilmagan (M-8) va rejaning fayl to'plami faqat `frontend/` edi.
+✅ **UCH REJA DAVOMIDA OCHIQ TURGAN XAVFSIZLIK BANDI YOPILDI.** Sof
+`inspector` roli dalil kadrini endi **KO'RADI**: `GET /snapshots/{id}/
+image` `CAMERA_VIEW` **YOKI** `OCCUPANCY_REVIEW` ostiga o'tdi
+(`require_any_permission()`, `EVIDENCE_FRAME_PERMISSIONS`). Kengaytma
+**AYNAN BITTA marshrutda** — kadr metama'lumoti, kun jurnali va alert
+oqimi nazoratchiga YOPIQ QOLDI va bu ikki MUSTAQIL darvoza bilan
+o'lchanadi (struktura: marshrut grafi; xulq: HTTP). `ROLE_PERMISSIONS`
+matritsasi va `rbac.py`/`rbac.ts` juftligi **TEGILMADI**, ya'ni M-8
+bandining o'zi hamon rost.
 
-**⚠ 05-13 NARXNI QAYTA O'LCHADI va u 05-11 baholaganidan KENGROQ:** huquq
-IKKI joyda talab qilinadi — marshrut dekoratori (`snapshots.py:410`) VA
-`principal: SnapshotViewerDep` (`snapshots.py:170`), ikkinchisi esa
-TO'RTTA marshrutda ishlatiladi (322, 381, 414, 500), ya'ni uni bo'shatish
-nazoratchiga kadr metama'lumoti, kun jurnali va ro'yxatni ham ochardi.
-O'zgaradigan fayllar: `deps.py`, `snapshots.py` (ALOHIDA alias),
-`tests/tenancy/test_personal_data_coverage.py:462` VA
-`test_camera_route_coverage.py:214/244/265`. **Qaror `05-15` da.**
-Bugungi vaqtinchalik yo'l — nazoratchiga `market_admin` rolini HAM berish
-(D-05: rollar to'plam). Ekran esa HALOL: rasm ochilmasa uchala javob
-tugmasi `aria-disabled` bo'lib qoladi va taxminiy javob YOZILMAYDI.
+✅ **4-FAZADAN MEROS `gate` BANDI (D-26/W0-13) YOPILDI.** O'lchov
+**TINCH XOSTDA** olindi: xostdagi 6 ta `parnikkpi-*` konteyner (aynan
+`04-14` ni ifloslantirgan stek) `docker stop` bilan to'xtatildi va
+o'lchovdan keyin tiklandi. Uch o'lchov: **1009 / 1004 / 983 s**
+(tarqoqlik 26 s = 2,6 %). Nazorat: `gate:fast` **87 s** (chegara 180 s,
+o'zgarmadi). Yangi chegara = 1009 × 1,20 → **1250 s**, `package.json`
+dagi `//gate-budget` izohida ham, `05-VALIDATION.md` da ham BIR XIL.
+⚠ Ko'tarish sababi degradatsiya EMAS: zanjirga `cv:lint` + `cv:test`
+qo'shildi (05-02) va to'plam o'sdi.
+⚠ **`C:` diski 91 % to'la (bo'sh 15 GB)** — Docker VHDX o'sha yerda;
+kelajakdagi o'lchovlar uchun xavf sifatida yozib qo'yildi.
 
-⚠ **05-13 REJADAN TASHQARI BITTA TEST FAYLINI TUZATDI**
-(`tests/integration/test_alerting.py`, commit `bcc2d49`): ikkala debounce
-testi ham haqiqiy soatga 30/61 daqiqa qo'shib, 23:30 dan keyin ERTANGI
-biznes-kunni ko'rardi va alert yopilardi. Biri qizardi, ikkinchisi esa
-YASHIL QOLIB noto'g'ri narsani o'lchardi. `dc5f182` ning aynan davomi.
+⛔ **AI-02 `Blocked` — VA BU FAZANING ENG MUHIM HALOLLIGI.** Talab
+matnining ikkinchi jumlasi («AI natijasi confidence bilan saqlanadi va
+hech qachon o'zgartirilmaydi») to'liq o'lchangan. Birinchi jumlasi
+(«RF-DETR ONNX Runtime CPU da har zonani baholaydi») CI'da **real
+artefakt bilan bajarilmaydi** — `.onnx` fayli yo'q, `-m model` bandlari
+umuman chaqirilmaydi — va **modelning ANIQLIGI umuman o'lchanmagan**,
+chunki oltin to'plam bo'sh. Mexanika qatlamining yashilligi bilan
+aniqlik qatlamining yo'qligini yopish TAQIQLANADI (D-01) va bu endi
+mexanik darvoza bilan ham qo'llab-quvvatlanadi: mezon modulida
+`precision`/`recall`/`f1`/`map` **nomlari** `ast` daraxtidan taqiqlangan.
+AI-01/03/04/05/06 esa dalil bilan `Done`. Sanoq: Done 21 · Pending 26 ·
+Blocked 2.
+
+⚠⚠ **D-16 (nazoratchining ichki mosligi) QURILMADI VA QURILMAYDI.**
+`05-14` gacha u «ekranda yo'q» edi; `05-15` uni **spetsifikatsiyadan
+ham** olib tashladi (UI-SPEC §11.6). Sabab: `audit_draw` har hodisani
+eng ko'pi bilan bir marta tortadi va takroriy band mexanizmi YO'Q.
+Spetsifikatsiya qurilmagan narsani ta'riflab tursa, keyingi faza uni
+**yo'qolgan funksiya** deb o'qirdi. §11.7 (DL-5 per-slot jadvali) ham
+shu sababdan tuzatildi — u marshrut YO'Q bo'lgan qatorlarni talab
+qilardi.
+
+⚠ **SABOTAJ O'LCHOVINING YANGI DARSI (`05-15`, S-D).** `accuracy_report`
+ning `purpose AND queue_kind` filtri `or` ga o'zgartirilganda SC#4
+**umuman qizarmadi** — sabotaj sistemaga yetib borgan, lekin test
+tanlagan MA'LUMOT ikkala shoxda ham bir xil natija berardi. Tuzatish
+testni emas, **HOLATNI** kengaytirish bo'ldi: endi butun ko'r namuna
+javoblanadi (70/30 kvota `eval` ham, `train` ham beradi) va hisobotdagi
+son `eval` lar soniga TENG bo'lishi talab qilinadi. Shundan keyin
+sabotaj qizardi.
+
+⚠ **OCHIQ BANDLAR (bloklamaydi, LEKIN nomlangan):**
+`05-HUMAN-UAT.md` — sakkiz band, har birida ega va tetik. Birinchisi
+**detektorning aniqligi**. Ikki `SECURITY DEFINER` funksiya
+(`audit_draw_due_markets()`, `occupancy_day_close_markets()`) hamon
+chaqiruvchisiz — qarori 6-fazaning billing tikida (Rule 4, yuzasi tor
+va `FORBIDDEN_SURFACE_TOKENS` darvozasi bilan qulflangan).
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -121,6 +146,7 @@ YASHIL QOLIB noto'g'ri narsani o'lchardi. `dc5f182` ning aynan davomi.
 | Phase 05 P12 | 175min | 3 tasks | 16 files |
 | Phase 05 P13 | 165min | 3 tasks | 20 files |
 | Phase 05 P14 | 150 | 3 tasks | 17 files |
+| Phase 05 P15 | 235min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -214,6 +240,13 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-14: foiz KLIENTDA hisoblanmaydi — uch nisbat, uch oraliq, baseRate, measured va min_sample SERVERDAN; klientdagi qayta hisob xato bo'lib emas, IKKINCHI JAVOB bo'lib chiqardi (5,4 % vs 3,8 %)
 - [Phase 05]: 05-14: D-16 ekranda ham YO'Q — na qator, na tire, na nol, na kalit; yo'qlik «so'z topilmadi» bilan emas, <dt> to'plamining literal tengligi va z.strictObject bilan o'lchanadi
 - [Phase 05]: 05-14: DL-5 slot qatorlarisiz qurildi — OccupancyStallItem da slot vaqti, kamera va snapshot_id YO'Q; to'qish (stub) va bo'sh jadval (placeholder) rad etildi, yangi marshrut Rule 4 sifatida 05-15 ga
+- [Phase 05]: 05-15: dalil-kadr huquq bo'shligi TO'RTINCHI marta kechiktirilmadi — fazani yopishdan OLDIN yopildi. Kengaytma AYNAN BITTA marshrutda (`GET /snapshots/{id}/image`), `ROLE_PERMISSIONS` matritsasi va `rbac.py`/`rbac.ts` juftligi TEGILMADI
+- [Phase 05]: 05-15: `require_any_permission()` ning introspektsiya tegi KO'PLIKDA (`required_any_permissions`) va `required_permission` QO'YILMAYDI — qo'yilsa struktura skanerlari «CAMERA_VIEW MAJBURIY» deb yolg'on gapirardi
+- [Phase 05]: 05-15: ruxsat etilgan huquqlar to'plami darvozada IKKINCHI marta yoziladi, mahsulot konstantasidan import QILINMAYDI — import darvozani o'zi tekshirayotgan qiymatga bog'lardi va mahsulotga uchinchi huquq qo'shilsa u jimgina kengayardi
+- [Phase 05]: 05-15: `gate` chegarasi 900 -> 1250 s KO'TARILDI, lekin JIMGINA emas — tinch xost ta'minlandi (6 ta `parnikkpi-*` konteyner to'xtatilib, o'lchovdan keyin tiklandi), uchala o'lchov (1009/1004/983 s) alohida yozildi va sabab o'lchandi: zanjirga `cv:lint` + `cv:test` qo'shilgan
+- [Phase 05]: 05-15: AI-02 `Blocked` — talab matnining birinchi jumlasi CI'da REAL ONNX artefakti bilan bajarilmaydi va modelning aniqligi umuman o'lchanmagan; mexanika qatlamining yashilligi bilan aniqlik qatlamining yo'qligini yopish TAQIQLANADI (D-01)
+- [Phase 05]: 05-15: UI-SPEC ning ikki eskirgan bo'limi (§11.6 D-16 qatori, §11.7 DL-5 per-slot jadvali) TUZATILDI — qurilmagan narsani ta'riflagan spetsifikatsiyani keyingi faza «yo'qolgan funksiya» deb o'qiydi
+- [Phase 05]: 05-15: sabotaj sistemaga YETIB BORSA ham hech nima qizarmasa, tuzatish TESTDA emas — HOLATDA. SC#4 `and`->`or` sabotajini o'tkazib yuborgan edi; endi butun ko'r namuna javoblanadi (70/30 kvota `eval` ham, `train` ham beradi) va shundan keyin sabotaj qizardi
 
 ### Pending Todos
 
@@ -247,6 +280,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-09T20:15:17.779Z
-Stopped at: Completed 05-14-PLAN.md
+Last session: 2026-08-10T03:20:00.000Z
+Stopped at: Completed 05-15-PLAN.md
 Resume file: None

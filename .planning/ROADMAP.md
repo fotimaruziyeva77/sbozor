@@ -45,7 +45,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Bozor domeni va "Yangi bozor" ustasi** - Rasta, toifa, tarixiy tarif, sotuvchi, ish kunlari, sxematik plan-xarita (24/24 reja bajarildi; 02-VERIFICATION.md ning to'rtala bo'shlig'i 16–20-to'lqinlarda yopildi — qayta tekshiruv kutilyapti) (plans completed 2026-08-03)
 - [x] **Phase 3: NVR avtomatik kashfiyoti va tarmoq ulanishi** - Simulyator, ISAPI kashfiyoti, Fernet rekvizitlari, WireGuard tunnel, jonli ko'rish (14/14 reja bajarildi; sakkizala mezon `tests/integration/test_phase3_criteria.py` bilan bitta buyruqda o'lchanadi. Qayta tekshiruv **5/8** (`gaps_found`) berdi va ikkala bo'shliq ham 03-12/03-13/03-14 bilan YOPILDI: jonli ko'rish yo'li endi rekvizit uzatadi va kadr mock'siz keladi — `tests/integration/test_live_view_e2e.py`. CAM-03 va CAM-09 dalil bilan `Done`; **CAM-02 `Blocked` bo'lib qoldi** — CI'da `wg0` yo'q, egasi Ops, tetigi VPS deploy'i, bandi `03-HUMAN-UAT.md` #1–#2) (plans completed 2026-08-03)
 - [x] **Phase 4: Snapshot pipeline** - Mavsumiy jadval, idempotent kadr olish, sifat filtri, S3 arxiv, alertlar (14/14 reja bajarildi; beshala mezon `tests/integration/test_phase4_criteria.py` bilan BITTA buyruqda o'lchanadi va uchala darvozasi — mezon boshiga bitta test, meta-test, mock'siz o'lchov — yashil. CAM-04…CAM-07 va FOUND-06 dalil bilan `Done`; hammasi SIMULYATOR ustida o'lchangan va real uskuna/kalendar/tashqi xizmat talab qiladigan **yettita** band `04-HUMAN-UAT.md` da ega hamda tetik bilan. `npm run gate` chegarasi olti o'lchov asosida 1200 s dan **900 s** ga tushirildi. ⚠ **TEKSHIRUV O'TKAZILDI VA U BO'SHLIQ TOPDI:** `04-VERIFICATION.md` (2026-08-05) fazaga `4/5` ball qo'yib `gaps_found` deb yopdi — yagona bo'shliq SC#5 ning Sentry yarmi edi: `scheduler` konteyneri `SENTRY_DSN` ni olardi va 4-fazaning HAMMA jobini tetiklardi, lekin `init_sentry()` o'sha jarayonda hech qachon chaqirilmasdi. Bo'shliq `04-13` da yopildi (ilmoq + `ObservedScheduler` + `compose.yaml` dan HOSILA qilingan darvoza, uch mustaqil qatlam) va `04-14` uning atrofidagi ochiq bandlarni yopib regressiyasizligini o'lchadi. ⚠ **BELGI HAMON `- [ ]`:** fazani yopish qaroriniki QAYTA TEKSHIRUV (`/gsd-verify-work`), ijrochi emas — bu farq ataylab saqlanadi) (completed 2026-08-05)
-- [ ] **Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i** - Poligon muharriri, RF-DETR aniqlash, noaniq navbati, ko'r audit
+- [ ] **Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i** - Poligon muharriri, RF-DETR aniqlash, noaniq navbati, ko'r audit (15/15 reja bajarildi; beshala mezon `tests/integration/test_phase5_criteria.py` bilan BITTA buyruqda o'lchanadi va uchala darvozasi - mezon boshiga bitta test, meta-test, soxtalashtirishsiz o'lchov - yashil. AI-01/03/04/05/06 dalil bilan `Done`; **AI-02 `Blocked`** - real ONNX artefakti CI'da yo'q va modelning ANIQLIGI oltin to'plam bo'shligi uchun umuman o'lchanmagan, egasi nazoratchi + Ops, bandlari `05-HUMAN-UAT.md` #1-#3. 4-fazadan meros `gate` bandi (D-26) TINCH XOSTDAGI uch o'lchov bilan yopildi: 1009/1004/983 s, chegara 900 s -> **1250 s**. Ochiq bandlar `05-HUMAN-UAT.md` da ega va tetik bilan. ⚠ **BELGI HAMON `- [ ]`:** fazani yopish qarori QAYTA TEKSHIRUVNIKI (`/gsd-verify-work`), ijrochi emas - bu farq 4-fazadagidek ataylab saqlanadi) (plans completed 2026-08-10)
+ (completed 2026-08-09)
 - [ ] **Phase 6: Billing va kassir** - O'zgarmas kunlik patta, dalil bog'lash, qarz, ≤3 bosishli kassir, smena hisobi
 - [ ] **Phase 7: Nomuvofiqlik, bildirishnoma va botlar** - "Band, lekin to'lovsiz" case oqimi, sotuvchi va direktor botlari
 - [ ] **Phase 8: Hisobotlar, mustahkamlash va ishga tushirish** - Excel eksport, AI aniqlik hisoboti, backup mashqi, go-live
@@ -340,7 +341,7 @@ Plans:
 - [x] 05-12-PLAN.md — Agregatsiya, kun yopilishi va aniqlik hisoboti (AI-05, AI-06, AI-04)
 - [x] 05-13-PLAN.md — Frontend Y-2/Y-3: navbat va ko'r audit sessiyalari (AI-03, AI-04)
 - [x] 05-14-PLAN.md — Frontend Y-4: bandlik va aniqlik hisoboti (AI-04, AI-05, AI-06)
-- [ ] 05-15-PLAN.md — Faza darvozasi, `gate` byudjeti (W0-13) va yakunlash
+- [x] 05-15-PLAN.md — Faza darvozasi, `gate` byudjeti (W0-13) va yakunlash
 
 **UI hint**: yes
 **Research flag**: yes — `/gsd-plan-phase 5 --research-phase 5`. Detektor kechikishi/aniqligi Contabo AMD EPYC'da o'lchanmagan (raqamlar Intel/jamoa benchmarklaridan); kichik rastalar uchun tiling/SAHI qarori, ikki chegarali triage qiymatlari va poligon muharriri UX'i "o'lchang, taxmin qilmang" deb belgilangan.
@@ -446,7 +447,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 2. Bozor domeni va ustasi | 0/17 | Planned | - |
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
-| 5. Kamera zonalari, CV va HITL | 0/TBD | Not started | - |
+| 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
 | 6. Billing va kassir | 0/TBD | Not started | - |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |

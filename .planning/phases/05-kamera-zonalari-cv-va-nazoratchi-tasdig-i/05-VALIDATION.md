@@ -141,6 +141,22 @@ Modelning band/bo'sh qarori to'g'riligi — bu haqiqatga qarshi **o'lchov**, va 
 
 ⚠ **`gate:fast` chegarasi 180 s da QOLDI.**
 
+#### TO'RTINCHI YUGURISH — chegara asosiga KIRMAYDI, lekin yozib qo'yiladi
+
+Faza yopilishining yakuniy tekshiruvi `parnikkpi` steki **TIKLANGANDAN
+KEYIN** bajarildi (ya'ni xost yana ikki steklik): `npm run gate` →
+**exit 0, 1015 s** (`16m54.7s`).
+
+⚠ **Bu son chegarani BELGILAMAYDI** — chegara ATAYIN faqat tinch
+xostdagi uch o'lchovdan chiqadi. U bu yerda BOSHQA savolga javob
+beradi va javob qiziq: ikkinchi stek tiklangach farq **+0,6 %**
+(1009 → 1015), holbuki `04-14` da ayni shu stek **+30 %** bergan edi.
+Ya'ni 4-fazadagi degradatsiya stekning MAVJUDLIGIDAN emas, o'sha
+seansdagi **progressiv** holatdan kelib chiqqan (`gate:fast` ning
+68 → 129 s bo'lishi ham shu shaklda edi). Bu farq keyingi o'lchovchi
+uchun yozib qo'yiladi: «boshqa stek bor» yolg'iz o'zi hali
+ifloslanish DEMAKMAS — nazorat o'lchovi (`gate:fast`) shart.
+
 ---
 
 ## Per-Task Verification Map
