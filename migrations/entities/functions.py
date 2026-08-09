@@ -1153,6 +1153,34 @@ BEGIN
     RETURN false;
   END IF;
 
+  -- 5-faza bandlik domeni (0018_occupancy_domain). BLOK SNAPSHOT BLOKIDAN
+  -- OLDIN TURISHI SHART va bu O'LCHANGAN, taxmin emas: `occupancy_events`
+  -- `snapshots (id, is_billable)` ga kompozit FK bilan tayanadi (D-21),
+  -- `snapshots` esa pastdagi blokning BIRINCHI o'chirishi. Blok keyinga
+  -- qo'yilganda chaqiruv `ForeignKeyViolation: update or delete on table
+  -- "snapshots" violates foreign key constraint
+  -- "fk_occupancy_events_snapshot_billable"` bilan yiqiladi — va STATIK
+  -- DARVOZA BUNI SEZMAYDI (matnda oltala jadval baribir bor). Aynan
+  -- shuning uchun `test_draft_market_deletion_covers_the_occupancy_domain`
+  -- funksiyani HAQIQATAN chaqiradi.
+  --
+  -- Ichki tartib `OCCUPANCY_DELETE_ORDER` dan: `stall_slot_occupancy` ->
+  -- `zone_reviews` -> `review_assignments` -> `audit_rounds` ->
+  -- `occupancy_events` -> `camera_zones`. Bu domenda FK zanjiridan chetda
+  -- turgan jadval YO'Q (4-fazadagi `alert_events` dan farqli).
+  --
+  -- ⚠ `occupancy_events` VA `zone_reviews` USTIDA O'ZGARMASLIK TRIGGERI
+  --   BOR (0018) va u `DELETE` ni FAQAT QORALAMA bozor uchun o'tkazadi.
+  --   Yuqoridagi `IS DISTINCT FROM false` sharti aynan shu holatni
+  --   kafolatlaydi, ya'ni bu yerga faqat qoralama bozor yetib keladi.
+  --   `tariffs` / `stall_category_periods` bilan AYNAN bir xil naqsh.
+  DELETE FROM public.stall_slot_occupancy      WHERE market_id = p_market_id;
+  DELETE FROM public.zone_reviews              WHERE market_id = p_market_id;
+  DELETE FROM public.review_assignments        WHERE market_id = p_market_id;
+  DELETE FROM public.audit_rounds              WHERE market_id = p_market_id;
+  DELETE FROM public.occupancy_events          WHERE market_id = p_market_id;
+  DELETE FROM public.camera_zones              WHERE market_id = p_market_id;
+
   -- 4-faza snapshot domeni (0014_snapshot_domain). BLOK NVR BLOKIDAN
   -- OLDIN TURISHI SHART va bu O'LCHANGAN, taxmin emas: `capture_runs`
   -- `cameras` ga kompozit FK `(market_id, camera_id)` bilan tayanadi,
@@ -1272,6 +1300,31 @@ Ichki tartib `migrations/entities/__init__.py::SNAPSHOT_DELETE_ORDER` dan
 olingan; reyestr yagona manba bo'lib qoladi va uning o'zi
 `test_meta.py::test_snapshot_registries_are_self_consistent` bilan
 qulflangan.
+
+=============================================================================
+✅ 5-FAZA QARZI YOPILDI (W0-6, `0019_market_delete_occupancy`, 05-05/T3).
+
+`0018_occupancy_domain` OLTITA yangi tenant jadvalini olib keldi va
+yuqoridagi darvoza AYTGANIDEK QIZARDI — xato xabarida oltala nom ham turdi
+(`['audit_rounds', 'camera_zones', 'occupancy_events', 'review_assignments',
+'stall_slot_occupancy', 'zone_reviews']`). Kaskad `0019` da, AYNAN O'SHA
+REJANING oynasida kengaytirildi va darvoza qayta yashil bo'ldi. Mexanizm
+o'zi uchun mo'ljallangan ishni UCHINCHI marta bajardi.
+
+⚠ BLOK SNAPSHOT BLOKIDAN OLDIN — tartib statik darvoza bilan
+O'LCHANMAYDI: matnda oltala jadval bo'lsa-yu, blok snapshot blokidan
+KEYIN tursa `test_cascade_covers_every_table_referencing_markets` YASHIL
+qolardi, chaqiruv esa `ForeignKeyViolation` bilan yiqilardi
+(`occupancy_events` -> `snapshots`). Shuning uchun
+`test_draft_market_deletion_covers_the_occupancy_domain` funksiyani
+HAQIQATAN chaqiradi.
+
+⛔ `audit_log` KASKADGA QO'SHILMADI va bu 3-fazada O'LCHANGAN TUZOQ:
+`market_id` USTUNI bo'yicha izlaydigan so'rov 13 jadval topadi va
+`audit_log` ni «yetishmayotgan» deb ko'rsatardi, holbuki unda `markets`
+ga CHET EL KALITI YO'Q. «Tuzatish» yo'li dalil zanjirini butunlay
+o'chirib yuborardi — `test_audit_log_deliberately_survives_market_deletion`
+o'sha yo'lni teskari yo'nalishdan yopadi.
 
 =============================================================================
 WR-02 — IKKI QATLAM, IKKALASI HAM KERAK (03-03 da yopildi).
