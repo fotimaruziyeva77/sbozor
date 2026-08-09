@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, apiRequest } from "@/lib/api-client";
 import {
   cameraZoneListSchema,
   captureDaySchema,
@@ -252,6 +253,65 @@ export function useCameraFrame(
     isPending: today.isPending || (yesterday.fetchStatus !== "idle" && yesterday.isPending),
     isError: today.isError || yesterday.isError,
   };
+}
+
+/* --- Kadr baytlari ---------------------------------------------------------- */
+
+export const SNAPSHOTS_PATH = "/snapshots";
+
+/**
+ * Kadr rasmining kesh kaliti — `camera-zones` domenining bolasi.
+ *
+ * ⚠ `snapshot-dialog.tsx::snapshotImageKey` QAYTA ISHLATILMADI va bu
+ *   ongli tanlov: uni import qilish MA'LUMOT QATLAMINI KOMPONENTGA
+ *   bog'lardi (`lib/` -> `components/`), ya'ni bog'liqlik yo'nalishi
+ *   teskari bo'lardi. Narxi — bir xil baytlarni ikkala yuza ham ochiq
+ *   bo'lgan holatda ikki marta so'rash; u nazariy (dialog kadr olish
+ *   sahifasida, muharrir esa boshqa marshrutda) va `gcTime: 0` bilan
+ *   baribir keshda qolmaydi.
+ */
+export const frameImageKey = (marketId: string, snapshotId: string) =>
+  domainKey(marketId, "camera-zones", "frame-image", snapshotId);
+
+/**
+ * `GET /api/v1/snapshots/{id}/image` — SESSIYA TOKENI bilan, proxy orqali.
+ *
+ * ⚠ BRAUZERNING O'ZI SO'ROV YUBORA OLMAYDI: marshrut sessiya tokenini
+ *   talab qiladi va `<image>` elementi sarlavha qo'sha olmaydi. Shuning
+ *   uchun baytlar `apiRequest` bilan olinadi va brauzer ichidagi
+ *   vaqtinchalik havolaga aylantiriladi — u sahifadan tashqariga
+ *   chiqmaydi, ulashilmaydi va komponent yopilganda BEKOR QILINADI
+ *   (`snapshot-dialog.tsx:441-470` naqshi).
+ *
+ * ⚠ `gcTime: 0` — kadr TASHRIFCHILARNING shaxsiy ma'lumoti; uni keshda
+ *   ushlab turish uchun hech qanday sabab yo'q va uni ushlab turish
+ *   sessiya almashganda ham xotirada qoldirardi.
+ */
+export function useFrameImageHref(snapshotId: string | null): string | null {
+  const marketId = useMarketId();
+
+  const image = useQuery({
+    queryKey: frameImageKey(marketId ?? "", snapshotId ?? ""),
+    queryFn: async () => {
+      const response = await apiRequest(
+        `${SNAPSHOTS_PATH}/${snapshotId ?? ""}/image`,
+      );
+      return URL.createObjectURL(await response.blob());
+    },
+    enabled: marketId !== null && snapshotId !== null,
+    gcTime: 0,
+    retry: false,
+    staleTime: Infinity,
+  });
+
+  const href = image.data ?? null;
+
+  useEffect(() => {
+    if (href === null) return;
+    return () => URL.revokeObjectURL(href);
+  }, [href]);
+
+  return href;
 }
 
 /* --- Muharrir darvozasi (Z-1…Z-8) ------------------------------------------ */
