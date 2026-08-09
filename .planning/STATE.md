@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase 5 ijrosi TUGADI — qayta tekshiruv kutilmoqda
-stopped_at: Completed 05-15-PLAN.md
+stopped_at: Phase 05 verified (5/5) and closed
 last_updated: "2026-08-09T22:12:18.916Z"
-last_activity: "2026-08-10 -- 05-15 bajarildi (faza darvozasi: beshala mezon bitta buyruqda; dalil-kadr huquq bo'shligi YOPILDI; gate byudjeti 900 -> 1250 s)"
+last_activity: "2026-08-10 -- Faza 05 QAYTA TEKSHIRUVDAN 5/5 bilan o'tdi; W-1/W-2/W-3 sabotaj bilan yopildi"
 progress:
   total_phases: 9
   completed_phases: 5
