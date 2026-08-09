@@ -473,6 +473,26 @@ EVIDENCE_FRAME_ALLOWED = frozenset({Permission.CAMERA_VIEW, Permission.OCCUPANCY
   darvoza tomonidagi jufti).
 """
 
+SNAPSHOT_SURFACE_MODULE = "app.api.v1.snapshots"
+"""Dalil-kadr yuzasining MANBA MODULI — yopiqlik shu yerdan HOSILA qilinadi.
+
+⚠ MODUL BO'YICHA, PREFIKS BO'YICHA EMAS va bu ATAYIN. `snapshots.py`
+  bitta faylda UCH router saqlaydi va ularning yo'l prefikslari
+  BOSHQA-BOSHQA (`/capture-runs`, `/snapshots`, `/alerts`). Prefiks
+  ro'yxati yana QO'LDA YOZILGAN ro'yxat bo'lardi — ya'ni W-3 ni bir
+  qavat pastga ko'chirardi, yopmasdi. Modul nomi esa marshrutning
+  QAYERDA TUG'ILGANINI aytadi va u faylga qo'shilgan har qanday yangi
+  marshrutni AVTOMATIK qamrab oladi.
+"""
+
+SNAPSHOT_EVIDENCE_FRAME_ROUTES = ("/api/v1/snapshots/{snapshot_id}/image",)
+"""«Yo P yo Q» darvozasini KO'TARISHGA HAQLI marshrutlar — 05-15 qarori.
+
+Ro'yxat bitta elementdan iborat va u SHUNDAY QOLISHI kerak: 05-15
+kengaytmasi AYNAN dalil-kadr baytlari uchun edi. Ikkinchi element
+qo'shilishi — ongli qaror va u shu yerda ko'rinadi.
+"""
+
 SNAPSHOT_CAMERA_ONLY_ROUTES = (
     "/api/v1/capture-runs",
     "/api/v1/snapshots/{snapshot_id}",
@@ -489,7 +509,32 @@ CHEGARALANGANINI ushlab turadi: alias bo'shatilsa yoki «yo P yo Q»
 darvozasi qo'shniga ko'chirilsa, nazoratchi kun jurnalini, kadr
 metama'lumotini va alert oqimini ham olardi — ya'ni «faqat rasm» qarori
 jimgina «butun kuzatuv yuzasi» ga aylanardi.
+
+⚠ RO'YXATNING O'ZI YOPIQ EMAS EDI — 05-VERIFICATION W-3. U eskirishni
+  ushlardi (`route is None`), lekin `snapshots.py` ga YANGI marshrut
+  qo'shilib unga «yo P yo Q» berilsa, birorta test qizarmasdi: yangi
+  yo'l bu uchlikda yo'q, ya'ni sikl unga umuman yetib bormasdi. Yopiqlik
+  endi `test_the_snapshot_surface_is_a_closed_set` da va u
+  `BINARY_PERSONAL_ROUTES` ning naqshini AYNAN takrorlaydi.
 """
+
+
+def snapshot_surface_routes(app: FastAPI) -> dict[str, APIRoute]:
+    """`snapshots.py` da TUG'ILGAN barcha marshrutlar — metodidan qat'i nazar.
+
+    ⚠ `GET` FILTRI YO'Q va bu ATAYIN. Yuqoridagi `get_routes()` faqat
+      `GET` ni beradi, chunki D-09 O'QISH haqida. Bu yerdagi savol esa
+      boshqa: «bu faylga qo'shilgan marshrut huquq darvozasi bo'yicha
+      TASNIFLANGANMI?» — va `POST` ga berilgan «yo P yo Q» ham xuddi
+      shunday kengaytma bo'lardi. Filtr qo'yilsa, darvoza o'z nomidagi
+      va'dadan tor bo'lib qolardi.
+    """
+    return {
+        path: route
+        for path, route in _walk(app.routes, prefix="")
+        if isinstance(route, APIRoute)
+        and getattr(route.endpoint, "__module__", "") == SNAPSHOT_SURFACE_MODULE
+    }
 
 
 def test_binary_personal_routes_declare_read_audit_and_permission() -> None:
@@ -572,6 +617,93 @@ def test_the_evidence_frame_widening_stops_at_the_image_route() -> None:
             f"{required_any_permissions(route)} — 05-15 qarori AYNAN BITTA "
             "marshrut uchun edi"
         )
+
+
+def test_the_snapshot_surface_is_a_closed_set() -> None:
+    """`snapshots.py` ning HAR marshruti IKKI ro'yxatdan BIRIDA — YOPIQLIK.
+
+    =======================================================================
+    ⛔ 05-VERIFICATION W-3 — YUQORIDAGI TEST ESKIRISHNI USHLARDI, KENGAYISHNI
+       EMAS.
+
+    `test_the_evidence_frame_widening_stops_at_the_image_route`
+    `SNAPSHOT_CAMERA_ONLY_ROUTES` BO'YICHA aylanadi, ya'ni u faqat NOM
+    BILAN yozilgan uchta marshrutga qaraydi. `snapshots.py` ga to'rtinchi
+    qo'shni qo'shib unga `require_any_permission(...)` berilsa, yangi yo'l
+    bu uchlikda YO'Q — sikl unga umuman yetib bormaydi va butun fayl
+    yashil qoladi. «Kengaytma aynan bitta marshrutda» degan kafolat esa
+    o'sha payt allaqachon buzilgan bo'lardi.
+
+    Yopiqlik `BINARY_PERSONAL_ROUTES` naqshi bo'yicha: to'plam MARSHRUT
+    GRAFIDAN hosila qilinadi (`__module__`), tasnif esa qo'lda — va
+    ikkalasining AYIRMASI ikkala yo'nalishda ham tekshiriladi. Yangi
+    marshrut qo'shgan odam tanlov qilishga MAJBUR; «hech nima qilmaslik»
+    CI'ni qizartiradi.
+    =======================================================================
+    """
+    found = set(snapshot_surface_routes(fastapi_app))
+    classified = set(SNAPSHOT_CAMERA_ONLY_ROUTES) | set(SNAPSHOT_EVIDENCE_FRAME_ROUTES)
+
+    assert found, (
+        f"`{SNAPSHOT_SURFACE_MODULE}` dan birorta marshrut topilmadi — modul "
+        "ko'chirilgan yoki qayta nomlangan bo'lsa, bu darvoza BO'SH to'plam "
+        "ustida jimgina yashil bo'lardi (`SNAPSHOT_SURFACE_MODULE` ni yangilang)"
+    )
+
+    unclassified = sorted(found - classified)
+    assert not unclassified, (
+        "`snapshots.py` ga tasniflanmagan marshrut(lar) qo'shildi:\n  "
+        + "\n  ".join(unclassified)
+        + "\n\nHuquq darvozasi qanday? Qat'iy `CAMERA_VIEW` -> "
+        "`SNAPSHOT_CAMERA_ONLY_ROUTES`. «Yo P yo Q» -> "
+        "`SNAPSHOT_EVIDENCE_FRAME_ROUTES` — ⛔ LEKIN 05-15 qarori AYNAN BITTA "
+        "marshrut (dalil-kadr baytlari) uchun edi, ya'ni ikkinchi element "
+        "qo'shish ONGLI qaror va u nazoratchiga kuzatuv yuzasini kengaytiradi."
+    )
+
+    stale = sorted(classified - found)
+    assert not stale, (
+        f"tasnif ro'yxatlarida MAVJUD BO'LMAGAN marshrutlar qoldi: {stale} — "
+        "ro'yxat eskirgan va u endi hech nimani qo'riqlamaydi"
+    )
+
+    overlap = sorted(set(SNAPSHOT_CAMERA_ONLY_ROUTES) & set(SNAPSHOT_EVIDENCE_FRAME_ROUTES))
+    assert not overlap, f"marshrut IKKALA ro'yxatda ham: {overlap}"
+
+
+def test_the_any_permission_gate_exists_nowhere_else_in_the_app() -> None:
+    """«Yo P yo Q» darvozasi BUTUN ilovada faqat e'lon qilingan marshrut(lar)da.
+
+    =======================================================================
+    ⛔ BU YUQORIDAGI YOPIQLIKNING TASHQI HALQASI.
+
+    `test_the_snapshot_surface_is_a_closed_set` `snapshots.py` ni
+    qo'riqlaydi. Lekin «yo P yo Q» darvozasi BOSHQA faylda tug'ilsa —
+    masalan kimdir `occupancy.py` ga `require_any_permission(CAMERA_VIEW,
+    OCCUPANCY_REVIEW)` yozsa — modul filtri unga yetib bormaydi.
+
+    05-VERIFICATION §1 buni `grep` bilan tasdiqlagan edi. `grep` —
+    o'lchov, darvoza emas: u tekshirilgan kunda rost gapiradi va ertasiga
+    hech nimani ushlab turmaydi. Bu test o'sha grep ni MARSHRUT GRAFI
+    ustidagi yopiq to'plamga aylantiradi.
+    =======================================================================
+    """
+    gated = sorted(
+        path
+        for path, route in _walk(fastapi_app.routes, prefix="")
+        if isinstance(route, APIRoute) and required_any_permissions(route)
+    )
+
+    assert gated == sorted(SNAPSHOT_EVIDENCE_FRAME_ROUTES), (
+        "«kamida bittasi» darvozasini ko'targan marshrutlar to'plami "
+        f"o'zgardi.\n  Topildi:   {gated}\n  E'lon qilingan: "
+        f"{sorted(SNAPSHOT_EVIDENCE_FRAME_ROUTES)}\n\n"
+        "Yangi «yo P yo Q» darvozasi qo'shilgan bo'lsa — u huquq talabini "
+        "BO'SHASHTIRADI (P siz ham o'tish mumkin) va shuning uchun u "
+        "`SNAPSHOT_EVIDENCE_FRAME_ROUTES` da NOM BILAN e'lon qilinishi kerak. "
+        "Darvoza olib tashlangan bo'lsa — dalil-kadr endi nazoratchiga "
+        "yopiq, ya'ni 05-15 ning butun mazmuni yo'qolgan."
+    )
 
 
 # ---------------------------------------------------------------------------
