@@ -413,6 +413,36 @@ async def test_no_coverage_is_not_counted_as_empty(
     ), "to'rt bo'lak yig'indisi rasta soniga teng emas — biri ikkinchisiga qo'shilib ketgan"
 
 
+async def test_the_grid_covers_every_captured_slot(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    env: Env,
+) -> None:
+    """⛔ MATERIALIZATSIYA `snapshots` NING BARCHA SLOTLARINI qamraydi.
+
+    ⚠ DA'VO ALOHIDA TEST SIFATIDA YOZILGAN VA BU O'LCHANGAN ZARURIYAT:
+      slotlar `occupancy_events` dan olinganda (sabotaj D) qamrov to'ri
+      jimgina QISQARADI — birorta hisoblagich nolga tushmaydi, faqat
+      kunning bir qismi hisobotdan G'OYIB bo'ladi. Boshqa testlar buni
+      `KeyError` bilan ko'rsatardi, ya'ni SABAB emas, OQIBAT ko'rinardi.
+
+    Farq mahsulotda ham aynan shunday: kamera qorong'i bo'lgan slotda
+    hodisa YOZILMAYDI (05-08), ya'ni «hech kim ko'rmagan» slot
+    o'lchovdan chiqib ketardi va `no_coverage` nol bo'lib turardi.
+    """
+    clear_slots(sync_owner_conn, env.market_a)
+    captured = snapshot_slot_times(sync_owner_conn, env.market_a)
+
+    await close(app_sessionmaker)
+
+    materialized = {slot for _, slot in slot_rows(sync_owner_conn, env.market_a)}
+
+    assert materialized == captured, (
+        f"qamrov to'ri {sorted(captured - materialized)} slotini o'tkazib yubordi "
+        "— kadr olingan slot HAR DOIM materializatsiyaga tushishi shart"
+    )
+
+
 async def test_a_slot_with_no_frames_is_absent_rather_than_empty(
     sync_owner_conn: Connection[TupleRow],
     app_sessionmaker: async_sessionmaker[AsyncSession],
