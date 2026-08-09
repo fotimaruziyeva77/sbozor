@@ -187,6 +187,33 @@ describe("planRowSplit", () => {
     expect(plan).toEqual({ ok: false, reason: "vertex-mismatch" });
   });
 
+  test("⛔ IKKINCHI QATLAM: poligon soni kam qaytsa ham HECH NIMA qo'shilmaydi", () => {
+    /*
+     * ⚠ BU TEST SABOTAJDAN TUG'ILDI. Birinchi yozuvda `count-mismatch`
+     *   tarmog'ini butunlay o'chirish HECH BIR TESTNI qizartirmadi:
+     *   bugungi `interpolateRow` kontrakti ostida u YETIB BO'LMAYDIGAN
+     *   holat edi (tepa soni teng bo'lmasa u yuqorida ushlanadi, aks
+     *   holda AYNAN `n` ta poligon qaytadi).
+     *
+     *   Ya'ni «ikkinchi qatlam» degan da'vo o'lchanmagan bo'lardi —
+     *   05-06 ning S4 sabotaji fosh qilgan sinfning aynan o'zi. Endi
+     *   interpolyator injeksiya qilinadi va himoya HAQIQATAN sinaladi.
+     */
+    const short = (first: Poly, last: Poly, n: number): readonly Poly[] =>
+      Array.from({ length: Math.max(0, n - 1) }, () => first);
+
+    expect(
+      planRowSplit(
+        {
+          firstPolygon: SQUARE,
+          lastPolygon: FAR_SQUARE,
+          targets: targetsOf(["14-B", "14-C", "14-D"]),
+        },
+        short,
+      ),
+    ).toEqual({ ok: false, reason: "count-mismatch" });
+  });
+
   test("oraliq bo'sh bo'lsa AYRIM sabab qaytadi", () => {
     /*
      * «Oraliq yo'q» — XATO EMAS, u qatorning uchlari yonma-yon degani.

@@ -111,19 +111,43 @@ export function rowTargets(input: {
  * Ikkalasi bir xil xabar bersa, admin nima qilishni bilmasdi: birinchisi
  * TEPALARNI tenglashtirishni, ikkinchisi esa umuman boshqa tekshiruvni
  * talab qiladi.
+ *
+ * =========================================================================
+ * ⚠⚠ NEGA GEOMETRIYA FUNKSIYASI ARGUMENT — VA BU SABOTAJ BILAN O'LCHANDI.
+ *
+ *   Birinchi yozuvda `interpolateRow` to'g'ridan-to'g'ri chaqirilardi va
+ *   `count-mismatch` tarmog'i BUGUNGI kontrakt ostida YETIB BO'LMAYDIGAN
+ *   bo'lib qolgan edi: `interpolateRow` tepa soni teng bo'lmaganda `[]`
+ *   qaytaradi, lekin u holat YUQORIDA allaqachon ushlanadi, qolgan
+ *   hollarda esa u AYNAN `n` ta poligon qaytaradi.
+ *
+ *   O'lchov: o'sha tarmoqni butunlay o'chirib tashlash HECH BIR TESTNI
+ *   qizartirmadi. Ya'ni «ikkinchi qatlam» degan da'vo o'lchanmagan
+ *   bo'lardi — 05-06 ning S4 sabotaji fosh qilgan sinfning aynan o'zi.
+ *
+ *   Shuning uchun interpolyator INJEKSIYA qilinadi: standart qiymat
+ *   ishlab chiqarishda ishlatiladi, test esa ATAYIN kam poligon
+ *   qaytaradigan funksiya berib, himoyaning HAQIQATAN ishlashini
+ *   o'lchaydi. Bu — kelajakda `zone-geometry.ts` o'zgarsa, DL-2 jimgina
+ *   noto'g'ri sonda zona qo'shmasligining kafolati.
+ * =========================================================================
  */
-export function planRowSplit(input: {
-  firstPolygon: Poly;
-  lastPolygon: Poly;
-  targets: readonly RowTarget[];
-}): RowSplitPlan {
+export function planRowSplit(
+  input: {
+    firstPolygon: Poly;
+    lastPolygon: Poly;
+    targets: readonly RowTarget[];
+  },
+  interpolate: (first: Poly, last: Poly, n: number) => readonly Poly[] =
+    interpolateRow,
+): RowSplitPlan {
   if (input.targets.length === 0) return { ok: false, reason: "no-targets" };
 
   if (input.firstPolygon.length !== input.lastPolygon.length) {
     return { ok: false, reason: "vertex-mismatch" };
   }
 
-  const polygons = interpolateRow(
+  const polygons = interpolate(
     input.firstPolygon,
     input.lastPolygon,
     input.targets.length,
