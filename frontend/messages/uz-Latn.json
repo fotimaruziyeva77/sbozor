@@ -1055,6 +1055,20 @@
     "unanswered": "Javobsiz",
     "unclearCount": "Aniq ayta olmadi",
     "fastDecisions": "Tez qaror",
-    "fastDecisionsWhy": "Juda tez berilgan javoblar. Ular bloklanmaydi — faqat shu hisobotda ko'rinadi."
+    "fastDecisionsWhy": "Juda tez berilgan javoblar. Ular bloklanmaydi — faqat shu hisobotda ko'rinadi.",
+    "stallsTitle": "Rastalar",
+    "showNoCoverage": "Faqat qamrovsizlarni ko'rsatish",
+    "clearFilter": "Filtrni tozalash",
+    "emptyNoCoverage": "Qamrovsiz rasta yo'q",
+    "emptyNoCoverageHint": "Bu kunda har bir rastani kamida bitta kamera ko'rgan.",
+    "slotsLine": "{total} vaqtdan {occupied} tasida band",
+    "resolutionSource": "Manba",
+    "sourceSystem": "Tizim",
+    "sourceHuman": "Nazoratchi",
+    "sourceNotReviewed": "Ko'rilmadi",
+    "detailTitle": "Rasta {code}",
+    "detailZone": "Bozor zonasi",
+    "detailStatus": "Kun holati",
+    "detailSlots": "Kadr olingan vaqtlar"
   }
 }

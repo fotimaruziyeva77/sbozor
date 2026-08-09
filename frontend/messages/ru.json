@@ -1055,6 +1055,20 @@
     "unanswered": "Без ответа",
     "unclearCount": "Не смог сказать точно",
     "fastDecisions": "Быстрых решений",
-    "fastDecisionsWhy": "Ответы, данные очень быстро. Они ничего не блокируют — видны только в этом отчёте."
+    "fastDecisionsWhy": "Ответы, данные очень быстро. Они ничего не блокируют — видны только в этом отчёте.",
+    "stallsTitle": "Места",
+    "showNoCoverage": "Показать только вне обзора",
+    "clearFilter": "Сбросить фильтр",
+    "emptyNoCoverage": "Мест вне обзора нет",
+    "emptyNoCoverageHint": "В этот день каждое место видела хотя бы одна камера.",
+    "slotsLine": "занято в {occupied} из {total}",
+    "resolutionSource": "Источник",
+    "sourceSystem": "Система",
+    "sourceHuman": "Контролёр",
+    "sourceNotReviewed": "Не проверено",
+    "detailTitle": "Место {code}",
+    "detailZone": "Зона рынка",
+    "detailStatus": "Состояние за день",
+    "detailSlots": "Время съёмки кадров"
   }
 }

@@ -1055,6 +1055,20 @@
     "unanswered": "Жавобсиз",
     "unclearCount": "Аниқ айта олмади",
     "fastDecisions": "Тез қарор",
-    "fastDecisionsWhy": "Жуда тез берилган жавоблар. Улар блокланмайди — фақат шу ҳисоботда кўринади."
+    "fastDecisionsWhy": "Жуда тез берилган жавоблар. Улар блокланмайди — фақат шу ҳисоботда кўринади.",
+    "stallsTitle": "Расталар",
+    "showNoCoverage": "Фақат қамровсизларни кўрсатиш",
+    "clearFilter": "Фильтрни тозалаш",
+    "emptyNoCoverage": "Қамровсиз раста йўқ",
+    "emptyNoCoverageHint": "Бу кунда ҳар бир растани камида битта камера кўрган.",
+    "slotsLine": "{total} вақтдан {occupied} тасида банд",
+    "resolutionSource": "Манба",
+    "sourceSystem": "Тизим",
+    "sourceHuman": "Назоратчи",
+    "sourceNotReviewed": "Кўрилмади",
+    "detailTitle": "Раста {code}",
+    "detailZone": "Бозор зонаси",
+    "detailStatus": "Кун ҳолати",
+    "detailSlots": "Кадр олинган вақтлар"
   }
 }

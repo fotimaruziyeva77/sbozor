@@ -1,16 +1,22 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { ConfusionMatrix } from "@/components/occupancy/confusion-matrix";
 import { DayBreakdown } from "@/components/occupancy/day-breakdown";
 import { RoundSummary } from "@/components/occupancy/round-summary";
+import {
+  StallDayList,
+  useNoCoverageOnly,
+} from "@/components/occupancy/stall-day-list";
+import { StallDetailDialog } from "@/components/occupancy/stall-detail-dialog";
 import { DayPicker, useDaySelection } from "@/components/snapshots/day-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { OccupancyStallItem } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import {
   useAccuracyReport,
@@ -130,6 +136,15 @@ function OccupancyWorkspace() {
   const occupancy = useOccupancyDay(day, todayIso);
   const accuracy = useAccuracyReport();
   const round = useAuditRound(day, todayIso);
+  const [noCoverageOnly, setNoCoverageOnly] = useNoCoverageOnly();
+
+  /*
+   * ⚠ DL-5 HOLATI URL'DA EMAS (`snapshots/page.tsx:244-249` naqshi):
+   *   URL'da faqat `?day=` va `?nocov=` yashaydi. Rasta tafsilotini
+   *   ulashiladigan havolaga aylantirish uni sahifa holatidan marshrutga
+   *   ko'chirardi va «orqaga» tugmasi dialogni qayta ochardi.
+   */
+  const [openStall, setOpenStall] = useState<OccupancyStallItem | null>(null);
 
   return (
     <div className="flex flex-col gap-6">
@@ -282,6 +297,34 @@ function OccupancyWorkspace() {
           <RoundSummary round={round.data} />
         )}
       </section>
+
+      {/* --- ZONA (D): rastalar ro'yxati ---------------------------------- */}
+      {/*
+       * ⚠ RO'YXAT XULOSA BILAN AYNI SO'ROVDAN keladi va u kun
+       *   almashtirilganda `aria-busy` oladi, MAZMUNI esa joyida qoladi
+       *   (§8.4 O-2). `stalls === 0` bo'lgan kunda ro'yxat umuman
+       *   chizilmaydi — E-6 allaqachon sababni aytgan.
+       */}
+      {occupancy.data !== undefined && occupancy.data.stalls > 0 ? (
+        <section
+          aria-busy={occupancy.isFetching}
+          aria-label={t("occupancy.stallsTitle")}
+        >
+          <StallDayList
+            items={occupancy.data.items}
+            noCoverageOnly={noCoverageOnly}
+            onNoCoverageOnlyChange={setNoCoverageOnly}
+            onOpen={setOpenStall}
+          />
+        </section>
+      ) : null}
+
+      <StallDetailDialog
+        item={openStall}
+        onOpenChange={(open) => {
+          if (!open) setOpenStall(null);
+        }}
+      />
     </div>
   );
 }
