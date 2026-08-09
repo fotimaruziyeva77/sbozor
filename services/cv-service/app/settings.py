@@ -40,7 +40,15 @@ MAX_INTRA_OP_THREADS = 16
 
 Yuqori chegara Contabo VPS ning vCPU soniga (4–6) nisbatan KENG qo'yilgan:
 u «xato yozilgan qiymat» ni (masalan `0` yoki `256`) ushlash uchun, optimal
-qiymatni majburlash uchun EMAS. Optimal qiymat 05-07 da o'lchanadi.
+qiymatni majburlash uchun EMAS.
+
+⚠ OPTIMAL QIYMAT 05-07 DA O'LCHANMADI — VA BU ONGLI QAROR (D-08).
+  RESEARCH §B.3 arifmetikasi savolni ahamiyatsiz qildi: 175 kadr/kun/bozor
+  da eng og'ir ssenariy ham ~47 daqiqa CPU/kun, ya'ni kechikish bu
+  fazaning chegarasi EMAS va §B.3 «reja EPYC'da benchmarkni DARVOZA qilib
+  qo'ymasin» deb ochiq yozgan. Qiymat ≈ vCPU soni bo'lib qoladi va
+  operatsion tarzda sozlanadi; o'lchov (`test_inference_budget.py`)
+  foydali, lekin u fazani bloklamaydi.
 """
 
 
