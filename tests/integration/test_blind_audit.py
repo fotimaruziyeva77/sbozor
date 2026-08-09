@@ -46,9 +46,11 @@ import inspect
 import re
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+import psycopg
 import pytest
 from app.jobs import audit_draw as draw_module
 from app.jobs.audit_draw import (
@@ -527,6 +529,19 @@ async def test_a_different_round_number_draws_a_different_sample(
     tur raqami bilan hisoblangan namuna bazadagisidan FARQ QILISHI
     tekshiriladi — ya'ni urug' natijaga KIRADI.
     =======================================================================
+
+    ⚠⚠ BU TESTNING O'Z CHEGARASI 05-11 SABOTAJ B BILAN O'LCHANDI VA U
+       YOZIB QO'YILDI: `ORDER BY` dan urug' olib tashlanganda bu test
+       YASHIL QOLDI. Sabab mantiqiy — urug'siz tartib UCHINCHI to'plamni
+       beradi, ya'ni u 1- va 2-tur to'plamlarining IKKALASIDAN ham farq
+       qiladi va `!=` sharti bajarilaveradi.
+
+       Demak `!=` YOLG'IZ hech nimani qo'riqlamaydi. U FAQAT
+       `test_sample_is_reproducible` (baza = 1-tur) bilan JUFTLIKDA
+       ma'noga ega. Shuning uchun bu yerga UCHINCHI, mustaqil assert
+       qo'shildi: urug'ning O'ZI formulaning natijasini o'zgartiradimi —
+       bu shart bazadan MUTLAQO mustaqil va u urug' butunlay e'tiborsiz
+       qoldirilgan formulani ham ushlaydi.
     """
     clear_review_state(sync_owner_conn, env.market_a)
     grow_frame(sync_owner_conn, env, total=FRAME_TARGET)
@@ -548,8 +563,18 @@ async def test_a_different_round_number_draws_a_different_sample(
         )
     )
 
+    seedless = set(expected_sample(frame, "", SAMPLE_SIZE))
+    first_round = set(
+        expected_sample(
+            frame, derived_seed(env.market_a, SEED_BUSINESS_DATE, FIRST_ROUND_NO), SAMPLE_SIZE
+        )
+    )
+
     assert written != other_round, "tur raqami namunani o'zgartirmadi — urug' `ORDER BY` da emas"
     assert written != other_day, "kun namunani o'zgartirmadi — urug' `ORDER BY` da emas"
+    # ⚠ BAZADAN MUSTAQIL SHART: urug' FORMULAGA ta'sir qiladimi.
+    assert first_round != seedless, "urug' tartibga umuman ta'sir qilmayapti"
+    assert first_round != other_round, "ikki tur bir xil namuna beradi"
 
 
 async def test_the_sample_query_orders_by_the_derived_seed() -> None:
@@ -1176,7 +1201,7 @@ def test_no_get_route_returns_the_reveal() -> None:
     assert not leaking, f"oshkor ma'lumot `GET` javobida qaytmoqda: {sorted(set(leaking))}"
 
 
-async def test_the_second_answer_is_locked_not_a_race(
+async def test_answer_is_locked_after_reveal(
     api_client: httpx.AsyncClient,
     app_sessionmaker: async_sessionmaker[AsyncSession],
     sync_owner_conn: Connection[TupleRow],
@@ -1395,3 +1420,329 @@ async def test_the_director_cannot_reach_the_blind_queue(
 
     assert denied.status_code == 403, denied.text
     assert allowed.status_code == 200, allowed.text
+
+
+# ===========================================================================
+# 7. DB QATLAMI — UCH KAFOLAT VA ULARNI ILOVA EMAS, BAZA USHLAYDI
+# ===========================================================================
+
+
+def _fresh_event(conn: Connection[TupleRow], env: Env, *, version: int) -> UUID:
+    """Birorta navbatga BOG'LANMAGAN yangi hodisa."""
+    return add_candidate(
+        conn, env, stall_id=env.stall_a, center=(0.80, 0.80), version=version
+    ).event_id
+
+
+def test_event_cannot_be_in_two_queues(
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+) -> None:
+    """⛔ 4-INVARIANT — BITTA HODISA IKKI NAVBATDA BO'LA OLMAYDI (DB RAD ETADI).
+
+    =======================================================================
+    KAFOLAT ILOVADA EMAS, `uq_review_assignments_occupancy_event_id` DA.
+
+    Ilova qatlamidagi «avval tekshir, keyin yoz» ikki parallel jobga bir
+    xil bo'sh holatni ko'rsatardi va bitta hodisa uchun IKKITA yozuv
+    tug'ilardi — o'shanda nazoratchi bir zonani ikki marta ko'rardi va
+    uning ikkinchi javobi aniqlik hisobotiga IKKINCHI marta kirardi
+    (05-RESEARCH §C.8, 3-dushman).
+    =======================================================================
+
+    ⚠ NAZORAT JUFTI MAJBURIY: bog'lanmagan hodisa AYNAN o'sha `INSERT`
+      bilan bemalol o'tadi. Usiz «`INSERT` umuman ishlamayapti» holati
+      ham yashil bo'lardi.
+    """
+    already_queued = env.occupancy.market_a.uncertain_event_id
+    assert already_queued is not None, "nazorat: seed'da noaniq navbat yozuvi yo'q"
+    round_id = env.occupancy.market_a.audit_round_id
+
+    with pytest.raises(psycopg.errors.UniqueViolation) as error:
+        _add_blind_assignment(sync_owner_conn, env, round_id, already_queued)
+    assert "uq_review_assignments_occupancy_event_id" in str(error.value)
+
+    free_event = _fresh_event(sync_owner_conn, env, version=71)
+    assert _add_blind_assignment(sync_owner_conn, env, round_id, free_event) is not None
+
+
+def test_blind_implies_not_shown(
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+) -> None:
+    """⛔ 5-INVARIANT — «KO'R, LEKIN KO'RSATILGAN» QATOR MAVJUD BO'LA OLMAYDI.
+
+    To'g'ridan-to'g'ri `INSERT` (ilovani butunlay chetlab o'tib) `CHECK
+    (blind_audit_not_shown)` bilan rad etiladi.
+
+    ⚠⚠ BU YERDA `queue_kind` HALOL NUSXA BILAN YOZILADI VA BU MUHIM:
+       05-05 sabotaj D o'lchagan edi — nusxani `'uncertain'` deb YOLG'ON
+       yozish `CHECK` ni chetlab o'tardi. O'sha teshikni
+       `fk_zone_reviews_queue_kind_anchor` yopdi va uni AYNAN o'sha
+       rejaning `test_lying_queue_kind_copy_is_rejected` i qo'riqlaydi.
+       Bu test esa HALOL nusxadagi kafolatni o'lchaydi — ikkisi ikki xil
+       yarimni ushlaydi va ikkalasi ham kerak.
+
+    ⚠ NAZORAT: `shown_ai_verdict = false` bilan AYNAN o'sha `INSERT`
+      o'tadi.
+    """
+    round_id = env.occupancy.market_a.audit_round_id
+    reviewer = env.base.market_a.admin_user_id
+
+    lying_event = _fresh_event(sync_owner_conn, env, version=72)
+    lying_assignment = _add_blind_assignment(sync_owner_conn, env, round_id, lying_event)
+    with pytest.raises(psycopg.errors.CheckViolation) as error:
+        _write_review(sync_owner_conn, env, lying_assignment, reviewer, shown=True)
+    assert "blind_audit_not_shown" in str(error.value)
+
+    honest_event = _fresh_event(sync_owner_conn, env, version=73)
+    honest_assignment = _add_blind_assignment(sync_owner_conn, env, round_id, honest_event)
+    _write_review(sync_owner_conn, env, honest_assignment, reviewer, shown=False)
+
+
+def _write_review(
+    conn: Connection[TupleRow],
+    env: Env,
+    assignment_id: UUID,
+    reviewer_id: UUID,
+    *,
+    shown: bool,
+) -> None:
+    """`zone_reviews` ga TO'G'RIDAN-TO'G'RI yozadi — ilovani chetlab o'tib."""
+    conn.execute(
+        "INSERT INTO zone_reviews "
+        "(market_id, review_assignment_id, queue_kind, shown_ai_verdict, "
+        " human_verdict, reviewer_id) "
+        "VALUES (%s, %s, %s, %s, %s, %s)",
+        (
+            str(env.market_a),
+            str(assignment_id),
+            ReviewQueueKind.BLIND_AUDIT.value,
+            shown,
+            OccupancyVerdict.OCCUPIED.value,
+            str(reviewer_id),
+        ),
+    )
+
+
+def test_review_is_immutable(
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+) -> None:
+    """⛔ 6-INVARIANT — `UPDATE` VA `DELETE` IKKALASI HAM RAD ETILADI.
+
+    =======================================================================
+    NEGA IKKALASI HAM O'LCHANADI.
+
+    Faqat `UPDATE` ni tekshiradigan test qo'riqchi `BEFORE UPDATE` ga
+    toraytirilgan holatda YASHIL qolardi — va o'shanda javobni O'CHIRIB
+    QAYTA YOZISH yo'li ochiq bo'lardi, ya'ni «o'zgarmas» kafolati bitta
+    qo'shimcha qadam bilan chetlab o'tilardi.
+
+    ⚠ QO'RIQCHI EGAGA QARSHI HAM ISHLAYDI: bu yerdagi ulanish
+      `sbozor_owner`, ya'ni RLS uni to'smaydi va rad etish AYNAN
+      triggerdan keladi.
+    =======================================================================
+    """
+    review_id = env.occupancy.market_a.blind_review_id
+
+    with pytest.raises(psycopg.errors.RaiseException):
+        sync_owner_conn.execute(
+            "UPDATE zone_reviews SET human_verdict = %s WHERE id = %s",
+            (OccupancyVerdict.EMPTY.value, str(review_id)),
+        )
+
+    with pytest.raises(psycopg.errors.RaiseException):
+        sync_owner_conn.execute("DELETE FROM zone_reviews WHERE id = %s", (str(review_id),))
+
+    still_there = sync_owner_conn.execute(
+        "SELECT human_verdict FROM zone_reviews WHERE id = %s", (str(review_id),)
+    ).fetchone()
+    assert still_there is not None, "nazorat: qator umuman yo'q — test hech nimani o'lchamadi"
+    assert str(still_there[0]) == OccupancyVerdict.OCCUPIED.value
+
+
+# ===========================================================================
+# 8. QAYTA TORTISH YO'LINING YO'QLIGI (D-17.1)
+# ===========================================================================
+
+
+DRAW_SYMBOLS = ("audit_draw", "daily_queue_tick", "audit_rounds")
+"""Namunani tortadigan (yoki turni yozadigan) belgilar.
+
+⚠ MARSHRUT NOMLARI RO'YXATI YOZILMAYDI (§S-10, 04-12 ning darsi):
+  `POST /review/redraw` deb emas, `POST /review/rounds` deb nomlangan
+  endpoint nomlar ro'yxatidan bemalol o'tardi. Belgilar esa TORTISHNING
+  O'ZINI nomlaydi.
+"""
+
+
+def _all_endpoints() -> list[tuple[str, Any]]:
+    """ILOVANING butun marshrut jadvali — ichma-ich routerlar bo'ylab.
+
+    ⚠ `fastapi_app.routes` YASSI EMAS: `include_router()` ilova qilingan
+      routerni `original_router` sifatida saqlaydi va yuqori darajada
+      atigi 6 ta yozuv ko'rinadi (o'lchandi). Yassi ro'yxatga tayanish
+      darvozani 6 marshrutda yugurtirib, qolgan 60 dan ortig'ini
+      KO'RMASDAN qoldirardi — `test_uncertain_queue.py::
+      _review_surface_paths()` ayni shu sababdan yozilgan.
+    """
+    found: list[tuple[str, Any]] = []
+
+    def _walk(routes: Any, prefix: str) -> None:
+        for route in routes:
+            included = getattr(route, "original_router", None)
+            if included is not None:
+                context = getattr(route, "include_context", None)
+                _walk(included.routes, prefix + str(getattr(context, "prefix", "") or ""))
+                continue
+            endpoint = getattr(route, "endpoint", None)
+            path = getattr(route, "path", None)
+            if endpoint is not None and path is not None:
+                found.append((prefix + path, endpoint))
+
+    _walk(fastapi_app.routes, "")
+    return found
+
+
+def test_no_redraw_endpoint() -> None:
+    """⛔ NAMUNANI QAYTA TORTADIGAN HTTP YO'LI YO'Q — IKKI MUSTAQIL PREDIKAT.
+
+    =======================================================================
+      (1) HANDLER: ilovaning marshrut jadvalidan HOSILA — birorta
+          endpoint funksiyasining manbasida tortish belgilari uchramaydi.
+      (2) IMPORT GRAFI: `app/api/**` ning birorta fayli tortish modulini
+          import qilmaydi. Bu (1) ni yordamchi funksiyaga ko'chirib
+          yashirish yo'lini yopadi.
+
+    ⛔ NEGA D-17.1: tugma (yoki endpoint) bo'lsa, «bu turda xato ko'p
+       chiqdi, qaytadan tortaman» degan yo'l ochilardi va u aniqlikni
+       YUQORIGA siljitardi — hisobot o'zi o'lchayotgan narsani
+       o'zgartirardi (05-RESEARCH §C.8.1).
+    =======================================================================
+    """
+    scanned = 0
+    handler_offenders: list[str] = []
+    for path, endpoint in _all_endpoints():
+        try:
+            body = inspect.getsource(endpoint)
+        except (OSError, TypeError):  # pragma: no cover - o'rnatilgan qobiqlar
+            continue
+        scanned += 1
+        if any(symbol in body for symbol in DRAW_SYMBOLS):
+            handler_offenders.append(f"{path} -> {endpoint.__name__}")
+
+    # ⚠ KATALOG MAHSULOT MODULIDAN HOSILA, qadalgan yo'l EMAS: repo
+    #   ko'chirilganda yoki paket qayta nomlanganda skan JIMGINA bo'sh
+    #   to'plamda yugurmasin (`assert list(...)` quyi chegarasi bilan
+    #   birga ikki qatlam beradi).
+    api_dir = Path(draw_module.__file__).resolve().parent.parent / "api"
+    import_offenders = [
+        str(path.relative_to(api_dir))
+        for path in sorted(api_dir.rglob("*.py"))
+        if any(symbol in path.read_text(encoding="utf-8") for symbol in DRAW_SYMBOLS[:2])
+    ]
+
+    assert scanned >= 40, f"faqat {scanned} ta marshrut skanerlandi — jadval o'qilmadi"
+    assert list(api_dir.rglob("*.py")), "nazorat: `app/api` bo'sh — import skani yugurmadi"
+    assert not handler_offenders, f"marshrut namunani tortmoqda (D-17.1): {handler_offenders}"
+    assert not import_offenders, f"`app/api` tortish modulini import qilmoqda: {import_offenders}"
+
+
+# ===========================================================================
+# 9. D-16 — TAKRORIY BAND: O'LCHANGAN ZIDDIYAT
+# ===========================================================================
+
+
+async def test_repeat_items_are_indistinguishable_in_payload(
+    api_client: httpx.AsyncClient,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """⛔ TORTISH PAYTIDAGI BIRORTA BELGI PAYLOADGA YETIB BORMAYDI.
+
+    =======================================================================
+    DA'VO TORAYTIRILDI — VA SHU BILAN KUCHAYDI.
+
+    Reja «takroriy band oddiy banddan payloadda farq qilmaydi» deydi.
+    Takroriy bandning O'ZI bugungi sxemada MAVJUD BO'LA OLMAYDI
+    (`test_a_repeat_band_is_structurally_impossible_today`), ya'ni uni
+    to'g'ridan-to'g'ri o'lchaydigan holat yozib bo'lmaydi.
+
+    O'lchanadigan — va KUCHLIROQ — shakl: payload tortish paytida
+    qo'yilgan HAR QANDAY belgidan mustaqil. Bugun ikki xil belgi bor
+    (`purpose` = `eval` va `train`) va ular AYNI kalit to'plamini beradi;
+    kelajakda takror belgisi qo'shilsa u ham AYNI holatga tushadi, chunki
+    payloadning kalit to'plami `BlindItemResponse` bilan YOPIQ.
+    =======================================================================
+
+    ⚠ NAZORAT: namunada IKKALA `purpose` ham HAQIQATAN mavjud — aks
+      holda «ikki sinf farq qilmaydi» da'vosi bitta sinf ustida
+      o'lchanardi.
+    """
+    clear_review_state(sync_owner_conn, env.market_a)
+    grow_frame(sync_owner_conn, env, total=FRAME_TARGET)
+    await draw(app_sessionmaker, sample_size=10)
+
+    purposes = set(blind_assignments(sync_owner_conn, env.market_a).values())
+    assert purposes == {ReviewPurpose.EVAL.value, ReviewPurpose.TRAIN.value}, (
+        f"nazorat: namunada ikkala `purpose` ham yo'q: {sorted(purposes)}"
+    )
+
+    shapes: list[frozenset[str]] = []
+    for _ in range(4):
+        item = (await api_client.get(BLIND_NEXT_URL, headers=inspector_headers)).json()
+        shapes.append(frozenset(all_keys(item)))
+        await api_client.post(
+            f"{BLIND_URL}/{item['assignment_id']}/answer",
+            json={"human_verdict": "occupied"},
+            headers=inspector_headers,
+        )
+
+    assert len(shapes) == 4
+    assert len(set(shapes)) == 1, f"bandlar payload SHAKLI bo'yicha ajraladi: {shapes}"
+    assert not (FORBIDDEN_BLIND_KEYS & shapes[0]), "payloadda tortish belgisi bor"
+
+
+def test_a_repeat_band_is_structurally_impossible_today(
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+) -> None:
+    """⚠⚠ D-16 NING O'LCHANGAN ZIDDIYATI — IKKI KONSTRAYT UNI YOPADI.
+
+    =======================================================================
+    D-16: «namunaning ~10% i OLDIN KO'RILGAN bandlardan qayta olinadi va
+    nazoratchining o'ziga-o'zi mosligi hisoblanadi».
+
+    Bitta bandga IKKI javob 05-05 sxemasida IKKI MUSTAQIL joyda
+    imkonsiz:
+
+        `uq_review_assignments_occupancy_event_id` — o'sha hodisaga
+            IKKINCHI topshiriq yozib bo'lmaydi (3-himoya: ikki navbatning
+            ifloslanishi);
+        `uq_zone_reviews_review_assignment_id`     — o'sha topshiriqqa
+            IKKINCHI javob yozib bo'lmaydi (4-himoya: o'zgarmaslik).
+
+    Ya'ni 5-himoyani (nazoratchining o'z-o'ziga mosligi) qurish uchun
+    3- yoki 4-himoyani BO'SHATISH kerak bo'lardi. Bu test o'sha faktni
+    PROZADAN BAJARILADIGAN o'lchovga aylantiradi: yo'l ochilgan kuni
+    darvoza qizaradi va qaror ONGLI qabul qilinadi.
+
+    ⛔ SHU SABABDAN `BLIND_AUDIT_REPEAT_RATIO` SOZLAMASI YOZILMADI:
+       iste'molchisiz sozlama «bu ishlaydi» degan yolg'on va'da berardi.
+    =======================================================================
+    """
+    round_id = env.occupancy.market_a.audit_round_id
+    answered_assignment = env.occupancy.market_a.blind_assignment_id
+    answered_event = env.occupancy.market_a.occupied_event_id
+    reviewer = env.base.market_a.admin_user_id
+
+    with pytest.raises(psycopg.errors.UniqueViolation) as second_assignment:
+        _add_blind_assignment(sync_owner_conn, env, round_id, answered_event)
+    assert "uq_review_assignments_occupancy_event_id" in str(second_assignment.value)
+
+    with pytest.raises(psycopg.errors.UniqueViolation) as second_answer:
+        _write_review(sync_owner_conn, env, answered_assignment, reviewer, shown=False)
+    assert "uq_zone_reviews_review_assignment_id" in str(second_answer.value)
