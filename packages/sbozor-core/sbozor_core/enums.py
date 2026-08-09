@@ -23,6 +23,10 @@ __all__ = [
     "CaptureRunStatus",
     "DiscoveryRunStatus",
     "Locale",
+    "OccupancyVerdict",
+    "ResolutionSource",
+    "ReviewPurpose",
+    "ReviewQueueKind",
     "Role",
     "SnapshotLightMode",
     "SnapshotQuality",
@@ -321,6 +325,118 @@ class CaptureMethod(StrEnum):
     GO2RTC = "go2rtc"
     ISAPI = "isapi"
     FFMPEG = "ffmpeg"
+
+
+class OccupancyVerdict(StrEnum):
+    """`occupancy_events.verdict` qiymatlari — AYNAN uchta (5-faza, D-11/D-12).
+
+    Qiymatlar DB KONTENTI va ATAYIN BITTA TILDA (`CaptureRunStatus` bilan bir
+    xil qoida): ular `occupancy_events.verdict` ustunida matn sifatida
+    yashaydi va `0018_occupancy_domain` dagi qisman indeksning predikati
+    (`verdict = 'uncertain'`) AYNAN shu a'zodan HOSILA. Qiymatni o'zgartirish
+    migratsiya talab qiladi — indeks jimgina hech nimani qamramay qolardi va
+    noaniq navbat to'liq skanga o'tardi.
+
+    ⚠ `uncertain` — «MODEL BILMAYDI», «rasta yarim band» EMAS. U ikki
+    chegara orasidagi confidence oynasi (D-11) va uning YAGONA ma'nosi —
+    «bu zona INSON ko'zini talab qiladi». Chegaralar `thresholds_version`
+    bilan QATORDA yashaydi, ya'ni ularni sozlash migratsiya emas, `UPDATE`.
+
+    ⚠ TASDIQLANMAGAN `uncertain` KUN OXIRIDA «BO'SH» BO'LADI (AI-06/D-19),
+    LEKIN QATORNING O'ZI O'ZGARMAYDI: hukm `stall_slot_occupancy` ga
+    `resolution_source = 'default_empty'` bilan yoziladi va hisobotda
+    ALOHIDA belgi oladi. Ya'ni «hech kim qaramadi» jimgina «bo'sh» ga
+    aylanmaydi — bu farq hisobotdan o'chib ketsa nazoratning yo'qligi
+    yaxshi natijaga o'xshab qolardi.
+
+    `occupied`  — zonada savdo bor; kunlik patta hisobiga kiradi
+    `empty`     — zona bo'sh
+    `uncertain` — ishonch chegaralari orasida; nazoratchi navbatiga tushadi
+    """
+
+    OCCUPIED = "occupied"
+    EMPTY = "empty"
+    UNCERTAIN = "uncertain"
+
+
+class ReviewQueueKind(StrEnum):
+    """`review_assignments.queue_kind` — AYNAN ikkita navbat (D-13/D-17).
+
+    Ikki navbat IKKI XIL SAVOLGA javob beradi va ularni aralashtirish
+    aniqlik hisobotini jimgina shishirardi:
+
+      `uncertain`   — «modelni TUZAT»: faqat model ikkilangan zonalar. Bu
+                      TANLANGAN (biased) namuna — undagi to'g'rilik foizi
+                      modelning umumiy aniqligi EMAS.
+      `blind_audit` — «modelni O'LCHA»: kunlik `frame` dan HOSILA URUG' bilan
+                      tortilgan xolis namuna (D-13: 30 band/kun). Nazoratchi
+                      AI javobini KO'RMAYDI, ya'ni javob ankorlanmaydi.
+
+    ⚠ TARTIB MAJBURIY (`05-RESEARCH.md` §C.8.3): avval ko'r audit namunasi
+    tortiladi, KEYIN noaniq navbat quriladi. Teskari tartibda audit doirasi
+    «noaniq» lardan tozalangan bo'lardi va o'lchangan aniqlik sun'iy
+    ko'tarilardi.
+
+    ⚠ QIYMAT SXEMAGA QADALGAN: `zone_reviews` dagi
+    `CHECK (queue_kind <> 'blind_audit' OR shown_ai_verdict = false)`
+    aynan shu literalga tayanadi (D-17.3).
+    """
+
+    UNCERTAIN = "uncertain"
+    BLIND_AUDIT = "blind_audit"
+
+
+class ReviewPurpose(StrEnum):
+    """`review_assignments.purpose` — javob NIMAGA ishlatilishi (D-14, 70/30).
+
+    ⚠ TORTISH PAYTIDA belgilanadi, javob kelganda EMAS. Sabab bitta va u
+    D-14 ning butun mazmuni: agar bo'linish keyin qilinsa, kimdir (yoki
+    kelajakdagi kod) «yaxshi» javoblarni `eval` ga, «yomon» larini `train`
+    ga surib qo'yishi mumkin bo'lardi — ya'ni aniqlik hisoboti o'z
+    namunasini o'zi tanlardi.
+
+    `eval`  — XOLIS o'lchov namunasi. Aniqlik hisoboti FAQAT shundan
+              hisoblanadi va bu qatorlar hech qachon o'qitishga bermaydi.
+    `train` — kelajakdagi krop-klassifikator (`timm`, §E.15) uchun yorliq.
+              Noaniq navbatning BARCHA javoblari shu yerga tushadi: ular
+              tanlangan namuna, ya'ni ular bilan o'lchash aniqlikni
+              shishirardi.
+
+    Ya'ni `eval` FAQAT `queue_kind = 'blind_audit'` bilan birga bo'la oladi
+    va bu `review_assignments` da `CHECK` bilan qulflangan — konventsiya
+    emas, sxema.
+    """
+
+    EVAL = "eval"
+    TRAIN = "train"
+
+
+class ResolutionSource(StrEnum):
+    """`stall_slot_occupancy.resolution_source` — hukm QAYERDAN keldi (AI-05/AI-06).
+
+    ⚠ BU USTUN «QO'SHIMCHA METAMA'LUMOT» EMAS — u D-19 va D-22 ning
+    bajarilish mexanizmi. Usiz uch butunlay boshqa holat hisobotda BIR XIL
+    ko'rinardi: «model bo'sh dedi», «hech kim qaramadi, standart bo'sh» va
+    «bu rastani birorta kamera ko'rmaydi».
+
+    `ai`            — model verdikti to'g'ridan-to'g'ri qabul qilindi
+    `human`         — nazoratchi javobi modelnikini ALMASHTIRDI (D-12: AI
+                      qatori TAHRIRLANMAYDI, inson javobi ALOHIDA qator)
+    `default_empty` — `uncertain` kun oxirigacha tasdiqlanmadi (AI-06/D-19).
+                      ⛔ `zone_reviews` ga SOXTA qator YOZILMAYDI: tizim
+                      «nazoratchi buni bo'sh deb tasdiqladi» deb yolg'on
+                      gapirardi va o'sha yolg'on keyin trening datasetiga
+                      tushardi.
+    `no_coverage`   — rastani birorta kamera zonasi qamramaydi (D-22). Bu
+                      «bo'sh» EMAS va hech qachon «bo'sh» hisoblagichiga
+                      qo'shilmaydi — qamrovsiz rasta jimgina yo'qotishga
+                      aylanardi.
+    """
+
+    AI = "ai"
+    HUMAN = "human"
+    DEFAULT_EMPTY = "default_empty"
+    NO_COVERAGE = "no_coverage"
 
 
 class AuditAction(StrEnum):
