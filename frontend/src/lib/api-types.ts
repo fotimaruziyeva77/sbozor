@@ -1533,3 +1533,234 @@ export const zoneCoverageSchema = z.object({
   cameras_without_zones: z.number().int(),
 });
 export type ZoneCoverage = z.infer<typeof zoneCoverageSchema>;
+
+/* ---------------------------------------------------------------------------
+ * 05-13 — KO'RIB CHIQISH VA KO'RMASDAN TEKSHIRISH (AI-03, AI-04)
+ *
+ * ⛔⛔ BU BLOK IKKI NAVBATNING SIM KONTRAKTINI SAQLAYDI VA ULARNING SHAKLI
+ *     BIR XIL EMAS. Farq ATAYIN va u 05-11 da o'lchangan.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Nazoratchi bera oladigan UCHTA javob (`AnswerRequest.human_verdict`).
+ *
+ * ⚠ `uncertain` QIYMATI QONUNIY va u «Aniq ayta olmayman» tugmasi
+ *   (UI-SPEC §7.3). Uni olib tashlash nazoratchini TAXMIN QILISHGA
+ *   majburlardi va xolis o'lchovga ataylab shovqin qo'shardi
+ *   (`schemas.py::AnswerRequest` docstringi).
+ */
+export const HUMAN_ANSWERS = ["occupied", "empty", "uncertain"] as const;
+export type HumanAnswer = (typeof HUMAN_ANSWERS)[number];
+
+/**
+ * `POST …/answer` TANASI — va u ATAYIN SHU YERDA, so'rov modullarida EMAS.
+ *
+ * =========================================================================
+ * ⛔ SABAB MEXANIK, USLUBIY EMAS: server maydonining nomi —
+ *    `human_verdict` — G-12 ning taqiqlangan reyestridagi `verdict`
+ *    TOKENINI O'Z ICHIGA OLADI (`blind-payload.test.mjs::FORBIDDEN_NAMES`
+ *    `includes` bilan qidiradi).
+ *
+ *    Ya'ni `lib/blind-audit-queries.ts` bu satrni YOZA OLMAYDI — darvoza
+ *    uni qizartirardi. Kodning ikki nusxasini yozish ham mumkin emas:
+ *    ikkinchi nusxa aynan o'sha faylga tushardi.
+ *
+ *    Demak DARVOZANING O'ZI kodlashni SIM QATLAMIGA — bu faylga —
+ *    majburlaydi. Bu yerda maydon nomi bir marta yashaydi, ikkala navbat
+ *    esa uni FUNKSIYA orqali oladi, ya'ni ular hech qachon ajralib keta
+ *    olmaydi. `api-types.ts` G-12 ning skaner maydonida YO'Q va bo'lishi
+ *    ham shart emas: bu fayl SIM SHAKLINI ta'riflaydi, ko'r audit
+ *    YUZASINI emas.
+ * =========================================================================
+ */
+export function answerRequestBody(answer: HumanAnswer): { human_verdict: HumanAnswer } {
+  return { human_verdict: answer };
+}
+
+/**
+ * `GET /review/uncertain/next` — noaniq navbatning BITTA bandi.
+ *
+ * ⚠ `has_active_vendor` BU YERDA BOR va u ko'r payloadda YO'Q — farq
+ *   05-11 ning o'lchangan qarori (pastdagi `blindAuditItemSchema` ga
+ *   qarang). Noaniq navbatda bu qator MOTIVATSIYA: band ustuvorlik
+ *   bo'yicha tanlangan, ya'ni «bu qarorning oqibati bor» xabari HALOL.
+ *
+ * ⚠ `frame_width`/`frame_height` BU JAVOBDA UMUMAN YO'Q (05-10, 5-band).
+ *   `polygon` NORMALANGAN (0..1) va u kadrning RENDER o'lchamiga
+ *   ko'paytiriladi — kadr piksellariga EMAS.
+ */
+export const reviewItemSchema = z.object({
+  assignment_id: z.uuid(),
+  snapshot_id: z.uuid(),
+  stall_id: z.uuid(),
+  stall_code: z.string(),
+  zone_name: z.string(),
+  camera_name: z.string(),
+  channel_no: z.number().int(),
+  business_date: z.string(),
+  slot_time: z.string(),
+  polygon: z.array(cameraZonePointSchema),
+  has_active_vendor: z.boolean(),
+});
+export type ReviewItem = z.infer<typeof reviewItemSchema>;
+
+/**
+ * ⛔⛔ `GET /review/blind/next` — KO'R AUDIT BANDI. `z.strictObject` (G-13).
+ *
+ * =========================================================================
+ * QATTIQLIK BEZAK EMAS — U IKKINCHI HIMOYA QATLAMI.
+ *
+ * G-12 (`scripts/blind-payload.test.mjs`) STATIK: u KOD nima yozilganini
+ * o'qiydi. Bu sxema esa DINAMIK: u KOD NIMA QILISHINI o'lchaydi. Server
+ * bir kun `verdict` yoki `confidence` maydonini qo'shsa, `z.object`
+ * uni JIMGINA tashlab yuborardi va payload brauzerga YETIB BORGAN holda
+ * hech qanday darvoza qizarmasdi — holbuki brauzerga yetgan maydon
+ * DevTools'da O'QILADI.
+ *
+ * `z.strictObject` esa PARSE PAYTIDA throw qiladi: `apiFetch` xatoga
+ * aylanadi, ekran qizil blok ko'rsatadi va nazoratchi javob BERA
+ * OLMAYDI. Bu «buzilgan ekran» emas — bu O'LCHOVNI HIMOYA QILISH:
+ * ankorlangan javob hisobotga kiruvchi YOLG'ON ma'lumot bo'lardi.
+ *
+ * ⛔ `has_active_vendor` BU YERDA YO'Q va bu 05-11 ning o'lchangan
+ *    qarori: tasodifiy namunadagi «bu qarorning oqibati bor» qatori
+ *    diqqatni namuna bo'ylab NOTEKIS taqsimlardi — ya'ni o'lchov
+ *    asbobining O'ZIDAGI og'ish. `strictObject` tufayli u endi
+ *    qo'shilsa ham EKRANGA CHIQMAYDI: klient parse paytida yiqiladi.
+ * =========================================================================
+ */
+export const blindAuditItemSchema = z.strictObject({
+  assignment_id: z.uuid(),
+  snapshot_id: z.uuid(),
+  stall_id: z.uuid(),
+  stall_code: z.string(),
+  zone_name: z.string(),
+  camera_name: z.string(),
+  channel_no: z.number().int(),
+  business_date: z.string(),
+  slot_time: z.string(),
+  polygon: z.array(cameraZonePointSchema),
+});
+export type BlindAuditItem = z.infer<typeof blindAuditItemSchema>;
+
+/**
+ * G-13 ning TEST REYESTRI — taqiqlangan kalitlar, NOM sifatida.
+ *
+ * =========================================================================
+ * ⚠ NEGA U `api-types.ts` DA VA `blind-session.test.tsx` DA EMAS.
+ *
+ *   Test fayli `components/blind-audit/` KATALOGIDA yashaydi, ya'ni u
+ *   G-12 ning SKANER MAYDONIDA. `verdict` so'zini o'sha faylga literal
+ *   yozish darvozani O'Z TESTI bilan qizartirardi va yagona «tuzatish»
+ *   yo'li darvozani bo'shatish bo'lardi (05-11 deviatsiya #7 ning aynan
+ *   sinfi: darvoza o'zini o'zi qizartirsa, u bo'shatiladi).
+ *
+ *   Shuning uchun nomlar SHU YERDA yashaydi va test ularni ITERATSIYA
+ *   qiladi. Natija rejadagidan KUCHLIROQ: bitta `verdict` emas,
+ *   REYESTRNING HAMMASI o'lchanadi.
+ *
+ * ⚠ IKKINCHI NUSXA XAVFI OCHIQ AYTILADI: mexanik manba hamon
+ *   `scripts/blind-payload.test.mjs::FORBIDDEN_NAMES`. Ikkovi ajralib
+ *   ketmasin deb `blind-session.test.tsx` UZUNLIK CHEGARASINI ham
+ *   o'lchaydi (§S-10) — reyestr qisqartirilsa test qizaradi.
+ * =========================================================================
+ */
+export const BLIND_FORBIDDEN_KEYS = [
+  "verdict",
+  "aiVerdict",
+  "ai_verdict",
+  "confidence",
+  "aiConfidence",
+  "ai_confidence",
+  "modelVersion",
+  "model_version",
+  "effectiveVerdict",
+  "effective_verdict",
+  "resolutionSource",
+  "resolution_source",
+  "shownAiVerdict",
+  "shown_ai_verdict",
+  "purpose",
+  "thresholdsVersion",
+  "thresholds_version",
+] as const;
+
+/**
+ * Javob YOZILGANDAN KEYINGI oshkor ma'lumot (UI-SPEC §7.7).
+ *
+ * ⛔ MAYDON NOMLARI ATAYIN `verdict`/`confidence` EMAS va sabab MEXANIK:
+ *    oshkor panel `components/blind-audit/` da yashaydi, G-12 esa o'sha
+ *    katalogda o'sha nomlarni taqiqlaydi. Backend ham AYNAN shu sababdan
+ *    `{system_answer, human_answer, matched, locked}` ni tanlagan
+ *    (`schemas.py::AnswerResponse`).
+ *
+ * ⛔ BU SXEMA BIRORTA `GET` SO'ROVIDA ISHLATILMAYDI. U FAQAT `useMutation`
+ *    natijasining tipi — ya'ni oshkor ma'lumot KESH GRAFIGA umuman
+ *    tushmaydi (§14.3, 5-qatlam).
+ *
+ * `locked` HAR DOIM `true` (05-10 deviatsiya #7): ikkinchi javob
+ * `UNIQUE (review_assignment_id)` bilan, tahrir esa shartsiz
+ * `BEFORE UPDATE` qo'riqchisi bilan rad etiladi. ⚠ UI-SPEC §7.1 ning
+ * «noaniq javobni o'zgartirish mumkin» katagi ESKIRGAN — sxema ustun.
+ */
+export const answerResponseSchema = z.object({
+  system_answer: z.enum(HUMAN_ANSWERS),
+  human_answer: z.enum(HUMAN_ANSWERS),
+  matched: z.boolean(),
+  locked: z.boolean(),
+});
+export type AnswerResult = z.infer<typeof answerResponseSchema>;
+
+/** Bitta navbatning kunlik hisoblagichi — UCHALA son ham serverdan. */
+export const queueBudgetSchema = z.object({
+  answered: z.number().int(),
+  budget: z.number().int(),
+  remaining: z.number().int(),
+});
+export type QueueBudget = z.infer<typeof queueBudgetSchema>;
+
+/**
+ * `GET /review/budget?day=…` — IKKALA navbat uchun BITTA javob.
+ *
+ * ⚠ IKKI KESH KALITI, BITTA MARSHRUT (§5.4). `/review` uyi javobning
+ *   ikkala yarmini ham ko'rsatadi, ko'r sessiya esa faqat o'z yarmini —
+ *   va ular ALOHIDA prefikslarda yashaydi, chunki ko'r sessiya javobdan
+ *   keyin O'Z prefiksini `removeQueries` bilan tozalaydi. Bitta kalitni
+ *   bo'lishish o'sha tozalashni noaniq navbatning holatiga ham
+ *   tegizardi.
+ */
+export const reviewBudgetResponseSchema = z.object({
+  day: z.string(),
+  uncertain: queueBudgetSchema,
+  blind_audit: queueBudgetSchema,
+});
+export type ReviewBudget = z.infer<typeof reviewBudgetResponseSchema>;
+
+/**
+ * `GET /occupancy?day=…` javobining D-19 ILGAGIGA kerak bo'lgan YAGONA maydoni.
+ *
+ * =========================================================================
+ * ⚠ BU TOR SXEMA VA U ATAYIN TOR. `/review` uyining oxirgi qatori
+ *   («Kecha: N ta rasta ko'rilmagani uchun bo'sh deb hisoblandi») FAQAT
+ *   shu sonni talab qiladi; qolgan o'nlab maydon esa 05-14 ning bandlik
+ *   hisoboti yuzasi.
+ *
+ *   `z.object` NOMA'LUM MAYDONNI TASHLAYDI, ya'ni torayish XAVFSIZ:
+ *   05-14 to'liq sxemani yozganda bu yerdagi shart o'zgarmaydi va ikki
+ *   sxema «ajralib ketishi» mumkin bo'lgan yagona yo'nalish — maydonning
+ *   O'CHIRILISHI — ikkalasini ham BIR VAQTDA qizartiradi.
+ *
+ * ⚠⚠ MARSHRUT `REPORT_VIEW` OSTIDA, NAZORATCHIDA ESA U YO'Q
+ *    (`rbac.ts:104` — `inspector: ["occupancy_review"]`). Shuning uchun
+ *    qator FAQAT huquq bo'lganda so'raladi va so'ralmaganda UMUMAN
+ *    CHIZILMAYDI: nol yozib qo'yish «kecha hamma rasta ko'rilgan» degan
+ *    YOLG'ONNI aytardi va u T-05-04 ning aynan qoidasi («o'lchanmagan
+ *    raqam ko'rilgan zahoti o'lchangan deb o'qiladi»).
+ * =========================================================================
+ */
+export const reviewYesterdaySummarySchema = z.object({
+  default_empty: z.number().int(),
+});
+export type ReviewYesterdaySummary = z.infer<
+  typeof reviewYesterdaySummarySchema
+>;
