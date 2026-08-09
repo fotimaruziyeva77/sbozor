@@ -365,14 +365,27 @@ async def test_a_repeat_inside_the_debounce_window_sends_nothing(
        bo'g'ilmadi ham. 5/25 = 20 % chegaradan past, ya'ni bu stsenariyda
        YAGONA alert `capture_missed` bo'lib qoladi va debounce AYNAN
        o'lchanadi.
+
+    ⚠⚠ SIGNAL IKKI BIZNES-KUNGA YOZILADI — `test_an_old_alert_escalates_
+      by_level_not_by_frequency` dagi bilan AYNAN bir xil sabab (`dc5f182`).
+      Kech supurgi kunni `business_date(moment + 30 daq)` dan oladi
+      (`alerting.py:487,668`), ya'ni Toshkent vaqti bilan 23:30 dan keyin
+      u ERTANGI kun bo'ladi. Signal faqat bugunga yozilsa, kech supurgi
+      BO'SH kunni ko'rib alertni bo'g'ish o'rniga YOPARDI va yopilish
+      xabari IKKINCHI chaqiruv bo'lib chiqardi. O'lchandi: 23:37 da
+      `resolved=1` va `assert 2 == 1`.
     """
-    bed.fail_slot(DEFAULT_SNAPSHOT_SLOTS[0], count=5)
     moment = datetime.now(tz=MARKET_TZ)
+    late_moment = moment + timedelta(minutes=30)
+
+    bed.fail_slot(DEFAULT_SNAPSHOT_SLOTS[0], count=5)
+    if business_date(late_moment) != bed.today:
+        bed.fail_slot(DEFAULT_SNAPSHOT_SLOTS[0], count=5, days_ago=-1)
 
     async with respx.mock(assert_all_called=False) as router:
         route = router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
         await _sweep(api_sessionmaker, sender, now=moment)
-        second = await _sweep(api_sessionmaker, sender, now=moment + timedelta(minutes=30))
+        second = await _sweep(api_sessionmaker, sender, now=late_moment)
 
     rows = bed.alerts()
     assert [row["alert_key"] for row in rows] == ["capture_missed"], rows
@@ -390,14 +403,26 @@ async def test_a_repeat_after_the_debounce_window_sends_again(
 
     Bu testsiz «bo'g'ish» va «umuman yubormaslik» bir xil ko'rinardi —
     yuqoridagi test ikkalasida ham yashil bo'lardi.
+
+    ⚠⚠ BU NAZORAT TESTI KUN CHEGARASIDA YOLG'ON-YASHIL BERARDI va u
+      qo'shni testdan ham YOMONROQ holat edi: 22:59 dan keyin ikkinchi
+      supurgi ERTANGI bo'sh kunni ko'rib alertni YOPARDI, yopilish
+      xabari esa `call_count` ni AYNAN 2 GA yetkazardi — ya'ni assert
+      qanoatlanardi, lekin u o'lchayotgan narsa «debounce oynasidan
+      keyin QAYTA yuborish» emas, «alert yopildi» bo'lardi. Bir xil
+      langar ikkala testni ham o'sha sinfdan chiqaradi.
     """
-    bed.fail_slot(DEFAULT_SNAPSHOT_SLOTS[0], count=5)
     moment = datetime.now(tz=MARKET_TZ)
+    late_moment = moment + timedelta(minutes=61)
+
+    bed.fail_slot(DEFAULT_SNAPSHOT_SLOTS[0], count=5)
+    if business_date(late_moment) != bed.today:
+        bed.fail_slot(DEFAULT_SNAPSHOT_SLOTS[0], count=5, days_ago=-1)
 
     async with respx.mock(assert_all_called=False) as router:
         route = router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
         await _sweep(api_sessionmaker, sender, now=moment)
-        await _sweep(api_sessionmaker, sender, now=moment + timedelta(minutes=61))
+        await _sweep(api_sessionmaker, sender, now=late_moment)
 
     assert route.call_count == 2, "debounce oynasidan keyin xabar qayta ketmadi"
 
