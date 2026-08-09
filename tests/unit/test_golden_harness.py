@@ -269,3 +269,127 @@ def test_script_does_not_duplicate_the_statistics(script_source: str) -> None:
         "skriptga ulash uchun joy qolmasdi va o'shanda hisob skriptning "
         "ichida ikkinchi marta yozilardi."
     )
+
+
+# ===========================================================================
+# 05-12 — MATEMATIKANING IMPORT NUQTASI ENDI HAQIQATAN YECHILADI
+# ===========================================================================
+
+
+def test_the_accuracy_module_import_point_resolves(script: ModuleType) -> None:
+    """⚠ 05-01 DA BU SATR FAQAT MATN EDI — ENDI U HAQIQIY BOG'.
+
+    `ACCURACY_MODULE` va `LOWER_BOUND_ATTR` 05-01 da yozilgan, lekin
+    modul o'shanda MAVJUD EMAS edi: ular tekshirilmagan satrlar bo'lib
+    turardi va `test_script_does_not_duplicate_the_statistics` faqat
+    ularning MATNDA borligini o'lchardi.
+
+    05-12 modulni yozdi, ya'ni endi import nuqtasining O'ZI
+    o'lchanadigan bo'ldi: nom, atribut VA imzo. Nomdagi bitta xato
+    (`accuracy_reports`) darvoza uyg'ongan kunigacha ko'rinmasdi.
+    """
+    module_name = cast("str", script.ACCURACY_MODULE)
+    attribute = cast("str", script.LOWER_BOUND_ATTR)
+
+    accuracy_module = importlib.import_module(module_name)
+    lower_bound = getattr(accuracy_module, attribute, None)
+
+    assert callable(lower_bound), (
+        f"`{module_name}.{attribute}` chaqiriluvchi emas — skriptning import nuqtasi uzilgan"
+    )
+    assert lower_bound(90, 100) == pytest.approx(0.8256, abs=1e-3), (
+        "import nuqtasi BOSHQA funksiyaga ulangan: `(to'g'ri, jami) -> Wilson quyi chegarasi` "
+        "imzosi bajarilmadi"
+    )
+
+
+def test_the_armed_gate_runs_end_to_end_with_an_injected_provider(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    """⛔⛔ QUROLLANGAN YO'L BUGUN, SINTETIK MANIFEST BILAN TO'LIQ YURITILADI.
+
+    =========================================================================
+    NEGA BU KERAK: bugungacha `run_gate` ning QUROLLANGAN shoxi BIRORTA
+    testda ishga tushmagan edi — `karmana` yozuvlari nol, ya'ni skript
+    HAR DOIM birinchi shoxdan qaytardi. Ya'ni darvoza uyg'ongan kuni
+    ishlaydimi degan savolga javob YO'Q edi va nosozlik AYNAN o'sha kuni,
+    real ma'lumot kelganda ko'rinardi.
+
+    Test HAQIQIY manifestga TEGMAYDI (`tmp_path` da o'zining sintetik
+    nusxasini quradi), ya'ni `test_the_accuracy_gate_is_asleep_today`
+    hamon uxlab yotgan holatni o'lchaydi.
+
+    ⚠ PROVAYDER IN'EKTSIYA QILINADI — bu D-02 ning choki (`VerdictProvider`).
+      Mahsulotda uning o'rniga `cv-service` ning `zone_verdict` yo'li
+      keladi; bu yerda esa ATAYIN oddiy chaqiriluvchi, chunki o'lchanayotgan
+      narsa DARVOZA, model EMAS.
+    =========================================================================
+    """
+    run_gate = cast("Callable[..., int]", script.run_gate)
+    load_manifest = cast("Callable[[Path], list[Any]]", script.load_manifest)
+
+    manifest = tmp_path / "karmana.jsonl"
+    manifest.write_text(_synthetic_karmana_manifest(), encoding="utf-8")
+    rows = load_manifest(manifest)
+    karmana = [row for row in rows if row.source == "karmana"]
+    assert len(karmana) == 10, "nazorat: sintetik manifest kutilgan hajmda emas"
+
+    # 10 dan 9 tasi to'g'ri -> Wilson quyi chegarasi ≈ 0,596 (QO'LDA:
+    # p = 0,9; n = 10; maxraj = 1,38416; markaz = 0,84025;
+    # yarim = 1,96·√(0,009 + 0,0096016)/1,38416 = 0,19318).
+    def always_occupied(_image_ref: str, _polygon: tuple[tuple[float, float], ...]) -> str:
+        """«Har doim band» deydigan SOXTA model — §C.8.4 ning aynan misoli."""
+        return "occupied"
+
+    passed = run_gate(rows, min_n=10, threshold=0.50, provider=always_occupied)
+    failed = run_gate(rows, min_n=10, threshold=0.95, provider=always_occupied)
+
+    assert passed == 0, "qurollangan darvoza o'tishi kerak bo'lgan holatda YIQILDI"
+    assert failed == 1, "qurollangan darvoza yiqilishi kerak bo'lgan holatda O'TDI"
+
+
+def test_the_armed_gate_refuses_to_run_without_a_provider(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    """⛔ Real ma'lumot keldi-yu provayder yo'q -> BALAND ovozda yiqiladi.
+
+    ⚠ NAZORAT HOLATI: usiz yuqoridagi test «darvoza ishlaydi» degan
+      da'voni yolg'iz ko'tarardi. Bu yerdagi shox esa «real ma'lumot
+      keldi, lekin hech nima o'lchanmadi» degan JIMGINA nosozlikni
+      yopadi va xabar provayderni QAYERDAN olishni nomma-nom aytadi.
+    """
+    run_gate = cast("Callable[..., int]", script.run_gate)
+    load_manifest = cast("Callable[[Path], list[Any]]", script.load_manifest)
+
+    manifest = tmp_path / "karmana.jsonl"
+    manifest.write_text(_synthetic_karmana_manifest(), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as error:
+        run_gate(load_manifest(manifest), min_n=10, threshold=0.85, provider=None)
+
+    assert "cv-service" in str(error.value), (
+        f"xabar provayderning manbasini nomlamadi: {error.value}"
+    )
+
+
+def _synthetic_karmana_manifest() -> str:
+    """10 ta `karmana` yozuvi — 9 tasi `occupied`, 1 tasi `empty`.
+
+    ⚠ NISBAT ATAYIN NOSIMMETRIK: «har doim band» deydigan provayder
+      aynan 9/10 oladi, ya'ni yuqoridagi test ikki chegarani (0,50 va
+      0,95) ajrata oladi. Teng nisbatda ikkala chegara ham bir tomonga
+      tushib, test faqat BITTA shoxni o'lchardi.
+
+    ⚠ `labeled_by` — `inspector`, `geometry` EMAS: real kadrning
+      haqiqati faqat INSONDAN keladi va manifest validatori buni
+      `test_manifest_is_schema_valid_and_above_the_lower_bound` da
+      talab qiladi.
+    """
+    polygon = "[[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]]"
+    lines = [
+        f'{{"image_ref": "karmana/{index}.jpg", "polygon": {polygon}, '
+        f'"true_verdict": "{"empty" if index == 0 else "occupied"}", '
+        '"source": "karmana", "labeled_by": "inspector", "labeled_at": "2026-10-01"}'
+        for index in range(10)
+    ]
+    return "\n".join(lines) + "\n"

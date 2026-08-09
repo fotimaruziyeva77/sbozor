@@ -46,7 +46,7 @@ from tenancy.test_cross_tenant import (
 
 pytestmark = pytest.mark.tenancy
 
-MINIMUM_MATRIX_ROUTES = 57
+MINIMUM_MATRIX_ROUTES = 60
 """Matritsada kamida shuncha marshrut bo'lishi shart.
 
 01-07 holatida qamrovda 7 marshrut bor edi (`/users` GET+POST,
@@ -75,6 +75,15 @@ navbatining UCHTASINI (`GET /review/uncertain/next`, `GET /review/budget`,
 `POST /review/{review_assignment_id}/answer`) — chegara 55. 05-11 esa ko'r
 auditning IKKITASINI (`GET /review/blind/next`,
 `POST /review/blind/{review_assignment_id}/answer`) — chegara 57.
+05-12 bandlik hisobotining UCHTASINI qo'shdi (`GET /occupancy`,
+`GET /occupancy/accuracy`, `GET /occupancy/round`) — chegara 60.
+
+⚠ UCHALASI HAM `REPORT_VIEW` OSTIDA, ya'ni ular `INSPECTOR_ROUTES` ga
+QO'SHILMAYDI: bozor admini sessiyasida bu huquq BOR va matritsa ularni
+odatdagi yo'ldan yuradi. Nazoratchi esa ularga 403 oladi va bu AYNAN
+kutilgan xulq — u `tests/integration/test_occupancy_report.py::
+test_the_inspector_cannot_reach_the_report` da ALOHIDA o'lchanadi
+(T-05-58: nazoratchi o'z aniqligini ko'rmasligi kerak).
 
 ⚠ Beshalasi ham `OCCUPANCY_REVIEW` talab qiladi, ya'ni ular matritsada
 FAQAT `INSPECTOR_ROUTES` ro'yxati tufayli HAQIQIY yo'ldan yuradi. Ro'yxatga

@@ -108,6 +108,12 @@ __all__ = [
     "NvrPasswordRequest",
     "NvrTestConnectionRequest",
     "NvrTestConnectionResponse",
+    "OccupancyAccuracyResponse",
+    "OccupancyDayResponse",
+    "OccupancyRoundResponse",
+    "OccupancyStallItem",
+    "ConfusionMatrixOut",
+    "ProportionIntervalOut",
     "ProfileResponse",
     "QueueBudget",
     "RefreshResponse",
@@ -2646,3 +2652,158 @@ class ReviewBudgetResponse(BaseModel):
     day: date
     uncertain: QueueBudget
     blind_audit: QueueBudget
+
+
+# ===========================================================================
+# 05-12 — BANDLIK HISOBOTI (AI-04, AI-05, AI-06)
+#
+# ⛔⛔ BU YUZA `REPORT_VIEW` OSTIDA VA NAZORATCHIDA BU HUQUQ YO'Q.
+#
+# Nazoratchi o'z aniqligini KO'RMAYDI (T-05-58): ko'rsa u raqamni
+# yaxshilashga urinardi va o'lchov o'zi o'lchayotgan narsani o'zgartirardi
+# — «tez qaror» sanog'i esa aynan shu urinishning izi bo'lib qolardi.
+#
+# ⛔ «NAMUNANI QAYTA TORTISH» MARSHRUTI YO'Q (D-17.1) va uning yo'qligi
+#    05-11 ning OpenAPI skani bilan o'lchanadi.
+# ===========================================================================
+
+
+class ProportionIntervalOut(BaseModel):
+    """Nisbat va uning Wilson oralig'i — UCHALA maydon ham `null` bo'lishi mumkin.
+
+    ⛔ MAYDON JAVOBDAN CHIQIB KETMAYDI: `null` «hali o'lchanmagan»
+       degani, maydonning YO'QLIGI esa klientda «eski server» yoki
+       «xato» deb o'qilardi.
+    """
+
+    point: float | None
+    lower: float | None
+    upper: float | None
+
+
+class ConfusionMatrixOut(BaseModel):
+    """2x2 chalkashlik matritsasi — «musbat» AYNAN `occupied`.
+
+    ⛔ TO'RT KATAK HAM XOM SON. Foizga aylantirish SERVERDA
+       qilinmaydi-yu, bu yerda ham qilinmaydi: `n < 20` da foiz UMUMAN
+       chizilmaydi va xom sonlar HAR DOIM ko'rinadi (§11.5).
+    """
+
+    true_occupied: int
+    """Tizim band dedi, nazoratchi ham band dedi."""
+    false_occupied: int
+    """⚠ Tizim band dedi, nazoratchi BO'SH dedi -> SOTUVCHI BILAN NIZO xavfi."""
+    false_empty: int
+    """⚠ Tizim bo'sh dedi, nazoratchi BAND dedi -> YIG'ILMAGAN PATTA."""
+    true_empty: int
+
+
+class OccupancyAccuracyResponse(BaseModel):
+    """`GET /occupancy/accuracy` — matritsa, uch oraliq va BAZAVIY ULUSH.
+
+    =======================================================================
+    ⛔ «ANIQLIK» YOLG'IZ QAYTARILMAYDI. `base_rate` — MAJBURIY maydon:
+       rastalarning 90 % i band bo'lsa, «har doim band» deydigan soxta
+       model 90 % oladi va usiz bu ko'rinmasdi (§C.8.4).
+
+    ⛔ `measured is False` bo'lganda BARCHA foiz maydonlari `null`, xom
+       sonlar esa QAYTADI: «hisobot yo'q» bilan «hali o'lchanmadi» bir
+       xil ko'rinmasligi kerak.
+
+    ⛔ NAZORATCHINING ICHKI MOSLIGI (D-16) BU YERDA YO'Q — na son, na
+       maydon sifatida. 05-11 o'lchadi: takroriy band bugungi sxemada
+       ifodalab bo'lmaydi, ya'ni MEXANIZM QURILMAGAN. Uni `100 %` qilib
+       ko'rsatish o'lchanmagan miqdorni o'lchangan qilib ko'rsatardi
+       (T-05-04), bo'sh maydon qoldirish esa keyingi ijrochini unga son
+       yozishga undardi.
+    =======================================================================
+    """
+
+    from_date: date
+    to_date: date
+    drawn: int
+    """Namunaga tushgan `eval` bandlari — JAVOBSIZLARI BILAN."""
+    answered: int
+    unanswered: int
+    """⛔ JAVOBSIZ BANDLAR NAMUNADAN CHIQMAYDI (§C.8, 4-dushman)."""
+    dont_know: int
+    """«Aniq ayta olmadi» — matritsadan TASHQARIDA (O-06)."""
+    matrix: ConfusionMatrixOut
+    n: int
+    """Matritsaga tushgan javoblar soni — `drawn` dan KICHIK bo'lishi normal."""
+    measured: bool
+    min_sample: int
+    """Foiz chizilishi uchun zarur eng kichik `n` — klient uni O'ZI YOZMAYDI."""
+    base_rate: float | None
+    correct: ProportionIntervalOut
+    false_occupied: ProportionIntervalOut
+    false_empty: ProportionIntervalOut
+
+
+class OccupancyStallItem(BaseModel):
+    """Rastalar ro'yxatining bitta qatori (UI-SPEC §11.7).
+
+    ⛔ PATTA/SUMMA YO'Q — 6-faza (§16.1).
+    """
+
+    stall_id: UUID
+    stall_code: str
+    zone_name: str
+    status: str
+    """`occupied` / `empty` / `default_empty` / `no_coverage`."""
+    slots: int
+    occupied_slots: int
+    human_confirmed: bool
+
+
+class OccupancyDayResponse(BaseModel):
+    """`GET /occupancy?day=…` — BESH hisoblagich va rastalar ro'yxati.
+
+    ⛔ TO'RTTA BO'LAK O'ZARO INKOR VA ULARNING YIG'INDISI `stalls` GA
+       TENG; `human_confirmed` — KESISHUVCHI o'lcham va yig'indiga
+       KIRMAYDI (§11.4).
+
+    ⛔ BESHALASI HAM NOL BO'LGANDA HAM QAYTADI: nol — NATIJA, uning
+       yo'qligi emas.
+    """
+
+    day: date
+    stalls: int
+    occupied: int
+    empty: int
+    default_empty: int
+    """⛔ `empty` GA QO'SHILMAYDI (D-19) — «nazoratchi ulgurmadi» signali."""
+    no_coverage: int
+    """⛔ `empty` GA QO'SHILMAYDI (D-22) — bu rasta haqida ma'lumot YO'Q."""
+    human_confirmed: int
+    items: list[OccupancyStallItem]
+
+
+class OccupancyRoundResponse(BaseModel):
+    """`GET /occupancy/round?day=…` — o'lchovning O'ZI haqidagi ma'lumot (§11.6).
+
+    ⛔ URUG' QAYTARILMAYDI: u foydalanuvchi uchun ma'nosiz va uni
+       ko'rsatish «tanlash mumkin» degan taassurot berardi (D-17.1).
+
+    ⛔ `drawn` TORTILGANLAR SONI (`round_no`/`drawn_at`/`frame_size`
+       bilan birga) — namuna QANDAY qurilganini ko'rsatadi.
+
+    ⚠ `drawn = false` bo'lganda («tur tortilmagan») qolgan maydonlar
+      `null`. Bu «hammasi bajarildi» DAN ATAYIN ajratilgan: asbobning
+      YO'QLIGI muvaffaqiyat bo'lib ko'rinmasligi kerak
+      (`review_repo._HAS_ANY_ROUND` bilan bir xil qaror).
+    """
+
+    day: date
+    drawn: bool
+    round_no: int | None
+    drawn_at: datetime | None
+    frame_size: int | None
+    sample_size: int | None
+    answered: int | None
+    unanswered: int | None
+    """⛔ NOL BO'LGANDA HAM QAYTADI (§11.6)."""
+    dont_know: int | None
+    fast_decisions: int | None
+    """«2 soniyadan tez» javoblar. ⚠ `decision_ms` `NULL` bo'lganlar bu
+    sanoqqa KIRMAYDI: `NULL` — o'lchovning YO'QLIGI, «tez» EMAS."""

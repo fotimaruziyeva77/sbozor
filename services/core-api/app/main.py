@@ -52,6 +52,7 @@ from app.api.v1.imports import router as imports_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
 from app.api.v1.nvr import router as nvr_router
+from app.api.v1.occupancy import router as occupancy_router
 from app.api.v1.reviews import router as reviews_router
 from app.api.v1.schedules import router as schedules_router
 from app.api.v1.snapshots import alerts_router, capture_runs_router
@@ -237,6 +238,23 @@ app.include_router(camera_zones_router, prefix=f"{API_V1_PREFIX}/camera-zones")
 # test_no_bulk_approve_endpoint` da OpenAPI sxemasidan skanerlanadi
 # (D-18 — API qoidasi, UI qoidasi EMAS).
 app.include_router(reviews_router, prefix=f"{API_V1_PREFIX}/review")
+# --- 05-12: bandlik va aniqlik hisoboti (AI-04/AI-05/AI-06, D-19/D-22) ---
+#
+# ⛔ ALOHIDA PREFIKS VA `REPORT_VIEW` OSTIDA — `/review` NING QO'SHNISI
+#    EMAS, ZIDDI.
+#
+# `/review` — NAZORATCHINING uyi (`OCCUPANCY_REVIEW`), `/occupancy` esa
+# DIREKTORNIKI (`REPORT_VIEW`). Ularni bitta router ostiga qo'yish
+# huquqni marshrut darajasida ajratishni talab qilardi va `INSPECTOR_
+# ROUTES` matritsasi ikkala yuzani ham bitta sessiya bilan chaqirardi.
+#
+# ⛔ NAZORATCHIDA `REPORT_VIEW` YO'Q va bu ATAYIN (T-05-58): u o'z
+# aniqligini ko'rsa raqamni yaxshilashga urinardi — «tez qaror» sanog'i
+# esa aynan shu urinishning izi bo'lib qolardi.
+#
+# ⛔ «NAMUNANI QAYTA TORTISH» MARSHRUTI YOZILMAGAN (D-17.1) va uning
+# yo'qligi 05-11 ning OpenAPI skani bilan o'lchanadi.
+app.include_router(occupancy_router, prefix=f"{API_V1_PREFIX}/occupancy")
 # --- 04-09: snapshot jadvali (CAM-04, D-05) ---
 #
 # ⚠ ALOHIDA PREFIKS, `cameras` OSTIDA EMAS — `cameras` ning `nvr-devices`

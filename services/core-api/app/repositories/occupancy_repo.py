@@ -72,16 +72,20 @@ from sbozor_core.tenancy import TenantScopedRepository
 from sqlalchemy import Date, Text, Time, bindparam, text
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 
+from app.services.accuracy_report import AccuracyRow
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from datetime import date, time
+    from datetime import date, datetime, time
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
     "OccupancyDaySummary",
     "OccupancyRepository",
+    "RoundStatus",
     "SlotRow",
+    "StallDay",
     "ZoneOutcome",
 ]
 
@@ -161,6 +165,47 @@ class OccupancyDaySummary:
     no_coverage: int
     human_confirmed: int
     stalls: int
+
+
+@dataclass(frozen=True, slots=True)
+class StallDay:
+    """Bitta rastaning kunlik holati — ro'yxat qatori (UI-SPEC §11.7)."""
+
+    stall_id: UUID
+    stall_code: str
+    zone_name: str
+    bucket: str
+    """`occupied` / `empty` / `default_empty` / `no_coverage` — `_PER_STALL_CTE` dan.
+
+    ⛔ XULOSADAGI HISOBLAGICH BILAN BIR MANBADAN: ro'yxat va xulosa bir
+       xil `CASE` dan chiqadi, ya'ni ular ajralib keta olmaydi.
+    """
+    slots: int
+    occupied_slots: int
+    human_confirmed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class RoundStatus:
+    """Kunlik ko'r audit turi — o'lchovning O'ZI haqidagi ma'lumot.
+
+    ⛔ URUG' YO'Q va `decision_ms` XOM qiymatlar bo'lib keladi: «tez
+       qaror» sanog'i `accuracy_report.is_fast_decision()` bilan, YAGONA
+       joyda hisoblanadi (`_ROUND_STATUS` docstringi).
+    """
+
+    round_no: int
+    drawn_at: datetime
+    frame_size: int
+    drawn: int
+    answered: int
+    dont_know: int
+    decision_ms: tuple[int, ...]
+
+    @property
+    def unanswered(self) -> int:
+        """⛔ JAVOBSIZLAR — NAMUNADAN CHIQMAYDI, SANALADI (§C.8, 4-dushman)."""
+        return self.drawn - self.answered
 
 
 # ===========================================================================
@@ -316,36 +361,79 @@ yetib bormasdi (D-15 buzilardi).
 =============================================================================
 """
 
-_DAY_SUMMARY = text(
-    """
-    WITH per_stall AS (
+_PER_STALL_CTE = """
+    per_stall AS (
         SELECT sso.stall_id,
-               bool_or(sso.verdict = :occupied)            AS any_occupied,
-               bool_or(sso.verdict <> :no_coverage)        AS any_covered,
-               bool_or(sso.resolution_source IN (:ai, :human)) AS any_evidence,
-               bool_or(sso.resolution_source = :human)     AS any_human
+               count(*)                                        AS slots,
+               count(*) FILTER (WHERE sso.verdict = :occupied)  AS occupied_slots,
+               bool_or(sso.resolution_source = :human)          AS human_confirmed,
+               CASE
+                   WHEN bool_or(sso.verdict = :occupied)
+                        THEN :occupied
+                   WHEN NOT bool_or(sso.verdict <> :no_coverage)
+                        THEN :no_coverage
+                   WHEN bool_or(sso.resolution_source IN (:ai, :human))
+                        THEN :empty
+                   ELSE :default_empty
+               END                                              AS bucket
           FROM stall_slot_occupancy sso
          WHERE sso.market_id = :market_id
            AND sso.business_date = :business_date
          GROUP BY sso.stall_id
     )
+"""
+"""RASTA x KUN bo'lagi — VA U AYNAN BIR MARTA YOZILGAN.
+
+=============================================================================
+⛔⛔ BITTA `CASE`, IKKI ISTE'MOLCHI (`_DAY_SUMMARY` va `_DAY_STALLS`).
+
+Xulosadagi hisoblagich bilan ro'yxatdagi badge BIR XIL savolga javob
+beradi: «bu rasta bugun qaysi bo'lakda?». Ikki nusxa yozilganda ular
+sekin-asta ajralib ketardi va nosozlik ENG YOMON shaklda ko'rinardi —
+xulosada «Bo'sh 68», ro'yxatda esa 69 ta bo'sh rasta, ikkalasi ham
+xatosiz.
+
+BO'LAK QOIDASI ZONA -> SLOT QOIDASINING AYNAN O'ZI:
+
+    band bo'lsa                       -> `occupied`
+    birorta sloti qamralmagan bo'lsa  -> `no_coverage`
+    DALIL bo'lsa (`ai`/`human`)       -> `empty`
+    aks holda                         -> `default_empty`
+
+⚠ TARTIB MAJBURIY: `occupied` birinchi (D-20), `no_coverage` ikkinchi.
+  `no_coverage` ni yuqoriga ko'tarish qamrovsiz SLOTI bor band rastani
+  «qamrovsiz» qilib ko'rsatardi.
+
+⚠ INSON «aniq ayta olmadi» degan slot (`verdict='uncertain'`,
+  `resolution_source='human'`) `empty` bo'lagiga tushadi va
+  `human_confirmed` ga ham kiradi — modul docstringidagi bandning
+  mexanizmi aynan shu `CASE` da.
+=============================================================================
+"""
+
+# ⚠ `S608` SHU IKKI SO'ROVDA O'CHIRILGAN VA SABAB TOR (`audit_draw.py:232`
+#   bilan aynan bir xil): f-string ga tushadigan YAGONA qiymat — shu
+#   moduldagi SOBIT `_PER_STALL_CTE` konstantasi. Tashqi kirish f-string
+#   ga umuman kelmaydi, har bir qiymat `bindparam(...)` orqali TIPLANGAN
+#   parametr bo'lib ketadi.
+_DAY_SUMMARY = text(
+    f"""
+    WITH {_PER_STALL_CTE}
     SELECT
-        count(*) FILTER (WHERE any_occupied)                        AS occupied,
-        count(*) FILTER (WHERE NOT any_occupied
-                           AND any_covered
-                           AND any_evidence)                        AS empty,
-        count(*) FILTER (WHERE NOT any_occupied
-                           AND any_covered
-                           AND NOT any_evidence)                    AS default_empty,
-        count(*) FILTER (WHERE NOT any_covered)                     AS no_coverage,
-        count(*) FILTER (WHERE any_human)                           AS human_confirmed,
-        count(*)                                                    AS stalls
+        count(*) FILTER (WHERE bucket = :occupied)      AS occupied,
+        count(*) FILTER (WHERE bucket = :empty)         AS empty,
+        count(*) FILTER (WHERE bucket = :default_empty) AS default_empty,
+        count(*) FILTER (WHERE bucket = :no_coverage)   AS no_coverage,
+        count(*) FILTER (WHERE human_confirmed)         AS human_confirmed,
+        count(*)                                        AS stalls
       FROM per_stall
-    """
+    """  # noqa: S608
 ).bindparams(
     bindparam("market_id", type_=_UUID),
     bindparam("business_date", type_=Date()),
     bindparam("occupied", type_=Text()),
+    bindparam("empty", type_=Text()),
+    bindparam("default_empty", type_=Text()),
     bindparam("no_coverage", type_=Text()),
     bindparam("ai", type_=Text()),
     bindparam("human", type_=Text()),
@@ -358,9 +446,138 @@ _DAY_SUMMARY = text(
   «hammasi nol» ni ajrata olmasdi — modul docstringidagi «nol —
   NATIJA» qoidasi aynan shu yerda mexanik bo'ladi.
 
-⚠ `any_evidence` da `verdict` sharti YO'Q va u kerak emas: u faqat
-  `NOT any_occupied` shoxida ishlatiladi, ya'ni o'sha rastaning
-  BIRORTA sloti `occupied` emas.
+⚠ BO'LAK `_PER_STALL_CTE` DAN KELADI — bu yerda qayta hisoblanmaydi.
+"""
+
+_DAY_STALLS = text(
+    f"""
+    WITH {_PER_STALL_CTE}
+    SELECT s.id          AS stall_id,
+           s.code        AS stall_code,
+           z.name        AS zone_name,
+           ps.bucket     AS bucket,
+           ps.slots      AS slots,
+           ps.occupied_slots AS occupied_slots,
+           ps.human_confirmed AS human_confirmed
+      FROM per_stall ps
+      JOIN stalls s
+        ON s.market_id = :market_id
+       AND s.id = ps.stall_id
+      JOIN zones z
+        ON z.market_id = s.market_id
+       AND z.id = s.zone_id
+     ORDER BY z.name, s.code_sort, s.id
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("business_date", type_=Date()),
+    bindparam("occupied", type_=Text()),
+    bindparam("empty", type_=Text()),
+    bindparam("default_empty", type_=Text()),
+    bindparam("no_coverage", type_=Text()),
+    bindparam("ai", type_=Text()),
+    bindparam("human", type_=Text()),
+)
+"""Rastalar ro'yxati — xulosadagi bo'lak bilan AYNAN BIR MANBADAN.
+
+⚠ TARTIB `/stalls` BILAN BIR XIL (UI-SPEC §11.7): bozor zonasi ->
+  `code_sort`. `code_sort` DB tomonda hisoblanadi (2-faza), ya'ni ro'yxat
+  va xarita bir xil tartibda chiqadi. `s.id` — uchinchi, DETERMINIZM
+  uchun: bir zonada bir xil `code_sort` bo'lishi mumkin emas, lekin
+  tartib butunlay aniq bo'lishi sahifalash kelgan kunda ham kerak.
+"""
+
+_ACCURACY_ROWS = text(
+    """
+    SELECT ra.purpose      AS purpose,
+           ra.queue_kind   AS queue_kind,
+           ev.verdict      AS system_verdict,
+           zr.human_verdict AS human_verdict
+      FROM review_assignments ra
+      JOIN occupancy_events ev
+        ON ev.market_id = ra.market_id
+       AND ev.id = ra.occupancy_event_id
+      LEFT JOIN zone_reviews zr
+        ON zr.market_id = ra.market_id
+       AND zr.review_assignment_id = ra.id
+     WHERE ra.market_id = :market_id
+       AND ev.business_date >= :from_date
+       AND ev.business_date <= :to_date
+     ORDER BY ev.business_date, ra.id
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("from_date", type_=Date()),
+    bindparam("to_date", type_=Date()),
+)
+"""Davr ichidagi BARCHA topshiriqlar — javobsizlari HAM.
+
+=============================================================================
+⛔⛔ SO'ROVDA `purpose`/`queue_kind` FILTRI ATAYIN YO'Q.
+
+Filtr `accuracy_report()` da yashaydi va u YAGONA joyda bo'lishi shart:
+SQL ga ko'chirilsa kafolat IKKI joyda bo'lardi va sof funksiyaning 120
+qatorlik testi mahsulot yo'lini qo'riqlamay qolardi (bugungi filtr
+so'rovda bo'lardi, test esa funksiyani o'lchardi).
+
+⛔ `LEFT JOIN` — JAVOBSIZ BANDLAR CHIQADI (§C.8, 4-dushman). `INNER JOIN`
+   yozish eng tabiiy qisqartma va u aynan qisman bajarilgan auditni
+   TO'LIQ ko'rsatardi: javobsizlar so'rov darajasida yo'qolib, hisobot
+   ularni sanay olmasdi.
+
+⚠ DAVR `occupancy_events.business_date` BO'YICHA, `zone_reviews.
+  decided_at` BO'YICHA EMAS: hisobot «shu KUNLARDAGI bandlik qanchalik
+  to'g'ri o'lchandi?» degan savolga javob beradi, «nazoratchi shu
+  kunlarda nima qildi?» degan savolga emas (u byudjet savoli, 05-10).
+=============================================================================
+"""
+
+_ROUND_STATUS = text(
+    """
+    SELECT ar.round_no      AS round_no,
+           ar.drawn_at      AS drawn_at,
+           ar.frame_size    AS frame_size,
+           count(ra.id)     AS drawn,
+           count(zr.id)     AS answered,
+           count(*) FILTER (WHERE zr.human_verdict = :uncertain) AS dont_know,
+           array_remove(array_agg(zr.decision_ms), NULL) AS decision_ms
+      FROM audit_rounds ar
+      LEFT JOIN review_assignments ra
+        ON ra.market_id = ar.market_id
+       AND ra.audit_round_id = ar.id
+      LEFT JOIN zone_reviews zr
+        ON zr.market_id = ra.market_id
+       AND zr.review_assignment_id = ra.id
+     WHERE ar.market_id = :market_id
+       AND ar.business_date = :business_date
+     GROUP BY ar.round_no, ar.drawn_at, ar.frame_size
+     ORDER BY ar.round_no
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("business_date", type_=Date()),
+    bindparam("uncertain", type_=Text()),
+)
+"""Kunlik ko'r audit turining holati — O'LCHOVNING O'ZINI ko'rsatadi.
+
+⛔ URUG' QAYTARILMAYDI VA U USTUN SIFATIDA UMUMAN MAVJUD EMAS
+   (`audit_rounds` da bunday ustun yo'q — 05-11). Ko'rsatish «tanlash
+   mumkin» degan taassurot berardi.
+
+⛔ «TEZ QAROR» SANOG'I SO'ROVDA HISOBLANMAYDI — xom `decision_ms`
+   qiymatlari qaytadi va sanoq `accuracy_report.is_fast_decision()` bilan
+   qilinadi. Chegara (2000 ms) VA `NULL` qoidasi shu bilan AYNAN BITTA
+   joyda qoladi; SQL ga ko'chirilsa ikkinchi nusxa tug'ilardi va
+   `NULL` ni «tez» deb sanaydigan variant jimgina paydo bo'lishi mumkin
+   edi.
+
+⚠ `array_remove(..., NULL)` — `NULL` lar OLIB TASHLANADI, `0` GA
+  AYLANTIRILMAYDI: nol millisekund «juda tez», `NULL` esa
+  «O'LCHANMAGAN».
+
+⚠ `answered` `count(zr.id)` bilan sanaladi (`count(*)` EMAS): `LEFT
+  JOIN` da javobsiz topshiriq ham qator beradi va `count(*)` ularni
+  «javob berilgan» deb sanardi.
 """
 
 
@@ -450,19 +667,27 @@ class OccupancyRepository(TenantScopedRepository):
     # 3. O'QISH TOMONI
     # ------------------------------------------------------------------
 
+    def _bucket_params(self, business_date: date) -> dict[str, object]:
+        """`_PER_STALL_CTE` ning parametrlari — IKKALA so'rov uchun BIR marta.
+
+        ⚠ Qiymatlar ENUM DAN hosila: literal yozilganda `CASE` jimgina
+          birorta shoxga tushmay qolardi va butun bo'lak `default_empty`
+          bo'lardi — hech qanday xatosiz.
+        """
+        return {
+            "market_id": self.market_id,
+            "business_date": business_date,
+            "occupied": _OCCUPIED,
+            "empty": OccupancyVerdict.EMPTY.value,
+            "default_empty": ResolutionSource.DEFAULT_EMPTY.value,
+            "no_coverage": ResolutionSource.NO_COVERAGE.value,
+            "ai": ResolutionSource.AI.value,
+            "human": ResolutionSource.HUMAN.value,
+        }
+
     async def day_summary(self, business_date: date) -> OccupancyDaySummary:
         """Besh hisoblagich — NOL bo'lganda ham beshalasi qaytadi."""
-        result = await self.session.execute(
-            _DAY_SUMMARY,
-            {
-                "market_id": self.market_id,
-                "business_date": business_date,
-                "occupied": _OCCUPIED,
-                "no_coverage": ResolutionSource.NO_COVERAGE.value,
-                "ai": ResolutionSource.AI.value,
-                "human": ResolutionSource.HUMAN.value,
-            },
-        )
+        result = await self.session.execute(_DAY_SUMMARY, self._bucket_params(business_date))
         row = result.mappings().one()
         return OccupancyDaySummary(
             occupied=int(row["occupied"]),
@@ -471,4 +696,64 @@ class OccupancyRepository(TenantScopedRepository):
             no_coverage=int(row["no_coverage"]),
             human_confirmed=int(row["human_confirmed"]),
             stalls=int(row["stalls"]),
+        )
+
+    async def day_stalls(self, business_date: date) -> list[StallDay]:
+        """Rastalar ro'yxati — xulosadagi bo'lak bilan BIR MANBADAN."""
+        result = await self.session.execute(_DAY_STALLS, self._bucket_params(business_date))
+        return [
+            StallDay(
+                stall_id=row["stall_id"],
+                stall_code=row["stall_code"],
+                zone_name=row["zone_name"],
+                bucket=row["bucket"],
+                slots=int(row["slots"]),
+                occupied_slots=int(row["occupied_slots"]),
+                human_confirmed=bool(row["human_confirmed"]),
+            )
+            for row in result.mappings()
+        ]
+
+    async def accuracy_rows(self, from_date: date, to_date: date) -> list[AccuracyRow]:
+        """Davr ichidagi BARCHA topshiriqlar — filtrsiz (`_ACCURACY_ROWS`)."""
+        result = await self.session.execute(
+            _ACCURACY_ROWS,
+            {"market_id": self.market_id, "from_date": from_date, "to_date": to_date},
+        )
+        return [
+            AccuracyRow(
+                purpose=row["purpose"],
+                queue_kind=row["queue_kind"],
+                system_verdict=row["system_verdict"],
+                human_verdict=row["human_verdict"],
+            )
+            for row in result.mappings()
+        ]
+
+    async def round_status(self, business_date: date) -> RoundStatus | None:
+        """Shu kunning ko'r audit turi — tortilmagan bo'lsa `None`.
+
+        ⚠ `None` — «namuna TORTILMAGAN», «hammasi bajarildi» EMAS
+          (`review_repo._HAS_ANY_ROUND` ning aynan farqi). Chaqiruvchi
+          ikkalasini ajratib ko'rsatishi shart.
+        """
+        result = await self.session.execute(
+            _ROUND_STATUS,
+            {
+                "market_id": self.market_id,
+                "business_date": business_date,
+                "uncertain": OccupancyVerdict.UNCERTAIN.value,
+            },
+        )
+        row = result.mappings().first()
+        if row is None:
+            return None
+        return RoundStatus(
+            round_no=int(row["round_no"]),
+            drawn_at=row["drawn_at"],
+            frame_size=int(row["frame_size"]),
+            drawn=int(row["drawn"]),
+            answered=int(row["answered"]),
+            dont_know=int(row["dont_know"]),
+            decision_ms=tuple(int(value) for value in row["decision_ms"]),
         )

@@ -34,6 +34,21 @@ UXLAB yotadi:
   skript aniqlik foizini UMUMAN ko'rsatmaydi: raqamni ko'rsatish uni
   o'lchangan qilib ko'rsatardi, va o'sha raqam keyin taqdimotga,
   hisobotga, shartnomaga ko'chib ketardi.
+
+=============================================================================
+⚠ VERDIKT PROVAYDERI IN'EKTSIYA QILINADI, SHU YERDA QURILMAYDI (05-12).
+
+`run_gate(..., provider=...)` — D-02 ning choki. Standart qiymat ATAYIN
+`None`: haqiqiy provayder `cv-service` ning `DetectorSession` +
+`zone_verdict` yo'li, u esa BOSHQA image va BOSHQA toolchain
+(`onnxruntime`/`supervision` bu muhitda o'rnatilmagan), ONNX artefakti
+esa repoda umuman saqlanmaydi (D-24).
+
+Standart provayder yozilganda u BIRORTA muhitda ishga tushmasdi va
+ishga tushmaydigan kod «ulangan» degan yolg'on va'da bo'lardi. Uning
+o'rniga darvozaning QUROLLANGAN yo'li testda in'ektsiya qilingan
+provayder bilan TO'LIQ yuritiladi (`test_golden_harness.py`), ya'ni
+zanjirning shu tomondagi yarmi BUGUN o'lchanadi.
 =============================================================================
 
 Ishga tushirish:
@@ -263,8 +278,15 @@ def run_gate(
         # yashirardi.
         _fail(
             f"{len(karmana)} ta karmana yozuvi bor (>= {min_n}), ya'ni darvoza UYG'ONDI, "
-            "lekin verdikt provayderi ulanmagan. 05-12 `VerdictProvider` ni "
-            f"`{ACCURACY_MODULE}` bilan birga ulaydi."
+            "lekin verdikt provayderi ulanmagan. "
+            "Provayder — `cv-service` ning `DetectorSession` + `zone_verdict` yo'li "
+            "(`services/cv-service/app/detector/`) va u IN'EKTSIYA QILINADI: "
+            "`run_gate(rows, min_n=..., threshold=..., provider=<chaqiriluvchi>)`. "
+            "⛔ BU YERDA STANDART PROVAYDER YO'Q VA U ATAYIN: `cv-service` "
+            "boshqa image, boshqa toolchain (`onnxruntime`/`supervision` bu "
+            "muhitda o'rnatilmagan) va ONNX artefakti repoda saqlanmaydi "
+            "(D-24). Import qilingan taqdirda SKRIPTNING O'ZI bu yerda "
+            "ishga tushmasdi."
         )
 
     accuracy_module = importlib.import_module(ACCURACY_MODULE)
