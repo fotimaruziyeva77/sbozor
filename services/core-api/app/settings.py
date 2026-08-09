@@ -357,6 +357,40 @@ class Settings(BaseSettings):
     #   `.env` dan sozlanadi — migratsiya kerak emas.
     review_uncertain_midpoint: Annotated[float, Field(ge=0.0, le=1.0)] = 0.45
 
+    # --- 05-11: ko'r audit tortishi (AI-04, D-14) ---
+    #
+    # ⛔ NAMUNA HAJMI UCHUN IKKINCHI SOZLAMA YOZILMADI VA BU O'YLANGAN QAROR.
+    #
+    #   Reja `BLIND_AUDIT_DAILY_SAMPLE` (30) ni so'raydi, lekin
+    #   `review_blind_daily_budget` ALLAQACHON aynan o'sha D-13 sonini
+    #   tashiydi. Ikki sozlama BIR songa qo'yilsa ular ajralib ketardi va
+    #   ajralishning IKKALA yo'nalishi ham JIM nosozlik:
+    #
+    #     tortish > byudjet -> namunaning bir qismi HECH QACHON javob
+    #                          olmaydi va u hisobotga «javobsiz» bo'lib
+    #                          kiradi (C.8, 4-dushman) — ya'ni o'lchov
+    #                          asbobi o'zini o'zi kesardi;
+    #     tortish < byudjet -> nazoratchining diqqati bo'sh qoladi va
+    #                          «bugun bajarildi» aslida «bugun kam
+    #                          tortildi» degani bo'lardi.
+    #
+    #   D-13 BITTA son beradi («kuniga 30 band»), ya'ni sozlama ham BITTA
+    #   bo'lishi kerak. `audit_draw` uni `sample_size` ARGUMENTI sifatida
+    #   oladi va argument `worker.py` da shu maydondan to'ladi.
+    #
+    # ⚠ 0,70 — D-14 ning O'LCHOV qarori, qulaylik emas: aniqlik hisoboti
+    #   FAQAT `eval` qatorlardan hisoblanadi va o'sha qatorlar hech qachon
+    #   trening eksportiga tushmaydi. Ulushni OSHIRISH trening to'plamini
+    #   kambag'allashtiradi; TUSHIRISH esa Wilson oralig'ini kengaytiradi
+    #   (05-RESEARCH §C.8.4 — n=73 da ±5 f.p.). Ikkala yo'nalish ham
+    #   mahsulot qarori, shuning uchun u `.env` da.
+    #
+    # ⛔ NISBAT TORTISH PAYTIDA QO'YILADI (D-14) va bu sozlamaning O'ZI
+    #   uni kafolatlamaydi — kafolat `audit_draw` ning bitta `INSERT` ida
+    #   va `ck_review_assignments_eval_needs_blind_audit` da. Sozlamani
+    #   kun o'rtasida o'zgartirish O'TGAN turlarga tegmaydi.
+    review_blind_eval_ratio: Annotated[float, Field(gt=0.0, le=1.0)] = 0.70
+
     # --- Telegram alertlari (04-08, FOUND-06) ---
     #
     # ⚠ S3 KALITLARIDAN TESKARI: bo'sh qiymat — QONUNIY holat. Bo'sh token

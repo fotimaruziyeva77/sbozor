@@ -115,6 +115,7 @@ from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 
 from app.jobs.alerting import alert_sweep, daily_digest
+from app.jobs.audit_draw import QueueTickPolicy, daily_queue_tick
 from app.jobs.capture import BatchRequest, CapturePolicy, capture_batch, capture_tick
 from app.jobs.discovery import discover_nvr
 from app.jobs.retention import RetentionPolicy, retention_daily
@@ -138,6 +139,7 @@ __all__ = [
     "JOBS_QUEUE",
     "LOG_LEVEL_ENV",
     "MARKET_CRON_OFFSET",
+    "QUEUE_TICK_CRON",
     "RETENTION_CRON",
     "SENTRY_DSN_ENV",
     "SWEEP_CRON",
@@ -148,6 +150,7 @@ __all__ = [
     "capture_batch_task",
     "capture_tick_task",
     "daily_digest_task",
+    "daily_queue_tick_task",
     "discover_nvr_task",
     "enqueue_discovery",
     "retention_daily_task",
@@ -370,6 +373,36 @@ DIGEST_CRON: Final[str] = "0 20 * * *"
   18:00 + 10 daqiqa grace + zaxira = 20:00.
 """
 
+QUEUE_TICK_CRON: Final[str] = "30 19 * * *"
+"""Nazoratchi navbatlari — 19:30 (Toshkent), oxirgi slotdan (18:00) KEYIN.
+
+=============================================================================
+⛔⛔ VAQT — XOLISLIK QARORI, QULAYLIK EMAS (05-RESEARCH §C.8, 2-dushman).
+
+Ko'r audit doirasi kunning BARCHA slotlarini qamrashi shart. Kun
+o'rtasida tortilgan namuna faqat ertalabki slotlardan iborat bo'lardi va
+kunning ikkinchi yarmi (16:00, 18:00) o'lchovga UMUMAN kirmasdi — ya'ni
+«tasodifiy namuna» degan da'vo jimgina «ertalabki namuna» ga aylanardi.
+
+⛔ SHU SABABDAN NOANIQ NAVBAT HAM SHU YERDA, SOAT SAYIN EMAS.
+
+   Noaniq navbatni tez-tez qurish o'z-o'zicha oqilona ko'rinadi (bandlar
+   kun bo'yi qo'shiladi). Lekin o'shanda kun oxiriga borib BARCHA
+   `uncertain` hodisalar allaqachon noaniq navbatda bo'lardi va ko'r
+   audit namunasi ularni `ON CONFLICT DO NOTHING` bilan JIMGINA
+   yo'qotardi — cron JADVALI 2-dushmanni qaytadan ochardi.
+
+   Chaqiruv TARTIBINI kod majburlaydi (`daily_queue_tick`), CADENCE ni
+   esa BITTA vazifa. Ikkalasi ham kerak.
+
+⚠ 19:30 = 18:00 + grace + aniqlash quyruq vaqti; dayjestdan (20:00)
+  OLDIN, ya'ni kunlik xabar navbat qurilgandan keyin chiqadi.
+
+⚠ NAZORATCHI KECHAGI NAVBATNI BUGUN KO'RADI va bu KUTILGAN xulq:
+  byudjet `zone_reviews.decided_at` bo'yicha sanaladi (05-10), ya'ni
+  kechagi qoldiq BUGUNGI diqqat byudjetini yeydi.
+"""
+
 
 class ObservedScheduler(TaskiqScheduler):
     """`on_ready` ni o'rab oladigan planer — YUTILGAN ISTISNONI E'LON QILADI.
@@ -533,6 +566,7 @@ async def _open_worker_resources(state: TaskiqState) -> None:
     state.sources = sources
     state.policy = _capture_policy(settings)
     state.retention = _retention_policy(settings)
+    state.queue_tick = _queue_tick_policy(settings)
 
     # ⚠ ALERT JO'NATUVCHISI HAM SHU YERDA (04-08). `alert_sweep` har 5
     #   daqiqada ishlaydi, ya'ni har safar yangi TLS qo'l siqishi narxini
@@ -585,6 +619,22 @@ def _retention_policy(settings: Settings) -> RetentionPolicy:
         compressed_days=settings.retention_compressed_days,
         jpeg_quality=settings.retention_jpeg_quality,
         batch_size=settings.retention_batch_size,
+    )
+
+
+def _queue_tick_policy(settings: Settings) -> QueueTickPolicy:
+    """`Settings` -> `QueueTickPolicy` — `_retention_policy` bilan bir xil qaror.
+
+    ⛔ `sample_size` `review_blind_daily_budget` DAN OLINADI va ikkinchi
+       sozlama YOZILMAGAN: D-13 bitta son beradi («kuniga 30 band»), ikki
+       sozlama esa ajralib ketardi va ajralishning ikkala yo'nalishi ham
+       JIM nosozlik (`settings.py` dagi bo'lim izohi).
+    """
+    return QueueTickPolicy(
+        sample_size=settings.review_blind_daily_budget,
+        eval_ratio=settings.review_blind_eval_ratio,
+        uncertain_limit=settings.review_uncertain_daily_budget,
+        midpoint=settings.review_uncertain_midpoint,
     )
 
 
@@ -743,6 +793,32 @@ async def daily_digest_task(context: Annotated[Context, TaskiqDepends()]) -> Non
     """
     state = context.state
     await daily_digest(state.sessionmaker, state.sender, business_date=business_today())
+
+
+@broker.task(
+    task_name="review.queue_tick",
+    schedule=[{"cron": QUEUE_TICK_CRON, "cron_offset": MARKET_CRON_OFFSET}],
+)
+async def daily_queue_tick_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — ko'r audit namunasi VA noaniq navbat (05-11, AI-03/AI-04).
+
+    ⛔ IKKI QADAM BITTA VAZIFADA VA TARTIBI KODDA (`daily_queue_tick`):
+       avval ko'r audit tortiladi, keyin noaniq navbat quriladi. Ikkita
+       alohida vazifa yozilsa planer ularni MUSTAQIL jadval bilan
+       chaqirardi va tartib kafolati cron satrlariga ko'chib ketardi —
+       ya'ni xolislik kafolati kod tekshiruvidan CHIQIB ketardi
+       (`QUEUE_TICK_CRON` docstringi).
+
+    ⚠ BIZNES-KUN QOBIQDA HISOBLANADI, jobda EMAS (`daily_digest_task`
+      bilan bir xil qoida): job uni ARGUMENT sifatida oladi va shu bilan
+      «qaysi kun?» savoli testda bitta qiymatga aylanadi.
+    """
+    state = context.state
+    await daily_queue_tick(
+        state.sessionmaker,
+        business_date=business_today(),
+        policy=state.queue_tick,
+    )
 
 
 async def enqueue_discovery(
