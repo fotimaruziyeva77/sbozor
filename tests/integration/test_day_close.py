@@ -502,7 +502,9 @@ async def test_any_camera_occupied_wins(
         f"rasta {verdict!r} deb yozildi — «birortasi band desa band» buzilgan (D-20)"
     )
     assert source == ResolutionSource.AI.value
-    assert winner == seeded.event_id, "g'olib hodisa AYNAN band deb topilgan zonaniki bo'lishi shart"
+    assert winner == seeded.event_id, (
+        "g'olib hodisa AYNAN band deb topilgan zonaniki bo'lishi shart"
+    )
 
 
 async def test_human_verdict_overrides_ai_for_that_zone(
@@ -594,7 +596,9 @@ async def test_rerun_is_idempotent(
     await close(app_sessionmaker)
     second = slot_rows(sync_owner_conn, env.market_a)
 
-    assert second == first, "qayta hisoblash natijani o'zgartirdi — materializatsiya idempotent emas"
+    assert second == first, (
+        "qayta hisoblash natijani o'zgartirdi — materializatsiya idempotent emas"
+    )
 
 
 async def test_a_later_human_answer_reaches_a_closed_day(
