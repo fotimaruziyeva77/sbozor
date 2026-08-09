@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-12-PLAN.md
-last_updated: "2026-08-09T19:17:39.865Z"
-last_activity: "2026-08-10 -- 05-13 bajarildi (nazoratchining ikki sessiyasi: noaniq navbat va ko'rmasdan tekshirish)"
+stopped_at: Completed 05-14-PLAN.md
+last_updated: "2026-08-09T20:15:17.790Z"
+last_activity: "2026-08-10 -- 05-14 bajarildi (bandlik va aniqlik hisoboti: besh hisoblagich, chalkashlik matritsasi, namuna holati, rastalar ro'yxati)"
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 82
-  completed_plans: 80
+  completed_plans: 81
   percent: 44
 ---
 
@@ -26,31 +26,32 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 5
-Plan: 13
+Plan: 14
 Total Plans in Phase: 15
 Status: Executing
-Last activity: 2026-08-10 -- 05-13 bajarildi (nazoratchining ikki sessiyasi: noaniq navbat va ko'rmasdan tekshirish)
+Last activity: 2026-08-10 -- 05-14 bajarildi (bandlik va aniqlik hisoboti: besh hisoblagich, chalkashlik matritsasi, namuna holati, rastalar ro'yxati)
 
-Progress: [█████████░] 87% (13/15 reja — 05-01…05-13)
+Progress: [█████████░] 93% (14/15 reja — 05-01…05-14)
 
-⚠ **Wave 0 (05-01…05-04), sxema (05-05) va Wave 3/4/5/6/7
-(05-06…05-13) yopildi.** `05-13` AI-03 va AI-04 ning EKRANLARINI
-yetkazdi: `/review` uyi, `/review/uncertain` va `/review/blind`. Ko'rlik
-uch mustaqil qatlamda qulflandi — modul chegarasi (G-12, endi 4 fayl
-skanerlanadi), sxemaning qattiqligi (G-13, `z.strictObject`) va
-marshrutning shakli (G-14a, haqiqiy katalog). Ikkala talab ham
-YOPILMADI: AI-04 aniqlik hisobotining EKRANINI ham talab qiladi
-(`05-14`) va sof `inspector` dalil kadrini hali ko'ra olmaydi
-(pastdagi ochiq band).
+⚠ **Wave 0 (05-01…05-04), sxema (05-05) va Wave 3…8 (05-06…05-14)
+yopildi.** `05-14` AI-04/AI-05/AI-06 ning DIREKTOR yuzasini yetkazdi:
+`/occupancy` — besh qo'shilmaydigan hisoblagich, chalkashlik matritsasi
+(bazaviy ulush va uch Wilson oralig'i bilan), namuna holati va rastalar
+ro'yxati + DL-5. **Barcha foizlar SERVER hisoblagan holda chiziladi** va
+`confusion-matrix.tsx` da birorta bo'lish amali yo'q: 05-12 o'lchagan
+ikki maxraj (`fp/(tp+fp)` vs `fp/n`) **ikkalasi ham to'g'ri arifmetika**,
+lekin boshqa savolga javob. `measured` va `min_sample` ham serverdan.
+Faqat `05-15` (faza darvozasi) qoldi.
 
 ⚠⚠ **D-16 (~10% takroriy band) BUGUNGI SXEMADA IFODALAB BO'LMAYDI**
 va bu o'lchandi: ikkita `UNIQUE` (3- va 4-himoya) uni rad etadi, ya'ni
 5-himoyani qurish ularni bo'shatishni talab qilardi. Mexanizm ATAYIN
-qurilmadi; ziddiyat `test_a_repeat_band_is_structurally_impossible_today`
-bilan bajariladigan o'lchov bo'lib turadi. **`05-12` da BAJARILDI:**
-aniqlik hisobotida bu miqdor NA SON, NA MAYDON sifatida yo'q va ikkita
-test uni qulflaydi. **Oqibati `05-14` uchun:** UI-SPEC §11.6 ning
-«Ichki moslik» qatori ESKIRGAN — ekran uni chizmasligi kerak.
+qurilmadi. **`05-12` da:** hisobotda NA SON, NA MAYDON. **`05-14` da
+YAKUNLANDI:** ekranda ham na qator, na «—», na nol, na `occupancy.
+selfConsistency*` kaliti. Yo'qlik IKKI QATLAMDA o'lchanadi — sxema
+javobni RAD ETADI (`z.strictObject`) va `<dt>` yorliqlari TO'PLAMI
+literal qulflangan. **⚠ UI-SPEC §11.6 ESKIRGAN va uni tuzatish `05-15`
+ning bandi.**
 
 ⚠⚠ **OCHIQ XAVFSIZLIK BANDI (05-10 dan, 05-11 va 05-13 da ham kuchda):**
 sof `inspector` roli dalil kadrini KO'RA OLMAYDI —
@@ -119,6 +120,7 @@ YASHIL QOLIB noto'g'ri narsani o'lchardi. `dc5f182` ning aynan davomi.
 | Phase 05 P10 | 111 | 3 tasks | 9 files |
 | Phase 05 P12 | 175min | 3 tasks | 16 files |
 | Phase 05 P13 | 165min | 3 tasks | 20 files |
+| Phase 05 P14 | 150 | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -209,6 +211,9 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-13: «bitta so'rov = bitta qaror» POYGA masalasi — test uch bosishda uch javob yuborilishini topdi; qulf useRef da va u BAND IDENTIFIKATORINI saqlaydi (nollash kerak emas)
 - [Phase 05]: 05-13: sabotaj "removeQueries vs invalidateQueries" da'vosining bugungi sozlamada O'LCHANMASLIGINI fosh qildi — kafolat JUFTLIKDAN (gcTime: 0 + removeQueries) chiqadi va ikkala yarim alohida qo'riqlanadi
 - [Phase 05]: 05-13: o'lchanmagan sonning o'rniga NOL yozilmaydi — D-19 qatori report_view yo'q sessiyada UMUMAN chizilmaydi (T-05-04)
+- [Phase 05]: 05-14: foiz KLIENTDA hisoblanmaydi — uch nisbat, uch oraliq, baseRate, measured va min_sample SERVERDAN; klientdagi qayta hisob xato bo'lib emas, IKKINCHI JAVOB bo'lib chiqardi (5,4 % vs 3,8 %)
+- [Phase 05]: 05-14: D-16 ekranda ham YO'Q — na qator, na tire, na nol, na kalit; yo'qlik «so'z topilmadi» bilan emas, <dt> to'plamining literal tengligi va z.strictObject bilan o'lchanadi
+- [Phase 05]: 05-14: DL-5 slot qatorlarisiz qurildi — OccupancyStallItem da slot vaqti, kamera va snapshot_id YO'Q; to'qish (stub) va bo'sh jadval (placeholder) rad etildi, yangi marshrut Rule 4 sifatida 05-15 ga
 
 ### Pending Todos
 
@@ -242,6 +247,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-09T19:17:18.540Z
-Stopped at: Completed 05-12-PLAN.md
+Last session: 2026-08-09T20:15:17.779Z
+Stopped at: Completed 05-14-PLAN.md
 Resume file: None

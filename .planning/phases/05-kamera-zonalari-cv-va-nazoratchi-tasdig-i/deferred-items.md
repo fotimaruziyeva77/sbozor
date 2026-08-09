@@ -63,3 +63,60 @@ imzosini o'zgartiradi.
 argumentli shaklga o'tkazish, yoki (b) ularni `0018` dan olib tashlash
 kerakligi haqida ONGLI qaror. Ikkalasi ham hozir `SECURITY DEFINER`
 yuzasi bo'lib turibdi va chaqiruvchisi yo'q.
+
+---
+
+## 3. DL-5 SLOT QATORLARI — MARSHRUT YO'Q (05-14 da o'lchandi)
+
+**Holat:** `stall-detail-dialog.tsx` (DL-5) rastaning KUN bo'yicha
+hukmini, uning manbasini va slot nisbatini ko'rsatadi. UI-SPEC §11.7
+esa undan **kun davomidagi har vaqt uchun bitta qator** talab qiladi:
+`vaqt · kamera · natija · manba`, va har qatordan dalil kadri ochiladi.
+
+**Sabab — MA'LUMOT MANBASI YO'Q va bu o'lchandi:**
+
+- `GET /occupancy` bitta rasta uchun `OccupancyStallItem` beradi va unda
+  **aynan yetti maydon** bor (`stall_id`, `stall_code`, `zone_name`,
+  `status`, `slots`, `occupied_slots`, `human_confirmed`);
+- na slot vaqti, na kamera nomi, na `snapshot_id` — ya'ni «har qatordan
+  dalil kadri» uchun kerak bo'lgan identifikator **javobda yo'q**;
+- `occupancy_repo.py` da rasta-slot qatorlarini beradigan metod ham
+  **yozilmagan** (`day_stalls` agregat qaytaradi).
+
+**Rad etilgan ikki variant:** (a) qatorlarni klientda to'qib chiqarish —
+soxta ma'lumot, ya'ni eng yomon shakldagi stub; (b) «tez orada» degan
+bo'sh jadval — placeholder, u ham va'da berib bajarmaydi.
+
+**Nega bu rejada tuzatilmadi:** yangi marshrut (`GET
+/occupancy/stalls/{id}?day=`) + repozitoriy metodi + `REPORT_VIEW`
+tegi + `MINIMUM_MATRIX_ROUTES` 60 -> 61 + `tests/tenancy` qatorlari —
+**Rule 4** (arxitektura), va 05-14 ning `files_modified` ro'yxati
+**faqat `frontend/`**.
+
+**Kim uchun:** `05-15` yoki 8-faza. ⚠ Qaror bilan birga **dalil-kadr
+huquq bo'shlig'i** ham hal bo'lishi kerak (1-band emas — 05-13 ning
+`threat_flag` i): DL-5 dan kadr ochiladigan bo'lsa, u `CAMERA_VIEW`
+talab qiladi va direktorda bu huquq **bor**, ya'ni bu yerda bo'shliq
+YO'Q — bo'shliq faqat sof `inspector` da.
+
+---
+
+## 4. «TEZ QAROR» CHEGARASI JAVOBDA YO'Q (05-14 da o'lchandi)
+
+**Holat:** `round-summary.tsx` «Tez qaror: N» ni ko'rsatadi, lekin
+chegarani (2 soniya) **nomlamaydi**. UI-SPEC §12.6 ning matni
+`{seconds} soniyadan tez` deb yozilgan.
+
+**Sabab:** chegara `accuracy_report.is_fast_decision()` da (2000 ms) va
+`GET /occupancy/round` javobida **maydon sifatida yo'q**. Uni klientda
+yozish server konstantasining IKKINCHI nusxasi bo'lardi — chegara
+o'zgargan kuni yorliq jimgina yolg'on gapirardi. Bu aynan 05-12 ning
+`min_sample` uchun tanlagan yo'lining teskarisi bo'lardi.
+
+**Eng tor tuzatish:** `OccupancyRoundResponse` ga bitta maydon —
+`fast_decision_ms` (yoki `fast_decision_seconds`). Marshrut allaqachon
+`REPORT_VIEW` ostida, ya'ni yangi huquq yuzasi **ochilmaydi** va
+matritsa qatori ham o'zgarmaydi. Shundan keyin §12.6 ning matni to'liq
+tiklanadi.
+
+**Kim uchun:** `05-15` yoki 8-faza (hisobot yuzasi).
