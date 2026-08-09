@@ -93,7 +93,12 @@ metrics:
 
 # Phase 5 Plan 11: Ko'r audit — hosila urug', muzlatilgan doira va beshta strukturaviy himoya — Summary
 
-**Nazoratchi endi tizim javobini KO'RMASDAN, hosila urug' bilan tasodifiy tanlangan va muzlatilgan doiradan tortilgan namunani baholaydi; beshala himoyaning to'rttasi kodda va sxemada o'lchandi, beshinchisi (D-16 takroriy band) esa bugungi sxemada IFODALAB BO'LMASLIGI isbotlandi va yolg'on mexanizm QURILMADI.**
+**Nazoratchi endi tizim javobini KO'RMASDAN, hosila urug' bilan tasodifiy tanlangan va muzlatilgan doiradan tortilgan namunani baholaydi; §C.8 ning beshala DUSHMANIDAN to'rttasining chorasi kodda va sxemada o'lchandi, beshinchisiniki (D-16 takroriy band) esa bugungi sxemada IFODALAB BO'LMASLIGI isbotlandi va yolg'on mexanizm QURILMADI.**
+
+> ⚠ **SANOQ QAYSI RO'YXATNIKI** (05-VERIFICATION, W-1): yuqoridagi «4/5»
+> `05-RESEARCH §C.8` ning **dushmanlar** jadvaliga tegishli. D-17 ning
+> **mexanizmlari** (`D-17.1`…`D-17.5`) esa **5/5** qurilgan — bu boshqa
+> to'plam va moslik 1:1 emas. Farq `05-CONTEXT` D-17 bandida.
 
 ## Performance
 

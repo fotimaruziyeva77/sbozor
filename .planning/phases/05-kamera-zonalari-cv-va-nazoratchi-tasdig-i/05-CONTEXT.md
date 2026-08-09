@@ -46,7 +46,31 @@
 - **D-14** (OQ-6): `eval`/`train` nisbati — **70/30**, **tortish paytida** belgilanadi. Bu audit ma'lumoti o'qitishda ishlatilsa ham hisobot aniqligini shishira olmasligini kafolatlaydi.
 - **D-15** (OQ-7): Ko'r audit javobi bandlikni **ham tuzatadi, ham o'lchaydi** — inson javobi sifatliroq haqiqat va uni tashlab yuborish isrof. Hisobot `queue_kind` bo'yicha ajratadi.
 - **D-16** (OQ-13): Nazoratchi ishonchliligi (takroriy band) **v1 da yoqiladi**, ~10% — arzon va real kadrsiz ishlaydi.
-- **D-17**: **Ko'r auditning xolisligi beshta strukturaviy himoya bilan qo'riqlanadi**, konventsiya bilan emas: hosila urug' (namunani qayta chizib bo'lmaydi), AI maydonlari payloadda **umuman yo'q** (yashirilgan emas), «ko'r, lekin ko'rsatilgan» holatini ifodalab bo'lmaydigan qiladigan `CHECK`, o'zgarmas javoblar (oshkor qilingandan keyin tahrirlash imkonsiz), va 70/30 bo'linishi.
+  ⛔ **QURILMADI (05-11) va bu qaror ONGLI.** Bugungi sxemada D-16 ni
+  strukturaviy ravishda **ifodalab bo'lmaydi**: `audit_draw` har hodisani
+  eng ko'pi bilan **bir marta** tortadi. Yolg'on mexanizm qurilmadi,
+  UI-SPEC §11.6 qatori olib tashlandi, i18n kaliti yozilmadi. To'liq
+  bayonot — `05-VALIDATION.md` ning `automated_replacements` bloki.
+  Ya'ni **§C.8 ning 5-dushmani bugun ochiq** va u yashirilmagan.
+- **D-17**: **Ko'r auditning xolisligi beshta strukturaviy MEXANIZM bilan qo'riqlanadi**, konventsiya bilan emas. Ular repo bo'ylab **`D-17.1`…`D-17.5`** deb ataladi:
+  - **D-17.1** — hosila urug' (namunani qayta chizib bo'lmaydi);
+  - **D-17.2** — AI maydonlari payloadda **umuman yo'q** (yashirilgan emas);
+  - **D-17.3** — «ko'r, lekin ko'rsatilgan» holatini ifodalab bo'lmaydigan qiladigan `CHECK`;
+  - **D-17.4** — o'zgarmas javoblar (oshkor qilingandan keyin tahrirlash imkonsiz);
+  - **D-17.5** — 70/30 bo'linishi.
+
+  ⛔ **BU RO'YXAT `05-RESEARCH §C.8` NING «BESHTA DUSHMANI» EMAS** — ikkalasi
+  ham beshta a'zoli va aynan shu tasodif 05-VERIFICATION ning W-1
+  ogohlantirishini tug'dirgan. Ular bir-birining qayta raqamlanishi
+  **emas**: §C.8 ning 3-dushmaniga qarshi chora (`UNIQUE(occupancy_event_id)`)
+  bu beshlikda **yo'q**, D-17.5 (70/30) esa dushmanlar jadvalida alohida
+  qator **emas**. Moslik **1:1 emas** — masalan §C.8 ning 4-dushmaniga
+  D-17.1 va D-17.4 **birgalikda** javob beradi.
+
+  ⚠ **Sanoq qaysi ro'yxatga tegishli ekani HAR SAFAR aytilishi shart.**
+  «Beshalasi qurilgan» — **mexanizmlar** haqida rost (5/5). «To'rttasi
+  qurilgan» — **dushmanlar** haqida rost (5-dushmanning chorasi D-16 va u
+  qurilmagan, sabab D-16 bandida).
 - **D-18**: «Hammasini tasdiqlash» tugmasi **yo'q** (AI-03).
 - **D-19** (AI-06): Kun oxirigacha tasdiqlanmagan noaniq → **«bo'sh»**, hisobotda **alohida belgi bilan**. Bu standart billing kirishiga jimgina aylana olmasligi kerak.
 

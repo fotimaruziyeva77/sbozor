@@ -141,8 +141,8 @@ Shuning uchun uchta UI qoidasi **muzokarasiz** va §15 da darvozaga aylanadi:
 | **D-13** — 30 band/kun | 05-CONTEXT | Byudjet **hisoblagich** sifatida ko'rinadi (`7 / 30`), ⛔ **progress bar EMAS** (§7.3) |
 | **D-14** — 70/30 `eval`/`train`, **tortish paytida** | 05-CONTEXT | Nazoratchi bu belgini **ko'rmaydi** (u xulqni o'zgartirardi). Belgi faqat Y-4 hisobotida **agregat** sifatida ko'rinadi (§11.6) |
 | **D-15** — ko'r audit javobi **ham tuzatadi, ham o'lchaydi** | 05-CONTEXT | Y-4 hisoboti `queue_kind` bo'yicha **ajratadi**; bandlik xulosasida ko'r audit javobi ham `human` manba sifatida sanaladi (§11.4) |
-| **D-16** — takroriy band ~10% | 05-CONTEXT | Nazoratchi uchun ⛔ **ko'rinmaydi** — takroriy band oddiy banddan farq qilmaydi, aks holda o'lchov ma'nosini yo'qotadi (§7.6). Natija faqat Y-4 da |
-| **D-17** — beshta strukturaviy himoya | 05-CONTEXT, 05-RESEARCH §C.8 | §7.7 jadvali + **G-12/G-13/G-14** darvozalari (§15) |
+| **D-16** — takroriy band ~10% — ⛔ **QURILMADI** (05-11) | 05-CONTEXT | Nazoratchi uchun ⛔ **ko'rinmaydi** — takroriy band oddiy banddan farq qilmaydi, aks holda o'lchov ma'nosini yo'qotadi (§7.6). Natija faqat Y-4 da |
+| **D-17** — beshta strukturaviy **MEXANIZM** (`D-17.1`…`D-17.5`) | 05-CONTEXT | §7.6 jadvali + **G-12/G-13/G-14** darvozalari (§15). ⚠ `05-RESEARCH §C.8` **dushmanlarni** sanaydi, mexanizmlarni emas — boshqa to'plam (W-1) |
 | **D-18** — «hammasini tasdiqlash» **yo'q** | 05-CONTEXT | ⛔ Navbat **ro'yxat emas** — bir vaqtda **bitta band** (§7.3). Ko'p tanlash, checkbox ustuni, ommaviy amal paneli — **yo'q** |
 | **D-19** — tasdiqlanmagan noaniq → «bo'sh», **alohida belgi bilan** | 05-CONTEXT, 05-RESEARCH §C.10 | Y-4 da ⛔ **to'rtinchi hisoblagich**: `Ko'rilmagani uchun bo'sh`. Nol bo'lsa ham ko'rsatiladi (§11.4) |
 | **D-22** — `no_coverage` **alohida**, hech qachon «bo'sh» ga qo'shilmaydi | 05-CONTEXT | Y-4 da ⛔ **beshinchi hisoblagich**: `Qamrov yo'q` + `/cameras` ga yo'l. Y-1 da qamrov kartasi (§6.9) |
@@ -771,17 +771,26 @@ Bu bo'lim savolga to'g'ridan-to'g'ri javob beradi: **poligonlar rasta-boshiga ch
 | ⛔ Namuna urug'i, tur raqami, tortish vaqti | Y-4 da (`report_view`), sessiyada emas |
 | Boshqa nazoratchining javobi | Kelishuvni buzardi |
 
-### 7.6 ⛔ Ko'r audit — beshta himoyaning UI shakli
+### 7.6 ⛔ Ko'r audit — D-17 MEXANIZMLARINING UI shakli
 
-05-RESEARCH §C.8 beshta strukturaviy himoyani sanaydi. Har biri UI'da **aniq shaklga** ega va uchtasi **darvoza** oladi:
+`05-CONTEXT` ning **D-17** bandi beshta strukturaviy **mexanizmni**
+sanaydi (`D-17.1`…`D-17.5`). Har biri UI'da **aniq shaklga** ega va
+uchtasi **darvoza** oladi:
 
-| # | Strukturaviy himoya | UI dagi shakli | Darvoza |
+⛔ **MANBA ANIQLASHTIRILDI (05-VERIFICATION, W-1).** Bu jadval ilgari
+«05-RESEARCH §C.8 beshta strukturaviy himoyani sanaydi» deb boshlanardi
+— **§C.8 esa beshta DUSHMANNI sanaydi**, himoyani emas. Ikki ro'yxat
+ham beshta a'zoli va aynan shu mislabel W-1 ning manbai edi. Dushmanlar
+jadvali `05-RESEARCH §C.8` da qoladi; quyidagilar esa **mexanizmlar** va
+moslik **1:1 emas**.
+
+| # | Strukturaviy mexanizm | UI dagi shakli | Darvoza |
 |---|---------------------|----------------|---------|
-| **1** | **Hosila urug'** — namunani qayta chizib bo'lmaydi | ⛔ UI'da **«namunani qayta tortish» tugmasi YO'Q**. Y-4 turni faqat **ko'rsatadi** (§11.6) | §16.2 (aniq taqiq) |
-| **2** | **Tizim javobi payloadda umuman yo'q** | `blindAuditItemSchema` — **`z.strictObject`**; alohida modul va alohida katalog (§5.3) | ⛔ **G-12, G-13** |
-| **3** | **`CHECK (queue_kind <> 'blind_audit' OR shown_ai_verdict = false)`** | UI **`shown_ai_verdict` ni hech qachon yubormaydi** — u serverda hisoblanadi. Klient uni yuborsa, u **yolg'on gapira olardi** | ⛔ **G-14** |
-| **4** | **O'zgarmas javob** | URL'da identifikator yo'q (§4.5); javobdan keyin tugmalar `aria-disabled`; qayta yuborish `409` (§4.5 [TALAB]) | ⛔ **G-14** |
-| **5** | **70/30 bo'linishi** | Nazoratchiga **ko'rinmaydi** (§7.5) | — |
+| **D-17.1** | **Hosila urug'** — namunani qayta chizib bo'lmaydi | ⛔ UI'da **«namunani qayta tortish» tugmasi YO'Q**. Y-4 turni faqat **ko'rsatadi** (§11.6) | §16.2 (aniq taqiq) |
+| **D-17.2** | **Tizim javobi payloadda umuman yo'q** | `blindAuditItemSchema` — **`z.strictObject`**; alohida modul va alohida katalog (§5.3) | ⛔ **G-12, G-13** |
+| **D-17.3** | **`CHECK (queue_kind <> 'blind_audit' OR shown_ai_verdict = false)`** | UI **`shown_ai_verdict` ni hech qachon yubormaydi** — u serverda hisoblanadi. Klient uni yuborsa, u **yolg'on gapira olardi** | ⛔ **G-14** |
+| **D-17.4** | **O'zgarmas javob** | URL'da identifikator yo'q (§4.5); javobdan keyin tugmalar `aria-disabled`; qayta yuborish `409` (§4.5 [TALAB]) | ⛔ **G-14** |
+| **D-17.5** | **70/30 bo'linishi** | Nazoratchiga **ko'rinmaydi** (§7.5) | — |
 
 **Ko'r sessiyaning ko'rinishi — oddiy navbatdan UCH KANAL bilan ajraladi** (§1.2 Qoida 3):
 
