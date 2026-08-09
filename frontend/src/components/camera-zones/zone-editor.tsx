@@ -6,10 +6,13 @@ import { useFormatter, useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { CoverageCard } from "@/components/camera-zones/coverage-card";
+import { RowAssistDialog } from "@/components/camera-zones/row-assist-dialog";
 import { ZoneCanvas } from "@/components/camera-zones/zone-canvas";
 import type { CanvasZone } from "@/components/camera-zones/zone-canvas";
+import { ZoneDetailDialog } from "@/components/camera-zones/zone-detail-dialog";
 import { invalidZoneIds, ZoneList } from "@/components/camera-zones/zone-list";
 import type { ListZone } from "@/components/camera-zones/zone-list";
+import { ZoneToolbar } from "@/components/camera-zones/zone-toolbar";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ApiError } from "@/lib/api-client";
@@ -17,12 +20,14 @@ import type { CameraZone } from "@/lib/api-types";
 import { useReplaceCameraZones } from "@/lib/camera-zone-queries";
 import type { CameraZoneWriteInput } from "@/lib/camera-zone-queries";
 import { marketErrorMessageKey } from "@/lib/market-errors";
+import { useStallMapQuery } from "@/lib/market-queries";
 import { zoneErrorView } from "@/lib/zone-errors";
 import {
   insertMidpoint,
   MAX_ZONES_PER_CAMERA,
   moveVertex,
   deleteVertex,
+  translate,
   UNDO_DEPTH,
 } from "@/lib/zone-geometry";
 import type { Poly, Pt } from "@/lib/zone-geometry";
@@ -102,6 +107,8 @@ export type EditorZone = {
   needsReview: boolean;
   stallCode: string | null;
   stallId: string | null;
+  /** `null` — hali saqlanmagan zona (versiya SERVERDA hisoblanadi). */
+  version: number | null;
 };
 
 /** Server javobi -> muharrirning boshlang'ich holati. */
@@ -114,7 +121,30 @@ export function toEditorZones(
     polygon: item.polygon.map(([x, y]): Pt => [x, y]),
     stallCode: item.stall_code,
     stallId: item.stall_id,
+    version: item.version,
   }));
+}
+
+/**
+ * Nusxa qayerga tushadi — poligonning O'Z kengligicha o'ngga.
+ *
+ * ⚠ SOF SILJITISH (`translate`), ya'ni shakl SAQLANADI: `zone-geometry.ts`
+ *   siljish MIQDORINI qisadi, tepalarni emas. Har tepani alohida qisish
+ *   poligonni jimgina ezib, zona rastani emas, BOSHQA SHAKLNI o'lchardi.
+ *
+ * ⚠ Chegaraga urilgan poligon `translate` dan AYNAN O'SHA havolani oladi,
+ *   ya'ni nusxa asl joyida paydo bo'ladi — u yo'qolmaydi, admin uni
+ *   ko'radi va o'zi suradi. Jim rad etish «tugma buzuq» taassurotini
+ *   berardi.
+ */
+export function copyOffset(polygon: Poly): number {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  for (const [x] of polygon) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+  }
+  return polygon.length === 0 ? 0 : maxX - minX;
 }
 
 export function ZoneEditor({
@@ -141,6 +171,15 @@ export function ZoneEditor({
   const t = useTranslations();
   const format = useFormatter();
   const replace = useReplaceCameraZones(cameraId);
+  /*
+   * ⚠ RASTA RO'YXATI XARITADAN, REESTRDAN EMAS: `GET /stalls/map` barcha
+   *   rastani `code_sort` tartibida, SAHIFALASHSIZ beradi va aynan shu
+   *   tartib DL-2 ning yagona manbai. Reestr (`GET /stalls`) kursor bilan
+   *   sahifalanadi, ya'ni qator sahifalar chegarasida uzilardi.
+   *   Kesh yozuvi `stall-map.tsx` bilan BIR XIL, ya'ni ikkinchi so'rov
+   *   ketmaydi.
+   */
+  const stallMap = useStallMapQuery();
 
   const [zones, setZones] = useState<readonly EditorZone[]>(() =>
     toEditorZones(initialZones),
@@ -160,6 +199,11 @@ export function ZoneEditor({
     fix: string | null;
   } | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [detailZoneId, setDetailZoneId] = useState<string | null>(null);
+  const [deleteZoneId, setDeleteZoneId] = useState<string | null>(null);
+  const [rowSplitOpen, setRowSplitOpen] = useState(false);
+  const [rowAnchors, setRowAnchors] = useState<readonly string[]>([]);
+  const [preview, setPreview] = useState<readonly Poly[]>([]);
   const [renderSize, setRenderSize] = useState(() => ({
     height: (FALLBACK_RENDER_WIDTH * frameHeight) / frameWidth,
     width: FALLBACK_RENDER_WIDTH,
@@ -266,13 +310,74 @@ export function ZoneEditor({
      */
     nextLocalId.current += 1;
     const id = `new:${nextLocalId.current}`;
-    commit([
-      ...zones,
-      { id, needsReview: false, polygon, stallCode: null, stallId: null },
-    ]);
+    commit([...zones, blankZone(id, polygon)]);
     setSelectedZoneId(id);
     setFocusedVertex(0);
     announce(t("cameraZones.zoneAdded"));
+  }
+
+  function blankZone(id: string, polygon: Poly): EditorZone {
+    return {
+      id,
+      needsReview: false,
+      polygon,
+      stallCode: null,
+      stallId: null,
+      version: null,
+    };
+  }
+
+  /** Nusxalash + siljitish — ikkinchi yordamchi, u ham SOF matematika. */
+  function copySelectedZone(): void {
+    if (selected === null) return;
+    if (zones.length >= MAX_ZONES_PER_CAMERA) {
+      announce(t("cameraZones.maxZones", { max: MAX_ZONES_PER_CAMERA }));
+      return;
+    }
+    nextLocalId.current += 1;
+    const id = `new:${nextLocalId.current}`;
+    commit([
+      ...zones,
+      blankZone(id, translate(selected.polygon, copyOffset(selected.polygon), 0)),
+    ]);
+    setSelectedZoneId(id);
+    setFocusedVertex(null);
+  }
+
+  /**
+   * DL-2 natijasi — MUHARRIRGA qo'shiladi, DARHOL SAQLANMAYDI (§6.7).
+   *
+   * ⛔ Chegaradan oshadigan qism KESILMAYDI — butun amal rad etiladi.
+   *    Qisman qo'shish «qaysilari qo'shildi?» savolini tug'dirardi va uni
+   *    faqat kadrni sanab tekshirish bilan hal qilib bo'lardi.
+   */
+  function applyRowSplit(result: {
+    polygons: readonly Poly[];
+    stallIds: readonly string[];
+  }): void {
+    if (zones.length + result.polygons.length > MAX_ZONES_PER_CAMERA) {
+      announce(t("cameraZones.maxZones", { max: MAX_ZONES_PER_CAMERA }));
+      return;
+    }
+
+    const added = result.polygons.map((polygon, index) => {
+      nextLocalId.current += 1;
+      const stallId = result.stallIds[index];
+      const code =
+        stallMap.data?.zones
+          .flatMap((zone) => zone.cells)
+          .find((cell) => cell.id === stallId)?.code ?? null;
+      return {
+        ...blankZone(`new:${nextLocalId.current}`, polygon),
+        stallCode: code,
+        stallId,
+      };
+    });
+
+    commit([...zones, ...added]);
+    setRowSplitOpen(false);
+    setPreview([]);
+    toast.success(t("cameraZones.toastRowSplit", { count: added.length }));
   }
 
   function undo(): void {
@@ -305,6 +410,36 @@ export function ZoneEditor({
   const unsavedCount = undoStack.length;
   const needsReview = zones.some((zone) => zone.needsReview);
   const saveBlocked = blocking.length > 0 || replace.isPending;
+
+  /*
+   * ⛔ DL-2 UCHUN IKKI ZONA — TANLOV TARIXIDAN, IKKINCHI TANLOV
+   *    MODELIDAN EMAS.
+   *
+   *   §16.2 «bir vaqtda bir necha zonani tanlash» ni ATAYIN rad etadi:
+   *   narxi — ikkinchi tanlov modeli va ikkinchi klaviatura naqshi.
+   *   Shuning uchun bu yerda ARZON shakl: oxirgi ikki tanlangan zona
+   *   qatorning uchlari bo'ladi. Foydalanuvchi A ni, keyin B ni bosadi
+   *   va tugmani bosadi — hech qanday yangi tanlov holati, `Ctrl+bosish`
+   *   yoki checkbox yo'q.
+   */
+  const anchors = rowAnchors
+    .map((id) => zones.find((zone) => zone.id === id) ?? null)
+    .filter((zone): zone is EditorZone => zone !== null);
+  const canRowSplit =
+    anchors.length === 2 &&
+    anchors[0].stallId !== null &&
+    anchors[1].stallId !== null;
+
+  function selectZone(zoneId: string | null): void {
+    setSelectedZoneId(zoneId);
+    setFocusedVertex(null);
+    if (zoneId === null) return;
+    setRowAnchors((current) =>
+      current[current.length - 1] === zoneId
+        ? current
+        : [...current, zoneId].slice(-2),
+    );
+  }
 
   async function save(): Promise<void> {
     if (saveBlocked) return;
@@ -366,6 +501,12 @@ export function ZoneEditor({
   }));
 
   const selected = zones.find((zone) => zone.id === selectedZoneId) ?? null;
+  const detailZone = zones.find((zone) => zone.id === detailZoneId) ?? null;
+  const deleteZone = zones.find((zone) => zone.id === deleteZoneId) ?? null;
+  /** Bu kamerada ALLAQACHON zonasi bor rastalar — DL-2 ularni chiqaradi. */
+  const occupiedStallIds = zones
+    .map((zone) => zone.stallId)
+    .filter((id): id is string => id !== null);
 
   return (
     <div className="flex flex-col gap-6">
@@ -477,11 +618,8 @@ export function ZoneEditor({
                   moveVertex(selected.polygon, index, point),
                 );
               }}
-              onSelectZone={(zoneId) => {
-                setSelectedZoneId(zoneId);
-                setFocusedVertex(null);
-              }}
-              preview={[]}
+              onSelectZone={selectZone}
+              preview={preview}
               selectedZoneId={selectedZoneId}
               zones={canvasZones}
             />
@@ -541,40 +679,50 @@ export function ZoneEditor({
               );
               announceVertexLater(index, point);
             }}
-            onSelectZone={(zoneId) => {
-              setSelectedZoneId(zoneId);
-              setFocusedVertex(null);
-            }}
+            onSelectZone={selectZone}
             renderHeight={renderSize.height}
             renderWidth={renderSize.width}
             selectedZoneId={selectedZoneId}
             zones={listZones}
           />
 
+          {/* --- (C) Asboblar ------------------------------------------- */}
+          <ZoneToolbar
+            canCopy={selected !== null}
+            canRedo={redoStack.length > 0}
+            canRowSplit={canRowSplit}
+            canUndo={undoStack.length > 0}
+            onAnnounce={announce}
+            onCopyZone={copySelectedZone}
+            onCreateZone={createZone}
+            onOpenRowSplit={() => setRowSplitOpen(true)}
+            onRedo={redo}
+            onUndo={undo}
+            zoneCount={zones.length}
+          />
+
           {/*
-           * ⚠ HAMMASI `secondary` — sahifadagi yagona aksent fonli tugma
-           *   `[Zonalarni saqlash]` (§10.3 №6). 3-vazifada bu ikkita
-           *   tugma `zone-toolbar.tsx` ga ko'chadi va yoniga qator
-           *   yordamchilari qo'shiladi.
+           * ⚠ DL-1 NI OCHADIGAN YAGONA YO'L va u ro'yxatning ICHIDA EMAS.
+           *   Ro'yxatga uchinchi tugma qo'shish roving tabindex naqshini
+           *   murakkablashtirardi (§13.4), holbuki rasta biriktirish —
+           *   TANLANGAN zona ustidagi amal, ya'ni uning tabiiy joyi
+           *   ro'yxatdan KEYIN.
            */}
-          <div className="flex gap-2">
-            <Button
-              aria-disabled={undoStack.length === 0 ? true : undefined}
-              onClick={undo}
-              size="sm"
-              variant="secondary"
-            >
-              {t("cameraZones.undo")}
-            </Button>
-            <Button
-              aria-disabled={redoStack.length === 0 ? true : undefined}
-              onClick={redo}
-              size="sm"
-              variant="secondary"
-            >
-              {t("cameraZones.redo")}
-            </Button>
-          </div>
+          <Button
+            aria-disabled={selected === null ? true : undefined}
+            className={selected === null ? "self-start opacity-60" : "self-start"}
+            onClick={() => {
+              if (selected === null) {
+                announce(t("cameraZones.copyNeedsOne"));
+                return;
+              }
+              setDetailZoneId(selected.id);
+            }}
+            size="sm"
+            variant="secondary"
+          >
+            {t("cameraZones.assignStall")}
+          </Button>
         </div>
       </div>
 
@@ -593,6 +741,80 @@ export function ZoneEditor({
         open={leaveOpen}
         title={t("cameraZones.unsavedTitle")}
       />
+
+      {/* --- DL-1: zona ma'lumotlari ------------------------------------ */}
+      <ZoneDetailDialog
+        onAssignStall={(stall) => {
+          if (detailZone === null) return;
+          commit(
+            zones.map((zone) =>
+              zone.id === detailZone.id
+                ? { ...zone, stallCode: stall.code, stallId: stall.id }
+                : zone,
+            ),
+          );
+          setDetailZoneId(null);
+        }}
+        onDelete={() => {
+          if (detailZone === null) return;
+          setDetailZoneId(null);
+          setDeleteZoneId(detailZone.id);
+        }}
+        onOpenChange={(next) => {
+          if (!next) setDetailZoneId(null);
+        }}
+        open={detailZone !== null}
+        stallCode={detailZone?.stallCode ?? null}
+        stallId={detailZone?.stallId ?? null}
+        version={detailZone?.version ?? null}
+        zones={stallMap.data?.zones ?? []}
+      />
+
+      {/*
+       * --- DL-3: zonani o'chirish tasdig'i ----------------------------
+       *
+       * ⛔ ALOHIDA `DELETE` SO'ROVI YUBORILMAYDI. `PUT` — kameraning
+       *    TO'LIQ holati, ya'ni ro'yxatdan chiqarilgan zona saqlash
+       *    paytida serverda eskirtiriladi (05-06). Ikkinchi yo'l ochish
+       *    «o'chirdim, lekin saqlamadim» degan izohlab bo'lmaydigan
+       *    oraliq holat yasardi.
+       */}
+      <ConfirmDialog
+        cancelLabel={t("common.cancel")}
+        confirmLabel={t("cameraZones.deleteZone")}
+        description={t("cameraZones.deleteZoneBody", {
+          stall: deleteZone?.stallCode ?? t("cameraZones.noStall"),
+        })}
+        onConfirm={() => {
+          if (deleteZone === null) return;
+          commit(zones.filter((zone) => zone.id !== deleteZone.id));
+          if (selectedZoneId === deleteZone.id) setSelectedZoneId(null);
+          setDeleteZoneId(null);
+        }}
+        onOpenChange={(next) => {
+          if (!next) setDeleteZoneId(null);
+        }}
+        open={deleteZone !== null}
+        title={t("cameraZones.deleteZone")}
+      />
+
+      {/* --- DL-2: qator bo'yicha bo'lish ------------------------------- */}
+      {canRowSplit ? (
+        <RowAssistDialog
+          firstLabel={anchors[0].stallCode ?? t("cameraZones.noStall")}
+          firstPolygon={anchors[0].polygon}
+          firstStallId={anchors[0].stallId}
+          lastLabel={anchors[1].stallCode ?? t("cameraZones.noStall")}
+          lastPolygon={anchors[1].polygon}
+          lastStallId={anchors[1].stallId}
+          occupiedStallIds={occupiedStallIds}
+          onApply={applyRowSplit}
+          onOpenChange={setRowSplitOpen}
+          onPreview={setPreview}
+          open={rowSplitOpen}
+          zones={stallMap.data?.zones ?? []}
+        />
+      ) : null}
     </div>
   );
 }
