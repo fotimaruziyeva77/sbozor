@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-11-PLAN.md
-last_updated: "2026-08-09T18:20:00.000Z"
-last_activity: "2026-08-09 -- 05-11 bajarildi (ko'r audit: hosila urug', muzlatilgan doira, ko'r serializer, olti invariant)"
+stopped_at: Completed 05-12-PLAN.md
+last_updated: "2026-08-09T17:31:54.405Z"
+last_activity: 2026-08-09 -- 05-12 bajarildi (kameralararo agregatsiya, kun yopilishi va aniqlik hisoboti)
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 82
-  completed_plans: 78
-  percent: 45
+  completed_plans: 79
+  percent: 44
 ---
 
 # Project State
@@ -26,24 +26,28 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 5
-Plan: 11
+Plan: 12
 Total Plans in Phase: 15
 Status: Executing
-Last activity: 2026-08-09 -- 05-11 bajarildi (ko'r audit: hosila urug', muzlatilgan doira, ko'r serializer, olti invariant)
+Last activity: 2026-08-09 -- 05-12 bajarildi (kameralararo agregatsiya, kun yopilishi va aniqlik hisoboti)
 
-Progress: [███████░░░] 73% (11/15 reja — 05-01…05-11)
+Progress: [████████░░] 80% (12/15 reja — 05-01…05-12)
 
-⚠ **Wave 0 (05-01…05-04), sxema (05-05) va Wave 3/4/5/6
-(05-06…05-11) yopildi.** `05-11` AI-04 ning O'LCHOV MEXANIZMINI
-yetkazdi: hosila urug', muzlatilgan doira, ko'r serializer va
-o'zgarmas javob. Talab YOPILMADI — xolis aniqlik hisoboti `05-14` da.
+⚠ **Wave 0 (05-01…05-04), sxema (05-05) va Wave 3/4/5/6/7
+(05-06…05-12) yopildi.** `05-12` AI-05 ning QOIDASINI (kameralararo
+agregatsiya — 120 holatli jadval), AI-06 ning «hisoblanadi, yozilmaydi»
+kafolatini va AI-04 ning HISOBOT tomonini (chalkashlik matritsasi,
+Wilson, faqat `eval`) yetkazdi. Uchala talab ham YOPILMADI — ular
+EKRANNI talab qiladi (`05-13` sessiya, `05-14` hisobot).
 
 ⚠⚠ **D-16 (~10% takroriy band) BUGUNGI SXEMADA IFODALAB BO'LMAYDI**
 va bu o'lchandi: ikkita `UNIQUE` (3- va 4-himoya) uni rad etadi, ya'ni
 5-himoyani qurish ularni bo'shatishni talab qilardi. Mexanizm ATAYIN
 qurilmadi; ziddiyat `test_a_repeat_band_is_structurally_impossible_today`
-bilan bajariladigan o'lchov bo'lib turadi. **Oqibati `05-14` uchun:**
-aniqlik hisoboti nazoratchining ichki mosligini E'LON QILA OLMAYDI.
+bilan bajariladigan o'lchov bo'lib turadi. **`05-12` da BAJARILDI:**
+aniqlik hisobotida bu miqdor NA SON, NA MAYDON sifatida yo'q va ikkita
+test uni qulflaydi. **Oqibati `05-14` uchun:** UI-SPEC §11.6 ning
+«Ichki moslik» qatori ESKIRGAN — ekran uni chizmasligi kerak.
 
 ⚠⚠ **OCHIQ XAVFSIZLIK BANDI (05-10 dan, 05-11 da ham kuchda):** sof
 `inspector` roli dalil kadrini KO'RA OLMAYDI — `GET /snapshots/{id}/image`
@@ -95,6 +99,7 @@ aniqlik hisoboti nazoratchining ichki mosligini E'LON QILA OLMAYDI.
 | Phase 04 P13 | 125min | 3 tasks | 6 files |
 | Phase 05 P05 | 185min | 3 tasks | 15 files |
 | Phase 05 P10 | 111 | 3 tasks | 9 files |
+| Phase 05 P12 | 175min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -178,6 +183,8 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-10 O'LCHANDI: src.queue_kind -> :queue_kind sabotaji 28 testni YASHIL qoldirdi (WHERE filtri ikkalasini teng qiladi) — da'vo 'yozilgan qiymat konstanta emas' shakliga toraytirildi va sabotaj D-prime bilan qizartirildi
 - [Phase 05]: 05-10: AnswerResponse.locked HAR DOIM true — UI-SPEC 7.1 noaniq javobni tahrirlanadigan deydi, 05-05 sxemasi esa buni imkonsiz qilgan (UNIQUE + shartsiz BEFORE UPDATE); sxema ustun olindi va UI-SPEC 7.1 ESKIRGAN deb belgilandi
 - [Phase 05]: 05-10: yo'l parametri review_assignment_id (assignment_id EMAS) — nom to'qnashuvi cross-tenant matritsasiga marshrutga begona OBYEKT TURINI berardi va u yashil turib hech nimani o'lchamasdi
+- [Phase 05]: 05-12: D-16 (nazoratchining ichki mosligi) aniqlik hisobotida NA SON, NA MAYDON — o'lchanmagan miqdor uchun maydon ham yozilmaydi (T-05-04)
+- [Phase 05]: 05-12: ikki xatoning MAXRAJI UI-SPEC 11.1 ishlangan misolidan O'LCHAB olindi — band deb xato = fp/(tp+fp), bo'sh deb xato = fn/(tp+fn)
 
 ### Pending Todos
 
@@ -211,6 +218,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-09T09:45:31.661Z
-Stopped at: Completed 05-05-PLAN.md
+Last session: 2026-08-09T17:31:37.569Z
+Stopped at: Completed 05-12-PLAN.md
 Resume file: None

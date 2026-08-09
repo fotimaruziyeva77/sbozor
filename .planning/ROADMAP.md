@@ -337,7 +337,7 @@ Plans:
 - [x] 05-09-PLAN.md — Frontend Y-1: zona muharriri (AI-01)
 - [x] 05-10-PLAN.md — Noaniq navbat: byudjet, ustuvorlik, ommaviy endpointning yo'qligi (AI-03)
 - [x] 05-11-PLAN.md — Ko'r audit: namuna tortish, ko'r serializer, olti invariant (AI-04)
-- [ ] 05-12-PLAN.md — Agregatsiya, kun yopilishi va aniqlik hisoboti (AI-05, AI-06, AI-04)
+- [x] 05-12-PLAN.md — Agregatsiya, kun yopilishi va aniqlik hisoboti (AI-05, AI-06, AI-04)
 - [ ] 05-13-PLAN.md — Frontend Y-2/Y-3: navbat va ko'r audit sessiyalari (AI-03, AI-04)
 - [ ] 05-14-PLAN.md — Frontend Y-4: bandlik va aniqlik hisoboti (AI-04, AI-05, AI-06)
 - [ ] 05-15-PLAN.md — Faza darvozasi, `gate` byudjeti (W0-13) va yakunlash
