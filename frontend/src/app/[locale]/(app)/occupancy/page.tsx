@@ -3,14 +3,20 @@
 import { Suspense } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
+import { ConfusionMatrix } from "@/components/occupancy/confusion-matrix";
 import { DayBreakdown } from "@/components/occupancy/day-breakdown";
+import { RoundSummary } from "@/components/occupancy/round-summary";
 import { DayPicker, useDaySelection } from "@/components/snapshots/day-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthStore } from "@/lib/auth-store";
-import { useOccupancyDay } from "@/lib/occupancy-queries";
+import {
+  useAccuracyReport,
+  useAuditRound,
+  useOccupancyDay,
+} from "@/lib/occupancy-queries";
 import { hasPermission } from "@/lib/rbac";
 import { routing } from "@/i18n/routing";
 
@@ -122,6 +128,8 @@ function OccupancyWorkspace() {
 
   const canReview = hasPermission(principal?.roles ?? [], "occupancy_review");
   const occupancy = useOccupancyDay(day, todayIso);
+  const accuracy = useAccuracyReport();
+  const round = useAuditRound(day, todayIso);
 
   return (
     <div className="flex flex-col gap-6">
@@ -210,6 +218,69 @@ function OccupancyWorkspace() {
             />
           )
         ) : null}
+      </section>
+
+      {/* --- ZONA (B): aniqlik ------------------------------------------- */}
+      {/*
+       * ⛔ ZONA (B) KUN BILAN O'ZGARMAYDI (§11.1) va shuning uchun u
+       *    `aria-busy` ni kunlik so'rovdan OLMAYDI: u oyning to'plangan
+       *    namunasi. Kun almashtirilganda bu blok umuman qayta
+       *    so'ralmaydi.
+       */}
+      <section
+        aria-busy={accuracy.isFetching}
+        aria-label={t("occupancy.accuracyTitle")}
+      >
+        {accuracy.isPending ? (
+          <Card>
+            <CardContent className="pt-5">
+              <div aria-busy="true" role="status">
+                <span className="sr-only">{t("common.loading")}</span>
+                <Skeleton className="h-40" />
+              </div>
+            </CardContent>
+          </Card>
+        ) : accuracy.isError ? (
+          <Card>
+            <CardContent className="pt-5">
+              <p
+                className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
+                role="alert"
+              >
+                {t("errors.loadFailedBody")}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <ConfusionMatrix report={accuracy.data} />
+        )}
+      </section>
+
+      {/* --- ZONA (C): namuna holati ------------------------------------- */}
+      <section aria-busy={round.isFetching} aria-label={t("occupancy.roundTitle")}>
+        {round.isPending ? (
+          <Card>
+            <CardContent className="pt-5">
+              <div aria-busy="true" role="status">
+                <span className="sr-only">{t("common.loading")}</span>
+                <Skeleton className="h-24" />
+              </div>
+            </CardContent>
+          </Card>
+        ) : round.isError ? (
+          <Card>
+            <CardContent className="pt-5">
+              <p
+                className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
+                role="alert"
+              >
+                {t("errors.loadFailedBody")}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <RoundSummary round={round.data} />
+        )}
       </section>
     </div>
   );
