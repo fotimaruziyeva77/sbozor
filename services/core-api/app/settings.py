@@ -302,11 +302,24 @@ class Settings(BaseSettings):
     #   `quality_*` chegaralari bilan bir xil sinfdagi raqam bo'lib
     #   turib, ularning yonida KO'RINMASDI.
     #
-    # 0,01 — 16:9 (1,7778) va 4:3 (1,3333) orasidagi farqdan (0,4444)
-    # qirq barobar kichik, ya'ni haqiqiy oqim almashuvi hech qachon bu
-    # chegaraga urilmaydi; 1920x1081 kabi bir pikselli nomutanosiblik
-    # (0,0016) esa ichkarida qoladi.
-    zone_aspect_tolerance: Annotated[float, Field(gt=0.0, le=1.0)] = 0.01
+    # ⚠⚠ 0,05 — VA U «EHTIYOT UCHUN KENG» EMAS, O'LCHANGAN ZARURIYAT.
+    #
+    #   Joriy kadr o'lchami `snapshots.width`/`height` dan olinadi, ular
+    #   esa `quality.py::analyze()` ning `draft("RGB", (320, 180))`
+    #   natijasi — ya'ni DEKODLANGAN (kichraytirilgan) o'lcham, kadrning
+    #   haqiqiy o'lchami EMAS. Pillow `draft()` ni ikkala o'qqa BIR XIL
+    #   ko'paytuvchi bilan qo'llaydi, ya'ni NISBAT saqlanadi — lekin
+    #   natija `ceil()` bilan yaxlitlanadi va 1/8 masshtabda (1920x1080 ->
+    #   240x135) har o'qdagi bir pikselli farq nisbatni ~0,013 ga
+    #   siljitishi mumkin. 0,01 tolerans bilan bu HAR ZONANI «tekshirish
+    #   kerak» qilib, bayroqni butunlay ma'nosiz qilardi — admin uni
+    #   birinchi haftadayoq e'tiborsiz qoldirardi va HAQIQIY nisbat
+    #   o'zgarishi shovqin ostida ko'milardi.
+    #
+    #   0,05 esa 16:9 (1,7778) va 4:3 (1,3333) orasidagi farqdan (0,4444)
+    #   TO'QQIZ barobar kichik, ya'ni haqiqiy nisbat o'zgarishi baribir
+    #   ishonchli ushlanadi.
+    zone_aspect_tolerance: Annotated[float, Field(gt=0.0, le=1.0)] = 0.05
 
     # --- Telegram alertlari (04-08, FOUND-06) ---
     #

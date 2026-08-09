@@ -45,6 +45,7 @@ from app.api.v1.assignments import stall_router as stall_assignments_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.calendar import router as calendar_router
+from app.api.v1.camera_zones import router as camera_zones_router
 from app.api.v1.cameras import router as cameras_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.imports import router as imports_router
@@ -196,6 +197,24 @@ app.include_router(nvr_router, prefix=f"{API_V1_PREFIX}/nvr-devices")
 # `test_no_unclassified_routes` va `test_cross_tenant_object_returns_404`
 # qizaradi (yuqoridagi 2-faza izohidagi IKKI QO'LDA QADAM).
 app.include_router(cameras_router, prefix=f"{API_V1_PREFIX}/cameras")
+# --- 05-06: kamera zonalari (AI-01, D-07/D-22) ---
+#
+# ⚠ ALOHIDA PREFIKS, `cameras/{camera_id}/zones` OSTIDA EMAS — VA SABAB
+# `cameras` ning `nvr-devices` ostida turmasligidan FARQ QILADI.
+#
+# Zona kameraning bolasi, lekin `GET /camera-zones/coverage` BOZORGA
+# tegishli: u butun bozorning qamrovini sanaydi va hech qaysi kameraga
+# oid emas. `cameras/{camera_id}/zones` ostida u uy topa olmasdi —
+# `cameras/coverage` esa `{camera_id}` shabloniga tushib, 422 berardi
+# (`stalls.py:3-11` dagi tartib tuzog'ining aynan o'zi).
+#
+# ⚠ `camera_id` YO'L PARAMETRI EMAS, QUERY parametri — ya'ni u
+# cross-tenant matritsasining `PARAM_FILLERS` iga TUSHMAYDI. Uning
+# tenant chegarasi shu sababdan `tests/integration/test_camera_zones_
+# api.py::test_cross_tenant_camera_returns_404` da ALOHIDA o'lchanadi;
+# matritsa esa `camera_zone_id` ni (yo'l parametri) qamraydi va u uchun
+# `PARAM_FILLERS` ga B bozorining HAQIQIY zonasi qo'shildi.
+app.include_router(camera_zones_router, prefix=f"{API_V1_PREFIX}/camera-zones")
 # --- 04-09: snapshot jadvali (CAM-04, D-05) ---
 #
 # ⚠ ALOHIDA PREFIKS, `cameras` OSTIDA EMAS — `cameras` ning `nvr-devices`

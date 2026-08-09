@@ -259,6 +259,13 @@ class MarketOccupancyRows:
     """Bitta bozorning bandlik qatorlari."""
 
     market_id: UUID
+    camera_id: UUID
+    """Zonalar chizilgan ASOSIY kamera — `snapshot_with_ok_quality` niki.
+
+    BAZADAN olingan (`_camera_of()`), `nvr_domain` ning ro'yxat tartibidan
+    EMAS: zona `cameras (market_id, id)` ga kompozit FK bilan tayanadi,
+    ya'ni u kadr kelgan kameraga AYNAN bog'lanishi kerak.
+    """
     superseded_zone_id: UUID | None
     """`is_active = false` bo'lgan ESKI versiya (D-07). B bozorida `None`."""
     second_camera_id: UUID | None
@@ -592,6 +599,7 @@ def _seed_market_occupancy(
 
     return MarketOccupancyRows(
         market_id=market_id,
+        camera_id=camera_id,
         superseded_zone_id=superseded_zone_id,
         second_camera_id=second_camera_id if with_uncertain else None,
         second_camera_zone_id=second_camera_zone_id,

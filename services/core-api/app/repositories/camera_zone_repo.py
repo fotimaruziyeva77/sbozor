@@ -59,10 +59,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID
 
-from sbozor_core.enums import StallStatus
+from sbozor_core.enums import SnapshotQuality, StallStatus
 from sbozor_core.models.market import Stall
 from sbozor_core.models.nvr import Camera
 from sbozor_core.models.occupancy import CameraZone
+from sbozor_core.models.snapshot import Snapshot
 from sbozor_core.tenancy import TenantScopedRepository
 from sqlalchemy import Select, and_, func, insert, select, update
 
@@ -291,6 +292,55 @@ class CameraZoneRepository(TenantScopedRepository):
             stmt.order_by(Stall.code_sort, CameraZone.version.desc())
         )
         return [_row(record) for record in result]
+
+    async def latest_frame_size(self, camera_id: UUID) -> tuple[int, int] | None:
+        """Kameraning ENG SO'NGGI yaroqli kadridagi o'lcham; kadr yo'q bo'lsa `None`.
+
+        =================================================================
+        ⚠⚠ BU USTUNLAR KADRNING HAQIQIY O'LCHAMI EMAS — VA BU YERDA
+           AHAMIYATSIZ, CHUNKI FAQAT NISBAT KERAK.
+
+        `snapshots.width`/`height` — `quality.py::analyze()` ning
+        `draft("RGB", (320, 180))` natijasi, ya'ni DCT darajasida
+        kichraytirilgan dekod (1280x720 kadr uchun taxminan 320x180).
+        Ularni «kadr o'lchami» deb javobga chiqarish YOLG'ON bo'lardi.
+
+        Lekin `draft()` ko'paytuvchini IKKALA O'QQA BIR XIL qo'llaydi,
+        ya'ni NISBAT saqlanadi — va §6.8 darvozasi aynan nisbatni
+        so'raydi. Yaxlitlashdan kelib chiqadigan kichik siljish
+        `zone_aspect_tolerance` ichida qoladi (sabab o'sha sozlama
+        izohida, o'lchov bilan).
+        =================================================================
+
+        ⚠ FAQAT `quality_verdict = 'ok'` KADR. Buzuq kadrda `width`/
+          `height` `NULL` (`0016`), qorong'i yoki bo'sh kadrda esa ular
+          bor — lekin bunday kadr kameraning holatini emas, o'sha
+          lahzadagi yorug'likni aks ettiradi. Nisbat esa kameraning
+          SOZLAMASI, ya'ni uni faqat billing uchun yaroqli kadrdan
+          o'qish to'g'ri.
+
+        ⚠ ENG SO'NGGISI — `captured_at` bo'yicha. Birinchisini olish
+          kamera ruxsati o'zgarganini HECH QACHON ko'rmasdi: eski kadr
+          abadiy eski nisbatni qaytarardi va §6.8 darvozasi butunlay
+          o'chib qolardi.
+        """
+        result = await self.session.execute(
+            self.scoped(
+                select(Snapshot.width, Snapshot.height)
+                .where(
+                    Snapshot.camera_id == camera_id,
+                    Snapshot.quality_verdict == SnapshotQuality.OK.value,
+                    Snapshot.width.is_not(None),
+                    Snapshot.height.is_not(None),
+                )
+                .order_by(Snapshot.captured_at.desc())
+                .limit(1)
+            )
+        )
+        record = result.one_or_none()
+        if record is None:
+            return None
+        return int(record.width), int(record.height)
 
     async def camera_exists(self, camera_id: UUID) -> bool:
         """Kamera SHU bozorda bormi.

@@ -56,6 +56,10 @@ __all__ = [
     "CameraQuery",
     "CameraRead",
     "CameraUpdateRequest",
+    "CameraZoneItem",
+    "CameraZoneListResponse",
+    "CameraZoneRequest",
+    "CameraZoneWrite",
     "CaptureDayOut",
     "CaptureRunOut",
     "CategoryItem",
@@ -135,6 +139,7 @@ __all__ = [
     "VendorQuery",
     "VendorRequest",
     "VendorUpdateRequest",
+    "ZoneCoverageResponse",
     "ZoneItem",
     "ZoneListResponse",
     "ZoneRequest",
@@ -2292,3 +2297,138 @@ class AlertListResponse(BaseModel):
     """
 
     items: list[AlertEventOut]
+
+
+# ---------------------------------------------------------------------------
+# 5-FAZA — KAMERA ZONALARI (05-06, AI-01, D-07/D-22)
+#
+# ⚠ `market_id` MAYDONI BU BO'LIMDA UMUMAN E'LON QILINMAGAN (T-05-24).
+#   `zones.py` / `stalls.py` bo'limlaridagi bilan AYNAN bir xil qaror:
+#   bozor identifikatori faqat `_market_id(principal)` dan keladi. Maydon
+#   e'lon qilinmagani uchun uni «e'tiborsiz qoldirish» kodi ham kerak
+#   emas — Pydantic uni tashlab yuboradi va router uni HECH QACHON
+#   ko'rmaydi. Bu «filtrlaymiz» dan kuchliroq kafolat: filtrni unutish
+#   mumkin, mavjud bo'lmagan maydonni esa yo'q.
+#
+# ⚠ `version` HAM YO'Q va sabab boshqa: versiyani SERVER hisoblaydi
+#   (`camera_zone_repo.replace_for_camera()`). Klientga versiya
+#   yozdirish D-07 ning butun kafolatini klientning to'g'ri ishlashiga
+#   bog'lab qo'yardi — eski qator ustiga yozish bir satrlik xato bo'lardi.
+# ---------------------------------------------------------------------------
+
+
+class CameraZoneItem(BaseModel):
+    """Bitta zona — `polygon` NORMALANGAN (0..1), piksel EMAS (D-07).
+
+    `stall_code` javobda ATAYIN bor: UUID admin uchun hech nima
+    anglatmaydi, u (B) ro'yxatida «14-A» ni ko'radi (UI-SPEC §6.4).
+    Kodni bu yerga qo'shmaslik frontendni har zona uchun alohida
+    so'rovga majburlardi.
+
+    `needs_review` — HOSILA, saqlanadigan ustun EMAS (§6.8): u zonaning
+    `source_width`/`source_height` i bilan JORIY kadr o'lchamini
+    solishtirishdan chiqadi. Ustun sifatida saqlansa kamera ruxsati
+    o'zgargan kuni u eskirib qolardi va bayroq JIMGINA yolg'on bo'lardi.
+
+    ⛔ Bayroq zonani RAD ETMAYDI va AVTOMATIK TO'G'RILASH ham yo'q
+       (§6.8): cho'zilganmi yoki kesilganmi — bilib bo'lmaydi va
+       noto'g'ri tuzatish jimgina noto'g'ri hisob berardi.
+    """
+
+    id: UUID
+    camera_id: UUID
+    stall_id: UUID
+    stall_code: str
+    version: int
+    polygon: list[tuple[float, float]]
+    source_width: int
+    source_height: int
+    needs_review: bool
+
+
+class CameraZoneListResponse(BaseModel):
+    """`GET /camera-zones?camera_id=…` javobi.
+
+    SAHIFALASH YO'Q: bitta kameradagi zonalar soni `ZONE_MAX_PER_CAMERA`
+    (60) bilan SERVERDA cheklangan, ya'ni javob hech qachon o'smaydi va
+    kursor mexanikasi hech qanday muammoni hal qilmasdi
+    (`ZoneListResponse` da o'rnatilgan qoida).
+
+    `frame_width`/`frame_height` — poligonlar ustiga chiziladigan JORIY
+    kadrning o'lchami. Ular javobda ATAYIN bor: `needs_review` bayrog'i
+    aynan shu ikki songa tayanadi va ularni ko'rsatmaslik adminni
+    «nega tekshirish kerak?» savoliga javobsiz qoldirardi.
+
+    ⚠ `None` — kamerada HALI YAROQLI KADR YO'Q. Bu NOSOZLIK EMAS: yangi
+      ulangan kamera birinchi slotgacha aynan shu holatda bo'ladi.
+      O'shanda `needs_review` HAR ZONADA `false` — solishtiradigan
+      narsa yo'q, ya'ni «farq qiladi» degan da'vo asossiz bo'lardi.
+    """
+
+    items: list[CameraZoneItem]
+    frame_width: int | None = None
+    frame_height: int | None = None
+
+
+class CameraZoneWrite(BaseModel):
+    """`PUT /camera-zones` tanasidagi BITTA zona.
+
+    `polygon` — `list[tuple[float, float]]`, ya'ni har element AYNAN ikki
+    sonli. Erkin `list[list[float]]` uch komponentli «nuqta» ni ham
+    qabul qilardi va u `supervision.PolygonZone` ga yetib borib, u yerda
+    tushunarsiz xato berardi.
+
+    ⚠ CHEGARA TEKSHIRUVI (`min_length`) BU YERDA ATAYIN YO'Q. Pydantic
+      uni 422 bilan rad etardi, 422 esa `detail` da xato KODINI emas,
+      Pydantic ning ichki tuzilmasini qaytaradi — ya'ni frontend
+      `zone_polygon_too_few_points` matnini KO'RSATA OLMASDI va admin
+      «Kutilmagan xato» ni o'qirdi. Poligon qoidalari `validate_polygon()`
+      da tekshiriladi va 422 emas, NOMLANGAN kod bilan rad etiladi.
+    """
+
+    stall_id: UUID
+    polygon: list[tuple[float, float]]
+    source_width: Annotated[int, Field(gt=0)]
+    source_height: Annotated[int, Field(gt=0)]
+
+
+class CameraZoneRequest(BaseModel):
+    """`PUT /camera-zones?camera_id=…` tanasi — kameraning TO'LIQ holati.
+
+    ⛔ QISMAN SAQLASH YO'Q (UI-SPEC §6.6): ro'yxat butun kameraning
+       yangi holati va unda YO'Q faol zona eskirgan deb belgilanadi.
+       Yarim saqlangan kamera bandlik hisobini JIMGINA buzardi — bir
+       qism rasta yangi kontur bilan, qolgani eskisi bilan o'lchanardi.
+
+    ⚠ BO'SH RO'YXAT QONUNIY va u «bu kameradagi hamma zonani olib
+      tashla» degani. Rad etish adminni zonalarni bittalab o'chirishga
+      majburlardi va oxirgisida baribir shu holatga kelardi.
+
+    ⚠ `camera_id` TANADA EMAS, QUERY PARAMETRIDA: u RESURSNI aniqlaydi,
+      ya'ni yo'lning bir qismi. Tanada bo'lganda bitta `PUT` ikki xil
+      kameraga yozish niyatini ifodalay olardi (query'da bittasi,
+      tanada boshqasi) va qaysi biri ustun ekani kodni o'qimasdan
+      ko'rinmasdi.
+    """
+
+    zones: list[CameraZoneWrite]
+
+
+class ZoneCoverageResponse(BaseModel):
+    """`GET /camera-zones/coverage` — D-22 uchligi (UI-SPEC §6.9).
+
+    ⛔ `uncovered` MAYDONI «bo'sh» DEB NOMLANMAYDI va bu farq
+       mahsulotning yuragi: qamrovsiz rasta bo'sh EMAS — u haqida
+       MA'LUMOT YO'Q. «Bo'sh» deb sanalgan qamrovsiz rasta hisobotda
+       «to'lovsiz emas» bo'lib ko'rinardi, ya'ni tizim o'zi KO'RMAGAN
+       narsani «joyida» deb e'lon qilardi — aynan shu mahsulot fosh
+       qilishi kerak bo'lgan holat.
+
+    ⚠ UCHALA SON HAM HAR DOIM QAYTADI, nol bo'lganda ham. Ixtiyoriy
+      qilinsa birorta zona chizilmagan bozorda karta UMUMAN chiqmasdi
+      va admin «hammasi joyida» deb o'qirdi.
+    """
+
+    covered: int
+    uncovered: int
+    cameras_without_zones: int
