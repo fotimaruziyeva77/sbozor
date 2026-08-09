@@ -339,7 +339,8 @@ Sabab 3 va 4-fazadagi bilan bir xil va bu yerda **kuchliroq**: zona chizish — 
 | **W0-F3** | `lib/wilson.ts` + testi | `lib/`, `scripts/` | Y-4 hisoboti usiz **Wald oralig'ini** ishlatishga majbur bo'lardi — 05-RESEARCH §C.8.4 uni ochiq rad etadi |
 | **W0-F4** | `blind-payload.test.mjs` — **yangi fayl** | `scripts/` | Darvozalar **G-12, G-13**. Ekran yozilmasdan **oldin** qo'yiladi: keyin qo'yilsa, birinchi ijro allaqachon maydonni kiritgan bo'lardi |
 | **W0-F5** | ⚠ **RBAC — o'zgarish YO'Q, lekin TASDIQLANADI** | `lib/rbac.ts` | [O'LCHANDI: M-8] `occupancy_review` **mavjud**. Bandning vazifasi — planer yangi huquq **o'ylab topmasligi**. Agar topsa, `rbac.py` **birga** o'zgaradi va `scripts/role-gate.test.mjs` ni qondiradi |
-| **W0-F6** | `zone-copy.test.mjs` — **yangi fayl** | `scripts/` | Darvozalar **G-11, G-15, G-16, G-18** |
+| **W0-F6** | `zone-copy.test.mjs` — **yangi fayl** | `scripts/` | Darvozalar **G-11, G-15, G-16, G-18(a)** |
+| **W0-F8** | `bulk-action-surface.test.mjs` — **yangi fayl** (05-16, W-2) | `scripts/` | Darvoza **G-18(b)**. ⚠ Qamrovi §15 ning G-18 **qatoridan HOSILA** qilinadi, bu yerda qayta yozilmaydi — aks holda e'lon kengayganda skan ortda qolardi |
 | **W0-F7** | `error-codes.test.mjs` ni `zone_*` / `review_*` kodlari bilan kengaytirish | `scripts/` | Darvoza **G-17** — sabab↔tuzatish parity |
 
 ### 5.2 Yangi komponentlar
@@ -1740,10 +1741,19 @@ Raqamlash 4-fazadan **davom etadi** (G-1…G-10 band) — darvoza skriptlari bit
 | **G-15** | ⛔ **`no_coverage` ≠ «bo'sh»** | `scripts/zone-copy.test.mjs` | `occupancy.noCoverage*` va `cameraZones.uncovered*` kalitlarining qiymatlarida `bo'sh` / `бо'ш` / `свободн` **yo'q** | **D-22 ning copy shakli.** Farq DB'da bor, lekin u **matn darajasida** yo'qolsa, hisobot jimgina noto'g'ri o'qilardi — va bu xatoni hech qanday sxema ushlamaydi |
 | **G-16** | **Jargon taqig'i** | `scripts/zone-copy.test.mjs` | `cameraZones.*` / `review.*` / `occupancy.*` da `poligon`, `полигон`, `dataset`, `датасет`, `konfidens`, `конфиденс` **yo'q**; va tizim javobiga nisbatan `tuzatish` / `исправить` **yo'q** | §12.10. 4-fazadagi «slot» taqig'i bilan bir sinf: so'z taqig'i — kod-ko'rikda **eng oson o'tkazib yuboriladigan** narsa |
 | **G-17** | **Sabab↔tuzatish parity** | `scripts/error-codes.test.mjs` (kengaytiriladi, W0-F7) | Har `cameraZones.errorCause.{code}` uchun `cameraZones.errorFix.{code}` **uchala tilda** mavjud; `ZONE_ERROR_CODES` va `REVIEW_ERROR_CODES` reyestrlari `lib/zone-errors.ts` bilan mos | 3-fazadagi G-1 ning davomi |
-| **G-18** | ⛔ **Ommaviy tasdiq va qayta tortish taqig'i** | `scripts/zone-copy.test.mjs` + `review-session.test.tsx` | (a) `messages/*.json` da «hammasini tasdiqlash» / «подтвердить все» / «намунани қайта» va shu ma'nodagi shakllar **yo'q**; (b) `components/review/**` va `components/blind-audit/**` da `type="checkbox"` va `Array.isArray` bilan yuboriladigan mutatsiya **yo'q** | **D-18 va D-17, 1-himoya.** So'z copy'ga kirsa, keyingi ijrochi uni **amalga oshirishga** urinardi — 2 va 3-fazada aynan shunday bo'lgan |
+| **G-18** | ⛔ **Ommaviy tasdiq va qayta tortish taqig'i** | (a) `scripts/zone-copy.test.mjs` · (b) `scripts/bulk-action-surface.test.mjs` (**qamrovi SHU QATORDAN hosila**) + `review-session.test.tsx` (DOM qatlami) | (a) `messages/*.json` da «hammasini tasdiqlash» / «подтвердить все» / «намунани қайта» va shu ma'nodagi shakllar **yo'q**; (b) `components/review/**` va `components/blind-audit/**` da `type="checkbox"` va `Array.isArray` bilan yuboriladigan mutatsiya **yo'q** | **D-18 va D-17, 1-himoya.** So'z copy'ga kirsa, keyingi ijrochi uni **amalga oshirishga** urinardi — 2 va 3-fazada aynan shunday bo'lgan |
 | **G-19** | **Geometriya invariantlari** | `scripts/zone-geometry.test.mjs` (yangi, W0-F2) | `isSelfIntersecting` «soat mili» va «qum soati» to'rtburchakni **ajratadi**; `moveVertex` 0..1 dan tashqariga **chiqmaydi**; `deleteVertex` 3 tepada **o'zgarishsiz** qaytaradi; `interpolateRow` tepa soni teng bo'lmaganda **`[]`** qaytaradi; `normalize`/`denormalize` — aylanma (round-trip) mos | ⛔ **D-05 ning butun mazmuni.** Bu funksiyalar noto'g'ri bo'lsa, xato **poligon geometriyasiga** yoziladi va u yerdan **billing'ga** o'tadi — jimgina, dalilsiz |
 
 > **G-12 va G-13 nima uchun IKKALASI ham kerak.** G-12 — **statik** (kod nima yozilgan), G-13 — **dinamik** (kod nima qiladi). Faqat G-12 bo'lsa, `data["verd" + "ict"]` uni chetlab o'tardi. Faqat G-13 bo'lsa, u faqat **test yozilgan** payloadni tekshirardi. Ikkalasi birga — statik chegara + xulq chegarasi.
+>
+> ⛔ **G-18(b) ning qamrovi BU QATORDAN o'qiladi — u yerda qayta yozilmaydi (05-16, W-2).**
+> Ilgari skan `components/review/**` da edi, e'lon esa IKKI katalogni sanardi:
+> `blind-session.tsx` ga to'g'ridan-to'g'ri qo'shilgan checkbox birorta darvozani
+> qizartirmasdi (o'lchandi — sabotaj ostida mavjud 40 test YASHIL qolgan). Tuzatish
+> «ikkinchi test qo'shish» emas, chunki u UCHINCHI katalog qo'shilganda yana ortda
+> qolardi. `bulk-action-surface.test.mjs` shu qatorni tahlil qilib
+> `components/.../**` naqshlarini O'ZI oladi va e'lon kengaysa, skan ham kengayadi.
+> Qator torayib qolsa — «kamida ikki katalog» va fayl soni quyi chegarasi qizaradi.
 >
 > ⚠ **G-14 (a) sharti — `[` belgisining yo'qligi — qo'pol, lekin ATAYIN qo'pol.** U «dinamik marshrut segmenti bo'lmasin» degan niyatni **fayl tizimi darajasida** ifodalaydi va uni chetlab o'tish uchun ataylab harakat kerak bo'ladi. Nozikroq tekshiruv (URL parametrlarini tahlil qilish) yozilishi mumkin edi, lekin u o'zi buzilishi mumkin bo'lgan kodga aylanardi.
 
