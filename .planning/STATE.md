@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-08-09T09:47:35.725Z"
-last_activity: "2026-08-09 -- 05-10 bajarildi (noaniq navbat: byudjet, ustuvorlik, ommaviy endpointning yo'qligi)"
+stopped_at: Completed 05-11-PLAN.md
+last_updated: "2026-08-09T18:20:00.000Z"
+last_activity: "2026-08-09 -- 05-11 bajarildi (ko'r audit: hosila urug', muzlatilgan doira, ko'r serializer, olti invariant)"
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 82
-  completed_plans: 77
-  percent: 44
+  completed_plans: 78
+  percent: 45
 ---
 
 # Project State
@@ -26,23 +26,33 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 5
-Plan: 10
+Plan: 11
 Total Plans in Phase: 15
 Status: Executing
-Last activity: 2026-08-09 -- 05-10 bajarildi (noaniq navbat: byudjet, ustuvorlik, ommaviy endpointning yo'qligi)
+Last activity: 2026-08-09 -- 05-11 bajarildi (ko'r audit: hosila urug', muzlatilgan doira, ko'r serializer, olti invariant)
 
-Progress: [██████░░░░] 67% (10/15 reja — 05-01…05-10)
+Progress: [███████░░░] 73% (11/15 reja — 05-01…05-11)
 
-⚠ **Wave 0 (05-01…05-04), sxema (05-05) va Wave 3/4/5 ning birinchi
-qismi (05-06…05-10) yopildi.** `05-10` AI-03 ning SERVER yuzasini
-yetkazdi: `review_repo` + `reviews.py` + uchta darvoza. D-18
-(«hammasini tasdiqlash» yo'q) endi **API qoidasi** va uni OpenAPI
-sxemasidan hosila ikki predikat o'lchaydi.
+⚠ **Wave 0 (05-01…05-04), sxema (05-05) va Wave 3/4/5/6
+(05-06…05-11) yopildi.** `05-11` AI-04 ning O'LCHOV MEXANIZMINI
+yetkazdi: hosila urug', muzlatilgan doira, ko'r serializer va
+o'zgarmas javob. Talab YOPILMADI — xolis aniqlik hisoboti `05-14` da.
 
-⚠⚠ **OCHIQ XAVFSIZLIK BANDI (05-10 dan):** sof `inspector` roli dalil
-kadrini KO'RA OLMAYDI — `GET /snapshots/{id}/image` `CAMERA_VIEW`
-talab qiladi, nazoratchida esa aynan `{OCCUPANCY_REVIEW}` bor. Qaror
-`05-13` yoki `05-15` da (RBAC bu fazada ATAYIN tegilmagan — M-8).
+⚠⚠ **D-16 (~10% takroriy band) BUGUNGI SXEMADA IFODALAB BO'LMAYDI**
+va bu o'lchandi: ikkita `UNIQUE` (3- va 4-himoya) uni rad etadi, ya'ni
+5-himoyani qurish ularni bo'shatishni talab qilardi. Mexanizm ATAYIN
+qurilmadi; ziddiyat `test_a_repeat_band_is_structurally_impossible_today`
+bilan bajariladigan o'lchov bo'lib turadi. **Oqibati `05-14` uchun:**
+aniqlik hisoboti nazoratchining ichki mosligini E'LON QILA OLMAYDI.
+
+⚠⚠ **OCHIQ XAVFSIZLIK BANDI (05-10 dan, 05-11 da ham kuchda):** sof
+`inspector` roli dalil kadrini KO'RA OLMAYDI — `GET /snapshots/{id}/image`
+`CAMERA_VIEW` talab qiladi (`snapshots.py:408`), nazoratchida esa aynan
+`{OCCUPANCY_REVIEW}` bor (`rbac.py:217`). RBAC bu fazada ATAYIN tegilmagan
+(M-8). **Eng tor tuzatish `05-13` uchun yozib qo'yildi:** marshrutni
+«`CAMERA_VIEW` YOKI `OCCUPANCY_REVIEW`» ga o'tkazish — narxi
+`require_permission()` tegining ko'plikka aylanishi va
+`tests/tenancy/test_personal_data_coverage.py:462`.
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
