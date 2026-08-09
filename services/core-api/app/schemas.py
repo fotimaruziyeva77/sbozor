@@ -26,7 +26,14 @@ from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
-from sbozor_core.enums import CameraStatus, DiscoveryRunStatus, Locale, Role, StallStatus
+from sbozor_core.enums import (
+    CameraStatus,
+    DiscoveryRunStatus,
+    Locale,
+    OccupancyVerdict,
+    Role,
+    StallStatus,
+)
 from sbozor_core.money import MAX_SAFE_SOUM
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
@@ -65,6 +72,8 @@ __all__ = [
     "CategoryItem",
     "CategoryListResponse",
     "CategoryRequest",
+    "AnswerRequest",
+    "AnswerResponse",
     "ChangePasswordRequest",
     "CreateUserRequest",
     "CreateUserResponse",
@@ -99,7 +108,10 @@ __all__ = [
     "NvrTestConnectionRequest",
     "NvrTestConnectionResponse",
     "ProfileResponse",
+    "QueueBudget",
     "RefreshResponse",
+    "ReviewBudgetResponse",
+    "ReviewItemResponse",
     "ResetPasswordResponse",
     "SCHEDULE_NAME_MAX",
     "SCHEDULE_TIMES_PAYLOAD_MAX",
@@ -2432,3 +2444,153 @@ class ZoneCoverageResponse(BaseModel):
     covered: int
     uncovered: int
     cameras_without_zones: int
+
+
+# ---------------------------------------------------------------------------
+# 5-FAZA — NAZORATCHI NAVBATI (05-10, AI-03, D-13/D-18)
+#
+# ⛔⛔ BU BO'LIMDA TIZIMNING JAVOBI YO'Q — VA U «YASHIRILGAN» EMAS,
+#     E'LON QILINMAGAN (D-17.2, T-05-45).
+#
+#   `verdict`, `confidence`, `model_version`, `thresholds_version`,
+#   `purpose`, `queue_kind`, `shown_ai_verdict` — bu maydonlarning
+#   BIRORTASI HAM `ReviewItemResponse` da yo'q. `None` qilib yuborish
+#   YETARLI EMAS bo'lardi: kalitning O'ZI javobda turgan bo'lsa, uni
+#   to'ldirish bir satrlik o'zgarish bo'lardi.
+#
+#   ⚠ SABAB AI-03 TALAB QILGANIDAN QATTIQROQ VA U O'LCHANGAN: band
+#   navbatga tushgan bo'lsa tizim ALLAQACHON ishonchsiz, ya'ni uning
+#   moyilligi deyarli MA'LUMOT TASHIMAYDI, lekin TO'LIQ ankorlash
+#   kuchiga ega (05-RESEARCH §C.8 — mustaqil qarorlarning ~7% i
+#   noto'g'ri maslahatdan teskarisiga o'zgargan). Yashirishning narxi
+#   NOL, foydasi — TOZA YORLIQLAR.
+#
+# ⛔ `market_id` HAM, `shown_ai_verdict` HAM, `decision_ms` HAM
+#   `AnswerRequest` DA E'LON QILINMAGAN (T-05-24, T-05-44, T-05-46).
+#   Birinchisi — tenant chegarasi; ikkinchisi klient YOLG'ON gapira
+#   oladigan yagona maydon bo'lardi va DB `CHECK` i aldangan bo'lardi;
+#   uchinchisi esa nazoratchi «shoshib bosish» o'lchovini o'zi yozib
+#   qo'ya olardi.
+#
+# ⚠ `extra="forbid"` ATAYIN QO'YILMAGAN. U noma'lum maydonni 422 bilan
+#   RAD ETARDI — ya'ni eskirgan klient nazoratchini javob BERISHDAN
+#   to'sib qo'yardi. Javob — mahsulot, `decision_ms` esa DIAGNOSTIKA:
+#   nosozlikning narxi ikkalasida bir xil emas. Pydantic'ning standarti
+#   (`extra="ignore"`) qiymatni JIMGINA tashlaydi va uning shu tarzda
+#   tashlanishi test bilan o'lchanadi (`ScheduleCreateIn` dagi
+#   `extra="forbid"` boshqa sinf: u USTA formasining kontrakti).
+# ---------------------------------------------------------------------------
+
+
+class ReviewItemResponse(BaseModel):
+    """`GET /review/uncertain/next` — nazoratchi ko'radigan BITTA band.
+
+    Maydonlarning har biri ekranda BOR (UI-SPEC §7.3): dalil kadri,
+    rasta raqami va hududi, sana/vaqt/kanal, kontur va «sotuvchi
+    biriktirilgan» qatori. Ortiqcha maydon YO'Q — bu bo'lim izohidagi
+    sabab.
+
+    `snapshot_id` — kadr HAVOLASINING manbai. Klient uni
+    `GET /api/v1/snapshots/{id}/image` proxysiga aylantiradi; imzolangan
+    (presigned) URL BERILMAYDI va so'ralmaydi (UI-SPEC §14.2, T-05-47).
+
+    `polygon` NORMALANGAN (0..1): klient konturni kadr ustiga SVG bilan
+    chizadi, ya'ni AYNI kadr Y-2, Y-3 va Y-4 da bitta keshdan keladi.
+    """
+
+    assignment_id: UUID
+    snapshot_id: UUID
+    stall_id: UUID
+    stall_code: str
+    zone_name: str
+    camera_name: str
+    channel_no: int
+    business_date: date
+    slot_time: time
+    polygon: list[tuple[float, float]]
+    has_active_vendor: bool
+
+
+class AnswerRequest(BaseModel):
+    """`POST /review/{id}/answer` tanasi — AYNAN BITTA maydon.
+
+    ⛔ MASSIV QABUL QILADIGAN VARIANTI YO'Q va bo'lmaydi (D-18). Bitta
+       so'rov = bitta qaror; buni `tests/integration/test_uncertain_
+       queue.py::test_no_bulk_approve_endpoint` OpenAPI sxemasidan
+       skanerlab tasdiqlaydi.
+
+    `human_verdict` `OccupancyVerdict` DAN HOSILA, literal ro'yxat EMAS:
+    domen enum'da yashaydi va `zone_reviews.human_verdict` ning `CHECK`
+    i ham o'sha enum'dan chiqadi (§S-5).
+
+    ⚠ `uncertain` QIYMATI QONUNIY va u «Aniq ayta olmayman» tugmasi
+      (UI-SPEC §7.3). Uni rad etish nazoratchini TAXMIN QILISHGA
+      majburlardi va xolis o'lchovga ataylab shovqin qo'shardi
+      (`HUMAN_VERDICT_CHECK` docstringi).
+    """
+
+    human_verdict: OccupancyVerdict
+
+
+class AnswerResponse(BaseModel):
+    """Javob YOZILGANDAN KEYINGI oshkor ma'lumot (UI-SPEC §7.7).
+
+    ⛔ BU MA'LUMOT BIRORTA `GET` MARSHRUTIDAN OLINMAYDI. U FAQAT shu
+       `POST` ning javobida mavjud — oldindan yuklab qo'yish (prefetch)
+       yo'li shu bilan yopiladi. Klient uni `useMutation` ning `data`
+       sidan oladi, `useQuery` dan EMAS.
+
+    ⛔ MAYDON NOMLARI ATAYIN `verdict`/`ai_verdict`/`confidence` EMAS.
+       Sabab MEXANIK: G-12 darvozasi `components/blind-audit/**` da o'sha
+       nomlarning UMUMAN uchramasligini talab qiladi (UI-SPEC §14.3),
+       ya'ni oshkor panelining tipi ularni olib kirsa darvoza O'ZINI
+       O'ZI qizartirardi va yagona «tuzatish» yo'li darvozani
+       BO'SHATISH bo'lardi.
+
+    `locked` — «bu javobni endi o'zgartirib bo'lmaydi». Bezak emas:
+    qiymat IKKI strukturaviy mexanizmdan chiqadi
+    (`UNIQUE (review_assignment_id)` + `BEFORE UPDATE` qo'riqchisi) va
+    ularning ikkalasi ham test bilan o'lchanadi.
+
+    ⚠ `confidence` BU YERDA HAM YO'Q (UI-SPEC §7.5): u nazoratchi uchun
+      ma'nosiz («0,42 nimani anglatadi?») va keyingi bandga ankor
+      bo'lardi.
+    """
+
+    system_answer: OccupancyVerdict
+    human_answer: OccupancyVerdict
+    matched: bool
+    locked: bool
+
+
+class QueueBudget(BaseModel):
+    """Bitta navbatning kunlik hisoblagichi (UI-SPEC §7.2 dagi «12 / 50»).
+
+    ⚠ UCHALA SON HAM QAYTADI. `remaining` ni klientga hisoblatish ikki
+      joyda ikki formula tug'dirardi (`max(0, budget - answered)` yoki
+      shunchaki ayirma) va nazoratchi MANFIY qoldiqni ko'rishi mumkin
+      edi — byudjet sozlamasi kun o'rtasida pasaytirilsa aynan shunday
+      bo'lardi.
+    """
+
+    answered: int
+    budget: int
+    remaining: int
+
+
+class ReviewBudgetResponse(BaseModel):
+    """`GET /review/budget?day=…` — IKKALA navbat uchun (UI-SPEC §7.2).
+
+    ⚠ BITTA SO'ROVDA IKKALASI: `/review` uyi ikkala kartani ham BIR
+      VAQTDA ko'rsatadi (byudjeti tugagan kartani ham). Ikki alohida
+      so'rov ikkita yuklanish holatini yaratardi va kartalar navbatma-
+      navbat «sakrab» chiqardi.
+
+    ⛔ `blind_audit` HISOBLAGICHI BU YERDA, LEKIN TORTISH 05-11 DA.
+       Ya'ni bugun bu son `0 / 30` bo'lib turishi MUMKIN va bu NOSOZLIK
+       EMAS — namuna hali tortilmagan bo'lsa javob ham yo'q.
+    """
+
+    day: date
+    uncertain: QueueBudget
+    blind_audit: QueueBudget

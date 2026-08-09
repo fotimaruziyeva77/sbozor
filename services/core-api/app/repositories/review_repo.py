@@ -395,6 +395,7 @@ _RECORD_ANSWER = text(
            AND ev.id = ra.occupancy_event_id
          WHERE ra.market_id = :market_id
            AND ra.id = :assignment_id
+           AND ra.queue_kind = :queue_kind
     ), written AS (
         INSERT INTO zone_reviews
             (market_id, review_assignment_id, queue_kind, shown_ai_verdict,
@@ -411,11 +412,29 @@ _RECORD_ANSWER = text(
 ).bindparams(
     bindparam("market_id", type_=PgUuid(as_uuid=True)),
     bindparam("assignment_id", type_=PgUuid(as_uuid=True)),
+    bindparam("queue_kind", type_=Text()),
     bindparam("reviewer_id", type_=PgUuid(as_uuid=True)),
     bindparam("human_verdict", type_=Text()),
     bindparam("decision_ms", type_=Integer()),
 )
 """BITTA javob qatori + oshkor qilinadigan tizim verdikti — BIR so'rovda.
+
+=============================================================================
+⛔⛔ `:queue_kind` — FILTR, YOZILADIGAN QIYMAT EMAS. IKKISI ADASHTIRILMASIN.
+
+`WHERE ra.queue_kind = :queue_kind` chaqiruvchi QAYSI navbatga xizmat
+qilayotganini bildiradi: noaniq navbat marshruti ko'r audit topshirig'iga
+javob yoza OLMAYDI va aksincha. Ikki marshrut ikki xil xato kodini
+beradi (`review_already_answered` va `blind_answer_locked`, 05-11) va
+ular AYNAN shu chegara tufayli aralashib ketmaydi.
+
+`INSERT` ga esa **`src.queue_kind`** ketadi — QATORDAN o'qilgan qiymat.
+Uni `:queue_kind` bilan almashtirish «soddalashtirish» bo'lib ko'rinardi
+(«baribir teng-ku») va DENORMALIZATSIYA MANBAINI chaqiruvchiga
+ko'chirardi: filtrni bo'shatgan kun (yoki ikki navbat uchun bitta
+marshrut yozilgan kun) yolg'on nusxa yozish yo'li OCHILARDI. Farq
+sabotaj bilan o'lchanadi.
+=============================================================================
 
 =============================================================================
 ⛔⛔ `queue_kind` TOPSHIRIQ QATORIDAN O'QILADI, CHAQIRUVCHIDAN OLINMAYDI.
@@ -605,6 +624,7 @@ class ReviewRepository(TenantScopedRepository):
         self,
         assignment_id: UUID,
         *,
+        queue_kind: str,
         reviewer_id: UUID,
         human_verdict: str,
         shown_ai_verdict: bool,
@@ -613,6 +633,9 @@ class ReviewRepository(TenantScopedRepository):
         """BITTA `zone_reviews` qatori yozadi va oshkor ma'lumotni qaytaradi.
 
         Args:
+            queue_kind: chaqiruvchi QAYSI navbatga xizmat qilyapti —
+                FILTR. Yoziladigan qiymat QATORDAN o'qiladi
+                (`_RECORD_ANSWER` docstringi).
             shown_ai_verdict: SERVER hisoblagan qiymat. Klient uni
                 yubormaydi va `AnswerRequest` da bunday maydon UMUMAN
                 yo'q (D-17.3).
@@ -620,8 +643,9 @@ class ReviewRepository(TenantScopedRepository):
                 topilmadi). Klient qiymati BU YERGA YETIB KELMAYDI.
 
         Returns:
-            `None` — topshiriq topilmadi yoki begona bozorniki (ikkalasi
-            ham 404).
+            `None` — topshiriq topilmadi, begona bozorniki yoki BOSHQA
+            navbatniki (uchalasi ham 404 — farqlash navbat a'zoligini
+            javob kodi bilan oshkor qilardi).
 
         Raises:
             IntegrityError: bu topshiriqqa javob ALLAQACHON yozilgan
@@ -632,6 +656,7 @@ class ReviewRepository(TenantScopedRepository):
             {
                 "market_id": self.market_id,
                 "assignment_id": assignment_id,
+                "queue_kind": queue_kind,
                 "reviewer_id": reviewer_id,
                 "human_verdict": human_verdict,
                 "shown_ai_verdict": shown_ai_verdict,
@@ -646,4 +671,3 @@ class ReviewRepository(TenantScopedRepository):
             system_verdict=row["system_verdict"],
             queue_kind=row["queue_kind"],
         )
-

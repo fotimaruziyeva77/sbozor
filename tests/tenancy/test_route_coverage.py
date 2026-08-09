@@ -46,7 +46,7 @@ from tenancy.test_cross_tenant import (
 
 pytestmark = pytest.mark.tenancy
 
-MINIMUM_MATRIX_ROUTES = 52
+MINIMUM_MATRIX_ROUTES = 55
 """Matritsada kamida shuncha marshrut bo'lishi shart.
 
 01-07 holatida qamrovda 7 marshrut bor edi (`/users` GET+POST,

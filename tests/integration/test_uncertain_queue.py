@@ -41,7 +41,9 @@ from uuid import UUID, uuid4
 import psycopg
 import pytest
 from app.repositories.review_repo import ReviewRepository
+from app.schemas import AnswerRequest
 from fixtures.admin_api import session_headers
+from fixtures.auth_api import audit_rows
 from fixtures.market_domain import MarketDomainSeed
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import (
@@ -56,7 +58,7 @@ from fixtures.occupancy_domain import (
 from fixtures.snapshot_domain import SEED_BUSINESS_DATE, snapshot_rows
 from fixtures.two_markets import SEED_PASSWORD, TwoMarketSeed
 from sbozor_core.db import make_sessionmaker
-from sbozor_core.enums import OccupancyVerdict, ReviewQueueKind
+from sbozor_core.enums import AuditAction, OccupancyVerdict, ReviewQueueKind
 from sbozor_core.tenancy import set_tenant_context
 from sbozor_core.timeutil import business_today
 from sqlalchemy import text
@@ -72,6 +74,10 @@ if TYPE_CHECKING:
     from psycopg import Connection
     from psycopg.rows import TupleRow
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+NEXT_URL = "/api/v1/review/uncertain/next"
+BUDGET_URL = "/api/v1/review/budget"
+REVIEW_URL = "/api/v1/review"
 
 QUEUE_LIMIT = 50
 """`build_uncertain_queue()` ning test chegarasi — nomzodlar sonidan KATTA.
@@ -125,12 +131,16 @@ class Env:
         Seed'dagi `uncertain` hodisa AYNAN shu rastada (`stall_ids[1]`),
         ya'ni navbat qurilganda u avtomatik nomzod bo'ladi.
         """
-        return self.domain.market_a.gap_stall_id
+        stall_id = self.domain.market_a.gap_stall_id
+        assert stall_id is not None, "nazorat: `market_domain` da `gap_stall_id` yo'q"
+        return stall_id
 
     @property
     def unassigned_stall(self) -> UUID:
         """Biriktirilmagan VA zonasiz rasta (`stall_ids[2]`)."""
-        return self.domain.market_a.unassigned_stall_id
+        stall_id = self.domain.market_a.unassigned_stall_id
+        assert stall_id is not None, "nazorat: `market_domain` da `unassigned_stall_id` yo'q"
+        return stall_id
 
     @property
     def seed_assignment(self) -> UUID:
@@ -201,7 +211,6 @@ async def duo_sessionmaker(
         yield make_sessionmaker(engine)
     finally:
         await engine.dispose()
-
 
 
 # ===========================================================================
@@ -581,6 +590,7 @@ async def test_second_record_answer_raises_integrity_error(
     async with tenant_session(env.market_a, env.reviewer_id) as session:
         first = await repo(session, env.market_a).record_answer(
             env.seed_assignment,
+            queue_kind=ReviewQueueKind.UNCERTAIN.value,
             reviewer_id=env.reviewer_id,
             human_verdict=OccupancyVerdict.OCCUPIED.value,
             shown_ai_verdict=False,
@@ -594,6 +604,7 @@ async def test_second_record_answer_raises_integrity_error(
         async with tenant_session(env.market_a, env.reviewer_id) as session:
             await repo(session, env.market_a).record_answer(
                 env.seed_assignment,
+                queue_kind=ReviewQueueKind.UNCERTAIN.value,
                 reviewer_id=env.reviewer_id,
                 human_verdict=OccupancyVerdict.EMPTY.value,
                 shown_ai_verdict=False,
@@ -621,6 +632,7 @@ async def test_record_answer_copies_the_queue_kind_from_the_assignment(
     async with tenant_session(market_b, env.base.market_b.admin_user_id) as session:
         answered = await repo(session, market_b).record_answer(
             blind_id,
+            queue_kind=ReviewQueueKind.BLIND_AUDIT.value,
             reviewer_id=env.base.market_b.admin_user_id,
             human_verdict=OccupancyVerdict.EMPTY.value,
             shown_ai_verdict=False,
@@ -642,6 +654,7 @@ async def test_record_answer_on_a_foreign_assignment_writes_nothing(
     async with tenant_session(env.market_a, env.reviewer_id) as session:
         answered = await repo(session, env.market_a).record_answer(
             foreign,
+            queue_kind=ReviewQueueKind.BLIND_AUDIT.value,
             reviewer_id=env.reviewer_id,
             human_verdict=OccupancyVerdict.OCCUPIED.value,
             shown_ai_verdict=False,
@@ -662,6 +675,7 @@ async def test_record_answer_on_an_unknown_assignment_returns_none(
     async with tenant_session(env.market_a, env.reviewer_id) as session:
         answered = await repo(session, env.market_a).record_answer(
             uuid4(),
+            queue_kind=ReviewQueueKind.UNCERTAIN.value,
             reviewer_id=env.reviewer_id,
             human_verdict=OccupancyVerdict.OCCUPIED.value,
             shown_ai_verdict=False,
@@ -688,6 +702,7 @@ async def test_answered_row_is_immutable(
     async with tenant_session(env.market_a, env.reviewer_id) as session:
         answered = await repo(session, env.market_a).record_answer(
             env.seed_assignment,
+            queue_kind=ReviewQueueKind.UNCERTAIN.value,
             reviewer_id=env.reviewer_id,
             human_verdict=OccupancyVerdict.OCCUPIED.value,
             shown_ai_verdict=False,
@@ -727,6 +742,7 @@ async def test_daily_answered_count_is_scoped_to_reviewer_and_queue(
         )
         await repo(session, env.market_a).record_answer(
             env.seed_assignment,
+            queue_kind=ReviewQueueKind.UNCERTAIN.value,
             reviewer_id=env.reviewer_id,
             human_verdict=OccupancyVerdict.OCCUPIED.value,
             shown_ai_verdict=False,
@@ -749,3 +765,186 @@ async def test_daily_answered_count_is_scoped_to_reviewer_and_queue(
     assert after == 1
     assert other_queue == 0, "ko'r audit hisoblagichi noaniq navbat javobini sanadi"
     assert other_reviewer == 0, "boshqa nazoratchining javobi hisoblagichga tushdi"
+
+
+# ===========================================================================
+# 5. HTTP yuzasi — bitta so'rov = bitta qaror
+# ===========================================================================
+
+
+async def test_next_item_is_served_to_the_inspector(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """NAZORAT HOLATI: nazoratchi bandni HAQIQATAN oladi.
+
+    Usiz quyidagi rad etish testlari «endpoint umuman ishlamayapti»
+    holatida ham yashil bo'lardi.
+    """
+    await build_queue(tenant_session, env)
+
+    response = await api_client.get(NEXT_URL, headers=inspector_headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["stall_code"]
+    assert body["zone_name"]
+    assert UUID(body["snapshot_id"]) == env.snapshot_a
+    assert body["has_active_vendor"] is True
+    assert len(body["polygon"]) >= 3
+
+
+async def test_director_cannot_reach_the_queue(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    director_headers: dict[str, str],
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """`report_view` bor, `occupancy_review` yo'q -> **403** VA soxta audit qatori YO'Q.
+
+    ⚠ DA'VO MEXANIZM EMAS, XULQ BILAN O'LCHANADI (03-07 ning darsi):
+      «huquq dekoratorda turibdi» ni tekshiradigan test kafolatning IKKI
+      mustaqil mexanizmidan faqat bittasini ko'rardi. Bu yerda rad etish
+      NATIJASI va uning IZI o'lchanadi.
+
+    NAZORAT: o'sha navbatni nazoratchi 200 bilan oladi.
+    """
+    await build_queue(tenant_session, env)
+    before = await audit_rows(tenant_session, env.market_a, action=AuditAction.READ.value)
+
+    denied = await api_client.get(NEXT_URL, headers=director_headers)
+    allowed = await api_client.get(NEXT_URL, headers=inspector_headers)
+    after = await audit_rows(tenant_session, env.market_a, action=AuditAction.READ.value)
+
+    assert denied.status_code == 403, denied.text
+    assert allowed.status_code == 200, allowed.text
+    assert len(after) == len(before), "rad etilgan so'rov audit jurnalida iz qoldirdi"
+
+
+def test_answer_request_declares_no_shown_ai_verdict() -> None:
+    """⛔ `shown_ai_verdict` KLIENT MAYDONI SIFATIDA MAVJUD EMAS (D-17.3, T-05-44).
+
+    `None` qilib yuborish YETARLI EMAS bo'lardi: maydon sxemada tursa,
+    klient uni `true` deb yuborishi mumkin edi va DB `CHECK` i
+    (`blind_audit_not_shown`) faqat KO'R auditni qamraydi — ya'ni noaniq
+    navbat uchun yolg'on qiymat bemalol yozilardi.
+
+    ⚠ `market_id` VA `decision_ms` HAM YO'Q va ular AYNAN shu sinfdagi
+      maydonlar (T-05-24, T-05-46).
+    """
+    declared = set(AnswerRequest.model_fields)
+
+    assert "shown_ai_verdict" not in declared
+    assert "market_id" not in declared
+    assert "decision_ms" not in declared
+    assert "queue_kind" not in declared
+    assert declared == {"human_verdict"}, f"kutilmagan maydon: {sorted(declared)}"
+
+
+async def test_second_answer_returns_409(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """Ikkinchi javob -> **409** `review_already_answered` (poyga holati).
+
+    ⛔ `blind_answer_locked` DAN AJRATILGAN va farq mahsulotda: bu yerda
+       ikkinchi so'rov shunchaki KECH QOLGAN (ikki oyna, ikki bosish),
+       ko'r auditda esa taqiq STRUKTURAVIY (`occupancy_errors.py`).
+    """
+    await build_queue(tenant_session, env)
+    item = (await api_client.get(NEXT_URL, headers=inspector_headers)).json()
+    target = f"{REVIEW_URL}/{item['assignment_id']}/answer"
+
+    first = await api_client.post(
+        target, json={"human_verdict": "occupied"}, headers=inspector_headers
+    )
+    second = await api_client.post(
+        target, json={"human_verdict": "empty"}, headers=inspector_headers
+    )
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 409, second.text
+    assert second.json()["detail"] == "review_already_answered"
+
+
+async def test_answer_reveals_the_system_verdict_only_afterwards(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """Oshkor ma'lumot javob TANASIDA keladi va u to'rt maydondan iborat.
+
+    Maydon nomlari `verdict`/`ai_verdict`/`confidence` EMAS va bu MEXANIK
+    qaror: G-12 darvozasi `components/blind-audit/**` da o'sha nomlarning
+    umuman uchramasligini talab qiladi (UI-SPEC §14.3).
+    """
+    await build_queue(tenant_session, env)
+    item = (await api_client.get(NEXT_URL, headers=inspector_headers)).json()
+
+    response = await api_client.post(
+        f"{REVIEW_URL}/{item['assignment_id']}/answer",
+        json={"human_verdict": "empty"},
+        headers=inspector_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert set(body) == {"system_answer", "human_answer", "matched", "locked"}
+    assert body["system_answer"] == OccupancyVerdict.UNCERTAIN.value
+    assert body["human_answer"] == OccupancyVerdict.EMPTY.value
+    assert body["matched"] is False
+    assert body["locked"] is True
+
+
+async def test_answer_on_a_blind_assignment_is_not_found(
+    api_client: httpx.AsyncClient,
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """KO'R AUDIT topshirig'i bu marshrutda **404** (begona bozor bilan bir xil).
+
+    ⛔ 403 YOKI 409 BERILMAYDI: har ikkalasi ham «bunday topshiriq bor,
+       lekin u boshqa navbatda» degan ma'lumotni oshkor qilardi va
+       nazoratchi navbat a'zoligini javob kodi bo'yicha aniqlay olardi
+       (D-14: `purpose` ham, navbat ham unga ko'rinmaydi).
+    """
+    blind_id = env.occupancy.market_a.blind_assignment_id
+
+    response = await api_client.post(
+        f"{REVIEW_URL}/{blind_id}/answer",
+        json={"human_verdict": "occupied"},
+        headers=inspector_headers,
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "not_found"
+
+
+async def test_budget_endpoint_reports_both_queues(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    inspector_headers: dict[str, str],
+    env: Env,
+) -> None:
+    """`GET /review/budget` ikkala navbatning uchligini beradi (UI-SPEC §7.2)."""
+    await build_queue(tenant_session, env)
+    item = (await api_client.get(NEXT_URL, headers=inspector_headers)).json()
+    await api_client.post(
+        f"{REVIEW_URL}/{item['assignment_id']}/answer",
+        json={"human_verdict": "occupied"},
+        headers=inspector_headers,
+    )
+
+    response = await api_client.get(BUDGET_URL, headers=inspector_headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["day"] == business_today().isoformat()
+    assert body["uncertain"] == {"answered": 1, "budget": 50, "remaining": 49}
+    assert body["blind_audit"] == {"answered": 0, "budget": 30, "remaining": 30}

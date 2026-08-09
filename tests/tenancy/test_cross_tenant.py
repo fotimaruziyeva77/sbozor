@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     import httpx
     from app.settings import Settings
     from fastapi import FastAPI
+    from fixtures.auth_users import AuthSeed
     from fixtures.market_domain import MarketDomainSeed
     from fixtures.nvr_domain import NvrDomainSeed
     from fixtures.occupancy_domain import OccupancyDomainSeed
@@ -130,6 +131,17 @@ class TenantSeed(NamedTuple):
       Tasodifiy UUID bilan 404 hech nimani isbotlamasdi — biz aynan
       «obyekt BOR, lekin boshqa bozorniki» holatini sinayapmiz
       (`PARAM_FILLERS` docstringidagi umumiy qoida).
+    """
+
+    auth: AuthSeed
+    """1-faza qatlami: maxsus holatdagi foydalanuvchilar (`AuthSeed`).
+
+    ⚠ FAQAT BITTA A'ZOSI UCHUN KERAK — `inspector`. `OCCUPANCY_REVIEW`
+      huquqi D-07 matritsasida FAQAT o'sha rolda bor va `two_markets`
+      seed'ida bunday foydalanuvchi YO'Q. Uni `two_markets` ga qo'shish
+      o'sha seed'ga tayanadigan o'nlab testning a'zolik manzarasini
+      o'zgartirardi; `auth_seed` esa AYNAN shu maqsad uchun mavjud
+      (`INSPECTOR_ROUTES` docstringi).
     """
 
     occupancy: OccupancyDomainSeed
@@ -304,6 +316,22 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # shart ham majburiy: eskirgan qator 404 ni TENANT chegarasi emas,
     # HOLAT tufayli berardi.
     "camera_zone_id": lambda seed: str(seed.occupancy.market_b.active_zone_ids[0]),
+    # --- 05-10: nazoratchi navbatining topshirig'i ---
+    #
+    # ⚠ NOM `assignment_id` EMAS va bu ATAYIN: o'sha kalit `PATCH
+    # /assignments/{assignment_id}` (RASTA-SOTUVCHI biriktirishi)
+    # tomonidan BAND. Ikkala marshrut bir kalitni bo'lishsa, filler
+    # `POST /review/.../answer` ga BEGONA OBYEKT TURINI berardi —
+    # javob 404 bo'lardi-yu, sababi tenant chegarasi emas, «bunday
+    # topshiriq umuman yo'q» bo'lardi va matritsa yashil turib HECH
+    # NIMANI o'lchamasdi.
+    #
+    # ⚠ B bozorida FAQAT ko'r audit topshirig'i bor (`uncertain_
+    # assignment_id` A ga xos — `fixtures/occupancy_domain.py` ning
+    # asimmetriyasi ATAYIN). Bu marshrut uchun u baribir to'g'ri
+    # qiymat: begona bozorning topshirig'i RLS ostida 0 qator beradi
+    # va javob 404 bo'ladi — AYNAN o'lchanayotgan holat.
+    "review_assignment_id": lambda seed: str(seed.occupancy.market_b.blind_assignment_id),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -510,6 +538,15 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
     RouteSpec("PATCH", "/api/v1/snapshot-schedules/{schedule_id}"): lambda _: {
         "times": ["06:00", "18:00"],
     },
+    # --- 05-10: nazoratchi javobi ---
+    #
+    # ⚠ TANADA AYNAN BITTA MAYDON BOR va bu D-18 ning aksi: `AnswerRequest`
+    #   massiv ham, `market_id` ham, `shown_ai_verdict` ham qabul qilmaydi.
+    #   Matritsa uchun muhimi — so'rov 422 da to'xtamasdan tenant
+    #   darvozasigacha YETIB BORISHI.
+    RouteSpec("POST", "/api/v1/review/{review_assignment_id}/answer"): lambda _: {
+        "human_verdict": "occupied",
+    },
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
 
@@ -642,6 +679,35 @@ o'zi) bilan AYNAN bir xil sinf xato, faqat kontent tipi darajasida.
 
 Ikkala xarita ham bir vaqtda berilmaydi: `call_route()` avval
 `FILE_FILLERS` ga qaraydi va topsa `json=` ni umuman ishlatmaydi.
+"""
+
+INSPECTOR_ROUTES: frozenset[RouteSpec] = frozenset(
+    {
+        RouteSpec("GET", "/api/v1/review/uncertain/next"),
+        RouteSpec("GET", "/api/v1/review/budget"),
+        RouteSpec("POST", "/api/v1/review/{review_assignment_id}/answer"),
+    }
+)
+"""Matritsa NAZORATCHI sessiyasi bilan chaqiradigan marshrutlar (05-10).
+
+=============================================================================
+`PLATFORM_ADMIN_ROUTES` BILAN AYNAN BIR XIL MULOHAZA, BOSHQA ROL.
+
+Uchala marshrut ham `OCCUPANCY_REVIEW` talab qiladi, u esa D-07
+matritsasida FAQAT `inspector` da bor — bozor adminida ham, platforma
+adminida ham YO'Q. Ya'ni odatdagi `market_a_headers` sessiyasi bilan
+javob **403** bo'lardi va `test_cross_tenant_object_returns_404` aynan
+403 ga qarshi yozilgan assertion'da yiqilardi.
+
+"Yiqilmasin" deb 403 ni ruxsat etish eng yomon yechim bo'lardi: o'shanda
+HUQUQ darvozasi TENANT darvozasini butunlay YOPIB qo'yardi va "begona
+bozorning topshirig'iga javob yozib bo'lmaydi" degan da'vo HECH QACHON
+sinalmasdi.
+
+⚠ NAZORATCHI `auth_seed` DAN KELADI (`AuthSeed.inspector`): `two_markets`
+  seed'ida bu rol YO'Q va uni o'sha faylga qo'shish beshta boshqa
+  to'plamning a'zolik sanoqlariga tegardi.
+=============================================================================
 """
 
 PLATFORM_ADMIN_ROUTES: frozenset[RouteSpec] = frozenset(
@@ -940,6 +1006,7 @@ def occupancy_domain(
 @pytest.fixture
 def tenant_seed(
     two_markets: TwoMarketSeed,
+    auth_seed: AuthSeed,
     market_domain: MarketDomainSeed,
     nvr_domain: NvrDomainSeed,
     snapshot_domain: SnapshotDomainSeed,
@@ -953,6 +1020,7 @@ def tenant_seed(
     """
     return TenantSeed(
         base=two_markets,
+        auth=auth_seed,
         domain=market_domain,
         nvr=nvr_domain,
         snapshot=snapshot_domain,
@@ -989,19 +1057,39 @@ async def market_a_admin_headers(
 
 
 @pytest.fixture
+async def market_a_inspector_headers(
+    api_client: httpx.AsyncClient, tenant_seed: TenantSeed
+) -> dict[str, str]:
+    """A bozori NAZORATCHISINING sessiyasi (`OCCUPANCY_REVIEW` bilan).
+
+    A'zoligi bitta -> bozor avtomatik tanlanadi. `must_change_password`
+    bayrog'i `false` (`AuthSeed.inspector` docstringi), ya'ni parol
+    darvozasi bu sessiyada UMUMAN qatnashmaydi va 403 ning sababi bir
+    ma'noli qoladi.
+    """
+    return await session_headers(api_client, tenant_seed.auth.inspector.phone, SEED_PASSWORD)
+
+
+@pytest.fixture
 def headers_for(
     market_a_headers: dict[str, str],
     market_a_admin_headers: dict[str, str],
+    market_a_inspector_headers: dict[str, str],
 ) -> Callable[[RouteSpec], dict[str, str]]:
     """Marshrutga MOS keladigan A-bozor sessiyasini tanlaydi.
 
-    Tanlov `PLATFORM_ADMIN_ROUTES` bo'yicha va boshqa hech qanday shart
-    yo'q: sessiya HAR DOIM **A bozoriga** tegishli, ya'ni "begona bozor
-    obyekti -> 404" da'vosi o'zgarmaydi. Farq faqat HUQUQ darajasida.
+    Tanlov IKKI ro'yxat bo'yicha (`PLATFORM_ADMIN_ROUTES`,
+    `INSPECTOR_ROUTES`) va boshqa hech qanday shart yo'q: sessiya HAR
+    DOIM **A bozoriga** tegishli, ya'ni "begona bozor obyekti -> 404"
+    da'vosi o'zgarmaydi. Farq faqat HUQUQ darajasida.
     """
 
     def _pick(route: RouteSpec) -> dict[str, str]:
-        return market_a_admin_headers if route in PLATFORM_ADMIN_ROUTES else market_a_headers
+        if route in PLATFORM_ADMIN_ROUTES:
+            return market_a_admin_headers
+        if route in INSPECTOR_ROUTES:
+            return market_a_inspector_headers
+        return market_a_headers
 
     return _pick
 
@@ -1313,6 +1401,8 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             # qilardi (`deactivate()` `is_active = true` shartini qo'yadi)
             # va matritsa yashil bo'lib turib, boshqa narsani o'lchardi.
             *occupancy_b.active_zone_ids,
+            # --- 05-10 ---
+            occupancy_b.blind_assignment_id,
         )
     }
 
@@ -1401,6 +1491,54 @@ def test_file_and_body_fillers_do_not_overlap() -> None:
     qo'shgan odam "tana yuborilyapti" deb o'ylab yurardi.
     """
     assert set(FILE_FILLERS) & set(BODY_FILLERS) == set()
+
+
+def test_inspector_routes_point_at_live_routes() -> None:
+    """`INSPECTOR_ROUTES` da o'chirilgan marshrut QOLIB KETMAGAN.
+
+    `PLATFORM_ADMIN_ROUTES` bilan aynan bir xil sabab: eskirgan yozuv
+    o'zi zararsiz, lekin marshrut BOSHQA ma'noda qayta paydo bo'lganda u
+    tug'ilishidanoq nazoratchi sessiyasi bilan chaqirilardi.
+    """
+    live = set(all_routes(fastapi_app))
+    stale = sorted(route.test_id for route in INSPECTOR_ROUTES if route not in live)
+
+    assert not stale, f"`INSPECTOR_ROUTES` da mavjud bo'lmagan marshrutlar: {stale}"
+
+
+@pytest.mark.parametrize("route", sorted(INSPECTOR_ROUTES), ids=_route_id)
+async def test_inspector_routes_really_need_the_review_permission(
+    api_client: httpx.AsyncClient,
+    tenant_seed: TenantSeed,
+    market_a_headers: dict[str, str],
+    route: RouteSpec,
+) -> None:
+    """Ro'yxatdagi marshrut bozor admini uchun ROSTDAN 403 beradi.
+
+    Bu — `INSPECTOR_ROUTES` ning O'ZINI himoya qiladigan darvoza va u
+    `test_platform_admin_routes_really_need_the_elevated_session` ning
+    aynan jufti. Usiz kimdir hammaga ochiq marshrutni ro'yxatga qo'shib,
+    uni kuchsizroq sessiyadan olib chiqib ketardi va matritsa buni
+    umuman sezmasdi — ikkala sessiya ham A bozoriga tegishli, ya'ni javob
+    baribir kelardi.
+
+    ⚠ SO'ROV **A BOZORINING O'Z** topshirig'i bilan yuboriladi: begona
+      identifikator bilan 404 (tenant darvozasi) 403 dan OLDIN kelib,
+      huquq darvozasi umuman sinalmay qolardi.
+    """
+    own_assignment = tenant_seed.occupancy.market_a.blind_assignment_id
+    own_path = route.path
+    for name in route.param_names:
+        own_path = own_path.replace("{" + name + "}", str(own_assignment))
+
+    response = await call_route(
+        api_client, route, tenant_seed, headers=market_a_headers, path=own_path
+    )
+
+    assert response.status_code == 403, (
+        f"{route.test_id}: bozor admini {response.status_code} oldi — "
+        "marshrut `INSPECTOR_ROUTES` da bo'lishi shart emas"
+    )
 
 
 def test_platform_admin_routes_point_at_live_routes() -> None:

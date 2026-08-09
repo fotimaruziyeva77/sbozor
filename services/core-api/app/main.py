@@ -52,6 +52,7 @@ from app.api.v1.imports import router as imports_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
 from app.api.v1.nvr import router as nvr_router
+from app.api.v1.reviews import router as reviews_router
 from app.api.v1.schedules import router as schedules_router
 from app.api.v1.snapshots import alerts_router, capture_runs_router
 from app.api.v1.snapshots import router as snapshots_router
@@ -215,6 +216,27 @@ app.include_router(cameras_router, prefix=f"{API_V1_PREFIX}/cameras")
 # matritsa esa `camera_zone_id` ni (yo'l parametri) qamraydi va u uchun
 # `PARAM_FILLERS` ga B bozorining HAQIQIY zonasi qo'shildi.
 app.include_router(camera_zones_router, prefix=f"{API_V1_PREFIX}/camera-zones")
+# --- 05-10: nazoratchi navbati (AI-03, D-13/D-18) ---
+#
+# ⛔ ALOHIDA PREFIKS VA BITTA ROUTER — IKKALA NAVBAT UCHUN.
+#
+# `/review/uncertain/next` va (05-11 da) `/review/blind/next` BIR router
+# ostida yashaydi, chunki ular BITTA mahsulot yuzasining ikki rejimi:
+# nazoratchining uyi (`/review`) ikkala kartani ham ko'rsatadi va
+# `GET /review/budget` ikkalasining hisoblagichini BIR so'rovda beradi.
+#
+# ⚠ `POST /review/{review_assignment_id}/answer` — yo'l parametri
+# ATAYIN `assignment_id` DEB NOMLANMAGAN: o'sha nom `PATCH /assignments/
+# {assignment_id}` (rasta-sotuvchi biriktirishi) bilan to'qnashardi va
+# cross-tenant matritsasining `PARAM_FILLERS` i bu marshrutga BEGONA
+# obyekt turini berardi — 404 chiqardi-yu, sababi tenant chegarasi
+# emas, «bunday topshiriq umuman yo'q» bo'lardi.
+#
+# ⚠ OMMAVIY (massiv qabul qiladigan) MARSHRUT BU ROUTERDA YO'Q va uning
+# yo'qligi `tests/integration/test_uncertain_queue.py::
+# test_no_bulk_approve_endpoint` da OpenAPI sxemasidan skanerlanadi
+# (D-18 — API qoidasi, UI qoidasi EMAS).
+app.include_router(reviews_router, prefix=f"{API_V1_PREFIX}/review")
 # --- 04-09: snapshot jadvali (CAM-04, D-05) ---
 #
 # ⚠ ALOHIDA PREFIKS, `cameras` OSTIDA EMAS — `cameras` ning `nvr-devices`
