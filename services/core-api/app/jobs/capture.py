@@ -104,11 +104,20 @@ from app.services.capture_errors import (
     MAX_DETAIL_CHARS,
     CaptureError,
 )
+
+# ⚠ `cv_queue` — NAVBAT KUTUBXONASINI TASHIYDIGAN YAGONA IMPORT VA U D-06 NI
+#   BUZMAYDI: bu fayl `taskiq` ni O'ZI import qilmaydi va navbat mexanizmi
+#   haqida hech nima bilmaydi — u faqat «kadr tayyor» hodisasini nashr
+#   qiladigan FUNKSIYANI chaqiradi. Mexanizm almashtirilsa o'zgaradigan
+#   fayl `app/services/cv_queue.py`, bu emas.
+#   Buni `grep -cE "^\s*(import|from)\s+taskiq" app/jobs/capture.py` -> 0
+#   mexanik tasdiqlaydi.
+from app.services.cv_queue import enqueue_detect
 from app.services.frame_source import CaptureTarget, DeviceEndpoint, capture_frame
 from app.services.isapi.client import RTSP_FALLBACK_PORT
 from app.services.live_source import authenticated_rtsp_source
 from app.services.object_key import object_key
-from app.services.quality import analyze
+from app.services.quality import VERDICT_OK, analyze
 from app.services.rtsp import rtsp_url
 from app.services.storage import StorageError
 
@@ -1027,6 +1036,36 @@ async def _capture_one(
 
     finisher.done.add(run.run_id)
     state.succeeded += 1
+
+    # =======================================================================
+    # ⛔ CV NAVBATIGA QO'YISH — TRANZAKSIYA YAKUNLANGANDAN KEYIN VA FAQAT
+    #    YAROQLI KADR UCHUN. IKKALA SHART HAM MUZOKARA QILINMAYDI.
+    #
+    # (a) NEGA TRANZAKSIYADAN KEYIN (`04-PATTERNS.md` §3.3, 4-qadam):
+    #     ichkarida bo'lsa CV navbatining nosozligi (Valkey uzilgan)
+    #     `COMMIT` ni yiqitardi va KADR OLISH ham yiqilardi — holbuki
+    #     obyekt allaqachon S3 da. Ya'ni kuzatuvchi quvurning nosozligi
+    #     kuzatilayotgan quvurni o'ldirardi. Bundan tashqari: xabar
+    #     `COMMIT` dan OLDIN chiqsa `cv-service` hali MAVJUD BO'LMAGAN
+    #     `snapshots` qatorini izlardi va u «ko'rinmadi» deb chiqib ketardi.
+    #
+    # (b) NEGA FAQAT `ok` KADR UCHUN: `snapshots.is_billable` —
+    #     `GENERATED (quality_verdict = 'ok')`, ya'ni yaroqsiz kadr uchun
+    #     `occupancy_events` ning kompozit FK'si TALAB QILADIGAN
+    #     `(id, true)` juftligi jadvalda UMUMAN yo'q va `INSERT` DB
+    #     darajasida rad etilardi (D-21). Taskni baribir qo'yish
+    #     «oldindan filtrlash mumkin bo'lgan xatoni IMKONSIZ xatoga
+    #     aylantirish» bo'lardi: navbat, worker vaqti va S3 o'qishi
+    #     sarflanib, natija HAR DOIM `ForeignKeyViolation` bo'lardi.
+    #
+    # ⚠ `enqueue_detect` NING XATOSI YUTILADI (`cv_queue.py` docstringi),
+    #   ya'ni bu chaqiruvni `try` ga o'rash KERAK EMAS va u ATAYIN
+    #   o'ralmagan: ikkinchi qatlam «qaysi biri yutdi?» savolini
+    #   tug'dirardi.
+    # =======================================================================
+    if report.verdict == VERDICT_OK:
+        await enqueue_detect(market_id=market_id, snapshot_id=snapshot_id)
+
     log.info(
         "capture_succeeded",
         verdict=report.verdict,

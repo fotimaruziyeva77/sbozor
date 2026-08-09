@@ -518,7 +518,47 @@ services:
       target: dev
     command: ["pytest", "-q"]
     environment:
+      # =================================================================
+      # ⚠⚠ INTEGRATSIYA TESTLARI MIGRATSIYA QILINGAN BAZAGA BORADI (05-08).
+      #
+      # `tests` konteyneri `testcontainers` bilan O'Z Postgres'ini
+      # ko'taradi; bu konteyner esa BUNI QILMAYDI va sabab narxda:
+      # bo'sh konteynerga sxema kerak, sxema esa `alembic` +
+      # `alembic-utils` ni (RLS siyosatlari va o'zgarmaslik triggerlari
+      # `migrations/entities/` da yashaydi) IKKINCHI image'ga olib
+      # kirardi. `Base.metadata.create_all()` bilan qisqartirish YO'Q:
+      # u RLS ni ham, triggerlarni ham yaratmaydi — ya'ni aynan
+      # o'lchanishi kerak bo'lgan kafolatlar sinalmasdi.
+      #
+      # ⚠ SXEMA TAYYORLIGI TESTNING SHARTI: `npm run migrate` bajarilmagan
+      #   bo'lsa `tests/conftest.py` QATTIQ yiqiladi va buyruqni nomma-nom
+      #   ko'rsatadi (`skip` shoxi ATAYIN yo'q — 05-07 ning `model`
+      #   markeri bilan bir xil qaror).
+      #
+      # ⚠ `depends_on: db` shu sababdan qo'shilgan: `npm run cv:test`
+      #   bazani O'ZI ko'taradi. Birlik testlari (`pytest tests/unit`)
+      #   bazaga umuman tegmaydi — fixture faqat SO'RALGANDA quriladi.
+      # =================================================================
+      DATABASE_URL: ${DATABASE_URL}
+      # ⚠⚠ SEED ROLI ILOVA ROLIDAN BOSHQA — VA BU O'LCHANGAN ZARURIYAT.
+      #
+      # `sbozor_app` da `markets` uchun FAQAT `SELECT` bor (o'lchandi
+      # 2026-08-09: `information_schema.role_table_grants`). Bozor
+      # yaratish — EGA ning ishi, ya'ni test seed'i ham egadan boradi
+      # (repo ildizidagi `tests/conftest.py` ning `owner_url` i bilan
+      # aynan bir xil bo'linish).
+      #
+      # ⚠ AJRATISH TESTNI KUCHAYTIRADI, ZAIFLASHTIRMAYDI: `detect` VA
+      #   uning natijasini o'qish HAMON `sbozor_app` (NOSUPERUSER,
+      #   NOBYPASSRLS) ostida boradi, ya'ni RLS da'vosi haqiqiy qoladi.
+      #   Ikkalasini bitta rolga yig'ish seed uchun `markets` INSERT
+      #   grantini ilova roliga berishni talab qilardi — ya'ni testni
+      #   qulaylashtirish uchun MAHSULOT huquqini kengaytirish.
+      CV_TEST_SEED_DATABASE_URL: ${MIGRATION_DATABASE_URL}
       TZ: Asia/Tashkent
+    depends_on:
+      db:
+        condition: service_healthy
     # ⚠ `/app` EMAS: `pytest`, `ruff` va `mypy` uchalasi ham
     # `services/cv-service/pyproject.toml` ni topishi SHART. `/app` da
     # ular repo ildizidagi konfiguratsiyani olib, `core-api` ning
