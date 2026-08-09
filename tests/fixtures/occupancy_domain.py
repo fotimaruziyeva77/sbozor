@@ -100,7 +100,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import time
+from datetime import date, time
 from uuid import UUID, uuid4
 
 from psycopg import Connection
@@ -119,6 +119,9 @@ from fixtures.two_markets import TwoMarketSeed
 __all__ = [
     "AUDIT_FRAME_PREDICATE_HASH",
     "CLEANUP_ORDER",
+    "CONFIDENCE_0_45",
+    "CONFIDENCE_0_55",
+    "CONFIDENCE_0_59",
     "MODEL_VERSION",
     "NARROW_SOURCE_HEIGHT",
     "NARROW_SOURCE_WIDTH",
@@ -127,7 +130,10 @@ __all__ = [
     "SOURCE_WIDTH",
     "MarketOccupancyRows",
     "OccupancyDomainSeed",
+    "SeededEvent",
+    "add_zone_with_event",
     "cleanup_occupancy_domain",
+    "has_active_vendor_on",
     "occupancy_rows",
     "seed_occupancy_domain",
     "square_polygon",
@@ -480,7 +486,11 @@ def _seed_market_occupancy(
                 SEED_BUSINESS_DATE,
                 slot_time,
                 OccupancyVerdict.UNCERTAIN.value,
-                "0.5540",
+                # ⚠ LITERAL EMAS: `add_uncertain_event()` bilan bir
+                #   MANBADAN (`CONFIDENCE_0_55`). Ikki literal bo'lganda
+                #   seed'dagi qiymat o'zgarib, testdagi kutish o'zgarmay
+                #   qolishi mumkin edi.
+                CONFIDENCE_0_55,
                 MODEL_VERSION,
                 SEED_THRESHOLDS_VERSION,
                 1,
@@ -739,6 +749,141 @@ def _other_active_camera(conn: Connection[TupleRow], market_id: UUID, exclude: U
         (str(market_id), str(exclude)),
     ).fetchone()
     return None if row is None else UUID(str(row[0]))
+
+
+# ---------------------------------------------------------------------------
+# 05-10: NOANIQ NAVBAT UCHUN QO'SHIMCHA NOMZODLAR
+#
+# ⚠ SEED'NING O'ZIGA QO'SHILMAYDI, ALOHIDA FUNKSIYA BILAN BERILADI.
+#
+#   Sabab o'lchangan: `_seed_market_occupancy()` `stall_ids[2]` ni ATAYIN
+#   ZONASIZ qoldiradi va `camera_zone_repo.coverage().uncovered` ning
+#   butun qamrovi shunga tayanadi (05-06 sabotaj S4). Bu rastaga seed
+#   darajasida zona qo'shish o'sha testni JIMGINA trivial qilardi —
+#   `uncovered` bir kamayib, nol bo'lmagani uchun test baribir yashil
+#   qolardi.
+#
+#   Shuning uchun qo'shimcha nomzodlar SO'RALGANDA yoziladi va faqat
+#   ularni so'ragan testda mavjud bo'ladi.
+# ---------------------------------------------------------------------------
+
+CONFIDENCE_0_45 = "0.4500"
+CONFIDENCE_0_55 = "0.5540"
+CONFIDENCE_0_59 = "0.5900"
+"""Nomzod hodisalarining `confidence` qiymatlari — SON BO'YICHA nomlangan (§S-9).
+
+⛔ `CONFIDENCE_CLOSEST_TO_THRESHOLD` DEB NOMLANMAYDI. Bunday nom
+   fixture'ni tekshirilayotgan qoidaning (o'lchov nuqtasi qayerda?)
+   AKS-SADOSIGA aylantirardi: «chegaraga eng yaqin» qiymatni yasash
+   uchun o'lchov nuqtasini BILISH kerak bo'lardi va nuqta noto'g'ri
+   qo'yilganda ham test YASHIL qolardi.
+
+`CONFIDENCE_0_55` — seed'dagi `uncertain` hodisaning qiymati bilan AYNAN
+bir xil (`_seed_market_occupancy()`), ya'ni test uni qayta yozmaydi va
+ikki manba ajralib ketmaydi.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class SeededEvent:
+    """`add_zone_with_event()` yozgan zona + hodisa juftligi."""
+
+    zone_id: UUID
+    event_id: UUID
+    stall_id: UUID
+    camera_id: UUID
+
+
+def add_zone_with_event(
+    conn: Connection[TupleRow],
+    *,
+    market_id: UUID,
+    camera_id: UUID,
+    stall_id: UUID,
+    snapshot_id: UUID,
+    verdict: str,
+    confidence: str,
+    center: tuple[float, float],
+    version: int = 1,
+) -> SeededEvent:
+    """Rastaga faol zona + BITTA bandlik hodisasi qo'shadi.
+
+    ⚠ `verdict` ARGUMENT va u ATAYIN qattiq yozilmagan: navbat filtri
+      («faqat `uncertain`») ni o'lchash uchun navbatga TUSHMASLIGI kerak
+      bo'lgan hodisa ham kerak. Faqat `uncertain` yozadigan yordamchi
+      o'sha testni yozib bo'lmas qilardi va filtr `NOT EXISTS` predikati
+      bilan ajratilmay qolardi.
+
+    `slot_time` KADRDAN o'qiladi (`_snapshot_slot_time()`), qayta
+    hisoblanmaydi — modul docstringidagi ⚠ ning aynan o'zi.
+
+    `version` — bir kamerada bir rastaga IKKINCHI zona kerak bo'lganda
+    (`uq_camera_zones_market_id_camera_id_stall_id_version`). Standart
+    qiymat `1`, ya'ni chaqiruvchi uni faqat ATAYIN oshiradi.
+    """
+    slot_time = _snapshot_slot_time(conn, snapshot_id)
+
+    zone_id = uuid4()
+    conn.execute(
+        _INSERT_ZONE,
+        (
+            str(zone_id),
+            str(market_id),
+            str(camera_id),
+            str(stall_id),
+            version,
+            _as_json(square_polygon(*center)),
+            SOURCE_WIDTH,
+            SOURCE_HEIGHT,
+            True,
+        ),
+    )
+
+    event_id = uuid4()
+    conn.execute(
+        _INSERT_EVENT,
+        (
+            str(event_id),
+            str(market_id),
+            str(snapshot_id),
+            str(zone_id),
+            SEED_BUSINESS_DATE,
+            slot_time,
+            verdict,
+            confidence,
+            MODEL_VERSION,
+            SEED_THRESHOLDS_VERSION,
+            version,
+        ),
+    )
+    return SeededEvent(zone_id=zone_id, event_id=event_id, stall_id=stall_id, camera_id=camera_id)
+
+
+def has_active_vendor_on(
+    conn: Connection[TupleRow], *, market_id: UUID, stall_id: UUID, day: date
+) -> bool:
+    """Shu rastaning shu KUNDA biriktirilgan sotuvchisi bormi — BAZADAN.
+
+    ⚠ NAZORAT ASSERTI UCHUN, ustuvorlikni HISOBLASH uchun EMAS.
+      `market_domain` ning qaysi rastaga biriktirish yozgani o'sha
+      faylning ro'yxat TARTIBIGA bog'liq (`stall_ids[0]`, `[1]`), ya'ni
+      testda «bu rasta biriktirilgan» deb yozish jimgina eskirishi
+      mumkin. Bu funksiya taxminni O'LCHANGAN faktga aylantiradi va
+      ro'yxat qayta tartiblansa test SABAB bilan yiqiladi.
+
+    ⛔ `review_repo._BILLING_IMPACT` NI TAKRORLAMAYDI degan da'vo bu
+       yerda YO'Q — u AYNAN o'sha predikat. Farq maqsadda: bu yerda u
+       seed'ning HOLATINI tasdiqlaydi, u yerda esa TARTIBNI belgilaydi.
+       Ikkalasi bir xil bo'lgani uchun ham nazorat asserti kuchli:
+       predikat noto'g'ri bo'lsa seed haqidagi taxmin ham yiqiladi.
+    """
+    row = conn.execute(
+        "SELECT EXISTS (SELECT 1 FROM stall_assignments "
+        "WHERE market_id = %s AND stall_id = %s AND period @> %s::date)",
+        (str(market_id), str(stall_id), day),
+    ).fetchone()
+    assert row is not None
+    return bool(row[0])
 
 
 def cleanup_occupancy_domain(conn: Connection[TupleRow], seed: OccupancyDomainSeed) -> None:

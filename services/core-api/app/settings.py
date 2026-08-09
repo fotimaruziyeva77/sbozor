@@ -321,6 +321,42 @@ class Settings(BaseSettings):
     #   ishonchli ushlanadi.
     zone_aspect_tolerance: Annotated[float, Field(gt=0.0, le=1.0)] = 0.05
 
+    # --- 05-10: nazoratchi navbatlari (AI-03/AI-04, D-13) ---
+    #
+    # ⛔ IKKALA BYUDJET HAM SOZLAMA VA BU O'YLANGAN QAROR. «Nazoratchi
+    #   kuniga 30 bandni ulgurayaptimi?» — INSON o'lchovi va uning javobi
+    #   `05-HUMAN-UAT` da, kodda emas. Qiymatni kodda qotirish o'sha
+    #   savolni «sozlanmaydigan haqiqat» qilib ko'rsatardi.
+    #
+    # ⚠ BYUDJET — KVOTA EMAS, DIQQAT CHEGARASI (`REVIEW_BUDGET_EXHAUSTED`
+    #   docstringi). Uni oshirish charchagan holda berilgan javoblarni
+    #   ma'lumotga aylantiradi va AYNAN o'sha ma'lumot bilan tizim
+    #   aniqligi o'lchanadi — ya'ni chegarani yumshatish o'lchov
+    #   asbobining o'zini buzadi.
+    review_uncertain_daily_budget: Annotated[int, Field(ge=1)] = 50
+    # ⚠ 30 — D-13 ning O'LCHANGAN qiymati: oylik ±2–3 f.p. aniqlik
+    #   oralig'i. Uni PASAYTIRISH oraliqni kengaytiradi, ya'ni hisobotning
+    #   «aniqlik 92%» da'vosi kuchsizlanadi — bu qulaylik emas, O'LCHOV
+    #   qarori. Bugun uni FAQAT `GET /review/budget` o'qiydi; ko'r audit
+    #   tortishining O'ZI 05-11 da.
+    review_blind_daily_budget: Annotated[int, Field(ge=1)] = 30
+    # Noaniq oynaning O'RTASI — «chegaraga yaqinlik» ustuvorligining
+    # o'lchov nuqtasi (05-RESEARCH §C.9: klassik uncertainty sampling).
+    #
+    # ⛔ BU SON DARVOZA EMAS, FAQAT TARTIB. Uni `cv-service` dagi
+    #   `UNCERTAIN_THRESHOLDS = (0.30, 0.60)` bilan sinxron ushlab
+    #   turadigan MEXANIZM ATAYIN YO'Q va sabab shu ustunda: qiymat faqat
+    #   `ORDER BY` ga kiradi, ya'ni drift navbat TARTIBINI biroz
+    #   o'zgartiradi va birorta HUKMGA tegmaydi. Ikki kod bazasini bitta
+    #   songa mexanik bog'lash (05-08 dagi navbat nomi darvozasi kabi)
+    #   bu yerda o'z narxini oqlamaydi — u yerda ajralish JIM NOSOZLIK
+    #   berardi, bu yerda esa faqat suboptimal tartib.
+    #
+    # ⚠ 0,45 = (0.30 + 0.60) / 2. Chegaralar qatorda yashaydi (D-11) va
+    #   `thresholds_version` bilan o'zgaradi; o'shanda bu qiymat ham
+    #   `.env` dan sozlanadi — migratsiya kerak emas.
+    review_uncertain_midpoint: Annotated[float, Field(ge=0.0, le=1.0)] = 0.45
+
     # --- Telegram alertlari (04-08, FOUND-06) ---
     #
     # ⚠ S3 KALITLARIDAN TESKARI: bo'sh qiymat — QONUNIY holat. Bo'sh token
