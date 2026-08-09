@@ -38,10 +38,11 @@ from app.services.cv_queue import (
     CV_DETECT_TASK,
     CV_ENQUEUE_TIMEOUT_SECONDS,
     CV_QUEUE_NAME,
+    cv_broker,
     cv_detect_task,
     enqueue_detect,
 )
-from app.worker import ENQUEUE_TIMEOUT_SECONDS, JOBS_QUEUE
+from app.worker import ENQUEUE_TIMEOUT_SECONDS, JOBS_QUEUE, broker
 from taskiq_redis import ListQueueBroker
 
 if TYPE_CHECKING:
@@ -106,6 +107,18 @@ def test_cv_queue_name_differs_from_core_queue() -> None:
     takrorlanmaydigan bo'lardi — eng qimmat sinf.
     """
     assert CV_QUEUE_NAME != JOBS_QUEUE
+
+    # ⚠⚠ NOM FARQI YOLG'IZ O'ZI YETARLI EMAS. Haqiqiy xavf — `cv.detect`
+    #    ning `core-api` NING O'Z brokeriga ro'yxatdan o'tib qolishi:
+    #    o'shanda `kiq()` xabarni `sbozor:jobs` ga qo'yardi, uni
+    #    `core-api` worker'i tortib olardi va `cv_detect_task` ning tanasi
+    #    (`RuntimeError`) BAJARILARDI — ya'ni har kadr uchun bitta
+    #    yiqilgan vazifa, hech qanday aniqlashsiz.
+    assert CV_DETECT_TASK not in broker.get_all_tasks(), (
+        f"`{CV_DETECT_TASK}` `core-api` ning O'Z brokerida ro'yxatdan "
+        f"o'tgan — xabarlar `{JOBS_QUEUE}` ga tushardi."
+    )
+    assert CV_DETECT_TASK in cv_broker.get_all_tasks()
 
 
 def test_the_two_enqueue_timeouts_agree() -> None:
