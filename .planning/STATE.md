@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-12-PLAN.md
-last_updated: "2026-08-09T17:31:54.405Z"
-last_activity: 2026-08-09 -- 05-12 bajarildi (kameralararo agregatsiya, kun yopilishi va aniqlik hisoboti)
+last_updated: "2026-08-09T19:17:39.865Z"
+last_activity: "2026-08-10 -- 05-13 bajarildi (nazoratchining ikki sessiyasi: noaniq navbat va ko'rmasdan tekshirish)"
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 82
-  completed_plans: 79
+  completed_plans: 80
   percent: 44
 ---
 
@@ -26,19 +26,22 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 ## Current Position
 
 Phase: 5
-Plan: 12
+Plan: 13
 Total Plans in Phase: 15
 Status: Executing
-Last activity: 2026-08-09 -- 05-12 bajarildi (kameralararo agregatsiya, kun yopilishi va aniqlik hisoboti)
+Last activity: 2026-08-10 -- 05-13 bajarildi (nazoratchining ikki sessiyasi: noaniq navbat va ko'rmasdan tekshirish)
 
-Progress: [████████░░] 80% (12/15 reja — 05-01…05-12)
+Progress: [█████████░] 87% (13/15 reja — 05-01…05-13)
 
 ⚠ **Wave 0 (05-01…05-04), sxema (05-05) va Wave 3/4/5/6/7
-(05-06…05-12) yopildi.** `05-12` AI-05 ning QOIDASINI (kameralararo
-agregatsiya — 120 holatli jadval), AI-06 ning «hisoblanadi, yozilmaydi»
-kafolatini va AI-04 ning HISOBOT tomonini (chalkashlik matritsasi,
-Wilson, faqat `eval`) yetkazdi. Uchala talab ham YOPILMADI — ular
-EKRANNI talab qiladi (`05-13` sessiya, `05-14` hisobot).
+(05-06…05-13) yopildi.** `05-13` AI-03 va AI-04 ning EKRANLARINI
+yetkazdi: `/review` uyi, `/review/uncertain` va `/review/blind`. Ko'rlik
+uch mustaqil qatlamda qulflandi — modul chegarasi (G-12, endi 4 fayl
+skanerlanadi), sxemaning qattiqligi (G-13, `z.strictObject`) va
+marshrutning shakli (G-14a, haqiqiy katalog). Ikkala talab ham
+YOPILMADI: AI-04 aniqlik hisobotining EKRANINI ham talab qiladi
+(`05-14`) va sof `inspector` dalil kadrini hali ko'ra olmaydi
+(pastdagi ochiq band).
 
 ⚠⚠ **D-16 (~10% takroriy band) BUGUNGI SXEMADA IFODALAB BO'LMAYDI**
 va bu o'lchandi: ikkita `UNIQUE` (3- va 4-himoya) uni rad etadi, ya'ni
@@ -49,14 +52,29 @@ aniqlik hisobotida bu miqdor NA SON, NA MAYDON sifatida yo'q va ikkita
 test uni qulflaydi. **Oqibati `05-14` uchun:** UI-SPEC §11.6 ning
 «Ichki moslik» qatori ESKIRGAN — ekran uni chizmasligi kerak.
 
-⚠⚠ **OCHIQ XAVFSIZLIK BANDI (05-10 dan, 05-11 da ham kuchda):** sof
-`inspector` roli dalil kadrini KO'RA OLMAYDI — `GET /snapshots/{id}/image`
-`CAMERA_VIEW` talab qiladi (`snapshots.py:408`), nazoratchida esa aynan
-`{OCCUPANCY_REVIEW}` bor (`rbac.py:217`). RBAC bu fazada ATAYIN tegilmagan
-(M-8). **Eng tor tuzatish `05-13` uchun yozib qo'yildi:** marshrutni
-«`CAMERA_VIEW` YOKI `OCCUPANCY_REVIEW`» ga o'tkazish — narxi
-`require_permission()` tegining ko'plikka aylanishi va
-`tests/tenancy/test_personal_data_coverage.py:462`.
+⚠⚠ **OCHIQ XAVFSIZLIK BANDI (05-10 dan, 05-11 va 05-13 da ham kuchda):**
+sof `inspector` roli dalil kadrini KO'RA OLMAYDI —
+`GET /snapshots/{id}/image` `CAMERA_VIEW` talab qiladi, nazoratchida esa
+aynan `{OCCUPANCY_REVIEW}` bor (`rbac.py:217`). RBAC bu fazada ATAYIN
+tegilmagan (M-8) va rejaning fayl to'plami faqat `frontend/` edi.
+
+**⚠ 05-13 NARXNI QAYTA O'LCHADI va u 05-11 baholaganidan KENGROQ:** huquq
+IKKI joyda talab qilinadi — marshrut dekoratori (`snapshots.py:410`) VA
+`principal: SnapshotViewerDep` (`snapshots.py:170`), ikkinchisi esa
+TO'RTTA marshrutda ishlatiladi (322, 381, 414, 500), ya'ni uni bo'shatish
+nazoratchiga kadr metama'lumoti, kun jurnali va ro'yxatni ham ochardi.
+O'zgaradigan fayllar: `deps.py`, `snapshots.py` (ALOHIDA alias),
+`tests/tenancy/test_personal_data_coverage.py:462` VA
+`test_camera_route_coverage.py:214/244/265`. **Qaror `05-15` da.**
+Bugungi vaqtinchalik yo'l — nazoratchiga `market_admin` rolini HAM berish
+(D-05: rollar to'plam). Ekran esa HALOL: rasm ochilmasa uchala javob
+tugmasi `aria-disabled` bo'lib qoladi va taxminiy javob YOZILMAYDI.
+
+⚠ **05-13 REJADAN TASHQARI BITTA TEST FAYLINI TUZATDI**
+(`tests/integration/test_alerting.py`, commit `bcc2d49`): ikkala debounce
+testi ham haqiqiy soatga 30/61 daqiqa qo'shib, 23:30 dan keyin ERTANGI
+biznes-kunni ko'rardi va alert yopilardi. Biri qizardi, ikkinchisi esa
+YASHIL QOLIB noto'g'ri narsani o'lchardi. `dc5f182` ning aynan davomi.
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -100,6 +118,7 @@ test uni qulflaydi. **Oqibati `05-14` uchun:** UI-SPEC §11.6 ning
 | Phase 05 P05 | 185min | 3 tasks | 15 files |
 | Phase 05 P10 | 111 | 3 tasks | 9 files |
 | Phase 05 P12 | 175min | 3 tasks | 16 files |
+| Phase 05 P13 | 165min | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -185,6 +204,11 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-10: yo'l parametri review_assignment_id (assignment_id EMAS) — nom to'qnashuvi cross-tenant matritsasiga marshrutga begona OBYEKT TURINI berardi va u yashil turib hech nimani o'lchamasdi
 - [Phase 05]: 05-12: D-16 (nazoratchining ichki mosligi) aniqlik hisobotida NA SON, NA MAYDON — o'lchanmagan miqdor uchun maydon ham yozilmaydi (T-05-04)
 - [Phase 05]: 05-12: ikki xatoning MAXRAJI UI-SPEC 11.1 ishlangan misolidan O'LCHAB olindi — band deb xato = fp/(tp+fp), bo'sh deb xato = fn/(tp+fn)
+- [Phase 05]: 05-13: darvozaning O'ZI kod shaklini boshqardi — server maydoni G-12 tokenini o'z ichiga olgani uchun kodlash api-types.ts ga ko'chdi, ikki nusxa MEXANIK ravishda imkonsiz
+- [Phase 05]: 05-13: G-13 ning taqiqlangan nomlari test faylida LITERAL yozilmaydi (fayl G-12 ning skaner maydonida) — ular REYESTRDAN iteratsiya qilinadi va natija rejadagidan kuchliroq
+- [Phase 05]: 05-13: «bitta so'rov = bitta qaror» POYGA masalasi — test uch bosishda uch javob yuborilishini topdi; qulf useRef da va u BAND IDENTIFIKATORINI saqlaydi (nollash kerak emas)
+- [Phase 05]: 05-13: sabotaj "removeQueries vs invalidateQueries" da'vosining bugungi sozlamada O'LCHANMASLIGINI fosh qildi — kafolat JUFTLIKDAN (gcTime: 0 + removeQueries) chiqadi va ikkala yarim alohida qo'riqlanadi
+- [Phase 05]: 05-13: o'lchanmagan sonning o'rniga NOL yozilmaydi — D-19 qatori report_view yo'q sessiyada UMUMAN chizilmaydi (T-05-04)
 
 ### Pending Todos
 
@@ -218,6 +242,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-09T17:31:37.569Z
+Last session: 2026-08-09T19:17:18.540Z
 Stopped at: Completed 05-12-PLAN.md
 Resume file: None
