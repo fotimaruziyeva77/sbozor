@@ -221,13 +221,20 @@ export function useAnswerUncertainItem(day: string) {
  *      test.mjs` xom manbani skanerlaydi va izohdagi nusxa darvozani
  *      o'zi qizartirardi (03-07 qoidasi).
  *
- * ⚠⚠ 403 BU YERDA MUMKIN VA U EKRANDA XATO BO'LIB KO'RINADI. Sof
- *    `inspector` roli `OCCUPANCY_REVIEW` ga ega, rasm marshruti esa
- *    `CAMERA_VIEW` talab qiladi (`snapshots.py`, `rbac.py`). Bu
- *    rejaning fayl to'plami FAQAT frontend, ya'ni tuzatish bu yerda
- *    bajarilmadi — SUMMARY da ochiq yozilgan. Xulq esa HALOL:
- *    `frameState()` «tayyor emas» qaytaradi, uchala javob tugmasi
- *    `aria-disabled` bo'lib qoladi va TAXMINIY javob yozilmaydi.
+ * ⚠ 403 HAMON MUMKIN, LEKIN SABABI ENDI BOSHQA — VA BU FARQ MUHIM.
+ *    05-13 gacha sof `inspector` roli SHU MARSHRUTDA har doim 403
+ *    olardi: uning huquqi `OCCUPANCY_REVIEW`, marshrut esa `CAMERA_VIEW`
+ *    talab qilardi. 05-15 buni yopdi — marshrut endi
+ *    `EVIDENCE_FRAME_PERMISSIONS` («`CAMERA_VIEW` YOKI
+ *    `OCCUPANCY_REVIEW`») ostida (`snapshots.py`), ya'ni nazoratchi
+ *    dalil kadrini KO'RADI. Qolgan 403 yo'llari — huquqsiz rol, boshqa
+ *    bozorning kadri, bloklangan hisob — va ular xato bo'lib KO'RINISHI
+ *    KERAK.
+ *
+ * ⚠ XULQ O'ZGARMADI va u ATAYIN shunday qoldi: `frameState()` har qanday
+ *    nosozlikda «tayyor emas» qaytaradi, uchala javob tugmasi
+ *    `aria-disabled` bo'lib qoladi va TAXMINIY javob yozilmaydi. Rasm
+ *    kelmagan holatda javob berish — o'lchovga axlat qo'shish.
  */
 export function useEvidenceImageHref(snapshotId: string | null): {
   href: string | null;

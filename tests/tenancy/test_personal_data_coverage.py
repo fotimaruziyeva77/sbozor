@@ -280,11 +280,34 @@ def audit_resources(route: APIRoute) -> list[str]:
 
 
 def required_permissions(route: APIRoute) -> list[Permission]:
-    """Marshrut talab qiladigan huquqlar (`require_permission` teglari)."""
+    """Marshrut MAJBURIY talab qiladigan huquqlar (`require_permission` teglari).
+
+    ⚠ «YO P, YO Q» DARVOZASI BU RO'YXATGA TUSHMAYDI va bu ATAYIN — pastdagi
+      `required_any_permissions()` ga qarang. Ikkalasini bitta ro'yxatga
+      qo'shish bu funksiyani YOLG'ON gapirtirardi: chaqiruvchilar undan
+      «bu huquqsiz o'tib bo'lmaydi» degan ma'noni o'qiydi
+      (`test_every_camera_get_route_requires_camera_view` shu ma'noga
+      tayanadi), «yo P yo Q» da esa P siz ham o'tish MUMKIN.
+    """
     tagged = [
         getattr(call, "required_permission", None) for call in dependency_calls(route.dependant)
     ]
     return [perm for perm in tagged if perm is not None]
+
+
+def required_any_permissions(route: APIRoute) -> list[frozenset[Permission]]:
+    """«Kamida bittasi» darvozalari (`require_any_permission` teglari).
+
+    Har element BITTA darvozaning ruxsat etilgan to'plami. Ro'yxat
+    bo'lishining sababi — bitta marshrutda bir nechta bunday darvoza
+    bo'lishi mumkin (masalan dekoratorda va imzoda), va ular BIRGALIKDA
+    `AND` bilan ishlaydi.
+    """
+    tagged = [
+        getattr(call, "required_any_permissions", None)
+        for call in dependency_calls(route.dependant)
+    ]
+    return [perms for perms in tagged if perms is not None]
 
 
 def personal_data_routes(app: FastAPI) -> dict[str, APIRoute]:
@@ -437,8 +460,40 @@ def test_every_binary_response_route_is_classified() -> None:
     assert not overlap, f"marshrut IKKALA ro'yxatda ham: {overlap}"
 
 
+EVIDENCE_FRAME_ALLOWED = frozenset({Permission.CAMERA_VIEW, Permission.OCCUPANCY_REVIEW})
+"""DALIL-KADRNI KO'RISHI MUMKIN BO'LGAN HUQUQLARNING YOPIQ TO'PLAMI (05-15).
+
+⚠ RO'YXAT SHU YERDA IKKINCHI MARTA YOZILADI va bu ATAYIN — `snapshots.py`
+  dagi `EVIDENCE_FRAME_PERMISSIONS` dan IMPORT QILINMAYDI. Import qilingan
+  darvoza o'z tekshirayotgan qiymatini tekshirayotgan bo'lardi: kimdir
+  mahsulot konstantasiga `PAYMENT_CREATE` qo'shsa, darvoza JIMGINA
+  kengayib, yashil qolardi. Ikki nusxa ajralganda test QIZARADI va bu
+  aynan kerakli xulq — qaror bu yerda ham ONGLI ravishda takrorlanishi
+  kerak (§S-9 ning «fixture mexanizmni takrorlamaydi» qoidasining
+  darvoza tomonidagi jufti).
+"""
+
+SNAPSHOT_CAMERA_ONLY_ROUTES = (
+    "/api/v1/capture-runs",
+    "/api/v1/snapshots/{snapshot_id}",
+    "/api/v1/alerts",
+)
+"""NAZORAT — `SnapshotViewerDep` ning QOLGAN uchta marshruti.
+
+05-15 `GET /snapshots/{id}/image` ni «`CAMERA_VIEW` YOKI `OCCUPANCY_REVIEW`»
+ga kengaytirdi. `snapshots.py` bitta faylda UCH router saqlaydi (kun
+jurnali, kadr metama'lumoti, alertlar) va ular AVVAL bitta
+`SnapshotViewerDep` ni bo'lishardi — 05-13 aynan shuni «to'rtta marshrut»
+deb o'lchagan. Bu ro'yxat kengayishning O'SHA BITTA MARSHRUT BILAN
+CHEGARALANGANINI ushlab turadi: alias bo'shatilsa yoki «yo P yo Q»
+darvozasi qo'shniga ko'chirilsa, nazoratchi kun jurnalini, kadr
+metama'lumotini va alert oqimini ham olardi — ya'ni «faqat rasm» qarori
+jimgina «butun kuzatuv yuzasi» ga aylanardi.
+"""
+
+
 def test_binary_personal_routes_declare_read_audit_and_permission() -> None:
-    """Bayt-shaxsiy marshrut o'qish auditini VA kamera huquqini e'lon qiladi.
+    """Bayt-shaxsiy marshrut o'qish auditini VA dalil-kadr huquqini e'lon qiladi.
 
     ⚠ IKKI DA'VO BITTA TESTDA va bu yuqoridagi juftlikdan ATAYIN farq
       qiladi: u yerda ikkalasi ALOHIDA o'lchanadi, chunki ro'yxatda beshta
@@ -446,10 +501,18 @@ def test_binary_personal_routes_declare_read_audit_and_permission() -> None:
       Bu yerda ro'yxat bitta marshrutdan iborat, ya'ni ajratish faqat
       ikkinchi nusxa berardi.
 
-    `CAMERA_VIEW` — `VENDOR_VIEW` EMAS: kadr sotuvchining reyestr yozuvi
-    emas, kamera tasviri. `VENDOR_VIEW` ni talab qilish ikkita bog'liq
-    bo'lmagan huquqni birlashtirardi (`EXEMPT_ROUTES` dagi `/users`
+    `CAMERA_VIEW`/`OCCUPANCY_REVIEW` — `VENDOR_VIEW` EMAS: kadr sotuvchining
+    reyestr yozuvi emas, kamera tasviri. `VENDOR_VIEW` ni talab qilish ikkita
+    bog'liq bo'lmagan huquqni birlashtirardi (`EXEMPT_ROUTES` dagi `/users`
     mulohazasi bilan bir xil).
+
+    ⚠⚠ DA'VO 05-15 DA KENGAYDI, LEKIN BO'SHASHMADI — VA FARQ SHU YERDA.
+      Ilgari test AYNAN `CAMERA_VIEW` ni talab qilardi. Endi u ikki
+      shartni o'lchaydi: (a) darvoza UMUMAN BOR, (b) uning ruxsat etgan
+      huquqlari `EVIDENCE_FRAME_ALLOWED` ICHIDA. «Darvoza bor» yolg'iz
+      o'zi yetarli bo'lsa, `require_any_permission(PAYMENT_CREATE)`
+      ham o'tib ketardi; «aynan CAMERA_VIEW» esa nazoratchining o'z
+      ekranini qaytadan buzardi.
     """
     routes = binary_routes(fastapi_app)
 
@@ -459,8 +522,55 @@ def test_binary_personal_routes_declare_read_audit_and_permission() -> None:
             f"{path} shaxsiy BAYT qaytaradi, lekin o'qish auditini e'lon "
             "qilmaydi — `Depends(audit_read(<resurs>, reason=...))` qo'shing"
         )
+
+        strict = set(required_permissions(route))
+        any_gates = required_any_permissions(route)
+        granted = strict.union(*any_gates) if any_gates else strict
+
+        assert granted, (
+            f"{path} birorta huquq darvozasini e'lon qilmaydi — dalil-kadr huquqsiz o'qilardi"
+        )
+        assert granted <= EVIDENCE_FRAME_ALLOWED, (
+            f"{path} dalil-kadrni {sorted(granted - EVIDENCE_FRAME_ALLOWED)} huquqiga "
+            "ham ochib qo'ydi. Ruxsat etilgan to'plam — `EVIDENCE_FRAME_ALLOWED` va u "
+            "ATAYIN tor: bozor tashrifchilarining tasviri O'zR shaxsiy ma'lumotlar "
+            "qonuni ostida"
+        )
+
+
+def test_the_evidence_frame_widening_stops_at_the_image_route() -> None:
+    """NAZORAT — 05-15 kengaytmasi QO'SHNI marshrutlarga o'tmagan.
+
+    =======================================================================
+    ⛔ BU TEST YUQORIDAGINING TAKRORI EMAS — U TESKARI TOMONNI O'LCHAYDI.
+
+    Yuqoridagi darvoza «dalil-kadr HUQUQSIZ qolmasin» deydi va u
+    kengaytmadan KEYIN ham yashil bo'lardi, agar kengaytma butun
+    `snapshots.py` ga yoyilsa. Aynan shu — 05-13 o'lchagan (b) varianti:
+    `SnapshotViewerDep` TO'RTTA marshrutda ishlatiladi va uni bo'shatish
+    eng oson «tuzatish» yo'li edi.
+
+    Bu yerdagi savol boshqa: «kengaytma QAYERDA TO'XTADI?» Uchala qo'shni
+    marshrut hamon AYNAN `CAMERA_VIEW` MAJBURIY ostida bo'lishi kerak,
+    ya'ni ularda «yo P yo Q» darvozasi BO'LMASLIGI kerak.
+    =======================================================================
+    """
+    routes = {path: route for path, route in get_routes(fastapi_app).items()}
+
+    for path in SNAPSHOT_CAMERA_ONLY_ROUTES:
+        route = routes.get(path)
+        assert route is not None, (
+            f"{path} umuman topilmadi — nazorat ro'yxati eskirgan va bu test endi "
+            "hech nimani ushlab turmaydi"
+        )
         assert Permission.CAMERA_VIEW in required_permissions(route), (
-            f"{path} `CAMERA_VIEW` talab qilmaydi — dalil-kadr huquqsiz o'qilardi"
+            f"{path} `CAMERA_VIEW` ni MAJBURIY talab qilmay qo'ydi — dalil-kadr "
+            "kengaytmasi qo'shni marshrutga oqib o'tgan"
+        )
+        assert not required_any_permissions(route), (
+            f"{path} da «kamida bittasi» darvozasi paydo bo'ldi: "
+            f"{required_any_permissions(route)} — 05-15 qarori AYNAN BITTA "
+            "marshrut uchun edi"
         )
 
 

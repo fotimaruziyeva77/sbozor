@@ -501,6 +501,58 @@ def require_permission(perm: Permission) -> Callable[[Principal], Coroutine[Any,
     return _require
 
 
+def require_any_permission(
+    *perms: Permission,
+) -> Callable[[Principal], Coroutine[Any, Any, Principal]]:
+    """Sanab o'tilgan huquqlardan KAMIDA BITTASI yetarli bo'lgan darvoza.
+
+    =======================================================================
+    ⛔ BU `require_permission()` NING QULAYROQ SHAKLI EMAS — U BOSHQA
+       MA'NO VA UNI ADASHTIRISH XAVFLI.
+
+    `require_permission(P)` — «bu resursni P egasi ko'radi».
+    `require_any_permission(P, Q)` — «bu resursni IKKI XIL ish uchun ikki
+    xil odam ko'radi». Ikkinchisini birinchisi bilan ifodalash uchun
+    yagona yo'l — Q roliga P ni ham berish, ya'ni ROL YUZASINI kengaytirish.
+    Aynan shu narsa `OCCUPANCY_REVIEW` uchun rad etildi (05-15): nazoratchi
+    dalil kadrini ko'rishi kerak, LEKIN kamera reestrini, jonli tasvirni va
+    NVR sozlamasini EMAS.
+
+    ⚠ RO'YXAT BO'SH BO'LSA — `ValueError` va u IMPORT PAYTIDA chiqadi.
+      Bo'sh ro'yxat «hech kim o'tmaydi» emas, «hamma o'tadi» ga aylanardi
+      (`any([])` -> `False` bo'lsa ham, chaqiruvchi buni «darvoza yo'q» deb
+      yozib qo'yishi mumkin edi). Import paytidagi xato ishlab chiqarishga
+      chiqmaydi; so'rov paytidagisi chiqardi.
+
+    ⚠ INTROSPEKTSIYA TEGI ALOHIDA NOM OLADI (`required_any_permissions`,
+      KO'PLIKDA) va `required_permission` QO'YILMAYDI. Ikkinchisini ham
+      qo'yish darvoza skanerlarini (`tests/tenancy/
+      test_personal_data_coverage.py::required_permissions`) YOLG'ON
+      gapirtirardi: ular «bu marshrut CAMERA_VIEW TALAB QILADI» deb
+      o'qirdi, holbuki u endi MAJBURIY emas — ya'ni struktura darvozasi
+      o'z da'vosidan boshqa narsani o'lchay boshlardi. Bu fazaning
+      to'qqizta rejasi topgan nosozlik sinfining AYNAN o'zi.
+    =======================================================================
+    """
+    if not perms:
+        raise ValueError("require_any_permission() kamida bitta huquq talab qiladi")
+
+    allowed = frozenset(perms)
+
+    async def _require(principal: CurrentPasswordDep) -> Principal:
+        if not allowed & principal.permissions:
+            log.info(
+                "permission_denied",
+                required_any=sorted(str(perm) for perm in allowed),
+                roles=sorted(principal.roles),
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+        return principal
+
+    _require.required_any_permissions = allowed  # type: ignore[attr-defined]
+    return _require
+
+
 def require_roles(*roles: Role) -> Callable[[Principal], Coroutine[Any, Any, Principal]]:
     """Rol talab qiluvchi sodda variant.
 

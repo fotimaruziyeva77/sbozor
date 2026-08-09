@@ -119,7 +119,13 @@ from fastapi.responses import StreamingResponse
 from sbozor_core.enums import SnapshotTier
 from sbozor_core.timeutil import business_today
 
-from app.deps import Principal, SettingsDep, TenantSessionDep, require_permission
+from app.deps import (
+    Principal,
+    SettingsDep,
+    TenantSessionDep,
+    require_any_permission,
+    require_permission,
+)
 from app.repositories.alert_repo import AlertRepository
 from app.repositories.capture_repo import CaptureRepository
 from app.repositories.snapshot_repo import SnapshotRepository
@@ -171,6 +177,69 @@ SnapshotViewerDep = Annotated[Principal, Depends(require_permission(Permission.C
 """IMZO aliasi — DARVOZA aliasi EMAS (`cameras.py:39-42` qoidasi).
 
 Darvozaning o'zi har marshrutning dekoratorida ochiq yozilgan.
+
+⚠ QAMROVI UCHTA MARSHRUT: kun jurnali, kadrlar ro'yxati va kadr
+  metama'lumoti. DALIL-KADRNING O'ZI bu aliasdan CHIQARILDI — pastdagi
+  `EvidenceFrameViewerDep` ga qarang. Ajratish ATAYIN: bu aliasni
+  bo'shatish nazoratchiga butun kamera arxivini ochardi.
+"""
+
+EVIDENCE_FRAME_PERMISSIONS = (Permission.CAMERA_VIEW, Permission.OCCUPANCY_REVIEW)
+"""DALIL-KADRNI KO'RADIGAN IKKI XIL ODAM — va ular BOSHQA-BOSHQA ish qiladi.
+
+=============================================================================
+⛔ BU KENGAYTMA 5-FAZANING YOPILISH QARORI (05-15). SABABI O'LCHANGAN.
+
+`GET /snapshots/{id}/image` `CAMERA_VIEW` ostida tug'ilgan (04-09) va
+o'shanda bu TO'G'RI edi: kadrni ochadigan yagona odam direktor yoki bozor
+admini edi. 5-faza esa IKKINCHI iste'molchi qo'shdi — NAZORATCHI, va
+uning butun ishi aynan shu kadrni ko'rib «band/bo'sh» deyish
+(`/uz/review`, `/uz/review/blind`).
+
+`ROLE_PERMISSIONS[INSPECTOR]` esa AYNAN `{OCCUPANCY_REVIEW}`, ya'ni sof
+nazoratchi navbat bandini oladi-yu, DALILNI 403 bilan ololmasdi. Bo'shliq
+uch marta qayd etilgan (05-10 topdi, 05-11 yozdi, 05-13 QAYTA O'LCHADI)
+va har safar M-8 («bu fazada RBAC tegilmaydi») bilan qoldirilgan. Bu reja
+fazaning YOPILISHI, ya'ni M-8 endi qalqon emas: mezonlari «nazoratchi
+dalil kadridan javob beradi» deyilgan fazani ekranning ASOSIY
+boshqaruvi sof nazoratchida ishlamas holda yopib bo'lmaydi.
+
+⛔ RAD ETILGAN IKKI VARIANT VA ULARNING NARXI:
+
+  (a) `ROLE_PERMISSIONS[INSPECTOR]` ga `CAMERA_VIEW` qo'shish — BITTA
+      qator, LEKIN u nazoratchiga kamera REESTRINI, JONLI TASVIRNI, NVR
+      qurilmalari ro'yxatini va kadrlar ARXIVINI ochardi (`GET /cameras`,
+      `POST /cameras/{id}/live-token`, `GET /nvr-devices`, `GET
+      /snapshots`). «Nazoratchi rasmni ko'rsin» so'rovi jimgina
+      «nazoratchi butun kuzatuv yuzasini ko'rsin» ga aylanardi — bu
+      `rbac.py:127-134` da `CAMERA_VIEW`/`CAMERA_MANAGE` uchun ochiq rad
+      etilgan naqshning aynan o'zi.
+
+  (b) `SnapshotViewerDep` ni bo'shatish — u TO'RTTA marshrutda ishlatilar
+      edi (05-13 o'lchadi), ya'ni (a) ning toraytirilgan, lekin baribir
+      kerakmagan shakli: kun jurnali va kadrlar ro'yxati ham ochilardi.
+
+TANLANGAN VARIANT — FAQAT SHU BITTA MARSHRUT «yo P, yo Q» darvozasiga
+o'tadi. Nazoratchining kirishi `market_id` + RLS bilan chegaralangan
+(hamma kabi), lekin kamera yuzasining qolgan qismi UNGA YOPIQ QOLADI va
+bu XULQ bilan o'lchanadi (`test_snapshot_api.py` ning uchta yangi testi:
+kadr 200, ro'yxat/metama'lumot 403, huquqsiz rol 403).
+
+⚠ BU RO'YXAT «DALIL-KADRNI KIM KO'RADI» SAVOLINING YAGONA JAVOBI va
+  struktura darvozasi (`test_personal_data_coverage.py`) uni ADRESI
+  bo'yicha o'qiydi: ro'yxatga uchinchi huquq qo'shilsa darvoza
+  QIZARADI, chunki u ruxsat etilgan to'plamni O'ZI sanaydi.
+=============================================================================
+"""
+
+EvidenceFrameViewerDep = Annotated[
+    Principal, Depends(require_any_permission(*EVIDENCE_FRAME_PERMISSIONS))
+]
+"""IMZO aliasi FAQAT dalil-kadr uchun — `SnapshotViewerDep` DAN ALOHIDA.
+
+Ikki alias bir faylda turishi ATAYIN: ular yonma-yon o'qiladi va
+«qaysi marshrut qaysi darvoza ostida» savoliga javob bitta ekranda
+ko'rinadi.
 """
 
 SnapshotImageIntentDep = Annotated[
@@ -407,11 +476,11 @@ async def snapshot_detail(
 @router.get(
     "/{snapshot_id}/image",
     response_class=StreamingResponse,
-    dependencies=[Depends(require_permission(Permission.CAMERA_VIEW))],
+    dependencies=[Depends(require_any_permission(*EVIDENCE_FRAME_PERMISSIONS))],
 )
 async def snapshot_image(
     snapshot_id: UUID,
-    principal: SnapshotViewerDep,
+    principal: EvidenceFrameViewerDep,
     intent: SnapshotImageIntentDep,
     session: TenantSessionDep,
     settings: SettingsDep,
@@ -425,10 +494,15 @@ async def snapshot_image(
 
       1. Baytlar OMBORDAN core-api orqali keladi — imzolangan havola
          BERILMAYDI (modul docstringidagi to'rt sabab);
-      2. So'rov `CAMERA_VIEW` darvozasidan o'tadi va darvoza
-         DEKORATORDA, ya'ni 403 quyidagi audit yozuviga YETIB BORMAYDI;
+      2. So'rov `EVIDENCE_FRAME_PERMISSIONS` darvozasidan o'tadi
+         (`CAMERA_VIEW` **yoki** `OCCUPANCY_REVIEW` — 05-15 qarori) va
+         darvoza DEKORATORDA, ya'ni 403 quyidagi audit yozuviga YETIB
+         BORMAYDI;
       3. MUVAFFAQIYATLI o'qish `audit_log` ga `source='app'`,
-         `action='read'`, `table_name='snapshots'` qatorini qoldiradi.
+         `action='read'`, `table_name='snapshots'` qatorini qoldiradi —
+         ⚠ VA U IKKALA ROL UCHUN HAM BIR XIL ISHLAYDI: nazoratchining
+         kadr ochgani ham jurnalda ko'rinadi, ya'ni darvozaning
+         kengayishi izning yo'qolishini ANGLATMAYDI.
 
     ⚠ IMZODAGI TARTIB YUK KO'TARADI: `principal` `intent` DAN OLDIN.
       FastAPI imzo parametrlarini e'lon tartibida hal qiladi, ya'ni

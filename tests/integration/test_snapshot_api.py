@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     import httpx
     from app.services.storage import SnapshotStorage
     from fixtures import TenantSessionFactory
+    from fixtures.auth_users import AuthSeed
     from fixtures.snapshot_domain import SnapshotDomainSeed
     from fixtures.two_markets import TwoMarketSeed
     from psycopg import Connection
@@ -141,6 +142,22 @@ async def cashier_headers(
     """A bozori kassirining sessiyasi — `CAMERA_VIEW` YO'Q."""
     market_a = two_markets.market_a
     return await session_headers(api_client, market_a.cashier_phone, SEED_PASSWORD)
+
+
+@pytest.fixture
+async def inspector_headers(
+    api_client: httpx.AsyncClient,
+    auth_seed: AuthSeed,
+) -> dict[str, str]:
+    """A bozori NAZORATCHISINING sessiyasi — huquqi AYNAN `OCCUPANCY_REVIEW`.
+
+    ⚠ `two_markets.market_a.cashier_phone` NAQSHI ISHLAMAYDI: nazoratchi
+      `two_markets` qatlamida YO'Q, u `auth_seed` da tug'iladi
+      (`fixtures/auth_users.py`). Aynan shu fixture RBAC rad etish
+      testlari uchun yaratilgan va uning `must_change_password` i `false` —
+      ya'ni 403 kelsa sababi HUQUQ, parol darvozasi emas.
+    """
+    return await session_headers(api_client, auth_seed.inspector.phone, auth_seed.password)
 
 
 def _object_key(conn: Connection[TupleRow], snapshot_id: UUID) -> str:
@@ -500,6 +517,105 @@ async def test_a_role_without_camera_view_is_refused_and_leaves_no_audit_row(
     assert len(after) == len(before), (
         "rad etilgan so'rov `audit_log` ga o'qish qatori yozdi — jurnalda "
         "YOLG'ON DALIL qoldi (ko'rmagan odam ko'rgan bo'lib turibdi)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 05-15 — DALIL-KADR DARVOZASINING KENGAYISHI VA UNING CHEGARASI
+# ---------------------------------------------------------------------------
+
+
+async def test_a_pure_inspector_can_open_the_evidence_frame(
+    api_client: httpx.AsyncClient,
+    inspector_headers: dict[str, str],
+    snapshot_env: Callable[[], AbstractContextManager[SnapshotDomainSeed]],
+    sync_owner_conn: Connection[TupleRow],
+    s3_client: SnapshotStorage,
+) -> None:
+    """SOF `inspector` (huquqi AYNAN `OCCUPANCY_REVIEW`) kadrni OLADI.
+
+    =======================================================================
+    ⛔ 5-FAZANING YOPILISH SHARTI — VA U UCH REJADA OCHIQ TURGAN.
+
+    05-10 bo'shliqni topdi, 05-11 uni yozdi, 05-13 QAYTA O'LCHADI: navbat
+    bandini nazoratchi oladi, DALILNI esa 403 bilan ololmasdi. Fazaning
+    mezonlari («nazoratchi ko'r audit navbatida AI javobini KO'RMASDAN
+    zonalarni BAHOLAYDI») rasmni ko'rishga tayanadi, ya'ni ekranning
+    asosiy boshqaruvi o'z foydalanuvchisida ishlamas holda faza yopilib
+    bo'lmasdi.
+
+    ⚠ DA'VO STATUS KODIDA EMAS, BAYTLARDA (yuqoridagi proxy testining
+      metodikasi): 200 + bo'sh tana ham «ishladi» ko'rinardi, va aynan
+      shu holat nazoratchining ekranida oq to'rtburchak bo'lib chiqardi.
+
+    ⚠ FOYDALANUVCHI TANLOVI YUK KO'TARADI: `auth_seed.inspector` ning
+      roli AYNAN BITTA (`inspector`) va `must_change_password = false`.
+      Ikkinchisi shart — `must_change` egasi 403 `password_change_required`
+      olardi va test «huquq berildi» ni emas, parol darvozasini
+      o'lchardi (`fixtures/auth_users.py` dagi `must_change` docstringi).
+    =======================================================================
+    """
+    payload = frame_bytes(mean=118, stddev=41)
+    with snapshot_env() as snap:
+        snapshot_id = snap.market_a.snapshot_ids[0]
+        key = _object_key(sync_owner_conn, snapshot_id)
+        await s3_client.put(key, payload)
+        try:
+            response = await api_client.get(
+                f"{SNAPSHOTS_URL}/{snapshot_id}/image", headers=inspector_headers
+            )
+        finally:
+            await s3_client.delete_many([key])
+
+    assert response.status_code == 200, (
+        f"sof `inspector` dalil kadrini ololmadi ({response.status_code}) — "
+        "noaniq navbat va ko'r audit ekranlari o'z foydalanuvchisida ISHLAMAYDI"
+    )
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content == payload, (
+        "javob 200 berdi, lekin baytlar mos emas — darvoza ochildi-yu, proxy "
+        "zanjiri nazoratchi uchun boshqacha ishlayapti"
+    )
+
+
+async def test_the_inspector_gate_stops_at_the_frame(
+    api_client: httpx.AsyncClient,
+    inspector_headers: dict[str, str],
+    snapshot_env: Callable[[], AbstractContextManager[SnapshotDomainSeed]],
+    market_today: date,
+) -> None:
+    """NAZORAT — o'sha nazoratchi kadr METAMA'LUMOTINI va kun jurnalini OLMAYDI.
+
+    =======================================================================
+    ⛔ BU TEST YUQORIDAGISIZ MA'NOSIZ, YUQORIDAGISI ESA BUSIZ XAVFLI.
+
+    «Nazoratchi rasmni ko'rsin» so'rovining eng oson bajarilishi —
+    `ROLE_PERMISSIONS[INSPECTOR]` ga `CAMERA_VIEW` qo'shish yoki
+    `SnapshotViewerDep` ni bo'shatish edi. Ikkalasi ham yuqoridagi testni
+    YASHIL qilardi va ikkalasi ham nazoratchiga butun kadr arxivini,
+    kun jurnalini va alert oqimini ochardi.
+
+    Bu yerdagi savol shuning uchun boshqa: «kengayish QAYERDA TO'XTADI?»
+    Struktura darvozasi (`tests/tenancy/test_personal_data_coverage.py::
+    test_the_evidence_frame_widening_stops_at_the_image_route`) buni
+    marshrut grafida o'lchaydi; bu yerda XULQ o'lchanadi va ikkalasi
+    mustaqil.
+    =======================================================================
+    """
+    with snapshot_env() as snap:
+        snapshot_id = snap.market_a.snapshot_ids[0]
+        detail = await api_client.get(f"{SNAPSHOTS_URL}/{snapshot_id}", headers=inspector_headers)
+        day_log = await api_client.get(
+            CAPTURE_RUNS_URL, params={"day": market_today.isoformat()}, headers=inspector_headers
+        )
+
+    assert detail.status_code == 403, (
+        f"nazoratchi kadr METAMA'LUMOTINI oldi ({detail.status_code}) — kengayish "
+        "dalil-kadr marshrutidan tashqariga oqib ketgan"
+    )
+    assert day_log.status_code == 403, (
+        f"nazoratchi KUN JURNALINI oldi ({day_log.status_code}) — u kuzatuv "
+        "yuzasining hisobot qismi va nazoratchining ishiga kirmaydi"
     )
 
 
