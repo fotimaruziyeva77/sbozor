@@ -13,6 +13,7 @@ from typing import Annotated
 from cryptography.fernet import Fernet
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sbozor_core.models.occupancy import POLYGON_MAX_VERTICES, POLYGON_MIN_VERTICES
 
 from app.services.quality import QUALITY_THRESHOLDS_VERSION, QualityThresholds
 
@@ -270,6 +271,42 @@ class Settings(BaseSettings):
     quality_dark_stddev_max: Annotated[float, Field(ge=0.0)] = 12.0
     quality_ir_saturation: Annotated[float, Field(ge=0.0, le=1.0)] = 0.05
     quality_night_mean: Annotated[float, Field(ge=0.0)] = 110.0
+
+    # --- Kamera zonalari (05-06, AI-01, D-07) ---
+    #
+    # ⚠ KLIENTDAGI CHEGARA — QULAYLIK, XAVFSIZLIK CHEGARASI SHU YERDA.
+    #   `frontend/src/lib/zone-geometry.ts::MAX_VERTICES_PER_ZONE` va
+    #   `MAX_ZONES_PER_CAMERA` adminlarga chegaraga urilganini DARHOL
+    #   ko'rsatadi, lekin ular `curl` bilan chetlab o'tiladi. Bu
+    #   qiymatlar `validate_polygon()` ga ARGUMENT bo'lib kiradi — sof
+    #   modul `Settings` ni bilmaydi (§S-8, D-11 naqshi).
+    #
+    # ⚠ YUQORI CHEGARA `POLYGON_MAX_VERTICES` DAN OLINADI, LITERAL EMAS.
+    #   Sozlamani DB `CHECK` idan (12) yuqoriga qo'yish mumkin bo'lsa,
+    #   13 tepali poligon ilova darvozasidan O'TIB, bazada `23514` bilan
+    #   rad etilardi. `_zone_conflict()` uni tanimasdi va admin
+    #   `zone_polygon_too_many_points` o'rniga 500 ko'rardi. Pastga
+    #   qo'yish (qat'iyroq) esa QONUNIY va u kutilgan sozlash yo'li.
+    zone_max_vertices: Annotated[int, Field(ge=POLYGON_MIN_VERTICES, le=POLYGON_MAX_VERTICES)] = (
+        POLYGON_MAX_VERTICES
+    )
+    # Kutilgan qiymat 10–40; 60 — zaxira (05-UI-SPEC §6.5). Chegarasiz
+    # bitta kamera uchun cheksiz poligon yozib, kunlik bandlik hisobini
+    # sekinlashtirish mumkin edi (T-05-23).
+    zone_max_per_camera: Annotated[int, Field(ge=1)] = 60
+    # Kadr nisbati farqining ruxsat etilgan chegarasi (§6.8).
+    #
+    # ⚠ SOZLAMA, ROUTERDAGI LITERAL EMAS: `aspect_ratio_matches()` uni
+    #   ARGUMENT sifatida oladi (`Settings` ni bilmaydi), ya'ni qiymat
+    #   baribir biror joyda yozilishi kerak. Router ichida qolsa u
+    #   `quality_*` chegaralari bilan bir xil sinfdagi raqam bo'lib
+    #   turib, ularning yonida KO'RINMASDI.
+    #
+    # 0,01 — 16:9 (1,7778) va 4:3 (1,3333) orasidagi farqdan (0,4444)
+    # qirq barobar kichik, ya'ni haqiqiy oqim almashuvi hech qachon bu
+    # chegaraga urilmaydi; 1920x1081 kabi bir pikselli nomutanosiblik
+    # (0,0016) esa ichkarida qoladi.
+    zone_aspect_tolerance: Annotated[float, Field(gt=0.0, le=1.0)] = 0.01
 
     # --- Telegram alertlari (04-08, FOUND-06) ---
     #

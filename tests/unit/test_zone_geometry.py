@@ -497,9 +497,7 @@ def test_aspect_comparison_is_symmetric() -> None:
     for tolerance in (0.01, 0.5):
         assert aspect_ratio_matches(
             VGA_WIDTH, VGA_HEIGHT, HD_WIDTH, HD_HEIGHT, tolerance=tolerance
-        ) == aspect_ratio_matches(
-            HD_WIDTH, HD_HEIGHT, VGA_WIDTH, VGA_HEIGHT, tolerance=tolerance
-        )
+        ) == aspect_ratio_matches(HD_WIDTH, HD_HEIGHT, VGA_WIDTH, VGA_HEIGHT, tolerance=tolerance)
 
 
 def test_non_positive_extent_never_matches() -> None:
