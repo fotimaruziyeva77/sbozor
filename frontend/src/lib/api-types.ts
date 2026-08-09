@@ -1439,3 +1439,97 @@ export type AlertEvent = z.infer<typeof alertEventSchema>;
 export const alertListResponseSchema = z.object({
   items: z.array(alertEventSchema),
 });
+
+/* ---------------------------------------------------------------------------
+ * KAMERA ZONALARI (AI-01) — `camera_zones` kontraktining ko'zgusi (05-06).
+ *
+ * ⚠ XATO KODLARI REYESTRI BU YERDA TAKRORLANMAYDI. `CAPTURE_ERROR_CODES`
+ *   yuqorida ro'yxat sifatida yashaydi, chunki uning frontenddagi
+ *   YAGONA iste'molchisi `lib/capture-errors.ts`. Zona domenida esa
+ *   reyestr 05-04 da ALLAQACHON tug'ilgan — `lib/zone-errors.ts`
+ *   (`ZoneErrorCode` / `ReviewErrorCode` union'lari + `zoneErrorView`) —
+ *   va u `scripts/error-codes.test.mjs` (G-17) bilan backendga
+ *   langarlangan. Bu yerga ikkinchi nusxa yozish ikkita mustaqil
+ *   ro'yxat yaratardi va G-17 ulardan FAQAT BITTASINI ko'rardi.
+ *   ⛔ Xato kodi kerak bo'lsa `@/lib/zone-errors` dan import qiling.
+ *
+ * ⚠ JAVOB ENUMLARI `z.enum` BILAN QULFLANMAYDI [O'LCHANDI: 04-10]. Server
+ *   bir kun yangi qiymat qo'shsa, `z.enum` butun sahifani parse xatosi
+ *   bilan yiqitardi — holbuki qo'shimchali o'zgarish klientni buzmasligi
+ *   kerak. Shakl tekshiriladi, MAZMUN emas.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Normalangan tepa — AYNAN ikki son (`CameraZoneItem.polygon` elementi).
+ *
+ * ⚠ `z.array(z.number())` YETARLI EMAS: u uch komponentli «nuqta» ni ham
+ *   qabul qilardi va u `zone-geometry.ts` ning `Pt` tipiga tushib,
+ *   `undefined` koordinata bo'lib chiqardi. Server tomonda ham aynan shu
+ *   sabab bilan `list[tuple[float, float]]` yozilgan
+ *   (`schemas.py::CameraZoneWrite`).
+ */
+export const cameraZonePointSchema = z.tuple([z.number(), z.number()]);
+
+/**
+ * Bitta kamera zonasi — `polygon` NORMALANGAN (0..1), piksel EMAS (D-07).
+ *
+ * ⚠ `source_width`/`source_height` — zona CHIZILGANDAGI kadr o'lchami va
+ *   ular RENDER uchun ISHLATILMAYDI (sabab `zone-canvas.tsx` da). Ularning
+ *   yagona vazifasi — NISBATNI eslab qolish, ya'ni `needs_review` ning
+ *   kirishi (§6.8).
+ *
+ * `needs_review` — SERVERDA hisoblangan HOSILA. Klient uni qayta
+ * hisoblamaydi: ikki tomon tolerans qiymatida ajralib ketsa, lenta
+ * ekranda bor-yo'qligi bilan serverning fikridan farq qilardi.
+ */
+export const cameraZoneSchema = z.object({
+  id: z.uuid(),
+  camera_id: z.uuid(),
+  stall_id: z.uuid(),
+  stall_code: z.string(),
+  version: z.number().int(),
+  polygon: z.array(cameraZonePointSchema),
+  source_width: z.number().int(),
+  source_height: z.number().int(),
+  needs_review: z.boolean(),
+});
+export type CameraZone = z.infer<typeof cameraZoneSchema>;
+
+/**
+ * `GET /camera-zones?camera_id=…` — kameraning FAOL zonalari (`PUT` javobi ham).
+ *
+ * ⚠⚠ `frame_width`/`frame_height` — KADRNING HAQIQIY O'LCHAMI EMAS.
+ *    Ular `snapshots.width`/`height` ustunlari, ya'ni `quality.py::analyze()`
+ *    ning `draft("RGB", (320,180))` natijasi — DCT darajasida
+ *    KICHRAYTIRILGAN dekod (1280×720 kadr uchun taxminan 320×180).
+ *    ⛔ ULARNI PIKSEL GEOMETRIYASIGA (`denormalize`) BERISH HAR
+ *       KOORDINATADA TO'RT BAROBAR XATO BERARDI (05-06 SUMMARY, «Keyingi
+ *       rejalar uchun ochiq bandlar»). Ulardan olinadigan YAGONA fakt —
+ *       NISBAT, chunki `draft()` ko'paytuvchini ikkala o'qqa bir xil
+ *       qo'llaydi.
+ *
+ * ⚠ `null` — kamerada HALI yaroqli kadr yo'q. Bu NOSOZLIK EMAS: yangi
+ *   ulangan kamera birinchi slotgacha aynan shu holatda bo'ladi va u
+ *   Z-2 holatini (muharrir OCHILMAYDI) qo'zg'atadi.
+ */
+export const cameraZoneListSchema = z.object({
+  items: z.array(cameraZoneSchema),
+  frame_width: z.number().int().nullable(),
+  frame_height: z.number().int().nullable(),
+});
+export type CameraZoneList = z.infer<typeof cameraZoneListSchema>;
+
+/**
+ * `GET /camera-zones/coverage` — D-22 uchligi (§6.9).
+ *
+ * ⛔ UCHALA SON HAM MAJBURIY va birortasi `.optional()` EMAS: nol —
+ *    NATIJA, uning yo'qligi emas. Ixtiyoriy qilinsa birorta zona
+ *    chizilmagan bozorda karta umuman chizilmasdi va admin buni
+ *    «hammasi joyida» deb o'qirdi.
+ */
+export const zoneCoverageSchema = z.object({
+  covered: z.number().int(),
+  uncovered: z.number().int(),
+  cameras_without_zones: z.number().int(),
+});
+export type ZoneCoverage = z.infer<typeof zoneCoverageSchema>;

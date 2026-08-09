@@ -7,6 +7,7 @@ import { parseAsString, useQueryState } from "nuqs";
 
 import { CameraList } from "@/components/cameras/camera-list";
 import { isDiscoveryRunId } from "@/components/cameras/camera-page-state";
+import { CoverageCard } from "@/components/camera-zones/coverage-card";
 import { DiscoveryPanel } from "@/components/cameras/discovery-panel";
 import { NvrCard } from "@/components/cameras/nvr-card";
 import { NvrForm } from "@/components/cameras/nvr-form";
@@ -275,6 +276,30 @@ function CamerasWorkspace() {
           }}
         />
       </section>
+
+      {/*
+       * --- ZONA (D): zona qamrovi (5-faza, §5.5) -----------------------
+       *
+       * ⚠ TO'RTINCHI ZONA VA U ENG PASTDA. Yuqoridagi uchtasi kameraning
+       *   O'ZI haqida; bu esa kameralar BIRGALIKDA nimani qoplayotgani
+       *   haqida, ya'ni u ro'yxatning XULOSASI. Tepaga qo'yish adminni
+       *   kameralarni ko'rmasdan turib qamrov haqida o'ylashga
+       *   majburlardi.
+       *
+       * ⚠ `camera_manage` OSTIDA, `camera_view` emas: qamrovsiz rasta —
+       *   ZONA CHIZISH ishining ro'yxati, ya'ni u faqat chiza oladigan
+       *   odamga keyingi qadamni ko'rsatadi. Direktor uchun bu son
+       *   bandlik hisobotida (Y-4) o'z kontekstida keladi.
+       *
+       * ⛔ SHART `canManage` — ya'ni huquqsiz sessiyada
+       *    `GET /camera-zones/coverage` ga so'rov HAM ketmaydi
+       *    (`users/page.tsx:54-63` naqshi). Haqiqiy nazorat serverda.
+       */}
+      {canManage ? (
+        <section aria-label={t("cameraZones.coverageTitle")}>
+          <CoverageCard />
+        </section>
+      ) : null}
     </div>
   );
 }

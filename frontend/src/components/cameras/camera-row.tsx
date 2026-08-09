@@ -7,13 +7,15 @@ import {
   ArchiveRestore,
   MoreHorizontal,
   Pencil,
+  Shapes,
   SquarePen,
 } from "lucide-react";
-import { useFormatter, useNow, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useNow, useTranslations } from "next-intl";
 
 import { CameraStatusBadge } from "@/components/cameras/camera-status-badge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { routing } from "@/i18n/routing";
 import type { Camera } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
 
@@ -53,6 +55,58 @@ import { cn } from "@/lib/cn";
  */
 export function channelLabel(channelNo: number): string {
   return String(channelNo).padStart(2, "0");
+}
+
+/**
+ * Locale prefiksli manzil — `@/i18n/navigation` GA TEGMASDAN.
+ *
+ * =========================================================================
+ * ⚠⚠ NEGA `Link` HAM, `getPathname` HAM ISHLATILMAYDI — O'LCHANGAN.
+ *
+ *   `@/i18n/navigation` `next-intl/navigation` ni, u esa `next/navigation`
+ *   ni import qiladi va o'sha zanjir VITEST OSTIDA UMUMAN YECHILMAYDI:
+ *
+ *     Error: Cannot find module '…/node_modules/next/navigation'
+ *            imported from …/next-intl/dist/esm/development/navigation/
+ *            react-client/createNavigation.js
+ *
+ *   Ya'ni muammo render paytidagi router konteksti EMAS, MODULNI IMPORT
+ *   QILISHNING O'ZI. `app-shell.test.tsx:36-49` va `wizard-stepper.test.tsx`
+ *   shu sababdan butun modulni mock qiladi.
+ *
+ *   Bu fayl esa `camera-row.test.tsx` DAN TASHQARI yana uchta test
+ *   faylining import grafiga kiradi (`capture-grid`, `snapshot-dialog`,
+ *   `live-view-dialog` — ular `channelLabel` ni oladi). O'lchov: import
+ *   qo'shilgan holatda TO'RTALA fayl ham «0 test» bilan yiqildi va 27
+ *   test yo'qoldi. Shuning uchun bu yerda navigatsiya modulining O'RNIGA
+ *   uning YAGONA MANBASI — `routing` konfiguratsiyasi — o'qiladi.
+ *
+ * ⚠ PREFIKS XARITASI NUSXA KO'CHIRILMAYDI. Qiymat `routing.localePrefix`
+ *   dan olinadi, ya'ni `/uz`, `/uz-cyrl` bir joyda qoladi. Prefiksi
+ *   ko'rsatilmagan til uchun standart — `/{locale}` (`routing.ts` izohi:
+ *   «`ru` uchun prefiks ko'rsatilmagan → standart `/ru`»).
+ *
+ * ⚠ NARXI HALOL AYTILADI: oddiy `<a>` TO'LIQ sahifa yuklashini beradi,
+ *   klient tomondagi o'tishni emas. Zona muharriri baribir og'ir ekran va
+ *   u kunlik amal emas (bir martalik sozlash), ya'ni farq sezilmaydi.
+ *   `camera-row.test.tsx` ni o'z fayl to'plamiga oladigan keyingi reja
+ *   modulni mock qilib, bu yerni `Link` ga o'tkazishi mumkin.
+ * =========================================================================
+ */
+function localeHref(locale: string, path: string): string {
+  /*
+   * `localePrefix` — BIRLASHMA tipi (`"always" | {mode, prefixes?}`),
+   * shuning uchun `typeof` bilan toraytiriladi. `Partial<Record<string,…>>`
+   * annotatsiyasi esa `useLocale()` ning `string` ini indeks sifatida
+   * ishlatishga ruxsat beradi: ro'yxatda yo'q til (bo'lishi mumkin emas,
+   * lekin tip buni bilmaydi) standart shoxga tushadi.
+   */
+  const config = routing.localePrefix;
+  const prefixes: Partial<Record<string, string>> =
+    typeof config === "object" && "prefixes" in config
+      ? (config.prefixes ?? {})
+      : {};
+  return `${prefixes[locale] ?? `/${locale}`}${path}`;
 }
 
 export type CameraRowProps = {
@@ -256,6 +310,16 @@ export function CameraRow({
  * ⚠ «Ko'rish» MENYUGA TUSHMAYDI: u eng ko'p ishlatiladigan amal va uni
  *   ikki bosish ortiga yashirish har kuni takrorlanadigan ishni
  *   qimmatlashtirardi.
+ *
+ * ⚠ 5-FAZA MENYUGA AYNAN BITTA YOZUV QO'SHADI — «Kamera zonalari»
+ *   (UI-SPEC §5.5, navigatsiya byudjeti §4.2). U menyuda va qatorda
+ *   emas, chunki zona chizish — BIR MARTALIK sozlash ishi: «Ko'rish»
+ *   har kuni bosiladi, zonalar esa kamerani ulagandan keyin bir marta.
+ *   Ikkalasini yonma-yon qo'yish kundalik amalni sekinlashtirardi.
+ *
+ * ⚠ ARXIVLANGAN KAMERADA MENYU UMUMAN YO'Q (yuqoridagi shox), ya'ni
+ *   zonalarga yo'l ham yopiq. Bu to'g'ri: arxivlangan kamera kadr
+ *   bermaydi, ya'ni muharrir baribir Z-2 da to'xtardi.
  */
 function RowActions({
   camera,
@@ -267,6 +331,7 @@ function RowActions({
   onRename: (camera: Camera) => void;
 }) {
   const t = useTranslations();
+  const locale = useLocale();
 
   return (
     <DropdownMenu.Root>
@@ -289,6 +354,22 @@ function RowActions({
           >
             <SquarePen aria-hidden="true" className="size-4" />
             {t("cameras.rename")}
+          </DropdownMenu.Item>
+
+          {/*
+           * `asChild` — havola SEMANTIKASI saqlanadi: skrinrider «havola»
+           * deb o'qiydi, o'rta tugma yangi tabda ochadi va manzil holat
+           * satrida ko'rinadi. `onSelect` + dasturiy o'tish bularning
+           * uchalasini ham yo'qotardi.
+           */}
+          <DropdownMenu.Item asChild>
+            <a
+              className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm outline-none select-none data-[highlighted]:bg-surface-muted"
+              href={localeHref(locale, `/cameras/${camera.id}/zones`)}
+            >
+              <Shapes aria-hidden="true" className="size-4" />
+              {t("cameraZones.title")}
+            </a>
           </DropdownMenu.Item>
 
           <DropdownMenu.Item
