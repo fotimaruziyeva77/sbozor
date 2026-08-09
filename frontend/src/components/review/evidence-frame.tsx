@@ -105,12 +105,24 @@ export type EvidenceFrameProps = {
   snapshotId: string;
   /** Kadr holati o'zgarganda — sessiya javob tugmalarini shunga qarab qulflaydi. */
   onStateChange: (state: FrameState) => void;
+  /**
+   * Yaqinlashtirish tugmasi ko'rsatiladimi (standart — HA).
+   *
+   * ⛔ JAVOB YOZILGANDAN KEYIN `false` (ko'rmasdan tekshirishda). Sabab
+   *    mahsulotga oid: qaror allaqachon O'ZGARMAS, ya'ni kadrni qayta
+   *    kattalashtirish faqat «to'g'ri javob berdimmi?» degan qayta
+   *    o'ylashni taklif qilardi — aynan o'zgarmaslik himoya qilayotgan
+   *    narsani. Qo'shimcha oqibati o'lchanadigan: javobdan keyin
+   *    sessiyada FAQAT BITTA faol boshqaruv qoladi (`[Keyingisi →]`).
+   */
+  showZoom?: boolean;
 };
 
 export function EvidenceFrame({
   polygon,
   snapshotId,
   onStateChange,
+  showZoom = true,
 }: EvidenceFrameProps) {
   const t = useTranslations();
   const image = useEvidenceImageHref(snapshotId);
@@ -240,7 +252,7 @@ export function EvidenceFrame({
        *   chiqadi: bo'sh dialog ochish hech qanday savolga javob
        *   bermasdi.
        */}
-      {state === "ready" ? (
+      {state === "ready" && showZoom ? (
         <div className="flex justify-end">
           <Button onClick={() => setZoomOpen(true)} size="sm" variant="ghost">
             {t("review.zoomFrame")}
