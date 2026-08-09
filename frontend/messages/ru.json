@@ -858,8 +858,16 @@
   },
   "cameraZones": {
     "title": "Зоны камеры",
+    "backToCameras": "К камерам",
+    "coverageTitle": "Охват зонами",
+    "covered": "Мест в охвате",
     "uncovered": "Мест вне охвата",
     "uncoveredWhy": "Эти места не видит ни одна камера. По ним данные не собираются.",
+    "camerasWithoutZones": "Камер без зон",
+    "allCovered": "Все места в охвате",
+    "emptyNoFrame": "На этой камере ещё нет годного кадра",
+    "emptyNoFrameHint": "Чтобы нарисовать зону, нужен кадр. Как только камера даст кадр, страница откроется.",
+    "goToCapture": "Перейти к съёмке кадров",
     "errorCauseLabel": "Причина",
     "errorFixLabel": "Что делать",
     "errorCause": {

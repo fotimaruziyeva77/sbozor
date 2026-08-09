@@ -858,8 +858,16 @@
   },
   "cameraZones": {
     "title": "Kamera zonalari",
+    "backToCameras": "Kameralarga",
+    "coverageTitle": "Zona qamrovi",
+    "covered": "Qamrovdagi rasta",
     "uncovered": "Qamrovsiz rasta",
     "uncoveredWhy": "Bu rastalarni birorta kamera ko'rmaydi. Ular haqida ma'lumot yig'ilmaydi.",
+    "camerasWithoutZones": "Zonasiz kamera",
+    "allCovered": "Hamma rasta qamrovda",
+    "emptyNoFrame": "Bu kamerada hali yaroqli kadr yo'q",
+    "emptyNoFrameHint": "Zona chizish uchun kadr kerak. Kamera kadr berganidan keyin bu sahifa ochiladi.",
+    "goToCapture": "Kadr olishga o'tish",
     "errorCauseLabel": "Sabab",
     "errorFixLabel": "Nima qilish kerak",
     "errorCause": {

@@ -858,8 +858,16 @@
   },
   "cameraZones": {
     "title": "Камера зоналари",
+    "backToCameras": "Камераларга",
+    "coverageTitle": "Зона қамрови",
+    "covered": "Қамровдаги раста",
     "uncovered": "Қамровсиз раста",
     "uncoveredWhy": "Бу расталарни бирорта камера кўрмайди. Улар ҳақида маълумот йиғилмайди.",
+    "camerasWithoutZones": "Зонасиз камера",
+    "allCovered": "Ҳамма раста қамровда",
+    "emptyNoFrame": "Бу камерада ҳали яроқли кадр йўқ",
+    "emptyNoFrameHint": "Зона чизиш учун кадр керак. Камера кадр берганидан кейин бу саҳифа очилади.",
+    "goToCapture": "Кадр олишга ўтиш",
     "errorCauseLabel": "Сабаб",
     "errorFixLabel": "Нима қилиш керак",
     "errorCause": {
