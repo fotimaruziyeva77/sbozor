@@ -46,7 +46,7 @@ from tenancy.test_cross_tenant import (
 
 pytestmark = pytest.mark.tenancy
 
-MINIMUM_MATRIX_ROUTES = 48
+MINIMUM_MATRIX_ROUTES = 52
 """Matritsada kamida shuncha marshrut bo'lishi shart.
 
 01-07 holatida qamrovda 7 marshrut bor edi (`/users` GET+POST,
@@ -68,6 +68,23 @@ amaldagi son 51, chegara 42. 03-07 kameralarning oltitasini qo'shdi.
 `POST ""`, `PATCH /{schedule_id}`, `DELETE /{schedule_id}`) va kadr
 yuzasi to'rtta (`GET /capture-runs`, `GET /snapshots/{snapshot_id}`,
 `GET /snapshots/{snapshot_id}/image`, `GET /alerts`) — chegara 48.
+05-06 esa kamera zonalarining TO'RTTASINI qo'shdi (`GET /camera-zones`,
+`PUT /camera-zones`, `GET /camera-zones/coverage`,
+`DELETE /camera-zones/{camera_zone_id}`) — chegara 52.
+
+⚠ To'rttadan FAQAT BITTASI (`DELETE`) 404 matritsasiga tushadi, chunki
+faqat unda yo'l parametri bor. Qolgan uchtasida `camera_id` QUERY
+parametri va matritsa uni to'ldirmaydi — ular 422 bilan javob beradi
+va bu KUTILGAN: ularning tenant chegarasi
+`tests/integration/test_camera_zones_api.py` da ALOHIDA o'lchanadi
+(`test_cross_tenant_camera_returns_404`). Ular baribir matritsada
+qoladi, ya'ni tokensiz/buzilgan/muddati o'tgan token da'volari va
+«javobda B ning izi yo'q» tekshiruvi ular uchun ham bajariladi.
+
+⚠ `camera_zone_id` matritsaga FAQAT `PARAM_FILLERS` ga B bozorining
+HAQIQIY VA FAOL zonasi qo'shilgani uchun tushadi (`TenantSeed.occupancy`
+qatlami). Eskirgan zona ko'rsatilsa 404 tenant chegarasi tufayli emas,
+HOLAT tufayli qaytardi va matritsa boshqa narsani o'lchardi.
 
 ⚠ To'qqiztadan UCHTASI matritsaga FAQAT `PARAM_FILLERS` ga B bozorining
 HAQIQIY `schedule_id` va `snapshot_id` qatorlari qo'shilgani uchun

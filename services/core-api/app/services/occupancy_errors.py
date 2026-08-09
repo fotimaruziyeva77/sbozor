@@ -1,4 +1,4 @@
-"""Bandlik domenining xato taksonomiyasi — o'n to'rt kod, BITTA iste'molchi.
+"""Bandlik domenining xato taksonomiyasi — o'n besh kod, BITTA iste'molchi.
 
 =============================================================================
 ⛔ BU REYESTR OLDINGI BESHTASIDAN BITTA NARSA BILAN FARQ QILADI:
@@ -69,6 +69,7 @@ __all__ = [
     "ZONE_CAMERA_HAS_NO_FRAME",
     "ZONE_ERROR_CODES",
     "ZONE_LIMIT_REACHED",
+    "ZONE_POLYGON_DEGENERATE_EDGE",
     "ZONE_POLYGON_OUT_OF_RANGE",
     "ZONE_POLYGON_SELF_INTERSECTING",
     "ZONE_POLYGON_TOO_FEW_POINTS",
@@ -117,6 +118,30 @@ ZONE_POLYGON_SELF_INTERSECTING: Final[str] = "zone_polygon_self_intersecting"
    testi ishlatilgan algoritmga qarab TURLI javob beradi. Ya'ni xato
    poligon geometriyasiga yoziladi va u yerdan bandlik qaroriga, undan
    esa billing chegarasiga o'tadi — jimgina, dalilsiz.
+"""
+
+ZONE_POLYGON_DEGENERATE_EDGE: Final[str] = "zone_polygon_degenerate_edge"
+"""Ketma-ket ikki tepa AYNAN bir xil — qirraning uzunligi NOL.
+
+⛔ BU `ZONE_POLYGON_SELF_INTERSECTING` NING TAKRORI EMAS va ularni
+   birlashtirish JIMGINA noto'g'ri hisob berardi. Farq o'lchangan:
+   `frontend/src/lib/zone-geometry.ts::isSelfIntersecting` takrorlangan
+   tepani **topa olmaydi** — nol uzunlikdagi kesma uchun orientatsiya
+   determinanti har doim nol bo'ladi, ya'ni «nina» sharti ham
+   (`dot > EPS`), umumiy kesishuv sharti ham (`o1 !== o2`) bajarilmaydi.
+   Ya'ni bu holat klient darvozasidan BEMALOL o'tadi va uni FAQAT server
+   ushlaydi.
+
+Oqibati esa kesishgan poligonникi bilan bir sinf: nol uzunlikdagi qirra
+`supervision.PolygonZone` ostidagi nuqta-poligon testida aniqlanmagan
+natija beradi (takroriy tepa aylanish sonini buzadi), ya'ni bandlik
+boshqa maydondan o'lchanadi — xato xabarisiz, bevosita billing chegarasiga.
+
+⚠ Kod REYESTRGA 05-06 da QO'SHILDI: `validate_polygon()` beshta
+  mavjud kodning birortasiga ham to'g'ri kelmaydigan HAQIQIY rad etish
+  yo'lini topdi. Reyestrga qo'shish — `zone_geometry.py` da yangi literal
+  o'ylab topishdan yagona to'g'ri muqobil (§S-5): literal `app/schemas.py`
+  allowlist'iga tushmasdi va admin `errors.generic` ni ko'rardi.
 """
 
 ZONE_LIMIT_REACHED: Final[str] = "zone_limit_reached"
@@ -233,6 +258,7 @@ ZONE_ERROR_CODES: Final[frozenset[str]] = frozenset(
         ZONE_POLYGON_TOO_MANY_POINTS,
         ZONE_POLYGON_OUT_OF_RANGE,
         ZONE_POLYGON_SELF_INTERSECTING,
+        ZONE_POLYGON_DEGENERATE_EDGE,
         ZONE_LIMIT_REACHED,
         ZONE_STALL_ALREADY_COVERED,
         ZONE_CAMERA_HAS_NO_FRAME,
@@ -259,7 +285,7 @@ REVIEW_ERROR_CODES: Final[frozenset[str]] = frozenset(
 
 
 OCCUPANCY_ERROR_CODES: Final[frozenset[str]] = ZONE_ERROR_CODES | REVIEW_ERROR_CODES
-"""Bandlik domenining BARCHA `detail` kodlari — o'n to'rtta.
+"""Bandlik domenining BARCHA `detail` kodlari — o'n beshta.
 
 ⚠ IKKI SIRT REYESTRIDAN HOSILA, qo'lda uchinchi marta YOZILMAGAN. Qo'lda
   yozilgan nusxa `app/schemas.py` ning allowlist'ini reyestrdan kichik

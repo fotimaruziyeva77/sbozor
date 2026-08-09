@@ -44,6 +44,7 @@ from app.main import app as fastapi_app
 from fixtures.admin_api import AUDIT_URL, USERS_URL, bearer, session_headers
 from fixtures.market_domain import A_CATEGORY_NAMES, A_ZONE_NAMES
 from fixtures.nvr_domain import add_discovery_run, nvr_rows
+from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import SEED_PASSWORD
 from sbozor_core.security import encode_access
@@ -56,6 +57,7 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from fixtures.market_domain import MarketDomainSeed
     from fixtures.nvr_domain import NvrDomainSeed
+    from fixtures.occupancy_domain import OccupancyDomainSeed
     from fixtures.snapshot_domain import SnapshotDomainSeed
     from fixtures.two_markets import TwoMarketSeed
     from psycopg import Connection
@@ -128,6 +130,22 @@ class TenantSeed(NamedTuple):
       Tasodifiy UUID bilan 404 hech nimani isbotlamasdi — biz aynan
       «obyekt BOR, lekin boshqa bozorniki» holatini sinayapmiz
       (`PARAM_FILLERS` docstringidagi umumiy qoida).
+    """
+
+    occupancy: OccupancyDomainSeed
+    """5-faza qatlami: kamera zonalari, bandlik hodisalari va ko'rib chiqish.
+
+    ⚠ `camera_zone_id` uchun B bozorida HAQIQIY FAOL zona bor
+      (`fixtures/occupancy_domain.py` ikkala bozorga ham yozadi), ya'ni
+      `DELETE /camera-zones/{camera_zone_id}` matritsada «obyekt BOR,
+      lekin boshqa bozorniki» holatini o'lchaydi. Tasodifiy UUID bilan
+      404 tenant chegarasi haqida HECH NIMA aytmasdi — u shunchaki
+      «bunday zona yo'q» bo'lardi.
+
+    ⚠ FAOL zona kerak: `deactivate()` ATAYIN `is_active = true` shartini
+      qo'yadi, ya'ni eskirgan qatorni ko'rsatish 404 ni tenant chegarasi
+      tufayli emas, HOLAT tufayli beradigan qilib qo'yardi va matritsa
+      yashil bo'lib turib, boshqa narsani o'lchardi.
     """
 
 
@@ -279,6 +297,13 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # ikkalasi farq qilsa javobning O'ZI enumeration signali bo'lardi.
     "schedule_id": lambda seed: str(seed.snapshot.market_b.schedule_id),
     "snapshot_id": lambda seed: str(seed.snapshot.market_b.snapshot_ids[0]),
+    # --- 05-06: kamera zonasi ---
+    #
+    # ⚠ B bozorining HAQIQIY va FAOL zonasi (`TenantSeed.occupancy`
+    # docstringi). `DELETE /camera-zones/{camera_zone_id}` uchun ikkala
+    # shart ham majburiy: eskirgan qator 404 ni TENANT chegarasi emas,
+    # HOLAT tufayli berardi.
+    "camera_zone_id": lambda seed: str(seed.occupancy.market_b.active_zone_ids[0]),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -889,24 +914,49 @@ def snapshot_domain(
 
 
 @pytest.fixture
+def occupancy_domain(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+    snapshot_domain: SnapshotDomainSeed,
+) -> Iterator[OccupancyDomainSeed]:
+    """`snapshot_domain` USTIGA 5-fazaning bandlik qatlami (05-05/05-06).
+
+    ⚠ `snapshot_domain` ARGUMENT sifatida olinadi va bu TARTIB masalasi,
+      uslub emas (yuqoridagi uchala qatlam bilan bir xil sabab): pytest
+      fixture'larni TESKARI tartibda yopadi, ya'ni bandlik qatlamining
+      tozalashi kadrlar qatlamidan OLDIN ishlaydi. Teskari joylashuvda
+      `snapshots` hali `occupancy_events` tayanib turganda o'chirilardi
+      va teardown FK buzilishi bilan yiqilardi.
+
+    ⚠ `market_domain` HAM KERAK va u `two_markets` ustiga qatlangan:
+      `camera_zones` `stalls (market_id, id)` ga kompozit FK bilan
+      tayanadi, ya'ni rastalarsiz birorta zona yozib bo'lmasdi.
+    """
+    with occupancy_rows(sync_owner_conn, two_markets, market_domain, snapshot_domain) as seed:
+        yield seed
+
+
+@pytest.fixture
 def tenant_seed(
     two_markets: TwoMarketSeed,
     market_domain: MarketDomainSeed,
     nvr_domain: NvrDomainSeed,
     snapshot_domain: SnapshotDomainSeed,
+    occupancy_domain: OccupancyDomainSeed,
 ) -> TenantSeed:
-    """A'zolik, domen, NVR va snapshot qatlamlarini bitta obyektga bog'laydi.
+    """A'zolik, domen, NVR, snapshot va bandlik qatlamlarini bog'laydi.
 
-    `market_domain` `two_markets` ni, `snapshot_domain` esa `nvr_domain`
-    ni O'ZI argument sifatida oladi, ya'ni to'rtalasi AYNI bozorlarni
-    tavsiflaydi va teardown tartibi ham to'g'ri qoladi (har qatlam
-    o'zidan pastdagisidan OLDIN tozalanadi).
+    Har qatlam o'zidan pastdagisini O'ZI argument sifatida oladi, ya'ni
+    beshalasi AYNI bozorlarni tavsiflaydi va teardown tartibi ham to'g'ri
+    qoladi (har qatlam o'zidan pastdagisidan OLDIN tozalanadi).
     """
     return TenantSeed(
         base=two_markets,
         domain=market_domain,
         nvr=nvr_domain,
         snapshot=snapshot_domain,
+        occupancy=occupancy_domain,
     )
 
 
@@ -1228,6 +1278,7 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
     domain_b = tenant_seed.domain.market_b
     nvr_b = tenant_seed.nvr.market_b
     snapshot_b = tenant_seed.snapshot.market_b
+    occupancy_b = tenant_seed.occupancy.market_b
     foreign_values = {
         str(value)
         for value in (
@@ -1254,6 +1305,14 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             # o'z-o'zini tekshiradigan holga keltirardi.
             snapshot_b.schedule_id,
             *snapshot_b.snapshot_ids,
+            # --- 05-06 ---
+            #
+            # ⚠ FAQAT FAOL zonalar sanaladi. `superseded_zone_id` ATAYIN
+            # yo'q: eskirgan zonani filler qilib qo'yish `DELETE` uchun
+            # 404 ni TENANT chegarasi emas, HOLAT tufayli beradigan
+            # qilardi (`deactivate()` `is_active = true` shartini qo'yadi)
+            # va matritsa yashil bo'lib turib, boshqa narsani o'lchardi.
+            *occupancy_b.active_zone_ids,
         )
     }
 

@@ -95,6 +95,8 @@ __all__ = [
     "A_RUN_PLAN",
     "B_RUN_PLAN",
     "CLEANUP_ORDER",
+    "DECODED_HEIGHT",
+    "DECODED_WIDTH",
     "OPEN_ALERT_KEY",
     "RESOLVED_ALERT_KEY",
     "SCHEDULE_NAME",
@@ -217,8 +219,8 @@ _INSERT_SNAPSHOT = (
     "INSERT INTO snapshots "
     "(id, market_id, capture_run_id, camera_id, scheduled_at, captured_at, slot_time, "
     " object_key, size_bytes, quality_verdict, quality_mean, quality_stddev, "
-    " quality_thresholds_version, light_mode, capture_method) "
-    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    " quality_thresholds_version, light_mode, capture_method, width, height) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
 )
 _LINK_SNAPSHOT = "UPDATE capture_runs SET snapshot_id = %s WHERE id = %s"
 _INSERT_ALERT = (
@@ -236,6 +238,36 @@ _QUALITY_METRICS: dict[str, tuple[str, str, str]] = {
     SnapshotQuality.DARK: ("9.20", "2.10", SnapshotLightMode.IR_NIGHT),
 }
 _THRESHOLDS_VERSION = 1
+
+DECODED_WIDTH = 480
+DECODED_HEIGHT = 270
+"""Kadr DEKODLANGANDAGI o'lchami — 16:9, `snapshots.width`/`height` ga yoziladi.
+
+=============================================================================
+⚠⚠ BU KADRNING HAQIQIY O'LCHAMI EMAS VA ATAYIN SHUNDAY.
+
+Ishlab chiqarishda bu ikki ustunga `quality.py::analyze()` ning
+`draft("RGB", (320, 180))` natijasi yoziladi — DCT darajasida
+kichraytirilgan dekod. 1920x1080 kadr uchun Pillow 1/4 masshtabni
+tanlaydi va natija 480x270 bo'ladi.
+
+Seed AYNAN SHU SINFDAGI qiymatni yozadi, ya'ni «to'liq o'lcham» (1920x1080)
+YOZILMAYDI: ustunlarni haqiqiy kadr o'lchami deb to'ldirish keyingi
+o'qiyotgan odamni ular shundaydir deb ishontirardi va u ularni
+denormalizatsiya (`denormalize()`) uchun ishlatishga urinardi — natija
+har koordinatada TO'RT BAROBAR xato bo'lardi.
+
+⚠ QIYMAT `quality.py` DAN IMPORT QILINMAYDI va `_DRAFT_SIZE` dan
+  hisoblanmaydi (§S-9): seed «qanday kadr yozilgan» ni ta'riflaydi,
+  «dekoder qanday ishlaydi» ni emas. Import qilinsa `draft()` ning nishon
+  o'lchami o'zgargan kuni seed jimgina ergashardi va u tekshirilayotgan
+  xususiyatning aks-sadosiga aylanardi.
+
+NISBAT 16:9 va u YAGONA MA'NOLI xususiyat: `camera_zones` ning §6.8
+darvozasi (`aspect_ratio_matches`) faqat nisbatni so'raydi — absolyut
+o'lcham unga umuman kirmaydi.
+=============================================================================
+"""
 
 _NEVER_ATTEMPTED: frozenset[str] = frozenset(
     {CaptureRunStatus.PENDING, CaptureRunStatus.MISSED, CaptureRunStatus.SKIPPED}
@@ -384,6 +416,8 @@ def _seed_market_snapshots(
                 _THRESHOLDS_VERSION,
                 light_mode,
                 CaptureMethod.GO2RTC.value,
+                DECODED_WIDTH,
+                DECODED_HEIGHT,
             ),
         )
         conn.execute(_LINK_SNAPSHOT, (str(snapshot_id), str(run_id)))
