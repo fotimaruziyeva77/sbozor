@@ -41,12 +41,25 @@ import { domainKey } from "@/lib/market-queries";
  * `invalidateQueries` yozuvni keshda QOLDIRIB uni «eskirgan» deb
  * belgilaydi — ya'ni ko'rilgan band brauzer xotirasida turaveradi va
  * React Query DevTools'da bir bosishda o'qiladi. `removeQueries` esa uni
- * GRAFDAN CHIQARADI. Farq MA'NOLI, uslubiy emas, va u darvoza bilan
- * qulflangan: bu faylda `invalidateQueries` so'zining O'ZI ham
- * yozilmaydi.
+ * GRAFDAN CHIQARADI. Darvoza bu faylda `invalidateQueries` so'zining
+ * O'ZINI ham taqiqlaydi.
  *
- * ⛔ Shu sababdan har so'rov `gcTime: 0`, `staleTime: 0` va
+ * ⛔ Har so'rov `gcTime: 0`, `staleTime: 0` va
  *    `refetchOnWindowFocus: false` bilan yuritiladi.
+ *
+ * ⚠⚠ DA'VO SABOTAJ BILAN TORAYTIRILDI (05-13). «`remove` `invalidate`
+ *    dan xavfsizroq» — BUGUNGI sozlamada O'LCHANADIGAN da'vo EMAS:
+ *    `removeQueries` -> `invalidateQueries` almashuvi `blind-session.
+ *    test.tsx` ning 18 testidan BIRORTASINI ham qizartirmadi. Sabab
+ *    strukturaviy: oshkor ma'lumot keshga umuman tushmaydi, `invalidate`
+ *    keshda qoldiradigan BAND payloadi esa `gcTime: 0` tufayli
+ *    kuzatuvchi uzilishi bilan baribir o'chadi.
+ *
+ *    Ya'ni kafolat JUFTLIKDAN chiqadi: `gcTime: 0` OYNANI yopadi,
+ *    `removeQueries` esa DARHOL tozalaydi va `gcTime` bir kun oshirilsa
+ *    yolg'iz o'zi ham kafolat beradi. Shuning uchun IKKALASI ham
+ *    alohida qo'riqlanadi: `removeQueries` — statik darvoza (G-14b),
+ *    `gcTime`/`staleTime` — `review-queries.test.tsx` dagi xulq testi.
  *
  * -----------------------------------------------------------------------
  * ⛔ POLL YO'Q (§8.5) va SESSIYA HOLATI URL'DA EMAS (§4.5)

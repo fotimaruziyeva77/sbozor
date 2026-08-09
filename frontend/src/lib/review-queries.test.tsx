@@ -49,6 +49,8 @@ import {
   blindBudgetKey,
   blindNextKey,
   blindPrefix,
+  useBlindBudget,
+  useBlindNext,
 } from "@/lib/blind-audit-queries";
 import {
   evidenceImageKey,
@@ -238,6 +240,67 @@ describe("⛔ navbat SO'ROV BO'YICHA yuriydi — poll yo'q", () => {
     for (const query of cached) {
       const options = query.options as { refetchInterval?: unknown };
       expect(options.refetchInterval).toBeUndefined();
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 2b. KO'R SO'ROVLAR XOTIRADA QOLMAYDI (§14.3, 4-qatlam)                     */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ ko'r so'rovlar keshda YASHAMAYDI", () => {
+  test("`gcTime` va `staleTime` IKKALASI ham NOL", async () => {
+    /*
+     * =====================================================================
+     * ⚠⚠ BU TEST SABOTAJ O'LCHOVIDAN KEYIN QO'SHILDI — VA SABAB MUHIM.
+     *
+     * `removeQueries` -> `invalidateQueries` sabotaji `blind-session.
+     * test.tsx` ning O'N SAKKIZTA testini ham YASHIL qoldirdi va faqat
+     * STATIK darvoza (G-14b) qizardi. Sabab strukturaviy: oshkor
+     * ma'lumot keshga UMUMAN tushmaydi (u mutatsiya natijasi), ya'ni
+     * kesh skani ikki chaqiruvni AJRATA OLMAYDI. `invalidate` keshda
+     * qoldiradigan narsa — BAND payloadi — esa `gcTime: 0` tufayli
+     * kuzatuvchi uzilishi bilan baribir o'chadi.
+     *
+     * Ya'ni bugungi kafolat JUFTLIKDAN chiqadi: `gcTime: 0` OYNANI
+     * yopadi, `removeQueries` esa DARHOL tozalaydi. Statik darvoza
+     * ikkinchisini qo'riqlaydi; bu test BIRINCHISINI — ya'ni
+     * `gcTime` bir kun oshirilsa, `removeQueries` ning ma'nosi
+     * qaytadi va darvoza yolg'iz qolmaydi.
+     *
+     * Bu 05-10 sabotaj D ning aynan sinfi: da'vo O'LCHANADIGAN farqdan
+     * chiqishi kerak, kodning shaklidan emas.
+     * =====================================================================
+     */
+    apiClientMock.apiFetch.mockResolvedValue(
+      budgetPayload({ blind: 7, blindMax: 30, uncertain: 0, uncertainMax: 50 }),
+    );
+
+    renderHook(
+      () => {
+        useBlindNext();
+        return useBlindBudget(DAY);
+      },
+      { wrapper },
+    );
+
+    await waitFor(() =>
+      expect(client.getQueryCache().getAll().length).toBeGreaterThanOrEqual(2),
+    );
+
+    const blind = client
+      .getQueryCache()
+      .getAll()
+      .filter((query) => query.queryKey[2] === "blind-audit");
+
+    expect(blind.length).toBeGreaterThanOrEqual(2);
+    for (const query of blind) {
+      const options = query.options as {
+        gcTime?: unknown;
+        staleTime?: unknown;
+      };
+      expect(options.gcTime).toBe(0);
+      expect(options.staleTime).toBe(0);
     }
   });
 });
