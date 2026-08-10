@@ -1,8 +1,10 @@
 "use client";
 
+import { Suspense } from "react";
 import { DoorOpen } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
+import { CollectSession } from "@/components/collect/collect-session";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/rbac";
 import { routing } from "@/i18n/routing";
@@ -26,12 +28,13 @@ import { routing } from "@/i18n/routing";
  *   3. «Orqaga» tugmasi «to'lovdan oldingi holat» ga qaytarib, yozilgan
  *      to'lovni BEKOR QILINGANDEK ko'rsatardi.
  *
- * ⚠ Shu sababdan bu sahifada `Suspense` chegarasi ham YO'Q. `occupancy`
- *   va `snapshots` sahifalarida u MAJBURIY, chunki ular `?day=` ni
- *   `useSearchParams` orqali o'qiydi va Next 16 shunday daraxtni statik
- *   prerender ro'yxatidan chiqarib buildni yiqitadi. Bu yerda o'sha sabab
- *   MAVJUD EMAS — chegarani «har ehtimolga qarshi» qo'yish naqshni
- *   sababisiz ko'chirish bo'lardi.
+ * ⚠ `Suspense` chegarasi bu yerda BOSHQA sababga ko'ra turibdi.
+ *   `occupancy` va `snapshots` sahifalarida u MAJBURIY, chunki ular
+ *   `?day=` ni `useSearchParams` orqali o'qiydi va Next 16 shunday
+ *   daraxtni statik prerender ro'yxatidan chiqarib buildni yiqitadi. Bu
+ *   yerda o'sha sabab YO'Q (URL holati taqiqlangan) — chegara ish
+ *   maydonini SARLAVHADAN ajratadi, ya'ni sessiya yuklanayotganda ham
+ *   `[Smena]` havolasi darhol bosiladigan bo'lib qoladi.
  *
  * -----------------------------------------------------------------------
  * ⚠ HUQUQ KO'ZGUSI — HAQIQIY NAZORAT SERVERDA
@@ -96,6 +99,28 @@ export default function CollectPage() {
           {t("collect.shiftTitle")}
         </a>
       </div>
+
+      {/*
+       * ⛔⛔ KOMPOZITSIYA KONTRAKTI — QURILGAN NARSA RENDER QILINISHI SHART.
+       *
+       *   Bu fazaning eng JIM nuqsoni shu bo'lardi: yettita komponent
+       *   qurilib, ularni hech kim chizmasa uchala task ham yashil
+       *   qaytardi va `/collect` — kuniga 300–1000 marta ochiladigan yuza
+       *   — BO'SH QOBIQ bo'lib qolardi. CASH-01/02/03 esa ekranda umuman
+       *   MAVJUD BO'LMASDI.
+       *
+       *   ⛔ Shu sababdan bu yerda komponentning O'ZI chiziladi: bo'sh
+       *      o'ram ham, `null` ham, `data-*` o'rami ham EMAS.
+       */}
+      <Suspense
+        fallback={
+          <p className="text-sm text-text-muted" role="status">
+            {t("common.loading")}
+          </p>
+        }
+      >
+        <CollectSession shiftHref={localeHref(locale, "/collect/shift")} />
+      </Suspense>
     </div>
   );
 }
