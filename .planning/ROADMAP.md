@@ -47,6 +47,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Snapshot pipeline** - Mavsumiy jadval, idempotent kadr olish, sifat filtri, S3 arxiv, alertlar (14/14 reja bajarildi; beshala mezon `tests/integration/test_phase4_criteria.py` bilan BITTA buyruqda o'lchanadi va uchala darvozasi — mezon boshiga bitta test, meta-test, mock'siz o'lchov — yashil. CAM-04…CAM-07 va FOUND-06 dalil bilan `Done`; hammasi SIMULYATOR ustida o'lchangan va real uskuna/kalendar/tashqi xizmat talab qiladigan **yettita** band `04-HUMAN-UAT.md` da ega hamda tetik bilan. `npm run gate` chegarasi olti o'lchov asosida 1200 s dan **900 s** ga tushirildi. ⚠ **TEKSHIRUV O'TKAZILDI VA U BO'SHLIQ TOPDI:** `04-VERIFICATION.md` (2026-08-05) fazaga `4/5` ball qo'yib `gaps_found` deb yopdi — yagona bo'shliq SC#5 ning Sentry yarmi edi: `scheduler` konteyneri `SENTRY_DSN` ni olardi va 4-fazaning HAMMA jobini tetiklardi, lekin `init_sentry()` o'sha jarayonda hech qachon chaqirilmasdi. Bo'shliq `04-13` da yopildi (ilmoq + `ObservedScheduler` + `compose.yaml` dan HOSILA qilingan darvoza, uch mustaqil qatlam) va `04-14` uning atrofidagi ochiq bandlarni yopib regressiyasizligini o'lchadi. ⚠ **BELGI HAMON `- [ ]`:** fazani yopish qaroriniki QAYTA TEKSHIRUV (`/gsd-verify-work`), ijrochi emas — bu farq ataylab saqlanadi) (completed 2026-08-05)
 - [x] **Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i** - Poligon muharriri, RF-DETR aniqlash, noaniq navbati, ko'r audit (15/15 reja bajarildi; beshala mezon `tests/integration/test_phase5_criteria.py` bilan BITTA buyruqda o'lchanadi va uchala darvozasi - mezon boshiga bitta test, meta-test, soxtalashtirishsiz o'lchov - yashil. AI-01/03/04/05/06 dalil bilan `Done`; **AI-02 `Blocked`** - real ONNX artefakti CI'da yo'q va modelning ANIQLIGI oltin to'plam bo'shligi uchun umuman o'lchanmagan, egasi nazoratchi + Ops, bandlari `05-HUMAN-UAT.md` #1-#3. 4-fazadan meros `gate` bandi (D-26) TINCH XOSTDAGI uch o'lchov bilan yopildi: 1009/1004/983 s, chegara 900 s -> **1250 s**. Ochiq bandlar `05-HUMAN-UAT.md` da ega va tetik bilan. ✅ **QAYTA TEKSHIRUV O'TDI (2026-08-10): 5/5, holat `human_needed`** - `05-VERIFICATION.md`. Tekshiruvchi da'volarni o'qimay testlarni O'ZI yugurtirdi va uchta ogohlantirish topdi; uchalasi ham `05-16` da sabotaj bilan yopildi. IKKITASI HAQIQIY BO'SHLIQ edi: yangi `any`-darvozali marshrutda eski test YASHIL qolardi (W-3), ko'r audit ekraniga qo'yilgan haqiqiy `checkbox` da esa mavjud 40 ta test YASHIL qolardi (W-2). `human_needed` - `05-HUMAN-UAT.md` dagi qo'lda bajariladigan bandlar, kod bo'shlig'i emas) (plans completed 2026-08-10)
  (completed 2026-08-09)
+
 - [ ] **Phase 6: Billing va kassir** - O'zgarmas kunlik patta, dalil bog'lash, qarz, ≤3 bosishli kassir, smena hisobi
 - [ ] **Phase 7: Nomuvofiqlik, bildirishnoma va botlar** - "Band, lekin to'lovsiz" case oqimi, sotuvchi va direktor botlari
 - [ ] **Phase 8: Hisobotlar, mustahkamlash va ishga tushirish** - Excel eksport, AI aniqlik hisoboti, backup mashqi, go-live
@@ -360,22 +361,49 @@ Plans:
   3. Qarz faqat biriktirilgan sotuvchida ko'rinadi (qoldiq har doim hisoblanadigan ko'rinish: hisoblar − to'lovlar); biriktirilmagan band rasta hisob emas, "ro'yxatga olinmagan savdo" anomaliyasi sifatida chiqadi
   4. Kun davomida kassir/direktor "kutilayotgan patta"ni (bugungi tarif + eski qarz) jonli ko'radi; kassir rastani raqamdan topib, tarifdan kelgan summani ≤3 bosishda tasdiqlaydi va summani faqat sabab-kod bilan o'zgartira oladi
   5. Takror bosilgan to'lov dublikat yaratmaydi, tuzatish faqat storno + qayta kiritish orqali; smena yopilishida kassir tizim summasini ko'rmasdan naqdni deklaratsiya qiladi va farq (variance) direktor hisobotiga chiqadi
-
-**Plans**: 14 plans (10 to'lqin)
+**Plans**: 14 plans (10 to'lqin)
+**Wave 1**
 
 - [ ] 06-01-PLAN.md — Wave 0/A: A1 (parallel get-or-create) va A2 (generated-from-column) zondlari, sof funksiyalar (D-04/D-05/C-6, D-26) + D-24 ning taqsimlash qoidasi (`FIFO_OLDEST_SERVICE_DATE_FIRST`, G-13/G-14)
 - [ ] 06-02-PLAN.md — Wave 0/B: ikki huquq, yetti domen enumi, 14 xato kodi, butun matn va ikki yangi darvoza (OP-6/7/12, §5.10)
 - [ ] 06-03-PLAN.md — Wave 0/C: to'rt so'rov moduli (ikki ALOHIDA) va `collect-surface` darvozasi (W0-F3/F4, G-7/G-22/G-28d)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-04-PLAN.md — `0020` billing domeni + `0021` kaskad; uch o'zgarmaslik qo'riqchisi, orfan DEFINER DROP (C-1/2/4/5/7/11/12)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 06-05-PLAN.md — Seed (`day_close` orqali), sxema meta testi va o'zgarmaslikning xulqiy darvozasi (D-07/23/25/27)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 06-06-PLAN.md — `billing_repo`: yagona pul yechimi, D-04 predikati, muzlatilgan dalil, qoldiq (BILL-01…05, C-6/7/8)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 06-07-PLAN.md — `billing_close` job, cron `day_close` dan KEYIN, yurak urishining ko'rinishi (C-3, D-12…15, M-C)
 - [ ] 06-08-PLAN.md — `GET /billing/*`: maydonni e'lon qilmaslik va yangi 422 darvozasi (D-17/20, C-9/10)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 06-09-PLAN.md — `POST /payments` + storno: ikki bayonotli idempotentlik, fingerprint, CASH-02 auditi, yopiq kunda qarz undirish va `stall_not_assigned` (D-21/22/23/28, §9.4)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 06-10-PLAN.md — Smena API: ko'r serializator va ikki tomonlama variance (CASH-04, D-25/26/27)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
 - [ ] 06-11-PLAN.md — Frontend Y-1: ≤3 bosish sanog'i, ikki qatlamli qulf, DL-1/DL-2 (D-18/19/21/22, OP-5)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
 - [ ] 06-12-PLAN.md — Frontend Y-3: ko'r naqd deklaratsiyasi va yo'qlikning o'lchovi (D-25, G-7/G-23b)
 - [ ] 06-13-PLAN.md — Frontend Y-4: hisoblar, dalil, anomaliya va variance (BILL-02/03/04, G-25/26/27/28)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
 - [ ] 06-14-PLAN.md — Faza darvozasi, beshta sabotaj, `gate` byudjeti va yakunlash
 
 **UI hint**: yes

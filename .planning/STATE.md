@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 5 ijrosi TUGADI — qayta tekshiruv kutilmoqda
-stopped_at: Phase 05 verified (5/5) and closed
-last_updated: "2026-08-09T22:12:18.916Z"
-last_activity: "2026-08-10 -- Faza 05 QAYTA TEKSHIRUVDAN 5/5 bilan o'tdi; W-1/W-2/W-3 sabotaj bilan yopildi"
+status: executing
+stopped_at: Phase 6 UI-SPEC approved
+last_updated: "2026-08-10T09:00:37.293Z"
+last_activity: 2026-08-10 -- Phase 06 planning complete
 progress:
   total_phases: 9
   completed_phases: 5
-  total_plans: 82
+  total_plans: 96
   completed_plans: 82
   percent: 56
 ---
@@ -27,9 +27,9 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 
 Phase: 5
 Plan: 15
-Total Plans in Phase: 15
-Status: Phase 5 ijrosi TUGADI — qayta tekshiruv kutilmoqda
-Last activity: 2026-08-10 -- 05-15 bajarildi (faza darvozasi: beshala mezon bitta buyruqda; dalil-kadr huquq bo'shligi YOPILDI; gate byudjeti 900 -> 1250 s)
+Total Plans in Phase: 14
+Status: Ready to execute
+Last activity: 2026-08-10 -- Phase 06 planning complete
 
 Progress: [██████████] 100% (15/15 reja — 05-01…05-15)
 
@@ -280,6 +280,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-10T03:20:00.000Z
-Stopped at: Completed 05-15-PLAN.md
-Resume file: None
+Last session: 2026-08-10T04:50:38.871Z
+Stopped at: Phase 6 UI-SPEC approved
+Resume file: .planning/phases/06-billing-va-kassir/06-UI-SPEC.md
