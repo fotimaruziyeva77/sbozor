@@ -1153,6 +1153,42 @@ BEGIN
     RETURN false;
   END IF;
 
+  -- 6-faza billing domeni (0020_billing_domain). BLOK BANDLIK VA SNAPSHOT
+  -- BLOKLARIDAN OLDIN TURISHI SHART va bu O'LCHANGAN, taxmin emas:
+  -- `charge_evidence` UCHTA quyi jadvalga birdan tayanadi —
+  -- `stall_slot_occupancy` (audit havolasi), `occupancy_events`
+  -- (muzlatilgan dalil) va `snapshots` (kadrga yo'l); `billing_anomalies`
+  -- esa `occupancy_events` va `snapshots` ga. Ular pastdagi ikki blokning
+  -- BIRINCHI `DELETE` lari, ya'ni blok keyinga qo'yilganda chaqiruv
+  -- `ForeignKeyViolation: update or delete on table "stall_slot_occupancy"
+  -- violates foreign key constraint "fk_charge_evidence_stall_slot_
+  -- occupancy"` bilan yiqiladi — va STATIK DARVOZA BUNI SEZMAYDI (matnda
+  -- oltala jadval baribir bor). Aynan shuning uchun
+  -- `test_draft_market_deletion_covers_the_billing_domain` funksiyani
+  -- HAQIQATAN chaqiradi. Bu `0013`/`0015`/`0019` juftliklarining
+  -- TO'RTINCHI takrori.
+  --
+  -- Ichki tartib `BILLING_DELETE_ORDER` dan: `charge_evidence` ->
+  -- `charge_adjustments` -> `payments` -> `billing_anomalies` ->
+  -- `daily_charges` -> `cashier_shifts`. Bu domenda IKKI MUSTAQIL zanjir
+  -- bor (`charge_evidence`/`charge_adjustments` -> `daily_charges` va
+  -- `payments` -> `cashier_shifts`), shuning uchun ro'yxat
+  -- `reversed(BILLING_TENANT_TABLES)` bilan USTMA-UST TUSHMAYDI —
+  -- 5-fazadagi tasodifiy ustma-ustlikdan farqli o'laroq.
+  --
+  -- ⚠ UCHALA JADVALDA (`daily_charges`, `payments`, `cashier_shifts`)
+  --   O'ZGARMASLIK TRIGGERI BOR (0020) va ular `DELETE` ni FAQAT QORALAMA
+  --   bozor uchun o'tkazadi. Yuqoridagi `IS DISTINCT FROM false` sharti
+  --   aynan shu holatni kafolatlaydi, ya'ni bu yerga faqat qoralama bozor
+  --   yetib keladi. `tariffs` / `occupancy_events` bilan AYNAN bir xil
+  --   naqsh.
+  DELETE FROM public.charge_evidence            WHERE market_id = p_market_id;
+  DELETE FROM public.charge_adjustments         WHERE market_id = p_market_id;
+  DELETE FROM public.payments                   WHERE market_id = p_market_id;
+  DELETE FROM public.billing_anomalies          WHERE market_id = p_market_id;
+  DELETE FROM public.daily_charges              WHERE market_id = p_market_id;
+  DELETE FROM public.cashier_shifts             WHERE market_id = p_market_id;
+
   -- 5-faza bandlik domeni (0018_occupancy_domain). BLOK SNAPSHOT BLOKIDAN
   -- OLDIN TURISHI SHART va bu O'LCHANGAN, taxmin emas: `occupancy_events`
   -- `snapshots (id, is_billable)` ga kompozit FK bilan tayanadi (D-21),
@@ -1245,10 +1281,19 @@ ANIQ ro'yxat esa yangi jadval qo'shilganda KO'RINADIGAN qarz qoldiradi:
 jadval ro'yxatga qo'shilmasa `DELETE FROM markets` FK xatosi bilan yiqiladi
 va sabab darhol ma'lum bo'ladi.
 
-TARTIB — FK bo'yicha bolalardan ota-onaga: kameralar -> kashfiyot
-yugurishlari -> NVR sirlari -> NVR qurilmalari -> biriktirishlar -> toifa
-davrlari -> tariflar -> kod reyestri -> rastalar -> sotuvchilar -> zonalar ->
-toifalar -> kalendar -> profil -> a'zoliklar -> tokenlar -> bozor.
+TARTIB — FK bo'yicha bolalardan ota-onaga: billing (dalil -> tuzatish ->
+to'lov -> anomaliya -> hisob -> smena) -> bandlik -> snapshot -> kameralar
+-> kashfiyot yugurishlari -> NVR sirlari -> NVR qurilmalari ->
+biriktirishlar -> toifa davrlari -> tariflar -> kod reyestri -> rastalar ->
+sotuvchilar -> zonalar -> toifalar -> kalendar -> profil -> a'zoliklar ->
+tokenlar -> bozor.
+
+⛔ BLOKLAR TARTIBI HAM MAJBURIY, FAQAT BLOK ICHI EMAS: billing bandlikdan
+OLDIN, bandlik snapshotdan oldin, snapshot NVR dan oldin. Har bir juftlik
+tananing o'z izohida sabab bilan yozilgan va uchalasi ham HAQIQIY
+chaqiruv bilan o'lchanadi (`test_market_delete_guard.py` ning uchta
+`test_draft_market_deletion_covers_the_*` testi) — statik matn darvozasi
+tartibni SEZMAYDI.
 
 ⚠ `tariffs` va `stall_category_periods` ustidagi `DELETE` o'zgarmaslik
 triggerlarini ishga tushiradi. Ular QORALAMA bozor uchun ataylab o'tkazib
@@ -1768,26 +1813,45 @@ va uni jurnalga yozadi. `0` qiymat XATO EMAS — u yuqoridagi holat.
 bo'lsa, chetlab o'tish shunchalik keng (T-04-16 / T-05-19).
 """
 
-OCCUPANCY_FUNCTIONS: list[PGFunction] = [
-    AUDIT_DRAW_DUE_MARKETS,
-    OCCUPANCY_DAY_CLOSE_MARKETS,
-]
-"""`0018_occupancy_domain` YARATADIGAN to'plam.
+OCCUPANCY_FUNCTIONS: list[PGFunction] = []
+"""⛔ BO'SHATILDI (`06-04` / T2, 2026-08-10) — IKKALA FUNKSIYA `0020` DA DROP QILINDI.
 
-⚠ `ALL_FUNCTIONS` GA QO'SHILMAYDI va bu ATAYIN (`SNAPSHOT_FUNCTIONS` bilan
-bir xil qoida): `ALL_FUNCTIONS` — `0001_identity` ning MUZLATILGAN to'plami
-va `0001` uning ustidan tsikl qiladi. Yangi nomni u yerga qo'shish nol
-holatdan qilingan migratsiyani mavjud bo'lmagan obyektga `GRANT` berishga
-majburlab yiqitardi.
+=============================================================================
+NEGA REYESTR BO'SH, LEKIN `PGFunction` TA'RIFLARI JOYIDA QOLDI.
+
+`AUDIT_DRAW_DUE_MARKETS` va `OCCUPANCY_DAY_CLOSE_MARKETS`
+CHAQIRUVCHISIZ qoldi (C-11/G-10): argumentli job modeli (D-12) ularni
+PRINSIPIAL ravishda ishlata olmaydi — ikkalasining tanasi ham `now()` ga
+qadalgan va job kunni ARGUMENT sifatida oladi. Chaqiruvchisiz `SECURITY
+DEFINER` funksiya esa RLS'ni chetlab o'tadigan ISHLATILMAYOTGAN yuza,
+ya'ni u faqat xavf qo'shadi (T-06-22).
+
+REYESTR BO'SHATILISHI MAJBURIY: `ALL_ENTITIES` shu ro'yxatdan quriladi va
+`alembic_utils` reyestrdagi, lekin bazada YO'Q funksiyani «yaratish kerak»
+deb ko'radi — `test_autogenerate_is_empty` `create_entity` taklifi bilan
+QIZARARDI.
+
+TA'RIFLAR ESA JOYIDA QOLADI va bu ZARURAT, e'tiborsizlik emas: ularni
+`0018` (yaratish + `_regrant`) va `0020` ning `downgrade()` i (qaytarish)
+NOMMA-NOM import qiladi. Ta'riflarni o'chirish `alembic downgrade 0019` ni
+`ImportError` bilan yiqitardi, ya'ni tarixiy migratsiya zanjiri uzilardi.
+
+⚠ `0018` ENDI BU RO'YXATNI ISHLATMAYDI — u `_OCCUPANCY_FUNCTIONS_AT_0018`
+MUZLATILGAN nusxasidan yuradi (sabab o'sha faylda, `0019:71-137` naqshining
+teskari qo'llanishi).
+=============================================================================
 """
 
-OCCUPANCY_GRANT_SIGNATURES: tuple[str, ...] = (
-    "audit_draw_due_markets()",
-    "occupancy_day_close_markets()",
-)
-"""`OCCUPANCY_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari).
+OCCUPANCY_GRANT_SIGNATURES: tuple[str, ...] = ()
+"""⛔ BO'SHATILDI (`06-04` / T2) — `OCCUPANCY_FUNCTIONS` bilan AYNI SABABDAN.
 
-`REVOKE ALL ... FROM PUBLIC` MAJBURIY: `CREATE FUNCTION` dan keyin Postgres
-yangi funksiyaga `EXECUTE TO PUBLIC` ni STANDART beradi, ya'ni bazadagi HAR
-QANDAY rol RLS'ni chetlab o'tadigan bu funksiyalarni chaqira olardi.
+⚠ BO'SH TUPLE `0018` NING `_regrant` TSIKLINI HAM BO'SHATARDI va o'shanda
+NOL HOLATDAN yugurishda ikkala funksiya `EXECUTE TO PUBLIC` bilan tug'ilib,
+`0020` gacha SHUNDAY QOLARDI — ya'ni tarixiy migratsiya XAVFSIZLIK
+OYNASINI ochardi. Shuning uchun `0018` uchliklarni O'ZIGA muzlatib
+ko'chirdi (`_OCCUPANCY_GRANT_SIGNATURES_AT_0018`) va bu bo'sh tuple unga
+umuman ta'sir qilmaydi.
+
+`REVOKE ALL ... FROM PUBLIC` ning nega majburiyligi `0018:242-251` va
+`0019:154-163` da yozilgan.
 """

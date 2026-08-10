@@ -131,6 +131,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from alembic import op
+from alembic_utils.pg_function import PGFunction
 from sbozor_core.models.occupancy import (
     BLIND_AUDIT_NEEDS_ROUND_CHECK,
     BLIND_AUDIT_NOT_SHOWN_CHECK,
@@ -161,7 +162,6 @@ from migrations.entities import (
 from migrations.entities.functions import (
     AUDIT_DRAW_DUE_MARKETS,
     OCCUPANCY_DAY_CLOSE_MARKETS,
-    OCCUPANCY_GRANT_SIGNATURES,
 )
 from migrations.entities.policies import owner_bootstrap_policy, tenant_policy
 from migrations.entities.triggers import OCCUPANCY_EVENT_IMMUTABLE, ZONE_REVIEW_IMMUTABLE
@@ -192,6 +192,58 @@ depends_on: str | Sequence[str] | None = None
 #   ko'rinadi va `test_autogenerate_is_empty` `remove_index` bilan qizaradi.
 #   Indeks IKKALA tomonda ham bo'lishi shart, nom va predikat esa BITTA
 #   manbadan kelishi shart — aks holda ular jimgina ajralib ketardi.
+
+_OCCUPANCY_FUNCTIONS_AT_0018: tuple[PGFunction, ...] = (
+    AUDIT_DRAW_DUE_MARKETS,
+    OCCUPANCY_DAY_CLOSE_MARKETS,
+)
+"""`0018` YARATADIGAN ikki tik yuzasi — MUZLATILGAN NUSXA (`06-04` / T2).
+
+=============================================================================
+NEGA REYESTRDAN EMAS, SHU YERDAN.
+
+`migrations/entities/functions.py::OCCUPANCY_FUNCTIONS` 6-fazada
+BO'SHATILDI: ikkala funksiya `0020` da DROP qilinadi (C-11/G-10 —
+chaqiruvchisiz `SECURITY DEFINER` yuzasi) va reyestrda qolgan nom
+`test_autogenerate_is_empty` ni «qayta yaratish kerak» taklifi bilan
+qizartirardi.
+
+Bu migratsiya esa TARIXIY holatni ifodalaydi va u O'ZGARMASLIGI shart:
+`0018` qo'ngan paytda ikkala funksiya HAQIQATAN mavjud edi. Bo'shatilgan
+reyestr ustidan tsikl qilish `0018` ni JIMGINA no-op qilardi va
+`alembic downgrade 0019 && alembic upgrade head` zanjiri funksiyalarsiz
+holatga kelardi.
+
+⛔ VA IKKINCHI, KUCHLIROQ SABAB — XAVFSIZLIK OYNASI (§5.9 ning (b)
+varianti ATAYIN RAD ETILDI): bo'sh reyestr `_regrant()` tsiklini ham
+bo'shatardi. Nol holatdan yugurishda ikkala funksiya `CREATE FUNCTION`
+ning standarti — `EXECUTE TO PUBLIC` — bilan tug'ilib, `0020` gacha
+SHUNDAY QOLARDI. Ya'ni tarixiy migratsiya bazadagi HAR QANDAY rolga
+RLS'ni chetlab o'tish yo'lini ochib qo'yardi. Oyna qisqa, lekin u
+`0018`→`0020` oralig'ida to'xtagan har qanday yugurishda (CI bosqichi,
+qo'lda `alembic upgrade 0019`) OCHIQ qolardi.
+
+NAQSH `0019:71-137` (`MARKET_DELETE_DRAFT_WITHOUT_OCCUPANCY`) NING
+TESKARI QO'LLANISHI: u YANGI migratsiyaga ESKI ta'rifni muzlatgan edi,
+bu yerda esa ESKI migratsiyaga ESKI REYESTR muzlatiladi. `PGFunction`
+ta'riflarining O'ZI `functions.py` da JOYIDA QOLADI — bu nusxa faqat
+RO'YXAT, ta'rif emas.
+
+⚠ BU FAYLNING BOSHQA HECH BIR QATORI TEGILMAGAN: jadval, indeks, RLS,
+audit va trigger DDL'i `0018` qo'ngan kundagidek.
+=============================================================================
+"""
+
+_OCCUPANCY_GRANT_SIGNATURES_AT_0018: tuple[str, ...] = (
+    "audit_draw_due_markets()",
+    "occupancy_day_close_markets()",
+)
+"""`_OCCUPANCY_FUNCTIONS_AT_0018` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari).
+
+Sabab yuqoridagi konstantaning docstringida — ayniqsa uning ikkinchi
+bandi: bo'sh imzolar ro'yxati `_regrant()` ni no-op qilib, funksiyalarni
+`EXECUTE TO PUBLIC` bilan qoldirardi.
+"""
 
 IMMUTABILITY_TRIGGERS: tuple[tuple[str, str, str], ...] = (
     ("occupancy_events", "occupancy_event_immutable", "trg_occupancy_event_immutable"),
@@ -752,16 +804,20 @@ def upgrade() -> None:
     #     YANGI funksiyalar, ya'ni `drop_entity()` KERAK EMAS. `_regrant()`
     #     esa MAJBURIY — ikkalasi ham RLS'ni chetlab o'tadi.
     # ------------------------------------------------------------------
-    create_entity(AUDIT_DRAW_DUE_MARKETS)
-    create_entity(OCCUPANCY_DAY_CLOSE_MARKETS)
-    for signature in OCCUPANCY_GRANT_SIGNATURES:
+    #     ⚠ TSIKL MUZLATILGAN NUSXA USTIDAN (`_OCCUPANCY_FUNCTIONS_AT_0018`),
+    #       `migrations.entities.functions::OCCUPANCY_FUNCTIONS` USTIDAN
+    #       EMAS — o'sha reyestr 6-fazada bo'shatildi va sabab konstanta
+    #       docstringida.
+    for function in _OCCUPANCY_FUNCTIONS_AT_0018:
+        create_entity(function)
+    for signature in _OCCUPANCY_GRANT_SIGNATURES_AT_0018:
         _regrant(signature)
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    drop_entity(OCCUPANCY_DAY_CLOSE_MARKETS)
-    drop_entity(AUDIT_DRAW_DUE_MARKETS)
+    for function in reversed(_OCCUPANCY_FUNCTIONS_AT_0018):
+        drop_entity(function)
 
     # TARTIB TESKARI: trigger AVVAL yechiladi, funksiya KEYIN o'chiriladi —
     # `DROP FUNCTION` unga tayanuvchi trigger mavjud bo'lganda yiqiladi.

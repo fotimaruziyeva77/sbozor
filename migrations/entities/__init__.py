@@ -37,6 +37,9 @@ __all__ = [
     "ALL_ENTITIES",
     "ALL_RLS_TABLES",
     "ALL_TENANT_TABLES",
+    "BILLING_AUDITED_TABLES",
+    "BILLING_DELETE_ORDER",
+    "BILLING_TENANT_TABLES",
     "CALENDAR_TENANT_TABLES",
     "GENERATED_FROM_COLUMN_MEASURED_AT",
     "GENERATED_FROM_COLUMN_SUPPORTED",
@@ -427,6 +430,128 @@ O'ZGARTIRILMAYDI: reyestr ATAYIN `0018` dan OLDIN yoziladi, shunda
 tuzatish ro'yxati tayyor turadi.
 """
 
+# ===========================================================================
+# 6-FAZA — BILLING VA KASSIR DOMENI
+# ===========================================================================
+
+BILLING_TENANT_TABLES: tuple[str, ...] = (
+    "cashier_shifts",
+    "daily_charges",
+    "charge_adjustments",
+    "charge_evidence",
+    "payments",
+    "billing_anomalies",
+)
+"""`0020_billing_domain` yaratadigan tenant jadvallari (BILL-01…04, CASH-03/04).
+
+TARTIB — FK bo'yicha OTA-ONADAN bolalarga, `OCCUPANCY_TENANT_TABLES` bilan
+aynan bir xil qoida:
+  * `cashier_shifts`     -> `users` ga (kompozit EMAS: `users` global);
+  * `daily_charges`      -> `stalls`, `vendors`, `tariffs` ga (2-fazadan);
+  * `charge_adjustments` -> `daily_charges` ga `(market_id, charge_id)`;
+  * `charge_evidence`    -> `daily_charges`, `stall_slot_occupancy`,
+                            `occupancy_events`, `snapshots` ga;
+  * `payments`           -> `cashier_shifts` ga `(market_id, shift_id)`
+                            VA O'ZIGA (`reverses_payment_id`);
+  * `billing_anomalies`  -> `stalls`, `occupancy_events`, `snapshots` ga.
+`0020` shu ro'yxat ustidan `enable_tenant_rls` + `tenant_policy` +
+`owner_bootstrap_policy` tsiklini bajaradi, `downgrade()` esa
+`BILLING_DELETE_ORDER` bo'yicha yuradi.
+
+⚠ `cashier_shifts` BIRINCHI, chunki `payments.shift_id` unga tayanadi.
+`payments` esa O'ZIGA tayanadi (storno), lekin bu tartibga ta'sir
+qilmaydi — o'ziga havola qiluvchi FK jadval yaratilgandan keyin ham
+qo'shiladi.
+
+BU RO'YXAT AUDIT UCHUN EMAS. Trigger faqat `BILLING_AUDITED_TABLES` ga
+ulanadi (pastda) va farq ATAYIN — oltala jadval RLS ostida bo'lishi SHART,
+audit triggeri ostida esa faqat ikkitasi.
+
+QARORLAR (`06-CONTEXT.md`):
+  * C-1 — NOM `daily_charges`, `charges` EMAS. `sbozor_core.schema_
+    contract.FINANCIAL_TABLES` uni 1-fazadan beri AYNAN shu nom bilan
+    kutadi va `test_financial_tables_have_guards` bazada shu nomni
+    izlaydi.
+  * C-2 — `service_date` (DOMEN) va `business_date` (AUDIT) IKKI XIL
+    savol. Idempotentlik kaliti `service_date` ustida, `business_date`
+    ustida EMAS — `financial_guards()` shuning uchun CHAQIRILMAYDI
+    (`0008_temporal.py:164-182` presedenti).
+  * C-4/D-24 — `payments.charge_id` YO'Q: to'lov SOTUVCHI darajasidagi
+    kredit va kun kesimi `FIFO_OLDEST_SERVICE_DATE_FIRST` qoidasidan
+    (06-01) HOSILA qilinadi. Ettinchi jadval (`payment_allocations`)
+    YARATILMAYDI.
+  * C-7 — `charge_evidence` ning MUZLATILGAN dalili `occupancy_event_id`;
+    `stall_slot_occupancy_id` faqat AUDIT havolasi (o'sha jadval MUTABLE).
+"""
+
+BILLING_AUDITED_TABLES: tuple[str, ...] = ("charge_adjustments", "cashier_shifts")
+"""`0020_billing_domain` da `attach_audit_trigger()` ULANADIGAN jadvallar.
+
+⚠ AUDIT ASSIMETRIYASI — TO'RTTASI ATAYIN CHIQARILGAN va sabablar
+`sbozor_core.schema_contract.AUDITED_TABLES` docstringida NOMMA-NOM
+yozilgan. Qisqacha:
+
+  * `daily_charges` — D-07 bo'yicha SHARTSIZ o'zgarmas, ya'ni audit faqat
+    `INSERT` ni ko'rardi (IKKINCHI NUSXA); ustiga hajmi katta;
+  * `payments`      — APPEND-ONLY va iz `payments` NING O'ZIDA (`kind`,
+    `reverses_payment_id`, `reversal_reason`, `override_reason`,
+    `cashier_id`);
+  * `billing_anomalies` — hodisa jurnali (job yozadi, odam tahrirlamaydi);
+  * `charge_evidence`   — `daily_charges` ning muzlatilgan nusxasi.
+
+Ikkalasi esa AUDITDA va bu ro'yxatning butun mazmuni: `charge_adjustments`
+INSONNING moliyaviy oqibatli qarori (`tariffs` / `zone_reviews` bilan bir
+oilada), `cashier_shifts` esa `AUDITED_TABLES` dagi YAGONA jadval bo'lib
+HAQIQATAN `UPDATE` ni ko'radi (`open` -> `closed` o'tishi) — ya'ni bu yerda
+audit «ikkinchi nusxa» emas, YAGONA iz.
+
+Ro'yxat ALOHIDA, chunki `0020` ikki xil tsikl qiladi: RLS
+`BILLING_TENANT_TABLES` bo'yicha, audit esa shu yerdan.
+"""
+
+BILLING_DELETE_ORDER: tuple[str, ...] = (
+    "charge_evidence",
+    "charge_adjustments",
+    "payments",
+    "billing_anomalies",
+    "daily_charges",
+    "cashier_shifts",
+)
+"""`market_delete_draft()` kaskadiga qo'shiladigan tartib (`0021`).
+
+⚠ UCH FAKT, UCHALASI HAM MAJBURIY:
+
+**(a) RO'YXAT LITERAL — HOSILA EMAS.** `tuple(reversed(BILLING_TENANT_
+TABLES))` yozish `payments` ni `charge_evidence` dan OLDIN qo'yardi va
+bu ustma-ust TUSHMAYDI: `charge_evidence` `daily_charges` ga tayanadi,
+`payments` esa `cashier_shifts` ga — ikki mustaqil zanjir. `OCCUPANCY_
+DELETE_ORDER` da ustma-ustlik TASODIF edi, bu yerda esa u YO'Q ham.
+Taqiq mexanik qulflangan: `test_meta.py::test_billing_delete_order_is_
+declared_not_derived` MANBA MATNINI o'qiydi va `tuple(reversed(` iborasini
+topsa qizaradi (§S-10 — darvoza sanoq emas, manbadan hosila).
+
+**(b) BUTUN BLOK MAVJUD SNAPSHOT VA OCCUPANCY BLOKLARIDAN OLDIN TURISHI
+SHART.** `charge_evidence` `occupancy_events` VA `snapshots` ga kompozit
+FK bilan tayanadi, `billing_anomalies` ham o'sha ikkovga. `stall_slot_
+occupancy` esa occupancy blokining BIRINCHI `DELETE` i, `snapshots` —
+snapshot blokining birinchisi. Blok keyinga qo'yilganda chaqiruv
+`ForeignKeyViolation` bilan yiqiladi va ⛔ STATIK DARVOZA BUNI SEZMAYDI
+(matnda oltala jadval baribir bor) — `0015`/`0019` juftliklarining
+AYNAN TAKRORI, endi to'rtinchi marta. Shuning uchun tartib
+`test_draft_market_deletion_covers_the_billing_domain` da, funksiyani
+HAQIQATAN chaqirib o'lchanadi.
+
+**(c) ICHKI TARTIB IKKI MUSTAQIL ZANJIRNI QAMRAYDI.**
+`charge_evidence` -> `charge_adjustments` -> `daily_charges` birinchi
+zanjir; `payments` -> `cashier_shifts` ikkinchisi. `billing_anomalies`
+ikkalasida ham turmaydi (unga hech kim tayanmaydi va u faqat 5-faza
+jadvallariga tayanadi), shuning uchun uning o'rni ixtiyoriy —
+`SNAPSHOT_DELETE_ORDER` dagi `alert_events` bilan aynan bir xil holat.
+
+`0021` va `MARKET_DELETE_DRAFT` kengaytmasi qiymatni SHUNDAN oladi
+(`06-04` / T3).
+"""
+
 ALL_TENANT_TABLES: tuple[str, ...] = (
     *TENANT_TABLES,
     *MARKET_DOMAIN_TENANT_TABLES,
@@ -474,6 +599,20 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     # test_occupancy_registries_are_self_consistent` shartni BAZAGA bog'lagan —
     # jadval tug'ilgan zahoti darvoza O'ZI QUROLLANDI.
     *OCCUPANCY_TENANT_TABLES,
+    # ✅ QARZ UMUMAN OCHILMADI (`06-04` / T2, 2026-08-10) — splice
+    # `0020_billing_domain` BILAN AYNI COMMITDA qilindi va bu 4-/5-fazadagi
+    # ikki reja oralig'idagi qarzdan FARQ QILADI (OP-3).
+    #
+    # SPLICE IKKI TOMONLAMA QULFLANGAN va shuning uchun u AYNAN shu
+    # commitda bo'lishi shart:
+    #   * OLDIN qilinsa -> `alembic_utils` komparatori mavjud bo'lmagan
+    #     jadvalga policy'ni HAQIQATAN yaratib ko'radi (`simulate_entity`)
+    #     va `test_autogenerate_is_empty` `UndefinedTable` bilan yiqiladi
+    #     (yuqoridagi ✅ bandda 2026-08-04 da o'lchangan);
+    #   * KEYIN qilinsa -> `test_meta.py::test_billing_registries_are_self_
+    #     consistent` ning `born <= ALL_TENANT_TABLES` sharti QIZARADI,
+    #     chunki jadvallar bazada allaqachon bor.
+    *BILLING_TENANT_TABLES,
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 

@@ -1001,6 +1001,27 @@ class StallSlotOccupancy(Base, TenantMixin):
             #   4-fazada aynan shu holat bo'lgan).
             name="uq_stall_slot_occupancy_market_stall_day_slot",
         ),
+        # ⚠⚠ KOMPOZIT FK NISHONI (6-faza, `0020_billing_domain`, C-7/OP-11).
+        #
+        #   `charge_evidence.stall_slot_occupancy_id` `(market_id, id)` ga
+        #   havola qiladi — «kun yopilishida qaysi agregat qator hisobga
+        #   sabab bo'ldi» degan AUDIT havolasi sifatida. Nishon 5-fazada
+        #   YOZILMAGAN edi, chunki bu jadval zanjirning OXIRI edi: unga hech
+        #   kim tayanmasdi.
+        #
+        #   O'LCHANGAN, TAXMIN EMAS: usiz `0020` ning O'ZI
+        #   `asyncpg.exceptions.InvalidForeignKeyError: there is no unique
+        #   constraint matching given keys for referenced table
+        #   "stall_slot_occupancy"` bilan yiqiladi — bu `0018:266-287` dagi
+        #   `uq_snapshots_market_id_id` holatining AYNAN takrori.
+        #
+        #   ⚠ `market_id` bilan BOSHLANADI, ya'ni `test_meta.py::
+        #     INDEX_EXCEPTIONS` ga qo'shish TALAB QILINMAYDI.
+        #
+        #   ⚠ BU QATOR `charge_evidence` NI «DALIL» QILMAYDI: qator MUTABLE
+        #     (`_MATERIALIZE_SLOT` `DO UPDATE` ishlatadi), muzlatilgan dalil
+        #     esa `occupancy_event_id` (klass docstringidagi zanjir).
+        UniqueConstraint("market_id", "id", name="uq_stall_slot_occupancy_market_id_id"),
         CheckConstraint(SLOT_VERDICT_CHECK, name="verdict_allowed"),
         CheckConstraint(RESOLUTION_SOURCE_CHECK, name="resolution_source_allowed"),
         CheckConstraint(SLOT_OCCUPIED_HAS_WINNER_CHECK, name="occupied_has_winning_event"),
