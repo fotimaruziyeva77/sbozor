@@ -41,6 +41,19 @@ export const PERMISSIONS = [
   "market_data_view",
   "vendor_view",
   "payment_create",
+  // 6-faza (§5.6): kassirning O'QISH yuzasi va smena boshqaruvi.
+  //
+  // ⛔ NOMLAR SHU YERDA LITERAL SATR sifatida yoziladi va backenddan IMPORT
+  // QILINMAYDI — `scripts/role-gate.test.mjs` ikkala faylni MATN sifatida
+  // solishtiradi, ya'ni import darvozani o'zi tekshirayotgan qiymatga
+  // bog'lab qo'yardi (05-15 darsi). Ikkinchi nusxa MAJBURIY.
+  //
+  // Sabablari (nega aynan bu ikkitasi va nega `market_data_view`/
+  // `vendor_view`/`camera_view`/`report_view` kassirga BERILMAYDI) —
+  // `services/core-api/app/security/rbac.py::Permission.BILLING_COLLECT_VIEW`
+  // docstringida, bir joyda.
+  "billing_collect_view",
+  "shift_manage",
   "report_view",
   "occupancy_review",
   "dispute_decide",
@@ -90,6 +103,9 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "user_view",
     "market_data_view",
     "vendor_view",
+    // 6-faza: kutilayotgan patta BOZOR KESIMIDA (`/billing?day=bugun`).
+    // `payment_create` va `shift_manage` BERILMADI — direktor o'qiydi.
+    "billing_collect_view",
   ],
   market_admin: [
     "user_manage",
@@ -103,8 +119,16 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "report_view",
     "camera_view",
     "camera_manage",
+    "billing_collect_view",
+    "shift_manage",
   ],
-  cashier: ["payment_create"],
+  // 6-fazagacha kassirda O'QISH huquqi UMUMAN YO'Q edi (o'lchandi: M-7) —
+  // u to'lov yoza olardi, lekin nima yozayotganini ko'ra olmasdi.
+  //
+  // ⛔ `market_data_view` / `vendor_view` / `camera_view` / `report_view`
+  // ATAYIN YO'Q: kassir yuzasida shaxsiy maydon strukturaviy ravishda
+  // imkonsiz bo'lib qoladi (C-10). Sabablar `rbac.py` docstringida.
+  cashier: ["payment_create", "billing_collect_view", "shift_manage"],
   inspector: ["occupancy_review"],
 };
 

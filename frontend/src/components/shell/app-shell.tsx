@@ -7,8 +7,10 @@ import {
   CalendarDays,
   ClipboardCheck,
   Ellipsis,
+  HandCoins,
   LayoutDashboard,
   Map,
+  ReceiptText,
   ScrollText,
   Store,
   UserRound,
@@ -65,6 +67,8 @@ type NavItem = {
     | "/snapshots"
     | "/review"
     | "/occupancy"
+    | "/collect"
+    | "/billing"
     | "/users"
     | "/audit"
     | "/markets/new";
@@ -79,6 +83,8 @@ type NavItem = {
     | "snapshots"
     | "review"
     | "occupancy"
+    | "collect"
+    | "billing"
     | "users"
     | "audit"
     | "newMarket";
@@ -243,6 +249,55 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/occupancy",
     labelKey: "occupancy",
     icon: Store,
+    permission: "report_view",
+    group: "market",
+  },
+  /*
+   * "Yig'ish" va "Patta hisobi" — 6-fazaning IKKITA yangi bo'limi
+   * (06-UI-SPEC §4.6).
+   *
+   * ⛔ ENG MUHIM NATIJA YANA NAVIGATSIYADA. Bugungacha `cashier` roli FAQAT
+   * Boshqaruv panelini ko'rardi (bitta yozuv) — ya'ni kassirning KUNLIK ishi
+   * uchun ekran umuman yo'q edi (o'lchandi: 06-UI-SPEC M-6/M-7). Shu ikki
+   * qatordan keyin u ikkita yozuv ko'radi va `/collect` uning UYIGA aylanadi.
+   *
+   * `/occupancy` DAN BEVOSITA KEYIN: domen zanjiri kamera -> kadr -> ko'rib
+   * chiqish -> bandlik -> YIG'ISH -> patta hisobi bo'lib o'qiladi. Ikkalasi
+   * ham `market` guruhida — patta bozor ICHIDAGI hodisa.
+   *
+   * ⛔ HUQUQLAR: `/collect` — `payment_create` (kassirda ALLAQACHON bor edi),
+   * `/billing` — `report_view` (direktor va bozor adminida bor). Yangi ikki
+   * huquq (`billing_collect_view`, `shift_manage`) MARSHRUT ICHIDAGI
+   * so'rovlarni qo'riqlaydi, menyuni EMAS: menyu "kim pul yig'adi" va "kim
+   * hisobot o'qiydi" degan savolga javob beradi, "kim proyeksiyani o'qiy
+   * oladi" degan savolga emas.
+   *
+   * MOBIL KONTRAKT BUZILMAYDI [O'LCHANDI: 06-UI-SPEC M-6]: ro'yxat 13 -> 15
+   * ga o'sdi, `MOBILE_PRIMARY_COUNT` esa 4 bo'lib qoladi. Kassirda jami ikki
+   * yozuv bor (`/dashboard` + `/collect`), ya'ni "Ko'proq" tugmasi unda
+   * umuman chizilmaydi va overflow NOL.
+   *
+   * ⛔ `/collect/shift` NAVIGATSIYAGA QO'SHILMAYDI: u `/collect` sahifasi
+   * sarlavhasidagi havola (`/cameras/[id]/zones` bilan bir xil naqsh — bola
+   * marshrut nav elementi emas). Menyudagi uchinchi yozuv kuniga 2 marta
+   * bosiladigan amalni kuniga 500 marta bosiladigani bilan TENG og'irlikka
+   * qo'yardi (§4.2).
+   *
+   * Ikonkalar: `HandCoins` (qo'lga pul — yig'ish) va `ReceiptText` (yozilgan
+   * hisob). `Banknote` BAND (`/tariffs`), `Receipt` esa `ReceiptText` bilan
+   * bir xil o'qilardi.
+   */
+  {
+    href: "/collect",
+    labelKey: "collect",
+    icon: HandCoins,
+    permission: "payment_create",
+    group: "market",
+  },
+  {
+    href: "/billing",
+    labelKey: "billing",
+    icon: ReceiptText,
     permission: "report_view",
     group: "market",
   },

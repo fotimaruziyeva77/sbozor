@@ -111,6 +111,60 @@ class Permission(StrEnum):
 
     # --- Operatsiya (5- va 6-fazalar) ---
     PAYMENT_CREATE = "payment_create"
+    BILLING_COLLECT_VIEW = "billing_collect_view"
+    """Kassir yig'ish yuzasining O'QISH huquqi (6-faza, C-9).
+
+    Qamrovi: `GET /billing/pending` (kutilayotgan patta proyeksiyasi) va
+    `GET /payments/recent` (shu smenada yozilgan to'lovlar). Egalari —
+    kassir, bozor admini, direktor.
+
+    ⛔ `require_any_permission()` YANGI MARSHRUTDA ISHLATILMAYDI (C-9). Kassir
+    va direktor bitta marshrutni bo'lishishi kerak bo'lganda yechim — BITTA
+    huquqni bir necha rolga berish (aynan shu huquq), «yo P yo Q» EMAS.
+    Sabab o'lchangan (M-8): `require_any_permission()` ning yopiq to'plami
+    bugun AYNAN BITTA marshrutda (`GET /snapshots/{id}/image`, 05-15) va uni
+    kengaytirish `SNAPSHOT_EVIDENCE_FRAME_ROUTES` darvozasini qayta ochardi.
+
+    =========================================================================
+    ⛔ KASSIR SHU HUQUQNI OLADI, LEKIN QUYIDAGI TO'RTTASINI OLMAYDI — VA HAR
+       BIRINING SABABI BOSHQA. Ro'yxat shu yerda, chunki keyingi ijrochi
+       «kassir rasta ro'yxatini ko'rsin» so'roviga aynan shu to'rttadan
+       bittasini qo'shish bilan javob berishga uringan bo'lardi.
+
+    `MARKET_DATA_VIEW` — `tests/tenancy/test_personal_data_coverage.py`
+        (`test_market_data_view_holders_already_have_vendor_view`) uning
+        HAR BIR egasida `VENDOR_VIEW` ham bo'lishini TALAB qiladi. Ya'ni bu
+        huquqni kassirga berish avtomatik ravishda ikkinchisini ham berardi.
+
+    `VENDOR_VIEW` — u butun shaxsiy-ma'lumot yuzasini ochadi (yuqoridagi
+        docstring). C-10: kassir yuzasida shaxsiy maydon YO'Q va bu
+        marshrut darajasidagi kod-ko'rik da'vosi emas, STRUKTURAVIY holat
+        bo'lishi kerak: huquq yo'q, demak `GET /vendors` — 403.
+
+    `CAMERA_VIEW` — dalil kadri kassirga KERAK EMAS: u pul yig'adi, hukm
+        chiqarmaydi. Bermaslik yuqoridagi `require_any_permission()` yopiq
+        to'plamini TEGILMAGAN qoldiradi (M-8).
+
+    `REPORT_VIEW` — kassir hisobot o'qimaydi. Qarz unga RASTA KESIMIDA,
+        proyeksiya ichida ko'rinadi (`billing_collect_view`), bozor kesimida
+        emas.
+    =========================================================================
+    """
+    SHIFT_MANAGE = "shift_manage"
+    """Smena ochish, ochiq smenani o'qish va ko'r deklaratsiya bilan yopish.
+
+    Qamrovi: `POST /shifts`, `GET /shifts/open`, `POST /shifts/{id}/close`.
+    Egalari — kassir va bozor admini.
+
+    ⛔ DIREKTORGA BERILMAYDI va bu tanlov: direktor variance ni `REPORT_VIEW`
+    ostidagi kun hisobotida ko'radi (`GET /shifts`), smenani O'ZI ochmaydi
+    ham, yopmaydi ham. D-26 bo'yicha variance HECH QACHON «to'g'rilanmaydi»,
+    ya'ni direktorga smena ustida YOZUV yuzasi umuman kerak emas.
+
+    ⚠ Kassirga berilmaydigan to'rt huquqning sababi yuqoridagi
+    `BILLING_COLLECT_VIEW` docstringida — u ikkala yangi huquq uchun ham
+    bir xil va ikki marta yozilmaydi.
+    """
     REPORT_VIEW = "report_view"
     OCCUPANCY_REVIEW = "occupancy_review"
     DISPUTE_DECIDE = "dispute_decide"
@@ -177,6 +231,10 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     # tarif reestrini ko'radi (hisobotlari shunsiz ma'nosiz), lekin birorta
     # `*_MANAGE` OLMAYDI. `test_director_is_read_only_on_market_data` shu
     # chegarani qulflaydi — matritsa kengayishi D-07 ni buzmasin.
+    #
+    # `BILLING_COLLECT_VIEW` 6-fazada QO'SHILDI: direktor kutilayotgan pattani
+    # BOZOR KESIMIDA ko'radi (`/billing?day=bugun`). U hamon FAQAT O'QISH —
+    # `PAYMENT_CREATE` ham, `SHIFT_MANAGE` ham berilmadi.
     Role.DIRECTOR: frozenset(
         {
             Permission.REPORT_VIEW,
@@ -186,6 +244,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.USER_VIEW,
             Permission.MARKET_DATA_VIEW,
             Permission.VENDOR_VIEW,
+            Permission.BILLING_COLLECT_VIEW,
         }
     ),
     # Bozor admini o'z bozorining hamma narsasini boshqaradi, LEKIN boshqa
@@ -193,6 +252,10 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     # boshqaruvi 3-fazada qo'shildi: `CAMERA_VIEW` unda allaqachon bor edi,
     # ya'ni u kameralarni KO'RA olardi, lekin nomini o'zgartira ham,
     # arxivlay ham olmasdi (W0-4).
+    # 6-fazada ikkala yangi huquq ham berildi: kichik bozorda bozor admini
+    # kassirni ALMASHTIRADI (D-05 birlashmasi buni yolg'iz hal qilmaydi —
+    # bozor admini kassir roli berilmagan holda ham smenani yopa olishi
+    # kerak, aks holda kassir kasal bo'lgan kuni kun umuman yopilmasdi).
     Role.MARKET_ADMIN: frozenset(
         {
             Permission.USER_MANAGE,
@@ -206,12 +269,28 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.REPORT_VIEW,
             Permission.CAMERA_VIEW,
             Permission.CAMERA_MANAGE,
+            Permission.BILLING_COLLECT_VIEW,
+            Permission.SHIFT_MANAGE,
         }
     ),
-    # Kassir — eng tor yuza: u faqat to'lov qayd etadi. Summani tarif
-    # belgilaydi (spec §4.7), ya'ni bu huquq "pul kiritish" emas,
-    # "to'lovni qayd etish".
-    Role.CASHIER: frozenset({Permission.PAYMENT_CREATE}),
+    # Kassir — eng tor yuza: u to'lov qayd etadi, o'z smenasini boshqaradi va
+    # yig'ish ekranidagi summani O'QIYDI. Summani tarif belgilaydi (spec
+    # §4.7), ya'ni `PAYMENT_CREATE` "pul kiritish" emas, "to'lovni qayd
+    # etish".
+    #
+    # 6-FAZAGACHA BU QATOR AYNAN BITTA HUQUQDAN IBORAT EDI va o'lchandi
+    # (M-7): kassir rasta ro'yxatini ham, proyeksiyani ham, smenani ham 403
+    # olardi — ya'ni u YOZA olardi, lekin nima yozayotganini KO'RA olmasdi.
+    # Yuza kengaydi, LEKIN `MARKET_DATA_VIEW`/`VENDOR_VIEW`/`CAMERA_VIEW`/
+    # `REPORT_VIEW` TEGILMADI: har birining rad etish sababi yuqoridagi
+    # `BILLING_COLLECT_VIEW` docstringida yozilgan.
+    Role.CASHIER: frozenset(
+        {
+            Permission.PAYMENT_CREATE,
+            Permission.BILLING_COLLECT_VIEW,
+            Permission.SHIFT_MANAGE,
+        }
+    ),
     # Nazoratchi — HITL navbati. U to'lov ham kirita olmaydi, jurnal ham
     # ko'rmaydi: uning ishi faqat "band/bo'sh" qarorini tasdiqlash.
     Role.INSPECTOR: frozenset({Permission.OCCUPANCY_REVIEW}),
