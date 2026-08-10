@@ -774,6 +774,7 @@
       "cameraOffline": "Камера узоқ вақт жавоб бермаяпти",
       "backupStale": "Захира нусха янгиланмади",
       "retentionStale": "Сақлаш сиёсати бажарилмади",
+      "billingCloseStale": "Кунлик патта ҳисоби ёзилмади",
       "diskPressure": "Диск тўлиб бормоқда",
       "credentialUnreadable": "NVR пароли ўқилмади",
       "nvrAccountLocked": "NVR ҳисоби қулфланди",

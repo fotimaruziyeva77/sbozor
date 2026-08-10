@@ -124,6 +124,7 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.jobs.billing_close import BILLING_CLOSE_COMPONENT
 from app.jobs.retention import RETENTION_COMPONENT, active_market_ids, disk_usage_percent
 from app.repositories.capture_repo import CaptureRepository
 from app.services.capture_errors import (
@@ -304,6 +305,14 @@ ALERT_META: Final[dict[str, AlertMeta]] = {
         AlertMeta("backup_stale", AlertSeverity.CRITICAL.value, True, True),
         AlertMeta("retention_stale", AlertSeverity.WARNING.value, False, True),
         AlertMeta("disk_pressure", AlertSeverity.CRITICAL.value, True, True),
+        # ⛔ `critical` VA BO'G'ILMAYDI — `retention_stale` (`warning`) DAN
+        #   FARQI ONGLI: saqlash siyosati bir kun o'tkazib yuborilsa disk
+        #   biroz to'ladi, patta hisobi o'tkazib yuborilsa esa O'SHA
+        #   KUNNING TUSHUMI umuman yozilmaydi va u kunlik hisobotdan
+        #   JIMGINA tushib qoladi. Bu `backup_stale` bilan bir sinf:
+        #   yo'qotish QAYTARIB BO'LMAYDIGAN emas (job konvergent), lekin
+        #   uni sezmaslik oyning oxirigacha cho'zilardi.
+        AlertMeta("billing_close_stale", AlertSeverity.CRITICAL.value, True, True),
         # -------------------------------------------------------------
         # 4-GURUH — XABAR, OCHIQ ISH EMAS.
         # -------------------------------------------------------------
@@ -608,6 +617,14 @@ async def _platform_signals(
     watched = (
         (BACKUP_COMPONENT, "backup_stale"),
         (RETENTION_COMPONENT, "retention_stale"),
+        # ⛔⛔ 06-07 QO'SHDI — VA BU O'LCHANGAN KO'RLIKNI YOPADI.
+        #   `billing.close` cron jadvali `import` PAYTIDA olinadi
+        #   (`worker.py:55-58`), ya'ni `scheduler` konteyneri qayta ishga
+        #   tushirilmasa vazifa RO'YXATGA OLINMAYDI: job hech qachon
+        #   ishlamaydi, patta hisobi yozilmaydi va HECH QANDAY xato
+        #   chiqmaydi. Buni birorta test ushlamaydi — pastdagi `None ham
+        #   eskirish` qoidasi esa AYNAN shu holatni alertga aylantiradi.
+        (BILLING_CLOSE_COMPONENT, "billing_close_stale"),
     )
     for component, key in watched:
         last_seen = seen.get(component)

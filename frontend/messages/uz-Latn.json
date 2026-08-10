@@ -774,6 +774,7 @@
       "cameraOffline": "Kamera uzoq vaqt javob bermayapti",
       "backupStale": "Zaxira nusxa yangilanmadi",
       "retentionStale": "Saqlash siyosati bajarilmadi",
+      "billingCloseStale": "Kunlik patta hisobi yozilmadi",
       "diskPressure": "Disk to'lib bormoqda",
       "credentialUnreadable": "NVR paroli o'qilmadi",
       "nvrAccountLocked": "NVR hisobi qulflandi",

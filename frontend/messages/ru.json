@@ -774,6 +774,7 @@
       "cameraOffline": "Камера долго не отвечает",
       "backupStale": "Резервная копия не обновлялась",
       "retentionStale": "Политика хранения не выполнялась",
+      "billingCloseStale": "Ежедневный расчёт патта не выполнялся",
       "diskPressure": "Диск заполняется",
       "credentialUnreadable": "Пароль NVR не читается",
       "nvrAccountLocked": "Учётная запись NVR заблокирована",

@@ -76,11 +76,15 @@ const SEVERITY_VIEW = {
  *    `errors.generic` ga tushadi: `capture_stopped` degan satrni ko'rgan
  *    admin uni nosozlik kodi deb o'qib, uni izlashga tushardi.
  *
- * Manba: `app/jobs/alerting.py::ALERT_META` — to'qqizta yozuv.
+ * Manba: `app/jobs/alerting.py::ALERT_META` — o'nta yozuv.
  * ⚠ `nvr_account_locked` UI-SPEC §11.9 jadvalida YO'Q edi va u shu
  *   rejada qo'shildi: u `critical` va HECH QACHON bo'g'ilmaydi, ya'ni
  *   matnsiz qolgan taqdirda admin eng shoshilinch xabarni «Kutilmagan
  *   xato» ko'rinishida olardi.
+ * ⚠ `billing_close_stale` 6-fazada qo'shildi va u AYNAN o'sha sinfda:
+ *   u `critical`, bo'g'ilmaydi va uning manbai «kunlik patta hisobi
+ *   umuman ishlamadi» — matnsiz qolganda admin platformaning eng
+ *   qimmat nosozligini «Kutilmagan xato» bo'lib ko'rardi.
  */
 const ALERT_TITLE_KEYS = {
   capture_stopped: "snapshots.alertKey.captureStopped",
@@ -90,6 +94,7 @@ const ALERT_TITLE_KEYS = {
   nvr_account_locked: "snapshots.alertKey.nvrAccountLocked",
   backup_stale: "snapshots.alertKey.backupStale",
   retention_stale: "snapshots.alertKey.retentionStale",
+  billing_close_stale: "snapshots.alertKey.billingCloseStale",
   disk_pressure: "snapshots.alertKey.diskPressure",
   capture_recovered: "snapshots.alertKey.captureRecovered",
 } as const;

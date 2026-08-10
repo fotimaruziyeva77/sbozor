@@ -111,6 +111,7 @@ EXPECTED_COMPONENTS: Final[tuple[str, ...]] = (
     "retention",
     "backup",
     "cv_detect",
+    "billing_close",
 )
 """Yurak urishi KUTILADIGAN fon komponentlari.
 
@@ -137,6 +138,31 @@ EXPECTED_COMPONENTS: Final[tuple[str, ...]] = (
   bool(seen)` — `never_seen` `ok` ga TA'SIR QILMAYDI (fayl boshidagi
   oxirgi blok). Ya'ni endpoint bugun ham `200` qaytaradi va javobda
   `cv_detect` `never_seen` ro'yxatida OCHIQ ko'rinadi.
+
+=============================================================================
+⛔⛔ `billing_close` — 6-FAZADA QO'SHILDI VA U MEXANIK KO'RLIKNI YOPADI.
+
+Satr `app/jobs/billing_close.py::BILLING_CLOSE_COMPONENT` bilan AYNAN bir
+xil bo'lishi SHART va ular MATN sifatida bog'langan (reyestr jadvaldan
+hosila EMAS — yuqoridagi birinchi ⚠). Nom ayrilsa endpoint uni MANGU
+`never_seen` da ko'rsatardi, holbuki job ishlab turardi.
+
+⛔ NEGA BU QATOR KERAK: cron jadvali `import` PAYTIDA olinadi
+(`worker.py:55-58`), ya'ni `scheduler` konteyneri qayta ishga
+tushirilmasa `billing.close` vazifasi RO'YXATGA OLINMAYDI — job hech
+qachon ishlamaydi va HECH QANDAY xato chiqmaydi. Birorta test buni
+ushlamaydi (testlar reyestrni jarayonning O'ZIDA o'qiydi). Bu qator
+(va `alerting.py::watched` dagi jufti) — YAGONA mexanik himoya.
+
+⚠ `day_close` ATAYIN QO'SHILMADI va bu qarz sifatida OCHIQ yozilgan:
+  u 5-faza domeni va uning AYNAN SHU bo'shlig'i (yurak urishi
+  `system_heartbeats` ga yoziladi, lekin uning YO'QLIGI hech qayerda
+  ko'rinmaydi) shu rejaning SUMMARY sida nomlangan o'tkazma band bo'lib
+  qoladi. Uni «yo'l-yo'lakay» qo'shish 6-fazani 5-fazaning qarziga
+  bog'lardi: `day_close` ning yurak urishi 5-fazadagi testlar bilan
+  o'lchanadi va reyestrga qo'shilishi ularning kutilmasini ham
+  siljitardi.
+=============================================================================
 """
 
 _OK = "ok"

@@ -50,6 +50,7 @@ from app.jobs.alerting import (
     alert_sweep,
     daily_digest,
 )
+from app.jobs.billing_close import BILLING_CLOSE_COMPONENT
 from app.jobs.capture import CapturePolicy, capture_tick
 from app.jobs.retention import RETENTION_COMPONENT
 from app.services.alerts import TELEGRAM_API_BASE, TELEGRAM_SEND_METHOD, AlertSender
@@ -79,12 +80,19 @@ SEND_URL = f"{TELEGRAM_API_BASE}/bot{TOKEN}/{TELEGRAM_SEND_METHOD}"
 CAMERA_COUNT = 22
 """§E.13 ning aniq stsenariysi: 25 kameradan 22 tasi bitta slotda yiqildi."""
 
-_PLATFORM_COMPONENTS = (BACKUP_COMPONENT, RETENTION_COMPONENT)
+_PLATFORM_COMPONENTS = (BACKUP_COMPONENT, RETENTION_COMPONENT, BILLING_CLOSE_COMPONENT)
 """Platforma darajasidagi yurak urishlari — `bed` ularni YANGI qilib qo'yadi.
 
 Sabab `bed` fixture'ining docstringida: ular yo'q bo'lganda supurgi HAR
-YUGURISHDA ikkita platforma alertini ko'taradi va bozor guruhlashining
-o'lchovini shovqin bilan aralashtiradi.
+YUGURISHDA platforma alertini ko'taradi va bozor guruhlashining o'lchovini
+shovqin bilan aralashtiradi.
+
+⚠ `BILLING_CLOSE_COMPONENT` 06-07 DA QO'SHILDI VA SABAB O'LCHANDI, uslub
+  emas: u `watched` ga qo'shilgan zahoti guruhlash testlarining
+  `route.call_count == 1` da'vosi 2 ga chiqardi — mahsulot TO'G'RI ishlab
+  turgan holda (yurak urishi hali yozilmagan). Ro'yxatga qo'shish o'sha
+  shovqinni CHIQARIB tashlaydi; `billing_close_stale` ning O'ZI esa
+  pastdagi ALOHIDA testda IKKI YO'NALISHDA o'lchanadi.
 """
 
 _INSERT_RUN = (
@@ -551,6 +559,63 @@ async def test_stale_heartbeat_alerts(
     assert "backup_stale" in missing, "YOZILMAGAN yurak urishi alert bermadi"
     assert "backup_stale" in stale, "ESKIRGAN yurak urishi alert bermadi"
     assert "backup_stale" not in fresh, "YANGI yurak urishi ham alert berdi"
+
+
+async def test_a_missing_billing_close_heartbeat_is_visible(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sender: AlertSender,
+    bed: _Bed,
+) -> None:
+    """⛔ M-C — «CRON RO'YXATGA OLINMAGAN» HOLATI ENDI ALERT BERADI (06-07).
+
+    =========================================================================
+    ⛔⛔ BU DARVOZA MEXANIK RAVISHDA USHLANMAYDIGAN BANDNING YAGONA HIMOYASI.
+
+    `billing.close` cron jadvali `import` PAYTIDA olinadi
+    (`worker.py:55-58`), ya'ni deployda `scheduler` konteyneri qayta ishga
+    tushirilmasa vazifa RO'YXATGA OLINMAYDI: patta hisobi hech qachon
+    yozilmaydi, xato ham chiqmaydi, jurnalda ham hech nima qolmaydi.
+    Birorta test buni ushlay olmaydi — testlar reyestrni jarayonning
+    O'ZIDA o'qiydi.
+
+    `None` HAM ESKIRISH qoidasi (`_platform_signals` dagi ⚠⚠) aynan shu
+    holatni alertga aylantiradi: qator UMUMAN yozilmagan bo'lsa ham
+    `billing_close_stale` ochiladi.
+
+    =========================================================================
+    ⛔ DA'VO IKKI YO'NALISHLI VA BUSIZ U BO'SH BO'LARDI:
+
+      * yurak urishi YO'Q  -> alert OCHILADI;
+      * yurak urishi YANGI -> alert OCHILMAYDI.
+
+    Faqat birinchisi yozilganda «supurgi har doim alert ochadi» degan
+    nosozlik ham yashil qolardi.
+    =========================================================================
+    """
+    bed.drop_heartbeat(BILLING_CLOSE_COMPONENT)
+    moment = datetime.now(tz=MARKET_TZ)
+
+    async with respx.mock(assert_all_called=False) as router:
+        router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+        await _sweep(api_sessionmaker, sender, now=moment)
+        missing = [row["alert_key"] for row in bed.alerts()]
+
+        bed.set_heartbeat(BILLING_CLOSE_COMPONENT, hours_ago=1)
+        bed.conn.execute("DELETE FROM alert_events WHERE market_id = %s", (str(bed.market_id),))
+        await _sweep(api_sessionmaker, sender, now=moment + timedelta(minutes=1))
+        fresh = [row["alert_key"] for row in bed.alerts()]
+
+    assert "billing_close_stale" in missing, (
+        "`billing_close` yurak urishi UMUMAN yozilmagan holat alert BERMADI — "
+        "«cron ro'yxatga olinmagan» nosozligi jimgina qolardi (M-C)"
+    )
+    assert "billing_close_stale" not in fresh, (
+        "YANGI yurak urishi ham alert berdi — supurgi har yugurishda shovqin qo'shardi"
+    )
+    assert "billing_close_stale" in PLATFORM_SCOPED_ALERT_KEYS, (
+        "platforma alerti bozor darajasiga tushib qolgan — u har bozorga alohida "
+        "Telegram xabari bo'lib chiqardi"
+    )
 
 
 async def test_a_never_suppressed_alert_ignores_the_debounce_window(
