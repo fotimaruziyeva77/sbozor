@@ -38,6 +38,8 @@ __all__ = [
     "ALL_RLS_TABLES",
     "ALL_TENANT_TABLES",
     "CALENDAR_TENANT_TABLES",
+    "GENERATED_FROM_COLUMN_MEASURED_AT",
+    "GENERATED_FROM_COLUMN_SUPPORTED",
     "IDEMPOTENT_GET_OR_CREATE_MEASURED_AT",
     "IDEMPOTENT_GET_OR_CREATE_SUPPORTED",
     "MARKET_DOMAIN_TENANT_TABLES",
@@ -596,3 +598,43 @@ savolga aylanardi (`billable_probe.BillableProbe.server_version` bilan
 aynan bir xil sabab). PG major versiyasi ko'tarilganda zond QAYTA
 yugurtiriladi va bu satr yangilanadi.
 """
+
+GENERATED_FROM_COLUMN_SUPPORTED: Final[bool] = True
+"""A2 O'LCHOVI — `GENERATED ALWAYS AS (<oddiy ustun>) STORED` PG 18 da mumkinmi.
+
+**O'lchov:** 2026-08-10, `PostgreSQL 18.4 (Debian trixie)`, testcontainer.
+**O'lchaydigan test:** `tests/tenancy/test_generated_from_column_probe.py::
+test_generated_from_plain_column_is_accepted_or_rejected` — vaqtinchalik
+jadvalda `business_date date GENERATED ALWAYS AS (service_date) STORED`;
+DDL o'tsa qiymatning KO'CHIRILISHI va `attgenerated = 's'` tekshiriladi.
+**Nazorat o'lchovi:** `test_generated_from_created_at_is_accepted` —
+`migrations.helpers.BUSINESS_DATE_EXPR` (`created_at` dan hosila) shakli
+ishlaydi. Usiz `False` natijasi «umuman generated ustun ishlamaydi» degan
+NOTO'G'RI xulosa berardi.
+
+⛔ **QAROR: `0020` BARIBIR VARIANT A NI ISHLATADI** — o'lchov natijasi
+`True` bo'lgani bu qarorni O'ZGARTIRMAYDI. `daily_charges` da
+`service_date date NOT NULL` DOMEN ustuni bo'ladi va `business_date`
+`created_at` DAN hosila qilinadi (`migrations/versions/0008_temporal.py:
+164-206` presedenti, `financial_guard_statements()` chiqaradigan DDL).
+
+**Nega Variant B rad etildi (C-2):** u `test_financial_tables_have_guards`
+ning `attgenerated = 's'` talabini SHAKL UCHUN bajarardi, lekin «qator
+QACHON YOZILGAN» degan AUDIT FAKTINI butunlay yo'qotardi — backfill bilan
+normal `billing_close` farqlanmasdi, chunki ikkala holatda ham
+`business_date == service_date` bo'lardi. D-02 ning nizo modeli
+(«nizoda qaysi yozuv dalil?») aynan shu faktga tayanadi, ya'ni uni
+ustunlar sonini kamaytirish evaziga sotib bo'lmaydi.
+
+⚠ **MARKER HUJJAT SIFATIDA QOLADI.** Uning qiymati birorta migratsiyani
+shoxlantirmaydi — u «yana bir variant bor edi, nega tanlanmadi?» degan
+savolga O'LCHOV bilan javob beradi. Usiz keyingi faza variantni qaytadan
+o'ylab topib, uni qaytadan rad etishga majbur bo'lardi.
+
+⛔ **QIYMAT QO'LDA YOZILMAYDI.** Test uni O'QIB o'lchov natijasi bilan
+solishtiradi (`assert probe.plain_column_supported is
+GENERATED_FROM_COLUMN_SUPPORTED`).
+"""
+
+GENERATED_FROM_COLUMN_MEASURED_AT: Final[str] = "2026-08-10 · PostgreSQL 18.4"
+"""A2 o'lchovining sanasi va serveri (`IDEMPOTENT_..._MEASURED_AT` bilan bir sabab)."""
