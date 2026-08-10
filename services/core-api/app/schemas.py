@@ -38,6 +38,7 @@ from sbozor_core.money import MAX_SAFE_SOUM
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
 from app.jobs.discovery import DISCOVERY_JOB_ERROR_CODES
+from app.services.billing_errors import SERVER_BILLING_ERROR_CODES
 from app.services.capture_errors import CAPTURE_JOB_ERROR_CODES
 from app.services.isapi.errors import NVR_ERROR_CODES
 from app.services.occupancy_errors import OCCUPANCY_ERROR_CODES
@@ -645,6 +646,24 @@ MARKET_ERROR_CODES: Final[frozenset[str]] = frozenset(
         #   `errors.generic` ga tushirardi va admin poligonning QAYSI
         #   qoidasini buzganini bilmasdi.
         *OCCUPANCY_ERROR_CODES,
+        # --- billing va kassir domeni (06-02, BILL-02/03, CASH-01…04) ---
+        #
+        # ⚠ IMPORT QILINADI, QO'LDA TAKRORLANMAYDI (§S-7) — yuqoridagi to'rt
+        #   reyestr bilan aynan bir xil qoida.
+        #
+        # ⚠ AYNAN `SERVER_BILLING_ERROR_CODES`, `ALL_BILLING_ERROR_CODES`
+        #   EMAS: ikkinchisida `network_unreachable` ham bor va u FAQAT
+        #   mijoz tomonidagi kod — serverdan hech qachon qaytmaydi. Uni bu
+        #   yerga kiritish allowlist'ni "server nima qaytarishi mumkin"
+        #   degan savolga NOTO'G'RI javob beradigan qilardi.
+        #
+        # ⚠ KODLAR 06-02 DA REYESTRGA OLINDI, marshrutlar esa 06-09 da
+        #   yoziladi. Allowlist AVVAL to'ldirildi ATAYIN: teskari tartibda
+        #   router `stall_not_assigned` bilan `HTTPException` ko'tarardi,
+        #   allowlist uni tanimay `errors.generic` ga tushirardi va kassir
+        #   "bu rastaga sotuvchi biriktirilmagan" o'rniga umumiy xato
+        #   matnini ko'rardi — nosozlik FAQAT dala sinovida ko'rinardi.
+        *SERVER_BILLING_ERROR_CODES,
     }
 )
 """2-faza qaytaradigan BARCHA `detail` kodlari — yigirma to'rtta.

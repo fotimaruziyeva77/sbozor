@@ -1127,6 +1127,36 @@
       "wrong_amount": "Нотўғри сумма",
       "duplicate_entry": "Такрорий киритиш",
       "customer_refund": "Сотувчига қайтарилди"
+    },
+    "errorCause": {
+      "stall_not_found": "Бундай рақамли раста топилмади",
+      "tariff_missing": "Бу растанинг бугунги тарифи белгиланмаган",
+      "amount_unavailable": "Сервер суммани бермади",
+      "market_closed": "Бугун бозор ёпиқ — бугунги патта ҳисобланмайди",
+      "stall_not_assigned": "Бу растага сотувчи бириктирилмаган",
+      "override_not_applicable": "Сумма сервер таклифига тенг — сабаб керак эмас",
+      "reason_required": "Сабаб танланмаган",
+      "idempotency_key_reused": "Бу тўлов варағи бошқа сумма билан юборилди",
+      "payment_already_reversed": "Бу тўлов аллақачон бекор қилинган",
+      "no_open_shift": "Очиқ смена йўқ",
+      "shift_already_open": "Сизда очиқ смена бор",
+      "shift_already_closed": "Бу смена аллақачон ёпилган",
+      "network_unreachable": "Тармоқ узилди"
+    },
+    "errorFix": {
+      "stall_not_found": "Рақамни текшириб қайта киритинг",
+      "tariff_missing": "Тариф саҳифасида тоифа нархини киритинг",
+      "amount_unavailable": "Саҳифани янгиланг — сумма сервердан келади ва қўлда киритилмайди",
+      "market_closed": "Фақат эски қарзни олиш мумкин; қарз ҳам йўқ бўлса бугун бу растага тўлов ёзилмайди",
+      "stall_not_assigned": "Бириктиришлар саҳифасида сотувчини бириктиринг — тўлов сотувчига ёзилади",
+      "override_not_applicable": "Сабабни олиб ташлаб қайтадан юборинг",
+      "reason_required": "Рўйхатдан сабаб танланг",
+      "idempotency_key_reused": "Саҳифани янгилаб қайтадан киритинг",
+      "payment_already_reversed": "Янги тўлов киритинг",
+      "no_open_shift": "Аввал сменани очиш керак",
+      "shift_already_open": "Аввалги сменани ёпинг",
+      "shift_already_closed": "Янги смена очиш",
+      "network_unreachable": "Қайта юборинг — дубликат яратилмайди"
     }
   },
   "billing": {
@@ -1165,6 +1195,12 @@
     "varianceMatch": "Мос келди",
     "shiftlessPayments": "Сменасиз тўловлар",
     "chargesLaterNotice": "Кунлик патта кун ёпилгандан кейин, эртаси куни эрталаб ёзилади.",
-    "amountUnit": "сўм"
+    "amountUnit": "сўм",
+    "errorCause": {
+      "charge_immutable": "Ёзилган ҳисоб ўзгартирилмайди"
+    },
+    "errorFix": {
+      "charge_immutable": "Тузатишни алоҳида ёзув сифатида киритинг"
+    }
   }
 }

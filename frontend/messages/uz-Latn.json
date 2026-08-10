@@ -1127,6 +1127,36 @@
       "wrong_amount": "Noto'g'ri summa",
       "duplicate_entry": "Takroriy kiritish",
       "customer_refund": "Sotuvchiga qaytarildi"
+    },
+    "errorCause": {
+      "stall_not_found": "Bunday raqamli rasta topilmadi",
+      "tariff_missing": "Bu rastaning bugungi tarifi belgilanmagan",
+      "amount_unavailable": "Server summani bermadi",
+      "market_closed": "Bugun bozor yopiq — bugungi patta hisoblanmaydi",
+      "stall_not_assigned": "Bu rastaga sotuvchi biriktirilmagan",
+      "override_not_applicable": "Summa server taklifiga teng — sabab kerak emas",
+      "reason_required": "Sabab tanlanmagan",
+      "idempotency_key_reused": "Bu to'lov varag'i boshqa summa bilan yuborildi",
+      "payment_already_reversed": "Bu to'lov allaqachon bekor qilingan",
+      "no_open_shift": "Ochiq smena yo'q",
+      "shift_already_open": "Sizda ochiq smena bor",
+      "shift_already_closed": "Bu smena allaqachon yopilgan",
+      "network_unreachable": "Tarmoq uzildi"
+    },
+    "errorFix": {
+      "stall_not_found": "Raqamni tekshirib qayta kiriting",
+      "tariff_missing": "Tarif sahifasida toifa narxini kiriting",
+      "amount_unavailable": "Sahifani yangilang — summa serverdan keladi va qo'lda kiritilmaydi",
+      "market_closed": "Faqat eski qarzni olish mumkin; qarz ham yo'q bo'lsa bugun bu rastaga to'lov yozilmaydi",
+      "stall_not_assigned": "Biriktirishlar sahifasida sotuvchini biriktiring — to'lov sotuvchiga yoziladi",
+      "override_not_applicable": "Sababni olib tashlab qaytadan yuboring",
+      "reason_required": "Ro'yxatdan sabab tanlang",
+      "idempotency_key_reused": "Sahifani yangilab qaytadan kiriting",
+      "payment_already_reversed": "Yangi to'lov kiriting",
+      "no_open_shift": "Avval smenani ochish kerak",
+      "shift_already_open": "Avvalgi smenani yoping",
+      "shift_already_closed": "Yangi smena ochish",
+      "network_unreachable": "Qayta yuboring — dublikat yaratilmaydi"
     }
   },
   "billing": {
@@ -1165,6 +1195,12 @@
     "varianceMatch": "Mos keldi",
     "shiftlessPayments": "Smenasiz to'lovlar",
     "chargesLaterNotice": "Kunlik patta kun yopilgandan keyin, ertasi kuni ertalab yoziladi.",
-    "amountUnit": "so'm"
+    "amountUnit": "so'm",
+    "errorCause": {
+      "charge_immutable": "Yozilgan hisob o'zgartirilmaydi"
+    },
+    "errorFix": {
+      "charge_immutable": "Tuzatishni alohida yozuv sifatida kiriting"
+    }
   }
 }
