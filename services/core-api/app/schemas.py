@@ -41,6 +41,7 @@ from sbozor_core.enums import (
     DiscoveryRunStatus,
     Locale,
     OccupancyVerdict,
+    ReversalReason,
     Role,
     StallStatus,
 )
@@ -131,12 +132,16 @@ __all__ = [
     "OccupancyRoundResponse",
     "OccupancyStallItem",
     "ConfusionMatrixOut",
+    "PaymentCreateRequest",
+    "PaymentResponse",
+    "PaymentReverseRequest",
     "PendingLookupResponse",
     "PendingMarketResponse",
     "PendingStallResponse",
     "ProportionIntervalOut",
     "ProfileResponse",
     "QueueBudget",
+    "RecentPaymentsResponse",
     "RefreshResponse",
     "ReviewBudgetResponse",
     "ReviewItemResponse",
@@ -3241,3 +3246,180 @@ class AnomalyListResponse(BaseModel):
     """`closed_day_occupied` — «Yopiq kunda savdo» (D-10)."""
     no_coverage_count: int
     """`no_coverage_stall` — «Qamrovsiz rasta» (D-05). ⛔ Yuqoridagilarga QO'SHILMAYDI."""
+
+
+# ---------------------------------------------------------------------------
+# 06-09: KASSIRNING YOZUV YUZASI (CASH-01…CASH-03)
+#
+# ⛔⛔ YUQORIDAGI 06-08 BLOKINING «E'LON QILMASLIK» NAQSHI SHU YERDA HAM
+#    TO'LIQ KUCHDA — VA U ENDI **SO'ROV** MODELLARIGA HAM QO'LLANADI.
+#
+# `PaymentCreateRequest` da `quote_soum` maydoni YO'Q. Bu D-20 ning
+# so'rov tomonidagi shakli: server bergan summani MIJOZ yubora olsa,
+# `payments` dagi juftlangan `CHECK ((amount_soum = quote_soum) =
+# (override_reason IS NULL))` ⛔ **CHETLAB O'TILARDI** — kassir
+# `quote_soum = amount_soum` deb yuborib har qanday summani sababsiz
+# yozardi va D-19 ning butun narxi bekor bo'lardi. Maydonni `None`
+# standarti bilan e'lon qilish ham YETARLI EMAS: keyingi bosqich BIR
+# SATRLIK bo'lardi.
+#
+# ⛔ `charge_id` HAM YO'Q — na so'rovda, na javobda (D-24/C-4): to'lov
+#    hisobga bog'lanmaydi va bog'lanish uchun narsaning O'ZI yo'q (hisob
+#    D+1 04:10 da tug'iladi, to'lov esa BUGUN yoziladi).
+#
+# ⛔ `shift_id` HAM SO'ROVDA YO'Q va bu 06-09 ning ONGLI chetlanishi —
+#    sabab `PaymentCreateRequest` docstringida (T-06-57).
+# ---------------------------------------------------------------------------
+
+
+class PaymentCreateRequest(BaseModel):
+    """`POST /payments` tanasi — ⛔ MIJOZ PUL MAYDONI YUBORMAYDI (D-20).
+
+    =======================================================================
+    ⛔⛔ E'LON QILINMAGAN MAYDONLAR — NOM BILAN:
+
+        quote_soum   — D-20; server `payment_quote_set()` dan tanlaydi
+        charge_id    — D-24/C-4; to'lov hisobga bog'lanmaydi
+        shift_id     — T-06-57; server SO'ROVCHINING ochiq smenasini
+                       o'zi yechadi
+        service_date — kun `business_today()`; o'tmish kuniga to'lov
+                       yozish yuzasi 6-fazada QURILMAYDI
+        vendor_id    — u `stall_code` dan yechiladi (D-28); mijozdan
+                       olish begona sotuvchiga to'lov yozish yo'lini
+                       ochardi
+    =======================================================================
+
+    ⛔ **`shift_id` NEGA MIJOZDAN OLINMAYDI** (rejadan ONGLI chetlanish):
+       uni qabul qilish kassirga **boshqa kassirning** ochiq smenasiga
+       to'lov yozish imkonini berardi va o'sha smenaning ko'r
+       deklaratsiyasi (D-25) begona pul bilan ifloslanardi — variance
+       hisobotida sababi topilmaydigan farq chiqardi. Bu `quote_soum`
+       bilan **AYNAN BIR XIL** sinf: server o'zi biladigan qiymatni
+       mijozdan olmaydi. Server `payment_repo.open_shift_id()` bilan
+       yechadi; ochiq smena bo'lmasa `NULL` (OQ-6/A5 — direktor smenasiz
+       kiritishi mumkin).
+
+    ⚠ **MAYDON NOMI `reason_code`, `override_reason` EMAS** — va bu
+      KLIENT KONTRAKTIDAN keladi: `frontend/src/lib/payment-queries.ts`
+      ning `PaymentInput` tipi (06-03, allaqachon merge qilingan) aynan
+      shu nomni yuboradi. `extra="forbid"` ostida ikkinchi nom **422**
+      berardi va 06-11 ning kassir paneli birinchi bosishdayoq
+      yiqilardi. Ustun nomi `payments.override_reason` bo'lib qoladi;
+      ikki nom orasidagi ko'chirish ⛔ **AYNAN BITTA joyda** —
+      `api/v1/payments.py` handlerida.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    idempotency_key: Annotated[str, StringConstraints(min_length=8, max_length=128)]
+    """D-21 ning kaliti — ⛔ MIJOZ BERADI va u sahifa holatida yashaydi (§8.7).
+
+    ⚠ Uzunlik chegarasi bor, SHAKLI esa YO'Q (UUID talab qilinmaydi):
+      kalit server uchun **shaffof satr** va uning ma'nosi faqat
+      «bu o'sha so'rovmi?» — formatni majburlash klientni server
+      tanlagan shaklga bog'lab qo'yardi.
+    """
+    stall_code: Annotated[str, StringConstraints(min_length=1, max_length=32)]
+    """⛔ Kassir yuzasidagi YAGONA identifikator (§5.5) — `stall_id` EMAS."""
+    method: Literal["cash", "terminal"]
+    """`payments.method`. ⛔ Uchinchi tur YO'Q (`PaymentMethod` docstringi)."""
+    amount_soum: int = Field(gt=0, le=MAX_SAFE_SOUM)
+    """AMALDA olinadigan summa. ⛔ `> 0` — nol to'lov to'lov emas."""
+    reason_code: AdjustmentReason | None = None
+    """Server taklifidan CHETLANISH sababi (D-19).
+
+    ⛔ IKKI TOMONLAMA MAJBURIY: chetlanish bor-u sabab yo'q -> **422
+       `reason_required`**; chetlanish yo'q-u sabab bor -> **422
+       `override_not_applicable`**. Shart handlerda, juftlangan `CHECK`
+       esa sxemada — himoya IKKI QATLAM (06-04).
+    """
+
+
+class PaymentReverseRequest(BaseModel):
+    """`POST /payments/{payment_id}/reverse` tanasi — sabab ⛔ MAJBURIY (D-23).
+
+    ⚠ `reason_code` `ReversalReason` DAN, `AdjustmentReason` DAN EMAS: ular
+      ikki BOSHQA yopiq to'plam (`payments.reversal_reason` va
+      `payments.override_reason` ustunlari ham alohida `CHECK` bilan
+      qulflangan). Birlashtirish «bekor qilish sababi» bilan «summa
+      o'zgarishi sababi» ni bir hisobotda aralashtirardi.
+
+    ⛔ MAYDON IXTIYORIY EMAS: standart qiymat berilsa birinchi shoshilinch
+       tuzatishda u bo'sh ketardi va hisobotda «sababsiz storno» guruhi
+       paydo bo'lardi (D-19 ning aynan oldini olayotgan holati).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason_code: ReversalReason
+
+
+class PaymentResponse(BaseModel):
+    """Yozilgan to'lov qatori — ⛔ KALITLAR TO'PLAMI AYNAN SAKKIZTA (§8.8).
+
+    =======================================================================
+    ⛔⛔ E'LON QILINMAGAN MAYDONLAR — NOM BILAN (yashirilgan EMAS):
+
+        charge_id                       — D-24/C-4
+        vendor_id · vendor_name · phone — C-10 + §5.5
+        quote_soum · override_reason    — D-20; ular «server qancha taklif
+                                          qilgan edi?» savolining KIRISH
+                                          ma'lumoti va u nizoda AUDITDAN
+                                          o'qiladi, ekrandan emas
+        shift_id · cashier_id           — kassir o'z yozuvini ko'radi;
+                                          identifikatorlar unga ma'nosiz
+        shift_total · running_total     — ⛔ D-25: har qanday YIG'INDI
+                                          maydoni ko'r deklaratsiyani
+                                          arifmetika bilan buzardi
+    =======================================================================
+
+    ⚠ To'plam `frontend/src/lib/payment-queries.ts::paymentResponseSchema`
+      (`z.strictObject`, 06-03) bilan AYNAN bir xil — test ikkalasini
+      solishtiradi.
+
+    ⚠ `reversed` — ⛔ HOSILA, saqlangan ustun EMAS: storno o'z qatori
+      bo'lgani uchun «bu to'lov bekor qilinganmi?» savoli mavjudlik
+      so'rovi bilan javob oladi (D-23).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    payment_id: UUID
+    stall_code: str
+    service_date: date
+    """⛔ «Qaysi kun UCHUN kiritildi», «qaysi kunning pattasi YOPILDI» EMAS.
+
+    Ikkinchisi `allocate_charge_credit()` ning `FIFO_OLDEST_SERVICE_DATE_
+    FIRST` hosila qoidasidan chiqadi va HECH QAYERDA saqlanmaydi (D-24).
+    """
+    amount_soum: int
+    kind: Literal["payment", "reversal"]
+    method: Literal["cash", "terminal"]
+    created_at: datetime
+    reversed: bool
+
+
+class RecentPaymentsResponse(BaseModel):
+    """`GET /payments/recent` — ⛔ OYNA SERVERDA QAT'IY 5 (§8.8, §10.3).
+
+    =======================================================================
+    ⛔⛔ NA YIG'INDI, NA UMUMIY SANOQ, NA KEYINGI SAHIFA BELGISI.
+
+    Kassir o'zi yozgan to'lovlarni ko'rishi KERAK (bekor qilish uchun).
+    Lekin u smenasining HAMMA to'lovini ko'rsa, ularni **qo'shib** tizim
+    summasini chiqarib olardi va §10.3 ning ko'r deklaratsiyasi
+    ⛔ **ARIFMETIKA BILAN** buzilardi.
+
+    Shuning uchun bu modelda `total`/`count`/`next_cursor` NOMLI maydon
+    YO'Q, marshrutda esa `limit`/`offset`/`cursor` **parametri** yo'q —
+    yig'indi yo'lini **maydon yashirish** emas, ⛔ **marshrutning
+    imkoniyati** to'sadi.
+    =======================================================================
+
+    ⚠ Bo'sh `items` — «natija», nosozlik emas: ochiq smenasi bo'lmagan
+      foydalanuvchi (direktor) bo'sh ro'yxat oladi, **404 emas**.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[PaymentResponse]

@@ -54,6 +54,7 @@ from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
 from app.api.v1.nvr import router as nvr_router
 from app.api.v1.occupancy import router as occupancy_router
+from app.api.v1.payments import router as payments_router
 from app.api.v1.reviews import router as reviews_router
 from app.api.v1.schedules import router as schedules_router
 from app.api.v1.snapshots import alerts_router, capture_runs_router
@@ -289,6 +290,28 @@ app.include_router(occupancy_router, prefix=f"{API_V1_PREFIX}/occupancy")
 # Yangi yo'l parametri (`charge_id`) cross-tenant matritsasining
 # `PARAM_FILLERS` iga B bozorining HAQIQIY hisobi bilan qo'shildi.
 app.include_router(billing_router, prefix=f"{API_V1_PREFIX}/billing")
+# --- 06-09: KASSIRNING YOZUV YUZASI (CASH-01…CASH-03) ---
+#
+# ⛔ ALOHIDA PREFIKS, `/billing` OSTIDA EMAS — VA BU MAHSULOT QARORI,
+# fayl uzunligi masalasi emas. `/billing/*` — DIREKTORNING o'qish yuzasi
+# (`report_view`), `/payments/*` esa KASSIRNING yozuv yuzasi
+# (`payment_create`, u D-07 matritsasida YOLG'IZ kassirda). Ularni bitta
+# prefiksga yig'ish ikki ROLNI bitta resurs daraxtiga bog'lardi va
+# `/billing` ni «hamma narsa shu yerda» degan chalkash yuzaga aylantirardi.
+#
+# ⛔ RESURS NOMI KO'PLIKDA VA U KLIENT KONTRAKTIDAN:
+# `frontend/src/lib/payment-queries.ts::PAYMENTS_PATH = "/payments"`
+# (06-03, allaqachon merge qilingan). Boshqa nom 06-11 ning kassir
+# panelini birinchi bosishdayoq 404 ga tushirardi.
+#
+# ⛔ `PATCH`/`PUT`/`DELETE` BU PREFIKSDA UMUMAN YO'Q (D-23) — `payments`
+# append-only va tuzatish FAQAT storno (`POST /{id}/reverse`). OpenAPI
+# to'plam tengligi buni `test_payments_api.py` da qulflaydi.
+#
+# Yangi yo'l parametri (`payment_id`) cross-tenant matritsasining
+# `PARAM_FILLERS` iga, ikkala `POST` esa `BODY_FILLERS` VA
+# `CASHIER_ROUTES` ga qo'shildi (OP-8/OP-9).
+app.include_router(payments_router, prefix=f"{API_V1_PREFIX}/payments")
 # --- 04-09: snapshot jadvali (CAM-04, D-05) ---
 #
 # ⚠ ALOHIDA PREFIKS, `cameras` OSTIDA EMAS — `cameras` ning `nvr-devices`
