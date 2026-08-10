@@ -165,7 +165,12 @@ def _report_day(day: date | None) -> date:
     today = business_today()
     resolved = today - timedelta(days=1) if day is None else day
     if resolved > today:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=_DAY_IN_FUTURE)
+        # ⚠ `HTTP_422_UNPROCESSABLE_CONTENT` — RFC 9110 dagi joriy nom
+        #   (`audit.py:184-187` da o'rnatilgan qoida). Eski `..._ENTITY`
+        #   aliasi Starlette'da DEPRECATED va ogohlantirish beradi.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_DAY_IN_FUTURE
+        )
     return resolved
 
 
