@@ -103,7 +103,7 @@ from typing import TYPE_CHECKING, Final
 from uuid import UUID, uuid4
 
 from sbozor_core.enums import PaymentKind, ShiftStatus
-from sbozor_core.models import Payment
+from sbozor_core.models import Payment, Stall
 from sqlalchemy import Integer, Text, bindparam, select, text
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -654,37 +654,47 @@ async def reverse_payment(
 
 @dataclass(frozen=True, slots=True)
 class PaymentOwner:
-    """Asl to'lovning smenasi va turi — storno darvozalari uchun.
+    """Asl to'lovning smenasi, turi va rasta KODI — storno darvozalari uchun.
 
     ⚠ MARSHRUT UCHUN KERAK, `reverse_payment()` UCHUN EMAS: storno so'rovi
       uch xil rad etilishi mumkin va ular UCH BOSHQA javob beradi —
       «qator yo'q» (**404**), «boshqa smenaning to'lovi» (**403**, UI-SPEC
       §8.8) va «allaqachon bekor qilingan» (**409**). Ularni bitta 409 ga
       siqish kassirga noto'g'ri yo'l ko'rsatardi.
+
+    ⚠ `stall_code` SHU YERDA OLINADI VA IKKINCHI SO'ROV YOZILMAYDI:
+      marshrut storno javobida rasta kodini qaytaradi (§5.5 — kassir
+      yuzasida UUID yo'q), qator esa bu tekshiruv uchun ALLAQACHON
+      o'qilyapti. Alohida `SELECT` bir so'rovda ikki marta o'sha
+      jadvalga borardi.
     """
 
     shift_id: UUID | None
     kind: str
+    stall_code: str
 
 
 async def payment_owner(
     session: AsyncSession, *, market_id: UUID, payment_id: UUID
 ) -> PaymentOwner | None:
-    """Asl to'lov bormi va u qaysi smenaga tegishli (`None` — yo'q).
+    """Asl to'lov bormi, qaysi smenaga tegishli va qaysi rastaniki (`None` — yo'q).
 
     ⚠ RLS ostida begona bozorning qatori ham `None` beradi va bu
       **to'g'ri**: marshrut ikkala holatda ham **404** qaytaradi (T-01-76 —
       403 obyekt MAVJUDLIGINI tasdiqlardi).
     """
     result = await session.execute(
-        select(Payment.shift_id, Payment.kind).where(
-            Payment.market_id == market_id, Payment.id == payment_id
+        select(Payment.shift_id, Payment.kind, Stall.code).where(
+            Payment.market_id == market_id,
+            Payment.id == payment_id,
+            Stall.market_id == Payment.market_id,
+            Stall.id == Payment.stall_id,
         )
     )
     row = result.one_or_none()
     if row is None:
         return None
-    return PaymentOwner(shift_id=row[0], kind=str(row[1]))
+    return PaymentOwner(shift_id=row[0], kind=str(row[1]), stall_code=str(row[2]))
 
 
 _RECENT_PAYMENTS = text(
