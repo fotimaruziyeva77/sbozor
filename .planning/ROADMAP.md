@@ -361,7 +361,23 @@ Plans:
   4. Kun davomida kassir/direktor "kutilayotgan patta"ni (bugungi tarif + eski qarz) jonli ko'radi; kassir rastani raqamdan topib, tarifdan kelgan summani ≤3 bosishda tasdiqlaydi va summani faqat sabab-kod bilan o'zgartira oladi
   5. Takror bosilgan to'lov dublikat yaratmaydi, tuzatish faqat storno + qayta kiritish orqali; smena yopilishida kassir tizim summasini ko'rmasdan naqdni deklaratsiya qiladi va farq (variance) direktor hisobotiga chiqadi
 
-**Plans**: TBD
+**Plans**: 14 plans (9 to'lqin)
+
+- [ ] 06-01-PLAN.md — Wave 0/A: A1 (parallel get-or-create) va A2 (generated-from-column) zondlari, sof funksiyalar (D-04/D-05/C-6, D-26)
+- [ ] 06-02-PLAN.md — Wave 0/B: ikki huquq, yetti domen enumi, 11 xato kodi, butun matn va ikki yangi darvoza (OP-6/7/12, §5.10)
+- [ ] 06-03-PLAN.md — Wave 0/C: to'rt so'rov moduli (ikki ALOHIDA) va `collect-surface` darvozasi (W0-F3/F4, G-7/G-22/G-28d)
+- [ ] 06-04-PLAN.md — `0020` billing domeni + `0021` kaskad; uch o'zgarmaslik qo'riqchisi, orfan DEFINER DROP (C-1/2/4/5/7/11/12)
+- [ ] 06-05-PLAN.md — Seed (`day_close` orqali), sxema meta testi va o'zgarmaslikning xulqiy darvozasi (D-07/23/25/27)
+- [ ] 06-06-PLAN.md — `billing_repo`: yagona pul yechimi, D-04 predikati, muzlatilgan dalil, qoldiq (BILL-01…05, C-6/7/8)
+- [ ] 06-07-PLAN.md — `billing_close` job, cron `day_close` dan KEYIN, yurak urishining ko'rinishi (C-3, D-12…15, M-C)
+- [ ] 06-08-PLAN.md — `GET /billing/*`: maydonni e'lon qilmaslik va yangi 422 darvozasi (D-17/20, C-9/10)
+- [ ] 06-09-PLAN.md — `POST /payments` + storno: ikki bayonotli idempotentlik, fingerprint, CASH-02 auditi (D-21/22/23)
+- [ ] 06-10-PLAN.md — Smena API: ko'r serializator va ikki tomonlama variance (CASH-04, D-25/26/27)
+- [ ] 06-11-PLAN.md — Frontend Y-1: ≤3 bosish sanog'i, ikki qatlamli qulf, DL-1/DL-2 (D-18/19/21/22, OP-5)
+- [ ] 06-12-PLAN.md — Frontend Y-3: ko'r naqd deklaratsiyasi va yo'qlikning o'lchovi (D-25, G-7/G-23b)
+- [ ] 06-13-PLAN.md — Frontend Y-4: hisoblar, dalil, anomaliya va variance (BILL-02/03/04, G-25/26/27/28)
+- [ ] 06-14-PLAN.md — Faza darvozasi, beshta sabotaj, `gate` byudjeti va yakunlash
+
 **UI hint**: yes
 
 ### Phase 7: Nomuvofiqlik, bildirishnoma va botlar
