@@ -1,7 +1,16 @@
 ---
 phase: 06-billing-va-kassir
-status: draft
+status: approved
 created: 2026-08-10
+reviewed_at: 2026-08-10
+review_verdict: APPROVED — 6/6 o'lchov PASS, 4 ta bloklamaydigan FLAG (gsd-ui-checker)
+open_flags:
+  - "§8.8 to'lov turi ikonkasiga aria-label / ko'rinadigan matn qo'shilsin (WCAG 1.4.1 — hujjatdagi yagona juftlanmagan ikonka)"
+  - "§11.5 «Smenasiz to'lovlar» agregatiga maydon NOMI berilsin (ehtimol GET /shifts?day= ga shiftless_payment_count + shiftless_payment_soum)"
+  - "§8.2/G-20: noaniq ko'p-moslikdagi rasta qidiruvi 1-qadam ichida «ikkinchi o'zaro ta'sir» — u steps === 3 invariantida QANDAY sanaladi, collect-session.test.tsx yozilishidan OLDIN qaror qilinsin"
+  - "§11.2 jadvalida [TALAB] tegi to'rtala qatorda bir xil bo'lsin (kosmetik)"
+not_verified:
+  - "M-5 transliteratsiya da'vosi (67 satr × gen-cyrillic.mjs) tekshiruvchi tomonidan QAYTA yugurtirilmadi — hech qaysi o'lchov uchun yuk ko'taruvchi emas"
 design_system: shadcn-pattern (manual, CVA + Radix — Phase 1/2 tokenlari)
 response_language: uz-Latn
 inherits: .planning/phases/05-kamera-zonalari-cv-va-nazoratchi-tasdig-i/05-UI-SPEC.md
