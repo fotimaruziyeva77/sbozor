@@ -141,7 +141,9 @@
       "password_changed": "Парол алмаштирилди",
       "user_blocked": "Фойдаланувчи блокланди",
       "user_unblocked": "Фойдаланувчи блокдан чиқарилди",
-      "refresh_reuse_detected": "Эски сессия калити қайта ишлатилди"
+      "refresh_reuse_detected": "Эски сессия калити қайта ишлатилди",
+      "payment_override": "Тўлов суммаси ўзгартирилди",
+      "payment_reverse": "Тўлов бекор қилинди"
     },
     "tables": {
       "users": "Фойдаланувчилар",
@@ -1112,7 +1114,20 @@
     "shiftConfirmBody": "Декларатсия ёзилгач ўзгартирилмайди.",
     "declarationWritten": "Декларатсия ёзилди",
     "shiftClosedAt": "Ёпилган вақт",
-    "shiftNew": "Янги смена очиш"
+    "shiftNew": "Янги смена очиш",
+    "adjustmentReason": {
+      "late_review": "Назоратчи кейин тасдиқлади",
+      "ai_false_positive": "Тизим хато банд деди",
+      "tariff_correction": "Тариф нотўғри киритилган",
+      "partial_day": "Раста кун ўртасида бўшатилган",
+      "director_waiver": "Директор кечирди"
+    },
+    "reversalReason": {
+      "wrong_stall": "Нотўғри раста",
+      "wrong_amount": "Нотўғри сумма",
+      "duplicate_entry": "Такрорий киритиш",
+      "customer_refund": "Сотувчига қайтарилди"
+    }
   },
   "billing": {
     "title": "Патта ҳисоби",

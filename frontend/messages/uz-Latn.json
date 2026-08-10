@@ -141,7 +141,9 @@
       "password_changed": "Parol almashtirildi",
       "user_blocked": "Foydalanuvchi bloklandi",
       "user_unblocked": "Foydalanuvchi blokdan chiqarildi",
-      "refresh_reuse_detected": "Eski sessiya kaliti qayta ishlatildi"
+      "refresh_reuse_detected": "Eski sessiya kaliti qayta ishlatildi",
+      "payment_override": "To'lov summasi o'zgartirildi",
+      "payment_reverse": "To'lov bekor qilindi"
     },
     "tables": {
       "users": "Foydalanuvchilar",
@@ -1112,7 +1114,20 @@
     "shiftConfirmBody": "Deklaratsiya yozilgach o'zgartirilmaydi.",
     "declarationWritten": "Deklaratsiya yozildi",
     "shiftClosedAt": "Yopilgan vaqt",
-    "shiftNew": "Yangi smena ochish"
+    "shiftNew": "Yangi smena ochish",
+    "adjustmentReason": {
+      "late_review": "Nazoratchi keyin tasdiqladi",
+      "ai_false_positive": "Tizim xato band dedi",
+      "tariff_correction": "Tarif noto'g'ri kiritilgan",
+      "partial_day": "Rasta kun o'rtasida bo'shatilgan",
+      "director_waiver": "Direktor kechirdi"
+    },
+    "reversalReason": {
+      "wrong_stall": "Noto'g'ri rasta",
+      "wrong_amount": "Noto'g'ri summa",
+      "duplicate_entry": "Takroriy kiritish",
+      "customer_refund": "Sotuvchiga qaytarildi"
+    }
   },
   "billing": {
     "title": "Patta hisobi",

@@ -141,7 +141,9 @@
       "password_changed": "Пароль изменён",
       "user_blocked": "Пользователь заблокирован",
       "user_unblocked": "Пользователь разблокирован",
-      "refresh_reuse_detected": "Повторное использование ключа сессии"
+      "refresh_reuse_detected": "Повторное использование ключа сессии",
+      "payment_override": "Сумма платежа изменена",
+      "payment_reverse": "Платёж отменён"
     },
     "tables": {
       "users": "Пользователи",
@@ -1112,7 +1114,20 @@
     "shiftConfirmBody": "После записи декларация не меняется.",
     "declarationWritten": "Декларация записана",
     "shiftClosedAt": "Время закрытия",
-    "shiftNew": "Открыть новую смену"
+    "shiftNew": "Открыть новую смену",
+    "adjustmentReason": {
+      "late_review": "Контролёр подтвердил позже",
+      "ai_false_positive": "Система ошибочно посчитала занятым",
+      "tariff_correction": "Тариф введён неверно",
+      "partial_day": "Место освободили в середине дня",
+      "director_waiver": "Директор простил"
+    },
+    "reversalReason": {
+      "wrong_stall": "Не то место",
+      "wrong_amount": "Неверная сумма",
+      "duplicate_entry": "Повторный ввод",
+      "customer_refund": "Возвращено продавцу"
+    }
   },
   "billing": {
     "title": "Начисление патты",
