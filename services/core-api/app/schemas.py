@@ -159,6 +159,11 @@ __all__ = [
     "SelectMarketRequest",
     "SessionResponse",
     "SetupStatusResponse",
+    "ShiftCloseRequest",
+    "ShiftCloseResponse",
+    "ShiftOpenResponse",
+    "ShiftReportResponse",
+    "ShiftReportRow",
     "SnapshotDetailOut",
     "StaffCredentialItem",
     "StaffImportResponse",
@@ -3423,3 +3428,216 @@ class RecentPaymentsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[PaymentResponse]
+
+
+# ---------------------------------------------------------------------------
+# 06-10: SMENA VA ⛔⛔ KO'R NAQD DEKLARATSIYASI (CASH-04, D-25, D-26)
+#
+# ⛔⛔ BU BO'LIMDA IKKI YUZA BOR VA ULARNING KALITLAR TO'PLAMI ATAYIN
+#    BOSHQA — «yo'qlik» BITTA modelda, «borlik» ikkinchisida:
+#
+#      ShiftCloseResponse  (kassir)   -> variance YO'Q, tizim summasi YO'Q
+#      ShiftReportRow      (direktor) -> ikkalasi ham BOR
+#
+# Bir modelni ikkinchisiga «umumlashtirish» (ixtiyoriy maydonlar bilan
+# bitta model) D-25 ni ⛔ BIR SATRDA buzardi: ixtiyoriy maydon javobda
+# `null` bo'lib turardi va uni to'ldirish bitta topshiriq bo'lardi.
+#
+# ⛔ HAR MODELDA `extra="forbid"` — 06-08/06-09 bloklarida o'rnatilgan
+#    qoida (`model_construct()` yoki noto'g'ri `**kwargs` bilan qo'shilgan
+#    maydon JIMGINA o'tib ketmasin).
+# ---------------------------------------------------------------------------
+
+
+class ShiftOpenResponse(BaseModel):
+    """`POST /shifts` va `GET /shifts/open` — AYNAN UCH kalit (UI-SPEC §10.1).
+
+    =======================================================================
+    ⛔⛔ OCHIQ SMENA KARTASIDA YIG'INDI KO'RINMAYDI — «HECH QANDAY
+        SHAKLDA» (§10.1 ning so'zma-so'z talabi).
+
+    E'LON QILINMAGAN maydonlar — NOM bilan:
+
+        payment_count · collected_soum · average_soum · today_total
+        system_soum   · system_total_soum
+
+    Ular «bugungi natija» ko'rinishida ⛔ ZARARSIZ tuyuladi, lekin har
+    biri ⛔ **yig'indiga olib boradi** va smena yopilishidagi ko'r
+    deklaratsiyani (§10.3) ARIFMETIKA bilan buzardi. Kassir kartani kun
+    davomida ko'radi, ya'ni u sanashdan OLDIN son ko'rgan bo'lardi.
+    =======================================================================
+
+    ⚠ `GET /shifts/open` ochiq smena bo'lmasa ⛔ **`null`** qaytaradi,
+      **404 EMAS**: §10.1 da ekranning IKKI holati bor (`EmptyState` +
+      `[Smenani ochish]`, yoki karta), uchinchisi yo'q. 404 klientni
+      «server nosoz» shoxiga yuborardi.
+
+    ⚠ To'plam `frontend/src/lib/shift-queries.ts::shiftOpenSchema`
+      (`z.strictObject`, 06-03) bilan AYNAN bir xil.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    status: Literal["open", "closed"]
+    opened_at: datetime
+
+
+class ShiftCloseRequest(BaseModel):
+    """`POST /shifts/{shift_id}/close` tanasi — ⛔ AYNAN BITTA maydon.
+
+    =======================================================================
+    ⛔⛔ `system_soum` VA `variance_soum` QABUL QILINMAYDI.
+
+    Ular D-25 ning so'rov tomonidagi shakli: mijoz tizim summasini
+    yubora olsa, u avval uni ⛔ **BILISHI** kerak bo'lardi — ya'ni
+    maydonning MAVJUDLIGI o'zi «bu son klientda bor» degan taxminni
+    kontraktga yozib qo'yardi va keyingi ijrochi uni to'ldiradigan
+    `GET` marshrutini qidirardi.
+
+    ⛔ `shift_id` HAM TANADA YO'Q — u YO'L parametri; ikki joyda
+       berilishi ularni bir-biriga zid qilib yuborish yo'lini ochardi.
+    =======================================================================
+
+    ⛔ **`0` RUXSAT ETILADI** (§10.2, `ge=0`, `gt=0` EMAS): butun smena
+       terminal orqali o'tgan kun ⛔ **REAL holat** va uni rad etish
+       kassirni SOXTA naqd summa yozishga majburlardi. Manfiy qiymat
+       shu yerda **422** bo'ladi va u `ck_cashier_shifts_declared_soum_
+       non_negative` ning HTTP qatlamidagi jufti.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    declared_soum: int = Field(ge=0, le=MAX_SAFE_SOUM)
+    """Kassir SANAB kiritgan naqd — ⛔ `0` ham qonuniy qiymat."""
+
+
+class ShiftCloseResponse(BaseModel):
+    """`POST /shifts/{shift_id}/close` — ⛔⛔ KALITLAR TO'PLAMI AYNAN TO'RTTA.
+
+    =======================================================================
+    ⛔⛔ SAKKIZ MAYDONNING BIRORTASI HAM E'LON QILINMAGAN VA BU
+        «YASHIRISH» EMAS (naqsh `BlindItemResponse` DAN VERBATIM):
+
+        system_soum · system_total_soum · expected_soum
+        variance_soum · variance
+        payment_count · cash_count · terminal_soum
+
+    (a) ⛔ **BRAUZERGA YETGAN MAYDON O'QILADI** (Pitfall 6): DevTools,
+        tarmoq paneli, React DevTools, `JSON.stringify`. CSS ham,
+        shartli render ham mexanizm EMAS — «ko'rsatmayapmiz» kod-ko'rik
+        DA'VOSI, ⛔ **o'lchov emas**.
+
+    (b) ⛔ **`null` QILIB YUBORISH HAM YARAMAYDI:** `null` maydonning
+        ⛔ **BORLIGINI** tasdiqlaydi va keyingi ijrochi uni to'ldirardi —
+        o'zgarish BIR SATRLIK bo'lardi. `include_in_schema=False` esa
+        umuman himoya emas: u hujjatni o'zgartiradi, ⛔ **baytlarni
+        emas**.
+
+    (c) ⛔ **VARIANCE FAQAT `GET /shifts?day=` DA** (UI-SPEC §10.4).
+        Sabab matematik: `system = declared − variance` — ⛔ **bitta
+        ayirish**, ya'ni variance ni qaytarish `system_soum` ni
+        qaytarish bilan AYNI narsa. Qo'shimcha ikki sabab: har kuni
+        variance ko'rgan kassir ⛔ **langar** hosil qiladi va sanashdan
+        oldin TAXMIN qiladi; va bu smenada tuzatish yo'li ⛔ **YO'Q**
+        (deklaratsiya o'zgarmas, variance to'g'rilanmaydi) — ya'ni
+        ko'rsatish ⛔ **hech qanday harakatni ochmaydi**.
+    =======================================================================
+
+    **Kassir yopgandan keyin ko'radigan narsa AYNAN UCHTA** (§10.3):
+    `Badge tone="success"` «Deklaratsiya yozildi» · kiritilgan summa
+    (`font-mono`) · `[Yangi smena ochish]`.
+
+    ⚠ To'plam TENGLIGI bilan o'lchanadi (D-31), inkor tasdiq bilan EMAS:
+      `not in` faqat AYNAN o'sha nomni ushlaydi va `systemSoum` jimgina
+      o'tib ketardi. Ikkinchi, MUSTAQIL qatlam — `app.openapi()` dan
+      hosila skan (D-32), uchinchisi esa klientdagi `z.strictObject`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    status: Literal["open", "closed"]
+    declared_soum: int
+    closed_at: datetime
+
+
+class ShiftReportRow(BaseModel):
+    """`GET /shifts?day=` jadvalining bitta qatori — ⛔ variance BILAN (§11.5).
+
+    ⛔ **KASSIRNING ISMI YO'Q** (C-10 + §5.5): `cashier_id` qaytadi, ism
+       esa klientda MAVJUD va AUDIT QILINGAN `GET /users` dan
+       joinlanadi. `cashier_name`/`full_name` qo'shish moliyaviy
+       marshrutga shaxsiy-ma'lumot qo'riqchisini o'rnatardi va
+       `PERSONAL_ROUTES` ni o'stirardi. ⛔ Nom bilan aylanib o'tish
+       (`cashier_label`, `who`) ham TAQIQLANADI.
+
+    ⛔ **`variance_soum` BELGILI VA MODUL KATTALIGIGA AYLANTIRILMAYDI**
+       (D-26, Pitfall 7): `< 0` kamomad, `> 0` ortiqcha, `= 0` mos
+       keldi. «Ortiqcha naqdni jimgina yutish kamomadni yashirish bilan
+       BIR XIL xato» — shuning uchun ikkala yo'nalish ham qaytariladi.
+
+    ⚠ `closed_at`/`declared_soum` ⛔ **`None` EMAS** va bu ATAYIN:
+      hisobot FAQAT yopilgan smenalarni qaytaradi
+      (`shift_repo._SHIFT_REPORT_ROWS`), `ck_cashier_shifts_closed_has_
+      declaration` esa juftlikni MAJBURLAYDI. Ularni ixtiyoriy qilish
+      «ochiq smenani ham qo'shsak bo'ladi» degan taklifni kontraktga
+      yozib qo'yardi — o'shanda variance MA'NOSIZ bo'lardi (deklaratsiya
+      hali yozilmagan, tizim summasi hamon o'syapti).
+
+    ⚠ Klientning `shiftReportRowSchema` si (06-03) ikkalasini
+      `nullable()` deb o'qiydi — bu KENGROQ shart, ya'ni bu javob unga
+      to'liq mos keladi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    cashier_id: UUID
+    opened_at: datetime
+    closed_at: datetime
+    declared_soum: int
+    system_soum: int
+    variance_soum: int
+    """⛔ SERVERDA hisoblangan (`sbozor_core.billing.variance()`).
+
+    Klientda AYIRISH qilinmaydi va bu 05-14 ning darsi: klientdagi qayta
+    hisob xato bo'lib emas, ⛔ **IKKINCHI JAVOB** bo'lib chiqadi.
+    """
+
+
+class ShiftReportResponse(BaseModel):
+    """`GET /shifts?day=` — ⛔ SMENASIZ to'lovlar NOMLANGAN maydon (§11.5).
+
+    =======================================================================
+    ⛔⛔ §11.5 FLAG'I SHU YERDA YOPILADI (06-RESEARCH OQ-6 / A5).
+
+    `shift_id IS NULL` bo'lgan to'lovlar birorta kassir qutisiga
+    ⛔ **tushmagan**, ya'ni ular variance hisobiga ⛔ **KIRMAYDI** va bu
+    ⛔ **to'g'ri**. Ammo ular PUL: ko'rsatilmasa, hisobotdan ⛔ **JIMGINA
+    yo'qolardi** va kun yig'indisi sababsiz kamayardi (D-14 ruhi —
+    o'lchanadigan miqdor NOMLANADI).
+
+    ⛔ SANOQ VA SUMMA — IKKALASI HAM: faqat summa «bitta katta to'lovmi
+       yoki ellikta kichikmi?» savolini javobsiz qoldirardi.
+    =======================================================================
+
+    ⛔ **NOL — NATIJA:** birorta smena yopilmagan kunda ham uchala maydon
+       QAYTADI (`rows=[]`, ikkala hisoblagich `0`). «Bu kunda smena
+       yo'q» bilan «hisoblagich ishlamayapti» bir xil ko'rinmasligi
+       kerak (`AnomalyListResponse` bilan aynan bir xil qaror).
+
+    ⚠ `day` — ⛔ **YECHILGAN** kun, so'rovdagi (ixtiyoriy) parametr emas:
+      klient uni yubormasa server BUGUN ni tanlaydi va javob QAYSI kun
+      ekanini o'zi aytadi. `ChargeListResponse`/`AnomalyListResponse`
+      bilan aynan bir xil shakl — usiz klient «men so'ragan kun» ni
+      taxmin qilardi va sana chegarasida (Toshkent yarim tuni) ekran
+      boshqa kunning sarlavhasi bilan chizilardi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    rows: list[ShiftReportRow]
+    shiftless_payment_count: int
+    shiftless_payment_soum: int

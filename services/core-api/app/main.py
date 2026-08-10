@@ -57,6 +57,7 @@ from app.api.v1.occupancy import router as occupancy_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.reviews import router as reviews_router
 from app.api.v1.schedules import router as schedules_router
+from app.api.v1.shifts import router as shifts_router
 from app.api.v1.snapshots import alerts_router, capture_runs_router
 from app.api.v1.snapshots import router as snapshots_router
 from app.api.v1.stalls import router as stalls_router
@@ -312,6 +313,36 @@ app.include_router(billing_router, prefix=f"{API_V1_PREFIX}/billing")
 # `PARAM_FILLERS` iga, ikkala `POST` esa `BODY_FILLERS` VA
 # `CASHIER_ROUTES` ga qo'shildi (OP-8/OP-9).
 app.include_router(payments_router, prefix=f"{API_V1_PREFIX}/payments")
+# --- 06-10: SMENA VA KO'R NAQD DEKLARATSIYASI (CASH-04, D-25, D-26) ---
+#
+# ⛔ MUSTAQIL PREFIKS, `/collect` OSTIDA EMAS — VA BU IKKI QATLAMNI
+# AJRATADIGAN QARORDIR. `/collect/shift` — FRONTEND ning URL ierarxiyasi
+# (UI-SPEC §4.2: kassir ekranining bolasi), backend prefiksi esa DOMEN
+# bo'yicha quriladi. Ularni tenglashtirish serverni ekran daraxtiga
+# bog'lardi: sahifa ko'chirilgan kuni (masalan `/cashier/shift`) API ham
+# ko'chishi kerak bo'lardi yoki nom ekrandan JIMGINA ajralib ketardi.
+#
+# ⛔ RESURS NOMI KO'PLIKDA VA U KLIENT KONTRAKTIDAN:
+# `frontend/src/lib/shift-queries.ts::SHIFTS_PATH = "/shifts"` (06-03,
+# allaqachon merge qilingan). Boshqa nom 06-12 ning smena ekranini
+# birinchi bosishdayoq 404 ga tushirardi.
+#
+# ⛔ BITTA ROUTER, IKKI HUQUQ: `POST /shifts`, `GET /shifts/open` va
+# `POST /shifts/{id}/close` — `SHIFT_MANAGE` (kassir + bozor admini);
+# `GET /shifts?day=` — `REPORT_VIEW` (kassirda YO'Q). Variance FAQAT
+# oxirgisida qaytariladi (UI-SPEC §10.4) va o'sha ajratma D-25 ning
+# ⛔ HUQUQ darajasidagi yarmi.
+#
+# ⛔ `/billing` GA QO'SHILMADI: `/billing/*` — HISOB va anomaliya yuzasi
+# (`service_date` kesimida, C-2), `/shifts` esa KASSA yuzasi
+# (`business_date` kesimida). Bir `?day=` ni bo'lishish ikki xil kun
+# semantikasini bitta parametrga siqardi.
+#
+# Yangi yo'l parametri (`shift_id`) cross-tenant matritsasining
+# `PARAM_FILLERS` iga B bozorining HAQIQIY smenasi bilan, ikkala `POST`
+# esa `BODY_FILLERS` ga qo'shildi. ⛔ `CASHIER_ROUTES` GA TUSHMAYDI —
+# `shift_manage` bozor adminida HAM bor (`shifts.py::ShiftManagerDep`).
+app.include_router(shifts_router, prefix=f"{API_V1_PREFIX}/shifts")
 # --- 04-09: snapshot jadvali (CAM-04, D-05) ---
 #
 # ⚠ ALOHIDA PREFIKS, `cameras` OSTIDA EMAS — `cameras` ning `nvr-devices`
