@@ -1768,26 +1768,45 @@ va uni jurnalga yozadi. `0` qiymat XATO EMAS — u yuqoridagi holat.
 bo'lsa, chetlab o'tish shunchalik keng (T-04-16 / T-05-19).
 """
 
-OCCUPANCY_FUNCTIONS: list[PGFunction] = [
-    AUDIT_DRAW_DUE_MARKETS,
-    OCCUPANCY_DAY_CLOSE_MARKETS,
-]
-"""`0018_occupancy_domain` YARATADIGAN to'plam.
+OCCUPANCY_FUNCTIONS: list[PGFunction] = []
+"""⛔ BO'SHATILDI (`06-04` / T2, 2026-08-10) — IKKALA FUNKSIYA `0020` DA DROP QILINDI.
 
-⚠ `ALL_FUNCTIONS` GA QO'SHILMAYDI va bu ATAYIN (`SNAPSHOT_FUNCTIONS` bilan
-bir xil qoida): `ALL_FUNCTIONS` — `0001_identity` ning MUZLATILGAN to'plami
-va `0001` uning ustidan tsikl qiladi. Yangi nomni u yerga qo'shish nol
-holatdan qilingan migratsiyani mavjud bo'lmagan obyektga `GRANT` berishga
-majburlab yiqitardi.
+=============================================================================
+NEGA REYESTR BO'SH, LEKIN `PGFunction` TA'RIFLARI JOYIDA QOLDI.
+
+`AUDIT_DRAW_DUE_MARKETS` va `OCCUPANCY_DAY_CLOSE_MARKETS`
+CHAQIRUVCHISIZ qoldi (C-11/G-10): argumentli job modeli (D-12) ularni
+PRINSIPIAL ravishda ishlata olmaydi — ikkalasining tanasi ham `now()` ga
+qadalgan va job kunni ARGUMENT sifatida oladi. Chaqiruvchisiz `SECURITY
+DEFINER` funksiya esa RLS'ni chetlab o'tadigan ISHLATILMAYOTGAN yuza,
+ya'ni u faqat xavf qo'shadi (T-06-22).
+
+REYESTR BO'SHATILISHI MAJBURIY: `ALL_ENTITIES` shu ro'yxatdan quriladi va
+`alembic_utils` reyestrdagi, lekin bazada YO'Q funksiyani «yaratish kerak»
+deb ko'radi — `test_autogenerate_is_empty` `create_entity` taklifi bilan
+QIZARARDI.
+
+TA'RIFLAR ESA JOYIDA QOLADI va bu ZARURAT, e'tiborsizlik emas: ularni
+`0018` (yaratish + `_regrant`) va `0020` ning `downgrade()` i (qaytarish)
+NOMMA-NOM import qiladi. Ta'riflarni o'chirish `alembic downgrade 0019` ni
+`ImportError` bilan yiqitardi, ya'ni tarixiy migratsiya zanjiri uzilardi.
+
+⚠ `0018` ENDI BU RO'YXATNI ISHLATMAYDI — u `_OCCUPANCY_FUNCTIONS_AT_0018`
+MUZLATILGAN nusxasidan yuradi (sabab o'sha faylda, `0019:71-137` naqshining
+teskari qo'llanishi).
+=============================================================================
 """
 
-OCCUPANCY_GRANT_SIGNATURES: tuple[str, ...] = (
-    "audit_draw_due_markets()",
-    "occupancy_day_close_markets()",
-)
-"""`OCCUPANCY_FUNCTIONS` bilan bir xil TARTIBDA (`GRANT`/`REVOKE` imzolari).
+OCCUPANCY_GRANT_SIGNATURES: tuple[str, ...] = ()
+"""⛔ BO'SHATILDI (`06-04` / T2) — `OCCUPANCY_FUNCTIONS` bilan AYNI SABABDAN.
 
-`REVOKE ALL ... FROM PUBLIC` MAJBURIY: `CREATE FUNCTION` dan keyin Postgres
-yangi funksiyaga `EXECUTE TO PUBLIC` ni STANDART beradi, ya'ni bazadagi HAR
-QANDAY rol RLS'ni chetlab o'tadigan bu funksiyalarni chaqira olardi.
+⚠ BO'SH TUPLE `0018` NING `_regrant` TSIKLINI HAM BO'SHATARDI va o'shanda
+NOL HOLATDAN yugurishda ikkala funksiya `EXECUTE TO PUBLIC` bilan tug'ilib,
+`0020` gacha SHUNDAY QOLARDI — ya'ni tarixiy migratsiya XAVFSIZLIK
+OYNASINI ochardi. Shuning uchun `0018` uchliklarni O'ZIGA muzlatib
+ko'chirdi (`_OCCUPANCY_GRANT_SIGNATURES_AT_0018`) va bu bo'sh tuple unga
+umuman ta'sir qilmaydi.
+
+`REVOKE ALL ... FROM PUBLIC` ning nega majburiyligi `0018:242-251` va
+`0019:154-163` da yozilgan.
 """

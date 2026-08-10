@@ -43,13 +43,17 @@ __all__ = [
     "ALL_TRIGGER_FUNCTIONS",
     "AUDIT_IMMUTABLE",
     "AUDIT_TRIGGER_FUNCTIONS",
+    "BILLING_TRIGGER_FUNCTIONS",
     "CATEGORY_PERIOD_PAST_IMMUTABLE",
+    "CHARGE_IMMUTABLE",
     "FN_AUDIT_ROW",
     "MARKETS_DELETE_GUARD",
     "MARKET_DOMAIN_TRIGGER_FUNCTIONS",
     "NVR_DOMAIN_TRIGGER_FUNCTIONS",
     "OCCUPANCY_EVENT_IMMUTABLE",
     "OCCUPANCY_TRIGGER_FUNCTIONS",
+    "PAYMENT_IMMUTABLE",
+    "SHIFT_DECLARATION_IMMUTABLE",
     "STALL_CODE_CLAIM",
     "TARIFF_PAST_IMMUTABLE",
     "ZONE_REVIEW_IMMUTABLE",
@@ -565,6 +569,226 @@ triggeri unga `delete` qatorini yozadi. Iz `audit_log` da qoladi — u esa
 o'lchangan tuzoq).
 """
 
+# ===========================================================================
+# 0020 — BILLING DOMENINING O'ZGARMASLIGI (6-faza, D-07 / D-23 / D-25)
+# ===========================================================================
+#
+# ⚠⚠ BU YERDA IKKALA SHAKL HAM ISHLATILADI VA TANLOV HAR FUNKSIYADA
+#    OCHIQ YOZILGAN. Yuqoridagi 0018 bloki ikki shaklni solishtirgan:
+#
+#      SHARTSIZ  (`OCCUPANCY_EVENT_IMMUTABLE`) -> har qanday UPDATE/DELETE
+#                                                 rad etiladi; `DELETE`
+#                                                 uchun yagona istisno —
+#                                                 QORALAMA bozor
+#      SHARTLI   (`TARIFF_PAST_IMMUTABLE`)     -> faqat ma'lum shartdagi
+#                                                 qator qulflanadi
+#
+# `daily_charges` va `payments` — SHARTSIZ (D-07 / D-23).
+# `cashier_shifts` — SHARTLI (D-25) va bu SHAKL EMAS, ZARURAT: smena
+# `open` -> `closed` o'tishi RUXSAT ETILISHI SHART, aks holda smenani
+# umuman yopib bo'lmasdi. Uchala funksiyada ham `SECURITY DEFINER`
+# YOZILMAYDI (yuqoridagi 0018 blokining oxirgi bandi) va
+# `SET search_path = pg_catalog, public` MAJBURIY.
+#
+# QORALAMA-BOZOR ISTISNOSI UCHALASIDA HAM SAQLANADI va u O'LCHANGAN
+# ZARURAT: `market_delete_draft()` (`0021`) oltala jadvaldan ham `DELETE`
+# qiladi. Butunlay shartsiz qo'riqchi o'sha `DELETE` ni HAR DOIM
+# `RAISE EXCEPTION` bilan to'xtatardi, ya'ni rejaning ikki qismi
+# bir-birini INKOR QILARDI. Rad etilgan uch muqobil
+# (`session_replication_role`, `DISABLE TRIGGER`, `current_user` sharti)
+# yuqoridagi 0018 blokida sanab chiqilgan va bu yerda TAKRORLANMAYDI.
+
+CHARGE_IMMUTABLE = PGFunction(
+    schema="public",
+    signature="charge_immutable()",
+    definition="""
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE'
+     AND EXISTS (
+       SELECT 1 FROM public.markets AS m
+       WHERE m.id = OLD.market_id AND m.is_active = false
+     ) THEN
+    RETURN OLD;
+  END IF;
+
+  RAISE EXCEPTION 'daily_charges is append-only (attempted %)', TG_OP;
+END $$
+""",
+)
+"""`BEFORE UPDATE OR DELETE ON daily_charges` — YOZILGAN HISOB TAHRIRLANMAYDI (D-07).
+
+SHAKL: SHARTSIZ (`OCCUPANCY_EVENT_IMMUTABLE` ning aynan nusxasi), SHARTLI
+EMAS. Sabab MA'NODA: `tariff_past_immutable()` ning `valid_from <= bugun`
+sharti «bugungi» qatorni OCHIQ qoldiradi, holbuki hisob ERTASI KUNI 04:10
+da tug'iladi — ya'ni har bir hisob o'zining birinchi kunida tahrirlanadigan
+bo'lib qolardi. Aynan o'sha oyna esa eng qimmat: kassir kun yopilgandan
+keyin «tuzatib» qo'yishi mumkin bo'lgan yagona payt.
+
+Tuzatish YANGI QATOR bo'ladi (`charge_adjustments`, D-19), ya'ni asl summa
+nizoda ko'rinib qoladi va «qancha talab qilingan edi?» savoli javobsiz
+qolmaydi (D-02). Yakuniy summa — HISOBLANADIGAN KO'RINISH.
+
+`TG_OP` xabarga qo'shiladi (`AUDIT_IMMUTABLE` bilan bir xil sabab): ikki
+xil urinish ikki xil tahdid modelidan keladi — `UPDATE` summani JIMGINA
+o'zgartiradi (T-06-15), `DELETE` esa qarzni butunlay yo'q qiladi.
+
+`RETURN OLD` FAQAT istisno shoxida: `BEFORE DELETE` triggeri `NULL`
+qaytarsa amal JIMGINA bekor qilinadi (xatosiz!) va `market_delete_draft()`
+"o'chirdim" deb `true` qaytarardi-yu, qatorlar joyida qolardi — ya'ni
+kaskad YOLG'ON gapirardi.
+
+⚠ IKKI ALOHIDA FUNKSIYA, BITTA UMUMIY EMAS (`helpers.py:278-282` qoidasi):
+xato xabari QAYSI jadvalning qoidasi buzilganini aytishi kerak. Tanasi
+`payment_immutable()` niki bilan deyarli bir xil bo'lgani TAKROR emas,
+ZARURAT — `tariff_past_immutable()` / `category_period_past_immutable()`
+juftligi bilan aynan bir xil qaror sinfi.
+"""
+
+PAYMENT_IMMUTABLE = PGFunction(
+    schema="public",
+    signature="payment_immutable()",
+    definition="""
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE'
+     AND EXISTS (
+       SELECT 1 FROM public.markets AS m
+       WHERE m.id = OLD.market_id AND m.is_active = false
+     ) THEN
+    RETURN OLD;
+  END IF;
+
+  RAISE EXCEPTION 'payments is append-only (attempted %)', TG_OP;
+END $$
+""",
+)
+"""`BEFORE UPDATE OR DELETE ON payments` — TO'LOV O'CHIRILMAYDI (D-23, T-06-16).
+
+`CHARGE_IMMUTABLE` ning JUFTI, lekin tahdid TESKARI TOMONDAN keladi va u
+kuchliroq: yozilgan to'lovni o'chirish «pul kelmagan» degan da'voni HECH
+QANDAY iz qoldirmasdan yaratadi. `daily_charges` da tahdid qarzni
+YASHIRISH edi; bu yerda esa TUSHUMNI yashirish — ya'ni aynan mahsulot fosh
+qiladigan nosozlik turi (`PROJECT.md` Core Value).
+
+Xato yozuv STORNO qatori bilan qoplanadi: `kind = 'reversal'` +
+`reverses_payment_id` + `reversal_reason` (uchalasi ham `0020` da ikki
+tomonlama `CHECK` bilan bog'langan). Nizoda IKKALA yozuv ham ko'rinadi —
+«to'ladi» va «bekor qilindi, sababi shu» (D-02).
+
+⚠ JADVALDA AUDIT TRIGGERI YO'Q va bu qo'riqchini KUCHSIZLANTIRMAYDI: iz
+`payments` NING O'ZIDA yashaydi (append-only jadval o'z tarixi), ilova
+darajasidagi audit esa `AuditAction.PAYMENT_REVERSE` bilan yoziladi
+(`enums.py::AuditAction` docstringi).
+"""
+
+SHIFT_DECLARATION_IMMUTABLE = PGFunction(
+    schema="public",
+    signature="shift_declaration_immutable()",
+    definition="""
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF EXISTS (
+      SELECT 1 FROM public.markets AS m
+      WHERE m.id = OLD.market_id AND m.is_active = false
+    ) THEN
+      RETURN OLD;
+    END IF;
+
+    RAISE EXCEPTION 'cashier_shifts rows are not deletable (attempted %)', TG_OP;
+  END IF;
+
+  IF OLD.status = 'closed' THEN
+    RAISE EXCEPTION 'cashier shift % is closed and cannot be changed (D-25)', OLD.id
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF OLD.declared_soum IS NOT NULL
+     AND NEW.declared_soum IS DISTINCT FROM OLD.declared_soum THEN
+    RAISE EXCEPTION 'declared_soum of shift % is already recorded (D-25)', OLD.id
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF OLD.system_soum IS NOT NULL
+     AND NEW.system_soum IS DISTINCT FROM OLD.system_soum THEN
+    RAISE EXCEPTION 'system_soum of shift % is already recorded (D-25)', OLD.id
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NEW;
+END $$
+""",
+)
+"""`BEFORE UPDATE OR DELETE ON cashier_shifts` — KO'R DEKLARATSIYA QULFLANADI (D-25).
+
+=============================================================================
+⛔ SHAKL TANLOVI: SHARTLI (`TARIFF_PAST_IMMUTABLE` sinfi), SHARTSIZ EMAS —
+   VA BU ZARURAT, QULAYLIK EMAS.
+
+Shartsiz shakl (`CHARGE_IMMUTABLE` / `PAYMENT_IMMUTABLE`) HAR QANDAY
+`UPDATE` ni rad etadi. Smena esa `open` -> `closed` o'tishini TALAB QILADI:
+u yagona holat o'zgarishi va usiz smenani umuman yopib bo'lmasdi, ya'ni
+CASH-04 ning butun oqimi (ko'r deklaratsiya -> variance) IMKONSIZ bo'lardi.
+Ya'ni bu yerda «kuchliroq shakl» ni tanlash mahsulotni ishlamaydigan
+qilardi — 0018 blokidagi tanlovning TESKARI tomoni.
+
+Shartli shakl esa `tariffs` nikidan HAM TOR: u vaqt shartiga
+(`valid_from <= bugun`) umuman tayanmaydi, chunki bu yerdagi qulf VAQT
+emas, HOLAT va QIYMAT bo'yicha. Ruxsat etilgan yagona o'zgarish —
+`NULL` dan qiymatga o'tish.
+
+TO'RT SHOX VA HAR BIRI BOSHQA NOSOZLIKNI YOPADI:
+
+  (a) `OLD.status = 'closed'` -> HAR QANDAY `UPDATE` rad etiladi.
+      «Qayta ochish» yo'li smenani tizim summasiga MOSLASHTIRISH imkonini
+      berardi va ko'r deklaratsiya ma'nosini butunlay yo'qotardi (D-25:
+      `closed` — YAKUNIY holat).
+  (b) `declared_soum` bir marta yozilgach QAYTA YOZILMAYDI. Bu (a) dan
+      MUSTAQIL: deklaratsiya `open` smenaga ham yozilishi mumkin va
+      o'shanda (a) hali ishlamaydi.
+  (c) `system_soum` uchun ayni shart. Tizim summasi yopilish paytida
+      MUZLATILADI, chunki `payments` keyin ham o'zgaradi (storno YANGI
+      qator) — qayta hisoblangan son BOSHQA javob berardi.
+  (d) `DELETE` — qoralama bozor shoxidan tashqari RAD ETILADI. Smenani
+      o'chirish variance yozuvini butunlay yo'q qilardi.
+
+⚠ `IS DISTINCT FROM` MAJBURIY, `<>` EMAS: `NEW.declared_soum` `NULL`
+  bo'lsa `<>` `NULL` berardi va shart JIMGINA o'tib ketardi — ya'ni
+  deklaratsiyani `NULL` ga qaytarish yo'li ochiq qolardi.
+
+⚠ `RETURN NEW` — `UPDATE` shoxining YAGONA chiqishi. `DELETE` shoxi
+  yuqorida tugaydi (`RETURN OLD` yoki `RAISE`), ya'ni bu yerga faqat
+  `UPDATE` yetib keladi va `NEW` HAR DOIM mavjud.
+
+⚠ JADVALDA IKKALA TRIGGER HAM BOR (audit + o'zgarmaslik). `BEFORE`
+  `AFTER` dan oldin yuradi, ya'ni bu qo'riqchi rad etgan `UPDATE`
+  `audit_log` ga qator QOLDIRMAYDI (`helpers.py:295-298`) — rad etilgan
+  urinish "o'zgardi" deb yozilmasin.
+
+`ERRCODE = '23514'` (check_violation) — `TARIFF_PAST_IMMUTABLE` va
+`MARKETS_DELETE_GUARD` bilan AYNAN bir xil kod va bu ataylab: uchalasi ham
+"domen qoidasi buzildi" sinfida va chaqiruvchi ularni bitta yo'lda 409 ga
+aylantiradi. Yangi konvensiya KIRITILMAYDI.
+
+⚠ `status` LITERALI (`'closed'`) TANADA QO'LDA YOZILGAN va bu boshqa
+  yo'li yo'q: `PGFunction` ta'rifi SQL matni, ya'ni u `sbozor_core.enums`
+  ni import qila olmaydi (`migrations/entities` `alembic_utils` ga
+  bog'langan, `sbozor_core` esa unga bog'lanmaydi). Qiymatning o'zgarishi
+  esa `0020` ning `SHIFT_STATUS_CHECK` ini ham buzardi, ya'ni u jimgina
+  o'tib keta olmaydi.
+=============================================================================
+"""
+
 OCCUPANCY_TRIGGER_FUNCTIONS: list[PGFunction] = [
     OCCUPANCY_EVENT_IMMUTABLE,
     ZONE_REVIEW_IMMUTABLE,
@@ -622,11 +846,33 @@ Trigger FUNKSIYASI bu yerda, trigger'ning O'ZI esa migratsiyada xom
 boshqarmaydi — `0002_audit.py` dagi naqsh).
 """
 
+BILLING_TRIGGER_FUNCTIONS: list[PGFunction] = [
+    CHARGE_IMMUTABLE,
+    PAYMENT_IMMUTABLE,
+    SHIFT_DECLARATION_IMMUTABLE,
+]
+"""6-faza qo'riqchilari — `0020_billing_domain` yaratadi.
+
+Trigger FUNKSIYASI bu yerda, trigger'ning O'ZI esa migratsiyada
+`attach_immutability_trigger(...)` bilan (`0018` naqshi — `alembic-utils`
+triggerlarni boshqarmaydi).
+
+UCHTA ALOHIDA FUNKSIYA, ikkitasining tanasi deyarli bir xil bo'lsa ham:
+umumiy `TG_TABLE_NAME` funksiyasi `helpers.py:278-282` bilan TAQIQLANGAN —
+xato xabari QAYSI jadvalning qoidasi buzilganini aytishi kerak va uchala
+qoida ham MUSTAQIL o'zgaradi (D-07, D-23, D-25 uch xil qaror).
+
+Ro'yxat ALOHIDA va u `OCCUPANCY_TRIGGER_FUNCTIONS` bilan bir xil qoidaga
+bo'ysunadi: har migratsiya O'Z scope'li ro'yxatini oladi,
+`ALL_TRIGGER_FUNCTIONS` esa faqat KUZATUV aggregati.
+"""
+
 ALL_TRIGGER_FUNCTIONS: list[PGFunction] = [
     *AUDIT_TRIGGER_FUNCTIONS,
     *MARKET_DOMAIN_TRIGGER_FUNCTIONS,
     *NVR_DOMAIN_TRIGGER_FUNCTIONS,
     *OCCUPANCY_TRIGGER_FUNCTIONS,
+    *BILLING_TRIGGER_FUNCTIONS,
 ]
 """BARCHA trigger funksiyalari — autogenerate reyestri (`ALL_ENTITIES`) uchun.
 

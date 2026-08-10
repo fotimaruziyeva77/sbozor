@@ -223,22 +223,21 @@ EXPECTED_DEFINER_FUNCTIONS = {
 #
 # Bu `INDEX_EXCEPTIONS` va `POLICY_TENANT_GUC_EXCEPTIONS` bilan bir xil naqsh:
 # istisno testda, sababi yozma, o'zgartirish code review'da ko'zga tashlanadi.
-PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset({"charge_adjustments", "cashier_shifts"})
+PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset()
 """`AUDITED_TABLES` ga OLINGAN, lekin jadvali hali TUG'ILMAGAN nomlar.
 
-🟡 OCHIQ QARZ (`06-04` / T1, 2026-08-10) — VA U AYNI REJADA, T2 DA
-YOPILADI. `sbozor_core.schema_contract.AUDITED_TABLES` ga
-`charge_adjustments` va `cashier_shifts` SHU COMMITDA qo'shildi, jadvallar
-esa `0020_billing_domain` da (T2) tug'iladi. Ya'ni T1 bilan T2 orasida
-`missing` shu ikki nomdan iborat bo'ladi va TENGLIK (`missing ==
-PENDING_AUDIT_TRIGGERS`) darvozani YASHIL ushlab turadi — «kutilgan
-qizil» holat YARATILMAYDI (izohdagi «Buzilgan darvoza — darvoza emas»
-bandi).
+✅ QARZ YOPILDI (`06-04` / T2, 2026-08-10) — `0020_billing_domain` BILAN
+BIR COMMITDA. `06-04` / T1 `charge_adjustments` va `cashier_shifts` ni
+`sbozor_core.schema_contract.AUDITED_TABLES` ga qo'shib, AYNI VAQTDA shu
+yerga ham yozgan edi (OP-4); `0020` endi `attach_audit_trigger()` ni
+chaqirdi, ya'ni `missing` bo'shadi va ikkala nom bu yerdan O'CHIRILDI.
+Ro'yxat yana BO'SH.
 
-⛔ T2 DA IKKALA NOM HAM SHU YERDAN O'CHIRILADI. `0020`
-`attach_audit_trigger()` ni chaqirgach `missing` bo'shaydi va ro'yxat
-bo'shatilmasa test TESKARI yo'nalishdan (`closed` asserti) qizaradi.
-Qulf IKKI TOMONLAMA — bu OP-4 ning hujjatlashtirilgan muqobili.
+⛔ IKKALA YO'NALISH HAM QULFLANGAN: nomni bu yerda qoldirish `closed`
+asserti bilan qizartirardi, `AUDITED_TABLES` ga qo'shib bu yerga
+yozmaslik esa `regressed` bilan. Ya'ni `test_audited_tables_have_trigger`
+`06-04` / T1 dan T2 gacha UZLUKSIZ YASHIL turdi — «kutilgan qizil» holat
+HECH QACHON bo'lmadi.
 
 ✅ OLDINGI QARZ YOPILGAN (`05-05` / T2, 2026-08-09). `0018_occupancy_domain`
 `camera_zones` va `zone_reviews` ga audit triggerini ULADI, ya'ni ikkala

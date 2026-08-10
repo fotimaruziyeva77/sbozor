@@ -72,11 +72,39 @@ UNAUDITED_OCCUPANCY_TABLES: tuple[str, ...] = (
 )
 """Audit triggeri ATAYIN ULANMAGAN jadvallar (§S-1, audit assimetriyasi)."""
 
-DEFINER_SURFACES: tuple[str, ...] = (
-    "audit_draw_due_markets()",
-    "occupancy_day_close_markets()",
-)
-"""5-fazaning ikki tik yuzasi — ikkalasi ham RLS'ni chetlab o'tadi."""
+DEFINER_SURFACES: tuple[str, ...] = ()
+"""⛔ BO'SHATILDI (`06-04` / T2, 2026-08-10) — IKKALA YUZA `0020` DA DROP QILINDI.
+
+=============================================================================
+NEGA BO'SH TO'PLAM «TESTNI O'CHIRISH» EMAS.
+
+`audit_draw_due_markets()` va `occupancy_day_close_markets()`
+CHAQIRUVCHISIZ qoldi: argumentli job modeli (D-12) ularni PRINSIPIAL
+ravishda ishlata olmaydi — ikkalasining tanasi ham `now()` ga qadalgan,
+job esa kunni ARGUMENT sifatida oladi. Chaqiruvchisiz `SECURITY DEFINER`
+funksiya — RLS'ni chetlab o'tadigan ISHLATILMAYOTGAN yuza, ya'ni u faqat
+xavf qo'shadi (C-11/G-10, T-06-22). `0020` ikkalasini ham DROP qildi.
+
+⛔ RO'YXATNI BO'SHATISH MAJBURIY, TANLOV EMAS:
+`test_due_markets_functions_expose_only_identifiers` har bir imzo uchun
+`assert row is not None, "bazada topilmadi"` bajaradi, ya'ni bazada
+YO'Q funksiya nomi qolgan taqdirda test AYNAN o'sha assert bilan
+qizarardi — va yagona «tuzatish» yo'li funksiyani QAYTA YARATISH bo'lardi,
+ya'ni endigina yopilgan yuzani qayta ochish.
+
+⚠ DA'VO SUSAYMADI, U KO'CHDI: «RLS'ni chetlab o'tadigan yuza tor
+bo'lsin» invarianti endi `test_meta.py::test_security_definer_functions_
+set_search_path` (`found >= EXPECTED_DEFINER_FUNCTIONS`) va
+`test_snapshot_domain_meta.py::test_capture_due_markets_exposes_only_
+identifiers` da yashaydi — ikkalasi ham HAMON YASHIL va HAMON amalda.
+`capture_due_markets()` esa bu ro'yxatdagi ikkovidan farqli o'laroq
+HAQIQIY chaqiruvchiga ega, ya'ni u DROP qilinmadi.
+
+⛔ YANGI NOM BU YERGA FAQAT SHU BILAN QO'SHILADI: `0018` yoki keyingi
+migratsiya bandlik domeniga YANGI `SECURITY DEFINER` funksiya qo'shsa.
+Bo'sh to'plam «tik yuzasi yo'q» degani, «tekshirilmaydi» degani EMAS.
+=============================================================================
+"""
 
 FORBIDDEN_SURFACE_TOKENS: tuple[str, ...] = (
     "verdict",
