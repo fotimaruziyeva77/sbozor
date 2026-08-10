@@ -382,8 +382,8 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 06-07-PLAN.md — `billing_close` job, cron `day_close` dan KEYIN, yurak urishining ko'rinishi (C-3, D-12…15, M-C)
-- [ ] 06-08-PLAN.md — `GET /billing/*`: maydonni e'lon qilmaslik va yangi 422 darvozasi (D-17/20, C-9/10)
+- [x] 06-07-PLAN.md — `billing_close` job, cron `day_close` dan KEYIN, yurak urishining ko'rinishi (C-3, D-12…15, M-C)
+- [x] 06-08-PLAN.md — `GET /billing/*`: maydonni e'lon qilmaslik va yangi 422 darvozasi (D-17/20, C-9/10)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
@@ -492,7 +492,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
-| 6. Billing va kassir | 6/14 | In Progress|  |
+| 6. Billing va kassir | 8/14 | In Progress|  |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 
