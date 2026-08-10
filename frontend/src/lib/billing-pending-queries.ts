@@ -1,0 +1,324 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
+import { z } from "zod";
+
+import { apiFetch } from "@/lib/api-client";
+import { soumSchema } from "@/lib/api-types";
+import { useAuthStore } from "@/lib/auth-store";
+import { domainKey } from "@/lib/market-queries";
+
+/*
+ * =============================================================================
+ * ⛔⛔ KUTILAYOTGAN PATTA PROYEKSIYASI — ALOHIDA MODUL (W0-F3).
+ *
+ * -----------------------------------------------------------------------
+ * ⛔ NEGA U `billing-charge-queries.ts` GA QO'SHILMAYDI [QAROR — §5.3]
+ * -----------------------------------------------------------------------
+ * Qo'shish TEXNIK JIHATDAN to'g'ri bo'lardi: bir domen, bir backend,
+ * o'xshash shakl, ~50 qator kamroq kod. RAD ETILADI — uch sabab bilan,
+ * va uchalasi ham MEXANIK.
+ *
+ * 1. ⛔ G-22 (06-UI-SPEC) SHUNDAN KEYIN YOZILISHI MUMKIN BO'LADI.
+ *    `scripts/collect-surface.test.mjs` taqiqlangan nomlarni BUTUN
+ *    FAYLDA izlaydi — to'liq va mexanik shart. Aralash modulda o'sha
+ *    nomlar QONUNIY bo'lardi (yozilgan hisob ularsiz ifodalanmaydi) va
+ *    darvoza «taqiqlangan nom faqat proyeksiya funksiyalarida
+ *    uchramaydi» degan KONTEKSTGA BOG'LIQ shartga aylanardi — ya'ni
+ *    matn skani bilan tekshirib bo'lmaydigan, kod-ko'rikka qaytadigan
+ *    shartga. Kod ko'rigi esa aynan shu sinfdagi xatoni 2 va 3-fazada
+ *    15+ marta o'tkazib yuborgan.
+ *
+ * 2. ⛔ KESH GRAFI AJRALADI. Proyeksiya `gcTime: 0` bilan yashaydi
+ *    (§9.4), yozilgan hisob esa 60 s `staleTime` bilan — u O'ZGARMAS
+ *    (D-07), ya'ni keshlash xavfsiz. Bitta modulda ikki siyosat bir
+ *    opsiyalar to'plamiga siqilib ketardi va ehtiyotkorroq siyosat
+ *    yo'qolardi.
+ *
+ * 3. ⛔ TIP TIZIMI ISH QILADI. `PendingStall` da hisob identifikatori
+ *    UMUMAN YO'Q, ya'ni unga murojaat KOMPILYATSIYA XATOSI. Aralash
+ *    modulda tip birlashmasi (`union`) paydo bo'lardi va o'sha maydon
+ *    `undefined` bo'lib JIMGINA o'tardi.
+ *
+ * -----------------------------------------------------------------------
+ * ⛔ PROYEKSIYA — HISOB EMAS (D-17, §9.1)
+ * -----------------------------------------------------------------------
+ * Bugungi kun uchun `stall_slot_occupancy` BO'SH (u D+1 03:40 da
+ * to'ladi). Ya'ni «bugun band» belgisi ham, slot sanog'i ham, «bu rasta
+ * pattaga tushadi» da'vosi ham SOXTA KO'RSATKICH bo'lardi. Proyeksiya =
+ * TARIF + QOLDIQ, bandlik shartisiz.
+ *
+ * Shuning uchun hisob identifikatori bu payloadda YASHIRILMAGAN —
+ * u MAVJUD EMAS. Yashirish kod-ko'rik da'vosi bo'lardi; yo'qlik esa
+ * `z.strictObject` bilan o'lchanadigan xossa.
+ *
+ * -----------------------------------------------------------------------
+ * ⛔ D-20 NING KUCHLI SHAKLI: KLIENTDA PUL ARIFMETIKASI IMKONSIZ
+ * -----------------------------------------------------------------------
+ * Tarifning kirish ma'lumoti (identifikatori, toifasi, amal qilish
+ * boshlanishi) bu javobda YO'Q. Ya'ni summani klientda hisoblash
+ * *taqiqlanmaydi* — u IMKONSIZ. Yig'indi ham serverdan keladi
+ * (`total_due_soum`, §9.6): aks holda `[Qarzni ham olish]` tugmasi
+ * D-20 ni BITTA QO'SHISH AMALI bilan buzardi.
+ *
+ * -----------------------------------------------------------------------
+ * ⛔ KESH FAQAT `removeQueries` BILAN TOZALANADI [§5.4, G-23(e)]
+ * -----------------------------------------------------------------------
+ * TanStack'ning `invalidate*` oilasi yozuvni keshda QOLDIRIB uni
+ * «eskirgan» deb belgilaydi. `removeQueries` esa uni GRAFDAN CHIQARADI.
+ * ⛔ Shu sababdan `invalidate*` chaqiruvi bu faylda UMUMAN yo'q va
+ *    yo'qligi statik darvoza bilan o'lchanadi.
+ *
+ * ⚠⚠ 05-13 O'LCHADI: kafolat JUFTLIKDAN chiqadi. `gcTime: 0` oynani
+ *    yopadi, `removeQueries` esa darhol tozalaydi — va `gcTime` bir kun
+ *    oshirilsa, yolg'iz o'zi ham kafolat beradi. Shuning uchun IKKALASI
+ *    ham alohida qo'riqlanadi: `removeQueries` — statik darvoza (G-23e),
+ *    `gcTime`/`staleTime` — komponent testi.
+ * =============================================================================
+ */
+
+/* --- Yo'l konstantasi ------------------------------------------------------ */
+
+export const BILLING_PENDING_PATH = "/billing/pending";
+
+/* --- Summaning yo'qlik sabablari (YOPIQ enum, serverdan) ------------------ */
+
+/**
+ * `amount_soum === null` bo'lganda uning NOMLANGAN sababi (§9.4).
+ *
+ * ⛔ Ro'yxat YOPIQ va u serverning yagona so'zi: klient «taxminiy summa»
+ *    ham, «oxirgi ma'lum summa» ni ham KO'RSATMAYDI. Yo'q summa — yo'q
+ *    summa (D-20).
+ */
+export const AMOUNT_UNAVAILABLE_REASONS = [
+  "market_closed",
+  "tariff_missing",
+] as const;
+
+export type AmountUnavailableReason =
+  (typeof AMOUNT_UNAVAILABLE_REASONS)[number];
+
+/* --- Sxemalar -------------------------------------------------------------- */
+
+/**
+ * `GET /billing/pending?stall_code=…` — BITTA rastaning proyeksiyasi.
+ *
+ * =========================================================================
+ * ⛔ KALITLAR TO'PLAMI AYNAN YETTITA (§9.2) va `z.strictObject` buni
+ *    DINAMIK ravishda qo'riqlaydi: server bir kun ortiqcha maydon
+ *    qo'shsa, klient PARSE PAYTIDA yiqiladi va ekran xato blokini
+ *    ko'rsatadi.
+ *
+ *    Bu «buzilgan ekran» emas — bu PUL YIG'ISHNI HIMOYA QILISH:
+ *    brauzerga yetgan maydon O'QILADI (DevTools, React DevTools,
+ *    `JSON.stringify`), ya'ni CSS bilan yashirish yoki shartli render
+ *    YETARLI EMAS (Pitfall 6).
+ *
+ * ⛔ IKKI QATLAM: statik darvoza (`collect-surface.test.mjs`) KOD nima
+ *    yozilganini o'qiydi, bu sxema esa KOD NIMA QILISHINI o'lchaydi.
+ *    Faqat statik bo'lsa `data["char" + "ge_id"]` uni chetlab o'tardi;
+ *    faqat dinamik bo'lsa u faqat testda yozilgan payloadni tekshirardi.
+ * =========================================================================
+ */
+export const pendingStallSchema = z.strictObject({
+  /** ⛔ Kassir yuzasidagi YAGONA identifikator (§5.5). */
+  stall_code: z.string(),
+  /** «Qaysi kun uchun» — C-4 ning javobi (ISO sana). */
+  service_date: z.string(),
+  market_open: z.boolean(),
+  /** Bugungi patta. `null` — FAQAT nomlangan sabab bilan. */
+  amount_soum: soumSchema.nullable(),
+  amount_unavailable_reason: z.enum(AMOUNT_UNAVAILABLE_REASONS).nullable(),
+  /** Eski qarz — HISOBLANADIGAN qoldiq (BILL-03), saqlangan ustun emas. */
+  outstanding_soum: soumSchema,
+  /** ⛔ SERVERDA hisoblangan yig'indi (§9.6). */
+  total_due_soum: soumSchema,
+})
+  /*
+   * ⛔ JUFTLANGAN INVARIANT — naqsh `NO_COVERAGE_IS_PAIRED_CHECK` dan
+   *   (`sbozor_core/models/occupancy.py`). Ikki yo'nalish IKKI ALOHIDA
+   *   tekshiruvda, chunki xato xabari ikki holatni AJRATIB aytishi
+   *   kerak: «sababsiz yo'q summa» va «summasi bor sabab» — ular
+   *   boshqa-boshqa server nosozliklari.
+   */
+  .refine(
+    (value) =>
+      !(value.amount_soum === null && value.amount_unavailable_reason === null),
+    {
+      message:
+        "SABABSIZ YO'Q SUMMA: `amount_soum` null, lekin sabab berilmagan. " +
+        "Ekran «summa yo'q» deb ko'rsatardi va kassir NIMA UCHUN yo'qligini " +
+        "bilmasdi — D-20 aynan buni taqiqlaydi (§9.4).",
+    },
+  )
+  .refine(
+    (value) =>
+      !(value.amount_soum !== null && value.amount_unavailable_reason !== null),
+    {
+      message:
+        "SUMMASI BOR SABAB: `amount_soum` bor, lekin yo'qlik sababi ham " +
+        "kelgan. Ikkalasi bir vaqtda rost bo'la olmaydi va bu holat " +
+        "ekranda «yopiq kun, lekin to'la» bo'lib chizilardi.",
+    },
+  );
+
+export type PendingStall = z.infer<typeof pendingStallSchema>;
+
+/**
+ * `GET /billing/pending` (rasta parametrisiz) — BOZOR kesimi (§9.5).
+ *
+ * ⛔ Bu ham `strictObject` va unda ham hisob identifikatori YO'Q: bozor
+ *    kesimi proyeksiyaning YIG'INDISI, hisoblar ro'yxati EMAS.
+ *
+ * `fetched_at` — «oxirgi olingan vaqt». U ATAYIN payloadda: §9.5 avtomatik
+ * taymerni rad etadi va uning o'rniga [Yangilash] tugmasi + vaqt tamg'asi
+ * qo'yadi — «men boshqa raqam ko'rgandim» nizosining manbai jimgina
+ * o'zgaradigan raqam edi.
+ */
+export const pendingMarketSummarySchema = z.strictObject({
+  service_date: z.string(),
+  market_open: z.boolean(),
+  pending_amount_soum: soumSchema,
+  outstanding_soum: soumSchema,
+  pending_stall_count: z.number().int(),
+  fetched_at: z.string(),
+});
+
+export type PendingMarketSummary = z.infer<typeof pendingMarketSummarySchema>;
+
+/* --- Query kalitlari (TUG'ILISHIDANOQ doiralangan, §5.4) ------------------ */
+
+/**
+ * ⛔ PREFIKS — `removeQueries` ning YAGONA nishoni.
+ *
+ * `domainKey` `market-queries.ts` DAN import qilinadi, ikkinchi nusxa
+ * yaratilmaydi. Har fabrikaning BIRINCHI argumenti `marketId`: kalit
+ * tug'ilishidanoq tenant chegarasi ichida.
+ */
+export const pendingPrefix = (marketId: string) =>
+  domainKey(marketId, "billing-pending");
+
+export const pendingStallKey = (marketId: string, stallCode: string) =>
+  domainKey(marketId, "billing-pending", stallCode);
+
+export const pendingMarketKey = (marketId: string) =>
+  domainKey(marketId, "billing-pending", "market");
+
+/** Joriy bozor — kalit qurish uchun YAGONA manba (eksport QILINMAYDI). */
+function useMarketId(): string | null {
+  const { principal } = useAuthStore();
+  return principal?.marketId ?? null;
+}
+
+/* --- Rasta proyeksiyasi ---------------------------------------------------- */
+
+/**
+ * `GET /billing/pending?stall_code=…` — kassir yuzasining YAGONA summa manbai.
+ *
+ * =========================================================================
+ * ⛔ `staleTime: 0` VA `gcTime: 0` — BU FAZANING ENG JIM XATO SINFIGA
+ *    QARSHI (§9.4).
+ *
+ *    Kassir `14-C` ni terdi (15 000), keyin `15-A` ni terdi va BIR ZUMGA
+ *    `15-A` kodi ostida 15 000 ko'rindi — u shu paytda [Naqd] va
+ *    [Tasdiqlash] ni bosdi. Eski rastaning summasi yangi rasta kodi
+ *    ostida ko'rinishi TO'G'RIDAN-TO'G'RI noto'g'ri pul yig'ish.
+ *
+ * ⛔ MOSLIK SHARTI KESH SIYOSATIDAN MUSTAQIL (§9.4, 2-qatlam).
+ *    `select` har javobga `matchesRequestedCode` ni HOSIL QILADI: summa
+ *    FAQAT `data.stall_code === stallCode` bo'lganda chizilishi mumkin.
+ *    Ya'ni kalitni SERVER JAVOBINING O'ZI tasdiqlaydi, kesh emas —
+ *    `gcTime` bir kun oshirilsa ham bu qatlam tirik qoladi.
+ *
+ * ⚠ `retry: false`: `market_closed` va `tariff_missing` NORMAL holatlar va
+ *   ular javob tanasida keladi; tarmoq xatosida esa avtomatik takror
+ *   urinish kassirni «summa hozir chiqadi» deb kutishga majburlardi —
+ *   §9.4 bo'yicha bu holatda summa UMUMAN chizilmaydi va [Qayta urinish]
+ *   FOYDALANUVCHI qarori bo'lib qoladi.
+ * =========================================================================
+ */
+export function usePendingStall(
+  stallCode: string,
+  options?: { enabled?: boolean },
+) {
+  const marketId = useMarketId();
+
+  return useQuery({
+    queryKey: pendingStallKey(marketId ?? "", stallCode),
+    queryFn: () =>
+      apiFetch(
+        `${BILLING_PENDING_PATH}?stall_code=${encodeURIComponent(stallCode)}`,
+        { schema: pendingStallSchema },
+      ),
+    select: (data: PendingStall) => ({
+      ...data,
+      matchesRequestedCode: data.stall_code === stallCode,
+    }),
+    enabled:
+      marketId !== null && stallCode !== "" && (options?.enabled ?? true),
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/* --- Bozor kesimi (direktor) ---------------------------------------------- */
+
+/**
+ * `GET /billing/pending` — bozor kesimidagi proyeksiya (§9.5).
+ *
+ * ⛔ `staleTime: 0` va `gcTime: 0` shu yerda ham: raqam KUN ICHIDA
+ *    o'zgaradi va eski yig'indi direktor ekranida «bugungi holat» bo'lib
+ *    ko'rinardi.
+ *
+ * ⚠ `refetchOnWindowFocus` ATAYIN QO'YILMAYDI va standart holida qoladi —
+ *   §9.5 ning so'zma-so'z qarori. Kassir yuzasidan farqi ochiq: u yerda
+ *   fokus qaytishi so'rov TUG'DIRMASLIGI kerak (kassir bir rastada
+ *   turadi), bu yerda esa direktor sahifaga qaytganda eng yangi raqamni
+ *   ko'rgani ma'qul. AVTOMATIK TAYMER esa ikkala yuzada ham YO'Q:
+ *   raqamni o'qib turgan paytda uni jimgina o'zgartirib qo'yish
+ *   «men boshqa raqam ko'rgandim» nizosining manbai.
+ */
+export function useMarketPending(options?: { enabled?: boolean }) {
+  const marketId = useMarketId();
+
+  return useQuery({
+    queryKey: pendingMarketKey(marketId ?? ""),
+    queryFn: () =>
+      apiFetch(BILLING_PENDING_PATH, { schema: pendingMarketSummarySchema }),
+    enabled: marketId !== null && (options?.enabled ?? true),
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
+/* --- Muvaffaqiyatli to'lovdan keyingi tozalash ----------------------------- */
+
+/**
+ * ⛔ To'lov yozilgach proyeksiya keshdan CHIQARILADI — «eskirgan» deb
+ *    belgilanmaydi.
+ *
+ * =========================================================================
+ * ⚠ NOMIDA `invalidate` SO'ZI YO'Q VA BU ATAYIN.
+ *
+ *   `invalidatePendingAfterPayment` nomi TEXNIK JIHATDAN to'g'ri bo'lardi
+ *   (u kesh yozuvini «endi ishonchsiz» deb belgilaydi), lekin u keyingi
+ *   o'quvchiga AMALNI NOTO'G'RI aytardi: TanStack'da `invalidate` yozuvni
+ *   grafda QOLDIRADI va faqat qayta so'raladigan qilib belgilaydi. To'lov
+ *   yozilgandan keyin esa eski proyeksiya BRAUZER XOTIRASIDA turishi ham
+ *   kerak emas — u endi YOLG'ON summa.
+ *
+ *   05-13 ning darsi: kafolat JUFTLIKDAN chiqadi (`gcTime: 0` +
+ *   `removeQueries`) va ikkala yarim ALOHIDA qo'riqlanadi. Nom shu
+ *   juftlikning ikkinchi yarmini aytadi, birinchisini emas.
+ * =========================================================================
+ */
+export function dropPendingAfterPayment(
+  client: QueryClient,
+  marketId: string,
+): void {
+  client.removeQueries({ queryKey: pendingPrefix(marketId) });
+}
