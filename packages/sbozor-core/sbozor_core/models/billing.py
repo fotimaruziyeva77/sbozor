@@ -137,6 +137,8 @@ __all__ = [
     "CHARGE_EVIDENCE_INDEX",
     "DAILY_CHARGE_DAY_INDEX",
     "DAILY_CHARGE_VENDOR_INDEX",
+    "LATE_REVIEW_ADJUSTMENT_INDEX",
+    "LATE_REVIEW_ADJUSTMENT_PREDICATE",
     "NO_COVERAGE_ANOMALY_IS_PAIRED_CHECK",
     "OVERRIDE_IS_PAIRED_CHECK",
     "OVERRIDE_REASON_CHECK",
@@ -406,6 +408,37 @@ PAYMENT_STALL_INDEX = "ix_payments_market_stall_service_date"
 
 CHARGE_ADJUSTMENT_INDEX = "ix_charge_adjustments_market_charge"
 """Hisob kartochkasidagi tuzatishlar ro'yxati (UI-SPEC §11.3)."""
+
+LATE_REVIEW_ADJUSTMENT_INDEX = "uq_charge_adjustments_market_charge_late_review"
+"""BIR HISOBGA BITTA `late_review` TUZATISHI — qisman UNIQUE indeks (0022).
+
+=============================================================================
+⛔⛔ POYGA DB'GA TOPSHIRILADI, `SHIFT_OPEN_INDEX` bilan AYNAN bir xil sabab.
+
+`late_review` tuzatishini INSON emas, `billing_close` job'i yozadi
+(`app/jobs/billing_close.py`): nazoratchi D+1 kunduzida «bo'sh» degach,
+job qayta yugurganda o'zgarmas hisobni BEKOR QILA OLMAYDI (D-07) va
+o'rniga `direction = 'decrease'` tuzatishi yoziladi.
+
+⚠ Job KONVERGENT, ya'ni u AYNAN o'sha kun uchun QAYTA-QAYTA yugurishi
+  NORMAL holat. Idempotentlik ilova qatlamida («avval tekshir, keyin
+  yoz») qilinganda ikkita parallel yugurish ikkita TO'LIQ SUMMALI
+  kamaytirish yozardi va hisobning netto summasi MANFIY bo'lib qolardi —
+  ya'ni himoyaning yo'qligi jimgina PUL XATOSIGA aylanardi.
+
+⚠ QOLGAN sabab kodlari uchun bu indeks HECH NIMANI cheklamaydi va bu
+  ATAYIN: `CHARGE_ADJUSTMENT_INDEX` docstringidagi «bir hisobga bir necha
+  tuzatish MUTLAQO qonuniy» qoidasi kuchida qoladi — qisman indeks faqat
+  TIZIM yozadigan yagona sabab kodini qamraydi.
+"""
+
+LATE_REVIEW_ADJUSTMENT_PREDICATE = f"reason_code = '{AdjustmentReason.LATE_REVIEW.value}'"
+"""Qisman indeksning predikati — `AdjustmentReason` DAN HOSILA.
+
+`SHIFT_OPEN_PREDICATE` bilan bir xil qoida: qo'lda ko'chirilgan literal
+enum bilan ajralib ketganda indeks JIMGINA hech nimani qamramay qolardi
+va idempotentlik konventsiyaga aylanardi.
+"""
 
 BILLING_ANOMALY_INDEX = "ix_billing_anomalies_market_service_date_kind"
 """Kunlik anomaliya hisoboti — uchala `kind` ALOHIDA sanaladi (C-12)."""
@@ -698,6 +731,17 @@ class ChargeAdjustment(Base, TenantMixin):
         CheckConstraint(ADJUSTMENT_REASON_CHECK, name="reason_code_allowed"),
         CheckConstraint("amount_soum > 0", name="amount_soum_positive"),
         Index(CHARGE_ADJUSTMENT_INDEX, "market_id", "charge_id"),
+        # ⚠⚠ TIZIM YOZADIGAN YAGONA SABAB KODI UCHUN QISMAN UNIQUE INDEKS
+        #   (`LATE_REVIEW_ADJUSTMENT_INDEX` docstringi). Qolgan sabab
+        #   kodlari uchun bir hisobga bir necha tuzatish qonuniy bo'lib
+        #   QOLADI — indeks ularni umuman qamramaydi.
+        Index(
+            LATE_REVIEW_ADJUSTMENT_INDEX,
+            "market_id",
+            "charge_id",
+            unique=True,
+            postgresql_where=text(LATE_REVIEW_ADJUSTMENT_PREDICATE),
+        ),
     )
 
     id: Mapped[UUID] = uuid_pk()
@@ -709,7 +753,19 @@ class ChargeAdjustment(Base, TenantMixin):
     # MUSBAT KATTALIK (C-5). `bigint` so'm.
     amount_soum: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     # Kim tuzatdi — nizoda «kim qaror qildi?» savolining javobi (D-02).
-    actor_user_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), nullable=False)
+    #
+    # ⛔ `NULL` = TIZIM, va u YO'Q JAVOB EMAS (0022 da NOT NULL bo'shatildi).
+    #   `late_review` tuzatishini `billing_close` job'i yozadi: nazoratchi
+    #   kechikkan javobi hisobni o'zgarmas qoldiradi (D-07) va kamaytirish
+    #   ALOHIDA qator bo'lib tug'iladi. O'sha qatorga birorta odamning
+    #   `user_id` sini yozish YOLG'ON bo'lardi — «kim qaror qildi?»
+    #   savoliga noto'g'ri odamni ko'rsatgan javob javobning YO'QLIGIDAN
+    #   yomonroq (nizoda u aynan dalil sifatida o'qiladi).
+    #
+    # ⚠ NAQSH `ops.py::AuditLog.actor_user_id` DAN: u ham `nullable` va
+    #   sabab AYNAN bir xil — fon jobi `actor_kind = 'system'` bilan
+    #   ishlaydi va uning `app.actor_id` GUC'i bo'sh.
+    actor_user_id: Mapped[UUID | None] = mapped_column(PgUuid(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

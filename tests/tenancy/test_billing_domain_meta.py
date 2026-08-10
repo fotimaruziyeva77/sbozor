@@ -739,9 +739,19 @@ qo'shiladigan yangi ustunni qamramasdi.
 
 _BILLING_MIGRATIONS = tuple(
     (Path(__file__).resolve().parents[2] / "migrations" / "versions" / name)
-    for name in ("0020_billing_domain.py", "0021_market_delete_billing.py")
+    for name in (
+        "0020_billing_domain.py",
+        "0021_market_delete_billing.py",
+        # ⚠ 06-07 QO'SHDI: `0022` `charge_adjustments` ga qisman UNIQUE
+        #   indeks olib keladi va uning predikati `AdjustmentReason` DAN
+        #   HOSILA. Ro'yxat NOMMA-NOM bo'lgani uchun yangi migratsiya
+        #   avtomatik qamralmasdi — ya'ni 6-fazaning YANGI fayli
+        #   darvozadan JIMGINA chetda qolardi va D-32 shu fayldan
+        #   boshlab kuchsizlanardi.
+        "0022_billing_late_review.py",
+    )
 )
-"""6-fazaning ikki migratsiyasi — NOMMA-NOM.
+"""6-fazaning uchta migratsiyasi — NOMMA-NOM.
 
 ⚠ `glob("*.py")` ATAYIN EMAS: quyi fazalarning migratsiyalarida qo'lda
 yozilgan ro'yxatlar BO'LISHI mumkin (ular boshqa qaror sinfida) va
