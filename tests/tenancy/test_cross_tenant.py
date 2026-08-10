@@ -36,7 +36,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from itertools import count
 from typing import TYPE_CHECKING, Any, NamedTuple
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 import xlsxwriter
@@ -54,6 +54,7 @@ from fixtures.nvr_domain import add_discovery_run, nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import SEED_PASSWORD
+from sbozor_core.enums import ShiftStatus
 from sbozor_core.security import encode_access
 
 if TYPE_CHECKING:
@@ -127,6 +128,19 @@ class MatrixBillingRows(NamedTuple):
       qo'shni faylning RO'YXAT TARTIBIGA tayanardi va u qayta tartiblangan
       kuni matritsa BOSHQA rastani so'ragan bo'lardi
       (`test_billing_api._stall_code()` da o'rnatilgan qoida).
+    """
+    shift_id: UUID
+    """B bozorining HAQIQIY `cashier_shifts.id` si — `shift_id` filleri (06-10).
+
+    ⚠ To'qilgan UUID YARAMAYDI: `POST /shifts/{id}/close` ikkala holatda
+      ham 404 berardi, lekin sababi TENANT chegarasi emas, «bunday smena
+      umuman yo'q» bo'lardi (`PARAM_FILLERS` docstringidagi umumiy qoida).
+
+    ⚠ QATOR `status = 'open'` (yopilgan EMAS): yopilgan smena bilan
+      marshrut TENANT darvozasigacha yetib bormasdan **409
+      `shift_already_closed`** berardi va matritsa 404 kutayotgan joyda
+      HOLAT darvozasini o'lchagan bo'lardi (`camera_id` filleri
+      arxivlanmagan kanalni ko'rsatishi bilan aynan bir xil mulohaza).
     """
 
 
@@ -404,6 +418,18 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # joyda holat darvozasini o'lchagan bo'lardi (`camera_id` filleri
     # arxivlanmagan kanalni ko'rsatishi bilan bir xil mulohaza).
     "payment_id": lambda seed: str(seed.billing.payment_id),
+    # --- 06-10: kassir smenasi ---
+    #
+    # ⚠ B BOZORINING HAQIQIY VA OCHIQ `cashier_shifts.id` SI —
+    # `payment_id`/`charge_id` bilan AYNAN bir xil sabab, ikki qo'shimcha
+    # shart bilan: (1) qator OCHIQ bo'lishi shart, aks holda javob 409
+    # `shift_already_closed` bo'lardi va tenant darvozasi umuman
+    # sinalmasdi; (2) u B ning KASSIRIGA tegishli, ya'ni A ning sessiyasi
+    # uni RLS ostida umuman ko'rmaydi va 404 sababi bir ma'noli qoladi.
+    #
+    # ⚠ QATORNI `billing_rows` fixture'i YOZADI, seed EMAS
+    # (`TenantSeed.billing` docstringi).
+    "shift_id": lambda seed: str(seed.billing.shift_id),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -504,6 +530,15 @@ qatori qoldirardi — `MATRIX_STAFF_PHONE` bilan aynan bir xil qaror.
 
 ⚠ Uzunlik `PaymentCreateRequest.idempotency_key` ning `min_length=8`
   chegarasidan katta.
+"""
+
+MATRIX_SHIFT_OPEN = ShiftStatus.OPEN.value
+"""B bozorining smena qatorining holati — ⛔ ENUMDAN, LITERAL emas (06-10).
+
+`fixtures/billing_domain._open_shift()` da o'rnatilgan qoida: literal
+`'open'` yozilganda enum o'zgargan kuni fixture qatorni JIMGINA boshqa
+holatda yozardi va `shift_id` filleri 404 o'rniga 409 olardi — ya'ni
+matritsa tenant emas, HOLAT darvozasini o'lchay boshlardi.
 """
 
 MATRIX_PAYMENT_SOUM = 1
@@ -732,6 +767,30 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
     RouteSpec("POST", "/api/v1/payments/{payment_id}/reverse"): lambda _: {
         "reason_code": "wrong_amount",
     },
+    # --- 06-10: smena ochish va KO'R deklaratsiya bilan yopish ---
+    #
+    # ⛔ TANA BO'SH VA BU YOZUV XATOSI EMAS: `POST /api/v1/shifts` da
+    # so'rov modeli UMUMAN yo'q — `cashier_id` so'rovchining O'ZIDAN
+    # olinadi (`shifts.py::open_shift` docstringi). Yozuvni bu yerda
+    # QOLDIRISH kerak, chunki `test_no_matrix_route_returns_422`
+    # `BODY_METHODS` bo'yicha yuradi va tanasiz `POST` ni «filler
+    # unutilgan» deb qizartirardi.
+    #
+    # ⚠ IKKINCHI CHAQIRUV **409 `shift_already_open`** beradi (D-27) va
+    # bu MATRITSA UCHUN YETARLI: da'vo «so'rov 422 da to'xtamadi»,
+    # «har safar yangi qator yozildi» EMAS (`MATRIX_STAFF_PHONE` bilan
+    # aynan bir xil qaror).
+    RouteSpec("POST", "/api/v1/shifts"): lambda _: {},
+    # ⚠ TANA AYNAN BITTA MAYDONLI va `declared_soum` MAJBURIY: ixtiyoriy
+    #   qilingan maydon bilan tana bo'sh ketardi va marshrut Pydantic
+    #   darajasida **422** olardi — tenant da'vosi sinalmasdi.
+    #
+    # ⚠ QIYMAT ARIFMETIKASIZ: yopish tizim summasini SERVERDA hisoblaydi
+    #   va deklaratsiya u bilan SOLISHTIRILMAYDI — ya'ni har qanday
+    #   nomanfiy son marshrutni ishlab ketkazadi. `0` ham qonuniy
+    #   (§10.2), lekin `1000` tanlandi: nol qiymat «filler to'ldirilmagan»
+    #   dan farq qilib turishi kerak.
+    RouteSpec("POST", "/api/v1/shifts/{shift_id}/close"): lambda _: {"declared_soum": 1000},
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
 
@@ -927,6 +986,17 @@ sinalmasdi (OP-9).
    HAM bor (`/billing/pending` bilan bir xil sabab), ya'ni u odatdagi
    sessiyadan o'tadi. Uni bu yerga qo'shish marshrutni kuchsizroq
    sessiyadan olib chiqib ketardi.
+
+⛔ **TO'RTALA SMENA MARSHRUTI HAM (06-10) BU RO'YXATDA ATAYIN YO'Q** va
+   sabab AYNAN o'sha: `POST /shifts`, `GET /shifts/open` va
+   `POST /shifts/{id}/close` `SHIFT_MANAGE` talab qiladi, u esa
+   `market_admin` da HAM bor (UI-SPEC §5.6 — kichik bozorda bozor
+   admini kassirni almashtiradi); `GET /shifts?day=` esa `REPORT_VIEW`
+   ostida va u ham `market_admin` da bor. Ya'ni to'rtalasi ham ODATDAGI
+   sessiyadan o'tadi. Ularni bu yerga qo'shish matritsani KUCHSIZROQ
+   sessiyaga o'tkazardi — va yomoni: kassirda `report_view` YO'Q, ya'ni
+   `GET /shifts` **403** olib matritsani 404 kutayotgan joyda
+   yiqitardi.
 
 ⚠ KASSIR `two_markets` SEED'IDAN KELADI (`AuthSeed.cashier` ->
   `market_a.cashier_user_id`), ya'ni YANGI SEED YOZILMAYDI (Gotcha 22):
@@ -1352,12 +1422,31 @@ def billing_rows(
         stall_id=domain_b.stall_ids[0],
         vendor_id=domain_b.vendor_ids[0],
         cashier_id=market_b.cashier_user_id,
-        # ⚠ `None` ATAYIN: B bozorida ochiq smena YO'Q va uni ochish
-        #   `uq_cashier_shifts_..._open` ga tegadigan yangi holat
-        #   qo'shardi. `shift_id` NULLABLE (OQ-6/A5), ya'ni qator
-        #   `payment_id` filleri uchun to'liq yaroqli.
+        # ⚠ `None` ATAYIN VA U 06-10 DAN KEYIN HAM SHUNDAY QOLADI: B
+        #   bozorida ochiq smena endi BOR (pastdagi `shift_id`), lekin
+        #   bu to'lov unga BOG'LANMAYDI. `shift_id` NULLABLE (OQ-6/A5)
+        #   va aynan shu qator `payment_id` filleri uchun to'liq
+        #   yaroqli; smenaga bog'lash uni B ning tizim summasiga
+        #   qo'shardi va ikki filler bir-biriga bog'lanib qolardi.
         shift_id=None,
         service_date=service_date,
+    )
+    # ⛔ B BOZORINING OCHIQ SMENASI — `shift_id` FILLERI UCHUN (06-10).
+    #
+    # `nvr_domain` ning `add_discovery_run()` i bilan aynan bir xil naqsh:
+    # seed bu qatorni YOZMAYDI, matritsaga esa HAQIQIY B qatori KERAK.
+    # Qator OCHIQ holatda qoldiriladi — sabab `MatrixBillingRows.shift_id`
+    # docstringida (yopilgan smena 409 berib tenant darvozasini
+    # KO'RSATMASDAN qolardi).
+    #
+    # ⚠ EGASI B NING KASSIRI: qisman UNIQUE indeks `(market_id,
+    #   cashier_id)` bo'yicha, ya'ni bu qator A bozoridagi hech kimga
+    #   xalaqit bermaydi va matritsaning `POST /api/v1/shifts` chaqiruvi
+    #   (A ning admini) baribir 201 oladi.
+    shift_id = uuid4()
+    sync_owner_conn.execute(
+        "INSERT INTO cashier_shifts (id, market_id, cashier_id, status) VALUES (%s, %s, %s, %s)",
+        (str(shift_id), str(market_b.id), str(market_b.cashier_user_id), MATRIX_SHIFT_OPEN),
     )
 
     payer_stall_id = domain_a.handover_stall_id
@@ -1379,6 +1468,7 @@ def billing_rows(
             service_date=service_date,
             payment_id=payment_id,
             payer_stall_code=payer_stall_code,
+            shift_id=shift_id,
         )
     finally:
         market_ids = [str(market_a.id), str(market_b.id)]
@@ -1399,6 +1489,24 @@ def billing_rows(
         )
         sync_owner_conn.execute(
             "DELETE FROM daily_charges WHERE market_id = ANY(%s::uuid[])", (market_ids,)
+        )
+        # ⛔ SMENALAR ENG OXIRIDA — `CLEANUP_ORDER` (`fixtures/billing_
+        #    domain.py`) bilan AYNAN bir xil tartib: `payments.shift_id`
+        #    kompozit FK bilan `(market_id, id)` ga havola qiladi, ya'ni
+        #    to'lovlar OLDIN o'chirilishi shart.
+        #
+        # ⚠ MARKET BO'YICHA, `id` BO'YICHA EMAS: matritsa `POST
+        #   /api/v1/shifts` ni chaqirganda A bozoriga HAQIQIY smena
+        #   yozadi va uning identifikatorini fixture BILMAYDI —
+        #   `payments` bilan aynan bir xil holat. `id` bo'yicha tozalash
+        #   o'sha qatorni bazada abadiy qoldirardi va KEYINGI yugurishda
+        #   `POST /api/v1/shifts` 409 dan boshlanardi.
+        #
+        # ⚠ BOZORLAR ALLAQACHON QORALAMADA (yuqoridagi `UPDATE`):
+        #   `shift_declaration_immutable()` `DELETE` ni FAQAT nofaol
+        #   bozorda ruxsat etadi, aks holda `23514` berardi.
+        sync_owner_conn.execute(
+            "DELETE FROM cashier_shifts WHERE market_id = ANY(%s::uuid[])", (market_ids,)
         )
         if active:
             sync_owner_conn.execute(
@@ -1850,6 +1958,13 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             #   KIRMAYDI: bu yerdagi da'vo «filler AYNAN B ni ko'rsatadi»
             #   va A ning qatorini qo'shish uni bo'shatib yuborardi.
             tenant_seed.billing.payment_id,
+            # --- 06-10 ---
+            #
+            # ⚠ AYNAN o'sha fixture yozgan B bozorining OCHIQ smenasi.
+            #   Matritsa `POST /api/v1/shifts` ni chaqirganda A bozoriga
+            #   ham smena yoziladi, LEKIN u bu ro'yxatga KIRMAYDI —
+            #   `payment_id` bandi bilan aynan bir xil sabab.
+            tenant_seed.billing.shift_id,
         )
     }
 
