@@ -75,12 +75,14 @@ from sbozor_core.billing import (
 )
 from sbozor_core.enums import (
     AdjustmentDirection,
+    AdjustmentReason,
     AnomalyKind,
     OccupancyVerdict,
     PaymentKind,
     ResolutionSource,
 )
-from sbozor_core.models import BillingAnomaly, ChargeEvidence, DailyCharge
+from sbozor_core.models import BillingAnomaly, ChargeAdjustment, ChargeEvidence, DailyCharge
+from sbozor_core.models.billing import LATE_REVIEW_ADJUSTMENT_PREDICATE
 from sbozor_core.money import assert_safe_soum
 from sqlalchemy import Date, Integer, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -102,6 +104,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
+    "ExistingCharge",
     "PendingMarket",
     "PendingProjection",
     "PendingStall",
@@ -109,6 +112,8 @@ __all__ = [
     "StallDayMoney",
     "StallSlotVerdict",
     "billable_stalls",
+    "event_snapshots",
+    "market_day_charges",
     "pending_projection",
     "resolve_stall_day_money",
     "vendor_charge_allocation",
@@ -116,6 +121,7 @@ __all__ = [
     "write_anomaly",
     "write_charge",
     "write_evidence",
+    "write_late_review_adjustment",
 ]
 
 _UUID = PgUuid(as_uuid=True)
@@ -647,6 +653,30 @@ ishora qilishi mumkin.
 """
 
 
+async def event_snapshots(
+    session: AsyncSession, *, market_id: UUID, event_ids: Sequence[UUID]
+) -> dict[UUID, UUID]:
+    """`occupancy_event_id -> snapshot_id` — dalil nusxasining YAGONA manbai.
+
+    ⛔ IKKI CHAQIRUVCHI, BITTA SO'ROV: `write_evidence()` (hisobning
+       rasm-dalili) va `billing_close` (anomaliyaning dalili — D-29 hisob
+       YOZILMAGANDA ham kadr talab qiladi). Ikkinchi nusxa yozilganda
+       ular bir kun ajralib ketardi va anomaliya boshqa kadrga ishora
+       qilardi — nizoda ikkala rasm ham «to'g'ri» bo'lardi.
+
+    Returns:
+        Faqat TOPILGAN juftliklar. Yo'q hodisa lug'atga KIRMAYDI va bu
+        HALOL javob: chaqiruvchi `None` bilan anomaliya yozishga urinsa
+        `write_anomaly()` uni `ValueError` bilan rad etadi (D-29).
+    """
+    if not event_ids:
+        return {}
+    result = await session.execute(
+        _EVIDENCE_SNAPSHOTS, {"market_id": market_id, "event_ids": list(event_ids)}
+    )
+    return {row["occupancy_event_id"]: row["snapshot_id"] for row in result.mappings()}
+
+
 async def write_evidence(
     session: AsyncSession,
     *,
@@ -684,16 +714,13 @@ async def write_evidence(
     if not winners:
         return 0
 
-    lookup = await session.execute(
-        _EVIDENCE_SNAPSHOTS,
-        {
-            "market_id": market_id,
-            "event_ids": [row.winning_occupancy_event_id for row in winners],
-        },
+    snapshot_by_event = await event_snapshots(
+        session,
+        market_id=market_id,
+        event_ids=[
+            event_id for row in winners if (event_id := row.winning_occupancy_event_id) is not None
+        ],
     )
-    snapshot_by_event: dict[UUID, UUID] = {
-        row["occupancy_event_id"]: row["snapshot_id"] for row in lookup.mappings()
-    }
 
     values = [
         {
@@ -785,6 +812,125 @@ async def write_anomaly(
     )
     anomaly_id: UUID | None = (await session.execute(stmt)).scalar_one_or_none()
     return anomaly_id
+
+
+_MARKET_DAY_CHARGES = text(
+    """
+    SELECT c.stall_id    AS stall_id,
+           c.id          AS charge_id,
+           c.amount_soum AS amount_soum
+      FROM daily_charges c
+     WHERE c.market_id = :market_id
+       AND c.service_date = :service_date
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("service_date", type_=Date()),
+)
+"""Shu kunga ALLAQACHON yozilgan hisoblar — rasta kesimida.
+
+⛔ NEGA KERAK: `write_charge()` konfliktda `None` qaytaradi (Pitfall 3),
+   ya'ni «bor» degan javobdan hisobning `id` si ham, summasi ham CHIQMAYDI.
+   Kech kelgan tasdiq shoxi (Pitfall 5c) esa AYNAN shu ikkalasini talab
+   qiladi: tuzatish qatori mavjud hisobga osiladi va uning TO'LIQ
+   summasini kamaytiradi.
+
+⚠ `service_date` bo'yicha, `business_date` bo'yicha EMAS — ikki ustunning
+  ikki ma'nosi `_BILLABLE_SLOT_ROWS` docstringida (Pitfall 1). Job D + 1
+  da yuguradi, ya'ni `business_date` bo'yicha qidiruv NORMAL kunda 0 qator
+  berardi va kech tasdiq shoxi HECH QACHON ishlamasdi.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class ExistingCharge:
+    """Yozilgan hisobning tuzatish uchun YETARLI minimumi.
+
+    ⚠ `service_date` YO'Q va bu ataylab: qator `market_day_charges()` ning
+      AYNAN bitta kuni uchun olinadi, ya'ni kunni qatorga takrorlash
+      «qaysi kun?» savoliga ikkinchi javob manbai bo'lardi.
+    """
+
+    charge_id: UUID
+    amount_soum: int
+
+
+async def market_day_charges(
+    session: AsyncSession, *, market_id: UUID, service_date: date
+) -> dict[UUID, ExistingCharge]:
+    """Shu kunning yozilgan hisoblari — `{stall_id: ExistingCharge}`.
+
+    Bo'sh lug'at — NATIJA («bu kunga hali hisob yozilmagan»), uning
+    yo'qligi emas.
+    """
+    result = await session.execute(
+        _MARKET_DAY_CHARGES, {"market_id": market_id, "service_date": service_date}
+    )
+    return {
+        row["stall_id"]: ExistingCharge(
+            charge_id=row["charge_id"], amount_soum=int(row["amount_soum"])
+        )
+        for row in result.mappings()
+    }
+
+
+async def write_late_review_adjustment(
+    session: AsyncSession, *, market_id: UUID, charge: ExistingCharge
+) -> UUID | None:
+    """KECH KELGAN TASDIQ — hisob BEKOR QILINMAYDI, KAMAYTIRILADI (Pitfall 5c).
+
+    =======================================================================
+    ⛔⛔ D-07 NING AMALDAGI SHAKLI VA BILL-02 NING YAGONA PRODUCER'I.
+
+    Nazoratchi D + 1 kunduzida «bo'sh» degach `day_close` qayta yuguradi va
+    o'sha kunning materializatsiyasi o'zgaradi. Yozilgan hisob esa
+    O'ZGARMAS (`daily_charges` da `UPDATE`/`DELETE` triggeri bor, 0020) —
+    va bu TO'G'RI: sotuvchi ko'rgan summa kechasi jimgina o'zgarmasligi
+    kerak. Tuzatish ALOHIDA QATOR bo'lib tug'iladi va nizoda IKKALA yozuv
+    ham ko'rinadi.
+
+    ⛔ `actor_user_id` YOZILMAYDI (`NULL` = tizim, `0022`). Odam
+       ko'rsatilgan qator «kim qaror qildi?» savoliga YOLG'ON javob
+       bo'lardi — model qaror qildi, odam esa faqat bandlikni tuzatdi.
+
+    ⛔ `write_app_audit()` CHAQIRILMAYDI: `charge_adjustments`
+       `BILLING_AUDITED_TABLES` da, ya'ni audit qatorini DB-TRIGGER
+       (`fn_audit_row()`) yozadi va ilova qatlamidagi ikkinchi yozuv
+       DUBLIKAT bo'lardi (`enums.py::AuditAction` ning `charge_adjust`
+       a'zosi aynan shu sababdan YO'Q).
+
+    ⛔ IDEMPOTENTLIK STRUKTURAVIY: `LATE_REVIEW_ADJUSTMENT_INDEX` qisman
+       UNIQUE indeksi `(market_id, charge_id) WHERE reason_code =
+       'late_review'` ni qamraydi. Job KONVERGENT, ya'ni bir kunni
+       qayta-qayta yugurish NORMAL — ilova qatlamidagi «avval tekshir,
+       keyin yoz» ikkita parallel yugurishda IKKI marta to'liq summani
+       ayirardi va hisobning nettosi MANFIY bo'lib qolardi.
+    =======================================================================
+
+    Returns:
+        Yangi tuzatish qatorining `id` si, yoki `None` — ⛔ XATO EMAS:
+        «bu hisobga `late_review` tuzatishi ALLAQACHON yozilgan».
+    """
+    stmt = (
+        pg_insert(ChargeAdjustment)
+        .values(
+            market_id=market_id,
+            charge_id=charge.charge_id,
+            direction=AdjustmentDirection.DECREASE.value,
+            reason_code=AdjustmentReason.LATE_REVIEW.value,
+            # ⛔ TO'LIQ SUMMA: kech tasdiq «bu rasta band EMAS edi» deydi,
+            #   ya'ni hisobning bir qismi emas, HAMMASI o'rinsiz.
+            amount_soum=assert_safe_soum(charge.amount_soum),
+            actor_user_id=None,
+        )
+        .on_conflict_do_nothing(
+            index_elements=["market_id", "charge_id"],
+            index_where=text(LATE_REVIEW_ADJUSTMENT_PREDICATE),
+        )
+        .returning(ChargeAdjustment.id)
+    )
+    adjustment_id: UUID | None = (await session.execute(stmt)).scalar_one_or_none()
+    return adjustment_id
 
 
 # ===========================================================================

@@ -117,6 +117,7 @@ from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
 
 from app.jobs.alerting import alert_sweep, daily_digest
 from app.jobs.audit_draw import QueueTickPolicy, daily_queue_tick
+from app.jobs.billing_close import billing_close
 from app.jobs.capture import BatchRequest, CapturePolicy, capture_batch, capture_tick
 from app.jobs.day_close import day_close
 from app.jobs.discovery import discover_nvr
@@ -135,6 +136,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 __all__ = [
+    "BILLING_CLOSE_CRON",
     "DAY_CLOSE_CRON",
     "DEFAULT_LOG_LEVEL",
     "DIGEST_CRON",
@@ -149,6 +151,7 @@ __all__ = [
     "TICK_CRON",
     "ObservedScheduler",
     "alert_sweep_task",
+    "billing_close_task",
     "broker",
     "capture_batch_task",
     "capture_tick_task",
@@ -436,6 +439,65 @@ aylanardi.
   daqiqada boshlansalar disk uchun raqobat qilardilar; 20 daqiqa farq
   ularni ajratadi. Kadr olish oynasi (06:00–18:00) ikkalasidan ham
   uzoqda.
+=============================================================================
+"""
+
+BILLING_CLOSE_CRON: Final[str] = "10 4 * * *"
+"""Kunlik patta hisobi — KECHASI 04:10 (Toshkent) va u KECHAGI kunni yopadi.
+
+=============================================================================
+⛔⛔ (a) `DAY_CLOSE_CRON` (03:40) DAN KEYIN — VA BU O'LCHANGAN, TANLOV EMAS.
+
+`stall_slot_occupancy` ning YAGONA yozuvchisi `occupancy_repo.
+materialize()` va uni faqat `day_close` chaqiradi, ya'ni D kunining
+slot qatorlari D + 1 ning 03:40 da TUG'ILADI. `billing_close` esa
+`billable_stalls()` orqali FAQAT materializatsiya qilingan qatorlarni
+o'qiydi (D-03).
+
+Vazifa 03:40 dan OLDIN (masalan o'sha kunning 20:30 ida) yugurganda slot
+jadvalida o'sha kun uchun ⛔ NOL qator bo'lardi: job hech nima yozmasdi
+va ⛔ XATO HAM BERMASDI — «hammasi joyida» bilan bir xil ko'rinadigan
+sukunat. 30 daqiqalik oraliq `day_close` ning uzoq bozorlarda cho'zilishi
+uchun zaxira.
+
+⛔ (b) ORALIQ `RETENTION_CRON`(03:20) -> `DAY_CLOSE_CRON`(03:40) FARQI
+   BILAN BIR XIL MULOHAZA: ketma-ket ishlaydigan kechki vazifalar bir
+   daqiqada boshlanmasligi kerak. Bu yerda raqobat disk uchun emas,
+   BAZA uchun: `day_close` 1000 rastaga 7000 qator yozadi.
+
+⛔ (c) TARTIB KAFOLATI BU SATRGA TAYANMAYDI (D-13 ning MAZMUNI).
+   `billing_close` bandlikka faqat O'QISH uchun tegadi va IDEMPOTENT
+   (`ON CONFLICT DO NOTHING`), ya'ni noto'g'ri tartibda yugursa ham
+   QAYTA YUGURISH tuzatadi. Cron satri faqat NARXNI kamaytiradi —
+   kafolatni `daily_charges` ning idempotentlik kaliti beradi.
+
+=============================================================================
+⛔⛔ DEPLOY BANDI — MEXANIK RAVISHDA USHLANMAYDI, SHU YERGA YOZILADI.
+
+Cron jadvali `import` PAYTIDA olinadi (`LabelScheduleSource`, fayl
+boshidagi planer bo'limi), ya'ni YANGI VAZIFA `scheduler` KONTEYNERI
+QAYTA ISHGA TUSHIRILMAGUNCHA RO'YXATGA OLINMAYDI:
+
+    docker compose up -d --force-recreate scheduler
+
+⛔ BUNI BIRORTA TEST USHLAMAYDI: testlar `broker.task` reyestrini
+   jarayonning O'ZIDA o'qiydi, prodda esa eski jarayon eski jadval bilan
+   ishlab turaveradi — vazifa hech qachon ishlamaydi va xato ham
+   chiqmaydi.
+
+⚠ YAGONA MEXANIK HIMOYA — YURAK URISHINING YO'QLIGI: `billing_close`
+  `self_check.EXPECTED_COMPONENTS` va `alerting._platform_signals`
+  ning `watched` ro'yxatiga qo'shilgan, ikkinchisida esa `None` HAM
+  eskirish. Ya'ni band unutilsa `billing_close_stale` alerti ochiladi.
+
+=============================================================================
+⚠ IKKINCHI CRON QO'SHILMAYDI (A8) va bu ONGLI rad etish. «Kechqurun yana
+  bir ko'r» varianti kuniga IKKI chaqiruv berardi va u ikki narsani
+  buzardi: (1) kechki yugurish hali materializatsiya qilinmagan kunni
+  ko'rib `no_slot_rows` ni shishirardi; (2) «qaysi yugurish yozdi?»
+  savoli har nosozlikda qaytadan so'ralardi — ikki haqiqat manbai.
+  Kech kelgan tasdiqlar `charge_adjustments` yo'li bilan hal bo'ladi
+  (`billing_close.py` docstringining 5-bandi).
 =============================================================================
 """
 
@@ -876,6 +938,32 @@ async def day_close_task(context: Annotated[Context, TaskiqDepends()]) -> None:
     """
     state = context.state
     await day_close(state.sessionmaker, business_date=business_today() - timedelta(days=1))
+
+
+@broker.task(
+    task_name="billing.close",
+    schedule=[{"cron": BILLING_CLOSE_CRON, "cron_offset": MARKET_CRON_OFFSET}],
+)
+async def billing_close_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — kunlik patta hisobi (06-07, BILL-01/BILL-02/BILL-04).
+
+    ⛔ KECHAGI KUN YOPILADI, BUGUNGISI EMAS (`BILLING_CLOSE_CRON`
+       docstringi): tik 04:10 da ishlaydi va bugungi kunning birinchi
+       sloti 06:00 da. `business_today()` berilsa job HAR KUNI hali
+       boshlanmagan kunni «yopardi» — hisob YOZILMASDI, `no_slot_rows`
+       esa har kuni butun bozor bo'lib turardi, kechagi kun esa HECH
+       QACHON hisoblanmasdi. Xato chiqmasdi.
+
+    ⚠ BIZNES-KUN QOBIQDA HISOBLANADI, jobda EMAS (`day_close_task` bilan
+      aynan bir xil qoida): job uni ARGUMENT sifatida oladi va shu bilan
+      «qaysi kun?» savoli testda bitta qiymatga aylanadi.
+
+    ⚠ IKKINCHI JADVAL YO'Q (A8) — sabab cron konstantasining oxirgi
+      bandida: kuniga BITTA chaqiruv, kech tasdiqlar esa
+      `charge_adjustments` yo'lidan hal bo'ladi.
+    """
+    state = context.state
+    await billing_close(state.sessionmaker, business_date=business_today() - timedelta(days=1))
 
 
 async def enqueue_discovery(

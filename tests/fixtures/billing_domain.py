@@ -186,9 +186,11 @@ __all__ = [
     "TARIFF_SOUM",
     "BillingDomainSeed",
     "MarketBillingRows",
+    "add_billable_frame",
     "add_charge_evidence",
     "add_daily_charge",
     "add_payment",
+    "add_zone_with_event_on",
     "billing_domain",
     "billing_domain_before_day_close",
     "cleanup_billing_domain",
@@ -503,7 +505,7 @@ def slot_count(conn: Connection[TupleRow], market_id: UUID, day: date) -> int:
 # ===========================================================================
 
 
-def _add_billable_frame(
+def add_billable_frame(
     conn: Connection[TupleRow],
     *,
     market_id: UUID,
@@ -527,6 +529,13 @@ def _add_billable_frame(
       yoziladi. `snapshot_domain` uni HAR DOIM `true` qiladi va o'z
       docstringida «yopiq kun holati kerak bo'lgan test qatorni O'ZI
       yozadi» deb yozgan — bu funksiya aynan o'sha qator.
+
+    ⚠ OMMAVIY VA U 06-07 DA SHUNDAY BO'LDI: `test_billing_close.py` seed
+      kunidan BOSHQA (o'tmishdagi) kun uchun kadr yozishi SHART —
+      `SEED_BUSINESS_DATE` kelajakda va `ck_daily_charges_service_date_
+      not_in_future` u kunga hisob yozishni RAD ETADI. Alternativa —
+      testda `INSERT` matnini takrorlash — `is_billable` langarini
+      (D-21) ikkinchi nusxaga bo'lardi.
     """
     scheduled_at = scheduled_at_for(slot, day)
     run_id, snapshot_id = uuid4(), uuid4()
@@ -571,7 +580,7 @@ def _add_billable_frame(
     return run_id, snapshot_id
 
 
-def _add_zone_with_event_on(
+def add_zone_with_event_on(
     conn: Connection[TupleRow],
     *,
     market_id: UUID,
@@ -719,7 +728,7 @@ def _seed_market_a(
     nvr_id = _nvr_of(conn, market_id)
 
     # ---- Ikkinchi YAROQLI kadr (modul docstringidagi ⚠).
-    second_run_id, second_snapshot_id = _add_billable_frame(
+    second_run_id, second_snapshot_id = add_billable_frame(
         conn,
         market_id=market_id,
         nvr_id=nvr_id,
@@ -731,7 +740,7 @@ def _seed_market_a(
     # ---- Yopiq kundagi kadr (D-10). `is_market_open = false` — bu DALIL:
     #      kadr yopiq kunda olingan (D-10 yopiq kunda ham kadr olishni
     #      TALAB qiladi, faqat hisob yozilmaydi).
-    closed_run_id, closed_snapshot_id = _add_billable_frame(
+    closed_run_id, closed_snapshot_id = add_billable_frame(
         conn,
         market_id=market_id,
         nvr_id=nvr_id,
@@ -795,7 +804,7 @@ def _seed_market_a(
     # (f) YOPIQ KUNDA BAND (D-10). ⚠ `version = 2`: bu rastada
     #     `occupancy_domain` ning `version = 1` zonasi ALLAQACHON bor
     #     (`uq_camera_zones_..._version`).
-    closed_zone_id, closed_event_id = _add_zone_with_event_on(
+    closed_zone_id, closed_event_id = add_zone_with_event_on(
         conn,
         market_id=market_id,
         camera_id=primary_camera,
