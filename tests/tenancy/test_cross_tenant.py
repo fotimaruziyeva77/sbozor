@@ -41,7 +41,14 @@ from uuid import UUID
 import pytest
 import xlsxwriter
 from app.main import app as fastapi_app
-from fixtures.admin_api import AUDIT_URL, USERS_URL, bearer, session_headers
+from fixtures.admin_api import (
+    AUDIT_URL,
+    TEST_PHONE_PREFIX,
+    USERS_URL,
+    bearer,
+    session_headers,
+)
+from fixtures.billing_domain import add_daily_charge
 from fixtures.market_domain import A_CATEGORY_NAMES, A_ZONE_NAMES
 from fixtures.nvr_domain import add_discovery_run, nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
@@ -94,6 +101,18 @@ class RouteSpec(NamedTuple):
     def param_names(self) -> tuple[str, ...]:
         """Yo'ldagi `{...}` parametrlarining nomlari."""
         return tuple(chunk.split("}", 1)[0] for chunk in self.path.split("{")[1:] if "}" in chunk)
+
+
+class MatrixBillingRows(NamedTuple):
+    """Matritsa yozadigan billing qatorlari (06-08).
+
+    `service_date` HAM saqlanadi, chunki `add_daily_charge()` uni BAZADAN
+    oladi (`CURRENT_DATE - 1`) va uni ikkinchi marta hisoblash IKKINCHI
+    manba bo'lardi — yarim tunda ikkalasi bir kun farq qilardi.
+    """
+
+    charge_id: UUID
+    service_date: date
 
 
 class TenantSeed(NamedTuple):
@@ -158,6 +177,19 @@ class TenantSeed(NamedTuple):
       qo'yadi, ya'ni eskirgan qatorni ko'rsatish 404 ni tenant chegarasi
       tufayli emas, HOLAT tufayli beradigan qilib qo'yardi va matritsa
       yashil bo'lib turib, boshqa narsani o'lchardi.
+    """
+
+    billing: MatrixBillingRows
+    """6-faza qatlami: B bozorining HAQIQIY `daily_charges` qatori (06-08).
+
+    ⚠ QATOR SEEDDA YO'Q va bu ATAYIN (`fixtures/billing_domain.py` ning
+      «QATOR YOZUVCHI YORDAMCHILAR SEEDNING O'ZIGA QO'SHILMAYDI» bandi):
+      seed `billing_close` ning KIRISHINI ta'riflaydi, CHIQISHINI emas.
+      Matritsaga esa `charge_id` uchun HAQIQIY B qatori KERAK — TO'QILGAN
+      UUID bilan 404 «bunday hisob umuman yo'q» degani bo'lardi va tenant
+      da'vosi BO'SH qolardi. Shuning uchun uni `billing_rows` fixture'i
+      O'ZI yozadi (`nvr_domain` ning `run_id` bandi bilan AYNAN bir xil
+      naqsh).
     """
 
 
@@ -332,6 +364,17 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # qiymat: begona bozorning topshirig'i RLS ostida 0 qator beradi
     # va javob 404 bo'ladi — AYNAN o'lchanayotgan holat.
     "review_assignment_id": lambda seed: str(seed.occupancy.market_b.blind_assignment_id),
+    # --- 06-08: yozilgan kunlik patta hisobi ---
+    #
+    # ⚠ B BOZORINING HAQIQIY `daily_charges.id` SI, to'qilgan UUID EMAS.
+    # Farq bu marshrutda AYNIQSA ma'noli: `GET /billing/charges/{id}` ikki
+    # holatda ham 404 beradi, lekin to'qilgan qiymat bilan sabab «bunday
+    # hisob umuman yo'q» bo'lardi va «hisob BOR, lekin boshqa bozorniki»
+    # da'vosi HECH QACHON sinalmasdi.
+    #
+    # ⚠ QATORNI `billing_rows` fixture'i YOZADI, seed EMAS
+    # (`TenantSeed.billing` docstringi).
+    "charge_id": lambda seed: str(seed.billing.charge_id),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -406,6 +449,20 @@ def _free_stall(seed: TenantSeed) -> str:
     stall_id = seed.domain.market_a.unassigned_stall_id
     assert stall_id is not None, "seed `unassigned_stall_id` ni to'ldirmagan"
     return str(stall_id)
+
+
+MATRIX_STAFF_PHONE = f"{TEST_PHONE_PREFIX}9990001"
+"""Matritsa YARATADIGAN xodimning telefoni (`POST /api/v1/users`).
+
+⚠ `TEST_PHONE_PREFIX` (`+99893`) DIAPAZONIDA va bu ATAYIN: shu prefiksdagi
+  qatorlarni `fixtures/admin_api.cleanup_test_users()` supurib ketadi,
+  ya'ni matritsa yozgan foydalanuvchi bazada abadiy qolib ketmaydi.
+
+⚠ QIYMAT SOBIT (o'suvchi emas — `_MATRIX_NVR_PORTS` dan farqli): ikkinchi
+  chaqiruv `409 phone_taken` beradi va bu MATRITSA UCHUN YETARLI —
+  da'vo «so'rov 422 da to'xtamadi», «har safar yangi qator yozildi» emas.
+  O'suvchi telefon esa har testda yangi foydalanuvchi qoldirardi.
+"""
 
 
 BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
@@ -562,6 +619,24 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
     #   MAVJUD EMAS).
     RouteSpec("POST", "/api/v1/review/blind/{review_assignment_id}/answer"): lambda _: {
         "human_verdict": "occupied",
+    },
+    # --- 01-05: foydalanuvchi yaratish ---
+    #
+    # ⚠⚠ BU YOZUV 06-08 DA QO'SHILDI VA U YANGI DARVOZANING BIRINCHI
+    #   TOPILMASI (`test_no_matrix_route_returns_422`). Marshrut
+    #   matritsada 01-05 dan beri turgan, lekin tanasi BO'LMAGANI uchun
+    #   HAR SAFAR **422** olardi: ya'ni «javobda B ning izi yo'q» da'vosi
+    #   validatsiya xatosi ustida tekshirilardi va marshrutning YOZISH
+    #   yo'li UMUMAN ishlamasdi. Bu 02-08 deviatsiya #4 bilan aynan bir
+    #   xil sinf va u bu yerda uch faza davomida JIMGINA yashiringan edi.
+    #
+    # ⚠ ROL `cashier` — matritsadagi ENG PAST daraja. `market_admin` yoki
+    #   `platform_admin` so'ralsa javob rol-berish darvozasidan **403**
+    #   olardi va marshrutning yozish yo'li yana sinalmay qolardi.
+    RouteSpec("POST", "/api/v1/users"): lambda _: {
+        "phone": MATRIX_STAFF_PHONE,
+        "full_name": "Matritsa Xodimi",
+        "roles": ["cashier"],
     },
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
@@ -936,6 +1011,13 @@ def foreign_markers(seed: TenantSeed) -> tuple[str, ...]:
         *(str(snapshot_id) for snapshot_id in snapshot_b.snapshot_ids),
         str(snapshot_b.open_alert_id),
         str(snapshot_b.resolved_alert_id),
+        # --- 06-08: billing qatlami ---
+        #
+        # ⚠ `service_date` MARKER EMAS va bo'la olmaydi: u SANA
+        # (`CURRENT_DATE - 1`) va A bozorining o'z javoblarida ham AYNAN
+        # o'sha qiymat uchraydi — ya'ni u YOLG'ON-QIZIL generatori
+        # bo'lardi (`audit_log.id` bilan bir xil qaror).
+        str(seed.billing.charge_id),
     )
 
 
@@ -1023,6 +1105,59 @@ def occupancy_domain(
 
 
 @pytest.fixture
+def billing_rows(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+) -> Iterator[MatrixBillingRows]:
+    """B bozoriga BITTA `daily_charges` qatori — `charge_id` filleri uchun.
+
+    =========================================================================
+    ⛔ QATOR HAQIQIY BO'LISHI SHART (`PARAM_FILLERS` docstringidagi umumiy
+       qoida). To'qilgan UUID bilan `GET /billing/charges/{id}` baribir 404
+       berardi, lekin sababi TENANT chegarasi emas, «bunday hisob umuman
+       yo'q» bo'lardi — ya'ni matritsa yashil turib HECH NIMANI o'lchamasdi.
+
+    ⚠ `market_domain` ARGUMENT sifatida olinadi va bu TARTIB masalasi
+      (`nvr_domain`/`snapshot_domain` bilan aynan bir xil sabab): pytest
+      fixture'larni TESKARI tartibda yopadi, ya'ni bu qator rastalar va
+      tariflardan OLDIN o'chiriladi va kompozit FK buzilmaydi.
+    =========================================================================
+
+    ⚠ O'CHIRISHDAN OLDIN BOZOR QORALAMAGA QAYTARILADI VA BUSIZ TOZALASH
+      YIQILADI: `0020` `daily_charges` ga SHARTSIZ `BEFORE UPDATE OR
+      DELETE` qo'riqchisini qo'yadi (D-07) va `DELETE` uchun yagona istisno
+      — qoralama bozor. Naqsh `cleanup_billing_domain()` dan olingan;
+      bayroq keyin ASL QIYMATIGA qaytariladi, ya'ni fixture o'zidan keyin
+      hech qanday holat qoldirmaydi.
+    """
+    market_b = two_markets.market_b
+    domain_b = market_domain.market_b
+    charge_id, service_date = add_daily_charge(
+        sync_owner_conn,
+        market_id=market_b.id,
+        stall_id=domain_b.stall_ids[0],
+        vendor_id=domain_b.vendor_ids[0],
+        tariff_id=domain_b.tariff_ids[0],
+    )
+    try:
+        yield MatrixBillingRows(charge_id=charge_id, service_date=service_date)
+    finally:
+        row = sync_owner_conn.execute(
+            "SELECT is_active FROM markets WHERE id = %s", (str(market_b.id),)
+        ).fetchone()
+        was_active = bool(row[0]) if row is not None else False
+        sync_owner_conn.execute(
+            "UPDATE markets SET is_active = false WHERE id = %s", (str(market_b.id),)
+        )
+        sync_owner_conn.execute("DELETE FROM daily_charges WHERE id = %s", (str(charge_id),))
+        if was_active:
+            sync_owner_conn.execute(
+                "UPDATE markets SET is_active = true WHERE id = %s", (str(market_b.id),)
+            )
+
+
+@pytest.fixture
 def tenant_seed(
     two_markets: TwoMarketSeed,
     auth_seed: AuthSeed,
@@ -1030,11 +1165,12 @@ def tenant_seed(
     nvr_domain: NvrDomainSeed,
     snapshot_domain: SnapshotDomainSeed,
     occupancy_domain: OccupancyDomainSeed,
+    billing_rows: MatrixBillingRows,
 ) -> TenantSeed:
-    """A'zolik, domen, NVR, snapshot va bandlik qatlamlarini bog'laydi.
+    """A'zolik, domen, NVR, snapshot, bandlik va billing qatlamlarini bog'laydi.
 
     Har qatlam o'zidan pastdagisini O'ZI argument sifatida oladi, ya'ni
-    beshalasi AYNI bozorlarni tavsiflaydi va teardown tartibi ham to'g'ri
+    oltalasi AYNI bozorlarni tavsiflaydi va teardown tartibi ham to'g'ri
     qoladi (har qatlam o'zidan pastdagisidan OLDIN tozalanadi).
     """
     return TenantSeed(
@@ -1044,6 +1180,7 @@ def tenant_seed(
         nvr=nvr_domain,
         snapshot=snapshot_domain,
         occupancy=occupancy_domain,
+        billing=billing_rows,
     )
 
 
@@ -1422,6 +1559,11 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             *occupancy_b.active_zone_ids,
             # --- 05-10 ---
             occupancy_b.blind_assignment_id,
+            # --- 06-08 ---
+            #
+            # ⚠ Qatorni `billing_rows` fixture'i yozadi; bu yerdagi da'vo
+            # esa AYNAN o'sha qiymat filler'ga tushganini qulflaydi.
+            tenant_seed.billing.charge_id,
         )
     }
 
@@ -1444,6 +1586,156 @@ def test_body_fillers_point_at_live_routes() -> None:
     stale = sorted(route.test_id for route in BODY_FILLERS if route not in live)
 
     assert not stale, f"`BODY_FILLERS` da mavjud bo'lmagan marshrutlar qolgan: {stale}"
+
+
+BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
+"""Tana YUBORISH mumkin bo'lgan metodlar — `test_no_matrix_route_returns_422` ning doirasi.
+
+`DELETE` ATAYIN yo'q: matritsa unga tana yubormaydi va yubormasligi ham
+kerak (`BODY_FILLERS` docstringi).
+"""
+
+MIN_BODY_ROUTES = 30
+"""Matritsada tana yuborish mumkin bo'lgan marshrutlarning QUYI CHEGARASI.
+
+=============================================================================
+⛔ BUSIZ YANGI DARVOZA BO'SH TO'PLAM USTIDA JIMGINA ROST BO'LARDI (S-6).
+
+`test_no_matrix_route_returns_422` «hech bir marshrut 422 olmaydi» deydi.
+Agar `tenant_resource_routes()` yurishi bir kun buzilib bo'shab qolsa (yoki
+filtr noto'g'ri yozilsa) da'vo NOL marshrut ustida bajarilardi va darvoza
+YASHIL bo'lib qolardi — ya'ni u aynan o'zi qo'riqlayotgan nosozlik sinfiga
+tushardi (`test_matrix_is_not_empty` bilan bir xil mulohaza).
+
+Chegara AMALDAGI SONDAN PAST (o'lchandi 2026-08-10: 38 marshrut):
+`MINIMUM_MATRIX_ROUTES` bilan aynan bir xil qaror — u «bo'shab qolmadimi?»
+degan savolga javob beradi, aniq sonni qulflamaydi.
+=============================================================================
+"""
+
+QUERY_PARAM_ROUTES: frozenset[RouteSpec] = frozenset(
+    {
+        RouteSpec("PUT", "/api/v1/camera-zones"),
+    }
+)
+"""MAJBURIY QUERY parametri bor va matritsa uni TO'LDIRMAYDIGAN marshrutlar.
+
+=============================================================================
+BULAR UCHUN **422** KUTILGAN JAVOB — VA U `BODY_FILLERS` NING YO'QLIGIDAN
+KELMAYDI.
+
+`PUT /api/v1/camera-zones` `camera_id` ni QUERY parametri sifatida oladi
+(`main.py:213-218`: yo'l parametri bo'lsa u `cameras/coverage` shabloniga
+tushib qolardi). Matritsa esa faqat YO'L parametrlarini to'ldiradi, ya'ni
+so'rov tanadan qat'i nazar validatsiya darvozasida to'xtaydi.
+
+⚠ ISTISNO RO'YXAT BO'LIB E'LON QILINADI, `try/except` yoki «422 ham
+  mayli» degan yumshatish bilan EMAS: yumshatish butun darvozani
+  ma'nosiz qilardi (aynan o'sha status kod qo'riqlanayapti). Ro'yxatga
+  qo'shilgan har marshrutning tenant chegarasi BOSHQA joyda o'lchanishi
+  SHART — bu holatda `tests/integration/test_camera_zones_api.py::
+  test_cross_tenant_camera_returns_404` da (`test_route_coverage.py`
+  ning `MINIMUM_MATRIX_ROUTES` docstringida ham shu yozilgan).
+=============================================================================
+"""
+
+
+def test_query_param_routes_point_at_live_routes() -> None:
+    """`QUERY_PARAM_ROUTES` da o'chirilgan marshrut QOLIB KETMAGAN.
+
+    `BODY_FILLERS`/`FILE_FILLERS` ning staleness darvozalari bilan aynan
+    bir xil sabab, bitta qo'shimcha xavf bilan: eskirgan istisno YANGI
+    marshrutga jimgina tegib, uning 422 sini QONUNIY qilib ko'rsatardi.
+    """
+    live = set(all_routes(fastapi_app))
+    stale = sorted(route.test_id for route in QUERY_PARAM_ROUTES if route not in live)
+
+    assert not stale, f"`QUERY_PARAM_ROUTES` da mavjud bo'lmagan marshrutlar qolgan: {stale}"
+
+
+BODY_ROUTES = tuple(
+    sorted(
+        route
+        for route in MATRIX_ROUTES
+        if route.method in BODY_METHODS and route not in QUERY_PARAM_ROUTES
+    )
+)
+"""`test_no_matrix_route_returns_422` ning DOIRASI — hosila, qo'lda yozilgan emas.
+
+⛔ ISTISNO PARAMETRIZATSIYADAN CHIQARILADI, test ICHIDA o'tkazib
+   yuborilmaydi: bu fayl (va `test_route_coverage.py`) «kutilgan nosozlik»
+   va «o'tkazib yuborish» markerlarini ATAYIN ishlatmaydi — marker
+   qo'yilgan darvoza qizarmaydi, ya'ni teshik ochiq qolib hisobotda
+   «o'tdi» bo'lib ko'rinardi.
+"""
+
+
+def test_matrix_has_enough_body_routes() -> None:
+    """Tana yuboriladigan marshrutlar to'plami BO'SHAB QOLMAGAN (S-6).
+
+    `test_no_matrix_route_returns_422` ning maxraji — ya'ni bu test
+    o'sha darvozaning BO'SH TO'PLAM ustida rost bo'lib qolishiga
+    qarshi (`MIN_BODY_ROUTES` docstringi).
+    """
+    assert len(BODY_ROUTES) >= MIN_BODY_ROUTES, (
+        f"matritsada atigi {len(BODY_ROUTES)} ta tana yuboriladigan marshrut bor "
+        f"(kamida {MIN_BODY_ROUTES} kutilgan) — `app.routes` yurishi yoki "
+        "`EXEMPT_ROUTES` buzilgan bo'lishi mumkin"
+    )
+
+
+@pytest.mark.parametrize("route", BODY_ROUTES, ids=_route_id)
+async def test_no_matrix_route_returns_422(
+    api_client: httpx.AsyncClient,
+    tenant_seed: TenantSeed,
+    headers_for: Callable[[RouteSpec], dict[str, str]],
+    route: RouteSpec,
+) -> None:
+    """Tana talab qiladigan HAR BIR matritsa marshruti 422 DA TO'XTAMAYDI.
+
+    =======================================================================
+    ⛔⛔ BU DARVOZA MEXANIK KO'RLIKNI YOPADI — VA KO'RLIK O'LCHANGAN
+        (`06-PATTERNS.md` §6, OP-8).
+
+    Mavjud darvozalar `BODY_FILLERS` ning YETISHMASLIGINI ushlamaydi:
+
+      * `test_body_fillers_point_at_live_routes` faqat ESKIRGAN yozuvni
+        ushlaydi («xaritada bor, marshrutda yo'q») — teskarisini EMAS;
+      * `test_cross_tenant_object_returns_404` faqat YO'L PARAMETRI BOR
+        marshrutlarga tegadi, ya'ni `POST /api/v1/users` yoki
+        `POST /api/v1/zones` uning doirasiga UMUMAN kirmaydi;
+      * `test_no_route_leaks_other_market_identifiers` esa **422**
+        javobida ham YASHIL qoladi: validatsiya xatosida B bozorining
+        birorta identifikatori bo'lmaydi va da'vo BO'SH bajariladi.
+
+    Natija: tanasi yozilmagan marshrut matritsada «bor» bo'lib turadi,
+    endpoint mantiqi esa UMUMAN ishlamaydi — hech qanday test
+    qizarmasdan. Bu 02-08 deviatsiya #4 (`BODY_FILLERS` ning O'ZI) va
+    02-12 deviatsiya (`FILE_FILLERS`) bilan AYNAN bir xil sinf; ikkalasi
+    ham sabotaj bilan topilgan, ya'ni uchinchi marta kutish kerak emas.
+
+    ⛔ ANIQ STATUS QULFLANMAYDI (`test_file_routes_actually_execute` bilan
+       bir xil qaror): javob 200, 201, 204, 403, 404 yoki 409 bo'lishi
+       MUMKIN — matritsa qatorlarni HAQIQATAN yozadi va ketma-ket
+       chaqiruvlar konfliktga tushishi qonuniy. Yagona ma'noli da'vo —
+       ENDPOINT YUKLAMANI QABUL QILDI.
+    =======================================================================
+
+    Yangi POST/PUT/PATCH marshruti qo'shgan odam uchun bu shunday
+    ko'rinadi: marshrut qo'shildi -> bu test qizardi -> `BODY_FILLERS` ga
+    yaroqli tana qo'shildi -> tenant da'vosi o'sha kuniyoq ishlay
+    boshladi. Hech qanday test yozish shart emas (D-32).
+    """
+    response = await call_route(api_client, route, tenant_seed, headers=headers_for(route))
+
+    assert response.status_code != 422, (
+        f"{route.test_id}: so'rov VALIDATSIYA darvozasida to'xtadi ({response.text}).\n"
+        "Ya'ni endpoint mantiqi UMUMAN ishlamadi va bu marshrutning tenant "
+        "da'vosi SINALMAY qoldi.\n"
+        f"Tuzatish: `BODY_FILLERS[{route.test_id}]` ga yaroqli tana qo'shing "
+        "(yoki fayl marshruti bo'lsa `FILE_FILLERS` ga). Majburiy QUERY "
+        "parametri sababli 422 bo'lsa — `QUERY_PARAM_ROUTES` ga SABAB bilan."
+    )
 
 
 def test_file_fillers_point_at_live_routes() -> None:

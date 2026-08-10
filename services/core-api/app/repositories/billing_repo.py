@@ -104,6 +104,12 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
+    "AnomalyCounts",
+    "AnomalyRow",
+    "ChargeAdjustmentItem",
+    "ChargeDetail",
+    "ChargeEvidenceItem",
+    "ChargeRow",
     "ExistingCharge",
     "PendingMarket",
     "PendingProjection",
@@ -111,7 +117,10 @@ __all__ = [
     "SlotEvidenceRow",
     "StallDayMoney",
     "StallSlotVerdict",
+    "anomaly_list",
     "billable_stalls",
+    "charge_detail",
+    "charge_list",
     "event_snapshots",
     "market_day_charges",
     "pending_projection",
@@ -1266,8 +1275,16 @@ class PendingMarket:
     taymer YO'Q: direktor raqamni o'qib turganda uni jimgina o'zgartirib
     qo'yadigan yangilanish «men boshqa raqam ko'rgandim» degan nizoning
     manbai.
+
+    ⚠ `market_open` — `StallDayMoney` dagi bilan AYNAN bir xil sabab
+      (06-06 deviatsiya #1): UI-SPEC §9.5/§9.2 uni MUSTAQIL maydon
+      sifatida talab qiladi va uni rastalar ro'yxatidan hosila qilish
+      RASTASIZ bozorda (yoki tarifsiz kunda) javobsiz qolardi. Shuning
+      uchun u AYNI `as_of` bilan alohida so'raladi — `now()` bilan emas,
+      ya'ni yarim tunda ikki maydon ikki xil kunni ko'rsata olmaydi.
     """
 
+    market_open: bool
     pending_amount_soum: int
     outstanding_soum: int
     pending_stall_count: int
@@ -1393,9 +1410,447 @@ async def _market_projection(session: AsyncSession, market_id: UUID, as_of: date
     rows = await resolve_stall_day_money(session, market_id=market_id, as_of=as_of)
     priced = [row.amount_soum for row in rows if row.amount_soum is not None]
     balances = await vendor_outstanding(session, market_id=market_id, as_of=as_of)
+    market_open = await session.execute(_MARKET_OPEN, {"market_id": market_id, "as_of": as_of})
     return PendingMarket(
+        market_open=bool(market_open.scalar_one()),
         pending_amount_soum=sum(priced),
         outstanding_soum=sum(balances.values()),
         pending_stall_count=len(priced),
         fetched_at=datetime.now(tz=UTC),
+    )
+
+
+_MARKET_OPEN = text(
+    """
+    SELECT market_is_open(:market_id, :as_of) AS market_open
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("as_of", type_=Date()),
+)
+"""Kalendar javobi — ⛔ ILOVA QATLAMIDA QAYTA HISOBLANMAYDI (D-10, T-06-34).
+
+`open_weekdays` va `market_calendar_exceptions` mantig'i 2-fazadagi DB
+funksiyasida yashaydi va bu modul uni HECH QAYERDA takrorlamaydi
+(`grep open_weekdays` -> 0). Ikkinchi nusxa bir kun ajralib ketardi va
+o'shanda kassir ekrani «bozor ochiq», hisobot esa «yopiq kun» degan
+bo'lardi.
+
+⚠ INVOKER va fail-closed: tenant konteksti o'rnatilmagan sessiyada RLS 0
+  qator ko'rsatadi va funksiya HAR KUNNI YOPIQ deb qaytaradi (modul
+  docstringidagi Pitfall 9).
+"""
+
+
+# ===========================================================================
+# 7. DIREKTOR YUZASINING O'QISH SO'ROVLARI (BILL-02, BILL-03, BILL-04)
+#
+# ⛔⛔ MARSHRUT PUL MANTIG'I YOZMAYDI — U SHU YERGA KELADI (D-16 ning
+#    marshrut qatlamidagi shakli).
+#
+# `api/v1/billing.py` ning uchala direktor marshruti ham FAQAT quyidagi
+# uch funksiyani chaqiradi. Sabab 06-06 modul docstringi bilan bir xil:
+# arifmetika ikki joyda (SQL va handler) yashasa ular BIR KUN ajralib
+# ketardi va o'shanda ekrandagi son bilan hisobotdagi son farq qilardi —
+# IKKALASI HAM «to'g'ri» bo'lgan holda.
+#
+# ⛔ NETLANGAN SUMMA BITTA IFODADAN (`_SIGNED_ADJUSTMENT_EXPR`): ro'yxat
+#    ham, tafsilot ham, qoldiq ham AYNI konstantani ishlatadi. Bu C-5/G-14
+#    ning aynan o'sha mexanizmi — ikki hosila ko'rinish ajralib keta
+#    OLMAYDI, chunki manba satr BITTA.
+# ===========================================================================
+
+_CHARGE_ADJUSTMENT_TOTAL = f"""
+        SELECT sum({_SIGNED_ADJUSTMENT_EXPR}) AS total
+          FROM charge_adjustments a
+         WHERE a.market_id = c.market_id
+           AND a.charge_id = c.id
+"""  # noqa: S608
+"""Bitta hisobning BELGILI tuzatish yig'indisi — LATERAL ichida ishlatiladi.
+
+⚠ FRAGMENT KONSTANTA, chunki uni ikki so'rov (`_CHARGE_ROWS` va
+  `_CHARGE_DETAIL`) ishlatadi. Nusxa ko'chirilganda ro'yxatdagi summa
+  bilan tafsilotdagi summa bir kun farq qilardi va direktor dialogni
+  ochib «jadvalda boshqa son turgan edi» degan xulosaga kelardi.
+"""
+
+_CHARGE_ROWS = text(
+    f"""
+    SELECT c.id                 AS charge_id,
+           s.code               AS stall_code,
+           c.vendor_id          AS vendor_id,
+           c.service_date       AS service_date,
+           c.tariff_amount_soum AS tariff_amount_soum,
+           (c.amount_soum + COALESCE(adj.total, 0))::bigint AS amount_soum
+      FROM daily_charges c
+      JOIN stalls s
+        ON s.market_id = c.market_id
+       AND s.id = c.stall_id
+      LEFT JOIN LATERAL ({_CHARGE_ADJUSTMENT_TOTAL}) adj ON true
+     WHERE c.market_id = :market_id
+       AND c.service_date = :day
+     ORDER BY s.code_sort, s.id
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("day", type_=Date()),
+    bindparam("increase", type_=Text()),
+)
+"""Kun kesimidagi yozilgan hisoblar (UI-SPEC §11.2).
+
+⛔ `S608` TOR SABAB BILAN: f-string ga tushadigan YAGONA qiymat — shu
+   moduldagi SOBIT fragment konstantalari. Tashqi kirish `bindparam`
+   orqali TIPLANGAN parametr bo'lib keladi.
+
+⛔ FILTR `service_date` USTIDA, `business_date` USTIDA EMAS (C-2/D-06):
+   direktor «qaysi KUN uchun patta yozildi?» deb so'raydi, «qaysi kuni
+   yozildi?» deb emas. Ikkalasi D+1 04:10 da BIR KUN farq qiladi va
+   `business_date` bo'yicha filtr sahifani HAR DOIM bir kun oldingi
+   ma'lumot bilan ko'rsatardi.
+
+⚠ TARTIB `code_sort` bo'yicha — SERVERDA. `ORDER BY s.code` «1, 10, 100,
+  11, 2» berardi (`models/market.py:154-183`).
+"""
+
+_CHARGE_DETAIL = text(
+    f"""
+    SELECT c.id                 AS charge_id,
+           c.service_date       AS service_date,
+           s.code               AS stall_code,
+           c.tariff_amount_soum AS tariff_amount_soum,
+           (c.amount_soum + COALESCE(adj.total, 0))::bigint AS amount_soum
+      FROM daily_charges c
+      JOIN stalls s
+        ON s.market_id = c.market_id
+       AND s.id = c.stall_id
+      LEFT JOIN LATERAL ({_CHARGE_ADJUSTMENT_TOTAL}) adj ON true
+     WHERE c.market_id = :market_id
+       AND c.id = :charge_id
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("charge_id", type_=_UUID),
+    bindparam("increase", type_=Text()),
+)
+"""DL-3 ning 1 va 2-bo'limi (UI-SPEC §11.3).
+
+⛔ `tariff_id` SELECT DA UMUMAN YO'Q — javob modeli uni e'lon qilmaydi va
+   so'rov ham uni olib kelmaydi. Ustunni «baribir kerak bo'lar» deb
+   qoldirish keyingi ijrochiga uni javobga qo'shishni BIR SATRLIK
+   o'zgartirish qilib qo'yardi.
+
+⚠ BEGONA BOZORNING `charge_id` SI 0 QATOR BERADI — RLS tufayli, `WHERE`
+  sharti tufayli emas. Ikkalasi ham 404 beradi va javob BAYT-BAYT bir xil
+  bo'ladi (`test_cross_tenant_is_indistinguishable_from_unknown_id`).
+"""
+
+_CHARGE_ADJUSTMENTS = text(
+    """
+    SELECT a.id            AS adjustment_id,
+           a.direction     AS direction,
+           a.amount_soum   AS amount_soum,
+           a.reason_code   AS reason_code,
+           a.actor_user_id AS actor_user_id,
+           a.created_at    AS created_at
+      FROM charge_adjustments a
+     WHERE a.market_id = :market_id
+       AND a.charge_id = :charge_id
+     ORDER BY a.created_at, a.id
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("charge_id", type_=_UUID),
+)
+"""DL-3 ning 4-bo'limi — tuzatishlar, YOZILISH tartibida.
+
+⛔ `actor_user_id` QAYTADI, ISM EMAS (C-10 + §5.5): ism `GET /users` dan
+   klientda joinlanadi va o'sha marshrut `audit_read` YOZADI. Ismni bu
+   yerga qo'shish moliyaviy so'rovni shaxsiy-ma'lumot so'roviga
+   aylantirardi.
+
+⚠ TENGLIK UZGICHI `a.id`: bir hisobga bir tranzaksiyada ikki tuzatish
+  yozilsa `created_at` bir xil bo'lishi mumkin va tartib SO'ROVDAN
+  SO'ROVGA o'zgarardi — dialog har ochilganda boshqa ketma-ketlik
+  ko'rsatardi.
+"""
+
+_CHARGE_EVIDENCE_ROWS = text(
+    """
+    SELECT e.snapshot_id AS snapshot_id,
+           e.slot_time   AS slot_time
+      FROM charge_evidence e
+     WHERE e.market_id = :market_id
+       AND e.charge_id = :charge_id
+     ORDER BY e.slot_time, e.id
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("charge_id", type_=_UUID),
+)
+"""DL-3 ning 5-bo'limi — MUZLATILGAN dalil kadrlari (BILL-02, D-08).
+
+⚠ `charge_evidence.snapshot_id` SXEMADA `NOT NULL`, ya'ni bu so'rov
+  bugun `null` QAYTARMAYDI. Kontrakt (`ChargeEvidenceRow.snapshot_id`)
+  baribir nullable bo'lib qoladi va bu ATAYIN: 05-14 ning darsi
+  bo'yicha marshrut bermagan qator UMUMAN chizilmaydi — ya'ni klientda
+  «kadr yo'q» shoxi MAVJUD bo'lishi kerak. Uni server tomondan
+  `NOT NULL` deb e'lon qilish o'sha shoxni o'lik kod qilib qo'yardi va
+  kelajakda `no_coverage` sinfidagi dalil qo'shilganda klient PARSE
+  PAYTIDA yiqilardi.
+
+⛔ KADRNING O'ZI BU MARSHRUTDAN KELMAYDI: rasm `GET /snapshots/{id}/image`
+   proxysidan olinadi va AYNAN o'sha marshrut `audit_read` yozadi
+   (§11.3, M-8). Presigned URL berilmaydi va so'ralmaydi.
+"""
+
+_ANOMALY_ROWS = text(
+    """
+    SELECT b.id           AS anomaly_id,
+           b.kind         AS kind,
+           s.code         AS stall_code,
+           b.service_date AS service_date,
+           b.snapshot_id  AS snapshot_id
+      FROM billing_anomalies b
+      JOIN stalls s
+        ON s.market_id = b.market_id
+       AND s.id = b.stall_id
+     WHERE b.market_id = :market_id
+       AND b.service_date = :day
+     ORDER BY b.kind, s.code_sort, s.id
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("day", type_=Date()),
+)
+"""Kun kesimidagi anomaliyalar (BILL-04, §11.4).
+
+⛔ SO'ROV `kind` BO'YICHA GURUHLAMAYDI va yagona sanoq BERMAYDI — u
+   QATORLARNI qaytaradi, sanoqni esa `anomaly_list()` uch ALOHIDA
+   hisoblagichga ajratadi (D-05). SQL da `count(*)` yozish uchala turni
+   bitta songa qo'shishni BIR SATRLIK o'zgartirish qilib qo'yardi.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class ChargeRow:
+    """Hisoblar jadvalining bitta qatori (UI-SPEC §11.2).
+
+    ⛔ `vendor_name` YO'Q, `vendor_id` BOR (C-10): ism MAVJUD, AUDIT
+       QILINGAN `GET /vendors` dan KLIENTDA joinlanadi.
+
+    ⚠ `amount_soum` — TUZATISHLAR BILAN NETLANGAN summa. Xom
+      `daily_charges.amount_soum` o'zgarmas (D-07) va tuzatish ALOHIDA
+      qator bo'ladi, ya'ni «amaldagi summa» har doim HISOBLANADIGAN
+      ko'rinish (`ChargeAdjustment` klass docstringi).
+    """
+
+    charge_id: UUID
+    stall_code: str
+    vendor_id: UUID
+    service_date: date
+    tariff_amount_soum: int
+    amount_soum: int
+    outstanding_soum: int
+
+
+@dataclass(frozen=True, slots=True)
+class ChargeAdjustmentItem:
+    """Bitta tuzatish yozuvi — DL-3 ning 4-bo'limi."""
+
+    adjustment_id: UUID
+    direction: str
+    amount_soum: int
+    reason_code: str
+    actor_user_id: UUID
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ChargeEvidenceItem:
+    """Bitta dalil kadri — DL-3 ning 5-bo'limi."""
+
+    snapshot_id: UUID | None
+    slot_time: time
+
+
+@dataclass(frozen=True, slots=True)
+class ChargeDetail:
+    """DL-3 ning BESH bo'limi bitta natijada (§11.3).
+
+    ⛔ `tariff_id` YO'Q (§11.3, 2-bo'lim) va `vendor_id` ham YO'Q:
+       sarlavhada rasta KODI turadi. Tafsilot dialogi sotuvchi nomini
+       jadval qatoridan oladi — ikkinchi shaxsiy-ma'lumot yo'li
+       ochilmaydi.
+    """
+
+    charge_id: UUID
+    service_date: date
+    stall_code: str
+    tariff_amount_soum: int
+    amount_soum: int
+    adjustments: tuple[ChargeAdjustmentItem, ...]
+    evidence: tuple[ChargeEvidenceItem, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class AnomalyRow:
+    """Bitta anomaliya qatori (BILL-04).
+
+    ⛔ JUFTLANGAN INVARIANT C-12 ning DB `CHECK` ida va javob modelida
+       ikki marta majburlanadi; bu yerda u QAYTA TEKSHIRILMAYDI —
+       uchinchi nusxa uchinchi haqiqat manbai bo'lardi.
+    """
+
+    anomaly_id: UUID
+    kind: str
+    stall_code: str
+    service_date: date
+    snapshot_id: UUID | None
+
+
+@dataclass(frozen=True, slots=True)
+class AnomalyCounts:
+    """Uch ALOHIDA sanoq — ⛔ HECH QACHON QO'SHILMAYDI (D-05).
+
+    «Ko'ra olmadik» (`no_coverage`) ≠ «band, lekin biriktirilmagan»
+    (`unassigned`). Yagona `total` maydoni ATAYIN yo'q: u mavjud bo'lsa
+    ekran uni ko'rsatardi va farq matn darajasida yo'qolardi — bu esa
+    KO'R NUQTADAN TUSHUM DA'VOSI to'qish bo'lardi.
+    """
+
+    unassigned: int
+    closed_day: int
+    no_coverage: int
+
+
+async def charge_list(
+    session: AsyncSession, *, market_id: UUID, day: date
+) -> tuple[ChargeRow, ...]:
+    """Kun kesimidagi yozilgan hisoblar + sotuvchi kesimidagi qoldiq.
+
+    ⛔ QOLDIQ `vendor_outstanding()` DAN keladi va bu yerda QAYTA
+       HISOBLANMAYDI (BILL-03, G-14): saqlangan balans ustuni yo'q va
+       ikkinchi arifmetika ikkinchi haqiqat manbai bo'lardi.
+
+    ⚠ `as_of` BERILMAYDI (ya'ni `None`): jadvaldagi «Qoldiq» ustuni
+      sotuvchining BUGUNGI to'liq qarzini ko'rsatadi. `as_of=day` bilan
+      chaqirish o'sha kunning O'Z hisobini qoldiqdan CHIQARIB
+      tashlagan bo'lardi va direktor «hisob yozilgan, lekin qarz
+      o'smabdi» degan xulosaga kelardi.
+
+    Returns:
+        `code_sort` tartibidagi qatorlar. ⛔ Bo'sh kortej — NORMAL javob
+        (C-3: hisob D+1 04:10 da tug'iladi), nosozlik EMAS.
+    """
+    result = await session.execute(
+        _CHARGE_ROWS,
+        {
+            "market_id": market_id,
+            "day": day,
+            "increase": AdjustmentDirection.INCREASE.value,
+        },
+    )
+    rows = list(result.mappings())
+    if not rows:
+        return ()
+
+    balances = await vendor_outstanding(
+        session,
+        market_id=market_id,
+        vendor_ids=[row["vendor_id"] for row in rows],
+    )
+    return tuple(
+        ChargeRow(
+            charge_id=row["charge_id"],
+            stall_code=str(row["stall_code"]),
+            vendor_id=row["vendor_id"],
+            service_date=row["service_date"],
+            tariff_amount_soum=int(row["tariff_amount_soum"]),
+            amount_soum=int(row["amount_soum"]),
+            outstanding_soum=balances.get(row["vendor_id"], 0),
+        )
+        for row in rows
+    )
+
+
+async def charge_detail(
+    session: AsyncSession, *, market_id: UUID, charge_id: UUID
+) -> ChargeDetail | None:
+    """Bitta hisobning tafsiloti — tuzatishlar va MUZLATILGAN dalil bilan.
+
+    Returns:
+        `None` — hisob bu bozorda YO'Q. ⛔ Begona bozorning hisobi ham
+        AYNAN shu javobni beradi (RLS 0 qator ko'rsatadi), ya'ni
+        chaqiruvchi 404 ni ikkala holatda ham bir xil qaytaradi va
+        javobning O'ZI enumeration signali bo'lmaydi (T-01-76).
+    """
+    head = await session.execute(
+        _CHARGE_DETAIL,
+        {
+            "market_id": market_id,
+            "charge_id": charge_id,
+            "increase": AdjustmentDirection.INCREASE.value,
+        },
+    )
+    row = head.mappings().one_or_none()
+    if row is None:
+        return None
+
+    params = {"market_id": market_id, "charge_id": charge_id}
+    adjustments = await session.execute(_CHARGE_ADJUSTMENTS, params)
+    evidence = await session.execute(_CHARGE_EVIDENCE_ROWS, params)
+
+    return ChargeDetail(
+        charge_id=row["charge_id"],
+        service_date=row["service_date"],
+        stall_code=str(row["stall_code"]),
+        tariff_amount_soum=int(row["tariff_amount_soum"]),
+        amount_soum=int(row["amount_soum"]),
+        adjustments=tuple(
+            ChargeAdjustmentItem(
+                adjustment_id=item["adjustment_id"],
+                direction=str(item["direction"]),
+                amount_soum=int(item["amount_soum"]),
+                reason_code=str(item["reason_code"]),
+                actor_user_id=item["actor_user_id"],
+                created_at=item["created_at"],
+            )
+            for item in adjustments.mappings()
+        ),
+        evidence=tuple(
+            ChargeEvidenceItem(snapshot_id=item["snapshot_id"], slot_time=item["slot_time"])
+            for item in evidence.mappings()
+        ),
+    )
+
+
+async def anomaly_list(
+    session: AsyncSession, *, market_id: UUID, day: date
+) -> tuple[tuple[AnomalyRow, ...], AnomalyCounts]:
+    """Kun kesimidagi anomaliyalar va ⛔ UCH ALOHIDA sanoq (BILL-04, D-05).
+
+    ⛔ SANOQ QATORLARDAN HOSILA, ikkinchi `count(*)` so'rovi bilan EMAS:
+       ikki so'rov orasida yangi qator yozilsa ro'yxat bilan sanoq
+       ajralib ketardi va ekranda «3 ta anomaliya» yozuvi ostida 2 qator
+       turardi.
+
+    Returns:
+        `(qatorlar, sanoqlar)`. ⛔ Uchala sanoq ham NOL bo'lganda ham
+        qaytadi — nol NATIJA (`occupancy.py:122-124` qoidasi).
+    """
+    result = await session.execute(_ANOMALY_ROWS, {"market_id": market_id, "day": day})
+    rows = tuple(
+        AnomalyRow(
+            anomaly_id=row["anomaly_id"],
+            kind=str(row["kind"]),
+            stall_code=str(row["stall_code"]),
+            service_date=row["service_date"],
+            snapshot_id=row["snapshot_id"],
+        )
+        for row in result.mappings()
+    )
+    return rows, AnomalyCounts(
+        unassigned=sum(1 for row in rows if row.kind == AnomalyKind.UNASSIGNED_OCCUPIED.value),
+        closed_day=sum(1 for row in rows if row.kind == AnomalyKind.CLOSED_DAY_OCCUPIED.value),
+        no_coverage=sum(1 for row in rows if row.kind == AnomalyKind.NO_COVERAGE_STALL.value),
     )

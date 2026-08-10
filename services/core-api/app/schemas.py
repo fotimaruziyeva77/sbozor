@@ -22,11 +22,21 @@ to'sqinlik qilmaydi — shakllar bo'lim izohlari ostida guruhlangan.
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Annotated, Any, Final, Literal
+from typing import Annotated, Any, Final, Literal, Self, get_args
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 from sbozor_core.enums import (
+    AdjustmentDirection,
+    AdjustmentReason,
+    AnomalyKind,
     CameraStatus,
     DiscoveryRunStatus,
     Locale,
@@ -38,7 +48,7 @@ from sbozor_core.money import MAX_SAFE_SOUM
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
 from app.jobs.discovery import DISCOVERY_JOB_ERROR_CODES
-from app.services.billing_errors import SERVER_BILLING_ERROR_CODES
+from app.services.billing_errors import AMOUNT_UNAVAILABLE_REASONS, SERVER_BILLING_ERROR_CODES
 from app.services.capture_errors import CAPTURE_JOB_ERROR_CODES
 from app.services.isapi.errors import NVR_ERROR_CODES
 from app.services.occupancy_errors import OCCUPANCY_ERROR_CODES
@@ -48,6 +58,8 @@ __all__ = [
     "AUDIT_PAGE_SIZE_MAX",
     "AlertEventOut",
     "AlertListResponse",
+    "AnomalyListResponse",
+    "AnomalyRowResponse",
     "AssignmentCloseRequest",
     "AssignmentCreateRequest",
     "AssignmentItem",
@@ -73,6 +85,11 @@ __all__ = [
     "CategoryItem",
     "CategoryListResponse",
     "CategoryRequest",
+    "ChargeAdjustmentRow",
+    "ChargeDetailResponse",
+    "ChargeEvidenceRow",
+    "ChargeListResponse",
+    "ChargeRowResponse",
     "AnswerRequest",
     "AnswerResponse",
     "BlindItemResponse",
@@ -114,6 +131,9 @@ __all__ = [
     "OccupancyRoundResponse",
     "OccupancyStallItem",
     "ConfusionMatrixOut",
+    "PendingLookupResponse",
+    "PendingMarketResponse",
+    "PendingStallResponse",
     "ProportionIntervalOut",
     "ProfileResponse",
     "QueueBudget",
@@ -2826,3 +2846,398 @@ class OccupancyRoundResponse(BaseModel):
     fast_decisions: int | None
     """«2 soniyadan tez» javoblar. ⚠ `decision_ms` `NULL` bo'lganlar bu
     sanoqqa KIRMAYDI: `NULL` — o'lchovning YO'QLIGI, «tez» EMAS."""
+
+
+# ---------------------------------------------------------------------------
+# 06-08: BILLING VA KASSIRNING O'QISH YUZASI (BILL-02…BILL-05)
+#
+# ⛔⛔ BU BO'LIMNING ENG QIMMAT QARORI — MAYDONNI E'LON QILMASLIK.
+#
+# Naqsh yuqoridagi `BlindItemResponse` DAN VERBATIM olingan va uning
+# uch bandi shu yerda ham to'liq kuchda:
+#
+#   * `None` qilib yuborish YETARLI EMAS — kalit javobda tursa uni
+#     to'ldirish BIR SATRLIK o'zgarish bo'lardi;
+#   * `include_in_schema=False` UMUMAN HIMOYA EMAS — u hujjatni
+#     o'zgartiradi, BAYTLARNI emas;
+#   * marshrutning O'ZI sxemada ko'rinadi va bu ATAYIN: himoya
+#     payloadning SHAKLIDA.
+#
+# ⛔ HAR MODELDA `extra="forbid"` (V5 Input Validation): server tomonda
+#    ham qattiqlik. Bu javob modellari uchun ham ma'noli — `model_
+#    construct()` yoki noto'g'ri `**kwargs` bilan qo'shilgan maydon
+#    JIMGINA o'tib ketmasin.
+# ---------------------------------------------------------------------------
+
+AmountUnavailableReason = Literal["market_closed", "tariff_missing"]
+"""`amount_soum is None` bo'lganda uning NOMLANGAN sababi (UI-SPEC §9.2).
+
+⚠ Literal SATRLARI shu yerda YOZILGAN, lekin ular REYESTRDAN AJRALIB
+  KETA OLMAYDI: quyidagi import-vaqti darvozasi ikki to'plamni
+  solishtiradi. Literal'ni `AMOUNT_UNAVAILABLE_REASONS` dan DINAMIK
+  qurish mumkin emas (`Literal[*frozenset]` statik tekshiruvchi uchun
+  tip emas), ya'ni yagona halol yechim — nusxani MEXANIK qulflash.
+
+⛔ NEGA UMUMAN LITERAL: klient `z.enum([...])` bilan o'qiydi va OpenAPI
+   sxemasida bu maydon ENUM bo'lib ko'rinishi kerak. `str` tipi uni
+   ochiq matnga aylantirardi va yopiq to'plam da'vosi kontraktdan
+   yo'qolardi.
+"""
+
+if set(get_args(AmountUnavailableReason)) != AMOUNT_UNAVAILABLE_REASONS:
+    raise AssertionError(  # pragma: no cover - import-vaqti darvozasi
+        "`AmountUnavailableReason` va `billing_errors.AMOUNT_UNAVAILABLE_REASONS` "
+        f"ajralib ketdi: {sorted(get_args(AmountUnavailableReason))} != "
+        f"{sorted(AMOUNT_UNAVAILABLE_REASONS)}. Yangi sabab IKKALA joyda ham "
+        "e'lon qilinishi SHART (D-32) — aks holda server reyestrda bo'lmagan "
+        "qiymat qaytarib, klient sxemasi PARSE PAYTIDA yiqilardi."
+    )
+
+
+class PendingStallResponse(BaseModel):
+    """`GET /billing/pending?stall_code=…` — BITTA rastaning proyeksiyasi (BILL-05).
+
+    =======================================================================
+    ⛔⛔ KALITLAR TO'PLAMI AYNAN YETTITA (UI-SPEC §9.2) VA QUYIDAGILAR
+        E'LON QILINMAGAN — YASHIRILGAN EMAS:
+
+        charge_id                        — D-17;
+        tariff_id · category_id · valid_from — D-20;
+        vendor_id · vendor_name · phone  — C-10 + §5.5;
+        occupied_slots · is_billable     — §9.1 (C-8);
+        balance · balance_soum           — BILL-03.
+
+    `charge_id` YO'Q, chunki **proyeksiya hisob EMAS**: hisob D+1 04:10
+    da tug'iladi (C-3), ya'ni bugungi kun uchun hisob identifikatori
+    MAVJUD EMAS. Uni `null` bilan e'lon qilish «hisob bor, faqat hozir
+    bo'sh» degan yolg'on aytardi va ekran uni kvitansiya deb chizardi.
+
+    `tariff_id`/`category_id`/`valid_from` YO'Q — D-20 ning KUCHLI
+    shakli: klientda tarifning KIRISH MA'LUMOTI yo'q, ya'ni summani
+    qayta hisoblash *taqiqlanmaydi* — U IMKONSIZ. `total_due_soum` ham
+    shuning uchun SERVERDA (§9.6): aks holda `[Qarzni ham olish]`
+    tugmasi D-20 ni BITTA QO'SHISH AMALI bilan buzardi.
+
+    `vendor_id`/`vendor_name`/`phone` YO'Q — kassirda `vendor_view`
+    yo'q va ism marshrut darajasida emas, HUQUQ darajasida yo'q (§5.5).
+    Bu maydonlardan birortasini qo'shish `PERSONAL_ROUTES` ni
+    o'stirardi va moliyaviy yuzaga shaxsiy-ma'lumot qo'riqchisini
+    o'rnatardi (C-10). ⛔ Nom bilan aylanib o'tish (`vendor_label`,
+    `payer`, `who`) ham TAQIQLANADI.
+
+    `occupied_slots`/`is_billable` YO'Q — bugungi kun uchun
+    `stall_slot_occupancy` BO'SH (C-8), ya'ni «bugun band» BILINMAYDI
+    va ko'rsatilgan har qanday sanoq SOXTA KO'RSATKICH bo'lardi.
+
+    `balance`/`balance_soum` YO'Q — saqlangan balans yo'q (BILL-03),
+    NOMI ham yo'q: nom bir kun ustunga aylanardi.
+    =======================================================================
+
+    ⚠ To'plam tengligi bilan o'lchanadi (D-31), inkor tasdiq bilan EMAS:
+      `not in` faqat AYNAN o'sha nomni ushlaydi va `chargeId` jimgina
+      o'tib ketardi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stall_code: str
+    """⛔ Kassir yuzasidagi YAGONA identifikator (§5.5)."""
+    service_date: date
+    """«Qaysi kun uchun» — C-4 ning javobi."""
+    market_open: bool
+    """`market_is_open(market, as_of)` natijasi — ⛔ xato kodidan HOSILA emas."""
+    amount_soum: int | None
+    """Bugungi patta. `null` — FAQAT nomlangan sabab bilan."""
+    amount_unavailable_reason: AmountUnavailableReason | None
+    outstanding_soum: int
+    """Eski qarz — HISOBLANADIGAN qoldiq (BILL-03), saqlangan ustun emas."""
+    total_due_soum: int
+    """⛔ SERVERDA hisoblangan yig'indi (§9.6) — klientda qo'shish YO'Q."""
+
+    @model_validator(mode="after")
+    def _amount_and_reason_are_paired(self) -> Self:
+        """⛔ JUFTLANGAN INVARIANT (§9.2, `NO_COVERAGE_IS_PAIRED_CHECK` naqshi).
+
+            (amount_soum is None) == (amount_unavailable_reason is not None)
+
+        «Sababsiz yo'q summa» ham, «summasi bor sabab» ham IFODALAB
+        BO'LMAYDI. Ikki yo'nalish ikki ALOHIDA xabar bilan: ular ikki
+        boshqa server nosozligi va bitta umumiy matn «qaysi yarim
+        buzildi?» savolini javobsiz qoldirardi.
+        """
+        if self.amount_soum is None and self.amount_unavailable_reason is None:
+            raise ValueError(
+                "SABABSIZ YO'Q SUMMA: `amount_soum` null, lekin sabab berilmagan. "
+                "Ekran «summa yo'q» deb ko'rsatardi va kassir NIMA UCHUN "
+                "yo'qligini bilmasdi — D-20 aynan buni taqiqlaydi (§9.4)."
+            )
+        if self.amount_soum is not None and self.amount_unavailable_reason is not None:
+            raise ValueError(
+                "SUMMASI BOR SABAB: `amount_soum` bor, lekin yo'qlik sababi ham "
+                "kelgan. Ikkalasi bir vaqtda rost bo'la olmaydi va bu holat "
+                "ekranda «yopiq kun, lekin to'la» bo'lib chizilardi."
+            )
+        return self
+
+
+class PendingLookupResponse(BaseModel):
+    """`GET /billing/pending?stall_code=…` ning KO'P MOSLIK javobi (§8.3).
+
+    =======================================================================
+    ⛔ IKKI SHAKL, ULARDAN AYNAN BITTASI — VA BU O'LCHANADI.
+
+    Kassir kodni PREFIKS sifatida teradi. `"1"` kodi bozorda YO'Q, lekin
+    `"10"` va `"100"` bor bo'lsa summa HISOBLANMAYDI: taxminiy summa
+    ko'rsatish §9.4 ning aynan taqiqlagan xatosi. O'shanda javob faqat
+    KODLAR ro'yxati bo'ladi (`stalls.code_sort` tartibida — inson-raqamli
+    tartib serverda, klientda emas).
+
+    ⚠ ANIQ MOSLIK holatida marshrut BU MODELNI EMAS, `PendingStall
+      Response` ni (tekis, yetti kalit) qaytaradi — §9.2 ning to'plam
+      tengligi AYNAN o'sha tekis payload ustida o'lchanadi (G-23) va
+      klient sxemasi (`billing-pending-queries.ts::pendingStallSchema`)
+      ham aynan shuni `z.strictObject` bilan kutadi. `stall` maydoni shu
+      sababdan «bitta moslik» slotini NOM BILAN band qilib turadi: u
+      bo'lmasa ikki shakl orasidagi bog'liqlik kontraktda emas, faqat
+      izohda qolardi.
+    =======================================================================
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    matches: list[str]
+    """⛔ FAQAT KODLAR — `code_sort` tartibida. Summa, sotuvchi, tarif YO'Q."""
+    stall: PendingStallResponse | None
+    """«Aynan bitta moslik» sloti — ko'p moslikda `null`."""
+
+    @model_validator(mode="after")
+    def _exactly_one_shape(self) -> Self:
+        """⛔ `stall` va `matches` BIR VAQTDA to'lgan bo'la olmaydi.
+
+        Ikkalasi ham to'lgan javob ekranga «ro'yxat ham bor, summa ham
+        bor» deb kelardi va kassir ro'yxatdan boshqa rastani tanlab,
+        ekranda TURGAN summani to'lardi — §9.4 ning «eski summa yangi
+        rasta ostida» xatosi, faqat bir so'rov ichida.
+        """
+        if self.stall is not None and self.matches:
+            raise ValueError(
+                "IKKI SHAKL BIR VAQTDA: `stall` to'lgan va `matches` ham bo'sh "
+                "emas. Aynan bitta moslikda ro'yxat BO'SH bo'ladi, ko'p "
+                "moslikda esa summa UMUMAN hisoblanmaydi (§8.3, §9.4)."
+            )
+        return self
+
+
+class PendingMarketResponse(BaseModel):
+    """`GET /billing/pending` (rasta parametrisiz) — BOZOR kesimi (§9.5).
+
+    ⛔ NOL — NATIJA: uchala son nol bo'lganda ham qaytariladi
+       (`occupancy.py:122-124` da o'rnatilgan qoida). «Bugun hech nima
+       kutilmayapti» bilan «hisoblagich ishlamayapti» bir xil
+       KO'RINMASLIGI kerak.
+
+    ⛔ Bu yerda ham hisob identifikatori YO'Q: bozor kesimi
+       proyeksiyaning YIG'INDISI, hisoblar RO'YXATI emas.
+
+    `fetched_at` ATAYIN payloadda: §9.5 avtomatik taymerni RAD ETADI va
+    uning o'rniga `[Yangilash]` tugmasi + vaqt tamg'asini qo'yadi —
+    «men boshqa raqam ko'rgandim» nizosining manbai jimgina o'zgaradigan
+    raqam edi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    service_date: date
+    market_open: bool
+    pending_amount_soum: int
+    outstanding_soum: int
+    pending_stall_count: int
+    fetched_at: datetime
+
+
+class ChargeRowResponse(BaseModel):
+    """`GET /billing/charges?day=…` ning bitta qatori (UI-SPEC §11.2).
+
+    ⛔ `vendor_name` YO'Q, `vendor_id` BOR (C-10 + §5.5). Sotuvchi nomi
+       ekranda KERAK, lekin u MAVJUD, AUDIT QILINGAN `GET /vendors`
+       marshrutidan olinib KLIENTDA joinlanadi. Nomni bu javobga
+       qo'shish `PERSONAL_ROUTES` ni o'stirardi va o'sha marshrutdan
+       `audit_read(...)` talab qilinardi — ya'ni moliyaviy yuza
+       shaxsiy-ma'lumot yuzasiga aylanardi.
+
+    ⛔ `balance` NOMLI maydon HECH QAYERDA yo'q (BILL-03): qoldiq —
+       HISOBLANADIGAN ko'rinish va uning nomi ham `outstanding_soum`.
+
+    ⚠ `amount_soum` — TUZATISHLAR BILAN NETLANGAN summa
+      (`amount_soum + Σ(increase) − Σ(decrease)`). `tariff_amount_soum`
+      dan FARQ QILISHI aynan tuzatish bo'lganini aytadi (§11.2) va
+      arifmetika SERVERDA bajariladi: klient ikki ustunni ayirib
+      «tuzatish bormi?» degan xulosaga kelmasligi kerak.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    charge_id: UUID
+    stall_code: str
+    vendor_id: UUID
+    service_date: date
+    tariff_amount_soum: int
+    """Tarif BERGAN summa (D-09) — retroaktiv o'zgarishdan himoyalangan."""
+    amount_soum: int
+    outstanding_soum: int
+    """Sotuvchi kesimidagi qoldiq (BILL-03) — rasta kesimida EMAS (C-4)."""
+
+
+class ChargeListResponse(BaseModel):
+    """`GET /billing/charges?day=…` — kun kesimidagi yozilgan hisoblar.
+
+    ⛔ IKKALA HISOBLAGICH HAM HAR DOIM QAYTADI, nol bo'lganda ham. Kun
+       bo'sh bo'lishi NORMAL holat (C-3: hisob D+1 04:10 da tug'iladi),
+       lekin «bu kunda hisob yo'q» bilan «hisoblagich ishlamayapti» bir
+       xil ko'rinsa direktor tizimni buzuq deb hisoblardi.
+
+    ⚠ `day` javobda ATAYIN bor: standart kun SERVERDA hisoblanadi
+      (KECHA — §11.1) va klient qaysi kunni ko'rayotganini javobning
+      O'ZIDAN biladi, so'rovni qayta o'qib emas.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    rows: list[ChargeRowResponse]
+    charge_count: int
+    charged_soum: int
+
+
+class ChargeAdjustmentRow(BaseModel):
+    """DL-3 ning 4-bo'limi — hisob tuzatishi (§11.3).
+
+    ⛔ `actor_user_id` — IDENTIFIKATOR, ism EMAS (C-10 + §5.5). Ism
+       `GET /users` dan klientda joinlanadi.
+
+    ⛔ Bo'sh massiv YASHIRILMAYDI: dialog «Tuzatish yo'q» jumlasini
+       ko'rsatadi — nol NATIJA, yo'qlik emas.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    adjustment_id: UUID
+    direction: AdjustmentDirection
+    """`increase` / `decrease` — ⛔ BELGILI summa emas, kattalik + yo'nalish (C-5)."""
+    amount_soum: int
+    reason_code: AdjustmentReason
+    """YOPIQ ro'yxat (D-19) — `other` a'zosi YO'Q."""
+    actor_user_id: UUID
+    created_at: datetime
+
+
+class ChargeEvidenceRow(BaseModel):
+    """DL-3 ning 5-bo'limi — dalil kadri (§11.3, BILL-02).
+
+    ⛔ `snapshot_id` `null` bo'lgan element QAYTARILISHI MUMKIN va klient
+       uni UMUMAN CHIZMAYDI: na placeholder, na «yuklanmadi». Bu 05-14
+       ning darsi — marshrut bermagan qatorni to'qish (stub) ham, bo'sh
+       jadval (placeholder) ham RAD ETILGAN.
+
+    ⛔ `tariff_id` bu yerda ham, `ChargeDetailResponse` da ham YO'Q:
+       direktorga ham ma'nosiz identifikator (§11.3, 2-bo'lim).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: UUID | None
+    slot_time: time
+
+
+class ChargeDetailResponse(BaseModel):
+    """`GET /billing/charges/{charge_id}` — DL-3 ning besh bo'limi (§11.3).
+
+    ⛔ `tariff_id` E'LON QILINMAGAN. `tariff_amount_soum` BOR va u
+       ma'noli son; tarifning identifikatori esa ekranda hech nimani
+       ochmaydi va uni berish D-20 ning kirish ma'lumotini direktor
+       yuzasidan kassir yuzasiga ko'chirish yo'lini ochardi.
+
+    ⛔ `vendor_name` ham YO'Q (C-10): sarlavhada rasta KODI turadi,
+       sotuvchi nomi esa `GET /vendors` dan klientda joinlanadi.
+
+    ⚠ 3-bo'lim («Bu hisob o'zgartirilmaydi») — MATN, ya'ni u payloadda
+      YO'Q va bo'lishi ham shart emas: u har doim ko'rinadi va
+      serverdan kelgan bayroqqa bog'liq emas (§11.3).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    charge_id: UUID
+    service_date: date
+    stall_code: str
+    tariff_amount_soum: int
+    amount_soum: int
+    """⛔ TUZATISHLAR BILAN NETLANGAN — `ChargeRowResponse` bilan AYNI arifmetika."""
+    adjustments: list[ChargeAdjustmentRow]
+    evidence: list[ChargeEvidenceRow]
+
+
+class AnomalyRowResponse(BaseModel):
+    """`GET /billing/anomalies?day=…` ning bitta qatori (BILL-04, §11.4).
+
+    =======================================================================
+    ⛔ JUFTLANGAN INVARIANT — C-12 ning DB `CHECK` ining AYNAN takrori:
+
+        (kind = 'no_coverage_stall') = (snapshot_id IS NULL)
+
+    «Qamrovsiz rasta» dalilsiz, qolgan ikki tur esa dalil BILAN keladi.
+    Ikkala yo'nalish ham ifodalab bo'lmaydigan qilinadi: «qamrovsiz,
+    lekin kadri bor» — KO'R NUQTADAN dalil da'vosi; «band, lekin
+    kadrsiz» — hukmning dalilsiz qolishi.
+    =======================================================================
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    anomaly_id: UUID
+    kind: AnomalyKind
+    stall_code: str
+    service_date: date
+    snapshot_id: UUID | None
+
+    @model_validator(mode="after")
+    def _no_coverage_is_paired(self) -> Self:
+        """C-12 ning serializator qatlamidagi takrori."""
+        if (self.kind is AnomalyKind.NO_COVERAGE_STALL) != (self.snapshot_id is None):
+            raise ValueError(
+                "C-12 JUFTLIGI BUZILDI: `no_coverage_stall` dalilsiz, qolgan "
+                "turlar esa dalil bilan kelishi SHART. "
+                f"kind={self.kind.value!r}, snapshot_id={self.snapshot_id!r}"
+            )
+        return self
+
+
+class AnomalyListResponse(BaseModel):
+    """`GET /billing/anomalies?day=…` — kun kesimidagi anomaliyalar.
+
+    =======================================================================
+    ⛔⛔ UCH ALOHIDA SANOQ VA ULAR HECH QACHON QO'SHILMAYDI (D-05).
+
+    «Ko'ra olmadik» (`no_coverage_stall`) ≠ «band, lekin biriktirilmagan»
+    (`unassigned_occupied`). Ikkisini bitta «anomaliya soni» ga qo'shish
+    KO'R NUQTADAN TUSHUM DA'VOSI TO'QISH bo'lardi — ya'ni hisobot
+    kamerasiz rastani ham «yo'qotilgan pul» deb ko'rsatardi.
+
+    Shuning uchun bu yerda `anomaly_count` NOMLI maydon YO'Q va u
+    qo'shilmaydi: yagona son mavjud bo'lsa ekran uni ko'rsatardi va
+    farq matn darajasida yo'qolardi (G-26 ning sababi).
+    =======================================================================
+
+    ⛔ UCHALA SANOQ HAM NOL BO'LGANDA HAM QAYTADI — nol NATIJA.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    rows: list[AnomalyRowResponse]
+    unassigned_count: int
+    """`unassigned_occupied` — «Ro'yxatga olinmagan savdo» (D-28)."""
+    closed_day_count: int
+    """`closed_day_occupied` — «Yopiq kunda savdo» (D-10)."""
+    no_coverage_count: int
+    """`no_coverage_stall` — «Qamrovsiz rasta» (D-05). ⛔ Yuqoridagilarga QO'SHILMAYDI."""
