@@ -370,7 +370,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-04-PLAN.md — `0020` billing domeni + `0021` kaskad; uch o'zgarmaslik qo'riqchisi, orfan DEFINER DROP (C-1/2/4/5/7/11/12)
+- [x] 06-04-PLAN.md — `0020` billing domeni + `0021` kaskad; uch o'zgarmaslik qo'riqchisi, orfan DEFINER DROP (C-1/2/4/5/7/11/12)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -492,7 +492,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
-| 6. Billing va kassir | 3/14 | In Progress|  |
+| 6. Billing va kassir | 4/14 | In Progress|  |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 
