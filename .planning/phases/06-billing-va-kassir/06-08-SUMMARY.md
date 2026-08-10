@@ -259,3 +259,29 @@ None — tashqi servis sozlamasi talab qilinmadi.
 - **06-10 (smena):** `POST /shifts`, `POST /shifts/{id}/close` uchun ham o'sha darvoza amal qiladi; `shift_manage` huquqi 06-02 da tayyor.
 - **06-11/06-13 (frontend):** kontrakt **o'lchangan**, LEKIN ⛔ **06-03 ning uchta klient sxemasi serverdan orqada** — `chargeListSchema`/`anomalyListSchema` (`{items}` → `{day, rows, hisoblagichlar}`) va ko'p moslik uchun `pendingLookupSchema`. Band `deferred-items.md` ning **2-qatorida** to'liq yozilgan.
 - **06-12/06-14 (darvozalar):** G-22 (taqiqlangan nomlar) ning **server yarmi** shu rejada hosila skan bilan yopildi; klient yarmi (`scripts/collect-surface.test.mjs`) 06-12 niki. `MINIMUM_MATRIX_ROUTES` **06-14 da** ko'tariladi (bugungi o'lchov: matritsada 4 yangi marshrut, tana yuboriladigan marshrutlar **37**).
+
+## Self-Check: PASSED
+
+**Fayllar (4/4 mavjud):** `services/core-api/app/api/v1/billing.py` (399 qator, 16 500 bayt) · `tests/integration/test_billing_api.py` (828 qator, 31 140 bayt) · `06-08-SUMMARY.md` · `deferred-items.md`
+
+**Commitlar (4/4 topildi):** `62f4327` · `8397509` · `1b3751f` · `e4a698e`
+
+**`must_haves` artefaktlari:**
+
+| Talab | O'lchov | Natija |
+|---|---|---|
+| `billing.py` `min_lines: 220` | `wc -l` → **399** | ✅ |
+| `billing.py` `contains: ReportViewerDep` | `grep -c` → **4** | ✅ |
+| `provides`: `/pending`, `/charges`, `/charges/{charge_id}`, `/anomalies` | OpenAPI da to'rtala yo'l | ✅ |
+| `test_billing_api.py` — to'plam tengligi + nol-natija + C-10 skani | 22 test, besh guruh | ✅ |
+| `key_links`: `billing.py` → `billing_repo` (`pending_projection`) | `grep -c pending_projection` → **3** | ✅ |
+| `key_links`: `PARAM_FILLERS` → `charge_id` (B ning HAQIQIY qiymati) | `billing_rows` fixture'i + `test_param_fillers_point_at_the_other_market` | ✅ |
+| `key_links`: `test_no_matrix_route_returns_422` (yangi 422 qulfi) | mavjud, sabotaj bilan o'lchangan | ✅ |
+
+**`truths` (6/6):**
+`charge_id` proyeksiya javobida UMUMAN e'lon qilinmagan (S-A ikkala qatlamni ham qizartirdi) ·
+`tariff_id`/`category_id` birorta `/billing/*` javobida yo'q — klient summani hisoblab chiqara OLMAYDI ·
+birorta yangi marshrut `PERSONAL_FIELDS` qaytarmaydi (`PERSONAL_ROUTES` **o'smadi**) ·
+kassir `billing_collect_view` bilan proyeksiyani oladi, hisoblar/anomaliya `report_view` ostida (403 bilan o'lchandi) ·
+begona bozorning hisobi **404** beradi va matritsa to'rt yangi marshrutni QAMRAYDI ·
+matritsadagi birorta marshrut 422 bermaydi — `BODY_FILLERS` bo'shlig'i endi MEXANIK ushlanadi (va u DARHOL `POST /api/v1/users` ni topdi).
