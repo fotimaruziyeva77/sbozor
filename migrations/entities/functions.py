@@ -1153,6 +1153,42 @@ BEGIN
     RETURN false;
   END IF;
 
+  -- 6-faza billing domeni (0020_billing_domain). BLOK BANDLIK VA SNAPSHOT
+  -- BLOKLARIDAN OLDIN TURISHI SHART va bu O'LCHANGAN, taxmin emas:
+  -- `charge_evidence` UCHTA quyi jadvalga birdan tayanadi —
+  -- `stall_slot_occupancy` (audit havolasi), `occupancy_events`
+  -- (muzlatilgan dalil) va `snapshots` (kadrga yo'l); `billing_anomalies`
+  -- esa `occupancy_events` va `snapshots` ga. Ular pastdagi ikki blokning
+  -- BIRINCHI `DELETE` lari, ya'ni blok keyinga qo'yilganda chaqiruv
+  -- `ForeignKeyViolation: update or delete on table "stall_slot_occupancy"
+  -- violates foreign key constraint "fk_charge_evidence_stall_slot_
+  -- occupancy"` bilan yiqiladi — va STATIK DARVOZA BUNI SEZMAYDI (matnda
+  -- oltala jadval baribir bor). Aynan shuning uchun
+  -- `test_draft_market_deletion_covers_the_billing_domain` funksiyani
+  -- HAQIQATAN chaqiradi. Bu `0013`/`0015`/`0019` juftliklarining
+  -- TO'RTINCHI takrori.
+  --
+  -- Ichki tartib `BILLING_DELETE_ORDER` dan: `charge_evidence` ->
+  -- `charge_adjustments` -> `payments` -> `billing_anomalies` ->
+  -- `daily_charges` -> `cashier_shifts`. Bu domenda IKKI MUSTAQIL zanjir
+  -- bor (`charge_evidence`/`charge_adjustments` -> `daily_charges` va
+  -- `payments` -> `cashier_shifts`), shuning uchun ro'yxat
+  -- `reversed(BILLING_TENANT_TABLES)` bilan USTMA-UST TUSHMAYDI —
+  -- 5-fazadagi tasodifiy ustma-ustlikdan farqli o'laroq.
+  --
+  -- ⚠ UCHALA JADVALDA (`daily_charges`, `payments`, `cashier_shifts`)
+  --   O'ZGARMASLIK TRIGGERI BOR (0020) va ular `DELETE` ni FAQAT QORALAMA
+  --   bozor uchun o'tkazadi. Yuqoridagi `IS DISTINCT FROM false` sharti
+  --   aynan shu holatni kafolatlaydi, ya'ni bu yerga faqat qoralama bozor
+  --   yetib keladi. `tariffs` / `occupancy_events` bilan AYNAN bir xil
+  --   naqsh.
+  DELETE FROM public.charge_evidence            WHERE market_id = p_market_id;
+  DELETE FROM public.charge_adjustments         WHERE market_id = p_market_id;
+  DELETE FROM public.payments                   WHERE market_id = p_market_id;
+  DELETE FROM public.billing_anomalies          WHERE market_id = p_market_id;
+  DELETE FROM public.daily_charges              WHERE market_id = p_market_id;
+  DELETE FROM public.cashier_shifts             WHERE market_id = p_market_id;
+
   -- 5-faza bandlik domeni (0018_occupancy_domain). BLOK SNAPSHOT BLOKIDAN
   -- OLDIN TURISHI SHART va bu O'LCHANGAN, taxmin emas: `occupancy_events`
   -- `snapshots (id, is_billable)` ga kompozit FK bilan tayanadi (D-21),
@@ -1245,10 +1281,19 @@ ANIQ ro'yxat esa yangi jadval qo'shilganda KO'RINADIGAN qarz qoldiradi:
 jadval ro'yxatga qo'shilmasa `DELETE FROM markets` FK xatosi bilan yiqiladi
 va sabab darhol ma'lum bo'ladi.
 
-TARTIB — FK bo'yicha bolalardan ota-onaga: kameralar -> kashfiyot
-yugurishlari -> NVR sirlari -> NVR qurilmalari -> biriktirishlar -> toifa
-davrlari -> tariflar -> kod reyestri -> rastalar -> sotuvchilar -> zonalar ->
-toifalar -> kalendar -> profil -> a'zoliklar -> tokenlar -> bozor.
+TARTIB — FK bo'yicha bolalardan ota-onaga: billing (dalil -> tuzatish ->
+to'lov -> anomaliya -> hisob -> smena) -> bandlik -> snapshot -> kameralar
+-> kashfiyot yugurishlari -> NVR sirlari -> NVR qurilmalari ->
+biriktirishlar -> toifa davrlari -> tariflar -> kod reyestri -> rastalar ->
+sotuvchilar -> zonalar -> toifalar -> kalendar -> profil -> a'zoliklar ->
+tokenlar -> bozor.
+
+⛔ BLOKLAR TARTIBI HAM MAJBURIY, FAQAT BLOK ICHI EMAS: billing bandlikdan
+OLDIN, bandlik snapshotdan oldin, snapshot NVR dan oldin. Har bir juftlik
+tananing o'z izohida sabab bilan yozilgan va uchalasi ham HAQIQIY
+chaqiruv bilan o'lchanadi (`test_market_delete_guard.py` ning uchta
+`test_draft_market_deletion_covers_the_*` testi) — statik matn darvozasi
+tartibni SEZMAYDI.
 
 ⚠ `tariffs` va `stall_category_periods` ustidagi `DELETE` o'zgarmaslik
 triggerlarini ishga tushiradi. Ular QORALAMA bozor uchun ataylab o'tkazib

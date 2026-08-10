@@ -705,7 +705,8 @@ BEGIN
       RETURN OLD;
     END IF;
 
-    RAISE EXCEPTION 'cashier_shifts rows are not deletable (attempted %)', TG_OP;
+    RAISE EXCEPTION 'cashier_shifts rows are not deletable (attempted %)', TG_OP
+      USING ERRCODE = '23514';
   END IF;
 
   IF OLD.status = 'closed' THEN
@@ -775,10 +776,23 @@ TO'RT SHOX VA HAR BIRI BOSHQA NOSOZLIKNI YOPADI:
   `audit_log` ga qator QOLDIRMAYDI (`helpers.py:295-298`) — rad etilgan
   urinish "o'zgardi" deb yozilmasin.
 
-`ERRCODE = '23514'` (check_violation) — `TARIFF_PAST_IMMUTABLE` va
-`MARKETS_DELETE_GUARD` bilan AYNAN bir xil kod va bu ataylab: uchalasi ham
-"domen qoidasi buzildi" sinfida va chaqiruvchi ularni bitta yo'lda 409 ga
-aylantiradi. Yangi konvensiya KIRITILMAYDI.
+⛔ `ERRCODE = '23514'` (check_violation) — TO'RTALA SHOXDA HAM, VA BU
+  FUNKSIYA ICHIDA IZCHIL BO'LISHI SHART.
+
+  Repoda ikki xato-sinfi bor va ular SHAKL bilan birga yuradi:
+    * SHARTSIZ append-only qo'riqchi (`audit_immutable()`,
+      `occupancy_event_immutable()`, `charge_immutable()`,
+      `payment_immutable()`) — ERRCODE'siz, ya'ni `P0001`
+      (`psycopg.errors.RaiseException`);
+    * SHARTLI domen-qoidasi qo'riqchisi (`tariff_past_immutable()`,
+      `category_period_past_immutable()`, `markets_delete_guard()`) —
+      `23514` (`psycopg.errors.CheckViolation`).
+
+  Bu funksiya IKKINCHI sinfda (yuqoridagi SHAKL TANLOVI bloki), shuning
+  uchun uning HAR TO'RT shoxi ham `23514` beradi — `DELETE` shoxi ham.
+  Bitta funksiya ichida ikki xato-sinfini aralashtirish chaqiruvchini
+  IKKI xil `except` yozishga majburlardi va `MARKETS_DELETE_GUARD`
+  docstringidagi «Yangi konvensiya KIRITILMAYDI» qoidasini buzardi.
 
 ⚠ `status` LITERALI (`'closed'`) TANADA QO'LDA YOZILGAN va bu boshqa
   yo'li yo'q: `PGFunction` ta'rifi SQL matni, ya'ni u `sbozor_core.enums`

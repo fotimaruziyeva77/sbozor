@@ -1207,8 +1207,26 @@ def test_occupancy_registries_are_self_consistent(
 
 ENTITIES_SOURCE = Path(__file__).resolve().parents[2] / "migrations" / "entities" / "__init__.py"
 
-DERIVED_ORDER_PATTERN = re.compile(r"^\s*OCCUPANCY_DELETE_ORDER[^=]*=\s*tuple\s*\(", re.MULTILINE)
-"""`OCCUPANCY_DELETE_ORDER = tuple(reversed(...))` shaklini topadigan naqsh.
+DERIVED_ORDER_PATTERN = re.compile(r"^\s*(\w+)_DELETE_ORDER[^=]*=\s*tuple\s*\(", re.MULTILINE)
+"""`<DOMEN>_DELETE_ORDER = tuple(reversed(...))` shaklini topadigan naqsh.
+
+⛔ NAQSH UMUMLASHTIRILDI (`06-04` / T3, §5.8 ning yopilishi). Ilgari u
+`OCCUPANCY_DELETE_ORDER` NOMIGA QATTIQ YOZILGAN edi, ya'ni 6-fazaning
+`BILLING_DELETE_ORDER` i uni UMUMAN QAMRAMASDI va §S-2 ning qoidasi
+yangi domenda JIMGINA bo'shab qolardi.
+
+⛔ IKKINCHI KONSTANTA QO'SHISH RAD ETILDI va sabab arifmetik: har yangi
+domen darvozaga BITTA QATOR qo'shishni talab qilardi va uchinchi domen
+paydo bo'lganda YANA tahrir kerak bo'lardi — ya'ni darvozaning qamrovi
+qo'lda yuritiladigan ro'yxatga aylanardi (D-32: darvoza SANOQ emas,
+MANBADAN HOSILA). Umumlashtirilgan naqsh esa `SNAPSHOT_DELETE_ORDER` ni
+ham, kelajakdagi har qanday `*_DELETE_ORDER` ni ham AVTOMATIK qamraydi.
+
+⚠ UMUMLASHTIRISH MAVJUD OCCUPANCY DA'VOSINI SUSAYTIRMAYDI va bu
+TAXMIN EMAS, O'LCHANADI: `test_billing_delete_order_is_declared_not_
+derived` naqshni POZITIV (hosila e'lon TOPILADI, shu jumladan
+`OCCUPANCY_DELETE_ORDER` niki) va NEGATIV (literal e'lon TOPILMAYDI)
+nazorat bilan sinaydi.
 
 Faqat E'LON satri qidiriladi — docstring ichidagi tushuntirish matni
 («bu `reversed()` i EMAS») darvozani qizartirmasligi kerak, aks holda
@@ -1252,6 +1270,11 @@ def test_occupancy_delete_order_is_declared_not_derived() -> None:
     Darvoza MANBA MATNINI o'qiydi, import qilmaydi (§S-10): import qilingan
     qiymat `tuple(reversed(...))` bilan LITERAL tuple'ni bir-biridan
     ajrata olmaydi — ikkalasi ham bir xil obyekt beradi.
+
+    ⚠ `06-04` / T3 DAN BERI NAQSH UMUMLASHTIRILGAN (`(\\w+)_DELETE_ORDER`),
+    ya'ni bu test endi occupancy'ni ham, boshqa har qanday domen
+    ro'yxatini ham qamraydi. Da'vo SUSAYMADI — u KENGAYDI; nazorati
+    `test_billing_delete_order_is_declared_not_derived` da.
     """
     source = ENTITIES_SOURCE.read_text(encoding="utf-8")
 
@@ -1264,13 +1287,215 @@ def test_occupancy_delete_order_is_declared_not_derived() -> None:
 
     derived = DERIVED_ORDER_PATTERN.search(source)
     assert derived is None, (
-        "`OCCUPANCY_DELETE_ORDER` HOSILA qiymat sifatida yozilgan: "
+        "`*_DELETE_ORDER` HOSILA qiymat sifatida yozilgan: "
         f"{derived.group(0).strip() if derived else ''!r}\n"
         "RLS tartibi (ota-onadan bolalarga) va o'chirish tartibi (bolalardan "
         "ota-onaga) IKKI XIL savolga javob beradi va MUSTAQIL o'zgaradi. "
         "FK zanjiridan chetda turgan bitta jadval qo'shilgan kuni hosila "
         "qiymat JIMGINA noto'g'ri bo'lardi — 4-fazada `alert_events` aynan "
         "shunday edi (§S-2)."
+    )
+
+
+BILLING_CASCADE_HINT = (
+    "Tushib qolgan jadval `0020` qo'ngandan keyin qoralama bozorni o'chirishni "
+    "chet el kaliti buzilishi bilan yiqitardi (OP-1) va sabab faqat ish paytida, "
+    "admin ekranida ko'rinardi. Kaskad `0021` da yoziladi (`06-04` / T3)."
+)
+"""Tuzatish yo'riqnomasi ALOHIDA konstantada — sabab `CASCADE_REGISTRY_HINT` da."""
+
+BILLING_TENANT_REGISTRY_HINT = (
+    "`ALL_ENTITIES` aynan `ALL_TENANT_TABLES` dan quriladi, ya'ni tushib qolgan "
+    "jadval `tenant_isolation` policy'sisiz — RLS himoyasisiz — qolardi. "
+    "Qo'shish `0020` bilan BIR OYNADA bajariladi (`06-04` / T2, OP-3)."
+)
+
+
+def test_billing_registries_are_self_consistent(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """6-faza reyestrlari o'zaro MOS (D-32).
+
+    `test_occupancy_registries_are_self_consistent` ning AYNAN shakli,
+    to'rtinchi marta qo'llangan. Uchta ro'yxat uch xil savolga javob beradi
+    va ular AJRALIB KETISHI mumkin, chunki uchalasi qo'lda yuritiladi:
+
+      * `BILLING_TENANT_TABLES`  -> RLS + policy tsikli (`0020`);
+      * `BILLING_AUDITED_TABLES` -> audit triggeri (`AUDITED_TABLES` kichik to'plami);
+      * `BILLING_DELETE_ORDER`   -> `market_delete_draft()` kaskadi (`0021`).
+
+    ⚠ IMPORT TEST FUNKSIYASINING ICHIDA — 4- va 5-fazadagi bilan bir xil
+      sabab: reyestr hali tug'ilmagan bosqichda modul darajasidagi import
+      BUTUN FAYLNING yig'ilishini yiqitardi.
+    """
+    from migrations.entities import (
+        ALL_TENANT_TABLES,
+        BILLING_AUDITED_TABLES,
+        BILLING_DELETE_ORDER,
+        BILLING_TENANT_TABLES,
+    )
+
+    assert len(BILLING_TENANT_TABLES) == 6, (
+        f"`BILLING_TENANT_TABLES` da {len(BILLING_TENANT_TABLES)} jadval: "
+        f"{list(BILLING_TENANT_TABLES)}. Kutilgani oltita (`06-PATTERNS.md` §2 R-1)."
+    )
+    assert len(set(BILLING_TENANT_TABLES)) == len(BILLING_TENANT_TABLES), (
+        f"`BILLING_TENANT_TABLES` da dublikat bor: {list(BILLING_TENANT_TABLES)}"
+    )
+
+    # 🔴 C-1 — NOM MEXANIK QULFLANDI. `charges` nomi `FINANCIAL_TABLES` da
+    # 1-fazadan beri `daily_charges` deb yozilgan va
+    # `test_financial_tables_have_guards` bazada AYNAN shu nomni izlaydi.
+    # `charges` deb nomlash darvozani «jadval yo'q» holatida JIMGINA yashil
+    # qoldirardi — uchala moliyaviy qo'riqchi ham tekshirilmasdi.
+    assert "charges" not in BILLING_TENANT_TABLES, (
+        "`charges` nomi TAQIQLANGAN: `sbozor_core.schema_contract."
+        "FINANCIAL_TABLES` 1-fazadan beri `daily_charges` ni kutadi (C-1)."
+    )
+    assert "daily_charges" in BILLING_TENANT_TABLES, (
+        "`daily_charges` reyestrda yo'q — C-1 ning butun mazmuni shu nomda."
+    )
+
+    # ⛔ C-4/D-24 — YETTINCHI JADVAL YARATILMAYDI. Taqsimlash HOSILA qoida
+    # (`FIFO_OLDEST_SERVICE_DATE_FIRST`, 06-01) va u SAQLANMAYDI: saqlangan
+    # taqsimlash D-07 (yozilgan hisob o'zgarmas) va BILL-03 (qoldiq
+    # hisoblanadigan ko'rinish) ning IKKALASINI ham buzardi.
+    assert "payment_allocations" not in BILLING_TENANT_TABLES, (
+        "`payment_allocations` reyestrga qo'shilgan — D-24 ning mexanizmi "
+        "HOSILA qoida, saqlanadigan jadval EMAS (C-4)."
+    )
+
+    # ⚠ O'ZI QUROLLANADIGAN DARVOZA — shartsiz `<=` EMAS (sabab
+    # `test_occupancy_registries_are_self_consistent` da o'lchangan).
+    existing = {
+        row[0]
+        for row in sync_app_conn.execute(
+            "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'public' AND c.relkind = 'r'"
+        ).fetchall()
+    }
+    born = set(BILLING_TENANT_TABLES) & existing
+    assert born <= set(ALL_TENANT_TABLES), (
+        f"jadval BAZADA bor, lekin `ALL_TENANT_TABLES` da yo'q: "
+        f"{sorted(born - set(ALL_TENANT_TABLES))}. " + BILLING_TENANT_REGISTRY_HINT
+    )
+
+    assert set(BILLING_DELETE_ORDER) == set(BILLING_TENANT_TABLES), (
+        "kaskad tartibi tenant reyestriga mos emas.\n"
+        f"  kaskadda yo'q: {sorted(set(BILLING_TENANT_TABLES) - set(BILLING_DELETE_ORDER))}\n"
+        f"  ortiqcha:      {sorted(set(BILLING_DELETE_ORDER) - set(BILLING_TENANT_TABLES))}\n"
+        + BILLING_CASCADE_HINT
+    )
+    assert len(BILLING_DELETE_ORDER) == len(set(BILLING_DELETE_ORDER)), (
+        f"`BILLING_DELETE_ORDER` da dublikat bor: {list(BILLING_DELETE_ORDER)}"
+    )
+
+    # Tartib — BOLALARDAN OTA-ONAGA. Har juftlik `models/billing.py` dagi
+    # HAQIQIY kompozit FK ga mos keladi, ya'ni bu ro'yxat ixtiyoriy tartib
+    # emas — u `0021` ning `DELETE` ketma-ketligi. ⚠ IKKI MUSTAQIL zanjir.
+    order = list(BILLING_DELETE_ORDER)
+    for child, parent in (
+        ("charge_evidence", "daily_charges"),
+        ("charge_adjustments", "daily_charges"),
+        ("payments", "cashier_shifts"),
+    ):
+        assert order.index(child) < order.index(parent), (
+            f"`{child}` `{parent}` dan KEYIN o'chirilyapti — kaskad o'z chet el "
+            "kalitiga uriladi. Tartib bolalardan ota-onaga bo'lishi shart."
+        )
+
+    assert set(BILLING_AUDITED_TABLES) < set(BILLING_TENANT_TABLES), (
+        "`BILLING_AUDITED_TABLES` tenant reyestrining QAT'IY kichik to'plami "
+        f"bo'lishi shart. Topilgani: {list(BILLING_AUDITED_TABLES)}. To'rtta "
+        "jadval (`daily_charges`, `payments`, `charge_evidence`, "
+        "`billing_anomalies`) auditdan ATAYIN chiqarilgan — sabab "
+        "`sbozor_core.schema_contract.AUDITED_TABLES` docstringida."
+    )
+    assert set(BILLING_AUDITED_TABLES) <= AUDITED_TABLES, (
+        f"audit reyestriga tushmagan nom(lar): "
+        f"{sorted(set(BILLING_AUDITED_TABLES) - AUDITED_TABLES)} — "
+        "`BILLING_AUDITED_TABLES` va `AUDITED_TABLES` ajralib ketgan."
+    )
+
+
+def test_billing_delete_order_is_declared_not_derived() -> None:
+    """`BILLING_DELETE_ORDER` LITERAL e'lon qilinadi — hosila EMAS (§5.8/D-32).
+
+    =====================================================================
+    ⚠ BU TEST IKKI DA'VONI BIRDAN O'LCHAYDI VA IKKALASI HAM KERAK.
+
+    **(1) YANGI RO'YXAT QAMRALDI.** `DERIVED_ORDER_PATTERN` `06-04` gacha
+    `OCCUPANCY_DELETE_ORDER` NOMIGA QATTIQ YOZILGAN edi (`05-01` / §S-10),
+    ya'ni `BILLING_DELETE_ORDER = tuple(reversed(BILLING_TENANT_TABLES))`
+    deb yozish darvozadan JIMGINA o'tib ketardi. Bu 5-fazadagidan
+    ham QIMMAT xato bo'lardi: u yerda ikki ro'yxat TASODIFAN ustma-ust
+    tushardi, bu domenda esa ular USTMA-UST TUSHMAYDI —
+    `reversed(BILLING_TENANT_TABLES)` `payments` ni `charge_evidence` dan
+    OLDIN qo'yardi va kaskad o'z chet el kalitiga urilardi.
+
+    **(2) UMUMLASHTIRISH ESKI DA'VONI SUSAYTIRMADI.** Naqshni kengaytirish
+    uni «hech nimani topmaydigan» qilib qo'yishi mumkin edi va o'shanda
+    IKKALA ro'yxat ham qo'riqsiz qolardi — test esa BARIBIR yashil
+    bo'lardi («hosila e'lon topilmadi» har doim rost). Shuning uchun naqsh
+    POZITIV va NEGATIV nazorat bilan sinaladi: u sun'iy HOSILA e'lonni
+    (o'sha jumladan eski `OCCUPANCY_DELETE_ORDER` shaklini) TOPISHI va
+    sun'iy LITERAL e'lonni TOPMASLIGI shart.
+
+    Darvoza MANBA MATNINI o'qiydi, import qilmaydi (§S-10): import qilingan
+    qiymat `tuple(reversed(...))` bilan LITERAL tuple'ni bir-biridan
+    ajrata olmaydi — ikkalasi ham bir xil obyekt beradi.
+    =====================================================================
+    """
+    source = ENTITIES_SOURCE.read_text(encoding="utf-8")
+
+    # QUYI CHEGARA: fayl yo'li noto'g'ri bo'lsa yoki konstanta qayta
+    # nomlansa quyidagi "topilmadi" assert'i JIMGINA yashil qolardi.
+    assert "BILLING_DELETE_ORDER" in source, (
+        f"`BILLING_DELETE_ORDER` {ENTITIES_SOURCE} da topilmadi — darvoza "
+        "noto'g'ri faylni o'qiyapti yoki konstanta qayta nomlangan."
+    )
+
+    derived = [match.group(1) for match in DERIVED_ORDER_PATTERN.finditer(source)]
+    assert "BILLING" not in derived, (
+        "`BILLING_DELETE_ORDER` HOSILA qiymat sifatida yozilgan.\n"
+        "RLS tartibi (ota-onadan bolalarga) va o'chirish tartibi (bolalardan "
+        "ota-onaga) IKKI XIL savolga javob beradi va MUSTAQIL o'zgaradi. "
+        "Bu domenda ular USTMA-UST HAM TUSHMAYDI: hosila qiymat `payments` "
+        "ni `charge_evidence` dan oldin qo'yardi va kaskad o'z chet el "
+        "kalitiga urilardi (§5.8)."
+    )
+    assert not derived, (
+        f"hosila `*_DELETE_ORDER` e'lon(lar)i topildi: {sorted(derived)} — "
+        "har bir domen ro'yxati LITERAL yozilishi shart (§S-2)."
+    )
+
+    # ⚠⚠ NAQSHNING O'ZI SINALADI — usiz yuqoridagi assert'lar «hech nima
+    #   topilmadi» degan BO'SH rost bilan yashil qolardi (§S-6: darvoza
+    #   quyi chegarasi). Pozitiv nazoratda ESKI (occupancy) shakli ham bor:
+    #   umumlashtirish 5-fazaning da'vosini yo'qotmaganini aynan shu satr
+    #   isbotlaydi.
+    positive = (
+        "OCCUPANCY_DELETE_ORDER = tuple(reversed(OCCUPANCY_TENANT_TABLES))\n"
+        "BILLING_DELETE_ORDER: tuple[str, ...] = tuple(reversed(BILLING_TENANT_TABLES))\n"
+        "    SNAPSHOT_DELETE_ORDER = tuple (reversed(SNAPSHOT_TENANT_TABLES))\n"
+    )
+    found = {match.group(1) for match in DERIVED_ORDER_PATTERN.finditer(positive)}
+    assert found == {"OCCUPANCY", "BILLING", "SNAPSHOT"}, (
+        f"`DERIVED_ORDER_PATTERN` hosila e'lonlarni topmayapti: {sorted(found)}. "
+        "Naqsh umumlashtirilgandan keyin HECH NIMANI topmaydigan bo'lib "
+        "qolgan bo'lishi mumkin — o'shanda yuqoridagi assert'lar BO'SH rost "
+        "bilan yashil qolardi."
+    )
+
+    negative = (
+        'OCCUPANCY_DELETE_ORDER: tuple[str, ...] = (\n    "zone_reviews",\n)\n'
+        'BILLING_DELETE_ORDER: tuple[str, ...] = (\n    "charge_evidence",\n)\n'
+        "# `BILLING_DELETE_ORDER = tuple(reversed(...))` DEB YOZISH TAQIQLANGAN\n"
+    )
+    assert not DERIVED_ORDER_PATTERN.search(negative), (
+        "`DERIVED_ORDER_PATTERN` LITERAL e'lonni (yoki izohdagi tushuntirish "
+        "matnini) hosila deb ko'rsatyapti — darvoza YOLG'ON-QIZIL beradi va "
+        "yagona «tuzatish» yo'li SABABNI O'CHIRISH bo'lardi."
     )
 
 
