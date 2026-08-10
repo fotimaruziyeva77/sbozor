@@ -121,6 +121,8 @@ function routeFetch(pendingFor: Record<string, unknown>): void {
   apiClientMock.apiFetch.mockImplementation(
     (path: string, options?: { method?: string }) => {
       if (path === "/shifts/open") return Promise.resolve(OPEN_SHIFT);
+      /* ⛔ Oyna SERVERDA qat'iy — bu yerda ham bo'sh javob YETARLI. */
+      if (path === "/payments/recent") return Promise.resolve({ items: [] });
       if (path === "/payments" && options?.method === "POST") {
         return Promise.resolve(WRITTEN);
       }
@@ -350,6 +352,7 @@ describe("G-20 (06-UI-SPEC §8.2): qadam sanog'i", () => {
   test("ochiq smena yo'q bo'lsa to'lov yuzasi UMUMAN chizilmaydi", async () => {
     apiClientMock.apiFetch.mockImplementation((path: string) => {
       if (path === "/shifts/open") return Promise.resolve(null);
+      if (path === "/payments/recent") return Promise.resolve({ items: [] });
       return Promise.reject(new Error(`kutilmagan yo'l: ${path}`));
     });
 

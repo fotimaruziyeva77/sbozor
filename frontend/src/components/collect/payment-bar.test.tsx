@@ -240,6 +240,7 @@ describe("G-21: idempotentlik kalitining hayot davri (§8.7)", () => {
     apiClientMock.apiFetch.mockImplementation(
       (path: string, options?: { method?: string }) => {
         if (path === "/shifts/open") return Promise.resolve(OPEN_SHIFT);
+        if (path === "/payments/recent") return Promise.resolve({ items: [] });
         if (path.startsWith("/billing/pending?stall_code=")) {
           return Promise.resolve(PENDING);
         }

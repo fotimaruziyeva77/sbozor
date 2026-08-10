@@ -7,18 +7,21 @@ import { useFormatter, useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { PaymentBar } from "@/components/collect/payment-bar";
+import { PaymentRow } from "@/components/collect/payment-row";
 import { PendingCard } from "@/components/collect/pending-card";
+import { ReasonDialog } from "@/components/collect/reason-dialog";
 import { StallLookup } from "@/components/collect/stall-lookup";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ApiError } from "@/lib/api-client";
-import type { PaymentMethodValue } from "@/lib/api-types";
+import type { AdjustmentReasonValue, PaymentMethodValue } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import {
   dropPendingAfterPayment,
   usePendingStall,
 } from "@/lib/billing-pending-queries";
 import type { PendingStall } from "@/lib/billing-pending-queries";
+import { useRecentPayments, useReversePayment } from "@/lib/payment-queries";
 import type { PaymentRecord } from "@/lib/payment-queries";
 import { useOpenShift } from "@/lib/shift-queries";
 
@@ -153,7 +156,22 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
   const [extraAmount, setExtraAmount] = useState<number | null>(null);
   const [wrote, setWrote] = useState<PaymentRecord | null>(null);
 
+  /*
+   * ⛔ DL-1 / DL-2 SAHIFA HOLATIDA, URL'da EMAS (§4.4): dialogni
+   *    ulashiladigan havolaga aylantirish uni sahifa holatidan marshrutga
+   *    ko'chirardi va «orqaga» tugmasi uni qayta ochardi.
+   */
+  const [dialog, setDialog] = useState<
+    { mode: "override" } | { mode: "reversal"; paymentId: string } | null
+  >(null);
+  const [override, setOverride] = useState<{
+    amountSoum: number;
+    reasonCode: AdjustmentReasonValue;
+  } | null>(null);
+
   const shift = useOpenShift();
+  const recent = useRecentPayments();
+  const reverse = useReversePayment();
   const hasOpenShift =
     shift.data === undefined ? null : shift.data !== null;
 
@@ -189,7 +207,13 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
       ? null
       : (stall.amount_soum ??
         (stall.outstanding_soum > 0 ? stall.outstanding_soum : null));
-  const chosenAmount = extraAmount ?? baseAmount;
+  /*
+   * ⛔ DL-1 ning natijasi eng ustuvor: kassir sabab-kod bilan ATAYIN
+   *    boshqa qiymat kiritdi va u serverga AYNAN shu qiymat bilan
+   *    ketadi. Server esa uni o'z takliflari bilan solishtirib, sabab
+   *    haqiqatan kerakmi yoki ortiqchami — o'zi hal qiladi (D-19).
+   */
+  const chosenAmount = override?.amountSoum ?? extraAmount ?? baseAmount;
 
   /*
    * ⛔ KALIT URUG'I — §8.7 jadvalining MEXANIK shakli.
@@ -215,11 +239,19 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
     [format, t],
   );
 
+  /*
+   * ⛔ RO'YXAT SERVER BERGANICHA — klientda kesilmaydi ham, uzaytirilmaydi
+   *    ham. Oyna marshrutning IMKONIYATIDA (parametri yo'q), ya'ni uni
+   *    klientdan kengaytirishning yo'li umuman qolmagan.
+   */
+  const recentItems = recent.data?.items ?? [];
+
   /** Yangi rasta — varaqning HAMMASI noldan boshlanadi. */
   const startLookup = useCallback((code: string) => {
     setSubmittedCode(code);
     setMethod(null);
     setExtraAmount(null);
+    setOverride(null);
     setWrote(null);
   }, []);
 
@@ -250,6 +282,7 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
       setDraft("");
       setMethod(null);
       setExtraAmount(null);
+      setOverride(null);
 
       /* ⛔ Fokus qidiruv maydoniga QAYTADI — kassir hech nima bosmaydi. */
       inputRef.current?.focus();
@@ -313,6 +346,11 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
           isError={pending.isError && !notFound}
           isLoading={pending.isFetching}
           onCollectDebt={setExtraAmount}
+          /*
+           * ⛔ T1 da IXTIYORIY qoldirilgan prop endi BERILADI — ya'ni
+           *    `[Summani o'zgartirish]` shu taskdan boshlab ko'rinadi.
+           */
+          onRequestOverride={() => setDialog({ mode: "override" })}
           onRetry={() => void pending.refetch()}
           pending={stall}
         />
@@ -325,6 +363,7 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
           method={method}
           onMethodChange={setMethod}
           onWritten={onWritten}
+          reasonCode={override?.reasonCode}
           stallCode={stall.stall_code}
         />
       ) : null}
@@ -340,6 +379,63 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
           {t("collect.written")} · {wrote.stall_code} ·{" "}
           {money(wrote.amount_soum)}
         </p>
+      ) : null}
+
+      {/*
+       * ⛔ §8.5 NING 1-BANDI KO'RINADIGAN SHAKLDA — oyna SERVERDA qat'iy
+       *    (oxirgi beshta), ya'ni bu ro'yxatdan smenaning jamini
+       *    chiqarib olishning yo'li yo'q. ⛔ Bu yerda ham yig'uvchi amal
+       *    yozilmaydi (§8.8, G-7 ning frontend yarmi).
+       */}
+      {recentItems.length > 0 ? (
+        <section
+          aria-label={t("collect.recentTitle")}
+          className="flex flex-col gap-2"
+        >
+          <h2 className="text-lg leading-snug font-semibold">
+            {t("collect.recentTitle")}
+          </h2>
+          <ul className="flex flex-col gap-2">
+            {recentItems.map((record) => (
+              <PaymentRow
+                key={record.payment_id}
+                onRequestReverse={() =>
+                  setDialog({ mode: "reversal", paymentId: record.payment_id })
+                }
+                record={record}
+              />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {/*
+       * ⛔ DL-1 / DL-2 — HAQIQIY render, `null` yoki bo'sh o'ram EMAS.
+       *    Ikkisi qurilib hech kim chizmasa, CASH-02 va CASH-03 ekranda
+       *    UMUMAN mavjud bo'lmasdi va uchala task ham yashil qaytardi.
+       */}
+      {dialog !== null ? (
+        <ReasonDialog
+          mode={dialog.mode}
+          onConfirm={(result) => {
+            if (result.mode === "override") {
+              setOverride({
+                amountSoum: result.amountSoum,
+                reasonCode: result.reasonCode,
+              });
+            } else if (dialog.mode === "reversal") {
+              reverse.mutate({
+                payment_id: dialog.paymentId,
+                reason_code: result.reasonCode,
+              });
+            }
+            setDialog(null);
+          }}
+          onOpenChange={(next) => {
+            if (!next) setDialog(null);
+          }}
+          open
+        />
       ) : null}
     </div>
   );
