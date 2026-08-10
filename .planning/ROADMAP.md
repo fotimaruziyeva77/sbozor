@@ -378,7 +378,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 06-06-PLAN.md — `billing_repo`: yagona pul yechimi, D-04 predikati, muzlatilgan dalil, qoldiq (BILL-01…05, C-6/7/8)
+- [x] 06-06-PLAN.md — `billing_repo`: yagona pul yechimi, D-04 predikati, muzlatilgan dalil, qoldiq (BILL-01…05, C-6/7/8)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -492,7 +492,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
-| 6. Billing va kassir | 5/14 | In Progress|  |
+| 6. Billing va kassir | 6/14 | In Progress|  |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 
