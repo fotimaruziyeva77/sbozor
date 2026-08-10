@@ -34,6 +34,7 @@ UCHTA QOIDA BU FAYLNING SHAKLINI BELGILAYDI.
 
 from __future__ import annotations
 
+from dataclasses import fields
 from datetime import timedelta
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -42,8 +43,12 @@ import psycopg
 import pytest
 from app.jobs.day_close import day_close
 from app.repositories.billing_repo import (
+    PendingStall,
     billable_stalls,
+    pending_projection,
     resolve_stall_day_money,
+    vendor_charge_allocation,
+    vendor_outstanding,
     write_anomaly,
     write_charge,
     write_evidence,
@@ -58,18 +63,31 @@ from fixtures.billing_domain import (
     TARIFF_SOUM,
     BillingDomainSeed,
     MarketBillingRows,
+    add_daily_charge,
+    add_payment,
     billing_domain,
     billing_domain_before_day_close,
 )
-from fixtures.market_domain import A_OPEN_WEEKDAYS, HANDOVER_DAY, MarketDomainSeed
+from fixtures.market_domain import (
+    A_OPEN_WEEKDAYS,
+    A_STALL_CODES_BY_SORT,
+    A_TARIFF_AMOUNTS,
+    HANDOVER_DAY,
+    MarketDomainSeed,
+)
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import add_zone_with_event, occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import TwoMarketSeed
+from sbozor_core.billing import ALLOCATION_RULE
 from sbozor_core.enums import (
+    AdjustmentDirection,
+    AdjustmentReason,
     AnomalyKind,
     OccupancyVerdict,
+    PaymentKind,
     ResolutionSource,
+    ReversalReason,
     ReviewPurpose,
     ReviewQueueKind,
 )
@@ -82,6 +100,7 @@ if TYPE_CHECKING:
     from fixtures import TenantSessionFactory
     from psycopg import Connection
     from psycopg.rows import TupleRow
+    from sbozor_core.billing import ChargeCreditAllocation
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 _INSERT_ASSIGNMENT = (
@@ -1159,3 +1178,431 @@ def _open_past_day_from(env: Env) -> date:
       bu yerda hafta kunini tanlash SHART EMAS — faqat kelajak bo'lmasin.
     """
     return env.domain.market_a.operating_since
+
+
+# ===========================================================================
+# 9. QOLDIQ — HISOBLANADIGAN, SAQLANMAYDIGAN (BILL-03, C-4, C-5)
+# ===========================================================================
+
+_INSERT_ADJUSTMENT = (
+    "INSERT INTO charge_adjustments "
+    "(id, market_id, charge_id, direction, reason_code, amount_soum, actor_user_id) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s)"
+)
+"""Tuzatish qatori — `amount_soum` HAR DOIM MUSBAT, belgi `direction` da (C-5).
+
+⚠ `delta_soum` nomli ustun YO'Q va bo'lmaydi: `test_meta.py` ning moliyaviy
+  darvozasi `amount_soum > 0` regeksini AYNAN shu nomda izlaydi.
+"""
+
+
+def _adjust(
+    conn: Connection[TupleRow],
+    *,
+    env: Env,
+    charge_id: UUID,
+    direction: AdjustmentDirection,
+    amount_soum: int,
+) -> None:
+    conn.execute(
+        _INSERT_ADJUSTMENT,
+        (
+            str(uuid4()),
+            str(env.market_id),
+            str(charge_id),
+            direction.value,
+            AdjustmentReason.TARIFF_CORRECTION.value,
+            amount_soum,
+            str(env.base.market_a.admin_user_id),
+        ),
+    )
+
+
+def _pay(
+    conn: Connection[TupleRow],
+    *,
+    env: Env,
+    stall_id: UUID,
+    amount_soum: int,
+    kind: PaymentKind = PaymentKind.PAYMENT,
+    reverses_payment_id: UUID | None = None,
+) -> UUID:
+    """To'lov (yoki STORNO) qatori — `quote_soum` summaga TENG.
+
+    ⚠ `payments` da `CHECK ((amount_soum = quote_soum) = (override_reason IS
+      NULL))` bor: kvotani summadan ajratish `override_reason` ni TALAB
+      qilardi va bu boshqa (D-19) da'voning holati bo'lardi.
+    """
+    return add_payment(
+        conn,
+        market_id=env.market_id,
+        stall_id=stall_id,
+        vendor_id=env.live.vendor_id,
+        cashier_id=env.live.cashier_id,
+        shift_id=env.live.open_shift_id,
+        amount_soum=amount_soum,
+        quote_soum=amount_soum,
+        kind=kind.value,
+        reverses_payment_id=reverses_payment_id,
+        reversal_reason=None if kind is PaymentKind.PAYMENT else ReversalReason.WRONG_STALL.value,
+    )
+
+
+async def _outstanding(tenant_session: TenantSessionFactory, env: Env) -> int:
+    async with tenant_session(env.market_id) as session:
+        balances = await vendor_outstanding(
+            session, market_id=env.market_id, vendor_ids=[env.live.vendor_id]
+        )
+    return balances.get(env.live.vendor_id, 0)
+
+
+async def test_outstanding_is_charges_plus_adjustments_minus_payments(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """BILL-03: qoldiq SO'ROV va u QO'LDA hisoblangan LITERAL son bilan solishtiriladi.
+
+    =========================================================================
+    30 000 (ikki hisob) − 5 000 (chegirma) − 10 000 (to'lov) = ⛔ 15 000.
+
+    ⛔ SAQLANGAN BALANS USTUNI HECH QAYERDA YO'Q va u qo'shilmaydi: drift
+       nizoga aylanadi va aynan shu nizo SBOZOR mavjud bo'lish sababidir
+       (D-02). Literal son ATAYIN: hisob-kitobni testda qayta yozish
+       so'rovning O'ZINI takrorlardi va u hech nimani o'lchamasdi.
+    """
+    stall_id = env.stall("stall_with_two_occupied_slots")
+    first_charge, _ = add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=stall_id,
+        vendor_id=env.live.vendor_id,
+        tariff_id=env.live.tariff_id,
+        service_date=_service_day(sync_owner_conn, 2),
+    )
+    add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=stall_id,
+        vendor_id=env.live.vendor_id,
+        tariff_id=env.live.tariff_id,
+        service_date=_service_day(sync_owner_conn, 1),
+    )
+    _adjust(
+        sync_owner_conn,
+        env=env,
+        charge_id=first_charge,
+        direction=AdjustmentDirection.DECREASE,
+        amount_soum=5_000,
+    )
+    _pay(sync_owner_conn, env=env, stall_id=stall_id, amount_soum=10_000)
+
+    assert await _outstanding(tenant_session, env) == 15_000
+
+
+async def test_a_reversal_increases_the_outstanding_amount(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """D-23: storno YANGI QATOR va u qoldiqni QAYTA KO'TARADI.
+
+    ⛔ `payments` APPEND-ONLY: xato to'lov O'CHIRILMAYDI va TAHRIRLANMAYDI,
+       u manfiy belgili qator bilan qoplanadi. Belgi USTUNDA emas,
+       KO'RINISHDA (`kind = 'reversal'` -> `-amount_soum`), chunki
+       `CHECK (amount_soum > 0)` manfiy qiymatni umuman ifodalab
+       bo'lmaydigan qiladi (C-5).
+    """
+    stall_id = env.stall("stall_with_two_occupied_slots")
+    add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=stall_id,
+        vendor_id=env.live.vendor_id,
+        tariff_id=env.live.tariff_id,
+    )
+    payment_id = _pay(sync_owner_conn, env=env, stall_id=stall_id, amount_soum=TARIFF_SOUM)
+    assert await _outstanding(tenant_session, env) == 0
+
+    _pay(
+        sync_owner_conn,
+        env=env,
+        stall_id=stall_id,
+        amount_soum=TARIFF_SOUM,
+        kind=PaymentKind.REVERSAL,
+        reverses_payment_id=payment_id,
+    )
+
+    assert await _outstanding(tenant_session, env) == TARIFF_SOUM
+
+
+async def test_an_overpayment_yields_a_negative_outstanding_amount(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """OQ-4/A4: AVANS ruxsat etiladi va natija MANFIY bo'lib qoladi.
+
+    ⛔ KATTALIKKA AYLANTIRILMAYDI (`abs` bu modulda umuman yo'q): ortiqcha
+       to'lovni bloklash kassirni pulni UMUMAN YOZMASLIKKA majburlardi —
+       ya'ni himoya o'zi himoya qilayotgan yozuvni yo'q qilardi. Ekranda u
+       «Avans» bo'lib ko'rinadi (UI-SPEC §9.6).
+    """
+    stall_id = env.stall("stall_with_two_occupied_slots")
+    add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=stall_id,
+        vendor_id=env.live.vendor_id,
+        tariff_id=env.live.tariff_id,
+    )
+    _pay(sync_owner_conn, env=env, stall_id=stall_id, amount_soum=20_000)
+
+    assert await _outstanding(tenant_session, env) == -5_000
+
+
+# ===========================================================================
+# 10. D-24 — «QAYSI KUNNING PATTASI TO'LANDI?» NING TASDIQI (G-13, G-14)
+#
+# ⛔ UCH ALOHIDA NOMLANGAN TEST: bir to'lov N kunga, qisman to'lov va ikki
+#    hosila ko'rinishning TENGLIGI uch BOSHQA nosozlikni ushlaydi.
+# ===========================================================================
+
+
+def _three_unpaid_days(conn: Connection[TupleRow], env: Env) -> tuple[date, date, date]:
+    """Sotuvchiga uch KETMA-KET kunlik to'lanmagan hisob (15 000 x 3).
+
+    ⚠ Uchala hisob ham BITTA rastada: kunlar bo'yicha tartib
+      («qaysi kun oldin yopiladi?») aynan shu bilan o'lchanadi. Bir kunda
+      IKKI RASTA holati 06-01 ning jadval testida (`stall_code` tenglik
+      uzgichi) alohida qamralgan.
+    """
+    stall_id = env.stall("stall_with_two_occupied_slots")
+    days = (
+        _service_day(conn, 3),
+        _service_day(conn, 2),
+        _service_day(conn, 1),
+    )
+    for day in days:
+        add_daily_charge(
+            conn,
+            market_id=env.market_id,
+            stall_id=stall_id,
+            vendor_id=env.live.vendor_id,
+            tariff_id=env.live.tariff_id,
+            service_date=day,
+        )
+    return days
+
+
+async def _allocation(tenant_session: TenantSessionFactory, env: Env) -> ChargeCreditAllocation:
+    async with tenant_session(env.market_id) as session:
+        return await vendor_charge_allocation(
+            session, market_id=env.market_id, vendor_id=env.live.vendor_id
+        )
+
+
+async def test_a_single_payment_across_days_settles_the_oldest_first(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """⛔ D-24 NING JAVOBI — PROZA EMAS, RO'YXAT.
+
+    =========================================================================
+    Uch kunlik qarz (15 000 x 3) va AYNAN BITTA 45 000 to'lov — bu
+    `[Qarzni ham olish]` oqimining o'zi (UI-SPEC §9.6). `payments.charge_id`
+    YO'Q (C-4) va `service_date` yolg'iz javob BERMAYDI: u BUGUN bo'lib
+    qoladi, to'langan kunlar esa ESKI.
+
+    ⛔ JAVOB NOMLANGAN QOIDADAN keladi — `FIFO_OLDEST_SERVICE_DATE_FIRST` —
+       va test yopilgan kunlarning RO'YXATINI, TARTIBI bilan da'vo qiladi.
+
+    ⛔ HECH NIMA SAQLANMAYDI: taqsimlash jadvali ham, `allocated_*` ustuni
+       ham yo'q (D-07/BILL-03). Funksiya HOSILA ko'rinish qaytaradi.
+    """
+    days = _three_unpaid_days(sync_owner_conn, env)
+    _pay(
+        sync_owner_conn,
+        env=env,
+        stall_id=env.stall("stall_with_two_occupied_slots"),
+        amount_soum=45_000,
+    )
+
+    allocation = await _allocation(tenant_session, env)
+
+    assert allocation.rule == ALLOCATION_RULE
+    assert [row.service_date for row in allocation.rows if row.settled] == list(days)
+    assert allocation.unpaid_soum == 0
+    assert allocation.advance_soum == 0
+
+
+async def test_a_partial_payment_across_days_leaves_the_newest_unpaid(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """QISMAN to'lov — eng qadimgi kun YOPILADI, eng yangisi TEGILMAYDI.
+
+    20 000 kredit: `D-3` to'liq (15 000), `D-2` qisman (5 000), `D-1` — 0.
+    ⛔ Uchala qator ham qaytariladi (NOL — NATIJA): «tegilmagan kun»
+       ro'yxatdan TUSHIB QOLSA kassir uni to'langan deb o'qishi mumkin edi.
+    """
+    oldest, middle, newest = _three_unpaid_days(sync_owner_conn, env)
+    _pay(
+        sync_owner_conn,
+        env=env,
+        stall_id=env.stall("stall_with_two_occupied_slots"),
+        amount_soum=20_000,
+    )
+
+    allocation = await _allocation(tenant_session, env)
+    by_day = {row.service_date: row for row in allocation.rows}
+
+    assert by_day[oldest].settled is True
+    assert by_day[oldest].paid_soum == TARIFF_SOUM
+    assert by_day[middle].paid_soum == 5_000
+    assert by_day[middle].settled is False
+    assert by_day[newest].paid_soum == 0
+    assert allocation.unpaid_soum == 25_000
+
+
+async def test_the_allocation_matches_vendor_outstanding(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """⛔ G-14: IKKI HOSILA KO'RINISH AJRALIB KETA OLMAYDI.
+
+    =========================================================================
+    `Σ unpaid_soum` (FIFO ko'rinish) ⛔ `vendor_outstanding()` (hisoblanadigan
+    qoldiq) bilan AYNAN bir xil son berishi shart. Aks holda ekrandagi qarz
+    bilan hisobotdagi qarz bir kun farq qilardi va IKKALASI HAM «to'g'ri»
+    bo'lardi — bu loyihada takroran topilgan sinf.
+
+    Mexanizm: belgili to'lov ifodasi (`_SIGNED_PAYMENT_EXPR`) AYNAN BITTA
+    `text()` konstantasi va ikkala funksiya SHUNI ishlatadi.
+    """
+    _three_unpaid_days(sync_owner_conn, env)
+    _pay(
+        sync_owner_conn,
+        env=env,
+        stall_id=env.stall("stall_with_two_occupied_slots"),
+        amount_soum=20_000,
+    )
+
+    allocation = await _allocation(tenant_session, env)
+    outstanding = await _outstanding(tenant_session, env)
+
+    assert outstanding > 0, "nazorat: avans holati bu da'voning shartidan tashqarida"
+    assert sum(row.unpaid_soum for row in allocation.rows) == outstanding
+
+
+# ===========================================================================
+# 11. PROYEKSIYA (BILL-05, D-16, D-17, D-31)
+# ===========================================================================
+
+PENDING_STALL_FIELDS = {
+    "stall_code",
+    "service_date",
+    "market_open",
+    "amount_soum",
+    "amount_unavailable_reason",
+    "outstanding_soum",
+    "total_due_soum",
+}
+"""UI-SPEC §9.2 ning AYNAN yetti kaliti — TESTDA literal, mahsulotdan EMAS.
+
+⛔ Mahsulot konstantasidan import qilish darvozani o'zi tekshirayotgan
+   qiymatga bog'lardi va sakkizinchi maydon JIMGINA qo'shilardi (05-15 da
+   o'rnatilgan qoida).
+"""
+
+
+def test_pending_projection_exposes_exactly_seven_fields() -> None:
+    """D-31: TO'PLAM TENGLIGI, inkor tasdiq EMAS.
+
+    `not.toContain("charge_id")` faqat AYNAN o'sha nomni ushlardi va
+    `chargeId` jimgina o'tib ketardi. To'plam tengligi esa HAR QANDAY
+    yangi maydonni ushlaydi — `charge_id`, `tariff_id`, `vendor_id`,
+    `occupied_slots`, `balance_soum` (G-22 ning beshala qatori).
+    """
+    assert {item.name for item in fields(PendingStall)} == PENDING_STALL_FIELDS
+
+
+async def test_the_projection_amount_equals_the_money_resolution(
+    tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """⛔ D-16 NING O'LCHOVI: ikki chaqiruvchi — BIR NATIJA.
+
+    Kassir ko'radigan summa (`pending_projection`) va kechqurun yoziladigan
+    summa (`resolve_stall_day_money`) AYNAN BIR funksiyadan keladi. Ikki
+    alohida implementatsiya ularni ajratib yuborardi va sotuvchi «men
+    boshqa summa to'lagandim» deganda ikkala yozuv ham «to'g'ri» bo'lardi.
+    """
+    async with tenant_session(env.market_id) as session:
+        money = _one(
+            await resolve_stall_day_money(
+                session, market_id=env.market_id, as_of=SEED_BUSINESS_DATE, stall_code="7"
+            )
+        )
+        projection = await pending_projection(
+            session, market_id=env.market_id, as_of=SEED_BUSINESS_DATE, stall_code="7"
+        )
+
+    assert projection.stall is not None
+    assert projection.stall.amount_soum == money.amount_soum
+    assert projection.stall.total_due_soum == money.amount_soum, (
+        "qarzsiz sotuvchida `total_due_soum` bugungi pattaga TENG — qo'shish "
+        "amali `sbozor_core.billing.total_due_soum()` dan keladi (§9.6)"
+    )
+
+
+async def test_an_ambiguous_prefix_returns_matches_without_an_amount(
+    tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """UI-SPEC §8.2/§8.3 ning SERVER yarmi — va ikkinchi chaqiruv TUGAYDI.
+
+    =========================================================================
+    «1» prefiksi seedda IKKI kodga mos keladi («10» va «100»), ya'ni summa
+    HISOBLANMAYDI: yo'q summa — yo'q summa (§9.4), taxminiy summa
+    ko'rsatilmaydi.
+
+    ⛔ IKKINCHI CHAQIRUV: kassir «10» ni tanlaydi. Sof prefiks semantikasi
+       o'sha ro'yxatni QAYTA berardi (chunki «10» ham «100» ning prefiksi)
+       va oqim HECH QACHON `ready` holatiga yetmasdi. Shuning uchun ANIQ
+       moslik USTUN va bu test aynan shu tugashni o'lchaydi.
+    """
+    async with tenant_session(env.market_id) as session:
+        ambiguous = await pending_projection(
+            session, market_id=env.market_id, as_of=SEED_BUSINESS_DATE, stall_code="1"
+        )
+        exact = await pending_projection(
+            session, market_id=env.market_id, as_of=SEED_BUSINESS_DATE, stall_code="10"
+        )
+
+    assert ambiguous.stall is None
+    assert ambiguous.matches == ("10", "100")
+    assert exact.matches == ()
+    assert exact.stall is not None
+    assert exact.stall.stall_code == "10"
+
+
+async def test_the_market_projection_returns_zero_as_a_result(
+    tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """UI-SPEC §9.5 — bozor kesimi; ⛔ NOL HAM NATIJA.
+
+    =========================================================================
+    Uchala son HAR DOIM qaytariladi. `outstanding_soum` bu seedda AYNAN
+    NOL (birorta hisob yozilmagan) va u NATIJA sifatida qaytadi — «hisobot
+    yo'q» degan javob direktorni ma'lumot yo'qolgan deb o'ylashga
+    majburlardi.
+
+    Kutilayotgan summa BOZOR DOMENIDAN hosila: to'rt rasta billing
+    toifasida (15 000), «10» va «100» esa `market_domain` ning ikkinchi va
+    uchinchi toifasida qoladi (billing seed ularga toifa davri
+    yozmaydi — `billing_domain.py:812-819`).
+    """
+    async with tenant_session(env.market_id) as session:
+        projection = await pending_projection(
+            session, market_id=env.market_id, as_of=SEED_BUSINESS_DATE
+        )
+
+    assert projection.stall is None
+    assert projection.matches == ()
+    assert projection.market is not None
+    assert projection.market.pending_stall_count == len(A_STALL_CODES_BY_SORT)
+    assert projection.market.pending_amount_soum == (
+        4 * TARIFF_SOUM + A_TARIFF_AMOUNTS[1] + A_TARIFF_AMOUNTS[2]
+    )
+    assert projection.market.outstanding_soum == 0
+    assert projection.market.fetched_at.tzinfo is not None

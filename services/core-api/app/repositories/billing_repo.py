@@ -62,18 +62,32 @@ naqshi).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Final
 from uuid import UUID
 
-from sbozor_core.billing import billable_from_slots
-from sbozor_core.enums import AnomalyKind, OccupancyVerdict
+from sbozor_core.billing import (
+    ChargeCreditAllocation,
+    ChargeDue,
+    allocate_charge_credit,
+    billable_from_slots,
+    total_due_soum,
+)
+from sbozor_core.enums import (
+    AdjustmentDirection,
+    AnomalyKind,
+    OccupancyVerdict,
+    PaymentKind,
+    ResolutionSource,
+)
 from sbozor_core.models import BillingAnomaly, ChargeEvidence, DailyCharge
 from sbozor_core.money import assert_safe_soum
-from sqlalchemy import Date, Text, bindparam, text
+from sqlalchemy import Date, Integer, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.repositories.stall_repo import like_term
 from app.services.billing_errors import (
     AMOUNT_UNAVAILABLE_REASONS,
     MARKET_CLOSED,
@@ -88,11 +102,17 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
+    "PendingMarket",
+    "PendingProjection",
+    "PendingStall",
     "SlotEvidenceRow",
     "StallDayMoney",
     "StallSlotVerdict",
     "billable_stalls",
+    "pending_projection",
     "resolve_stall_day_money",
+    "vendor_charge_allocation",
+    "vendor_outstanding",
     "write_anomaly",
     "write_charge",
     "write_evidence",
@@ -102,11 +122,49 @@ _UUID = PgUuid(as_uuid=True)
 _UUID_ARRAY = ARRAY(PgUuid(as_uuid=True))
 
 _OCCUPIED: Final[str] = OccupancyVerdict.OCCUPIED.value
-"""Qiymat so'rov PARAMETRI, so'rov MATNIDAGI literal emas.
+_HUMAN: Final[str] = ResolutionSource.HUMAN.value
+"""Qiymatlar so'rov PARAMETRI, so'rov MATNIDAGI literal emas.
 
 `occupancy_repo.py:94-101` da o'rnatilgan qoida: literal yozilganda enum
 o'zgargan kuni filtr jimgina hech nimaga tushmasdi — so'rov ishlayverardi,
 faqat natija bo'sh bo'lardi.
+"""
+
+
+# ===========================================================================
+# BELGILI PUL IFODALARI — HAR BIRI AYNAN BIR MARTA YOZILGAN (C-5, G-14)
+# ===========================================================================
+
+_SIGNED_PAYMENT_EXPR: Final[str] = (
+    "CASE WHEN p.kind = :reversal THEN -p.amount_soum ELSE p.amount_soum END"
+)
+"""To'lovning BELGILI qiymati — ustun har doim MUSBAT, belgi KO'RINISHDA (C-5).
+
+=============================================================================
+⛔⛔ BU KONSTANTA IKKI FUNKSIYA TOMONIDAN ISHLATILADI VA IKKINCHI NUSXA
+   YOZILMAYDI: `vendor_outstanding()` (hisoblanadigan qoldiq, BILL-03) va
+   `vendor_charge_allocation()` (hosila FIFO ko'rinish, D-24).
+
+G-14 ning butun da'vosi shu satrga tayanadi: ikki hosila ko'rinish AYNAN
+bir xil kredit sonidan chiqadi, ya'ni ular **ajralib keta olmaydi**. Ikki
+nusxa yozilganda ekrandagi qarz bilan hisobotdagi qarz bir kun farq
+qilardi va **ikkalasi ham «to'g'ri»** bo'lardi — bu loyihada takroran
+topilgan «ikki haqiqat manbai» sinfi.
+
+⚠ `payments.amount_soum` da `CHECK (> 0)` bor (C-5), ya'ni storno manfiy
+  summa bilan EMAS, `kind = 'reversal'` bilan yoziladi va belgi faqat shu
+  ifodada tug'iladi.
+"""
+
+_SIGNED_ADJUSTMENT_EXPR: Final[str] = (
+    "CASE WHEN a.direction = :increase THEN a.amount_soum ELSE -a.amount_soum END"
+)
+"""Tuzatishning BELGILI qiymati — `_SIGNED_PAYMENT_EXPR` bilan bir xil qaror.
+
+`charge_adjustments.amount_soum` ham har doim musbat; kamaytirish
+`direction = 'decrease'` bilan ifodalanadi. Ustun nomi ATAYIN `amount_soum`
+(`delta_soum` EMAS): `test_meta.py` ning moliyaviy darvozasi AYNAN shu
+nomni izlaydi (C-5).
 """
 
 
@@ -727,3 +785,471 @@ async def write_anomaly(
     )
     anomaly_id: UUID | None = (await session.execute(stmt)).scalar_one_or_none()
     return anomaly_id
+
+
+# ===========================================================================
+# 4. QOLDIQ — HISOBLANADIGAN, SAQLANMAYDIGAN (BILL-03, C-4, C-5)
+# ===========================================================================
+
+_VENDOR_OUTSTANDING = text(
+    f"""
+    WITH parts AS (
+        SELECT c.vendor_id AS vendor_id,
+               c.amount_soum AS signed_soum
+          FROM daily_charges c
+         WHERE c.market_id = :market_id
+           AND (:as_of IS NULL OR c.service_date < :as_of)
+           AND (:vendor_ids IS NULL OR c.vendor_id = ANY(:vendor_ids))
+        UNION ALL
+        SELECT c2.vendor_id,
+               {_SIGNED_ADJUSTMENT_EXPR}
+          FROM charge_adjustments a
+          JOIN daily_charges c2
+            ON c2.market_id = a.market_id
+           AND c2.id = a.charge_id
+         WHERE a.market_id = :market_id
+           AND (:as_of IS NULL OR c2.service_date < :as_of)
+           AND (:vendor_ids IS NULL OR c2.vendor_id = ANY(:vendor_ids))
+        UNION ALL
+        SELECT p.vendor_id,
+               -({_SIGNED_PAYMENT_EXPR})
+          FROM payments p
+         WHERE p.market_id = :market_id
+           AND (:vendor_ids IS NULL OR p.vendor_id = ANY(:vendor_ids))
+    )
+    SELECT vendor_id,
+           sum(signed_soum)::bigint AS outstanding_soum
+      FROM parts
+     GROUP BY vendor_id
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("as_of", type_=Date()),
+    bindparam("vendor_ids", type_=_UUID_ARRAY),
+    bindparam("increase", type_=Text()),
+    bindparam("reversal", type_=Text()),
+)
+"""BILL-03 — qoldiq SO'ROV, saqlangan ustun EMAS.
+
+=============================================================================
+⛔ `S608` SHU SO'ROVDA O'CHIRILGAN VA SABAB TOR (`occupancy_repo.py:414-418`
+   bilan aynan bir xil): f-string ga tushadigan YAGONA qiymat — shu
+   moduldagi SOBIT `_SIGNED_*_EXPR` konstantalari. Tashqi kirish f-string ga
+   umuman kelmaydi; har qiymat `bindparam(...)` orqali TIPLANGAN parametr.
+
+=============================================================================
+⛔⛔ QOLDIQ NEGA SOTUVCHI KESIMIDA (C-4), RASTA KESIMIDA EMAS.
+
+To'lov — SOTUVCHI darajasidagi kredit (`payments.charge_id` YO'Q) va bitta
+to'lov BIR NECHA kunlik qarzni yopadi (UI-SPEC §9.6). Rasta kesimida
+hisoblash bir sotuvchining ikki rastasi bo'lganda qarzni IKKIGA BO'LIB
+yuborardi va u **hech qaysi rastada to'liq ko'rinmasdi** — kassir har
+ekranda qarzning yarmini ko'rib «hammasi to'langan» degan xulosaga kelardi.
+
+⚠ Buning ONGLI narxi: bir sotuvchining ikki rastasi bo'lsa kassir HAR
+  IKKALASIDA ham O'SHA qoldiqni ko'radi. Bu TO'G'RI — qarz sotuvchining,
+  rastaning emas (UI-SPEC §13.1 «Eski qarz» atamasi ham shunday o'qiladi).
+
+=============================================================================
+⛔ `as_of` FAQAT HISOBLARNI CHEKLAYDI (`service_date < :as_of`), to'lovlarni
+   EMAS. Sabab: «ESKI qarz» aynan eski bo'lishi kerak — bugungi patta
+   proyeksiyada ALOHIDA maydon (`amount_soum`) bo'lib chiqadi va uni
+   qoldiqqa ham qo'shish `total_due_soum` ni IKKI MARTA sanardi. To'lovlar
+   esa cheklanmaydi: bugun to'langan pul eski qarzni AYNAN bugun yopadi.
+
+=============================================================================
+⛔ MANFIY NATIJA (AVANS) RUXSAT ETILADI va kattalikka AYLANTIRILMAYDI
+   (OQ-4/A4, UI-SPEC §9.6). Ortiqcha to'lovni bloklash kassirni pulni
+   UMUMAN YOZMASLIKKA majburlardi — ya'ni himoya o'zi himoya qilayotgan
+   yozuvni yo'q qilardi.
+"""
+
+
+async def vendor_outstanding(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    vendor_ids: Sequence[UUID] | None = None,
+    as_of: date | None = None,
+) -> dict[UUID, int]:
+    """Sotuvchi kesimidagi HISOBLANADIGAN qoldiq (BILL-03).
+
+    `hisoblar + belgili tuzatishlar − belgili to'lovlar`, sotuvchi
+    kesimida. ⛔ SAQLANGAN BALANS USTUNI HECH QAYERDA YO'Q va u
+    qo'shilmaydi: drift nizoga aylanadi va aynan shu nizo SBOZOR mavjud
+    bo'lish sababidir (D-02).
+
+    Args:
+        vendor_ids: filtr; `None` — bozorning HAMMA sotuvchisi.
+        as_of: berilsa hisoblar `service_date < as_of` bilan cheklanadi.
+
+    Returns:
+        `{vendor_id: outstanding_soum}`. ⚠ Qatori umuman yo'q sotuvchi
+        lug'atga KIRMAYDI — chaqiruvchi `.get(vendor_id, 0)` bilan oladi
+        va bu «0» ni «ma'lumot yo'q» dan ajratmaydigan yolg'on aniqlikdan
+        saqlaydi.
+    """
+    result = await session.execute(
+        _VENDOR_OUTSTANDING,
+        {
+            "market_id": market_id,
+            "as_of": as_of,
+            "vendor_ids": None if vendor_ids is None else list(vendor_ids),
+            "increase": AdjustmentDirection.INCREASE.value,
+            "reversal": PaymentKind.REVERSAL.value,
+        },
+    )
+    return {row["vendor_id"]: int(row["outstanding_soum"]) for row in result.mappings()}
+
+
+# ===========================================================================
+# 5. D-24 — «QAYSI KUNNING PATTASI TO'LANDI?» (HOSILA KO'RINISH)
+# ===========================================================================
+
+_VENDOR_CHARGE_DUES = text(
+    f"""
+    SELECT c.service_date AS service_date,
+           s.code         AS stall_code,
+           (c.amount_soum + COALESCE(adj.total, 0))::bigint AS due_soum
+      FROM daily_charges c
+      JOIN stalls s
+        ON s.market_id = c.market_id
+       AND s.id = c.stall_id
+      LEFT JOIN LATERAL (
+        SELECT sum({_SIGNED_ADJUSTMENT_EXPR}) AS total
+        FROM charge_adjustments a
+        WHERE a.market_id = c.market_id
+          AND a.charge_id = c.id
+      ) adj ON true
+     WHERE c.market_id = :market_id
+       AND c.vendor_id = :vendor_id
+       AND (:as_of IS NULL OR c.service_date < :as_of)
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("vendor_id", type_=_UUID),
+    bindparam("as_of", type_=Date()),
+    bindparam("increase", type_=Text()),
+)
+"""Sotuvchining hisoblari, tuzatishlar bilan NETLANGAN holda.
+
+⛔ TARTIB SO'ROVDA E'LON QILINMAYDI va bu ATAYIN: taqsimlash tartibi
+   (`FIFO_OLDEST_SERVICE_DATE_FIRST`) `sbozor_core.billing` ning
+   `sorted()` ida yashaydi. SQL da `ORDER BY` yozish qoidani IKKI JOYGA
+   bo'lardi va `tests/unit/test_payment_credit_rules.py` ning jadvali
+   mahsulot yo'lini o'lchamay qo'yardi.
+
+⚠ `stall_code` `stalls` dan JOIN bilan olinadi, chunki 06-01 ning
+  kontraktida tenglik uzgichi AYNAN KOD (`stall_id` EMAS): UUID tartibni
+  tasodifiy qilardi va nizoda «qaysi rasta?» savoliga odam o'qiydigan
+  javob bo'lmasdi.
+"""
+
+_VENDOR_CREDIT = text(
+    f"""
+    SELECT COALESCE(sum({_SIGNED_PAYMENT_EXPR}), 0)::bigint AS credit_soum
+      FROM payments p
+     WHERE p.market_id = :market_id
+       AND p.vendor_id = :vendor_id
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("vendor_id", type_=_UUID),
+    bindparam("reversal", type_=Text()),
+)
+"""Sotuvchining BELGILI to'lov yig'indisi — ⛔ `vendor_outstanding()` BILAN
+AYNI IFODADAN (`_SIGNED_PAYMENT_EXPR`). G-14 shu tenglikni o'lchaydi.
+
+⚠ `COALESCE(..., 0)` — to'lovsiz sotuvchi ham qator beradi: «0» natija,
+  uning yo'qligi emas.
+"""
+
+
+async def vendor_charge_allocation(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    vendor_id: UUID,
+    as_of: date | None = None,
+) -> ChargeCreditAllocation:
+    """⛔ D-24 NING JAVOBI — HOSILA KO'RINISH, hech nima saqlanmaydi.
+
+    =======================================================================
+    ⛔⛔ NIMA UCHUN BU FUNKSIYA UMUMAN BOR.
+
+    `payments.charge_id` YO'Q (C-4) va u bo'lishi ham mumkin emas: kassir
+    bugungi pattani KUN DAVOMIDA yig'adi, hisob esa ertasi kuni 04:10 da
+    tug'iladi (C-3). `service_date` yolg'iz ham yetarli emas —
+    `[Qarzni ham olish]` (UI-SPEC §9.6) da bitta to'lov bugungi tarif VA
+    eski qarzni yopadi, `service_date` esa BUGUN bo'lib qoladi.
+
+    Ya'ni «qaysi kunning pattasi to'landi?» savolining javobi USTUNDA emas,
+    NOMLANGAN QOIDADA yashaydi: `FIFO_OLDEST_SERVICE_DATE_FIRST`. Bu
+    funksiya o'sha qoidani HAQIQIY qatorlar ustida qo'llaydi.
+
+    =======================================================================
+    ⛔⛔ TAQIQ — KEYINGI IJROCHI UCHUN, CHUNKI VASVASA AYNAN UNDA TUG'ILADI:
+
+      * natijani jadvalga YOZISH taqiqlanadi (ettinchi jadval qo'shilmaydi);
+      * `payments` ga `allocated_*` ustuni QO'SHILMAYDI;
+      * natijani KESHLASH taqiqlanadi.
+
+    Uchalasi ham D-07/BILL-03 ning «saqlangan balans YO'Q» shartini
+    buzardi va ikkinchi haqiqat manbai tug'dirardi.
+
+    =======================================================================
+    ⚠ 6-FAZADA BU FUNKSIYANING HTTP ISTE'MOLCHISI YO'Q va bu KUTILGAN:
+      sotuvchi kesimidagi to'lov tarixi 8-fazaniki (UI-SPEC §16.1). Qoida
+      BUGUN tasdiq bilan qulflanadi, yuza keyin qo'shiladi — ⛔ shuning
+      uchun bu «o'lik kod» EMAS va o'chirilmaydi (06-02 ning `AuditAction`
+      bandi bilan aynan bir xil naqsh).
+
+    =======================================================================
+    ⛔ QAROR SQL DA EMAS: `allocate_charge_credit()` (06-01) CHAQIRILADI.
+       `billable_stalls()` bilan aynan bir xil majburiyat.
+
+    Args:
+        as_of: berilsa hisoblar `service_date < as_of` bilan cheklanadi —
+            ⛔ `vendor_outstanding()` BILAN BIR XIL CHEGARA, aks holda ikki
+            ko'rinish bir xil kunni boshqacha sanardi va G-14 ning tengligi
+            buzilardi.
+    """
+    dues = await session.execute(
+        _VENDOR_CHARGE_DUES,
+        {
+            "market_id": market_id,
+            "vendor_id": vendor_id,
+            "as_of": as_of,
+            "increase": AdjustmentDirection.INCREASE.value,
+        },
+    )
+    charges = [
+        ChargeDue(
+            service_date=row["service_date"],
+            stall_code=str(row["stall_code"]),
+            due_soum=int(row["due_soum"]),
+        )
+        for row in dues.mappings()
+    ]
+
+    credit = await session.execute(
+        _VENDOR_CREDIT,
+        {
+            "market_id": market_id,
+            "vendor_id": vendor_id,
+            "reversal": PaymentKind.REVERSAL.value,
+        },
+    )
+    credit_soum = int(credit.scalar_one())
+
+    return allocate_charge_credit(charges, credit_soum)
+
+
+# ===========================================================================
+# 6. KUTILAYOTGAN PATTA — PROYEKSIYA (BILL-05, D-16, D-17)
+# ===========================================================================
+
+_STALL_CODE_MATCHES = text(
+    """
+    SELECT s.code AS stall_code
+      FROM stalls s
+     WHERE s.market_id = :market_id
+       AND s.code LIKE :prefix
+     ORDER BY s.code_sort, s.id
+     LIMIT :limit
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("prefix", type_=Text()),
+    bindparam("limit", type_=Integer()),
+)
+"""Kassir tergan kodning MOSLIKLARI — 02-UI-SPEC §6.9 ning server yarmi.
+
+⚠ `LIKE` naqshi `stall_repo.like_term()` bilan QOCHIRILADI, qo'lda emas:
+  `%` bilan kelgan so'rov butun reyestrni qaytarardi va `_` har bir bir
+  belgili kodga mos kelardi (`stall_repo.py:560-579`).
+"""
+
+MATCH_LIMIT: Final[int] = 20
+"""Ro'yxat uzunligining chegarasi — kassir ekrani uchun (UI-SPEC §8.3).
+
+Chegaradan oshgan natija ham «ko'p moslik» bo'lib qoladi, ya'ni oqim
+o'zgarmaydi: kassir aniqroq kod teradi.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class PendingStall:
+    """⛔ UI-SPEC §9.2 NING AYNAN YETTI MAYDONI — na kam, na ko'p.
+
+    =======================================================================
+    ⛔ YO'Q VA YO'QLIGI O'LCHANADIGAN MAYDONLAR (G-22/G-23):
+
+        charge_id      — D-17: proyeksiya HISOB EMAS, ya'ni hisob
+                         identifikatori MAVJUD EMAS (yashirilgan emas);
+        tariff_id      — D-20 ning KUCHLI shakli: klientda tarif kirish
+                         ma'lumoti YO'Q, ya'ni summani hisoblash
+                         taqiqlanmaydi — IMKONSIZ;
+        vendor_id      — C-10: kassir yuzasida shaxsiy ma'lumot yo'q;
+        occupied_slots — §9.1: «bugun band» BILINMAYDI (C-3);
+        balance_soum   — BILL-03: saqlangan balans yo'q, NOMI ham yo'q.
+
+    ⚠ To'plam tengligi bilan o'lchanadi (`dataclasses.fields()`), inkor
+      tasdiq bilan EMAS (D-31): `not.toContain("charge_id")` faqat AYNAN
+      o'sha nomni ushlardi va `chargeId` jimgina o'tib ketardi.
+    """
+
+    stall_code: str
+    service_date: date
+    market_open: bool
+    amount_soum: int | None
+    amount_unavailable_reason: str | None
+    outstanding_soum: int
+    total_due_soum: int
+
+
+@dataclass(frozen=True, slots=True)
+class PendingMarket:
+    """Bozor kesimi (direktor, UI-SPEC §9.5) — ⛔ NOL HAM NATIJA.
+
+    Uchala son NOL bo'lganda ham qaytariladi: «hisobot yo'q» bilan
+    «hammasi nol» ni ajratmaydigan javob direktorni ma'lumot yo'qolgan deb
+    o'ylashga majburlardi (`occupancy.py:122-124` da o'rnatilgan qoida).
+
+    `fetched_at` — UI-SPEC §9.5 ning «oxirgi olingan vaqt» i. Avtomatik
+    taymer YO'Q: direktor raqamni o'qib turganda uni jimgina o'zgartirib
+    qo'yadigan yangilanish «men boshqa raqam ko'rgandim» degan nizoning
+    manbai.
+    """
+
+    pending_amount_soum: int
+    outstanding_soum: int
+    pending_stall_count: int
+    fetched_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PendingProjection:
+    """Proyeksiyaning UCH SHAKLI — har biri ALOHIDA maydon bilan.
+
+    `stall`   — aynan bitta moslik (to'liq proyeksiya);
+    `matches` — ko'p moslik (faqat KODLAR, `code_sort` tartibida);
+    `market`  — bozor kesimi (`stall_code` berilmaganda).
+
+    ⚠ Uch shaklni bitta «bo'sh qiymatlar» to'plamiga siqish «summa
+      hisoblanmadi» bilan «summa nol» ni ajratmaydigan javob berardi — bu
+      esa aynan §9.4 ning oldini olayotgan xatosi.
+    """
+
+    stall: PendingStall | None
+    matches: tuple[str, ...]
+    market: PendingMarket | None
+
+
+async def pending_projection(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    as_of: date,
+    stall_code: str | None = None,
+) -> PendingProjection:
+    """BILL-05 — kutilayotgan patta = ⛔ bugungi tarif + eski qarz.
+
+    =======================================================================
+    ⛔ SUMMA `resolve_stall_day_money(as_of=as_of)` DAN KELADI (D-16), ya'ni
+       kassir ko'rgan son bilan kechqurun yozilgan son AYNAN BIR
+       FUNKSIYADAN chiqadi. Farq testda `==` bilan o'lchanadi.
+
+    ⛔ `total_due_soum` SERVERDA hisoblanadi va ⛔ ARIFMETIKA BU FAYLDA
+       YOZILMAYDI: `sbozor_core.billing.total_due_soum()` (06-01)
+       chaqiriladi. Aynan shu qo'shish amali `POST /payments` da (06-09,
+       kvota to'plami) ham kerak bo'ladi va ikki joyda yozilsa ular BIR KUN
+       ajralib ketardi — §9.6 ning «klientda arifmetika yo'q» qarori
+       serverda IKKI HAQIQAT MANBAI bilan almashardi, ya'ni xato
+       klientdan serverga KO'CHARDI, yo'qolmasdi.
+
+    =======================================================================
+    ⛔ KO'P MOSLIK — VA ANIQ MOSLIKNING USTUNLIGI (02-UI-SPEC §6.9).
+
+    Kod PREFIKS sifatida qidiriladi. Bir nechta rasta mos kelsa summa
+    HISOBLANMAYDI va faqat kodlar ro'yxati qaytadi; kassir aniq kodni
+    tanlagach IKKINCHI chaqiruv bo'ladi.
+
+    ⚠ IKKINCHI CHAQIRUV TUGASHI UCHUN ANIQ MOSLIK USTUN: `"1"` va `"12"`
+      kodlari bor bozorda prefiks semantikasi `"1"` uchun HAR DOIM ikki
+      natija berardi va kassir ro'yxatdan `"1"` ni tanlaganda o'sha ro'yxat
+      QAYTA chiqardi — oqim hech qachon `ready` holatiga yetmasdi. Shuning
+      uchun tergan kod moslashlar orasida AYNAN bo'lsa, u yagona natija
+      sifatida qabul qilinadi.
+    """
+    if stall_code is None:
+        return PendingProjection(
+            stall=None, matches=(), market=await _market_projection(session, market_id, as_of)
+        )
+
+    matched = await session.execute(
+        _STALL_CODE_MATCHES,
+        {
+            "market_id": market_id,
+            "prefix": f"{like_term(stall_code)}%",
+            "limit": MATCH_LIMIT,
+        },
+    )
+    codes = tuple(str(row["stall_code"]) for row in matched.mappings())
+
+    if stall_code in codes:
+        exact: str | None = stall_code
+    elif len(codes) == 1:
+        exact = codes[0]
+    else:
+        # Nol moslik ham, ko'p moslik ham SUMMASIZ qaytadi — «yo'q summa
+        # yo'q summa» (UI-SPEC §9.4), taxminiy summa KO'RSATILMAYDI.
+        return PendingProjection(stall=None, matches=codes, market=None)
+
+    money = await resolve_stall_day_money(
+        session, market_id=market_id, as_of=as_of, stall_code=exact
+    )
+    if not money:
+        return PendingProjection(stall=None, matches=(), market=None)
+
+    row = money[0]
+    outstanding = 0
+    if row.vendor_id is not None:
+        balances = await vendor_outstanding(
+            session, market_id=market_id, vendor_ids=[row.vendor_id], as_of=as_of
+        )
+        outstanding = balances.get(row.vendor_id, 0)
+
+    return PendingProjection(
+        stall=PendingStall(
+            stall_code=row.stall_code,
+            service_date=as_of,
+            market_open=row.market_open,
+            amount_soum=row.amount_soum,
+            amount_unavailable_reason=row.unavailable_reason,
+            outstanding_soum=outstanding,
+            total_due_soum=total_due_soum(row.amount_soum, outstanding),
+        ),
+        matches=(),
+        market=None,
+    )
+
+
+async def _market_projection(session: AsyncSession, market_id: UUID, as_of: date) -> PendingMarket:
+    """Bozor kesimi — `resolve_stall_day_money()` ning AYNI natijasidan.
+
+    ⚠ RASTA HOLATI (`status`) BO'YICHA FILTR ATAYIN YO'Q: `maintenance`
+      deb belgilangan rasta savdo qilsa ham patta to'laydi va «qaysi rasta
+      hisob oladi?» savoliga BANDLIK darvozasi javob beradi (D-04), holat
+      ustuni emas. Bu yerdagi sanoq esa «bugun qancha patta KUTILYAPTI»
+      degan boshqa savol.
+    """
+    rows = await resolve_stall_day_money(session, market_id=market_id, as_of=as_of)
+    priced = [row.amount_soum for row in rows if row.amount_soum is not None]
+    balances = await vendor_outstanding(session, market_id=market_id, as_of=as_of)
+    return PendingMarket(
+        pending_amount_soum=sum(priced),
+        outstanding_soum=sum(balances.values()),
+        pending_stall_count=len(priced),
+        fetched_at=datetime.now(tz=UTC),
+    )
