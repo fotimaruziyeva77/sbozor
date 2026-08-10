@@ -893,6 +893,17 @@ Mexanizm tayyor: `alert_events` + `alert_key` + qisman UNIQUE debounce (`models/
 | **G-10** | Orfan `SECURITY DEFINER` funksiyalar **hal qilindi** | `DEFINER_SURFACES` (`test_occupancy_domain_meta.py:75-79`) to'plami `0020` dan keyin **bo'sh** (yoki qolganlar sabab bilan) — ikki tomonlama qulf |
 | **G-11** | Kaskad yangi jadvallarni qamraydi | mavjud `test_market_delete_guard.py::test_cascade_covers_every_table_referencing_markets` — `0020` dan keyin **o'zi qizaradi**, `0021` uni yashil qiladi |
 | **G-12** | Idempotentlik parallel yozuvda ham ishlaydi | **Wave 0 zondi**: ikki `asyncio` sessiya bir xil kalit bilan; natija 1 qator + bir xil `id` (A1) |
+| **G-13** | **D-24 ning savoliga javob TASDIQ, proza emas** — bitta to'lov N kunlik qarzni yopganda ham «qaysi kunning pattasi to'landi?» aniq | ⛔ Ikki qatlam: (a) jadval testi `tests/unit/test_payment_credit_rules.py` — `FIFO_OLDEST_SERVICE_DATE_FIRST` qoidasi (bir to'lov N kunga, qisman, avans, storno, bir kunda ikki rasta + kirish tartibidan **mustaqillik**); (b) integratsiya `tests/integration/test_billing_repo.py::vendor_charge_allocation` — uch kunlik qarz + **bitta** 45 000 to'lov → yopilgan kunlar ⛔ **AYNAN `[D-2, D-1, D]`**. ⛔ **Sabotaj:** tartib LIFO ga almashtiriladi → ikkala holat **qizarishi shart**. ⛔ Taqsimlash **saqlanmaydi**: `payment_allocations` jadvali va `allocated_*` ustuni **yo'q** (D-07, BILL-03) |
+| **G-14** | **Hosila taqsimlash hisoblanadigan qoldiqdan AJRALIB KETA OLMAYDI** | `Σ unpaid_soum` (FIFO ko'rinish) ⛔ **`vendor_outstanding()[vendor_id]` ga TENG** (avans bo'lmagan holatda) — integratsiya testida arifmetik solishtirish; belgili to'lov ifodasi **bitta** `text()` konstantasi va ikkala funksiya **shuni** ishlatadi |
+| **G-15** | **«Summa yo'q» qarzni undirilmaydigan QILMAYDI** (UI-SPEC §9.4) | `POST /payments`: (a) `market_closed` + `outstanding > 0` → ⛔ **201**; (b) `tariff_missing` + `outstanding > 0` → **201**; (c) qarz ham `<= 0` → **422** va `detail` da ⛔ **nomlangan sabab** (`market_closed`/`tariff_missing`). ⛔ **Sabotaj:** eski shart (`amount_soum is None` → 422) qaytariladi → (a) va (b) **qizarishi shart**. ⛔ 422 ning sharti — `payment_quote_set() == ()`, «bugungi summa yo'q» **emas** |
+| **G-16** | **Biriktirilmagan rasta uchun BITTA aniq javob** | `POST /payments` → ⛔ **409 `stall_not_assigned`** (404 **emas**, 422 **emas**), `payments` da **0 qator**; ⛔ **nazorat**: biriktirish qo'shilgach o'sha so'rov → **201** (409 **holatdan**, kod xatosidan emas). Kod 06-02 ning **14 kodli** reyestrida tug'iladi — 06-09 reyestrga **tegmaydi** (D-28) |
+
+> ⚠ **G-13…G-16 rejalashtirish iteratsiyasi 1 da (2026-08-10) qo'shildi**
+> — D-24 («qaysi kunning pattasi to'landi?») va UI-SPEC §9.4 ning javobi
+> **proza** emas, **darvoza** bo'lishi kerak edi. `06-VALIDATION.md` bu
+> to'rtlikni shu jadvaldan ⛔ **HOSILA** ravishda oladi; ikkisi
+> **bir xil matnda** turishi shart, aks holda «HOSILA» konventsiyasining
+> o'zi jimgina buziladi.
 
 ### Sampling Rate
 
@@ -910,6 +921,7 @@ Mexanizm tayyor: `alert_events` + `alert_key` + qisman UNIQUE debounce (`models/
 - [ ] `frontend/scripts/collect-surface.test.mjs` — G-7 (ko'r deklaratsiya + ommaviy amal yo'qligi), **katalogdan hosila**
 - [ ] `frontend/src/components/collect/*.test.tsx` — bosish sanog'i (SC#4b), `useRef` qulfi (SC#5b)
 - [ ] `packages/sbozor-core/tests` yo'q → sof funksiyalar `tests/unit/test_billable_from_slots.py`, `test_variance.py` (`test_aggregate_stall_slot.py` naqshi: **jadval testi**, bitta holat emas)
+- [ ] ⛔ `tests/unit/test_payment_credit_rules.py` — **G-13/G-14 ning birinchi qatlami**: `allocate_charge_credit()` (⛔ `FIFO_OLDEST_SERVICE_DATE_FIRST`), `payment_quote_set()` va `total_due_soum()` uchun ⛔ **uch mustaqil jadval** (`FIFO_ALLOCATION_TABLE` ≥ 9 qator, `EXPECTED_BY_TOTALS`, `QUOTE_SET_TABLE` ≥ 7 qator) + uchala uchun `test_the_*_table_covers_every_case()`. ⛔ **Bitta holat EMAS** — D-24 ning javobi shu jadvalda yashaydi
 - [ ] Framework install: **kerak emas** — hamma narsa mavjud
 
 ---
