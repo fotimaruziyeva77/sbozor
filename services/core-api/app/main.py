@@ -44,6 +44,7 @@ from app.api.v1.assignments import router as assignments_router
 from app.api.v1.assignments import stall_router as stall_assignments_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.billing import router as billing_router
 from app.api.v1.calendar import router as calendar_router
 from app.api.v1.camera_zones import router as camera_zones_router
 from app.api.v1.cameras import router as cameras_router
@@ -255,6 +256,39 @@ app.include_router(reviews_router, prefix=f"{API_V1_PREFIX}/review")
 # ⛔ «NAMUNANI QAYTA TORTISH» MARSHRUTI YOZILMAGAN (D-17.1) va uning
 # yo'qligi 05-11 ning OpenAPI skani bilan o'lchanadi.
 app.include_router(occupancy_router, prefix=f"{API_V1_PREFIX}/occupancy")
+# --- 06-08: kutilayotgan patta va yozilgan hisob (BILL-02…BILL-05) ---
+#
+# ⛔ ALOHIDA PREFIKS — `/occupancy` GA QO'SHILMAYDI, VA SABAB
+#    STRUKTURAVIY (UI-SPEC §4.3 ning to'rt sababi, qisqacha):
+#
+#   1. `/occupancy` ning copy'si 05-UI-SPEC §16.1 da OCHIQ VA'DA beradi:
+#      «Patta hisobi alohida qoidaga ko'ra yuritiladi»
+#      (`occupancy.notBillingYet`). Patta ustunini o'sha yuzaga qo'shish
+#      o'sha jumlani YOLG'ONGA aylantirardi;
+#   2. BANDLIK ≠ HISOB: `no_coverage` bandlikda KO'RINADI, hisobda YO'Q
+#      (D-04/D-05). Bitta jadvalda ikki semantika — «bo'sh katak»
+#      sinfidagi jim xato;
+#   3. KUN SEMANTIKASI BOSHQA: `/occupancy` `stall_slot_occupancy.
+#      business_date` bo'yicha, `/billing` esa `daily_charges.
+#      service_date` bo'yicha (C-2). Bir `?day=` ni bo'lishish Pitfall 1
+#      ni UI qatlamiga ko'chirardi;
+#   4. ALOHIDA KATALOG — DARVOZANING SHARTI: `components/billing/**`
+#      ajratilgani uchun G-22 `components/collect/**` da hisob
+#      identifikatori YO'QLIGINI skanerlab bera oladi.
+#
+# ⛔ IKKI HUQUQ, BITTA ROUTER: `/pending` — `BILLING_COLLECT_VIEW`
+# (kassir + direktor + bozor admini), qolgan uchtasi — `REPORT_VIEW`
+# (kassirda u YO'Q). Ular bitta faylda yashaydi, chunki bitta domen va
+# bitta ekranning (`/billing`) ikki bloki; huquq esa IMZO ALIASI bilan
+# marshrut darajasida ajratilgan.
+#
+# ⛔ `require_any_permission()` BU ROUTERDA ISHLATILMAYDI (C-9):
+# `test_personal_data_coverage.py:691-706` o'sha darvozaning to'plamini
+# AYNAN BITTA marshrutga qulflagan va bu faza unga TEGMAYDI.
+#
+# Yangi yo'l parametri (`charge_id`) cross-tenant matritsasining
+# `PARAM_FILLERS` iga B bozorining HAQIQIY hisobi bilan qo'shildi.
+app.include_router(billing_router, prefix=f"{API_V1_PREFIX}/billing")
 # --- 04-09: snapshot jadvali (CAM-04, D-05) ---
 #
 # ⚠ ALOHIDA PREFIKS, `cameras` OSTIDA EMAS — `cameras` ning `nvr-devices`
