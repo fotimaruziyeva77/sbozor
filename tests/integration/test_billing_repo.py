@@ -504,13 +504,24 @@ async def test_resolve_does_not_leak_another_market(
 
 
 def _service_day(conn: Connection[TupleRow], offset: int) -> date:
-    """`CURRENT_DATE - offset` — hisob/to'lov sanalari uchun YAGONA manba.
+    """Bozorning bugungi kuni (Asia/Tashkent) minus `offset` — sanalar uchun YAGONA manba.
 
     Fayl docstringidagi ikkinchi sana oilasi: `daily_charges.business_date`
     `created_at` dan hosila, ya'ni qadalgan kelajak sanasi
     `ck_daily_charges_service_date_not_in_future` ga urilardi (06-05).
+
+    ⛔ `CURRENT_DATE` EMAS. Sessiya mintaqasi UTC, `business_date` esa
+       `BILLING_BUSINESS_DATE_EXPR` bo'yicha `Asia/Tashkent` da hisoblanadi
+       (`models/billing.py:172`). Toshkentda 00:00–04:59 oralig'ida ular BIR
+       KUN farq qiladi va `test_a_charge_service_date_is_the_slot_day_not_its
+       _business_date` ning `row[1] == today` da'vosi har kuni besh soat
+       davomida qizarardi — sabab kodda emas, MINTAQADA. Ifoda
+       `conftest.py::MARKET_TODAY_SQL` dan olingan; u ayni ogohlantirishni
+       o'zgarmaslik triggeri uchun allaqachon yozib qo'ygan.
     """
-    row = conn.execute("SELECT CURRENT_DATE - %s::int", (offset,)).fetchone()
+    row = conn.execute(
+        "SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date - %s::int", (offset,)
+    ).fetchone()
     assert row is not None
     day: date = row[0]
     return day
