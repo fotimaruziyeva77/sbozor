@@ -79,6 +79,20 @@ const BACKEND_OCCUPANCY_ERRORS = path.join(
   "services",
   "occupancy_errors.py",
 );
+const BILLING_ERRORS = path.join(
+  FRONTEND_ROOT,
+  "src",
+  "lib",
+  "billing-errors.ts",
+);
+const BACKEND_BILLING_ERRORS = path.join(
+  REPO_ROOT,
+  "services",
+  "core-api",
+  "app",
+  "services",
+  "billing_errors.py",
+);
 
 function read(file) {
   return readFileSync(file, "utf8");
@@ -930,4 +944,288 @@ test("G-17: HAR BACKEND kodi uchun sabab va tuzatish UCHALA tilda bor", () => {
     "D-02 buzilgan — sabab va tuzatish JUFT va TO'G'RI SIRTDA bo'lishi SHART:\n  " +
       problems.join("\n  "),
   );
+});
+
+/* ---------------------------------------------------------------------------
+ * G-17 — 6-FAZA: YETTINCHI REYESTR va UCH SIRT USTIDAGI PARITY (OP-12).
+ *
+ * Zanjir yana uch bo'g'inli va har bo'g'in boshqa tilda:
+ *
+ *   billing_errors.py::{COLLECT,SHIFT,BILLING,CLIENT_ONLY}_ERROR_CODES
+ *     -> lib/billing-errors.ts::BILLING_ERROR_META   (kod + SIRT + tone)
+ *     -> messages/*.json                             (sabab va tuzatish)
+ *
+ * ⛔⛔ NEGA YANGI BLOK VA YANGI BACKEND FAYLI — O'LCHOV BILAN (§0.1 M-B).
+ *
+ *   Yuqoridagi bandlik bloki `occupancyConstants.size` ni ANIQ SON (15)
+ *   bilan talab qiladi. 6-fazaning kodlarini `occupancy_errors.py` ga
+ *   qo'shish o'sha nazorat qiymatini DARHOL qizartirardi va uni
+ *   "tuzatish" yagona yo'li — sonni oshirish, ya'ni nazoratning butun
+ *   ma'nosini yo'q qilish bo'lardi.
+ *
+ *   Shuning uchun bandlik bloki TEGILMAYDI va bu blok o'z aniq soniga
+ *   ega: `billingConstants.size === 14`.
+ *
+ * ⚠ REYESTR NOMI EKRANNI, `surface` esa MATN NAMESPACE'ini bildiradi va
+ *   ular 1:1 EMAS — bu bandlik blokidan FARQ QILADIGAN yagona joy.
+ *   `/collect/shift` `/collect` ning bolasi, ya'ni SMENA kodlari ham
+ *   `collect.*` da yashaydi; `network_unreachable` esa serverdan hech
+ *   qachon kelmaydi, lekin ekranda AYNI xato bloki bo'lib chiziladi.
+ * ------------------------------------------------------------------------ */
+
+/** Reyestr nomi -> matn namespace'i + kutilgan kod soni. */
+const BILLING_SURFACES = [
+  { registry: "COLLECT_ERROR_CODES", surface: "collect", expected: 9 },
+  { registry: "SHIFT_ERROR_CODES", surface: "collect", expected: 3 },
+  { registry: "BILLING_ERROR_CODES", surface: "billing", expected: 1 },
+  { registry: "CLIENT_ONLY_ERROR_CODES", surface: "collect", expected: 1 },
+];
+
+/** `BILLING_SURFACES` dagi TAKRORLANMAS namespace'lar (teskari skan uchun). */
+const BILLING_NAMESPACES = [
+  ...new Set(BILLING_SURFACES.map((item) => item.surface)),
+];
+
+/**
+ * `kod: { tone: "...", surface: "..." },` — `billing-errors.ts` ning jadvali.
+ *
+ * ⚠ MAVJUD `readTsZoneMeta` ISHLATILMAYDI: u `^\s{2}` ga, ya'ni AYNAN ikki
+ *   bo'shliqqa qadalgan. `billing-errors.ts` da jadval `Readonly<Record<…>>`
+ *   e'lonidan keyin bir daraja pastroqda turadi — umumiy parser uni jimgina
+ *   BO'SH deb o'qib, quyidagi uchala testni ham yashil qilib qo'yardi.
+ */
+function readTsBillingMeta(source) {
+  return new Map(
+    [
+      ...source.matchAll(
+        /^\s{2,8}([a-z_]+):\s*\{\s*tone:\s*"([a-z]+)",\s*surface:\s*"([a-z]+)"\s*\}/gmu,
+      ),
+    ].map((match) => [match[1], { tone: match[2], surface: match[3] }]),
+  );
+}
+
+const billingSource = read(BACKEND_BILLING_ERRORS);
+const billingConstants = readPythonStrConstants(billingSource);
+
+/** kod -> sirt (backend haqiqati). */
+const backendBillingSurface = new Map();
+for (const { registry, surface } of BILLING_SURFACES) {
+  for (const code of readPythonFrozensetRefs(
+    billingSource,
+    registry,
+    billingConstants,
+  )) {
+    backendBillingSurface.set(code, surface);
+  }
+}
+
+test("G-17: billing reyestri o'qildi va AYNAN o'n to'rt kod (nazorat)", () => {
+  /*
+   * Nazorat: parser sinsa (masalan reyestr `tuple` ga aylantirilsa)
+   * quyidagi darvozalar ham JIMGINA yashil bo'lardi — bo'sh to'plam
+   * bo'yicha aylanish hech nimani tekshirmaydi.
+   */
+  assert.equal(
+    billingConstants.size,
+    14,
+    `billing_errors.py dan ${billingConstants.size} konstanta o'qildi, kutilgan 14`,
+  );
+
+  for (const { registry, surface, expected } of BILLING_SURFACES) {
+    const codes = readPythonFrozensetRefs(
+      billingSource,
+      registry,
+      billingConstants,
+    );
+    assert.equal(
+      codes.length,
+      expected,
+      `${registry} dan ${codes.length} kod o'qildi, kutilgan ${expected} (sirt: ${surface})`,
+    );
+  }
+
+  assert.equal(
+    backendBillingSurface.size,
+    14,
+    "to'rt reyestr kesishib qolgan — bitta kod ikki sirtda bo'lolmaydi",
+  );
+});
+
+test("G-17: `ALL_BILLING_ERROR_CODES` reyestrlardan HOSILA (qo'lda ro'yxat yo'q)", () => {
+  /*
+   * ⛔ `OCCUPANCY_ERROR_CODES` bilan aynan bir xil sabab (§S-5): qo'lda
+   *   yozilgan aggregat bir kun reyestrlardan kichik bo'lib qolardi va
+   *   `app/schemas.py` allowlist'i router ko'targan kodni tanimasdi.
+   *
+   * ⛔ IKKI POG'ONA ATAYIN: `SERVER_…` — allowlist uchun (u
+   *   `network_unreachable` ni O'Z ICHIGA OLMAYDI, chunki allowlist
+   *   «server nima qaytarishi mumkin» degan savolga javob beradi);
+   *   `ALL_…` — frontend darvozasi uchun.
+   */
+  assert.match(
+    billingSource,
+    /SERVER_BILLING_ERROR_CODES: Final\[frozenset\[str\]\] = \(\s*COLLECT_ERROR_CODES \| SHIFT_ERROR_CODES \| BILLING_ERROR_CODES\s*\)/u,
+    "`SERVER_BILLING_ERROR_CODES` UCH sirt reyestrining BIRLASHMASI bo'lishi SHART",
+  );
+  assert.match(
+    billingSource,
+    /ALL_BILLING_ERROR_CODES: Final\[frozenset\[str\]\] = \(\s*SERVER_BILLING_ERROR_CODES \| CLIENT_ONLY_ERROR_CODES\s*\)/u,
+    "`ALL_BILLING_ERROR_CODES` HOSILA bo'lishi SHART — qo'lda yozilgan " +
+      "ro'yxat ikkinchi haqiqat manbai bo'lardi (§S-5)",
+  );
+});
+
+test("G-17: `AMOUNT_UNAVAILABLE_REASONS` ALOHIDA va u KOD REYESTRI EMAS", () => {
+  /*
+   * ⛔ BU TO'PLAM YUZA REYESTRI EMAS: uning ikkala kodi ham allaqachon
+   *   `COLLECT_ERROR_CODES` da. Vazifasi boshqa — u proyeksiya javobidagi
+   *   `unavailable_reason` maydonining YOPIQ qiymat to'plami (§9.4) va
+   *   `resolve_stall_day_money()` (06-06) uni IMPORT qiladi, ya'ni
+   *   `"market_closed"` satri kodda IKKINCHI marta yozilmaydi.
+   *
+   * ⛔ SHUNING UCHUN U `billingConstants` SANOG'IGA TUSHMASLIGI KERAK:
+   *   `readPythonStrConstants` faqat `Final[str]` konstantalarini oladi,
+   *   `Final[frozenset[str]]` e'lonlarini emas. Yuqoridagi `size === 14`
+   *   asserti aynan shu qoidaga tayanadi — yangi frozenset qo'shish uni
+   *   buzmasligi kerak.
+   */
+  const reasons = readPythonFrozensetRefs(
+    billingSource,
+    "AMOUNT_UNAVAILABLE_REASONS",
+    billingConstants,
+  );
+
+  assert.deepEqual(
+    [...reasons].sort(),
+    ["market_closed", "tariff_missing"],
+    "`AMOUNT_UNAVAILABLE_REASONS` §9.4 dagi ikki sababdan iborat bo'lishi SHART",
+  );
+
+  // Ikkalasi ham kassir yuzasining kodi — ya'ni to'plam yangi kod KIRITMAYDI.
+  for (const code of reasons) {
+    assert.equal(
+      backendBillingSurface.get(code),
+      "collect",
+      `${code} kassir yuzasining kodi bo'lishi kerak edi`,
+    );
+  }
+});
+
+test("G-17: `lib/billing-errors.ts` backend reyestrining TO'LIQ ko'zgusi va SIRT MOS", () => {
+  const meta = readTsBillingMeta(read(BILLING_ERRORS));
+
+  assert.ok(
+    meta.size >= 13,
+    `billing-errors.ts dan atigi ${meta.size} yozuv o'qildi — parser sinigan bo'lishi mumkin`,
+  );
+
+  const problems = [];
+  for (const [code, surface] of backendBillingSurface) {
+    const view = meta.get(code);
+    if (view === undefined) {
+      problems.push(
+        `billing-errors.ts: ${code} uchun yozuv YO'Q — kod backendда bor, ` +
+          "frontendда esa u `errors.generic` ga tushadi (D-02)",
+      );
+      continue;
+    }
+    if (view.surface !== surface) {
+      problems.push(
+        `${code}: sirt backendда «${surface}», frontendда «${view.surface}» — ` +
+          "matn mavjud bo'lmagan namespace'dan qidirilardi",
+      );
+    }
+    if (!["neutral", "warning", "danger"].includes(view.tone)) {
+      problems.push(`${code}: noma'lum tone «${view.tone}» (to'rtinchisi YO'Q)`);
+    }
+  }
+
+  // Teskari yo'nalish: ko'zguda ORTIQCHA kod — hech qachon kelmaydigan
+  // xato uchun matn va qoida saqlab yurish.
+  for (const code of meta.keys()) {
+    if (!backendBillingSurface.has(code)) {
+      problems.push(`billing-errors.ts: ${code} backend reyestrida YO'Q`);
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "billing xato taksonomiyasi ikki tomonda AJRALIB KETGAN:\n  " +
+      problems.join("\n  "),
+  );
+});
+
+test("G-17: HAR BILLING kodi uchun sabab va tuzatish UCHALA tilda bor", () => {
+  const problems = [];
+
+  for (const locale of LOCALES) {
+    const messages = loadMessages(locale);
+
+    // OLDINGA: backend reyestridan boshlanadi (LANGAR).
+    for (const [code, surface] of backendBillingSurface) {
+      const causes = messages[surface]?.errorCause ?? {};
+      const fixes = messages[surface]?.errorFix ?? {};
+
+      if (typeof causes[code] !== "string" || causes[code].trim() === "") {
+        problems.push(`${locale}.json: ${surface}.errorCause.${code} YO'Q`);
+      }
+      if (typeof fixes[code] !== "string" || fixes[code].trim() === "") {
+        problems.push(`${locale}.json: ${surface}.errorFix.${code} YO'Q`);
+      }
+    }
+
+    // TESKARI: matn bor, kod yo'q — o'lik kalit. Sirt ham tekshiriladi.
+    for (const surface of BILLING_NAMESPACES) {
+      for (const group of ["errorCause", "errorFix"]) {
+        for (const code of Object.keys(messages[surface]?.[group] ?? {})) {
+          const actual = backendBillingSurface.get(code);
+          if (actual === undefined) {
+            problems.push(
+              `${locale}.json: ${surface}.${group}.${code} backend reyestrida YO'Q`,
+            );
+          } else if (actual !== surface) {
+            problems.push(
+              `${locale}.json: ${surface}.${group}.${code} NOTO'G'RI namespace'da ` +
+                `(backend sirti: ${actual})`,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "D-02 buzilgan — billing sabab/tuzatish JUFT va TO'G'RI SIRTDA bo'lishi SHART:\n  " +
+      problems.join("\n  "),
+  );
+});
+
+test("G-17: `market_closed` matni §9.4 dagi EKRAN matni bilan AYNAN bir xil", () => {
+  /*
+   * ⛔ BU KOD IKKI JOYDA KO'RINADI: proyeksiya kartasidagi «summa yo'q»
+   *   sababi (`collect.marketClosed`, §9.4) va 422 javobining xato bloki
+   *   (`collect.errorCause.market_closed`). Ikki xil jumla kassirga IKKI
+   *   XIL HODISA bo'lib tuyulardi — u ekranda bir narsani o'qib, so'rov
+   *   yuborgach boshqasini ko'rardi va tizim beqaror deb xulosa qilardi.
+   *
+   * ⚠ Tenglik UCHALA locale'da talab qilinadi: `uz-Cyrl` generatsiya
+   *   bo'lgani uchun u avtomatik mos keladi, `ru` esa QO'LDA yoziladi —
+   *   aynan u ajralib ketishi mumkin bo'lgan yarim.
+   */
+  for (const locale of LOCALES) {
+    const messages = loadMessages(locale);
+    assert.equal(
+      messages.collect?.errorCause?.market_closed,
+      messages.collect?.marketClosed,
+      `${locale}.json: collect.errorCause.market_closed va collect.marketClosed ` +
+        "AJRALIB KETGAN (§9.4)",
+    );
+    assert.ok(
+      (messages.collect?.marketClosed ?? "").length > 10,
+      `${locale}.json: collect.marketClosed bo'sh — tenglik jimgina rost bo'lardi`,
+    );
+  }
 });

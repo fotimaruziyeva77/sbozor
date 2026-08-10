@@ -1198,16 +1198,21 @@ Har kod **ikki** kalitga ega: `errorCause.{kod}` (nima bo'ldi) va `errorFix.{kod
 | `stall_not_found` | Bunday raqamli rasta topilmadi | Raqamni tekshirib qayta kiriting |
 | `tariff_missing` | Bu rastaning bugungi tarifi belgilanmagan | Tarif sahifasida toifa narxini kiriting |
 | `amount_unavailable` | Server summani bermadi | Sahifani yangilang — summa serverdan keladi va qo'lda kiritilmaydi |
+| ⛔ `market_closed` | Bugun bozor yopiq — bugungi patta hisoblanmaydi | Faqat eski qarzni olish mumkin; qarz ham yo'q bo'lsa bugun bu rastaga to'lov yozilmaydi |
+| ⛔ `stall_not_assigned` | Bu rastaga sotuvchi biriktirilmagan | Biriktirishlar sahifasida sotuvchini biriktiring — to'lov sotuvchiga yoziladi |
 | `no_open_shift` | Ochiq smena yo'q | Avval smenani ochish kerak |
 | `shift_already_open` | Sizda ochiq smena bor | Avvalgi smenani yoping |
 | `shift_already_closed` | Bu smena allaqachon yopilgan | Yangi smena ochish |
 | `reason_required` | Sabab tanlanmagan | Ro'yxatdan sabab tanlang |
+| ⛔ `override_not_applicable` | Summa server taklifiga teng — sabab kerak emas | Sababni olib tashlab qaytadan yuboring |
 | `idempotency_key_reused` | Bu to'lov varag'i boshqa summa bilan yuborildi | Sahifani yangilab qaytadan kiriting |
 | `payment_already_reversed` | Bu to'lov allaqachon bekor qilingan | Yangi to'lov kiriting |
 | `charge_immutable` | Yozilgan hisob o'zgartirilmaydi | Tuzatishni alohida yozuv sifatida kiriting |
 | `network_unreachable` | Tarmoq uzildi | Qayta yuboring — dublikat yaratilmaydi |
 
-⛔ **Har kod uchala tilda va JUFTLIKDA** — G-17 (`error-codes.test.mjs` kengaytmasi) `BILLING_ERROR_CODES` reyestridan **iteratsiya qiladi** va bitta yarim yetishmasa qizaradi.
+⛔ **Uch qator 06-02 da QO'SHILDI** (jadval **14** kod). Uchalasi ham 06-09 ning **haqiqiy** shoxidan chiqadi — «ehtimol kerak bo'ladi» degan kod qo'shilmadi: `market_closed` D-24 ning «yopiq kunda ham qarz undiriladi» mexanizmidan (§9.4), `stall_not_assigned` D-28 ning `vendor_id NOT NULL` langaridan, `override_not_applicable` esa `payments` dagi `CHECK ((amount_soum = quote_soum) = (override_reason IS NULL))` dan. §13.6 ning presedenti bu kengaytmani ochiq ruxsat etadi va `06-UI-SPEC.md` **yakuniy manba** bo'lib qoladi.
+
+⛔ **Har kod uchala tilda va JUFTLIKDA** — G-17 (`error-codes.test.mjs` kengaytmasi) `billing_errors.py` ning **to'rt** sirt reyestridan **iteratsiya qiladi** va bitta yarim yetishmasa qizaradi. Reyestr `occupancy_errors.py` ga **qo'shilmaydi**: u yerdagi `occupancyConstants.size === 15` nazorat qiymati darhol qizarardi (§0.1 M-B).
 
 ### 13.8 Toastlar (6) va bo'sh holatlar (7)
 
@@ -1329,7 +1334,10 @@ Loyihada bugun **ikki mustaqil** `G-N` ketma-ketligi mavjud va ular **kesishadi*
 | Ketma-ketlik | Diapazon | Uyi | Kim yozgan |
 |--------------|----------|-----|------------|
 | **Frontend darvozalari** | `G-1`…`G-19` **band** | `frontend/scripts/*.test.mjs`, `*.test.tsx` | 03/04/05-UI-SPEC |
-| **Backend/faza darvozalari** | `G-1`…`G-12` **band** | `tests/**` | **06-RESEARCH § Validation Architecture** |
+| **Backend/faza darvozalari** | `G-1`…`G-16` **band** | `tests/**` | **06-RESEARCH § Validation Architecture** + `06-VALIDATION.md` |
+
+⛔ **Backend diapazoni 06-02 da `G-12` dan `G-16` ga kengaytirildi.** Sabab shu jadvalning **o'z qoidasi**: diapazon kelajakdagi to'qnashuvni oldini olish uchun yozilgan va eskirgan diapazon `G-13`…`G-16` ni **jimgina qayta ishlatishga** olib kelardi (yangilari `06-VALIDATION.md` da: D-24 kun kesimi · hosila↔hisoblanadigan qoldiq tengligi · §9.4 ning «faqat qarz» ustuni · `stall_not_assigned`).
+⚠ **Frontend ketma-ketligi TEGILMADI** — `G-1`…`G-19` band, yangilari `G-20` dan. Bu **ikki mustaqil** ketma-ketlik.
 
 ⛔ **Bu hujjat RENOMERLAMAYDI.** Sabab: 06-RESEARCH ning `G-7` i (ko'r deklaratsiya serializatori) allaqachon **ikki qatlamli** — backend yarmi `ShiftCloseResponse` kalitlar to'plamini, **frontend yarmi** `components/collect/**` katalogini skanerlaydi. Uni ko'chirish rejaning va research'ning **ikkalasini** ham tuzatishni talab qilardi.
 

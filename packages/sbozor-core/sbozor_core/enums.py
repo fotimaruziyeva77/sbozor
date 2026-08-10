@@ -15,7 +15,10 @@ from enum import StrEnum
 
 __all__ = [
     "ActorKind",
+    "AdjustmentDirection",
+    "AdjustmentReason",
     "AlertSeverity",
+    "AnomalyKind",
     "AuditAction",
     "AuditSource",
     "CameraStatus",
@@ -24,10 +27,14 @@ __all__ = [
     "DiscoveryRunStatus",
     "Locale",
     "OccupancyVerdict",
+    "PaymentKind",
+    "PaymentMethod",
     "ResolutionSource",
+    "ReversalReason",
     "ReviewPurpose",
     "ReviewQueueKind",
     "Role",
+    "ShiftStatus",
     "SnapshotLightMode",
     "SnapshotQuality",
     "SnapshotTier",
@@ -439,12 +446,174 @@ class ResolutionSource(StrEnum):
     NO_COVERAGE = "no_coverage"
 
 
+class PaymentKind(StrEnum):
+    """`payments.kind` — qator TO'LOVMI yoki uning BEKORIMI (D-23).
+
+    `payments` APPEND-ONLY: o'chirish ham, tahrirlash ham yo'q. Xato yozuv
+    `reversal` qatori bilan qoplanadi va u `reverses_payment_id` orqali asl
+    qatorga bog'lanadi. Qoldiq — belgili summalarning YIG'INDISI.
+
+    ⛔ Ekranda «storno» so'zi ISHLATILMAYDI (§13.1): kassir qilayotgan
+    ishning nomi «bekor qilish». Kod nomi shu yerda `reversal` bo'lib
+    QOLADI — atama ajralishi ATAYIN va u §13.1 jadvalida reyestrga olingan.
+    """
+
+    PAYMENT = "payment"
+    REVERSAL = "reversal"
+
+
+class PaymentMethod(StrEnum):
+    """`payments.method` — naqd yoki terminal (CASH-01).
+
+    ⛔ UCHINCHI TUR YO'Q. QR / bank o'tkazmasi + referens `V2-CASH-03` da va
+    u UMUMAN BOSHQA maydonlar to'plamini (referens raqami, UzQR solishtiruvi,
+    hisob-kitob kuni) talab qiladi. Bugundan `transfer` a'zosini qo'shish
+    kassirga referenssiz «o'tkazma» yozish yo'lini ochardi — ya'ni nizoda
+    HECH QANDAY dalil qoldirmaydigan to'lov turi.
+    """
+
+    CASH = "cash"
+    TERMINAL = "terminal"
+
+
+class AdjustmentDirection(StrEnum):
+    """`charge_adjustments.direction` — tuzatish hisobni oshiradimi/kamaytiradimi.
+
+    ⛔ BELGILI SUMMA EMAS, KATTALIK + YO'NALISH (C-5). Sabab o'lchanadigan:
+    belgili `BIGINT` da «-15000» ni yozgan odam «15000 qaytarildi» ni ham,
+    «15000 kamaytirildi» ni ham nazarda tutgan bo'lishi mumkin va hisobot
+    ikkalasini BIR XIL guruhga qo'shardi. Yo'nalish alohida ustun bo'lganda
+    esa «qancha qo'shildi» va «qancha kamaytirildi» ikki MUSTAQIL yig'indi.
+
+    Ekranda: «Qo'shildi» / «Kamaytirildi» (§13.4).
+    """
+
+    INCREASE = "increase"
+    DECREASE = "decrease"
+
+
+class AdjustmentReason(StrEnum):
+    """`charge_adjustments.reason` — YOPIQ sabab-kod ro'yxati (D-19).
+
+    =========================================================================
+    ⛔ `other` / `custom` A'ZOSI YO'Q va bu ro'yxatning butun qiymati.
+
+    Erkin matn (yoki uni qaytarib keltiradigan `other` a'zosi) ikki narsani
+    birdan buzardi: (1) hisobotda guruhlanmaydi — «boshqa» AMALDA eng katta
+    guruh bo'lib qolardi va tuzatishlarning haqiqiy sababi hech qachon
+    o'lchanmasdi; (2) D-19 ning maqsadi — summani o'zgartirishni ATAYIN
+    QIMMAT qilish — bekor bo'lardi: bitta bo'sh maydon har qanday
+    o'zgartirishni oqlab yuborardi.
+
+    Ro'yxat kengaytirilishi MUMKIN, lekin faqat NOMLANGAN a'zo bilan va
+    o'shanda uchala locale ham `billing-copy.test.mjs` (G-24) darvozasida
+    to'plam TENGLIGI bo'yicha tekshiriladi.
+    =========================================================================
+    """
+
+    LATE_REVIEW = "late_review"
+    AI_FALSE_POSITIVE = "ai_false_positive"
+    TARIFF_CORRECTION = "tariff_correction"
+    PARTIAL_DAY = "partial_day"
+    DIRECTOR_WAIVER = "director_waiver"
+
+
+class ReversalReason(StrEnum):
+    """`payments.reversal_reason` — YOPIQ sabab-kod ro'yxati (D-19, D-23).
+
+    ⛔ `other` / `custom` A'ZOSI YO'Q — sabab yuqoridagi `AdjustmentReason`
+    docstringida va u ikkala ro'yxat uchun ham AYNAN bir xil.
+
+    ⚠ Storno HAR DOIM sabab talab qiladi va o'z QATORI bo'ladi: asl to'lov
+    tahrirlanmaydi. Ya'ni nizoda ikkala yozuv ham ko'rinadi — «to'ladi» va
+    «bekor qilindi, sababi shu» (D-02).
+    """
+
+    WRONG_STALL = "wrong_stall"
+    WRONG_AMOUNT = "wrong_amount"
+    DUPLICATE_ENTRY = "duplicate_entry"
+    CUSTOMER_REFUND = "customer_refund"
+
+
+class AnomalyKind(StrEnum):
+    """Kun yopilishida hisob YOZILMAGAN, lekin e'tibor talab qiladigan holatlar.
+
+    Uchala a'zo UCH BOSHQA qarordan chiqadi va ular HECH QACHON bitta
+    hisoblagichga qo'shilmaydi (C-12):
+
+    `unassigned_occupied`  — rasta band, lekin sotuvchi biriktirilmagan
+        (D-28). Hisob YOZILMAYDI va `vendor_id` NULL bilan ham yozilmaydi:
+        «kimdir qarzdor, lekin kim ekani noma'lum» yozuvi qarz hisobotini
+        buzardi. Ekranda: «Ro'yxatga olinmagan savdo».
+
+    `closed_day_occupied`  — yopiq kunda savdo ko'rindi (D-10). Yopiq kunda
+        hisob yozilmaydi, lekin hodisani jimgina yo'qotish ham noto'g'ri.
+
+    `no_coverage_stall`    — rastani birorta kamera zonasi qamramaydi
+        (D-05). ⛔ BU «BAND, LEKIN TO'LOVSIZ» EMAS: «ko'ra olmadik» ≠ «band».
+        Ikkisini bir joyga qo'shish KO'R NUQTADAN tushum da'vosi to'qish
+        bo'lardi. Ekranda: «Qamrovsiz rasta» — «bo'sh» so'zi TAQIQLANADI
+        (G-26).
+    """
+
+    UNASSIGNED_OCCUPIED = "unassigned_occupied"
+    CLOSED_DAY_OCCUPIED = "closed_day_occupied"
+    NO_COVERAGE_STALL = "no_coverage_stall"
+
+
+class ShiftStatus(StrEnum):
+    """`cashier_shifts.status` — smena ochiqmi yoki yopilganmi (D-27).
+
+    Bir kassirda bir vaqtda AYNAN BITTA ochiq smena bo'lishi qisman `UNIQUE`
+    indeks bilan STRUKTURAVIY majburlanadi (`uq_alert_events_..._open`
+    naqshi), ilova mantig'i bilan emas: ikki oynadan bir vaqtda ochilgan
+    smena poyga holati va uni faqat sxema to'xtata oladi.
+
+    ⚠ `closed` — YAKUNIY holat: yopilgan smena qayta ochilmaydi va
+    deklaratsiya o'zgartirilmaydi (D-25). «Qayta ochish» yo'li smenani
+    tizim summasiga MOSLASHTIRISH imkonini berardi.
+    """
+
+    OPEN = "open"
+    CLOSED = "closed"
+
+
 class AuditAction(StrEnum):
     """`audit_log.action` qiymatlari.
 
     DB-trigger `lower(TG_OP)` yozadi, shuning uchun `insert`/`update`/`delete`
     KICHIK harfda bo'lishi shart — aks holda ilova yozgan va trigger yozgan
     qatorlar bir xil hisobotda ikki xil qiymat bo'lib ko'rinadi.
+
+    =========================================================================
+    ⛔ 6-FAZA AYNAN IKKI A'ZO QO'SHADI — VA BU UI-SPEC §13.6 NING NOMZOD
+       TO'PLAMIDAN (`charge_adjust`, `shift_open`, `shift_close`) ATAYIN
+       CHETLASHISH. §13.6 buni OCHIQ ruxsat etadi: «Reja bu to'plamdan chetga
+       chiqsa, darvoza O'ZI aytadi va bu hujjat tuzatishni talab qilmaydi.»
+
+    Sabab MEXANIK va u `AUDITED_TABLES` reyestridan chiqadi:
+
+      * `payments` `AUDITED_TABLES` da YO'Q (append-only, hajmi katta —
+        `schema_contract.py` tavsiyasi). Ya'ni DB-trigger u yerda hech nima
+        yozmaydi va `write_app_audit()` YAGONA audit yo'li. Shuning uchun
+        `payment_override` va `payment_reverse` HAQIQIY ishlab chiqaruvchiga
+        ega bo'ladi (06-09: summa override i va storno).
+
+      * ⛔ `shift_open` / `shift_close` QO'SHILMAYDI: `cashier_shifts`
+        `AUDITED_TABLES` da BOR, ya'ni DB-trigger qatorni O'ZI yozadi va app
+        darajasidagi audit DUBLIKAT bo'lardi — bitta hodisa jurnalda ikki
+        marta ko'rinardi va «nechta smena yopildi?» savoli ikki xil javob
+        berardi.
+
+      * ⛔ `charge_adjust` QO'SHILMAYDI: `charge_adjustments` ham
+        `AUDITED_TABLES` da BOR — o'sha sabab.
+
+    ⚠ IKKALA A'ZO 06-09 DAGI `write_app_audit()` CHAQIRUVLARI PAYDO BO'LGUNGA
+      QADAR ISHLATILMASDAN TURADI va bu KUTILGAN. `audit-actions.test.mjs`
+      faqat enum <-> TS <-> i18n parity'sini o'lchaydi, ISHLATILISHNI emas.
+      Sabab shu yerda yozilgan, aks holda keyingi ijrochi ularni «o'lik kod»
+      deb o'chirib, 06-09 ni audit izisiz qoldirardi.
+    =========================================================================
     """
 
     INSERT = "insert"
@@ -462,6 +631,8 @@ class AuditAction(StrEnum):
     USER_BLOCKED = "user_blocked"
     USER_UNBLOCKED = "user_unblocked"
     REFRESH_REUSE_DETECTED = "refresh_reuse_detected"
+    PAYMENT_OVERRIDE = "payment_override"
+    PAYMENT_REVERSE = "payment_reverse"
 
 
 class AuditSource(StrEnum):

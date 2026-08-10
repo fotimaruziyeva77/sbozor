@@ -284,13 +284,77 @@ def test_camera_manage_holders_are_exactly_the_two_admins() -> None:
 
 
 def test_cashier_scope_minimal() -> None:
-    """Kassirning huquqlari AYNAN bitta: to'lov qayd etish.
+    """Kassirning huquqlari AYNAN uchta: to'lov, yig'ish yuzasi, smena.
 
     Kassir — korrupsiya xavfi eng yuqori nuqta (spec §4.7: erkin summa
     kiritish taqiqlangan). Uning yuzasi kengaysa, u kengayganini shu test
     ko'rsatadi.
+
+    =========================================================================
+    ⛔ 6-FAZADA TO'PLAM 1 -> 3 GA O'SDI va bu ATAYIN qilingan harakat, jimgina
+       sizib o'tish emas — aynan shu testning 5-fazadagi izohi ("bu chegara
+       5- va 6-fazalarda ATAYIN qayta ko'riladi") shu holatni oldindan
+       nomlagan edi.
+
+    Sabab o'lchangan (06-UI-SPEC M-7): `cashier: {PAYMENT_CREATE}` bilan
+    kassir rasta ro'yxatini ham, kutilayotgan patta proyeksiyasini ham,
+    smenani ham 403 olardi. Ya'ni u to'lov YOZA olardi, lekin nima
+    yozayotganini KO'RA olmasdi — ≤3 bosish oqimi (SC#4) qurib bo'lmas
+    holatda edi.
+
+    ⛔ To'plam AYNAN uchta: `MARKET_DATA_VIEW`, `VENDOR_VIEW`, `CAMERA_VIEW`
+       va `REPORT_VIEW` TEGILMADI. Har birining rad etish sababi
+       `rbac.py::Permission.BILLING_COLLECT_VIEW` docstringida.
+    =========================================================================
     """
-    assert ROLE_PERMISSIONS[Role.CASHIER] == frozenset({Permission.PAYMENT_CREATE})
+    assert ROLE_PERMISSIONS[Role.CASHIER] == frozenset(
+        {
+            Permission.PAYMENT_CREATE,
+            Permission.BILLING_COLLECT_VIEW,
+            Permission.SHIFT_MANAGE,
+        }
+    )
+
+
+def test_billing_collect_view_holders_are_exactly_three_roles() -> None:
+    """`BILLING_COLLECT_VIEW` AYNAN uch rolda — HUQUQ bo'yicha, rol bo'yicha emas.
+
+    `test_cashier_scope_minimal` "kassirda nima bor" ni qulflaydi. Bu esa
+    teskari yo'nalish: yangi rol qo'shilib unga yig'ish yuzasi "zarari yo'q"
+    deb berilsa, yuqoridagi test yashil qolardi
+    (`test_camera_manage_holders_are_exactly_the_two_admins` naqshi).
+
+    ⛔ To'plam TENGLIGI bilan (D-31), `not in` bilan EMAS: inkor tasdiq faqat
+       aynan o'sha rolni ushlaydi va oltinchi rol qo'shilsa jimgina o'tardi.
+    """
+    holders = {
+        role
+        for role, granted in ROLE_PERMISSIONS.items()
+        if Permission.BILLING_COLLECT_VIEW in granted
+    }
+
+    assert holders == {Role.CASHIER, Role.MARKET_ADMIN, Role.DIRECTOR}, (
+        f"`BILLING_COLLECT_VIEW` quyidagi rollarda: {sorted(str(role) for role in holders)}. "
+        "U AYNAN kassir, bozor admini va direktorda bo'lishi kerak (06-UI-SPEC §5.6)."
+    )
+
+
+def test_shift_manage_holders_exclude_the_director() -> None:
+    """`SHIFT_MANAGE` AYNAN ikki rolda — direktor smenani ochmaydi ham, yopmaydi ham.
+
+    D-26: variance HECH QACHON avtomatik "to'g'rilanmaydi" va direktorga
+    smena ustida YOZUV yuzasi umuman kerak emas — u farqni `REPORT_VIEW`
+    ostidagi kun hisobotida KO'RADI. Bu huquqni direktorga berish "ortiqcha
+    naqdni tenglashtirish" imkoniyatini tug'dirardi.
+    """
+    holders = {
+        role for role, granted in ROLE_PERMISSIONS.items() if Permission.SHIFT_MANAGE in granted
+    }
+
+    assert holders == {Role.CASHIER, Role.MARKET_ADMIN}, (
+        f"`SHIFT_MANAGE` quyidagi rollarda: {sorted(str(role) for role in holders)}. "
+        "U AYNAN kassir va bozor adminida bo'lishi kerak (D-26/D-27)."
+    )
 
 
 def test_inspector_scope_minimal() -> None:
@@ -366,4 +430,8 @@ def test_unknown_role_contributes_nothing() -> None:
     e'tiborsiz qoldirish, `KeyError` bilan 500 qaytarish emas.
     """
     assert permissions_for(["hech_qanday_rol"]) == frozenset()
-    assert permissions_for(["cashier", "hech_qanday_rol"]) == frozenset({Permission.PAYMENT_CREATE})
+    # ⛔ MATRITSA BU YERDA TAKRORLANMAYDI. Ilgari bu satr kassirning to'plamini
+    #   LITERAL yozgan edi va 6-fazada kassir yuzasi kengayganda u
+    #   "noma'lum rol" da'vosidan butunlay boshqa sabab bilan qizardi.
+    #   Da'vo esa bitta: noma'lum rol HECH NIMA qo'shmaydi.
+    assert permissions_for(["cashier", "hech_qanday_rol"]) == ROLE_PERMISSIONS[Role.CASHIER]

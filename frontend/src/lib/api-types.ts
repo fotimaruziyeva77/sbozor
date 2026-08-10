@@ -255,6 +255,12 @@ export const AUDIT_ACTIONS = [
   "user_blocked",
   "user_unblocked",
   "refresh_reuse_detected",
+  // 06-02: `payments` `AUDITED_TABLES` da YO'Q, ya'ni `write_app_audit()`
+  // yagona audit yo'li. `shift_open`/`shift_close`/`charge_adjust` ATAYIN
+  // qo'shilmadi — ularning jadvallari triggerli va app audit DUBLIKAT
+  // bo'lardi (sabab `enums.py::AuditAction` docstringida).
+  "payment_override",
+  "payment_reverse",
 ] as const;
 export type AuditActionValue = (typeof AUDIT_ACTIONS)[number];
 
@@ -1947,3 +1953,74 @@ export const auditRoundSchema = z.strictObject({
   fast_decisions: z.number().int().nullable(),
 });
 export type AuditRound = z.infer<typeof auditRoundSchema>;
+
+/* ---------------------------------------------------------------------------
+ * 06-02 — BILLING VA KASSIR DOMENINING TO'RT REYESTRI (W0-F7)
+ *
+ * ⛔⛔ NEGA BU YERDA VA NEGA ENUM IMPORT QILINMAYDI.
+ *
+ *   To'rtala ro'yxat ham `packages/sbozor-core/sbozor_core/enums.py` ning
+ *   IKKINCHI NUSXASI. Nusxa ATAYIN: til chegarasi tufayli kompilyator
+ *   ularni solishtira olmaydi va `scripts/billing-copy.test.mjs`
+ *   `readPythonEnumValues()` bilan IKKALA faylni MATN sifatida o'qib
+ *   `deepEqual` qiladi. Import darvozani o'zi tekshirayotgan qiymatga
+ *   bog'lab qo'yardi (05-13/05-15 darsi).
+ *
+ * ⛔ BU DARVOZA 06-02 GACHA MAVJUD EMAS EDI. `readPythonEnumValues` faqat
+ *   `AuditAction` (`audit-actions.test.mjs`) va `Role` (`role-gate.test.mjs`)
+ *   uchun ishlatilgan — ya'ni backendga yangi DOMEN enum a'zosi qo'shilsa u
+ *   frontend ko'zgusisiz JIMGINA o'tib ketardi va UI eskirgan to'plamni
+ *   ko'rsatardi (06-PATTERNS §5.10).
+ *
+ * ⚠ `soumSchema` (yuqorida, `:45`) QAYTA ISHLATILADI — yangi pul sxemasi
+ *   yozilmaydi. Pul modeli serverda (`money.py`) va u ikkinchi marta
+ *   e'lon qilinsa ikki haqiqat manbai bo'lardi (D-11).
+ * ------------------------------------------------------------------------ */
+
+/**
+ * `payments.method` — `sbozor_core.enums.PaymentMethod` nusxasi.
+ *
+ * ⛔ UCHINCHI TUR YO'Q (`V2-CASH-03`): QR / bank o'tkazmasi referens
+ * maydonlarisiz nizoda hech qanday dalil qoldirmaydi.
+ */
+export const PAYMENT_METHODS = ["cash", "terminal"] as const;
+export type PaymentMethodValue = (typeof PAYMENT_METHODS)[number];
+
+/**
+ * Summani o'zgartirish sabablari — `sbozor_core.enums.AdjustmentReason` nusxasi.
+ *
+ * ⛔ `other` / `custom` YO'Q (D-19). Erkin matn hisobotda guruhlanmaydi va
+ * «boshqa» AMALDA eng katta guruh bo'lib qolardi — G-24 buni to'plam
+ * TENGLIGI bilan o'lchaydi (D-31: `not.toContain` EMAS).
+ */
+export const ADJUSTMENT_REASONS = [
+  "late_review",
+  "ai_false_positive",
+  "tariff_correction",
+  "partial_day",
+  "director_waiver",
+] as const;
+export type AdjustmentReasonValue = (typeof ADJUSTMENT_REASONS)[number];
+
+/** To'lovni bekor qilish sabablari — `sbozor_core.enums.ReversalReason` nusxasi. */
+export const REVERSAL_REASONS = [
+  "wrong_stall",
+  "wrong_amount",
+  "duplicate_entry",
+  "customer_refund",
+] as const;
+export type ReversalReasonValue = (typeof REVERSAL_REASONS)[number];
+
+/**
+ * Anomaliya turlari — `sbozor_core.enums.AnomalyKind` nusxasi.
+ *
+ * ⛔ UCH `kind` — UCH YORLIQ va ular hech qachon bitta hisoblagichga
+ * qo'shilmaydi (C-12). `no_coverage_stall` «bo'sh» EMAS: G-26 uning
+ * matnida `bo'sh`/`бўш`/`свободн` so'zini TAQIQLAYDI.
+ */
+export const ANOMALY_KINDS = [
+  "unassigned_occupied",
+  "closed_day_occupied",
+  "no_coverage_stall",
+] as const;
+export type AnomalyKindValue = (typeof ANOMALY_KINDS)[number];
