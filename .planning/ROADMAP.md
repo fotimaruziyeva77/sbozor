@@ -374,7 +374,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 06-05-PLAN.md — Seed (`day_close` orqali), sxema meta testi va o'zgarmaslikning xulqiy darvozasi (D-07/23/25/27)
+- [x] 06-05-PLAN.md — Seed (`day_close` orqali), sxema meta testi va o'zgarmaslikning xulqiy darvozasi (D-07/23/25/27)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -492,7 +492,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
-| 6. Billing va kassir | 4/14 | In Progress|  |
+| 6. Billing va kassir | 5/14 | In Progress|  |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 
