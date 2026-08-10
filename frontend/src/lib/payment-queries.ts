@@ -4,10 +4,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { apiFetch } from "@/lib/api-client";
-import { soumSchema } from "@/lib/api-types";
+import {
+  PAYMENT_METHODS,
+  REVERSAL_REASONS,
+  soumSchema,
+} from "@/lib/api-types";
+import type {
+  AdjustmentReasonValue,
+  PaymentMethodValue,
+  ReversalReasonValue,
+} from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
-import { ADJUSTMENT_REASONS } from "@/lib/billing-charge-queries";
-import type { AdjustmentReason } from "@/lib/billing-charge-queries";
 import { dropPendingAfterPayment } from "@/lib/billing-pending-queries";
 import { domainKey } from "@/lib/market-queries";
 
@@ -68,16 +75,22 @@ export const PAYMENT_KINDS = ["payment", "reversal"] as const;
 
 export type PaymentKind = (typeof PAYMENT_KINDS)[number];
 
-/**
- * To'lov usuli — YOPIQ to'plam (`CHECK (method IN ('cash','terminal'))`).
+/*
+ * ⛔⛔ `PAYMENT_METHODS` VA `REVERSAL_REASONS` — `api-types.ts` DAN (06-11).
  *
- * ⚠ 06-02 (W0-F7) bu reyestrning ko'zgusini `api-types.ts` ga qo'yadi;
- *   ikkovi bir to'lqinda ishlangani uchun bu modul hozircha o'z nusxasini
- *   saqlaydi va ko'zgu yetib kelganda import bilan almashtiriladi.
+ * 06-03 ikkalasini ham bu yerda VAQTINCHA `as const` literal qilib
+ * yozgan edi (`api-types.ts` o'sha to'lqinda 06-02 ning egaligida edi).
+ * Nusxa endi OLIB TASHLANDI: G-24 va G-26 darvozalari reyestrni AYNAN
+ * `api-types.ts` dan o'qiydi, ya'ni bu yerda qolgan uchinchi nusxa
+ * ajralib ketsa HECH BIR darvoza qizarmasdi.
+ *
+ * ⛔ Tip aliaslari SAQLANADI: bu modulning omma yuzasi (`PaymentMethod`,
+ *    `ReversalReason`) o'zgarmaydi va iste'molchilar qayta yozilmaydi —
+ *    almashtirilgan narsa QIYMAT manbai, NOM emas.
  */
-export const PAYMENT_METHODS = ["cash", "terminal"] as const;
 
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+/** To'lov usuli — YOPIQ to'plam (`CHECK (method IN ('cash','terminal'))`). */
+export type PaymentMethod = PaymentMethodValue;
 
 /**
  * Storno sabab-kodlari — YOPIQ ro'yxat (D-23, §8.8).
@@ -85,14 +98,7 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
  * ⛔ `other`/`custom` YO'Q: erkin matn hisobotda guruhlanmaydi va amalda
  *    ENG KATTA guruh bo'lib qolardi (D-19 bilan bir xil mulohaza).
  */
-export const REVERSAL_REASONS = [
-  "wrong_stall",
-  "wrong_amount",
-  "duplicate_entry",
-  "customer_refund",
-] as const;
-
-export type ReversalReason = (typeof REVERSAL_REASONS)[number];
+export type ReversalReason = ReversalReasonValue;
 
 /* --- Sxemalar -------------------------------------------------------------- */
 
@@ -152,7 +158,7 @@ export type PaymentInput = {
   method: PaymentMethod;
   amount_soum: number;
   /** Faqat summa tarifdan farq qilganda (D-19, §8.6). */
-  reason_code?: AdjustmentReason;
+  reason_code?: AdjustmentReasonValue;
 };
 
 /** `POST /payments/{id}/reverse` tanasi — sabab MAJBURIY (D-23). */

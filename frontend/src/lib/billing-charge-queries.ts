@@ -4,7 +4,15 @@ import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { apiFetch } from "@/lib/api-client";
-import { soumSchema } from "@/lib/api-types";
+import {
+  ADJUSTMENT_REASONS,
+  ANOMALY_KINDS,
+  soumSchema,
+} from "@/lib/api-types";
+import type {
+  AdjustmentReasonValue,
+  AnomalyKindValue,
+} from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import { domainKey } from "@/lib/market-queries";
 
@@ -46,26 +54,35 @@ export const BILLING_ANOMALIES_PATH = "/billing/anomalies";
 
 /* --- Reyestrlar (yopiq to'plamlar) ---------------------------------------- */
 
+/*
+ * ⛔⛔ REYESTRLAR `api-types.ts` DAN IMPORT QILINADI — NUSXA YO'Q (06-11).
+ *
+ * 06-03 bu modulda `ANOMALY_KINDS` va `ADJUSTMENT_REASONS` ni VAQTINCHA
+ * `as const` literal sifatida saqlagan edi: `api-types.ts` o'sha to'lqinda
+ * 06-02 ning egaligida edi va ikki worktree bitta faylni yozsa merge
+ * paytida jimgina `Duplicate identifier` chiqardi.
+ *
+ * ⛔ Endi nusxa OLIB TASHLANDI va sabab MEXANIK: G-24 va G-26 darvozalari
+ *    (`scripts/billing-copy.test.mjs`) reyestrni AYNAN `api-types.ts` dan
+ *    o'qiydi va uni Python enumlari hamda uchala locale bilan taqqoslaydi.
+ *    Ikkinchi nusxa qolganda ikki reyestr AJRALIB KETISHI mumkin edi va
+ *    darvoza har safar YASHIL qolardi — u ajralgan nusxani umuman
+ *    ko'rmaydi.
+ *
+ * ⚠ Ko'zgu MANTIG'I o'zgarmaydi: `api-types.ts` ning o'zi Python enumining
+ *   ATAYIN yozilgan ikkinchi nusxasi (til chegarasi tufayli kompilyator
+ *   ularni solishtira olmaydi). Bu yerdagi import esa UCHINCHI nusxani
+ *   yo'q qiladi — u qo'riqlanmagan yagona nusxa edi.
+ */
+
 /**
  * Anomaliya turlari (BILL-04, §11.4).
  *
  * ⛔ UCHALASI ALOHIDA SANALADI va bitta «anomaliya» soniga QO'SHILMAYDI
  *    (D-05): «ko'ra olmadik» ≠ «band, lekin biriktirilmagan». Ikkisini
  *    qo'shish ko'r nuqtadan tushum da'vosi to'qish bo'lardi.
- *
- * ⚠ 06-02 (W0-F7) bu to'plamning KO'ZGUSINI `api-types.ts` ga qo'yadi va
- *   `billing-copy.test.mjs` (G-26) uni Python reyestri bilan taqqoslaydi.
- *   Ikkovi bir to'lqinda ishlangani uchun bu modul hozircha o'z nusxasini
- *   saqlaydi; ko'zgu yetib kelganda import bilan almashtiriladi va
- *   to'plam tengligi darvozasi ikkovini ajralib ketishdan qo'riqlaydi.
  */
-export const ANOMALY_KINDS = [
-  "unassigned_occupied",
-  "closed_day_occupied",
-  "no_coverage_stall",
-] as const;
-
-export type AnomalyKind = (typeof ANOMALY_KINDS)[number];
+export type AnomalyKind = AnomalyKindValue;
 
 /**
  * Tuzatish yo'nalishi — MUSBAT KATTALIK + yo'nalish ustuni (C-5).
@@ -82,17 +99,10 @@ export type AdjustmentDirection = (typeof ADJUSTMENT_DIRECTIONS)[number];
  * Tuzatish sabab-kodlari — YOPIQ ro'yxat (D-19, §13.5).
  *
  * ⛔ `other`/`custom` YO'Q: erkin matn hisobotda ENG KATTA GURUH bo'lib
- *    qolardi va sabab tahlilini ma'nosiz qilardi.
+ *    qolardi va sabab tahlilini ma'nosiz qilardi. To'plamning O'ZI
+ *    `api-types.ts` da (yuqoridagi blokka qarang).
  */
-export const ADJUSTMENT_REASONS = [
-  "late_review",
-  "ai_false_positive",
-  "tariff_correction",
-  "partial_day",
-  "director_waiver",
-] as const;
-
-export type AdjustmentReason = (typeof ADJUSTMENT_REASONS)[number];
+export type AdjustmentReason = AdjustmentReasonValue;
 
 /* --- Sxemalar -------------------------------------------------------------- */
 
@@ -121,8 +131,33 @@ export const chargeRowSchema = z.strictObject({
 
 export type ChargeRow = z.infer<typeof chargeRowSchema>;
 
+/**
+ * `GET /billing/charges?day=…` javobining O'RAMI (06-08 kontrakti).
+ *
+ * =========================================================================
+ * ⛔⛔ O'RAM `{items}` EMAS — `{day, rows, charge_count, charged_soum}`.
+ *
+ *   06-03 bu sxemani `z.strictObject({ items })` deb yozgan edi, 06-08
+ *   esa serverni AYNAN yuqoridagi to'rt kalit bilan shipladi va bu
+ *   kontrakt `test_billing_api.py` da to'plam TENGLIGI bilan qulflangan.
+ *   Ya'ni klientni «serverni `items` ga qaytarish» bilan tuzatib
+ *   bo'lmaydi — nol-natija hisoblagichlari D-05 ning talabi.
+ *
+ * ⛔ `day` ATAYIN javobda: standart kun SERVERDA hisoblanadi (KECHA,
+ *    §11.1) va klient qaysi kunni ko'rayotganini javobning O'ZIDAN
+ *    biladi. Aks holda «kun tanlanmagan» holatda ekran o'z taxminini
+ *    ko'rsatardi va u server bilan bir kun ajralib ketardi.
+ *
+ * ⛔ IKKALA HISOBLAGICH HAM NOL BO'LGANDA HAM KELADI: «bu kunda hisob
+ *    yo'q» (C-3 bo'yicha NORMAL) va «hisoblagich ishlamayapti» bir xil
+ *    ko'rinmasligi kerak.
+ * =========================================================================
+ */
 export const chargeListSchema = z.strictObject({
-  items: z.array(chargeRowSchema),
+  day: z.string(),
+  rows: z.array(chargeRowSchema),
+  charge_count: z.number().int(),
+  charged_soum: soumSchema,
 });
 
 export type ChargeList = z.infer<typeof chargeListSchema>;
@@ -215,8 +250,30 @@ export const anomalyRowSchema = z.strictObject({
 
 export type AnomalyRow = z.infer<typeof anomalyRowSchema>;
 
+/**
+ * `GET /billing/anomalies?day=…` javobining O'RAMI (06-08 kontrakti).
+ *
+ * =========================================================================
+ * ⛔⛔ UCH ALOHIDA SANOQ — VA UMUMIY `anomaly_count` MAYDONI YO'Q (D-05).
+ *
+ *   «Ko'ra olmadik» (`no_coverage_stall`) ≠ «band, lekin biriktirilmagan»
+ *   (`unassigned_occupied`). Ikkisini bitta songa qo'shish KO'R NUQTADAN
+ *   TUSHUM DA'VOSI TO'QISH bo'lardi. Yagona son MAVJUD bo'lsa ekran uni
+ *   ko'rsatardi va farq matn darajasida yo'qolardi.
+ *
+ * ⛔ Klient ham ularni QO'SHMAYDI: uchala son serverdan alohida keladi va
+ *    `strictObject` ortiqcha (masalan, agregat) maydonni PARSE PAYTIDA
+ *    rad etadi.
+ *
+ * ⛔ UCHALASI HAM NOL BO'LGANDA HAM KELADI — nol NATIJA, yo'qlik emas.
+ * =========================================================================
+ */
 export const anomalyListSchema = z.strictObject({
-  items: z.array(anomalyRowSchema),
+  day: z.string(),
+  rows: z.array(anomalyRowSchema),
+  unassigned_count: z.number().int(),
+  closed_day_count: z.number().int(),
+  no_coverage_count: z.number().int(),
 });
 
 export type AnomalyList = z.infer<typeof anomalyListSchema>;
