@@ -223,13 +223,27 @@ EXPECTED_DEFINER_FUNCTIONS = {
 #
 # Bu `INDEX_EXCEPTIONS` va `POLICY_TENANT_GUC_EXCEPTIONS` bilan bir xil naqsh:
 # istisno testda, sababi yozma, o'zgartirish code review'da ko'zga tashlanadi.
-PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset()
+PENDING_AUDIT_TRIGGERS: frozenset[str] = frozenset({"charge_adjustments", "cashier_shifts"})
 """`AUDITED_TABLES` ga OLINGAN, lekin jadvali hali TUG'ILMAGAN nomlar.
 
-✅ QARZ YOPILDI (`05-05` / T2, 2026-08-09). `0018_occupancy_domain`
+🟡 OCHIQ QARZ (`06-04` / T1, 2026-08-10) — VA U AYNI REJADA, T2 DA
+YOPILADI. `sbozor_core.schema_contract.AUDITED_TABLES` ga
+`charge_adjustments` va `cashier_shifts` SHU COMMITDA qo'shildi, jadvallar
+esa `0020_billing_domain` da (T2) tug'iladi. Ya'ni T1 bilan T2 orasida
+`missing` shu ikki nomdan iborat bo'ladi va TENGLIK (`missing ==
+PENDING_AUDIT_TRIGGERS`) darvozani YASHIL ushlab turadi — «kutilgan
+qizil» holat YARATILMAYDI (izohdagi «Buzilgan darvoza — darvoza emas»
+bandi).
+
+⛔ T2 DA IKKALA NOM HAM SHU YERDAN O'CHIRILADI. `0020`
+`attach_audit_trigger()` ni chaqirgach `missing` bo'shaydi va ro'yxat
+bo'shatilmasa test TESKARI yo'nalishdan (`closed` asserti) qizaradi.
+Qulf IKKI TOMONLAMA — bu OP-4 ning hujjatlashtirilgan muqobili.
+
+✅ OLDINGI QARZ YOPILGAN (`05-05` / T2, 2026-08-09). `0018_occupancy_domain`
 `camera_zones` va `zone_reviews` ga audit triggerini ULADI, ya'ni ikkala
-nom O'SHA MIGRATSIYA BILAN BIR COMMITDA bu yerdan O'CHIRILDI va ro'yxat
-yana BO'SH. Bu `04-01` → `04-03` juftligining (`snapshot_schedules`,
+nom O'SHA MIGRATSIYA BILAN BIR COMMITDA bu yerdan O'CHIRILGAN edi. Bu
+`04-01` → `04-03` juftligining (`snapshot_schedules`,
 `snapshot_schedule_slots`) AYNAN takrori va uchinchi marta qo'llanishi.
 
 ⚠ NOMNI UNUTIB QOLDIRISH TESTNI TESKARI YO'NALISHDAN QIZARTIRARDI:

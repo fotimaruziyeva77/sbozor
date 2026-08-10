@@ -123,6 +123,27 @@ soxta pul ustuni bo'lardi.
 idempotentlik kaliti `(market_id, camera_id, slot, business_date)` ning
 qismi sifatida. Billing kafolati bu yerda BOSHQA mexanizm bilan
 quriladi: `UNIQUE (id, is_billable)` langari va 5-fazadagi kompozit FK.
+
+6-FAZA HAM BU REYESTRGA HECH NIMA QO'SHMAYDI va bu ATAYIN. Uchala
+moliyaviy jadval (`daily_charges`, `charge_adjustments`, `payments`)
+1-fazadan BERI shu yerda — reyestrni oldindan yozishning butun ma'nosi
+shu edi va `0020` qo'ngan kuni darvoza O'ZI YOPILDI.
+
+Qolgan uchtasi ATAYIN QO'SHILMAYDI va sabab yuqoridagi
+`stall_assignments` (Pitfall 3) bilan AYNAN bir xil sinfda:
+
+  * `cashier_shifts` — unda PUL BOR (`declared_soum`, `system_soum`),
+    lekin ⛔ `amount_soum` NOMLI USTUN YO'Q va bo'lishi ham kerak emas:
+    smena qatorida BITTA summa emas, IKKI TOMONLAMA solishtiruv yashaydi
+    (ko'r deklaratsiya va tizim summasi). `test_financial_tables_have_
+    guards` esa `amount_soum\\s*>\\s*0` regeksini izlaydi, ya'ni yagona
+    «tuzatish» yo'li SOXTA PUL USTUNI qo'shish bo'lardi. Ustiga
+    `declared_soum = 0` QONUNIY holat (butun smena terminalda o'tdi,
+    UI-SPEC §10.2) — `> 0` sharti uni imkonsiz qilardi.
+  * `billing_anomalies` — pul ustuni UMUMAN YO'Q: anomaliya aynan hisob
+    YOZILMAGAN holat (C-12).
+  * `charge_evidence` — dalil pointerlari, pul emas; summa `charge_id`
+    ko'rsatgan `daily_charges` qatorida.
 """
 
 AUDITED_TABLES: frozenset[str] = frozenset(
@@ -199,6 +220,29 @@ AUDITED_TABLES: frozenset[str] = frozenset(
         # bo'yicha SHARTSIZ o'zgarmas — o'zgarmas jadval uchun audit faqat
         # INSERT ni ko'rardi, ya'ni ikkinchi nusxa yozardi).
         "zone_reviews",
+        # --- 6-faza billing domeni (0020_billing_domain) ---
+        # ⚠ IKKALA NOM HAM JADVAL TUG'ILISHIDAN OLDIN qo'shildi (06-04/T1)
+        # va shuning uchun ular `tests/tenancy/test_meta.py::
+        # PENDING_AUDIT_TRIGGERS` da AYNI COMMITDA ro'yxatga olingan
+        # (OP-4). Reyestr IKKI TOMONLAMA qulflangan: bu yerga qo'shib u
+        # yerga qo'shmaslik `regressed` bilan, `0020` triggerlarni
+        # ulagandan keyin u yerdan O'CHIRMASLIK esa `closed` bilan
+        # qizartiradi. `05-01`→`05-05` juftligining AYNAN takrori.
+        #
+        # Hisob tuzatishi — INSONNING moliyaviy oqibatli qarori: u
+        # yozilgan pattaning summasini o'zgartiradi (D-19). `tariffs` va
+        # `zone_reviews` bilan BIR OILADA. Sabab-kod yopiq ro'yxatdan
+        # bo'lgani AUDITNI ORTIQCHA QILMAYDI: «qaysi sabab» qatorda,
+        # «kim va qachon» esa faqat jurnalda.
+        "charge_adjustments",
+        # Kassir smenasi — ko'r deklaratsiya (CASH-04) nizoda dalil bo'ladi
+        # va smenaning ochilishi/yopilishi INSON qarori. `0020` unga
+        # SHARTLI o'zgarmaslik qo'riqchisini qo'yadi (`open` -> `closed`
+        # o'tishi ruxsat), ya'ni jadval `daily_charges` dan farqli o'laroq
+        # HAQIQATAN `UPDATE` ni ko'radi — audit esa aynan o'sha o'tishni
+        # yozadi. Bu «o'zgarmas jadvalga audit qo'yilmaydi» qoidasiga zid
+        # emas, u qoidaning TESKARI tomoni.
+        "cashier_shifts",
     }
 )
 """`fn_audit_row()` triggeri O'RNATILGAN jadvallar (hozirgi holat, kutilgan emas).
@@ -249,4 +293,23 @@ RO'YXATGA KIRMAYDIGANLAR va sababi:
     o'zgartirdi) `snapshot_schedules`/`snapshot_schedule_slots` orqali
     auditda, KUNLIK YUGURISHLAR esa `capture_runs` ning O'ZIDA tarixga
     ega (`status`, `attempt_count`, `error_code`, vaqt tamg'alari).
+  * `daily_charges` (6-faza) — jadval D-07 bo'yicha SHARTSIZ o'zgarmas
+    (`charge_immutable()`), ya'ni audit FAQAT `INSERT` ni ko'rardi va bu
+    o'sha ma'lumotning IKKINCHI NUSXASI bo'lardi (`occupancy_events`
+    bilan aynan bir xil dalil). Ikkinchi, mustaqil sabab HAJM:
+    ~300–1000 qator/kun/bozor va `audit_log` hech qachon kichraymaydi.
+    Iz yo'qolmaydi: summani o'zgartiradigan YAGONA yo'l
+    `charge_adjustments` va U auditda.
+  * `payments` (6-faza) — jadval APPEND-ONLY (`payment_immutable()`) va
+    iz `payments` NING O'ZIDA yashaydi: `kind`, `reverses_payment_id`,
+    `reversal_reason`, `override_reason`, `cashier_id`. Ya'ni «kim, nima
+    qildi, nega» savolining javobi qatorning ichida. Ilova darajasidagi
+    audit esa `AuditAction.PAYMENT_OVERRIDE` / `PAYMENT_REVERSE` bilan
+    yoziladi (06-09) — `enums.py::AuditAction` o'sha ikki a'zoni AYNAN
+    shu sababdan qo'shgan.
+  * `billing_anomalies` (6-faza) — HODISA JURNALI: uni odam
+    tahrirlamaydi, `billing_close` jobi yozadi (`capture_runs` /
+    `alert_events` bilan bir sinfda).
+  * `charge_evidence` (6-faza) — `daily_charges` ning MUZLATILGAN
+    nusxasi; u ham hech qachon tahrirlanmaydi.
 """
