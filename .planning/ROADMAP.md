@@ -364,9 +364,9 @@ Plans:
 **Plans**: 14 plans (10 to'lqin)
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Wave 0/A: A1 (parallel get-or-create) va A2 (generated-from-column) zondlari, sof funksiyalar (D-04/D-05/C-6, D-26) + D-24 ning taqsimlash qoidasi (`FIFO_OLDEST_SERVICE_DATE_FIRST`, G-13/G-14)
-- [ ] 06-02-PLAN.md — Wave 0/B: ikki huquq, yetti domen enumi, 14 xato kodi, butun matn va ikki yangi darvoza (OP-6/7/12, §5.10)
-- [ ] 06-03-PLAN.md — Wave 0/C: to'rt so'rov moduli (ikki ALOHIDA) va `collect-surface` darvozasi (W0-F3/F4, G-7/G-22/G-28d)
+- [x] 06-01-PLAN.md — Wave 0/A: A1 (parallel get-or-create) va A2 (generated-from-column) zondlari, sof funksiyalar (D-04/D-05/C-6, D-26) + D-24 ning taqsimlash qoidasi (`FIFO_OLDEST_SERVICE_DATE_FIRST`, G-13/G-14)
+- [x] 06-02-PLAN.md — Wave 0/B: ikki huquq, yetti domen enumi, 14 xato kodi, butun matn va ikki yangi darvoza (OP-6/7/12, §5.10)
+- [x] 06-03-PLAN.md — Wave 0/C: to'rt so'rov moduli (ikki ALOHIDA) va `collect-surface` darvozasi (W0-F3/F4, G-7/G-22/G-28d)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -492,7 +492,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
-| 6. Billing va kassir | 0/TBD | Not started | - |
+| 6. Billing va kassir | 3/14 | In Progress|  |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 

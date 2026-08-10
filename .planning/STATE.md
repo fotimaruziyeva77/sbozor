@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 6 UI-SPEC approved
-last_updated: "2026-08-10T09:00:37.293Z"
-last_activity: 2026-08-10 -- Phase 06 planning complete
+last_updated: "2026-08-10T09:08:32.628Z"
+last_activity: 2026-08-10 -- Phase 06 execution started
 progress:
   total_phases: 9
   completed_phases: 5
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-28)
 
 **Core value:** Bozor ma'muriyati har bir band rastadan patta to'liq yig'ilayotganini raqamlar va rasm-dalil bilan ko'radi — "band, lekin to'lovsiz" rastalar kunlik hisobotda avtomatik fosh bo'ladi.
-**Current focus:** Phase 05 — kamera zonalari, CV va nazoratchi tasdig'i
+**Current focus:** Phase 06 — billing-va-kassir
 
 ## Current Position
 
-Phase: 5
-Plan: 15
+Phase: 06 (billing-va-kassir) — EXECUTING
+Plan: 1 of 14
 Total Plans in Phase: 14
-Status: Ready to execute
-Last activity: 2026-08-10 -- Phase 06 planning complete
+Status: Executing Phase 06
+Last activity: 2026-08-10 -- Phase 06 execution started
 
 Progress: [██████████] 100% (15/15 reja — 05-01…05-15)
 
