@@ -387,7 +387,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 06-09-PLAN.md — `POST /payments` + storno: ikki bayonotli idempotentlik, fingerprint, CASH-02 auditi, yopiq kunda qarz undirish va `stall_not_assigned` (D-21/22/23/28, §9.4)
+- [x] 06-09-PLAN.md — `POST /payments` + storno: ikki bayonotli idempotentlik, fingerprint, CASH-02 auditi, yopiq kunda qarz undirish va `stall_not_assigned` (D-21/22/23/28, §9.4)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
@@ -492,7 +492,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
-| 6. Billing va kassir | 8/14 | In Progress|  |
+| 6. Billing va kassir | 9/14 | In Progress|  |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 
