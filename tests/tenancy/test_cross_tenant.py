@@ -48,7 +48,7 @@ from fixtures.admin_api import (
     bearer,
     session_headers,
 )
-from fixtures.billing_domain import add_daily_charge
+from fixtures.billing_domain import add_daily_charge, add_payment
 from fixtures.market_domain import A_CATEGORY_NAMES, A_ZONE_NAMES
 from fixtures.nvr_domain import add_discovery_run, nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
@@ -104,7 +104,7 @@ class RouteSpec(NamedTuple):
 
 
 class MatrixBillingRows(NamedTuple):
-    """Matritsa yozadigan billing qatorlari (06-08).
+    """Matritsa yozadigan billing qatorlari (06-08, 06-09).
 
     `service_date` HAM saqlanadi, chunki `add_daily_charge()` uni BAZADAN
     oladi (`CURRENT_DATE - 1`) va uni ikkinchi marta hisoblash IKKINCHI
@@ -113,6 +113,21 @@ class MatrixBillingRows(NamedTuple):
 
     charge_id: UUID
     service_date: date
+    payment_id: UUID
+    """B bozorining HAQIQIY `payments.id` si — `payment_id` filleri (06-09).
+
+    ⚠ To'qilgan UUID YARAMAYDI: `POST /payments/{id}/reverse` ikkala holatda
+      ham 404 berardi, lekin sababi TENANT chegarasi emas, «bunday to'lov
+      umuman yo'q» bo'lardi (`PARAM_FILLERS` docstringidagi umumiy qoida).
+    """
+    payer_stall_code: str
+    """A bozorining BUGUN BIRIKTIRILGAN rastasi — `POST /payments` tanasi uchun.
+
+    ⚠ KOD BAZADAN o'qiladi, `A_STALL_CODES` indeksidan EMAS: indeks
+      qo'shni faylning RO'YXAT TARTIBIGA tayanardi va u qayta tartiblangan
+      kuni matritsa BOSHQA rastani so'ragan bo'lardi
+      (`test_billing_api._stall_code()` da o'rnatilgan qoida).
+    """
 
 
 class TenantSeed(NamedTuple):
@@ -375,6 +390,20 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # ⚠ QATORNI `billing_rows` fixture'i YOZADI, seed EMAS
     # (`TenantSeed.billing` docstringi).
     "charge_id": lambda seed: str(seed.billing.charge_id),
+    # --- 06-09: yozilgan to'lov ---
+    #
+    # ⚠ B BOZORINING HAQIQIY `payments.id` SI, to'qilgan UUID EMAS —
+    # `charge_id` bilan AYNAN bir xil sabab. `POST /payments/{id}/reverse`
+    # to'qilgan qiymat bilan ham 404 berardi, lekin u «bunday to'lov
+    # umuman yo'q» degan javob bo'lardi va «to'lov BOR, lekin boshqa
+    # bozorniki» da'vosi HECH QACHON sinalmasdi.
+    #
+    # ⚠ QATOR `kind = 'payment'` (storno EMAS): storno qatori uchun
+    # marshrut TENANT darvozasigacha yetib bormasdan **409
+    # `payment_already_reversed`** berardi va matritsa 404 kutayotgan
+    # joyda holat darvozasini o'lchagan bo'lardi (`camera_id` filleri
+    # arxivlanmagan kanalni ko'rsatishi bilan bir xil mulohaza).
+    "payment_id": lambda seed: str(seed.billing.payment_id),
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -462,6 +491,34 @@ MATRIX_STAFF_PHONE = f"{TEST_PHONE_PREFIX}9990001"
   chaqiruv `409 phone_taken` beradi va bu MATRITSA UCHUN YETARLI —
   da'vo «so'rov 422 da to'xtamadi», «har safar yangi qator yozildi» emas.
   O'suvchi telefon esa har testda yangi foydalanuvchi qoldirardi.
+"""
+
+
+MATRIX_IDEMPOTENCY_KEY = "matritsa-tolov-kaliti-0001"
+"""Matritsa yuboradigan idempotentlik kaliti — ⛔ SOBIT (06-09, D-21).
+
+Ikkinchi chaqiruv **200** va O'SHA to'lovni qaytaradi, ya'ni marshrut
+422 ham, 409 ham bermaydi va matritsaning da'vosi («so'rov validatsiyada
+to'xtamadi») bajariladi. O'suvchi kalit esa har testda YANGI `payments`
+qatori qoldirardi — `MATRIX_STAFF_PHONE` bilan aynan bir xil qaror.
+
+⚠ Uzunlik `PaymentCreateRequest.idempotency_key` ning `min_length=8`
+  chegarasidan katta.
+"""
+
+MATRIX_PAYMENT_SOUM = 1
+"""Matritsa yozadigan summa — ⛔ SERVER TAKLIFIGA HECH QACHON TENG EMAS.
+
+Server takliflari (`payment_quote_set()`) — bugungi tarif, eski qarz va
+ularning yig'indisi. Uchalasi ham seed qiymatlaridan chiqadi va ular
+**mingdan katta** (`A_TARIFF_AMOUNTS` = 5 000/12 000/8 000, `TARIFF_SOUM`
+= 15 000), ya'ni **1 so'm** to'plamda bo'lishi MUMKIN EMAS.
+
+⛔ NEGA BU QIYMAT «SEHRLI SON» EMAS: matritsa serverning arifmetikasini
+   QAYTA HISOBLAMASLIGI kerak (D-20). Taklifga TENG summa yuborish uchun
+   test bugungi tarifni va qarzni o'zi hisoblab chiqarishi kerak bo'lardi
+   — ya'ni ikkinchi haqiqat manbai. Chetlanish yo'li esa arifmetikasiz
+   va u sabab-kod bilan **201** beradi (OQ-4/A4: qisman to'lov RUXSAT).
 """
 
 
@@ -638,6 +695,43 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
         "full_name": "Matritsa Xodimi",
         "roles": ["cashier"],
     },
+    # --- 06-09: kassirning YOZUV yuzasi (CASH-01, CASH-03) ---
+    #
+    # ⛔⛔ TANA **A** BOZORINING BUGUN BIRIKTIRILGAN RASTASINI KO'RSATADI.
+    #
+    # Bu marshrutda yo'l parametri YO'Q, ya'ni u faqat «javobda B'ning izi
+    # yo'q» da'vosiga tushadi — tanaga B ning kodini qo'yish 404/409
+    # javobini tug'dirardi va marshrutning YOZISH yo'li umuman
+    # ishlamasdi (`POST /assignments` bilan aynan bir xil mulohaza).
+    #
+    # ⛔ `amount_soum = MATRIX_PAYMENT_SOUM` (1 so'm) + `reason_code`:
+    # SERVER TAKLIFIGA HECH QACHON TENG BO'LMAYDIGAN summa, ya'ni so'rov
+    # har doim OVERRIDE shoxidan o'tadi va **201** oladi. Sababsiz
+    # yuborilsa 422 `reason_required`, taklifga teng summa + sabab esa
+    # 422 `override_not_applicable` bo'lardi — ikkala holat ham
+    # `test_no_matrix_route_returns_422` ni qizartirardi. Uchinchi
+    # variant («taklifga teng summa, sababsiz») HAM yaramaydi: taklif
+    # bugungi tarifga va QARZGA bog'liq, ya'ni matritsa serverning
+    # arifmetikasini QAYTA HISOBLASHI kerak bo'lardi — bu esa D-20 ning
+    # aynan taqiqlaydigan narsasi.
+    #
+    # ⚠ `idempotency_key` SOBIT: ikkinchi chaqiruv **200** va O'SHA
+    # to'lovni qaytaradi (D-21), ya'ni 422 ham, 409 ham emas — matritsa
+    # uchun yetarli. O'suvchi kalit har testda YANGI to'lov qatori
+    # qoldirardi (`MATRIX_STAFF_PHONE` bilan bir xil qaror).
+    RouteSpec("POST", "/api/v1/payments"): lambda seed: {
+        "idempotency_key": MATRIX_IDEMPOTENCY_KEY,
+        "stall_code": seed.billing.payer_stall_code,
+        "method": "cash",
+        "amount_soum": MATRIX_PAYMENT_SOUM,
+        "reason_code": "partial_day",
+    },
+    # ⚠ TANA AYNAN BITTA MAYDONLI va `reason_code` MAJBURIY (D-23):
+    #   ixtiyoriy qilingan maydon bilan tana bo'sh ketardi va marshrut
+    #   Pydantic darajasida **422** olardi — tenant da'vosi sinalmasdi.
+    RouteSpec("POST", "/api/v1/payments/{payment_id}/reverse"): lambda _: {
+        "reason_code": "wrong_amount",
+    },
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
 
@@ -801,6 +895,43 @@ sinalmasdi.
 ⚠ NAZORATCHI `auth_seed` DAN KELADI (`AuthSeed.inspector`): `two_markets`
   seed'ida bu rol YO'Q va uni o'sha faylga qo'shish beshta boshqa
   to'plamning a'zolik sanoqlariga tegardi.
+=============================================================================
+"""
+
+CASHIER_ROUTES: frozenset[RouteSpec] = frozenset(
+    {
+        RouteSpec("POST", "/api/v1/payments"),
+        RouteSpec("POST", "/api/v1/payments/{payment_id}/reverse"),
+    }
+)
+"""Matritsa KASSIR sessiyasi bilan chaqiradigan marshrutlar (06-09).
+
+=============================================================================
+`INSPECTOR_ROUTES` / `PLATFORM_ADMIN_ROUTES` BILAN AYNAN BIR XIL MULOHAZA,
+BOSHQA ROL — VA BU YERDA U «PASTGA» QARAB ISHLAYDI.
+
+Ikkala marshrut ham `PAYMENT_CREATE` talab qiladi, u esa D-07 matritsasida
+⛔ **FAQAT `cashier`** da bor — bozor adminida ham, direktorda ham YO'Q
+(UI-SPEC §5.6: pul yig'ish kassirning ishi, direktor uni `report_view`
+bilan KO'RADI). Ya'ni odatdagi `market_a_headers` (bozor admini) sessiyasi
+bilan javob **403** bo'lardi va `test_cross_tenant_object_returns_404`
+aynan 403 ga qarshi yozilgan assertion'da yiqilardi.
+
+«Yiqilmasin» deb 403 ni ruxsat etish eng yomon yechim bo'lardi: o'shanda
+HUQUQ darvozasi TENANT darvozasini butunlay YOPIB qo'yardi va «begona
+bozorning to'lovini bekor qilib bo'lmaydi» degan da'vo HECH QACHON
+sinalmasdi (OP-9).
+
+⛔ **`GET /api/v1/payments/recent` BU RO'YXATDA ATAYIN YO'Q:** u
+   `BILLING_COLLECT_VIEW` talab qiladi va o'sha huquq `market_admin` da
+   HAM bor (`/billing/pending` bilan bir xil sabab), ya'ni u odatdagi
+   sessiyadan o'tadi. Uni bu yerga qo'shish marshrutni kuchsizroq
+   sessiyadan olib chiqib ketardi.
+
+⚠ KASSIR `two_markets` SEED'IDAN KELADI (`AuthSeed.cashier` ->
+  `market_a.cashier_user_id`), ya'ni YANGI SEED YOZILMAYDI (Gotcha 22):
+  ikkinchi `cashier` rolli hisob a'zolik sanog'iga tayanadigan RBAC
+  testlarini jimgina siljitardi.
 =============================================================================
 """
 
@@ -1104,35 +1235,110 @@ def occupancy_domain(
         yield seed
 
 
+def _assigned_stall_today(
+    conn: Connection[TupleRow], *, market_id: UUID, stall_id: UUID
+) -> tuple[str, UUID]:
+    """Rastaning KODI va BUGUNGI sotuvchisi — ikkalasi ham BAZADAN (06-09).
+
+    =========================================================================
+    ⛔ KUN `Asia/Tashkent` DA HISOBLANADI, `CURRENT_DATE` (UTC) DA EMAS.
+
+    `POST /payments` `business_today()` bilan ishlaydi va u Toshkent devor-
+    soatiga tayanadi. Konteynerlar UTC da yuguradi, ya'ni Toshkent
+    00:00–04:59 oralig'ida `CURRENT_DATE` OLDINGI kunni beradi — va
+    biriktirish davri aynan o'sha chegarada boshlangan bo'lsa fixture
+    «biriktirilmagan» deb yiqilardi. Bu nosozlik sinfi post-merge
+    darvozasida ALLAQACHON bir marta o'lchangan (`_service_day` tuzatishi).
+
+    ⛔ SOTUVCHI `vendor_ids[i]` DEB QOTIRILMAYDI: `sa.period @> :today`
+       predikati `resolve_stall_day_money()` niki bilan AYNAN bir xil,
+       ya'ni fixture marshrut ko'radigan sotuvchini ko'radi. Indeks bilan
+       yozish almashinuv sanasi o'tgach jimgina BOSHQA sotuvchini
+       ko'rsatardi.
+    =========================================================================
+
+    Returns:
+        `(stall_code, vendor_id)` — bugungi kun uchun.
+    """
+    row = conn.execute(
+        "SELECT s.code, sa.vendor_id "
+        "FROM stalls s "
+        "JOIN stall_assignments sa "
+        "  ON sa.market_id = s.market_id AND sa.stall_id = s.id "
+        " AND sa.period @> (now() AT TIME ZONE 'Asia/Tashkent')::date "
+        "WHERE s.market_id = %s AND s.id = %s",
+        (str(market_id), str(stall_id)),
+    ).fetchone()
+    assert row is not None, (
+        f"nazorat: {stall_id} rastasi BUGUN biriktirilmagan — `POST /payments` "
+        "matritsa tanasi 409 `stall_not_assigned` olardi va tenant da'vosi "
+        "boshqa shoxdan o'tardi"
+    )
+    stall_code: str = row[0]
+    vendor_id: UUID = row[1]
+    return stall_code, vendor_id
+
+
 @pytest.fixture
 def billing_rows(
     sync_owner_conn: Connection[TupleRow],
     two_markets: TwoMarketSeed,
     market_domain: MarketDomainSeed,
 ) -> Iterator[MatrixBillingRows]:
-    """B bozoriga BITTA `daily_charges` qatori — `charge_id` filleri uchun.
+    """Matritsaning billing qatorlari — B da hisob + to'lov, A da QARZ (06-08, 06-09).
 
     =========================================================================
-    ⛔ QATOR HAQIQIY BO'LISHI SHART (`PARAM_FILLERS` docstringidagi umumiy
-       qoida). To'qilgan UUID bilan `GET /billing/charges/{id}` baribir 404
-       berardi, lekin sababi TENANT chegarasi emas, «bunday hisob umuman
-       yo'q» bo'lardi — ya'ni matritsa yashil turib HECH NIMANI o'lchamasdi.
+    ⛔ QATORLAR HAQIQIY BO'LISHI SHART (`PARAM_FILLERS` docstringidagi umumiy
+       qoida). To'qilgan UUID bilan `GET /billing/charges/{id}` va
+       `POST /payments/{id}/reverse` baribir 404 berardi, lekin sababi
+       TENANT chegarasi emas, «bunday qator umuman yo'q» bo'lardi — ya'ni
+       matritsa yashil turib HECH NIMANI o'lchamasdi.
 
     ⚠ `market_domain` ARGUMENT sifatida olinadi va bu TARTIB masalasi
       (`nvr_domain`/`snapshot_domain` bilan aynan bir xil sabab): pytest
-      fixture'larni TESKARI tartibda yopadi, ya'ni bu qator rastalar va
+      fixture'larni TESKARI tartibda yopadi, ya'ni bu qatorlar rastalar va
       tariflardan OLDIN o'chiriladi va kompozit FK buzilmaydi.
     =========================================================================
+    ⛔⛔ 06-09: **A BOZORIGA HAM HISOB YOZILADI — VA BU HAFTA KUNIDAN
+        MUSTAQILLIK UCHUN.**
 
-    ⚠ O'CHIRISHDAN OLDIN BOZOR QORALAMAGA QAYTARILADI VA BUSIZ TOZALASH
-      YIQILADI: `0020` `daily_charges` ga SHARTSIZ `BEFORE UPDATE OR
-      DELETE` qo'riqchisini qo'yadi (D-07) va `DELETE` uchun yagona istisno
-      — qoralama bozor. Naqsh `cleanup_billing_domain()` dan olingan;
-      bayroq keyin ASL QIYMATIGA qaytariladi, ya'ni fixture o'zidan keyin
-      hech qanday holat qoldirmaydi.
+    `POST /api/v1/payments` ning matritsa tanasi **422 olmasligi** shart
+    (`test_no_matrix_route_returns_422`). Marshrutning yagona to'liq rad
+    etish yo'li — `payment_quote_set()` ning **bo'sh** natijasi, ya'ni
+    «bugungi tarif ham yo'q, qarz ham yo'q».
+
+    A bozori DUSHANBA yopiq (`A_OPEN_WEEKDAYS` = ISO 2..7), ya'ni har
+    dushanba `today_soum is None` bo'ladi. Qarz ham bo'lmasa to'plam
+    **bo'sh** chiqardi va matritsa ⛔ **haftada bir kun** qizarardi — bu
+    aynan «to'lqin chegarasida yashil, dushanba qizil» sinfidagi eng qimmat
+    flakelik. Bitta `daily_charges` qatori (`service_date = CURRENT_DATE -
+    1`) qarzni **musbat** qiladi va to'plam har kuni kamida bitta
+    elementli bo'ladi.
+
+    ⚠ SOTUVCHI BAZADAN O'QILADI, `vendor_ids[1]` DEB QOTIRILMAYDI:
+      `handover_stall` ning bugungi egasi `HANDOVER_DAY` chegarasiga
+      bog'liq va uni indeks bilan yozish sana o'tgach jimgina noto'g'ri
+      sotuvchini ko'rsatardi — hisob boshqa sotuvchiga yozilib, qarz
+      to'lov qilinayotgan rastaning egasida NOL bo'lib qolardi.
+    =========================================================================
+
+    ⚠ O'CHIRISHDAN OLDIN BOZORLAR QORALAMAGA QAYTARILADI VA BUSIZ TOZALASH
+      YIQILADI: `0020` `daily_charges` ga HAM, `payments` ga HAM SHARTSIZ
+      `BEFORE UPDATE OR DELETE` qo'riqchisini qo'yadi (D-07, D-23) va
+      `DELETE` uchun yagona istisno — qoralama bozor. Naqsh
+      `cleanup_billing_domain()` dan olingan; bayroqlar keyin ASL
+      QIYMATIGA qaytariladi.
+
+    ⚠ `payments` MARKET BO'YICHA o'chiriladi, `id` bo'yicha EMAS: matritsa
+      `POST /api/v1/payments` ni chaqirganda A bozoriga HAQIQIY qator
+      yozadi va uning identifikatorini fixture BILMAYDI. `id` bo'yicha
+      tozalash o'sha qatorni bazada abadiy qoldirardi.
     """
+    market_a = two_markets.market_a
     market_b = two_markets.market_b
+    domain_a = market_domain.market_a
     domain_b = market_domain.market_b
+
     charge_id, service_date = add_daily_charge(
         sync_owner_conn,
         market_id=market_b.id,
@@ -1140,20 +1346,63 @@ def billing_rows(
         vendor_id=domain_b.vendor_ids[0],
         tariff_id=domain_b.tariff_ids[0],
     )
+    payment_id = add_payment(
+        sync_owner_conn,
+        market_id=market_b.id,
+        stall_id=domain_b.stall_ids[0],
+        vendor_id=domain_b.vendor_ids[0],
+        cashier_id=market_b.cashier_user_id,
+        # ⚠ `None` ATAYIN: B bozorida ochiq smena YO'Q va uni ochish
+        #   `uq_cashier_shifts_..._open` ga tegadigan yangi holat
+        #   qo'shardi. `shift_id` NULLABLE (OQ-6/A5), ya'ni qator
+        #   `payment_id` filleri uchun to'liq yaroqli.
+        shift_id=None,
+        service_date=service_date,
+    )
+
+    payer_stall_id = domain_a.handover_stall_id
+    assert payer_stall_id is not None, "seed `handover_stall_id` ni to'ldirmagan"
+    payer_stall_code, payer_vendor_id = _assigned_stall_today(
+        sync_owner_conn, market_id=market_a.id, stall_id=payer_stall_id
+    )
+    add_daily_charge(
+        sync_owner_conn,
+        market_id=market_a.id,
+        stall_id=payer_stall_id,
+        vendor_id=payer_vendor_id,
+        tariff_id=domain_a.tariff_ids[0],
+    )
+
     try:
-        yield MatrixBillingRows(charge_id=charge_id, service_date=service_date)
-    finally:
-        row = sync_owner_conn.execute(
-            "SELECT is_active FROM markets WHERE id = %s", (str(market_b.id),)
-        ).fetchone()
-        was_active = bool(row[0]) if row is not None else False
-        sync_owner_conn.execute(
-            "UPDATE markets SET is_active = false WHERE id = %s", (str(market_b.id),)
+        yield MatrixBillingRows(
+            charge_id=charge_id,
+            service_date=service_date,
+            payment_id=payment_id,
+            payer_stall_code=payer_stall_code,
         )
-        sync_owner_conn.execute("DELETE FROM daily_charges WHERE id = %s", (str(charge_id),))
-        if was_active:
+    finally:
+        market_ids = [str(market_a.id), str(market_b.id)]
+        active = {
+            str(row[0])
+            for row in sync_owner_conn.execute(
+                "SELECT id FROM markets WHERE id = ANY(%s::uuid[]) AND is_active", (market_ids,)
+            ).fetchall()
+        }
+        sync_owner_conn.execute(
+            "UPDATE markets SET is_active = false WHERE id = ANY(%s::uuid[])", (market_ids,)
+        )
+        # TARTIB: to'lov -> hisob. `payments` `daily_charges` ga FK bilan
+        # bog'lanmaydi (D-24/C-4), lekin tartib `CLEANUP_ORDER` bilan bir
+        # xil saqlanadi — u yerdagi qoida bu yerda ham o'qiladi.
+        sync_owner_conn.execute(
+            "DELETE FROM payments WHERE market_id = ANY(%s::uuid[])", (market_ids,)
+        )
+        sync_owner_conn.execute(
+            "DELETE FROM daily_charges WHERE market_id = ANY(%s::uuid[])", (market_ids,)
+        )
+        if active:
             sync_owner_conn.execute(
-                "UPDATE markets SET is_active = true WHERE id = %s", (str(market_b.id),)
+                "UPDATE markets SET is_active = true WHERE id = ANY(%s::uuid[])", (sorted(active),)
             )
 
 
@@ -1227,17 +1476,44 @@ async def market_a_inspector_headers(
 
 
 @pytest.fixture
+async def market_a_cashier_headers(
+    api_client: httpx.AsyncClient, tenant_seed: TenantSeed
+) -> dict[str, str]:
+    """A bozori KASSIRINING sessiyasi (`PAYMENT_CREATE` bilan) — 06-09.
+
+    `market_a_inspector_headers` bilan aynan bir xil shakl, boshqa rol.
+    A'zoligi bitta -> bozor avtomatik tanlanadi.
+
+    ⚠ MAVJUD SEED ISHLATILADI (`AuthSeed.cashier`, `fixtures/auth_users.py:
+      208-210` -> `two_markets.market_a.cashier_user_id`): yangi kassir
+      hisobi YARATILMAYDI (Gotcha 22).
+
+    ⚠ `must_change_password` bayrog'i `false` (`two_markets` seed'i barcha
+      oddiy rollarni shunday yozadi), ya'ni parol darvozasi bu sessiyada
+      UMUMAN qatnashmaydi va 403 ning sababi bir ma'noli qoladi.
+    """
+    market_a = tenant_seed.base.market_a
+    return await session_headers(api_client, market_a.cashier_phone, SEED_PASSWORD)
+
+
+@pytest.fixture
 def headers_for(
     market_a_headers: dict[str, str],
     market_a_admin_headers: dict[str, str],
     market_a_inspector_headers: dict[str, str],
+    market_a_cashier_headers: dict[str, str],
 ) -> Callable[[RouteSpec], dict[str, str]]:
     """Marshrutga MOS keladigan A-bozor sessiyasini tanlaydi.
 
-    Tanlov IKKI ro'yxat bo'yicha (`PLATFORM_ADMIN_ROUTES`,
-    `INSPECTOR_ROUTES`) va boshqa hech qanday shart yo'q: sessiya HAR
-    DOIM **A bozoriga** tegishli, ya'ni "begona bozor obyekti -> 404"
-    da'vosi o'zgarmaydi. Farq faqat HUQUQ darajasida.
+    Tanlov UCH ro'yxat bo'yicha (`PLATFORM_ADMIN_ROUTES`,
+    `INSPECTOR_ROUTES`, `CASHIER_ROUTES`) va boshqa hech qanday shart
+    yo'q: sessiya HAR DOIM **A bozoriga** tegishli, ya'ni "begona bozor
+    obyekti -> 404" da'vosi o'zgarmaydi. Farq faqat HUQUQ darajasida.
+
+    ⛔ UCHINCHI SHOX 06-09 DA QO'SHILDI VA U MAJBURIY: usiz
+       `test_cross_tenant_object_returns_404` ikkala to'lov marshrutida
+       ham **403** olardi (bozor adminida `payment_create` YO'Q) va 404
+       asserti yiqilardi — `CASHIER_ROUTES` docstringidagi OP-9.
     """
 
     def _pick(route: RouteSpec) -> dict[str, str]:
@@ -1245,6 +1521,8 @@ def headers_for(
             return market_a_admin_headers
         if route in INSPECTOR_ROUTES:
             return market_a_inspector_headers
+        if route in CASHIER_ROUTES:
+            return market_a_cashier_headers
         return market_a_headers
 
     return _pick
@@ -1564,6 +1842,14 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             # ⚠ Qatorni `billing_rows` fixture'i yozadi; bu yerdagi da'vo
             # esa AYNAN o'sha qiymat filler'ga tushganini qulflaydi.
             tenant_seed.billing.charge_id,
+            # --- 06-09 ---
+            #
+            # ⚠ AYNAN o'sha fixture yozgan B bozorining `payments.id` si.
+            #   A bozoriga ham hisob yoziladi (haftaning har kunida kvota
+            #   to'plami bo'sh bo'lmasligi uchun), LEKIN u bu ro'yxatga
+            #   KIRMAYDI: bu yerdagi da'vo «filler AYNAN B ni ko'rsatadi»
+            #   va A ning qatorini qo'shish uni bo'shatib yuborardi.
+            tenant_seed.billing.payment_id,
         )
     }
 
@@ -1849,6 +2135,51 @@ async def test_inspector_routes_really_need_the_review_permission(
     assert response.status_code == 403, (
         f"{route.test_id}: bozor admini {response.status_code} oldi — "
         "marshrut `INSPECTOR_ROUTES` da bo'lishi shart emas"
+    )
+
+
+def test_cashier_routes_point_at_live_routes() -> None:
+    """`CASHIER_ROUTES` da o'chirilgan marshrut QOLIB KETMAGAN (06-09).
+
+    `INSPECTOR_ROUTES` / `PLATFORM_ADMIN_ROUTES` bilan aynan bir xil
+    sabab: eskirgan yozuv o'zi zararsiz, lekin marshrut BOSHQA ma'noda
+    qayta paydo bo'lganda u tug'ilishidanoq kassir sessiyasi bilan
+    chaqirilardi — ya'ni eng TOR huquqli sessiya bilan, va o'sha
+    marshrutning haqiqiy huquq darvozasi umuman sinalmasdi.
+    """
+    live = set(all_routes(fastapi_app))
+    stale = sorted(route.test_id for route in CASHIER_ROUTES if route not in live)
+
+    assert not stale, f"`CASHIER_ROUTES` da mavjud bo'lmagan marshrutlar: {stale}"
+
+
+@pytest.mark.parametrize("route", sorted(CASHIER_ROUTES), ids=_route_id)
+async def test_cashier_routes_really_need_the_payment_permission(
+    api_client: httpx.AsyncClient,
+    tenant_seed: TenantSeed,
+    market_a_headers: dict[str, str],
+    route: RouteSpec,
+) -> None:
+    """Ro'yxatdagi marshrut bozor admini uchun ROSTDAN 403 beradi (06-09).
+
+    `test_inspector_routes_really_need_the_review_permission` ning aynan
+    jufti va u `CASHIER_ROUTES` ning O'ZINI himoya qiladi: usiz kimdir
+    hammaga ochiq marshrutni ro'yxatga qo'shib, uni ENG TOR sessiyadan
+    olib chiqib ketardi va matritsa buni umuman sezmasdi — ikkala sessiya
+    ham A bozoriga tegishli, ya'ni javob baribir kelardi.
+
+    ⚠ SO'ROV **A BOZORINING O'Z** to'lovi bilan yuboriladi... aniqrog'i,
+      to'lov IDENTIFIKATORI bu darvoza uchun ahamiyatsiz: `payment_create`
+      huquqi `Depends()` da, ya'ni u handler tanasidan OLDIN baholanadi va
+      403 har qanday yo'l parametrida keladi. Begona identifikator ham
+      SHU sababdan xavfsiz — 404 (tenant darvozasi) 403 dan KEYIN
+      bo'lardi, oldin emas.
+    """
+    response = await call_route(api_client, route, tenant_seed, headers=market_a_headers)
+
+    assert response.status_code == 403, (
+        f"{route.test_id}: bozor admini {response.status_code} oldi — "
+        "marshrut `CASHIER_ROUTES` da bo'lishi shart emas"
     )
 
 
