@@ -12,7 +12,7 @@ dagi `enable_tenant_rls()` orqali qo'yiladi (Pitfall 10).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
 from migrations.entities.functions import (
     ALL_FUNCTIONS,
@@ -38,6 +38,8 @@ __all__ = [
     "ALL_RLS_TABLES",
     "ALL_TENANT_TABLES",
     "CALENDAR_TENANT_TABLES",
+    "IDEMPOTENT_GET_OR_CREATE_MEASURED_AT",
+    "IDEMPOTENT_GET_OR_CREATE_SUPPORTED",
     "MARKET_DOMAIN_TENANT_TABLES",
     "NVR_AUDITED_TABLES",
     "NVR_TENANT_TABLES",
@@ -538,3 +540,59 @@ ALL_ENTITIES: list[Any] = [
     # domenining ikki o'zgarmaslik qo'riqchisi (D-12/D-17.4).
     *ALL_TRIGGER_FUNCTIONS,
 ]
+
+
+# ===========================================================================
+# 6-FAZA — WAVE 0 O'LCHOV MARKERLARI (BILLING VA KASSIR)
+# ===========================================================================
+#
+# ⛔ BU BLOKDAGI KONSTANTALAR ENTITY EMAS va `ALL_ENTITIES` ga KIRMAYDI.
+#    Ular HAQIQIY `postgres:18.4` da olingan O'LCHOV natijalari va ular
+#    shu yerda yashaydi, chunki ularning ISTE'MOLCHISI migratsiya qatlami:
+#    `0020` ning shakli va `payment_repo` ning shakli aynan shu javoblardan
+#    chiqadi. `04-01` ning `BILLABLE_ANCHOR_SUPPORTED` i (bu faylda `:344`
+#    izohida havola qilingan) o'rnatgan naqsh — o'lchov SUMMARY'da qolib
+#    ketmaydi, u KODDA qulflanadi.
+
+IDEMPOTENT_GET_OR_CREATE_SUPPORTED: Final[bool] = True
+"""A1 O'LCHOVI — ikki bayonotli get-or-create parallel yozuvda ISHLAYDIMI.
+
+**O'lchov:** 2026-08-10, `PostgreSQL 18.4 (Debian trixie)`, testcontainer.
+**O'lchaydigan test:** `tests/tenancy/test_idempotency_concurrency.py::
+test_second_statement_sees_the_winner` — ikki MUSTAQIL `AsyncSession`
+`asyncio.Barrier` bilan bir vaqtda bir xil `(market_id, idempotency_key)`
+juftligini yozadi.
+
+**Nima o'lchandi (uchala da'vo birga):** jadvalda AYNAN 1 qator · ikkala
+korutina ham BIR XIL `id` oldi · birorta korutina istisno ko'tarmadi.
+Yutqazgan sessiya AYNI tranzaksiyasida alohida `SELECT` bajardi va yutgan
+qatorni KO'RDI (READ COMMITTED har BAYONOT uchun yangi snapshot oladi).
+
+⛔ **QIYMAT QO'LDA YOZILMAYDI.** Test uni O'QIB o'lchov natijasi bilan
+solishtiradi (`assert IDEMPOTENT_GET_OR_CREATE_SUPPORTED is measured`),
+ya'ni marker o'lchovdan ajralib keta olmaydi. `True` deb qo'yib xulqni
+buzish IMKONSIZ — test darhol qizaradi.
+
+⛔ **AGAR QIYMAT `False` BO'LSA — 06-09 NING KIRISH SHARTI O'ZGARADI:**
+`payment_repo` ikki bayonotli get-or-create o'rniga `IntegrityError` +
+`SAVEPOINT` (`session.begin_nested()`) yo'lidan yuradi —
+`services/core-api/app/repositories/nvr_repo.py:506-532` naqshi va `03-06`
+ning o'lchangan darsi (abort holatidagi tranzaksiya 409+`run_id` ni 500 ga
+aylantirardi). Bu shox TAXMIN emas, MAJBURIYAT: D-21 («takror so'rov o'sha
+to'lovni 200 bilan qaytaradi») ikkala holatda ham bajarilishi shart.
+
+⚠ **QIYMAT IZOLYATSIYA DARAJASIGA BOG'LIQ.** `REPEATABLE READ` ga
+o'tilganda ikkinchi bayonot o'z tranzaksiyasi boshidagi snapshotni ko'rar
+va qatorni TOPMASDI. Test `SHOW transaction_isolation` ni OCHIQ
+solishtiradi (`read committed`), ya'ni engine sozlamasining jimgina
+o'zgarishi shu yerda ushlanadi.
+"""
+
+IDEMPOTENT_GET_OR_CREATE_MEASURED_AT: Final[str] = "2026-08-10 · PostgreSQL 18.4"
+"""A1 o'lchovining sanasi va serveri.
+
+Yozilmasa natija keyinroq «qayerda va qachon o'lchangan?» degan javobsiz
+savolga aylanardi (`billable_probe.BillableProbe.server_version` bilan
+aynan bir xil sabab). PG major versiyasi ko'tarilganda zond QAYTA
+yugurtiriladi va bu satr yangilanadi.
+"""
