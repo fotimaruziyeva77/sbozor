@@ -62,12 +62,17 @@ naqshi).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 from uuid import UUID
 
+from sbozor_core.billing import billable_from_slots
+from sbozor_core.enums import AnomalyKind, OccupancyVerdict
+from sbozor_core.models import BillingAnomaly, ChargeEvidence, DailyCharge
 from sbozor_core.money import assert_safe_soum
 from sqlalchemy import Date, Text, bindparam, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.services.billing_errors import (
     AMOUNT_UNAVAILABLE_REASONS,
@@ -76,16 +81,33 @@ from app.services.billing_errors import (
 )
 
 if TYPE_CHECKING:
-    from datetime import date
+    from collections.abc import Sequence
+    from datetime import date, time
 
+    from sbozor_core.billing import BillableDecision
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
+    "SlotEvidenceRow",
     "StallDayMoney",
+    "StallSlotVerdict",
+    "billable_stalls",
     "resolve_stall_day_money",
+    "write_anomaly",
+    "write_charge",
+    "write_evidence",
 ]
 
 _UUID = PgUuid(as_uuid=True)
+_UUID_ARRAY = ARRAY(PgUuid(as_uuid=True))
+
+_OCCUPIED: Final[str] = OccupancyVerdict.OCCUPIED.value
+"""Qiymat so'rov PARAMETRI, so'rov MATNIDAGI literal emas.
+
+`occupancy_repo.py:94-101` da o'rnatilgan qoida: literal yozilganda enum
+o'zgargan kuni filtr jimgina hech nimaga tushmasdi — so'rov ishlayverardi,
+faqat natija bo'sh bo'lardi.
+"""
 
 
 # ===========================================================================
@@ -325,3 +347,383 @@ async def resolve_stall_day_money(
         )
         for row in result.mappings()
     ]
+
+
+# ===========================================================================
+# 2. BANDLIK — FAQAT O'QISH (D-03, D-04, C-6)
+# ===========================================================================
+
+_BILLABLE_SLOT_ROWS = text(
+    """
+    SELECT sso.stall_id                   AS stall_id,
+           s.code                         AS stall_code,
+           sso.id                         AS stall_slot_occupancy_id,
+           sso.slot_time                  AS slot_time,
+           sso.verdict                    AS verdict,
+           sso.resolution_source          AS resolution_source,
+           sso.winning_occupancy_event_id AS winning_occupancy_event_id
+      FROM stall_slot_occupancy sso
+      JOIN stalls s
+        ON s.market_id = sso.market_id
+       AND s.id = sso.stall_id
+     WHERE sso.market_id = :market_id
+       AND sso.business_date = :service_date
+     ORDER BY s.code_sort, sso.stall_id, sso.slot_time
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("service_date", type_=Date()),
+)
+"""XOM slot qatorlari — ⛔ QAROR SQL DA EMAS (C-6, D-04).
+
+=============================================================================
+⛔⛔ NEGA `bool_or(...)` SHU YERDA HISOBLANMAYDI.
+
+`occupancy_repo.py:364-384` dagi `_PER_STALL_CTE` bo'lakni SQL da
+hisoblaydi va bu **hisobot uchun to'g'ri**. Billing esa qarorni
+`sbozor_core.billing.billable_from_slots()` (06-01) bilan **Pythonda**
+chiqaradi va sabab O'LCHOV: predikat ikki joyda (SQL va sof funksiya)
+yashasa ular bir kun ajralib ketardi va
+`tests/unit/test_billable_from_slots.py` ning jadval testi **hech nimani
+kafolatlamasdi**.
+
+⚠ MIQYOS ARZON: 1000 rasta x 5 slot = 5000 qator/bozor/kun. Bu Pythonga
+  olib kelinadigan hajm sifatida ahamiyatsiz, SQL ga ko'chirishdan
+  yutiladigan vaqt esa yuqoridagi xavfni to'lamaydi.
+
+=============================================================================
+⛔ IKKI USTUN NOMINING IKKI MA'NOSI (Pitfall 1) — YONMA-YON:
+
+    stall_slot_occupancy.business_date  = MA'LUMOT TEGISHLI kun
+                                          (`snapshots` dan NUSXALANADI)
+    daily_charges.business_date         = QATOR YOZILGAN kun
+                                          (`created_at` dan GENERATED)
+
+Shuning uchun bu so'rov `sso.business_date = :service_date` bo'yicha
+filtrlaydi: hisobning domen ustuni `service_date` deb ATAYIN boshqa
+nomlangan. Ikkalasini `business_date` bo'yicha join qilish normal kunda
+**0 qator** berardi (job D+1 da yuguradi) — hisobot bo'sh, xato yo'q.
+
+=============================================================================
+⛔ SLOT QATORI UMUMAN BO'LMAGAN RASTA BU RO'YXATGA KIRMAYDI va bu Pitfall 2
+   ning o'lchov nuqtasi: `billing_close(D)` ni `day_close(D)` dan OLDIN
+   yugurtirganda natija bo'sh bo'ladi va chaqiruvchi buni `no_slot_rows`
+   deb SANAYDI — «hammasi bo'sh» degan yolg'on hisobot bermaydi.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class SlotEvidenceRow:
+    """Bitta slot qatori — qaror uchun JUFTLIK, dalil uchun UCHLIK.
+
+    ⛔ `winning_occupancy_event_id` — D-08 ning MUZLATILGAN pointeri (C-7);
+       `stall_slot_occupancy_id` esa faqat AUDIT havolasi, chunki o'sha
+       qator MUTABLE (`_MATERIALIZE_SLOT` `DO UPDATE` ishlatadi).
+    """
+
+    stall_slot_occupancy_id: UUID
+    slot_time: time
+    verdict: str
+    resolution_source: str
+    winning_occupancy_event_id: UUID | None
+
+
+@dataclass(frozen=True, slots=True)
+class StallSlotVerdict:
+    """Bir rastaning bir kundagi slotlari va ulardan chiqqan QAROR."""
+
+    stall_id: UUID
+    stall_code: str
+    rows: tuple[SlotEvidenceRow, ...]
+    decision: BillableDecision
+
+
+async def billable_stalls(
+    session: AsyncSession, *, market_id: UUID, service_date: date
+) -> list[StallSlotVerdict]:
+    """Shu kunning slot qatorlari + D-04 qarori — ⛔ FAQAT O'QISH (D-03).
+
+    ⛔ `occupancy_events` DAN QAYTA AGREGATSIYA TAQIQLANADI: agregatsiya
+       5-fazada tugagan va ikkinchi marta qilinsa u **ikkinchi haqiqat
+       manbai** bo'lardi — direktor bandlik sahifasida bitta son, patta
+       hisobida boshqa son ko'rardi va ikkalasi ham «to'g'ri» bo'lardi.
+
+    Returns:
+        `code_sort` tartibida, faqat SLOT QATORI BOR rastalar. Ro'yxatga
+        kirmagan rasta — `no_slot_rows` holati (Pitfall 2).
+    """
+    result = await session.execute(
+        _BILLABLE_SLOT_ROWS, {"market_id": market_id, "service_date": service_date}
+    )
+
+    order: list[UUID] = []
+    codes: dict[UUID, str] = {}
+    grouped: dict[UUID, list[SlotEvidenceRow]] = {}
+    for row in result.mappings():
+        stall_id: UUID = row["stall_id"]
+        if stall_id not in grouped:
+            order.append(stall_id)
+            grouped[stall_id] = []
+            codes[stall_id] = str(row["stall_code"])
+        grouped[stall_id].append(
+            SlotEvidenceRow(
+                stall_slot_occupancy_id=row["stall_slot_occupancy_id"],
+                slot_time=row["slot_time"],
+                verdict=str(row["verdict"]),
+                resolution_source=str(row["resolution_source"]),
+                winning_occupancy_event_id=row["winning_occupancy_event_id"],
+            )
+        )
+
+    return [
+        StallSlotVerdict(
+            stall_id=stall_id,
+            stall_code=codes[stall_id],
+            rows=tuple(grouped[stall_id]),
+            # ⛔ QAROR 06-01 DAN — predikat ikkinchi marta O'YLAB TOPILMAYDI.
+            decision=billable_from_slots(
+                [(row.verdict, row.resolution_source) for row in grouped[stall_id]]
+            ),
+        )
+        for stall_id in order
+    ]
+
+
+# ===========================================================================
+# 3. YOZISH — HISOB, DALIL, ANOMALIYA (D-06, D-08, D-28, C-12)
+# ===========================================================================
+
+
+async def write_charge(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    stall_id: UUID,
+    service_date: date,
+    money: StallDayMoney,
+) -> UUID | None:
+    """Kunlik pattani IDEMPOTENT yozadi — ⛔ `DO NOTHING`, `DO UPDATE` EMAS.
+
+    =======================================================================
+    ⛔ D-06/D-07 — YOZILGAN HISOB O'ZGARMAS VA QAYTA YUGURISH UNGA TEGMAYDI.
+
+    `DO UPDATE` shakli `occupancy_repo._MATERIALIZE_SLOT` da TO'G'RI
+    (u HOSILA jadval), bu yerda esa TESKARI qaror: `daily_charges` — pul
+    yozuvi va uni jimgina yangilash sotuvchining bilgan summasini kechasi
+    o'zgartirardi. Naqshni ko'chirish aynan shu xatoga olib borardi
+    (`06-PATTERNS.md` Gotcha 1).
+
+    ⚠ `index_elements` ISHLATILADI, konstrayt NOMI emas: kalitning uchala
+      ustuni ham ODDIY (`market_id`, `stall_id`, `service_date`).
+      `capture_repo.py:338-341` da konstrayt nomi kerak edi, chunki u
+      yerda kalitda HISOBLANADIGAN ustun bor.
+    =======================================================================
+    ⛔ D-28 — `vendor_id` YO'Q BO'LSA BU FUNKSIYA UMUMAN CHAQIRILMAYDI.
+
+    «Kimdir qarzdor, lekin kim ekani noma'lum» yozuvi qarz hisobotini
+    buzardi: summa jamida ko'rinardi, lekin birorta sotuvchining qarziga
+    tushmasdi. Chaqiruvchi buning o'rniga `unassigned_occupied` anomaliyasi
+    yozadi. Shart shu yerda ham majburlanadi, chunki `ValueError` xato
+    TURINI saqlaydi — `IntegrityError` esa uni yo'qotib, jobda
+    «billing_close_failed» bo'lib ko'rinardi.
+    =======================================================================
+
+    Returns:
+        Yangi yozilgan hisobning `id` si, yoki `None` — ⛔ **XATO EMAS**:
+        «bu rasta-kunga hisob ALLAQACHON bor» (Pitfall 3). Chaqiruvchi
+        buni `skipped_existing` deb sanaydi.
+    """
+    if money.vendor_id is None:
+        raise ValueError(
+            f"write_charge(): {money.stall_code!r} rastasiga {service_date} kunida "
+            "sotuvchi biriktirilmagan — hisob YOZILMAYDI (D-28). Chaqiruvchi "
+            f"{AnomalyKind.UNASSIGNED_OCCUPIED.value!r} anomaliyasini yozishi kerak."
+        )
+    if money.tariff_id is None or money.amount_soum is None:
+        raise ValueError(
+            f"write_charge(): {money.stall_code!r} rastasi uchun {service_date} kunida "
+            f"summa yo'q ({money.unavailable_reason!r}) — hisob YOZILMAYDI. Yopiq kun "
+            "va tarifsiz rasta anomaliya yo'lidan ketadi (D-10 / TARIFF_MISSING)."
+        )
+
+    stmt = (
+        pg_insert(DailyCharge)
+        .values(
+            market_id=market_id,
+            stall_id=stall_id,
+            service_date=service_date,
+            vendor_id=money.vendor_id,
+            tariff_id=money.tariff_id,
+            # ⛔ D-09: IKKALASI HAM. `tariff_id` yolg'iz kelajakdagi
+            #   tahrirga ochiq, summa yolg'iz esa «qaysi tarifdan?»
+            #   savolini javobsiz qoldirardi.
+            tariff_amount_soum=money.amount_soum,
+            amount_soum=money.amount_soum,
+        )
+        .on_conflict_do_nothing(index_elements=["market_id", "stall_id", "service_date"])
+        .returning(DailyCharge.id)
+    )
+    charge_id: UUID | None = (await session.execute(stmt)).scalar_one_or_none()
+    return charge_id
+
+
+_EVIDENCE_SNAPSHOTS = text(
+    """
+    SELECT ev.id          AS occupancy_event_id,
+           ev.snapshot_id AS snapshot_id
+      FROM occupancy_events ev
+     WHERE ev.market_id = :market_id
+       AND ev.id = ANY(:event_ids)
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("event_ids", type_=_UUID_ARRAY),
+)
+"""Kadrga yo'l — ⛔ NUSXA OLINADI, so'rov sifatida saqlanmaydi (D-08/C-7).
+
+`charge_evidence.snapshot_id` `occupancy_events` dan **bir marta** olinadi
+va hisob bilan birga muzlaydi. `occupancy_events` shartsiz o'zgarmas
+(`0018`), ya'ni nusxa hech qachon eskirmaydi — `stall_slot_occupancy` esa
+MUTABLE va uning `id` si kech kelgan tasdiqdan keyin **boshqa hodisaga**
+ishora qilishi mumkin.
+"""
+
+
+async def write_evidence(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    charge_id: UUID,
+    slot_rows: Sequence[SlotEvidenceRow],
+) -> int:
+    """Hisobning rasm-dalilini MUZLATIB yozadi (D-08, C-7, D-29).
+
+    =======================================================================
+    ⛔ DALIL — SO'ROV EMAS, NUSXA. Keyin qayta hisoblangan so'rov boshqa
+       javob bersa ham, nizoda ko'rsatiladigan kadr O'ZGARMAYDI. Bu
+       5-fazaning `audit_rounds.frame_size` «muzlatilgan doira» qarorining
+       aynan o'zi.
+
+    ⛔ FAQAT `occupied` VA G'OLIB HODISASI BOR QATORLAR yoziladi.
+       `SLOT_OCCUPIED_HAS_WINNER_CHECK` (`models/occupancy.py:317-331`)
+       bo'yicha g'olib hodisa AYNAN `occupied` da mavjud, ya'ni
+       `winning_occupancy_event_id IS NULL` bo'lgan qator dalil BERA
+       OLMAYDI va uni o'tkazib yuborish yagona to'g'ri xulq — `NULL` bilan
+       yozishga urinish `charge_evidence` ning `NOT NULL` iga urilardi.
+
+    ⛔ `on_conflict_do_nothing` — job qayta yugurishi dublikat dalil
+       yaratmaydi va «nechta slotda band edi?» sanog'ini SHISHIRMAYDI.
+    =======================================================================
+
+    Returns:
+        YANGI yozilgan dalil qatorlari soni. Nol — natija (qayta yugurish).
+    """
+    winners = [
+        row
+        for row in slot_rows
+        if row.verdict == _OCCUPIED and row.winning_occupancy_event_id is not None
+    ]
+    if not winners:
+        return 0
+
+    lookup = await session.execute(
+        _EVIDENCE_SNAPSHOTS,
+        {
+            "market_id": market_id,
+            "event_ids": [row.winning_occupancy_event_id for row in winners],
+        },
+    )
+    snapshot_by_event: dict[UUID, UUID] = {
+        row["occupancy_event_id"]: row["snapshot_id"] for row in lookup.mappings()
+    }
+
+    values = [
+        {
+            "market_id": market_id,
+            "charge_id": charge_id,
+            "stall_slot_occupancy_id": row.stall_slot_occupancy_id,
+            "occupancy_event_id": row.winning_occupancy_event_id,
+            "snapshot_id": snapshot_by_event[event_id],
+            "slot_time": row.slot_time,
+        }
+        for row in winners
+        if (event_id := row.winning_occupancy_event_id) in snapshot_by_event
+    ]
+    if not values:
+        return 0
+
+    stmt = (
+        pg_insert(ChargeEvidence)
+        .values(values)
+        .on_conflict_do_nothing(
+            index_elements=["market_id", "charge_id", "stall_slot_occupancy_id"]
+        )
+        .returning(ChargeEvidence.id)
+    )
+    return len((await session.execute(stmt)).all())
+
+
+async def write_anomaly(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    stall_id: UUID,
+    service_date: date,
+    kind: AnomalyKind,
+    occupancy_event_id: UUID | None = None,
+    snapshot_id: UUID | None = None,
+) -> UUID | None:
+    """Uchala anomaliya turi uchun BITTA funksiya (D-05, D-10, D-28, C-12).
+
+    =======================================================================
+    ⛔ JUFTLANGAN SHART ILOVA QATLAMIDA HAM MAJBURLANADI — `CHECK` BILAN
+       BIRGA, IKKI QATLAM:
+
+        no_coverage_stall   -> dalil YO'Q  (`occupancy_event_id` None)
+        unassigned_occupied -> dalil BOR
+        closed_day_occupied -> dalil BOR
+
+    `CHECK` ni `IntegrityError` bilan ushlash xato TURINI yo'qotardi va
+    06-07 uni `billing_close_failed` deb yozib qo'yardi — ya'ni dasturchi
+    xatosi ish vaqti nosozligiga aylanardi.
+
+    =======================================================================
+    ⛔ D-05 NING ANIQ MA'NOSI: `no_coverage_stall` — BILL-04 ANOMALIYASI
+       EMAS. U alohida `kind` va hisobotda ALOHIDA sanaladi. «Ko'ra
+       olmadik» != «band, lekin biriktirilmagan»; ikkisini qo'shish
+       KO'R NUQTADAN TUSHUM DA'VOSI TO'QISH bo'lardi (0-fazadagi ~10 %
+       qamrovsizlik aynan shu bayroq ostida ko'rinadi).
+
+    Returns:
+        Yangi qator `id` si, yoki `None` — allaqachon yozilgan (job qayta
+        yugurdi). ⛔ Bu ham XATO EMAS.
+    """
+    needs_evidence = kind is not AnomalyKind.NO_COVERAGE_STALL
+    if needs_evidence and (occupancy_event_id is None or snapshot_id is None):
+        raise ValueError(
+            f"write_anomaly(): {kind.value!r} DALIL bilan yoziladi (D-29) — "
+            f"occupancy_event_id={occupancy_event_id!r}, snapshot_id={snapshot_id!r}. "
+            "Dalilsiz «band, lekin to'lovsiz» da'vosi rasm-dalilsiz qolardi."
+        )
+    if not needs_evidence and (occupancy_event_id is not None or snapshot_id is not None):
+        raise ValueError(
+            f"write_anomaly(): {kind.value!r} da dalil BO'LMAYDI (C-12) — "
+            f"occupancy_event_id={occupancy_event_id!r}, snapshot_id={snapshot_id!r}. "
+            "«Ko'ra olmadik» da'vosi ko'rilgan kadr bilan kelsa u YOLG'ON bo'lardi."
+        )
+
+    stmt = (
+        pg_insert(BillingAnomaly)
+        .values(
+            market_id=market_id,
+            stall_id=stall_id,
+            service_date=service_date,
+            kind=kind.value,
+            occupancy_event_id=occupancy_event_id,
+            snapshot_id=snapshot_id,
+        )
+        .on_conflict_do_nothing(index_elements=["market_id", "stall_id", "service_date", "kind"])
+        .returning(BillingAnomaly.id)
+    )
+    anomaly_id: UUID | None = (await session.execute(stmt)).scalar_one_or_none()
+    return anomaly_id
