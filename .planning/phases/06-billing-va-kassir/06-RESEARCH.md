@@ -193,6 +193,8 @@ payments:
 Qoldiq: `Σ daily_charges + Σ charge_adjustments − Σ signed(payments)` **sotuvchi kesimida** (BILL-03 ning so'zma-so'z talabi). "Qaysi kun to'landi?" — `service_date`. `charge_id` **umuman yo'q**, ya'ni D-24 ning *maqsadi* bajariladi, *mexanizmi* boshqa.
 ⚠ Bu **qaror o'zgarishi** — planner uni CONTEXT.md ga qaytarishi (yoki discuss-phase ga eskalatsiya qilishi) kerak.
 
+**[QAYTARILDI 2026-08-10 — rejalashtirish]** `06-CONTEXT.md` D-24 ostidagi «MEXANIZM MOSLASHTIRILDI» blokiga yozildi; eskalatsiya **qilinmadi** (foydalanuvchining doimiy ko'rsatmasi: savol berilmaydi, tavsiya tanlanadi, sabab yoziladi). ⛔ **Va bu tavsiya bitta muhim bo'shliq bilan yetarli emas edi:** `service_date` yolg'iz «qaysi kun to'landi?» ga faqat **shu kunning o'zi** to'langan holatda javob beradi; `[Qarzni ham olish]` (UI-SPEC §9.6) da bitta to'lov bugungi tarif **va** ixtiyoriy eski qarzni yopadi va `service_date` **bugun** bo'lib qoladi. Shuning uchun mexanizm ⛔ **nomlangan determinlashtirilgan taqsimlash qoidasi** bilan to'ldirildi — **`FIFO_OLDEST_SERVICE_DATE_FIRST`**: kredit sotuvchi kesimida eng **qadimgi** to'lanmagan `daily_charges.service_date` dan boshlab yopiladi, tenglik `stall_code` bo'yicha uziladi. Qoida ⛔ **saqlanmaydi** (hosila ko'rinish, saqlangan balans yo'q — D-07/BILL-03) va ⛔ **ettinchi jadval qo'shilmaydi**: sof funksiya `sbozor_core.billing.allocate_charge_credit()` (06-01) + `billing_repo.vendor_charge_allocation()` (06-06), jadval testi `tests/unit/test_payment_credit_rules.py`, integratsiya tasdig'i `tests/integration/test_billing_repo.py` (LIFO sabotaji bilan).
+
 ### C-5 — D-23 "belgili summa" `CHECK (amount_soum > 0)` bilan to'qnashadi
 
 **CONTEXT.md** D-23: "Qoldiq — belgili summalar yig'indisi". `charge_adjustments` uchun ham chegirma manfiy delta bo'lib tabiiy ko'rinadi.
@@ -787,7 +789,7 @@ SELECT v.id AS vendor_id,
 
 ---
 
-## Open Questions (CONTEXT.md OQ-1…OQ-7 — javoblar)
+## Open Questions (CONTEXT.md OQ-1…OQ-7 — javoblar) (RESOLVED)
 
 ### OQ-1 — Kassir qurilmasi: PWA yoki mavjud Next.js marshruti?
 **Javob: mavjud Next.js ilovasining mobil marshruti** (`app/[locale]/(app)/collect/`), PWA **emas**.

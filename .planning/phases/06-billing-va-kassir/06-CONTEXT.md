@@ -59,6 +59,35 @@
 - **D-23**: `payments` **append-only**: `kind ∈ {payment, reversal}`, `reverses_payment_id`, o'zgarmaslik triggeri. Storno **sabab-kod** talab qiladi va **o'z qatori** bo'ladi. O'chirish/tahrirlash YO'Q. Qoldiq — belgili summalar yig'indisi.
 - **D-24**: To'lov **hisobga bog'lanadi** (`charge_id`), rastaga emas. Aks holda "qaysi kunning pattasi to'landi?" savoliga javob yo'qoladi va eski qarz bilan bugungi patta aralashadi.
 
+> **D-24 — MEXANIZM MOSLASHTIRILDI** (rejalashtirish, 2026-08-10). Bu **qaror emas**,
+> mexanizm; `06-RESEARCH.md` §C-4 talab qilgani bo'yicha shu yerga **qaytarildi**
+> (discuss-phase ga eskalatsiya **qilinmadi** — foydalanuvchining doimiy ko'rsatmasi).
+>
+> ⛔ **Maqsad o'zgarmaydi**, ustun o'zgaradi: `payments.charge_id` **YO'Q**. Sabab ikkita,
+> ikkalasi ham mustaqil bloklovchi: (1) kassir bugungi pattani **kun davomida** yig'adi,
+> hisob esa **ertasi kuni 04:10 da** tug'iladi (C-3) — to'lov paytida `charge_id`
+> **mavjud emas**; (2) bitta to'lov **bir necha kunlik** qarzni yopadi
+> (`[Qarzni ham olish]`, UI-SPEC §9.6), ya'ni to'lov↔hisob **1:1 emas**.
+>
+> **O'rniga:** to'lov — **sotuvchi darajasidagi kredit** + `payments.service_date`, va
+> «qaysi kunning pattasi to'landi?» savoliga ⛔ **nomlangan, determinlashtirilgan
+> taqsimlash qoidasi** javob beradi:
+> ⛔ **`FIFO_OLDEST_SERVICE_DATE_FIRST`** — kredit sotuvchi kesimida eng **qadimgi**
+> to'lanmagan `daily_charges.service_date` dan boshlab yopiladi; bir kunda ikki rasta
+> bo'lsa tenglik `stall_code` bo'yicha **o'sish tartibida** uziladi (determinlashtirilgan,
+> kiritish tartibiga **bog'liq emas**).
+>
+> ⛔ Taqsimlash **SAQLANMAYDI** — u **hosila ko'rinish**: sof funksiya
+> `sbozor_core.billing.allocate_charge_credit()` (06-01) + hosila so'rov
+> `billing_repo.vendor_charge_allocation()` (06-06). Shu bilan D-07/BILL-03 ning
+> «saqlangan balans YO'Q» sharti **buzilmaydi** va ⛔ ettinchi jadval
+> (`payment_allocations`) ham **qo'shilmaydi**.
+>
+> ⛔ **Javob PROZA emas, TASDIQ:** jadval testi `tests/unit/test_payment_credit_rules.py`
+> (bir to'lov N kunga, qisman to'lov, avans, storno, bir kunda ikki rasta) va integratsiya
+> tasdig'i `tests/integration/test_billing_repo.py` (06-06, LIFO sabotaji bilan).
+> D-02 ning «nizoda qaysi yozuv dalil?» sharti shu bilan **kun kesimida ham** bajariladi.
+
 ### Smena va ko'r deklaratsiya (CASH-04)
 
 - **D-25**: **Ko'r deklaratsiya 5-fazaning ko'r audit naqshining AYNAN qayta ishlatilishi.** Smena yopish payloadida tizim summasi **e'lon qilinmagan** (yashirilgan emas), deklaratsiya yozilgach **o'zgarmas**, variance **serverda** hisoblanadi. `blind-audit` uchun yozilgan G-12 sinfidagi darvoza smena-yopish katalogini ham skanerlaydi.
