@@ -345,6 +345,30 @@ None — tashqi xizmat sozlanmasi talab qilinmaydi.
 - ⚠ **`ADJUSTMENT_DIRECTIONS`** (`{increase, decrease}`) ham shu rejada
   tug'ildi; u 06-RESEARCH C-5 dan olingan va DL-3 ning 4-bo'limi uchun kerak.
 
+## Self-Check: PASSED
+
+**Fayllar (`git ls-files` bilan — kuzatilayotgani ham tasdiqlandi):**
+
+- ✅ `frontend/src/lib/billing-pending-queries.ts`
+- ✅ `frontend/src/lib/billing-charge-queries.ts`
+- ✅ `frontend/src/lib/payment-queries.ts`
+- ✅ `frontend/src/lib/shift-queries.ts`
+- ✅ `frontend/scripts/collect-surface.test.mjs`
+- ✅ `.planning/phases/06-billing-va-kassir/06-03-SUMMARY.md`
+
+**Commitlar (`git log`):**
+
+- ✅ `9522168` — Task 1
+- ✅ `34a4f8b` — Task 2
+- ✅ `e8de8a5` — Task 3
+- ✅ `5f16361` — SUMMARY
+
+**Ishchi daraxt:** toza (`git status --short` bo'sh; sabotaj fayllari
+qaytarilgan, `node_modules` junction'i gitignore'da).
+
+⚠ **STATE.md, ROADMAP.md va REQUIREMENTS.md ATAYIN TEGILMADI** — worktree
+rejimi, ular to'lqin birlashuvidan keyin orkestrator zimmasida.
+
 ---
 *Phase: 06-billing-va-kassir*
 *Completed: 2026-08-10*
