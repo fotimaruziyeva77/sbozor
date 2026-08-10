@@ -91,7 +91,7 @@ completed: 2026-08-10
 
 ## Files Created/Modified
 
-- `packages/sbozor-core/sbozor_core/billing.py` (**yangi**, 582 qator) — besh sof funksiya, `ALLOCATION_RULE`, to'rt `dataclass(frozen=True, slots=True)`
+- `packages/sbozor-core/sbozor_core/billing.py` (**yangi**, 586 qator) — besh sof funksiya, `ALLOCATION_RULE`, to'rt `dataclass(frozen=True, slots=True)`
 - `tests/fixtures/idempotency_probe.py` (**yangi**) — `probe_idempotent_writes` xom DDL + `sbozor_app` ga `GRANT` + DML SQL konstantalari
 - `tests/tenancy/test_idempotency_concurrency.py` (**yangi**, 3 test) — A1 ning uch o'lchovi
 - `tests/tenancy/test_generated_from_column_probe.py` (**yangi**, 2 test) — A2 + nazorat o'lchovi
@@ -243,6 +243,30 @@ None — tashqi servis sozlamasi talab qilinmadi.
 - **06-06 (`billing_repo`):** `billable_from_slots()` predikatini SQL da **takrorlamaydi**; `vendor_charge_allocation()` `allocate_charge_credit()` ni chaqiradi va `ALLOCATION_RULE` nomini qaytaradi. G-14 ning arifmetik tengligi (`Σ unpaid == vendor_outstanding()`) invariant (b) bilan oldindan majburlangan.
 - **06-09 (`POST /payments`):** `IDEMPOTENT_GET_OR_CREATE_SUPPORTED = True` → **ikki bayonotli** get-or-create; `SAVEPOINT` shoxi kerak emas. `total_due_soum()` va `payment_quote_set()` — yagona arifmetika manbai.
 - ⚠ **Ochiq band (bloklamaydi):** `stall_slot_occupancy` da `UNIQUE (market_id, id)` **yo'q** (C-7/Gotcha 8), ya'ni `charge_evidence` unga kompozit FK qo'ysa `0020` **o'zi yiqiladi**. Bu 06-03 ning OP-11 juftligi va u bu rejada hal qilinmadi.
+
+## Self-Check: PASSED
+
+Har bir da'vo mexanik tekshirildi:
+
+**Fayllar (9/9 mavjud):** `billing.py` · `idempotency_probe.py` ·
+`test_idempotency_concurrency.py` · `test_generated_from_column_probe.py` ·
+`test_billable_from_slots.py` · `test_variance.py` ·
+`test_payment_credit_rules.py` · `migrations/entities/__init__.py` ·
+`06-01-SUMMARY.md`
+
+**Commitlar (4/4 topildi):** `c82b4e1` · `46a53d9` · `c16bd7d` · `012245b`
+
+**`must_haves` artefaktlari:**
+
+| Talab | O'lchov | Natija |
+|---|---|---|
+| `billing.py` `min_lines: 190` | `wc -l` → **586** | ✅ |
+| `billing.py` `contains: FIFO_OLDEST_SERVICE_DATE_FIRST` | `grep -c` → **2** | ✅ |
+| `test_billable_from_slots.py` `contains: EXPECTED_BY_SLOT_SET` | `grep -c` → **9** | ✅ |
+| `test_payment_credit_rules.py` `contains: FIFO_ALLOCATION_TABLE` | `grep -c` → **14** | ✅ |
+| `key_links`: marker `IDEMPOTENT_GET_OR_CREATE_SUPPORTED` | `grep -c` → **3** (e'lon + `__all__` + import) | ✅ |
+| `key_links`: `from sbozor_core.enums import` (yangi enum yaratilmadi) | mavjud | ✅ |
+| `key_links`: `ALLOCATION_RULE` / `total_due_soum` eksport qilingan | `__all__` da | ✅ |
 
 ---
 *Phase: 06-billing-va-kassir*
