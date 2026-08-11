@@ -284,6 +284,27 @@ class ShiftReport:
        maydon QAYTADI (`rows=()`, ikkala hisoblagich `0`). «Bu kunda
        smena yo'q» bilan «hisoblagich ishlamayapti» bir xil
        ko'rinmasligi kerak (`occupancy.py:122-124` prinsipi).
+
+    =======================================================================
+    ⚠ **MA'NOSI WR-01 DAN KEYIN O'ZGARDI — HISOBLAGICH O'CHIRILMADI.**
+
+    `POST /payments` endi ochiq smena bo'lmasa `409 no_open_shift`
+    qaytaradi (`payments.py:399-400`), ya'ni **API yo'li bu qatorlarni
+    boshqa TUG'DIRMAYDI**. Ustun `nullable` bo'lib qoladi va hisoblagich
+    ham qoladi — lekin uning savoli endi boshqa:
+
+        oldin:  «qaysi to'lovlar kassir qutisiga tushmadi?»
+        endi:   «API'dan TASHQARIDA kim pul yozdi?»
+
+    Ya'ni nolga teng bo'lmagan hisoblagich endi **import, bevosita DB
+    yozuvi yoki kelajakdagi direktor-kiritish marshruti** demakdir.
+
+    ⛔ Hisoblagichni olib tashlash **noto'g'ri** bo'lardi: o'shanda
+       API'dan tashqarida yozilgan pul hisobotdan JIMGINA yo'qolardi —
+       aynan bu maydon oldini olish uchun tug'ilgan nosozlik (D-14).
+       Yetib bo'lmaydigan bo'lishi mumkin, **jimgina** yetib bo'lmaydigan
+       bo'lishi mumkin emas (WR-08 da o'rnatilgan qoida).
+    =======================================================================
     """
 
     rows: tuple[ShiftReportRow, ...]
