@@ -806,6 +806,62 @@ async def test_the_three_anomaly_kinds_never_share_a_counter(
     assert result.anomalies_no_coverage >= len(no_coverage)
 
 
+async def test_a_second_run_does_not_recount_the_same_anomalies(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    scenario: Scenario,
+    env: Env,
+) -> None:
+    """⛔ WR-03: anomaliya sanog'i YOZUVGA ergashadi, URINISHGA emas.
+
+    =========================================================================
+    ⛔⛔ JOB KONVERGENT — «QAYTA YUGURISH NORMAL HOLAT» (D-06/D-13).
+
+    `write_anomaly()` konfliktda `None` qaytaradi, ya'ni ikkinchi
+    yugurishda YANGI qator yozilmaydi. Sanoqlar esa SHARTSIZ oshardi:
+
+        await write_anomaly(...)
+        result.anomalies_no_coverage += 1     # yozildimi — tekshirilmaydi
+
+    Natijada bir kunning har qayta yugurishi o'sha anomaliyalarni QAYTA
+    sanardi. Son `system_heartbeats.detail` ga tushadi va uni
+    `/internal/self-check` bilan kunlik daydjest o'qiydi — ya'ni
+    BILL-04 ning YAGONA tashqi kuzatuvi oshirib ko'rsatardi.
+
+    `charged` bu qoidani ALLAQACHON bajarardi (`if charge_id is None:
+    skipped_existing += 1`), anomaliyalar esa YO'Q — nomuvofiqlik bitta
+    faylning ichida edi.
+
+    ⛔ QATOR SONI HAM O'LCHANADI: faqat sanoqni tekshirish «ikkinchi
+       yugurish anomaliyani UMUMAN yozmadi» bilan «yozdi, lekin
+       sanamadi» ni AJRATMASDI (D-30).
+
+    ⚠ NAZORAT: birinchi yugurishning sanog'i NOLDAN KATTA. Usiz «har
+      doim nol» ham bu testni qanoatlantirardi.
+    =========================================================================
+    """
+    await day_close(app_sessionmaker, business_date=scenario.day)
+    first = await billing_close(app_sessionmaker, business_date=scenario.day)
+    rows_before = anomalies(sync_owner_conn, env.market_id, scenario.day)
+
+    second = await billing_close(app_sessionmaker, business_date=scenario.day)
+    rows_after = anomalies(sync_owner_conn, env.market_id, scenario.day)
+
+    assert first.anomalies_unassigned > 0, "nazorat: birinchi yugurish anomaliya sanamadi"
+    assert first.anomalies_no_coverage > 0, "nazorat: qamrovsiz rasta sanog'i nol"
+    assert len(rows_after) == len(rows_before), "qayta yugurish YANGI anomaliya yozdi"
+
+    assert (
+        second.anomalies_unassigned,
+        second.anomalies_no_coverage,
+        second.anomalies_closed_day,
+    ) == (0, 0, 0), (
+        "qayta yugurish YOZILMAGAN anomaliyalarni sanadi — "
+        f"{second.anomalies_unassigned}/{second.anomalies_no_coverage}/"
+        f"{second.anomalies_closed_day}"
+    )
+
+
 # ===========================================================================
 # 6. D-14 — NAZORATCHISIZ HAL QILINGAN RASTALAR O'LCHANADI
 # ===========================================================================

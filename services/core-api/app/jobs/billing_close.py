@@ -425,7 +425,14 @@ async def _close_stall(
     #     shartidan OLDIN tekshiriladi: qamrovsiz rasta «band emas» degan
     #     javobga ham, «band» degan javobga ham EGA EMAS.
     if decision.no_coverage_only:
-        await write_anomaly(
+        # ⛔ SANOQ YOZUVGA ERGASHADI, URINISHGA EMAS (WR-03): `write_anomaly()`
+        #   konfliktda `None` qaytaradi va job KONVERGENT — «qayta yugurish
+        #   NORMAL holat». Shartsiz `+= 1` ikkinchi yugurishda o'sha
+        #   anomaliyani QAYTA sanardi va son `system_heartbeats.detail` ga
+        #   tushib, `/internal/self-check` bilan kunlik daydjestda
+        #   OSHIRIB ko'rsatilardi — BILL-04 ning yagona tashqi kuzatuvi.
+        #   `charged` bu qoidani ALLAQACHON bajaradi (`skipped_existing`).
+        anomaly_id = await write_anomaly(
             session,
             market_id=market_id,
             stall_id=verdict.stall_id,
@@ -434,7 +441,8 @@ async def _close_stall(
             occupancy_event_id=None,
             snapshot_id=None,
         )
-        result.anomalies_no_coverage += 1
+        if anomaly_id is not None:
+            result.anomalies_no_coverage += 1
         return
 
     # (2) KO'RDIK, LEKIN BAND EMAS — va shu yerda KECH KELGAN TASDIQ shoxi.
@@ -456,7 +464,11 @@ async def _close_stall(
     #     qarzdor, lekin kim ekani noma'lum» yozuvi qarz hisobotini
     #     buzardi (`write_charge()` docstringi).
     if money.vendor_id is None:
-        await _write_anomaly_with_evidence(
+        # ⛔ SANOQ YOZUVGA ERGASHADI (WR-03) — sabab (1) shoxida yozilgan.
+        #   Bu yerda ikkinchi sabab ham bor: dalil topilmasa
+        #   `_write_anomaly_with_evidence()` `errors` ga kod yozib ERTA
+        #   qaytadi, ya'ni shartsiz `+= 1` YOZILMAGAN anomaliyani sanardi.
+        written = await _write_anomaly_with_evidence(
             session,
             market_id=market_id,
             stall_id=verdict.stall_id,
@@ -465,7 +477,8 @@ async def _close_stall(
             rows=verdict.rows,
             result=result,
         )
-        result.anomalies_unassigned += 1
+        if written:
+            result.anomalies_unassigned += 1
         return
 
     # (4) TARIF YO'Q — ⛔ JIMGINA YUTILMAYDI (`errors` docstringidagi ⚠).
@@ -536,7 +549,8 @@ async def _write_closed_day_anomalies(
     for verdict in verdicts:
         if verdict.decision.occupied_slots == 0:
             continue
-        await _write_anomaly_with_evidence(
+        # ⛔ SANOQ YOZUVGA ERGASHADI (WR-03) — sabab yuqoridagi ikki shoxda.
+        written = await _write_anomaly_with_evidence(
             session,
             market_id=market_id,
             stall_id=verdict.stall_id,
@@ -545,7 +559,8 @@ async def _write_closed_day_anomalies(
             rows=verdict.rows,
             result=result,
         )
-        result.anomalies_closed_day += 1
+        if written:
+            result.anomalies_closed_day += 1
 
 
 async def _write_anomaly_with_evidence(
@@ -557,7 +572,7 @@ async def _write_anomaly_with_evidence(
     kind: AnomalyKind,
     rows: tuple[SlotEvidenceRow, ...],
     result: BillingCloseResult,
-) -> None:
+) -> bool:
     """D-29 — «band, lekin to'lovsiz» da'vosi KADR bilan keladi.
 
     ⛔ DALILSIZ ANOMALIYA YOZILMAYDI: `write_anomaly()` uni `ValueError`
@@ -570,6 +585,13 @@ async def _write_anomaly_with_evidence(
       (D-08 ning muzlatilgan pointeri), qayta hisoblanmaydi. Tartib
       `_BILLABLE_SLOT_ROWS` ning `ORDER BY ... slot_time` idan keladi,
       ya'ni bir xil kirish har safar BIR XIL kadrni beradi.
+
+    Returns:
+        `True` — YANGI qator yozildi; `False` — dalil topilmadi YOKI
+        anomaliya bu kunga ALLAQACHON yozilgan (konvergent qayta
+        yugurish). ⛔ Chaqiruvchi sanoqni AYNAN shu javobga bog'laydi
+        (WR-03): shartsiz `+= 1` qayta yugurishda sonni oshirib
+        yuborardi va u `system_heartbeats.detail` ga tushardi.
     """
     winner = next(
         (
@@ -587,9 +609,9 @@ async def _write_anomaly_with_evidence(
 
     if winner is None or snapshot_id is None:
         result.errors.append(f"billing_close_anomaly_without_evidence:{kind.value}")
-        return
+        return False
 
-    await write_anomaly(
+    anomaly_id = await write_anomaly(
         session,
         market_id=market_id,
         stall_id=stall_id,
@@ -598,6 +620,7 @@ async def _write_anomaly_with_evidence(
         occupancy_event_id=winner,
         snapshot_id=snapshot_id,
     )
+    return anomaly_id is not None
 
 
 async def _market_open(session: AsyncSession, *, market_id: UUID, business_date: date) -> bool:
