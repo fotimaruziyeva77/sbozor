@@ -432,24 +432,46 @@ bajarildi va beshala mezon bitta buyruqda yashil
   5. To'lov kiritilishi bilan sotuvchiga zudlik push-kvitansiya boradi (summa, rasta, kassir, vaqt) va qarz N kundan oshsa avtomatik eslatma keladi — barcha xabarlar outbox orqali, throttling va quiet hours hurmat qilinib, yetkazilganlik holati bilan
 
 **Plans**: 17 plans (8 to'lqin)
+Plans:
+**Wave 1**
 
-Plans:
 - [ ] 07-01-PLAN.md — `bot-service` tug'ilishi: skelet, compose, `package.json`, Sentry darvozasining kengaytmasi
 - [ ] 07-02-PLAN.md — Bildirishnoma domeni: besh enum, besh model, `0023` migratsiya (RLS + kompozit FK + XOR CHECK)
 - [ ] 07-03-PLAN.md — `GET /me/headline` — rol bo'yicha serverda hal qilinadigan bitta son (RECON-06)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 07-04-PLAN.md — Strukturaviy meta darvoza (G7-2/G7-7/G7-8) + domen fixture'lari (ikki bozorli telefon to'qnashuvi)
 - [ ] 07-05-PLAN.md — Frontend: bosh ekran ko'rsatkichi
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 07-06-PLAN.md — `AlertSender` kengaytmasi (`chat_id` argument) + `outbox_repo` + D-18 siyosati
 - [ ] 07-07-PLAN.md — Case domeni: `reconciliation_repo` + `recon.open` jobi + hosila hit-rate
 - [ ] 07-08-PLAN.md — Ichki bot API + `binding_repo` (D-26 ning uch shoxi)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 07-09-PLAN.md — `notify.outbox_tick` jobi + G7-1/G7-4/G7-5
 - [ ] 07-10-PLAN.md — Nomuvofiqlik hisoboti va case yuzasi (API) + G7-6
 - [ ] 07-11-PLAN.md — `bot-service` handlerlari, uchala locale katalogi + G7-9
 - [ ] 07-12-PLAN.md — CASH-05: kvitansiya niyati to'lov tranzaksiyasida
 - [ ] 07-13-PLAN.md — Kechki/ertalabki xabar (D-15/D-16) va kechikkan qarz eslatmasi (BOT-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 07-14-PLAN.md — Cron reyestri va yurak urishi (D-17): besh vazifa, to'rt komponent
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 07-15-PLAN.md — Frontend: nomuvofiqlik hisoboti + case ro'yxati + G7-3
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 07-16-PLAN.md — Frontend: case detali + yetkazilganlik holati (BOT-04)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
 - [ ] 07-17-PLAN.md — Faza darvozasi: `test_phase7_criteria.py`, byudjet o'lchovi, talab holatlari
 
 **UI hint**: yes
