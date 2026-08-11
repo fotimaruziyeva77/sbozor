@@ -93,10 +93,6 @@ export default function CollectShiftPage() {
   const locale = useLocale();
   const { principal } = useAuthStore();
 
-  const [closing, setClosing] = useState(false);
-  const requestClose = useCallback(() => setClosing(true), []);
-  const reopen = useCallback(() => setClosing(false), []);
-
   const canManage = hasPermission(principal?.roles ?? [], "shift_manage");
 
   /*
@@ -107,6 +103,56 @@ export default function CollectShiftPage() {
    */
   const { data } = useOpenShift({ enabled: canManage });
   const openShift = data ?? null;
+
+  /*
+   * =========================================================================
+   * ⛔⛔ CR-05: YOPISH OQIMI SO'ROV NATIJASIGA EMAS, O'ZI USHLAGAN
+   *     IDENTIFIKATORGA TAYANADI.
+   *
+   * Ilgari holat `closing: boolean` edi va shart
+   * `closing && openShift !== null` bo'lgan. `useCloseShift()` ning
+   * `onSuccess` i esa `removeQueries({ queryKey: shiftPrefix(marketId) })`
+   * chaqiradi va `shiftPrefix` — `openShiftKey` ning PREFIKSI, ya'ni
+   * ochiq smena yozuvi keshdan CHIQADI.
+   *
+   * ⛔ MEXANIZM O'LCHANDI (`page.test.tsx`), TAXMIN QILINMADI — va u
+   *    «darhol unmount» EMAS: react-query v5 da `removeQueries()` mount
+   *    holatidagi kuzatuvchiga XABAR BERMAYDI va qayta so'rov ham
+   *    yubormaydi. Shuning uchun yopilgan zahoti natija ekrani
+   *    KO'RINADI. Nuqson KEYINGI QAYTA CHIZISHDA otiladi:
+   *
+   *   1. sahifa har qanday sababdan qayta chiziladi;
+   *   2. `useQuery` o'chirilgan yozuvga qayta obuna bo'ladi ->
+   *      `data === undefined` -> `openShift` `null`;
+   *   3. eski shart `false` -> `ShiftCloseForm` UNMOUNT bo'ladi va uning
+   *      LOKAL `result` holati YO'Q QILINADI;
+   *   4. qayta so'rov javobi baribir `null` (smena YOPILGAN), ya'ni
+   *      forma QAYTIB KELMAYDI.
+   *
+   * ⛔ AYNAN SHU UNI XAVFLI QILADI: §10.3 natija ekranining yashashi
+   *    «sahifa qayta chizilmaydi» degan KAFOLATLANMAGAN shartga
+   *    tayanardi. Sabablar ro'yxati yopiq emas — `AuthProvider`,
+   *    locale/tema konteksti, brauzer fokusi, React ning dev rejimidagi
+   *    ikki marta chizishi, kelajakda bu sahifaga qo'shiladigan HAR
+   *    QANDAY holat. Ya'ni kassir moliyaviy deklaratsiya yozib, natija
+   *    ekranini ko'rmasligi — vaqti aniq bo'lmagan, LEKIN kutiladigan
+   *    oqibat; yagona dalil esa toast bo'lib qolardi.
+   *
+   * ⛔ IDENTIFIKATOR BIR MARTA OLINADI: forma butun oqim davomida
+   *    MOUNT holatda qoladi, ya'ni `result` yashaydi. `openShift` endi
+   *    faqat [Smenani yopish] BOSILGAN LAHZADA o'qiladi.
+   *
+   * ⚠ `shift-close-form.test.tsx` bu nuqsonni ko'ra olmasdi: u
+   *   `ShiftCloseForm` ni TO'G'RIDAN-TO'G'RI chizadi, ya'ni ota-onaning
+   *   unmount qarori umuman ishtirok etmaydi (WR-09).
+   * =========================================================================
+   */
+  const [closingShiftId, setClosingShiftId] = useState<string | null>(null);
+  const requestClose = useCallback(
+    () => setClosingShiftId(openShift?.id ?? null),
+    [openShift],
+  );
+  const reopen = useCallback(() => setClosingShiftId(null), []);
 
   if (!canManage) {
     return (
@@ -143,16 +189,23 @@ export default function CollectShiftPage() {
        *   qaytardi va CASH-04 ekranda KUZATILMAS bo'lib qolardi —
        *   kassir [Smenani yopish] ni bosgach hech nima ochilmasdi.
        *
-       *   ⚠ `openShift !== null` — QO'RIQCHI, bezak emas: `useOpenShift()`
-       *     yuklanayotganda qiymat mavjud emas va identifikator
-       *     o'qilmasdi. Qo'riqcha tushib qolsa kassir [Smenani yopish]
-       *     dan keyin BO'SH ekran ko'rardi.
+       *   ⚠ QO'RIQCHI `requestClose()` GA KO'CHDI (CR-05): `useOpenShift()`
+       *     yuklanayotganda `openShift?.id` `undefined` bo'ladi va
+       *     `closingShiftId` `null` bo'lib qoladi — ya'ni [Smenani
+       *     yopish] hech nima ochmaydi va kassir BO'SH ekran ko'rmaydi.
+       *     Farq shundaki, endi qo'riqcha BIR MARTA, bosish lahzasida
+       *     baholanadi; ilgari u HAR RENDERDA baholanardi va yopilgandan
+       *     keyin formani UNMOUNT qilardi.
        *
        *   ⛔ ALMASHTIRISH: yopish oqimida karta DOM'dan CHIQADI. Aks
        *      holda ekranda §10.3 ning AYNAN UCHTA narsasi o'rniga
        *      BESHTA bo'lardi (karta + tugma qo'shilardi).
        */}
-      {closing && openShift !== null ? <ShiftCloseForm onReopen={reopen} shiftId={openShift.id} /> : <ShiftOpenCard onRequestClose={requestClose} />}
+      {closingShiftId !== null ? (
+        <ShiftCloseForm onReopen={reopen} shiftId={closingShiftId} />
+      ) : (
+        <ShiftOpenCard onRequestClose={requestClose} />
+      )}
     </div>
   );
 }
