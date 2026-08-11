@@ -166,6 +166,93 @@ export const pendingStallSchema = z.strictObject({
 export type PendingStall = z.infer<typeof pendingStallSchema>;
 
 /**
+ * `GET /billing/pending?stall_code=…` ning KO'P MOSLIK javobi (§8.3).
+ *
+ * =========================================================================
+ * ⛔⛔ SERVER IKKI SHAKLDAN AYNAN BITTASINI QAYTARADI (06-08 kontrakti).
+ *
+ *   Kassir kodni PREFIKS sifatida teradi. `"1"` bozorda yo'q, lekin `"10"`
+ *   va `"100"` bor bo'lsa summa UMUMAN hisoblanmaydi — taxminiy summa
+ *   ko'rsatish §9.4 ning aynan taqiqlagan xatosi. O'shanda javob faqat
+ *   KODLAR ro'yxati bo'ladi (`code_sort` tartibi SERVERDA, klientda emas).
+ *
+ * ⛔ 06-03 bu shaklni umuman bilmasdi: `usePendingStall` faqat TEKIS
+ *    javobni parse qilardi, ya'ni ko'p moslikda ekran «xato» blokini
+ *    ko'rsatardi va kassir uchun rasta YO'Q bo'lib ko'rinardi.
+ *
+ * ⛔ JUFTLANGAN INVARIANT — serverning `_exactly_one_shape` validatorining
+ *    AYNAN takrori: `stall` va `matches` bir vaqtda to'lgan bo'la olmaydi.
+ *    Ikkalasi ham to'lgan javobda kassir ro'yxatdan BOSHQA rastani tanlab,
+ *    ekranda TURGAN summani to'lardi — §9.4 ning «eski summa yangi rasta
+ *    ostida» xatosi, faqat bitta so'rov ichida.
+ * =========================================================================
+ */
+export const pendingLookupSchema = z
+  .strictObject({
+    matches: z.array(z.string()),
+    stall: pendingStallSchema.nullable(),
+  })
+  .refine((value) => !(value.stall !== null && value.matches.length > 0), {
+    message:
+      "IKKI SHAKL BIR VAQTDA: `stall` to'lgan va `matches` ham bo'sh emas. " +
+      "Aynan bitta moslikda ro'yxat BO'SH bo'ladi, ko'p moslikda esa summa " +
+      "UMUMAN hisoblanmaydi (§8.3, §9.4).",
+  });
+
+/**
+ * Marshrutning IKKALA shakli — birlashma.
+ *
+ * ⚠ Ikki shakl DISJUNKT: tekis javobda `matches` kaliti yo'q, ro'yxat
+ *   javobida esa `service_date` yo'q, va ikkala sxema ham `strictObject`.
+ *   Ya'ni birlashma qaysi shox ekanini TAXMIN QILMAYDI — ortiqcha kalitli
+ *   javob ikkala shoxda ham yiqiladi.
+ */
+export const pendingLookupResponseSchema = z.union([
+  pendingStallSchema,
+  pendingLookupSchema,
+]);
+
+/**
+ * Qidiruv natijasining YAGONA klient shakli.
+ *
+ * ⛔ `matchesRequestedCode` — §9.4 ning IKKINCHI qatlami va u kesh
+ *    siyosatidan MUSTAQIL: summa faqat server javobining o'zi kiritilgan
+ *    kodni tasdiqlaganda chizilishi mumkin.
+ */
+export type PendingLookupResult = {
+  /** Aynan bitta moslik topilgan bo'lsa — proyeksiya; aks holda `null`. */
+  stall: PendingStall | null;
+  /** Ko'p moslikda kodlar ro'yxati (server tartibida), aks holda bo'sh. */
+  matches: readonly string[];
+  /** Javobdagi kod kiritilgan kodga TENGmi (§9.4, 2-qatlam). */
+  matchesRequestedCode: boolean;
+};
+
+/**
+ * Server javobini yagona shaklga keltiradi — ikki shox, bitta natija.
+ *
+ * ⚠ Eksport qilinadi, chunki komponent testi uni SO'ROVSIZ o'lchay oladi.
+ */
+export function normalizePendingLookup(
+  data: z.infer<typeof pendingLookupResponseSchema>,
+  requestedCode: string,
+): PendingLookupResult {
+  if ("matches" in data) {
+    return {
+      stall: data.stall,
+      matches: data.matches,
+      matchesRequestedCode:
+        data.stall !== null && data.stall.stall_code === requestedCode,
+    };
+  }
+  return {
+    stall: data,
+    matches: [],
+    matchesRequestedCode: data.stall_code === requestedCode,
+  };
+}
+
+/**
  * `GET /billing/pending` (rasta parametrisiz) — BOZOR kesimi (§9.5).
  *
  * ⛔ Bu ham `strictObject` va unda ham hisob identifikatori YO'Q: bozor
@@ -249,12 +336,10 @@ export function usePendingStall(
     queryFn: () =>
       apiFetch(
         `${BILLING_PENDING_PATH}?stall_code=${encodeURIComponent(stallCode)}`,
-        { schema: pendingStallSchema },
+        { schema: pendingLookupResponseSchema },
       ),
-    select: (data: PendingStall) => ({
-      ...data,
-      matchesRequestedCode: data.stall_code === stallCode,
-    }),
+    select: (data: z.infer<typeof pendingLookupResponseSchema>) =>
+      normalizePendingLookup(data, stallCode),
     enabled:
       marketId !== null && stallCode !== "" && (options?.enabled ?? true),
     retry: false,
