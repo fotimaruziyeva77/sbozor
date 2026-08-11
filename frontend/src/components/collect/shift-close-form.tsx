@@ -82,12 +82,18 @@ import type { ShiftCloseResult } from "@/lib/shift-queries";
  * ya'ni butun o'lchovni buzardi. Manfiy qiymat esa ma'nosiz: naqd
  * qutisida minus bo'lmaydi.
  *
- * ⚠ NOTO'G'RI KIRITISH UCHUN MATN KO'RSATILMAYDI, faqat `aria-invalid`.
- *   Sabab ochiq: `collect.*` da bunday xabar kaliti YO'Q, `tariffs.*`
- *   dagi mavjud xabar esa «noldan katta butun son bo'lsin» deydi —
- *   bu yerda u YOLG'ON bo'lardi, chunki nol AYNAN ruxsat etilgan. Yangi
- *   kalit qo'shish esa copy egaligidan tashqarida (06-02). Band
- *   `deferred-items.md` da qayd etilgan.
+ * ⛔ NOTO'G'RI KIRITISH ENDI NOMLANADI — `collect.declaredInvalid`.
+ *
+ *   Ilgari bu yerda faqat `aria-invalid` bor edi va ko'radigan
+ *   foydalanuvchi uchun ekran JIM qolardi: maydon qizarardi-yu, NEGA
+ *   qizargani aytilmasdi. `tariffs.amountInvalid` bu yerda YOLG'ON
+ *   bo'lardi — u «noldan katta butun son bo'lsin» deydi, §10.2 esa
+ *   nolni AYNAN ruxsat etadi. Shuning uchun kalit ALOHIDA va uning
+ *   matni nolning qonuniyligini OCHIQ aytadi.
+ *
+ * ⚠ MATN IKKI JOYDA EMAS, BITTA: u `aria-describedby` orqali maydonga
+ *   bog'lanadi va `role="status"` bilan e'lon qilinadi — ikkinchi
+ *   nusxa skrinriderda ikki marta o'qilardi.
  * =============================================================================
  */
 
@@ -127,6 +133,7 @@ export function ShiftCloseForm({ shiftId, onReopen }: ShiftCloseFormProps) {
 
   const fieldId = useId();
   const hintId = `${fieldId}-hint`;
+  const errorId = `${fieldId}-error`;
 
   const [raw, setRaw] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -243,7 +250,7 @@ export function ShiftCloseForm({ shiftId, onReopen }: ShiftCloseFormProps) {
 
       <Field id={fieldId} label={t("collect.declaredLabel")}>
         <Input
-          aria-describedby={hintId}
+          aria-describedby={invalid || notice ? `${hintId} ${errorId}` : hintId}
           aria-invalid={invalid ? true : undefined}
           autoComplete="off"
           autoFocus
@@ -274,9 +281,16 @@ export function ShiftCloseForm({ shiftId, onReopen }: ShiftCloseFormProps) {
         {t("common.close")}
       </Button>
 
-      {notice ? (
-        <p className="text-sm text-text-muted" role="status">
-          {t("collect.declaredLabel")}
+      {/*
+       * ⛔ IKKI TETIK, BITTA MATN: maydon NOTO'G'RI to'ldirilgan bo'lsa
+       *    (`invalid`) yoki bo'sh maydon bilan tasdiq bosilgan bo'lsa
+       *    (`notice`, §14.3 — bosish RAD ETILMAYDI, u SABABNI e'lon
+       *    qiladi). Ikkala holatda ham javob AYNI: «faqat raqam, nol ham
+       *    mumkin» — chunki ikkalasining ham sababi bitta.
+       */}
+      {invalid || notice ? (
+        <p className="text-sm text-danger-text" id={errorId} role="status">
+          {t("collect.declaredInvalid")}
         </p>
       ) : null}
 

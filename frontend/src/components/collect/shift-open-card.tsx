@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { DoorOpen, Loader2 } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -101,9 +102,24 @@ export function ShiftOpenCard({ onRequestClose }: ShiftOpenCardProps) {
         /* Server «ochiq smena bor» dedi — ekran uni ko'rsatishi shart. */
         if (code === ALREADY_OPEN) void refetch();
       },
-      onSuccess: () => setBusy(false),
+      onSuccess: () => {
+        setBusy(false);
+        /*
+         * ⛔ §13.8 NING 4-TOASTI — NATIJA, BUYRUQ EMAS.
+         *
+         * Karta holati `EmptyState` dan boshlangan-vaqt kartasiga
+         * o'tadi va bu o'zgarish EKRANNING pastki qismida bo'lishi
+         * mumkin — kassir telefonda uni sezmasligi mumkin. Toast
+         * o'zgarishni E'LON qiladi.
+         *
+         * ⛔ `collect.shiftOpen` ISHLATILMAYDI: u «Smenani ochish» —
+         *    BUYRUQ. Natija o'rniga buyruqni ko'rsatish kassirga
+         *    «yana bosish kerakmi?» degan savol qoldirardi.
+         */
+        toast.success(t("collect.shiftOpened"));
+      },
     });
-  }, [openShift, refetch]);
+  }, [openShift, refetch, t]);
 
   const failureView =
     failureCode === null ? null : billingErrorView(failureCode);
