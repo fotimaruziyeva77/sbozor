@@ -91,6 +91,7 @@ from app.security.rbac import Permission
 from app.services.billing_errors import (
     AMOUNT_UNAVAILABLE,
     IDEMPOTENCY_KEY_REUSED,
+    NO_OPEN_SHIFT,
     OVERRIDE_NOT_APPLICABLE,
     PAYMENT_ALREADY_REVERSED,
     REASON_REQUIRED,
@@ -220,6 +221,7 @@ async def create_payment(
       2. `stall_code` -> rasta va bugungi pul    -> 404 `stall_not_found`
       2.5 TAKROR SO'ROV (D-21)                   -> 200 / 409
       3. `vendor_id is None`                     -> 409 `stall_not_assigned`
+      3.5 ochiq smena yo'q                       -> 409 `no_open_shift`
       4. asoslangan summalar to'plami (SERVERDA) -> 422 (bo'sh to'plam)
       5. `quote_soum` tanlovi + sabab darvozasi  -> 422
       6. idempotent yozish                       -> 201 / 200 / 409
@@ -358,6 +360,45 @@ async def create_payment(
         raise _reject(STALL_NOT_ASSIGNED, status.HTTP_409_CONFLICT)
     vendor_id = money.vendor_id
 
+    # ---- 3.5-QADAM: OCHIQ SMENA — ⛔ SHART, ixtiyoriy emas (WR-01).
+    #
+    # ⛔⛔ SMENA ⛔ SERVERDA yechiladi (`PaymentCreateRequest` docstringi)
+    #    va endi u MAJBURIY. Reyestr buni ALLAQACHON e'lon qilgan edi
+    #    (`NO_OPEN_SHIFT`: «To'lov yozish uchun ochiq smena yo'q (409) …
+    #    ochiq smenasiz yozilgan to'lov keyin hech qaysi ko'r
+    #    deklaratsiyaga tushmasdi va variance o'z maxrajini yo'qotardi»),
+    #    LEKIN hech qaysi marshrut uni ko'tarmasdi — e'lon qilingan,
+    #    ammo QO'LLANILMAGAN nazorat.
+    #
+    # ⛔ IKKINCHI, HUJJATLASHTIRILMAGAN OQIBAT: bunday qator
+    #    ABADIY BEKOR QILINMAS edi. `reverse_payment` `owner.shift_id`
+    #    so'rovchining OCHIQ smenasiga teng bo'lishini talab qiladi
+    #    (`None != <uuid>` har doim rost -> 403), `payments` esa
+    #    append-only va 6-fazada boshqa storno yuzasi YO'Q. Ya'ni
+    #    noto'g'ri rastaga yozilgan smenasiz to'lovni HECH QACHON
+    #    tuzatib bo'lmasdi.
+    #
+    # ⛔ OQ-6/A5 («direktor smenasiz kiritishi mumkin») BU YO'LNI
+    #    OQLAMAYDI: `PAYMENT_CREATE` D-07 matritsasida ⛔ YOLG'IZ
+    #    KASSIRDA (`rbac.py`) va direktor qatorida u ATAYIN yo'q. Ya'ni
+    #    o'sha asos API orqali UMUMAN yetib bo'lmaydigan holatga
+    #    tegishli, amalda esa har bir smenasiz qator — kassirning
+    #    ko'r-deklaratsiya mexanizmidan CHIQIB KETGAN to'lovi edi.
+    #
+    # ⚠ USTUN NULLABLE QOLADI: `payments.shift_id` sxemasi TEGILMAYDI
+    #   (migratsiya yo'q). Bu qaror MARSHRUT darajasida va kelajakdagi
+    #   direktor yuzasi uni O'Z shartlari bilan qayta ochishi mumkin.
+    #
+    # ⛔ TARTIB MAJBURIY: bu darvoza 2.5-QADAMDAN KEYIN turadi. Oldinga
+    #    ko'chirilsa smena yopilgandan keyin yuborilgan TAKROR so'rov
+    #    409 olardi — D-21 ning aynan buzilishi (CR-02 bilan bir sinf).
+    shift_id = await payment_repo.open_shift_id(
+        session, market_id=market_id, cashier_id=principal.user_id
+    )
+    if shift_id is None:
+        log.info("payment_no_open_shift", stall_code=payload.stall_code)
+        raise _reject(NO_OPEN_SHIFT, status.HTTP_409_CONFLICT)
+
     # ---- 4-QADAM: asoslangan summalar — ⛔ SERVERDA, arifmetikasiz.
     outstanding = (
         await billing_repo.vendor_outstanding(
@@ -382,11 +423,6 @@ async def create_payment(
         quote_soum = quotes[0]
         if payload.reason_code is None:
             raise _reject(REASON_REQUIRED, status.HTTP_422_UNPROCESSABLE_CONTENT)
-
-    # ---- Smena ⛔ SERVERDA yechiladi (`PaymentCreateRequest` docstringi).
-    shift_id = await payment_repo.open_shift_id(
-        session, market_id=market_id, cashier_id=principal.user_id
-    )
 
     # ---- 6-QADAM: idempotent yozish (A1 zondi — ikki bayonot).
     try:

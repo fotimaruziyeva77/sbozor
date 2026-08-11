@@ -57,6 +57,7 @@ from fixtures.billing_domain import (
     TARIFF_SOUM,
     BillingDomainSeed,
     add_daily_charge,
+    add_payment,
     billing_domain_before_day_close,
 )
 from fixtures.market_domain import MarketDomainSeed
@@ -1099,46 +1100,102 @@ async def test_an_unknown_stall_code_is_a_not_found(
 
 
 # ===========================================================================
-# 7. OQ-6/A5 — `shift_id = NULL` RUXSAT, LEKIN OYNADA KO'RINMAYDI
+# 7. WR-01 — OCHIQ SMENA SHART; `shift_id = NULL` QATORI OYNADA KO'RINMAYDI
 # ===========================================================================
 
 
-async def test_a_payment_without_an_open_shift_is_written_but_stays_out_of_the_window(
+async def test_a_payment_without_an_open_shift_is_refused(
     api_client: httpx.AsyncClient, env: Env, cashier_headers: dict[str, str]
 ) -> None:
-    """OQ-6/A5: ochiq smenasiz to'lov -> **201** va `shift_id` `NULL`.
+    """⛔ WR-01: ochiq smenasiz to'lov -> **409 `no_open_shift`**, 201 EMAS.
 
     =======================================================================
-    ⛔ REJA BU DA'VONI «DIREKTOR SESSIYASI» BILAN O'LCHASHNI AYTADI —
-       LEKIN DIREKTORDA `payment_create` YO'Q (`rbac.py`, D-07 matritsasi,
-       06-02 da qulflangan). Direktor sessiyasi **403** olardi va test
-       OQ-6 ni umuman o'lchamasdi.
+    ⛔⛔ REYESTR BU QOIDANI E'LON QILGAN, MARSHRUT ESA QO'LLAMAGAN EDI.
 
-    Da'voning O'ZI esa huquq haqida emas, SMENA haqida: «`shift_id`
-    NULLABLE va u `NULL` bo'lishi mumkin». Uni AYNAN o'lchash yo'li —
-    `payment_create` ga EGA foydalanuvchi (kassir) ochiq smenasiz yozadi.
+    `billing_errors.NO_OPEN_SHIFT` docstringi: «To'lov yozish uchun ochiq
+    smena yo'q (409) … ochiq smenasiz yozilgan to'lov keyin hech qaysi
+    ko'r deklaratsiyaga tushmasdi va variance o'z maxrajini yo'qotardi».
+    Hech qaysi marshrut uni ko'tarmasdi — bu test ILGARI **201** ni va
+    `shift_id IS NULL` ni TASDIQLARDI, ya'ni u nuqsonni QULFLAB
+    QO'YGANDI.
+
+    ⛔ IKKINCHI, HUJJATLASHTIRILMAGAN OQIBAT — ABADIY BEKOR QILINMASLIK:
+       `reverse_payment` `owner.shift_id` so'rovchining OCHIQ smenasiga
+       teng bo'lishini talab qiladi (`None != <uuid>` har doim rost ->
+       403), `payments` esa append-only. Ya'ni noto'g'ri rastaga
+       yozilgan smenasiz to'lovni HECH QACHON tuzatib bo'lmasdi.
+
+    ⛔ OQ-6/A5 («direktor smenasiz kiritishi mumkin») BU YO'LNI
+       OQLAMAYDI: `PAYMENT_CREATE` D-07 matritsasida ⛔ YOLG'IZ KASSIRDA
+       va direktor qatorida u ATAYIN yo'q — o'sha asos API orqali
+       yetib bo'lmaydigan holatga tegishli edi.
+
+    ⚠ USTUN NULLABLE QOLADI (migratsiya TEGILMADI): qaror MARSHRUT
+      darajasida va kelajakdagi direktor yuzasi uni o'z shartlari bilan
+      qayta ochishi mumkin. Pastdagi test aynan shu sababdan hamon
+      `shift_id IS NULL` qatorini SEED bilan yozadi.
     =======================================================================
-
-    ⛔ IKKINCHI YARIM SHU YERDA: keyin smena OCHILADI va o'sha to'lov
-       `GET /payments/recent` da ⛔ **KO'RINMAYDI** — oyna `shift_id`
-       bo'yicha filtrlangan, ya'ni kassir BOSHQA (yoki smenasiz) yozuvni
-       o'z smenasining ro'yxatida ko'rmaydi.
     """
     code = env.code(env.stall("stall_with_two_occupied_slots"))
     env.close_the_open_shift()
 
-    orphan = await _post(
+    response = await _post(
         api_client,
         cashier_headers,
         _body(stall_code=code, amount_soum=1_000, reason_code="partial_day"),
     )
-    assert orphan.status_code == 201, orphan.text
 
-    rows = env.payments()
-    assert len(rows) == 1
-    assert rows[0][3] is None, "ochiq smenasiz yozilgan to'lovda `shift_id` `NULL` bo'lishi kerak"
+    assert response.status_code == 409, response.text
+    assert _detail(response) == "no_open_shift"
+    assert env.payments() == [], "smenasiz to'lov YOZILDI — WR-01 darvozasi ishlamadi"
 
+    # ⛔ NAZORAT: 409 SMENADAN keldi, boshqa shartdan emas (D-30).
     env.open_a_shift()
+    allowed = await _post(
+        api_client,
+        cashier_headers,
+        _body(stall_code=code, amount_soum=1_000, reason_code="partial_day"),
+    )
+    assert allowed.status_code == 201, f"nazorat yiqildi — 409 smenadan EMAS edi: {allowed.text}"
+
+
+async def test_a_shiftless_row_stays_out_of_the_cashier_window(
+    api_client: httpx.AsyncClient, env: Env, cashier_headers: dict[str, str]
+) -> None:
+    """`shift_id IS NULL` qatori `GET /payments/recent` da KO'RINMAYDI.
+
+    =======================================================================
+    ⛔ BU DA'VO WR-01 DAN KEYIN HAM YASHAYDI VA U BOSHQA NARSANI
+       O'LCHAYDI: oyna `shift_id` BO'YICHA filtrlanadimi.
+
+    Ustun hamon nullable (migratsiya tegilmadi) va bazada bunday qator
+    bo'lishi mumkin — masalan WR-01 dan OLDIN yozilgan tarixiy yozuv.
+    Agar filtr `cashier_id` bo'yicha bo'lsa, u kassirning yangi
+    smenasidagi ro'yxatga SIZIB KIRARDI va §8.8 ning oynasi begona
+    yozuvni ko'rsatardi.
+
+    ⛔ QATOR SEED BILAN YOZILADI, MARSHRUT ORQALI EMAS: marshrut endi
+       uni ATAYIN yozmaydi (WR-01) va uni «yozdirish» uchun darvozani
+       chetlab o'tish testni o'z himoyasiga qarshi qo'yardi.
+    =======================================================================
+    """
+    stall_id = env.stall("stall_with_two_occupied_slots")
+    code = env.code(stall_id)
+
+    # ⚠ `amount_soum == quote_soum` VA `override_reason IS NULL` —
+    #   `ck_payments_override_is_paired` juftlangan `CHECK` i shuni
+    #   talab qiladi (chetlanish bu testning da'vosi EMAS).
+    shiftless_id = add_payment(
+        env.conn,
+        market_id=env.market_id,
+        stall_id=stall_id,
+        vendor_id=env.vendor_id,
+        cashier_id=env.cashier_id,
+        shift_id=None,
+        amount_soum=1_000,
+        quote_soum=1_000,
+    )
+
     in_shift = await _post(
         api_client,
         cashier_headers,
@@ -1150,7 +1207,7 @@ async def test_a_payment_without_an_open_shift_is_written_but_stays_out_of_the_w
     assert window.status_code == 200, window.text
     ids = {item["payment_id"] for item in window.json()["items"]}
     assert ids == {in_shift.json()["payment_id"]}, (
-        "smenasiz yozilgan to'lov oynada KO'RINDI — filtr `shift_id` bo'yicha emas"
+        f"smenasiz qator ({shiftless_id}) oynada KO'RINDI — filtr `shift_id` bo'yicha emas"
     )
 
 

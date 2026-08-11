@@ -404,3 +404,144 @@ def test_every_billing_http_exception_sends_a_string_detail() -> None:
         "o'qiy olmaydi va kod `errors.generic` ga tushadi. `_reject(kod, status)` "
         f"ishlating: {offenders}"
     )
+
+
+# ===========================================================================
+# REYESTRDAGI KODNING YETIB BORISHI (WR-08)
+# ===========================================================================
+
+BILLING_ERRORS_SOURCE = (
+    Path(__file__).resolve().parents[2]
+    / "services"
+    / "core-api"
+    / "app"
+    / "services"
+    / "billing_errors.py"
+)
+
+UNREACHABLE_BY_DESIGN: dict[str, str] = {
+    "CHARGE_IMMUTABLE": (
+        "6-fazada hisobni O'ZGARTIRADIGAN marshrut UMUMAN yo'q (D-07: tuzatish "
+        "faqat `charge_adjustments` orqali va uning yozuv yuzasi 7-fazaniki). "
+        "Ya'ni bu kodning produseri hali TUG'ILMAGAN — u `daily_charges` ning "
+        "`P0001` triggeri uchun OLDINDAN nomlangan. Reyestrdan olib tashlash "
+        "`error-codes.test.mjs` ning uch qatlamli darvozasini (aniq son 14, "
+        "`SERVER_BILLING_ERROR_CODES` ning tuzilish regeksi, `BILLING_ERROR_CODES` "
+        "uchun `expected: 1`) va uchala locale matnini birdan siljitardi."
+    ),
+}
+"""⛔ REYESTRDA BOR, LEKIN HALI HECH QAYSI MARSHRUT KO'TARMAYDIGAN KODLAR.
+
+=============================================================================
+⛔⛔ NEGA ISTISNO RO'YXATI, «hammasi yetib borsin» degan qat'iy shart EMAS.
+
+Naqsh `EXEMPT_ROUTES` dan: yetib bormaslik O'ZI xato emas — SABABSIZ
+yetib bormaslik xato. WR-08 o'lchagan holat aynan ikkinchisi edi: kod
+qo'shildi, uchala tilga tarjima qilindi, `billing-errors.ts` ga
+ko'zgulandi va HECH QAYERDAN qaytmasdi. Frontend darvozasi esa faqat
+SONNI va matn qamrovini o'lchaydi, ya'ni u bunday kodni ko'ra olmasdi.
+
+⚠ SABAB MAJBURIY VA U O'QILADI (`test_unreachable_codes_have_reason`):
+  bo'sh satr bilan «istisno qildim» deb qo'yish yo'li yopiq.
+=============================================================================
+"""
+
+
+_SERVER_REGISTRY_NAMES = ("COLLECT_ERROR_CODES", "SHIFT_ERROR_CODES", "BILLING_ERROR_CODES")
+"""⛔ `SERVER_BILLING_ERROR_CODES` ning UCH tarkibiy qismi.
+
+`CLIENT_ONLY_ERROR_CODES` ATAYIN yo'q: `network_unreachable` serverdan
+HECH QACHON qaytmaydi va uni bu darvozaga qo'shish reyestrning O'Z
+ta'rifiga («server nima qaytarishi mumkin») zid bo'lardi.
+"""
+
+
+def _server_registry_members() -> set[str]:
+    """Uch server reyestrining a'zo KONSTANTA NOMLARI — AST dan HOSILA."""
+    tree = ast.parse(BILLING_ERRORS_SOURCE.read_text(encoding="utf-8"))
+    members: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
+            continue
+        if node.target.id not in _SERVER_REGISTRY_NAMES or node.value is None:
+            continue
+        members.update(inner.id for inner in ast.walk(node.value) if isinstance(inner, ast.Name))
+    return members
+
+
+def _names_used_in_production_code() -> set[str]:
+    """`app/` ostidagi ishlab chiqarish kodida NOMI bo'yicha ishlatilgan identifikatorlar.
+
+    ⛔ `billing_errors.py` NING O'ZI CHIQARILADI: u konstantalarni
+       ta'riflaydi va reyestr to'plamlarida qayta nomlaydi, ya'ni uni
+       qo'shish HAR kodni «ishlatilgan» qilib ko'rsatardi va darvoza
+       hech nimani o'lchamasdi.
+
+    ⚠ QAMROV MARSHRUTLARDAN KENG va bu ONGLI: `market_closed` /
+      `tariff_missing` marshrutga NOM sifatida emas, MA'LUMOT sifatida
+      keladi (`billing_repo.resolve_stall_day_money()` ularni
+      `unavailable_reason` ga yozadi, marshrut esa uni `_reject()` ga
+      uzatadi). Faqat `_reject(NOM, ...)` shaklini izlaydigan darvoza
+      ularni «yetib bormaydi» deb YOLG'ON ayblardi.
+    """
+    app_root = V1_ROUTER_DIR.parents[1]
+    used: set[str] = set()
+    for path in sorted(app_root.rglob("*.py")):
+        if path.name == BILLING_ERRORS_SOURCE.name:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        used.update(node.id for node in ast.walk(tree) if isinstance(node, ast.Name))
+    return used
+
+
+def test_the_billing_error_registry_scan_is_not_empty() -> None:
+    """DARVOZANING NAZORATI — parser reyestrni HAQIQATAN o'qidi.
+
+    ⛔ Usiz pastdagi ikki test parser singanda ham YASHIL qolardi: bo'sh
+       reyestrda «yetib bormaydigan kod yo'q» TRIVIAL ravishda rost
+       bo'lardi (05-16 ning W-2 darsi).
+    """
+    members = _server_registry_members()
+
+    assert len(members) >= 13, f"uch reyestrdan atigi {len(members)} a'zo o'qildi: {members}"
+    assert {"NO_OPEN_SHIFT", "STALL_NOT_FOUND", "CHARGE_IMMUTABLE"} <= members, members
+    assert "NETWORK_UNREACHABLE" not in members, (
+        "`network_unreachable` SERVER reyestriga kirib qolgan — u mijoz tomonining kodi"
+    )
+
+
+def test_unreachable_codes_have_reason() -> None:
+    """Har bir istisnoning bo'sh BO'LMAGAN sababi bor (`EXEMPT_ROUTES` naqshi)."""
+    members = _server_registry_members()
+    for name, reason in UNREACHABLE_BY_DESIGN.items():
+        assert reason.strip(), f"{name}: yetib bormaslik sababi bo'sh"
+        assert name in members, f"{name}: server reyestrida bunday a'zo YO'Q — istisno eskirgan"
+
+
+def test_every_registered_billing_code_is_reachable_or_declared() -> None:
+    """⛔ WR-08: reyestrdagi kod yo MARSHRUTDAN qaytadi, yo SABAB bilan e'lon qilinadi.
+
+    =======================================================================
+    ⛔⛔ NEGA MAVJUD DARVOZA BUNI KO'RA OLMASDI.
+
+    `frontend/scripts/error-codes.test.mjs` uchta narsani o'lchaydi:
+    aniq SON (14), reyestrlarning TUZILISHI va uchala locale'dagi
+    `errorCause`/`errorFix` juftligi. Ularning birortasi ham «bu kodni
+    kimdir QAYTARADIMI?» degan savolni bermaydi — ya'ni kod qo'shilib,
+    tarjima qilinib, ko'zgulanib, HECH QAYERDAN qaytmasligi mumkin.
+    WR-08 ikkita shunday kodni topdi (`no_open_shift`, `charge_immutable`)
+    va birinchisi shu ish doirasida ULANDI (WR-01).
+
+    ⚠ TO'PLAM TENGLIGI, «kamida bittasi» EMAS (D-31): ortiqcha e'lon
+      qilingan istisno ham qizartiradi, ya'ni kod ulangach uni ro'yxatda
+      unutib qo'yib bo'lmaydi.
+    =======================================================================
+    """
+    unreachable = _server_registry_members() - _names_used_in_production_code()
+
+    assert unreachable == set(UNREACHABLE_BY_DESIGN), (
+        "Billing xato reyestri va ishlab chiqarish kodi AJRALIB KETDI.\n"
+        f"  hech qayerda ishlatilmagan kodlar: {sorted(unreachable)}\n"
+        f"  e'lon qilingan istisnolar:         {sorted(UNREACHABLE_BY_DESIGN)}\n"
+        "Kodni marshrutga ULANG, yoki `UNREACHABLE_BY_DESIGN` ga SABAB bilan qo'shing."
+    )
