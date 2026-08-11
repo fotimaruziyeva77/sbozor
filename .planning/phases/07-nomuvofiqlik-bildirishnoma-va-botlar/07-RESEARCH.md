@@ -1173,7 +1173,9 @@ def _classify(exc: Exception) -> tuple[str, int | None]:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> ⚠ To'rtala savol ham rejalashtirish bosqichida **hal qilindi** (2026-08-11) va har biri **egasi bo'lgan rejaga** ko'chirildi. Quyidagi `RESOLVED:` markerlari qaror va uning **mexanik uyini** nomlaydi; savol matni tarix uchun **o'zgarmasdan** qoldirilgan.
 
 1. **D-26(a) ning «kutilmoqda ro'yxati» nimani anglatadi?**
    - Bilamiz: neytral matn qaytariladi, reyestr tashqaridan tekshirilmaydi.
@@ -1183,12 +1185,22 @@ def _classify(exc: Exception) -> tuple[str, int | None]:
      telefon raqamlarini saqlatadi — D-01 ostida yangi huquqiy yuk va uni saqlashning
      mahsulot qiymati nolga yaqin. Ikkinchisi hech qanday yangi jadval talab qilmaydi
      (`vendors LEFT JOIN vendor_telegram_bindings`) va admin uchun **foydaliroq**.
+   - **RESOLVED:** tavsiya qabul qilindi — «kutilmoqda ro'yxati» = **bog'lanmagan
+     sotuvchilar**. Uyi: **07-08** Task 1 ning `pending_vendors()` funksiyasi
+     (`vendors LEFT JOIN vendor_telegram_bindings ... WHERE binding.id IS NULL`).
+     ⛔ Muvaffaqiyatsiz urinishlar **saqlanmaydi** va `ResolveOutcome` da telefon
+     maydoni **yo'q** — bu 07-08 ning qabul mezoni bilan o'lchanadi (T-07-41).
 
 2. **CASH-05 kvitansiyasida kassir ismi bo'lsinmi?**
    - Bilamiz: talab matni «summa, rasta, kassir, vaqt» deydi.
    - Noaniq: «kassir» — ism, tabel raqami yoki umuman ko'rsatilmaydimi.
    - Tavsiya: **ism** (nizoda foydali), lekin `payload` allowlistiga **ataylab** va
      sabab bilan qo'shilsin; muqobil — kassir kodi/inisiallari.
+   - **RESOLVED:** tavsiya qabul qilindi — **ism**. Uyi: **07-06** Task 2
+     (`NOTIFICATION_META["payment_receipt"].payload_keys` ga `cashier_name`
+     ⛔ **ochiq yozuv** sifatida, sabab bilan) va **07-12** Task 1 (chaqiruv joyi
+     `user_repo.list_profiles()` bilan). ⛔ Ism **javobga qaytmaydi** — faqat
+     Telegram matniga tushadi, ya'ni `PERSONAL_ROUTES` **o'smaydi** (G7-6, T-07-74).
 
 3. **`bot-service` ning Valkey ulanishi qaysi `db` raqamini oladi?**
    - Bilamiz: `core-api` `db 0` da ishlaydi va u yerda rate-limit, sessiya keshi va
@@ -1197,6 +1209,10 @@ def _classify(exc: Exception) -> tuple[str, int | None]:
    - Tavsiya: **`db 1`** — kalit maydoni ajratiladi va `FLUSHDB` xatosi ikki tizimni
      birdan yiqitmaydi. Alternativa: `db 0` + `fsm:` prefiksi (aiogram `RedisStorage`
      prefiks beradi).
+   - **RESOLVED:** tavsiya qabul qilindi — **`db 1`**. Uyi: **07-01** Task 1
+     (`services/bot-service/app/settings.py` da `valkey_url` standarti
+     `redis://cache:6379/1`, sabab izohda) va Task 2 (`compose.yaml` dagi
+     `BOT_VALKEY_URL` — `.env.example` bandi bilan).
 
 4. **`gate` byudjeti oshadimi?**
    - Bilamiz: `gate` 2300 s, `gate:fast` 200 s (`06-VALIDATION.md`); oxirgi o'lchov
@@ -1206,6 +1222,11 @@ def _classify(exc: Exception) -> tuple[str, int | None]:
    - Tavsiya: byudjet **oldindan oshirilmaydi**. `bot-service` testlari `aiogram` ning
      `MockedBot` i bilan tarmoqsiz ishlaydi (~10–20 s). Faza yopilishida uch o'lchov
      protokoli qayta yuritiladi (05-15 W0-13 qoidasi).
+   - **RESOLVED:** tavsiya qabul qilindi — byudjet **oldindan oshirilmaydi**.
+     Uyi: **07-01** Task 2 (`bot:test` `gate` zanjirida, `gate:fast` da ⛔ **yo'q**)
+     va **07-17** Task 2 (tinch xostda **uch o'lchov**; oshsa avval `bot:test` ni
+     `gate` dan ajratish tekshiriladi, keyin 05-15 W0-13 protokoli; raqam
+     `package.json` va `07-VALIDATION.md` da ⛔ **bir xil** yoziladi).
 
 ---
 
