@@ -166,13 +166,24 @@ _DAY_IN_FUTURE = "day_in_future"
 """
 
 
+_MARKET_NOT_SELECTED = "market_not_selected"
+"""Sessiyada bozor tanlanmagan (**403**).
+
+⛔ REYESTRGA QO'SHILMAYDI (`_DAY_IN_FUTURE` bilan aynan bir xil sabab).
+   Kod `api-types.ts` ning O'Z ro'yxatida ALLAQACHON bor (u 01-fazadan).
+"""
+
+
 def _market_id(principal: Principal) -> UUID:
-    """Sessiyadagi bozor — `payments.py:164-171` dagi jufti bilan bir xil shakl."""
+    """Sessiyadagi bozor — `payments.py` dagi jufti bilan bir xil shakl.
+
+    ⛔ `detail` — **SATR** (`_reject()` orqali). Lug'at shakli 01-fazadan
+       meros edi; uning klientda ko'rinmasligi `/pending` ning 404 ida
+       O'LCHANGAN (CR-04).
+    """
     market_id = principal.market_id
     if market_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail={"error_code": "market_not_selected"}
-        )
+        raise _reject(_MARKET_NOT_SELECTED, status.HTTP_403_FORBIDDEN)
     return market_id
 
 

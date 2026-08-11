@@ -57,6 +57,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
 
 import messages from "../../../messages/uz-Latn.json";
 import { CollectSession } from "@/components/collect/collect-session";
+import { ApiError } from "@/lib/api-client";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 
 const MARKET_ID = "11111111-1111-4111-8111-111111111111";
@@ -366,5 +367,73 @@ describe("G-20 (06-UI-SPEC §8.2): qadam sanog'i", () => {
     expect(
       container.querySelector('a[href="/uz/collect/shift"]'),
     ).not.toBeNull();
+  });
+
+  /*
+   * ==========================================================================
+   * ⛔⛔ CR-04 — 404 `stall_not_found` NING KLIENT YARMI.
+   *
+   * Server bu kodni LUG'AT `detail` bilan yuborardi
+   * (`{"error_code": "stall_not_found"}`), `api-client.ts::detailOf()` esa
+   * `detail` ni FAQAT satr bo'lganda o'qiydi — ya'ni `ApiError.detail` `""`
+   * bo'lib qolardi va:
+   *
+   *     `collect-session.tsx::notFound`            -> HAR DOIM `false`
+   *     `collectState()` ning `"not-found"` holati -> O'LIK KOD
+   *     `StallLookup` ning «Rasta topilmadi» shoxi -> HECH QACHON
+   *
+   * Kassir esa `errors.loadFailedTitle` + [Qayta urinish] ko'rardi va har
+   * urinish o'sha 404 ni qaytarardi. Klient kodi TO'G'RI edi — u kodni
+   * hech qachon OLMAGANDI.
+   *
+   * ⛔ TEST SERVER SHAKLIDAN EMAS, `ApiError` DAN YURADI: bu qatlamning
+   *    kontrakti aynan shu. Server yarmi
+   *    `test_billing_api.py::test_an_unknown_code_is_not_an_empty_list` va
+   *    `test_route_coverage.py` ning AST darvozasi bilan o'lchanadi.
+   * ==========================================================================
+   */
+  test("⛔ CR-04: 404 `stall_not_found` SABAB+YECHIM juftligini chizadi", async () => {
+    apiClientMock.apiFetch.mockImplementation((path: string) => {
+      if (path === "/shifts/open") return Promise.resolve(OPEN_SHIFT);
+      if (path === "/payments/recent") return Promise.resolve({ items: [] });
+      if (path.startsWith("/billing/pending?stall_code=")) {
+        return Promise.reject(new ApiError(404, "stall_not_found"));
+      }
+      return Promise.reject(new Error(`mock'lanmagan yo'l: ${path}`));
+    });
+
+    const { container } = renderSession();
+
+    const input = await waitFor(() => {
+      const el = container.querySelector<HTMLInputElement>("input[data-collect-step]");
+      expect(el).not.toBeNull();
+      return el as HTMLInputElement;
+    });
+    fireEvent.change(input, { target: { value: "99999" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const cause = messages.collect.errorCause.stall_not_found;
+    const fix = messages.collect.errorFix.stall_not_found;
+
+    await waitFor(() => {
+      expect(client.isFetching()).toBe(0);
+      expect(container.textContent).toContain(cause);
+      expect(container.textContent).toContain(fix);
+    });
+
+    /*
+     * ⛔ IKKINCHI YARIM — TO'PLAM TENGLIGI, INKOR TASDIQ EMAS (D-31).
+     *
+     *   «Topilmadi» bloki `role="status"` (qayta terish holati), umumiy
+     *   yuklash xatosi esa `role="alert"` (`pending-card.tsx:126`). Nuqson
+     *   paytida AYNAN ikkinchisi chizilardi. `not.toContain(matn)` faqat
+     *   o'sha satrni ushlardi; `role="alert"` to'plamining BO'SHLIGI esa
+     *   «bu shoxda birorta ogohlantiruvchi blok yo'q» degan KUCHLIROQ
+     *   da'vo — kelajakda boshqa nomli xato bloki qo'shilsa ham qizaradi.
+     */
+    const alerts = Array.from(
+      container.querySelectorAll<HTMLElement>('[role="alert"]'),
+    ).map((el) => el.textContent ?? "");
+    expect(alerts).toEqual([]);
   });
 });

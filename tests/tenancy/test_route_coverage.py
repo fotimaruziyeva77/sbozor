@@ -32,6 +32,9 @@ marker nomlari bu izohda ham LITERAL yozilmaydi — 01-01/01-03/01-05/01-06/
 
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 import pytest
 from app.main import app as fastapi_app
 
@@ -295,3 +298,109 @@ def test_no_route_is_both_exempt_and_in_the_matrix() -> None:
     matrix_paths = {route.path for route in tenant_resource_routes(fastapi_app)}
 
     assert matrix_paths & set(EXEMPT_ROUTES) == set()
+
+
+# ===========================================================================
+# BILLING DOMENINING `detail` KONVENSIYASI (CR-04 / WR-06)
+# ===========================================================================
+
+V1_ROUTER_DIR = Path(__file__).resolve().parents[2] / "services" / "core-api" / "app" / "api" / "v1"
+"""Marshrut modullari — MANBA sifatida o'qiladi, import qilinmaydi.
+
+⚠ `HTTPException(detail=...)` ning SHAKLI ish vaqtida ko'rinmaydi: u
+  faqat istisno KO'TARILGANDA tug'iladi va o'sha shox ko'pincha
+  testlarda umuman ochilmaydi (CR-04 aynan shunday yashiringan edi —
+  `/pending` ning 404 i uchun test bor edi, lekin u `detail` ning
+  TURINI o'lchamasdi). Shuning uchun darvoza AST ustidan yuradi.
+"""
+
+_BILLING_ERRORS_MODULE = "app.services.billing_errors"
+"""Domen a'zoligi shu import bilan aniqlanadi — QO'LDA YOZILGAN RO'YXAT EMAS.
+
+⛔ D-32: darvoza qamrovi HOSILA bo'lishi shart. `billing_errors` dan kod
+   import qilgan HAR QANDAY yangi marshrut moduli darvozaga O'ZI kiradi;
+   qo'lda yozilgan uchtalik esa to'rtinchi router qo'shilgan kuni jimgina
+   eskirardi.
+
+⚠ QAMROV ATAYIN 6-FAZA BILAN CHEKLANGAN: `occupancy.py`, `nvr.py` va
+  boshqa eski marshrutlar hamon lug'at shaklini ishlatadi va ularni
+  o'zgartirish bu fazaning ishi EMAS — o'sha modullar `billing_errors`
+  ni import qilmaydi, ya'ni ular bu darvozaga tushmaydi.
+"""
+
+
+def _billing_router_sources() -> dict[str, ast.Module]:
+    """`billing_errors` ni import qilgan `api/v1/*.py` modullari — {nom: AST}."""
+    found: dict[str, ast.Module] = {}
+    for path in sorted(V1_ROUTER_DIR.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        imports_registry = any(
+            isinstance(node, ast.ImportFrom) and node.module == _BILLING_ERRORS_MODULE
+            for node in ast.walk(tree)
+        )
+        if imports_registry:
+            found[path.name] = tree
+    return found
+
+
+def test_the_billing_router_scan_actually_finds_the_routers() -> None:
+    """DARVOZANING NAZORATI — hosila ro'yxat BO'SHAB QOLMAGAN (W-2 darsi).
+
+    ⛔ USIZ PASTDAGI TEST ABADIY YASHIL BO'LARDI: `_BILLING_ERRORS_MODULE`
+       nomi o'zgarsa yoki fayllar ko'chirilsa skan **nol** modul topardi
+       va «birorta lug'at yo'q» degan da'vo TRIVIAL bajarilardi. Bu 05-16
+       ning W-2/W-3 sinfidagi aynan o'sha nosozlik.
+
+    ⚠ TENGLIK EMAS, QAMRAB OLISH: yangi billing routeri qo'shilsa bu test
+      qizarmasligi kerak (aks holda hosilalik ma'nosini yo'qotardi) —
+      lekin uchtasining YO'QOLISHI qizartiradi.
+    """
+    modules = set(_billing_router_sources())
+
+    assert {"billing.py", "payments.py", "shifts.py"} <= modules, (
+        f"6-fazaning marshrut modullari skanga tushmadi: topilgani {sorted(modules)}"
+    )
+
+
+def test_every_billing_http_exception_sends_a_string_detail() -> None:
+    """⛔ CR-04 / WR-06: billing marshrutlarida `detail` — SATR, LUG'AT EMAS.
+
+    =======================================================================
+    ⛔⛔ NEGA BU DARVOZA KERAK — DA'VO KLIENT TOMONDA O'LCHANADI.
+
+    `frontend/src/lib/api-client.ts::detailOf()` `detail` ni FAQAT satr
+    bo'lganda o'qiydi (`typeof parsed.data.detail === "string"`), aks
+    holda `""` qaytaradi. Ya'ni lug'at yuborilgan har bir kod klientga
+    UMUMAN yetib bormaydi va `billing-errors.ts` uni tanimay
+    `errors.generic` chizadi.
+
+    O'lchangan oqibat (CR-04): `GET /billing/pending` ning 404 i lug'at
+    yuborardi, `collect-session.tsx::notFound` HAR DOIM `false` bo'lardi,
+    `collectState()` ning `"not-found"` holati va `StallLookup` ning
+    «Rasta topilmadi» shoxi — O'LIK KOD. Kassir noto'g'ri kod tergan
+    bo'lsa «yuklab bo'lmadi» + [Qayta urinish] ko'rardi va har urinish
+    o'sha 404 ni qaytarardi.
+
+    ⛔ TESTLAR BU HOLATNI KO'RMAGANDI: `test_payments_api.py::_detail()`
+       `detail` ning satr ekanini TASDIQLAYDI, lekin u faqat `payments`
+       marshrutlaridan o'tadi. `billing`/`shifts` ning `_market_id()`
+       shoxi esa hech qaysi testda umuman ochilmaydi.
+    =======================================================================
+    """
+    offenders: list[str] = []
+    for name, tree in _billing_router_sources().items():
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (isinstance(func, ast.Name) and func.id == "HTTPException"):
+                continue
+            for keyword in node.keywords:
+                if keyword.arg == "detail" and isinstance(keyword.value, ast.Dict):
+                    offenders.append(f"{name}:{keyword.value.lineno}")
+
+    assert not offenders, (
+        "Billing marshrutlarida `detail` LUG'AT bilan yuborilgan — klient uni "
+        "o'qiy olmaydi va kod `errors.generic` ga tushadi. `_reject(kod, status)` "
+        f"ishlating: {offenders}"
+    )

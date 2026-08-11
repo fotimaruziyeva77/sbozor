@@ -161,13 +161,26 @@ _FORBIDDEN = "forbidden"
 """
 
 
+_MARKET_NOT_SELECTED = "market_not_selected"
+"""Sessiyada bozor tanlanmagan (**403**).
+
+⛔ REYESTRGA QO'SHILMAYDI (`_NOT_FOUND`/`_FORBIDDEN` bilan aynan bir xil
+   sabab): matnsiz yangi kod frontend darvozasini qizartirardi. Kod
+   `api-types.ts` ning O'Z ro'yxatida ALLAQACHON bor (u 01-fazadan).
+"""
+
+
 def _market_id(principal: Principal) -> UUID:
-    """Sessiyadagi bozor — `billing.py:137-144` dagi jufti bilan bir xil shakl."""
+    """Sessiyadagi bozor — `billing.py` dagi jufti bilan bir xil shakl.
+
+    ⛔ `detail` — **SATR** (`_reject()` orqali). Lug'at shakli 01-fazadan
+       meros edi va u «klient yo'lida yuz bermaydi» degan taxminga
+       tayanardi; o'sha taxminning ishonchsizligi `/pending` ning 404
+       ida O'LCHANGAN (CR-04).
+    """
     market_id = principal.market_id
     if market_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail={"error_code": "market_not_selected"}
-        )
+        raise _reject(_MARKET_NOT_SELECTED, status.HTTP_403_FORBIDDEN)
     return market_id
 
 
@@ -181,10 +194,12 @@ def _reject(code: str, http_status: int) -> HTTPException:
     sotuvchi biriktirilmagan» o'rniga umumiy xato ko'rardi va nosozlik
     FAQAT dala sinovida ko'rinardi.
 
-    ⚠ Shakl `billing.py::_report_day()` dagi 422 bilan bir xil
-      (`detail=_DAY_IN_FUTURE`), `_market_id()` dagi lug'at bilan emas:
-      o'sha lug'at 01-fazadan meros va u KLIENT YO'LIDA yuz bermaydi
-      (bozor tanlanmagan sessiya kassir panelini umuman ochmaydi).
+    ⛔ **BU MODULDA `HTTPException` NING BOSHQA SHAKLI YO'Q** — `_market_id()`
+       ham shu yerdan o'tadi. Ilgari u lug'at yuborardi va sabab «bu
+       holat klient yo'lida yuz bermaydi» degan taxmin edi; o'sha
+       taxminning ishonchsizligi `/billing/pending` ning 404 ida
+       O'LCHANDI (CR-04) — shuning uchun uchala marshrut oilasida endi
+       BITTA konvensiya bor va uni `test_route_coverage.py` qo'riqlaydi.
     """
     return HTTPException(status_code=http_status, detail=code)
 

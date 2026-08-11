@@ -75,7 +75,7 @@ from app.schemas import (
     PendingStallResponse,
 )
 from app.security.rbac import Permission
-from app.services.billing_errors import STALL_NOT_FOUND
+from app.services.billing_errors import AMOUNT_UNAVAILABLE, STALL_NOT_FOUND
 
 # ⚠ `date` VA `UUID` ISH VAQTIDA IMPORT QILINADI, `TYPE_CHECKING` OSTIDA
 #   EMAS — VA BU O'LCHANGAN ZARURIYAT (`occupancy.py:70-75` va
@@ -134,13 +134,55 @@ _DAY_IN_FUTURE = "day_in_future"
 """
 
 
+def _reject(code: str, http_status: int) -> HTTPException:
+    """`detail` ⛔ **SATR**, lug'at EMAS — va bu klient kontrakti.
+
+    =========================================================================
+    ⛔⛔ BU YERDA U BIR MARTA O'LCHANGAN NOSOZLIKNING TUZATMASI (CR-04).
+
+    `frontend/src/lib/api-client.ts::detailOf()` `detail` ni AYNAN satr
+    deb o'qiydi (`typeof parsed.data.detail === "string"`); lug'at
+    yuborilganda u **bo'sh satr** qaytaradi. `/pending` ning 404 i
+    lug'at yuborardi, ya'ni:
+
+        `ApiError.detail`                          -> `""`
+        `collect-session.tsx::notFound`            -> HAR DOIM `false`
+        `collectState()` ning `"not-found"` holati -> O'LIK KOD
+        `StallLookup` ning «Rasta topilmadi» shoxi -> HECH QACHON
+
+    va kassir noto'g'ri kod tergan bo'lsa «yuklab bo'lmadi» + [Qayta
+    urinish] ko'rardi — har urinish O'SHA 404 ni qaytarardi.
+
+    ⚠ Shakl `payments.py::_reject()` / `shifts.py::_reject()` bilan AYNI
+      — uch marshrut oilasida BITTA konvensiya.
+    =========================================================================
+    """
+    return HTTPException(status_code=http_status, detail=code)
+
+
+_MARKET_NOT_SELECTED = "market_not_selected"
+"""Sessiyada bozor tanlanmagan (**403**).
+
+⛔ REYESTRGA QO'SHILMAYDI (`_NOT_FOUND` bilan aynan bir xil sabab):
+   `ALL_BILLING_ERROR_CODES` ning soni frontend darvozasi tomonidan
+   uchala locale'dagi matn juftligi bilan solishtiriladi. Kod
+   `api-types.ts` ning O'Z ro'yxatida ALLAQACHON bor (u 01-fazadan).
+"""
+
+
 def _market_id(principal: Principal) -> UUID:
-    """Sessiyadagi bozor — `occupancy.py:100-107` dagi jufti bilan bir xil shakl."""
+    """Sessiyadagi bozor — `occupancy.py:100-107` dagi jufti bilan bir xil shakl.
+
+    ⛔ `detail` — **SATR** (`_reject()` docstringi): lug'at shaklida
+       `api-client.ts::detailOf()` bo'sh satr qaytaradi va klient kodni
+       UMUMAN ko'rmaydi. Bu 01-fazadan meros bo'lgan lug'at shakli edi
+       va u «klient yo'lida yuz bermaydi» degan taxminga tayanardi —
+       o'sha taxminning ishonchsizligi `/pending` ning 404 ida
+       O'LCHANGAN (CR-04).
+    """
     market_id = principal.market_id
     if market_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail={"error_code": "market_not_selected"}
-        )
+        raise _reject(_MARKET_NOT_SELECTED, status.HTTP_403_FORBIDDEN)
     return market_id
 
 
@@ -224,10 +266,7 @@ async def billing_pending(
     if stall_code is None:
         market = projection.market
         if market is None:  # pragma: no cover - `pending_projection` kontrakti
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={"error_code": "amount_unavailable"},
-            )
+            raise _reject(AMOUNT_UNAVAILABLE, status.HTTP_500_INTERNAL_SERVER_ERROR)
         return PendingMarketResponse(
             service_date=as_of,
             market_open=market.market_open,
@@ -250,9 +289,9 @@ async def billing_pending(
         )
 
     if not projection.matches:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail={"error_code": STALL_NOT_FOUND}
-        )
+        # ⛔ CR-04: `detail` SATR. Lug'at yuborilganda klientning
+        #    `stall_not_found` shoxi UMUMAN ochilmasdi (`_reject()`).
+        raise _reject(STALL_NOT_FOUND, status.HTTP_404_NOT_FOUND)
 
     return PendingLookupResponse(matches=list(projection.matches), stall=None)
 

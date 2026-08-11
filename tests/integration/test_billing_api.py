@@ -383,13 +383,37 @@ async def test_an_unknown_code_is_not_an_empty_list(
 
     Bo'sh `matches` bilan 200 qaytarish kassirga «rasta bor, faqat
     ko'rsatilmadi» deb YOLG'ON aytardi va u kodni qayta-qayta terardi.
+
+    =======================================================================
+    ⛔ `detail` — **SATR**, LUG'AT EMAS (CR-04).
+
+    Bu tasdiq ilgari `{"error_code": "stall_not_found"}` ni kutardi va
+    aynan shu bilan NOSOZLIKNI QULFLAB QO'YGANDI:
+    `api-client.ts::detailOf()` `detail` ni faqat satr bo'lganda o'qiydi,
+    lug'at uchun `""` qaytaradi. Ya'ni kod klientga UMUMAN yetib
+    bormasdi va `collect-session.tsx` ning `"not-found"` holati —
+    `StallLookup` ning «Rasta topilmadi / raqamni qayta kiriting»
+    shoxi — O'LIK KOD edi. Kassir esa «yuklab bo'lmadi» + [Qayta
+    urinish] ko'rardi va har urinish o'sha 404 ni qaytarardi.
+
+    ⚠ TIP HAM O'LCHANADI, faqat qiymat emas: `== "stall_not_found"`
+      yolg'iz `{"error_code": ...}` ni ham rad etadi, lekin
+      `isinstance` tekshiruvi nosozlik xabarini AYNAN sababga
+      yo'naltiradi. Sinf darvozasi esa
+      `test_route_coverage.py::test_every_billing_http_exception_sends_a_string_detail`
+      da — u BUTUN oilani AST ustidan skanerlaydi.
+    =======================================================================
     """
     response = await api_client.get(
         PENDING_URL, params={"stall_code": "99999"}, headers=cashier_headers
     )
 
     assert response.status_code == 404, response.text
-    assert response.json()["detail"] == {"error_code": "stall_not_found"}
+    detail = response.json()["detail"]
+    assert isinstance(detail, str), (
+        f"`detail` SATR bo'lishi SHART (klient shartnomasi), keldi: {detail!r}"
+    )
+    assert detail == "stall_not_found"
 
 
 async def test_the_market_projection_returns_every_counter(
