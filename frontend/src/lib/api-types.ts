@@ -45,6 +45,51 @@ export const LOCALE_LABELS: Readonly<Record<ApiLocale, string>> = {
 export const soumSchema = z.number().int().max(Number.MAX_SAFE_INTEGER);
 
 /**
+ * Foydalanuvchi TERGAN matndan so'm — ⛔ **YAGONA** qat'iy o'qish qoidasi.
+ *
+ * =============================================================================
+ * ⛔⛔ NEGA `Number(raw)` YARAMAYDI (WR-04).
+ *
+ * 6-fazada pul kiritadigan IKKI maydon bor va ular ilgari IKKI BOSHQA
+ * qoida bilan o'qilardi:
+ *
+ *   ko'r deklaratsiya (§10.2)  -> `/^\d+$/` — qat'iy
+ *   chetlanish summasi (DL-1)  -> `Number(raw)` — BO'SH
+ *
+ * `Number()` quyidagilarni JIMGINA qabul qiladi va hech biri kassir
+ * TERMOQCHI bo'lgan narsa emas:
+ *
+ *     "1e5"    -> 100000        "0x10"  -> 16
+ *     " 15000" -> 15000         "+15000"-> 15000
+ *
+ * Va aynan chetlanish maydoni — D-19 bo'yicha kassir IXTIYORIY summani
+ * nomlashi mumkin bo'lgan YAGONA joy, ya'ni bo'sh qoida eng qimmat
+ * joyda turardi. Bitta domen tushunchasi uchun ikki qarama-qarshi
+ * validatsiya — bu kodbaza boshqa joylarda ta'qib qiladigan «ikki
+ * haqiqat manbai» sinfining o'zi.
+ *
+ * ⛔ FILTRLAB TASHLASH TAQIQLANADI: `replace(/\D/g, "")` `-5000` ni
+ *    jimgina `5000` ga aylantirib, kassir YOZMAGAN raqamni yozib
+ *    qo'yardi. Shuning uchun qoida — RAD ETISH, tozalash emas.
+ *
+ * ⚠ `min` — IKKI CHAQIRUV ORASIDAGI YAGONA FARQ: deklaratsiya uchun
+ *   **0 RUXSAT** (butun smenasi terminal bo'lgan kun REAL holat, §10.2),
+ *   to'lov summasi uchun esa **0 RAD** (`payments.amount_soum > 0`).
+ * =============================================================================
+ *
+ * @returns Qiymat, yoki `null` — «hali yaroqli son yo'q» (bo'sh maydon,
+ *   manfiy, kasr, harf, chegaradan oshgan — HAMMASI bir xil javob).
+ */
+export function parseSoumInput(raw: string, { min }: { min: number }): number | null {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+
+  /* Yuqori chegara `soumSchema` da — 2^53 dan oshgan son jimgina yaxlitlanadi. */
+  const parsed = soumSchema.safeParse(Number(trimmed));
+  return parsed.success && parsed.data >= min ? parsed.data : null;
+}
+
+/**
  * Bozor havolasi — auth javoblarida `id`, nom va BOZOR faolligi keladi.
  *
  * `is_active === false` — usta tugallanmagan QORALAMA bozor. Maydon

@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/select";
 import {
   ADJUSTMENT_REASONS,
   REVERSAL_REASONS,
-  soumSchema,
+  parseSoumInput,
 } from "@/lib/api-types";
 import type {
   AdjustmentReasonValue,
@@ -84,11 +84,22 @@ export type ReasonDialogProps = {
   onConfirm: (result: ReasonDialogResult) => void;
 };
 
-/** ⛔ Manfiy VA NOL rad etiladi — `money.py` chegarasi bilan bir xil. */
+/**
+ * ⛔ Manfiy VA NOL rad etiladi — `payments.amount_soum > 0` bilan bir xil.
+ *
+ * ⛔⛔ QOIDA `api-types.ts::parseSoumInput()` DA va u SMENA
+ *     DEKLARATSIYASI BILAN AYNI (WR-04). Ilgari bu yerda `Number(raw)`
+ *     turardi va u `"1e5"` (100 000), `"0x10"` (16), `" 15000 "`,
+ *     `"+15000"` ni JIMGINA qabul qilardi — hech biri kassir TERMOQCHI
+ *     bo'lgan narsa emas. Bu maydon esa D-19 bo'yicha kassir IXTIYORIY
+ *     summani nomlashi mumkin bo'lgan YAGONA joy, ya'ni eng bo'sh qoida
+ *     eng qimmat joyda turardi.
+ *
+ * ⚠ `min: 1` — ikki chaqiruv orasidagi YAGONA farq (deklaratsiyada
+ *   nol ATAYIN ruxsat, §10.2).
+ */
 function parseAmount(raw: string): number | null {
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value <= 0) return null;
-  return soumSchema.safeParse(value).success ? value : null;
+  return parseSoumInput(raw, { min: 1 });
 }
 
 export function ReasonDialog({

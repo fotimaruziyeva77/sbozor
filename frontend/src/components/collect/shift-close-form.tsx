@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { soumSchema } from "@/lib/api-types";
+import { parseSoumInput } from "@/lib/api-types";
 import { useCloseShift } from "@/lib/shift-queries";
 import type { ShiftCloseResult } from "@/lib/shift-queries";
 
@@ -105,18 +105,18 @@ import type { ShiftCloseResult } from "@/lib/shift-queries";
  * holatni alohida ajratadi (birinchisida yo'riqnoma, ikkinchisida
  * `aria-invalid`).
  *
- * ⛔ Faqat raqamlardan iborat satr qabul qilinadi — minus belgisi shu
- *    yerda RAD ETILADI. Filtrlab tashlash (masalan `replace`) YARAMAYDI:
- *    u `-5000` ni JIMGINA `5000` ga aylantirib, kassir yozmagan raqamni
- *    yozib qo'yardi.
+ * ⛔ QOIDANING O'ZI `api-types.ts::parseSoumInput()` DA va u ⛔ YAGONA
+ *    (WR-04): DL-1 ning chetlanish summasi ham AYNAN shu funksiyadan
+ *    o'tadi. Ilgari u `Number(raw)` ishlatardi va `"1e5"`, `"0x10"`,
+ *    `"+15000"` ni jimgina qabul qilardi — bitta domen tushunchasi
+ *    uchun ikki qarama-qarshi qoida edi.
+ *
+ * ⛔ `min: 0` — §10.2: butun smenasi terminal bo'lgan kun REAL holat va
+ *    nolni rad etish kassirni YOLG'ON son kiritishga majburlardi. Bu
+ *    ikki chaqiruv orasidagi YAGONA farq.
  */
 export function parseDeclaredSoum(raw: string): number | null {
-  const trimmed = raw.trim();
-  if (!/^\d+$/.test(trimmed)) return null;
-
-  /* Yuqori chegara `soumSchema` da — 2^53 dan oshgan son jimgina yaxlitlanadi. */
-  const parsed = soumSchema.safeParse(Number(trimmed));
-  return parsed.success ? parsed.data : null;
+  return parseSoumInput(raw, { min: 0 });
 }
 
 export type ShiftCloseFormProps = {
