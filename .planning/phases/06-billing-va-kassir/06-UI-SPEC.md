@@ -881,8 +881,8 @@ Bu fazaning eng jim xato sinfi: kassir `14-C` ni terdi (15 000), keyin `15-A` ni
 | A | Kun tanlagichi | — | ✅ | ✅ |
 | B | ⛔ Kutilayotgan patta (proyeksiya) | `GET /billing/pending` | ✅ | ⛔ **chizilmaydi** |
 | C | Yozilgan hisoblar va qoldiq | `GET /billing/charges?day=` | ⛔ **chizilmaydi** | ✅ |
-| D | Anomaliyalar | `GET /billing/anomalies?day=` **[TALAB]** | ⛔ **chizilmaydi** | ✅ |
-| E | Smena variance | `GET /shifts?day=` **[TALAB]** | ✅ | ✅ |
+| D | Anomaliyalar | `GET /billing/anomalies?day=` | ⛔ **chizilmaydi** | ✅ |
+| E | Smena variance | `GET /shifts?day=` | ✅ | ✅ |
 
 **(C) Yozilgan hisoblar** — jadval, ustunlari **marshrut bergan maydonlardan**:
 

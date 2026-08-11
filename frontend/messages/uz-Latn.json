@@ -1163,6 +1163,7 @@
   "billing": {
     "title": "Patta hisobi",
     "dayLabel": "Kun",
+    "noFutureDays": "Kelajakdagi kun tanlanmaydi — patta kun yopilgach hisoblanadi",
     "pendingTitle": "Kutilayotgan patta",
     "pendingNotice": "Bu kutilayotgan summa — hisob hali yozilmagan.",
     "pendingStalls": "Kutilayotgan rasta",
