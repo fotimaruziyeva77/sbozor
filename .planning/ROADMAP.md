@@ -48,7 +48,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Kamera zonalari, CV va nazoratchi tasdig'i** - Poligon muharriri, RF-DETR aniqlash, noaniq navbati, ko'r audit (15/15 reja bajarildi; beshala mezon `tests/integration/test_phase5_criteria.py` bilan BITTA buyruqda o'lchanadi va uchala darvozasi - mezon boshiga bitta test, meta-test, soxtalashtirishsiz o'lchov - yashil. AI-01/03/04/05/06 dalil bilan `Done`; **AI-02 `Blocked`** - real ONNX artefakti CI'da yo'q va modelning ANIQLIGI oltin to'plam bo'shligi uchun umuman o'lchanmagan, egasi nazoratchi + Ops, bandlari `05-HUMAN-UAT.md` #1-#3. 4-fazadan meros `gate` bandi (D-26) TINCH XOSTDAGI uch o'lchov bilan yopildi: 1009/1004/983 s, chegara 900 s -> **1250 s**. Ochiq bandlar `05-HUMAN-UAT.md` da ega va tetik bilan. ✅ **QAYTA TEKSHIRUV O'TDI (2026-08-10): 5/5, holat `human_needed`** - `05-VERIFICATION.md`. Tekshiruvchi da'volarni o'qimay testlarni O'ZI yugurtirdi va uchta ogohlantirish topdi; uchalasi ham `05-16` da sabotaj bilan yopildi. IKKITASI HAQIQIY BO'SHLIQ edi: yangi `any`-darvozali marshrutda eski test YASHIL qolardi (W-3), ko'r audit ekraniga qo'yilgan haqiqiy `checkbox` da esa mavjud 40 ta test YASHIL qolardi (W-2). `human_needed` - `05-HUMAN-UAT.md` dagi qo'lda bajariladigan bandlar, kod bo'shlig'i emas) (plans completed 2026-08-10)
  (completed 2026-08-09)
 
-- [ ] **Phase 6: Billing va kassir** - O'zgarmas kunlik patta, dalil bog'lash, qarz, ≤3 bosishli kassir, smena hisobi
+- [x] **Phase 6: Billing va kassir** - O'zgarmas kunlik patta, dalil bog'lash, qarz, ≤3 bosishli kassir, smena hisobi (completed 2026-08-11)
 - [ ] **Phase 7: Nomuvofiqlik, bildirishnoma va botlar** - "Band, lekin to'lovsiz" case oqimi, sotuvchi va direktor botlari
 - [ ] **Phase 8: Hisobotlar, mustahkamlash va ishga tushirish** - Excel eksport, AI aniqlik hisoboti, backup mashqi, go-live
 
@@ -500,7 +500,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
-| 6. Billing va kassir | 13/14 | In Progress|  |
+| 6. Billing va kassir | 14/14 | Complete   | 2026-08-11 |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 
