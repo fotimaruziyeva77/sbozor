@@ -123,6 +123,7 @@ __all__ = [
     "PaymentWrite",
     "RecentPayment",
     "create_payment",
+    "find_by_idempotency_key",
     "open_shift_id",
     "payment_owner",
     "recent_payments",
@@ -308,8 +309,13 @@ def request_fingerprint(
         stall_id: rasta — kalit bilan birga «qaysi rasta» ni qulflaydi.
         service_date: to'lov QAYSI KUN uchun kiritildi.
         amount_soum: AMALDA olingan summa — Pitfall 4 ning asosiy maydoni.
-        quote_soum: server bergan summa (D-20). ⚠ U ham xeshda: takror
-            so'rov orasida tarif o'zgargan bo'lsa bu **boshqa** so'rov.
+        quote_soum: server bergan summa (D-20). ⚠ U ham xeshda va u
+            ⛔ **PARALLEL** so'rovlarni ajratadi, TAKROR so'rovni emas:
+            takror so'rovda marshrut xeshga qatorning O'Z `quote_soum`
+            ini qaytarib beradi (`find_by_idempotency_key()` docstringi).
+            Aks holda birinchi so'rov o'zgartirgan qoldiq ikkinchisiga
+            **boshqa** kvota berardi va bir xil tanali qayta yuborish
+            409 olardi — D-21 ning teskarisi.
         method: `cash` / `terminal`.
         override_reason: chetlanish sababi yoki `None`.
 
@@ -394,6 +400,47 @@ def _row(raw: tuple[object, ...]) -> PaymentRow:
         cashier_id=cashier_id,  # type: ignore[arg-type]
         created_at=created_at,  # type: ignore[arg-type]
     )
+
+
+async def find_by_idempotency_key(
+    session: AsyncSession, *, market_id: UUID, idempotency_key: str
+) -> PaymentRow | None:
+    """Kalit bo'yicha ALLAQACHON yozilgan qator, yoki `None` — D-21 ning 0-qadami.
+
+    =========================================================================
+    ⛔⛔ NEGA MARSHRUT BUNI NARXLASHDAN **OLDIN** CHAQIRADI.
+
+    `create_payment()` ning ichidagi idempotentlik `quote_soum` ni
+    ALLAQACHON hisoblangan holda oladi, ya'ni u FAQAT yozish poygasini
+    hal qiladi. Takror so'rov esa boshqa muammo: **birinchi so'rov
+    narxlash kirishini O'ZGARTIRGAN** bo'ladi — `vendor_outstanding()`
+    hamma to'lovni ayiradi va `as_of` bilan filtrlanmaydi, ya'ni
+    `payment_quote_set()` retryda BOSHQA to'plam qaytaradi. O'sha
+    to'plamda asl summa endi yo'q va marshrut 422 `reason_required`
+    berardi — D-21 ning aynan teskarisi.
+
+    Shuning uchun kalit narxlash darvozalaridan OLDIN qaraladi va
+    solishtirishga qatorning O'Z `quote_soum` i kiradi (marshrutdagi
+    izoh). ⛔ Bu `create_payment()` ning ichki tekshiruvini ALMASHTIRMAYDI:
+    u SELECT bilan INSERT orasidagi poygani (ikki parallel so'rov, bitta
+    kalit) hamon qo'riqlaydi va shuning uchun IKKALASI HAM qoladi.
+
+    ⚠ Storno qatorlari bu yo'lda uchramaydi: ular kalitni SERVERDA
+      tug'diradi (`reversal:{uuid4}`), mijoznikidan mustaqil.
+    =========================================================================
+
+    Returns:
+        `PaymentRow` yoki `None` — ⛔ NATIJA («bu kalit hali ishlatilmagan»),
+        xato emas.
+    """
+    result = await session.execute(
+        select(*_PAYMENT_COLUMNS).where(
+            Payment.market_id == market_id,
+            Payment.idempotency_key == idempotency_key,
+        )
+    )
+    found = result.one_or_none()
+    return None if found is None else _row(tuple(found))
 
 
 async def create_payment(

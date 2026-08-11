@@ -397,6 +397,118 @@ async def test_the_same_key_twice_writes_one_row_and_returns_the_same_payment(
     assert len(env.payments()) == 1, "takror so'rov IKKINCHI qator yozdi — D-21 buzilgan"
 
 
+@pytest.mark.parametrize(
+    ("label", "pays_the_debt_too"),
+    [("qarzni_ham_olish", True), ("faqat_qarz", False)],
+)
+async def test_a_debt_moving_payment_is_still_idempotent_on_retry(
+    api_client: httpx.AsyncClient,
+    env: Env,
+    cashier_headers: dict[str, str],
+    label: str,
+    pays_the_debt_too: bool,
+) -> None:
+    """⛔ CR-02: QARZNI SURGAN to'lovni qayta yuborish ham **200** beradi.
+
+    =======================================================================
+    ⛔⛔ YUQORIDAGI TEST BU NOSOZLIKNI KO'RA OLMASDI VA SABABI HOLATDA.
+
+    U QARZSIZ holatni qayta yuboradi: o'shanda kvota to'plami `(tarif,)`
+    va u BIRINCHI so'rovdan KEYIN HAM o'sha bo'lib qoladi. Ya'ni test
+    «narxlash darvozasi retryni rad etadimi?» degan savolni umuman
+    bermaydi.
+
+    Qarz bo'lganda esa `vendor_outstanding()` — u `as_of` bilan
+    filtrlanmaydi va HAMMA to'lovni ayiradi — retryda BOSHQA son
+    qaytaradi:
+
+        so'rov 1  qoldiq  45 000   kvotalar (15000, 45000, 60000)
+        retry     qoldiq −15 000   kvotalar (15000,)
+
+    Ya'ni asl summa endi kvota EMAS, `reason_code` esa yo'q ->
+    422 `reason_required`. Pul YOZILGAN, kassir esa qattiq xato
+    ko'radi va `[Qayta yuborish]` o'sha 422 ni qaytaradi.
+
+    ⛔ IKKALA SHOX HAM O'LCHANADI (§9.6 ning uchinchi va ikkinchi
+       kvotasi): ular BOSHQA `quote_soum` bilan yoziladi, ya'ni bitta
+       shox yashil qolib ikkinchisi qizarishi MUMKIN.
+
+    ⛔ DA'VO «200» BILAN CHEKLANMAYDI: `payment_id` AYNI bo'lishi va
+       jadvalda BITTA qator qolishi ham tekshiriladi — 200 ni ikkinchi
+       qator yozib ham qaytarish mumkin bo'lardi.
+    =======================================================================
+    """
+    stall_id = env.stall("stall_with_two_occupied_slots")
+    code = env.code(stall_id)
+    debt = 45_000
+    env.add_debt(stall_id=stall_id, vendor_id=env.vendor_id, amount_soum=debt)
+
+    amount = TARIFF_SOUM + debt if pays_the_debt_too else debt
+    payload = _body(stall_code=code, amount_soum=amount, key=f"cr02-{label}")
+
+    first = await _post(api_client, cashier_headers, payload)
+    assert first.status_code == 201, first.text
+
+    retry = await _post(api_client, cashier_headers, payload)
+
+    assert retry.status_code == 200, (
+        "qarzni surgan to'lovning retryi 200 BERMADI — D-21 buzilgan: "
+        f"{retry.status_code} {retry.text}"
+    )
+    assert retry.json()["payment_id"] == first.json()["payment_id"]
+    assert len(env.payments()) == 1, "retry IKKINCHI qator yozdi"
+
+
+async def test_a_replayed_key_sent_to_another_stall_is_rejected(
+    api_client: httpx.AsyncClient, env: Env, cashier_headers: dict[str, str]
+) -> None:
+    """CR-02 tuzatishining ⛔ NAZORATI: kalit O'SHA, **rasta** BOSHQA -> **409**.
+
+    ⛔ BU TEST TUZATISHNING ARZON SHAKLINI RAD ETADI. Barmoq izini
+       qatorning O'Z `stall_id` si bilan hisoblash (ya'ni «hamma
+       maydonni qatordan olish») retryni har doim mos qilardi va server
+       kassirga BIRINCHI rastaning to'lovini «tasdiqlangan» deb
+       ko'rsatardi — noto'g'ri rasta pul yo'lida JIMGINA to'langan
+       bo'lib qolardi.
+
+    ⚠ Faqat `quote_soum` qatordan olinadi (u serverning O'Z hosilasi va
+      birinchi so'rov uni o'zgartirgan); qolgan maydonlar SO'ROVDAN.
+
+    ⛔ OXIRIDA NAZORAT: O'SHA ikkinchi rasta YANGI kalit bilan **201**
+       oladi. Usiz 409 «bu rastaga umuman to'lov yozib bo'lmaydi»
+       degandan ham kelib chiqishi mumkin edi va test o'z da'vosini
+       («kalit qayta ishlatilgan») isbotlamasdi (D-30).
+    """
+    first_stall = env.stall("stall_with_two_occupied_slots")
+    other_stall = env.stall("stall_with_one_human_confirmed_occupied_slot")
+    assert first_stall != other_stall, "nazorat: seedda ikkinchi rasta yo'q"
+    other_code = env.code(other_stall)
+    key = "cr02-boshqa-rasta"
+
+    first = await _post(
+        api_client,
+        cashier_headers,
+        _body(stall_code=env.code(first_stall), amount_soum=TARIFF_SOUM, key=key),
+    )
+    assert first.status_code == 201, first.text
+
+    second = await _post(
+        api_client,
+        cashier_headers,
+        _body(stall_code=other_code, amount_soum=TARIFF_SOUM, key=key),
+    )
+
+    assert second.status_code == 409, second.text
+    assert _detail(second) == "idempotency_key_reused"
+    assert len(env.payments()) == 1
+
+    control = await _post(
+        api_client, cashier_headers, _body(stall_code=other_code, amount_soum=TARIFF_SOUM)
+    )
+    assert control.status_code == 201, f"nazorat yiqildi — 409 rastadan edi: {control.text}"
+    assert len(env.payments()) == 2
+
+
 async def test_two_concurrent_requests_write_one_row_and_neither_returns_5xx(
     api_client: httpx.AsyncClient, env: Env, cashier_headers: dict[str, str]
 ) -> None:

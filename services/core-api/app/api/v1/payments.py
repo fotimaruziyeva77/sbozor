@@ -203,6 +203,7 @@ async def create_payment(
 
       1. bozor yechimi                          -> 403
       2. `stall_code` -> rasta va bugungi pul    -> 404 `stall_not_found`
+      2.5 TAKROR SO'ROV (D-21)                   -> 200 / 409
       3. `vendor_id is None`                     -> 409 `stall_not_assigned`
       4. asoslangan summalar to'plami (SERVERDA) -> 422 (bo'sh to'plam)
       5. `quote_soum` tanlovi + sabab darvozasi  -> 422
@@ -212,6 +213,22 @@ async def create_payment(
     Teskari tartib (masalan avval yozib, keyin tekshirish) qatorni
     yozib bo'lib rad etardi — `payments` esa APPEND-ONLY, ya'ni uni
     ORTGA QAYTARIB bo'lmasdi.
+
+    ⛔ **2.5-QADAM 3/4/5 DAN OLDIN TURADI VA BU TARTIB D-21 NING O'ZI.**
+
+    Uchala darvoza ham birinchi so'rov O'ZGARTIRGAN holatdan hosila:
+    `vendor_outstanding()` hamma to'lovni ayiradi va `as_of` bilan
+    filtrlanmaydi, ya'ni retryda `payment_quote_set()` **boshqa**
+    to'plam qaytaradi. Misol (tarif 15 000, qarz 45 000, `[Qarzni ham
+    olish]` -> 60 000):
+
+        so'rov 1  qoldiq  45 000   kvotalar (15000, 45000, 60000) -> 201
+        retry     qoldiq −15 000   kvotalar (15000,)              -> 422
+
+    Ya'ni pul YOZILGAN bo'lsa ham kassir qattiq xato ko'rardi va
+    `[Qayta yuborish]` o'sha 422 ni qayta-qayta olardi — pul yo'lidagi
+    chiqishsiz tugun. Kalitni narxlashdan OLDIN qarash bu shoxni
+    umuman ochmaydi.
     =======================================================================
 
     ⛔ **3-QADAM: `vendor_id is None` -> 409 `stall_not_assigned` VA BOSHQA
@@ -264,10 +281,15 @@ async def create_payment(
     **O'SHA** `payment_id` oladi (409 EMAS). Bir xil kalit + **boshqa**
     tana esa ⛔ **409 `idempotency_key_reused`** — aks holda yangi summa
     **jimgina yo'qolardi** (Pitfall 4).
+
+    ⚠ Bu qadam 2.5 dan KEYIN ham qoladi va IKKALASI HAM kerak: 2.5
+      so'rovlar KETMA-KET kelganini (retry), 6 esa ular PARALLEL
+      kelganini (`SELECT` bilan `INSERT` orasidagi poyga) hal qiladi.
     =======================================================================
     """
     market_id = _market_id(principal)
     as_of = business_today()
+    override_reason = None if payload.reason_code is None else payload.reason_code.value
 
     # ---- 2-QADAM: rasta va bugungi pul — IKKALASI BITTA so'rovdan (D-16).
     matches = await billing_repo.resolve_stall_day_money(
@@ -276,6 +298,44 @@ async def create_payment(
     if not matches:
         raise _reject(STALL_NOT_FOUND, status.HTTP_404_NOT_FOUND)
     money = matches[0]
+
+    # ---- 2.5-QADAM: TAKROR SO'ROV ⛔ PUL QAYTA NARXLANMASDAN yopiladi (D-21).
+    replayed = await payment_repo.find_by_idempotency_key(
+        session, market_id=market_id, idempotency_key=payload.idempotency_key
+    )
+    if replayed is not None:
+        # ⛔ `quote_soum` — QATORNING O'ZINIKI, qayta hisoblangani EMAS.
+        #    Yangi kvota to'plami birinchi so'rovdan KEYINGI qoldiqdan
+        #    tug'iladi, ya'ni uni xeshga qo'shish bir xil tanali qayta
+        #    yuborishni 409 ga aylantirardi (docstringdagi jadval).
+        #
+        # ⚠ Qolgan maydonlar SO'ROVDAN olinadi (`money.stall_id`,
+        #   `payload.*`), qatordan EMAS: aks holda o'sha kalit bilan
+        #   BOSHQA rastaga yuborilgan so'rov jimgina birinchi to'lovni
+        #   tasdiqlardi — kassir noto'g'ri rastani to'langan deb ko'rardi.
+        if replayed.request_fingerprint != payment_repo.request_fingerprint(
+            stall_id=money.stall_id,
+            service_date=as_of,
+            amount_soum=payload.amount_soum,
+            quote_soum=replayed.quote_soum,
+            method=payload.method,
+            override_reason=override_reason,
+        ):
+            log.info("payment_idempotency_key_reused", stall_code=payload.stall_code)
+            raise _reject(IDEMPOTENCY_KEY_REUSED, status.HTTP_409_CONFLICT)
+        response.status_code = status.HTTP_200_OK
+        return PaymentResponse(
+            payment_id=replayed.payment_id,
+            stall_code=money.stall_code,
+            service_date=replayed.service_date,
+            amount_soum=replayed.amount_soum,
+            kind=replayed.kind,  # type: ignore[arg-type]
+            method=replayed.method,  # type: ignore[arg-type]
+            created_at=replayed.created_at,
+            # ⛔ 6-QADAMDAGI qaytish bilan AYNI: storno o'z marshrutidan
+            #    o'tadi va o'sha holatda kassir ro'yxatni qayta oladi.
+            reversed=False,
+        )
 
     # ---- 3-QADAM: biriktirilmagan rasta — BITTA aniq javob (D-28).
     if money.vendor_id is None:
@@ -307,8 +367,6 @@ async def create_payment(
         quote_soum = quotes[0]
         if payload.reason_code is None:
             raise _reject(REASON_REQUIRED, status.HTTP_422_UNPROCESSABLE_CONTENT)
-
-    override_reason = None if payload.reason_code is None else payload.reason_code.value
 
     # ---- Smena ⛔ SERVERDA yechiladi (`PaymentCreateRequest` docstringi).
     shift_id = await payment_repo.open_shift_id(
