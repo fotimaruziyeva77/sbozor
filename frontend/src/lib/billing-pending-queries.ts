@@ -215,17 +215,43 @@ export const pendingLookupResponseSchema = z.union([
 /**
  * Qidiruv natijasining YAGONA klient shakli.
  *
- * ⛔ `matchesRequestedCode` — §9.4 ning IKKINCHI qatlami va u kesh
- *    siyosatidan MUSTAQIL: summa faqat server javobining o'zi kiritilgan
- *    kodni tasdiqlaganda chizilishi mumkin.
+ * =============================================================================
+ * ⛔⛔ BU YERDA `matchesRequestedCode` MAYDONI BOR EDI — U OLIB TASHLANDI
+ *     (WR-05), VA SABAB DOKUMENTATSIYA TOZALASH EMAS.
+ *
+ * Maydon «§9.4 ning IKKINCHI qatlami» deb e'lon qilingan, hisoblangan,
+ * eksport qilingan va HECH KIM O'QIMAGAN edi. Uni «shunchaki ulash»
+ * esa ⛔ MAHSULOTNI BUZARDI: server kodni ⛔ PREFIKS sifatida qidiradi
+ * va AYNAN BITTA moslik topilganda o'sha rastaning TO'LIQ kodini
+ * qaytaradi (`billing_repo.pending_projection()`: `elif len(codes) == 1:
+ * exact = codes[0]`).
+ *
+ *     kassir «14-» teradi -> yagona moslik «14-C» -> javob «14-C»
+ *
+ * Ya'ni `javob === tergan kod` sharti bu QONUNIY oqimda `false` bo'lardi
+ * va to'lov yuzasi UMUMAN chizilmasdi. Da'vo maydonning nomida ham
+ * yashiringan edi: u «kod BIR XILmi?» degan savolga javob beradi,
+ * himoya kerak bo'lgan savol esa «summa BOSHQA rastanikimi?».
+ *
+ * ⛔ HAQIQIY HIMOYA QAYERDA (§9.4):
+ *
+ *   1. so'rov KALITI `stallCode` ni o'z ichiga oladi — boshqa kod ostida
+ *      yozilgan javob bu kalit ostida UMUMAN yashamaydi;
+ *   2. `staleTime: 0` + `gcTime: 0` — eski javob keshda QOLMAYDI;
+ *   3. `PendingCard` javobning kodini kiritilgan kod bilan O'ZI
+ *      solishtiradi (`pending-card.tsx`) va mos kelmasa SUMMA o'rniga
+ *      skeleton chizadi.
+ *
+ * ⚠ To'lov tanasiga ketadigan kod SERVERNIKI (`stall.stall_code`,
+ *   `collect-session.tsx`), kassir tergan matn EMAS — ya'ni prefiks
+ *   oqimida ham `POST /payments` kanonik kodni yuboradi.
+ * =============================================================================
  */
 export type PendingLookupResult = {
   /** Aynan bitta moslik topilgan bo'lsa — proyeksiya; aks holda `null`. */
   stall: PendingStall | null;
   /** Ko'p moslikda kodlar ro'yxati (server tartibida), aks holda bo'sh. */
   matches: readonly string[];
-  /** Javobdagi kod kiritilgan kodga TENGmi (§9.4, 2-qatlam). */
-  matchesRequestedCode: boolean;
 };
 
 /**
@@ -235,21 +261,11 @@ export type PendingLookupResult = {
  */
 export function normalizePendingLookup(
   data: z.infer<typeof pendingLookupResponseSchema>,
-  requestedCode: string,
 ): PendingLookupResult {
   if ("matches" in data) {
-    return {
-      stall: data.stall,
-      matches: data.matches,
-      matchesRequestedCode:
-        data.stall !== null && data.stall.stall_code === requestedCode,
-    };
+    return { stall: data.stall, matches: data.matches };
   }
-  return {
-    stall: data,
-    matches: [],
-    matchesRequestedCode: data.stall_code === requestedCode,
-  };
+  return { stall: data, matches: [] };
 }
 
 /**
@@ -312,11 +328,20 @@ function useMarketId(): string | null {
  *    [Tasdiqlash] ni bosdi. Eski rastaning summasi yangi rasta kodi
  *    ostida ko'rinishi TO'G'RIDAN-TO'G'RI noto'g'ri pul yig'ish.
  *
- * ⛔ MOSLIK SHARTI KESH SIYOSATIDAN MUSTAQIL (§9.4, 2-qatlam).
- *    `select` har javobga `matchesRequestedCode` ni HOSIL QILADI: summa
- *    FAQAT `data.stall_code === stallCode` bo'lganda chizilishi mumkin.
- *    Ya'ni kalitni SERVER JAVOBINING O'ZI tasdiqlaydi, kesh emas —
- *    `gcTime` bir kun oshirilsa ham bu qatlam tirik qoladi.
+ * ⛔ IKKINCHI QATLAM SHU MODULDA EMAS, `PendingCard` DA (WR-05).
+ *    Ilgari bu docstring `select` HOSIL QILADIGAN `matchesRequestedCode`
+ *    maydonini «2-qatlam» deb e'lon qilardi — maydonni esa HECH KIM
+ *    o'qimasdi va uni ulash mahsulotni BUZARDI (prefiks qidiruvi, sabab
+ *    `PendingLookupResult` docstringida). Amaldagi qatlamlar:
+ *
+ *      1. so'rov KALITI `stallCode` ni o'z ichiga oladi;
+ *      2. `staleTime: 0` + `gcTime: 0` — eski javob keshda QOLMAYDI;
+ *      3. `PendingCard` javobning kodini O'ZI solishtiradi va mos
+ *         kelmasa summa o'rniga skeleton chizadi.
+ *
+ * ⛔ IZOH ENDI KODNI TA'RIFLAYDI, DA'VO QILMAYDI: yolg'on izoh
+ *    yo'qligidan YOMONROQ — keyingi o'quvchi mavjud bo'lmagan himoyaga
+ *    ishonib, haqiqiysini olib tashlashi mumkin edi.
  *
  * ⚠ `retry: false`: `market_closed` va `tariff_missing` NORMAL holatlar va
  *   ular javob tanasida keladi; tarmoq xatosida esa avtomatik takror
@@ -339,7 +364,7 @@ export function usePendingStall(
         { schema: pendingLookupResponseSchema },
       ),
     select: (data: z.infer<typeof pendingLookupResponseSchema>) =>
-      normalizePendingLookup(data, stallCode),
+      normalizePendingLookup(data),
     enabled:
       marketId !== null && stallCode !== "" && (options?.enabled ?? true),
     retry: false,
