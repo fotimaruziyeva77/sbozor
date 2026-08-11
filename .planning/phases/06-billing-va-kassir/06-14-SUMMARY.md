@@ -362,10 +362,13 @@ o'zi chaqiradi — ya'ni **ketma-ketlik darvozasi saqlanadi**.
 
 1. ⛔ **`gate` byudjeti o'lchanmadi** — yuqoridagi «Byudjet» bo'limi. Bu rejaning
    yagona bajarilmagan qabul mezoni.
-2. ⛔ **8 ta begona konteyner TO'XTATILGAN holda qoldi** (`frosty_benz`,
-   `priceless_sammet`, `parnikkpi-*` ×6). O'lchov uzilgani uchun tiklash qadami
-   bajarilmadi. **Tiklash buyrug'i:**
-   `docker start parnikkpi-db-1 parnikkpi-redis-1 parnikkpi-backend-1 parnikkpi-frontend-1 parnikkpi-celery_worker-1 parnikkpi-bot-1 frosty_benz priceless_sammet`
+2. ✅ **YOPILDI — begona konteynerlar TIKLANDI.** O'lchov uchun to'xtatilgan 8 ta
+   konteyner (`frosty_benz`, `priceless_sammet`, `parnikkpi-{db,redis,backend,frontend,celery_worker,bot}-1`)
+   `docker start` bilan qaytarildi va `docker ps` bilan tasdiqlandi — sakkiztasi
+   ham ishlayapti. ⚠ `sbozor-storage-1` esa endi **worktree'ning**
+   `ops/seaweedfs/s3.json` fayliga bog'langan (4-deviatsiya): worktree
+   o'chirilgach asosiy checkout uni o'z yo'lidan qayta yaratadi
+   (`docker compose up -d storage`).
 3. **`day_close` yurak urishining ko'rinmasligi** (06-07 dan meros,
    `deferred-items.md` 2-band, 5-faza domeni) — `occupancy.day_close` cron'i
    ro'yxatga olinmasa nosozlik JIMGINA qoladi.
