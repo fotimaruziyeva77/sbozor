@@ -181,6 +181,20 @@ export type ShiftReportRow = z.infer<typeof shiftReportRowSchema>;
  * =========================================================================
  */
 export const shiftReportSchema = z.strictObject({
+  /**
+   * ⛔ SERVER QAYTARGAN KUN — klient so'ragan kun EMAS.
+   *
+   *    `ChargeListResponse` / `AnomalyListResponse` bilan bitta naqsh:
+   *    envelope o'zi qaysi kunni javob berayotganini AYTADI. Usiz ekran
+   *    so'rov parametridan taxmin qilardi va Toshkent yarim tunida
+   *    sarlavha boshqa kunni ko'rsatardi.
+   *
+   *    ⚠ `z.strictObject` ostida bu maydonning YO'QLIGI parse paytida
+   *    THROW berardi (server uni `ShiftReportResponse.day: date` deb
+   *    e'lon qiladi) — 06-13 ning farq bloki birinchi yuklashdayoq
+   *    yiqilardi.
+   */
+  day: z.string(),
   rows: z.array(shiftReportRowSchema),
   shiftless_payment_count: z.number().int(),
   shiftless_payment_soum: soumSchema,
