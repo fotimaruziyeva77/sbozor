@@ -29,7 +29,7 @@ Phase: 06 (billing-va-kassir) — EXECUTING
 Plan: 1 of 14
 Total Plans in Phase: 14
 Status: Executing Phase 06
-Last activity: 2026-08-10 -- Phase 06 execution started
+Last activity: 2026-08-11 -- Completed quick task 260811-kyz: 06-14-SUMMARY.md eskirgan byudjet da'vosini yopilgan holatga moslash
 
 Progress: [██████████] 100% (15/15 reja — 05-01…05-15)
 
@@ -269,6 +269,12 @@ None yet.
 - [Phase 4] go2rtc-sim oqimini birorta test iste'mol qilmaydi — CAM-03 va CAM-09 aynan shu sababdan Blocked; yopilish yo'li: -m sim ostida go2rtc-sim'dan bitta kadr olish
 - CAM-02 Blocked: CI konteynerida wg0 yo'q — «server NVR'ga FAQAT tunnel orqali kiradi» o'lchanmaydi (Pitfall 10). Egasi Ops, tetigi VPS deploy'i, bandlari 03-HUMAN-UAT.md #1 va #2
 - 05-10: sof inspector roli dalil kadrini ko'ra olmaydi — GET /snapshots/{id}/image CAMERA_VIEW talab qiladi, ROLE_PERMISSIONS[INSPECTOR] esa aynan {OCCUPANCY_REVIEW}. RBAC bu fazada ATAYIN tegilmagan (M-8); qaror 05-13 yoki 05-15 da
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260811-kyz | 06-14-SUMMARY.md eskirgan byudjet da'vosini yopilgan holatga moslash (xavfsizlik auditi F-2) | 2026-08-11 | 8b5cf6f | [260811-kyz-06-14-summary-md-eskirgan-byudjet-da-vos](./quick/260811-kyz-06-14-summary-md-eskirgan-byudjet-da-vos/) |
 
 ## Deferred Items
 
