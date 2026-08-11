@@ -387,14 +387,26 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
        *    chiqarib olishning yo'li yo'q. ⛔ Bu yerda ham yig'uvchi amal
        *    yozilmaydi (§8.8, G-7 ning frontend yarmi).
        */}
-      {recentItems.length > 0 ? (
-        <section
-          aria-label={t("collect.recentTitle")}
-          className="flex flex-col gap-2"
-        >
-          <h2 className="text-lg leading-snug font-semibold">
-            {t("collect.recentTitle")}
-          </h2>
+      {/*
+       * ⛔ §13.8 NING 3-BO'SH HOLATI: BLOK HAR DOIM CHIZILADI.
+       *
+       * Ilgari ro'yxat bo'sh bo'lganda butun bo'lim YO'QOLARDI va kassir
+       * «yozdimmi yoki yo'qmi?» degan savolga ekrandan javob topa
+       * olmasdi — yo'qlik NOSOZLIK bilan bir xil ko'rinardi. Endi
+       * yo'qlik NOMLANADI (`collect.recentEmpty`).
+       *
+       * ⚠ Matn oynaning CHEGARASINI aytmaydi va SANOQ bermaydi: har
+       *   qanday «N ta to'lov» shakli §8.8 ning yig'indi taqig'iga
+       *   yaqinlashardi (G-7).
+       */}
+      <section
+        aria-label={t("collect.recentTitle")}
+        className="flex flex-col gap-2"
+      >
+        <h2 className="text-lg leading-snug font-semibold">
+          {t("collect.recentTitle")}
+        </h2>
+        {recentItems.length > 0 ? (
           <ul className="flex flex-col gap-2">
             {recentItems.map((record) => (
               <PaymentRow
@@ -406,8 +418,10 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
               />
             ))}
           </ul>
-        </section>
-      ) : null}
+        ) : (
+          <p className="text-sm text-text-muted">{t("collect.recentEmpty")}</p>
+        )}
+      </section>
 
       {/*
        * ⛔ DL-1 / DL-2 — HAQIQIY render, `null` yoki bo'sh o'ram EMAS.

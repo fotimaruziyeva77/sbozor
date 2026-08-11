@@ -50,18 +50,18 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 
 ### Billing (BILL)
 
-- [ ] **BILL-01**: Kun yopilishida band rastaga (kamida 2 snapshotda band, yoki 1 snapshot + nazoratchi tasdig'i) toifa tarifi bo'yicha to'liq kunlik patta hisoblanadi; job idempotent — qayta ishga tushirish dublikat yaratmaydi (`UNIQUE(market_id, stall_id, business_date)`)
-- [ ] **BILL-02**: Har hisob yozuvi dalil-kadrlarga bog'langan; yaratilgach o'zgartirilmaydi — tuzatish faqat sabab ko'rsatilgan `charge_adjustments` yozuvi orqali
-- [ ] **BILL-03**: Qarz faqat biriktirilgan sotuvchiga yoziladi; qoldiq har doim hisoblanadigan ko'rinish (hisoblar − to'lovlar), saqlangan balans ustuni emas
-- [ ] **BILL-04**: Biriktirilmagan rasta band ko'rinsa — hisob yozilmaydi, "ro'yxatga olinmagan savdo" anomaliyasi sifatida hisobotga tushadi
-- [ ] **BILL-05**: Kun davomida kassir/direktor "kutilayotgan patta"ni (bugungi tarif + eski qarz) ko'radi — bu jonli projection, yozilgan hisob emas
+- [x] **BILL-01**: Kun yopilishida band rastaga (kamida 2 snapshotda band, yoki 1 snapshot + nazoratchi tasdig'i) toifa tarifi bo'yicha to'liq kunlik patta hisoblanadi; job idempotent — qayta ishga tushirish dublikat yaratmaydi (`UNIQUE(market_id, stall_id, business_date)`)
+- [x] **BILL-02**: Har hisob yozuvi dalil-kadrlarga bog'langan; yaratilgach o'zgartirilmaydi — tuzatish faqat sabab ko'rsatilgan `charge_adjustments` yozuvi orqali
+- [x] **BILL-03**: Qarz faqat biriktirilgan sotuvchiga yoziladi; qoldiq har doim hisoblanadigan ko'rinish (hisoblar − to'lovlar), saqlangan balans ustuni emas
+- [x] **BILL-04**: Biriktirilmagan rasta band ko'rinsa — hisob yozilmaydi, "ro'yxatga olinmagan savdo" anomaliyasi sifatida hisobotga tushadi
+- [x] **BILL-05**: Kun davomida kassir/direktor "kutilayotgan patta"ni (bugungi tarif + eski qarz) ko'radi — bu jonli projection, yozilgan hisob emas
 
 ### Kassir (CASH)
 
-- [ ] **CASH-01**: Kassir telefonda rastani raqam bo'yicha topadi → summa tarifdan avtomatik → to'lov turi (naqd/terminal) → ≤3 bosishda tasdiqlaydi
-- [ ] **CASH-02**: Kassir summani faqat sabab-kod bilan o'zgartira oladi; har o'zgartirish auditda ko'rinadi
-- [ ] **CASH-03**: To'lov kiritish idempotent (takror bosish dublikat yaratmaydi); to'lov tuzatish faqat storno + qayta kiritish orqali, o'chirish/tahrirlash yo'q
-- [ ] **CASH-04**: Kassir smenani ochadi/yopadi; yopishda yig'ilgan naqdni ko'r (tizim summasini ko'rmasdan) deklaratsiya qiladi; tizim farqni (variance) hisoblab direktor hisobotiga chiqaradi
+- [x] **CASH-01**: Kassir telefonda rastani raqam bo'yicha topadi → summa tarifdan avtomatik → to'lov turi (naqd/terminal) → ≤3 bosishda tasdiqlaydi
+- [x] **CASH-02**: Kassir summani faqat sabab-kod bilan o'zgartira oladi; har o'zgartirish auditda ko'rinadi
+- [x] **CASH-03**: To'lov kiritish idempotent (takror bosish dublikat yaratmaydi); to'lov tuzatish faqat storno + qayta kiritish orqali, o'chirish/tahrirlash yo'q
+- [x] **CASH-04**: Kassir smenani ochadi/yopadi; yopishda yig'ilgan naqdni ko'r (tizim summasini ko'rmasdan) deklaratsiya qiladi; tizim farqni (variance) hisoblab direktor hisobotiga chiqaradi
 - [ ] **CASH-05**: To'lov kiritilishi bilan sotuvchiga Telegram orqali zudlik push-kvitansiya boradi (summa, rasta, kassir, vaqt)
 
 ### Nomuvofiqlik va hisobotlar (RECON)
@@ -164,15 +164,15 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | AI-04 | Phase 5 | Done |
 | AI-05 | Phase 5 | Done |
 | AI-06 | Phase 5 | Done |
-| BILL-01 | Phase 6 | Pending |
-| BILL-02 | Phase 6 | Pending |
-| BILL-03 | Phase 6 | Pending |
-| BILL-04 | Phase 6 | Pending |
-| BILL-05 | Phase 6 | Pending |
-| CASH-01 | Phase 6 | Pending |
-| CASH-02 | Phase 6 | Pending |
-| CASH-03 | Phase 6 | Pending |
-| CASH-04 | Phase 6 | Pending |
+| BILL-01 | Phase 6 | Done |
+| BILL-02 | Phase 6 | Done |
+| BILL-03 | Phase 6 | Done |
+| BILL-04 | Phase 6 | Done |
+| BILL-05 | Phase 6 | Done |
+| CASH-01 | Phase 6 | Done |
+| CASH-02 | Phase 6 | Done |
+| CASH-03 | Phase 6 | Done |
+| CASH-04 | Phase 6 | Done |
 | CASH-05 | Phase 7 | Pending |
 | RECON-01 | Phase 7 | Pending |
 | RECON-02 | Phase 7 | Pending |
@@ -325,6 +325,40 @@ TURIBDI — kod yozish talab qilinmaydi.
 fazaning yetkazib berish mahsulotini o'lchaydi, talablar esa v1
 relizining jumlalarini — AI-02 ning «RF-DETR» so'zi, masalan, birorta
 SC ning matnida YO'Q.
+
+### Qoidaning 6-fazadagi qo'llanishi (2026-08-11, `06-14`) — DALIL BILAN
+
+To'qqizala band `Pending` -> **`Done`**. ⛔ **Bu nisbat 3- va 5-fazadan
+FARQ QILADI va farq TASODIF EMAS:** o'sha fazalarda talab matnidagi bir
+jumla CI'da real artefakt bilan bajarilmasdi (tunnel yo'q, ONNX
+og'irliklari yo'q). Bu fazada esa haqiqatning uchala qismi ham bazada
+yashaydi — pul miqdori `tariffs.amount_soum` da, bandlik
+`stall_slot_occupancy` da, to'lov `payments` da — ya'ni har jumla
+HAQIQIY `postgres:18.4`, HAQIQIY SeaweedFS va HAQIQIY marshrut grafi
+ustida bajariladi (D-01).
+
+⚠ **`Done` NIMANI ANGLATMAYDI.** Hech bir qator «real bozorda,
+real kassir bilan ishlaydi» degan da'voni bermaydi: uchala frontend
+da'vosi jsdom da, pul zanjiri esa seed ma'lumoti ustida o'lchangan.
+Oxirgi ustun har qatorda nima o'lchanMAGANini ochiq aytadi.
+
+| Talab | Yangi holat | Nima o'lchandi va QAYSI test bilan | Nima o'lchanMAGAN |
+|---|---|---|---|
+| **BILL-01** | `Pending` -> **`Done`** | `test_phase6_criteria.py::test_sc1_immutable_daily_charge_is_written_once` — o'tmishdagi OCHIQ kunda `day_close` -> `billing_close` zanjiri: hisob AYNAN ikki rastada (2 slotli AI + nazoratchi tasdiqlagan), summa `tariffs` qatoridan O'QIB solishtiriladi; qayta yugurish `charged = 0`, qator qiymatlari va `created_at` o'zgarmaydi, `errors` BO'SH va `skipped_existing` mavjud hisoblarni TANIYDI. Chegara (`kamida 2 slot, yoki 1 + tasdiq`) — `test_g6_human_confirmation_must_be_on_the_occupied_slot` (uch holat) va `tests/unit/test_billable_from_slots.py` (jadval testi). Job yuzasi — `test_billing_close.py` | ⚠ **TALAB MATNIDAGI USTUN NOMI ESKIRGAN:** `UNIQUE(market_id, stall_id, business_date)` deb yozilgan, amaldagi kalit esa `(market_id, stall_id, service_date)`. Sabab loyihalash paytida hujjatlashtirilgan (Pitfall 1): `daily_charges.business_date` — qator YOZILGAN kun (`created_at` dan hosila), domen kuni esa ATAYIN `service_date` deb nomlangan. **Mexanizm** (bir rasta-kunga bitta hisob) o'lchangan, nomlanish esa boshqacha. ⛔ **Cron satrining O'ZI** (`BILLING_CLOSE_CRON = "10 4 * * *"`) birorta test bilan assert QILINMAYDI — u faqat yurak urishining YO'QLIGI orqali ko'rinadi (`billing_close_stale`, `test_alerting.py`) va deployda `scheduler` qayta ishga tushirilishini TALAB qiladi |
+| **BILL-02** | `Pending` -> **`Done`** | `test_sc2_charge_reaches_evidence_and_cannot_be_edited` — zanjir OXIRIGACHA yuriladi: `daily_charges` -> `charge_evidence.occupancy_event_id` -> `occupancy_events.snapshot_id` -> `GET /snapshots/{id}/image` **200 + `image/jpeg` + AYNAN o'sha baytlar** (HAQIQIY SeaweedFS ga yozilgan, mock YO'Q, direktor sessiyasi). `UPDATE`/`DELETE` -> `RaiseException`; `charge_adjustments` INSERT o'tadi va `audit_log` da qator paydo bo'ladi, asl summa O'ZGARMAYDI. Qo'riqchilarning qolgani — `test_billing_immutable.py`; ekran — `charge-detail-dialog` (06-13) | Dalil kadrining direktor uchun **o'qilishi** (rasm ekranda qanday ko'rinadi, nizoda yetarlimi) — inson idroki, jsdom bermaydi. Rasm proxysi CI'da SEED baytlari bilan o'lchanadi, real Karmana kadri bilan emas |
+| **BILL-03** | `Pending` -> **`Done`** | `test_sc3_debt_is_computed_and_unassigned_becomes_anomaly` — biriktirilgan sotuvchining qoldig'i `vendor_outstanding()` dan yozilgan hisobni QAMRAYDI; `information_schema` da `daily_charges` va `vendors` da nomi `balance` bilan boshlanadigan/tugaydigan ustun **TO'PLAM TENGLIGI bilan YO'Q**. FIFO taqsimlash SAQLANMAYDI: `payment_allocations` jadvali yo'q, `payments` da `allocated*` ustuni yo'q, qoida `ALLOCATION_RULE == "FIFO_OLDEST_SERVICE_DATE_FIRST"`. Arifmetikaning o'zi — `test_billing_repo.py` (Σ unpaid ↔ `vendor_outstanding`) va `tests/unit/test_payment_credit_rules.py` (uch jadval) | «Qarz faqat biriktirilgan sotuvchida ko'rinadi» — **ekranda** ism KLIENTDA joinlanadi va `useVendorsQuery` 50 qatorli sahifa beradi, ya'ni 50 dan ortiq sotuvchisi bor bozorda ustun bo'sh qoladi (`deferred-items.md` 9-band, 8-fazaning hisobot yuzasi). Qoldiq SONI to'g'ri, ISM to'liq emas |
+| **BILL-04** | `Pending` -> **`Done`** | O'sha testning (b) qismi: biriktirilmagan band rastada `daily_charges` da **0 qator** VA `billing_anomalies(kind='unassigned_occupied')` da **AYNAN 1 qator**. Invariant IKKI joyda qo'riqlangan — `_close_stall` ning D-28 shoxi va `write_charge()` ning `ValueError` i (S-3 sabotaji ikkalasini ham ko'rsatdi). Hisobotga chiqishi — `GET /billing/anomalies` (`test_billing_api.py`, uch ALOHIDA sanoq) va `anomaly-list.tsx` (06-13) | Anomaliya bilan **nima qilinishi** — case oqimi, mas'ul, holat — 7-fazaning mavzusi (RECON-02). Bu yerda faqat «ko'rinadi» o'lchangan |
+| **BILL-05** | `Pending` -> **`Done`** | `test_sc4_pending_projection_and_three_step_confirmation` (a) — `GET /billing/pending` javobining kalitlar to'plami AYNAN yetti va `charge_id` **umuman yo'q**; summa `resolve_stall_day_money()` va `pending_projection()` dan **ikki chaqiruv, bir natija** (D-16) va HTTP javobi ham AYNAN o'sha son. Nol-natija va uch shakl (aniq/ko'p moslik/bozor kesimi) — `test_billing_api.py`; ekran — `pending-card` + `pending-summary` | Kassir uchun **jonliligi**: so'rov `staleTime`/`refetch` siyosati real telefonda, zaif tarmoqda o'lchanmagan |
+| **CASH-01** | `Pending` -> **`Done`** | ≤3 bosish **DOM'dan HOSILA** sanoq bilan: `frontend/src/components/collect/collect-session.test.tsx` — `expect(steps).toBe(3)` (2 ham, 4 ham qizil) va ikkinchi takror ham AYNAN 3 (fokus qidiruvga qaytadi). Mezon modulida uning DARVOZAGA ULANGANI o'lchanadi (`package.json::gate` zanjirida `npm --prefix frontend test` bor). Summa tarifdan — `test_sc4` (a); rasta raqamdan topiladi — `stall-lookup` + `pending_projection` prefiks qidiruvi | ⛔ **«Telefonda»** — jsdom brauzer EMAS: tegish nishoni o'lchami (`min-h-11`/`min-h-14`) sinf sifatida bor, lekin real qurilmada barmoq bilan bosish, klaviatura qoplashi va bir qo'lda ishlash **o'lchanmagan**. Egasi: kassir; tetigi: pilot tayyorgarligi haftasi |
+| **CASH-02** | `Pending` -> **`Done`** | `test_sc4` (c) — sabab-kodsiz chetlangan summa **422** (HAQIQIY marshrutdan, `payments` da 0 qator). Sabab bilan yozilgani va auditda ko'rinishi — `test_payments_api.py::test_a_changed_amount_with_a_reason_is_written_and_audited` (`audit_log` da aktor, ESKI va YANGI summa hamda kvota to'plami). Sabablar reyestri yopiq (`ReversalReason`/`AdjustmentReason`, `other` a'zosi YO'Q) va uchala locale'da matni bor | Sabab-kodlarning **amalda to'g'ri tanlanishi** — kassir «boshqa» yo'qligida qaysi sababni bosadi degan savol inson kuzatuvi bilan javob oladi |
+| **CASH-03** | `Pending` -> **`Done`** | `test_sc5_idempotent_payment_reversal_and_blind_variance` (a)/(c) — bir xil `idempotency_key` bilan ikki `POST`: `payments` da **1 qator**, ikkinchi javob **200** va **o'sha `payment_id`**; `UPDATE payments` -> `RaiseException`; storno **YANGI qator** (`kind='reversal'`) va sababsiz storno `CheckViolation`. Uch tez bosish -> bitta so'rov (`payment-bar.test.tsx`, `toHaveLength(1)`), parallel ikki so'rov -> bitta qator (`test_payments_api.py`, `asyncio.gather`) | Tarmoq **haqiqiy** uzilishi: qayta yuborish oynasi mobil tarmoqda, offlayn navbat bilan o'lchanmagan (V2-CASH-05) |
+| **CASH-04** | `Pending` -> **`Done`** | `test_sc5` (d) — `POST /shifts/{id}/close` javobining kalitlar to'plami AYNAN to'rtta va `system_*` **umuman yo'q**; variance **serverda** hisoblanadi va FAQAT `GET /shifts?day=` da (direktor sessiyasi) qaytadi, IKKI YO'NALISHDA: `declared < system` -> **-5 000**, `declared > system` -> **+7 000** (har xil kattalikda — modul-kattalik sabotaji S-5 buni QIZARTIRDI). Ekran qatlami — `shift-close-form.test.tsx` (yopilgandan keyin AYNAN uchta narsa) va `variance-list.tsx` | Kassirning **haqiqatan ko'r qolishi**: u smenaning jamini boshqa yo'ldan (qog'oz daftar, o'z hisobi) chiqarib ololmasligi tashkiliy shart, texnik emas. `GET /payments/recent` oynasi serverda qat'iy beshta, lekin kassir kun davomida yozganini eslab qolishi mumkin — bu D-25 ning ochiq narxi |
+
+⛔ **BIRORTA BAND `Blocked` EMAS VA BU DA'VO EMAS, O'LCHOV NATIJASI.**
+To'qqizala talabning har jumlasi CI'da real artefakt bilan bajariladi.
+Yuqoridagi «Nima o'lchanMAGAN» ustuni **inson idroki, real qurilma va
+tashkiliy shart** haqida — ya'ni ular talab MATNINING jumlalari emas.
+Aynan shu sababdan bu fazada `06-HUMAN-UAT.md` fayli **YARATILMADI**.
 
 Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 `node scripts/check-requirements-sync.mjs` — qo'lda, har faza yopilishida

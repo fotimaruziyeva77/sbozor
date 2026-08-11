@@ -399,9 +399,17 @@ describe("§10.2: deklaratsiya qiymatining chegaralari", () => {
 
     fireEvent.click(submit);
 
-    /* §14.3: bosish RAD ETILMAYDI — u sababni E'LON qiladi. */
+    /*
+     * §14.3: bosish RAD ETILMAYDI — u SABABNI e'lon qiladi.
+     *
+     * ⛔ E'LON MAYDON NOMINI EMAS, SABABNI aytadi (06-14). Ilgari bu
+     *    yerda `collect.declaredLabel` («Yig'ilgan naqd») turardi va u
+     *    VAQTINCHA yechim edi: `collect.*` da to'g'ri kalit YO'Q edi
+     *    (`deferred-items.md` 8-band). Maydon nomini qaytarish
+     *    foydalanuvchiga «nima qilay?» degan savolga javob bermasdi.
+     */
     expect(screen.getByRole("status").textContent).toBe(
-      messages.collect.declaredLabel,
+      messages.collect.declaredInvalid,
     );
     expect(closeCalls()).toHaveLength(0);
   });

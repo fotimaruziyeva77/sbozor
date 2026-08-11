@@ -46,7 +46,7 @@ from tenancy.test_cross_tenant import (
 
 pytestmark = pytest.mark.tenancy
 
-MINIMUM_MATRIX_ROUTES = 60
+MINIMUM_MATRIX_ROUTES = 80
 """Matritsada kamida shuncha marshrut bo'lishi shart.
 
 01-07 holatida qamrovda 7 marshrut bor edi (`/users` GET+POST,
@@ -130,6 +130,28 @@ ushlaydi.
 qamrovi `tests/integration/test_wizard_flow.py` da QAYTA tiklangan
 (tokensiz -> 401; bozor admini -> 403; platforma admini -> 201) —
 `EXEMPT_ROUTES` docstringidagi talab shuni buyuradi.
+
+⛔ 06-14 CHEGARANI 60 -> 80 GA KO'TARDI VA SON O'LCHANGAN, TAXMIN
+QILINMAGAN: `len(tenant_resource_routes(app))` = **88** (2026-08-11).
+Ulardan AYNAN **11 tasi** 6-fazaniki va ular nomma-nom sanaladi:
+
+    GET  /billing/pending · /billing/charges · /billing/charges/{charge_id}
+         /billing/anomalies                                      (4)
+    POST /payments · /payments/{payment_id}/reverse
+    GET  /payments/recent                                        (3)
+    POST /shifts · /shifts/{shift_id}/close
+    GET  /shifts · /shifts/open                                  (4)
+
+⚠ 06-08 CHEGARANI ATAYIN KO'TARMADI va u haq edi: shart `>=`, ya'ni
+  yangi marshrut darvozani QIZARTIRMAYDI. Ko'tarish esa D-32 intizomi
+  bo'yicha YAKUNIY o'lchov bilan, bir marta va SABAB bilan bajariladi —
+  aynan shu yerda.
+
+⚠ 60 dan 80 gacha bo'lgan farq 6-fazaning 11 marshrutidan KATTA va bu
+  ham o'lchangan fakt: chegara 05-12 dan beri ko'tarilmagan, ya'ni u
+  faza oxiriga kelib amaldagi sondan 17 ta orqada qolgan edi. Yangi
+  qiymat faylning O'Z konventsiyasini tiklaydi (amaldagi sondan ~8-9
+  past — 02-10 dan beri saqlanadigan masofa).
 
 Chegara ATAYIN AMALDAGI SONDAN PAST — u "matritsa bo'shab qolmadimi?"
 degan savolga javob beradi, aniq sonni qulflamaydi. Aniq son yozilganda
