@@ -51,7 +51,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
 import messages from "../../../messages/uz-Latn.json";
 import { CollectSession } from "@/components/collect/collect-session";
 import { PaymentBar } from "@/components/collect/payment-bar";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, NetworkError } from "@/lib/api-client";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 
 const MARKET_ID = "11111111-1111-4111-8111-111111111111";
@@ -354,5 +354,58 @@ describe("G-21: idempotentlik kalitining hayot davri (§8.7)", () => {
     );
     /* ⛔ Yangi summa ham SERVER bergan qiymatdan — klientda qo'shilmagan. */
     expect(second[1].body.amount_soum).toBe(PENDING.total_due_soum);
+  });
+
+  /*
+   * ==========================================================================
+   * ⛔⛔ CR-03 — (c) KANALINING HAQIQIY STSENARIYSI: TARMOQ UZILISHI.
+   *
+   * Yuqoridagi (c)/(d) `ApiError` INJEKSIYA QILADI, ya'ni ular server
+   * JAVOB BERGAN holatni o'lchaydi. `api-client.ts` esa transport
+   * nosozligida ⛔ `NetworkError` otadi va u `ApiError` NING AVLODI EMAS.
+   *
+   * O'lchangan oqibat: `billingErrorCodeOf()` `null` qaytarardi ->
+   * `failureView` `null` -> xato bloki UMUMAN chizilmasdi. Kassir
+   * [Tasdiqlash] ni bosardi, spinner to'xtardi va BOSHQA HECH NIMA
+   * bo'lmasdi — na sabab, na [Qayta yuborish], na toast. To'lov esa
+   * yozilgan bo'lishi MUMKIN edi.
+   *
+   * ⛔ BU IDEMPOTENTLIK MEXANIZMI MAVJUD BO'LGAN YAGONA STSENARIY (D-21,
+   *    §8.7): «tarmoq uzildi -> qayta yuborish». Ko'rmagan kassir naqdni
+   *    QAYTA olardi.
+   *
+   * ⛔ DA'VO IKKI QISMLI: blok CHIZILADI **va** [Qayta yuborish] AYNI
+   *    KALIT bilan ketadi. Faqat birinchisi yozilsa, blok chizilib
+   *    YANGI kalit yuborilishi mumkin bo'lardi — o'shanda IKKINCHI
+   *    to'lov yozilardi va nuqson og'irroq shaklda qaytardi.
+   * ==========================================================================
+   */
+  test("⛔ (f) TARMOQ UZILDI: blok chiziladi va qayta yuborish AYNI kalit", async () => {
+    routeFetch([
+      () => Promise.reject(new NetworkError(new Error("offline"))),
+      () => Promise.resolve(WRITTEN),
+    ]);
+    const { container } = renderTree(
+      <CollectSession shiftHref="/uz/collect/shift" />,
+    );
+
+    await reachConfirm(container);
+    fireEvent.click(confirmButton());
+
+    /* ⛔ SABAB MATNI — `collect.errorCause.network_unreachable` (§13.8 №6). */
+    await screen.findByText(messages.collect.errorCause.network_unreachable);
+    await screen.findByText(messages.collect.retrySafe);
+
+    const retry = await screen.findByRole("button", {
+      name: messages.collect.retry,
+    });
+    expect(paymentCalls()).toHaveLength(1);
+
+    fireEvent.click(retry);
+    await waitFor(() => expect(paymentCalls()).toHaveLength(2));
+
+    const [first, second] = paymentCalls();
+    expect(second[1].body.idempotency_key).toBe(first[1].body.idempotency_key);
+    expect(typeof first[1].body.idempotency_key).toBe("string");
   });
 });

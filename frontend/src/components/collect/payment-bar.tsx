@@ -77,15 +77,49 @@ import type { PaymentRecord } from "@/lib/payment-queries";
  */
 
 /**
- * Xato kodini ajratadi — `review-session.tsx:115` ning LOKAL nusxasi.
+ * ⛔ TARMOQ UZILISHINING KODI — `billing-errors.ts` jadvalidagi a'zo.
  *
- * ⚠ Import qilinmadi ATAYIN: u Y-2 sessiyasining komponent modulida
- *   yashaydi va uni bu yerdan chaqirish butun nazoratchi ekranini kassir
- *   to'plamiga tortib kelardi. Uch qatorlik funksiya uchun bu narx juda
- *   baland.
+ * Satr literali IKKINCHI MARTA yozilmaydi: uni pastdagi
+ * `billingErrorCodeOf()` ham, `failureView` ning zaxira shoxi ham
+ * ishlatadi va ikki nusxa bir kun ajralib ketardi.
  */
-function billingErrorCodeOf(error: unknown): string | null {
-  return error instanceof ApiError ? error.detail : null;
+const NETWORK_UNREACHABLE = "network_unreachable";
+
+/**
+ * Xato -> KOD. ⛔ HAR DOIM kod qaytaradi, `null` HECH QACHON emas.
+ *
+ * =============================================================================
+ * ⛔⛔ CR-03: BU YERDA `null` QAYTARISH TO'LOVNI JIMGINA YO'QOTARDI.
+ *
+ * `api-client.ts` transport nosozligida `NetworkError` otadi va u ⛔ `ApiError`
+ * NING AVLODI EMAS (`class NetworkError extends Error`). Eski shakl
+ * (`error instanceof ApiError ? error.detail : null`) o'shanda `null`
+ * qaytarardi, `failureCode` `null` bo'lib qolardi va xato bloki UMUMAN
+ * chizilmasdi:
+ *
+ *     kassir [Tasdiqlash] ni bosadi -> spinner to'xtaydi -> BOSHQA HECH NIMA
+ *
+ * Ya'ni `[Qayta yuborish]` tugmasi ham, sabab matni ham yo'q. To'lov
+ * YOZILGAN bo'lishi ham mumkin edi — va bu AYNAN idempotentlik
+ * mexanizmi (§8.7, D-21) mavjud bo'lgan YAGONA stsenariy. Ko'rmagan
+ * kassir naqdni QAYTA oladi.
+ *
+ * ⛔ `collect.errorCause.network_unreachable` va `collect.retrySafe`
+ *    uchala locale'da ALLAQACHON bor edi — ular bu yo'lda O'LIK matn edi.
+ *
+ * ⚠ `ApiError` ning tanilmagan `detail` i (masalan 500 `internal_error`)
+ *   bu yerdan O'ZI qaytadi va chaqiruvchidagi `??` uni
+ *   `network_unreachable` ga tushiradi — o'sha xulq O'ZGARMADI
+ *   (`payment-bar.test.tsx` ning (c)/(d) kanallari uni qulflaydi).
+ * =============================================================================
+ *
+ * ⚠ `review-session.tsx:115` dan import QILINMADI (u Y-2 sessiyasining
+ *   moduli va butun nazoratchi ekranini kassir to'plamiga tortib kelardi)
+ *   — lekin bu funksiya endi uning NUSXASI ham emas: u yerdagi `null`
+ *   ma'noli, bu yerda esa YO'QOTISH edi.
+ */
+function billingErrorCodeOf(error: unknown): string {
+  return error instanceof ApiError ? error.detail : NETWORK_UNREACHABLE;
 }
 
 const METHOD_LABEL: Record<
@@ -189,11 +223,18 @@ export function PaymentBar({
     [submit],
   );
 
+  /*
+   * ⛔ `failureCode === null` — «hali xato bo'lmagan», «xato kodsiz» EMAS.
+   *   `billingErrorCodeOf()` HAR DOIM satr qaytaradi (CR-03), ya'ni
+   *   `onError` dan keyin bu qiymat hech qachon `null` bo'lmaydi va
+   *   blok CHIZILADI. Zaxira shox esa faqat TANILMAGAN `ApiError.detail`
+   *   uchun qoladi.
+   */
   const failureView =
     failureCode === null
       ? null
       : (billingErrorView(failureCode) ??
-        billingErrorView("network_unreachable"));
+        billingErrorView(NETWORK_UNREACHABLE));
 
   return (
     <div className="flex flex-col gap-4">
