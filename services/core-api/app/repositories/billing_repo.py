@@ -1655,13 +1655,18 @@ class ChargeRow:
 
 @dataclass(frozen=True, slots=True)
 class ChargeAdjustmentItem:
-    """Bitta tuzatish yozuvi — DL-3 ning 4-bo'limi."""
+    """Bitta tuzatish yozuvi — DL-3 ning 4-bo'limi.
+
+    ⛔ `actor_user_id` — `None` = TIZIM (`0022`): `late_review`
+       tuzatishini `billing_close` job'i yozadi, odam emas
+       (`write_late_review_adjustment()` docstringi).
+    """
 
     adjustment_id: UUID
     direction: str
     amount_soum: int
     reason_code: str
-    actor_user_id: UUID
+    actor_user_id: UUID | None
     created_at: datetime
 
 

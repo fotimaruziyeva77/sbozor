@@ -3137,7 +3137,17 @@ class ChargeAdjustmentRow(BaseModel):
     amount_soum: int
     reason_code: AdjustmentReason
     """YOPIQ ro'yxat (D-19) — `other` a'zosi YO'Q."""
-    actor_user_id: UUID
+    actor_user_id: UUID | None
+    """⛔ `NULL` = TIZIM (`0022` ustunni ATAYIN nullable qildi).
+
+    `late_review` tuzatishini `billing_close` job'i yozadi
+    (`billing_repo.write_late_review_adjustment()` → `actor_user_id=None`)
+    va unga odam biriktirish «kim qaror qildi?» savoliga YOLG'ON javob
+    bo'lardi. Bu yerda `UUID` (non-Optional) e'lon qilish javobni
+    `ResponseValidationError` bilan **500** ga aylantirardi — aynan
+    nizoli, ya'ni tuzatilgan hisoblar uchun. Klient sxemasi
+    (`billing-charge-queries.ts`) `null` ni ALLAQACHON kutadi.
+    """
     created_at: datetime
 
 

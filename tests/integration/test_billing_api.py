@@ -40,7 +40,11 @@ from uuid import UUID
 
 import pytest
 from app.main import app as fastapi_app
-from app.repositories.billing_repo import write_anomaly
+from app.repositories.billing_repo import (
+    ExistingCharge,
+    write_anomaly,
+    write_late_review_adjustment,
+)
 from fixtures.admin_api import session_headers
 from fixtures.billing_domain import (
     TARIFF_SOUM,
@@ -701,6 +705,72 @@ async def test_the_charge_detail_never_declares_the_tariff_id(
     }, body
     assert body["adjustments"] == []
     assert body["evidence"] == []
+
+
+async def test_the_charge_detail_survives_a_system_written_adjustment(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    env: Env,
+    admin_headers: dict[str, str],
+) -> None:
+    """⛔ CR-01: TIZIM yozgan tuzatish (`actor_user_id IS NULL`) 200 beradi.
+
+    =======================================================================
+    BU TESTNING QIYMATI — YUQORIDAGI TESTNING KO'R NUQTASI.
+
+    `test_the_charge_detail_never_declares_the_tariff_id` `adjustments ==
+    []` ni tasdiqlaydi, ya'ni SERIALIZATOR tuzatish qatori bilan HECH
+    QACHON uchrashmaydi. Sxema `actor_user_id: UUID` (non-Optional) deb
+    turganda ham u YASHIL edi — 500 faqat TUZATILGAN, ya'ni nizoli
+    hisoblarda chiqardi.
+
+    ⛔ Tuzatish MAHSULOT YO'LIDAN yoziladi
+      (`write_late_review_adjustment()`), xom `INSERT` bilan emas va
+      AYNIQSA `admin_user_id` bilan emas: `test_billing_repo.py::_adjust`
+      HAQIQIY odam biriktiradi — bu PRODUKSIYA yozadigan qatorning
+      TESKARISI va aynan shu farq nuqsonni yashirgan edi.
+
+    ⛔ `actor_user_id is None` TENGLIK bilan o'lchanadi, `in body` bilan
+      emas: maydon YO'QOLIB ketsa ham (`exclude_none`) test qizarishi
+      kerak — klient uni `z.uuid().nullable()` bilan KUTADI, ya'ni
+      yo'qlik `strictObject` da throw berardi.
+    =======================================================================
+    """
+    charge_id, _ = add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=env.stall("stall_with_two_occupied_slots"),
+        vendor_id=env.vendor_id,
+        tariff_id=env.tariff_id,
+    )
+
+    async with tenant_session(env.market_id) as session:
+        adjustment_id = await write_late_review_adjustment(
+            session,
+            market_id=env.market_id,
+            charge=ExistingCharge(charge_id=charge_id, amount_soum=TARIFF_SOUM),
+        )
+    assert adjustment_id is not None, "tuzatish yozilmadi — test o'z holatini qurmadi"
+
+    response = await api_client.get(f"{CHARGES_URL}/{charge_id}", headers=admin_headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    (adjustment,) = body["adjustments"]
+    assert set(adjustment) == {
+        "adjustment_id",
+        "direction",
+        "amount_soum",
+        "reason_code",
+        "actor_user_id",
+        "created_at",
+    }, adjustment
+    assert adjustment["actor_user_id"] is None, "NULL = TIZIM (0022) — odam TO'QILMAYDI"
+    assert adjustment["reason_code"] == "late_review"
+    assert adjustment["direction"] == "decrease"
+    assert adjustment["amount_soum"] == TARIFF_SOUM
+    assert body["amount_soum"] == 0, "to'liq summa ayirildi — netto NOL"
 
 
 async def test_an_unknown_charge_is_not_found(
