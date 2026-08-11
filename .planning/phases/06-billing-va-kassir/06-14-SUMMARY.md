@@ -38,7 +38,7 @@ decisions:
   - "SC#4(b)/SC#5(b) subprocess BILAN EMAS — `tests` konteynerida `node`/`npm` YO'Q (o'lchandi)"
   - "S-1 yashil qoldi -> HOLAT kengaytirildi (test emas), ikkinchi urinishda QIZARDI"
   - "G-3 ning tiplar to'plami rejadagi taxmin emas, O'LCHANGAN qiymat (`boolean` yo'q, `time` bor)"
-  - "nyquist_compliant HAMON false — `gate` byudjeti o'lchanmadi va band YASHIRILMADI"
+  - "nyquist_compliant HAMON false — `gate` byudjeti o'lchanmadi va band YASHIRILMADI — KEYIN YOPILDI (orkestrator, to'lqin 9 dan keyin: `gate` uch marta 1703/1733/1899 s exit 0, byudjet 1250 -> 2300 s, `gate:fast` 180 -> 200 s, `06-VALIDATION.md` da nyquist_compliant: true)"
 metrics:
   duration: "~4 soat (bir transport uzilishi bilan)"
   completed: 2026-08-11
@@ -53,6 +53,17 @@ metrics:
 meta-test · soxtalashtirishsiz o'lchov) yashil; beshta sabotajdan to'rttasi
 qizardi, bittasi yashil qoldi va u TESTNI emas, HOLATNI kengaytirish bilan
 tuzatildi; `gate` byudjeti esa O'LCHANMADI va bu ochiq band sifatida yozildi.**
+
+✅ **YOPILDI — byudjet KEYINCHALIK O'LCHANDI va qayta belgilandi (orkestrator,
+to'lqin 9 dan keyin — ya'ni bu reja YAKUNLANGANDAN so'ng).** Yuqoridagi xatboshi
+06-14 tugagan paytdagi holatni qayd etadi va TARIX sifatida o'zgarmaydi.
+`npm run gate` tinch xostda **uch marta** yugurtirildi — **1703 / 1733 / 1899 s,
+uchalasi ham exit 0** — byudjet **1250 → 2300 s** (`package.json` dagi
+`//gate-budget` izohi), `gate:fast` esa **160 / 154 / 152 s** o'lchovi bilan
+**180 → 200 s**. `06-VALIDATION.md` frontmatteri endi `nyquist_compliant: true` ·
+`status: complete` · `wave_0_complete: true`, va
+`node scripts/check-validation-signoff.mjs` → **exit 0**. Batafsil quyidagi
+«Byudjet» bo'limida; dalil: `deferred-items.md` 7-band.
 
 ---
 
@@ -223,7 +234,29 @@ ATAYIN ko'tarmagan edi va u haq edi.
 
 ---
 
-## ⛔ Byudjet — O'LCHANMADI (ochiq band)
+## ⛔ Byudjet — O'LCHANMADI (ochiq band) → ✅ YOPILDI (o'lchov reja yakunlangandan keyin)
+
+✅ **YOPILDI — `gate` O'LCHANDI, byudjet qayta belgilandi (orkestrator, to'lqin 7
+ning post-merge darvozasi va to'lqin 9 dan keyin).** ⛔ Quyidagi jadval va
+«Oqibat va qaror» bandlari **06-14 ijrosi paytidagi** holatni qayd etadi — ular
+TARIX va O'CHIRILMAYDI. O'shandan beri o'zgargani:
+
+| Nima | O'shanda (06-14 ijrosi) | Hozir (yopilgandan keyin) | Dalil artefakti |
+|---|---|---|---|
+| `npm run gate` yugurishi | ❌ 1-yugurish ~33 % da transport xatosi bilan uzildi | ✅ **uch marta, tinch xostda: 1703 / 1733 / 1899 s — uchalasi ham exit 0** | `deferred-items.md` 7-band |
+| Tarqoqlik | ❌ hisoblanmadi | ✅ **196 s = eng yomonning 10,3 %** | `package.json` `//gate-budget` |
+| `gate` byudjeti | 1250 s (05-15 niki) | ✅ **2300 s** = 1899 × 1,20 = 2278,8 → 50 ga yuqoriga yaxlitlandi | `package.json` `//gate-budget` **va** `06-VALIDATION.md` — BIR XIL |
+| `gate:fast` nazorat o'lchovi | ❌ olinmadi | ✅ **160 / 154 / 152 s**, tarqoqlik 8 s (5,0 %) | `package.json` `//gate-fast-budget` |
+| `gate:fast` byudjeti | 180 s | ✅ **200 s** = 160 × 1,20 = 192 → 50 ga yuqoriga yaxlitlandi | `package.json` `//gate-fast-budget` |
+| `nyquist_compliant` | ⛔ `false` | ✅ **`true`** (`status: complete`, `wave_0_complete: true`) | `06-VALIDATION.md` frontmatteri |
+| `check-validation-signoff.mjs` | «Ochiq qoidalar (1)» | ✅ **exit 0** | `node scripts/check-validation-signoff.mjs` |
+
+⚠ **Quyidagi qo'rquv ASOSLI edi:** «241 s zaxira yetarli ekani TASDIQLANMAGAN» —
+o'lchov 1250 s byudjetini haqiqatan **oshirdi** (eng yomoni 1899 s). ⚠ Lekin
+o'sish **to'plamning o'sishidan, ifloslanishdan EMAS** (`//gate-budget` izohida
+yozilgan): 6-faza 173 ta backend testi qo'shdi, vitest **620 → 717**, va uchta
+yangi marshrut (`/collect`, `/collect/shift`, `/billing`) uchala locale'da SSG
+build'ga qo'shildi.
 
 ⛔ **Bu bo'limni to'g'ri o'qing: `npm run gate` bu rejada TO'LIQ yugurmadi va uning
 vaqti O'LCHANMADI.** «Yashil» degan da'vo BERILMAYDI.
@@ -254,6 +287,12 @@ vaqti O'LCHANMADI.** «Yashil» degan da'vo BERILMAYDI.
 **Yopish yo'li (bir qadam):** tinch xostda `npm run gate` uch marta; oshmasa
 byudjet o'zgarmaydi va ikkala band `[x]` bo'ladi; oshsa yangi chegara = eng yomon
 o'lchov × 1,20 (50 ga yuqoriga yaxlitlanadi) va u **ikki joyda BIR XIL** yoziladi.
+
+✅ **Shu yo'l AYNAN bajarildi** (yuqoridagi jadvalga qarang): uch o'lchov olindi,
+eng yomoni (**1899 s**) 1250 s dan oshdi, shuning uchun yangi chegara
+**1899 × 1,20 = 2278,8 → 2300 s** qilib belgilandi va u `package.json` dagi
+`//gate-budget` izohida **va** `06-VALIDATION.md` da **BIR XIL** yozildi. Ikkala
+band `[x]` bo'ldi.
 
 **Bu rejada TO'LIQ yugurgan va YASHIL bo'lgan darvozalar** (byudjet o'lchovidan
 alohida):
@@ -360,8 +399,15 @@ o'zi chaqiradi — ya'ni **ketma-ketlik darvozasi saqlanadi**.
 
 ## Ochiq bandlar
 
-1. ⛔ **`gate` byudjeti o'lchanmadi** — yuqoridagi «Byudjet» bo'limi. Bu rejaning
-   yagona bajarilmagan qabul mezoni.
+1. ✅ **YOPILDI — `gate` byudjeti O'LCHANDI va qayta belgilandi.** O'sha paytdagi
+   yozuv TARIX sifatida saqlanadi: ⛔ **`gate` byudjeti o'lchanmadi** — yuqoridagi
+   «Byudjet» bo'limi. Bu rejaning yagona bajarilmagan qabul mezoni. ✅ **Yopilishi:**
+   orkestrator to'lqin 9 dan keyin tinch xostda `npm run gate` ni **uch marta**
+   yugurtirdi (**1703 / 1733 / 1899 s, uchalasi ham exit 0**); byudjet
+   **1250 → 2300 s** (`package.json` `//gate-budget`), `gate:fast` **180 → 200 s**
+   (o'lchovlar 160 / 154 / 152 s); `06-VALIDATION.md` da `nyquist_compliant: true`
+   va `node scripts/check-validation-signoff.mjs` → **exit 0**. Dalil:
+   `deferred-items.md` 7-band.
 2. ✅ **YOPILDI — begona konteynerlar TIKLANDI.** O'lchov uchun to'xtatilgan 8 ta
    konteyner (`frosty_benz`, `priceless_sammet`, `parnikkpi-{db,redis,backend,frontend,celery_worker,bot}-1`)
    `docker start` bilan qaytarildi va `docker ps` bilan tasdiqlandi — sakkiztasi
@@ -375,8 +421,18 @@ o'zi chaqiradi — ya'ni **ketma-ketlik darvozasi saqlanadi**.
 4. **Ochiq buyurtmachi savollari OQ-3/OQ-4/OQ-6/OQ-7** — bular manual verification
    EMAS, `[ASSUMED]` standart qiymat bilan qurilgan **parametr**. Tetigi:
    buyurtmachining javobi; sozlash nuqtalari UI-SPEC §17 (O-01…O-07) jadvalida.
-5. **`deferred-items.md` 3-, 7- va 9-bandlar** ochiq (7-band bu rejada qisman
-   yopildi — backend darvozasi yugurtirildi; 3 va 9 boshqa fazalarniki).
+5. ⚠ **QISMAN ESKIRGAN — 7-band endi TO'LIQ yopilgan; 3- va 9-bandlar OCHIQ.**
+   O'sha paytdagi yozuv: **`deferred-items.md` 3-, 7- va 9-bandlar** ochiq (7-band
+   bu rejada qisman yopildi — backend darvozasi yugurtirildi; 3 va 9 boshqa
+   fazalarniki). ✅ **7-band TO'LIQ YOPILDI** — `deferred-items.md` ning 19-qatori
+   endi shuni yozadi: orkestrator to'lqin 7 ning post-merge darvozasida, so'ng
+   to'lqin 9 dan keyin to'liq `gate` ni **uch marta** yugurtirdi
+   (**1703 / 1733 / 1899 s, exit 0**), ya'ni «qisman» qaydi — faqat backend yarmi —
+   endi o'rinli emas. ⚠ **3- va 9-bandlar HAMON OCHIQ va bu TO'G'RI:** 3-band
+   (`PUT /api/v1/camera-zones` ning `QUERY_PARAM_ROUTES` istisnosi) 05-06 dan
+   meros, 9-band (`charge-list.tsx` da sotuvchi ismi joini faqat birinchi 50 lik
+   sahifani ko'radi) esa 8-fazaning hisobot yuzasiniki — ikkalasi ham 6-fazaniki
+   EMAS va bu rejada ularga TEGILMAYDI.
 6. ⚠ **Phase-5 flaky:** `test_blind_audit.py::test_a_different_round_number_draws_a_different_sample`
    to'liq to'plamda ba'zan qizaradi (`deferred-items.md` 1-band). **Bu 6-fazaning
    regressiyasi EMAS** va bu rejaning birorta yugurishida uchramadi.
