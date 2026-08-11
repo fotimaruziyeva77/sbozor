@@ -459,12 +459,42 @@ _SHIFT_REPORT_ROWS = text(
    o'sib turibdi. Uni «0 farq» deb ko'rsatish `NULL` ni nol deb yozish
    bo'lardi — D-14 ning aynan taqiqlaydigan narsasi.
 
-⛔ **KUN — `business_date`, `service_date` EMAS** (C-2). Savol «qaysi
-   kunda kassa hisobi olindi», «qaysi kun UCHUN pul yig'ildi» emas:
-   kechagi qarzni bugun to'lagan sotuvchining puli ⛔ **bugungi**
-   kassirning qutisiga tushadi va uning deklaratsiyasiga kiradi.
-   `service_date` bo'yicha guruhlash o'sha pulni kechagi kunga
-   yuborardi va ikkala kunning variance i ham noto'g'ri chiqardi.
+⛔ **KUN — `business_date`, `service_date` EMAS** (C-2). Savol «qaysi kun
+   UCHUN pul yig'ildi» EMAS: kechagi qarzni bugun to'lagan sotuvchining
+   puli ⛔ **bugungi** kassirning qutisiga tushadi va uning
+   deklaratsiyasiga kiradi. `service_date` bo'yicha guruhlash o'sha pulni
+   kechagi kunga yuborardi va ikkala kunning variance i ham noto'g'ri
+   chiqardi.
+
+=============================================================================
+⛔⛔ **KUN — SMENA OCHILGAN KUN.** ILGARI BU YERDA «QAYSI KUNDA KASSA
+    HISOBI OLINDI» DEB YOZILGAN EDI VA U ⛔ **NOTO'G'RI** (WR-07).
+
+`cashier_shifts.business_date` — `GENERATED ALWAYS AS
+(BILLING_BUSINESS_DATE_EXPR)` va uning yagona kirishi `created_at`,
+ya'ni ⛔ **qator INSERT qilingan lahza** = smena OCHILGAN payt
+(`models/billing.py::CashierShift`). Kassa hisobi esa smena
+**YOPILGANDA** olinadi (`closed_at`) — ikki BOSHQA moment.
+
+⚠ **TUNGI SMENA KAFOLATI YO'Q VA U SHU YERDA OCHIQ AYTILADI:**
+  Toshkent yarim tunidan OLDIN ochilib, undan KEYIN yopilgan smena
+  ⛔ **ochilgan kunda** hisobotga tushadi, uning to'lovlari esa o'z
+  `payments.business_date` lari bo'yicha ⛔ **ikki kunga** bo'linadi.
+  Ya'ni bir qatorning ikki yarmi ikki xil kun ta'rifidan foydalanadi —
+  pastdagi `_SHIFTLESS_PAYMENTS` `payments.business_date` da filtrlanadi.
+
+⚠ VARIANCE BUNDAN BUZILMAYDI: u SMENA kesimidagi son
+  (`declared_soum − system_soum`) va tizim summasi smenaning HAMMA
+  to'lovidan hisoblanadi, kun bo'yicha kesilmaydi. Kun bu yerda faqat
+  FILTR.
+
+⛔ `closed_at` GA O'TKAZILMADI VA BU ONGLI TANLOV: u xulqni o'zgartirardi
+   (tungi smena boshqa kunga ko'chardi), amaliy foyda esa nol — bozorlar
+   kechqurun yopiladi. Ta'rif endi ⛔ **NOMLANGAN va TEST bilan
+   qulflangan** (`test_shifts_api.py`), ya'ni keyingi o'quvchi uni proza
+   emas, TASDIQ sifatida ko'radi. O'zgartirish kerak bo'lsa — o'sha test
+   qizaradi.
+=============================================================================
 
 ⚠ `ORDER BY opened_at, id` — ikkinchi kalit DETERMINIZM uchun: bir
   tranzaksiyada yozilgan ikki qator `now()` ning BIR XIL qiymatini oladi

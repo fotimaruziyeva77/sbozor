@@ -780,6 +780,90 @@ async def test_the_report_row_has_exactly_seven_keys_and_no_cashier_name(
     assert row["cashier_id"] == str(env.cashier_id)
 
 
+async def test_an_overnight_shift_is_reported_under_the_day_it_was_opened(
+    api_client: httpx.AsyncClient,
+    env: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ WR-07: hisobotning KUNI — smena OCHILGAN kun, YOPILGAN kun EMAS.
+
+    =========================================================================
+    ⛔⛔ TA'RIF ENDI PROZA EMAS, TASDIQ.
+
+    `_SHIFT_REPORT_ROWS` `cashier_shifts.business_date` bo'yicha
+    filtrlaydi va u `GENERATED ALWAYS AS (...)` — yagona kirishi
+    `created_at`, ya'ni ⛔ QATOR YOZILGAN (= smena OCHILGAN) lahza.
+    Docstring esa «qaysi kunda kassa hisobi olindi» deb turardi va bu
+    NOTO'G'RI edi: kassa hisobi smena YOPILGANDA olinadi (`closed_at`).
+
+    Toshkent yarim tunidan oshgan smena uchun ikkalasi AJRALADI. Bu
+    test o'sha holatni AYNAN quradi va ta'rifni QULFLAYDI:
+
+        `created_at` = KECHA   -> `business_date` = KECHA
+        `closed_at`  = BUGUN
+
+    ⛔ IKKI TOMONLAMA DA'VO: qator KECHAGI hisobotda BOR va BUGUNGISIDA
+       YO'Q. Faqat birinchisi yozilsa filtr `closed_at` ga o'tkazilganda
+       test YASHIL qolardi (qator ikkala kunda ham topilardi degan
+       taxmin bilan) — ikkinchi yarim aynan shu shoxni yopadi.
+
+    ⚠ QATOR XOM `INSERT` BILAN YOZILADI va bu MAJBURIY: `business_date`
+      GENERATED, ya'ni unga qiymat yozib bo'lmaydi va uni faqat
+      `created_at` orqali siljitish mumkin. HTTP marshruti esa har doim
+      `now()` beradi — tungi holatni mahsulot yo'lidan qurish IMKONSIZ.
+
+    ⚠ Smena YOPIQ holatda yoziladi: `closed_has_declaration` /
+      `closed_has_system_total` `CHECK` lari ikkala summani TALAB qiladi,
+      qisman `SHIFT_OPEN_INDEX` esa faqat OCHIQ qatorlarni qamraydi —
+      ya'ni seedning ochiq smenasi bilan to'qnashuv yo'q.
+    =========================================================================
+    """
+    yesterday = env.today - timedelta(days=1)
+    overnight_id = uuid4()
+    env.conn.execute(
+        "INSERT INTO cashier_shifts "
+        "(id, market_id, cashier_id, status, opened_at, closed_at, "
+        " declared_soum, system_soum, created_at) "
+        "VALUES (%s, %s, %s, %s, "
+        "        (%s::date + time '23:30') AT TIME ZONE 'Asia/Tashkent', "
+        "        (%s::date + time '00:30') AT TIME ZONE 'Asia/Tashkent', "
+        "        %s, %s, "
+        "        (%s::date + time '23:30') AT TIME ZONE 'Asia/Tashkent')",
+        (
+            str(overnight_id),
+            str(env.market_id),
+            str(env.cashier_id),
+            ShiftStatus.CLOSED.value,
+            yesterday,
+            env.today,
+            0,
+            0,
+            yesterday,
+        ),
+    )
+
+    # ⛔ NAZORAT: holat HAQIQATAN tungi — ikki ustun ikki BOSHQA kunni ko'rsatadi.
+    row = env.conn.execute(
+        "SELECT business_date, (closed_at AT TIME ZONE 'Asia/Tashkent')::date "
+        "FROM cashier_shifts WHERE id = %s",
+        (str(overnight_id),),
+    ).fetchone()
+    assert row is not None
+    assert (row[0], row[1]) == (yesterday, env.today), (
+        f"nazorat: tungi holat qurilmadi — business_date={row[0]}, closed={row[1]}"
+    )
+
+    on_open_day = await _report(api_client, director_headers, yesterday)
+    on_close_day = await _report(api_client, director_headers, env.today)
+
+    assert str(overnight_id) in {r["id"] for r in on_open_day["rows"]}, (
+        "tungi smena OCHILGAN kunning hisobotida YO'Q — kun ta'rifi o'zgargan"
+    )
+    assert str(overnight_id) not in {r["id"] for r in on_close_day["rows"]}, (
+        "tungi smena YOPILGAN kunda ham ko'rindi — filtr `closed_at` ga o'tkazilgan"
+    )
+
+
 async def test_an_open_shift_is_not_in_the_report(
     api_client: httpx.AsyncClient, env: Env, director_headers: dict[str, str]
 ) -> None:
