@@ -361,7 +361,8 @@ Plans:
   3. Qarz faqat biriktirilgan sotuvchida ko'rinadi (qoldiq har doim hisoblanadigan ko'rinish: hisoblar − to'lovlar); biriktirilmagan band rasta hisob emas, "ro'yxatga olinmagan savdo" anomaliyasi sifatida chiqadi
   4. Kun davomida kassir/direktor "kutilayotgan patta"ni (bugungi tarif + eski qarz) jonli ko'radi; kassir rastani raqamdan topib, tarifdan kelgan summani ≤3 bosishda tasdiqlaydi va summani faqat sabab-kod bilan o'zgartira oladi
   5. Takror bosilgan to'lov dublikat yaratmaydi, tuzatish faqat storno + qayta kiritish orqali; smena yopilishida kassir tizim summasini ko'rmasdan naqdni deklaratsiya qiladi va farq (variance) direktor hisobotiga chiqadi
-**Plans**: 14 plans (10 to'lqin)
+
+**Plans**: 14 plans (10 to'lqin)
 **Wave 1**
 
 - [x] 06-01-PLAN.md — Wave 0/A: A1 (parallel get-or-create) va A2 (generated-from-column) zondlari, sof funksiyalar (D-04/D-05/C-6, D-26) + D-24 ning taqsimlash qoidasi (`FIFO_OLDEST_SERVICE_DATE_FIRST`, G-13/G-14)
@@ -430,7 +431,27 @@ bajarildi va beshala mezon bitta buyruqda yashil
   4. Sotuvchi contact ulashish orqali botga ulanadi (telefon raqami admin reestriga mos bo'lsa) va o'z qoldig'i/qarzi hamda to'lov tarixini ko'radi
   5. To'lov kiritilishi bilan sotuvchiga zudlik push-kvitansiya boradi (summa, rasta, kassir, vaqt) va qarz N kundan oshsa avtomatik eslatma keladi — barcha xabarlar outbox orqali, throttling va quiet hours hurmat qilinib, yetkazilganlik holati bilan
 
-**Plans**: TBD
+**Plans**: 17 plans (8 to'lqin)
+
+Plans:
+- [ ] 07-01-PLAN.md — `bot-service` tug'ilishi: skelet, compose, `package.json`, Sentry darvozasining kengaytmasi
+- [ ] 07-02-PLAN.md — Bildirishnoma domeni: besh enum, besh model, `0023` migratsiya (RLS + kompozit FK + XOR CHECK)
+- [ ] 07-03-PLAN.md — `GET /me/headline` — rol bo'yicha serverda hal qilinadigan bitta son (RECON-06)
+- [ ] 07-04-PLAN.md — Strukturaviy meta darvoza (G7-2/G7-7/G7-8) + domen fixture'lari (ikki bozorli telefon to'qnashuvi)
+- [ ] 07-05-PLAN.md — Frontend: bosh ekran ko'rsatkichi
+- [ ] 07-06-PLAN.md — `AlertSender` kengaytmasi (`chat_id` argument) + `outbox_repo` + D-18 siyosati
+- [ ] 07-07-PLAN.md — Case domeni: `reconciliation_repo` + `recon.open` jobi + hosila hit-rate
+- [ ] 07-08-PLAN.md — Ichki bot API + `binding_repo` (D-26 ning uch shoxi)
+- [ ] 07-09-PLAN.md — `notify.outbox_tick` jobi + G7-1/G7-4/G7-5
+- [ ] 07-10-PLAN.md — Nomuvofiqlik hisoboti va case yuzasi (API) + G7-6
+- [ ] 07-11-PLAN.md — `bot-service` handlerlari, uchala locale katalogi + G7-9
+- [ ] 07-12-PLAN.md — CASH-05: kvitansiya niyati to'lov tranzaksiyasida
+- [ ] 07-13-PLAN.md — Kechki/ertalabki xabar (D-15/D-16) va kechikkan qarz eslatmasi (BOT-03)
+- [ ] 07-14-PLAN.md — Cron reyestri va yurak urishi (D-17): besh vazifa, to'rt komponent
+- [ ] 07-15-PLAN.md — Frontend: nomuvofiqlik hisoboti + case ro'yxati + G7-3
+- [ ] 07-16-PLAN.md — Frontend: case detali + yetkazilganlik holati (BOT-04)
+- [ ] 07-17-PLAN.md — Faza darvozasi: `test_phase7_criteria.py`, byudjet o'lchovi, talab holatlari
+
 **UI hint**: yes
 
 ### Phase 8: Hisobotlar, mustahkamlash va ishga tushirish
