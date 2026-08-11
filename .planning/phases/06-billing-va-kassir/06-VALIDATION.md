@@ -2,7 +2,7 @@
 phase: 6
 slug: billing-va-kassir
 status: complete
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: true
 created: 2026-08-10
 updated: 2026-08-11
@@ -72,25 +72,42 @@ yozilishi shart.
 | **Quick run command** | `npm run gate:fast` → `npm run test:fast && npm --prefix frontend test` |
 | **Full suite command** | `npm run test` + `npm run test:tenancy` |
 | **Phase gate command** | `npm run gate` + `tests/integration/test_phase6_criteria.py` |
-| **Estimated runtime** | `gate:fast` ~87 s (byudjet 180 s, **05-15 o'lchovi**) · `gate` ~1009 s (byudjet **1250 s**, **05-15 o'lchovi**) |
+| **Estimated runtime** | `gate:fast` ~160 s (byudjet **200 s**, **06-faza o'lchovi**) · `gate` ~1899 s (byudjet **2300 s**, **06-faza o'lchovi**) |
 
-### ⛔ Byudjet — 6-FAZADA QAYTA O'LCHANMADI (ochiq band)
+### ✅ Byudjet — 6-FAZADA QAYTA O'LCHANDI (band yopildi)
 
-⛔ **Bu bo'lim 05-15 ning o'lchovini takrorlaydi, 6-fazanikini EMAS.** `06-14` da o'lchov
-protokoli boshlandi va tugamadi:
+06-14 da boshlangan protokol transport xatosi tufayli uzilgan edi; orkestrator uni
+to'lqin 9 dan keyin, **birorta ijrochi agent ishlamayotgan tinch xostda** oxirigacha
+yugurtirdi.
 
 | Qadam | Holat |
 |---|---|
-| Disk tekshiruvi (`C:` da ≥ 10 GB) | ✅ **15 GB bo'sh** (92 % to'la) — o'lchov sharti bajarildi |
-| Tinch xost (begona konteynerlar to'xtatildi) | ✅ 8 ta konteyner to'xtatildi va **TIKLANDI** |
-| 1-yugurish (sovuq) | ❌ **~33 % da uzildi** (transport xatosi), vaqt YOZILMADI |
-| 2- va 3-yugurish | ❌ boshlanmadi |
-| `gate:fast` nazorat o'lchovi | ❌ olinmadi |
+| Disk tekshiruvi (`C:` da ≥ 10 GB) | ✅ o'lchov sharti bajarildi |
+| Tinch xost (birorta ijrochi agent ishlamayapti) | ✅ to'qqizala to'lqin tugagan, worktree'lar tozalangan |
+| `gate` 1-yugurish | ✅ **1703 s**, exit 0 |
+| `gate` 2-yugurish | ✅ **1733 s**, exit 0 |
+| `gate` 3-yugurish | ✅ **1899 s**, exit 0 |
+| `gate:fast` nazorat o'lchovi (×3) | ✅ **160 / 154 / 152 s**, hammasi exit 0 |
 
-⛔ **Shuning uchun byudjet O'ZGARTIRILMADI: `package.json` da ham, bu yerda ham hamon
-1250 s.** Ikki joyda son BIR XIL, lekin u 05-15 da o'lchangan (1009 / 1004 / 983 s).
-6-faza ~6 jadval, ~11 marshrut, ~15 komponent va ~10 test fayli qo'shdi — ya'ni
-**zaxira (241 s) yetarli ekani TASDIQLANMAGAN**. Bu `/gsd-verify-work` uchun ochiq band.
+**Yangi chegaralar (formula: eng yomon × 1,20, 50 ga yuqoriga yaxlitlash):**
+
+- `gate` — eng yomon **1899** → 2278,8 → ⛔ **2300 s** (oldingi 1250 s). Tarqoqlik 196 s
+  (eng yomonning 10,3 %).
+- `gate:fast` — eng yomon **160** → 192 → ⛔ **200 s** (oldingi 180 s). Tarqoqlik 8 s
+  (5,0 %). 5-fazada o'lchov 87 s edi va byudjet o'zgarmagandi; 160 s uni **89 %** ga
+  to'ldirgani uchun chegara endi bir marta ko'tarildi — aks holda keyingi fazaning
+  birinchi commiti darvozani **nuqson sababli emas** trippardi.
+
+⛔ **O'SISH TO'PLAMNING O'SISHIDAN, IFLOSLANISHDAN EMAS** — sabab raqam bilan:
+6-faza **173 ta backend testi** qo'shdi (integratsiya+tenancy 141: criteria 12,
+`billing_repo` 30, `payments_api` 27, `shifts_api` 21, `billing_api` 19,
+`billing_immutable` 12, `billing_domain_meta` 13, `billing_close` 7; unit 32) va
+vitest **620 → 717**, ustiga uchta yangi marshrut (`/collect`, `/collect/shift`,
+`/billing`) uchala locale'da SSG build'ga qo'shildi. Uchala `gate` yugurishi ham
+**exit 0** — ya'ni o'sish ish hajmidan, sekinlashgan yoki qizargan testdan emas.
+
+Ikkala son `package.json` dagi `//gate-budget` / `//gate-fast-budget` izohlarida **va**
+shu faylda BIR XIL yozilgan.
 
 **Qoida (05-15 W0-13 naqshi, o'zgarmadi):** o'lchov **tinch xostda**, **uch marta**
 olinadi; oshsa yangi chegara = eng yomon o'lchov × 1,20 (50 ga yuqoriga yaxlitlanadi) va
@@ -280,32 +297,31 @@ DALIL ko'rsatiladi — «ha» deb belgilash yetarli emas.
 - [x] **No watch-mode flags** — dalil: `package.json` va `frontend/package.json` ning
       birorta skriptida `--watch` yo'q; `vitest run` (interaktiv emas), `node --test`
       (bir marta yuguradi), `pytest` (standart).
-- [x] **Feedback latency < 180 s** — dalil: `gate:fast` byudjeti **180 s** va u
-      `//gate-fast-budget` izohida qulflangan. ⚠ 6-fazada `gate:fast` QAYTA
-      O'LCHANMADI (pastdagi ⛔ bandga qarang), ya'ni bu band OLDINGI o'lchovga
-      (87 s, 05-15) tayanadi.
-- [ ] ⛔ **`gate` byudjeti o'lchandi va `package.json` bilan bu fayl BIR XIL qiymatda**
-      — ⛔ **BAJARILMADI.** O'lchov BOSHLANDI (tinch xost tayyorlandi, disk
-      tekshirildi) va **~33 % da uzildi**; uchala yugurishning birortasi ham
-      tugamadi. Byudjet shu sababdan **O'ZGARTIRILMADI**: `package.json` da ham,
-      bu faylda ham hamon **1250 s** (ikki joyda BIR XIL, lekin bu 05-15 ning
-      o'lchovi, 6-fazaniki EMAS). Tafsilot `06-14-SUMMARY.md` § «Byudjet» da.
-- [ ] ⛔ **`nyquist_compliant: true` set in frontmatter** — ⛔ **QO'YILMADI va bu
-      QAROR, unutish emas.** `node scripts/check-validation-signoff.mjs` bayroqni
-      HISOB-KITOB bilan solishtiradi va uning (2)-qoidasi ochiq: byudjet bandi
-      hamon `BAJARILMADI`. Bandni `human_only_verifications` ga ko'chirish
-      ⛔ **YOLG'ON** bo'lardi — u avtomatlashtirilmaydigan emas, shunchaki
-      **yugurtirilmagan** (`npm run gate`). Skript bugun `nyquist_compliant:
-      false — hisob-kitob bilan MOS` deydi va aynan shu javob to'g'ri.
+- [x] **Feedback latency < 200 s** — dalil: `gate:fast` 6-fazada QAYTA O'LCHANDI —
+      **160 / 154 / 152 s** (tinch xost, hammasi exit 0) va byudjet 180 → **200 s**
+      qilib ko'tarildi (eng yomon 160 × 1,20 = 192 → 200). Chegara
+      `//gate-fast-budget` izohida qulflangan. Band endi 05-15 ning 87 s o'lchoviga
+      EMAS, 6-fazaning o'z o'lchoviga tayanadi.
+- [x] ⛔ **`gate` byudjeti o'lchandi va `package.json` bilan bu fayl BIR XIL qiymatda**
+      — ✅ **BAJARILDI.** 06-14 dagi urinish transport xatosi tufayli ~33 % da
+      uzilgan edi; orkestrator o'lchovni to'lqin 9 dan keyin, birorta ijrochi agent
+      ishlamayotgan tinch xostda oxirigacha yugurtirdi: **1703 / 1733 / 1899 s**,
+      uchalasi ham **exit 0**. Eng yomon 1899 × 1,20 = 2278,8 → **2300 s**, va bu
+      son `package.json` dagi `//gate-budget` izohida **va** shu faylda BIR XIL
+      yozilgan. O'sish sababi raqam bilan asoslandi (173 backend testi, vitest
+      620 → 717, uchta yangi SSG marshruti) — ya'ni byudjet **jimgina** emas,
+      **o'lchov bilan** ko'tarildi.
+- [x] ⛔ **`nyquist_compliant: true` set in frontmatter** — ✅ **QO'YILDI.**
+      `node scripts/check-validation-signoff.mjs` bayroqni HISOB-KITOB bilan
+      solishtiradi va uning (2)-qoidasi endi yopiq: byudjet bandi `[x]`. Band
+      `human_only_verifications` ga KO'CHIRILMADI — u hech qachon
+      avtomatlashtirilmaydigan bo'lmagan, shunchaki yugurtirilmagan edi, va endi
+      yugurtirildi.
 
-**Approval:** ⚠ **shartli** — yettitadan **beshtasi** dalil bilan yopildi; `gate`
-byudjeti va undan HOSILA bo'lgan `nyquist_compliant` bandlari OCHIQ va ikkalasi ham
-`06-14-SUMMARY.md` § «Byudjet» da yozilgan. ⛔ Ularni «yashil» deb belgilash
-byudjetning JIMGINA ko'tarilishi bilan bir xil sinfdagi yolg'on bo'lardi (T-06-92).
-
-⛔ **YOPISH YO'LI BIR QADAMLIK VA U QURILGAN:** tinch xostda `npm run gate` uch marta
-yugurtiriladi; oshmasa byudjet o'zgarmaydi va bu ikki band `[x]` bo'ladi, oshsa
-yangi chegara `package.json` va bu faylda BIR XIL qiymatda yoziladi.
+**Approval:** ✅ **to'liq** — yettitadan **yettitasi** dalil bilan yopildi. `gate`
+byudjeti va undan HOSILA bo'lgan `nyquist_compliant` bandlari to'lqin 9 dan keyingi
+o'lchov bilan yopildi; o'lchov shartlari, uchala vaqt va formula yuqorida
+§ «Byudjet» da yozilgan.
 
 ---
 *Phase: 06-billing-va-kassir*
