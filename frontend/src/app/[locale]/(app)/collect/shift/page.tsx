@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
+import { ShiftCloseForm } from "@/components/collect/shift-close-form";
 import { ShiftOpenCard } from "@/components/collect/shift-open-card";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/rbac";
@@ -51,10 +52,15 @@ import { routing } from "@/i18n/routing";
  * (`shift-open-card.tsx` ning §10.1 shartnomasi — IKKI holat, uchinchisi
  * yo'q).
  *
- * ⛔ ALMASHTIRISH, QO'SHISH EMAS: yopish oqimida karta DOM'dan CHIQADI
- *    (`hidden` yoki `display:none` bilan yashirilmaydi). Aks holda
- *    yopilgandan keyin ekranda §10.3 ning AYNAN UCHTA narsasi o'rniga
- *    BESHTA bo'lardi va ko'rlikning ekran qatlami buzilardi.
+ * ⛔ ALMASHTIRISH, QO'SHISH EMAS: yopish oqimida karta DOM'dan CHIQADI —
+ *    CSS bilan ko'zdan yashirilgan holda QOLMAYDI. Aks holda yopilgandan
+ *    keyin ekranda §10.3 ning AYNAN UCHTA narsasi o'rniga BESHTA bo'lardi
+ *    va ko'rlikning ekran qatlami buzilardi.
+ *
+ * ⚠ Ushbu izohda yashirish utilitalarining nomi LITERAL sifatida
+ *   yozilmaydi: taqiqni o'lchaydigan darvoza xom matn skani va izohning
+ *   O'ZI uni qizartirardi (kodbaza konvensiyasi, `badge.tsx` da ham
+ *   xuddi shu sabab).
  *
  * ⚠ HUQUQ KO'ZGUSI — HAQIQIY NAZORAT SERVERDA. `shift_manage` yo'q
  *   sessiyada sahifa umuman chizilmaydi (naqsh `collect/page.tsx:76-85`
@@ -89,6 +95,7 @@ export default function CollectShiftPage() {
 
   const [closing, setClosing] = useState(false);
   const requestClose = useCallback(() => setClosing(true), []);
+  const reopen = useCallback(() => setClosing(false), []);
 
   const canManage = hasPermission(principal?.roles ?? [], "shift_manage");
 
@@ -129,17 +136,23 @@ export default function CollectShiftPage() {
       </div>
 
       {/*
-       * ⛔⛔ YOPISH SHOXI SHU REJANING IKKINCHI TASKIDA TO'LDIRILADI.
+       * ⛔⛔ SHARTNING IKKALA TARMOG'I HAM KOMPONENT CHIZADI.
        *
-       *   Bugun u `null`, va bu ATAYIN: yopish formasi moduli hali
-       *   tug'ilmagan, `tsc --noEmit` esa BUTUN proyektni tekshiradi —
-       *   oldindan murojaat bu taskning darvozasini BAJARILMAYDIGAN
-       *   qilardi.
+       *   Bo'sh o'ram, `null` yoki `data-*` o'rami EMAS: yopish formasi
+       *   qurilib, uni HECH KIM chizmasa uchala task ham yashil
+       *   qaytardi va CASH-04 ekranda KUZATILMAS bo'lib qolardi —
+       *   kassir [Smenani yopish] ni bosgach hech nima ochilmasdi.
        *
-       *   ⚠ Ikkinchi taskda shox komponentning O'ZIGA almashadi: bo'sh
-       *     o'ram ham, `data-*` o'rami ham EMAS.
+       *   ⚠ `openShift !== null` — QO'RIQCHI, bezak emas: `useOpenShift()`
+       *     yuklanayotganda qiymat mavjud emas va identifikator
+       *     o'qilmasdi. Qo'riqcha tushib qolsa kassir [Smenani yopish]
+       *     dan keyin BO'SH ekran ko'rardi.
+       *
+       *   ⛔ ALMASHTIRISH: yopish oqimida karta DOM'dan CHIQADI. Aks
+       *      holda ekranda §10.3 ning AYNAN UCHTA narsasi o'rniga
+       *      BESHTA bo'lardi (karta + tugma qo'shilardi).
        */}
-      {closing && openShift !== null ? null : <ShiftOpenCard onRequestClose={requestClose} />}
+      {closing && openShift !== null ? <ShiftCloseForm onReopen={reopen} shiftId={openShift.id} /> : <ShiftOpenCard onRequestClose={requestClose} />}
     </div>
   );
 }
