@@ -391,11 +391,11 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 06-10-PLAN.md — Smena API: ko'r serializator va ikki tomonlama variance (CASH-04, D-25/26/27)
+- [x] 06-10-PLAN.md — Smena API: ko'r serializator va ikki tomonlama variance (CASH-04, D-25/26/27)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 06-11-PLAN.md — Frontend Y-1: ≤3 bosish sanog'i, ikki qatlamli qulf, DL-1/DL-2 (D-18/19/21/22, OP-5)
+- [x] 06-11-PLAN.md — Frontend Y-1: ≤3 bosish sanog'i, ikki qatlamli qulf, DL-1/DL-2 (D-18/19/21/22, OP-5)
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
@@ -492,7 +492,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
-| 6. Billing va kassir | 9/14 | In Progress|  |
+| 6. Billing va kassir | 11/14 | In Progress|  |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 
