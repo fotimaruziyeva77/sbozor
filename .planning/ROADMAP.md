@@ -404,7 +404,15 @@ Plans:
 
 **Wave 10** *(blocked on Wave 9 completion)*
 
-- [ ] 06-14-PLAN.md — Faza darvozasi, beshta sabotaj, `gate` byudjeti va yakunlash
+- [x] 06-14-PLAN.md — Faza darvozasi, beshta sabotaj, `gate` byudjeti va yakunlash
+
+⚠ **FAZA BELGISI (`- [ ] **Phase 6: …**`, 51-qator) ATAYIN O'ZGARTIRILMADI.**
+Fazani yopish qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi
+emas — 4- va 5-fazalarda AYNAN shunday saqlangan. 14 rejaning hammasi
+bajarildi va beshala mezon bitta buyruqda yashil
+(`tests/integration/test_phase6_criteria.py`), lekin «bajarildi» bilan
+«tasdiqlandi» ikki BOSHQA da'vo va ularni bitta belgiga siqish
+2-fazaning o'zini o'zi tasdiqlovchi shablonini qaytarardi.
 
 **UI hint**: yes
 
