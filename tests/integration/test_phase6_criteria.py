@@ -917,6 +917,31 @@ async def test_sc1_immutable_daily_charge_is_written_once(
         f"`created_at` qayta yozilgan (D-06):\n  oldin: {written}\n  keyin: {after}"
     )
 
+    # ---- (4) ⛔ QAYTA YUGURISH **JIM** BO'LISHI SHART, «TO'SILGAN» EMAS.
+    #
+    # ⛔ BU IKKI ASSERT SABOTAJ BILAN TUG'ILDI (S-1, 06-14). `write_charge`
+    #    dagi `DO NOTHING` -> `DO UPDATE` almashtirilganda yuqoridagi uchala
+    #    da'vo ham YASHIL qolardi: `daily_charges` ustidagi o'zgarmaslik
+    #    triggeri `UPDATE` ni P0001 bilan rad etadi, job esa istisnoni
+    #    YUTADI (`errors` ga TUR yozadi) va qator soni ham, qiymatlar ham
+    #    o'zgarmaydi. Ya'ni sabotaj sistemaga YETIB BORGAN, lekin tanlangan
+    #    HOLAT ikkala shoxda bir xil natija berardi — 05-15 ning S-D darsi
+    #    AYNAN shu sinf.
+    #
+    # ⛔ Tuzatish TESTDA emas, HOLATDA: idempotentlik «hech nima o'zgarmadi»
+    #    emas, «job qatorni ALLAQACHON BOR deb TANIDI va JIM o'tdi» degani.
+    #    Ikkinchi shoxda hisob har kecha triggerga urilib turardi va u
+    #    faqat jurnalda ko'rinardi.
+    assert again.errors == [], (
+        f"qayta yugurish xato bilan tugadi: {again.errors} — idempotentlik "
+        "«yozuvni qayta yozishga urinib, qo'riqchiga urilish» EMAS (D-06)"
+    )
+    assert again.skipped_existing >= len(written), (
+        f"qayta yugurish {again.skipped_existing} ta mavjud hisobni tanidi, yozilgani "
+        f"esa {len(written)} ta — job konfliktni `ON CONFLICT DO NOTHING` yo'lidan "
+        "o'tkazmayapti"
+    )
+
 
 # ===========================================================================
 # SC#2 — «Har hisob yozuvidan dalil-kadrlarga o'tish mumkin; hisob
