@@ -399,8 +399,8 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
-- [ ] 06-12-PLAN.md — Frontend Y-3: ko'r naqd deklaratsiyasi va yo'qlikning o'lchovi (D-25, G-7/G-23b)
-- [ ] 06-13-PLAN.md — Frontend Y-4: hisoblar, dalil, anomaliya va variance (BILL-02/03/04, G-25/26/27/28)
+- [x] 06-12-PLAN.md — Frontend Y-3: ko'r naqd deklaratsiyasi va yo'qlikning o'lchovi (D-25, G-7/G-23b)
+- [x] 06-13-PLAN.md — Frontend Y-4: hisoblar, dalil, anomaliya va variance (BILL-02/03/04, G-25/26/27/28)
 
 **Wave 10** *(blocked on Wave 9 completion)*
 
@@ -492,7 +492,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
-| 6. Billing va kassir | 11/14 | In Progress|  |
+| 6. Billing va kassir | 13/14 | In Progress|  |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 
