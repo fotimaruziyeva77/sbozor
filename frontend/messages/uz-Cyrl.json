@@ -1186,6 +1186,13 @@
     "decrease": "Камайтирилди",
     "evidenceTitle": "Далил кадрлари",
     "anomaliesTitle": "Аномалиялар",
+    "emptyToday": "Бугунги ҳисоблар ҳали ёзилмаган",
+    "goYesterday": "Кечаги кунни кўриш",
+    "emptyAnomalies": "Аномалия топилмади",
+    "emptyAnomaliesHint": "Бу кунда уч турдаги белгидан бирортаси ҳам ёзилмаган.",
+    "emptyShifts": "Бу кунда ёпилган смена йўқ",
+    "emptyShiftsHint": "Смена ёпилгач, декларатсия ва фарқ шу ерда кўринади.",
+    "evidenceShow": "Кадрни кўрсатиш",
     "anomalyKind": {
       "unassigned_occupied": "Рўйхатга олинмаган савдо",
       "closed_day_occupied": "Ёпиқ кунда савдо",

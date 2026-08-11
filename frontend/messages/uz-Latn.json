@@ -1186,6 +1186,13 @@
     "decrease": "Kamaytirildi",
     "evidenceTitle": "Dalil kadrlari",
     "anomaliesTitle": "Anomaliyalar",
+    "emptyToday": "Bugungi hisoblar hali yozilmagan",
+    "goYesterday": "Kechagi kunni ko'rish",
+    "emptyAnomalies": "Anomaliya topilmadi",
+    "emptyAnomaliesHint": "Bu kunda uch turdagi belgidan birortasi ham yozilmagan.",
+    "emptyShifts": "Bu kunda yopilgan smena yo'q",
+    "emptyShiftsHint": "Smena yopilgach, deklaratsiya va farq shu yerda ko'rinadi.",
+    "evidenceShow": "Kadrni ko'rsatish",
     "anomalyKind": {
       "unassigned_occupied": "Ro'yxatga olinmagan savdo",
       "closed_day_occupied": "Yopiq kunda savdo",
