@@ -1414,7 +1414,31 @@ async def _market_projection(session: AsyncSession, market_id: UUID, as_of: date
     return PendingMarket(
         market_open=bool(market_open.scalar_one()),
         pending_amount_soum=sum(priced),
-        outstanding_soum=sum(balances.values()),
+        # ⛔⛔ HAR SOTUVCHI ALOHIDA QIRQILADI, KEYIN QO'SHILADI (WR-02).
+        #
+        # `vendor_outstanding()` BELGILI balans qaytaradi va manfiy qiymat
+        # ATAYIN ruxsat etilgan (avans, OQ-4/A4). Xom `sum()` esa bir
+        # sotuvchining avansini boshqasining qarzi bilan NETLARDI:
+        #
+        #     A 500 000 qarzdor, B 500 000 avans -> outstanding_soum = 0
+        #
+        # Ya'ni direktorning §9.5 panelida qarz JIMGINA kamayib
+        # ko'rinardi — bozor bo'yicha avanslar yig'indisi qadar. Bu
+        # mahsulot AYNAN fosh qilish uchun mavjud bo'lgan raqam.
+        #
+        # ⛔ NOM O'ZGARMADI VA BU ATAYIN: ekranda ustun `collect.oldDebt`
+        #    («Eski qarz») bilan chiziladi (`pending-summary.tsx`), ya'ni
+        #    maydon ALLAQACHON qarz deb o'qiladi. Uni `net_balance_soum`
+        #    ga qayta nomlash javob kalitlari to'plamini, klient
+        #    sxemasini va uchala locale matnini birdan siljitardi —
+        #    darvozalar esa to'plam TENGLIGI bilan qulflangan.
+        #
+        # ⚠ AVANS YO'QOLMAYDI: u sotuvchi kesimida hamon BELGILI
+        #   (`PendingStall.outstanding_soum` manfiy bo'lishi mumkin) va
+        #   §9.6 ning kvota to'plami o'sha belgili qiymatdan tug'iladi.
+        #   Qirqish FAQAT bozor yig'indisida va u «qancha qarz bor?»
+        #   degan boshqa savolga javob beradi.
+        outstanding_soum=sum(balance for balance in balances.values() if balance > 0),
         pending_stall_count=len(priced),
         fetched_at=datetime.now(tz=UTC),
     )

@@ -1617,3 +1617,80 @@ async def test_the_market_projection_returns_zero_as_a_result(
     )
     assert projection.market.outstanding_soum == 0
     assert projection.market.fetched_at.tzinfo is not None
+
+
+async def test_the_market_debt_is_not_netted_against_another_vendors_advance(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """⛔ WR-02: BIR sotuvchining AVANSI BOSHQASINING qarzini YO'QOTMAYDI.
+
+    =========================================================================
+    ⛔⛔ NEGA XOM `sum()` NOTO'G'RI EDI.
+
+    `vendor_outstanding()` BELGILI balans qaytaradi va manfiy qiymat
+    ATAYIN ruxsat etilgan (avans, OQ-4/A4). Bozor yig'indisi ularni xom
+    `sum()` bilan qo'shganda:
+
+        A 45 000 qarzdor, B 45 000 avans  ->  outstanding_soum = 0
+
+    Direktorning §9.5 panelida esa bu ustun `collect.oldDebt` («Eski
+    qarz») yorlig'i bilan chiziladi — ya'ni raqam O'Z NOMIGA zid javob
+    berardi va qarz bozor bo'yicha avanslar yig'indisi qadar JIMGINA
+    kamayib ko'rinardi. Mahsulot esa AYNAN shu raqamni fosh qilish
+    uchun mavjud.
+
+    ⛔ HOLAT IKKI SOTUVCHILI VA BU TESTNING BUTUN QIYMATI: bitta
+       sotuvchi bilan yozilgan test qirqishni UMUMAN ajrata olmasdi —
+       xom `sum()` ham, qirqilgan `sum()` ham AYNI sonni berardi
+       (D-30: «umuman biror test bu ikki holatni ajrata oladimi?»).
+
+    ⚠ AVANS YO'QOLMAGANI ALOHIDA O'LCHANADI: sotuvchi kesimida balans
+      hamon MANFIY. Faqat bozor yig'indisi qirqiladi.
+    =========================================================================
+    """
+    debtor = env.live.vendor_id
+    advance_holder = next(
+        vendor_id for vendor_id in env.domain.market_a.vendor_ids if vendor_id != debtor
+    )
+    debtor_stall = env.stall("stall_with_two_occupied_slots")
+    advance_stall = env.stall("stall_with_one_human_confirmed_occupied_slot")
+
+    # A: eski hisob bor, to'lov yo'q -> QARZDOR.
+    add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=debtor_stall,
+        vendor_id=debtor,
+        tariff_id=env.live.tariff_id,
+        amount_soum=45_000,
+        service_date=_service_day(sync_owner_conn, 1),
+    )
+    # B: hisobsiz to'lov -> AVANS (manfiy balans).
+    add_payment(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=advance_stall,
+        vendor_id=advance_holder,
+        cashier_id=env.live.cashier_id,
+        shift_id=env.live.open_shift_id,
+        amount_soum=45_000,
+        quote_soum=45_000,
+    )
+
+    async with tenant_session(env.market_id) as session:
+        balances = await vendor_outstanding(session, market_id=env.market_id)
+        projection = await pending_projection(
+            session, market_id=env.market_id, as_of=SEED_BUSINESS_DATE
+        )
+
+    # ⛔ NAZORAT: holat HAQIQATAN ikki qarama-qarshi belgidan iborat.
+    assert balances[debtor] == 45_000
+    assert balances[advance_holder] == -45_000, "avans MANFIY qolishi kerak (OQ-4/A4)"
+    assert sum(balances.values()) == 0, (
+        "nazorat: xom yig'indi NOL — ya'ni test qirqishni haqiqatan ajratadi"
+    )
+
+    assert projection.market is not None
+    assert projection.market.outstanding_soum == 45_000, (
+        "bozor qarzi AVANS bilan netlangan — WR-02 qaytdi"
+    )
