@@ -569,6 +569,158 @@ services:
     volumes:
       - .:/app
 
+  bot-service:
+    # SOTUVCHI VA DIREKTOR TELEGRAM BOTLARI (07-01, BOT-01, DQ-1).
+    #
+    # ⚠⚠ UCHINCHI VA OXIRGI SERVIS — «yana bitta konteyner» EMAS.
+    # `worker`, `scheduler`, `migrate` va `tests` `core-api` IMAGE'ining
+    # boshqa entrypointlari; `bot-service` esa O'Z `pyproject.toml`,
+    # `uv.lock` va `Dockerfile` i bilan keladi (D-09). Sabab
+    # bog'liqliklarda va u MEXANIK: `aiogram 3.30` `redis[hiredis]<8` va
+    # `pydantic<2.14` talab qiladi, `core-api` esa `redis==8.0.1` ga
+    # qadalgan (`tests/unit/test_runtime_deps.py::
+    # test_redis_pin_is_not_downgraded`). Ikki servis bitta navbat
+    # klientini BO'LISHA OLMAYDI — bu `arq` darsining aynan takrori (D-06).
+    # CLAUDE.md ning «aynan 3 ta servis» cheklovi BUZILMAYDI: `bot-service`
+    # allaqachon uchlikning a'zosi.
+    #
+    # ⚠ PROFILSIZ — `worker`/`scheduler`/`cv-service` bilan bir xil sabab:
+    # bu ISHLAB CHIQARISH komponenti va `npm run up` uni ham ko'taradi.
+    # Profil ortiga yashirilsa sotuvchi botga yozardi va javob HECH QACHON
+    # kelmasdi — hech qanday xato bermasdan (aynan o'sha «jimgina yolg'on»
+    # sinfi).
+    build:
+      context: .
+      dockerfile: services/bot-service/Dockerfile
+      target: runtime
+    # ⚠ `modul:atribut` SHAKLI YO'Q va bu ATAYIN: `python -m` `aiogram`
+    # uchun yagona to'g'ri ishga tushirish yo'li (u `uvicorn`/`taskiq` kabi
+    # obyektni argument sifatida QABUL QILMAYDI). Shu sababdan
+    # `tests/unit/test_sentry_processes.py` ning (b) bosqichi 07-01 da
+    # `-m <modul>` shaklini ham o'qiydigan qilib KENGAYTIRILDI va kirish
+    # nuqtasi moduli `main` nomli MODUL DARAJASIDAGI atributni e'lon
+    # qilishi SHART (`app/main.py` ning o'sha atribut ustidagi docstringi).
+    command: ["python", "-m", "app.main"]
+    environment:
+      # ⚠⚠ BIR XIL TOKEN IKKI MAQSADDA (A1) — VA BU ONGLI QAROR.
+      # `core-api`/`worker` shu tokenni ALERT supurgisi uchun ishlatadi,
+      # bu konteyner esa SOTUVCHI boti uchun. Ikkinchi token ikkinchi bot
+      # profili, ikkinchi nom va foydalanuvchida chalkashlik demakdir.
+      #
+      # ⛔ `:-` BILAN BO'SH STANDART YO'Q — bu `worker` blokidagi
+      # `TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}` dan ATAYIN farq
+      # qiladi. U yerda bo'sh token QONUNIY holat («alertlar o'chiq»,
+      # D-19), bu yerda esa bo'sh token — servisning MAVJUD BO'LISH
+      # sababining yo'qligi: tokensiz bot Telegram'ga umuman ulana
+      # olmaydi. `Settings` uni ishga tushishda RAD ETADI (T-07-02).
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      # Servis-servis tokeni (D-10): `hmac.compare_digest` bilan
+      # solishtiriladi va foydalanuvchi sessiyasini TUG'DIRMAYDI.
+      BOT_SERVICE_TOKEN: ${BOT_SERVICE_TOKEN}
+      CORE_API_URL: ${CORE_API_URL:-http://core-api:8000}
+      # ⛔ `db 1` — `core-api` ning `db 0` idan AJRATILGAN. U yerda
+      # rate-limit sanagichlari, sessiya keshi va `sbozor:jobs` navbati
+      # yashaydi; aiogram FSM kalitlarini o'sha makonga qo'shish `FLUSHDB`
+      # xatosini IKKI TIZIMNI BIRDAN yiqitadigan xatoga aylantirardi
+      # (`app/settings.py::DEFAULT_VALKEY_URL`).
+      VALKEY_URL: ${BOT_VALKEY_URL:-redis://cache:6379/1}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: Asia/Tashkent
+    # =====================================================================
+    # ⛔ `db` GA BOG'LIQLIK YO'Q — VA BU UNUTILGAN EMAS (D-08/1).
+    #
+    # Bot Postgres'ni KO'RMAYDI: uning yagona ma'lumot manbai `core-api`
+    # ning `/internal/bot/*` yuzasi. Sabab xavfsizlik chegarasida —
+    # Telegram'dan kelgan oqim AUTENTIFIKATSIYA QILINMAGAN va loyihaning
+    # ishonch chegarasidan TASHQARIDA, ya'ni bu konteynerga baza ulanishi
+    # berish IKKINCHI RLS yuzasini ochardi (T-07-01). Taqiq
+    # `services/bot-service/tests/unit/test_runtime_deps.py` da MEXANIK:
+    # `sqlalchemy`/`asyncpg` UMUMAN o'rnatilmagan.
+    #
+    # `cache` esa KERAK: aiogram FSM ombori (`RedisStorage`) shu yerda.
+    # =====================================================================
+    depends_on:
+      cache:
+        condition: service_healthy
+    # =====================================================================
+    # ⛔⛔ `deploy.replicas` YOZILMAYDI — VA BU BLOKDAGI ENG MUHIM SATR.
+    #
+    # Telegram Bot API da bir tokenga AYNAN BITTA `getUpdates` oqimi
+    # bo'lishi mumkin. Ikkinchi jarayon `409 Conflict` oladi YOKI
+    # update'ni TORTIB OLADI — ya'ni ikkinchi nusxa ishonchlilikni
+    # oshirmaydi, xabarlarni YO'QOTADI (DQ-1, T-07-03).
+    #
+    # Darvoza: `docker compose config | grep -c "replicas"` -> 0.
+    # =====================================================================
+    # =====================================================================
+    # ⚠⚠ `healthcheck` ATAYIN YOZILMAGAN — VA U SOXTALASHTIRILMAYDI.
+    #
+    # `cv-service` va `scheduler` bloklaridagi qaror so'zma-so'z shu yerga
+    # tegishli: long-poller HTTP yuzasi BERMAYDI va jarayon tirikligi
+    # «sotuvchi javob oldimi?» savoliga JAVOB BERMAYDI. `nc -z` uchun
+    # ataylab port ochish o'z portiga o'zi javob beradigan yuza bo'lardi —
+    # ya'ni «sog'lom» degan YOLG'ON ISHONCH. Bot `409` ostida jim qolgan
+    # holatda ham jarayon TIRIK bo'lardi.
+    # =====================================================================
+    # DIQQAT: xost portiga publish QILINMAYDI — bot tarmoq yuzasi bermaydi
+    # va uning yagona chiquvchi yo'li Telegram'ga HTTPS.
+    restart: unless-stopped
+
+  bot-tests:
+    # `bot-service` NING TEST KONTEYNERI (`cv-tests` naqshining takrori).
+    #
+    # ⚠ NEGA MAVJUD `tests` KONTEYNERI YETMAYDI: u `core-api` image'ida
+    # ishlaydi va u yerda `aiogram` YO'Q — uni o'sha muhitga qo'shish
+    # `test_runtime_deps.py:97-99` dagi O'LCHANGAN taqiqni bo'shatish
+    # bo'lardi (`aiogram` `pydantic<2.14` va `redis<8` ni qadaydi).
+    # TO'RTINCHI SERVIS TUG'ILMAYDI: bu o'sha image'ning boshqa
+    # entrypointi, `cv-tests` ↔ `cv-service` bilan aynan bir xil naqsh.
+    #
+    # ⚠ `SENTRY_DSN` ATAYIN BERILMAYDI: test jarayoni ishlab chiqarish
+    # kuzatuvi emas va `tests/unit/test_sentry_processes.py` ning predikati
+    # aynan shu kalit bo'yicha ishlaydi — uni bu yerga qo'yish darvozadan
+    # test konteyneri uchun ham `init_sentry()` talab qilardi, ya'ni CI
+    # xatolari mijozning Sentry loyihasiga oqib tushardi.
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: services/bot-service/Dockerfile
+      target: dev
+    command: ["pytest", "-q"]
+    environment:
+      # ⚠⚠ STANDART QIYMAT TOKEN SHAKLIGA MOS BO'LISHI SHART, «test-token»
+      # KIFOYA QILMAYDI — VA BU O'LCHANGAN FAKT, taxmin emas:
+      #
+      #   aiogram/utils/token.py: validate_token() -> TokenValidationError
+      #   («Token is invalid!») — token `<raqamlar>:<sir>` shaklida
+      #   bo'lmasa `Bot(...)` KONSTRUKTORI yiqiladi.
+      #
+      # `app/main.py` `bot` ni MODUL DARAJASIDA quradi, ya'ni yaroqsiz
+      # shakldagi standart bilan `import app.main` yozadigan HAR test
+      # yig'ilishda yiqilardi va sabab test mantig'ida emas, compose
+      # standartida bo'lardi.
+      #
+      # ⚠ QIYMAT SIR EMAS, USKUNA: u Telegram'da mavjud emas va tarmoqqa
+      #   umuman chiqmaydi (testlar `MockedBot` bilan ishlaydi).
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-123456:TEST-TOKEN-NOT-REAL}"
+      BOT_SERVICE_TOKEN: "${BOT_SERVICE_TOKEN:-test-service-token}"
+      CORE_API_URL: http://core-api:8000
+      VALKEY_URL: ${BOT_VALKEY_URL:-redis://cache:6379/1}
+      TZ: Asia/Tashkent
+    # ⛔ `depends_on` YO'Q — VA BU ATAYIN: birlik testlari `MockedBot`
+    # bilan ishlaydi va TARMOQQA CHIQMAYDI. `cache` ga bog'lanish
+    # ishlatilmaydigan konteynerni ko'tarardi va testlarga «Valkey tirik»
+    # degan yolg'on shart qo'shardi.
+    #
+    # ⚠ `/app` EMAS: `pytest`, `ruff` va `mypy` uchalasi ham
+    # `services/bot-service/pyproject.toml` ni topishi SHART. `/app` da
+    # ular repo ildizidagi konfiguratsiyani olib, `core-api` ning
+    # to'plamini shu image'da ishga tushirardi.
+    working_dir: /app/services/bot-service
+    volumes:
+      - .:/app
+
   go2rtc:
     # JONLI KO'RISHNING MEDIA SERVERI (03-07, CAM-03).
     #
