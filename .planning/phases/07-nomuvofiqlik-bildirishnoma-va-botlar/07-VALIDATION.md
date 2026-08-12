@@ -90,24 +90,65 @@ Bu darvozalar reja tuzilganda **tasodifiy test emas, majburiy band** bo'lishi ke
 | **Quick run command** | `npm run gate:fast` → `npm run test:fast && npm --prefix frontend test` |
 | **Full suite command** | `npm run test` + `npm run test:tenancy` + **`npm run bot:test`** (yangi) |
 | **Faza darvozasi** | `npm run gate` + `tests/integration/test_phase7_criteria.py` (beshta mezon, beshta test) |
-| **Estimated runtime** | `gate` ≈ **2124 s** (1899 s bugungi + ≈225 s bu faza) |
+| **Measured runtime** | `gate` = **1424 / 1263 / 1349 s** (07-17, tinch xostda uch o'lchov) · `gate:fast` = **80 s** |
 
-### ⛔ Byudjet — o'zgartirilmaydi
+### ⛔ Byudjet — O'LCHANDI (07-17, 2026-08-12) va **O'ZGARMADI**
 
-`gate` **2300 s**, `gate:fast` **200 s** (`06-VALIDATION.md` dan meros). Oxirgi
-o'lchov `gate` = **1899 s** → **401 s zaxira**.
+`gate` **2300 s**, `gate:fast` **200 s** (`06-VALIDATION.md` dan meros).
 
-| Manba | Taxminiy narx |
-|-------|---------------|
-| `bot-service` testlari (`bot:test`, `MockedBot`) | ~25 s |
-| Backend integratsiya (~60 test) | ~120 s |
-| `bot-service` lint/typecheck (ruff + mypy) | ~20 s |
-| vitest (+~60 test) + 1 yangi SSG marshruti (`/reconciliation` × 3 locale) | ~60 s |
-| **Jami** | **≈ 225 s** — zaxira ichida |
+⛔ **O'LCHOV, TAXMIN EMAS** — 05-15 ning W0-13 protokoli bo'yicha: **tinch
+xost**, **uch o'lchov**, uchalasi ham `exit 0`.
 
-⚠ Agar o'lchov 2300 s dan oshsa — ⛔ **byudjet «shunchaki oshirilmaydi»**: avval
-`bot:test` ni `gate:fast` dan **tashqarida** qoldirish tekshiriladi (u mustaqil kod
-bazasi), keyin 05-15 W0-13 protokoli yuritiladi (tinch xost, uch o'lchov, eng yomon × 1,20).
+| O'lchov | Natija |
+|---------|--------|
+| `npm run gate` #1 | **1424 s** (exit 0) |
+| `npm run gate` #2 | **1263 s** (exit 0) |
+| `npm run gate` #3 | **1349 s** (exit 0) |
+| Tarqoqlik | **161 s** — eng yomonning **11.3 %** |
+| Eng yomon | **1424 s** |
+| Byudjet | **2300 s — O'ZGARMADI**, zaxira **876 s** |
+| Nazorat: `npm run gate:fast` | **80 s** (byudjet **200 s**) |
+
+**Nega byudjet ko'tarilmadi:** eng yomon o'lchov (1424 s) chegaradan
+**876 s past**. Qaror daraxtining birinchi shoxi bajarildi va
+`bot:test` ni `gate` dan ajratish varianti ⛔ **umuman ko'rilmadi** —
+unga ehtiyoj yo'q.
+
+**To'plam esa O'SDI** (ya'ni pasayish «kamroq test» degani emas):
+
+| Manba | 06-14 | 07-17 |
+|-------|-------|-------|
+| vitest | 717 | **806** (+89) |
+| backend pytest (jami) | — | **3101** (unit 1218 · integratsiya 1152 · tenancy 731) |
+| `gate` zanjiri | `bot:*` YO'Q | **`bot:lint` + `bot:test` QO'SHILDI** (07-01) |
+
+⛔⛔ **RAQAM 06-14 NIKI (1703 / 1733 / 1899) BILAN TO'G'RIDAN-TO'G'RI
+SOLISHTIRILMAYDI — VA BU HALOLLIK BANDI, IZOH EMAS.**
+
+O'lchovdan oldin xost **tinch emas edi** va sabab topildi:
+`sbozor-cv-service-1` ⛔ **qayta-qayta yiqilib turgan** —
+`CV_MODEL_PATH` (`/app/models/rfdetr-large.onnx`) mavjud emas, taskiq
+esa `worker-0` ni har **~1 soniyada** qayta ishga tushirardi. U
+`docker stats` da **~80 % CPU** yeb turgan edi. Konteyner
+to'xtatilgandan keyin o'sha yuk yo'qoldi va o'lchov **~2 barobar**
+tezlashdi (ifloslangan holatda `npm run test` 19 daqiqada 46 % ga
+yetgan, tozasida 9 daqiqada 37 % ga).
+
+Ya'ni ⛔ **pasayish 7-fazaning yutug'i EMAS** — u MUHITNING tozalanishi.
+Byudjet aynan shu sababdan ham **pasaytirilmadi**: keyingi o'lchov
+o'sha crash-loop tiklangan xostda olinsa, 1424 s raqami ikki barobarga
+yaqin ko'tarilishi mumkin va 2300 s zaxirasi aynan shuning uchun
+saqlanadi.
+
+⚠ **ONNX artefaktining yo'qligi NUQSON EMAS** — u `ops` yetkazmasi
+(`ops/models/README.md`, `05-HUMAN-UAT.md` #3). Bu yerda qayd etilgani —
+uning **yon ta'siri**: artefaktsiz `cv-service` konteyneri cheksiz
+qayta ishga tushish siklida qoladi va **xostning har qanday o'lchovini
+ifloslantiradi**.
+
+⛔ **RAQAM IKKI JOYDA BIR XIL** (T-07-99): yuqoridagi jadval va
+`package.json` ning `//gate-budget` izohi — 1424 / 1263 / 1349,
+tarqoqlik 161 s, byudjet 2300 s, `gate:fast` 80 s.
 
 ---
 
