@@ -309,6 +309,18 @@ def env(
             # ⚠ TO'LOVLAR SHU YERDA O'CHIRILADI, `cleanup_billing_domain()`
             #   dan OLDIN: testlar HTTP orqali qator yozadi va seed ularning
             #   identifikatorlarini BILMAYDI. Tozalash `market_id` bo'yicha.
+            #
+            # ⛔ `notification_outbox` 07-12 DA QO'SHILDI VA U MAJBURIY:
+            #    `POST /payments` ning 6.5-QADAMI (CASH-05) har yangi to'lov
+            #    uchun kvitansiya niyatini ham yozadi.
+            #    `fk_notification_outbox_vendor` da `ondelete` YO'Q
+            #    (NO ACTION), ya'ni qoldiq qator `cleanup_market_domain()`
+            #    ning sotuvchi/bozor `DELETE` ini FK buzilishi bilan
+            #    yiqitardi — va nosozlik BU faylda emas, KEYINGI faylning
+            #    seed'ida ko'rinardi.
+            sync_owner_conn.execute(
+                "DELETE FROM notification_outbox WHERE market_id = %s", (str(market_id),)
+            )
             sync_owner_conn.execute("DELETE FROM payments WHERE market_id = %s", (str(market_id),))
             sync_owner_conn.execute(
                 "DELETE FROM daily_charges WHERE market_id = %s", (str(market_id),)
@@ -359,6 +371,21 @@ async def _post(
     return await client.post(PAYMENTS_URL, json=payload, headers=headers)
 
 
+def _outbox_count(env: Env) -> int:
+    """Bozordagi kvitansiya niyatlari soni — 07-12 ning regressiya bandi.
+
+    ⚠ BU FAYL CASH-05 NI O'LCHAMAYDI: to'rt xulqiy o'lchov (bir
+      tranzaksiya / takror / Telegram yiqilishi / quiet hours)
+      `tests/integration/test_receipt_outbox.py` da. Bu yordamchi faqat
+      «yangi qadam MAVJUD kafolatni buzmadi» degan bitta da'vo uchun.
+    """
+    row = env.conn.execute(
+        "SELECT count(*) FROM notification_outbox WHERE market_id = %s", (str(env.market_id),)
+    ).fetchone()
+    assert row is not None
+    return int(row[0])
+
+
 def _detail(response: httpx.Response) -> str:
     """Javobning `detail` KODI — ⛔ SATR (klient `api-client.ts::detailOf()` bilan).
 
@@ -396,6 +423,12 @@ async def test_the_same_key_twice_writes_one_row_and_returns_the_same_payment(
     assert second.json()["payment_id"] == first.json()["payment_id"]
 
     assert len(env.payments()) == 1, "takror so'rov IKKINCHI qator yozdi — D-21 buzilgan"
+    # ⛔ 07-12 REGRESSIYA BANDI: 6.5-QADAM (CASH-05) MAVJUD kafolatni
+    #    buzmagan. Kvitansiya niyati ham AYNAN BITTA — takror so'rov
+    #    sotuvchiga ikkinchi tasdiq YUBORMAYDI. To'liq xulqiy o'lchov
+    #    `tests/integration/test_receipt_outbox.py` da; bu yerda faqat
+    #    o'sha qadam BU testning da'vosini buzmaganini qulflaydi.
+    assert _outbox_count(env) == 1, "takror so'rov IKKINCHI kvitansiya niyatini yozdi"
 
 
 @pytest.mark.parametrize(

@@ -409,6 +409,14 @@ def env(
             sync_owner_conn.execute(
                 "UPDATE markets SET is_active = false WHERE id = %s", (str(market_id),)
             )
+            # ⛔ `notification_outbox` 07-12 DA QO'SHILDI: `POST /payments`
+            #    ning 6.5-QADAMI (CASH-05) har yangi to'lov uchun kvitansiya
+            #    niyatini ham yozadi. `fk_notification_outbox_vendor` da
+            #    `ondelete` YO'Q, ya'ni qoldiq qator quyi qatlamlarning
+            #    sotuvchi/bozor `DELETE` ini FK buzilishi bilan yiqitardi.
+            sync_owner_conn.execute(
+                "DELETE FROM notification_outbox WHERE market_id = %s", (str(market_id),)
+            )
             sync_owner_conn.execute("DELETE FROM payments WHERE market_id = %s", (str(market_id),))
             sync_owner_conn.execute(
                 "DELETE FROM cashier_shifts WHERE market_id = %s AND id <> %s",
