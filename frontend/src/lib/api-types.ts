@@ -2141,3 +2141,100 @@ export const HEADLINE_UNIT = {
 
 /** `HEADLINE_UNIT` da NOMMA-NOM mavjud metrika kalitlari. */
 export type HeadlineMetric = keyof typeof HEADLINE_UNIT;
+
+/* ---------------------------------------------------------------------------
+ * 7-FAZA — NOMUVOFIQLIK YUZASINING UCH REYESTR KO'ZGUSI (W0-F8).
+ *
+ * =========================================================================
+ * ⛔⛔ REYESTR IKKINCHI MARTA YOZILADI, IMPORT QILINMAYDI (05-13 DARSI).
+ *
+ * Manba — `packages/sbozor-core/sbozor_core/enums.py` dagi Python
+ * `StrEnum` lari. Til chegarasi tufayli kompilyator ikkalasini
+ * SOLISHTIRA OLMAYDI, ya'ni bu yerdagi massiv ATAYIN yozilgan ikkinchi
+ * nusxa. Darvoza (`scripts/reconciliation-copy.test.mjs`) shu nusxadan
+ * ITERATSIYA QILADI va uni uchala locale bilan taqqoslaydi — ya'ni
+ * darvoza o'zi tekshirayotgan qiymatni tekshirilayotgan koddan OLMAYDI.
+ *
+ * ⛔ `z.enum(...)` BILAN QULFLANMAYDI (04-10 darsi): bitta yangi backend
+ *    a'zosi butun ekranni PARSE CHEGARASIDA yiqitardi va direktor
+ *    kunlik hisobot o'rniga bo'sh sahifa ko'rardi. Noma'lum qiymat
+ *    uchun zaxira yorliq CHIZILADI (`caseStatusLabelKey`).
+ * =========================================================================
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Case holati — ⛔ AYNAN TO'RT A'ZO (D-12).
+ *
+ * Manba: `enums.py::ReconciliationCaseStatus`.
+ *
+ * ⛔ `other` / `custom` / `unknown` A'ZOSI YO'Q va qo'shilmaydi. Sabab
+ *    `AdjustmentReason` bilan aynan bir sinfda: erkin matnli a'zo
+ *    hisobotda GURUHLANMAYDI va u amalda ENG KATTA guruh bo'lib qolardi.
+ *
+ * ⛔ VA UNDAN KUCHLIROG'I — AYNAN SHU YERDA ANIQLIK ULUSHINING MAXRAJI
+ *    QULFLANADI (D-13): nisbat `justified / (justified + unjustified)`.
+ *    Beshinchi a'zo qo'shilsa, uning maxrajga kirishi yoki kirmasligi
+ *    HECH QAYERDA yozilmagan bo'lardi va foiz JIMGINA ma'nosini
+ *    o'zgartirardi.
+ */
+export const CASE_STATUSES = [
+  "new",
+  "in_review",
+  "justified",
+  "unjustified",
+] as const;
+export type CaseStatusValue = (typeof CASE_STATUSES)[number];
+
+/**
+ * Nomuvofiqlik sinfi — YOPIQ DISKRIMINATOR (DQ-5).
+ *
+ * Manba: `enums.py::ReconciliationSubjectKind`.
+ *
+ * ⛔ Klient shoxni SHU maydon bo'yicha tanlaydi, «qaysi ustun bo'sh?»
+ *    mantig'i bilan EMAS: `expected_soum === null` sharti bugun ishlardi,
+ *    ertaga esa hisobi yozilmagan uchinchi manba qo'shilganda JIMGINA
+ *    noto'g'ri sinfga tushardi.
+ */
+export const SUBJECT_KINDS = ["anomaly", "occupied_unpaid"] as const;
+export type SubjectKindValue = (typeof SUBJECT_KINDS)[number];
+
+/**
+ * Xabar yetkazilishining holati — ⛔ AYNAN BESH A'ZO (BOT-04).
+ *
+ * Manba: `enums.py::OutboxStatus`.
+ *
+ * ⛔ `blocked` — `failed` NING BIR TURI EMAS, ALOHIDA A'ZO (D-22).
+ *    Sotuvchi botni bloklashi uning HUQUQI; uni nosozlikka qo'shish
+ *    aloqa uzilishini texnik shovqinga ko'mib yuborardi va direktor
+ *    «bog'laning» degan yagona foydali qadamni topa olmasdi.
+ *
+ * ⛔ `delivered` FOYDALANUVCHI XABARNI O'QIGANINI BILDIRMAYDI: Bot API
+ *    yetkazilganlik kvitansiyasini UMUMAN bermaydi (Pitfall 2). Uchala
+ *    locale'dagi matn «Telegram qabul qildi» ma'nosini beradi va bu
+ *    G-34 bilan qulflanadi.
+ */
+export const DELIVERY_STATES = [
+  "pending",
+  "sent",
+  "delivered",
+  "failed",
+  "blocked",
+] as const;
+export type DeliveryStateValue = (typeof DELIVERY_STATES)[number];
+
+/**
+ * Xabar turi — navbatga QANDAY xabar qo'yilgan.
+ *
+ * Manba: `enums.py::OutboxKind`.
+ *
+ * ⚠ `payment_receipt` HECH QACHON to'xtatilmaydi (D-18) — na quiet
+ *   hours, na throttling uni ushlab qolmaydi. Bu yerdagi reyestr faqat
+ *   YORLIQ uchun; jo'natish qoidalari serverda.
+ */
+export const NOTIFICATION_KINDS = [
+  "payment_receipt",
+  "overdue_reminder",
+  "digest_morning",
+  "digest_evening",
+] as const;
+export type NotificationKindValue = (typeof NOTIFICATION_KINDS)[number];

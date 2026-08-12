@@ -1223,6 +1223,20 @@
       "charge_immutable": "Тузатишни алоҳида ёзув сифатида киритинг"
     }
   },
+  "recon": {
+    "errorCause": {
+      "case_not_found": "Бу номувофиқлик топилмади.",
+      "case_status_conflict": "Ҳолатни бошқа фойдаланувчи аллақачон ўзгартирган.",
+      "case_resolution_required": "Якуний ҳолат учун ечим матни керак.",
+      "case_forbidden": "Бу амалга рухсатингиз йўқ."
+    },
+    "errorFix": {
+      "case_not_found": "Рўйхатни янгиланг — у бошқа кунга тегишли бўлиши мумкин.",
+      "case_status_conflict": "Янгиланг ва ўзгаришлар тарихини кўринг.",
+      "case_resolution_required": "Қарорингиз сабабини ёзинг.",
+      "case_forbidden": "Директорга мурожаат қилинг."
+    }
+  },
   "headline": {
     "revenue_today": "Бугунги тушум",
     "review_queue": "{count, plural, other {Кўриб чиқиш навбати}}",

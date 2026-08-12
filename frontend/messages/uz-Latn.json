@@ -1223,6 +1223,20 @@
       "charge_immutable": "Tuzatishni alohida yozuv sifatida kiriting"
     }
   },
+  "recon": {
+    "errorCause": {
+      "case_not_found": "Bu nomuvofiqlik topilmadi.",
+      "case_status_conflict": "Holatni boshqa foydalanuvchi allaqachon o'zgartirgan.",
+      "case_resolution_required": "Yakuniy holat uchun yechim matni kerak.",
+      "case_forbidden": "Bu amalga ruxsatingiz yo'q."
+    },
+    "errorFix": {
+      "case_not_found": "Ro'yxatni yangilang — u boshqa kunga tegishli bo'lishi mumkin.",
+      "case_status_conflict": "Yangilang va o'zgarishlar tarixini ko'ring.",
+      "case_resolution_required": "Qaroringiz sababini yozing.",
+      "case_forbidden": "Direktorga murojaat qiling."
+    }
+  },
   "headline": {
     "revenue_today": "Bugungi tushum",
     "review_queue": "{count, plural, other {Ko'rib chiqish navbati}}",
