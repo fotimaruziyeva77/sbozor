@@ -1,10 +1,53 @@
 ---
 phase: 7
 slug: nomuvofiqlik-bildirishnoma-va-botlar
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-08-11
+updated: 2026-08-12
+human_only_verifications:
+  - item: Haqiqiy Telegram yetkazishi — jonli token bilan
+    why_not_automatable: CI'da bot tokeni YO'Q va bo'lmaydi ham (07-RESEARCH Environment Availability). Mezon moduli mahsulot jo'natuvchisini oxirigacha yuritadi va respx faqat TARMOQ CHEGARASINI tutadi (assert_all_mocked=True — tashqariga chiqish IMKONSIZ, T-07-97). Ya'ni «so'rov to'g'ri shakllandi» o'lchangan, «Telegram uni qabul qildi» esa o'lchanmagan
+    owner: Ops
+    trigger: Birinchi deploy (pilotdan oldin), test bozori va test chatida
+  - item: «Yetkazildi» so'zining sotuvchi uchun MA'NOSI
+    why_not_automatable: Telegram Bot API yetkazilganlik kvitansiyasini BERMAYDI — sendMessage faqat Message qaytaradi (Key Finding 4). delivered = «Telegram 200 qaytardi», «o'qildi» EMAS. Semantika kodda uch joyda bir xil va test uni o'lchaydi; o'lchanmagani — nizoda direktor va sotuvchi bu farqni tushunadimi
+    owner: Direktor (mahsulot egasi kuzatadi)
+    trigger: Pilotning birinchi «xabar kelmadi» nizosi
+  - item: Bot matnlarining sotuvchi uchun TUSHUNARLILIGI
+    why_not_automatable: Glossariy parity MEXANIK o'lchangan (G7-9 — atama ikkala manbada bir xil, taqiqlangan sinonim nol, uchala locale kalit-parity). O'lchanmagani — o'qish savodxonligi past sotuvchi «qoldiq», «patta» va «kvitansiya» so'zlarini ajrata oladimi. Bu lug'at emas, IDROK savoli
+    owner: Mahsulot egasi (bozor adminining yordami bilan)
+    trigger: Karmanadagi birinchi dala tashrifi — 5 sotuvchiga ko'rsatiladi
+  - item: request_contact tugmasining HAQIQIY klientlardagi xulqi
+    why_not_automatable: bot-tests MockedBot bilan ishlaydi, ya'ni Contact obyektini TEST O'ZI yasaydi. D-24 ning uch qo'riqchisi to'liq o'lchangan, lekin ular TAXMINGA tayanadi — haqiqiy klient Contact.user_id ni sender bilan teng qilib yuboradi. Tadqiqot buni MEDIUM-HIGH ishonch bilan yozgan
+    owner: Ops
+    trigger: Birinchi deploy — iOS, Android va Desktop klientlarida bittadan
+  - item: Deploy bandi — cron jadvali IMPORT PAYTIDA olinadi
+    why_not_automatable: Bu jarayon holati, kod emas. 07-14 jadvalni worker.py da import paytida o'qiydi, ya'ni qayta ishga tushirilmagan planer yangi vazifalarni UMUMAN ko'rmaydi va HECH QANDAY XATO CHIQMAYDI — jurnal toza, navbat mangu bo'sh
+    owner: Ops
+    trigger: Har deploy (checklist bandi) — beshala komponent last_seen_at ni yangilashi kuzatiladi
+  - item: Bir tokenga bitta poller
+    why_not_automatable: Nosozlik IKKI MASHINA ORASIDA tug'iladi va bitta muhitda ifodalanmaydi. Telegram getUpdates ni bitta token uchun bitta klientga beradi — dev nusxa prod botni JIM qiladi va jurnal TOZA qoladi (Pitfall 5)
+    owner: Ops (jamoa qoidasi sifatida)
+    trigger: Birinchi deploydan oldin — token taqsimoti belgilanganda
+  - item: Quiet hours va overdue_days STANDARTLARI
+    why_not_automatable: Ikkalasi ham [ASSUMED] qaror (A2 21:00-08:00, A3 overdue_days=3) va buyurtmachi bilan TASDIQLANMAGAN. Mexanika to'liq o'lchangan — oyna bozor kesimida, kvitansiya undan ozod, eslatma unga bo'ysunadi — lekin RAQAMLARNING O'ZI taxmin
+    owner: Mahsulot egasi (bozor ma'muriyati bilan)
+    trigger: Pilotning birinchi haftasi — javob market_notification_settings ga yoziladi, kod o'zgarmaydi
+automated_replacements:
+  - was: Kechqurun telefonga qarab dayjest keldimi deb kutish
+    now: docker compose --profile test run --rm tests pytest tests/integration/test_phase7_criteria.py -q — digest_evening + digest_morning chaqiriladi, outbox_tick respx bilan yuritiladi va CHIQQAN so'rov o'lchanadi (AYNAN 2, direktorning chatiga, ikki sifatlovchi aralashmaydi)
+  - was: Ikki dayjestning raqamini qo'lda solishtirish
+    now: test_sc3_... — ikki matnning pul qatori BIR XIL EMAS (D-15/D-16 manba farqi); manba farqining o'zi test_notifications.py::test_evening_reads_projection_and_morning_reads_ledger da
+  - was: Botni bloklab ko'rib navbat to'xtaganini kuzatish
+    now: test_sc5_... — 403 -> blocked, attempt_count == 1 va IKKINCHI tikda respx chaqiruvlari soni O'SMAYDI. Sabotaj bilan o'lchangan: 403 shoxi RETRY ga o'zgartirilganda test QIZARADI
+  - was: Quiet oynada xabar kelmasligini tunda kutib tekshirish
+    now: test_sc5_... — 22:30 da kvitansiya BORADI, eslatma esa navbatdan UMUMAN OLINMAYDI (attempt_count == 0 — «ushlab qolindi» ni «manzili topilmadi» dan ajratadi)
+  - was: Ikki bozorda bir xil telefonli sotuvchini qo'lda izlab topish
+    now: test_sc4_... — market_domain seed'ining O'Z to'qnashuvi (B_VENDOR_PHONE = A_VENDOR_PHONES[0]) ustida: multiple_matches va vendor_telegram_bindings da 0 qator
+  - was: Yangi ogohlantirish turiga matn yozishni eslab yurish
+    now: node --test frontend/scripts/snapshot-copy.test.mjs — G-36: ALERT_TITLE_KEYS reyestri x 3 locale, oldinga va teskari, o'lcham qulfi bilan (07-17 da qo'shildi, deferred-items 1-bandi)
 ---
 
 # Phase 7 — Validation Strategy
@@ -47,24 +90,65 @@ Bu darvozalar reja tuzilganda **tasodifiy test emas, majburiy band** bo'lishi ke
 | **Quick run command** | `npm run gate:fast` → `npm run test:fast && npm --prefix frontend test` |
 | **Full suite command** | `npm run test` + `npm run test:tenancy` + **`npm run bot:test`** (yangi) |
 | **Faza darvozasi** | `npm run gate` + `tests/integration/test_phase7_criteria.py` (beshta mezon, beshta test) |
-| **Estimated runtime** | `gate` ≈ **2124 s** (1899 s bugungi + ≈225 s bu faza) |
+| **Measured runtime** | `gate` = **1424 / 1263 / 1349 s** (07-17, tinch xostda uch o'lchov) · `gate:fast` = **80 s** |
 
-### ⛔ Byudjet — o'zgartirilmaydi
+### ⛔ Byudjet — O'LCHANDI (07-17, 2026-08-12) va **O'ZGARMADI**
 
-`gate` **2300 s**, `gate:fast` **200 s** (`06-VALIDATION.md` dan meros). Oxirgi
-o'lchov `gate` = **1899 s** → **401 s zaxira**.
+`gate` **2300 s**, `gate:fast` **200 s** (`06-VALIDATION.md` dan meros).
 
-| Manba | Taxminiy narx |
-|-------|---------------|
-| `bot-service` testlari (`bot:test`, `MockedBot`) | ~25 s |
-| Backend integratsiya (~60 test) | ~120 s |
-| `bot-service` lint/typecheck (ruff + mypy) | ~20 s |
-| vitest (+~60 test) + 1 yangi SSG marshruti (`/reconciliation` × 3 locale) | ~60 s |
-| **Jami** | **≈ 225 s** — zaxira ichida |
+⛔ **O'LCHOV, TAXMIN EMAS** — 05-15 ning W0-13 protokoli bo'yicha: **tinch
+xost**, **uch o'lchov**, uchalasi ham `exit 0`.
 
-⚠ Agar o'lchov 2300 s dan oshsa — ⛔ **byudjet «shunchaki oshirilmaydi»**: avval
-`bot:test` ni `gate:fast` dan **tashqarida** qoldirish tekshiriladi (u mustaqil kod
-bazasi), keyin 05-15 W0-13 protokoli yuritiladi (tinch xost, uch o'lchov, eng yomon × 1,20).
+| O'lchov | Natija |
+|---------|--------|
+| `npm run gate` #1 | **1424 s** (exit 0) |
+| `npm run gate` #2 | **1263 s** (exit 0) |
+| `npm run gate` #3 | **1349 s** (exit 0) |
+| Tarqoqlik | **161 s** — eng yomonning **11.3 %** |
+| Eng yomon | **1424 s** |
+| Byudjet | **2300 s — O'ZGARMADI**, zaxira **876 s** |
+| Nazorat: `npm run gate:fast` | **80 s** (byudjet **200 s**) |
+
+**Nega byudjet ko'tarilmadi:** eng yomon o'lchov (1424 s) chegaradan
+**876 s past**. Qaror daraxtining birinchi shoxi bajarildi va
+`bot:test` ni `gate` dan ajratish varianti ⛔ **umuman ko'rilmadi** —
+unga ehtiyoj yo'q.
+
+**To'plam esa O'SDI** (ya'ni pasayish «kamroq test» degani emas):
+
+| Manba | 06-14 | 07-17 |
+|-------|-------|-------|
+| vitest | 717 | **806** (+89) |
+| backend pytest (jami) | — | **3101** (unit 1218 · integratsiya 1152 · tenancy 731) |
+| `gate` zanjiri | `bot:*` YO'Q | **`bot:lint` + `bot:test` QO'SHILDI** (07-01) |
+
+⛔⛔ **RAQAM 06-14 NIKI (1703 / 1733 / 1899) BILAN TO'G'RIDAN-TO'G'RI
+SOLISHTIRILMAYDI — VA BU HALOLLIK BANDI, IZOH EMAS.**
+
+O'lchovdan oldin xost **tinch emas edi** va sabab topildi:
+`sbozor-cv-service-1` ⛔ **qayta-qayta yiqilib turgan** —
+`CV_MODEL_PATH` (`/app/models/rfdetr-large.onnx`) mavjud emas, taskiq
+esa `worker-0` ni har **~1 soniyada** qayta ishga tushirardi. U
+`docker stats` da **~80 % CPU** yeb turgan edi. Konteyner
+to'xtatilgandan keyin o'sha yuk yo'qoldi va o'lchov **~2 barobar**
+tezlashdi (ifloslangan holatda `npm run test` 19 daqiqada 46 % ga
+yetgan, tozasida 9 daqiqada 37 % ga).
+
+Ya'ni ⛔ **pasayish 7-fazaning yutug'i EMAS** — u MUHITNING tozalanishi.
+Byudjet aynan shu sababdan ham **pasaytirilmadi**: keyingi o'lchov
+o'sha crash-loop tiklangan xostda olinsa, 1424 s raqami ikki barobarga
+yaqin ko'tarilishi mumkin va 2300 s zaxirasi aynan shuning uchun
+saqlanadi.
+
+⚠ **ONNX artefaktining yo'qligi NUQSON EMAS** — u `ops` yetkazmasi
+(`ops/models/README.md`, `05-HUMAN-UAT.md` #3). Bu yerda qayd etilgani —
+uning **yon ta'siri**: artefaktsiz `cv-service` konteyneri cheksiz
+qayta ishga tushish siklida qoladi va **xostning har qanday o'lchovini
+ifloslantiradi**.
+
+⛔ **RAQAM IKKI JOYDA BIR XIL** (T-07-99): yuqoridagi jadval va
+`package.json` ning `//gate-budget` izohi — 1424 / 1263 / 1349,
+tarqoqlik 161 s, byudjet 2300 s, `gate:fast` 80 s.
 
 ---
 
@@ -80,15 +164,42 @@ bazasi), keyin 05-15 W0-13 protokoli yuritiladi (tinch xost, uch o'lchov, eng yo
 
 ## Per-Task Verification Map
 
-> Bu jadvalni **gsd-planner** to'ldiradi. Har task `<automated>` verify buyrug'iga
-> yoki Wave 0 bandiga ega bo'lishi shart. Uchta ketma-ket task avtomatik verify'siz
-> qolmaydi (sampling continuity).
+> ⚠ **GRANULYARLIK — REJA DARAJASIDA, TASK darajasida EMAS, va bu OCHIQ
+> tanlov.** 17 reja ~60 taskdan iborat va har taskning `<automated>` buyrug'i
+> o'z rejasida hamda SUMMARY sida allaqachon yozilgan. Bu yerda ularni
+> ko'chirish **ikkinchi haqiqat manbai** bo'lardi va u jimgina eskirardi.
+> Quyidagi jadval har rejaning **darvoza buyrug'ini** beradi — ya'ni «bu
+> reja bugun qanday o'lchanadi?» savoliga javob. Sampling continuity
+> shartini bu qanoatlantiradi: uchta ketma-ket reja avtomatik verify'siz
+> qolmagan (har qatorda buyruq bor).
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| _(planner to'ldiradi)_ | | | | | | | | | ⬜ pending |
+| P-01 | 07-01 | 1 | (infra) | T-07-01 | `bot-service` Sentry ilmog'i bilan tug'iladi; test konteyneri `core-api` to'plamini ifloslantirmaydi | unit | `docker compose --profile test run --rm tests pytest tests/unit/test_sentry_processes.py tests/unit/test_runtime_deps.py -q` | ✅ | ✅ green |
+| P-02 | 07-02 | 1 | (domen) | T-07-02 | `0023`: RLS + FORCE + kompozit FK + XOR CHECK; ⛔ `notification_outbox` da kadr ustuni YO'Q (G7-2) | tenancy | `docker compose --profile test run --rm tests pytest tests/tenancy/test_notification_domain_meta.py -q` | ✅ | ✅ green |
+| P-03 | 07-03 | 1 | RECON-06 | T-07-15 | Javobda AYNAN bitta son; kassir qiymati kunlik summaga TENG EMAS | integration | `docker compose --profile test run --rm tests pytest tests/integration/test_headline.py -q` | ✅ | ✅ green |
+| P-04 | 07-04 | 2 | (fixture) | T-07-07/08 | Strukturaviy meta darvozalar + `TwoMarketSeed` (D-26b ning YAGONA ifodasi) | tenancy | `docker compose --profile test run --rm tests pytest tests/tenancy -q` | ✅ | ✅ green |
+| P-05 | 07-05 | 2 | RECON-06 | T-07-15 | Bosh ekran bitta sonni chizadi; rol serverda hal qilinadi | vitest | `npm --prefix frontend test -- headline-card` | ✅ | ✅ green |
+| P-06 | 07-06 | 3 | BOT-04 | T-07-49/51 | `AlertSender` yuzasi O'ZGARMADI (G7-1); istisno matni hech qayerga yozilmaydi (G7-4) | unit | `docker compose --profile test run --rm tests pytest tests/unit/test_outbox_surface.py tests/unit/test_outbox_secrets.py -q` | ✅ | ✅ green |
+| P-07 | 07-07 | 3 | RECON-02 | T-07-60 | Case holati 4 a'zoli YOPIQ to'plam; hit-rate HOSILA, saqlanmaydi | integration | `docker compose --profile test run --rm tests pytest tests/integration/test_reconciliation_repo.py tests/unit/test_reconciliation_enums.py -q` | ✅ | ✅ green |
+| P-08 | 07-08 | 3 | BOT-01, BOT-02 | T-07-38/39/40 | Servis tokeni fail-closed (`503`), tokensiz/noto'g'ri token BAYT-BAYT ayni `401`, sessiya tug'ilmaydi | integration | `docker compose --profile test run --rm tests pytest tests/integration/test_bot_internal_api.py -q` | ✅ | ✅ green |
+| P-09 | 07-09 | 4 | BOT-04 | T-07-52/54 | `403` -> `blocked` qayta urinishsiz; token jurnalga sizmaydi (G7-5); yurak urishi detalida faqat SANOQ | integration | `docker compose --profile test run --rm tests pytest tests/integration/test_outbox.py tests/integration/test_outbox_repo.py -q` | ✅ | ✅ green |
+| P-10 | 07-10 | 4 | RECON-01, RECON-02 | T-07-61 | Hisobotda dalil IDENTIFIKATORI, kadr BAYTI yo'q; `PERSONAL_ROUTES` o'smadi (G7-6) | integration | `docker compose --profile test run --rm tests pytest tests/integration/test_reconciliation_api.py tests/tenancy/test_personal_data_coverage.py -q` | ✅ | ✅ green |
+| P-11 | 07-11 | 4 | BOT-01, BOT-02 | T-07-24 | `contact` ning uch rad javobi (D-24); uchala locale kalit-parity (G7-9) | unit (bot) | `docker compose --profile test run --rm bot-tests pytest -q` | ✅ | ✅ green |
+| P-12 | 07-12 | 4 | CASH-05 | T-07-23 | Kvitansiya niyati to'lov TRANZAKSIYASIDA; takror `POST` ikkinchi qator bermaydi | integration | `docker compose --profile test run --rm tests pytest tests/integration/test_receipt_outbox.py -q` | ✅ | ✅ green |
+| P-13 | 07-13 | 4 | RECON-03, BOT-03 | T-07-53 | Kechki PROYEKSIYADAN, ertalabki YOZILGAN hisobdan; sotuvchi ismi xabarga tushmaydi | integration | `docker compose --profile test run --rm tests pytest tests/integration/test_notifications.py tests/unit/test_digest_qualifiers.py -q` | ✅ | ✅ green |
+| P-14 | 07-14 | 5 | RECON-03 | T-07-55 | Beshala vazifa reyestrda VA `alert_sweep::watched` da (D-17); G-35 matn darvozasi | unit | `docker compose --profile test run --rm tests pytest tests/unit/test_heartbeat_registry.py tests/unit/test_digest_qualifiers.py -q` | ✅ | ✅ green |
+| P-15 | 07-15 | 6 | RECON-01 | T-07-81 | `components/reconciliation/**` da `<img>` YO'Q — dalil faqat HAVOLA (G7-3) | vitest + node | `npm --prefix frontend test` | ✅ | ✅ green |
+| P-16 | 07-16 | 7 | BOT-04 | T-07-62 | Yetkazilganlik holati direktor yuzasida; besh hisoblagich NOL bo'lsa ham qaytadi | integration + vitest | `docker compose --profile test run --rm tests pytest tests/integration/test_delivery_surface.py -q` va `npm --prefix frontend test -- delivery-list` | ✅ | ✅ green |
+| P-17a | 07-17 | 8 | (beshala mezon) | T-07-96/97/98 | Mezon SOXTALASHTIRILMAYDI (AST, to'rt yo'l); `respx` `assert_all_mocked`; SC#4 chegarasi OCHIQ | integration | `docker compose --profile test run --rm tests pytest tests/integration/test_phase7_criteria.py -q` | ✅ | ✅ green |
+| P-17b | 07-17 | 8 | (deferred #1) | — | `ALERT_TITLE_KEYS` reyestri x 3 locale MEXANIK bog'landi (G-36), o'lcham qulfi bilan | node --test | `node --test frontend/scripts/snapshot-copy.test.mjs` | ✅ | ✅ green |
+| P-17c | 07-17 | 8 | (byudjet) | T-07-99 | Byudjet raqami `package.json` va shu faylda BIR XIL; o'lchov tinch xostda, uch marta | ops | `npm run gate` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+⚠ **`File Exists` ustuni «fayl bor» degani, «to'liq» degani EMAS.** Har
+qator o'z rejasining SUMMARY sida batafsil ochilgan; bu jadval ularning
+**indeksi**, o'rnini bosuvchi emas.
 
 ---
 
@@ -176,12 +287,25 @@ beradi (`07-RESEARCH.md` Key Finding 5).
 
 ## Validation Sign-Off
 
-- [ ] Har task `<automated>` verify yoki Wave 0 bog'liqligiga ega
-- [ ] Sampling continuity: uchta ketma-ket task avtomatik verify'siz qolmagan
-- [ ] Wave 0 barcha MISSING havolalarni qoplaydi
-- [ ] ⛔ G7-1 … G7-9 **to'qqizala** darvoza rejada nomlangan task sifatida bor
-- [ ] Watch-mode bayrog'i yo'q
-- [ ] Feedback latency < **200 s**; `gate` < **2300 s** (o'lchangan, taxmin emas)
-- [ ] `nyquist_compliant: true` frontmatterda o'rnatilgan
+- [x] Har task `<automated>` verify yoki Wave 0 bog'liqligiga ega
+- [x] Sampling continuity: uchta ketma-ket task avtomatik verify'siz qolmagan
+- [x] Wave 0 barcha MISSING havolalarni qoplaydi
+- [x] ⛔ G7-1 … G7-9 **to'qqizala** darvoza rejada nomlangan task sifatida bor
+- [x] Watch-mode bayrog'i yo'q
+- [x] Feedback latency < **200 s**; `gate` byudjeti ⛔ **o'lchangan** (taxmin emas) — raqam va uch o'lchov yuqoridagi «Byudjet» bo'limida
+- [x] `nyquist_compliant: true` frontmatterda o'rnatilgan
 
-**Approval:** pending
+⛔ **`nyquist_compliant: true` NIMAGA TAYANADI — VA U «hammasi
+avtomatlashtirilgan» DEGANI EMAS.** Frontmatterda **yettita** inson
+bandi ochiq sanalgan va har birida **ega** hamda **tetik** bor; ular
+`07-HUMAN-UAT.md` bilan bir xil to'plam. Bayroq shuni bildiradi:
+fazaning har **avtomatlashtiriladigan** xulqi darvoza bilan qoplangan va
+qolgan bandlar **tashqi xizmat**, **haqiqiy klient** yoki **inson
+idroki** — ya'ni ular dizayn xatosi emas, tabiiy chegara.
+
+⚠ **FAZANI YOPISH QARORI BU FAYLNIKI EMAS.** Bu yerdagi belgilar
+**o'lchov** natijasi; yopish qarori qayta tekshiruvniki
+(`/gsd-verify-work`) va `ROADMAP.md` dagi faza belgisi shu sababdan
+`- [ ]` **holicha qoldirildi** (4- va 5-fazalarda ham aynan shunday).
+
+**Approval:** o'lchandi (07-17, 2026-08-12) — yopish qarori qayta tekshiruvda

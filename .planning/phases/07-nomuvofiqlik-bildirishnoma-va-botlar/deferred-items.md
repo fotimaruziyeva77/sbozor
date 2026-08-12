@@ -6,7 +6,31 @@ belgilanadi.
 
 ---
 
-## 1. `ALERT_TITLE_KEYS` uchala locale bilan MEXANIK bog'lanmagan
+## 1. ✅ YOPILDI (07-17) — `ALERT_TITLE_KEYS` uchala locale bilan MEXANIK bog'lanmagan edi
+
+> **Yopildi:** 07-17 ijrosi, `frontend/scripts/snapshot-copy.test.mjs`
+> ga **G-36** bloki qo'shildi (147 satr, `error-codes.test.mjs` ning
+> G-17 naqshi):
+>
+> * **o'lcham qulfi** — `ALERT_TITLE_KEY_COUNT = 15` (parser sinsa
+>   sikllar bo'sh to'plamda jimgina yashil bo'lardi);
+> * **OLDINGA** — har turning matni uchala locale'da bor;
+> * **TESKARI** — har matn kaliti reyestrda bor (o'lik kalit yo'q);
+> * **zaxira yorliq** (`errors.generic`) ALOHIDA o'lchanadi — u
+>   `snapshots.alertKey.*` guruhidan tashqarida, ya'ni teskari skanni
+>   ifloslantirmaydi, lekin noma'lum tur uchun AYNAN u chiziladi.
+>
+> ⛔ **SABOTAJ BAJARILDI:** 16-a'zo (`sabotage_probe`) matnsiz
+> qo'shilganda **ikki** darvoza qizardi — o'lcham qulfi (`16 != 15`) va
+> OLDINGA parity **uchala locale'ni nomma-nom** ko'rsatib. Sabotaj
+> qaytarildi.
+>
+> ⚠ **Quyidagi «Qo'shimcha» bandi OCHIQ QOLDI:** `alert-list.test.tsx`
+> hamon 07-14 ning to'rt yangi kalitini **render qilmaydi**. G-36 matn
+> MAVJUDLIGINI qo'riqlaydi, CHIZILISHINI emas — bu boshqa sinf va u
+> 8-fazaning ishi.
+
+**Asl yozuv (2026-08-11, 07-15):**
 
 **Topildi:** 07-15 ijrosi, `frontend/node_modules` birinchi marta
 o'rnatilgandan keyingi to'liq o'lchovda.
