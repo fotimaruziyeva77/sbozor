@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from aiogram import Router
 
-from app.handlers import start
+from app.handlers import binding, start, vendor
 
 
 def build_router() -> Router:
@@ -30,4 +30,6 @@ def build_router() -> Router:
     """
     router = Router(name="bot")
     router.include_router(start.router)
+    router.include_router(binding.router)
+    router.include_router(vendor.router)
     return router
