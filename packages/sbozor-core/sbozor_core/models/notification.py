@@ -122,7 +122,9 @@ __all__ = [
     "CASE_SUBJECT_CHARGE_INDEX",
     "CASE_SUBJECT_CHARGE_PREDICATE",
     "CASE_WORKLIST_INDEX",
+    "EVENT_FROM_STATUS_CHECK",
     "EVENT_STATUS_TRANSITION_CHECK",
+    "EVENT_TO_STATUS_CHECK",
     "OUTBOX_DUE_INDEX",
     "OUTBOX_DUE_PREDICATE",
     "OUTBOX_KIND_CHECK",
@@ -227,6 +229,25 @@ sinfning nisbati (RECON-01 ning butun mazmuni) noto'g'ri chiqardi.
 ⚠ IKKINCHI SHOX ALOHIDA YOZILMAYDI: `SUBJECT_IS_EXCLUSIVE_CHECK` bilan
 BIRGA bu ifoda `occupied_unpaid` uchun `charge_id IS NOT NULL` ni ham
 majburlaydi — XOR ikkinchi ustunni allaqachon qulflagan.
+"""
+
+EVENT_TO_STATUS_CHECK = f"to_status IN ({_quoted(CASE_STATUS_VALUES)})"
+"""`reconciliation_case_events.to_status` — `ReconciliationCaseStatus` DAN HOSILA.
+
+⚠ IFODA MODELDA E'LON QILINADI, MIGRATSIYADA EMAS va bu OP-10 ning aynan
+qoidasi: `0023` uni SHU YERDAN import qiladi, ya'ni qiymat ro'yxatining
+IKKINCHI NUSXASI umuman tug'ilmaydi. Nusxa bo'lganda «enumga a'zo
+qo'shilib migratsiya yozilmadi» holati mumkin bo'lardi.
+"""
+
+EVENT_FROM_STATUS_CHECK = f"from_status IS NULL OR from_status IN ({_quoted(CASE_STATUS_VALUES)})"
+"""`reconciliation_case_events.from_status` — enumdan HOSILA, lekin NULLABLE.
+
+⚠ `IS NULL OR ...` shakli ATAYIN OCHIQ yozilgan: `NULL IN (...)` `NULL`
+beradi va `CHECK` `NULL` ni O'TKAZADI, ya'ni shart usiz ham ishlardi.
+Ochiq yozilgani NIYATNI ko'rsatadi — case TUG'ILGANDA oldingi holat YO'Q
+va bu QONUNIY holat, unutilgan `NOT NULL` emas
+(`REVERSAL_REASON_CHECK` docstringidagi bilan bir xil qaror).
 """
 
 RESOLUTION_NOTE_MAX_LENGTH: Final[int] = 2000
@@ -532,14 +553,8 @@ class ReconciliationCaseEvent(Base, TenantMixin):
             name="fk_reconciliation_case_events_actor_user_id_users",
         ),
         UniqueConstraint("market_id", "id", name="uq_reconciliation_case_events_market_id_id"),
-        CheckConstraint(
-            f"from_status IS NULL OR from_status IN ({_quoted(CASE_STATUS_VALUES)})",
-            name="from_status_allowed",
-        ),
-        CheckConstraint(
-            f"to_status IN ({_quoted(CASE_STATUS_VALUES)})",
-            name="to_status_allowed",
-        ),
+        CheckConstraint(EVENT_FROM_STATUS_CHECK, name="from_status_allowed"),
+        CheckConstraint(EVENT_TO_STATUS_CHECK, name="to_status_allowed"),
         CheckConstraint(EVENT_STATUS_TRANSITION_CHECK, name="status_actually_changed"),
         Index("ix_reconciliation_case_events_market_case", "market_id", "case_id"),
     )
