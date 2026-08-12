@@ -2069,3 +2069,75 @@ export const ANOMALY_KINDS = [
   "no_coverage_stall",
 ] as const;
 export type AnomalyKindValue = (typeof ANOMALY_KINDS)[number];
+
+/* ---------------------------------------------------------------------------
+ * 07-05 — BOSH EKRAN KO'RSATKICHINING BIRLIK REYESTRI (W0-F5)
+ *
+ * ⛔⛔ NEGA BIRLIK REYESTRDA VA NEGA U JAVOBDA EMAS.
+ *
+ *   `GET /me/headline` javobi AYNAN IKKI maydon — `{metric, value}`
+ *   (`schemas.py::HeadlineResponse`, D-29). Uchinchi maydon (`unit`,
+ *   `label`, `secondary_value`) TAQIQLANGAN va server tomonda
+ *   `extra="forbid"` bilan qulflangan. Ya'ni «bu son pulmi yoki sanoqmi?»
+ *   savoliga javob KLIENTDA, shu reyestrda yashaydi.
+ *
+ *   Reyestr — shart EMAS. `if (metric === "...") ` shoxi yozilganda
+ *   keyingi metrika qo'shilishi IKKINCHI shox tug'dirardi va o'sha
+ *   shoxlardan biri ertaga ROLGA bog'lanardi (§10.2 aynan buni
+ *   taqiqlaydi). Xarita esa kengayganda ham BITTA qidiruv bo'lib qoladi.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Bosh ko'rsatkich qiymatining IKKI birligi — uchinchisi yo'q.
+ *
+ * `"soum"` — ekranda `headline.amountUnit` matni QO'SHILADI.
+ * `"count"` — ⛔ birlik matni UMUMAN chizilmaydi.
+ */
+export const HEADLINE_UNITS = ["soum", "count"] as const;
+export type HeadlineUnit = (typeof HEADLINE_UNITS)[number];
+
+/**
+ * Metrika kaliti -> birlik. ⛔ AYNAN UCH A'ZO (UI-SPEC §10.3).
+ *
+ * =========================================================================
+ * ⛔⛔ PITFALL 1 — KASSIRNIKI SUMMA EMAS, SANOQ. VA BU YERDA U BIRLIK
+ *     MATNIGACHA YETADI.
+ *
+ * 6-faza kassir ko'rligini UCH MUSTAQIL qatlamda qurgan:
+ *
+ *   1. `payment_repo.py:145` — `RECENT_PAYMENT_WINDOW = 5`: kassir 5 dan
+ *      ortiq to'lovini ko'rmaydi, ya'ni ularni QO'SHIB CHIQARA olmaydi
+ *      (T-06-53);
+ *   2. `ShiftCloseResponse` da `system_*` E'LON QILINMAGAN (T-06-59);
+ *   3. `variance_soum` faqat `REPORT_VIEW` ostida (`shifts.py:126`).
+ *
+ * ⛔ Bosh ekranga SUMMA chiqarish uchalasini ham BIR QATORDA bekor
+ *    qilardi: kassir uni o'qib, smena yopishda AYNAN SHU SONNI
+ *    deklaratsiya qilardi va variance HAR DOIM NOL bo'lardi — CASH-04
+ *    ning butun qiymati yo'qolardi.
+ *
+ * Shuning uchun server `headline.receipts_written` uchun `count(*)`
+ * qaytaradi (07-03), bu reyestr esa uning birligini ⛔ `"count"` deb
+ * belgilaydi — ya'ni ekranda «so'm» so'zi CHIZILMAYDI. Ikki qatlam
+ * ALOHIDA: serverniki qiymatni, bu yerdagisi MATNNI qo'riqlaydi.
+ *
+ * ⚠ NEGA `"count"` YETARLI EMAS DEB O'YLAMASLIK KERAK: birlik matnisiz
+ *   ham son «47» bo'lib qoladi va u kunlik SUMMA emas. Agar server bir
+ *   kun summa qaytarsa, bu reyestr uni «47 000 000» qilib ko'rsatardi —
+ *   ⛔ birliksiz. Shu sababdan 07-03 da XULQIY darvoza bor: kassirning
+ *   `value` i o'sha kunning haqiqiy summasiga TENG EMASLIGI o'lchanadi.
+ * =========================================================================
+ *
+ * ⛔ Metrika kalitlari `z.enum` bilan QULFLANMAYDI (04-10 darsi): bitta
+ *    yangi backend a'zosi butun ekranni CHEGARADA yiqitardi. Noma'lum
+ *    kalit uchun zaxira yorliq ko'rsatiladi va uning birligi — eng KAM
+ *    da'vo qiladigan `"count"` (`headlineUnitOf`, `headline-queries.ts`).
+ */
+export const HEADLINE_UNIT = {
+  "headline.revenue_today": "soum",
+  "headline.review_queue": "count",
+  "headline.receipts_written": "count",
+} as const satisfies Readonly<Record<string, HeadlineUnit>>;
+
+/** `HEADLINE_UNIT` da NOMMA-NOM mavjud metrika kalitlari. */
+export type HeadlineMetric = keyof typeof HEADLINE_UNIT;

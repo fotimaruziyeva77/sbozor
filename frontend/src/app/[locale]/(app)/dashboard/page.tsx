@@ -3,6 +3,7 @@
 import { ScrollText, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { HeadlineCard } from "@/components/headline/headline-card";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Link } from "@/i18n/navigation";
 import { useAuthStore } from "@/lib/auth-store";
@@ -12,10 +13,18 @@ import { hasPermission, roleLabelKey } from "@/lib/rbac";
 /*
  * Bosh ekran.
  *
- * DIQQAT: bu yerda birorta SOXTA raqam yo'q. Metrikalar (band rastalar,
- * yig'ilgan patta, nomuvofiqlik) 5- va 6-fazalarda haqiqiy ma'lumot bilan
- * keladi; ularning o'rniga hozir "0" yoki namunaviy grafik ko'rsatish
+ * DIQQAT: bu yerda birorta SOXTA raqam yo'q — va endi bitta HAQIQIY raqam
+ * bor. `<HeadlineCard />` ko'rsatadigan son `GET /me/headline` dan keladi
+ * (07-03) va uni qaysi ko'rsatkich ekanini SERVER huquq bo'yicha tanlaydi
+ * (D-28); ko'rsatkich yo'q bo'lsa karta UMUMAN chizilmaydi — nol yozilmaydi.
+ *
+ * Qolgan metrikalar (band rastalar, yig'ilgan patta, nomuvofiqlik yig'indisi)
+ * hamon YO'Q va ularning o'rniga "0" yoki namunaviy grafik ko'rsatish
  * ma'muriyatga tizim ishlayotgandek tuyulishiga sabab bo'lardi.
+ *
+ * ⛔ Joylashuv qat'iy (UI-SPEC §10.4): sarlavha + rol yorliqlaridan KEYIN,
+ *    `SECTIONS` dan OLDIN — bosh ekranning birinchi mazmunli elementi shu
+ *    ekranning JAVOBI. Boshlang'ich sahifa redirekti QO'SHILMAYDI (O-05).
  */
 const SECTIONS: readonly {
   href: "/users" | "/audit";
@@ -63,6 +72,13 @@ export default function DashboardPage() {
           </p>
         ) : null}
       </div>
+
+      {/*
+       * ⛔ Komponentga FAQAT `marketId` uzatiladi (§10.2). Rol ham, huquq
+       *    ham BERILMAYDI: qaysi son ko'rinishini server hal qiladi va
+       *    klient buni takrorlay olmasligi kerak.
+       */}
+      <HeadlineCard marketId={principal?.marketId ?? null} />
 
       {sections.length > 0 ? (
         <ul className="grid gap-3 sm:grid-cols-2">
