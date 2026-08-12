@@ -574,9 +574,13 @@ Ya'ni qatorni oldindan yaratish HECH BIR o'quvchining javobini
 o'zgartirmaydi, lekin IKKINCHI standart manbaini tug'dirardi: sxemaning
 `server_default` i va kaskadning yozgan qiymati bir kun ajralib ketardi
 va «standart qaysi?» savoliga ikki joy ikki xil javob berardi. Bundan
-tashqari kaskad `markets` ni yaratadigan `SECURITY DEFINER` funksiyada
-(migratsiyada) yashaydi — unga yangi jadval qo'shish har bozor
-yaratishda bajariladigan yozuvni ko'paytirardi.
+tashqari kaskad `markets` ni yaratadigan DB FUNKSIYASIDA (migratsiyada)
+yashaydi — unga yangi jadval qo'shish MIGRATSIYA talab qilardi, holbuki
+bu yo'l migratsiyasiz qurilgan.
+
+⚠ O'sha funksiyaning bajarilish huquqi turi bu yerda LITERAL
+  yozilmaydi — sabab modul docstringining «ikki taqiqlangan nom»
+  bandida (darvoza izohni koddan ajratmaydi).
 
 `director_chat_id` esa boshqa toifada: uning standarti YO'Q va u faqat
 direktor botga ulanganda ma'lum bo'ladi. Shuning uchun qator AYNAN SHU
