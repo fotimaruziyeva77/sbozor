@@ -41,6 +41,8 @@ from sbozor_core.enums import (
     DiscoveryRunStatus,
     Locale,
     OccupancyVerdict,
+    ReconciliationCaseStatus,
+    ReconciliationSubjectKind,
     ReversalReason,
     Role,
     StallStatus,
@@ -193,6 +195,15 @@ __all__ = [
     "ZoneItem",
     "ZoneListResponse",
     "ZoneRequest",
+    # --- 07-10: nomuvofiqlik hisoboti va case yuzasi (RECON-01, RECON-02) ---
+    "CaseDetailResponse",
+    "CaseEventRow",
+    "CaseListResponse",
+    "CaseRowResponse",
+    "CaseUpdateRequest",
+    "HitRateResponse",
+    "ReconciliationReportResponse",
+    "ReconciliationReportRow",
     "validate_password_strength",
 ]
 
@@ -3692,3 +3703,341 @@ class ShiftReportResponse(BaseModel):
     rows: list[ShiftReportRow]
     shiftless_payment_count: int
     shiftless_payment_soum: int
+
+
+# ---------------------------------------------------------------------------
+# 07-10: NOMUVOFIQLIK HISOBOTI VA CASE YUZASI (RECON-01, RECON-02)
+#
+# ⛔⛔ BU BO'LIMDAGI HAR BEsh MODELDA UCH TAQIQ BIR VAQTDA KUCHDA:
+#
+#   (a1) `chat_id` / `telegram_user_id` / `telegram_username` maydoni
+#        ⛔ **YO'Q**. Ular `PERSONAL_FIELDS` da BO'LMAGANI uchun C-10
+#        darvozasi (`tests/tenancy/test_personal_data_coverage.py`) ularni
+#        ⛔ **USHLAMAYDI** — ya'ni bu yerda darvoza emas, INTIZOM ishlaydi.
+#        Ular odamni TASHQI tizimda aniqlaydi va chegaradan CHIQIB BO'LGAN
+#        (D-01); `07-UI-SPEC.md` §5.5 shu bo'shliqni frontend tomonda
+#        **G-36** bilan yopadi.
+#
+#   (a)  `vendor_name` / `phone` / `full_name` maydoni ⛔ **YO'Q** (D-05,
+#        06-UI-SPEC §5.5). Ism klientda MAVJUD va AUDIT QILINGAN
+#        `GET /vendors` bilan joinlanadi. Nomni qo'shish `PERSONAL_ROUTES`
+#        ni o'stirardi va moliyaviy yuza shaxsiy-ma'lumot yuzasiga
+#        aylanardi. ⛔ Nom bilan aylanib o'tish (`vendor_label`, `who`,
+#        `payer`) ham TAQIQLANADI.
+#
+#   (b)  Dalil — ⛔ **IDENTIFIKATOR**. `evidence_snapshot_ids` tipi
+#        `list[UUID]`; imzolangan havola, obyekt kaliti yoki bayt YO'Q
+#        (D-03, T-06-81). `list[str]` bo'lganda «bir marta imzolangan
+#        havola qo'yaman» yo'li TIP darajasida ochiq qolardi — `UUID`
+#        bilan u ⛔ **IMKONSIZ**.
+# ---------------------------------------------------------------------------
+
+RESOLUTION_NOTE_MAX = 2000
+"""Yechim matnining server tomondagi uzunlik chegarasi (T-07-57).
+
+⚠ QIYMAT SXEMANING `RESOLUTION_NOTE_LENGTH_CHECK` I BILAN BIR XIL BO'LISHI
+  SHART. Bu yerda u HTTP qatlamining jufti: chegarasiz matn bazagacha
+  borib `IntegrityError` bilan qaytardi va sabab «kodda xato» emas,
+  «baza buzuq» kabi ko'rinardi (`transition()` ning nol-o'tish qarori
+  bilan aynan bir xil mulohaza).
+
+⛔ XSS BU YERDA HAL QILINMAYDI va u qilinishi ham kerak emas: React
+   matnni avtomatik escape qiladi va `dangerouslySetInnerHTML`
+   frontendda ISHLATILMAYDI (07-16). Serverda HTML tozalash uchinchi
+   haqiqat manbai bo'lardi — «tozalangan» matn nizo hujjatida ASL
+   matndan farq qilardi.
+"""
+
+
+class ReconciliationReportRow(BaseModel):
+    """Kunlik hisobotning bitta nomuvofiqlik qatori (RECON-01, §8.1).
+
+    =======================================================================
+    ⛔⛔ IKKI SINF BITTA JADVALDA, LEKIN `subject_kind` BILAN AJRALGAN.
+
+    `occupied_unpaid` — «band, lekin to'lovsiz»: hisob YOZILGAN, to'lov
+    esa yetmagan. `anomaly` — «ro'yxatga olinmagan savdo»: hisob UMUMAN
+    yozilmagan, chunki rasta biriktirilmagan (yoki kun yopiq edi).
+
+    Farq maydonlarda ham KO'RINADI va bu ATAYIN: `anomaly` qatorida
+    `expected_soum` ⛔ **`None`** — kutilgan summa mavjud EMAS, nol emas.
+    Nol yozish «bu savdodan hech nima kutilmagan» degan YOLG'ON da'vo
+    bo'lardi, holbuki haqiqat «qancha kutilishini tizim BILMAYDI»
+    (D-13 ning `hit_rate is None` qarori bilan aynan bir sinf).
+    =======================================================================
+
+    ⚠ `case_id` / `status` `None` BO'LISHI MUMKIN va bu kontraktning
+      ochiq e'tirofi: nomuvofiqlikning O'ZI `recon.open` yugurishidan
+      OLDIN ham mavjud bo'ladi. Bugun hisobot qatorlari FAQAT case'lardan
+      quriladi, ya'ni ikkala maydon ham to'lgan keladi; `| None` esa
+      «case hali ochilmagan» holatini kontraktni buzmasdan qo'shish
+      yo'lini ochiq qoldiradi.
+
+    ⛔ `evidence_snapshot_ids` — modul izohidagi (b) taqig'i. Klient
+       ularni ⛔ **MAVJUD** `GET /snapshots/{snapshot_id}/image`
+       marshrutiga beradi va o'sha marshrut har ochilishda `audit_read`
+       yozadi (04-11 qarori). ⛔ YANGI TASVIR MARSHRUTI OCHILMAYDI —
+       5-fazada dalil-kadr yuzasi ATAYIN bitta marshrutda qulflangan
+       (T-06-81) va bu faza uni KENGAYTIRMAYDI.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject_kind: ReconciliationSubjectKind
+    """⛔ YOPIQ DISKRIMINATOR (DQ-5) — «qaysi ustun bo'sh?» mantig'i EMAS."""
+    case_id: UUID | None
+    status: ReconciliationCaseStatus | None
+    service_date: date
+    stall_code: str
+    vendor_id: UUID | None
+    """⛔ IDENTIFIKATOR, ISM EMAS (modul izohidagi (a) taqig'i).
+
+    `anomaly` sinfida `None` va bu MA'NOLI: `unassigned_occupied` ning
+    butun mazmuni — rasta hech kimga biriktirilmagani.
+    """
+    expected_soum: int | None
+    """Netlangan hisob summasi; `anomaly` sinfida ⛔ `None` (klass docstringi)."""
+    paid_soum: int | None
+    """`FIFO_OLDEST_SERVICE_DATE_FIRST` taqsimlagan qism (D-24).
+
+    ⛔ HISOBLANMAYDI, BERILADI: qiymat `billing_repo.
+    vendor_charge_allocation()` dan keladi. Uni bu yerda (yoki klientda)
+    ayirish bilan chiqarish «to'landimi?» savolining IKKINCHI javobini
+    tug'dirardi.
+    """
+    evidence_snapshot_ids: list[UUID]
+    """⛔ FAQAT `UUID` — imzolangan havola, obyekt kaliti va bayt YO'Q."""
+
+
+class ReconciliationReportResponse(BaseModel):
+    """`GET /reconciliation/report?day=` — kunlik nomuvofiqlik hisoboti.
+
+    ⛔ UCHALA HISOBLAGICH HAM NOL BO'LGANDA HAM QAYTADI
+    (`ChargeListResponse` / `AnomalyListResponse` bilan AYNAN bir xil
+    qaror): «bu kunda nomuvofiqlik yo'q» bilan «hisoblagich ishlamayapti»
+    bir xil ko'rinsa direktor tizimni buzuq deb hisoblardi — va bu
+    mahsulotning butun va'dasiga («raqamlar bilan ko'rsatamiz») zid
+    bo'lardi.
+
+    ⛔ IKKI SANOQ HECH QACHON QO'SHILMAYDI. `unpaid_count` va
+       `unregistered_count` — IKKI BOSHQA hodisa (`AnomalyListResponse`
+       ning D-05 qarori): birinchisi «pul kelmadi», ikkinchisi «savdo
+       umuman yozilmadi». Yagona `total` maydoni ATAYIN yo'q, aks holda
+       ekran uni ko'rsatardi va farq matn darajasida yo'qolardi.
+
+    ⚠ `unpaid_expected_soum` FAQAT `occupied_unpaid` sinfi ustida
+      yig'iladi va sabab yuqoridagi bilan bir xil: `anomaly` qatorining
+      kutilgan summasi MAVJUD EMAS, ya'ni uni yig'indiga qo'shish
+      KO'RINMAGAN HISOBDAN TUSHUM DA'VOSI to'qish bo'lardi.
+
+    ⚠ `day` javobda ATAYIN bor: standart kun SERVERDA hisoblanadi
+      (KECHA — §11.1) va klient qaysi kunni ko'rayotganini javobning
+      O'ZIDAN biladi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    rows: list[ReconciliationReportRow]
+    unpaid_count: int
+    """`occupied_unpaid` qatorlari soni — «band, lekin to'lovsiz»."""
+    unregistered_count: int
+    """`anomaly` qatorlari soni — «ro'yxatga olinmagan savdo». ⛔ QO'SHILMAYDI."""
+    unpaid_expected_soum: int
+    """FAQAT `occupied_unpaid` sinfining kutilgan summalari yig'indisi."""
+
+
+class CaseRowResponse(BaseModel):
+    """`GET /reconciliation/cases?day=` navbatining bitta qatori (RECON-02).
+
+    ⛔ FAQAT IDENTIFIKATORLAR VA HOLAT (`reconciliation_repo.CaseRow`
+       docstringining HTTP qatlamidagi jufti). Rasta kodi, sotuvchi nomi
+       va summa BU YERDA YO'Q: ular hisobot marshrutidan yoki
+       `daily_charges` / `billing_anomalies` ning O'Z marshrutlaridan
+       olinadi. Ularni bu qatorga ko'chirish navbat ro'yxatini IKKINCHI
+       haqiqat manbaiga aylantirardi.
+
+    ⚠ `anomaly_id` / `charge_id` — ⛔ XOR: ikkalasidan AYNAN BITTASI
+      to'ldirilgan (DQ-5, `ck_reconciliation_cases_subject_is_exclusive`).
+      Klient shoxni `subject_kind` bo'yicha tanlaydi, «qaysi ustun
+      bo'sh?» bo'yicha EMAS.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    case_id: UUID
+    subject_kind: ReconciliationSubjectKind
+    anomaly_id: UUID | None
+    charge_id: UUID | None
+    service_date: date
+    status: ReconciliationCaseStatus
+    assignee_user_id: UUID | None
+    """⛔ IDENTIFIKATOR, ISM EMAS. `None` = case hali hech kimga biriktirilmagan."""
+    created_at: datetime
+
+
+class CaseListResponse(BaseModel):
+    """`GET /reconciliation/cases?day=` — kun kesimidagi navbat (DQ-4).
+
+    =======================================================================
+    ⛔⛔ ENVELOPE `ChargeListResponse` BILAN AYNAN BIR SHAKLDA: `day` +
+        `rows` + hisoblagichlar (+ keyset kursori).
+
+    Sabab `deferred-items.md` ning 2/4-bandida O'LCHANGAN: klient
+    envelope'i serverdan orqada qolganda `z.strictObject` xatoni
+    RENDER paytida emas, PARSE paytida beradi va ekran butunlay bo'sh
+    qoladi. Ikki marshrut oilasi bir xil shaklda bo'lsa klient sxemasi
+    birinchi kundan mos keladi.
+    =======================================================================
+
+    ⛔ TO'RTALA HISOBLAGICH HAM HAR DOIM QAYTADI va ular ⛔ `status`
+       FILTRIDAN MUSTAQIL (`reconciliation_repo._CASE_COUNTS`
+       docstringi): nazoratchi «yangi» filtrini yoqqanda «bugun nechta
+       case yopildi?» savolining javobi o'zgarmasligi kerak. Filtrni
+       hisoblagichlarga ham qo'llash tanlangan holatdan boshqa uchtasini
+       NOLGA tushirardi va u «bugun hech nima yopilmadi» bilan MEXANIK
+       ravishda bir xil ko'rinardi.
+
+    ⚠ `next_cursor` — ATAYIN UNUMSIZ SATR (klient uni PARSE QILMAYDI):
+      u serverga o'zgarmasdan qaytariladi. Kursorning ichki shakli
+      (`created_at` + `id` juftligi) SERVER qarori va uni klientga
+      ochish sahifalash qoidasini ikkiga bo'lardi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    rows: list[CaseRowResponse]
+    new_count: int
+    in_review_count: int
+    justified_count: int
+    unjustified_count: int
+    next_cursor: str | None
+    """Keyingi sahifa kaliti; `None` — sahifa to'lmadi, ya'ni oxiri."""
+
+
+class CaseEventRow(BaseModel):
+    """Case tarixining bitta bo'g'ini (D-14).
+
+    ⛔ TARIX — YANGI QATORLAR KETMA-KETLIGI, tahrirlangan qator EMAS.
+       Jadval `0023` ning o'zgarmaslik triggeri bilan qulflangan, ya'ni
+       nizoda (D-02) «kim, qachon, qaysi holatdan» savoliga javob
+       beradigan qator YO'QOLMAYDI.
+
+    ⛔ `actor_user_id` `None` = ⛔ **TIZIM**, «noma'lum» EMAS (`0022`
+       qarori): case'ni `recon.open` cron'i ochadi va unga odam
+       biriktirish «kim qaror qildi?» savoliga YOLG'ON javob bo'lardi.
+       Ism `GET /users` dan klientda joinlanadi (modul izohidagi (a)).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    from_status: ReconciliationCaseStatus | None
+    """`None` = case TUG'ILDI: birinchi hodisada oldingi holat FIZIK ravishda yo'q."""
+    to_status: ReconciliationCaseStatus
+    actor_user_id: UUID | None
+    note: str | None
+    created_at: datetime
+
+
+class CaseDetailResponse(BaseModel):
+    """`GET /reconciliation/cases/{case_id}` — case + tarix + dalil.
+
+    ⛔ DALIL — IDENTIFIKATOR (modul izohidagi (b) taqig'i). ⛔ BO'SH
+       ro'yxat NORMAL JAVOB: hisobning dalili `day_close` yugurmagani
+       uchun yozilmagan bo'lishi mumkin va klient bu holatda dalil
+       bo'limini UMUMAN chizmaydi — na placeholder, na «bo'sh» yorlig'i
+       (05-14 darsi).
+
+    ⚠ `resolution_note` case'ning JORIY yechim matni; tarixdagi har bir
+      `note` esa O'SHA QADAMNIKI. Ikkalasi bir-birini almashtirmaydi:
+      matn qayta yozilganda eski qadamning izohi tarixda QOLADI.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    case_id: UUID
+    subject_kind: ReconciliationSubjectKind
+    anomaly_id: UUID | None
+    charge_id: UUID | None
+    service_date: date
+    status: ReconciliationCaseStatus
+    assignee_user_id: UUID | None
+    created_at: datetime
+    resolution_note: str | None
+    events: list[CaseEventRow]
+    evidence_snapshot_ids: list[UUID]
+
+
+class CaseUpdateRequest(BaseModel):
+    """`PATCH /reconciliation/cases/{case_id}` tanasi (D-12, D-14).
+
+    =======================================================================
+    ⛔⛔ HOLAT — YOPIQ RO'YXAT, YECHIM MATNI — ERKIN. IKKISI ARALASHMAYDI.
+
+    `ReconciliationCaseStatus` da `other` a'zosi ⛔ YO'Q va qo'shilmaydi,
+    ya'ni erkin matn holat sifatida ⛔ KIRA OLMAYDI. Sabab
+    `AdjustmentReason` (6-faza D-19 / T-06-07) bilan AYNAN bir sinfda:
+    erkin matnli a'zo hisobotda GURUHLANMAYDI — u AMALDA eng katta guruh
+    bo'lib qolardi va nomuvofiqlik navbatining haqiqiy natijasi HECH
+    QACHON o'lchanmasdi (D-13 ning hit-rate maxraji ham shu yerda
+    qulflanadi).
+
+    Erkin matn esa `resolution_note` da yashaydi va u hisobotda
+    GURUHLANMAYDI ham, o'lchanmaydi ham — u NIZO hujjati uchun.
+    =======================================================================
+
+    ⛔ `assignee_user_id` — IDENTIFIKATOR, ISM EMAS. `None` = «mas'ulni
+       O'ZGARTIRMA», «egasiz qoldir» EMAS: `transition()` uni `COALESCE`
+       bilan yangilaydi (07-07 SUMMARY, 5-ochiq band). Biriktirishni
+       BEKOR QILISH amali bugun YO'Q va u qo'shilganda ALOHIDA argument
+       bilan keladi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: ReconciliationCaseStatus
+    resolution_note: Annotated[str, StringConstraints(max_length=RESOLUTION_NOTE_MAX)] | None = None
+    assignee_user_id: UUID | None = None
+
+
+class HitRateResponse(BaseModel):
+    """`GET /reconciliation/hit-rate?from=&to=` — navbatning aniqligi (D-13).
+
+    =======================================================================
+    ⛔⛔ `hit_rate` — HOSILA, SAQLANGAN USTUN ⛔ EMAS.
+
+    Nisbat `justified / (justified + unjustified)`. Maxrajga `new` va
+    `in_review` ⛔ KIRMAYDI va sabab mexanik: hali ko'rilmagan case
+    metrikani PASAYTIRARDI, ya'ni navbatni tez ko'rib chiqmaslik
+    ko'rsatkichni yomonlashtirardi va ko'rsatkich o'z JARAYONINI o'lchash
+    o'rniga uning KECHIKISHINI o'lchardi.
+
+    ⛔ O'LCHOV YO'Q BO'LGANDA JAVOB `null`, `0.0` ⛔ EMAS. «Hali o'lchov
+       yo'q» ≠ «nol aniqlik» — 5-fazaning Wilson qarori bilan aynan bir
+       sinfda: o'lchanmagan sonning o'rniga nol yozish direktorning
+       birinchi haftadagi qaroriga bevosita ta'sir qilardi.
+
+    ⛔ `open_cases` YASHIRILMAYDI: usiz «hit-rate 100 %» javobi «hamma
+       case ko'rildi» bilan «faqat bittasi ko'rildi, qolgan 74 tasi
+       navbatda» ni MEXANIK ravishda bir xil ko'rsatardi.
+    =======================================================================
+
+    ⚠⚠ `hit_rate` — bu bo'limdagi ⛔ YAGONA `float` maydon va u ⛔ PUL
+      EMAS, NISBAT. D-07 pul uchun `BIGINT` so'm ↔ `int` ni majburlaydi
+      (kasrli tip tushum hisobida drift beradi va nizoga olib keladi);
+      nisbat esa hech qachon jamlanmaydi va hech qachon so'mga
+      aylantirilmaydi. Istisno shu yerda OCHIQ yoziladi, aks holda
+      G7-8 darvozasining o'quvchisi uni D-07 buzilishi deb o'qirdi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    date_from: date
+    date_to: date
+    justified: int
+    unjustified: int
+    open_cases: int
+    """`new` + `in_review` — ⛔ MAXRAJGA KIRMAYDI, lekin YASHIRILMAYDI ham."""
+    hit_rate: float | None
+    """⛔ `None` — «hali o'lchov yo'q». `0.0` bilan ALMASHTIRILMAYDI."""
