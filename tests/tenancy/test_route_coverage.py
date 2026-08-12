@@ -156,6 +156,20 @@ Ulardan AYNAN **11 tasi** 6-fazaniki va ular nomma-nom sanaladi:
   qiymat faylning O'Z konventsiyasini tiklaydi (amaldagi sondan ~8-9
   past — 02-10 dan beri saqlanadigan masofa).
 
+⚠ 07-03 BITTASINI QO'SHDI (`GET /me/headline`, RECON-06) va CHEGARANI
+  ATAYIN KO'TARMADI — 06-08 ning yuqoridagi qarori bilan AYNAN bir xil
+  sabab: shart `>=`, ya'ni yangi marshrut darvozani qizartirmaydi va
+  ko'tarish D-32 intizomi bo'yicha faza OXIRIDA, yakuniy o'lchov bilan
+  bajariladi.
+
+⛔ `/api/v1/me/headline` `EXEMPT_ROUTES` GA QO'SHILMAYDI, garchi qo'shni
+   `/api/v1/me` o'sha ro'yxatda bo'lsa ham. Istisno YO'L bo'yicha aniq
+   moslikda ishlaydi va ikki marshrut BOSHQA toifada: `/me` — PROFIL
+   (ism, til), u bozorga tegishli EMAS va bozorsiz ham ishlaydi (D-13);
+   `/me/headline` esa BOZORNING soni (tushum / navbat / kvitansiya) va
+   u bozorsiz `409` beradi. Ya'ni u to'liq tenant resursi va matritsaning
+   uchala token da'vosi ham unga QO'LLANISHI SHART.
+
 Chegara ATAYIN AMALDAGI SONDAN PAST — u "matritsa bo'shab qolmadimi?"
 degan savolga javob beradi, aniq sonni qulflamaydi. Aniq son yozilganda
 har yangi endpoint bu faylni tahrirlashni talab qilardi va darvoza
