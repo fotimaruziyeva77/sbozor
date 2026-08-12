@@ -779,7 +779,11 @@
       "credentialUnreadable": "NVR paroli o'qilmadi",
       "nvrAccountLocked": "NVR hisobi qulflandi",
       "captureRecovered": "Kadr olish tiklandi",
-      "vendorBindingConflict": "Reyestrda takrorlangan telefon raqami bor"
+      "vendorBindingConflict": "Reyestrda takrorlangan telefon raqami bor",
+      "outboxStale": "Bildirishnoma navbati to'xtadi",
+      "reconciliationStale": "Nomuvofiqlik tekshiruvi bajarilmadi",
+      "digestStale": "Kunlik hisobot xabari tayyorlanmadi",
+      "overdueStale": "Qarzdorlik eslatmasi tayyorlanmadi"
     },
     "alertOpenCount": "Ochiq: {count}",
     "alertFirstSeen": "Birinchi marta: {time}",

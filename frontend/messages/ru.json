@@ -779,7 +779,11 @@
       "credentialUnreadable": "Пароль NVR не читается",
       "nvrAccountLocked": "Учётная запись NVR заблокирована",
       "captureRecovered": "Съёмка кадров восстановлена",
-      "vendorBindingConflict": "В реестре есть повторяющийся номер телефона"
+      "vendorBindingConflict": "В реестре есть повторяющийся номер телефона",
+      "outboxStale": "Очередь уведомлений остановилась",
+      "reconciliationStale": "Проверка расхождений не выполнялась",
+      "digestStale": "Ежедневная сводка не подготовлена",
+      "overdueStale": "Напоминание о долге не подготовлено"
     },
     "alertOpenCount": "Открытых: {count}",
     "alertFirstSeen": "Впервые: {time}",

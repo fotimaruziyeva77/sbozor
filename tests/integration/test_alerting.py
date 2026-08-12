@@ -55,6 +55,9 @@ from app.jobs.alerting import (
 )
 from app.jobs.billing_close import BILLING_CLOSE_COMPONENT
 from app.jobs.capture import CapturePolicy, capture_tick
+from app.jobs.notifications import DIGEST_COMPONENT, OVERDUE_COMPONENT
+from app.jobs.outbox import OUTBOX_COMPONENT
+from app.jobs.reconciliation import RECON_OPEN_COMPONENT
 from app.jobs.retention import RETENTION_COMPONENT
 from app.services.alerts import (
     TELEGRAM_API_BASE,
@@ -90,7 +93,15 @@ SEND_URL = f"{TELEGRAM_API_BASE}/bot{TOKEN}/{TELEGRAM_SEND_METHOD}"
 CAMERA_COUNT = 22
 """§E.13 ning aniq stsenariysi: 25 kameradan 22 tasi bitta slotda yiqildi."""
 
-_PLATFORM_COMPONENTS = (BACKUP_COMPONENT, RETENTION_COMPONENT, BILLING_CLOSE_COMPONENT)
+_PLATFORM_COMPONENTS = (
+    BACKUP_COMPONENT,
+    RETENTION_COMPONENT,
+    BILLING_CLOSE_COMPONENT,
+    OUTBOX_COMPONENT,
+    RECON_OPEN_COMPONENT,
+    DIGEST_COMPONENT,
+    OVERDUE_COMPONENT,
+)
 """Platforma darajasidagi yurak urishlari — `bed` ularni YANGI qilib qo'yadi.
 
 Sabab `bed` fixture'ining docstringida: ular yo'q bo'lganda supurgi HAR
@@ -103,6 +114,18 @@ shovqin bilan aralashtiradi.
   turgan holda (yurak urishi hali yozilmagan). Ro'yxatga qo'shish o'sha
   shovqinni CHIQARIB tashlaydi; `billing_close_stale` ning O'ZI esa
   pastdagi ALOHIDA testda IKKI YO'NALISHDA o'lchanadi.
+
+⚠⚠ OXIRGI TO'RTTASI 07-14 DA QO'SHILDI VA NOSOZLIK AYNAN TAKRORLANDI —
+   TAXMIN QILINMADI, O'LCHANDI: `watched` to'rt juftlik bilan o'sgach
+   BESHTA guruhlash testi `assert 4 == 2` / `assert 2 == 1` bilan qizardi.
+   Sabab yana MAHSULOTDA emas, TEST SHARTIDA edi (yangi joblar bu seedda
+   hech qachon yugurmaydi, ya'ni ularning yurak urishi YO'Q va `None` HAM
+   ESKIRISH).
+
+⛔ RO'YXAT NOMLARNI IMPORT QILADI, literal yozmaydi: nom ayrilsa shovqin
+   JIMGINA qaytardi va keyingi ishlovchi uni «flaky test» deb o'qirdi.
+   To'rtala kalitning O'ZI esa pastdagi `test_missing_new_heartbeat_
+   raises_an_alert` da XULQ bilan o'lchanadi.
 """
 
 _INSERT_RUN = (
@@ -655,6 +678,65 @@ async def test_a_missing_billing_close_heartbeat_is_visible(
         "YANGI yurak urishi ham alert berdi — supurgi har yugurishda shovqin qo'shardi"
     )
     assert "billing_close_stale" in PLATFORM_SCOPED_ALERT_KEYS, (
+        "platforma alerti bozor darajasiga tushib qolgan — u har bozorga alohida "
+        "Telegram xabari bo'lib chiqardi"
+    )
+
+
+async def test_missing_new_heartbeat_raises_an_alert(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sender: AlertSender,
+    bed: _Bed,
+) -> None:
+    """⛔ D-17 — 7-FAZANING FON OQIMI HAM «JIMGINA O'LA OLMAYDI» (07-14).
+
+    =========================================================================
+    ⛔⛔ BU `deferred-items.md` NING 2-BANDINI YOPADIGAN YAGONA XULQIY
+        O'LCHOV.
+
+    O'sha band aynan shunday edi: yurak urishi YOZILADI, lekin uning
+    YO'QLIGI hech qayerda ko'rinmasdi. `notify.outbox_tick` uchun bu
+    nosozlik eng qimmat shaklda chiqardi — navbat to'xtasa KVITANSIYA ham
+    ketmaydi (CASH-05) va sotuvchi to'laganini isbotlay olmaydi (D-02),
+    ya'ni mahsulotning butun dalil zanjiri JIMGINA uzilardi.
+
+    Reyestr tengligi `tests/unit/test_heartbeat_registry.py` da STRUKTURA
+    sifatida o'lchanadi. Bu test esa boshqa savolga javob beradi: reyestr
+    to'g'ri bo'lsa ham, `None` HAM ESKIRISH qoidasi HAQIQATAN alert
+    ochadimi? Ikkalasi mustaqil buziladi.
+    =========================================================================
+
+    ⛔ DA'VO IKKI YO'NALISHLI (`test_a_missing_billing_close_heartbeat_is_
+       visible` bilan aynan bir xil qoida): yurak urishi YO'Q -> alert
+       OCHILADI; YANGI -> alert OCHILMAYDI. Faqat birinchisi yozilganda
+       «supurgi har doim alert ochadi» degan nosozlik ham yashil qolardi.
+    """
+    bed.drop_heartbeat(OUTBOX_COMPONENT)
+    moment = datetime.now(tz=MARKET_TZ)
+
+    async with respx.mock(assert_all_called=False) as router:
+        router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+        await _sweep(api_sessionmaker, sender, now=moment)
+        missing = [row["alert_key"] for row in bed.alerts()]
+
+        bed.set_heartbeat(OUTBOX_COMPONENT, hours_ago=1)
+        bed.conn.execute("DELETE FROM alert_events WHERE market_id = %s", (str(bed.market_id),))
+        await _sweep(api_sessionmaker, sender, now=moment + timedelta(minutes=1))
+        fresh = [row["alert_key"] for row in bed.alerts()]
+
+    assert "outbox_stale" in missing, (
+        "`outbox_tick` yurak urishi UMUMAN yozilmagan holat alert BERMADI — "
+        "ro'yxatga olinmagan cron jimgina o'lardi va u bilan birga kvitansiya ham "
+        "(`deferred-items.md` 2-bandi)"
+    )
+    assert "outbox_stale" not in fresh, (
+        "YANGI yurak urishi ham alert berdi — supurgi har yugurishda shovqin qo'shardi"
+    )
+    assert ALERT_META["outbox_stale"].never_suppressed is True, (
+        "to'xtagan navbat alerti debounce oynasida bo'g'ildi — butun savdo kunining "
+        "kvitansiyalari to'planib turgan bir soatda xabar KECHIKARDI"
+    )
+    assert "outbox_stale" in PLATFORM_SCOPED_ALERT_KEYS, (
         "platforma alerti bozor darajasiga tushib qolgan — u har bozorga alohida "
         "Telegram xabari bo'lib chiqardi"
     )

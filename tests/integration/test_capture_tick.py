@@ -561,22 +561,103 @@ def test_the_scheduler_has_exactly_one_minute_cron() -> None:
     ning har qanday bo'shliqli variantini ham ushlaydi, holbuki eski
     shakl faqat literalning aynan bir ko'rinishini sanardi.
     =====================================================================
+    ⛔⛔ 07-14 DA IKKINCHI MARTA QAYTA YOZILDI — VA U YANA KUCHAYDI.
+
+    07-14 ikkinchi DAQIQALIK oqimni qo'shdi: `notify.outbox_tick`
+    (`OUTBOX_TICK_CRON`). Ya'ni `== 1` shakli o'sha rejani BAJARIB
+    BO'LMAYDIGAN qilardi va uni «tuzatish» ning yagona yo'li darvozani
+    O'CHIRISH bo'lardi.
+
+    ⛔ SANOQ EGALIK BILAN ALMASHTIRILDI, KATTALASHTIRILMADI. `<= 2` yozish
+       darvozani sekin-asta teshikka aylantirardi (03-07 ning o'lchangan
+       darsi: chegarani ko'tarish — taqiqni bekor qilishning sekin
+       shakli). Uning o'rniga daqiqalik jadval EGALARINING NOMLARI
+       talab qilinadi:
+
+           {"capture.tick", "notify.outbox_tick"}   <- AYNAN shu ikkitasi
+
+    UCHINCHI daqiqalik oqim — nomi qanday bo'lishidan qat'i nazar —
+    darvozani qizartiradi, ya'ni original da'vo («daqiqalik oqim
+    nazorat ostida») SAQLANDI.
+
+    ⛔ NEGA IKKINCHI OQIM QONUNIY, BIRINCHISINING KO'PAYISHI ESA EMAS:
+       D-02/D-03 ning da'vosi «bitta planer talab qilinmaydi» edi va u
+       KADR OLISH tikining idempotentligiga tayanadi. `notify.outbox_tick`
+       BOSHQA vazifa va uning O'Z idempotentlik mexanizmi bor — ijara
+       (`lease_until`) + `SKIP LOCKED` (`outbox_repo._CLAIM_DUE`). Ikki
+       tik bir vaqtda yugurganda ham bitta qator ikki marta YUBORILMAYDI.
+       `capture.tick` ning ikkinchi nusxasi esa aynan o'sha da'voni
+       buzardi.
+
+    ⛔ REYESTRDAN HOSILA, MATNDAN EMAS: nomlar `broker` ning O'Z
+       reyestridan olinadi. Matn skaneri dekorator argumentini ko'radi,
+       reyestr esa taskiq HAQIQATAN ro'yxatga olgan jadvalni ko'radi —
+       ikkinchisi kuchliroq.
+
+    ⚠ LITERAL SANOG'I SAQLANDI (endi 2) va unga IKKINCHI shart qo'shildi:
+      satr faqat KONSTANTA E'LONIDA uchrashi mumkin, dekoratorda EMAS.
+      Usiz sanoqni ikkiga ko'tarish «dekoratorga literal yozish» yo'lini
+      ochib qo'yardi va cron satri nomsiz qolardi.
+    =====================================================================
     """
     body = WORKER_PATH.read_text(encoding="utf-8")
-    assert len(re.findall(r'"\* \* \* \* \*"', body)) == 1, "daqiqalik cron satri bittadan ko'p"
+    literal_lines = [line for line in body.splitlines() if _MINUTE_LITERAL.search(line)]
+    assert len(literal_lines) == 2, (
+        f"daqiqalik cron satri {len(literal_lines)} marta uchradi, kutilgani 2 "
+        f"(`TICK_CRON` va `OUTBOX_TICK_CRON`): {literal_lines}"
+    )
+    not_a_constant = [line for line in literal_lines if not _CRON_DECLARATION.match(line)]
+    assert not_a_constant == [], (
+        "daqiqalik cron satri KONSTANTA e'lonidan tashqarida yozilgan (ehtimol "
+        f"dekoratorda) — jadval nomsiz qoladi: {not_a_constant}"
+    )
 
     crons = re.findall(r'"cron"\s*:\s*([A-Za-z_][A-Za-z_0-9]*|"[^"]*")', body)
     assert crons, "planerda birorta jadval topilmadi"
 
-    resolved = [
-        _CRON_CONSTANTS[name] if name in _CRON_CONSTANTS else name.strip('"') for name in crons
-    ]
-    minute_crons = [value for value in resolved if _IS_MINUTE_CRON.fullmatch(value)]
-    assert len(minute_crons) == 1, f"ikkinchi DAQIQALIK cron oqimi ochilgan: {resolved}"
+    owners = _minute_cron_task_names()
+    assert owners == _MINUTE_CRON_OWNERS, (
+        f"daqiqalik cron oqimlarining egalari o'zgardi: {sorted(owners)}, "
+        f"kutilgani {sorted(_MINUTE_CRON_OWNERS)}. Uchinchi daqiqalik oqim "
+        "qo'shilgan bo'lsa, uning idempotentlik mexanizmi shu testning "
+        "docstringida SABAB bilan yozilishi shart"
+    )
 
 
 _IS_MINUTE_CRON = re.compile(r"(\*|\*/1)(\s+\*){4}")
 """«Har daqiqada» ni bildiruvchi cron namunasi — literaldan KENGROQ."""
+
+_MINUTE_LITERAL = re.compile(r'"\* \* \* \* \*"')
+"""Daqiqalik cron LITERALI — manba matnida izlanadi."""
+
+_CRON_DECLARATION = re.compile(r"^[A-Z][A-Z0-9_]*: Final\[str\] = ")
+"""Modul darajasidagi cron konstantasi e'loni — literal FAQAT shu shaklda."""
+
+_MINUTE_CRON_OWNERS: frozenset[str] = frozenset({"capture.tick", "notify.outbox_tick"})
+"""Daqiqalik jadvalga EGALIK qiladigan vazifalar — YOPIQ to'plam.
+
+⛔ RO'YXAT MAHSULOTDAN IMPORT QILINMAYDI, shu yerda QAYTA YOZILGAN
+   (05-13 / 07-13 darsi): import darvozani o'zi tekshirayotgan qiymatga
+   bog'lardi va reyestrdan jimgina o'chirilgan nom o'tib ketardi.
+"""
+
+
+def _minute_cron_task_names() -> frozenset[str]:
+    """`broker` reyestridan daqiqalik jadvalli vazifa nomlarini yig'adi.
+
+    ⚠ MANBA — TASKIQ NING O'Z REYESTRI (`get_all_tasks()`), dekorator
+      matni emas: shu bilan «yozilgan, lekin ro'yxatga olinmagan» jadval
+      ham, «ro'yxatga olingan, lekin boshqa satr bilan» ham ko'rinadi.
+    """
+    from app import worker
+
+    names: set[str] = set()
+    for task in worker.broker.get_all_tasks().values():
+        for entry in task.labels.get("schedule", ()):
+            cron = entry.get("cron")
+            if isinstance(cron, str) and _IS_MINUTE_CRON.fullmatch(cron):
+                names.add(task.task_name)
+    return frozenset(names)
 
 
 def _cron_constants() -> dict[str, str]:

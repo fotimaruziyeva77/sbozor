@@ -110,7 +110,7 @@ from uuid import UUID
 import structlog
 from sbozor_core.db import make_engine, make_sessionmaker
 from sbozor_core.logging import configure_logging
-from sbozor_core.timeutil import business_today
+from sbozor_core.timeutil import business_today, now_tz
 from taskiq import Context, TaskiqDepends, TaskiqEvents, TaskiqScheduler, TaskiqState
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import ListQueueBroker, RedisAsyncResultBackend
@@ -121,6 +121,9 @@ from app.jobs.billing_close import billing_close
 from app.jobs.capture import BatchRequest, CapturePolicy, capture_batch, capture_tick
 from app.jobs.day_close import day_close
 from app.jobs.discovery import discover_nvr
+from app.jobs.notifications import digest_evening, digest_morning, overdue_reminder
+from app.jobs.outbox import outbox_tick
+from app.jobs.reconciliation import reconciliation_open
 from app.jobs.retention import RetentionPolicy, retention_daily
 from app.observability import capture_exception, init_sentry, sentry_installed
 from app.services import storage as storage_module
@@ -140,11 +143,16 @@ __all__ = [
     "DAY_CLOSE_CRON",
     "DEFAULT_LOG_LEVEL",
     "DIGEST_CRON",
+    "DIGEST_EVENING_CRON",
+    "DIGEST_MORNING_CRON",
     "DISCOVERY_QUEUE",
     "JOBS_QUEUE",
     "LOG_LEVEL_ENV",
     "MARKET_CRON_OFFSET",
+    "OUTBOX_TICK_CRON",
+    "OVERDUE_REMINDER_CRON",
     "QUEUE_TICK_CRON",
+    "RECON_OPEN_CRON",
     "RETENTION_CRON",
     "SENTRY_DSN_ENV",
     "SWEEP_CRON",
@@ -158,8 +166,13 @@ __all__ = [
     "daily_digest_task",
     "day_close_task",
     "daily_queue_tick_task",
+    "digest_evening_task",
+    "digest_morning_task",
     "discover_nvr_task",
     "enqueue_discovery",
+    "outbox_tick_task",
+    "overdue_reminder_task",
+    "reconciliation_open_task",
     "retention_daily_task",
     "scheduler",
 ]
@@ -498,6 +511,117 @@ QAYTA ISHGA TUSHIRILMAGUNCHA RO'YXATGA OLINMAYDI:
   savoli har nosozlikda qaytadan so'ralardi — ikki haqiqat manbai.
   Kech kelgan tasdiqlar `charge_adjustments` yo'li bilan hal bo'ladi
   (`billing_close.py` docstringining 5-bandi).
+=============================================================================
+"""
+
+OUTBOX_TICK_CRON: Final[str] = "* * * * *"
+"""Chiquvchi xabar navbatining tiki — har daqiqada (07-09, BOT-04).
+
+=============================================================================
+⛔⛔ (a) `TICK_CRON` LITERALI QAYTA ISHLATILMAYDI — VA BU IKKINCHI,
+    MUSTAQIL KONSTANTA.
+
+`TICK_CRON` docstringi ochiq yozadi: «SATR AYNAN BITTA MARTA UCHRAYDI
+(dekoratorda) va buni matn darvozasi sanaydi». O'sha satr `capture.tick`
+NIKI. Bu yerda uni QAYTA ISHLATISH ikki mustaqil oqimni bitta nomga
+bog'lardi: kadr olish jadvalini o'zgartirgan odam xabar navbatini ham,
+o'zi bilmagan holda, birga siljitardi.
+
+⛔ Ikki konstanta — ikki qaror. `test_capture_tick.py::test_the_scheduler_
+has_exactly_one_minute_cron` shu sababdan 07-14 da KUCHAYTIRILDI: u endi
+literalni sanashdan tashqari daqiqalik jadval EGALARINING nomlarini ham
+talab qiladi, ya'ni UCHINCHI daqiqalik oqim baribir qizaradi.
+
+⛔ (b) `cron_offset` ATAYIN YO'Q va bu `MARKET_CRON_OFFSET` bilan
+   ZIDDIYAT EMAS: «har daqiqada» har qanday mintaqada AYNAN bir xil
+   ma'noga ega. Offset qo'yish soatga bog'langan jadvallar uchun kerak;
+   bu yerda u faqat noto'g'ri taassurot berardi («demak, mintaqa muhim»).
+   Sabab `TICK_CRON` ning ⚠ bandidagi bilan AYNAN bir xil.
+
+⚠ TIKNING IDEMPOTENTLIGI CRONGA TAYANMAYDI: ijara (`lease_until`) va
+  `SKIP LOCKED` (`outbox_repo._CLAIM_DUE`) ikki tik bir vaqtda yugurganda
+  ham bir qatorni ikki marta yubormaydi. Cron faqat KECHIKISHNI
+  kamaytiradi.
+=============================================================================
+"""
+
+RECON_OPEN_CRON: Final[str] = "25 4 * * *"
+"""Nomuvofiqlik caselarini ochish — KECHASI 04:25 (Toshkent), KECHAGI kun uchun.
+
+=============================================================================
+⛔ 04:10 (`BILLING_CLOSE_CRON`) DAN KEYIN — case manbai `daily_charges`.
+
+`reconciliation_open` «hisoblandi, lekin to'lanmadi» qatorlarini qidiradi,
+ya'ni u YOZILGAN hisobni o'qiydi. Hisob esa D + 1 ning 04:10 da tug'iladi
+(`BILLING_CLOSE_CRON` ning (a) bandi). Undan OLDIN yugurgan job NOL case
+ochardi va — eng yomoni — XATO HAM BERMASDI.
+
+⛔ TARTIB KAFOLATI BU SATRGA TAYANMAYDI (`BILLING_CLOSE_CRON` ning (c)
+   bandi bilan AYNAN bir xil qoida): job IDEMPOTENT (`ON CONFLICT DO
+   NOTHING`) va manbasini O'ZI tekshiradi. Noto'g'ri tartibda yugursa
+   ham keyingi yugurish TUZATADI. Cron satri faqat NARXNI kamaytiradi —
+   kafolatni idempotentlik kaliti beradi.
+
+⚠ 15 daqiqalik oraliq `billing_close` ning uzoq bozorlarda cho'zilishi
+  uchun zaxira (`DAY_CLOSE_CRON` -> `BILLING_CLOSE_CRON` oralig'i bilan
+  bir xil mulohaza).
+"""
+
+DIGEST_MORNING_CRON: Final[str] = "0 8 * * *"
+"""Ertalabki dayjest — 08:00 (Toshkent), KECHAGI kunning YOZILGAN hisobi (D-16).
+
+⛔ 04:10 (`BILLING_CLOSE_CRON`) DAN KEYIN, ya'ni kechagi kun ALLAQACHON
+   yozilgan VA O'ZGARMAS. Xabar «kecha nima YOZILDI?» degan savolga javob
+   beradi va uning soni kechki xabarnikidan FARQ QILADI — bu nuqson emas,
+   DIZAYN (D-15).
+
+⚠ 08:00 — bozor kunining boshlanishi: direktor kechagi yakunni ish
+  boshlashdan oldin ko'radi. Undan erta yuborilgan xabar telefon jim
+  turgan paytga tushardi va o'qilmay qolardi.
+"""
+
+DIGEST_EVENING_CRON: Final[str] = "45 20 * * *"
+"""Kechki dayjest — 20:45 (Toshkent), BUGUNGI KUTILAYOTGAN holat (D-15).
+
+=============================================================================
+⛔⛔ MANBA `pending_projection()` VA UNING MEXANIK SABABI SHU SATRDA.
+
+20:45 da `daily_charges` da BUGUNGI KUN UMUMAN YO'Q: hisob D + 1 ning
+04:10 da tug'iladi (`BILLING_CLOSE_CRON`). Ya'ni yozilgan hisobdan
+o'qiydigan kechki xabar HAR KUNI NOL ko'rsatardi — xatosiz, jimgina.
+Shuning uchun manba PROYEKSIYA va u kassirning ekrani bilan AYNAN bir
+funksiyadan keladi.
+=============================================================================
+
+⚠ 20:45 — `DIGEST_CRON` (20:00, 4-fazaning OPS dayjesti) dan KEYIN va
+  ikkalasi BOSHQA xabar, BOSHQA manzil: 20:00 dagisi ops chatiga,
+  bu esa DIREKTORGA (`market_notification_settings.director_chat_id`)
+  ketadi. Oraliq ularni bir daqiqada to'qnashtirmaydi.
+
+⚠ OXIRGI SLOT (18:00) + grace + kassirning kun yakuni — 20:45 da savdo
+  kuni amalda tugagan va proyeksiya barqaror.
+"""
+
+OVERDUE_REMINDER_CRON: Final[str] = "0 9 * * *"
+"""Qarz eslatmasi — 09:00 (Toshkent), BOT-03.
+
+=============================================================================
+⛔ QUIET OYNADAN TASHQARIDA VA BU HISOBLANGAN, TANLANMAGAN.
+
+Standart tinch oyna 21:00–08:00 (`notification_meta.DEFAULT_QUIET_HOURS_*`)
+va eslatma unga BO'YSUNADI (`never_suppressed=False` — kvitansiyadan
+farqi shu). Oyna ichida yugurgan job qatorni YOZARDI, tik esa uni
+ertalabgacha OLMASDI — xabar baribir kechikardi, faqat sababi navbatning
+ichida ko'rinmas bo'lib qolardi.
+
+⚠ 08:00 EMAS, 09:00: oynaning AYNAN chegarasida yugurish sozlamasini
+  bir soatga siljitgan bozorda (`quiet_hours_end = 09:00` qonuniy
+  qiymat) o'sha holatni qaytarardi. Bir soatlik zaxira — `HEARTBEAT_
+  STALE_HOURS` ning «24 emas, 26» mulohazasi bilan bir xil sinf.
+
+⚠ ESLATMA SAVDO BOSHLANGANDAN KEYIN KELADI: sotuvchi qarzini o'sha
+  kuniyoq yopa oladi, ya'ni xabar harakat qilish imkoni bilan birga
+  keladi. Kechqurungi eslatma ertagacha hech nimani o'zgartirmasdi.
 =============================================================================
 """
 
@@ -1017,6 +1141,131 @@ async def billing_close_task(context: Annotated[Context, TaskiqDepends()]) -> No
     """
     state = context.state
     await billing_close(state.sessionmaker, business_date=business_today() - timedelta(days=1))
+
+
+@broker.task(task_name="notify.outbox_tick", schedule=[{"cron": OUTBOX_TICK_CRON}])
+async def outbox_tick_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — chiquvchi xabar navbatining tiki (07-09, BOT-04).
+
+    ⛔ `state.alerts_enabled` CHEGARASI BU YERDA YO'Q — VA BU
+       `alert_sweep_task` / `daily_digest_task` DAN ONGLI FARQ (07-06,
+       Pitfall 9). O'sha ikkalasi OPS CHATIGA yozadi, ya'ni chat
+       sozlanmagan bozorda ular manzilsiz so'rov qilardi. Navbat esa
+       sotuvchining VA direktorning O'Z chatlariga yozadi va manzilni
+       jo'natishdan bevosita oldin `resolve_chat_id()` dan oladi. Bayroqni
+       bu yerga qo'yish ops chati sozlanmagan bozorda KVITANSIYANI
+       (CASH-05) jimgina to'xtatardi — sotuvchi to'laganini isbotlay
+       olmasdi (D-02).
+
+    ⛔ YANGI JO'NATUVCHI QURILMAYDI (D-23): `state.sender`
+       `_open_worker_resources` da BIR MARTA ochilgan va u TLS ulanishini
+       ushlab turadi. Har tikda yangi klient qurish har daqiqada yangi
+       qo'l siqish narxini to'lardi.
+
+    ⚠ `now` QOBIQDA HISOBLANADI, jobda EMAS (`day_close_task` bilan aynan
+      bir xil qoida): quiet-hours darvozasi va backoff arifmetikasi AYNAN
+      shu qiymatga qaraydi, ya'ni testda «22:30 da nima bo'ladi?» savoli
+      soatni siljitmasdan, BITTA argument bilan o'lchanadi.
+    """
+    state = context.state
+    await outbox_tick(state.sessionmaker, state.sender, now=now_tz())
+
+
+@broker.task(
+    task_name="recon.open",
+    schedule=[{"cron": RECON_OPEN_CRON, "cron_offset": MARKET_CRON_OFFSET}],
+)
+async def reconciliation_open_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — kunlik nomuvofiqlik caselarini ochadi (07-07, RECON-03).
+
+    ⛔ KECHAGI KUN TEKSHIRILADI, BUGUNGISI EMAS (`RECON_OPEN_CRON`
+       docstringi): tik 04:25 da ishlaydi va bugungi kunning birinchi
+       sloti 06:00 da. `business_today()` berilsa job HAR KUNI hali
+       boshlanmagan kunni tekshirardi — birorta case ochilmasdi va xato
+       ham chiqmasdi (`billing_close_task` bilan AYNAN bir xil nosozlik
+       shakli).
+
+    ⚠ BIZNES-KUN QOBIQDA HISOBLANADI, jobda EMAS: job uni ARGUMENT
+      sifatida oladi (`reconciliation_open(..., business_date=...)`) va shu
+      bilan «qaysi kun?» savoli testda bitta qiymatga aylanadi.
+    """
+    state = context.state
+    await reconciliation_open(
+        state.sessionmaker, business_date=business_today() - timedelta(days=1)
+    )
+
+
+@broker.task(
+    task_name="notify.digest_morning",
+    schedule=[{"cron": DIGEST_MORNING_CRON, "cron_offset": MARKET_CRON_OFFSET}],
+)
+async def digest_morning_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — ertalabki dayjest, KECHAGI YOZILGAN kun (07-13, D-16).
+
+    ⛔ KECHAGI KUN: xabar «kecha nima YOZILDI?» degan savolga javob beradi
+       va manba `daily_charges` + `payments`. Bugungi kun berilsa 08:00 da
+       hisob HALI YOZILMAGAN bo'lardi (u 04:10 da KECHAGI kun uchun
+       yoziladi) va dayjest HAR KUNI nol ko'rsatardi.
+
+    ⚠ BIZNES-KUN QOBIQDA HISOBLANADI, jobda EMAS — `day_close_task` /
+      `billing_close_task` bilan aynan bir xil qoida.
+    """
+    state = context.state
+    await digest_morning(state.sessionmaker, business_date=business_today() - timedelta(days=1))
+
+
+@broker.task(
+    task_name="notify.digest_evening",
+    schedule=[{"cron": DIGEST_EVENING_CRON, "cron_offset": MARKET_CRON_OFFSET}],
+)
+async def digest_evening_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — kechki dayjest, BUGUNGI KUTILAYOTGAN holat (07-13, D-15).
+
+    =========================================================================
+    ⛔⛔ KUN BUGUNGI — VA BU TAQIQ, QULAYLIK EMAS.
+
+    `business_today() - 1` berilsa xabar ertalabki dayjest bilan AYNAN BIR
+    XIL raqamni qaytarardi (ikkalasi ham kechagi kunni ko'rsatardi) va
+    D-15 ning butun mazmuni — «kechqurun KUTILAYOTGAN, ertalab YOZILGAN» —
+    yo'qolardi. Direktor ikki bir xil xabarni ko'rib uchinchi kuni
+    ikkalasini ham o'qimay qo'yardi.
+
+    Shuning uchun bu YAGONA kunlik qobiq bo'lib, `business_today()` ni
+    AYIRISHSIZ beradi — qo'shni qobiqlardan farqi ATAYIN va u shu yerda
+    yozilgan.
+    =========================================================================
+
+    ⚠ ARGUMENTNING NOMI HAM BOSHQA (`as_of`, `business_date` EMAS): job
+      «o'sha kun uchun YOZILGAN hisob» emas, «o'sha PAYTDAGI proyeksiya»
+      ni so'raydi va nom bu farqni chaqiruv joyida ko'rinadigan qiladi.
+    """
+    state = context.state
+    await digest_evening(state.sessionmaker, as_of=business_today())
+
+
+@broker.task(
+    task_name="notify.overdue",
+    schedule=[{"cron": OVERDUE_REMINDER_CRON, "cron_offset": MARKET_CRON_OFFSET}],
+)
+async def overdue_reminder_task(context: Annotated[Context, TaskiqDepends()]) -> None:
+    """YUPQA QOBIQ — kechikkan qarz eslatmasi (07-13, BOT-03).
+
+    ⛔ KUN BUGUNGI: kechikish chegarasi BUGUNDAN orqaga sanaladi
+       (`business_date - overdue_days`), ya'ni «bugun kimning qarzi
+       kechikkan?» savoli aynan bugungi kunni talab qiladi. Kechagi kun
+       berilsa chegara bir kunga orqaga surilardi va eng yangi kechikkan
+       qator eslatmani BIR KUN KECH olardi.
+
+    ⚠ BIZNES-KUN QOBIQDA HISOBLANADI, jobda EMAS.
+
+    ⚠ QUIET HOURS BU YERDA TEKSHIRILMAYDI va bu qoldirilgan band EMAS:
+      darvoza `outbox_repo.claim()` ning SQL bandida va u REYESTRDAN
+      (`NOTIFICATION_META`) hosila. Bu yerga ikkinchi tekshiruv yozish bir
+      qoidaning ikki ifodasini tug'dirardi (`notifications.py` ning o'sha
+      bandi).
+    """
+    state = context.state
+    await overdue_reminder(state.sessionmaker, business_date=business_today())
 
 
 async def enqueue_discovery(

@@ -779,7 +779,11 @@
       "credentialUnreadable": "NVR пароли ўқилмади",
       "nvrAccountLocked": "NVR ҳисоби қулфланди",
       "captureRecovered": "Кадр олиш тикланди",
-      "vendorBindingConflict": "Реестрда такрорланган телефон рақами бор"
+      "vendorBindingConflict": "Реестрда такрорланган телефон рақами бор",
+      "outboxStale": "Билдиришнома навбати тўхтади",
+      "reconciliationStale": "Номувофиқлик текшируви бажарилмади",
+      "digestStale": "Кунлик ҳисобот хабари тайёрланмади",
+      "overdueStale": "Қарздорлик эслатмаси тайёрланмади"
     },
     "alertOpenCount": "Очиқ: {count}",
     "alertFirstSeen": "Биринчи марта: {time}",

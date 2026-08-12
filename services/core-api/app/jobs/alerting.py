@@ -125,6 +125,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.jobs.billing_close import BILLING_CLOSE_COMPONENT
+from app.jobs.notifications import DIGEST_COMPONENT, OVERDUE_COMPONENT
+from app.jobs.outbox import OUTBOX_COMPONENT
+from app.jobs.reconciliation import RECON_OPEN_COMPONENT
 from app.jobs.retention import RETENTION_COMPONENT, active_market_ids, disk_usage_percent
 from app.repositories.capture_repo import CaptureRepository
 from app.services.capture_errors import (
@@ -314,6 +317,33 @@ ALERT_META: Final[dict[str, AlertMeta]] = {
         #   yo'qotish QAYTARIB BO'LMAYDIGAN emas (job konvergent), lekin
         #   uni sezmaslik oyning oxirigacha cho'zilardi.
         AlertMeta("billing_close_stale", AlertSeverity.CRITICAL.value, True, True),
+        # ⛔ `critical` VA BO'G'ILMAYDI — VA BU 7-FAZANING ENG QIMMAT
+        #   SUKUNATI. Navbat to'xtasa KVITANSIYA ham ketmaydi (CASH-05),
+        #   ya'ni sotuvchi to'laganini isbotlay olmaydi — D-02 ning
+        #   AYNAN o'zi. Qolgan uchtasi (pastda) `warning`, chunki ular
+        #   HISOBOTNI kechiktiradi; bu esa NIZODAGI DALILNI yo'qotadi.
+        #   `never_suppressed`: to'xtagan navbat o'z-o'zidan tuzalmaydi va
+        #   debounce oynasi xabarni bir soatga kechiktirardi — o'sha bir
+        #   soatda esa butun savdo kunining kvitansiyalari to'planardi.
+        AlertMeta("outbox_stale", AlertSeverity.CRITICAL.value, True, True),
+        # ⚠ `warning`: case ochilmasa nomuvofiqlik YO'QOLMAYDI — job
+        #   IDEMPOTENT va ertangi yugurish o'sha kunni ham qamraydi
+        #   (`reconciliation_open` ning `ON CONFLICT DO NOTHING` i).
+        #   Yo'qotish QAYTARIB BO'LADIGAN, ya'ni `retention_stale` bilan
+        #   bir sinf, `billing_close_stale` bilan emas.
+        AlertMeta("reconciliation_stale", AlertSeverity.WARNING.value, False, True),
+        # ⚠ `warning`: o'tkazib yuborilgan dayjest — O'QILMAGAN XABAR,
+        #   yo'qotilgan MA'LUMOT emas. Sonlar bazada turaveradi va
+        #   direktor ularni veb yuzasida ko'radi. `critical` daraja bu
+        #   yerda D-22 ning teskarisi bo'lardi: kuniga ikki marta
+        #   ishlaydigan job uchun shoshilinch signal shovqinga aylanardi.
+        AlertMeta("digest_stale", AlertSeverity.WARNING.value, False, True),
+        # ⚠ `warning` va sabab `digest_stale` niki bilan bir xil: eslatma
+        #   kechiksa qarz O'SMAYDI — u allaqachon mavjud va veb yuzasida
+        #   ko'rinadi. Lekin komponent kuzatilishi SHART: kuzatilmagan
+        #   eslatma jobi hech qanday xato bermaydi va uning o'limini
+        #   ma'muriyat OYLAR keyin sezardi (`deferred-items.md` 2-bandi).
+        AlertMeta("overdue_stale", AlertSeverity.WARNING.value, False, True),
         # -------------------------------------------------------------
         # 4-GURUH — XABAR, OCHIQ ISH EMAS.
         # -------------------------------------------------------------
@@ -655,6 +685,25 @@ async def _platform_signals(
         #   chiqmaydi. Buni birorta test ushlamaydi — pastdagi `None ham
         #   eskirish` qoidasi esa AYNAN shu holatni alertga aylantiradi.
         (BILLING_CLOSE_COMPONENT, "billing_close_stale"),
+        # ⛔⛔ 07-14 QO'SHDI — BESHALA YANGI CRON O'SHA KO'RLIK OSTIDA EDI.
+        #   Yuqoridagi `billing.close` bandi bilan AYNAN bir xil sabab va u
+        #   endi BESH vazifaga tegishli: jadval `import` PAYTIDA olinadi,
+        #   ya'ni `scheduler` qayta ishga tushirilmasa vazifa RO'YXATGA
+        #   OLINMAYDI va HECH QANDAY xato chiqmaydi.
+        #
+        # ⛔ KOMPONENT NOMLARI IMPORT QILINADI, literal yozilmaydi
+        #   (`BILLING_CLOSE_COMPONENT` naqshi): qo'lda yozilgan ikkinchi
+        #   nusxa jimgina ajralib ketardi — job yurak urishini BIR nom
+        #   bilan yozardi, supurgi esa BOSHQA nomni kutib «yo'q» alertini
+        #   MANGU ko'tarib turardi.
+        #
+        # ⚠ TO'RTTA JUFTLIK, BESHTA VAZIFA: ikkala dayjest ham bitta
+        #   `notify_digest` qatorini yangilaydi (07-13 ning ongli narxi va u
+        #   `self_check.py` docstringida ham qayd etilgan).
+        (OUTBOX_COMPONENT, "outbox_stale"),
+        (RECON_OPEN_COMPONENT, "reconciliation_stale"),
+        (DIGEST_COMPONENT, "digest_stale"),
+        (OVERDUE_COMPONENT, "overdue_stale"),
     )
     for component, key in watched:
         last_seen = seen.get(component)

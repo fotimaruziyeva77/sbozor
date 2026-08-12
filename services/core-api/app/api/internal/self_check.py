@@ -112,6 +112,10 @@ EXPECTED_COMPONENTS: Final[tuple[str, ...]] = (
     "backup",
     "cv_detect",
     "billing_close",
+    "outbox_tick",
+    "reconciliation_open",
+    "notify_digest",
+    "notify_overdue",
 )
 """Yurak urishi KUTILADIGAN fon komponentlari.
 
@@ -162,6 +166,49 @@ ushlamaydi (testlar reyestrni jarayonning O'ZIDA o'qiydi). Bu qator
   bog'lardi: `day_close` ning yurak urishi 5-fazadagi testlar bilan
   o'lchanadi va reyestrga qo'shilishi ularning kutilmasini ham
   siljitardi.
+=============================================================================
+
+=============================================================================
+⛔⛔ OXIRGI TO'RT SATR — 7-FAZANING FON OQIMI (07-14, D-17).
+
+`outbox_tick` · `reconciliation_open` · `notify_digest` · `notify_overdue`
+
+⛔ (a) SATRLAR `app/jobs/*.py` DAGI KOMPONENT KONSTANTALARI BILAN AYNAN
+   BIR XIL BO'LISHI SHART va ular MATN sifatida bog'langan — reyestr
+   jadvaldan hosila EMAS (yuqoridagi birinchi ⚠). Manbalari:
+
+       app/jobs/outbox.py::OUTBOX_COMPONENT
+       app/jobs/reconciliation.py::RECON_OPEN_COMPONENT
+       app/jobs/notifications.py::DIGEST_COMPONENT / OVERDUE_COMPONENT
+
+   Nom ayrilsa endpoint komponentni MANGU `never_seen` da ko'rsatardi,
+   holbuki job ishlab turardi. Tenglik `tests/unit/test_heartbeat_
+   registry.py` da AST bilan, HOSILA darvoza sifatida o'lchanadi: ro'yxat
+   qo'lda solishtirilmaydi, `app/jobs/` katalogi TO'LIQ skanerlanadi.
+
+⛔ (b) NEGA BU QATORLAR KERAK — `billing_close` bandi bilan AYNAN BIR XIL
+   SABAB VA U ENDI BESH VAZIFAGA TEGISHLI: cron jadvali `import` PAYTIDA
+   olinadi, ya'ni `scheduler` konteyneri qayta ishga tushirilmasa
+   vazifalar RO'YXATGA OLINMAYDI — job hech qachon ishlamaydi va HECH
+   QANDAY xato chiqmaydi. Birorta test buni ushlamaydi (testlar reyestrni
+   jarayonning O'ZIDA o'qiydi). Bu qatorlar (va `alerting.py::watched`
+   dagi juftlari) — YAGONA mexanik himoya.
+
+⛔ (c) `notify_overdue` ALOHIDA QO'SHILDI VA BU TADQIQOTDAN CHETLANISH.
+   `07-RESEARCH.md` UCHTA komponentni sanagan (`outbox_tick`,
+   `reconciliation_open`, `notify_digest`) — BOT-03 ning jobi o'sha
+   ro'yxatda YO'Q edi. D-17 esa «yangi cron joblar» deydi: ko'plikda va
+   ISTISNOSIZ. `deferred-items.md` ning 2-bandi aynan shunday BITTA
+   unutilgan komponent edi va uning oqibati o'lchangan: kuzatilmagan
+   eslatma jobi hech qanday xato bermaydi — sotuvchilar shunchaki
+   eslatma olmay qo'yadi va buni ma'muriyat OYLAR keyin sezadi.
+
+⚠ IKKALA DAYJEST HAM BITTA `notify_digest` QATORINI YANGILAYDI (07-13
+  ning ongli narxi): kechkisi ishlab, ertalabkisi o'lsa yurak urishi
+  HAMON YANGI ko'rinadi. Bu reyestr o'sha bo'shliqni YOPMAYDI — u
+  «ikkalasi ham o'ldi» holatini ko'radi. Ikki alohida komponentga
+  bo'lish `notifications.py` ning konstantalar sonini o'zgartiradi va
+  egasi — o'sha faylni ochadigan keyingi reja.
 =============================================================================
 """
 

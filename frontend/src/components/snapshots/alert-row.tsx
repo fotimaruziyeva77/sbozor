@@ -94,6 +94,15 @@ const SEVERITY_VIEW = {
  *   orqali ham ketadi va Telegram serverlari loyiha zimmasiga olgan O'zR
  *   data-rezidentlik chegarasidan TASHQARIDA (D-19 bilan bir xil sabab).
  *   Tuzatish veb yuzasida bajariladi.
+ * ⚠ OXIRGI TO'RTTASI 07-14 DA (D-17) QO'SHILDI va ular BITTA sinfda:
+ *   fon oqimining YURAK URISHI YO'Q. Ularsiz `billing_close_stale` bilan
+ *   aynan bir xil nosozlik takrorlanardi — kalit `ALERT_META` da bo'lib,
+ *   ekranda «Kutilmagan xato» bo'lib chizilardi, ya'ni «uchala locale'da
+ *   matn bor» da'vosi BO'SH-ROST bo'lardi (07-08 ning o'lchangan darsi).
+ *   ⛔ `outboxStale` MATNI «o'qildi» yoki «yetkazildi» DA'VOSINI QILMAYDI
+ *   (Pitfall 2): u navbatning TO'XTAGANINI aytadi. Telegram Bot API
+ *   yetkazilganlik kvitansiyasini umuman bermaydi va bu semantika butun
+ *   fazada BIR XIL (`outbox.py` ning `delivered` bandi).
  */
 const ALERT_TITLE_KEYS = {
   capture_stopped: "snapshots.alertKey.captureStopped",
@@ -107,6 +116,10 @@ const ALERT_TITLE_KEYS = {
   disk_pressure: "snapshots.alertKey.diskPressure",
   capture_recovered: "snapshots.alertKey.captureRecovered",
   vendor_binding_conflict: "snapshots.alertKey.vendorBindingConflict",
+  outbox_stale: "snapshots.alertKey.outboxStale",
+  reconciliation_stale: "snapshots.alertKey.reconciliationStale",
+  digest_stale: "snapshots.alertKey.digestStale",
+  overdue_stale: "snapshots.alertKey.overdueStale",
 } as const;
 
 type AlertTitleKey = (typeof ALERT_TITLE_KEYS)[keyof typeof ALERT_TITLE_KEYS];
