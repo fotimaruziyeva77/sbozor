@@ -431,8 +431,9 @@ bajarildi va beshala mezon bitta buyruqda yashil
   4. Sotuvchi contact ulashish orqali botga ulanadi (telefon raqami admin reestriga mos bo'lsa) va o'z qoldig'i/qarzi hamda to'lov tarixini ko'radi
   5. To'lov kiritilishi bilan sotuvchiga zudlik push-kvitansiya boradi (summa, rasta, kassir, vaqt) va qarz N kundan oshsa avtomatik eslatma keladi — barcha xabarlar outbox orqali, throttling va quiet hours hurmat qilinib, yetkazilganlik holati bilan
 
-**Plans**: 17 plans (8 to'lqin)
-Plans:
+**Plans**: 23 plans (8 to'lqin + 4 to'lqin bo'shliqni yopish)
+
+Plans:
 **Wave 1**
 
 - [x] 07-01-PLAN.md — `bot-service` tug'ilishi: skelet, compose, `package.json`, Sentry darvozasining kengaytmasi
@@ -473,6 +474,29 @@ bajarildi va beshala mezon bitta buyruqda yashil
 **Wave 8** *(blocked on Wave 7 completion)*
 
 - [x] 07-17-PLAN.md — Faza darvozasi: `test_phase7_criteria.py`, byudjet o'lchovi, talab holatlari
+
+#### Bo'shliqni yopish (`07-VERIFICATION.md` — `gaps_found`, 2/5 mezon)
+
+> ⚠ To'lqin raqamlari `--gaps-only` ijrosining O'Z zanjiriga tegishli — yuqoridagi
+> sakkiz to'lqinning davomi EMAS. Har reja `gap_closure: true` bilan belgilangan.
+
+**Gap Wave 1** — Mezon #3 (NOT MET) va navbat konvergentligi
+
+- [ ] 07-18-PLAN.md — Direktor bog'lanishi: `director_chat_id` ning yagona yozuv yo'li (B-1)
+- [ ] 07-19-PLAN.md — Outbox: urinish byudjeti, tik deadline va UNRESOLVED terminal chegara (B-3/B-4)
+
+**Gap Wave 2** *(blocked on Gap Wave 1)*
+
+- [ ] 07-20-PLAN.md — Case mas'uli serverga yetadi + `user_market_roles` tekshiruvi (B-2, WR-01/WR-05)
+- [ ] 07-21-PLAN.md — Kuzatuv, matn rostgo'yligi va dev muhiti (WR-10/WR-02/WR-03, B-8/B-9)
+
+**Gap Wave 3** *(blocked on Gap Wave 2)*
+
+- [ ] 07-22-PLAN.md — Frontend: to'rt ro'yxat yuzasi — sahifalash, a11y, arifmetika (B-6, WR-06/WR-08)
+
+**Gap Wave 4** *(blocked on Gap Wave 3)*
+
+- [ ] 07-23-PLAN.md — Frontend: hukm dialogi yiqilganda buni AYTADI (B-5/B-7, WR-09/WR-16)
 
 **UI hint**: yes
 
