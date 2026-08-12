@@ -1077,7 +1077,13 @@ async def test_job_opens_cases_in_every_active_market(
 
     result = await reconciliation_open(app_sessionmaker, business_date=today)
 
-    assert result.markets == 2, f"job ikkala faol bozorni ham ko'rishi kerak edi: {result}"
+    # ⚠ `>= 2`, `== 2` EMAS — `test_retention.py:657` da o'rnatilgan qoida:
+    #   `active_market_ids()` BUTUN bazadagi faol bozorlarni qaytaradi va
+    #   qo'shni test fayli (masalan wizard oqimi) o'z bozorini qoldirishi
+    #   mumkin. Aniq songa qadalgan da'vo BEGONA faylning tartibiga
+    #   bog'lanib qolardi. Haqiqiy da'vo pastda: IKKALA seed bozorida ham
+    #   case bor.
+    assert result.markets >= 2, f"job ikkala faol bozorni ham ko'rishi kerak edi: {result}"
     assert result.errors == []
     assert result.unpaid_cases == 2, f"ikkala bozorda ham case ochilmadi: {result}"
     for market_id in recon.market_ids:
@@ -1155,7 +1161,10 @@ async def test_one_broken_market_does_not_stop_the_others(
 
     result = await reconciliation_open(app_sessionmaker, business_date=today)
 
-    assert result.markets == 2, f"job ikkala bozorni ham ko'rishi kerak edi: {result}"
+    # ⚠ `>= 2` — sabab qo'shni testdagi bilan aynan bir xil. Bu yerdagi
+    #   YUKNI KO'TARADIGAN da'vo `errors` ning UZUNLIGI: aynan BITTA bozor
+    #   yiqildi va tsikl to'xtamadi.
+    assert result.markets >= 2, f"job ikkala bozorni ham ko'rishi kerak edi: {result}"
     assert len(result.errors) == 1, f"aynan bitta bozor xato berishi kerak edi: {result}"
     assert result.errors[0].startswith("reconciliation_open_failed:"), (
         f"xato SANOQQA aylanmadi: {result.errors!r}"
