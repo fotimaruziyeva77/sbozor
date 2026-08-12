@@ -553,6 +553,38 @@ _BIND_DIRECTOR_CHAT = text(
 )
 """Direktorning chatini sozlama qatoriga YOZADI (UPSERT).
 
+=============================================================================
+⛔⛔ NEGA `UPSERT`, YA'NI NEGA BOZOR YARATILGANDA QATOR TUG'ILMAYDI — QAROR.
+
+`market_create()` KASKADIGA `market_notification_settings` QATORI
+QO'SHILMAYDI va bu bo'shliq emas, ONGLI TANLOV. Sabab: jadvalning uchala
+ustuni ham qator BO'LMAGANDA to'g'ri qiymat beradi va bu ikki joyda
+O'LCHANGAN, taxmin qilinmagan:
+
+  * `outbox_repo._CLAIM_DUE` — `LEFT JOIN market_notification_settings` +
+    `COALESCE(s.quiet_hours_start, :quiet_start)`; `JOIN` yozilganda
+    sozlamasiz bozorning butun navbati JIMGINA ko'rinmas bo'lardi, shuning
+    uchun u ATAYIN `LEFT JOIN`;
+  * `jobs/notifications._MARKET_OVERDUE_DAYS` va uning jufti
+    `jobs/reconciliation` da — `COALESCE((SELECT s.overdue_days ...),
+    :fallback)`, standart esa SXEMADAN hosila
+    (`notification_meta.DEFAULT_OVERDUE_DAYS`).
+
+Ya'ni qatorni oldindan yaratish HECH BIR o'quvchining javobini
+o'zgartirmaydi, lekin IKKINCHI standart manbaini tug'dirardi: sxemaning
+`server_default` i va kaskadning yozgan qiymati bir kun ajralib ketardi
+va «standart qaysi?» savoliga ikki joy ikki xil javob berardi. Bundan
+tashqari kaskad `markets` ni yaratadigan `SECURITY DEFINER` funksiyada
+(migratsiyada) yashaydi — unga yangi jadval qo'shish har bozor
+yaratishda bajariladigan yozuvni ko'paytirardi.
+
+`director_chat_id` esa boshqa toifada: uning standarti YO'Q va u faqat
+direktor botga ulanganda ma'lum bo'ladi. Shuning uchun qator AYNAN SHU
+yerda, LAZY tarzda tug'iladi — `ON CONFLICT` esa «qator allaqachon bor»
+(masalan `overdue_days` veb yuzasidan o'zgartirilgan) shoxini xatosiz
+qamraydi.
+=============================================================================
+
 ⛔ FAQAT IKKI USTUN `SET` QILINADI. `quiet_hours_start`, `quiet_hours_end`
    va `overdue_days` — BOZOR SOZLAMASI (D-19) va ular direktorning
    telefonidan kelmaydi. Ularni `EXCLUDED` bilan ustiga yozish qayta
