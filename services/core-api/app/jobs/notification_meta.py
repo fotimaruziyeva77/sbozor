@@ -53,6 +53,7 @@ from datetime import time
 from typing import Any, Final
 
 from sbozor_core.enums import OutboxKind, OutboxRecipientKind
+from sbozor_core.models.notification import MarketNotificationSettings
 
 __all__ = [
     "DEFAULT_OVERDUE_DAYS",
@@ -245,7 +246,37 @@ start AND end` shakli tunda HECH QACHON rost bo'lmasdi va quiet hours
 amalda ISHLAMASDI — jimgina.
 """
 
-DEFAULT_OVERDUE_DAYS: Final[int] = 3
+
+def _schema_default_overdue_days() -> int:
+    """Kechikish chegarasining kod standarti — ⛔ SXEMADAN HOSILA, literal EMAS.
+
+    =========================================================================
+    ⛔⛔ QIYMAT SHU YERDA QAYTA YOZILMAYDI. Uning yagona manbai —
+       `MarketNotificationSettings.overdue_days` ning `server_default` i
+       (A3, `models/notification.py` da sabablangan). Python tomonda
+       literal yozilganda ikki standart JIMGINA ajralib ketardi: sozlama
+       qatori BOR bozor bir chegarani, sozlamasi YO'Q bozor boshqasini
+       olardi va IKKALASI HAM «standart» deb atalardi (D-32 ning aynan
+       sinfi).
+
+    ⚠ SHAKL BUZILSA FUNKSIYA YIQILADI, NOLGA TUSHMAYDI: jim standart
+      qiymat chegarani bir kun jimgina o'chirib qo'yardi va nazoratchi
+      navbati shovqinga aylanardi.
+    =========================================================================
+    """
+    default = MarketNotificationSettings.__table__.c.overdue_days.server_default
+    literal = getattr(getattr(default, "arg", None), "text", None)
+    if literal is None:
+        raise RuntimeError(
+            "`market_notification_settings.overdue_days` ustunida o'qib "
+            "bo'ladigan `server_default` yo'q — kechikish chegarasining kod "
+            "standarti SXEMADAN olinadi va uni bu yerda literal bilan "
+            "almashtirish ikkinchi standart yaratardi."
+        )
+    return int(literal)
+
+
+DEFAULT_OVERDUE_DAYS: Final[int] = _schema_default_overdue_days()
 """[ASSUMED] A3 — qarz eslatmasi va case ochilishi uchun BIR knob (D-19).
 
 Kichikroq qiymat case navbatini SHOVQINGA aylantirardi — bu
@@ -257,6 +288,35 @@ o'lchangan.
    SHU qiymatdan yuradi. Ikki alohida sozlama ajralib ketardi va
    sotuvchi eslatma OLMAGAN qarz uchun case ochilardi — ya'ni u
    ogohlantirilmagan holda navbatga tushardi.
+
+=============================================================================
+⛔⛔ QIYMAT LITERAL EMAS, SXEMADAN HOSILA — VA BU 07-13 DA TUZATILGAN
+   D-32 NUQSONI.
+
+07-06 bu konstantani `3` literali bilan yozgan, 07-07 esa
+`app/jobs/reconciliation.py` da AYNI nomni sxemadan HOSILA qilib
+e'lon qilgan. Ikkalasi merge bo'lgach bazada IKKI MUSTAQIL e'lon
+qoldi: `market_notification_settings.overdue_days` ning
+`server_default` i o'zgargan kuni bu nusxa JIMGINA eskirardi va
+eslatma noto'g'ri kunda yonardi, holbuki case to'g'ri kunda ochilardi
+— ya'ni bir knob ikkiga bo'linardi (D-19 ning aynan buzilishi).
+
+⚠ YO'NALISH ATAYIN SHU TOMONGA: reyestr (bu modul) SXEMANI o'qiydi va
+  u LEAF bo'lib qoladi. Teskarisi — bu modulning
+  `app.jobs.reconciliation` dan import qilishi — `outbox_repo` ni
+  `reconciliation_repo` ga tranzitiv bog'lab qo'yardi va
+  `reconciliation_repo` bir kun outboxga yozadigan bo'lsa (case
+  ochildi -> xabar) import HALQASI yopilardi.
+
+⛔ KEYINGI QADAM (bu rejaning `files_modified` idan TASHQARIDA, shuning
+   uchun BAJARILMADI): `app/jobs/reconciliation.py` o'zining
+   `_schema_default_overdue_days()` ini o'chirib, `DEFAULT_OVERDUE_DAYS`
+   ni SHU MODULDAN import qilishi kerak — o'shanda o'quvchi ham BITTA
+   bo'ladi. Bugun manba bitta (sxema), o'quvchi ikkita va ularning
+   ajralishi `test_notifications.py` da IKKI darvoza bilan qulflangan:
+   qiymat tengligi VA har ikki modulda literal QAYTA PAYDO BO'LMASLIGI
+   (AST bilan, grep bilan emas).
+=============================================================================
 """
 
 
