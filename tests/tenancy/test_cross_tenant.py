@@ -1614,6 +1614,16 @@ def billing_rows(
         sync_owner_conn.execute(
             "UPDATE markets SET is_active = false WHERE id = ANY(%s::uuid[])", (market_ids,)
         )
+        # ⛔ `notification_outbox` 07-12 DA QO'SHILDI: matritsa `POST
+        #    /api/v1/payments` ni chaqirganda A bozoriga HAQIQIY to'lov
+        #    yozadi va 6.5-QADAM (CASH-05) unga kvitansiya niyatini ham
+        #    qo'shadi. `fk_notification_outbox_vendor` da `ondelete` YO'Q
+        #    (NO ACTION), ya'ni qoldiq qator quyi qatlamlarning
+        #    sotuvchi/bozor `DELETE` ini FK buzilishi bilan yiqitardi —
+        #    nosozlik bu faylda emas, KEYINGI faylning seed'ida ko'rinardi.
+        sync_owner_conn.execute(
+            "DELETE FROM notification_outbox WHERE market_id = ANY(%s::uuid[])", (market_ids,)
+        )
         # TARTIB: to'lov -> hisob. `payments` `daily_charges` ga FK bilan
         # bog'lanmaydi (D-24/C-4), lekin tartib `CLEANUP_ORDER` bilan bir
         # xil saqlanadi — u yerdagi qoida bu yerda ham o'qiladi.

@@ -64,6 +64,21 @@ UI-SPEC §5.6), `GET /payments/recent` esa `BILLING_COLLECT_VIEW` ostida
   DB-trigger u yerda hech nima yozmaydi va `write_app_audit()` ⛔ **YAGONA**
   audit yo'li. Aynan shuning uchun `enums.py` `PAYMENT_OVERRIDE` va
   `PAYMENT_REVERSE` a'zolarini qo'shgan (CASH-02).
+
+=============================================================================
+⛔⛔ BU MODUL TELEGRAM BILAN **UMUMAN GAPLASHMAYDI** (CASH-05, D-23).
+
+`POST /payments` kvitansiya **NIYATINI** `notification_outbox` ga yozadi
+va shu bilan tugaydi. Jo'natish — `notify.outbox_tick` ning ishi (07-09).
+
+⛔ **NEGA JO'NATISH BU YERDA EMAS:** tarmoq chaqiruvi to'lov
+   tranzaksiyasini ochiq holda internet muddatiga bog'lardi — Telegram
+   sekinlashsa `payments` qatori ustidagi qulf o'sha muddat davomida
+   turardi va kassirning har bosishi navbatga tushardi. Ikkinchi va
+   qimmatroq oqibat: Telegram yiqilganda `POST /payments` ⛔ **xato**
+   qaytarardi, ya'ni **pul yozuvi bildirishnoma holatiga bog'lanardi**.
+   Bu D-23 ning aynan teskarisi va u eng band kunda birinchi marta
+   ko'rinardi.
 =============================================================================
 """
 
@@ -75,11 +90,12 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sbozor_core.billing import payment_quote_set
-from sbozor_core.enums import AuditAction, PaymentKind
+from sbozor_core.enums import AuditAction, OutboxKind, OutboxRecipientKind, PaymentKind
 from sbozor_core.timeutil import business_today
 
 from app.deps import Principal, TenantSessionDep, require_permission
-from app.repositories import billing_repo, payment_repo
+from app.jobs.notification_meta import outbox_payload
+from app.repositories import billing_repo, outbox_repo, payment_repo, user_repo
 from app.schemas import (
     PaymentCreateRequest,
     PaymentResponse,
@@ -225,11 +241,17 @@ async def create_payment(
       4. asoslangan summalar to'plami (SERVERDA) -> 422 (bo'sh to'plam)
       5. `quote_soum` tanlovi + sabab darvozasi  -> 422
       6. idempotent yozish                       -> 201 / 200 / 409
+      6.5 KVITANSIYA NIYATI (CASH-05)            -> `notification_outbox`
       7. CASH-02 auditi                          -> `payment_override`
 
     Teskari tartib (masalan avval yozib, keyin tekshirish) qatorni
     yozib bo'lib rad etardi — `payments` esa APPEND-ONLY, ya'ni uni
     ORTGA QAYTARIB bo'lmasdi.
+
+    ⛔ **6.5-QADAM 6 DAN KEYIN TURADI VA BOSHQACHA BO'LISHI MUMKIN EMAS:**
+    `dedupe_key` ning ichida `payment_id` bor, ya'ni niyatni qatordan
+    OLDIN yozib bo'lmaydi. Uni oxirgi — javob qurilgandan keyingi —
+    qadamga surish esa niyatni tranzaksiyadan CHIQARIB yuborardi.
 
     ⛔ **2.5-QADAM 3/4/5 DAN OLDIN TURADI VA BU TARTIB D-21 NING O'ZI.**
 
@@ -446,6 +468,90 @@ async def create_payment(
         log.info("payment_idempotency_key_reused", stall_code=payload.stall_code)
         raise _reject(IDEMPOTENCY_KEY_REUSED, status.HTTP_409_CONFLICT) from exc
 
+    # ---- 6.5-QADAM: KVITANSIYA NIYATI — ⛔ AYNAN SHU TRANZAKSIYADA (CASH-05).
+    #
+    # ⛔⛔ 1. `session` — MARSHRUTNING O'Z SESSIYASI. Yangi sessiya
+    #    OCHILMAYDI va bu yerga `commit` ⛔ QO'SHILMAYDI: tranzaksiyani
+    #    `deps.get_tenant_session()` o'z joyida (`async with
+    #    session.begin()`) yopadi. Ya'ni to'lov qatori va kvitansiya niyati
+    #    BIRGA yoziladi yoki BIRGA yozilmaydi — oraliq holat YO'Q.
+    #
+    #    ⛔ Alohida tranzaksiya (yoki shu yerdagi oraliq `commit`) «to'lov
+    #       yozildi, kvitansiya yozilmadi» oynasini ochardi va u D-02 ning
+    #       IKKINCHI nizosini AYNAN tug'dirardi: kassir kvitansiya
+    #       berilganini aytadi, sotuvchi esa olmaganini — va ikkalasi ham
+    #       rost bo'lardi. Oyna eng band kunda, ya'ni eng ko'p to'lov
+    #       yoziladigan kunda eng keng ochilardi.
+    #
+    # ⛔⛔ 2. `if created:` — TAKROR SO'ROVDA NAVBAT UMUMAN CHAQIRILMAYDI,
+    #    LEKIN HIMOYA BUNGA ⛔ TAYANMAYDI. `create_payment()` takror
+    #    so'rovda O'SHA `payment_id` ni qaytaradi (D-21), ya'ni `dedupe_key`
+    #    ham AYNAN o'sha bo'ladi va `uq_notification_outbox_market_id_
+    #    dedupe_key` ikkinchi qatorni ⛔ CHEKLOV darajasida rad etadi
+    #    (`enqueue()` `None` qaytaradi — bu xato emas, NORMAL natija).
+    #
+    #    Ikki qatlam, va ikkinchisi ILOVA SHARTIDA emas: 6-fazaning T-06-49
+    #    si aynan shu sinf edi va u yerda ham yechim `UNIQUE` cheklov
+    #    bo'lgan. Ilova sharti PARALLEL ikki so'rovni ushlay olmasdi —
+    #    `SELECT` bilan `INSERT` orasidagi oyna 2.5-QADAMdagi bilan bir xil.
+    #
+    # ⛔⛔ 3. SOTUVCHI BOG'LANMAGAN BO'LSA HAM QATOR YOZILADI. Marshrut
+    #    Telegram bog'lanishi borligini ⛔ TEKSHIRMAYDI: tekshirish PUL
+    #    YOZUVINI bildirishnoma holatiga bog'lardi (D-23 ning teskarisi).
+    #    `chat_id` jo'natish paytida hal qilinadi (`outbox_repo.
+    #    resolve_chat_id`) va bog'lanmagan sotuvchining kvitansiyasi
+    #    navbatda KUTADI — sotuvchi botga ulangan kuni u yetkaziladi.
+    if created:
+        # ⚠ BIR QO'SHIMCHA SO'ROV — VA U ATAYIN (A8 / Open Question 2).
+        #
+        #   CASH-05 ning matni «kassir» deydi va sabab nizoda (D-02):
+        #   sotuvchi «kimga to'ladim?» degan savolga javob olishi kerak,
+        #   aks holda kvitansiya dalil emas, kvitansiya ko'rinishidagi son
+        #   bo'lardi. Ism `principal` da YO'Q (u yerda faqat `user_id`),
+        #   ya'ni uni o'qishning boshqa yo'li yo'q. Narxi: yangi to'lov
+        #   uchun BITTA qo'shimcha `SELECT` — takror so'rovda u ham
+        #   bajarilmaydi, chunki butun shox `created` ostida.
+        #
+        # ⛔ BU D-05 NI BUZMAYDI: `full_name` — `PERSONAL_FIELDS` a'zosi,
+        #    lekin D-05 ning o'lchovi `PERSONAL_ROUTES`, ya'ni `/api/v1/*`
+        #    marshrutlarining ⛔ JAVOB MODELLARI ustida yuradi. Outbox
+        #    marshrut emas: ism `PaymentResponse` ga ⛔ QAYTMAYDI, u faqat
+        #    sotuvchining O'Z Telegram matniga tushadi. `PERSONAL_ROUTES`
+        #    shuning uchun O'SMAYDI (G7-6 yashil qoladi).
+        #
+        # ⚠ `full_name` NULLABLE (`0001_identity`) va `None` bo'lgan holat
+        #   ⛔ RAD ETILMAYDI: `outbox_payload()` `None` qiymatni TASHLAB
+        #   YUBORADI va matn quruvchisi «kalit bormi?» degan bitta savol
+        #   bilan ishlaydi. Ismsiz kvitansiya — ismsiz to'lovdan yaxshi.
+        profiles = await user_repo.list_profiles(session, [principal.user_id])
+        cashier_name = profiles[0].full_name if profiles else None
+
+        # ⛔ 4. `payload` ⛔ ALLOWLIST ORQALI (`outbox_payload()`), xom
+        #    lug'at bilan EMAS. Ro'yxatdan tashqari kalit `ValueError`
+        #    beradi va bu ATAYIN qattiq: u KODDAGI xato, ma'lumot xatosi
+        #    emas. Jimgina o'tib ketgan kalit (tayyor matn, telefon raqami,
+        #    dalil havolasi) bazaga tushardi va u yerdan `pg_dump` ->
+        #    restic -> TASHQI BUCKET zanjiriga kirardi (Pitfall 6).
+        await outbox_repo.enqueue(
+            session,
+            market_id=market_id,
+            kind=OutboxKind.PAYMENT_RECEIPT.value,
+            recipient_kind=OutboxRecipientKind.VENDOR.value,
+            vendor_id=vendor_id,
+            # ⛔ KALIT `payment_id` DAN — `idempotency_key` DAN EMAS.
+            #    Ikkinchisi mijoz beradigan qiymat, ya'ni bir to'lovga ikki
+            #    xil kalit bilan kelish yo'li ochiq bo'lardi; `payment_id`
+            #    esa D-21 tufayli takror so'rovda AYNAN o'sha qaytadi.
+            dedupe_key=f"receipt:{row.payment_id}",
+            payload=outbox_payload(
+                OutboxKind.PAYMENT_RECEIPT.value,
+                amount_soum=row.amount_soum,
+                stall_code=money.stall_code,
+                paid_at=row.created_at.isoformat(),
+                cashier_name=cashier_name,
+            ),
+        )
+
     # ---- 7-QADAM: CASH-02 auditi — ⛔ FAQAT CHETLANISHDA.
     if created and override_reason is not None:
         await write_app_audit(
@@ -521,6 +627,24 @@ async def reverse_payment(
 
     ⚠ `reason_code` MAJBURIY va uning yo'qligi Pydantic darajasida
       **422** beradi — qo'lda tekshiruv yozilmaydi.
+
+    =======================================================================
+    ⛔⛔ STORNO KVITANSIYA **YOZMAYDI** — VA BU ⛔ **ONGLI RAD ETISH**,
+        UNUTISH EMAS.
+
+    Bu marshrutda 6.5-QADAMning jufti ⛔ **YO'Q** va u ATAYIN yo'q:
+    CASH-05 ning matni «**to'lov kiritilishi bilan**» deydi, storno esa
+    to'lov emas — u **tuzatish**. «To'lovingiz bekor qilindi» xabari
+    ⛔ **YANGI QOBILIYAT**: unga o'z matni, o'z sababi (kassir sababni
+    `reason_code` bilan beradi) va o'z `OutboxKind` a'zosi kerak, ya'ni u
+    reyestr yozuvi va allowlist talab qiladi. Egasi — 07-CONTEXT ning
+    Deferred Ideas bandi.
+
+    ⛔ Bu izoh SHUNING UCHUN YOZILGAN: keyingi ijrochi bu yerda niyat
+       yo'qligini **unutish** deb o'qib, uni «tuzatib» qo'yardi — va
+       o'shanda sotuvchi reyestrda umuman mavjud bo'lmagan `kind` bilan
+       `KeyError` olardi yoki (yomonroq) allowlistsiz matnga ega bo'lardi.
+    =======================================================================
     """
     market_id = _market_id(principal)
 
