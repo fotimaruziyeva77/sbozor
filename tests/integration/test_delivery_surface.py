@@ -210,7 +210,16 @@ class Bed:
         kind: OutboxKind = OutboxKind.PAYMENT_RECEIPT,
         attempt_count: int = 0,
     ) -> UUID:
-        """Bitta navbat qatori — ⛔ `created_at` SERVER soatidan (`now()`)."""
+        """Bitta navbat qatori — ⛔ `created_at` SERVER soatidan (`now()`).
+
+        ⚠ `attempt_count` — ⛔ HAQIQIY JO'NATISH URINISHLARI soni, «navbatdan
+          olingan marta» EMAS (07-19). Farq bu yerda O'LCHOVGA ta'sir
+          qilmaydi (seed ustunga TO'G'RIDAN-TO'G'RI yozadi), lekin qiymatning
+          MA'NOSI direktorning ekranida o'zgardi: ilgari botga ulanmagan
+          sotuvchining qatori har 15 daqiqada bittadan «urinish» to'plardi
+          va yuzada `288` kabi son ko'rinardi — holbuki Telegram'ga BIRORTA
+          so'rov ketmagan edi.
+        """
         return seed_outbox_row(
             self.conn,
             market_id=self.market_id if market_id is None else market_id,
@@ -428,6 +437,21 @@ async def test_the_error_type_is_a_type_name_not_a_message(
     istisnosining MATNI to'liq URL'ni o'z ichiga oladi — bitta
     `str(exc)` sirni bazaga, u yerdan `pg_dump` -> restic -> TASHQI
     BUCKET ga olib chiqardi.
+
+    =======================================================================
+    ⚠ `attempt_count` DA'VOSI SAQLANADI VA U SUSAYTIRILMAYDI (`== 5`).
+
+    Qiymatning MA'NOSI 07-19 da o'zgardi — «navbatdan olingan marta»
+    o'rniga ⛔ HAQIQIY JO'NATISH URINISHLARI — lekin bu yerdagi o'lchov
+    ustunni SEED qiladi, ya'ni yuza qiymatni O'ZGARTIRMASDAN, kesmasdan
+    va yaxlitlamasdan qaytarishi SHART. `>=` ga aylantirilgan da'vo
+    ustunni butunlay boshqa qiymat bilan almashtirgan yuzada ham yashil
+    bo'lardi.
+
+    ⛔ SON ENDI `MAX_ATTEMPTS` (5) BILAN BIR O'LCHOVDA: `5` — byudjetning
+       to'liq sarflangani, ya'ni seed HAQIQATAN ham `failed` qatorning
+       holatini ifodalaydi.
+    =======================================================================
     """
     failed_id = bed.seed_status(OutboxStatus.FAILED, vendor_id=bed.vendor_id, attempt_count=5)
     bed.set_error(failed_id, error_type="ConnectTimeout", status_code=502)
