@@ -592,6 +592,47 @@ async def test_active_bindings_is_empty_for_an_unknown_telegram_id(
     assert await active_bindings(app_sessionmaker, telegram_user_id=uuid4().int % 10**12) == ()
 
 
+async def test_pending_vendors_lists_unbound_vendors_and_drops_bound_ones(
+    phone_seed: TwoMarketPhoneSeed,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ D-26(a) NING ADMIN KO'RINISHI HAQIQATAN YUGURADI.
+
+    ⚠ Bu funksiyaning HTTP iste'molchisi bu fazada YO'Q (`billing_repo.
+      vendor_charge_allocation()` bilan aynan bir xil holat), ya'ni uni
+      hech qanday marshrut testi qamramaydi. Sinovsiz qolgan `LEFT JOIN`
+      esa keyingi rejada birinchi chaqiruvdayoq `ProgrammingError` bilan
+      yiqilardi va sabab «yangi marshrut buzuq» kabi ko'rinardi.
+    """
+    market_a = phone_seed.markets.market_a.id
+    async with binding_repo.tenant_session(
+        app_sessionmaker, market_id=market_a, request_id=None
+    ) as session:
+        before = await binding_repo.pending_vendors(
+            session, market_id=market_a, business_date=business_today()
+        )
+
+    assert [item.vendor_id for item in before.items] == [phone_seed.vendor_a_id]
+    assert before.next_cursor is None
+
+    _drop_second_vendor(sync_owner_conn, phone_seed)
+    await resolve(
+        app_sessionmaker,
+        raw_phone=phone_seed.phone_e164,
+        telegram_user_id=TELEGRAM_ID_A,
+    )
+
+    async with binding_repo.tenant_session(
+        app_sessionmaker, market_id=market_a, request_id=None
+    ) as session:
+        after = await binding_repo.pending_vendors(
+            session, market_id=market_a, business_date=business_today()
+        )
+
+    assert after.items == (), "bog'langan sotuvchi «kutilmoqda» ro'yxatida QOLDI"
+
+
 async def test_the_market_loop_visits_every_market_in_both_outcomes(
     phone_seed: TwoMarketPhoneSeed,
     app_sessionmaker: async_sessionmaker[AsyncSession],
