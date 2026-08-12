@@ -65,12 +65,15 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
 
 __all__ = [
+    "BOT_RESOLVE_LIMIT",
+    "BOT_RESOLVE_WINDOW_SECONDS",
     "IP_LIMIT",
     "NVR_TEST_LIMIT",
     "NVR_TEST_WINDOW_SECONDS",
     "PHONE_LIMIT",
     "WINDOW_SECONDS",
     "TooManyAttempts",
+    "check_bot_resolve_rate",
     "check_login_rate",
     "check_nvr_test_rate",
     "reset_login_rate",
@@ -207,6 +210,61 @@ async def check_nvr_test_rate(cache: Redis, *, market_id: str, host: str) -> Non
         return
     if not allowed:
         raise TooManyAttempts("nvr_test")
+
+
+BOT_RESOLVE_LIMIT = 5
+"""`POST /internal/bot/resolve` uchun oynadagi urinishlar soni.
+
+⚠ CHEGARA REYESTRNI SANASHNI QIMMAT QILADI, MAHSULOTNI EMAS. Haqiqiy
+  sotuvchi kontaktini BIR MARTA yuboradi; ikki-uch urinish (noto'g'ri
+  raqam, akkaunt almashtirish) ham normal. Beshdan ko'pi esa endi odam
+  xulqi emas.
+"""
+
+BOT_RESOLVE_WINDOW_SECONDS = 15 * 60
+"""Oyna — login sanagichi bilan bir xil, 15 daqiqa."""
+
+_BOT_RESOLVE_KEY = "rl:bot_resolve:"
+"""Kalit shakli — `rl:bot_resolve:<telegram_user_id>`.
+
+⛔ KESIM TELEGRAM AKKAUNTI BO'YICHA, TELEFON BO'YICHA EMAS — va bu farq
+   T-07-41 ning bevosita natijasi: telefon raqamini kalitga qo'yish uni
+   Valkey'ga (va u yerdan xotira dumpiga) YOZARDI, holbuki bu modulning
+   butun ma'nosi mos kelmagan raqamni HECH QAYERGA saqlamaslik.
+
+⚠ Telegram akkaunti hujumchi uchun ARZON emas: yangi `user_id` yangi
+  telefon raqamini (SIM) talab qiladi. Ya'ni kesim reyestrni sanash
+  narxini akkaunt narxiga bog'laydi.
+"""
+
+
+async def check_bot_resolve_rate(cache: Redis, *, telegram_user_id: int) -> None:
+    """Bog'lanish urinishini sanaydi (T-07-40 ning IKKINCHI qatlami).
+
+    ⛔ BIRINCHI QATLAM `binding_repo.resolve()` DA: tsikl HAR DOIM barcha
+       faol bozorlarni oxirigacha aylanadi, ya'ni javob vaqti moslikning
+       bor-yo'qligini oshkor qilmaydi. Bittasi yolg'iz yetarli emas:
+       tayming yopilmasa cheksiz urinish farqni statistik ravishda
+       ochardi; rate-limit bo'lmasa esa bozorlar soni o'sganda tsiklning
+       O'ZI sezilarli farq berardi.
+
+    ⚠ VALKEY YO'Q BO'LSA URINISH O'TKAZILADI (login yo'li bilan bir xil
+      qaror): kesh o'chgani uchun sotuvchilarning ulanishini butunlay
+      to'xtatib qo'yish mavjud xizmatni yo'q qiladi. Qoldiq xavf
+      CHEKLANGAN — yuza servis tokeni ortida va u tashqi tarmoqdan
+      umuman ko'rinmaydi.
+
+    Raises:
+        TooManyAttempts: shu Telegram akkaunti kesimida chegara oshsa.
+    """
+    key = f"{_BOT_RESOLVE_KEY}{telegram_user_id}"
+    try:
+        allowed = await _bump(cache, key, BOT_RESOLVE_LIMIT, BOT_RESOLVE_WINDOW_SECONDS)
+    except RedisError as exc:
+        log.warning("bot_resolve_rate_limit_unavailable", error=str(exc))
+        return
+    if not allowed:
+        raise TooManyAttempts("bot_resolve")
 
 
 async def reset_login_rate(cache: Redis, *, phone: str, ip: str | None) -> None:

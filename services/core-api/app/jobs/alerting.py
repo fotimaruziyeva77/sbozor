@@ -155,6 +155,7 @@ __all__ = [
     "SweepResult",
     "alert_sweep",
     "daily_digest",
+    "raise_alert",
 ]
 
 
@@ -317,6 +318,35 @@ ALERT_META: Final[dict[str, AlertMeta]] = {
         # 4-GURUH — XABAR, OCHIQ ISH EMAS.
         # -------------------------------------------------------------
         AlertMeta("capture_recovered", AlertSeverity.INFO.value, False, False, storable=False),
+        # -------------------------------------------------------------
+        # 5-GURUH — REYESTR NUQSONI (7-faza, D-26b / T-07-44a).
+        # -------------------------------------------------------------
+        # ⛔ SUPURGI EMAS, HODISA TUG'DIRADI: bu kalit
+        #   `binding_repo.resolve()` ning «bir nechta moslik» shoxidan
+        #   keladi, ya'ni u so'rov yo'lida tug'iladi. Ro'yxatga OLINMASA
+        #   `_upsert()` `ALERT_META[key]` ustida `KeyError` berardi va
+        #   (xato yutilsa) anomaliya JIMGINA yo'qolardi — aynan D-26(b)
+        #   oldini olmoqchi bo'lgan nosozlik.
+        #
+        # * `WARNING`, `CRITICAL` EMAS: reyestr nuqsoni pul yig'ishni
+        #   TO'XTATMAYDI va bozorni ko'r qilmaydi — u BITTA sotuvchining
+        #   ulanishini to'sadi. `CRITICAL` daraja `capture_stopped` /
+        #   `billing_close_stale` sinfi uchun saqlanadi (qaytarib
+        #   bo'lmaydigan yoki butun kunni yo'qotadigan hodisalar).
+        # * `never_suppressed=False`: sotuvchi tugmani qayta-qayta bosishi
+        #   mumkin va debounce oynasi AYNAN SHU YERDA kerak — aks holda
+        #   bitta dublikat raqam adminga o'nlab xabar yuborardi (yuqoridagi
+        #   D-22 «75 ta xabar» sinfi).
+        # * `platform_scoped=False`: to'qnashuv IKKALA bozorning reyestriga
+        #   tegishli va har bozor direktori O'Z qatorini ko'rishi kerak.
+        #   `True` bo'lsa xabar bozorlar bo'ylab BITTA bo'lib birlashardi
+        #   va ikkinchi bozor ma'muriyati hech nima ko'rmasdi.
+        AlertMeta(
+            "vendor_binding_conflict",
+            AlertSeverity.WARNING.value,
+            never_suppressed=False,
+            platform_scoped=False,
+        ),
     )
 }
 """Alert kalitlarining YAGONA reyestri — `04-UI-SPEC.md` §11.9 bilan mos."""
@@ -942,6 +972,57 @@ async def _upsert(session: AsyncSession, *, market_id: UUID, signal: _Signal) ->
         AlertEvent.notified_at,
     )
     return (await session.execute(upsert)).one()
+
+
+async def raise_alert(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    key: str,
+    subject_id: UUID | None = None,
+    **detail: Any,
+) -> None:
+    """SUPURGIDAN TASHQARIDAGI yagona alert ochish yuzasi (7-faza, D-26b).
+
+    =======================================================================
+    ⛔⛔ NEGA BU FUNKSIYA BOR — VA NEGA U `_upsert()` NI QAYTA YOZMAYDI.
+
+    Supurgi (`alert_sweep`) alertni SIGNALDAN tug'diradi: u holatni
+    o'qiydi va «hozir shu muammo bor» degan xulosaga keladi. D-26(b) esa
+    HODISA — u `resolve()` ning bir shoxida, so'rov yo'lida yuz beradi va
+    keyingi supurgi uni QAYTA TOPA OLMAYDI (moslik telefon bilan
+    qidirilgan, hech qayerda saqlanmagan). Ya'ni bu yo'l uchun supurgi
+    NAMUNASI mavjud emas.
+
+    Qolgan yagona savol — qatorni KIM yozadi. `_upsert()` ni qayta yozish
+    TAQIQLANADI va sabab uning O'Z docstringida: debounce ning yagona DB
+    kafolati — qisman UNIQUE indeks, va `ON CONFLICT` ifodasi indeksning
+    AYNAN o'zidan quriladi. Qo'lda yozilgan `SELECT ... THEN INSERT` ikki
+    parallel chaqiruvda ikkalasi ham bo'sh holatni ko'rardi va bitta
+    muammo uchun IKKITA ochiq qator tug'ilardi.
+
+    ⚠ BU `alert_repo` NING «YOZISH METODI YO'Q» QOIDASINI BUZMAYDI. O'sha
+      qoida FOYDALANUVCHI yuzasi haqida: `POST`/`PATCH`/`DELETE /alerts`
+      marshruti yo'q va qo'lda yopish tugmasi qurilmaydi (T-04-73 regex
+      darvozasi). Bu yerda foydalanuvchi ham, marshrut ham yo'q — chaqiruv
+      `/internal/*` ostidagi servis-servis yo'lidan keladi.
+    =======================================================================
+
+    ⛔ `detail` `_detail()` ALLOWLISTIDAN o'tadi (D-19): ro'yxatdan
+       tashqari kalit `ValueError` beradi. Telefon raqami yoki sotuvchi
+       ismi uchun ruxsat etilgan kalit YO'Q va qo'shilmaydi.
+
+    ⚠ SESSIYADA TENANT KONTEKSTI O'RNATILGAN BO'LISHI SHART: `alert_events`
+      RLS `FORCE` ostida va kontekstsiz `INSERT` `WITH CHECK` da
+      yiqilardi.
+    """
+    if key not in ALERT_META:  # pragma: no cover - reyestr darvozasi
+        raise KeyError(f"`ALERT_META` da ro'yxatga olinmagan alert kaliti: {key!r}")
+    await _upsert(
+        session,
+        market_id=market_id,
+        signal=_Signal(key, subject_id, _detail(**detail)),
+    )
 
 
 # ===========================================================================

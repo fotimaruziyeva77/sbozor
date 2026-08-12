@@ -315,6 +315,91 @@ def test_no_route_is_both_exempt_and_in_the_matrix() -> None:
 
 
 # ===========================================================================
+# `/internal/bot/*` — SXEMASIZ VA SHAXSIY MA'LUMOTSIZ (07-08, D-05/D-10)
+# ===========================================================================
+
+BOT_INTERNAL_PREFIX = "/internal/bot"
+"""⛔ `bot-service` ning yuzasi — REYESTRDA QAYD ETILADI, «unutilgan» emas.
+
+=============================================================================
+⛔⛔ NEGA BU YERDA, MARSHRUT FAYLIDA EMAS.
+
+07-08 fazaning ISHONCH CHEGARASINI ochadi (D-01): birinchi marta xodim
+BO'LMAGAN shaxs — sotuvchi — tizim ma'lumotini oladi. Ikkita kafolat shu
+qarorni ushlab turadi va ikkalasi ham marshrut faylida KO'RINMAYDI:
+
+  (a) uchala yo'l OpenAPI'ga CHIQMAYDI (`include_in_schema=False`), ya'ni
+      ular ommaviy mijoz kontraktining qismi emas;
+  (b) uchala yo'l `PERSONAL_ROUTES` ga TUSHMAYDI (D-05, G7-6) — javob
+      modellarida `vendor_name` / `phone` / `full_name` maydonlari YO'Q.
+
+Ikkalasi ham `include_in_schema=False` ni yoki javob modelini bir qator
+o'zgartirish bilan JIMGINA yo'qolishi mumkin edi va hech qaysi mavjud
+darvoza buni ko'rmasdi: sxemadan chiqarish `documented <= walked` shartini
+BUZMAYDI (ya'ni yuqoridagi test yashil qolardi), shaxsiy maydon qo'shish
+esa `PERSONAL_ROUTES` ni O'STIRARDI — lekin o'sish darvozasi `>=` bilan
+yozilgan, ya'ni u ham yashil qolardi.
+=============================================================================
+"""
+
+
+def _bot_internal_routes() -> list[str]:
+    """`/internal/bot` bilan boshlanadigan yo'llar — YURISHDAN, ro'yxatdan emas."""
+    return sorted(
+        {
+            route.path
+            for route in all_routes(fastapi_app)
+            if route.path.startswith(BOT_INTERNAL_PREFIX)
+        }
+    )
+
+
+def test_the_bot_internal_surface_is_exactly_three_routes() -> None:
+    """DARVOZANING NAZORATI — pastdagi ikki test BO'SH to'plamda yashil bo'lmaydi.
+
+    ⛔ Usiz «sxemada yo'q» va «shaxsiy maydon yo'q» da'volari router
+       o'chirilgan yoki qayta nomlangan holatda TRIVIAL ravishda rost
+       bo'lardi (05-16 ning W-2 darsi).
+    """
+    assert _bot_internal_routes() == [
+        "/internal/bot/resolve",
+        "/internal/bot/vendor/payments",
+        "/internal/bot/vendor/summary",
+    ]
+
+
+def test_no_bot_internal_route_is_documented_in_openapi() -> None:
+    """⛔ Uchala marshrut OpenAPI'da YO'Q (`include_in_schema=False`).
+
+    OpenAPI mijozlar uchun yoziladi va bu yerda brauzer mijozi YO'Q:
+    kontrakt bot-service bilan va u `app/api/internal/bot.py` ning O'ZI.
+    Sxemaga chiqarish yuzani `/api/docs` ni ochgan har qanday odamga
+    ko'rsatardi.
+    """
+    documented = [
+        path for path in fastapi_app.openapi()["paths"] if path.startswith(BOT_INTERNAL_PREFIX)
+    ]
+
+    assert documented == [], documented
+
+
+def test_no_bot_internal_route_enters_the_personal_data_gate() -> None:
+    """⛔ D-05 / G7-6: `PERSONAL_ROUTES` O'SMAYDI.
+
+    Yuza FAQAT identifikator, rasta kodi va sonlar qaytaradi. Ismni
+    qo'shish uni auditli `GET /api/v1/vendors` bilan bir toifaga olib
+    kirardi va u yerdagi kafolatlar (o'qish auditi + `VENDOR_VIEW`)
+    servis-servis yo'lida MAVJUD EMAS — ya'ni sotuvchi ismi izsiz
+    o'qilardi.
+    """
+    from tenancy.test_personal_data_coverage import PERSONAL_ROUTES
+
+    leaked = [path for path in PERSONAL_ROUTES if path.startswith(BOT_INTERNAL_PREFIX)]
+
+    assert leaked == [], leaked
+
+
+# ===========================================================================
 # BILLING DOMENINING `detail` KONVENSIYASI (CR-04 / WR-06)
 # ===========================================================================
 

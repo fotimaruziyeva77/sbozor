@@ -778,7 +778,8 @@
       "diskPressure": "Диск тўлиб бормоқда",
       "credentialUnreadable": "NVR пароли ўқилмади",
       "nvrAccountLocked": "NVR ҳисоби қулфланди",
-      "captureRecovered": "Кадр олиш тикланди"
+      "captureRecovered": "Кадр олиш тикланди",
+      "vendorBindingConflict": "Реестрда такрорланган телефон рақами бор"
     },
     "alertOpenCount": "Очиқ: {count}",
     "alertFirstSeen": "Биринчи марта: {time}",

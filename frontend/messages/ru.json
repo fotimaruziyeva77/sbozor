@@ -778,7 +778,8 @@
       "diskPressure": "Диск заполняется",
       "credentialUnreadable": "Пароль NVR не читается",
       "nvrAccountLocked": "Учётная запись NVR заблокирована",
-      "captureRecovered": "Съёмка кадров восстановлена"
+      "captureRecovered": "Съёмка кадров восстановлена",
+      "vendorBindingConflict": "В реестре есть повторяющийся номер телефона"
     },
     "alertOpenCount": "Открытых: {count}",
     "alertFirstSeen": "Впервые: {time}",
