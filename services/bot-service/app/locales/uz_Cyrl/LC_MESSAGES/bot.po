@@ -54,6 +54,13 @@ msgstr "Боғланиб бўлмади. Бозор маъмуриятига м�
 msgid "bot.binding.ok"
 msgstr "Уландингиз. Энди қарзингиз ва тўловларингизни шу ерда кўрасиз."
 
+# ⛔ 07-18 — QO'LDA TEKSHIRILGAN YANGI SO'Z: «чат» (o'zlashma, shu shaklda).
+#    `ns`/`ts` klasterli o'zlashma (квитанция sinfi) matnga ATAYIN
+#    kiritilmagan — mexanik transliterator o'sha sinfni SEMANTIK jihatdan
+#    noto'g'ri o'giradi va uni ushlaydigan darvoza YO'Q.
+msgid "bot.binding.director"
+msgstr "Уландингиз. Бозор бўйича кунлик хабарлар шу чатга келади."
+
 msgid "bot.notBound"
 msgstr "Аввал рақамингизни улашинг: /start"
 

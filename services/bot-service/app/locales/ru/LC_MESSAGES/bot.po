@@ -56,6 +56,11 @@ msgstr "Связать не удалось. Обратитесь в админи
 msgid "bot.binding.ok"
 msgstr "Вы подключены. Теперь вы видите здесь свой долг и оплаты."
 
+# ⛔ 07-18 — MUSTAQIL TARJIMA, transliteratsiya hosilasi EMAS. Matnda
+#    «лавк»/«магазин» ham, «сбор» ham YO'Q (G7-9 per-locale taqiqi).
+msgid "bot.binding.director"
+msgstr "Вы подключены. Ежедневные сообщения по рынку будут приходить в этот чат."
+
 msgid "bot.notBound"
 msgstr "Сначала поделитесь своим номером: /start"
 

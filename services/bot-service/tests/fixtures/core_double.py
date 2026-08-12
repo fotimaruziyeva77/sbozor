@@ -15,6 +15,7 @@ from uuid import UUID
 
 from app.core_client import (
     CoreApiError,
+    DirectorResolveResponse,
     MarketSummary,
     PaymentsPage,
     ResolveResult,
@@ -35,17 +36,22 @@ class CoreDouble:
         self,
         *,
         resolve_result: ResolveResult | None = None,
+        director_result: DirectorResolveResponse | None = None,
         summary: VendorSummary | None = None,
         pages: list[PaymentsPage] | None = None,
         raises: Exception | None = None,
+        director_raises: Exception | None = None,
     ) -> None:
         self.resolve_calls: list[dict[str, Any]] = []
+        self.director_calls: list[dict[str, Any]] = []
         self.summary_calls: list[int] = []
         self.payments_calls: list[dict[str, Any]] = []
         self._resolve_result = resolve_result
+        self._director_result = director_result
         self._summary = summary
         self._pages = list(pages or [])
         self._raises = raises
+        self._director_raises = director_raises
 
     async def resolve(self, *, telegram_user_id: int, raw_phone: str) -> ResolveResult:
         self.resolve_calls.append({"telegram_user_id": telegram_user_id, "raw_phone": raw_phone})
@@ -57,6 +63,26 @@ class CoreDouble:
             "BOT-01 ning uch darvozasidan biri ochilganda chiqadi."
         )
         return self._resolve_result
+
+    async def resolve_director(
+        self, *, telegram_user_id: int, raw_phone: str
+    ) -> DirectorResolveResponse:
+        """Direktor shoxining sanagichi — ⛔ `resolve_calls` DAN ALOHIDA.
+
+        Ikkalasini bitta ro'yxatga yig'ish «sotuvchi topilganda direktor
+        reyestri SO'RALMAYDI» degan da'voni o'lchab bo'lmas qilardi:
+        sanoq `1` bo'lib qolardi va qaysi yuza chaqirilgani ko'rinmasdi.
+        """
+        self.director_calls.append({"telegram_user_id": telegram_user_id, "raw_phone": raw_phone})
+        if self._director_raises is not None:
+            raise self._director_raises
+        if self._raises is not None:
+            raise self._raises
+        assert self._director_result is not None, (
+            "⛔ `core.resolve_director` CHAQIRILDI, lekin bu soxtaga javob "
+            "sozlanmagan — ya'ni test uni CHAQIRILMASLIGI kerak deb qurgan edi."
+        )
+        return self._director_result
 
     async def vendor_summary(self, *, telegram_user_id: int) -> VendorSummary:
         self.summary_calls.append(telegram_user_id)

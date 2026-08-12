@@ -69,6 +69,7 @@ from pydantic import BaseModel, SecretStr
 log = structlog.get_logger(__name__)
 
 RESOLVE_PATH: Final = "/internal/bot/resolve"
+DIRECTOR_RESOLVE_PATH: Final = "/internal/bot/director/resolve"
 VENDOR_SUMMARY_PATH: Final = "/internal/bot/vendor/summary"
 VENDOR_PAYMENTS_PATH: Final = "/internal/bot/vendor/payments"
 
@@ -202,6 +203,19 @@ class ResolveResult(BaseModel):
 
     status: str
     vendor: VendorRef | None = None
+
+
+class DirectorResolveResponse(BaseModel):
+    """`POST /internal/bot/director/resolve` javobi — ⛔ ikki maydon, boshqasi YO'Q.
+
+    ⛔ SERVER `market_id` RO'YXATINI QAYTARMAYDI va bot uni SO'RAMAYDI:
+       direktor bu fazada OLUVCHI, u botga bitta marta kontakt ulashadi va
+       boshqa hech narsa qilmaydi. `market_count` esa «ulandingizmi?»
+       degan yagona savolga javob berish uchun yetarli.
+    """
+
+    status: str
+    market_count: int
 
 
 class MarketSummary(BaseModel):
@@ -342,6 +356,36 @@ class CoreClient:
             json={"telegram_user_id": telegram_user_id, "phone": raw_phone},
         )
         return ResolveResult.model_validate(payload)
+
+    async def resolve_director(
+        self, *, telegram_user_id: int, raw_phone: str
+    ) -> DirectorResolveResponse:
+        """RECON-03 — «bu Telegram akkaunti qaysi bozorning direktoriniki?».
+
+        ⛔ IKKINCHI CHAQIRUV, IKKINCHI YUZA EMAS: handler avval
+           `resolve()` ni chaqiradi va faqat u mos kelmaganda shu yerga
+           tushadi. Ikkalasi ham AYNI kontaktdan, AYNI rate-limit
+           sanagichi ostida ishlaydi.
+
+        ⛔ RAQAM SO'ROV TANASIDA, URL DA EMAS (`resolve()` bilan bir xil
+           sabab): telefon — shaxsiy ma'lumot, URL esa jurnalning,
+           proxy'ning va `httpx` istisno matnining ichiga tushadi.
+
+        ⛔ NORMALIZATSIYA BU YERDA QILINMAYDI (D-25) — u chegarada va
+           AYNAN BIR JOYDA.
+
+        Raises:
+            CoreApiError: har qanday nosozlik — ⛔ SIRSIZ uch fakt bilan.
+                `404` bu yuzada HOLAT emas: «topilmadi» javobi `200` +
+                `no_match` bo'lib keladi.
+        """
+        payload = await self._request(
+            "resolve_director",
+            "POST",
+            DIRECTOR_RESOLVE_PATH,
+            json={"telegram_user_id": telegram_user_id, "phone": raw_phone},
+        )
+        return DirectorResolveResponse.model_validate(payload)
 
     async def vendor_summary(self, *, telegram_user_id: int) -> VendorSummary:
         """BOT-02 (1/2) — sotuvchining qoldig'i, har bozor uchun alohida.
