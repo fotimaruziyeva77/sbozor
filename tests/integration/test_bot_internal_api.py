@@ -36,13 +36,15 @@ from __future__ import annotations
 import ast
 import dataclasses
 import inspect
+from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
 from app.jobs.alerting import ALERT_META
-from app.repositories import binding_repo
+from app.repositories import billing_repo, binding_repo
 from app.repositories.binding_repo import (
     VENDOR_BINDING_CONFLICT_ALERT_KEY,
     PendingVendor,
@@ -51,17 +53,36 @@ from app.repositories.binding_repo import (
     active_bindings,
     resolve,
 )
+from app.security.ratelimit import BOT_RESOLVE_LIMIT
+from fixtures.billing_domain import (
+    TARIFF_SOUM,
+    add_daily_charge,
+    add_payment,
+    billing_domain_before_day_close,
+)
 from fixtures.notification_domain import (
     cleanup_same_phone_in_two_markets,
+    seed_binding,
     seed_same_phone_in_two_markets,
 )
+from fixtures.nvr_domain import nvr_rows
+from fixtures.occupancy_domain import occupancy_rows
+from fixtures.snapshot_domain import snapshot_rows
+from pydantic import SecretStr
+from sbozor_core.enums import AdjustmentReason
+from sbozor_core.timeutil import business_today
 from sqlalchemy import text
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    import httpx
+    from app.settings import Settings
+    from fastapi import FastAPI
     from fixtures import TenantSessionFactory
+    from fixtures.market_domain import MarketDomainSeed
     from fixtures.notification_domain import TwoMarketPhoneSeed
+    from fixtures.two_markets import TwoMarketSeed
     from psycopg import Connection
     from psycopg.rows import TupleRow
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -77,10 +98,32 @@ BINDING_REPO_SOURCE = (
     / "binding_repo.py"
 )
 
+BOT_ROUTER_SOURCE = (
+    Path(__file__).resolve().parents[2]
+    / "services"
+    / "core-api"
+    / "app"
+    / "api"
+    / "internal"
+    / "bot.py"
+)
+
 TELEGRAM_ID_A = 7_610_000_001
 """⛔ `2**31` DAN KATTA — `DEFAULT_TELEGRAM_USER_ID` bilan bir xil sabab."""
 
 TELEGRAM_ID_B = 7_610_000_002
+TELEGRAM_ID_BILLING = 7_610_000_003
+TELEGRAM_ID_RATE_LIMIT = 7_610_000_004
+TELEGRAM_ID_UNBOUND = 7_610_000_005
+
+
+@dataclass(frozen=True)
+class BoundVendor:
+    """Hisoblari BOR va Telegram akkauntiga BOG'LANGAN sotuvchi."""
+
+    market_id: UUID
+    vendor_id: UUID
+    telegram_user_id: int
 
 
 # ---------------------------------------------------------------------------
@@ -563,13 +606,13 @@ async def test_the_market_loop_visits_every_market_in_both_outcomes(
     `return` qo'yilgan holatni ko'rmasdi.
     """
     visited: list[UUID] = []
-    original = binding_repo._tenant_session
+    original = binding_repo.tenant_session
 
     def _spy(*args: Any, **kwargs: Any) -> Any:
         visited.append(kwargs["market_id"])
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(binding_repo, "_tenant_session", _spy)
+    monkeypatch.setattr(binding_repo, "tenant_session", _spy)
 
     await resolve(
         app_sessionmaker,
@@ -589,3 +632,382 @@ async def test_the_market_loop_visits_every_market_in_both_outcomes(
     assert scanned_without_match, "birorta faol bozor topilmadi — o'lchov bo'sh"
     assert set(phone_seed.market_ids) <= set(scanned_without_match)
     assert scanned_with_match == scanned_without_match
+
+
+# ---------------------------------------------------------------------------
+# `/internal/bot/*` — SERVIS TOKENI VA TOR YUZA
+# ---------------------------------------------------------------------------
+
+
+SERVICE_TOKEN = "test-bot-service-token-not-a-real-secret"  # noqa: S105 - test uskunasi
+
+
+@pytest.fixture
+def bot_token(api_app: FastAPI, test_settings: Settings) -> Iterator[str]:
+    """`bot_service_token` O'RNATILGAN `Settings` — TESTDAN KEYIN QAYTARILADI.
+
+    ⚠ `test_settings` SESSIYA doirasida va uni JOYIDA o'zgartirish tokenni
+      butun to'plamga tarqatardi: «sozlanmagan token -> 503» testi keyingi
+      yugurishda jimgina o'z ma'nosini yo'qotardi.
+    """
+    original = api_app.state.settings
+    api_app.state.settings = test_settings.model_copy(
+        update={"bot_service_token": SecretStr(SERVICE_TOKEN)}
+    )
+    try:
+        yield SERVICE_TOKEN
+    finally:
+        api_app.state.settings = original
+
+
+@pytest.fixture
+def bot_headers(bot_token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {bot_token}"}
+
+
+@pytest.fixture
+def bound_vendor(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+    migrated: None,
+) -> Iterator[BoundVendor]:
+    """HAQIQIY hisob va QISMAN to'lov + o'sha sotuvchiga Telegram bog'lanishi.
+
+    ⛔⛔ HISOB `_safe_service_date()` (BAZANING «kechagi kuni») BILAN
+       YOZILADI, `SEED_BUSINESS_DATE` (2026-09-01) BILAN EMAS — VA BU
+       O'LCHANGAN FARQ. Ikkala marshrut ham `as_of = business_today()`
+       beradi, `vendor_outstanding()` esa hisoblarni `service_date <
+       as_of` bilan cheklaydi. Seed'ning QADALGAN sanasi bugundan KEYIN
+       bo'lgani uchun u filtrdan o'tmasdi va tenglik testlari `0 == 0` /
+       `[] == []` bo'lib BO'SH-ROST bo'lib qolardi.
+
+    ⚠ TO'LOV HISOBDAN KAM: to'liq to'langan hisob `settled=True` va
+      `outstanding = 0` berardi — ya'ni «qoldiq qaytadimi?» degan da'vo
+      nolni nol bilan solishtirardi.
+    """
+    with (
+        nvr_rows(sync_owner_conn, two_markets) as nvr,
+        snapshot_rows(sync_owner_conn, nvr) as snaps,
+        occupancy_rows(sync_owner_conn, two_markets, market_domain, snaps) as occupancy,
+        billing_domain_before_day_close(
+            sync_owner_conn, two_markets, market_domain, occupancy
+        ) as billing,
+    ):
+        rows = billing.market_a
+        stall_id = rows.stall_with_two_occupied_slots
+        assert stall_id is not None, "A bozorining rastasi yo'q — seed buzilgan"
+
+        _charge_id, service_day = add_daily_charge(
+            sync_owner_conn,
+            market_id=rows.market_id,
+            stall_id=stall_id,
+            vendor_id=rows.vendor_id,
+            tariff_id=rows.tariff_id,
+        )
+        # ⚠ `override_reason` MAJBURIY: `ck_payments_override_is_paired`
+        #   server bergan summadan HAR QANDAY chetlanish uchun NOMLANGAN
+        #   sabab talab qiladi (D-19 sxemaga ko'chirilgan).
+        add_payment(
+            sync_owner_conn,
+            market_id=rows.market_id,
+            stall_id=stall_id,
+            vendor_id=rows.vendor_id,
+            cashier_id=rows.cashier_id,
+            shift_id=rows.open_shift_id,
+            service_date=service_day,
+            amount_soum=TARIFF_SOUM // 3,
+            override_reason=AdjustmentReason.PARTIAL_DAY.value,
+        )
+        binding_id = seed_binding(
+            sync_owner_conn,
+            market_id=rows.market_id,
+            vendor_id=rows.vendor_id,
+            telegram_user_id=TELEGRAM_ID_BILLING,
+        )
+        try:
+            yield BoundVendor(
+                market_id=rows.market_id,
+                vendor_id=rows.vendor_id,
+                telegram_user_id=TELEGRAM_ID_BILLING,
+            )
+        finally:
+            sync_owner_conn.execute(
+                "DELETE FROM vendor_telegram_bindings WHERE id = %s", (str(binding_id),)
+            )
+
+
+async def test_a_request_without_a_token_is_rejected(
+    api_client: httpx.AsyncClient, bot_headers: dict[str, str]
+) -> None:
+    """⛔ Tokensiz so'rov `401` va javob TANASI sababni aytmaydi (T-07-38)."""
+    assert bot_headers  # token SOZLANGAN — ya'ni 503 emas, 401 o'lchanadi
+
+    response = await api_client.get("/internal/bot/vendor/summary?telegram_user_id=1")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}
+
+
+async def test_a_request_with_a_wrong_token_is_rejected_identically(
+    api_client: httpx.AsyncClient, bot_headers: dict[str, str]
+) -> None:
+    """⛔ «Token yo'q» va «token noto'g'ri» — BAYT-BAYT AYNI javob.
+
+    Ajratish hujumchiga «sarlavha shakli to'g'ri edi» degan foydali
+    signal berardi.
+    """
+    assert bot_headers
+
+    missing = await api_client.get("/internal/bot/vendor/summary?telegram_user_id=1")
+    wrong = await api_client.get(
+        "/internal/bot/vendor/summary?telegram_user_id=1",
+        headers={"Authorization": "Bearer butunlay-boshqa-token"},
+    )
+
+    assert wrong.status_code == missing.status_code == 401
+    assert wrong.json() == missing.json()
+
+
+async def test_an_unconfigured_token_closes_the_surface_completely(
+    api_client: httpx.AsyncClient,
+) -> None:
+    """⛔ FAIL-CLOSED: sozlanmagan token `503` beradi, «hammaga ochiq» EMAS.
+
+    ⚠ Bu test `bot_token` fixture'ini ATAYIN SO'RAMAYDI — `test_settings`
+      ning standart holati aynan shu: `bot_service_token` bo'sh.
+    """
+    response = await api_client.post(
+        "/internal/bot/resolve",
+        json={"telegram_user_id": TELEGRAM_ID_A, "phone": "+998900000003"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "unavailable"}
+
+
+async def test_the_internal_surface_never_sets_a_cookie(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+    phone_seed: TwoMarketPhoneSeed,
+) -> None:
+    """⛔ D-10 / T-07-39: SESSIYA TUG'ILMAYDI — `Set-Cookie` YO'Q."""
+    response = await api_client.post(
+        "/internal/bot/resolve",
+        headers=bot_headers,
+        json={"telegram_user_id": TELEGRAM_ID_A, "phone": phone_seed.phone_e164},
+    )
+
+    assert response.status_code == 200
+    assert "set-cookie" not in {name.lower() for name in response.headers}
+
+
+def test_the_internal_router_creates_no_session_primitives() -> None:
+    """⛔ D-10 GREP DARVOZASI — token chiqaruvchi nomlar manbada YO'Q.
+
+    ⚠ Bu `Set-Cookie` testidan ALOHIDA va u kerak: cookie'siz JWT
+      chiqarish (masalan javob tanasida) ham ikkinchi sessiya modeli
+      bo'lardi va sarlavha testi uni KO'RMASDI.
+    """
+    source = BOT_ROUTER_SOURCE.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(BOT_ROUTER_SOURCE))
+    names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)} | {
+        node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+    }
+
+    forbidden = names & {
+        "create_access_token",
+        "encode_access",
+        "issue_refresh",
+        "issue_live_token",
+        "Principal",
+        "set_cookie",
+        "require_permission",
+    }
+    assert forbidden == set(), forbidden
+
+    # Doimiy vaqtli solishtiruv — VA `==` YO'Q.
+    assert "compare_digest" in source
+    assert "token ==" not in source
+    assert "== token" not in source
+
+
+async def test_multiple_matches_is_neutral_in_shape(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+    phone_seed: TwoMarketPhoneSeed,
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ D-26(b) javobi `no_match` BILAN AYNI SHAKLDA (qo'shimcha maydon yo'q).
+
+    Bot ikkalasida ham BIR XIL matn ko'rsatadi; shox faqat serverda
+    yoziladi (`alert_events`).
+    """
+    conflict = await api_client.post(
+        "/internal/bot/resolve",
+        headers=bot_headers,
+        json={"telegram_user_id": TELEGRAM_ID_A, "phone": phone_seed.phone_e164},
+    )
+    unknown = await api_client.post(
+        "/internal/bot/resolve",
+        headers=bot_headers,
+        json={"telegram_user_id": TELEGRAM_ID_B, "phone": "+998900000004"},
+    )
+
+    assert conflict.status_code == unknown.status_code == 200
+    assert conflict.json() == {"status": "multiple_matches", "vendor": None}
+    assert unknown.json() == {"status": "no_match", "vendor": None}
+    assert set(conflict.json()) == set(unknown.json())
+    # ⛔ Anomaliya SERVERDA yozilgan — javob neytral bo'lgani bilan
+    #   reyestr nuqsoni yo'qolmadi.
+    assert _conflict_markets(sync_owner_conn, phone_seed) == set(phone_seed.market_ids)
+
+
+async def test_resolve_is_rate_limited_per_telegram_account(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+    phone_seed: TwoMarketPhoneSeed,
+) -> None:
+    """⛔ T-07-40 ning IKKINCHI qatlami — cheksiz urinish yo'li yopiq."""
+    telegram_id = TELEGRAM_ID_RATE_LIMIT
+    statuses = [
+        (
+            await api_client.post(
+                "/internal/bot/resolve",
+                headers=bot_headers,
+                json={"telegram_user_id": telegram_id, "phone": "+998900000005"},
+            )
+        ).status_code
+        for _ in range(BOT_RESOLVE_LIMIT + 1)
+    ]
+
+    assert statuses[:BOT_RESOLVE_LIMIT] == [200] * BOT_RESOLVE_LIMIT
+    assert statuses[-1] == 429
+
+
+async def test_vendor_summary_equals_the_billing_repo_number(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+    bound_vendor: BoundVendor,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """⛔ D-06: son `billing_repo.vendor_outstanding()` BILAN `==` TENG.
+
+    Yangi SQL yozish IKKINCHI HAQIQAT MANBAI tug'dirardi: bir kun bot bir
+    sonni, qarzdorlik reestri boshqasini ko'rsatardi va ikkalasi ham
+    «to'g'ri» bo'lardi.
+    """
+    response = await api_client.get(
+        "/internal/bot/vendor/summary",
+        headers=bot_headers,
+        params={"telegram_user_id": bound_vendor.telegram_user_id},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["markets"]) == 1
+    entry = payload["markets"][0]
+    assert entry["market_id"] == str(bound_vendor.market_id)
+    assert entry["vendor_id"] == str(bound_vendor.vendor_id)
+
+    as_of = date.fromisoformat(entry["as_of"])
+    async with binding_repo.tenant_session(
+        app_sessionmaker, market_id=bound_vendor.market_id, request_id=None
+    ) as session:
+        expected = await billing_repo.vendor_outstanding(
+            session,
+            market_id=bound_vendor.market_id,
+            vendor_ids=[bound_vendor.vendor_id],
+            as_of=as_of,
+        )
+
+    assert entry["outstanding_soum"] == expected[bound_vendor.vendor_id]
+    assert entry["outstanding_soum"] != 0, (
+        "qoldiq NOL — seed hisob yozmagan va tenglik BO'SH-ROST bo'lib qolardi"
+    )
+    assert "balance" not in entry
+    assert not {"vendor_name", "phone", "full_name"} & set(entry)
+
+
+async def test_vendor_payments_mirrors_the_allocation_rows(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+    bound_vendor: BoundVendor,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """⛔ D-24: qatorlar `vendor_charge_allocation()` DAN HOSILA.
+
+    6-faza funksiyani ATAYIN iste'molchisiz qoldirgan va bu faza uning
+    iste'molchisi — ya'ni yangi taqsimlash arifmetikasi YOZILMAYDI.
+    """
+    response = await api_client.get(
+        "/internal/bot/vendor/payments",
+        headers=bot_headers,
+        params={
+            "telegram_user_id": bound_vendor.telegram_user_id,
+            "market_id": str(bound_vendor.market_id),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    async with binding_repo.tenant_session(
+        app_sessionmaker, market_id=bound_vendor.market_id, request_id=None
+    ) as session:
+        allocation = await billing_repo.vendor_charge_allocation(
+            session,
+            market_id=bound_vendor.market_id,
+            vendor_id=bound_vendor.vendor_id,
+            as_of=business_today(),
+        )
+
+    assert payload["rule"] == allocation.rule
+    assert allocation.rows, "seed birorta hisob yozmagan — ko'zgu BO'SH-ROST bo'lardi"
+    returned = [
+        (row["service_date"], row["stall_code"], row["due_soum"]) for row in payload["rows"]
+    ]
+    assert returned == [
+        (row.service_date.isoformat(), row.stall_code, row.due_soum) for row in allocation.rows
+    ]
+    assert [row["paid_soum"] for row in payload["rows"]] == [
+        row.paid_soum for row in allocation.rows
+    ]
+    assert [row["settled"] for row in payload["rows"]] == [row.settled for row in allocation.rows]
+
+
+async def test_vendor_payments_needs_an_active_binding_in_that_market(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+    bound_vendor: BoundVendor,
+) -> None:
+    """⛔ Begona bozor uchun `404` — «bor, lekin sizniki emas» farqi ochilmaydi."""
+    response = await api_client.get(
+        "/internal/bot/vendor/payments",
+        headers=bot_headers,
+        params={
+            "telegram_user_id": bound_vendor.telegram_user_id,
+            "market_id": str(uuid4()),
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "not_bound"}
+
+
+async def test_vendor_summary_is_404_for_an_unbound_account(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+) -> None:
+    """Bog'lanmagan akkaunt uchun `404` — bo'sh ro'yxat EMAS.
+
+    Bo'sh `200` bot tomonda «qarzingiz yo'q» bo'lib ko'rinardi, holbuki
+    haqiqat «siz hali ulanmagansiz» — ikki butunlay boshqa xabar.
+    """
+    response = await api_client.get(
+        "/internal/bot/vendor/summary",
+        headers=bot_headers,
+        params={"telegram_user_id": TELEGRAM_ID_UNBOUND},
+    )
+
+    assert response.status_code == 404

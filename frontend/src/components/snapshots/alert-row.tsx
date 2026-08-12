@@ -76,7 +76,7 @@ const SEVERITY_VIEW = {
  *    `errors.generic` ga tushadi: `capture_stopped` degan satrni ko'rgan
  *    admin uni nosozlik kodi deb o'qib, uni izlashga tushardi.
  *
- * Manba: `app/jobs/alerting.py::ALERT_META` — o'nta yozuv.
+ * Manba: `app/jobs/alerting.py::ALERT_META` — o'n bitta yozuv.
  * ⚠ `nvr_account_locked` UI-SPEC §11.9 jadvalida YO'Q edi va u shu
  *   rejada qo'shildi: u `critical` va HECH QACHON bo'g'ilmaydi, ya'ni
  *   matnsiz qolgan taqdirda admin eng shoshilinch xabarni «Kutilmagan
@@ -85,6 +85,15 @@ const SEVERITY_VIEW = {
  *   u `critical`, bo'g'ilmaydi va uning manbai «kunlik patta hisobi
  *   umuman ishlamadi» — matnsiz qolganda admin platformaning eng
  *   qimmat nosozligini «Kutilmagan xato» bo'lib ko'rardi.
+ * ⚠ `vendor_binding_conflict` 7-fazada (07-08, D-26b) qo'shildi va u
+ *   yagona SO'ROV YO'LIDAN tug'iladigan kalit: uni supurgi emas,
+ *   `binding_repo.resolve()` ochadi. Matnsiz qolganda admin «reyestrda
+ *   ikki sotuvchida bir xil raqam bor» xabarini «Kutilmagan xato» bo'lib
+ *   ko'rardi va nuqsonni tuzatish yo'lini topa olmasdi.
+ *   ⛔ MATNDA TELEFON RAQAMI HAM, SOTUVCHI ISMI HAM YO'Q: alert Telegram
+ *   orqali ham ketadi va Telegram serverlari loyiha zimmasiga olgan O'zR
+ *   data-rezidentlik chegarasidan TASHQARIDA (D-19 bilan bir xil sabab).
+ *   Tuzatish veb yuzasida bajariladi.
  */
 const ALERT_TITLE_KEYS = {
   capture_stopped: "snapshots.alertKey.captureStopped",
@@ -97,6 +106,7 @@ const ALERT_TITLE_KEYS = {
   billing_close_stale: "snapshots.alertKey.billingCloseStale",
   disk_pressure: "snapshots.alertKey.diskPressure",
   capture_recovered: "snapshots.alertKey.captureRecovered",
+  vendor_binding_conflict: "snapshots.alertKey.vendorBindingConflict",
 } as const;
 
 type AlertTitleKey = (typeof ALERT_TITLE_KEYS)[keyof typeof ALERT_TITLE_KEYS];

@@ -106,6 +106,8 @@ __all__ = [
     "pending_vendors",
     "resolve",
     "revoke",
+    "stall_codes_by_vendor",
+    "tenant_session",
 ]
 
 log = structlog.get_logger(__name__)
@@ -243,21 +245,28 @@ class PendingVendorPage:
 
 
 @asynccontextmanager
-async def _tenant_session(
+async def tenant_session(
     sessionmaker: async_sessionmaker[AsyncSession],
     *,
     market_id: UUID,
     request_id: str | None,
 ) -> AsyncIterator[AsyncSession]:
-    """Tenant konteksti O'RNATILGAN qisqa tranzaksiya.
+    """Tenant konteksti O'RNATILGAN qisqa tranzaksiya — BOT YO'LINING YAGONA kirishi.
 
     ⚠ NUSXA EMAS, JUFT — VA BU FARQ `active_market_ids()` DAN ATAYIN
       AJRATILGAN. `app/jobs/retention.py::active_market_ids` docstringi
-      ikkalasini ochiq ajratadi: chetlab o'tuvchi so'rov (`SECURITY
-      DEFINER`) TAKRORLANMAYDI va import qilinadi, `_tenant_session` esa
-      xavfsizlik YUZASI emas, STRUKTURAVIY naqsh va u `discovery.py`,
-      `capture.py`, `retention.py`, `alerting.py` da ATAYIN takrorlangan
-      (modul hech kimga bog'lanmasligi uchun). Bu — beshinchi nusxa.
+      ikkalasini ochiq ajratadi: RLS'ni chetlab o'tuvchi so'rov
+      TAKRORLANMAYDI va import qilinadi, kontekst menejeri esa xavfsizlik
+      YUZASI emas, STRUKTURAVIY naqsh va u `discovery.py`, `capture.py`,
+      `retention.py`, `alerting.py` da ATAYIN takrorlangan (modul hech
+      kimga bog'lanmasligi uchun). Bu — beshinchi nusxa.
+
+    ⚠ OMMAVIY (`_` PREFIKSISIZ) va sabab mexanik: `/internal/bot/*`
+      marshrutlarida `Principal` YO'Q, ya'ni `deps.py::TenantSessionDep`
+      (u bozorni `Principal` dan oladi) UMUMAN ishlamaydi. Bot yo'liga
+      o'z kontekst menejeri kerak va u AYNAN BITTA bo'lishi shart —
+      marshrut faylida ikkinchi nusxa yozilsa `actor_kind` yoki
+      tranzaksiya chegarasi jimgina ajralib ketardi.
 
     ⚠ `actor_kind = SYSTEM`, `actor_id = None`: bu yo'lda `Principal`
       UMUMAN YO'Q (D-10) va uni «taxmin qilib» yozish audit jurnalida
@@ -351,7 +360,7 @@ async def resolve(
 
     matches: list[VendorRef] = []
     for market_id in await active_market_ids(sessionmaker):
-        async with _tenant_session(
+        async with tenant_session(
             sessionmaker, market_id=market_id, request_id=request_id
         ) as session:
             # ⚠ `market_id` PREDIKATI RLS BILAN BIRGA — ikkinchi qatlam.
@@ -393,7 +402,7 @@ async def resolve(
 
     # --- D-26(c)/BOUND ------------------------------------------------
     match = matches[0]
-    async with _tenant_session(
+    async with tenant_session(
         sessionmaker, market_id=match.market_id, request_id=request_id
     ) as session:
         await bind(
@@ -432,7 +441,7 @@ async def _raise_conflict(
       emas, `occurrences + 1` beradi.
     """
     for market_id in sorted({match.market_id for match in matches}):
-        async with _tenant_session(
+        async with tenant_session(
             sessionmaker, market_id=market_id, request_id=request_id
         ) as session:
             await raise_alert(session, market_id=market_id, key=VENDOR_BINDING_CONFLICT_ALERT_KEY)
@@ -581,7 +590,7 @@ async def active_bindings(
     """
     found: list[BindingRef] = []
     for market_id in await active_market_ids(sessionmaker):
-        async with _tenant_session(
+        async with tenant_session(
             sessionmaker, market_id=market_id, request_id=request_id
         ) as session:
             result = await session.execute(
@@ -596,6 +605,52 @@ async def active_bindings(
                 for vendor_id in result.scalars().all()
             )
     return tuple(found)
+
+
+async def stall_codes_by_vendor(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    vendor_ids: list[UUID],
+    business_date: date,
+) -> dict[UUID, tuple[str, ...]]:
+    """Sotuvchining SHU KUNDAGI rasta KODLARI — `pending_vendors` bilan BIR MANBA.
+
+    ⛔ RASTA KODI SHAXSIY MA'LUMOT EMAS va u ATAYIN qaytariladi: sotuvchi
+       botda «qaysi rasta uchun?» degan savolga javob ko'rmasa, qarz soni
+       nizoda dalil bo'lolmasdi (D-02). Kod `stall_id` EMAS — 06-01 ning
+       kontraktida tenglik uzgichi AYNAN kod (`billing_repo.
+       _VENDOR_CHARGE_DUES` docstringi).
+
+    ⚠ IKKI CHAQIRUVCHI, BITTA SO'ROV: `pending_vendors()` (admin
+      ko'rinishi) va `/internal/bot/vendor/summary`. Ikkinchi nusxa
+      «hozir biriktirilgan» ta'rifini ikkiga bo'lardi va bir yuzada
+      tugagan biriktirish, ikkinchisida faol bo'lib ko'rinardi.
+    """
+    if not vendor_ids:
+        return {}
+
+    rows = (
+        await session.execute(
+            select(StallAssignment.vendor_id, Stall.code)
+            .join(
+                Stall,
+                (Stall.market_id == StallAssignment.market_id)
+                & (Stall.id == StallAssignment.stall_id),
+            )
+            .where(
+                StallAssignment.market_id == market_id,
+                StallAssignment.vendor_id.in_(vendor_ids),
+                StallAssignment.period.contains(business_date),
+            )
+            .order_by(StallAssignment.vendor_id, Stall.code_sort, Stall.id)
+        )
+    ).all()
+
+    collected: dict[UUID, list[str]] = {vendor_id: [] for vendor_id in vendor_ids}
+    for row in rows:
+        collected[UUID(str(row.vendor_id))].append(str(row.code))
+    return {vendor_id: tuple(codes) for vendor_id, codes in collected.items()}
 
 
 async def pending_vendors(
@@ -649,30 +704,13 @@ async def pending_vendors(
     if not page_ids:
         return PendingVendorPage(items=(), next_cursor=None)
 
-    codes = (
-        await session.execute(
-            select(StallAssignment.vendor_id, Stall.code)
-            .join(
-                Stall,
-                (Stall.market_id == StallAssignment.market_id)
-                & (Stall.id == StallAssignment.stall_id),
-            )
-            .where(
-                StallAssignment.market_id == market_id,
-                StallAssignment.vendor_id.in_(page_ids),
-                StallAssignment.period.contains(business_date),
-            )
-            .order_by(StallAssignment.vendor_id, Stall.code_sort, Stall.id)
-        )
-    ).all()
-
-    by_vendor: dict[UUID, list[str]] = {vendor_id: [] for vendor_id in page_ids}
-    for row in codes:
-        by_vendor[UUID(str(row.vendor_id))].append(str(row.code))
+    by_vendor = await stall_codes_by_vendor(
+        session, market_id=market_id, vendor_ids=page_ids, business_date=business_date
+    )
 
     return PendingVendorPage(
         items=tuple(
-            PendingVendor(vendor_id=vendor_id, stall_codes=tuple(by_vendor[vendor_id]))
+            PendingVendor(vendor_id=vendor_id, stall_codes=by_vendor[vendor_id])
             for vendor_id in page_ids
         ),
         next_cursor=page_ids[-1] if has_more else None,

@@ -409,6 +409,27 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_chat_id: str = ""
 
+    # --- Servis-servis tokeni (07-08, D-10) ---
+    #
+    # `bot-service` -> `core-api` `/internal/bot/*` yo'lining YAGONA
+    # autentifikatsiyasi. `hmac.compare_digest` bilan solishtiriladi.
+    #
+    # ⛔ BO'SH QIYMAT YUZANI BUTUNLAY YOPADI (`503`), «hammaga ochiq»
+    #   QILMAYDI — fail-closed. Bu farq bu faylning butun xavfsizlik
+    #   posturasi: bo'sh sirni «tekshiruvsiz o'tkazish» deb o'qish
+    #   avtorizatsiyani BIR QATOR bilan yo'q qilardi.
+    #
+    # ⛔ BU MAYDON `alerts_enabled` GA TA'SIR QILMAYDI va IKKINCHI BAYROQ
+    #   TUG'DIRMAYDI. `telegram_bot_token` alert kanalini boshqaradi va
+    #   ikkalasi mustaqil: alertsiz ishlaydigan o'rnatmada bot yuzasi
+    #   ochiq bo'lishi mumkin va teskarisi ham.
+    #
+    # ⚠ TIP `SecretStr`: bu token bilan istalgan odam sotuvchining qarz
+    #   ma'lumotini so'rab oladi. `repr()` da u `**********` bo'lib
+    #   ko'rinadi, ya'ni istisno izidan yoki `structlog` yozuvidan
+    #   tasodifan chiqib keta olmaydi.
+    bot_service_token: SecretStr = SecretStr("")
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"

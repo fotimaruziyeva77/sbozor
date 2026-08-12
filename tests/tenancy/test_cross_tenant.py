@@ -222,6 +222,26 @@ class TenantSeed(NamedTuple):
     """
 
 
+_BOT_INTERNAL_REASON = (
+    "global — `bot-service` -> `core-api` servis-servis yuzasi ({route}): uni "
+    "FOYDALANUVCHI emas, SERVIS chaqiradi va unda foydalanuvchi access tokeni "
+    "UMUMAN bo'lmaydi. Autentifikatsiya — STATIK servis sirri "
+    "(`Settings.bot_service_token`, `hmac.compare_digest`) va u BOZOR tushunchasini "
+    "ko'tarmaydi: bozor `telegram_user_id` -> faol bog'lanish orqali SERVERDA "
+    "aniqlanadi (D-10 — bot `Principal` tug'dirmaydi). Ya'ni matritsaning uchala "
+    "token da'vosi (tokensiz/buzilgan/muddati o'tgan -> 401) bu yerda MA'NOSIZ "
+    "bo'lardi va sozlanmagan token holatida kontrakt umuman 503. QAMROVI TO'LIQ "
+    "QAYTA TIKLANGAN: `tests/integration/test_bot_internal_api.py` tokensiz -> 401, "
+    "noto'g'ri token -> 401, sozlanmagan token -> 503, `Set-Cookie` YO'Q va "
+    "OpenAPI'da yo'l YO'Q holatlarini alohida o'lchaydi"
+)
+"""⛔ UCHALA `/internal/bot/*` YO'LI UCHUN BITTA SABAB — matn nusxalanmaydi.
+
+Uch yozuv bir xil qarorning uch ko'rinishi: ularni qo'lda uch marta yozish
+bittasini tahrirlab, ikkitasini unutish yo'lini ochardi va keyingi o'qigan
+odam «nega uchtasi uch xil?» degan savolga javob topmasdi.
+"""
+
 EXEMPT_ROUTES: dict[str, str] = {
     # --- health: autentifikatsiyasiz, hech qanday tenant ma'lumoti yo'q ---
     "/healthz": "health — autentifikatsiyasiz liveness, tenant ma'lumoti qaytarmaydi",
@@ -269,6 +289,13 @@ EXEMPT_ROUTES: dict[str, str] = {
         "`tests/integration/test_capture_schedule.py` yangi heartbeat -> 200, "
         "eskirgan -> 503, hech qachon yozilmagan -> 503, javob yuzasining torligi "
         "va konteyner healthcheck'iga ULANMAGANI holatlarini alohida o'lchaydi"
+    ),
+    "/internal/bot/resolve": _BOT_INTERNAL_REASON.format(route="POST /internal/bot/resolve"),
+    "/internal/bot/vendor/summary": _BOT_INTERNAL_REASON.format(
+        route="GET /internal/bot/vendor/summary"
+    ),
+    "/internal/bot/vendor/payments": _BOT_INTERNAL_REASON.format(
+        route="GET /internal/bot/vendor/payments"
     ),
     "/api/v1/audit/platform": (
         "global — platforma-global (`market_id IS NULL`) audit qatorlari, ya'ni "

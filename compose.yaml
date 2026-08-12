@@ -221,6 +221,20 @@ services:
       S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # --- Servis-servis tokeni (07-08, D-10) ---
+      #
+      # ⚠ `bot-service` BLOKIDAGI BILAN AYNI O'ZGARUVCHI va bu MAJBURIY:
+      # ikkalasi bitta sirning ikki uchi. Alohida nom berilsa ular jimgina
+      # ajralib ketardi va bot har so'rovda `401` olardi — jurnalda esa
+      # «token noto'g'ri» dan boshqa hech nima ko'rinmasdi.
+      #
+      # ⛔ `:-` BILAN STANDART YO'Q, lekin BO'SH QIYMAT ISHGA TUSHISHNI
+      # TO'XTATMAYDI — `NVR_CREDENTIAL_KEY` dan farqi shu. Bo'sh token
+      # `/internal/bot/*` ni `503` bilan BUTUNLAY yopadi (fail-closed),
+      # ya'ni sotuvchi boti ishlamaydi, lekin kadr olish, patta hisobi va
+      # veb yuzasi ISHLAB TURAVERADI. Yiqilish esa bot yuzasi uchun butun
+      # platformani to'xtatardi.
+      BOT_SERVICE_TOKEN: ${BOT_SERVICE_TOKEN}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: Asia/Tashkent

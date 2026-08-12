@@ -778,7 +778,8 @@
       "diskPressure": "Disk to'lib bormoqda",
       "credentialUnreadable": "NVR paroli o'qilmadi",
       "nvrAccountLocked": "NVR hisobi qulflandi",
-      "captureRecovered": "Kadr olish tiklandi"
+      "captureRecovered": "Kadr olish tiklandi",
+      "vendorBindingConflict": "Reyestrda takrorlangan telefon raqami bor"
     },
     "alertOpenCount": "Ochiq: {count}",
     "alertFirstSeen": "Birinchi marta: {time}",

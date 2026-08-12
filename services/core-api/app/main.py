@@ -38,6 +38,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from app.api.internal.bot import router as bot_internal_router
 from app.api.internal.live_authz import router as live_authz_router
 from app.api.internal.self_check import router as self_check_router
 from app.api.v1.assignments import router as assignments_router
@@ -398,6 +399,24 @@ app.include_router(live_authz_router)
 #    SOG'LOM API ni qayta ishga tushirish hech nimani tuzatmasdi.
 #    Sabab to'liq `self_check.py` modul docstringida.
 app.include_router(self_check_router)
+# --- 07-08: `bot-service` -> `core-api` ichki yuzasi (BOT-01/BOT-02, D-10) ---
+#
+# ⛔ `API_V1_PREFIX` SIZ — `live-authz` / `self-check` bilan bir xil toifa
+#    va bir xil sabab: chaqiruvchi FOYDALANUVCHI emas, SERVIS. Uni
+#    `/api/v1` ostiga qo'yish uni ommaviy mijoz kontraktining qismiga
+#    aylantirardi va cross-tenant matritsasi undan `Authorization: Bearer
+#    <access token>` xulqini talab qilardi — bu yerdagi token esa STATIK
+#    servis sirri va u bozor tushunchasini umuman ko'tarmaydi.
+#
+# ⛔ nginx BU PREFIKSNI TASHQARIGA PROXY QILMAYDI (`ops/nginx/nginx.conf`
+#    faqat `/api/` va `/`) va core-api porti xostga publish qilinmaydi,
+#    ya'ni yuza compose tarmog'idan tashqarida MAVJUD EMAS.
+#
+# Matritsadan chiqarilishi `tests/tenancy/test_cross_tenant.py::
+# EXEMPT_ROUTES` da SABAB bilan yozilgan va qamrovi
+# `tests/integration/test_bot_internal_api.py` da TO'LIQ qayta tiklangan
+# (tokensiz -> 401; noto'g'ri token -> 401; sozlanmagan token -> 503).
+app.include_router(bot_internal_router)
 
 
 @app.exception_handler(DBAPIError)
