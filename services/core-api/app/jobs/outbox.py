@@ -501,12 +501,18 @@ def _build_text(kind: str, payload: dict[str, Any], *, locale: str) -> str:
         payload: allowlist bilan cheklangan kalitlar (`NOTIFICATION_META`).
         locale: matn tili — ARGUMENT (`_LOCALE` docstringi).
 
+    ⚠ `locale` SHU YERDA NORMALIZATSIYA QILINADI (`_normalize_locale()`):
+      quyi funksiyalarning hammasi — yorliq jadvallari ham, `format_soum()`
+      ham — YECHILGAN qiymatni oladi. Noma'lum `kind` esa aksincha,
+      QATTIQ yiqiladi (pastdagi `Raises`): til KO'RINISH tanlovi, `kind`
+      esa xabarning MAZMUNI.
+
     Raises:
         KeyError: `kind` noma'lum bo'lganda. ⛔ QATTIQ: enumga a'zo
             qo'shilib matn quruvchisi unutilgan bo'lsa, xabar BO'SH ketardi.
     """
     builder = _BUILDERS[kind]
-    return builder(payload, locale)
+    return builder(payload, _normalize_locale(locale))
 
 
 def _receipt_text(payload: dict[str, Any], locale: str) -> str:
@@ -538,6 +544,159 @@ def _overdue_text(payload: dict[str, Any], locale: str) -> str:
     return "\n".join(lines)
 
 
+QUALIFIER_EXPECTED: Final[str] = "expected"
+QUALIFIER_RECORDED: Final[str] = "recorded"
+QUALIFIER_VOCAB: Final[frozenset[str]] = frozenset({QUALIFIER_EXPECTED, QUALIFIER_RECORDED})
+"""⛔ G-35 ning YOPIQ LUG'ATI (`07-UI-SPEC.md` §12.2/§12.3).
+
+Ikki sifatlovchi, ikkitasi ham MAJBURIY va ular ⛔ ARALASHMASLIGI shart:
+har xabarda AYNAN BITTASI bo'ladi.
+"""
+
+_QUALIFIER_WORDS: Final[dict[str, dict[str, str]]] = {
+    Locale.UZ_LATN.value: {
+        QUALIFIER_EXPECTED: "kutilayotgan",
+        QUALIFIER_RECORDED: "yozilgan",
+    },
+    Locale.UZ_CYRL.value: {
+        QUALIFIER_EXPECTED: "кутилаётган",
+        QUALIFIER_RECORDED: "ёзилган",
+    },
+    Locale.RU.value: {
+        QUALIFIER_EXPECTED: "ожидаемый",
+        QUALIFIER_RECORDED: "записанный",
+    },
+}
+"""⛔ `recon.qualifier.*` — `07-UI-SPEC.md` §12.2 jadvalining KOD tomoni.
+
+=============================================================================
+⛔⛔ SIFATLOVCHI RAQAM BILAN BIR JUMLADA TURADI, SARLAVHADA EMAS (§12.2).
+
+    ✅  «Bugun KUTILAYOTGAN patta: 4 200 000 so'm»
+    ⛔  «Kechki hisobot ⏎ Patta: 4 200 000 so'm»
+
+Sabab MEXANIK, uslubiy emas: Telegram bildirishnomasining QISQARTIRILGAN
+ko'rinishida sarlavha kesilib qoladi va foydalanuvchi FAQAT RAQAMNI
+ko'radi. Sifatlovchisiz esa direktor kechqurun 4 200 000, ertalab
+3 950 000 ko'radi, sababini TOPA OLMAYDI va uchinchi kuni ikkala xabarni
+ham o'qimay qo'yadi (§12.1).
+=============================================================================
+
+⚠ TIL DASTGOHI FAQAT SHU IKKI DAYJESTGA QO'YILDI va bu CHEGARA OCHIQ:
+  kvitansiya (CASH-05) va qarz eslatmasi (BOT-03) matnlari hamon BITTA
+  tilda. Sabab — egalik: ularning uch tilli varianti 07-09 ning ochiq
+  bandida (bot matnlari, BOT-01 doirasi) va u `vendors` dagi til
+  ustuniga bog'liq. Bu yerda esa til ustuni KERAK EMAS: G-35 ning
+  o'lchovi `locale` ni ARGUMENT sifatida beradi, ya'ni uchala variant
+  ham BUGUN o'lchanadi (`tests/unit/test_digest_qualifiers.py`).
+"""
+
+_MORNING_TEXT: Final[dict[str, dict[str, str]]] = {
+    Locale.UZ_LATN.value: {
+        "header": "Ertalabki hisobot",
+        "day": "Kun",
+        "charged": "Kecha {qualifier} patta",
+        "collected": "Yig'ildi",
+        "occupancy": "Bandlik",
+        "debtors": "Qarzdorlar",
+        "cases": "Yangi nomuvofiqliklar",
+    },
+    Locale.UZ_CYRL.value: {
+        "header": "Эрталабки ҳисобот",
+        "day": "Кун",
+        "charged": "Кеча {qualifier} патта",
+        "collected": "Йиғилди",
+        "occupancy": "Бандлик",
+        "debtors": "Қарздорлар",
+        "cases": "Янги номувофиқликлар",
+    },
+    Locale.RU.value: {
+        "header": "Утренний отчёт",
+        "day": "День",
+        "charged": "{qualifier} вчера патта",
+        "collected": "Собрано",
+        "occupancy": "Занятость",
+        "debtors": "Должники",
+        "cases": "Новые расхождения",
+    },
+}
+"""Ertalabki dayjestning yorliqlari — uchala locale.
+
+⚠ ATAMALAR GLOSSARIYDAN (`ops/i18n/glossary.json`): `patta` / `патта` /
+  `патт` o'zagi va `qarz` / `қарз` / `долг`. Taqiqlangan sinonimlar
+  (`yig'im`, `йиғим`, `лавк`, `магазин`) bu yerda YO'Q.
+
+⚠ «case» SO'ZI MATNGA CHIQMAYDI (`07-UI-SPEC.md` §8.5 bilan bir xil
+  qoida): foydalanuvchiga ko'rinadigan atama — «nomuvofiqlik». `case`
+  faqat KOD va API qiymati bo'lib qoladi.
+"""
+
+_EVENING_TEXT: Final[dict[str, dict[str, str]]] = {
+    Locale.UZ_LATN.value: {
+        "header": "Kechki holat",
+        "day": "Kun",
+        "expected": "Bugun {qualifier} patta",
+        "collected": "Yig'ildi",
+        "unpaid": "To'lovsiz rastalar",
+        "anomalies": "Anomaliyalar",
+        "details": "Batafsil",
+    },
+    Locale.UZ_CYRL.value: {
+        "header": "Кечки ҳолат",
+        "day": "Кун",
+        "expected": "Бугун {qualifier} патта",
+        "collected": "Йиғилди",
+        "unpaid": "Тўловсиз расталар",
+        "anomalies": "Аномалиялар",
+        "details": "Батафсил",
+    },
+    Locale.RU.value: {
+        "header": "Вечернее состояние",
+        "day": "День",
+        "expected": "{qualifier} сегодня патта",
+        "collected": "Собрано",
+        "unpaid": "Места без оплаты",
+        "anomalies": "Аномалии",
+        "details": "Подробнее",
+    },
+}
+"""Kechki dayjestning yorliqlari — uchala locale (`_MORNING_TEXT` naqshi)."""
+
+_SUPPORTED_LOCALES: Final[frozenset[str]] = frozenset(member.value for member in Locale)
+"""Qo'llab-quvvatlanadigan tillar — ⛔ ENUMDAN HOSILA, qo'lda sanalmagan.
+
+⚠ To'plam `sbozor_core.money` ning locale jadvali bilan AYNAN bir xil
+  bo'lishi SHART va u shu sababdan ikkalasi ham `Locale` dan quriladi:
+  pul formatlovchisi noma'lum tilda `ValueError` KO'TARADI, ya'ni yorliq
+  jadvali kengroq bo'lsa matn baribir yiqilardi.
+"""
+
+
+def _normalize_locale(locale: str) -> str:
+    """Noma'lum tilni standart tilga TUSHIRADI — xabarni yiqitmaydi.
+
+    =========================================================================
+    ⛔ NEGA `KeyError` EMAS — VA BU O'LCHANGAN, USLUBIY QAROR EMAS.
+
+    `_deliver()` matn qurilmaganda qatorni ⛔ `failed` ga tushiradi va
+    qayta urinmaydi. Ya'ni bitta noto'g'ri til qiymati (masalan `vendors`
+    ga til ustuni qo'shilgan kun kelgan eski yoki buzuq qiymat)
+    sotuvchining KVITANSIYASINI butunlay yo'qotardi — holbuki kvitansiya
+    D-02 ning dalili.
+
+    Til — KO'RINISH tanlovi, MA'LUMOT emas: standart tilda yetkazilgan
+    xabar axborotning hech qismini yo'qotmaydi, yetkazilmagan xabar esa
+    hammasini yo'qotadi.
+
+    ⚠ NORMALIZATSIYA `_build_text()` DA, BITTA JOYDA. Quyi funksiyalarning
+      har biri o'z fallbackini qilsa, `format_soum()` (u noma'lum tilda
+      `ValueError` beradi) baribir yiqilardi va fallback YARIM bo'lardi —
+      bu nosozlik ijro paytida HAQIQATAN ko'rildi.
+    =========================================================================
+    """
+    return locale if locale in _SUPPORTED_LOCALES else _LOCALE
+
+
 def _digest_morning_text(payload: dict[str, Any], locale: str) -> str:
     """Ertalabki dayjest — KECHAGI YOZILGAN kun (D-16).
 
@@ -545,15 +704,21 @@ def _digest_morning_text(payload: dict[str, Any], locale: str) -> str:
       bo'lmasligi NUQSON EMAS, DIZAYN (D-15) va direktor buni matndan
       bilishi kerak — aks holda u ikki raqamni ko'rib tizimga ishonchini
       yo'qotardi.
+
+    ⛔ SIFATLOVCHI (`recorded`) RAQAM BILAN BIR QATORDA (§12.2) va u
+       xabarda YAKKA: `expected` bu matnga TUSHMASLIGI shart, aks holda
+       aralashuv direktorni chalkashtirardi (G-35 to'plam tengligi).
     """
+    label = _MORNING_TEXT[locale]
+    charged = label["charged"].format(qualifier=_QUALIFIER_WORDS[locale][QUALIFIER_RECORDED])
     lines = [
-        "<b>Ertalabki hisobot</b> (kecha <i>yozilgan</i>)",
-        f"Kun: {_plain(payload, 'business_date')}",
-        f"Hisoblandi: {_soum(payload, 'charged_soum', locale=locale)}",
-        f"Yig'ildi: {_soum(payload, 'collected_soum', locale=locale)}",
-        f"Bandlik: {_plain(payload, 'occupancy_pct')}%",
-        f"Qarzdorlar: {_plain(payload, 'top_debtor_count')}",
-        f"Yangi caselar: {_plain(payload, 'case_new_count')}",
+        f"<b>{label['header']}</b>",
+        f"{label['day']}: {_plain(payload, 'business_date')}",
+        f"{charged}: {_soum(payload, 'charged_soum', locale=locale)}",
+        f"{label['collected']}: {_soum(payload, 'collected_soum', locale=locale)}",
+        f"{label['occupancy']}: {_plain(payload, 'occupancy_pct')}%",
+        f"{label['debtors']}: {_plain(payload, 'top_debtor_count')}",
+        f"{label['cases']}: {_plain(payload, 'case_new_count')}",
     ]
     return "\n".join(lines)
 
@@ -563,16 +728,21 @@ def _digest_evening_text(payload: dict[str, Any], locale: str) -> str:
 
     ⛔ DALIL HAVOLA BO'LIB BORADI, BAYT BO'LIB EMAS (D-03): matnda
        autentifikatsiya ostidagi SAHIFA manzili turadi.
+
+    ⛔ SIFATLOVCHI (`expected`) RAQAM BILAN BIR QATORDA (§12.2) va u
+       xabarda YAKKA — `recorded` bu matnga TUSHMAYDI.
     """
+    label = _EVENING_TEXT[locale]
     day = _plain(payload, "business_date")
+    expected = label["expected"].format(qualifier=_QUALIFIER_WORDS[locale][QUALIFIER_EXPECTED])
     lines = [
-        "<b>Kechki holat</b> (bugun <i>kutilayotgan</i>)",
-        f"Kun: {day}",
-        f"Kutilmoqda: {_soum(payload, 'expected_soum', locale=locale)}",
-        f"Yig'ildi: {_soum(payload, 'collected_soum', locale=locale)}",
-        f"To'lovsiz rastalar: {_plain(payload, 'unpaid_stall_count')}",
-        f"Anomaliyalar: {_plain(payload, 'anomaly_count')}",
-        f"Batafsil: {_RECONCILIATION_PATH}{day}",
+        f"<b>{label['header']}</b>",
+        f"{label['day']}: {day}",
+        f"{expected}: {_soum(payload, 'expected_soum', locale=locale)}",
+        f"{label['collected']}: {_soum(payload, 'collected_soum', locale=locale)}",
+        f"{label['unpaid']}: {_plain(payload, 'unpaid_stall_count')}",
+        f"{label['anomalies']}: {_plain(payload, 'anomaly_count')}",
+        f"{label['details']}: {_RECONCILIATION_PATH}{day}",
     ]
     return "\n".join(lines)
 
