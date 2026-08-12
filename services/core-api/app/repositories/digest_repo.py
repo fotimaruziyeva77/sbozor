@@ -162,7 +162,8 @@ _LEDGER_DAY = _text(
            count(*)::int AS charge_count,
            count(*) FILTER (
                WHERE COALESCE(paid.paid_soum, 0) < charged.due_soum
-           )::int AS unpaid_stall_count
+           )::int AS unpaid_stall_count,
+           (SELECT count(*) FROM paid WHERE paid.paid_soum > 0)::int AS paid_stall_count
       FROM charged
       LEFT JOIN paid
         ON paid.stall_id = charged.stall_id
@@ -173,7 +174,7 @@ _LEDGER_DAY = _text(
     _bindparam("increase", type_=_Text()),
     _bindparam("reversal", type_=_Text()),
 )
-"""YOZILGAN kunning uch soni — D-16 ning manbai.
+"""YOZILGAN kunning to'rt soni — D-16 ning manbai.
 
 =============================================================================
 ⛔ SO'ROV `daily_charges` DAN BOSHLANADI, `payments` DAN EMAS.
@@ -192,8 +193,14 @@ umuman tegishli bo'lmagan pulni o'z ichiga olardi.
    `<=` yozilganda to'liq to'langan rasta ham «to'lanmagan» bo'lib
    ko'rinardi va sanoq har kuni bozordagi hamma rastani ko'rsatardi.
 
-⚠ BO'SH KUN ham BITTA qator qaytaradi (agregat + `COALESCE`): uchala son
-  `0` bo'lib keladi. «Hisob yo'q» bilan «so'rov ishlamadi» ni
+⛔ `paid_stall_count` `charged` DAN MUSTAQIL (skalyar quyi so'rov) VA BU
+   MAJBURIY: kechqurun `charged` BO'SH bo'ladi (D-15 — bugungi hisob hali
+   yozilmagan), ya'ni `LEFT JOIN` orqali hisoblangan sanoq HAR DOIM nol
+   chiqardi. Kechki dayjest esa aynan shu songa tayanadi: «bugun patta
+   kutilayotgan rasta» MINUS «bugun to'lov yozilgan rasta».
+
+⚠ BO'SH KUN ham BITTA qator qaytaradi (agregat + `COALESCE`): to'rtala
+  son `0` bo'lib keladi. «Hisob yo'q» bilan «so'rov ishlamadi» ni
   ajratmaydigan javob direktorni ma'lumot yo'qolgan deb o'ylashga
   majburlardi (`PendingMarket` da o'rnatilgan qoida).
 """
@@ -219,7 +226,25 @@ class LedgerDay:
     """
     charge_count: int
     unpaid_stall_count: int
-    """Hisob BOR, belgili to'lov uni QOPLAMAGAN rastalar soni."""
+    """Hisob BOR, belgili to'lov uni QOPLAMAGAN rastalar soni.
+
+    ⚠ Kechqurun bu son HAR DOIM `0` va bu D-15 ning O'ZI: bugungi hisob
+      `daily_charges` da hali yo'q. Kechki dayjest shuning uchun
+      `paid_stall_count` ni proyeksiyaning rasta sanog'idan ayiradi.
+    """
+    paid_stall_count: int
+    """O'sha kun uchun BELGILI to'lovi MUSBAT bo'lgan rastalar soni.
+
+    ⛔ HISOBDAN MUSTAQIL: kechqurun hisob yo'q, to'lov esa BOR va aynan
+       shu son «bugun qaysi rastadan patta yig'ildi?» degan savolga
+       javob beradi (mahsulotning asosiy savoli).
+
+    ⚠ OCHIQ NARX: faqat ESKI QARZINI to'lagan sotuvchining rastasi ham
+      shu sanoqqa kiradi. Ya'ni son «kassir bu rastaga BORDIMI?» ni
+      o'lchaydi — bugungi patta to'liq yopilganini emas. Aniqroq savol
+      («hisob to'liq qoplandimi?») ertalabki dayjestda, `daily_charges`
+      yozilgandan KEYIN javob oladi (`unpaid_stall_count`).
+    """
 
 
 @_dataclass(frozen=True, slots=True)
@@ -279,7 +304,7 @@ async def ledger_day(
             ⛔ ARGUMENT — job uni o'zi hisoblamaydi.
 
     Returns:
-        `LedgerDay` — to'rt son, hammasi HAR DOIM to'ldirilgan.
+        `LedgerDay` — besh son, hammasi HAR DOIM to'ldirilgan.
     """
     row = (
         await session.execute(
@@ -300,6 +325,7 @@ async def ledger_day(
         collected_soum=collected,
         charge_count=int(numbers["charge_count"]),
         unpaid_stall_count=int(numbers["unpaid_stall_count"]),
+        paid_stall_count=int(numbers["paid_stall_count"]),
     )
 
 
