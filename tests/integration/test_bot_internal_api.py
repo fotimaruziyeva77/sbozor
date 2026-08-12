@@ -831,6 +831,16 @@ def test_the_internal_router_creates_no_session_primitives() -> None:
     assert "token ==" not in source
     assert "== token" not in source
 
+    # ⛔ D-06: «saqlangan qoldiq» ma'nosini beradigan nom NA JAVOBDA, NA
+    #   KODDA, NA IZOHDA. Izohda ham taqiqlanishi 03-07 / 07-02 darsi:
+    #   sodda darvoza izohni koddan ajratmaydi, ya'ni sababni yozish
+    #   yagona «tuzatish» yo'lini sababni o'chirishga aylantirardi.
+    assert "balance" not in source, (
+        "`balance` nomi `/internal/bot/*` yuzasiga kirib qoldi — saqlangan "
+        "qoldiq ustuni loyihada MAVJUD EMAS (D-06) va uni nom darajasida "
+        "tiklash ikkinchi haqiqat manbaiga birinchi qadam bo'lardi"
+    )
+
 
 async def test_multiple_matches_is_neutral_in_shape(
     api_client: httpx.AsyncClient,

@@ -194,10 +194,16 @@ class ResolveResponse(BaseModel):
 class VendorSummaryOut(BaseModel):
     """Bitta bozordagi qoldiq — ⛔ HOSILA SON (D-06).
 
-    ⛔ `balance` NOMI JAVOBDA HAM, KODDA HAM YO'Q: saqlangan balans ustuni
-       loyihada MAVJUD EMAS va uni nom darajasida ham tiklamaslik kerak.
-       Son har chaqiruvda `billing_repo` ning hisoblanadigan ko'rinishidan
-       keladi.
+    ⛔ MAYDON NOMI `outstanding_soum` VA U «SAQLANGAN QOLDIQ» MA'NOSINI
+       BERADIGAN NOMDAN ATAYIN FARQ QILADI: bunday ustun loyihada MAVJUD
+       EMAS va uni nom darajasida ham tiklamaslik kerak. Son har
+       chaqiruvda `billing_repo` ning hisoblanadigan ko'rinishidan keladi.
+
+    ⚠ TAQIQLANGAN NOM BU FAYLDA LITERAL YOZILMAYDI — 03-07 / 07-02 darsi:
+      sodda grep darvozasi IZOHNI KODDAN AJRATMAYDI va uni tushuntirish
+      uchun yozish darvozani O'Z sababi bilan qizartirardi. Da'voning
+      o'zi `tests/tenancy/test_billing_domain_meta.py` va `07-04` ning
+      AST darvozasida o'lchanadi.
     """
 
     market_id: UUID
