@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 
+import { CaseDetailDialog } from "@/components/reconciliation/case-detail-dialog";
 import { CaseStatusBadge } from "@/components/reconciliation/case-status-badge";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CASE_STATUSES } from "@/lib/api-types";
@@ -35,6 +38,15 @@ import { useReconciliationCases } from "@/lib/reconciliation-queries";
  * -----------------------------------------------------------------------
  * Hukm — tafsilot dialogining ishi va u ALOHIDA huquq ostida. Bu blok
  * ⛔ SOF O'QISH: yozuv yuzasi AYNAN NOL.
+ *
+ * ⛔ `[Ko'rib chiqish]` — `ghost`, ⛔ AKSENT EMAS: u HAR QATORDA
+ *    takrorlanadi va aksent fonli bo'lsa sahifada 10-50 ta urg'uli
+ *    tugma paydo bo'lardi — 10% chegarasi BUZILARDI. Fazadagi yagona
+ *    aksent fonli tugma — tafsilot dialogidagi YAKUNIY amal.
+ *
+ * ⛔ DIALOG HOLATI URL'DA EMAS: dialogda erkin matnli yechim maydoni
+ *    bor va URL'ga chiqarilgan holat YARIM YOZILGAN matn ulashiladigan
+ *    havola yaratardi.
  *
  * -----------------------------------------------------------------------
  * ⛔ 3. OMMAVIY AMAL ⛔ QURILMAYDI
@@ -90,6 +102,9 @@ const STATUS_COUNT: Record<
 export function CaseList({ day }: { day: string }) {
   const t = useTranslations();
   const cases = useReconciliationCases(day, "");
+
+  /* ⛔ Dialog holati SHU YERDA, URL'da EMAS (modul izohining 2-bandi). */
+  const [openCaseId, setOpenCaseId] = useState<string | null>(null);
 
   const rows = cases.data?.rows ?? [];
 
@@ -148,21 +163,41 @@ export function CaseList({ day }: { day: string }) {
                   {t("recon.assigneeColumn")}
                 </th>
                 <th className="p-3 font-normal">{t("recon.openedColumn")}</th>
+                <th className="p-3 font-normal">
+                  <span className="sr-only">{t("recon.caseReview")}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <CaseRowView key={row.case_id} row={row} />
+                <CaseRowView
+                  key={row.case_id}
+                  onReview={() => setOpenCaseId(row.case_id)}
+                  row={row}
+                />
               ))}
             </tbody>
           </table>
         </div>
       ) : null}
+
+      <CaseDetailDialog
+        caseId={openCaseId}
+        onOpenChange={(open) => {
+          if (!open) setOpenCaseId(null);
+        }}
+      />
     </div>
   );
 }
 
-function CaseRowView({ row }: { row: CaseRow }) {
+function CaseRowView({
+  onReview,
+  row,
+}: {
+  onReview: () => void;
+  row: CaseRow;
+}) {
   const t = useTranslations();
   const format = useFormatter();
 
@@ -193,6 +228,12 @@ function CaseRowView({ row }: { row: CaseRow }) {
       </td>
       <td className="p-3">
         {format.dateTime(new Date(row.created_at), { dateStyle: "medium" })}
+      </td>
+      <td className="p-3">
+        {/* ⛔ `ghost` — har qatorda takrorlanadigan amal AKSENT olmaydi. */}
+        <Button onClick={onReview} size="sm" variant="ghost">
+          {t("recon.caseReview")}
+        </Button>
       </td>
     </tr>
   );

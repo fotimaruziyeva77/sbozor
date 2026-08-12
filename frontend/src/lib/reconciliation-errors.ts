@@ -131,3 +131,87 @@ export function reconErrorView(
     fixKey: `recon.errorFix.${mapped}`,
   } as ReconErrorView;
 }
+
+/* -------------------------------------------------------------------------- */
+/* YETKAZILMASLIK TURLARI — §14.9 ning IKKINCHI jadvali (BOT-04)              */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * =============================================================================
+ * ⛔⛔ NEGA XOM ISTISNO SINFI EKRANGA CHIQMAYDI VA U SHU YERDA XARITALANADI.
+ *
+ * Server javobda ⛔ ISTISNO SINFINING NOMINI beradi (`ConnectTimeout`,
+ * `HTTPStatusError`, `UnresolvedRecipient`, …) va bu ⛔ TO'G'RI: D-04
+ * bo'yicha istisnoning MATNI hech qachon saqlanmaydi, chunki Telegram
+ * Bot API ning URL'i BOT TOKENINI tashiydi.
+ *
+ * Lekin `RemoteProtocolError` direktorga ⛔ HECH NIMA AYTMAYDI. Shuning
+ * uchun sinf nomi bu yerda ⛔ YOPIQ TO'RT A'ZOLI to'plamga xaritalanadi
+ * va ekranda faqat o'sha to'rttadan biri ko'rinadi.
+ *
+ * ⛔ XARITA NOMUVOFIQLIK YUZASIDA EMAS, SHU MODULDA: `components/
+ *    reconciliation/**` taqiqlangan nomlar skanidan o'tadi va sinf
+ *    nomlarining ro'yxati o'sha katalogda ⛔ TAQIQLANGAN TOKENNI olib
+ *    kirishi mumkin edi. Bu modul esa xato TAKSONOMIYASINING uyi.
+ *
+ * ⚠ NOMA'LUM SINF `unknown` GA TUSHADI, EKRANDAN YO'QOLMAYDI: qatorni
+ *   izohsiz qoldirish «xato bor, lekin qanaqa — bilinmaydi» degan
+ *   holatni «xato yo'q» dan AJRATIB BO'LMAYDIGAN qilardi.
+ * =============================================================================
+ */
+
+/** §14.9 — yetkazilmaslikning TO'RT turi. ⛔ Beshinchisi yo'q. */
+export const DELIVERY_ERROR_CODES = [
+  "telegram_unreachable",
+  "chat_not_found",
+  "rate_limited",
+  "unknown",
+] as const;
+
+export type DeliveryErrorCode = (typeof DELIVERY_ERROR_CODES)[number];
+
+/**
+ * Tarmoq qatlamida uzilgan istisnolar — ⛔ Telegram JAVOB BERMADI.
+ *
+ * ⚠ Ro'yxat `httpx` ning transport istisnolaridan olingan; u bu yerda
+ *   QAYTA YOZILADI, kutubxonadan import qilinmaydi — import qilingan
+ *   ro'yxat kutubxona versiyasi bilan JIMGINA o'zgarardi.
+ */
+const UNREACHABLE_CLASSES: ReadonlySet<string> = new Set([
+  "ConnectTimeout",
+  "ReadTimeout",
+  "WriteTimeout",
+  "PoolTimeout",
+  "ConnectError",
+  "ReadError",
+  "WriteError",
+  "RemoteProtocolError",
+  "TransportError",
+  "TimeoutException",
+]);
+
+/**
+ * Xato TURI -> ekranning yopiq kodi.
+ *
+ * ⛔ IKKI KIRISH BIRGA: status kodi sinf nomidan KUCHLIROQ signal.
+ *    Telegram `429` ni ham, `400` ni ham AYNAN BIR sinf bilan
+ *    (`HTTPStatusError`) beradi — faqat sinfga qarash ikkalasini bir
+ *    xil ko'rsatardi va «chegara oshdi» bilan «chat topilmadi» ni
+ *    ajratib bo'lmasdi.
+ *
+ * @param errorType istisno sinfining nomi (server bergan) yoki `null`.
+ * @param statusCode HTTP status kodi yoki `null`.
+ * @returns Yopiq to'plamning a'zosi; `errorType === null` bo'lsa `null`.
+ */
+export function deliveryErrorCode(
+  errorType: string | null,
+  statusCode: number | null,
+): DeliveryErrorCode | null {
+  if (errorType === null) return null;
+  if (statusCode === 429) return "rate_limited";
+  if (statusCode === 400 || errorType === "UnresolvedRecipient") {
+    return "chat_not_found";
+  }
+  if (UNREACHABLE_CLASSES.has(errorType)) return "telegram_unreachable";
+  return "unknown";
+}

@@ -906,6 +906,10 @@ def _delivery_row(row: outbox_repo.DeliveryRow) -> DeliveryRow:
         attempt_count=row.attempt_count,
         created_at=row.created_at,
         updated_at=row.updated_at,
-        last_error_type=row.last_error_type,
-        last_status_code=row.last_status_code,
+        # ⛔ SIM NOMI USTUN NOMIDAN FARQ QILADI (`DeliveryRow.error_type`
+        #   docstringi): `last_error` tokeni frontend darvozasida 0 ga
+        #   qulflangan va u prefiks bo'yicha ishlaydi — xavfsiz ustun
+        #   nomining O'ZI o'sha darvozani qizartirardi.
+        error_type=row.last_error_type,
+        error_status_code=row.last_status_code,
     )

@@ -1,15 +1,22 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { apiFetch } from "@/lib/api-client";
 import {
   CASE_STATUSES,
+  DELIVERY_STATES,
+  NOTIFICATION_KINDS,
   SUBJECT_KINDS,
   soumSchema,
 } from "@/lib/api-types";
-import type { CaseStatusValue, SubjectKindValue } from "@/lib/api-types";
+import type {
+  CaseStatusValue,
+  DeliveryStateValue,
+  NotificationKindValue,
+  SubjectKindValue,
+} from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import { domainKey } from "@/lib/market-queries";
 
@@ -96,6 +103,17 @@ export function isCaseStatus(value: string): value is CaseStatusValue {
 
 export function isSubjectKind(value: string): value is SubjectKindValue {
   return (SUBJECT_KINDS as readonly string[]).includes(value);
+}
+
+/** Yetkazilganlik holati reyestrda bormi — ⛔ zaxira yorliq shundan. */
+export function isDeliveryState(value: string): value is DeliveryStateValue {
+  return (DELIVERY_STATES as readonly string[]).includes(value);
+}
+
+export function isNotificationKind(
+  value: string,
+): value is NotificationKindValue {
+  return (NOTIFICATION_KINDS as readonly string[]).includes(value);
 }
 
 /* --- Sxemalar — HAMMASI `z.strictObject` ---------------------------------- */
@@ -221,6 +239,135 @@ export const caseListSchema = z.strictObject({
 
 export type CaseList = z.infer<typeof caseListSchema>;
 
+/**
+ * Tarixning bitta bo'g'ini — ⛔ O'ZGARMAS QATOR (D-14).
+ *
+ * ⛔ `actor_user_id === null` = ⛔ **TIZIM**, «noma'lum» EMAS: navbatni
+ *    `recon.open` cron'i ochadi va unga odam biriktirish «kim qaror
+ *    qildi?» savoliga YOLG'ON javob bo'lardi.
+ *
+ * ⛔ `from_status === null` = qator TUG'ILDI: birinchi hodisada oldingi
+ *    holat FIZIK ravishda mavjud emas.
+ */
+export const caseEventSchema = z.strictObject({
+  from_status: z.string().nullable(),
+  to_status: z.string(),
+  actor_user_id: z.uuid().nullable(),
+  note: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export type CaseEvent = z.infer<typeof caseEventSchema>;
+
+/**
+ * `GET /reconciliation/cases/{case_id}` — DL-5 ning butun mazmuni.
+ *
+ * ⛔ TARIX SAHIFALANMAYDI va bu SERVER qarori: u nazoratchining QO'L
+ *    harakatlaridan o'sadi va nizo hujjatida (D-02) aynan TO'LIQLIK
+ *    muhim. Klient uni QISQARTIRMAYDI ham — «oxirgi 5 ta» ko'rinishi
+ *    o'zgarish tarixini jimgina kesib qo'yardi.
+ *
+ * ⛔ `resolution_note` — case'ning JORIY matni; tarixdagi har `note` esa
+ *    O'SHA QADAMNIKI. Ikkalasi bir-birini almashtirmaydi.
+ */
+export const caseDetailSchema = z.strictObject({
+  case_id: z.uuid(),
+  subject_kind: z.string(),
+  anomaly_id: z.uuid().nullable(),
+  charge_id: z.uuid().nullable(),
+  service_date: z.string(),
+  status: z.string(),
+  assignee_user_id: z.uuid().nullable(),
+  created_at: z.string(),
+  resolution_note: z.string().nullable(),
+  events: z.array(caseEventSchema),
+  evidence_snapshot_ids: z.array(z.uuid()),
+});
+
+export type CaseDetail = z.infer<typeof caseDetailSchema>;
+
+/**
+ * Yetkazilganlik jadvalining bitta qatori (BOT-04, §11.3).
+ *
+ * =========================================================================
+ * ⛔⛔ XABARNING MAZMUNI BU SXEMADA YO'Q — VA U «UNUTILGAN» EMAS.
+ *
+ * Server xabarning TANASINI ham, tayyor MATNNI ham, Telegram
+ * IDENTIFIKATORINI ham QAYTARMAYDI (07-16 marshrut kontrakti).
+ * ⛔ `z.strictObject` shuning uchun MAJBURIY: server bir kun «qulaylik
+ * uchun» qo'shsa, klient PARSE chegarasida darhol qizaradi va maydon
+ * ekranga JIMGINA chiqib ketolmaydi.
+ *
+ * ⚠ Taqiqlangan maydon nomlari bu izohda LITERAL yozilmaydi —
+ *   `badge.tsx:24-26` da o'rnatilgan kodbaza konvensiyasi (skan izohni
+ *   koddan ajratsa ham, nusxa darvozani o'ziga qarshi qo'yish odati
+ *   ATAYIN rad etilgan).
+ * =========================================================================
+ *
+ * ⛔ `status` — reyestr bilan QULFLANMAYDI (`z.string()`): backend
+ *    oltinchi a'zo qo'shsa butun jadval parse chegarasida yiqilardi va
+ *    direktor «xabar bordimi?» savoliga BO'SH SAHIFA ko'rardi. Yopiqlik
+ *    KO'RINISHDA majburlanadi (`delivery-badge.tsx` zaxira yorliq
+ *    beradi) va reyestrdan yuradigan darvoza uni ushlaydi.
+ *
+ * ⛔ `error_type` — ⛔ TUR NOMI (`type(exc).__name__`), xato MATNI EMAS
+ *    (D-04): Telegram istisnosining matni bot TOKENINI tashiydi.
+ *    Chegara SERVERDA, yozish paytida qo'yiladi.
+ *
+ *    ⚠ Serverdagi USTUN nomi boshqacha va farq ATAYIN: taqiqlangan
+ *      nomlar reyestri o'sha nomni PREFIKS sifatida qidiradi va u
+ *      XAVFSIZ maydonni ham ushlab qolardi. Sim nomi shu sababdan
+ *      qisqartirilgan; sabab server sxemasining docstringida to'liq
+ *      yozilgan. ⚠ Eski nom bu izohda LITERAL yozilmaydi.
+ *
+ * ⛔ EKRANDA XOM QIYMAT CHIZILMAYDI: u `lib/reconciliation-errors.ts`
+ *    dagi YOPIQ to'plamga xaritalanadi (§14.9) — istisno sinfining nomi
+ *    direktorga hech nima aytmaydi.
+ *
+ * ⚠ `updated_at` — OXIRGI HOLAT O'ZGARISHI. `notification_outbox` da
+ *   `last_attempt_at` USTUNI YO'Q (07-16 SUMMARY); har holat o'zgarishi
+ *   `updated_at` ni yangilaydi, ya'ni u aynan shu savolga javob beradi.
+ */
+export const deliveryRowSchema = z.strictObject({
+  outbox_id: z.uuid(),
+  kind: z.string(),
+  recipient_kind: z.string(),
+  vendor_id: z.uuid().nullable(),
+  status: z.string(),
+  attempt_count: z.number().int(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  error_type: z.string().nullable(),
+  error_status_code: z.number().int().nullable(),
+});
+
+export type DeliveryRow = z.infer<typeof deliveryRowSchema>;
+
+/**
+ * `GET /reconciliation/delivery?day=` — kunning yetkazilganlik yozuvi.
+ *
+ * ⛔ BESHALA HISOBLAGICH HAM NOL BO'LGANDA HAM KELADI va klient ularni
+ *    ⛔ SHARTSIZ chizadi: «bu kunda bloklangan sotuvchi yo'q» bilan
+ *    «hisoblagich ishlamayapti» bir xil ko'rinsa, direktor D-02
+ *    nizosida noto'g'ri xulosaga kelardi.
+ *
+ * ⛔ `blocked_count` `failed_count` GA ⛔ QO'SHILMAYDI (D-22): blok —
+ *    sotuvchining HUQUQI va qarz undirish jarayonining bir qismi,
+ *    texnik nosozlik EMAS.
+ */
+export const deliveryListSchema = z.strictObject({
+  day: z.string(),
+  rows: z.array(deliveryRowSchema),
+  pending_count: z.number().int(),
+  sent_count: z.number().int(),
+  delivered_count: z.number().int(),
+  failed_count: z.number().int(),
+  blocked_count: z.number().int(),
+  next_cursor: z.string().nullable(),
+});
+
+export type DeliveryList = z.infer<typeof deliveryListSchema>;
+
 /* --- Kesh kalitlari (TUG'ILISHIDANOQ doiralangan, §5.4) ------------------- */
 
 /*
@@ -240,6 +387,16 @@ export const casesKey = (marketId: string, day: string, cursor: string) =>
 
 export const deliveryKey = (marketId: string, day: string) =>
   domainKey(marketId, "recon-delivery", day);
+
+/**
+ * Bitta nomuvofiqlikning tafsiloti — DL-5 ning kaliti.
+ *
+ * ⚠ KUN EMAS, IDENTIFIKATOR bo'yicha doiralangan: dialog KUNDAN
+ *   mustaqil ochiladi va o'sha case boshqa kunga ko'chsa ham (u
+ *   ko'chmaydi — `service_date` o'zgarmas) kalit BARQAROR qoladi.
+ */
+export const caseDetailKey = (marketId: string, caseId: string) =>
+  domainKey(marketId, "recon-case", caseId);
 
 /** Yozilgan hisobot O'ZGARMAS (D-07) — 60 soniya XAVFSIZ. */
 export const REPORT_STALE_TIME_MS = 60_000;
@@ -343,5 +500,147 @@ export function useReconciliationCases(
     },
     enabled: marketId !== null && day !== "" && (options?.enabled ?? true),
     staleTime: CASES_STALE_TIME_MS,
+  });
+}
+
+/**
+ * `GET /reconciliation/cases/{case_id}` — DL-5 ochilganda VA FAQAT o'shanda.
+ *
+ * ⛔ `enabled` DIALOG HOLATIDAN keladi: ro'yxatdagi har qator uchun
+ *    oldindan tafsilot tortish 10-50 ta ortiqcha so'rov bo'lardi va
+ *    ularning har biri serverda audit shovqinini yozardi.
+ */
+export function useCaseDetail(
+  caseId: string | null,
+  options?: { enabled?: boolean },
+) {
+  const marketId = useMarketId();
+
+  return useQuery({
+    queryKey: caseDetailKey(marketId ?? "", caseId ?? ""),
+    queryFn: () =>
+      apiFetch(
+        `${RECONCILIATION_CASES_PATH}/${encodeURIComponent(caseId ?? "")}`,
+        { schema: caseDetailSchema },
+      ),
+    enabled:
+      marketId !== null && caseId !== null && (options?.enabled ?? true),
+    staleTime: CASES_STALE_TIME_MS,
+  });
+}
+
+/**
+ * ⛔⛔ YETKAZILGANLIK — `day = bugun` DA JONLI (§5.4, §11.4).
+ *
+ * =========================================================================
+ * Bugungi holat SONIYALARDA o'zgaradi (`pending -> sent -> delivered`) va
+ * eski javob «hali yuborilmadi» deb ⛔ YOLG'ON GAPIRARDI — aynan shu
+ * yolg'on BOT-04 ning butun mavjudlik sababini («xabar kelmadi» nizosi,
+ * D-02) yo'q qilardi.
+ *
+ * ⛔ SHUNING UCHUN `staleTime` HAM, `gcTime` HAM NOL (`deliveryCachePolicy`
+ *    docstringi): `staleTime` yolg'iz o'zi YETARLI EMAS — blok qayta
+ *    chizilganda TanStack avval keshdagi eski javobni ko'rsatadi va
+ *    direktor uni «hozirgi holat» deb o'qirdi.
+ *
+ * ⛔ AVTOMATIK SO'ROV YO'Q: `refetchInterval` ⛔ YOZILMAYDI. Ochiq
+ *    qoldirilgan sahifa har necha soniyada so'rov yuborardi va raqam
+ *    JIMGINA o'zgarardi — «men boshqa raqam ko'rgandim» nizosi.
+ *    Yangilash — foydalanuvchining OCHIQ NIYATI (`[Yangilash]`).
+ * =========================================================================
+ *
+ * ⚠ `isToday` ARGUMENT, hook ichida HISOBLANMAYDI: biznes-kun tanlagichda
+ *   yechiladi (`useReconciliationDay()`) va ikkinchi hisob ikki manba
+ *   tug'dirardi — Toshkent yarim tunidan keyingi besh soatda ular
+ *   BOSHQA-BOSHQA kunni ko'rsatardi.
+ */
+export function useDeliveries(
+  day: string,
+  isToday: boolean,
+  options?: { enabled?: boolean },
+) {
+  const marketId = useMarketId();
+  const policy = deliveryCachePolicy(isToday);
+
+  return useQuery({
+    queryKey: deliveryKey(marketId ?? "", day),
+    queryFn: () =>
+      apiFetch(
+        `${RECONCILIATION_DELIVERY_PATH}?day=${encodeURIComponent(day)}`,
+        { schema: deliveryListSchema },
+      ),
+    enabled: marketId !== null && day !== "" && (options?.enabled ?? true),
+    staleTime: policy.staleTime,
+    gcTime: policy.gcTime,
+  });
+}
+
+/**
+ * `PATCH /reconciliation/cases/{case_id}` — hukm VA mas'ul (D-14).
+ *
+ * =========================================================================
+ * ⛔⛔ BEKOR QILISH `invalidateQueries` BILAN, ⛔ `removeQueries` EMAS —
+ *     VA SABAB 6-FAZANIKIDAN FARQ QILADI (§5.4).
+ *
+ * 6-fazada keshdan CHIQARISH kerak edi: eski rastaning summasi
+ * NOTO'G'RI PUL YIG'ISHGA olib borardi. Bu yerda esa keshdan chiqarish
+ * ro'yxatni ⛔ BO'SHATIB, direktor o'z o'zgarishini ⛔ YO'QOLGAN deb
+ * o'ylardi — ya'ni to'g'ri ishlagan yozuv buzuq bo'lib ko'rinardi.
+ * =========================================================================
+ *
+ * ⛔⛔ BEKOR QILINADIGAN DOMENLAR — VA NEGA ULAR IKKITA, UCHTA EMAS:
+ *
+ *   `recon-cases`  — navbat qatorining O'ZI (holat, mas'ul) ⛔ VA
+ *                    ANIQLIK ULUSHI ham. Ulush ⛔ ALOHIDA SO'ROV
+ *                    QILMAYDI: u `caseListSchema` ning to'rt sanog'idan
+ *                    RENDER PAYTIDA hisoblanadi (§9.2/§9.5, D-13,
+ *                    07-15 qarori). Ya'ni `recon-hitrate` degan kesh
+ *                    kaliti ⛔ MAVJUD EMAS va uni bekor qilish
+ *                    ⛔ NO-OP bo'lardi — kodda esa «ulush ham
+ *                    yangilanadi» degan YOLG'ON izoh qolardi.
+ *   `recon-report` — hisobot qatoridagi case NISHONI (§8.5).
+ *
+ * Bittasi unutilsa ekranda ⛔ IKKI XIL HAQIQAT qolardi: navbatda
+ * «Asosli», hisobot qatorida esa hamon «Yangi».
+ *
+ * ⛔ `recon-delivery` bekor QILINMAYDI: hukm chiqarish xabar
+ *    yubormaydi va u navbatga tegmaydi. Uni ham bekor qilish jonli
+ *    blokni sababsiz qayta so'ratardi.
+ *
+ * ⚠ Tafsilotning O'ZI (`recon-case`) ham bekor qilinadi: audit izi
+ *   YANGI QATOR bilan o'sadi va u dialogda DARHOL ko'rinishi kerak
+ *   (D-14 — o'zgarish tarixda ko'rinadi).
+ */
+export function useCaseUpdate() {
+  const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
+
+  return useMutation({
+    mutationFn: (input: {
+      caseId: string;
+      status: CaseStatusValue;
+      resolutionNote: string | null;
+      assigneeUserId: string | null;
+    }) =>
+      apiFetch(
+        `${RECONCILIATION_CASES_PATH}/${encodeURIComponent(input.caseId)}`,
+        {
+          method: "PATCH",
+          body: {
+            status: input.status,
+            resolution_note: input.resolutionNote,
+            assignee_user_id: input.assigneeUserId,
+          },
+          schema: caseDetailSchema,
+        },
+      ),
+    onSuccess: (_data, input) => {
+      void client.invalidateQueries({
+        queryKey: caseDetailKey(marketId, input.caseId),
+      });
+      for (const domain of ["recon-cases", "recon-report"]) {
+        void client.invalidateQueries({ queryKey: domainKey(marketId, domain) });
+      }
+    },
   });
 }

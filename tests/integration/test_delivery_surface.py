@@ -438,10 +438,15 @@ async def test_the_error_type_is_a_type_name_not_a_message(
     rows = response.json()["rows"]
     assert len(rows) == 1
 
-    error_type = rows[0]["last_error_type"]
+    # ⚠ SIM MAYDONI `error_type`, USTUN esa `last_error_type` — farq
+    #   `schemas.DeliveryRow.error_type` docstringida ochiq yozilgan
+    #   (G-36 tokeni prefiks bo'yicha ishlaydi va xavfsiz ustun nomini
+    #   ham ushlab qolardi).
+    error_type = rows[0]["error_type"]
     assert error_type == "ConnectTimeout"
-    assert rows[0]["last_status_code"] == 502
+    assert rows[0]["error_status_code"] == 502
     assert rows[0]["attempt_count"] == 5
+    assert "last_error_type" not in rows[0]
 
     found = sorted(token for token in ERROR_TYPE_FORBIDDEN if token in error_type.lower())
     assert found == [], f"xato TURI matnga o'xshayapti — topilgan parcha(lar): {found}"

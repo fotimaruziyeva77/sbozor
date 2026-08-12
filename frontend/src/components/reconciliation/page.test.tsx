@@ -152,13 +152,32 @@ function caseRow(status: string) {
   };
 }
 
+const OUTBOX_ID = "55555555-5555-4555-8555-555555555555";
+
+function deliveryRow(status: string) {
+  return {
+    outbox_id: OUTBOX_ID,
+    kind: "payment_receipt",
+    recipient_kind: "vendor",
+    vendor_id: VENDOR_ID,
+    status,
+    attempt_count: 1,
+    created_at: `${TODAY}T09:15:00Z`,
+    updated_at: `${TODAY}T09:15:02Z`,
+    error_type: null,
+    error_status_code: null,
+  };
+}
+
 /** Marshrutlarni mock'laydi — har blok O'Z ma'lumotini oladi. */
 function routeFetch({
   reportRows,
   caseRows,
+  deliveryRows = [deliveryRow("delivered")],
 }: {
   reportRows: Row[];
   caseRows: ReturnType<typeof caseRow>[];
+  deliveryRows?: ReturnType<typeof deliveryRow>[];
 }) {
   apiClientMock.apiFetch.mockImplementation((path: string) => {
     if (path.startsWith("/reconciliation/report")) {
@@ -182,6 +201,27 @@ function routeFetch({
         in_review_count: 0,
         justified_count: 3,
         unjustified_count: 1,
+        next_cursor: null,
+      });
+    }
+    /*
+     * ⛔ YETKAZILGANLIK MARSHRUTI HAR IKKALA KUNDA HAM SO'RALADI —
+     *   `delivery` bloki KESISHMANING a'zosi (§4.4). Uni mock'lamaslik
+     *   blokni XATO holatiga tushirardi va (c) bandining bo'sh-holat
+     *   da'vosi BOSHQA sababdan qizarardi.
+     */
+    if (path.startsWith("/reconciliation/delivery")) {
+      return Promise.resolve({
+        day: path.includes(TODAY) ? TODAY : YESTERDAY,
+        rows: deliveryRows,
+        pending_count: deliveryRows.filter((row) => row.status === "pending")
+          .length,
+        sent_count: 0,
+        delivered_count: deliveryRows.filter(
+          (row) => row.status === "delivered",
+        ).length,
+        failed_count: 0,
+        blocked_count: 0,
         next_cursor: null,
       });
     }
@@ -396,8 +436,26 @@ describe("⛔ G-29 (c): mazmun MOCK'DAGI AYNAN QIYMATGA qadalgan", () => {
     expect(block?.querySelectorAll("tbody tr").length).toBe(1);
   });
 
+  test("⛔ `delivery` bloki mock'dagi holat YORLIG'INI beradi", async () => {
+    routeFetch({
+      reportRows: [unpaidRow()],
+      caseRows: [caseRow("new")],
+      deliveryRows: [deliveryRow("delivered")],
+    });
+
+    const { container } = await renderPage(YESTERDAY);
+    const block = container.querySelector('[data-recon-content="delivery"]');
+
+    /*
+     * ⛔ MOCK'DAGI AYNAN QIYMATGA QADALGAN: platsholder bilan
+     *   almashtirilgan blok bu da'voni QIZARTIRADI.
+     */
+    expect(block?.textContent).toContain(messages.recon.deliveryState.delivered);
+    expect(block?.querySelectorAll("tbody tr").length).toBe(1);
+  });
+
   test("⛔ BO'SH javob bergan blok O'Z bo'sh-holat matnini ko'rsatadi", async () => {
-    routeFetch({ reportRows: [], caseRows: [] });
+    routeFetch({ reportRows: [], caseRows: [], deliveryRows: [] });
 
     const { container } = await renderPage(YESTERDAY);
 

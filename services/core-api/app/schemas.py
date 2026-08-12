@@ -4110,16 +4110,42 @@ class DeliveryRow(BaseModel):
     attempt_count: int
     created_at: datetime
     updated_at: datetime
-    last_error_type: str | None
+    error_type: str | None
     """⛔ TUR NOMI (`type(exc).__name__`), xato MATNI ⛔ HECH QACHON (D-04).
 
     Telegram Bot API ning URL'i BOT TOKENINI tashiydi va `httpx`
     istisnosining matni to'liq URL'ni o'z ichiga oladi. Chegara
     `outbox_repo._validate_error_type()` da YOZISH paytida qo'yiladi,
     ya'ni bu ustunga matn UMUMAN tusha olmaydi.
+
+    =======================================================================
+    ⛔⛔ SIM USTUNI `last_error_type`, SIM MAYDONI `error_type` — VA FARQ
+        ATAYIN, «unutish» EMAS.
+
+    07-UI-SPEC §16.6 (**G-36**) `last_error` tokenini nomuvofiqlik
+    yuzasida ⛔ **0** ga qulflaydi va taqiqning SABABI aynan ⛔ **xom
+    istisno MATNI** (u bot tokenini tashiydi). Darvoza esa tokenni
+    ⛔ **PREFIKS** sifatida qidiradi, ya'ni u `last_error_type` ni
+    `last_error` dan ⛔ **AJRATA OLMAYDI**: xavfsiz maydon nomining
+    O'ZI darvozani qizartirardi.
+
+    ⛔ DARVOZAGA ISTISNO YOZILMADI (07-15 ning `hitRate*` -> `accuracy*`
+       pretsedenti): «... dan tashqari» degan carve-out keyingi ijrochi
+       tomonidan kengaytirilardi va reyestr asta-sekin bo'shashardi.
+       Nomni o'zgartirish darvozani ⛔ **ISTISNOSIZ** qoldiradi.
+
+    ⚠ Va yangi nom MAZMUNAN ham aniqroq: maydon «oxirgi xato» emas,
+      «xatoning TURI» — `_type` qo'shimchasi bilan `last_` prefiksi
+      bir narsani ikki marta aytardi.
+    =======================================================================
     """
-    last_status_code: int | None
-    """HTTP status kodi (`429`, `400`, …). ⛔ `403` -> `blocked` (D-22)."""
+    error_status_code: int | None
+    """HTTP status kodi (`429`, `400`, …). ⛔ `403` -> `blocked` (D-22).
+
+    ⚠ Nomi `error_type` bilan JUFTLASHTIRILGAN: bir manbadan kelgan ikki
+      maydon ikki xil prefiks bilan turishi o'quvchida «ular boshqa
+      hodisadan» degan noto'g'ri taassurot qoldirardi.
+    """
 
 
 class DeliveryListResponse(BaseModel):
