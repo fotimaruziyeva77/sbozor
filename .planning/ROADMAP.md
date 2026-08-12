@@ -49,7 +49,7 @@ Decimal phases appear between their surrounding integers in numeric order.
  (completed 2026-08-09)
 
 - [x] **Phase 6: Billing va kassir** - O'zgarmas kunlik patta, dalil bog'lash, qarz, ≤3 bosishli kassir, smena hisobi (14/14 reja bajarildi; beshala mezon `tests/integration/test_phase6_criteria.py` bilan BITTA buyruqda o'lchanadi va uchala darvozasi — mezon boshiga bitta test, meta-test, soxtalashtirishsiz o'lchov — yashil. BILL-01…05 va CASH-01…04 dalil bilan `Done` (9/9). `## Manual-Only Verifications` jadvali BO'SH qoldi va bu fazaning NATIJASI: 5-fazadan farqli o'laroq bu yerda haqiqat to'liq mavjud edi (pul aniq, tarif jadvalda, bandlik materializatsiya qilingan), ya'ni «hozir o'lchab bo'lmaydi» bandining o'rni yo'q edi. 5-fazadan meros `gate` byudjeti TINCH XOSTDAGI uch o'lchov bilan qayta belgilandi: 1703/1733/1899 s, chegara 1250 s → **2300 s**; `gate:fast` 160/154/152 s, 180 s → **200 s** — ikkalasi ham o'sish TO'PLAMNING o'sishidan ekani raqam bilan asoslandi (173 backend testi, vitest 620 → 738, uchta yangi SSG marshruti). ⚠ **KOD KO'RIGI BO'SHLIQ TOPDI VA U YOPILDI:** `06-REVIEW.md` (2026-08-11) **5 bloker + 9 ogohlantirish** berdi — hammasi qatlam CHEGARALARIDA, ya'ni fazaning testlari to'xtagan joyda. Eng og'iri D-21 ning buzilishi edi: idempotentlik kvota darvozasidan KEYIN tekshirilardi, ya'ni qarz bilan to'lovni qayta yuborish 200 emas 422 berardi va to'lov ALLAQACHON yozilgan bo'lardi. O'n bir commitda yopildi va har blokerning tuzatilishi SABOTAJ bilan o'lchandi — har safar yangi test qizardi, mavjud testlar YASHIL qoldi (WR-09 ning aynan ko'rligi). ✅ **QAYTA TEKSHIRUV O'TDI (2026-08-11): 5/5, 9/9, holat `human_needed`** — `06-VERIFICATION.md`. Tekshiruvchi da'volarni o'qimay kodni O'ZI o'qidi, beshala tuzatishni mustaqil tasdiqladi va kafolatlarni migratsiya DDL'idan tekshirdi (idempotentlik kaliti — `UNIQUE` cheklov, ilova intizomi EMAS; o'zgarmaslik — shartsiz triggerlar; saqlangan `balance*` ustuni sxemada YO'Q). `human_needed` — `06-HUMAN-UAT.md` dagi to'rt band inson idroki, real qurilma va tashkiliy shart haqida, kod bo'shlig'i EMAS) (plans completed 2026-08-11)
-- [ ] **Phase 7: Nomuvofiqlik, bildirishnoma va botlar** - "Band, lekin to'lovsiz" case oqimi, sotuvchi va direktor botlari
+- [x] **Phase 7: Nomuvofiqlik, bildirishnoma va botlar** - "Band, lekin to'lovsiz" case oqimi, sotuvchi va direktor botlari (completed 2026-08-12)
 - [ ] **Phase 8: Hisobotlar, mustahkamlash va ishga tushirish** - Excel eksport, AI aniqlik hisoboti, backup mashqi, go-live
 
 ## Phase Details
@@ -435,44 +435,44 @@ bajarildi va beshala mezon bitta buyruqda yashil
 Plans:
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — `bot-service` tug'ilishi: skelet, compose, `package.json`, Sentry darvozasining kengaytmasi
-- [ ] 07-02-PLAN.md — Bildirishnoma domeni: besh enum, besh model, `0023` migratsiya (RLS + kompozit FK + XOR CHECK)
-- [ ] 07-03-PLAN.md — `GET /me/headline` — rol bo'yicha serverda hal qilinadigan bitta son (RECON-06)
+- [x] 07-01-PLAN.md — `bot-service` tug'ilishi: skelet, compose, `package.json`, Sentry darvozasining kengaytmasi
+- [x] 07-02-PLAN.md — Bildirishnoma domeni: besh enum, besh model, `0023` migratsiya (RLS + kompozit FK + XOR CHECK)
+- [x] 07-03-PLAN.md — `GET /me/headline` — rol bo'yicha serverda hal qilinadigan bitta son (RECON-06)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-04-PLAN.md — Strukturaviy meta darvoza (G7-2/G7-7/G7-8) + domen fixture'lari (ikki bozorli telefon to'qnashuvi)
-- [ ] 07-05-PLAN.md — Frontend: bosh ekran ko'rsatkichi
+- [x] 07-04-PLAN.md — Strukturaviy meta darvoza (G7-2/G7-7/G7-8) + domen fixture'lari (ikki bozorli telefon to'qnashuvi)
+- [x] 07-05-PLAN.md — Frontend: bosh ekran ko'rsatkichi
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 07-06-PLAN.md — `AlertSender` kengaytmasi (`chat_id` argument) + `outbox_repo` + D-18 siyosati
-- [ ] 07-07-PLAN.md — Case domeni: `reconciliation_repo` + `recon.open` jobi + hosila hit-rate
-- [ ] 07-08-PLAN.md — Ichki bot API + `binding_repo` (D-26 ning uch shoxi)
+- [x] 07-06-PLAN.md — `AlertSender` kengaytmasi (`chat_id` argument) + `outbox_repo` + D-18 siyosati
+- [x] 07-07-PLAN.md — Case domeni: `reconciliation_repo` + `recon.open` jobi + hosila hit-rate
+- [x] 07-08-PLAN.md — Ichki bot API + `binding_repo` (D-26 ning uch shoxi)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 07-09-PLAN.md — `notify.outbox_tick` jobi + G7-1/G7-4/G7-5
-- [ ] 07-10-PLAN.md — Nomuvofiqlik hisoboti va case yuzasi (API) + G7-6
-- [ ] 07-11-PLAN.md — `bot-service` handlerlari, uchala locale katalogi + G7-9
-- [ ] 07-12-PLAN.md — CASH-05: kvitansiya niyati to'lov tranzaksiyasida
-- [ ] 07-13-PLAN.md — Kechki/ertalabki xabar (D-15/D-16) va kechikkan qarz eslatmasi (BOT-03)
+- [x] 07-09-PLAN.md — `notify.outbox_tick` jobi + G7-1/G7-4/G7-5
+- [x] 07-10-PLAN.md — Nomuvofiqlik hisoboti va case yuzasi (API) + G7-6
+- [x] 07-11-PLAN.md — `bot-service` handlerlari, uchala locale katalogi + G7-9
+- [x] 07-12-PLAN.md — CASH-05: kvitansiya niyati to'lov tranzaksiyasida
+- [x] 07-13-PLAN.md — Kechki/ertalabki xabar (D-15/D-16) va kechikkan qarz eslatmasi (BOT-03)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 07-14-PLAN.md — Cron reyestri va yurak urishi (D-17): besh vazifa, to'rt komponent
+- [x] 07-14-PLAN.md — Cron reyestri va yurak urishi (D-17): besh vazifa, to'rt komponent
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 07-15-PLAN.md — Frontend: nomuvofiqlik hisoboti + case ro'yxati + G7-3
+- [x] 07-15-PLAN.md — Frontend: nomuvofiqlik hisoboti + case ro'yxati + G7-3
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 07-16-PLAN.md — Frontend: case detali + yetkazilganlik holati (BOT-04)
+- [x] 07-16-PLAN.md — Frontend: case detali + yetkazilganlik holati (BOT-04)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 07-17-PLAN.md — Faza darvozasi: `test_phase7_criteria.py`, byudjet o'lchovi, talab holatlari
+- [x] 07-17-PLAN.md — Faza darvozasi: `test_phase7_criteria.py`, byudjet o'lchovi, talab holatlari
 
 **UI hint**: yes
 
@@ -544,7 +544,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
 | 6. Billing va kassir | 14/14 | Complete   | 2026-08-11 |
-| 7. Nomuvofiqlik, bildirishnoma va botlar | 0/TBD | Not started | - |
+| 7. Nomuvofiqlik, bildirishnoma va botlar | 17/17 | Complete   | 2026-08-12 |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 
 ---
