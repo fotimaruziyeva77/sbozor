@@ -1217,5 +1217,12 @@
     "errorFix": {
       "charge_immutable": "Tuzatishni alohida yozuv sifatida kiriting"
     }
+  },
+  "headline": {
+    "revenue_today": "Bugungi tushum",
+    "review_queue": "{count, plural, other {Ko'rib chiqish navbati}}",
+    "receipts_written": "{count, plural, other {Bugun yozilgan kvitansiyalar}}",
+    "unknown": "Ko'rsatkich",
+    "amountUnit": "so'm"
   }
 }

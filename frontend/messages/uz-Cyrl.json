@@ -1217,5 +1217,12 @@
     "errorFix": {
       "charge_immutable": "Тузатишни алоҳида ёзув сифатида киритинг"
     }
+  },
+  "headline": {
+    "revenue_today": "Бугунги тушум",
+    "review_queue": "{count, plural, other {Кўриб чиқиш навбати}}",
+    "receipts_written": "{count, plural, other {Бугун ёзилган квитанциялар}}",
+    "unknown": "Кўрсаткич",
+    "amountUnit": "сўм"
   }
 }
