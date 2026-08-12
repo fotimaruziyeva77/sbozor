@@ -32,6 +32,7 @@ soatni almashtirmasdan, `freezegun`siz va yangi bog'liqliksiz o'lchanadi.
 
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
@@ -40,6 +41,7 @@ from uuid import uuid4
 import httpx
 import pytest
 import respx
+from app import worker
 from app.jobs.alerting import (
     ALERT_DETAIL_KEYS,
     ALERT_META,
@@ -60,12 +62,14 @@ from pydantic import SecretStr
 from sbozor_core.enums import AlertSeverity, CaptureMethod, CaptureRunStatus
 from sbozor_core.models.snapshot import DEFAULT_SNAPSHOT_SLOTS
 from sbozor_core.timeutil import MARKET_TZ, business_date, business_today
+from taskiq import Context, TaskiqMessage, TaskiqState
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import date
     from uuid import UUID
 
+    from app.settings import Settings
     from fixtures.two_markets import TwoMarketSeed
     from psycopg import Connection
     from psycopg.rows import TupleRow
@@ -311,6 +315,38 @@ async def _sweep(
     now: datetime | None = None,
 ) -> Any:
     return await alert_sweep(sessionmaker, sender, now=now)
+
+
+def _explode(*_args: object, **_kwargs: object) -> Any:
+    """Chaqirilishi DARVOZANING BUZILGANINI bildiradigan sentinel.
+
+    ⚠ `AssertionError` ATAYIN, `RuntimeError` EMAS: `alert_sweep` ning
+      birinchi qadami `SQLAlchemyError` ni YUTADI, ya'ni o'sha oiladagi
+      istisno jimgina bosilib, nazorat bandi hech nimani o'lchamasdi.
+    """
+    raise AssertionError(
+        "`sessionmaker` chaqirildi — vazifa `alerts_enabled` chegarasini chetlab o'tdi (Pitfall 9)"
+    )
+
+
+def _worker_context(sender: AlertSender, *, alerts_enabled: bool) -> Context:
+    """`TaskiqState` ni bazasiz quradi — vazifalar faqat SHU uch nomni o'qiydi.
+
+    ⚠ HAQIQIY `Context` VA HAQIQIY VAZIFA: `alert_sweep_task` mahsulot
+      kodining O'ZI bo'lib qoladi, faqat uning resurslari sentinel bilan
+      almashtiriladi. Vazifani qayta yozib «shunday ishlaydi» deb o'lchash
+      chegarani mahsulotdan UZARDI.
+    """
+    state = TaskiqState()
+    state.sessionmaker = _explode
+    state.sender = sender
+    state.alerts_enabled = alerts_enabled
+    context = Context(
+        TaskiqMessage(task_id="pytest", task_name="pytest", labels={}, args=[], kwargs={}),
+        worker.broker,
+    )
+    context.state = state
+    return context
 
 
 # ===========================================================================
@@ -859,3 +895,143 @@ async def test_alerts_disabled_never_raises_and_never_calls(
     assert route.call_count == 0, "o'chirilgan jo'natuvchi tarmoqqa chiqdi"
     assert result.notified == 0
     assert [row["alert_key"] for row in bed.alerts()], "alert qatori yozilmadi"
+
+
+# ===========================================================================
+# 8. ⛔ 07-06 — YUZA O'SMADI VA OPS CHATI KVITANSIYANI O'CHIRMAYDI
+# ===========================================================================
+
+
+def test_sender_public_surface_did_not_grow() -> None:
+    """⛔ D-19/D-23 — `AlertSender` ning ommaviy nomlari AYNAN uchta.
+
+    =======================================================================
+    ⛔ TO'PLAM TENGLIGI, `len()` EMAS.
+
+    Sanoq bir nomni ikkinchisiga ALMASHTIRISHNI umuman ko'rmasdi:
+    `send_message` o'chib `send_photo` qo'shilsa uzunlik hamon 3 bo'lardi
+    va darvoza yashil qolardi — ya'ni u aynan o'zi to'sishi kerak bo'lgan
+    o'zgarishni o'tkazib yuborardi.
+
+    ⚠ 07-06 BU DARVOZANI KENGAYTIRMADI, u AYNAN shu holatda qolishi
+      KERAK edi: `chat_id` METOD emas, ARGUMENT bo'lib qo'shildi
+      (pastdagi test). Ikkinchi jo'natuvchi sinf yozish modul
+      docstringining 1- va 2-taqig'ini IKKILANTIRARDI.
+
+    ⚠ KONTEKST MENEJERI DUNDER, ya'ni bu to'plamga TUSHMAYDI — shuning
+      uchun uning mavjudligi ALOHIDA assert bilan qulflangan: `aclose`
+      dunderlarsiz qolsa `AsyncExitStack` ga yozilgan resurs jimgina
+      yopilmasdan qolardi.
+    =======================================================================
+    """
+    public = {name for name in dir(AlertSender) if not name.startswith("_")}
+
+    assert public == {"aclose", "enabled", "send_message"}, (
+        f"`AlertSender` ning ommaviy yuzasi o'zgardi: {sorted(public)}. Har bir "
+        "yangi metod yangi savol talab qiladi («bu chaqiruvda shaxsiy ma'lumot "
+        "bormi?») va rasm/hujjat/media metodlari bu faylda ATAYIN YO'Q (D-19)."
+    )
+    assert hasattr(AlertSender, "__aenter__") and hasattr(AlertSender, "__aexit__"), (
+        "kontekst menejeri metodlari yo'qoldi — `AsyncExitStack` ga yozilgan "
+        "jo'natuvchi jimgina yopilmasdan qolardi"
+    )
+
+
+def test_send_message_accepts_chat_id_without_new_method() -> None:
+    """⛔ D-23 — `chat_id` KALIT-ONLY argument, standarti `None`.
+
+    =======================================================================
+    IKKALA XOSSA HAM O'LCHANADI VA IKKALASI HAM SABABLI:
+
+      * KALIT-ONLY — pozitsion chaqiruv (`send_message(text, chat_id)`)
+        matn va manzilni O'RIN bilan ajratardi va bir kun ular joyini
+        almashtirganda MANZIL matn sifatida yuborilardi;
+      * STANDART `None` — mavjud chaqiruvchilar (`alerting.py` ning
+        supurgisi va dayjesti) TEGILMAY qoladi, ya'ni bu o'zgarish
+        kengaytma, sinish emas.
+
+    ⚠ `TELEGRAM_SEND_METHOD` ham shu yerda qulflanadi: u YAGONA Bot API
+      metodi bo'lib qolishi 1-taqiqning butun mazmuni.
+    =======================================================================
+    """
+    parameters = inspect.signature(AlertSender.send_message).parameters
+
+    assert "chat_id" in parameters, (
+        "`send_message` `chat_id` argumentini qabul qilmaydi — outbox "
+        "sotuvchining shaxsiy chatiga yoza olmasdi va yagona chiqish yo'li "
+        "IKKINCHI jo'natuvchi sinf bo'lardi (D-23)"
+    )
+    assert parameters["chat_id"].kind is inspect.Parameter.KEYWORD_ONLY, (
+        "`chat_id` pozitsion bo'lib qoldi — matn bilan manzil o'rin almashganda "
+        "manzil xabar matni sifatida ketardi"
+    )
+    assert parameters["chat_id"].default is None, (
+        "`chat_id` ning standarti `None` emas — mavjud chaqiruvchilar (supurgi, "
+        "dayjest) sinardi va o'zgarish kengaytma bo'lmasdi"
+    )
+    assert TELEGRAM_SEND_METHOD == "sendMessage", (
+        "yagona Bot API metodi o'zgardi — 1-taqiqning butun mexanikasi shu satrga tayanadi"
+    )
+
+
+async def test_sweep_is_skipped_without_ops_chat_but_sender_stays_open(
+    test_settings: Settings,
+) -> None:
+    """⛔ Pitfall 9 — ops chatining YO'QLIGI kvitansiyani O'CHIRMAYDI.
+
+    =======================================================================
+    ⛔⛔ BU FAZANING CHEGARA SINOVI VA U IKKI DA'VONI BIRGA O'LCHAYDI.
+
+    `settings.py` — `alerts_enabled = bool(token AND chat_id)`. Bugungi
+    holatda `TELEGRAM_CHAT_ID` bo'sh bo'lsa `AlertSender` klientni UMUMAN
+    ochmasdi, ya'ni SOTUVCHIGA ketadigan kvitansiya (CASH-05) ham
+    JIMGINA ketmasdi — holbuki unga ops chati kerak emas.
+
+    Shuning uchun:
+      1. jo'natuvchi TOKEN borligida ochiladi -> `sender.enabled is True`;
+      2. SUPURGI esa chaqiruv joyida `alerts_enabled` bilan o'raladi ->
+         `alert_sweep` UMUMAN chaqirilmaydi.
+
+    ⚠ NAZORAT BANDI MAJBURIY: bayroq `True` bo'lganda vazifa
+      `sessionmaker` ga BORISHI shart. Usiz «vazifa ishlamadi» da'vosi
+      vazifaning butunlay bo'sh bo'lishi bilan ham bajarilardi va
+      darvoza hech nimani o'lchamasdi (05-fazaning W-2 darsi).
+
+    ⚠ TARMOQ VA BAZA BU YERDA KERAK EMAS: `sessionmaker` o'rniga
+      chaqirilganda YIQILADIGAN sentinel beriladi. `alert_sweep` ning
+      birinchi qadami `active_market_ids(sessionmaker)` va u faqat
+      `SQLAlchemyError` ni yutadi — `AssertionError` esa TASHQARIGA
+      chiqadi, ya'ni nazorat bandi haqiqatan qizaradi.
+    =======================================================================
+    """
+    tuned = test_settings.model_copy(
+        update={"telegram_bot_token": SecretStr(TOKEN), "telegram_chat_id": ""}
+    )
+    assert tuned.alerts_enabled is False, (
+        "test o'z farazini tasdiqlamadi: ops chati bo'sh bo'lsa `alerts_enabled` "
+        "`False` bo'lishi SHART — aks holda quyidagi da'volar hech nimani o'lchamaydi"
+    )
+
+    sender = worker._alert_sender(tuned)
+    try:
+        assert sender.enabled is True, (
+            "ops chati sozlanmagani BUTUN jo'natuvchini o'chirdi — sotuvchining "
+            "kvitansiyasi (CASH-05) jimgina ketmasdi (Pitfall 9)"
+        )
+        assert await sender.send_message("zond") is False, (
+            "manzilsiz chaqiruv `False` qaytarmadi — bo'sh `chat_id` bilan "
+            "Telegram'ga so'rov ketardi"
+        )
+
+        context = _worker_context(sender, alerts_enabled=tuned.alerts_enabled)
+        await worker.alert_sweep_task(context)
+        await worker.daily_digest_task(context)
+
+        # NAZORAT: bayroq yoqilganda ikkala vazifa ham resursga BORADI.
+        live = _worker_context(sender, alerts_enabled=True)
+        with pytest.raises(AssertionError, match="sessionmaker"):
+            await worker.alert_sweep_task(live)
+        with pytest.raises(AssertionError, match="sessionmaker"):
+            await worker.daily_digest_task(live)
+    finally:
+        await sender.aclose()
