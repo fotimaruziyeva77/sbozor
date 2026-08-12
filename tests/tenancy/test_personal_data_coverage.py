@@ -671,6 +671,174 @@ def test_the_snapshot_surface_is_a_closed_set() -> None:
     assert not overlap, f"marshrut IKKALA ro'yxatda ham: {overlap}"
 
 
+# ---------------------------------------------------------------------------
+# G7-6 — 07-10 NING BESH MARSHRUTI DARVOZAGA TUSHMAYDI (D-05, RECON-01/02)
+# ---------------------------------------------------------------------------
+
+RECONCILIATION_PREFIX = "/api/v1/reconciliation"
+"""Nomuvofiqlik yuzasining prefiksi — to'plam MARSHRUT GRAFIDAN hosila.
+
+⚠ PREFIKS BO'YICHA, QO'LDA YOZILGAN RO'YXAT BO'YICHA EMAS: oltinchi
+  marshrut qo'shilsa u darvozaga O'ZI kiradi. Nomlar reyestri esa
+  `test_route_coverage.py::RECONCILIATION_ROUTES` da va u BOSHQA
+  savolga javob beradi («yuza qanchaligicha qoldimi?»).
+"""
+
+TELEGRAM_IDENTIFIER_FIELDS = frozenset({"chat_id", "telegram_user_id", "telegram_username"})
+"""⛔ `PERSONAL_FIELDS` USHLAMAYDIGAN, LEKIN ODAMNI ANIQLAYDIGAN NOMLAR.
+
+=============================================================================
+⛔⛔ NEGA ALOHIDA RO'YXAT VA NEGA U `PERSONAL_FIELDS` GA QO'SHILMAYDI.
+
+`PERSONAL_FIELDS` ning butun kuchi TORLIGIDA (o'sha konstantaning
+docstringi): uni kengaytirish darvozani deyarli har marshrutga yoyardi
+va yagona amaliy yechim istisnolar ro'yxatini shishirish bo'lardi.
+Bundan tashqari bu uchtasi BOSHQA talabga ega — ular `audit_read` +
+`VENDOR_VIEW` bilan «qonuniylashtirilmaydi», ular javobda ⛔ UMUMAN
+BO'LMAYDI (07-UI-SPEC §5.5, D-01: ular odamni TASHQI tizimda aniqlaydi
+va chegaradan CHIQIB BO'LGAN).
+
+Frontend tomonda o'sha taqiq **G-36** bilan yopilgan; bu — uning
+SERVER yarmi va u shu fazaning yuzasi bilan CHEKLANGAN: eski
+marshrutlarni qamrash bu rejaning ishi emas.
+=============================================================================
+"""
+
+
+def reconciliation_routes(app: FastAPI) -> dict[str, APIRoute]:
+    """`/api/v1/reconciliation` ostidagi BARCHA marshrutlar — metodidan qat'i nazar.
+
+    ⚠ `GET` FILTRI YO'Q va bu ATAYIN (`snapshot_surface_routes()` bilan
+      aynan bir xil qaror): `PATCH /cases/{id}` ham JAVOB qaytaradi va
+      uning modeli ham shaxsiy maydondan xoli bo'lishi shart. Faqat
+      `GET` ga qarash yozuv marshrutining javobini darvozadan chiqarib
+      yuborardi.
+    """
+    return {
+        path: route
+        for path, route in _walk(app.routes, prefix="")
+        if isinstance(route, APIRoute) and path.startswith(RECONCILIATION_PREFIX)
+    }
+
+
+def test_the_reconciliation_gate_sees_the_routes() -> None:
+    """DARVOZANING NAZORATI — pastdagi uch test BO'SH to'plamda yashil bo'lmaydi.
+
+    ⛔ Usiz «shaxsiy maydon yo'q» da'vosi router o'chirilgan yoki qayta
+       nomlangan holatda TRIVIAL ravishda rost bo'lardi (05-16 ning W-2
+       darsi va `test_gate_covers_a_meaningful_number_of_routes` ning
+       aynan mulohazasi).
+    """
+    found = reconciliation_routes(fastapi_app)
+
+    assert len(found) == 4, sorted(found)
+    assert f"{RECONCILIATION_PREFIX}/report" in found
+    assert f"{RECONCILIATION_PREFIX}/cases/{{case_id}}" in found
+
+
+def test_reconciliation_routes_are_not_personal() -> None:
+    """⛔ G7-6: beshala marshrut ham `PERSONAL_ROUTES` GA TUSHMAYDI (D-05).
+
+    =========================================================================
+    ⛔⛔ DARVOZA YANGI MARSHRUTLARNI AVTOMATIK QAMRAYDI — BU TEST UNI
+        QAYTA YOZMAYDI, UNING NATIJASINI QULFLAYDI.
+
+    `personal_data_routes()` butun marshrut grafi bo'ylab yuradi, ya'ni
+    `ReconciliationReportRow` ga `vendor_name` qo'shilsa `PERSONAL_ROUTES`
+    o'sardi va `test_personal_data_routes_declare_read_audit` +
+    `test_personal_data_routes_require_vendor_view` IKKALASI ham
+    qizarardi. Bu test o'sha zanjirni AYNAN shu yuza uchun NOMLAB
+    qo'yadi: nosozlik xabari «qaysi marshrut, qaysi maydon» deb
+    javob beradi va tuzatayotgan odam sababni shu yerda o'qiydi.
+
+    ⚠ IKKI DA'VO ATAYIN: birinchisi javob MODELIDAN yuradi (maydon
+      nomlari), ikkinchisi DARVOZANING NATIJASIDAN. Faqat ikkinchisi
+      bo'lsa `EXEMPT_ROUTES` ga qo'shib qo'yish yo'li ochiq qolardi —
+      u ham testni yashil qilardi, lekin ismni javobga CHIQARARDI.
+    =========================================================================
+    """
+    offenders = {
+        path: sorted(response_field_names(route.response_model) & PERSONAL_FIELDS)
+        for path, route in reconciliation_routes(fastapi_app).items()
+        if response_field_names(route.response_model) & PERSONAL_FIELDS
+    }
+
+    assert not offenders, (
+        "Nomuvofiqlik yuzasi shaxsiy maydon qaytaryapti (G7-6 / D-05). Ism "
+        "klientda MAVJUD va AUDIT QILINGAN `GET /api/v1/vendors` bilan "
+        f"joinlanadi, javobga QO'SHILMAYDI: {offenders}"
+    )
+
+    leaked = sorted(path for path in PERSONAL_ROUTES if path.startswith(RECONCILIATION_PREFIX))
+    assert leaked == [], leaked
+
+
+def test_no_reconciliation_route_exposes_a_telegram_identifier() -> None:
+    """⛔ 07-UI-SPEC §5.5 — C-10 DARVOZASI USHLAMAYDIGAN BO'SHLIQ (D-01).
+
+    `chat_id` / `telegram_user_id` / `telegram_username` `PERSONAL_FIELDS`
+    da YO'Q, ya'ni yuqoridagi darvoza ularni KO'RMAYDI. Ular esa odamni
+    TASHQI tizimda (Telegram) aniqlaydi va chegaradan chiqib bo'lgan
+    identifikator — ularni hisobot javobiga qo'yish sotuvchining
+    Telegram hisobini bozor xodimining ekraniga olib chiqardi.
+
+    ⚠ QAMROV SHU FAZANING YUZASI BILAN CHEKLANGAN va bu ONGLI: eski
+      marshrutlarni qamrash bu rejaning ishi emas va ularda bunday
+      maydon UMUMAN yo'q (bog'lanishlar jadvali 07-02 da tug'ilgan).
+    """
+    offenders = {
+        path: sorted(response_field_names(route.response_model) & TELEGRAM_IDENTIFIER_FIELDS)
+        for path, route in reconciliation_routes(fastapi_app).items()
+        if response_field_names(route.response_model) & TELEGRAM_IDENTIFIER_FIELDS
+    }
+
+    assert not offenders, (
+        "Nomuvofiqlik javobida Telegram identifikatori bor. U `PERSONAL_FIELDS` "
+        "da YO'Q, ya'ni C-10 darvozasi uni ushlamaydi — lekin u odamni tashqi "
+        f"tizimda ANIQLAYDI (D-01, §5.5): {offenders}"
+    )
+
+
+def test_reconciliation_routes_never_enter_the_binary_classification() -> None:
+    """⛔ Beshalasi ham `response_model` E'LON QILADI — bayt-ro'yxatlar TEGILMAYDI.
+
+    =========================================================================
+    ⛔⛔ REJA «yangi marshrutlar `NON_PERSONAL_BINARY_ROUTES` ga
+        qo'shiladi» degan edi. AMALDA BUNING TESKARISI TO'G'RI VA U
+        SHU YERDA O'LCHANADI.
+
+    `binary_routes()` FAQAT `response_model` I YO'Q `GET` larni
+    to'playdi. Beshala marshrut ham modelini e'lon qiladi, ya'ni ular
+    o'sha to'plamga UMUMAN tushmaydi — va ularni tasnif ro'yxatiga
+    qo'shish `test_every_binary_response_route_is_classified` ning
+    ESKIRISH tekshiruvini (`classified - found`) QIZARTIRARDI.
+
+    ⚠ DA'VO KUCHLIROQ: model YO'QLIGI shaxsiy-ma'lumot darvozasini
+      KO'R qiladi (`BINARY_PERSONAL_ROUTES` docstringi — 04-09 ning
+      topilmasi). Model BORLIGI esa yuqoridagi maydon-nomi darvozasini
+      HAQIQATAN ishlatadi. Ya'ni bu test «tasniflanmadi» degan bo'shliq
+      emas, darvozaning ISHLAYOTGANINING sharti.
+    =========================================================================
+    """
+    modelless = sorted(
+        path
+        for path, route in reconciliation_routes(fastapi_app).items()
+        if route.response_model is None
+    )
+
+    assert modelless == [], (
+        "Nomuvofiqlik marshruti javob modelisiz qoldi — o'shanda maydon-nomi "
+        f"darvozasi u uchun KO'R bo'lardi (04-09 topilmasi): {modelless}"
+    )
+
+    classified = set(BINARY_PERSONAL_ROUTES) | set(NON_PERSONAL_BINARY_ROUTES)
+    assert not {path for path in classified if path.startswith(RECONCILIATION_PREFIX)}, (
+        "Nomuvofiqlik marshruti BAYT tasnifi ro'yxatiga qo'shilgan — u yerda "
+        "faqat `response_model` I YO'Q marshrutlar bo'ladi va ortiqcha yozuv "
+        "`test_every_binary_response_route_is_classified` ni qizartiradi"
+    )
+
+
 def test_the_any_permission_gate_exists_nowhere_else_in_the_app() -> None:
     """«Yo P yo Q» darvozasi BUTUN ilovada faqat e'lon qilingan marshrut(lar)da.
 

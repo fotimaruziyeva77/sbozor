@@ -56,6 +56,7 @@ from app.api.v1.me import router as me_router
 from app.api.v1.nvr import router as nvr_router
 from app.api.v1.occupancy import router as occupancy_router
 from app.api.v1.payments import router as payments_router
+from app.api.v1.reconciliation import router as reconciliation_router
 from app.api.v1.reviews import router as reviews_router
 from app.api.v1.schedules import router as schedules_router
 from app.api.v1.shifts import router as shifts_router
@@ -417,6 +418,39 @@ app.include_router(self_check_router)
 # `tests/integration/test_bot_internal_api.py` da TO'LIQ qayta tiklangan
 # (tokensiz -> 401; noto'g'ri token -> 401; sozlanmagan token -> 503).
 app.include_router(bot_internal_router)
+# --- 07-10: nomuvofiqlik hisoboti va case navbati (RECON-01, RECON-02) ---
+#
+# ⛔ ALOHIDA PREFIKS, `/billing` OSTIDA EMAS — VA SABAB 06-08 NING
+#    `/occupancy` DAN AJRALISHI BILAN AYNAN BIR SINFDA:
+#
+#   1. `/billing/*` — YOZILGAN yozuvni ko'rsatadi («bu kunda shu hisob
+#      bor»). `/reconciliation/*` esa YO'QLIKNI ko'rsatadi («bu hisob
+#      bo'lishi kerak edi, lekin to'lov kelmadi» / «bu savdo umuman
+#      yozilmadi»). Ikkalasini bitta prefiksga yig'ish «hisoblar
+#      ro'yxati» va «hisob BO'LMAGAN qatorlar ro'yxati» ni bitta
+#      resurs daraxtiga bog'lardi;
+#   2. `/billing` YOZUV, `/reconciliation` esa JARAYON: case'ning
+#      holati O'ZGARADI (D-14), hisob esa O'ZGARMAS (D-07). Bitta
+#      prefiks ostida `PATCH` ning mavjudligi hisobni ham
+#      o'zgartirsa bo'ladigandek ko'rsatardi;
+#   3. `06-UI-SPEC.md` §11.4 ochiq yozgan: «CASE OQIMI BU YERDA YO'Q
+#      (holat, mas'ul, qaror, [Ko'rildi]) — u 7-fazaniki (§16.1)».
+#      Uni `/billing` ga qo'shish o'sha jumlani yolg'onga aylantirardi.
+#
+# ⛔ IKKI HUQUQ, BITTA ROUTER (`billing.py` ning aynan naqshi): to'rtta
+# `GET` — `REPORT_VIEW`, `PATCH /cases/{id}` — ⛔ `DISPUTE_DECIDE`
+# (D-07 matritsasida FAQAT direktorda). Huquq IMZO ALIASI bilan
+# marshrut darajasida ajratilgan va ⛔ `ROLE_PERMISSIONS` matritsasi
+# TEGILMAGAN — ikkala a'zo ham MAVJUD edi.
+#
+# ⛔ `require_any_permission()` BU ROUTERDA HAM ISHLATILMAYDI (C-9):
+# `test_the_any_permission_gate_exists_nowhere_else_in_the_app` o'sha
+# darvozaning to'plamini AYNAN dalil-kadr yo'liga TENG deb qulflagan.
+#
+# Yangi yo'l parametri (`case_id`) cross-tenant matritsasining
+# `PARAM_FILLERS` iga B bozorining HAQIQIY case'i bilan, `PATCH` esa
+# `BODY_FILLERS` VA `DIRECTOR_ROUTES` ga qo'shildi.
+app.include_router(reconciliation_router, prefix=f"{API_V1_PREFIX}/reconciliation")
 
 
 @app.exception_handler(DBAPIError)

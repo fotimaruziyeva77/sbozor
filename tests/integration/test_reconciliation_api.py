@@ -1,0 +1,1014 @@
+"""`/api/v1/reconciliation/*` — RECON-01 va RECON-02 ning HTTP kontrakti.
+
+=============================================================================
+⛔⛔ BU FAYLNING ENG QIMMAT DA'VOSI — **DALILNING BAYT EMASLIGI**.
+
+RECON-01 «rasm-dalil **havolalari** bilan» deydi va o'sha so'z ikki xil
+o'qilishi mumkin edi: (a) javobda IMZOLANGAN URL, (b) javobda
+IDENTIFIKATOR. D-03 / T-06-81 ikkinchisini tanlagan va bu fayl tanlovni
+XULQ bilan qulflaydi: javob tanasida `evidence_snapshot_ids` BOR va
+`presigned` / `http` / `image` satrlari YO'Q.
+
+⚠ NEGA BU DARVOZA `test_personal_data_coverage.py` DAN AJRALIB TURADI:
+  o'sha fayl SXEMANI o'lchaydi (maydon nomlari, javob modeli), bu esa
+  HAQIQIY JAVOB TANASINI. Ikkalasi ham kerak — handler `dict` qaytarib
+  sxemani chetlab o'tsa birinchisi sezmasdi, model o'zgarsa-yu shu
+  stsenariy ochilmasa ikkinchisi sezmasdi (05-14 ning darsi).
+
+=============================================================================
+⛔ BU FAYL `test_reconciliation_repo.py` NI TAKRORLAMAYDI.
+
+Case arifmetikasi (ikki sinfning ochilishi, idempotentlik, hit-rate
+maxraji, keyset kesishmasligi) o'sha yerda, HAQIQIY bazada, 24 darvoza
+bilan o'lchangan. Bu yerda faqat HTTP CHEGARASIDAGI da'volar:
+
+  1. javob TANASI — dalil identifikator, shaxsiy maydon YO'Q;
+  2. HUQUQ — kassir/nazoratchi 403; bozor admini o'qiydi, lekin HUKM
+     CHIQARMAYDI (`DISPUTE_DECIDE` faqat direktorda);
+  3. YOPIQ RO'YXAT HTTP chegarasida ham yopiq (`"other"` -> 422);
+  4. IKKI JURNAL — `reconciliation_case_events` VA `audit_log`;
+  5. CROSS-TENANT — begona case 404, 403 EMAS;
+  6. standart kun KECHA va oraliq chegarasi 422.
+=============================================================================
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
+
+import pytest
+from fixtures.admin_api import session_headers
+from fixtures.billing_domain import (
+    BillingDomainSeed,
+    add_charge_evidence,
+    add_daily_charge,
+    billing_domain,
+)
+from fixtures.market_domain import MarketDomainSeed
+from fixtures.notification_domain import cleanup_notification_domain, seed_case
+from fixtures.nvr_domain import nvr_rows
+from fixtures.occupancy_domain import occupancy_rows
+from fixtures.snapshot_domain import snapshot_rows
+from fixtures.two_markets import SEED_PASSWORD, TwoMarketSeed
+from sbozor_core.enums import AnomalyKind, ReconciliationCaseStatus
+from sbozor_core.timeutil import business_today
+from sqlalchemy import text
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Iterator
+    from datetime import date
+
+    import httpx
+    from fixtures import TenantSessionFactory
+    from psycopg import Connection
+    from psycopg.rows import TupleRow
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+REPORT_URL = "/api/v1/reconciliation/report"
+CASES_URL = "/api/v1/reconciliation/cases"
+HIT_RATE_URL = "/api/v1/reconciliation/hit-rate"
+
+PERSONAL_FIELDS = frozenset({"vendor_name", "phone", "full_name"})
+"""C-10 darvozasining maydonlari — `test_personal_data_coverage.py:59` bilan AYNI.
+
+⚠ NUSXA ONGLI (`test_billing_api.py` da o'rnatilgan qoida): o'sha faylni
+  import qilish tenancy paketini integratsiya to'plamiga bog'lardi.
+  Nomlar `PERSONAL_ROUTES` darvozasi tomonidan ALLAQACHON mustaqil
+  qo'riqlanadi, ya'ni ikki ro'yxat ajralib ketsa o'sha darvoza qizaradi.
+"""
+
+FORBIDDEN_EVIDENCE_MARKERS = ("presigned", "http", "image")
+"""⛔ JAVOB TANASIDA BO'LMAYDIGAN satrlar — D-03 ning XULQ darajasidagi o'lchovi.
+
+`presigned` — imzolangan havolaning nomi; `http` — har qanday URL ning
+boshi; `image` — kadr marshrutining nomi. Uchalasi ham javobda paydo
+bo'lishi «dalil-kadr yuzasi kengaydi» degan BIRINCHI belgi bo'lardi va
+u aynan «qulaylik uchun» qo'shilgan bitta maydondan boshlanardi
+(`CaseEvidence` klass docstringi).
+"""
+
+_INSERT_EVIDENCED_ANOMALY = (
+    "INSERT INTO billing_anomalies "
+    "(id, market_id, kind, stall_id, service_date, occupancy_event_id, snapshot_id) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s)"
+)
+"""DALILLI anomaliya — case OCHILADIGAN sinf hodisa VA kadrni TALAB QILADI.
+
+`billing_anomalies` da ikki juftlangan `CHECK` bor:
+
+    (kind = 'no_coverage_stall') = (occupancy_event_id IS NULL)
+    (occupancy_event_id IS NULL) = (snapshot_id IS NULL)
+
+ya'ni `fixtures/notification_domain.py::seed_no_coverage_anomaly` ATAYIN
+faqat DALILSIZ sinfni yozadi va undan case OCHILMAYDI (Pattern 4).
+
+⚠ XOM SQL SHU MODULDA, `fixtures/` DA EMAS: reja bu rejaning
+  `files_modified` ini cheklaydi va 07-07 aynan shu qarorni AYNI sabab
+  bilan qabul qilgan (07-07 SUMMARY, Rule 3 / 2-band). Umumiy seed'ga
+  ko'chirish 07-04 SUMMARY ning 4-ochiq bandidagi ish.
+"""
+
+_EVIDENCE_PAIR = (
+    "SELECT e.id, e.snapshot_id FROM occupancy_events e "
+    "WHERE e.market_id = %s AND e.snapshot_id IS NOT NULL ORDER BY e.id LIMIT 1"
+)
+"""Hodisa + kadr juftligi — ZANJIR BAZADAN olinadi, qayta QURILMAYDI."""
+
+_COUNT_EVENTS = (
+    "SELECT count(*) FROM reconciliation_case_events WHERE market_id = %s AND case_id = %s"
+)
+
+
+# ===========================================================================
+# Fixture'lar — `test_reconciliation_repo.py::env` naqshi
+# ===========================================================================
+
+
+@dataclass(frozen=True)
+class Env:
+    """Bir testning butun kirishi — bozor, rastalar, sotuvchi va kassa."""
+
+    billing: BillingDomainSeed
+    domain: MarketDomainSeed
+    base: TwoMarketSeed
+
+    @property
+    def market_id(self) -> UUID:
+        return self.billing.market_a.market_id
+
+    @property
+    def vendor_id(self) -> UUID:
+        return self.billing.market_a.vendor_id
+
+    @property
+    def tariff_id(self) -> UUID:
+        return self.billing.market_a.tariff_id
+
+    @property
+    def stall_ids(self) -> tuple[UUID, ...]:
+        return self.domain.market_a.stall_ids
+
+    @property
+    def market_ids(self) -> tuple[UUID, ...]:
+        return self.billing.market_ids
+
+
+@pytest.fixture
+async def env(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+    migrated: None,
+) -> AsyncIterator[Env]:
+    """`day_close` YUGURGAN seed — ⛔ `stall_slot_occupancy` TO'LGAN.
+
+    =========================================================================
+    ⛔ `billing_domain_before_day_close` YETMAYDI VA BU O'LCHANGAN.
+
+    Sinf A ning dalili (`charge_evidence`) `stall_slot_occupancy` ga
+    KOMPOZIT FK bilan tayanadi, o'sha jadvalning YAGONA yozuvchisi esa
+    `occupancy_repo.materialize()` — ya'ni `day_close`. Slotlarsiz
+    `add_charge_evidence()` `None` qaytaradi va bu faylning eng qimmat
+    da'vosi (`evidence_snapshot_ids` BO'SH EMAS) o'lchanmasdi.
+
+    ⛔ QO'LDA `INSERT` YOZILMAYDI: u arzonroq bo'lardi va aynan o'sha
+       arzonlik C-3 sinfidagi xatoni testdan YASHIRARDI
+       (`fixtures/billing_domain.py` modul docstringining birinchi
+       bandi).
+    =========================================================================
+
+    ⚠ `day_close` `SEED_BUSINESS_DATE` (kelajakdagi qat'iy sana) uchun
+      yuguradi, bu faylning case'lari esa KECHAGI kunda. Ular
+      TO'QNASHMAYDI: `add_charge_evidence()` bozorning ISTALGAN slot
+      qatorini oladi (`ORDER BY s.id LIMIT 1`) va dalil zanjirining
+      sana bo'yicha bog'lanishi YO'Q — `test_billing_immutable.py:852`
+      da o'rnatilgan qoida.
+    """
+    with (
+        nvr_rows(sync_owner_conn, two_markets) as nvr,
+        snapshot_rows(sync_owner_conn, nvr) as snaps,
+        occupancy_rows(sync_owner_conn, two_markets, market_domain, snaps) as occupancy,
+    ):
+        async with billing_domain(
+            sync_owner_conn, app_sessionmaker, two_markets, market_domain, occupancy
+        ) as billing:
+            yield Env(billing, market_domain, two_markets)
+
+
+@pytest.fixture
+def recon(sync_owner_conn: Connection[TupleRow], env: Env) -> Iterator[Env]:
+    """`env` USTIGA case jadvallarining tozalanishi.
+
+    ⚠ `env` ARGUMENT sifatida olinadi, faqat «oldin ishlasin» uchun emas:
+      pytest fixture'larni TESKARI tartibda yopadi, ya'ni case'lar
+      billing qatorlaridan OLDIN o'chadi. Teskari holatda
+      `cleanup_billing_domain()` ning `DELETE FROM billing_anomalies` i
+      hali havola qilib turgan case tufayli FK buzilishi bilan yiqilardi
+      (`fk_reconciliation_cases_anomaly` da `ondelete` YO'Q).
+    """
+    try:
+        yield env
+    finally:
+        cleanup_notification_domain(sync_owner_conn, market_ids=list(env.market_ids))
+
+
+@pytest.fixture
+async def director_headers(api_client: httpx.AsyncClient, recon: Env) -> dict[str, str]:
+    """DIREKTOR sessiyasi — unda `report_view` VA ⛔ `dispute_decide` bor (§5.6)."""
+    return await session_headers(api_client, recon.base.market_a.director_phone, SEED_PASSWORD)
+
+
+@pytest.fixture
+async def admin_headers(api_client: httpx.AsyncClient, recon: Env) -> dict[str, str]:
+    """BOZOR ADMINI sessiyasi — `report_view` BOR, ⛔ `dispute_decide` YO'Q."""
+    market_a = recon.base.market_a
+    return await session_headers(api_client, market_a.admin_phone, market_a.admin_password)
+
+
+@pytest.fixture
+async def cashier_headers(api_client: httpx.AsyncClient, recon: Env) -> dict[str, str]:
+    """KASSIR sessiyasi — ⛔ unda `report_view` YO'Q (UI-SPEC §5.6)."""
+    return await session_headers(api_client, recon.base.market_a.cashier_phone, SEED_PASSWORD)
+
+
+# ===========================================================================
+# Yordamchilar
+# ===========================================================================
+
+
+def _report_day() -> date:
+    """Marshrutning STANDART kuni — ⛔ `business_today()` NING AYNAN JUFTI.
+
+    ⛔ `date.today()` YOKI DB `CURRENT_DATE` ISHLATILMAYDI: marshrut kunni
+       `sbozor_core.timeutil.business_today()` (Asia/Tashkent) bilan
+       hisoblaydi, konteynerlar esa UTC da yuguradi. Ikki manba
+       Toshkent yarim tunidan keyingi besh soatda BIR KUN farq qilardi
+       va seed marshrut qaraydigan kundan boshqa kunga tushardi — test
+       FLAKY bo'lardi va sabab kodda emas, SOATDA bo'lardi.
+
+    ⚠ `daily_charges` ning `service_date <= business_date` `CHECK` i
+      baribir bajariladi: Toshkent sanasi UTC sanasidan ko'pi bilan
+      BIR KUN oldinda, ya'ni `business_today() - 1` har doim
+      `CURRENT_DATE` dan katta emas.
+    """
+    return business_today() - timedelta(days=1)
+
+
+def _seed_unpaid_charge(conn: Connection[TupleRow], env: Env, *, day: date) -> tuple[UUID, UUID]:
+    """SINF A — «band, lekin to'lovsiz»: hisob YOZILGAN, to'lov YO'Q.
+
+    ⛔ TO'LOV ATAYIN YOZILMAYDI: sinfning butun ma'nosi shunda. Hisobning
+       dalili (`charge_evidence`) esa YOZILADI — usiz hisobot qatori
+       dalil identifikatorisiz kelardi va faylning eng qimmat da'vosi
+       (`evidence_snapshot_ids` bo'sh EMAS) o'lchanmasdi.
+
+    Returns:
+        `(charge_id, case_id)`.
+    """
+    charge_id, _ = add_daily_charge(
+        conn,
+        market_id=env.market_id,
+        stall_id=env.stall_ids[0],
+        vendor_id=env.vendor_id,
+        tariff_id=env.tariff_id,
+        service_date=day,
+    )
+    evidence_id = add_charge_evidence(conn, market_id=env.market_id, charge_id=charge_id)
+    assert evidence_id is not None, (
+        "nazorat: bozorda g'olib hodisali slot qatori yo'q — hisobning dalili "
+        "yozilmadi va `evidence_snapshot_ids` da'vosi BO'SH-ROST bo'lardi"
+    )
+    case_id = seed_case(conn, market_id=env.market_id, service_date=day, charge_id=charge_id)
+    return charge_id, case_id
+
+
+def _seed_unregistered_anomaly(
+    conn: Connection[TupleRow],
+    env: Env,
+    *,
+    day: date,
+    stall_index: int = 1,
+    kind: AnomalyKind = AnomalyKind.UNASSIGNED_OCCUPIED,
+) -> tuple[UUID, UUID]:
+    """SINF B — «ro'yxatga olinmagan savdo»: hisob UMUMAN yozilmagan.
+
+    ⚠ `stall_index` VA `kind` ARGUMENT: `uq_billing_anomalies_market_stall_
+      service_date_kind` bitta rastaga bir kunda bitta turdagi anomaliyani
+      ruxsat etadi, ya'ni bir nechta case kerak bo'lganda ular BOSHQA
+      rasta yoki BOSHQA turdan kelishi shart. Standart qiymatlar bitta
+      case yetadigan testlarni qisqa saqlaydi.
+
+    Returns:
+        `(anomaly_id, case_id)`.
+    """
+    row = conn.execute(_EVIDENCE_PAIR, (str(env.market_id),)).fetchone()
+    assert row is not None, f"nazorat: {env.market_id} da kadrli bandlik hodisasi yo'q"
+    event_id, snapshot_id = row
+
+    anomaly_id = uuid4()
+    conn.execute(
+        _INSERT_EVIDENCED_ANOMALY,
+        (
+            str(anomaly_id),
+            str(env.market_id),
+            kind.value,
+            str(env.stall_ids[stall_index]),
+            day,
+            str(event_id),
+            str(snapshot_id),
+        ),
+    )
+    case_id = seed_case(conn, market_id=env.market_id, service_date=day, anomaly_id=anomaly_id)
+    return anomaly_id, case_id
+
+
+def _keys_at_every_depth(payload: Any) -> set[str]:
+    """Javob JSON'idagi BARCHA kalitlar — ⛔ REKURSIV.
+
+    ⛔ FAQAT YUQORI DARAJAGA QARASH YETMAYDI: shaxsiy maydon deyarli hech
+       qachon ildizda turmaydi — u `rows[].vendor_name` bo'lib IKKI qavat
+       pastda yashaydi (`test_personal_data_coverage.response_field_names`
+       ning aynan sababi va CR-02 ning o'lchangan holati).
+    """
+    found: set[str] = set()
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            found.add(str(key))
+            found |= _keys_at_every_depth(value)
+    elif isinstance(payload, list):
+        for item in payload:
+            found |= _keys_at_every_depth(item)
+    return found
+
+
+async def _case_audit_count(tenant_session: TenantSessionFactory, market_id: UUID) -> int:
+    """`reconciliation_cases` ustidagi audit qatorlari — ⛔ ILOVA roli bilan.
+
+    ⛔ `sync_owner_conn` BILAN O'QILMAYDI: `audit_read` policy'si
+       `sbozor_app` ga va TENANT KONTEKSTIGA bog'langan, ega roli esa
+       `audit_log` da hech nima ko'rmaydi. Ega bilan yozilgan sanoq HAR
+       DOIM 0 berardi va «audit yozildi» da'vosi jimgina BO'SH-ROST
+       bo'lib qolardi (07-08 buni bir marta TO'LAGAN).
+    """
+    async with tenant_session(market_id) as session:
+        found = await session.execute(
+            text(
+                "SELECT count(*) FROM audit_log "
+                "WHERE market_id = :market_id AND table_name = :table_name"
+            ),
+            {"market_id": market_id, "table_name": "reconciliation_cases"},
+        )
+        return int(found.scalar_one())
+
+
+# ===========================================================================
+# 1. HISOBOT — IKKI SINF, DALIL IDENTIFIKATOR, SHAXSIY MAYDON YO'Q
+# ===========================================================================
+
+
+async def test_report_shows_both_classes(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ RECON-01: hisobot IKKALA sinfni ham ko'rsatadi va ularni AJRATADI.
+
+    =======================================================================
+    ⛔⛔ IKKI SANOQ HECH QACHON QO'SHILMAYDI (D-05 ning aynan takrori).
+
+    «Band, lekin to'lovsiz» — pul KELMADI. «Ro'yxatga olinmagan savdo» —
+    savdo UMUMAN yozilmadi. Ikkisini bitta «nomuvofiqlik soni» ga
+    qo'shish direktorga bitta son ko'rsatardi va u ikki BOSHQA harakat
+    (to'lovni undirish / rastani biriktirish) o'rniga bittasini
+    tanlardi.
+    =======================================================================
+    """
+    day = _report_day()
+    _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    _seed_unregistered_anomaly(sync_owner_conn, recon, day=day)
+
+    response = await api_client.get(REPORT_URL, headers=director_headers)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["day"] == day.isoformat()
+    assert payload["unpaid_count"] == 1, payload
+    assert payload["unregistered_count"] == 1, payload
+    assert {row["subject_kind"] for row in payload["rows"]} == {"occupied_unpaid", "anomaly"}
+
+    unpaid = next(row for row in payload["rows"] if row["subject_kind"] == "occupied_unpaid")
+    unregistered = next(row for row in payload["rows"] if row["subject_kind"] == "anomaly")
+    assert unpaid["expected_soum"] is not None and unpaid["expected_soum"] > 0
+    assert payload["unpaid_expected_soum"] == unpaid["expected_soum"]
+    # ⛔ SINF B DA KUTILGAN SUMMA `null` VA BU JAVOB, NOL EMAS: hisob
+    #    yozilmagan, ya'ni «qancha kutilishini tizim BILMAYDI». Nol
+    #    yozish «bu savdodan hech nima kutilmagan» degan YOLG'ON da'vo
+    #    bo'lardi va u yig'indini ham buzardi.
+    assert unregistered["expected_soum"] is None, unregistered
+    assert unregistered["vendor_id"] is None, unregistered
+
+
+async def test_report_carries_evidence_ids_but_no_bytes(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ RECON-01 NING ENG MUHIM O'LCHOVI — dalil HAVOLA, BAYT emas (D-03).
+
+    Uch da'vo BIRGA: identifikator BOR, u `UUID` shaklida, va javob
+    tanasida imzolangan havolaning birorta izi YO'Q. Faqat birinchisi
+    bo'lsa «qulaylik uchun» qo'shilgan `image_url` maydoni darvozadan
+    o'tib ketardi (T-06-81 ning aynan boshlanish nuqtasi).
+    """
+    day = _report_day()
+    _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    _seed_unregistered_anomaly(sync_owner_conn, recon, day=day)
+
+    response = await api_client.get(REPORT_URL, headers=director_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("application/json")
+
+    payload = response.json()
+    for row in payload["rows"]:
+        assert row["evidence_snapshot_ids"], (
+            f"{row['subject_kind']} qatori dalilsiz keldi — seed buzilgan bo'lsa "
+            "bu da'vo BO'SH-ROST bo'lardi"
+        )
+        for snapshot_id in row["evidence_snapshot_ids"]:
+            UUID(snapshot_id)
+
+    body = response.text.lower()
+    leaked = [marker for marker in FORBIDDEN_EVIDENCE_MARKERS if marker in body]
+    assert leaked == [], (
+        f"javob tanasida dalil-kadr yuzasining izi bor: {leaked}. Javobda FAQAT "
+        "`snapshot_id` bo'ladi; kadr MAVJUD `GET /api/v1/snapshots/{id}/image` "
+        "dan olinadi va o'sha marshrut `audit_read` yozadi (D-03, T-06-81)"
+    )
+
+
+async def test_report_has_no_personal_field(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ G7-6: javob JSON'ining HECH BIR chuqurligida shaxsiy maydon YO'Q.
+
+    ⚠ REKURSIV SKAN MAJBURIY (`_keys_at_every_depth` docstringi): CR-02
+      o'lchagan holatda `vendor_name` ildizda emas, `rows[]` ichida
+      yashardi.
+
+    ⚠ NAZORAT ASSERTI: `vendor_id` javobda BOR. Usiz test «javob bo'sh»
+      holatida ham yashil bo'lardi — ya'ni u shaxsiy maydonning yo'qligini
+      emas, MA'LUMOTNING yo'qligini o'lchardi (05-15 ning S-D darsi).
+    """
+    day = _report_day()
+    _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+
+    response = await api_client.get(REPORT_URL, headers=director_headers)
+
+    assert response.status_code == 200, response.text
+    keys = _keys_at_every_depth(response.json())
+
+    assert "vendor_id" in keys, "nazorat: javobda `vendor_id` yo'q — skan bo'sh to'plamda ishladi"
+    assert keys & PERSONAL_FIELDS == set(), sorted(keys & PERSONAL_FIELDS)
+
+
+async def test_report_day_defaults_to_yesterday(
+    api_client: httpx.AsyncClient,
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ STANDART KUN — KECHA, va u JAVOBDA qaytadi (§11.1).
+
+    ⛔ BUGUN BO'LSA sahifa HAR DOIM bo'sh ochilardi: `recon.open` KECHAGI
+       kunni bugun tekshiradi. To'g'ri ishlayotgan tizim «buzuq» bo'lib
+       ko'rinardi.
+
+    ⛔ KELAJAK KUNI **422** — bo'sh ro'yxat EMAS: «kelajakda nomuvofiqlik
+       yo'q» degan MA'NOSIZ javob «bu kunda nomuvofiqlik topilmadi»
+       bilan bir xil ko'rinardi.
+    """
+    response = await api_client.get(REPORT_URL, headers=director_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["day"] == _report_day().isoformat()
+    # ⛔ NOL — NATIJA: bo'sh kunda ham UCHALA hisoblagich qaytadi.
+    assert response.json()["unpaid_count"] == 0
+    assert response.json()["unregistered_count"] == 0
+    assert response.json()["unpaid_expected_soum"] == 0
+
+    future = (business_today() + timedelta(days=1)).isoformat()
+    rejected = await api_client.get(REPORT_URL, params={"day": future}, headers=director_headers)
+
+    assert rejected.status_code == 422, rejected.text
+    assert rejected.json()["detail"] == "day_in_future"
+
+
+# ===========================================================================
+# 2. HUQUQ — MATRITSA TEGILMAGAN, LEKIN U HTTP DA HAM ISHLAYDI
+# ===========================================================================
+
+
+@pytest.mark.parametrize(
+    "url", [REPORT_URL, CASES_URL, HIT_RATE_URL], ids=["report", "cases", "hit-rate"]
+)
+async def test_the_cashier_cannot_read_the_reconciliation_surface(
+    api_client: httpx.AsyncClient,
+    recon: Env,
+    cashier_headers: dict[str, str],
+    url: str,
+) -> None:
+    """⛔ Kassirda `report_view` YO'Q (UI-SPEC §5.6) — hamma yerda 403.
+
+    Kassir pul YIG'ADI, hisobot O'QIMAYDI. Uni nomuvofiqlik navbatiga
+    kiritish «kim qarzdor?» ro'yxatini kassa oldida turgan odamga
+    ochardi va bu D-02 ning nizо oqimidan butunlay boshqa yuza bo'lardi.
+    """
+    response = await api_client.get(url, headers=cashier_headers)
+
+    assert response.status_code == 403, f"{url}: {response.status_code} — {response.text}"
+
+
+async def test_the_market_admin_reads_but_cannot_decide(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    admin_headers: dict[str, str],
+) -> None:
+    """⛔ Bozor admini KO'RADI, lekin HUKM CHIQARMAYDI (`DISPUTE_DECIDE`).
+
+    =======================================================================
+    ⛔ IKKI DA'VO BITTA TESTDA VA ULAR AJRALMAS: «o'qiy oladi» yolg'iz
+       o'zi `REPORT_VIEW` ning kengligini isbotlaydi, «yoza olmaydi»
+       yolg'iz o'zi esa 403 ning sababini noaniq qoldirardi (huquq
+       yetishmadimi yoki sessiya buzuqmi?). Birga ular AYNAN bitta
+       huquqning chegarasini ko'rsatadi.
+    =======================================================================
+    """
+    day = _report_day()
+    _, case_id = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+
+    readable = await api_client.get(REPORT_URL, headers=admin_headers)
+    assert readable.status_code == 200, readable.text
+
+    detail = await api_client.get(f"{CASES_URL}/{case_id}", headers=admin_headers)
+    assert detail.status_code == 200, detail.text
+
+    denied = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={"status": ReconciliationCaseStatus.IN_REVIEW.value},
+        headers=admin_headers,
+    )
+
+    assert denied.status_code == 403, denied.text
+
+
+# ===========================================================================
+# 3. YOPIQ RO'YXAT VA IKKI JURNAL (D-12, D-14)
+# ===========================================================================
+
+
+async def test_case_status_is_a_closed_set_over_http(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ D-12: `"other"` HTTP chegarasida **422** — u holat bo'lib KIRA OLMAYDI.
+
+    Erkin matnli a'zo hisobotda GURUHLANMAYDI va u AMALDA eng katta guruh
+    bo'lib qolardi — o'shanda hit-rate maxraji (D-13) ham ma'nosini
+    yo'qotardi. Yechim matni esa `resolution_note` da yashaydi va u
+    o'lchanmaydi.
+    """
+    day = _report_day()
+    _, case_id = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+
+    response = await api_client.patch(
+        f"{CASES_URL}/{case_id}", json={"status": "other"}, headers=director_headers
+    )
+
+    assert response.status_code == 422, response.text
+
+    # NAZORAT: yopiq ro'yxatning A'ZOSI o'sha yo'ldan O'TADI — aks holda
+    # test «PATCH umuman ishlamaydi» holatida ham yashil bo'lardi.
+    accepted = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={"status": ReconciliationCaseStatus.IN_REVIEW.value},
+        headers=director_headers,
+    )
+    assert accepted.status_code == 200, accepted.text
+
+
+async def test_case_transition_writes_to_both_journals(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ D-14 / T-07-61: bitta o'tish IKKALA jurnalga ham **AYNAN +1** qator yozadi.
+
+    =======================================================================
+    ⛔⛔ IKKI JURNAL, IKKI MAQSAD — VA BIRORTASI ORTIQCHA EMAS.
+
+      `reconciliation_case_events` — MAHSULOT tarixi, uni DIREKTOR
+          o'qiydi va u javobning `events` maydonida KO'RINADI;
+      `audit_log` — XAVFSIZLIK jurnali, uni AUDITOR o'qiydi va uning
+          qamrovi butun ilova bo'ylab bir xil bo'lishi shart.
+
+    Birinchisida `from_status -> to_status` ketma-ketligi bor,
+    ikkinchisida yo'q; ikkinchisi butun tizimni qamraydi, birinchisi
+    faqat case domenini. Ya'ni ularni almashtirib bo'lmaydi.
+
+    ⛔⛔ SANOQ `+1`, `>= 1` EMAS — VA BU FARQ BIR MARTA O'LCHANGAN.
+
+    `audit_log` qatorini ⛔ **DB-TRIGGER** yozadi (`0023` migratsiyasi
+    `reconciliation_cases` ni `NOTIFICATION_AUDITED_TABLES` ga qo'shgan).
+    Marshrutga qo'shimcha `write_app_audit(...)` qo'yilganda sanoq
+    **+2** bo'ldi — ya'ni bitta hodisa xavfsizlik jurnalida IKKI MARTA
+    ko'rinardi va «bugun nechta case yopildi?» savoli ikki xil javob
+    berardi. `>= 1` bilan yozilgan assert bu dublikatni KO'RMASDI.
+    =======================================================================
+    """
+    day = _report_day()
+    _, case_id = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    audit_before = await _case_audit_count(tenant_session, recon.market_id)
+
+    response = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={
+            "status": ReconciliationCaseStatus.JUSTIFIED.value,
+            "resolution_note": "Sotuvchi kechqurun to'lagan — kvitansiya bor.",
+        },
+        headers=director_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "justified"
+    assert payload["resolution_note"] == "Sotuvchi kechqurun to'lagan — kvitansiya bor."
+    assert len(payload["events"]) == 1, payload["events"]
+    assert payload["events"][0]["from_status"] == "new"
+    assert payload["events"][0]["to_status"] == "justified"
+    # ⛔ AKTOR — DIREKTORNING IDENTIFIKATORI, ISMI EMAS (C-10): `None`
+    #    bo'lsa u «TIZIM» degani bo'lardi va nizoda hukmni kim
+    #    chiqarganini KO'RSATMASDI.
+    assert payload["events"][0]["actor_user_id"] == str(recon.base.market_a.director_user_id)
+
+    events = sync_owner_conn.execute(_COUNT_EVENTS, (str(recon.market_id), str(case_id))).fetchone()
+    assert events is not None and events[0] == 1, events
+
+    assert await _case_audit_count(tenant_session, recon.market_id) == audit_before + 1
+
+
+async def test_transition_to_the_same_status_is_a_conflict(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ NOL O'TISH -> **409**, va tarixga qator YOZILMAYDI (D-14).
+
+    Nol o'tish tarixni shovqin bilan to'ldirardi: «case necha marta
+    qo'ldan qo'lga o'tdi?» savoli noto'g'ri javob berardi. Repo
+    `ValueError` beradi, marshrut uni KODGA aylantiradi — sxemaning
+    `IntegrityError` i «baza buzuq» kabi ko'rinardi.
+    """
+    day = _report_day()
+    _, case_id = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+
+    response = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={"status": ReconciliationCaseStatus.NEW.value},
+        headers=director_headers,
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "status_unchanged"
+
+    events = sync_owner_conn.execute(_COUNT_EVENTS, (str(recon.market_id), str(case_id))).fetchone()
+    assert events is not None and events[0] == 0, events
+
+
+# ===========================================================================
+# 4. NAVBAT — KEYSET SAHIFALASH VA KUN KESIMIDAGI HISOBLAGICHLAR
+# ===========================================================================
+
+
+async def test_case_list_pagination_is_keyset(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ DQ-4: ikkinchi sahifa birinchisi bilan KESISHMAYDI, hisoblagich BIR XIL.
+
+    =======================================================================
+    ⛔ IKKI DA'VO ATAYIN BIRGA:
+
+      (a) KESISHMASLIK — `OFFSET` bilan sahifalaganda nazoratchi bir
+          case'ni IKKI MARTA ko'rib, ikkinchisini UMUMAN ko'rmasdi
+          (`_CASE_ROWS` docstringi);
+      (b) HISOBLAGICHLARNING TENGLIGI — ular SAHIFAGA emas, KUNGA
+          tegishli. Sahifadan hisoblansa ikkinchi sahifada «bugun
+          nechta case?» savoli boshqa javob berardi.
+    =======================================================================
+    """
+    day = _report_day()
+    # ⚠ HAR CASE O'Z NISHONI BILAN: qisman UNIQUE indeks bitta nishonga
+    #   ikkinchi case ochishni STRUKTURAVIY ravishda taqiqlaydi, anomaliya
+    #   unikaligi esa `(rasta, kun, tur)` bo'yicha — shuning uchun rasta
+    #   VA tur ikkalasi ham aylantiriladi.
+    seeded = {
+        str(
+            _seed_unregistered_anomaly(
+                sync_owner_conn,
+                recon,
+                day=day,
+                stall_index=index,
+                kind=AnomalyKind.UNASSIGNED_OCCUPIED
+                if index % 2 == 0
+                else AnomalyKind.CLOSED_DAY_OCCUPIED,
+            )[1]
+        )
+        for index in range(4)
+    }
+    assert len(seeded) == 4, "nazorat: seed to'rtta MUSTAQIL case yozmadi"
+
+    first = await api_client.get(
+        CASES_URL, params={"day": day.isoformat(), "limit": 2}, headers=director_headers
+    )
+    assert first.status_code == 200, first.text
+    page_one = first.json()
+    assert len(page_one["rows"]) == 2, page_one
+    assert page_one["next_cursor"] is not None, (
+        "sahifa TO'LDI, lekin kursor kelmadi — usiz keyset sahifalash "
+        "IFODALAB BO'LMASDI (`CaseListPage.next_cursor` docstringi)"
+    )
+
+    second = await api_client.get(
+        CASES_URL,
+        params={"day": day.isoformat(), "limit": 2, "cursor": page_one["next_cursor"]},
+        headers=director_headers,
+    )
+    assert second.status_code == 200, second.text
+    page_two = second.json()
+
+    ids_one = {row["case_id"] for row in page_one["rows"]}
+    ids_two = {row["case_id"] for row in page_two["rows"]}
+    assert ids_one & ids_two == set(), sorted(ids_one & ids_two)
+    assert ids_one | ids_two == seeded, sorted((ids_one | ids_two) ^ seeded)
+
+    # (b) HISOBLAGICHLAR IKKALA SAHIFADA HAM BIR XIL — ular KUNGA tegishli.
+    for key in ("new_count", "in_review_count", "justified_count", "unjustified_count"):
+        assert page_one[key] == page_two[key] == (4 if key == "new_count" else 0), (
+            f"{key}: {page_one[key]} vs {page_two[key]}"
+        )
+
+    # ⛔ BUZILGAN KURSOR JIM TASHLAB YUBORILMAYDI: aks holda nazoratchi
+    #    «Yana» tugmasini bosganda BIRINCHI sahifani qayta ko'rardi va
+    #    navbat cheksiz aylanardi — u buni sezmasdi ham.
+    probe = await api_client.get(
+        CASES_URL,
+        params={"day": day.isoformat(), "cursor": "buzilgan-kursor"},
+        headers=director_headers,
+    )
+    assert probe.status_code == 422, probe.text
+
+
+async def test_case_list_counts_ignore_the_status_filter(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ To'rt hisoblagich `status` filtridan MUSTAQIL — kun bo'yicha.
+
+    Nazoratchi «yangi» filtrini yoqqanda «bugun nechta case yopildi?»
+    savolining javobi o'zgarmasligi kerak. Filtrni hisoblagichlarga ham
+    qo'llash tanlangan holatdan boshqa uchtasini NOLGA tushirardi va u
+    «bugun hech nima yopilmadi» bilan MEXANIK ravishda bir xil
+    ko'rinardi.
+    """
+    day = _report_day()
+    _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    anomaly_id, _ = _seed_unregistered_anomaly(sync_owner_conn, recon, day=day)
+    del anomaly_id
+
+    filtered = await api_client.get(
+        CASES_URL,
+        params={"day": day.isoformat(), "status": ReconciliationCaseStatus.NEW.value},
+        headers=director_headers,
+    )
+
+    assert filtered.status_code == 200, filtered.text
+    payload = filtered.json()
+    assert payload["new_count"] == 2, payload
+    assert len(payload["rows"]) == 2, payload
+
+    unknown = await api_client.get(
+        CASES_URL, params={"day": day.isoformat(), "status": "other"}, headers=director_headers
+    )
+    assert unknown.status_code == 422, unknown.text
+
+
+# ===========================================================================
+# 5. HIT-RATE — MAXRAJ VA ORALIQ (D-13, T-07-60)
+# ===========================================================================
+
+
+async def test_hit_rate_excludes_open_cases(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ D-13: `new` / `in_review` MAXRAJGA KIRMAYDI, lekin YASHIRILMAYDI ham.
+
+    ⛔ NAZORAT ASSERTI (`open_cases > 0`) MAJBURIY: seedda ochiq case
+       BO'LMASA maxraj da'vosi BO'SH-ROST bo'lardi — 05-15 ning S-D
+       darsi va 07-07 ning sabotaj o'lchovi aynan shu nuqtani ko'rsatgan.
+    """
+    day = _report_day()
+    _, unpaid_case = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    # ⚠ IKKI ANOMALIYA BOSHQA-BOSHQA RASTADA: unikalik `(rasta, kun, tur)`
+    #   bo'yicha (`_seed_unregistered_anomaly` docstringi).
+    _, first_anomaly_case = _seed_unregistered_anomaly(
+        sync_owner_conn, recon, day=day, stall_index=1
+    )
+    _, second_anomaly_case = _seed_unregistered_anomaly(
+        sync_owner_conn, recon, day=day, stall_index=2
+    )
+
+    for case_id, to_status in (
+        (first_anomaly_case, ReconciliationCaseStatus.JUSTIFIED),
+        (second_anomaly_case, ReconciliationCaseStatus.UNJUSTIFIED),
+    ):
+        closed = await api_client.patch(
+            f"{CASES_URL}/{case_id}", json={"status": to_status.value}, headers=director_headers
+        )
+        assert closed.status_code == 200, closed.text
+    del unpaid_case  # ⚠ ATAYIN `new` holatida qoladi — u maxrajga KIRMAYDI.
+
+    response = await api_client.get(
+        HIT_RATE_URL,
+        params={"from": day.isoformat(), "to": day.isoformat()},
+        headers=director_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["justified"] == 1, payload
+    assert payload["unjustified"] == 1, payload
+    assert payload["open_cases"] == 1, payload
+    assert payload["hit_rate"] == pytest.approx(0.5), payload
+
+
+async def test_hit_rate_is_null_when_nothing_was_measured(
+    api_client: httpx.AsyncClient,
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ O'lchov yo'q bo'lganda javob **`null`**, `0.0` EMAS (D-13).
+
+    «Hali o'lchov yo'q» ≠ «nol aniqlik». Nol yozish direktorning birinchi
+    haftadagi qaroriga bevosita ta'sir qilardi — 5-fazaning Wilson
+    qarori bilan aynan bir sinfda.
+    """
+    day = _report_day()
+
+    response = await api_client.get(
+        HIT_RATE_URL,
+        params={"from": day.isoformat(), "to": day.isoformat()},
+        headers=director_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["hit_rate"] is None, payload
+    assert payload["justified"] == 0
+    assert payload["unjustified"] == 0
+
+
+async def test_hit_rate_rejects_an_unbounded_range(
+    api_client: httpx.AsyncClient,
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ T-07-60: oraliq MAJBURIY va 92 kundan uzun bo'lolmaydi.
+
+    Chegarasiz so'rov `reconciliation_cases` ni butunlay skanerlardi va
+    bitta so'rov bilan bozorning butun tarixini tortib olish yo'li ochiq
+    qolardi.
+    """
+    day = _report_day()
+
+    missing = await api_client.get(HIT_RATE_URL, headers=director_headers)
+    assert missing.status_code == 422, missing.text
+
+    too_wide = await api_client.get(
+        HIT_RATE_URL,
+        params={"from": (day - timedelta(days=92)).isoformat(), "to": day.isoformat()},
+        headers=director_headers,
+    )
+    assert too_wide.status_code == 422, too_wide.text
+    assert too_wide.json()["detail"] == "range_too_wide"
+
+    # NAZORAT: AYNAN 92 kunlik oraliq O'TADI — chegara bir kunga
+    # siljib qolgan bo'lsa bu assert uni ushlaydi.
+    exact = await api_client.get(
+        HIT_RATE_URL,
+        params={"from": (day - timedelta(days=91)).isoformat(), "to": day.isoformat()},
+        headers=director_headers,
+    )
+    assert exact.status_code == 200, exact.text
+
+    inverted = await api_client.get(
+        HIT_RATE_URL,
+        params={"from": day.isoformat(), "to": (day - timedelta(days=1)).isoformat()},
+        headers=director_headers,
+    )
+    assert inverted.status_code == 422, inverted.text
+    assert inverted.json()["detail"] == "range_invalid"
+
+
+# ===========================================================================
+# 6. CROSS-TENANT — 404, VA 403 EMAS (T-07-59)
+# ===========================================================================
+
+
+async def test_cross_tenant_case_is_not_found(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ Begona bozorning case'i -> **404**, va u MAVJUD BO'LMAGAN ID bilan AYNI.
+
+    =======================================================================
+    ⛔ 403 JAVOBINING O'ZI «bunday case bor, lekin sizniki emas» degan
+       ma'lumotni oshkor qilardi va hujumchi identifikatorlarni javob
+       KODI bo'yicha sanab chiqa olardi (T-07-59).
+
+    ⛔ IKKI JAVOB BAYT-BAYT SOLISHTIRILADI: bir xil 404 ichida turli
+       `detail` matni ham enumeration signali bo'lardi.
+    =======================================================================
+    """
+    day = _report_day()
+    market_b = recon.base.market_b
+    foreign_case = seed_case(
+        sync_owner_conn,
+        market_id=market_b.id,
+        service_date=day,
+        anomaly_id=_seed_foreign_anomaly(sync_owner_conn, recon, day=day),
+    )
+
+    foreign = await api_client.get(f"{CASES_URL}/{foreign_case}", headers=director_headers)
+    unknown = await api_client.get(f"{CASES_URL}/{uuid4()}", headers=director_headers)
+
+    assert foreign.status_code != 403, (
+        "403 case MAVJUDLIGINI tasdiqlaydi — 404 bo'lishi shart (T-07-59)"
+    )
+    assert foreign.status_code == 404, foreign.text
+    assert foreign.status_code == unknown.status_code
+    assert foreign.content == unknown.content, "javob tanalari farq qiladi — enumeration signali"
+
+    patched = await api_client.patch(
+        f"{CASES_URL}/{foreign_case}",
+        json={"status": ReconciliationCaseStatus.IN_REVIEW.value},
+        headers=director_headers,
+    )
+    assert patched.status_code == 404, patched.text
+
+
+def _seed_foreign_anomaly(conn: Connection[TupleRow], env: Env, *, day: date) -> UUID:
+    """B BOZORINING dalilsiz anomaliyasi — cross-tenant nishoni.
+
+    ⛔ `no_coverage_stall` ATAYIN: B bozorida dalil zanjiri (hodisa +
+       kadr) seedda YO'Q va uni qurish bu testning savoliga (tenant
+       chegarasi) hech nima qo'shmasdi. Case sxema darajasida qonuniy
+       — `recon.open` uni ochmaydi, lekin bu test JOBNI emas,
+       MARSHRUTNI sinaydi.
+    """
+    anomaly_id = uuid4()
+    conn.execute(
+        "INSERT INTO billing_anomalies (id, market_id, kind, stall_id, service_date) "
+        "VALUES (%s, %s, %s, %s, %s)",
+        (
+            str(anomaly_id),
+            str(env.base.market_b.id),
+            AnomalyKind.NO_COVERAGE_STALL.value,
+            str(env.domain.market_b.stall_ids[0]),
+            day,
+        ),
+    )
+    return anomaly_id

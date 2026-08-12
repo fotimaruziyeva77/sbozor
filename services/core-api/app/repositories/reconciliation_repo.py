@@ -105,12 +105,15 @@ __all__ = [
     "CASE_WORTHY_ANOMALY_KINDS",
     "NON_CASE_ANOMALY_KINDS",
     "CaseCursor",
+    "CaseDetail",
+    "CaseEvent",
     "CaseEvidence",
     "CaseListPage",
     "CaseRow",
     "CaseTransition",
     "HitRate",
     "OpenCasesResult",
+    "case_detail",
     "case_evidence",
     "hit_rate",
     "list_cases",
@@ -1140,4 +1143,175 @@ async def case_evidence(session: AsyncSession, *, market_id: UUID, case_id: UUID
         case_id=case_id,
         subject_kind=str(rows[0]["subject_kind"]),
         snapshot_ids=tuple(row["snapshot_id"] for row in rows if row["snapshot_id"] is not None),
+    )
+
+
+# ===========================================================================
+# 6. BITTA CASE VA UNING TARIXI — ⛔ SOF O'QISH YUZASI (07-10)
+#
+# ⚠ BU BO'LIM 07-10 DA QO'SHILDI VA SABAB MEXANIK: `list_cases()` KUN
+#   kesimi bilan ishlaydi (`service_date` majburiy bind), `GET /reconciliation/
+#   cases/{case_id}` esa kunni BILMAYDI — u faqat identifikatorni oladi.
+#   Kunni klientdan so'rash uni javobning SHARTIGA aylantirardi va nizo
+#   hujjatidagi havola («shu case'ga qarang») ishlamay qolardi.
+# ===========================================================================
+
+_CASE_BY_ID = text(
+    """
+    SELECT rc.id               AS case_id,
+           rc.subject_kind     AS subject_kind,
+           rc.anomaly_id       AS anomaly_id,
+           rc.charge_id        AS charge_id,
+           rc.service_date     AS service_date,
+           rc.status           AS status,
+           rc.assignee_user_id AS assignee_user_id,
+           rc.resolution_note  AS resolution_note,
+           rc.created_at       AS created_at
+      FROM reconciliation_cases rc
+     WHERE rc.market_id = :market_id
+       AND rc.id = :case_id
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("case_id", type_=_UUID),
+)
+"""Bitta case — ⛔ `market_id` FILTRI RLS USTIGA QO'SHILADI, uning O'RNIGA EMAS.
+
+⚠ Ikki qatlam ATAYIN: RLS `FORCE` begona bozorning qatorini KO'RINMAS
+  qiladi, aniq filtr esa sessiya konteksti noto'g'ri o'rnatilgan holatda
+  ham (masalan egasi ulanishi bilan) natijani tor tutadi. Bu fayldagi
+  QOLGAN so'rovlar bilan aynan bir xil shakl.
+"""
+
+_CASE_EVENTS = text(
+    """
+    SELECT ce.from_status   AS from_status,
+           ce.to_status     AS to_status,
+           ce.actor_user_id AS actor_user_id,
+           ce.note          AS note,
+           ce.created_at    AS created_at
+      FROM reconciliation_case_events ce
+     WHERE ce.market_id = :market_id
+       AND ce.case_id = :case_id
+     ORDER BY ce.created_at, ce.id
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("case_id", type_=_UUID),
+)
+"""Case tarixi — ⛔ ESKIDAN YANGIGA, va `id` TENGLIK UZGICHI SIFATIDA.
+
+⚠ Tartib `list_cases()` NIKIGA TESKARI (u `DESC`) va bu ATAYIN: navbat
+  ro'yxatida yangi case yuqorida turadi, TARIX esa hikoya — u boshidan
+  o'qiladi. `id` bilan uzish MAJBURIY: bir tranzaksiyada yozilgan ikki
+  qator AYNI `created_at` oladi va ularsiz tartib har chaqiruvda
+  o'zgarardi, ya'ni nizo hujjatiga tushadigan ketma-ketlik BEQAROR
+  bo'lardi (`_CASE_EVIDENCE` ning `ORDER BY` bandi bilan bir xil sabab).
+
+⚠ ⛔ SAHIFALASH YO'Q va bu ONGLI: bitta case'ning tarixi nazoratchining
+  QO'L HARAKATLARIDAN o'sadi (D-14 — har o'tish bitta qator) va u
+  o'nlab qatordan oshmaydi. Chegara qo'yish «tarixning bir qismi
+  ko'rinmaydi» degan holatni tug'dirardi — nizo hujjatida esa aynan
+  TO'LIQLIK muhim.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class CaseEvent:
+    """Tarixning bitta bo'g'ini — `reconciliation_case_events` qatori.
+
+    ⛔ `from_status` `None` = case TUG'ILDI, «noma'lum» EMAS: birinchi
+       hodisada oldingi holat FIZIK ravishda mavjud emas.
+
+    ⛔ `actor_user_id` `None` = ⛔ TIZIM (`0022` qarori): case'ni
+       `recon.open` cron'i ochadi.
+    """
+
+    from_status: str | None
+    to_status: str
+    actor_user_id: UUID | None
+    note: str | None
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class CaseDetail:
+    """Bitta case + uning TO'LIQ tarixi.
+
+    ⚠ DALIL BU YERDA YO'Q va bu ATAYIN: u `case_evidence()` dan alohida
+      keladi. Ikkalasini birlashtirish «dalilsiz case» holatini
+      («`day_close` hali yugurmagan») «case topilmadi» bilan aralashtirib
+      yuborardi — `_CASE_EVIDENCE` ning `LEFT JOIN LATERAL` qarori aynan
+      shu farqni saqlash uchun.
+    """
+
+    case: CaseRow
+    events: tuple[CaseEvent, ...]
+
+
+async def case_detail(
+    session: AsyncSession, *, market_id: UUID, case_id: UUID
+) -> CaseDetail | None:
+    """Case va uning tarixi — topilmasa ⛔ `None`, ISTISNO EMAS.
+
+    =======================================================================
+    ⛔ NEGA BU YERDA `LookupError` EMAS, HOLBUKI `transition()` VA
+       `case_evidence()` UNI KO'TARADI.
+
+    Farq amaldagi MA'NODA: `transition()` — YOZUV, ya'ni «topilmadi»
+    chaqiruvchining xatosi va jim qaytish nazoratchi ekranida
+    «o'zgardi» degan yolg'on taassurot qoldirardi. Bu esa SOF O'QISH:
+    mavjud bo'lmagan (yoki begona bozorning) identifikatorini so'rash
+    HTTP yuzasida ODATDAGI holat va uning yagona to'g'ri javobi — 404.
+    Istisno bilan ifodalash marshrutni `try/except` bilan o'rashga
+    majburlardi va `billing_repo.charge_detail()` ning aynan shu
+    holatdagi qarori (`None`) bilan AJRALIB KETARDI.
+
+    ⛔ BEGONA BOZORNING CASE'I HAM `None` — «ruxsat yo'q» EMAS. Javobning
+       O'ZI «bunday case bor» degan ma'lumotni oshkor qilmasligi kerak
+       (T-07-59): 403 bilan hujumchi identifikatorlarni javob kodi
+       bo'yicha sanab chiqa olardi.
+    =======================================================================
+
+    Returns:
+        `CaseDetail`, yoki case bu bozorda topilmasa `None`. ⚠ Tarixning
+        BO'SH bo'lishi «topilmadi» degani EMAS — u alohida holat va
+        `None` bilan ARALASHMAYDI.
+    """
+    row = (
+        (await session.execute(_CASE_BY_ID, {"market_id": market_id, "case_id": case_id}))
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        return None
+
+    events = (
+        (await session.execute(_CASE_EVENTS, {"market_id": market_id, "case_id": case_id}))
+        .mappings()
+        .all()
+    )
+
+    return CaseDetail(
+        case=CaseRow(
+            case_id=row["case_id"],
+            subject_kind=str(row["subject_kind"]),
+            anomaly_id=row["anomaly_id"],
+            charge_id=row["charge_id"],
+            service_date=row["service_date"],
+            status=str(row["status"]),
+            assignee_user_id=row["assignee_user_id"],
+            resolution_note=row["resolution_note"],
+            created_at=row["created_at"],
+        ),
+        events=tuple(
+            CaseEvent(
+                from_status=None if event["from_status"] is None else str(event["from_status"]),
+                to_status=str(event["to_status"]),
+                actor_user_id=event["actor_user_id"],
+                note=event["note"],
+                created_at=event["created_at"],
+            )
+            for event in events
+        ),
     )
