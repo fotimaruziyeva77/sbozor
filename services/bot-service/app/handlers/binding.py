@@ -52,6 +52,24 @@ sinab, kim sotuvchi ekanini aniqlay olardi.
    nomlangan holat bor (`BOUND_STATUS`) va qolgan hamma narsa bitta
    `else` shoxiga tushadi. Ya'ni ikkinchi matnni yozish uchun avval
    ikkinchi shoxni tug'dirish kerak bo'ladi.
+
+=============================================================================
+⛔⛔ DIREKTOR SHOXI D-26(a) NING NEYTRALLIGINI BUZMAYDI (07-18).
+
+Kontakt sotuvchi reyestriga mos kelmasa, handler IKKINCHI so'rov yuboradi
+va «bu odam biror bozorning direktormi?» deb so'raydi. Uch fakt bu
+shoxni neytral qoldiradi:
+
+  1. IKKALA RAD ETISH HAM AYNI MATN: sotuvchi ham, direktor ham
+     topilmasa `NEUTRAL_KEY` chiziladi — ya'ni «raqamingiz qaysi
+     reyestrda yo'q?» degan savolga bot javob BERMAYDI;
+  2. FARQ FAQAT MUVAFFAQIYAT SHOXIDA KO'RINADI, unga esa raqamning
+     EGASI yetadi (D-24 ning uch qo'riqchisi shoxdan OLDIN ishlaydi va
+     ular O'ZGARMAGAN) — begona odam boshqa birovning rolini
+     bilib ololmaydi;
+  3. IKKI SO'ROV BITTA RATE-LIMIT SANAGICHINI yeydi (`core-api`
+     `/director/resolve` docstringidagi arifmetika), ya'ni ikkinchi
+     shox urinishlar byudjetini kengaytirmaydi.
 =============================================================================
 """
 
@@ -123,7 +141,30 @@ async def on_contact(message: Message, core: CoreClient) -> None:
         await message.answer(_("bot.binding.ok"), reply_markup=main_menu_keyboard())
         return
 
-    # ⛔ `no_match` VA `multiple_matches` — SHU BITTA SHOX. Farq faqat
-    #    serverda yoziladi (07-08: ikkinchisi `alert_events` ga qator
-    #    qo'yadi), sotuvchi esa reyestr nuqsonini bilishi SHART EMAS.
+    try:
+        director = await core.resolve_director(
+            telegram_user_id=contact.user_id,
+            raw_phone=contact.phone_number,
+        )
+    except CoreApiError:
+        await message.answer(_("bot.error.retry"))
+        return
+
+    if director.status == BOUND_STATUS:
+        # ⛔ ASOSIY MENYU KLAVIATURASI BERILMAYDI VA BU QAROR: uning ikkala
+        #    tugmasi ham («Qarzim», «To'lovlarim») SOTUVCHINING savoli va
+        #    ular direktor uchun `not_bound` javobini qaytarardi — ya'ni
+        #    menyu ishlamaydigan tugmalar bilan chiqardi.
+        #
+        # ⚠ `ReplyKeyboardRemove()` ATAYIN YUBORILMAYDI: kontakt tugmasi
+        #   `/start` da ONE-TIME klaviatura sifatida ko'rsatiladi va uni
+        #   Telegram O'ZI yopadi. Ortiqcha olib tashlash so'rovi
+        #   direktorning chatida ikkinchi xabar tug'dirardi.
+        await message.answer(_("bot.binding.director"))
+        return
+
+    # ⛔ `no_match`, `multiple_matches` VA «direktor ham emas» — SHU BITTA
+    #    SHOX. Farq faqat serverda yoziladi (07-08: ikkinchisi
+    #    `alert_events` ga qator qo'yadi), foydalanuvchi esa reyestr
+    #    nuqsonini ham, reyestr A'ZOLIGINI ham bilishi SHART EMAS.
     await message.answer(_(NEUTRAL_KEY))

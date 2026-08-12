@@ -519,6 +519,18 @@ def seed_notification_settings(
       Shuning uchun bu seed HECH QAYERDA avtomatik chaqirilmaydi — uni
       faqat «sozlama BOR» shoxini o'lchayotgan test chaqiradi.
 
+    ⛔⛔ `director_chat_id` NING MAHSULOT YO'LI — `POST /internal/bot/
+       director/resolve` (07-18). BU SEED U EMAS va u bilan
+       ALMASHTIRILMAYDI.
+
+       Farq 07-VERIFICATION gap #1 da o'lchangan: `test_sc3` sozlama
+       qatorini shu fixture bilan yozgan paytida YASHIL edi, holbuki
+       ustunga yozadigan MAHSULOT yo'li butun repoda YO'Q edi — ya'ni
+       produksiyada `resolve_chat_id()` har doim `None` qaytarardi va
+       direktor dayjestni HECH QACHON olmasdi. Endi `test_sc3` o'sha
+       marshrutga boradi va natijani BAZADAN o'qiydi; bu fixture esa
+       `overdue_days` (D-19) shoxi uchun qoladi.
+
     ⚠ `quiet_hours_*` ATAYIN ARGUMENT EMAS: ikkala ustun ham
       `server_default` bilan keladi va standartning O'ZI [ASSUMED] qaror
       (A2). Fixture ularni qayta yozsa, testlar mahsulot standartini

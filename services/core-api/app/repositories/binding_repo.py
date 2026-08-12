@@ -78,14 +78,16 @@ from typing import TYPE_CHECKING, Final
 from uuid import UUID
 
 import structlog
-from sbozor_core.enums import ActorKind, AuditAction
+from sbozor_core.enums import ActorKind, AuditAction, Role
 from sbozor_core.models import Stall, StallAssignment, Vendor, VendorTelegramBinding
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 from sbozor_core.tenancy import set_tenant_context
-from sqlalchemy import func, select, update
+from sqlalchemy import BigInteger, bindparam, func, select, text, update
+from sqlalchemy.dialects.postgresql import UUID as PgUuid
 
 from app.jobs.alerting import raise_alert
 from app.jobs.retention import active_market_ids
+from app.repositories.user_repo import UserRepository
 from app.security.audit import write_app_audit
 
 if TYPE_CHECKING:
@@ -96,6 +98,9 @@ if TYPE_CHECKING:
 __all__ = [
     "VENDOR_BINDING_CONFLICT_ALERT_KEY",
     "BindingRef",
+    "DirectorRef",
+    "DirectorResolveOutcome",
+    "DirectorResolveStatus",
     "PendingVendor",
     "PendingVendorPage",
     "ResolveOutcome",
@@ -103,8 +108,10 @@ __all__ = [
     "VendorRef",
     "active_bindings",
     "bind",
+    "bind_director",
     "pending_vendors",
     "resolve",
+    "resolve_director",
     "revoke",
     "stall_codes_by_vendor",
     "tenant_session",
@@ -237,6 +244,63 @@ class PendingVendorPage:
 
     items: tuple[PendingVendor, ...]
     next_cursor: UUID | None
+
+
+class DirectorResolveStatus(StrEnum):
+    """Direktor shoxining IKKI nomlangan holati — yopiq to'plam.
+
+    ⛔ `ResolveStatus` NING UCHINCHI A'ZOSI (`multiple_matches`) BU YERDA
+       YO'Q va uning yo'qligi MEXANIK, kelishuv EMAS.
+
+    Sotuvchida noaniqlik REYESTR NUQSONI: `vendors` da telefon global
+    noyob emas (`uq_vendors_market_id_phone_e164` faqat BOZOR ICHIDA
+    ishlaydi), ya'ni bir telefon ikki sotuvchi qatoriga mos kelishi
+    mumkin va u holat tuzatilishi kerak.
+
+    `users.phone_e164` esa GLOBAL NOYOB (`auth_create_user` band telefonda
+    `None` qaytaradi), ya'ni bir telefon = BIR ODAM. Bir odamning ikki
+    bozorda direktor bo'lishi QONUNIY (`user_market_roles` da ikki qator)
+    va har bozorning O'Z sozlama qatori bor. Demak «bir nechta moslik»
+    holati bu shoxda UMUMAN TUG'ILMAYDI: mos kelgan HAR BIR bozorning
+    qatori yoziladi.
+    """
+
+    BOUND = "bound"
+    """>=1 bozorda direktor topildi va HAR BIRINING chati YOZILDI."""
+
+    NO_MATCH = "no_match"
+    """Moslik yo'q — `ResolveStatus.NO_MATCH` bilan AYNI ma'no va AYNI matn.
+
+    ⛔ Format xatosi, reyestrda yo'q telefon, bloklangan xodim va
+       kassir/nazoratchi roli — TO'RTALASI HAM shu qiymat. Ularni ajratish
+       reyestrni tashqaridan tekshirish oracle'i bo'lardi.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class DirectorRef:
+    """Direktorga ishora — FAQAT IDENTIFIKATORLAR.
+
+    ⛔ TELEFON VA ISM MAYDONI YO'Q (D-05, `VendorRef` bilan aynan bir xil
+       sabab): bu tip javob quruvchisiga boradi va u yerdan bot-service
+       ning jurnaliga tushishi mumkin. Yo'q maydon sizib chiqa olmaydi.
+    """
+
+    market_id: UUID
+    user_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class DirectorResolveOutcome:
+    """`resolve_director()` ning natijasi — holat va mos kelgan bozorlar.
+
+    ⚠ `markets` RO'YXAT: bir odam bir nechta bozorning direktori bo'lishi
+      QONUNIY va HAR BIRINING sozlama qatori yoziladi
+      (`DirectorResolveStatus` docstringi).
+    """
+
+    status: DirectorResolveStatus
+    markets: tuple[DirectorRef, ...] = ()
 
 
 # ===========================================================================
@@ -451,6 +515,205 @@ async def _raise_conflict(
         telegram_user_id=telegram_user_id,
         market_count=len({match.market_id for match in matches}),
     )
+
+
+# ===========================================================================
+# DIREKTOR SHOXI — DAYJEST MANZILINING YAGONA YOZUV YO'LI (RECON-03)
+# ===========================================================================
+#
+# ⛔⛔ BU BO'LIM 07-18 GACHA MAVJUD EMAS EDI VA UNING YO'QLIGI MEZON #3 NI
+#    STRUKTURAVIY RAVISHDA BAJARILMAS QILGAN EDI:
+#    `market_notification_settings.director_chat_id` ga butun repo bo'ylab
+#    BIRORTA yozuvchi yo'q edi, ya'ni `outbox_repo` ning o'quvchisi
+#    (`_RESOLVE_DIRECTOR_CHAT`) produksiyada HAR DOIM `None` qaytarardi va
+#    direktor dayjestni HECH QACHON olmasdi.
+#
+# ⛔ SHAKL — DIREKTOR BOTGA `contact` ULASHADI, admin veb formaga RAQAM
+#    KO'CHIRMAYDI. Sabab: `director_chat_id` — Telegram ning ICHKI raqami
+#    va uni qo'lda kiritishda BITTA xato dayjestni (kunlik tushum, bandlik,
+#    TOP-10 qarzdorning summasi) BEGONA odamning chatiga yuborardi —
+#    qiymat sintaktik jihatdan to'g'ri bo'lib qolaverardi va hech bir
+#    darvoza buni ushlay olmasdi. `contact` esa Telegram O'ZI kafolatlagan
+#    yagona narsa (D-24) va u `contact.user_id == message.from_user.id`
+#    bilan MEXANIK tekshiriladi.
+
+
+_BIND_DIRECTOR_CHAT = text(
+    """
+    INSERT INTO market_notification_settings (market_id, director_chat_id)
+         VALUES (:market_id, :chat_id)
+    ON CONFLICT (market_id) DO UPDATE
+            SET director_chat_id = EXCLUDED.director_chat_id,
+                updated_at = now()
+      RETURNING (xmax = 0) AS inserted
+    """
+).bindparams(
+    bindparam("market_id", type_=PgUuid(as_uuid=True)),
+    bindparam("chat_id", type_=BigInteger()),
+)
+"""Direktorning chatini sozlama qatoriga YOZADI (UPSERT).
+
+=============================================================================
+⛔⛔ NEGA `UPSERT`, YA'NI NEGA BOZOR YARATILGANDA QATOR TUG'ILMAYDI — QAROR.
+
+`market_create()` KASKADIGA `market_notification_settings` QATORI
+QO'SHILMAYDI va bu bo'shliq emas, ONGLI TANLOV. Sabab: jadvalning uchala
+ustuni ham qator BO'LMAGANDA to'g'ri qiymat beradi va bu ikki joyda
+O'LCHANGAN, taxmin qilinmagan:
+
+  * `outbox_repo._CLAIM_DUE` — `LEFT JOIN market_notification_settings` +
+    `COALESCE(s.quiet_hours_start, :quiet_start)`; `JOIN` yozilganda
+    sozlamasiz bozorning butun navbati JIMGINA ko'rinmas bo'lardi, shuning
+    uchun u ATAYIN `LEFT JOIN`;
+  * `jobs/notifications._MARKET_OVERDUE_DAYS` va uning jufti
+    `jobs/reconciliation` da — `COALESCE((SELECT s.overdue_days ...),
+    :fallback)`, standart esa SXEMADAN hosila
+    (`notification_meta.DEFAULT_OVERDUE_DAYS`).
+
+Ya'ni qatorni oldindan yaratish HECH BIR o'quvchining javobini
+o'zgartirmaydi, lekin IKKINCHI standart manbaini tug'dirardi: sxemaning
+`server_default` i va kaskadning yozgan qiymati bir kun ajralib ketardi
+va «standart qaysi?» savoliga ikki joy ikki xil javob berardi. Bundan
+tashqari kaskad `markets` ni yaratadigan DB FUNKSIYASIDA (migratsiyada)
+yashaydi — unga yangi jadval qo'shish MIGRATSIYA talab qilardi, holbuki
+bu yo'l migratsiyasiz qurilgan.
+
+⚠ O'sha funksiyaning bajarilish huquqi turi bu yerda LITERAL
+  yozilmaydi — sabab modul docstringining «ikki taqiqlangan nom»
+  bandida (darvoza izohni koddan ajratmaydi).
+
+`director_chat_id` esa boshqa toifada: uning standarti YO'Q va u faqat
+direktor botga ulanganda ma'lum bo'ladi. Shuning uchun qator AYNAN SHU
+yerda, LAZY tarzda tug'iladi — `ON CONFLICT` esa «qator allaqachon bor»
+(masalan `overdue_days` veb yuzasidan o'zgartirilgan) shoxini xatosiz
+qamraydi.
+=============================================================================
+
+⛔ FAQAT IKKI USTUN `SET` QILINADI. `quiet_hours_start`, `quiet_hours_end`
+   va `overdue_days` — BOZOR SOZLAMASI (D-19) va ular direktorning
+   telefonidan kelmaydi. Ularni `EXCLUDED` bilan ustiga yozish qayta
+   ulanishni «sozlamalarni standartga qaytarish» amaliga aylantirardi va
+   direktor sabab ko'rmasdi.
+
+⚠ `xmax = 0` — «bu qator YANGI yaratildimi?» faktining Postgres dagi
+  yagona arzon manbai: `ON CONFLICT DO UPDATE` shoxida qator versiyasi
+  yangilanadi va `xmax` nolga teng bo'lmaydi.
+"""
+
+
+async def bind_director(session: AsyncSession, *, market_id: UUID, chat_id: int) -> bool:
+    """Bozorning dayjest manzilini yozadi; `True` = qator YANGI yaratildi.
+
+    ⛔ AUDIT QATORI YOZILMAYDI VA BU TEXNIK TO'SIQ, UNUTISH EMAS.
+       `market_notification_settings` `schema_contract.AUDITED_TABLES` dan
+       ATAYIN chiqarilgan: jadvalning birlamchi kaliti `market_id`, ya'ni
+       unda `id uuid` ustuni YO'Q, `fn_audit_row()` esa `row_id` ni `uuid`
+       ga keltiradi va bunday jadvalda har DML da YIQILARDI
+       (`stall_code_registry` / `nvr_credentials` bilan aynan bir xil
+       to'siq). Ilova darajasida qo'lda yozish esa `revoke()` da topilgan
+       WR-03 nuqsonining aynan takrori bo'lardi.
+       ⚠ SHU SABABNI YOZUVCHI FUNKSIYA NOMI BU YERDA LITERAL
+         KELTIRILMAYDI: `test_bot_internal_api.py` uning SANOG'INI
+         qulflaydi (yangi chaqiruv qo'shilmagani shu bilan o'lchanadi) va
+         izohning O'ZI sanoqni oshirib, darvozani sababi bilan
+         qizartirardi — 03-07 / 07-02 darsining aynan takrori.
+       ⚠ «Direktor chati qachon, kim tomonidan almashtirildi?» savoli
+         bugun `updated_at` va tuzilmaviy jurnal bilan javob oladi; band
+         `deferred-items.md` da EGASI (8-faza) bilan yozilgan.
+
+    ⛔ FUNKSIYA `session` OLADI, `sessionmaker` EMAS: u chaqiruvchining
+       tranzaksiyasida ishlaydi (`outbox_repo` funksiyalarining aynan
+       qoidasi). Tenant konteksti chaqiruvchida o'rnatiladi — RLS
+       `tenant_policy` `FOR ALL ... WITH CHECK(...)` bo'lgani uchun
+       kontekstsiz `INSERT` policy bilan RAD ETILADI.
+
+    ⛔ `chat_id` JURNALGA YOZILMAYDI (loyihaning qattiq cheklovi).
+
+    Returns:
+        `True` — sozlama qatori shu chaqiruvda tug'ildi; `False` — mavjud
+        qatorning manzili ustiga yozildi (qayta ulanish).
+    """
+    result = await session.execute(
+        _BIND_DIRECTOR_CHAT, {"market_id": market_id, "chat_id": chat_id}
+    )
+    return bool(result.scalar_one())
+
+
+async def resolve_director(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    raw_phone: str,
+    telegram_user_id: int,
+    request_id: str | None = None,
+) -> DirectorResolveOutcome:
+    """Telefon -> direktor moslashtirish va HAR MOS BOZORNING chatini yozish.
+
+    ⛔ FUNKSIYA `sessionmaker` OLADI, `session` EMAS: u
+       `active_market_ids()` bo'ylab bir necha tenant sessiyasi ochadi
+       (`resolve()` bilan aynan bir xil sabab).
+
+    Bosqichlar:
+      1. normalizatsiya (chegarada, `_normalize()`);
+      2. HAR faol bozor bo'ylab SKANER — ⛔ erta `break` YO'Q;
+      3. mos kelgan HAR BIR bozor uchun ALOHIDA tranzaksiyada `bind_director()`.
+
+    ⛔ NORMALIZATSIYA YIQILGANDA HAM TSIKL TO'LIQ YUGURADI. Erta `return`
+       javob vaqtini «raqam shakli to'g'rimi?» oracle'iga aylantirardi —
+       `resolve()` ning aynan qoidasi (T-07-40). Moslik tekshiruvida
+       `None` hech qanday telefonga teng bo'lmaydi.
+
+    ⛔ ROL VA HOLAT TEKSHIRUVI HAQIQIY: moslik FAQAT `Role.DIRECTOR` roli
+       BOR va `is_active` bo'lgan a'zoda. Kassir/nazoratchi telefoni va
+       bloklangan xodim `NO_MATCH` beradi — bloklangan xodim bozorning
+       kunlik tushumini olishda davom etardi.
+
+    ⛔ TELEFON HECH QAYERGA YOZILMAYDI: na `log.*` argumentiga, na istisno
+       matniga, na natija tipiga (modul docstringi).
+
+    ⛔ YOZUV O'QISHDAN KEYIN VA HAR BOZOR UCHUN ALOHIDA TRANZAKSIYADA:
+       bitta bozorning yozuvi yiqilsa qolganlari o'z holicha qoladi.
+
+    Returns:
+        `DirectorResolveOutcome` — ⛔ telefon raqami YO'Q.
+    """
+    phone = _normalize(raw_phone)
+
+    matches: list[DirectorRef] = []
+    for market_id in await active_market_ids(sessionmaker):
+        async with tenant_session(
+            sessionmaker, market_id=market_id, request_id=request_id
+        ) as session:
+            members = await UserRepository(session, market_id).list_members()
+        matches.extend(
+            DirectorRef(market_id=market_id, user_id=member.user_id)
+            for member in members
+            if member.is_active
+            and Role.DIRECTOR.value in member.roles
+            # ⚠ `phone is None` bo'lganda bu shart HAR DOIM yolg'on —
+            #   `_normalize()` ikkala tomonda ham ishlaydi, ya'ni
+            #   `None == None` bilan tasodifiy moslik TUG'ILMAYDI.
+            and phone is not None
+            and _normalize(member.phone) == phone
+        )
+
+    if not matches:
+        # ⛔ NA TELEFON, NA `telegram_user_id` (u DIREKTOR uchun aynan
+        #   `chat_id` ning O'ZI) jurnalga yozilmaydi.
+        log.info("director_resolve_no_match")
+        return DirectorResolveOutcome(status=DirectorResolveStatus.NO_MATCH)
+
+    rebound = 0
+    for match in matches:
+        async with tenant_session(
+            sessionmaker, market_id=match.market_id, request_id=request_id
+        ) as session:
+            created = await bind_director(
+                session, market_id=match.market_id, chat_id=telegram_user_id
+            )
+        rebound += 0 if created else 1
+
+    log.info("director_chat_bound", market_count=len(matches), rebound=rebound)
+    return DirectorResolveOutcome(status=DirectorResolveStatus.BOUND, markets=tuple(matches))
 
 
 # ===========================================================================

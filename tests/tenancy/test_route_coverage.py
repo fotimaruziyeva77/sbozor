@@ -343,9 +343,9 @@ BOT_INTERNAL_PREFIX = "/internal/bot"
 BO'LMAGAN shaxs — sotuvchi — tizim ma'lumotini oladi. Ikkita kafolat shu
 qarorni ushlab turadi va ikkalasi ham marshrut faylida KO'RINMAYDI:
 
-  (a) uchala yo'l OpenAPI'ga CHIQMAYDI (`include_in_schema=False`), ya'ni
-      ular ommaviy mijoz kontraktining qismi emas;
-  (b) uchala yo'l `PERSONAL_ROUTES` ga TUSHMAYDI (D-05, G7-6) — javob
+  (a) to'rtala yo'l OpenAPI'ga CHIQMAYDI (`include_in_schema=False`),
+      ya'ni ular ommaviy mijoz kontraktining qismi emas;
+  (b) to'rtala yo'l `PERSONAL_ROUTES` ga TUSHMAYDI (D-05, G7-6) — javob
       modellarida `vendor_name` / `phone` / `full_name` maydonlari YO'Q.
 
 Ikkalasi ham `include_in_schema=False` ni yoki javob modelini bir qator
@@ -369,14 +369,25 @@ def _bot_internal_routes() -> list[str]:
     )
 
 
-def test_the_bot_internal_surface_is_exactly_three_routes() -> None:
+def test_the_bot_internal_surface_is_exactly_four_routes() -> None:
     """DARVOZANING NAZORATI — pastdagi ikki test BO'SH to'plamda yashil bo'lmaydi.
 
     ⛔ Usiz «sxemada yo'q» va «shaxsiy maydon yo'q» da'volari router
        o'chirilgan yoki qayta nomlangan holatda TRIVIAL ravishda rost
        bo'lardi (05-16 ning W-2 darsi).
+
+    ⛔ DA'VO SHAKLI TENGLIK BO'LIB QOLADI (`==`, `>=` EMAS) — 07-18 da son
+       uchdan to'rtga o'sganda ham. `>=` ga bo'shatish yuzaning JIMGINA
+       kengayishiga yo'l ochardi: yangi `/internal/bot/*` marshruti hech
+       qanday qarorsiz qo'shilib ketardi, holbuki bu yuzaning HAR BIR
+       yo'li `EXEMPT_ROUTES` ga sabab bilan yozilishi shart.
+
+    ⚠ TO'RTINCHISI — `POST /internal/bot/director/resolve` (07-18): u
+      `market_notification_settings.director_chat_id` ning YAGONA yozuv
+      yo'li va usiz direktor dayjestni umuman olmasdi.
     """
     assert _bot_internal_routes() == [
+        "/internal/bot/director/resolve",
         "/internal/bot/resolve",
         "/internal/bot/vendor/payments",
         "/internal/bot/vendor/summary",
@@ -384,7 +395,7 @@ def test_the_bot_internal_surface_is_exactly_three_routes() -> None:
 
 
 def test_no_bot_internal_route_is_documented_in_openapi() -> None:
-    """⛔ Uchala marshrut OpenAPI'da YO'Q (`include_in_schema=False`).
+    """⛔ To'rtala marshrut OpenAPI'da YO'Q (`include_in_schema=False`).
 
     OpenAPI mijozlar uchun yoziladi va bu yerda brauzer mijozi YO'Q:
     kontrakt bot-service bilan va u `app/api/internal/bot.py` ning O'ZI.

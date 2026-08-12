@@ -126,4 +126,48 @@ barcha o'lchovlar allaqachon shu naqshni ishlatadi. `enqueue()` ning
 idempotentligi bu testning predmeti EMAS, ya'ni mahsulot yo'lidan
 yurishning bu yerda hech qanday qiymati yo'q.
 
-**Egasi:** faza yakuni yoki 8-faza.
+**Egasi:** faza yakuni — `07-21` ga topshirildi (`notifications.py` uning fayl ro'yxatida).
+
+---
+
+## 4. `market_notification_settings` AUDIT ostida emas — direktor chatining tarixi yo'q
+
+**Manba:** 07-18 ijrosi (`binding_repo.bind_director()` yozilgan reja).
+
+07-18 `market_notification_settings.director_chat_id` ga **birinchi
+yozuv yo'lini** ochdi: direktor botga kontakt ulashadi va uning chati
+`UPSERT` bilan yoziladi. Ya'ni bugundan boshlab bu ustun **o'zgaradi** —
+avval unga hech qachon yozilmagan edi.
+
+**Bo'shliq:** jadval `schema_contract.AUDITED_TABLES` da **YO'Q**, ya'ni
+«direktor chati qachon, kim tomonidan almashtirildi?» degan savolga
+javob **faqat** `updated_at` (oxirgi o'zgarish payti) va tuzilmaviy
+jurnal bilan beriladi. Oldingi qiymat va o'zgarishlar ketma-ketligi
+**hech qayerda saqlanmaydi**.
+
+⛔ **BU UNUTISH EMAS, TEXNIK TO'SIQ** va u
+`schema_contract.AUDITED_TABLES` docstringida allaqachon nomma-nom
+yozilgan: jadvalning birlamchi kaliti `market_id`, ya'ni unda `id uuid`
+ustuni **yo'q**, `fn_audit_row()` esa `row_id` ni `uuid` ga keltiradi va
+bunday jadvalda **har DML da yiqilardi** (`stall_code_registry` va
+`nvr_credentials` bilan aynan bir xil to'siq). Ilova darajasida qo'lda
+audit qatori yozish esa `revoke()` da topilgan **WR-03** nuqsonining
+takrori bo'lardi.
+
+**Nega 07-18 da tuzatilmadi:** tuzatish **migratsiya** talab qiladi
+(`id uuid` ustuni + PK o'zgarishi), 07-18 esa `migrations/` ga **umuman
+tegmaydi** — uning tahdid reyestridagi `T-07-SC` bandi diffda
+`migrations/` bo'lmasligini talab qiladi.
+
+⛔ **Yechim shakli allaqachon nomlangan** (o'sha docstring): jadvalga
+`id uuid` ustuni **qo'shiladi**, audit funksiyasi **o'zgartirilmaydi** —
+`fn_audit_row()` ni kalitsiz jadvallarga moslash uni butun sxema bo'ylab
+qayta yozish bo'lardi.
+
+**Xavf darajasi — PAST va u o'lchangan:** qiymat faqat raqamning EGASI
+tomonidan (D-24 ning uch qo'riqchisi) va faqat `Role.DIRECTOR` +
+`is_active` a'zosi bo'lganda yoziladi, ya'ni «begona odam chatni o'ziga
+burib yubordi» stsenariysi **strukturaviy ravishda yopiq**. Yo'qolayotgan
+narsa — **tarix**, ruxsat emas.
+
+**Egasi:** 8-faza.

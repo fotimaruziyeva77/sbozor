@@ -58,6 +58,13 @@ msgstr "Bog'lanib bo'lmadi. Bozor ma'muriyatiga murojaat qiling."
 msgid "bot.binding.ok"
 msgstr "Ulandingiz. Endi qarzingiz va to'lovlaringizni shu yerda ko'rasiz."
 
+# ⛔ DIREKTOR SHOXI (07-18) — matn A'ZOLIK haqida HECH NIMA AYTMAYDI:
+#    «tasdiqlandi», «ro'yxatda topildingiz» kabi ibora javobni reyestrni
+#    tashqaridan tekshirish yo'liga aylantirardi (D-26a bot matnlariga ham
+#    amal qiladi). Aytiladigan yagona narsa — BUNDAN KEYIN NIMA BO'LADI.
+msgid "bot.binding.director"
+msgstr "Ulandingiz. Bozor bo'yicha kunlik xabarlar shu chatga keladi."
+
 msgid "bot.notBound"
 msgstr "Avval raqamingizni ulashing: /start"
 

@@ -31,7 +31,7 @@ from aiogram.enums import ChatType
 from fixtures.core_double import MARKET_ID, VENDOR_ID, CoreDouble
 from fixtures.telegram import make_bot, make_contact, make_message, sent_texts
 
-from app.core_client import ResolveResult, VendorRef
+from app.core_client import DirectorResolveResponse, ResolveResult, VendorRef
 from app.handlers.binding import on_contact
 from app.i18n import get_i18n
 
@@ -85,6 +85,11 @@ async def test_contact_without_user_id_is_rejected(locale: I18n) -> None:
     await on_contact(message, core=core)
 
     assert core.resolve_calls == []
+    assert core.director_calls == [], (
+        "⛔ D-24 ning qo'riqchisi ochilgan: rad etilgan kontakt uchun DIREKTOR "
+        "reyestri ham SO'RALMASLIGI kerak — u ham `core-api` da AYNI rate-limit "
+        "sanagichini oshirardi (T-07-96)"
+    )
     assert sent_texts(session) == [neutral_text()]
 
 
@@ -101,6 +106,11 @@ async def test_contact_of_another_user_is_rejected(locale: I18n) -> None:
     await on_contact(message, core=core)
 
     assert core.resolve_calls == []
+    assert core.director_calls == [], (
+        "⛔ D-24 ning qo'riqchisi ochilgan: rad etilgan kontakt uchun DIREKTOR "
+        "reyestri ham SO'RALMASLIGI kerak — u ham `core-api` da AYNI rate-limit "
+        "sanagichini oshirardi (T-07-96)"
+    )
     assert sent_texts(session) == [neutral_text()]
 
 
@@ -113,6 +123,11 @@ async def test_contact_from_group_chat_is_rejected(locale: I18n) -> None:
     await on_contact(message, core=core)
 
     assert core.resolve_calls == []
+    assert core.director_calls == [], (
+        "⛔ D-24 ning qo'riqchisi ochilgan: rad etilgan kontakt uchun DIREKTOR "
+        "reyestri ham SO'RALMASLIGI kerak — u ham `core-api` da AYNI rate-limit "
+        "sanagichini oshirardi (T-07-96)"
+    )
     assert sent_texts(session) == [neutral_text()]
 
 
@@ -126,16 +141,24 @@ async def test_no_match_and_multiple_matches_render_the_same_text(locale: I18n) 
 
     Farqli matn reyestrni tashqaridan tekshirish oracle'i bo'lardi:
     begona odam raqamlarni sinab, kim sotuvchi ekanini aniqlay olardi.
+
+    ⚠ DIREKTOR SHOXI (07-18) BU DA'VONI O'ZGARTIRMAYDI: u ham `no_match`
+      qaytaradi va oqim AYNI `NEUTRAL_KEY` ga tushadi. Ya'ni ikkinchi
+      chaqiruvning MAVJUDLIGI foydalanuvchi uchun KO'RINMAYDI.
     """
     texts: list[str] = []
     for status in ("no_match", "multiple_matches"):
         bot, session = make_bot()
-        core = CoreDouble(resolve_result=ResolveResult(status=status, vendor=None))
+        core = CoreDouble(
+            resolve_result=ResolveResult(status=status, vendor=None),
+            director_result=DirectorResolveResponse(status="no_match", market_count=0),
+        )
         message = make_message(contact=make_contact(user_id=777)).as_(bot)
 
         await on_contact(message, core=core)
 
         assert len(core.resolve_calls) == 1
+        assert len(core.director_calls) == 1
         texts.extend(sent_texts(session))
 
     first, second = texts
@@ -146,7 +169,13 @@ async def test_no_match_and_multiple_matches_render_the_same_text(locale: I18n) 
 
 
 async def test_valid_contact_calls_resolve_once(locale: I18n) -> None:
-    """To'g'ri kontakt: AYNAN BIR chaqiruv, tasdiq matni va menyu."""
+    """To'g'ri kontakt: AYNAN BIR chaqiruv, tasdiq matni va menyu.
+
+    ⛔ SOTUVCHI TOPILGANDA DIREKTOR REYESTRI SO'RALMAYDI: ikkinchi
+       chaqiruv rate-limit sanagichini bekorga yeb, sotuvchini o'z
+       akkauntidan bloklay olardi (07-18 ning ikkinchi shoxi FAQAT
+       sotuvchi mos kelmaganda ishlaydi).
+    """
     bot, session = make_bot()
     core = CoreDouble(
         resolve_result=ResolveResult(
@@ -160,9 +189,132 @@ async def test_valid_contact_calls_resolve_once(locale: I18n) -> None:
 
     assert len(core.resolve_calls) == 1
     assert core.resolve_calls[0]["telegram_user_id"] == 777
+    assert core.director_calls == []
     (text,) = sent_texts(session)
     assert text == get_i18n().gettext("bot.binding.ok", locale="uz_Latn")
     assert text != neutral_text()
+
+
+# ---------------------------------------------------------------------------
+# ⛔ DIREKTOR SHOXI (07-18, RECON-03)
+# ---------------------------------------------------------------------------
+
+
+def director_text() -> str:
+    return get_i18n().gettext("bot.binding.director", locale="uz_Latn")
+
+
+async def test_a_director_contact_binds_after_the_vendor_branch_misses(locale: I18n) -> None:
+    """⛔ IKKI CHAQIRUV, IKKINCHI TARTIBDA: avval sotuvchi, keyin direktor.
+
+    Tartib MUHIM: sotuvchilar soni direktorlarnikidan yuz barobar ko'p,
+    ya'ni teskari tartib har bir sotuvchi ulanishida bekorga bitta
+    so'rov qo'shardi.
+    """
+    bot, session = make_bot()
+    core = CoreDouble(
+        resolve_result=ResolveResult(status="no_match", vendor=None),
+        director_result=DirectorResolveResponse(status="bound", market_count=1),
+    )
+    message = make_message(contact=make_contact(user_id=777)).as_(bot)
+
+    await on_contact(message, core=core)
+
+    assert len(core.resolve_calls) == 1
+    assert len(core.director_calls) == 1
+    assert core.director_calls[0]["telegram_user_id"] == 777
+    (text,) = sent_texts(session)
+    assert text == director_text()
+    assert text != neutral_text()
+    assert text != get_i18n().gettext("bot.binding.ok", locale="uz_Latn")
+
+
+async def test_the_director_answer_carries_no_vendor_menu(locale: I18n) -> None:
+    """⛔ ASOSIY MENYU KLAVIATURASI BERILMAYDI — direktor OLUVCHI.
+
+    «Qarzim» va «To'lovlarim» — SOTUVCHINING savollari va ular direktor
+    uchun `not_bound` javobini qaytarardi, ya'ni menyu ishlamaydigan
+    tugmalar bilan chiqardi.
+    """
+    bot, session = make_bot()
+    core = CoreDouble(
+        resolve_result=ResolveResult(status="no_match", vendor=None),
+        director_result=DirectorResolveResponse(status="bound", market_count=2),
+    )
+    message = make_message(contact=make_contact(user_id=777)).as_(bot)
+
+    await on_contact(message, core=core)
+
+    (request,) = [
+        item for item in session.requests if getattr(item, "text", None) == director_text()
+    ]
+    assert request.reply_markup is None, (
+        f"direktorga sotuvchi menyusi ko'rsatildi: {request.reply_markup}"
+    )
+
+
+async def test_an_unknown_number_is_neutral_in_both_branches(locale: I18n) -> None:
+    """⛔ IKKALA RAD ETISH HAM AYNI MATN — D-26(a) direktor shoxida ham.
+
+    Direktor shoxining MAVJUDLIGI hech qanday farq bermaydi: begona odam
+    «bu raqam sotuvchi emas, lekin direktor» degan signalni ololmaydi.
+    """
+    bot, session = make_bot()
+    core = CoreDouble(
+        resolve_result=ResolveResult(status="no_match", vendor=None),
+        director_result=DirectorResolveResponse(status="no_match", market_count=0),
+    )
+    message = make_message(contact=make_contact(user_id=777)).as_(bot)
+
+    await on_contact(message, core=core)
+
+    assert len(core.director_calls) == 1
+    assert sent_texts(session) == [neutral_text()]
+
+
+async def test_a_director_lookup_failure_shows_the_retry_text(locale: I18n) -> None:
+    """⛔ Nosozlikda `bot.error.retry` — kontakt tugmasi QAYTA KO'RSATILMAYDI.
+
+    Tugmani qayta chizish foydalanuvchini «yana bosing» siklga solardi va
+    har bosish rate-limit sanagichini yeb, tiklanishni SEKINLASHTIRARDI.
+    """
+    from app.core_client import CoreApiError
+
+    bot, session = make_bot()
+    core = CoreDouble(
+        resolve_result=ResolveResult(status="no_match", vendor=None),
+        director_raises=CoreApiError(
+            operation="resolve_director", error_type="ConnectError", status=None
+        ),
+    )
+    message = make_message(contact=make_contact(user_id=777)).as_(bot)
+
+    await on_contact(message, core=core)
+
+    (request,) = session.requests
+    assert request.text == get_i18n().gettext("bot.error.retry", locale="uz_Latn")
+    assert "ConnectError" not in request.text
+    assert request.reply_markup is None
+
+
+def test_the_director_text_exists_in_every_locale() -> None:
+    """⛔ D-31: `bot.binding.director` UCHALA katalogda ham BOR va BO'SH EMAS.
+
+    ⚠ `test_locale_parity.py` to'plam tengligini o'lchaydi, bu esa AYNAN
+      SHU kalitni nomma-nom: parity darvozasi kalit UCHALA katalogdan
+      BIRDAN tushib qolganda ham yashil qolardi.
+    """
+    engine = get_i18n()
+    rendered = {
+        locale: engine.gettext("bot.binding.director", locale=locale)
+        for locale in ("uz_Latn", "uz_Cyrl", "ru")
+    }
+
+    for locale, text in rendered.items():
+        assert text and text != "bot.binding.director", f"{locale}: tarjima yo'q ({text!r})"
+    assert len(set(rendered.values())) == 3, (
+        f"kamida ikki locale bir xil matn berdi — tarjima nusxalangan: {rendered}"
+    )
 
 
 async def test_a_core_failure_shows_a_retry_text_not_the_exception(locale: I18n) -> None:
