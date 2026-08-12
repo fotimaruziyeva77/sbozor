@@ -124,9 +124,10 @@ async def _main() -> None:
         # KO'TARILADI — konteyner yiqiladi va sabab ko'rinadi.
         #
         # ⚠ `sentry_sdk.capture_exception` — `app/observability.py` dagi
-        #   «`sentry_sdk` faqat o'sha modulda» qoidasini BUZMAYDI: taqiq
-        #   `sentry_sdk.init(` ga tegishli (o'sha faylning docstringi).
-        #   Bu yerda `init(` YO'Q va bu 07-01 ning qabul mezoni.
+        #   «SDK faqat o'sha modulda sozlanadi» qoidasini BUZMAYDI: taqiq
+        #   SOZLASH chaqiruviga tegishli, XABAR BERISH chaqiruviga emas
+        #   (o'sha faylning docstringi). Bu faylda sozlash chaqiruvi YO'Q
+        #   va uning literal sanog'i 07-01 ning qabul mezoni.
         # =================================================================
         log.critical(
             "telegram_conflict",

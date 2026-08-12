@@ -29,9 +29,14 @@ izlarni tozalaydi. Bittasini qoldirish ikkinchisini bir chaqiruvdan narida
 qoldirardi — sir hodisa yuz bermasdan turib navbatga tushardi.
 
 =============================================================================
-⚠ `sentry_sdk.init()` FAQAT SHU MODULDA CHAQIRILADI (`app/main.py` da 0 ta
-  va bu `07-01` ning qabul mezoni). Shunda `before_send`siz o'rnatish yo'li
-  UMUMAN ochilmaydi.
+⚠ SDK NING XOM `init()` CHAQIRUVI FAQAT SHU MODULDA UCHRAYDI — pastdagi
+  `init_sentry()` ning ichida, AYNAN BIR MARTA. Shunda `before_send`siz
+  o'rnatish yo'li UMUMAN ochilmaydi.
+
+  ⛔ Bu darvoza MEXANIK va u LITERAL SANOG'I bilan o'lchanadi (07-01 qabul
+    mezoni): shu sababdan xom chaqiruvning matni bu faylda ham, `app/main.py`
+    da ham IZOHGA yozilmaydi — aks holda sanoq izohlardan shishib ketardi va
+    darvoza ma'nosini yo'qotardi.
 
   ⚠ `sentry_sdk.capture_exception()` esa `app/main.py` da ATAYIN
     chaqiriladi va bu taqiqni BUZMAYDI: u SOZLAMA emas, XABAR BERISH
@@ -183,5 +188,5 @@ def init_sentry(dsn: str) -> bool:
 
 
 def sentry_installed() -> bool:
-    """Shu JARAYONDA `sentry_sdk.init()` allaqachon bajarilganmi."""
+    """Shu JARAYONDA `init_sentry()` allaqachon o'rnatib bo'lganmi."""
     return bool(sentry_sdk.is_initialized())
