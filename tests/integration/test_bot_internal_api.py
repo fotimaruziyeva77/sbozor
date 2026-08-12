@@ -47,11 +47,13 @@ from app.jobs.alerting import ALERT_META
 from app.repositories import billing_repo, binding_repo
 from app.repositories.binding_repo import (
     VENDOR_BINDING_CONFLICT_ALERT_KEY,
+    DirectorResolveStatus,
     PendingVendor,
     ResolveOutcome,
     ResolveStatus,
     active_bindings,
     resolve,
+    resolve_director,
 )
 from app.security.ratelimit import BOT_RESOLVE_LIMIT
 from fixtures.billing_domain import (
@@ -68,8 +70,10 @@ from fixtures.notification_domain import (
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
+from fixtures.two_markets import SEED_PASSWORD_HASH
 from pydantic import SecretStr
-from sbozor_core.enums import AdjustmentReason
+from sbozor_core.enums import AdjustmentReason, Role
+from sbozor_core.phone import normalize_phone
 from sbozor_core.timeutil import business_today
 from sqlalchemy import text
 
@@ -116,6 +120,44 @@ TELEGRAM_ID_BILLING = 7_610_000_003
 TELEGRAM_ID_RATE_LIMIT = 7_610_000_004
 TELEGRAM_ID_UNBOUND = 7_610_000_005
 
+DIRECTOR_CHAT_A = 7_620_000_001
+"""Direktorning Telegram akkaunti — ⛔ shu shoxda u AYNAN `director_chat_id`.
+
+Ya'ni bu son SIR: mahsulot kodida u jurnalga ham, javob tanasiga ham
+chiqmaydi (`binding_repo.resolve_director` docstringi). Testda esa u
+bazadan O'QIB solishtiriladi — «yozuv yo'li HAQIQATAN yozdi» degan
+da'voning yagona shakli.
+"""
+
+DIRECTOR_CHAT_B = 7_620_000_002
+
+_SHARED_DIRECTOR_PHONE_COUNTER = 76_000_000
+"""⛔ `two_markets._next_phone()` (70 000 000) VA `notification_domain.
+_next_vendor_phone()` (79 000 000) DIAPAZONLARIDAN TASHQARIDA.
+
+Uchala diapazon ham `+9989 7…` prefiksini beradi (haqiqiy O'zbekiston
+operator kodi), ya'ni test xatosini o'qiyotgan odam raqamga qarab uning
+QAYSI seeddan kelganini darhol ajratadi.
+"""
+
+_INSERT_SHARED_DIRECTOR = (
+    "INSERT INTO users (id, phone_e164, password_hash, full_name, is_platform_admin) "
+    "VALUES (%s, %s, %s, %s, false)"
+)
+
+_INSERT_DIRECTOR_ROLE = (
+    "INSERT INTO user_market_roles (id, market_id, user_id, roles) VALUES (%s, %s, %s, %s)"
+)
+
+_DIRECTOR_CHAT_ROW = (
+    "SELECT director_chat_id, quiet_hours_start, quiet_hours_end, overdue_days "
+    "FROM market_notification_settings WHERE market_id = %s"
+)
+
+_SETTINGS_COUNT = (
+    "SELECT count(*) FROM market_notification_settings WHERE market_id = ANY(%s::uuid[])"
+)
+
 
 @dataclass(frozen=True)
 class BoundVendor:
@@ -151,6 +193,95 @@ def phone_seed(sync_owner_conn: Connection[TupleRow]) -> Iterator[TwoMarketPhone
         #   unga tegmaydi. Har test YANGI bozor identifikatorlarini oladi,
         #   ya'ni sanoqlar baribir ajratilgan.
         cleanup_same_phone_in_two_markets(sync_owner_conn, seed)
+
+
+@dataclass(frozen=True)
+class SharedDirectorSeed:
+    """BIR ODAM — IKKI BOZORNING direktori (`users.phone_e164` global noyob).
+
+    ⛔ BU SHAKL D-26(b) NING DIREKTORDAGI JUFTI EMAS, UNING TESKARISI.
+       Sotuvchida ikki moslik REYESTR NUQSONI (telefon `vendors` da global
+       noyob emas), bu yerda esa QONUNIY HOLAT: bir odam ikki bozorni
+       boshqaradi va HAR BIR bozorning dayjesti unga borishi kerak.
+    """
+
+    user_id: UUID
+    phone: str
+    market_ids: tuple[UUID, ...]
+
+
+def _next_shared_director_phone() -> str:
+    """⛔ RAQAM `normalize_phone()` DAN O'TKAZILADI, QO'LDA YASALMAYDI.
+
+    Fixture DB'ga to'g'ridan-to'g'ri yozadi (`users.phone_e164` da format
+    `CHECK` i YO'Q), ya'ni qalbaki satr jimgina o'tib ketardi va test
+    mahsulot HECH QACHON ko'rmaydigan shakl ustidan yugurgan bo'lardi
+    (`notification_domain._next_vendor_phone()` ning aynan qarori).
+    """
+    global _SHARED_DIRECTOR_PHONE_COUNTER
+    _SHARED_DIRECTOR_PHONE_COUNTER += 1
+    return normalize_phone(f"+9989{_SHARED_DIRECTOR_PHONE_COUNTER:08d}")
+
+
+@pytest.fixture
+def shared_director(
+    sync_owner_conn: Connection[TupleRow], two_markets: TwoMarketSeed
+) -> Iterator[SharedDirectorSeed]:
+    """AYNI odamga IKKALA bozorda ham `director` roli beradi.
+
+    ⚠ `seed_same_phone_in_two_markets()` NAQSHI ISHLATILMAYDI va bu farq
+      MAJBURIY: o'sha seed IKKI SOTUVCHI qatori yozadi (telefon `vendors`
+      da global noyob emas). Bu yerda esa BITTA `users` qatori va IKKI
+      `user_market_roles` qatori bo'lishi shart — aks holda test mahsulot
+      qura olmaydigan holatni o'lchagan bo'lardi.
+    """
+    user_id = uuid4()
+    phone = _next_shared_director_phone()
+    market_ids = tuple(market.id for market in two_markets.markets)
+
+    sync_owner_conn.execute(
+        _INSERT_SHARED_DIRECTOR,
+        (str(user_id), phone, SEED_PASSWORD_HASH, "Ikki bozor direktori"),
+    )
+    for market_id in market_ids:
+        sync_owner_conn.execute(
+            _INSERT_DIRECTOR_ROLE,
+            (str(uuid4()), str(market_id), str(user_id), [Role.DIRECTOR.value]),
+        )
+
+    try:
+        yield SharedDirectorSeed(user_id=user_id, phone=phone, market_ids=market_ids)
+    finally:
+        # ⛔ SOZLAMA QATORLARI SHU YERDA O'CHIRILADI: `cleanup_two_markets()`
+        #   `market_notification_settings` ni BILMAYDI va qoldiq qator
+        #   `DELETE FROM markets` ni FK bilan yiqitardi.
+        _clear_settings(sync_owner_conn, market_ids)
+        sync_owner_conn.execute("DELETE FROM user_market_roles WHERE user_id = %s", (str(user_id),))
+        sync_owner_conn.execute("DELETE FROM users WHERE id = %s", (str(user_id),))
+
+
+def _clear_settings(conn: Connection[TupleRow], market_ids: tuple[UUID, ...]) -> None:
+    conn.execute(
+        "DELETE FROM market_notification_settings WHERE market_id = ANY(%s::uuid[])",
+        ([str(market_id) for market_id in market_ids],),
+    )
+
+
+def _director_chat(conn: Connection[TupleRow], market_id: UUID) -> int | None:
+    """Bozorning dayjest manzili — ⛔ BAZADAN, natija obyektidan EMAS.
+
+    Da'vo aynan shu yerda tug'iladi: `resolve_director()` `BOUND` qaytarib,
+    hech nima YOZMAGAN bo'lishi mumkin edi va natijani o'qiydigan test
+    buni ko'rmasdi (07-VERIFICATION gap #1 ning aynan shakli).
+    """
+    row = conn.execute(_DIRECTOR_CHAT_ROW, (str(market_id),)).fetchone()
+    return None if row is None else (None if row[0] is None else int(row[0]))
+
+
+def _settings_rows(conn: Connection[TupleRow], market_ids: tuple[UUID, ...]) -> int:
+    row = conn.execute(_SETTINGS_COUNT, ([str(market_id) for market_id in market_ids],)).fetchone()
+    assert row is not None
+    return int(row[0])
 
 
 def _binding_rows(conn: Connection[TupleRow], seed: TwoMarketPhoneSeed) -> list[tuple[Any, ...]]:
@@ -673,6 +804,299 @@ async def test_the_market_loop_visits_every_market_in_both_outcomes(
     assert scanned_without_match, "birorta faol bozor topilmadi — o'lchov bo'sh"
     assert set(phone_seed.market_ids) <= set(scanned_without_match)
     assert scanned_with_match == scanned_without_match
+
+
+# ---------------------------------------------------------------------------
+# DIREKTOR SHOXI — `director_chat_id` NING YAGONA YOZUV YO'LI (RECON-03)
+#
+# ⛔⛔ 07-18 GACHA BU YO'L UMUMAN MAVJUD EMAS EDI: sozlama ustuniga butun
+#    repo bo'ylab birorta yozuvchi yo'q edi, ya'ni `outbox_repo` ning
+#    o'quvchisi produksiyada HAR DOIM `None` qaytarardi va direktor
+#    dayjestni HECH QACHON olmasdi. Quyidagi da'volarning HAR BIRI
+#    bazadan O'QIB tasdiqlanadi — natija obyektining O'ZI yetarli emas.
+# ---------------------------------------------------------------------------
+
+
+async def test_a_registered_director_gets_the_digest_address_written(
+    two_markets: TwoMarketSeed,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ MEZON #3 NING YOZUV YARMI: qator BAZADA paydo bo'ladi."""
+    market_a = two_markets.market_a
+    try:
+        outcome = await resolve_director(
+            app_sessionmaker,
+            raw_phone=market_a.director_phone,
+            telegram_user_id=DIRECTOR_CHAT_A,
+        )
+
+        assert outcome.status is DirectorResolveStatus.BOUND
+        assert [ref.market_id for ref in outcome.markets] == [market_a.id]
+        assert outcome.markets[0].user_id == market_a.director_user_id
+        assert _director_chat(sync_owner_conn, market_a.id) == DIRECTOR_CHAT_A, (
+            "⛔ `resolve_director()` `bound` qaytardi, lekin "
+            "`market_notification_settings.director_chat_id` BAZADA yozilmadi — "
+            "aynan shu bo'shliq mezon #3 ni bajarilmas qilgan edi"
+        )
+    finally:
+        _clear_settings(sync_owner_conn, (market_a.id,))
+
+
+async def test_one_person_directing_two_markets_gets_both_rows_written(
+    shared_director: SharedDirectorSeed,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ IKKALA BOZORNING HAM qatori yoziladi — «birinchisi» tanlanmaydi.
+
+    `users.phone_e164` GLOBAL NOYOB, ya'ni bir telefon = bir odam va
+    uning ikki bozorda direktor bo'lishi QONUNIY. D-26(b) ning
+    «bir nechta moslik -> bog'lanish YO'Q» qoidasi bu shoxga
+    QO'LLANMAYDI: u yerda noaniqlik reyestr nuqsoni edi, bu yerda esa
+    ikkala javob ham to'g'ri.
+    """
+    outcome = await resolve_director(
+        app_sessionmaker,
+        raw_phone=shared_director.phone,
+        telegram_user_id=DIRECTOR_CHAT_A,
+    )
+
+    assert outcome.status is DirectorResolveStatus.BOUND
+    assert {ref.market_id for ref in outcome.markets} == set(shared_director.market_ids)
+    assert {ref.user_id for ref in outcome.markets} == {shared_director.user_id}
+    for market_id in shared_director.market_ids:
+        assert _director_chat(sync_owner_conn, market_id) == DIRECTOR_CHAT_A, market_id
+
+
+async def test_an_unknown_number_writes_no_settings_row(
+    two_markets: TwoMarketSeed,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ Reyestrda yo'q telefon: `no_match` va YANGI QATOR YO'Q.
+
+    ⚠ `finally` DA TOZALASH — DA'VONI ZAIFLASHTIRMAYDI, TESHIKNI YOPADI:
+      da'vo `_settings_rows(...) == 0` da o'lchanadi va u tozalashdan
+      OLDIN bajariladi. Tozalashsiz regressiya (qator YOZILDI) `DELETE
+      FROM markets` ni FK bilan yiqitib, butun to'plamga ERROR kaskadi
+      tarqatardi — nosozlik AYNAN o'z testida qolishi kerak.
+    """
+    market_ids = tuple(market.id for market in two_markets.markets)
+
+    try:
+        outcome = await resolve_director(
+            app_sessionmaker,
+            raw_phone="+998900000011",
+            telegram_user_id=DIRECTOR_CHAT_A,
+        )
+
+        assert outcome.status is DirectorResolveStatus.NO_MATCH
+        assert outcome.markets == ()
+        assert _settings_rows(sync_owner_conn, market_ids) == 0
+    finally:
+        _clear_settings(sync_owner_conn, market_ids)
+
+
+async def test_an_unparseable_number_is_indistinguishable_for_the_director_branch(
+    two_markets: TwoMarketSeed,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ Format xatosi ham `no_match` — sabab OSHKOR QILINMAYDI.
+
+    «Raqamingiz noto'g'ri formatda» javobi «raqamingiz reyestrda yo'q»
+    dan ajralib turardi va farqning O'ZI enumeratsiya signali bo'lardi
+    (`resolve()` ning aynan qoidasi).
+    """
+    market_ids = tuple(market.id for market in two_markets.markets)
+
+    try:
+        outcome = await resolve_director(
+            app_sessionmaker,
+            raw_phone="salom-bu-raqam-emas",
+            telegram_user_id=DIRECTOR_CHAT_A,
+        )
+
+        assert outcome.status is DirectorResolveStatus.NO_MATCH
+        assert _settings_rows(sync_owner_conn, market_ids) == 0
+    finally:
+        _clear_settings(sync_owner_conn, market_ids)
+
+
+async def test_a_blocked_director_gets_no_digest_address(
+    two_markets: TwoMarketSeed,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ BLOKLANGAN XODIM DAYJEST OLMAYDI (`is_active is False`).
+
+    Aks holda bloklangan direktor bozorning kunlik tushumini, bandligini
+    va TOP-10 qarzdorini olishda DAVOM ETARDI — bloklash esa aynan shu
+    oqimni to'xtatish uchun mavjud (D-08).
+    """
+    market_a = two_markets.market_a
+    sync_owner_conn.execute(
+        "UPDATE users SET is_active = false WHERE id = %s",
+        (str(market_a.director_user_id),),
+    )
+
+    try:
+        outcome = await resolve_director(
+            app_sessionmaker,
+            raw_phone=market_a.director_phone,
+            telegram_user_id=DIRECTOR_CHAT_A,
+        )
+
+        assert outcome.status is DirectorResolveStatus.NO_MATCH
+        assert _director_chat(sync_owner_conn, market_a.id) is None
+    finally:
+        _clear_settings(sync_owner_conn, (market_a.id,))
+
+
+async def test_a_cashier_phone_never_becomes_a_digest_address(
+    two_markets: TwoMarketSeed,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ ROL TEKSHIRUVI HAQIQIY: kassir telefoni `no_match` (T-07-97).
+
+    Bu darvoza yo'q bo'lsa HAR QANDAY xodim — kassir, nazoratchi — o'z
+    kontaktini ulashib bozorning butun kunlik tushumini o'z chatiga
+    yo'naltira olardi.
+    """
+    market_a = two_markets.market_a
+
+    try:
+        outcome = await resolve_director(
+            app_sessionmaker,
+            raw_phone=market_a.cashier_phone,
+            telegram_user_id=DIRECTOR_CHAT_A,
+        )
+
+        assert outcome.status is DirectorResolveStatus.NO_MATCH
+        assert _director_chat(sync_owner_conn, market_a.id) is None
+    finally:
+        _clear_settings(sync_owner_conn, (market_a.id,))
+
+
+async def test_rebinding_overwrites_the_address_without_growing_the_table(
+    two_markets: TwoMarketSeed,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ QAYTA ULANISH: qiymat USTIGA yoziladi, qatorlar soni O'SMAYDI.
+
+    Direktor telefonini yangi Telegram akkauntiga ko'chirsa (akkaunt
+    almashtirildi, telefon o'g'irlandi) dayjest ESKI chatga ketishda
+    davom etmasligi kerak.
+    """
+    market_a = two_markets.market_a
+    try:
+        await resolve_director(
+            app_sessionmaker,
+            raw_phone=market_a.director_phone,
+            telegram_user_id=DIRECTOR_CHAT_A,
+        )
+        await resolve_director(
+            app_sessionmaker,
+            raw_phone=market_a.director_phone,
+            telegram_user_id=DIRECTOR_CHAT_B,
+        )
+
+        assert _director_chat(sync_owner_conn, market_a.id) == DIRECTOR_CHAT_B
+        assert _settings_rows(sync_owner_conn, (market_a.id,)) == 1
+    finally:
+        _clear_settings(sync_owner_conn, (market_a.id,))
+
+
+async def test_binding_the_director_never_touches_the_market_settings(
+    two_markets: TwoMarketSeed,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ NAZORAT (T-07-100): `UPSERT` FAQAT BITTA USTUNGA tegadi.
+
+    `quiet_hours_*` va `overdue_days` — BOZOR sozlamasi (D-19) va ular
+    direktorning telefonidan kelmaydi. `EXCLUDED` bilan ustiga yozish
+    qayta ulanishni «sozlamalarni standartga qaytarish» amaliga
+    aylantirardi va direktor sababni HECH QAYERDA ko'rmasdi.
+    """
+    market_a = two_markets.market_a
+    try:
+        sync_owner_conn.execute(
+            "INSERT INTO market_notification_settings "
+            "(market_id, quiet_hours_start, quiet_hours_end, overdue_days) "
+            "VALUES (%s, %s, %s, %s)",
+            (str(market_a.id), "22:30", "06:15", 7),
+        )
+
+        await resolve_director(
+            app_sessionmaker,
+            raw_phone=market_a.director_phone,
+            telegram_user_id=DIRECTOR_CHAT_A,
+        )
+
+        row = sync_owner_conn.execute(_DIRECTOR_CHAT_ROW, (str(market_a.id),)).fetchone()
+        assert row is not None
+        assert int(row[0]) == DIRECTOR_CHAT_A
+        assert (row[1].hour, row[1].minute) == (22, 30), row
+        assert (row[2].hour, row[2].minute) == (6, 15), row
+        assert int(row[3]) == 7, row
+    finally:
+        _clear_settings(sync_owner_conn, (market_a.id,))
+
+
+def test_resolve_director_never_breaks_out_of_the_market_loop() -> None:
+    """⛔ TAYM-ORACLE: skaner tsiklida `break` YO'Q (T-07-101).
+
+    `resolve()` bilan AYNI sabab: erta chiqish javob VAQTINI moslikning
+    bor-yo'qligiga bog'lardi va neytral javob ma'nosini yo'qotardi.
+
+    ⚠ AST, GREP EMAS (`test_resolve_never_breaks_out_of_the_market_loop`
+      ning aynan qarori): `break` so'zi izohda uchrasa sodda grep uni
+      jazolardi va yagona «tuzatish» yo'li sababni o'chirish bo'lardi.
+    """
+    tree = ast.parse(BINDING_REPO_SOURCE.read_text(encoding="utf-8"))
+    functions = {
+        node.name: node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef | ast.FunctionDef)
+    }
+
+    assert "resolve_director" in functions, sorted(functions)
+    breaks = [
+        node for node in ast.walk(functions["resolve_director"]) if isinstance(node, ast.Break)
+    ]
+    assert not breaks, "`resolve_director()` ichida `break` topildi (T-07-101)."
+
+
+def test_the_director_write_path_adds_no_audit_call() -> None:
+    """⛔ `market_notification_settings` GA AUDIT QATORI YOZILMAYDI (T-07-102).
+
+    Jadval `AUDITED_TABLES` dan TEXNIK sababga ko'ra chiqarilgan: unda
+    `id uuid` ustuni yo'q va `fn_audit_row()` `row_id` ni `uuid` ga
+    keltiradi, ya'ni trigger har DML da yiqilardi. Ilova darajasida qo'lda
+    yozish esa `revoke()` da topilgan WR-03 nuqsonining takrori bo'lardi.
+
+    ⚠ SANOQ AST BILAN O'LCHANADI, GREP BILAN EMAS: mahsulot fayli
+      taqiqning SABABINI o'z docstringida yozadi va sodda matn qidiruvi
+      o'sha izohni «yangi chaqiruv» deb o'qirdi — yagona «tuzatish» yo'li
+      sababni o'chirish bo'lardi (03-07 / G7-8 darsi).
+    """
+    tree = ast.parse(BINDING_REPO_SOURCE.read_text(encoding="utf-8"))
+    audit_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "write_app_audit"
+    ]
+
+    assert len(audit_calls) == 1, (
+        f"`binding_repo` da {len(audit_calls)} ta audit chaqiruvi bor — kutilgani "
+        "AYNAN BITTA (`revoke()`). Direktor yo'li audit qatori YOZMAYDI."
+    )
 
 
 # ---------------------------------------------------------------------------
