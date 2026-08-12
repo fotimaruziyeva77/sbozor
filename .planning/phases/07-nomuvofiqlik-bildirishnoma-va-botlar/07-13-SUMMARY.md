@@ -159,6 +159,8 @@ qizartirmasdi — ya'ni u sistemaga yetib borib ham ko'rinmas bo'lardi.
 |---|---|
 | `pytest tests/integration/test_notifications.py` | **18 test yashil** (reja ≥ 8 so'ragan) |
 | `test_notifications` + `test_outbox_repo` + `test_reconciliation_repo` + `test_alerting` | **82 test yashil** — qo'shni rejalarning darvozalari buzilmadi |
+| `pytest tests/integration -m "not sim and not slow"` | **964 yashil, 29 skip, 0 yiqilish — `EXIT=0`** |
+| `pytest tests/unit tests/tenancy` | **`EXIT=0`**, birorta yiqilish yo'q (07-04 ning G7-2/G7-7/G7-8 lari o'z joyida) |
 | `ruff check .` + `ruff format --check .` + `mypy .` | **toza** (327 fayl) |
 
 ### Ikki manbaning tengsizligi — o'lchangan sonlar
@@ -409,9 +411,10 @@ birinchi yugurishida to'rt test (`test_snapshot_api.py` ning uchtasi va
 `test_phase6_criteria.py::test_sc2_...`) `StorageError: AccessDenied
 (status=403)` bilan qizardi. `weed shell` bilan
 `s3.bucket.create -name sbozor-snapshots` bajarilgach o'sha to'rt test
-ham **yashil** bo'ldi. 07-06 va 07-07 SUMMARY laridagi aynan o'sha
-band — parallel worktree stekiga tegishli, mahsulotga emas. Bu reja
-birorta ombor, kadr yoki `storage` fayliga **tegmagan**.
+ham **yashil** bo'ldi va to'liq to'plam **`EXIT=0`** (964 yashil,
+29 skip, **0 yiqilish**) berdi. 07-06 va 07-07 SUMMARY laridagi aynan
+o'sha band — parallel worktree stekiga tegishli, mahsulotga emas. Bu
+reja birorta ombor, kadr yoki `storage` fayliga **tegmagan**.
 
 ## Known Stubs
 
