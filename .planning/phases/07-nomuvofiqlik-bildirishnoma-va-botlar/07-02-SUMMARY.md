@@ -191,3 +191,19 @@ API yuzasi qurilmagan va birorta bo'sh qiymat renderga oqmaydi.
 
 Yo'q. Yangi tashqi yuza (endpoint, auth yo'li, fayl kirishi) ochilmadi;
 beshala jadval RLS ostida va yangi `SECURITY DEFINER` funksiya qo'shilmadi.
+
+## Self-Check: PASSED
+
+Yaratilgan fayllar diskda mavjud:
+- `packages/sbozor-core/sbozor_core/models/notification.py` ✓
+- `migrations/versions/0023_notification_domain.py` ✓
+- `tests/unit/test_reconciliation_enums.py` ✓
+- `.planning/phases/07-nomuvofiqlik-bildirishnoma-va-botlar/07-02-SUMMARY.md` ✓
+
+Commitlar mavjud: `004a8ee` · `c119993` · `0597ffe` · `2331fd4`
+(baza `4d2303f`). Birorta commitda kutilmagan fayl o'chirilishi YO'Q
+(`git diff --diff-filter=D` bo'sh).
+
+⚠ STATE.md va ROADMAP.md ATAYIN TEGILMADI — worktree rejimida ularni
+orkestrator markazlashgan holda yangilaydi (parallel ijrochilar
+to'qnashuvining oldi olinadi).
