@@ -32,6 +32,7 @@ soatni almashtirmasdan, `freezegun`siz va yangi bog'liqliksiz o'lchanadi.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 from datetime import datetime, time, timedelta
@@ -55,7 +56,12 @@ from app.jobs.alerting import (
 from app.jobs.billing_close import BILLING_CLOSE_COMPONENT
 from app.jobs.capture import CapturePolicy, capture_tick
 from app.jobs.retention import RETENTION_COMPONENT
-from app.services.alerts import TELEGRAM_API_BASE, TELEGRAM_SEND_METHOD, AlertSender
+from app.services.alerts import (
+    TELEGRAM_API_BASE,
+    TELEGRAM_SEND_METHOD,
+    AlertSender,
+    SendFailure,
+)
 from app.services.quality import QualityThresholds
 from fixtures.nvr_domain import nvr_rows
 from pydantic import SecretStr
@@ -903,7 +909,7 @@ async def test_alerts_disabled_never_raises_and_never_calls(
 
 
 def test_sender_public_surface_did_not_grow() -> None:
-    """⛔ D-19/D-23 — `AlertSender` ning ommaviy nomlari AYNAN uchta.
+    """⛔ D-19/D-23 — `AlertSender` ning ommaviy nomlari AYNAN to'rtta.
 
     =======================================================================
     ⛔ TO'PLAM TENGLIGI, `len()` EMAS.
@@ -913,23 +919,51 @@ def test_sender_public_surface_did_not_grow() -> None:
     va darvoza yashil qolardi — ya'ni u aynan o'zi to'sishi kerak bo'lgan
     o'zgarishni o'tkazib yuborardi.
 
-    ⚠ 07-06 BU DARVOZANI KENGAYTIRMADI, u AYNAN shu holatda qolishi
-      KERAK edi: `chat_id` METOD emas, ARGUMENT bo'lib qo'shildi
-      (pastdagi test). Ikkinchi jo'natuvchi sinf yozish modul
-      docstringining 1- va 2-taqig'ini IKKILANTIRARDI.
+    ⚠ 07-06 BU DARVOZANI KENGAYTIRMADI: `chat_id` METOD emas, ARGUMENT
+      bo'lib qo'shildi (pastdagi test).
+
+    =======================================================================
+    ⛔⛔ 07-09 TO'PLAMGA AYNAN BITTA NOM QO'SHDI: `last_failure`.
+
+    NIMA QO'SHILDI: oxirgi urinishning SIRSIZ natijasi — status kodi, xato
+    TURI va Telegram bergan `retry_after`. Boshqa hech nima.
+
+    NEGA QO'SHILDI (bloklovchi bo'shliq edi, qulaylik emas): `send_message()`
+    `bool` qaytaradi (3-taqiq) va `bool` `403` ni `429` dan AJRATMAYDI.
+    Outbox uchun esa bu farq butun marshrutlashning o'zi — `403` ->
+    `blocked` va qayta urinish YO'Q (D-22), `429` -> `retry_after` bilan
+    navbatga qaytish (DQ-3). Farqsiz job bloklangan foydalanuvchini mangu
+    qayta urinardi va chegaraga urilgan xabarni butunlay yo'qotardi.
+
+    NEGA XOSSA, NEGA METOD EMAS: metod AMALNI bildiradi va o'quvchi har
+    safar «bu ikkinchi so'rov yubormaydimi?» degan savolni qaytadan
+    berardi. Bu yerda hech qanday amal yo'q — chaqiruv allaqachon bo'lgan
+    va o'qilayotgani uning HOLATI.
+
+    NEGA BU 1-TAQIQNI KUCHSIZLANTIRMAYDI: yangi Bot API METODI
+    QO'SHILMADI. `TELEGRAM_SEND_METHOD` hamon yagona qiymat va rasm/hujjat/
+    media metodlari bu sinfda HAMON YO'Q.
+
+    ⛔ TO'PLAM LITERAL VA MAHSULOTDAN IMPORT QILINMAYDI (05-15 darsi):
+       import darvozani o'zi tekshirayotgan qiymatga bog'lardi va yangi
+       metod qo'shilganda ro'yxat JIMGINA kengayardi.
+    =======================================================================
 
     ⚠ KONTEKST MENEJERI DUNDER, ya'ni bu to'plamga TUSHMAYDI — shuning
       uchun uning mavjudligi ALOHIDA assert bilan qulflangan: `aclose`
       dunderlarsiz qolsa `AsyncExitStack` ga yozilgan resurs jimgina
       yopilmasdan qolardi.
-    =======================================================================
     """
     public = {name for name in dir(AlertSender) if not name.startswith("_")}
 
-    assert public == {"aclose", "enabled", "send_message"}, (
+    assert public == {"aclose", "enabled", "last_failure", "send_message"}, (
         f"`AlertSender` ning ommaviy yuzasi o'zgardi: {sorted(public)}. Har bir "
         "yangi metod yangi savol talab qiladi («bu chaqiruvda shaxsiy ma'lumot "
         "bormi?») va rasm/hujjat/media metodlari bu faylda ATAYIN YO'Q (D-19)."
+    )
+    assert isinstance(AlertSender.__dict__["last_failure"], property), (
+        "`last_failure` METODGA aylandi — u HOLAT, amal emas va metod shakli "
+        "«bu chaqiruv ikkinchi so'rov yubormaydimi?» degan savolni qaytarardi"
     )
     assert hasattr(AlertSender, "__aenter__") and hasattr(AlertSender, "__aexit__"), (
         "kontekst menejeri metodlari yo'qoldi — `AsyncExitStack` ga yozilgan "
@@ -1035,3 +1069,185 @@ async def test_sweep_is_skipped_without_ops_chat_but_sender_stays_open(
             await worker.daily_digest_task(live)
     finally:
         await sender.aclose()
+
+
+# ===========================================================================
+# 9. ⛔ 07-09 — `last_failure`: SIRSIZ, TOZALANADIGAN VA VAZIFAGA XOS
+# ===========================================================================
+
+BLOCKED_CHAT = "5000000001"
+"""`403` beradigan manzil — «foydalanuvchi botni bloklagan» (D-22)."""
+
+THROTTLED_CHAT = "5000000002"
+"""`429` beradigan manzil — «juda tez yuboryapsiz» (DQ-3)."""
+
+RETRY_AFTER_SECONDS = 11
+"""Telegram bergan ANIQ soniya — formulaning 30 s idan ATAYIN farqli.
+
+Farq bo'lmasa test «`retry_after` o'qildimi?» degan savolga formulaning
+tasodifan mos kelgan qiymati bilan ham «ha» derdi.
+"""
+
+
+def _status_by_chat(request: httpx.Request) -> httpx.Response:
+    """Manzilga qarab TURLI status qaytaradi — poyga o'lchovining asbobi.
+
+    ⚠ Ikki chaqiruvchi bir vaqtda TURLI natija olishi SHART, aks holda
+      «har biri o'z statusini ko'rdi» da'vosi ikkalasi bir xil status
+      olganda ham yashil bo'lardi.
+    """
+    chat = json.loads(request.content)["chat_id"]
+    if chat == BLOCKED_CHAT:
+        return httpx.Response(
+            403, json={"ok": False, "error_code": 403, "description": "Forbidden"}
+        )
+    return httpx.Response(
+        429,
+        json={
+            "ok": False,
+            "error_code": 429,
+            "parameters": {"retry_after": RETRY_AFTER_SECONDS},
+        },
+    )
+
+
+async def test_send_message_records_a_secretless_failure(sender: AlertSender) -> None:
+    """⛔ D-04 — yiqilishdan keyin UCH FAKT qoladi va ularning hech biri SIR EMAS.
+
+    =======================================================================
+    ⛔ NEGA BU FAKTLAR KERAK: `send_message()` `bool` qaytaradi va `bool`
+       `403` ni `429` dan ajratmaydi. Outbox uchun bu farq marshrutning
+       O'ZI — biri `blocked` (qayta urinish YO'Q), ikkinchisi `retry_after`
+       bilan navbatga qaytish.
+
+    ⛔ NEGA UCHTA VA NEGA KO'PROQ EMAS: istisno OBYEKTI ham, uning MATNI
+       ham saqlanmaydi. Telegram URL'i bot tokenini tashiydi, ya'ni matnni
+       atributga yozish sirni JURNALDAN (bir marta ko'rinadigan satr)
+       SAQLANADIGAN HOLATGA ko'chirardi.
+    =======================================================================
+
+    ⚠ `error_type` TUR NOMI shakliga tekshiriladi, LITERAL bilan
+      solishtirilmaydi: `httpx` istisno sinfining nomi kutubxona
+      versiyasiga bog'liq va uni qotirish testni kutubxona relizida
+      qizartirardi — holbuki o'lchanadigan da'vo «bu matn emas, TUR».
+    """
+    async with respx.mock(assert_all_mocked=True) as router:
+        router.post(SEND_URL).mock(side_effect=_status_by_chat)
+        accepted = await sender.send_message("zond", chat_id=THROTTLED_CHAT)
+
+    failure = sender.last_failure
+
+    assert accepted is False, "test o'z farazini tasdiqlamadi: `429` `False` bermadi"
+    assert isinstance(failure, SendFailure), "yiqilishdan keyin `last_failure` yozilmadi"
+    assert failure.status == 429, f"status kodi noto'g'ri: {failure.status}"
+    assert failure.retry_after == RETRY_AFTER_SECONDS, (
+        f"Telegram bergan `retry_after` o'qilmadi: {failure.retry_after}. Usiz "
+        "backoff formulasi chegarani QATTIQROQ urardi (DQ-3)"
+    )
+    assert failure.error_type.isidentifier(), (
+        f"`error_type` tur nomi emas: {failure.error_type!r} — matn shaklidagi "
+        "qiymat Telegram URL'ini, ya'ni bot tokenini tashishi mumkin (D-04)"
+    )
+    assert TOKEN not in repr(failure), (
+        f"⛔ TOKEN `SendFailure` NING `repr` IDA: {failure!r}. Dataklassning "
+        "standart `repr` i uning MAYDONLARIDAN iborat, ya'ni istisno matnini "
+        "maydonga yozish uni jurnalga qaytarardi"
+    )
+
+
+async def test_last_failure_is_reset_before_every_call(sender: AlertSender) -> None:
+    """⛔ MUVAFFAQIYATDAN KEYIN QIYMAT `None` — eski xato OQIB O'TMAYDI.
+
+    =======================================================================
+    ⛔ USIZ NIMA BUZILARDI: outbox `send_message()` `False` qaytarganda
+       `last_failure` ni o'qiydi. Qiymat tozalanmasa, KEYINGI qatorning
+       «manzil yo'q» shoxi (u ham `False` beradi) OLDINGI qatorning `403`
+       ini ko'rardi va SOG'LOM qator `blocked` ga o'tardi — sotuvchi bilan
+       aloqa «uzilgan» deb belgilanardi, holbuki u hech qachon
+       bloklamagan.
+
+    ⚠ TOZALASH BIRORTA I/O DAN OLDIN: uni javob kelgandan keyin qilish
+      tarmoq yiqilgan shoxni qamramasdi.
+    =======================================================================
+    """
+    async with respx.mock(assert_all_mocked=True) as router:
+        router.post(SEND_URL).mock(side_effect=_status_by_chat)
+        assert await sender.send_message("zond", chat_id=BLOCKED_CHAT) is False
+        recorded = sender.last_failure
+
+    assert recorded is not None and recorded.status == 403, (
+        "test o'z farazini tasdiqlamadi: birinchi chaqiruv yiqilishi SHART, "
+        "aks holda pastdagi `None` da'vosi hech nimani o'lchamaydi"
+    )
+
+    async with respx.mock(assert_all_mocked=True) as router:
+        router.post(SEND_URL).mock(
+            return_value=httpx.Response(200, json={"ok": True, "result": {"message_id": 42}})
+        )
+        assert await sender.send_message("zond", chat_id=THROTTLED_CHAT) is True
+
+    assert sender.last_failure is None, (
+        f"muvaffaqiyatli chaqiruvdan keyin eski yiqilish qoldi: {sender.last_failure!r}. "
+        "«Xato yo'q» holati YO'QLIK bilan ifodalanadi — ikkinchi bayroq bilan emas"
+    )
+
+
+async def test_last_failure_is_isolated_between_concurrent_tasks(sender: AlertSender) -> None:
+    """⛔⛔ POYGA O'LCHOVI — bir jarayondagi ikki vazifa bir-birini KO'RMAYDI.
+
+    =======================================================================
+    ⛔ NEGA BU O'LCHOV MAVJUD: `AlertSender` `TaskiqState` da AYNAN BITTA
+       NUSXA bo'lib saqlanadi, `alert_sweep` va `notify.outbox_tick` esa
+       BIR XIL worker jarayonida asyncio vazifalari sifatida PARALLEL
+       yugurishi mumkin. Instans atributi bo'lganda bir vazifaning `403` i
+       ikkinchisining `429` ini JIMGINA almashtirardi va outbox qatori
+       NOTO'G'RI holatga o'tardi — xatosiz, jimgina va faqat yuklama
+       ostida.
+
+    ⛔⛔ TO'SIQ (`asyncio.Barrier`) TESTNING YURAGI, BEZAK EMAS.
+
+    Usiz ikki vazifa KETMA-KET bajarilardi: birinchisi o'z qiymatini yozib,
+    O'QIB, tugardi va faqat keyin ikkinchisi boshlanardi — ya'ni INSTANS
+    ATRIBUTI bilan ham har biri «o'z» qiymatini ko'rgan bo'lardi va test
+    MANGU YASHIL qolardi.
+
+    To'siq esa ikkala vazifani ham «yozdim, hali o'qimadim» nuqtasida
+    UCHRASHTIRADI. Shundan keyingina ular o'qiydi — bitta umumiy atribut
+    bilan IKKALASI ham OXIRGI yozuvchining statusini ko'rardi.
+    =======================================================================
+    """
+    gate = asyncio.Barrier(2)
+
+    async def attempt(target: str) -> tuple[bool, SendFailure | None]:
+        accepted = await sender.send_message("zond", chat_id=target)
+        # ⛔ IKKALA VAZIFA HAM O'Z YIQILISHINI YOZIB BO'LGACH uchrashadi.
+        await gate.wait()
+        return accepted, sender.last_failure
+
+    async with respx.mock(assert_all_mocked=True) as router:
+        route = router.post(SEND_URL).mock(side_effect=_status_by_chat)
+        async with asyncio.timeout(30):
+            blocked, throttled = await asyncio.gather(
+                attempt(BLOCKED_CHAT), attempt(THROTTLED_CHAT)
+            )
+        calls = route.call_count
+
+    assert calls == 2, f"ikki so'rov kutilgan edi, {calls} ta ketdi — poyga umuman qurilmadi"
+    assert blocked[0] is False and throttled[0] is False
+
+    blocked_failure, throttled_failure = blocked[1], throttled[1]
+    assert blocked_failure is not None and throttled_failure is not None
+
+    assert blocked_failure.status == 403, (
+        f"⛔ BLOKLANGAN chaqiruvchi BOSHQA vazifaning statusini ko'rdi: "
+        f"{blocked_failure.status}. Qiymat instans atributida bo'lsa aynan "
+        "shunday bo'lardi va outbox qatori noto'g'ri holatga o'tardi"
+    )
+    assert throttled_failure.status == 429, (
+        f"⛔ CHEGARAGA URILGAN chaqiruvchi boshqa vazifaning statusini ko'rdi: "
+        f"{throttled_failure.status}"
+    )
+    assert throttled_failure.retry_after == RETRY_AFTER_SECONDS
+    assert blocked_failure.retry_after is None, (
+        "`403` javobida `retry_after` paydo bo'ldi — qiymatlar vazifalar orasida aralashgan"
+    )
