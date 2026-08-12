@@ -179,6 +179,12 @@ PAYMENTS_URL = "/api/v1/payments"
 BOT_RESOLVE_URL = "/internal/bot/resolve"
 BOT_SUMMARY_URL = "/internal/bot/vendor/summary"
 BOT_PAYMENTS_URL = "/internal/bot/vendor/payments"
+DIRECTOR_RESOLVE_URL = "/internal/bot/director/resolve"
+"""⛔ `director_chat_id` NING YAGONA YOZUV YO'LI (07-18, RECON-03).
+
+Mezon #3 ning «Telegramda oladi» yarmi shu marshrutsiz produksiyada
+BAJARILMAS edi: ustunga yozadigan boshqa hech qanday yo'l yo'q.
+"""
 
 PERSONAL_FIELDS: Final[frozenset[str]] = frozenset({"vendor_name", "phone", "full_name"})
 """G7-6 ning maydonlari — `test_reconciliation_api.py:74` bilan AYNI ro'yxat.
@@ -950,6 +956,7 @@ async def test_sc3_director_gets_two_messages_and_every_role_gets_one_number(
     sync_owner_conn: Connection[TupleRow],
     env: Env,
     sender: AlertSender,
+    bot_headers: dict[str, str],
     director_headers: dict[str, str],
     cashier_headers: dict[str, str],
     inspector_headers: dict[str, str],
@@ -982,11 +989,49 @@ async def test_sc3_director_gets_two_messages_and_every_role_gets_one_number(
        (`headline.receipts_written`). Teng bo'lib qolgan kun
        «kassir bugun qancha yig'di?» savoli «nechta kvitansiya yozdi?»
        bilan aralashardi va kassirning ekrani pul ko'rsatib qo'yardi.
+
+    =======================================================================
+    ⛔⛔ (c) DAYJEST MANZILI MAHSULOT YO'LIDAN KELADI — 07-18 DAN BERI.
+
+    Bu qadam 07-18 gacha MAVJUD EMAS EDI va uning yo'qligi mezon #3 ni
+    STRUKTURAVIY ravishda bajarilmas qilgan edi: sozlama qatorini test
+    FIXTURE bilan, TO'G'RIDAN-TO'G'RI SQL orqali yozardi — holbuki
+    `market_notification_settings.director_chat_id` ga yozadigan MAHSULOT
+    yo'li butun repoda YO'Q edi. Ya'ni test yashil, produksiya esa jim:
+    `resolve_chat_id()` har doim `None` qaytarardi.
+
+    ⚠ O'SHA FIXTURE NING NOMI BU YERDA LITERAL YOZILMAYDI: qabul mezoni
+      testning MANBASINI o'sha nom bo'yicha skanerlaydi va izohning O'ZI
+      darvozani sababi bilan qizartirardi (03-07 / 07-02 darsi).
+
+    Endi manzil `POST /internal/bot/director/resolve` orqali yoziladi va
+    natija BAZADAN o'qib tasdiqlanadi. Yozuv yo'li olib tashlansa
+    quyidagi `route.call_count == 2` da'vosi QIZARADI — chunki
+    jo'natuvchi manzilsiz qatorni Telegram'ga umuman qo'ymaydi.
+    =======================================================================
     """
     day = _criteria_day()
-    seed_notification_settings(
-        sync_owner_conn, market_id=env.market_id, director_chat_id=DIRECTOR_CHAT
+    bound = await api_client.post(
+        DIRECTOR_RESOLVE_URL,
+        headers=bot_headers,
+        json={
+            "telegram_user_id": DIRECTOR_CHAT,
+            "phone": env.base.market_a.director_phone,
+        },
     )
+    assert bound.status_code == 200, bound.text
+    assert bound.json() == {"status": "bound", "market_count": 1}
+
+    stored = sync_owner_conn.execute(
+        "SELECT director_chat_id FROM market_notification_settings WHERE market_id = %s",
+        (str(env.market_id),),
+    ).fetchone()
+    assert stored is not None and int(stored[0]) == DIRECTOR_CHAT, (
+        "⛔ Marshrut `bound` qaytardi, lekin `market_notification_settings."
+        "director_chat_id` BAZADA yo'q — ya'ni «Telegramda oladi» va'dasi yana "
+        f"yozuvsiz qoldi: {stored}"
+    )
+
     _seed_unpaid_charge(sync_owner_conn, env, day=day)
 
     # ---- (a) IKKI DAYJEST -> NAVBAT -> TELEGRAM.

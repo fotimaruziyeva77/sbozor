@@ -170,6 +170,39 @@ class ResolveRequest(BaseModel):
     formatni ikki marta ta'riflardi va ular ajralib ketardi."""
 
 
+class DirectorResolveRequest(BaseModel):
+    """Direktorning bog'lanish so'rovi — Telegram akkaunti va u yuborgan raqam.
+
+    ⛔ `ResolveRequest` QAYTA ISHLATILMAYDI VA BU ONGLI: ikki yuzani bitta
+       shaklga bog'lash ularning kelajakda ajralishini YASHIRARDI —
+       sotuvchi so'rovi bir kun `market_id` yoki tilni olishi mumkin va
+       o'sha o'zgarish direktor yuzasiga JIMGINA ko'chib o'tardi.
+    """
+
+    telegram_user_id: int = Field(gt=0)
+    phone: str = Field(min_length=1, max_length=32)
+    """⚠ FORMAT BU YERDA TEKSHIRILMAYDI (`ResolveRequest` bilan bir xil
+    sabab): normalizatsiya CHEGARADA va AYNAN BIR JOYDA (D-25)."""
+
+
+class DirectorResolveResponse(BaseModel):
+    """⛔ FAQAT HOLAT VA SON — `market_id` RO'YXATI QAYTARILMAYDI.
+
+    Direktor bu fazada OLUVCHI: bot uning uchun hech qanday so'rov
+    qilmaydi va bozor identifikatorini hech qayerda ishlatmaydi. Ro'yxatni
+    qaytarish yuzani SABABSIZ kengaytirardi.
+
+    ⛔ `chat_id` (ya'ni `telegram_user_id`) JAVOBGA CHIQMAYDI: u sir va
+       javob tanasi bot-service ning jurnaliga tushishi mumkin.
+
+    `market_count` shaxsiy ma'lumot EMAS va u botga «ulandingizmi?» degan
+    yagona savolga javob berish uchun yetarli.
+    """
+
+    status: str
+    market_count: int
+
+
 class VendorRefOut(BaseModel):
     """⛔ FAQAT IDENTIFIKATORLAR — ism, telefon va bozor NOMI yo'q (D-05)."""
 
@@ -324,6 +357,52 @@ async def resolve_binding(
         else None
     )
     return ResolveResponse(status=outcome.status, vendor=vendor)
+
+
+@router.post("/director/resolve")
+async def resolve_director_binding(
+    request: Request,
+    payload: DirectorResolveRequest,
+    _token: ServiceToken,
+) -> DirectorResolveResponse:
+    """RECON-03 — «bu Telegram akkaunti qaysi bozorning direktoriniki?».
+
+    ⛔⛔ BU MARSHRUT `market_notification_settings.director_chat_id` NING
+       YAGONA YOZUV YO'LI. U 07-18 gacha MAVJUD EMAS EDI, ya'ni
+       `outbox_repo` ning o'quvchisi produksiyada HAR DOIM `None`
+       qaytarardi va direktor dayjestni HECH QACHON olmasdi.
+
+    ⛔ RATE-LIMIT SANAGICHI SOTUVCHINIKI BILAN BO'LINADI VA BU ONGLI QAROR.
+       Arifmetikasi: bot bitta kontakt ulashishda sotuvchi shoxi mos
+       kelmasa IKKI so'rov yuboradi (`/resolve`, keyin
+       `/director/resolve`), ya'ni `BOT_RESOLVE_LIMIT = 5` ikki TO'LIQ
+       urinishni va uchinchisining yarmini qoplaydi — haqiqiy odam uchun
+       yetarli. Alohida sanagich ochish bitta Telegram akkauntining umumiy
+       byudjetini IKKI BAROBAR oshirardi.
+       ⚠ Enumeratsiya bu yerda D-24 tufayli ALLAQACHON strukturaviy
+         imkonsiz (odam FAQAT O'Z kontaktini ulasha oladi), ya'ni sanagich
+         tayming qatlamining IKKINCHI to'ri, yagona himoya emas.
+
+    ⛔ RAD ETISH JAVOBI SOTUVCHINIKI BILAN AYNI MA'NODA: `no_match` va
+       `market_count = 0`. Bot ikkala shoxda ham AYNI matnni chizadi
+       (`handlers/binding.py` — `NEUTRAL_KEY`).
+
+    ⛔ SESSIYA TUG'ILMAYDI (fayl docstringi, D-10).
+    """
+    cache: Redis = request.app.state.cache
+    try:
+        await check_bot_resolve_rate(cache, telegram_user_id=payload.telegram_user_id)
+    except TooManyAttempts as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY_ATTEMPTS
+        ) from exc
+
+    outcome = await binding_repo.resolve_director(
+        request.app.state.sessionmaker,
+        raw_phone=payload.phone,
+        telegram_user_id=payload.telegram_user_id,
+    )
+    return DirectorResolveResponse(status=outcome.status.value, market_count=len(outcome.markets))
 
 
 @router.get("/vendor/summary")

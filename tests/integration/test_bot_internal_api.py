@@ -131,6 +131,11 @@ da'voning yagona shakli.
 
 DIRECTOR_CHAT_B = 7_620_000_002
 
+TELEGRAM_ID_DIRECTOR_RATE_LIMIT = 7_620_000_003
+"""⛔ ALOHIDA QIYMAT: rate-limit sanagichi Valkey'da TEST ORASIDA yashaydi
+(oyna 15 daqiqa), ya'ni boshqa test bilan bo'lingan identifikator
+sanoqni oldindan yeb qo'yardi va darvoza tasodifiy qizarardi."""
+
 _SHARED_DIRECTOR_PHONE_COUNTER = 76_000_000
 """⛔ `two_markets._next_phone()` (70 000 000) VA `notification_domain.
 _next_vendor_phone()` (79 000 000) DIAPAZONLARIDAN TASHQARIDA.
@@ -1358,6 +1363,179 @@ async def test_resolve_is_rate_limited_per_telegram_account(
 
     assert statuses[:BOT_RESOLVE_LIMIT] == [200] * BOT_RESOLVE_LIMIT
     assert statuses[-1] == 429
+
+
+# ---------------------------------------------------------------------------
+# `POST /internal/bot/director/resolve` — YOZUV YO'LI HTTP ORQALI
+# ---------------------------------------------------------------------------
+
+DIRECTOR_RESOLVE_URL = "/internal/bot/director/resolve"
+
+
+async def test_the_director_route_writes_the_address_and_reports_the_count(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+    two_markets: TwoMarketSeed,
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ MEZON #3 NING MAHSULOT YO'LI — HTTP dan bazagacha.
+
+    Da'vo javob bilan TUGAMAYDI: `market_notification_settings` dan
+    O'QILADI. `{"status": "bound"}` qaytarib hech nima yozmaydigan
+    marshrut aynan 07-VERIFICATION topgan bo'shliqning shakli bo'lardi.
+    """
+    market_a = two_markets.market_a
+    try:
+        response = await api_client.post(
+            DIRECTOR_RESOLVE_URL,
+            headers=bot_headers,
+            json={
+                "telegram_user_id": DIRECTOR_CHAT_A,
+                "phone": market_a.director_phone,
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json() == {"status": "bound", "market_count": 1}
+        assert _director_chat(sync_owner_conn, market_a.id) == DIRECTOR_CHAT_A
+    finally:
+        _clear_settings(sync_owner_conn, (market_a.id,))
+
+
+async def test_the_director_route_is_neutral_for_an_unknown_number(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+    two_markets: TwoMarketSeed,
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ Noma'lum raqam: `no_match` + `market_count = 0`, qator YO'Q."""
+    market_ids = tuple(market.id for market in two_markets.markets)
+
+    try:
+        response = await api_client.post(
+            DIRECTOR_RESOLVE_URL,
+            headers=bot_headers,
+            json={"telegram_user_id": DIRECTOR_CHAT_B, "phone": "+998900000012"},
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json() == {"status": "no_match", "market_count": 0}
+        assert _settings_rows(sync_owner_conn, market_ids) == 0
+    finally:
+        _clear_settings(sync_owner_conn, market_ids)
+
+
+async def test_the_director_route_carries_no_secret_in_its_response(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+    two_markets: TwoMarketSeed,
+    sync_owner_conn: Connection[TupleRow],
+) -> None:
+    """⛔ T-07-99: javobda `chat_id`, telefon va ism YO'Q; `Set-Cookie` ham YO'Q.
+
+    Skan REKURSIV va u XOM MATN ustida: maydon nomini o'zgartirish
+    (`chat_id` -> `address`) kalitlar bo'yicha yozilgan da'vodan o'tib
+    ketardi.
+    """
+    market_a = two_markets.market_a
+    try:
+        response = await api_client.post(
+            DIRECTOR_RESOLVE_URL,
+            headers=bot_headers,
+            json={
+                "telegram_user_id": DIRECTOR_CHAT_A,
+                "phone": market_a.director_phone,
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert set(response.json()) == {"status", "market_count"}
+        assert "set-cookie" not in {name.lower() for name in response.headers}
+
+        body = response.text
+        assert str(DIRECTOR_CHAT_A) not in body, (
+            "⛔ Direktorning chat identifikatori javob tanasiga chiqdi — u SIR"
+        )
+        assert market_a.director_phone not in body
+        assert market_a.director_phone.removeprefix("+") not in body
+        assert str(market_a.id) not in body, (
+            "⛔ Bozor identifikatori ham qaytarilmaydi: bot uni ishlatmaydi va "
+            "qaytarish yuzani sababsiz kengaytirardi"
+        )
+    finally:
+        _clear_settings(sync_owner_conn, (market_a.id,))
+
+
+async def test_the_director_route_rejects_a_missing_and_a_wrong_token_identically(
+    api_client: httpx.AsyncClient, bot_headers: dict[str, str]
+) -> None:
+    """⛔ «Token yo'q» va «token noto'g'ri» — BAYT-BAYT AYNI javob (T-07-38).
+
+    ⚠ Javob mavjud `/resolve` niki bilan ham solishtiriladi: ikki yuzaning
+      rad etish matni ajralib qolsa, hujumchi qaysi marshrutga tushganini
+      javobdan o'qiy olardi.
+    """
+    assert bot_headers  # token SOZLANGAN — ya'ni 401 o'lchanadi, 503 emas
+
+    payload = {"telegram_user_id": DIRECTOR_CHAT_A, "phone": "+998900000013"}
+    missing = await api_client.post(DIRECTOR_RESOLVE_URL, json=payload)
+    wrong = await api_client.post(
+        DIRECTOR_RESOLVE_URL,
+        headers={"Authorization": "Bearer butunlay-boshqa-token"},
+        json=payload,
+    )
+    vendor_surface = await api_client.post(
+        "/internal/bot/resolve",
+        json={"telegram_user_id": DIRECTOR_CHAT_A, "phone": "+998900000013"},
+    )
+
+    assert wrong.status_code == missing.status_code == 401
+    assert wrong.json() == missing.json()
+    assert missing.json() == vendor_surface.json()
+
+
+async def test_the_director_route_is_fail_closed_without_a_token_setting(
+    api_client: httpx.AsyncClient,
+) -> None:
+    """⛔ FAIL-CLOSED: sozlanmagan token `503`, «hammaga ochiq» EMAS.
+
+    ⚠ Bu test `bot_token` fixture'ini ATAYIN SO'RAMAYDI — `test_settings`
+      ning standart holati aynan shu: `bot_service_token` bo'sh.
+    """
+    response = await api_client.post(
+        DIRECTOR_RESOLVE_URL,
+        json={"telegram_user_id": DIRECTOR_CHAT_A, "phone": "+998900000014"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "unavailable"}
+
+
+async def test_the_director_route_shares_the_rate_limit_counter(
+    api_client: httpx.AsyncClient,
+    bot_headers: dict[str, str],
+    two_markets: TwoMarketSeed,
+) -> None:
+    """⛔ SANAGICH SOTUVCHINIKI BILAN BO'LINADI VA BU ONGLI QAROR (T-07-103).
+
+    Bot bitta kontakt ulashishda IKKI so'rov yuboradi, ya'ni alohida
+    sanagich bitta Telegram akkauntining umumiy byudjetini IKKI BAROBAR
+    oshirardi. Bu yerda budjet BIR: `/resolve` yegan urinishlar
+    `/director/resolve` uchun ham hisoblanadi.
+    """
+    payload = {
+        "telegram_user_id": TELEGRAM_ID_DIRECTOR_RATE_LIMIT,
+        "phone": "+998900000015",
+    }
+
+    for _ in range(BOT_RESOLVE_LIMIT):
+        first = await api_client.post("/internal/bot/resolve", headers=bot_headers, json=payload)
+        assert first.status_code == 200, first.text
+
+    blocked = await api_client.post(DIRECTOR_RESOLVE_URL, headers=bot_headers, json=payload)
+
+    assert blocked.status_code == 429, blocked.text
+    assert blocked.json() == {"detail": "too_many_attempts"}
 
 
 async def test_vendor_summary_equals_the_billing_repo_number(

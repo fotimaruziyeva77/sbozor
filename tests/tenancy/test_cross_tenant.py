@@ -255,11 +255,16 @@ _BOT_INTERNAL_REASON = (
     "noto'g'ri token -> 401, sozlanmagan token -> 503, `Set-Cookie` YO'Q va "
     "OpenAPI'da yo'l YO'Q holatlarini alohida o'lchaydi"
 )
-"""⛔ UCHALA `/internal/bot/*` YO'LI UCHUN BITTA SABAB — matn nusxalanmaydi.
+"""⛔ TO'RTALA `/internal/bot/*` YO'LI UCHUN BITTA SABAB — matn nusxalanmaydi.
 
-Uch yozuv bir xil qarorning uch ko'rinishi: ularni qo'lda uch marta yozish
-bittasini tahrirlab, ikkitasini unutish yo'lini ochardi va keyingi o'qigan
-odam «nega uchtasi uch xil?» degan savolga javob topmasdi.
+To'rt yozuv bir xil qarorning to'rt ko'rinishi: ularni qo'lda to'rt marta
+yozish bittasini tahrirlab, qolganini unutish yo'lini ochardi va keyingi
+o'qigan odam «nega to'rttasi to'rt xil?» degan savolga javob topmasdi.
+
+⚠ TO'RTINCHI YO'L (`POST /internal/bot/director/resolve`, 07-18) SABABGA
+  HECH NIMA QO'SHMAYDI: u ham servis tokeni ostida, ham `Principal`siz va
+  uning bozori ham SERVERDA (telefon -> `user_market_roles`) aniqlanadi.
+  Aynan shu tenglik uchun bu yerda yangi matn YOZILMAYDI.
 """
 
 EXEMPT_ROUTES: dict[str, str] = {
@@ -311,6 +316,9 @@ EXEMPT_ROUTES: dict[str, str] = {
         "va konteyner healthcheck'iga ULANMAGANI holatlarini alohida o'lchaydi"
     ),
     "/internal/bot/resolve": _BOT_INTERNAL_REASON.format(route="POST /internal/bot/resolve"),
+    "/internal/bot/director/resolve": _BOT_INTERNAL_REASON.format(
+        route="POST /internal/bot/director/resolve"
+    ),
     "/internal/bot/vendor/summary": _BOT_INTERNAL_REASON.format(
         route="GET /internal/bot/vendor/summary"
     ),
