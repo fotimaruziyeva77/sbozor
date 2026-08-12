@@ -149,8 +149,9 @@ talab qiladi.
 
 | Darvoza | Natija |
 |---|---|
-| `pytest tests/unit tests/tenancy` | **1945 test yig'ildi, `EXIT=0`** |
-| `pytest tests/integration -m "not sim and not slow"` | **1003 yig'ildi, 5 skip, 0 yiqilish, `EXIT=0`** |
+| `pytest tests/unit tests/tenancy` | **1945 yashil, 0 skip, 0 yiqilish — `EXIT=0`** |
+| `pytest tests/integration -m "not sim and not slow"` — **1-yugurish** | **998 yashil, 5 skip, 0 yiqilish — `EXIT=0`** |
+| AYNI to'plam — ⛔ **2-YUGURISH** (flake dalili) | **998 yashil, 5 skip, 0 yiqilish — `EXIT=0`** |
 | `tests/integration/test_outbox_repo.py` — **KETMA-KET BESH yugurish** | har birida **21/21 yashil** |
 | `ruff check .` + `ruff format --check .` + `mypy .` | **toza** (345 / 336 fayl) |
 | `npm --prefix frontend run i18n:check` | **1119 kalit × 3 til** — kalit va ICU parity to'liq |
@@ -183,8 +184,13 @@ talab qiladi.
   aylantirish «kvitansiya cheksiz kutmaydi» da'vosini o'lchovsiz
   qoldirardi. Vaqti-vaqti bilan qizaradigan darvoza — eng yomon sinf: u
   odamlarni **qarashga** emas, **qayta yugurtirishga** o'rgatadi.
-- **O'lchov:** `test_outbox_repo.py` **ketma-ket besh** yugurish, har birida
-  **21/21 yashil**; to'liq integratsiya to'plami ham `EXIT=0`.
+- **O'lchov — flake AYNAN o'z sharoitida takrorlandi:** nosozlik TO'LIQ
+  TO'PLAM kontekstida ko'ringan (yolg'iz yugurtirilganda hech qachon
+  qizarmagan), shuning uchun dalil ham o'sha kontekstda yig'ildi:
+  `pytest tests/integration -m "not sim and not slow"` **IKKI MARTA**
+  yugurtirildi va **ikkalasi ham** `998 yashil / 5 skip / 0 yiqilish /
+  EXIT=0` berdi. Ustiga `test_outbox_repo.py` **ketma-ket besh** yugurish,
+  har birida **21/21 yashil**.
 - **Commit:** `e0e8826`
 
 **2. [Ruxsat etilgan B] G-35 ning MATN yarmi — uchala locale**
