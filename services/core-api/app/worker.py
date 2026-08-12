@@ -671,19 +671,55 @@ async def _open_worker_resources(state: TaskiqState) -> None:
     #   to'lash keraksiz. Bo'sh token bilan qurilganda klient UMUMAN
     #   ochilmaydi va konstruktor bir marta `log.warning("alerts_disabled")`
     #   yozadi — jim ishlash aynan «alert bor deb o'ylash» yolg'onidir.
-    sender = AlertSender(
-        token=settings.telegram_bot_token,
-        chat_id=settings.telegram_chat_id,
-        enabled=settings.alerts_enabled,
-    )
+    sender = _alert_sender(settings)
     resources.push_async_callback(sender.aclose)
     state.sender = sender
+    # ⛔ CHEGARA `TaskiqState` DA, JO'NATUVCHIDA EMAS (07-06, Pitfall 9).
+    #   Jo'natuvchi TOKEN borligida ochiladi (`_alert_sender` docstringi),
+    #   ops chatining bor-yo'qligi esa faqat ALERT SUPURGISIGA va DAYJESTGA
+    #   tegishli — ular manzilsiz ishga tushsa har yugurishda `False` olib,
+    #   `notified_at` ni bo'sh qoldirardi va jurnalda hech qanday sabab
+    #   ko'rinmasdi. Bayroq `Settings` dan SHU YERDA o'qiladi: vazifalar
+    #   sozlamalar obyektining butun yuzasini ko'rmaydi (`_capture_policy`
+    #   bilan aynan bir xil qaror).
+    state.alerts_enabled = settings.alerts_enabled
 
     log.info(
         "worker_started",
         queue=JOBS_QUEUE,
         alerts=settings.alerts_enabled,
         sentry=sentry_enabled,
+    )
+
+
+def _alert_sender(settings: Settings) -> AlertSender:
+    """`Settings` -> `AlertSender` — TARJIMA SHU YERDA (`_capture_policy` naqshi).
+
+    =========================================================================
+    ⛔ `enabled=bool(TOKEN)`, `settings.alerts_enabled` EMAS — VA BU FARQ
+       O'LCHANGAN (07-RESEARCH Pitfall 9).
+
+    `alerts_enabled = bool(token AND chat_id)`. Ya'ni OPS chati
+    sozlanmagan bozorda jo'natuvchi butunlay o'chib qolardi va u bilan
+    birga SOTUVCHIGA ketadigan kvitansiya (CASH-05) ham JIMGINA ketmasdi
+    — holbuki kvitansiya uchun ops chati umuman kerak emas: unga token va
+    sotuvchining O'Z chati yetadi (`send_message(..., chat_id=...)`).
+
+    ⛔ IKKINCHI BAYROQ (`ALERTS_ENABLED`) QO'SHILMADI va `settings.py`
+       BU REJADA UMUMAN O'ZGARMADI: o'sha bayroq `settings.py` ochiq
+       ogohlantirgan «yoqilgan, lekin manzilsiz» uchinchi holatini
+       qaytarardi. Chegara CHAQIRUV JOYIDA — `state.alerts_enabled` va
+       `alert_sweep_task` / `daily_digest_task` ning birinchi qatori.
+
+    ⚠ `chat_id` HAMON BERILADI: u endi «yagona manzil» emas, STANDART
+      manzil. Argumentsiz chaqiruv (alert supurgisi) uni oladi,
+      argumentli chaqiruv (outbox) uni bosib o'tadi.
+    =========================================================================
+    """
+    return AlertSender(
+        token=settings.telegram_bot_token,
+        chat_id=settings.telegram_chat_id,
+        enabled=bool(settings.telegram_bot_token.get_secret_value()),
     )
 
 
@@ -873,8 +909,19 @@ async def alert_sweep_task(context: Annotated[Context, TaskiqDepends()]) -> None
        VAZIFADA. Aks holda Telegram uzilishi kadr olishni to'xtatardi —
        kuzatuv vositasi kuzatilayotgan tizimni yiqitardi (`alerting.py`
        ning 3-qoidasi).
+
+    ⛔ CHEGARA SHU YERDA (07-06, Pitfall 9). Jo'natuvchi endi TOKEN
+       borligida ochiladi (`_alert_sender`), ya'ni «token bor, ops chati
+       yo'q» holatida u OCHIQ qoladi va outbox undan foydalanadi. Lekin
+       SUPURGI manzilsiz ma'nosiz: u har yugurishda `False` olib,
+       `notified_at` ni bo'sh qoldirardi va sabab hech qayerda
+       ko'rinmasdi. Shuning uchun «yoqilgan, lekin manzilsiz» holati
+       IKKALA yo'lda ham imkonsiz: jo'natuvchida MANZIL tekshiriladi,
+       bu yerda esa SOZLAMA.
     """
     state = context.state
+    if not state.alerts_enabled:
+        return
     await alert_sweep(state.sessionmaker, state.sender)
 
 
@@ -888,8 +935,14 @@ async def daily_digest_task(context: Annotated[Context, TaskiqDepends()]) -> Non
     ⚠ BIZNES-KUN QOBIQDA HISOBLANADI, jobda emas: job uni ARGUMENT
       sifatida oladi va shu bilan «qaysi kun?» savoli testda bitta
       qiymatga aylanadi (`retention_daily` bilan bir xil qoida).
+
+    ⛔ CHEGARA `alert_sweep_task` BILAN AYNAN BIR XIL VA SABAB HAM BIR XIL
+       (07-06, Pitfall 9): dayjest OPS chatiga ketadi, ya'ni ops chati
+       sozlanmagan bozorda uni yugurtirish manzilsiz so'rov qilardi.
     """
     state = context.state
+    if not state.alerts_enabled:
+        return
     await daily_digest(state.sessionmaker, state.sender, business_date=business_today())
 
 

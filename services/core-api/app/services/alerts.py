@@ -220,11 +220,23 @@ class AlertSender:
     ⛔ RASM BIRIKTIRUVCHI METOD UMUMAN YO'Q va u «keyin qo'shiladigan
        qulaylik» emas — modul docstringining 1-taqig'iga qarang.
 
-    ⛔ `sendDocument`, `sendMediaGroup`, `editMessageText`, `deleteMessage`
+    ⛔ HUJJAT, MEDIA GURUH, XABAR TAHRIRLASH VA XABAR O'CHIRISH metodlari
        ham YO'Q. Ular ham «kerak bo'lib qolsa» qo'shiladigan qulayliklar
        emas: har bir yangi metod yangi yuza va yangi qaror talab qiladi
-       («bu chaqiruvda shaxsiy ma'lumot bormi?»), 4-fazada esa javob
-       birgina `sendMessage` bilan tugaydi.
+       («bu chaqiruvda shaxsiy ma'lumot bormi?»), javob esa
+       `TELEGRAM_SEND_METHOD` ning YAGONA qiymati bilan tugaydi.
+
+       ⚠ TAQIQLANGAN METOD NOMLARI BU YERDA LITERAL YOZILMAYDI — 03-07
+         ning o'lchangan darsi (07-02 uni `models/notification.py` da
+         qaytadan to'lagan): sodda grep darvozasi IZOHNI KODDAN
+         ajratmaydi, ya'ni taqiqni tushuntirish uchun yozilgan literal
+         darvozani O'Z-O'ZIGA QARSHI qo'yardi va yagona «tuzatish» yo'li
+         darvozaga istisno qo'shish bo'lardi. Da'vo SUSAYMAYDI, u
+         O'LCHANADIGAN joyga ko'chadi: `test_alerting.py::
+         test_sender_public_surface_did_not_grow` ommaviy nomlar
+         TO'PLAMINI literal to'plam bilan TENGLIK bo'yicha solishtiradi,
+         ya'ni yangi metod nima deb atalishidan QAT'I NAZAR ushlanadi —
+         grep esa faqat oldindan sanab chiqilgan nomlarni ko'rardi.
 
     Klient `TaskiqState` da SAQLANADI (worker resursi, `worker.py`):
     `alert_sweep` har 5 daqiqada ishlaydi va har safar yangi TLS qo'l
@@ -247,10 +259,27 @@ class AlertSender:
 
         Args:
             token: bot tokeni. `SecretStr` — tur darajasidagi himoya.
-            chat_id: platforma admini yoki ops guruhining identifikatori.
-            enabled: `Settings.alerts_enabled` ning HOSILASI. Alohida
-                bayroq EMAS — «yoqilgan, lekin tokensiz» uchinchi holati
-                `settings.py` da allaqachon imkonsiz qilingan.
+            chat_id: platforma admini yoki ops guruhining STANDART
+                manzili. `send_message(..., chat_id=...)` uni bosib
+                o'tadi — sabab metodning docstringida.
+            enabled: KLIENT OCHILSINMI. ⛔ Bu `Settings.alerts_enabled`
+                ning HOSILASI EMAS va 07-06 da AYNAN shu o'zgardi:
+                chegarani CHAQIRUVCHI hal qiladi.
+
+                Sabab o'lchangan (07-RESEARCH Pitfall 9):
+                `alerts_enabled = bool(token AND chat_id)`, ya'ni ops
+                chati sozlanmagan bozorda BUTUN jo'natuvchi o'chib
+                qolardi — SOTUVCHIGA ketadigan kvitansiya (CASH-05) ham
+                JIMGINA ketmasdi. Kvitansiya uchun esa ops chati KERAK
+                EMAS: unga faqat token va sotuvchining O'Z chati kerak.
+
+                ⛔ IKKINCHI BAYROQ QO'SHILMADI. `settings.py` ochiq
+                ogohlantirgan «uchinchi holat» (yoqilgan, lekin
+                manzilsiz) shu bilan qaytardi. Uning o'rniga worker
+                jo'natuvchini `enabled=bool(token)` bilan quradi va
+                ALERT SUPURGISINI chaqiruv joyida `alerts_enabled`
+                bilan o'raydi — ya'ni «manzilsiz supurgi» ikkala
+                yo'lda ham imkonsiz bo'lib qoladi.
             base_url: FAQAT test uchun almashtiriladi.
             timeout: FAQAT test uchun almashtiriladi.
         """
@@ -291,28 +320,61 @@ class AlertSender:
         """Alertlar sozlanganmi. UI va `alert_sweep` shu qiymatga qaraydi."""
         return self._enabled
 
-    async def send_message(self, text: str) -> bool:
+    async def send_message(self, text: str, *, chat_id: str | None = None) -> bool:
         """Matnli xabar yuboradi. ISTISNO KO'TARMAYDI (3-taqiq).
 
         ⛔ FAQAT MATN. Kadr, obyekt kaliti, rasm havolasi va shaxsiy
            ma'lumot bu chaqiruvga TUSHMAYDI — chaqiruvchi (`alerting.py`)
            matnni sonlar va tarjima kalitlaridan quradi.
 
+        =====================================================================
+        ⛔ 1. `chat_id` — ARGUMENT, YANGI METOD EMAS (D-23, 07-06).
+
+        Alert supurgisi OPS chatiga yozadi, outbox esa SOTUVCHINING
+        shaxsiy chatiga. Ikkinchi jo'natuvchi SINF yozish modul
+        docstringining 1- va 2-taqig'ini IKKILANTIRARDI: darvozalar ikki
+        joyda bo'lib, biri ertaga eskirardi va sizish yo'li aynan o'sha
+        eskirgan yarimdan ochilardi.
+
+        Kalit argument esa metodlar TO'PLAMINI tegilmagan qoldiradi —
+        `TELEGRAM_SEND_METHOD` hamon YAGONA Bot API metodi, ya'ni
+        1-taqiq strukturaviy jihatdan KUCHSIZLANMAYDI.
+
+        ⛔ 2. `chat_id` JURNALGA YOZILMAYDI.
+
+        U Telegram FOYDALANUVCHI identifikatori, ya'ni shaxsiy ma'lumot
+        (D-01). Pastdagi `log.info("alert_delivered", ...)` hamon faqat
+        `chars` va `status` beradi — manzil u yerga na to'g'ridan-to'g'ri,
+        na `_failure()` orqali tushadi.
+
+        ⛔ 3. METODLAR SONI O'ZGARMADI.
+
+        Rasm, hujjat va media guruh yuboradigan Bot API metodlari bu
+        faylda HAMON YO'Q. `tests/integration/test_alerting.py` ning yuza
+        darvozasi buni LITERAL TO'PLAM TENGLIGI bilan o'lchaydi (`len()`
+        emas: sanoq bir metodni ikkinchisiga almashtirishni ko'rmasdi).
+        =====================================================================
+
         Args:
             text: yuboriladigan matn (HTML `parse_mode`).
+            chat_id: manzil. `None` — konstruktordagi STANDART manzil
+                (ops chati). Bo'sh standart + argumentsiz chaqiruv
+                `False` beradi va bu XATO EMAS: «manzil yo'q» —
+                sozlamaning qonuniy holati.
 
         Returns:
             `True` — Telegram xabarni QABUL QILDI. `False` — alertlar
-            o'chiq, tarmoq yiqildi, chegaraga urildi yoki status xato.
-            Chaqiruvchi `False` ni `notified_at IS NULL` ga aylantiradi va
-            UI uni ochiq ko'rsatadi.
+            o'chiq, MANZIL yo'q, tarmoq yiqildi, chegaraga urildi yoki
+            status xato. Chaqiruvchi `False` ni `notified_at IS NULL` ga
+            aylantiradi va UI uni ochiq ko'rsatadi.
         """
         client = self._client
-        if client is None:
+        target = chat_id or self._chat_id
+        if client is None or not target:
             return False
 
         try:
-            response = await self._post(client, text)
+            response = await self._post(client, text, target)
         except AlertError as error:
             # ⚠ `str(error)` XAVFSIZ: `_failure()` unga faqat amal, xato
             #   turi va statusni beradi.
@@ -322,16 +384,22 @@ class AlertSender:
         log.info("alert_delivered", chars=len(text), status=response)
         return True
 
-    async def _post(self, client: httpx.AsyncClient, text: str) -> int:
+    async def _post(self, client: httpx.AsyncClient, text: str, target: str) -> int:
         """Retry qatlami — FAQAT tarmoq sinfi (`_should_retry`).
 
         ⚠ ISTISNO `except` BLOKIDAN TASHQARIDA KO'TARILADI (04-06 ning
           o'lchovi): blok tugagach Python kontekstni tozalaydi, ya'ni
           `__context__` ham xom istisnoni tashimaydi. `from None` yolg'iz
           o'zi faqat `__cause__` ni yopardi.
+
+        ⚠ `target` ARGUMENT, `self._chat_id` EMAS: manzil chaqiruv
+          joyida hal qilinadi (`send_message` docstringining 1-bandi).
+          Uni bu yerda qayta o'qish argumentli chaqiruvni JIMGINA ops
+          chatiga burardi — ya'ni sotuvchining kvitansiyasi begona chatga
+          ketardi.
         """
         payload = {
-            "chat_id": self._chat_id,
+            "chat_id": target,
             "text": text,
             # HTML — `Markdown` dan xavfsizroq: bozor nomida `_` yoki `*`
             # bo'lsa Markdown parseri butun xabarni rad etardi.
