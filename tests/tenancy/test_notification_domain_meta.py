@@ -56,13 +56,29 @@ import ast
 import re
 from datetime import date
 from pathlib import Path
+from typing import cast
 from uuid import UUID, uuid4
 
 import psycopg
 import pytest
 from fixtures.market_domain import MarketDomainSeed
+from fixtures.notification_domain import (
+    ALLOWED_PAYLOAD_KEYS,
+    DEFAULT_TELEGRAM_USER_ID,
+    cleanup_case_targets,
+    cleanup_notification_domain,
+    cleanup_same_phone_in_two_markets,
+    seed_binding,
+    seed_case,
+    seed_case_event,
+    seed_no_coverage_anomaly,
+    seed_notification_settings,
+    seed_outbox_row,
+    seed_same_phone_in_two_markets,
+)
 from psycopg import Connection
 from psycopg.rows import TupleRow
+from sbozor_core.enums import ReconciliationCaseStatus
 
 pytestmark = pytest.mark.tenancy
 
@@ -307,13 +323,29 @@ sababi). Ularni «har ehtimolga qarshi» qo'shish quyidagi TENGLIK
 darvozasini yiqitardi.
 """
 
-_ANOMALY_SERVICE_DATE = date(2026, 1, 15)
-"""Case nishoni uchun O'TMISH sanasi.
+_CASE_SERVICE_DATE = date(2026, 1, 15)
+"""Case va uning nishoni uchun O'TMISH sanasi.
 
 ⚠ «Bugun» ISHLATILMAYDI: `billing_anomalies.business_date` — `created_at`
 dan hosila ustun va u konteynerning `Asia/Tashkent` mintaqasida
 hisoblanadi. Sobit o'tmish sanasi yarim tundagi chegara xatosini
 BUTUNLAY yo'q qiladi.
+"""
+
+_UNREACHABLE_CONNECTION = cast("Connection[TupleRow]", None)
+"""⛔ ATAYIN `None` — VA BU O'ZI BIR O'LCHOV, QISQARTMA EMAS.
+
+`seed_case()` / `seed_outbox_row()` ning validatsiyasi HAR QANDAY
+`conn.execute()` DAN OLDIN ishlashi kerak. Ulanish o'rniga `None`
+berilganda:
+
+  * validatsiya to'g'ri joyda bo'lsa -> `ValueError` (test o'tadi);
+  * validatsiya `INSERT` dan KEYINGA surilgan bo'lsa -> `AttributeError`
+    (`None.execute`), ya'ni test AYNAN o'sha regressiyada qizaradi.
+
+Haqiqiy ulanish berilganda ikkinchi holat JIMGINA o'tib ketardi: DB
+noto'g'ri qatorni baribir rad etardi va `pytest.raises(ValueError)`
+umuman boshqa xatoni ko'rardi.
 """
 
 
@@ -725,8 +757,24 @@ def test_case_events_are_append_only(
       `sbozor_app` uchun ham aynan shu javob keladi.
     """
     market_id = market_domain.market_a.market_id
-    stall_id = market_domain.market_a.stall_ids[0]
-    event_id = _seed_case_with_event(sync_owner_conn, market_id=market_id, stall_id=stall_id)
+    anomaly_id = seed_no_coverage_anomaly(
+        sync_owner_conn,
+        market_id=market_id,
+        stall_id=market_domain.market_a.stall_ids[0],
+        service_date=_CASE_SERVICE_DATE,
+    )
+    case_id = seed_case(
+        sync_owner_conn,
+        market_id=market_id,
+        service_date=_CASE_SERVICE_DATE,
+        anomaly_id=anomaly_id,
+    )
+    event_id = seed_case_event(
+        sync_owner_conn,
+        market_id=market_id,
+        case_id=case_id,
+        to_status=ReconciliationCaseStatus.NEW.value,
+    )
 
     try:
         with pytest.raises(psycopg.errors.RaiseException) as excinfo:
@@ -739,7 +787,8 @@ def test_case_events_are_append_only(
             "xabari QAYSI qoida buzilganini aytishi kerak."
         )
     finally:
-        _cleanup_case_chain(sync_owner_conn, market_id=market_id)
+        cleanup_notification_domain(sync_owner_conn, market_ids=[market_id])
+        cleanup_case_targets(sync_owner_conn, market_ids=[market_id])
 
 
 def test_no_new_security_definer_function_was_added(
@@ -793,73 +842,241 @@ def test_no_new_security_definer_function_was_added(
 
 
 # ===========================================================================
-# XULQIY TEST UCHUN MINIMAL ZANJIR
+# FIXTURE KONTRAKTI — `fixtures/notification_domain.py` NING O'ZI O'LCHANADI
 #
-# ⚠ NEGA BU YERDA VA NEGA `fixtures/notification_domain.py` DA EMAS:
-#   fixture moduli QUYI OQIM rejalari (07-05…07-13) uchun yozilgan va
-#   uning `seed_case()` i nishonni CHAQIRUVCHIDAN oladi. Bu yerdagi test
-#   esa nishonni O'ZI yaratishi kerak — `billing_anomalies` qatori
-#   bo'lmasa case'ni umuman yozib bo'lmaydi (kompozit FK).
+# ⛔ NEGA FIXTURE TEST BILAN BIRGA KELADI: bu modulning seed'lari 07-05…
+#   07-13 ning HAMMASINI oziqlantiradi. Jimgina buzilgan seed o'sha o'n
+#   uch rejaning darvozalarini BIRVARAKAYIGA yolg'on-yashil qilardi va
+#   sabab har safar boshqa faylda qidirilardi.
 # ===========================================================================
 
-_INSERT_ANOMALY = (
-    "INSERT INTO billing_anomalies (id, market_id, kind, stall_id, service_date) "
-    "VALUES (%s, %s, %s, %s, %s)"
-)
-"""⚠ `kind = 'no_coverage_stall'` ATAYIN: AYNAN shu qiymatda ikkala
-juftlangan `CHECK` ham (`no_coverage_is_paired`, `evidence_is_paired`)
-dalil ustunlarining `NULL` bo'lishini TALAB qiladi, ya'ni bu yagona
-anomaliya sinfi bo'lib, u `occupancy_events` va `snapshots` seed'isiz
-qonuniy yoziladi. Boshqa `kind` da zanjir butun bandlik qatlamini
-talab qilardi."""
 
-_INSERT_CASE = (
-    "INSERT INTO reconciliation_cases "
-    "(id, market_id, subject_kind, anomaly_id, service_date) VALUES (%s, %s, %s, %s, %s)"
-)
+def test_seed_case_cannot_break_the_subject_xor() -> None:
+    """`seed_case()` DQ-5 ni buza olmaydi — ikkala noto'g'ri chaqiruv ham `ValueError`.
 
-_INSERT_CASE_EVENT = (
-    "INSERT INTO reconciliation_case_events (id, market_id, case_id, from_status, to_status) "
-    "VALUES (%s, %s, %s, NULL, %s)"
-)
+    =========================================================================
+    FIXTURE MAHSULOT QOIDASINI TAKRORLAMAYDI, UNGA BO'YSUNADI.
 
+    `ck_reconciliation_cases_subject_is_exclusive` ikkala nosozlikni ham
+    DB darajasida rad etadi. Unda nega fixture ham tekshiradi? Chunki
+    ikkalasi BOSHQA SAVOLGA javob beradi:
 
-def _seed_case_with_event(conn: Connection[TupleRow], *, market_id: UUID, stall_id: UUID) -> UUID:
-    """`anomaliya -> case -> case hodisasi` zanjirini yozadi va hodisa `id` sini qaytaradi."""
-    anomaly_id, case_id, event_id = uuid4(), uuid4(), uuid4()
+      DB      -> «bu QATOR qonuniymi?»    (mahsulot invarianti)
+      fixture -> «bu CHAQIRUV to'g'rimi?» (o'lchov asbobining butunligi)
 
-    conn.execute(
-        _INSERT_ANOMALY,
-        (
-            str(anomaly_id),
-            str(market_id),
-            "no_coverage_stall",
-            str(stall_id),
-            _ANOMALY_SERVICE_DATE,
-        ),
-    )
-    conn.execute(
-        _INSERT_CASE,
-        (str(case_id), str(market_id), "anomaly", str(anomaly_id), _ANOMALY_SERVICE_DATE),
-    )
-    conn.execute(_INSERT_CASE_EVENT, (str(event_id), str(market_id), str(case_id), "new"))
-    return event_id
+    Noto'g'ri seed DB xatosini TEST ICHIDA tug'dirardi va uni o'qiyotgan
+    odam mahsulotda nuqson bor deb o'ylardi — ya'ni darvoza yolg'on
+    signal berardi.
 
-
-def _cleanup_case_chain(conn: Connection[TupleRow], *, market_id: UUID) -> None:
-    """Zanjirni bolalardan otaga o'chiradi.
-
-    ⚠ AVVAL BOZOR QORALAMAGA QAYTARILADI VA BUSIZ TOZALASH YIQILADI:
-      `case_event_immutable()` `DELETE` ni FAQAT bozor nofaol bo'lganda
-      o'tkazadi (`market_delete_draft()` ning yo'li). Bayroqni tushirish
-      bu yerda semantik jihatdan HALOL — `market_domain` / `two_markets`
-      fixture'lari bozorni bir necha satr keyin baribir shu holatda
-      o'chiradi (`cleanup_billing_domain()` bilan bir xil naqsh).
+    ⚠ IKKALA SHOX HAM O'LCHANADI: faqat «ikkalasi berilgan» tekshirilsa,
+      «birortasi ham berilmagan» chaqiruv `subject_kind` ni
+      `occupied_unpaid` deb yozib, `charge_id` siz DB'ga borardi.
+    =========================================================================
     """
-    conn.execute("UPDATE markets SET is_active = false WHERE id = %s", (str(market_id),))
-    for table in ("reconciliation_case_events", "reconciliation_cases", "billing_anomalies"):
-        conn.execute(
-            f"DELETE FROM {table} WHERE market_id = %s",  # noqa: S608
-            (str(market_id),),
+    for kwargs, shox in (
+        ({"anomaly_id": uuid4(), "charge_id": uuid4()}, "IKKALASI berilgan"),
+        ({}, "BIRORTASI ham berilmagan"),
+    ):
+        with pytest.raises(ValueError, match="AYNAN BITTA nishon"):
+            seed_case(
+                _UNREACHABLE_CONNECTION,
+                market_id=uuid4(),
+                service_date=_CASE_SERVICE_DATE,
+                **kwargs,  # type: ignore[arg-type]
+            )
+        assert shox, "shox nomi bo'sh bo'lib qolmasin"
+
+
+def test_seed_binding_default_id_is_outside_the_32_bit_range() -> None:
+    """⛔ Standart `telegram_user_id` `2**31` DAN KATTA (BIGINT qarorining jufti).
+
+    Telegram identifikatorlari 32-bit chegarasidan ALLAQACHON oshib
+    ketgan. Ustun `BIGINT` deb e'lon qilingan, lekin STANDART SEED
+    QIYMATI ham katta bo'lishi shart: 32-bit diapazondagi qiymat bilan
+    yozilgan test `INTEGER` ga qaytarilgan ustunni ham O'TKAZIB
+    YUBORARDI — ya'ni tip qarori faqat migratsiyada qolib, o'lchanmasdi.
+    Nosozlik esa AYNAN eng band kunda, yangi akkauntda ko'rinardi.
+    """
+    assert DEFAULT_TELEGRAM_USER_ID > 2**31, (
+        f"standart `telegram_user_id` = {DEFAULT_TELEGRAM_USER_ID} — u "
+        f"`2**31` ({2**31}) dan KATTA bo'lishi shart, aks holda seed "
+        "`INTEGER` ustunda ham muvaffaqiyatli yozilardi va `BIGINT` "
+        "qarori umuman sinalmasdi."
+    )
+
+
+def test_seed_outbox_row_rejects_a_payload_key_outside_the_allowlist() -> None:
+    """`payload` allowlisti fixture darajasida ham MAJBURLANADI (Pitfall 6).
+
+    G7-2 USTUN nomlarini `information_schema` dan o'qiydi, `payload` esa
+    `jsonb` — ya'ni tayyor matn u yerga KALIT bo'lib kirsa darvoza uni
+    UMUMAN KO'RMASDI, `pg_dump` -> restic -> tashqi bucket zanjiri esa
+    uni baribir olib chiqardi. Shuning uchun taqiq ikkinchi joyda ham
+    turadi va u SEED paytida ishlaydi.
+    """
+    with pytest.raises(ValueError, match="allowlistdan tashqari"):
+        seed_outbox_row(
+            _UNREACHABLE_CONNECTION,
+            market_id=uuid4(),
+            payload={"amount_soum": 1, "message_text": "Hurmatli sotuvchi, qarzingiz bor"},
         )
-    conn.execute("UPDATE markets SET is_active = true WHERE id = %s", (str(market_id),))
+
+    # NAZORAT: allowlistdagi kalitlar RAD ETILMAYDI. Usiz yuqoridagi
+    # da'voni «hammasini rad etadigan» tekshiruv ham qanoatlantirardi va
+    # fixture umuman ishlatib bo'lmaydigan bo'lib qolardi.
+    assert {"amount_soum", "stall_code"} <= ALLOWED_PAYLOAD_KEYS, (
+        "kvitansiya kalitlari allowlistdan tushib qolgan — `seed_outbox_row()` "
+        "ning O'Z standart `payload` i ham rad etilardi"
+    )
+
+
+def test_two_markets_seed_is_measurable(
+    sync_owner_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """⛔⛔ D-26(b) O'LCHANADIGAN HOLATGA EGA — Pitfall 10 ning javobi.
+
+    =========================================================================
+    5-FAZANING W-2/W-3 DARSI: DARVOZA O'LCHAYOTGAN HOLATNING MAVJUDLIGINI
+    ISBOTLASHI KERAK.
+
+    «Bir nechta moslik» shoxi (D-26(b): ulanish YO'Q + anomaliya) BITTA
+    bozorda IFODALAB BO'LMAYDI — `uq_vendors_market_id_phone_e164` uni
+    imkonsiz qiladi. Ya'ni bitta bozorli seed bilan yozilgan 07-08 testi
+    YASHIL bo'lib turardi va HECH NIMANI isbotlamasdi.
+
+    Bu test ikki narsani ketma-ket o'lchaydi va ikkalasi ham MAJBURIY:
+
+      1. seed HAQIQATAN ikki bozorda bir xil telefon yaratadi
+         -> shox BAJARILADIGAN holatga keldi;
+      2. ⛔ NAZORAT — o'sha telefonni BIR bozorda TAKRORLASH
+         `UniqueViolation` beradi -> ya'ni `uq_vendors_market_id_phone_
+         e164` HAQIQATAN kuchda va 1-band «cheklov yo'q ekan» degani
+         EMAS.
+
+    Ikkinchisisiz birinchi band ikki xil sababdan rost bo'lishi mumkin
+    edi: cheklov ishlayapti-yu, shox bozorlar aro (to'g'ri xulosa), yoki
+    cheklov umuman yo'q (butunlay boshqa dunyo). Nazorat ikkisini
+    AJRATADI.
+    =========================================================================
+    """
+    seed = seed_same_phone_in_two_markets(sync_owner_conn)
+    try:
+        rows = sync_owner_conn.execute(
+            "SELECT market_id FROM vendors WHERE phone_e164 = %s", (seed.phone_e164,)
+        ).fetchall()
+        markets = {UUID(str(row[0])) for row in rows}
+
+        assert len(rows) == 2, (
+            f"`{seed.phone_e164}` bo'yicha {len(rows)} qator — kutilgani AYNAN 2. "
+            "D-26(b) ning shoxi ikki qatorsiz bajarilmaydi."
+        )
+        assert markets == set(seed.market_ids), (
+            f"qatorlar {sorted(map(str, markets))} bozorlarida — kutilgani "
+            f"{sorted(map(str, seed.market_ids))}. Ikki qator BIR bozorda "
+            "bo'lishi mumkin emas edi, ya'ni seed buzilgan."
+        )
+        assert len(markets) == 2, (
+            "ikkala qator ham BIR bozorda — bu holatda `uq_vendors_market_id_"
+            "phone_e164` ularni rad etishi kerak edi, ya'ni cheklov yo'q."
+        )
+
+        # ⛔ NAZORAT: cheklov HAQIQATAN kuchda. Tranzaksiya bu yerda
+        #   ATAYIN alohida ochiladi — `UniqueViolation` ulanishni
+        #   "aborted" holatiga qo'yadi va undan keyingi HAR QANDAY buyruq
+        #   (jumladan tozalash) `InFailedSqlTransaction` bilan yiqilardi.
+        with (
+            sync_owner_conn.transaction(force_rollback=True),
+            pytest.raises(psycopg.errors.UniqueViolation),
+        ):
+            sync_owner_conn.execute(
+                "INSERT INTO vendors (id, market_id, full_name, phone_e164) "
+                "VALUES (%s, %s, %s, %s)",
+                (
+                    str(uuid4()),
+                    str(seed.markets.market_a.id),
+                    "Takroriy telefonli sotuvchi",
+                    seed.phone_e164,
+                ),
+            )
+    finally:
+        cleanup_same_phone_in_two_markets(sync_owner_conn, seed)
+
+
+def test_cleanup_notification_domain_empties_all_five_tables(
+    sync_owner_conn: Connection[TupleRow], market_domain: MarketDomainSeed
+) -> None:
+    """Tozalashdan keyin BESHALA jadvalda 0 qator — va usiz 0 emas edi.
+
+    =========================================================================
+    ⛔ «0 QATOR» DA'VOSI YOLG'IZ O'ZI BO'SH ROST BO'LARDI.
+
+    Hech nima yozilmagan jadval ham 0 qator qaytaradi. Shuning uchun test
+    AVVAL beshala jadvalga qator yozadi, MAVJUDLIGINI o'lchaydi va faqat
+    SHUNDAN KEYIN tozalaydi. Aks holda `cleanup_notification_domain()`
+    umuman bo'sh funksiya bo'lgan taqdirda ham darvoza yashil qolardi —
+    va o'sha holat testlar orasida qoldiq qator qoldirib, keyingi
+    fixture'ni FK buzilishi bilan yiqitardi.
+
+    ⚠ BESHALA JADVAL ATAYIN: `market_notification_settings` osongina
+      unutilardi (u `market_id` PK bilan, ya'ni boshqa shaklda) va
+      qoldiq qatori `cleanup_two_markets()` ning `DELETE FROM markets`
+      ini FK bilan yiqitardi.
+    =========================================================================
+    """
+    market_id = market_domain.market_a.market_id
+    vendor_id = market_domain.market_a.vendor_ids[0]
+
+    anomaly_id = seed_no_coverage_anomaly(
+        sync_owner_conn,
+        market_id=market_id,
+        stall_id=market_domain.market_a.stall_ids[0],
+        service_date=_CASE_SERVICE_DATE,
+    )
+    case_id = seed_case(
+        sync_owner_conn,
+        market_id=market_id,
+        service_date=_CASE_SERVICE_DATE,
+        anomaly_id=anomaly_id,
+    )
+    seed_case_event(
+        sync_owner_conn,
+        market_id=market_id,
+        case_id=case_id,
+        to_status=ReconciliationCaseStatus.NEW.value,
+    )
+    seed_outbox_row(sync_owner_conn, market_id=market_id, vendor_id=vendor_id)
+    seed_binding(sync_owner_conn, market_id=market_id, vendor_id=vendor_id)
+    seed_notification_settings(sync_owner_conn, market_id=market_id)
+
+    try:
+        before = _row_counts(sync_owner_conn, market_id)
+        assert all(count > 0 for count in before.values()), (
+            f"seed beshala jadvalning hammasini to'ldirmadi: {before}. Shu "
+            "holatda quyidagi «0 qator» da'vosi BO'SH ROST bo'lib qolardi."
+        )
+
+        cleanup_notification_domain(sync_owner_conn, market_ids=[market_id])
+
+        after = _row_counts(sync_owner_conn, market_id)
+        assert all(count == 0 for count in after.values()), (
+            f"tozalashdan keyin qoldiq qator bor: "
+            f"{ {t: c for t, c in after.items() if c} }. Qoldiq qator "
+            "keyingi fixture'ning bozor o'chirish qadamini FK buzilishi "
+            "bilan yiqitardi."
+        )
+    finally:
+        cleanup_notification_domain(sync_owner_conn, market_ids=[market_id])
+        cleanup_case_targets(sync_owner_conn, market_ids=[market_id])
+
+
+def _row_counts(conn: Connection[TupleRow], market_id: UUID) -> dict[str, int]:
+    """Beshala jadvaldagi qatorlar sonini `market_id` bo'yicha sanaydi."""
+    counts: dict[str, int] = {}
+    for table in NOTIFICATION_TABLES:
+        row = conn.execute(
+            f"SELECT count(*) FROM {table} WHERE market_id = %s",  # noqa: S608
+            (str(market_id),),
+        ).fetchone()
+        assert row is not None, f"`{table}` uchun `count(*)` qator qaytarmadi"
+        counts[table] = int(row[0])
+    return counts
