@@ -46,6 +46,9 @@ __all__ = [
     "IDEMPOTENT_GET_OR_CREATE_MEASURED_AT",
     "IDEMPOTENT_GET_OR_CREATE_SUPPORTED",
     "MARKET_DOMAIN_TENANT_TABLES",
+    "NOTIFICATION_AUDITED_TABLES",
+    "NOTIFICATION_DELETE_ORDER",
+    "NOTIFICATION_TENANT_TABLES",
     "NVR_AUDITED_TABLES",
     "NVR_TENANT_TABLES",
     "OCCUPANCY_AUDITED_TABLES",
@@ -552,6 +555,121 @@ jadvallariga tayanadi), shuning uchun uning o'rni ixtiyoriy —
 (`06-04` / T3).
 """
 
+# ===========================================================================
+# 7-FAZA — NOMUVOFIQLIK, BILDIRISHNOMA VA BOTLAR DOMENI
+# ===========================================================================
+
+NOTIFICATION_TENANT_TABLES: tuple[str, ...] = (
+    "reconciliation_cases",
+    "reconciliation_case_events",
+    "notification_outbox",
+    "vendor_telegram_bindings",
+    "market_notification_settings",
+)
+"""`0023_notification_domain` yaratadigan tenant jadvallari (RECON-02, BOT-01/04).
+
+TARTIB — FK bo'yicha OTA-ONADAN bolalarga, `BILLING_TENANT_TABLES` bilan
+aynan bir xil qoida:
+  * `reconciliation_cases`          -> `billing_anomalies` VA `daily_charges`
+                                       ga IKKI MUSTAQIL kompozit FK (DQ-5);
+  * `reconciliation_case_events`    -> `reconciliation_cases` ga
+                                       `(market_id, case_id)`;
+  * `notification_outbox`           -> `vendors` ga (NULLABLE, D-26c);
+  * `vendor_telegram_bindings`      -> `vendors` ga;
+  * `market_notification_settings`  -> faqat `markets` ga (1:1).
+`0023` shu ro'yxat ustidan `enable_tenant_rls` + `tenant_policy` +
+`owner_bootstrap_policy` tsiklini bajaradi, `downgrade()` esa
+`NOTIFICATION_DELETE_ORDER` bo'yicha yuradi.
+
+⛔ RO'YXAT `0023` BILAN AYNI COMMITDA `ALL_TENANT_TABLES` GA SPLICE
+QILINADI (`06-04` / T2 naqshi, OP-3) va bu IKKI TOMONLAMA majburiy:
+  * OLDIN qilinsa -> `alembic_utils` komparatori mavjud bo'lmagan jadvalga
+    policy'ni HAQIQATAN yaratib ko'radi (`simulate_entity`) va
+    `test_autogenerate_is_empty` `UndefinedTable` bilan yiqiladi
+    (2026-08-04 da o'lchangan);
+  * KEYIN qilinsa -> reyestrning `born <= ALL_TENANT_TABLES` sharti
+    QIZARADI, chunki jadvallar bazada allaqachon bor.
+`OCCUPANCY_TENANT_TABLES` ning ikki reja oralig'ida ochiq turgan qarzi
+aynan shuning uchun bu yerda TAKRORLANMAYDI.
+
+BU RO'YXAT AUDIT UCHUN EMAS. Trigger faqat `NOTIFICATION_AUDITED_TABLES`
+ga ulanadi (pastda) va farq ATAYIN — beshala jadval RLS ostida bo'lishi
+SHART, audit triggeri ostida esa faqat BITTASI.
+
+QARORLAR (`07-CONTEXT.md`):
+  * D-11 — case ALOHIDA jadval; `billing_anomalies` ga ham, `daily_charges`
+    ga ham ustun QO'SHILMAYDI (hodisa/jarayon ajratmasi).
+  * D-19 — quiet hours va `overdue_days` BOZOR KESIMIDA, ya'ni
+    `market_notification_settings` tenant jadvali; global konstanta EMAS.
+  * D-21 — idempotentlik CHEKLOVDA (`UNIQUE (market_id, dedupe_key)`),
+    ilova intizomida emas.
+  * D-27 — bog'lanish `vendors` ga ustun emas, ALOHIDA tarix jadvali.
+"""
+
+NOTIFICATION_AUDITED_TABLES: tuple[str, ...] = ("reconciliation_cases",)
+"""`0023_notification_domain` da `attach_audit_trigger()` ULANADIGAN jadvallar.
+
+⚠ AUDIT ASSIMETRIYASI — TO'RTTASI ATAYIN CHIQARILGAN va sabablar
+`sbozor_core.schema_contract.AUDITED_TABLES` docstringida NOMMA-NOM
+yozilgan. Qisqacha:
+
+  * `reconciliation_case_events`   — SHARTSIZ o'zgarmas (`0023` unga
+    `case_event_immutable()` qo'riqchisini ulaydi), ya'ni audit faqat
+    `INSERT` ni ko'rardi (IKKINCHI NUSXA);
+  * `notification_outbox`          — qator HAR DAQIQADA yangilanadi va
+    audit jurnalini TEXNIK SHOVQIN bilan to'ldirardi (5-fazaning
+    `UNAUDITED_OCCUPANCY_TABLES` qarori bilan bir sinf);
+  * `vendor_telegram_bindings`     — jadvalning O'ZI tarix (D-27);
+  * `market_notification_settings` — `id uuid` ustuni YO'Q (PK
+    `market_id`), ya'ni `fn_audit_row()` unda har DML da YIQILARDI
+    (`stall_code_registry` / `nvr_credentials` bilan bir xil to'siq).
+
+Bittasi esa AUDITDA va bu ro'yxatning butun mazmuni: `reconciliation_cases`
+INSONNING qarori (`charge_adjustments` / `zone_reviews` / `cashier_shifts`
+bilan bir oilada) va u HAQIQATAN `UPDATE` ni ko'radi — ya'ni bu yerda
+audit «ikkinchi nusxa» emas, YAGONA iz.
+
+Ro'yxat ALOHIDA, chunki `0023` ikki xil tsikl qiladi: RLS
+`NOTIFICATION_TENANT_TABLES` bo'yicha, audit esa shu yerdan.
+"""
+
+NOTIFICATION_DELETE_ORDER: tuple[str, ...] = (
+    "reconciliation_case_events",
+    "reconciliation_cases",
+    "notification_outbox",
+    "vendor_telegram_bindings",
+    "market_notification_settings",
+)
+"""`market_delete_draft()` kaskadiga qo'shiladigan tartib (`0023`).
+
+⚠ UCH FAKT, UCHALASI HAM MAJBURIY:
+
+**(a) RO'YXAT LITERAL — HOSILA EMAS.** Bugun u tasodifan
+`tuple(reversed(...))` bilan USTMA-UST TUSHMAYDI ham: `notification_outbox`,
+`vendor_telegram_bindings` va `market_notification_settings` FK zanjiridan
+CHETDA turadi (ularga hech kim tayanmaydi), ya'ni ularning o'zaro tartibi
+IXTIYORIY — `SNAPSHOT_DELETE_ORDER` dagi `alert_events` bilan aynan bir
+xil holat. Hosila qiymat yozish `BILLING_DELETE_ORDER` docstringidagi
+taqiqni buzardi: RLS tartibi (ota-onadan bolalarga) va o'chirish tartibi
+(bolalardan ota-onaga) IKKI XIL SAVOLGA javob beradi.
+
+**(b) BUTUN BLOK MAVJUD BILLING BLOKIDAN OLDIN TURISHI SHART.**
+`reconciliation_cases` `billing_anomalies` VA `daily_charges` ga kompozit
+FK bilan tayanadi (DQ-5), ikkalasi ham `BILLING_DELETE_ORDER` ning
+ichida. Blok billing blokidan KEYIN qo'yilganda chaqiruv
+`ForeignKeyViolation` bilan yiqiladi va ⛔ STATIK DARVOZA BUNI SEZMAYDI
+(matnda beshala jadval baribir bor) — `0015`/`0019`/`0021`
+juftliklarining AYNAN TAKRORI, endi BESHINCHI marta. Shuning uchun
+tartib `test_cascade_covers_every_table_referencing_markets` da emas,
+funksiyani HAQIQATAN chaqirib o'lchanadi.
+
+**(c) `reconciliation_case_events` BIRINCHI.** U `reconciliation_cases`
+ga `(market_id, case_id)` bilan tayanadi va bu domendagi YAGONA ichki
+zanjir. Qolgan uchtasi `vendors` / `markets` ga tayanadi, ya'ni ular
+2-faza jadvallaridan OLDIN o'chirilishi kifoya — bu shart blokning
+o'rni bilan allaqachon bajarilgan.
+"""
+
 ALL_TENANT_TABLES: tuple[str, ...] = (
     *TENANT_TABLES,
     *MARKET_DOMAIN_TENANT_TABLES,
@@ -613,6 +731,16 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     #     consistent` ning `born <= ALL_TENANT_TABLES` sharti QIZARADI,
     #     chunki jadvallar bazada allaqachon bor.
     *BILLING_TENANT_TABLES,
+    # ✅ QARZ UMUMAN OCHILMADI (`07-02` / T3) — splice
+    # `0023_notification_domain` BILAN AYNI COMMITDA qilindi, ya'ni
+    # `06-04` / T2 ning (OP-3) qadami IKKINCHI marta qo'llanadi.
+    #
+    # SPLICE IKKI TOMONLAMA QULFLANGAN va sabab `NOTIFICATION_TENANT_TABLES`
+    # docstringida O'LCHOV bilan yozilgan (2026-08-04, `UndefinedTable`):
+    # oldin qilinsa `alembic_utils` komparatori mavjud bo'lmagan jadvalga
+    # policy'ni yaratib ko'radi va `test_autogenerate_is_empty` yiqiladi;
+    # keyin qilinsa `born <= ALL_TENANT_TABLES` sharti qizaradi.
+    *NOTIFICATION_TENANT_TABLES,
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 

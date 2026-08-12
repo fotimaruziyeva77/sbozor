@@ -44,11 +44,13 @@ __all__ = [
     "AUDIT_IMMUTABLE",
     "AUDIT_TRIGGER_FUNCTIONS",
     "BILLING_TRIGGER_FUNCTIONS",
+    "CASE_EVENT_IMMUTABLE",
     "CATEGORY_PERIOD_PAST_IMMUTABLE",
     "CHARGE_IMMUTABLE",
     "FN_AUDIT_ROW",
     "MARKETS_DELETE_GUARD",
     "MARKET_DOMAIN_TRIGGER_FUNCTIONS",
+    "NOTIFICATION_TRIGGER_FUNCTIONS",
     "NVR_DOMAIN_TRIGGER_FUNCTIONS",
     "OCCUPANCY_EVENT_IMMUTABLE",
     "OCCUPANCY_TRIGGER_FUNCTIONS",
@@ -881,12 +883,91 @@ bo'ysunadi: har migratsiya O'Z scope'li ro'yxatini oladi,
 `ALL_TRIGGER_FUNCTIONS` esa faqat KUZATUV aggregati.
 """
 
+# ===========================================================================
+# 7-FAZA — BILDIRISHNOMA DOMENI (0023_notification_domain, D-14 / D-20)
+# ===========================================================================
+#
+# ⚠ SHAKL 0018/0020 BLOKLARIDAN NUSXA: `SECURITY DEFINER` YOZILMAYDI va
+#   `SET search_path = pg_catalog, public` MAJBURIY.
+#
+# QORALAMA-BOZOR ISTISNOSI SAQLANADI va u O'LCHANGAN ZARURAT:
+# `market_delete_draft()` (`0023` ning kaskad kengaytmasi) bu jadvaldan ham
+# `DELETE` qiladi. Butunlay shartsiz qo'riqchi o'sha `DELETE` ni HAR DOIM
+# `RAISE EXCEPTION` bilan to'xtatardi, ya'ni rejaning ikki qismi
+# bir-birini INKOR QILARDI. Rad etilgan uch muqobil
+# (`session_replication_role`, `DISABLE TRIGGER`, `current_user` sharti)
+# yuqoridagi 0018 blokida sanab chiqilgan va bu yerda TAKRORLANMAYDI.
+
+CASE_EVENT_IMMUTABLE = PGFunction(
+    schema="public",
+    signature="case_event_immutable()",
+    definition="""
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE'
+     AND EXISTS (
+       SELECT 1 FROM public.markets AS m
+       WHERE m.id = OLD.market_id AND m.is_active = false
+     ) THEN
+    RETURN OLD;
+  END IF;
+
+  RAISE EXCEPTION 'reconciliation_case_events is append-only (attempted %)', TG_OP;
+END $$
+""",
+)
+"""`BEFORE UPDATE OR DELETE ON reconciliation_case_events` — TARIX QAYTA YOZILMAYDI.
+
+SHAKL: SHARTSIZ (`OCCUPANCY_EVENT_IMMUTABLE` / `CHARGE_IMMUTABLE` ning
+aynan nusxasi). Sabab MA'NODA: case tarixi «kim, qachon, qaysi holatdan
+qaysi holatga o'tkazdi» degan savolning YAGONA javobi (D-14) va u nizoda
+(D-02) dalil bo'ladi. Tahrirlanadigan tarix — tarix EMAS.
+
+Bu T-07-09 ning aynan mitigatsiyasi: «case tarixining qayta yozilishi»
+tahdidi faqat SXEMA darajasida yopiladi — ilova qatlamidagi «biz UPDATE
+yozmaymiz» kelishuvini xom SQL yo'li BUTUNLAY chetlab o'tadi
+(`migrations/entities/triggers.py` boshidagi o'lchangan sinf).
+
+⚠ NEGA `reconciliation_cases` GA BUNDAY QO'RIQCHI QO'YILMAYDI: o'sha
+jadval ATAYIN o'zgaradi (`new` -> `in_review` -> `justified`) — u JARAYON
+qatori (D-11). Uning izi audit triggeri bilan olinadi
+(`schema_contract.AUDITED_TABLES`), bu jadval esa o'sha izning
+O'ZGARMAS, ilova yozadigan jufti.
+
+`RETURN OLD` FAQAT istisno shoxida: `BEFORE DELETE` triggeri `NULL`
+qaytarsa amal JIMGINA bekor qilinadi (xatosiz!) va `market_delete_draft()`
+"o'chirdim" deb `true` qaytarardi-yu, qatorlar joyida qolardi — ya'ni
+kaskad YOLG'ON gapirardi.
+
+⚠ ALOHIDA FUNKSIYA, umumiy `TG_TABLE_NAME` shoxlanishi EMAS
+(`helpers.py:278-282` qoidasi): xato xabari QAYSI jadvalning qoidasi
+buzilganini aytishi kerak.
+"""
+
+NOTIFICATION_TRIGGER_FUNCTIONS: list[PGFunction] = [CASE_EVENT_IMMUTABLE]
+"""7-faza qo'riqchisi — `0023_notification_domain` yaratadi.
+
+BITTA FUNKSIYA, chunki bu domenda o'zgarmas jadval AYNAN BITTA:
+`reconciliation_case_events`. Qolgan to'rttasi ATAYIN o'zgaradi —
+`reconciliation_cases` (jarayon), `notification_outbox` (holat mashinasi),
+`vendor_telegram_bindings` (bekor qilinadi), `market_notification_settings`
+(sozlama).
+
+Ro'yxat ALOHIDA va u `BILLING_TRIGGER_FUNCTIONS` bilan bir xil qoidaga
+bo'ysunadi: har migratsiya O'Z scope'li ro'yxatini oladi,
+`ALL_TRIGGER_FUNCTIONS` esa faqat KUZATUV aggregati.
+"""
+
 ALL_TRIGGER_FUNCTIONS: list[PGFunction] = [
     *AUDIT_TRIGGER_FUNCTIONS,
     *MARKET_DOMAIN_TRIGGER_FUNCTIONS,
     *NVR_DOMAIN_TRIGGER_FUNCTIONS,
     *OCCUPANCY_TRIGGER_FUNCTIONS,
     *BILLING_TRIGGER_FUNCTIONS,
+    *NOTIFICATION_TRIGGER_FUNCTIONS,
 ]
 """BARCHA trigger funksiyalari — autogenerate reyestri (`ALL_ENTITIES`) uchun.
 

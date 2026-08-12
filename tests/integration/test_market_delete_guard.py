@@ -148,7 +148,17 @@ FUNCTION_BODY = "SELECT pg_get_functiondef('public.market_delete_draft(uuid)'::r
 # ⚠ SON `23` DAN `29` GA KO'TARILDI (`06-04` / T3) va sabab AYNAN yuqorida:
 # eski qiymat bilan `0020` ning oltala jadvali `markets` ga FK'siz
 # yaratilgan taqdirda ham darvoza YASHIL qolardi.
-KNOWN_TENANT_TABLE_COUNT = 29
+#
+# ⚠ SON `29` DAN `34` GA KO'TARILDI (`07-02` / T3) — `0023_notification_
+# domain` beshta jadval qo'shdi (`reconciliation_cases`,
+# `reconciliation_case_events`, `notification_outbox`,
+# `vendor_telegram_bindings`, `market_notification_settings`).
+# KO'TARISH MAJBURIY va bu yuqoridagi bandning aynan takrori: eski
+# qiymat (29) bilan beshala YANGI jadval `markets` ga FK'siz yaratilgan
+# taqdirda ham quyi chegara qanoatlanardi, ya'ni
+# `test_cascade_covers_every_table_referencing_markets` ularni UMUMAN
+# ko'rmasdi va kaskad qarzi JIMGINA ochiq qolardi.
+KNOWN_TENANT_TABLE_COUNT = 34
 
 # Tuzatish yo'riqnomasi ALOHIDA konstantada, f-satr ICHIDA emas: ruff'ning
 # `S608` qoidasi SQL kalit so'zi bo'lgan formatlangan satrni "so'rov

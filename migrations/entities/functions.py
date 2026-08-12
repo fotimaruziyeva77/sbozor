@@ -1153,6 +1153,36 @@ BEGIN
     RETURN false;
   END IF;
 
+  -- 7-faza bildirishnoma domeni (0023_notification_domain). BLOK BILLING
+  -- BLOKIDAN OLDIN TURISHI SHART va bu O'LCHANGAN, taxmin emas:
+  -- `reconciliation_cases` IKKI MUSTAQIL kompozit FK bilan
+  -- `billing_anomalies` VA `daily_charges` ga tayanadi (DQ-5), ikkalasi
+  -- ham pastdagi billing blokining ichida. Blok keyinga qo'yilganda
+  -- chaqiruv `ForeignKeyViolation: update or delete on table
+  -- "billing_anomalies" violates foreign key constraint
+  -- "fk_reconciliation_cases_anomaly"` bilan yiqiladi — va STATIK DARVOZA
+  -- BUNI SEZMAYDI (matnda beshala jadval baribir bor). Bu
+  -- `0013`/`0015`/`0019`/`0021` juftliklarining BESHINCHI takrori.
+  --
+  -- Ichki tartib `NOTIFICATION_DELETE_ORDER` dan:
+  -- `reconciliation_case_events` -> `reconciliation_cases` ->
+  -- `notification_outbox` -> `vendor_telegram_bindings` ->
+  -- `market_notification_settings`. Oxirgi uchtasi FK zanjiridan CHETDA
+  -- (ularga hech kim tayanmaydi), ya'ni ularning o'zaro tartibi ixtiyoriy
+  -- — `alert_events` bilan aynan bir xil holat.
+  --
+  -- ⚠ `reconciliation_case_events` USTIDA O'ZGARMASLIK TRIGGERI BOR
+  --   (`case_event_immutable()`, 0023) va u `DELETE` ni FAQAT QORALAMA
+  --   bozor uchun o'tkazadi. Yuqoridagi `IS DISTINCT FROM false` sharti
+  --   aynan shu holatni kafolatlaydi, ya'ni bu yerga faqat qoralama bozor
+  --   yetib keladi. `occupancy_events` / `daily_charges` bilan AYNAN bir
+  --   xil naqsh.
+  DELETE FROM public.reconciliation_case_events   WHERE market_id = p_market_id;
+  DELETE FROM public.reconciliation_cases         WHERE market_id = p_market_id;
+  DELETE FROM public.notification_outbox          WHERE market_id = p_market_id;
+  DELETE FROM public.vendor_telegram_bindings     WHERE market_id = p_market_id;
+  DELETE FROM public.market_notification_settings WHERE market_id = p_market_id;
+
   -- 6-faza billing domeni (0020_billing_domain). BLOK BANDLIK VA SNAPSHOT
   -- BLOKLARIDAN OLDIN TURISHI SHART va bu O'LCHANGAN, taxmin emas:
   -- `charge_evidence` UCHTA quyi jadvalga birdan tayanadi —
