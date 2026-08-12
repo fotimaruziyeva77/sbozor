@@ -144,6 +144,27 @@ Qolgan uchtasi ATAYIN QO'SHILMAYDI va sabab yuqoridagi
     YOZILMAGAN holat (C-12).
   * `charge_evidence` — dalil pointerlari, pul emas; summa `charge_id`
     ko'rsatgan `daily_charges` qatorida.
+
+7-FAZA HAM BU REYESTRGA HECH NIMA QO'SHMAYDI va bu ATAYIN. Beshala
+bildirishnoma jadvalida (`reconciliation_cases`,
+`reconciliation_case_events`, `notification_outbox`,
+`vendor_telegram_bindings`, `market_notification_settings`) `amount_soum`
+NOMLI USTUN YO'Q va bo'lishi ham kerak emas — bu faza pul YOZMAYDI, u
+yozilgan pul ustidan JARAYON yuritadi va xabar jo'natadi.
+
+⚠ `notification_outbox.payload` da summa KO'RINISHI mumkin, lekin u
+KO'CHIRMA: manba `payments` / `daily_charges` va ular allaqachon shu
+reyestrda. Outbox'ni bu yerga qo'shish `test_financial_tables_have_guards`
+dan `business_date` generated ustunini va `CHECK (amount_soum > 0)` ni
+talab qilardi — yagona «tuzatish» yo'li esa SOXTA PUL USTUNI qo'shish
+bo'lardi, ya'ni `stall_assignments` (2-faza, Pitfall 3) va
+`cashier_shifts` (6-faza) bilan AYNAN bir xil tuzoq.
+
+⚠ Beshalasi `GLOBAL_TABLES` da ham YO'Q va bu ham ATAYIN: hammasida
+`market_id` bor va hammasi tenant policy ostida. Quiet hours va
+`overdue_days` BOZOR KESIMIDA sozlanadi (D-19), ya'ni
+`market_notification_settings` `market_id` siz UMUMAN ma'nosiz bo'lardi —
+u bitta bozorning sozlamasi, platformaniki emas.
 """
 
 AUDITED_TABLES: frozenset[str] = frozenset(
@@ -243,6 +264,20 @@ AUDITED_TABLES: frozenset[str] = frozenset(
         # yozadi. Bu «o'zgarmas jadvalga audit qo'yilmaydi» qoidasiga zid
         # emas, u qoidaning TESKARI tomoni.
         "cashier_shifts",
+        # --- 7-faza bildirishnoma domeni (0023_notification_domain) ---
+        # Nomuvofiqlik case'i — INSONNING qarori va u nizoda dalil bo'ladi
+        # (D-14): «bu nomuvofiqlik asosli deb kim, qachon belgiladi?».
+        # `charge_adjustments` / `zone_reviews` / `tariffs` bilan BIR
+        # OILADA va `cashier_shifts` bilan bir xil sababdan — jadval
+        # HAQIQATAN `UPDATE` ni ko'radi (`new` -> `in_review` ->
+        # `justified`), ya'ni audit bu yerda «ikkinchi nusxa» EMAS.
+        #
+        # ⚠ IKKALA REYESTR AYNI COMMITDA tenglashadi (`06-04` T1->T2
+        # naqshi): nom bu yerga qo'shildi VA `0023` `attach_audit_trigger()`
+        # ni chaqirdi, ya'ni `PENDING_AUDIT_TRIGGERS` BO'SH qoladi va
+        # `test_audited_tables_have_trigger` UZLUKSIZ yashil turadi —
+        # «kutilgan qizil» holat HECH QACHON bo'lmaydi.
+        "reconciliation_cases",
     }
 )
 """`fn_audit_row()` triggeri O'RNATILGAN jadvallar (hozirgi holat, kutilgan emas).
@@ -312,4 +347,37 @@ RO'YXATGA KIRMAYDIGANLAR va sababi:
     `alert_events` bilan bir sinfda).
   * `charge_evidence` (6-faza) — `daily_charges` ning MUZLATILGAN
     nusxasi; u ham hech qachon tahrirlanmaydi.
+  * `reconciliation_case_events` (7-faza) — jadval SHARTSIZ o'zgarmas
+    (`0023` unga `BEFORE UPDATE OR DELETE` qo'riqchisini ulaydi, D-14/D-20),
+    ya'ni audit FAQAT `INSERT` ni ko'rardi va bu o'sha ma'lumotning
+    IKKINCHI NUSXASI bo'lardi — `occupancy_events` va `daily_charges`
+    bilan AYNAN bir xil dalil. Jadvalning O'ZI allaqachon audit qatori:
+    unda `actor_user_id`, `from_status`, `to_status` va `created_at` bor.
+  * `notification_outbox` (7-faza) — IKKI MUSTAQIL sabab, bir xil qaror:
+      (a) qator har daqiqada YANGILANADI (`status`, `attempt_count`,
+          `next_attempt_at`, `lease_until`) va audit triggeri jurnalni
+          TEXNIK SHOVQIN bilan to'ldirardi — bitta kvitansiya `pending` ->
+          `sent` -> `delivered` yo'lida uchta audit qatori berardi va
+          ularning birortasi ham INSON qarori emas;
+      (b) HAJM: har to'lov + har eslatma + kunlik ikki dayjest, ya'ni
+          `payments` bilan bir tartibdagi son. `audit_log` append-only.
+    Bu 5-fazaning `UNAUDITED_OCCUPANCY_TABLES` qarori bilan BIR SINFDA.
+    Iz yo'qolmaydi: `dedupe_key` niyatni, `provider_message_id` esa
+    natijani QATORNING O'ZIDA saqlaydi.
+  * `vendor_telegram_bindings` (7-faza) — jadvalning O'ZI TARIX (D-27):
+    bog'lanish tahrirlanmaydi, u BEKOR QILINADI (`revoked_at` +
+    `revoked_reason`) va yangisi ALOHIDA QATOR bo'lib tug'iladi. Ya'ni
+    «kim, qachon, nega uzildi?» savolining javobi qatorlar KETMA-KETLIGIDA
+    — audit unga ikkinchi nusxa yozardi (`charge_adjustments` naqshining
+    TESKARISI: u yerda tarix yo'q edi, bu yerda BOR).
+  * `market_notification_settings` (7-faza) — IKKI sabab:
+      (a) TEXNIK TO'SIQ: birlamchi kaliti `market_id`, ya'ni `id uuid`
+          ustuni YO'Q. `fn_audit_row()` `row_id` ni `uuid` ga keltiradi va
+          bunday jadvalda har DML da YIQILARDI — `stall_code_registry` va
+          `nvr_credentials` bilan aynan bir xil to'siq;
+      (b) qator sozlama, moliyaviy yoki huquqiy yozuv emas.
+    ⚠ BU BAND OCHIQ QARZ: quiet hours ni kengaytirish eslatmani AMALDA
+    o'chirish yo'li va u bir kun audit talab qilishi mumkin. O'shanda
+    yechim `id uuid` ustuni qo'shish bo'ladi, audit funksiyasini
+    o'zgartirish EMAS.
 """
