@@ -50,6 +50,7 @@ from fixtures.admin_api import (
 )
 from fixtures.billing_domain import add_daily_charge, add_payment
 from fixtures.market_domain import A_CATEGORY_NAMES, A_ZONE_NAMES
+from fixtures.notification_domain import seed_case
 from fixtures.nvr_domain import add_discovery_run, nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
@@ -141,6 +142,25 @@ class MatrixBillingRows(NamedTuple):
       `shift_already_closed`** berardi va matritsa 404 kutayotgan joyda
       HOLAT darvozasini o'lchagan bo'lardi (`camera_id` filleri
       arxivlanmagan kanalni ko'rsatishi bilan aynan bir xil mulohaza).
+    """
+
+    case_id: UUID
+    """B bozorining HAQIQIY `reconciliation_cases.id` si — `case_id` filleri (07-10).
+
+    ⚠ To'qilgan UUID YARAMAYDI: `GET`/`PATCH /reconciliation/cases/{id}`
+      ikkala holatda ham 404 berardi, lekin sababi TENANT chegarasi emas,
+      «bunday case umuman yo'q» bo'lardi (`PARAM_FILLERS` docstringidagi
+      umumiy qoida).
+
+    ⚠ QATOR `status = 'new'` VA U SHUNDAY QOLADI: `PATCH` tanasi
+      `in_review` yuboradi, ya'ni matritsa 404 gacha YETIB BORMAGAN
+      taqdirda ham nol o'tish (**409**) shoxiga tushmasdi va nosozlik
+      sababi bir ma'noli qolardi (`shift_id` ning ochiq holati bilan
+      aynan bir xil mulohaza).
+
+    ⚠ NISHON — B NING HISOBI (`charge_id`), anomaliya EMAS: `seed_no_
+      coverage_anomaly()` faqat DALILSIZ sinfni yozadi va undan case
+      OCHILMAYDI (Pattern 4). Hisob esa shu fixture'da allaqachon bor.
     """
 
 
@@ -431,6 +451,20 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # ⚠ QATORNI `billing_rows` fixture'i YOZADI, seed EMAS
     # (`TenantSeed.billing` docstringi).
     "charge_id": lambda seed: str(seed.billing.charge_id),
+    # --- 07-10: nomuvofiqlik case'i ---
+    #
+    # ⚠ B BOZORINING HAQIQIY `reconciliation_cases.id` SI, to'qilgan UUID
+    # EMAS — `charge_id` bilan AYNAN bir xil sabab. Qatorni `billing_rows`
+    # fixture'i yozadi (`MatrixBillingRows.case_id` docstringi): u B ning
+    # hisobiga bog'lanadi, ya'ni case va uning nishoni AYNI bozorda va
+    # AYNI kunda bo'ladi.
+    #
+    # ⚠ `PATCH /reconciliation/cases/{case_id}` `DISPUTE_DECIDE` talab
+    # qiladi va u FAQAT direktorda — shuning uchun marshrut
+    # `DIRECTOR_ROUTES` da va matritsa unga DIREKTOR sessiyasi bilan
+    # boradi. Usiz javob 403 bo'lardi va tenant da'vosi HECH QACHON
+    # sinalmasdi.
+    "case_id": lambda seed: str(seed.billing.case_id),
     # --- 06-09: yozilgan to'lov ---
     #
     # ⚠ B BOZORINING HAQIQIY `payments.id` SI, to'qilgan UUID EMAS —
@@ -818,6 +852,23 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
     #   (§10.2), lekin `1000` tanlandi: nol qiymat «filler to'ldirilmagan»
     #   dan farq qilib turishi kerak.
     RouteSpec("POST", "/api/v1/shifts/{shift_id}/close"): lambda _: {"declared_soum": 1000},
+    # --- 07-10: case holatini o'zgartirish (RECON-02, D-14) ---
+    #
+    # ⚠ TANADA FAQAT `status` VA U MAJBURIY: qolgan ikki maydon
+    #   (`resolution_note`, `assignee_user_id`) ixtiyoriy, ya'ni
+    #   minimal yaroqli tana bitta kalitli.
+    #
+    # ⛔ QIYMAT `in_review` VA U SEED HOLATIDAN (`new`) FARQ QILADI:
+    #   bir xil bo'lsa marshrut tenant darvozasigacha yetib bormasdan
+    #   **409 `status_unchanged`** berardi va matritsa 404 kutayotgan
+    #   joyda NOL O'TISH darvozasini o'lchagan bo'lardi (`shift_id`
+    #   filleri ochiq smenani ko'rsatishi bilan aynan bir xil mulohaza).
+    #
+    # ⛔ `assignee_user_id` ATAYIN YO'Q: unga B bozorining foydalanuvchisi
+    #   qo'yilsa 422 javobi kirish qiymatini AKS ETTIRIB
+    #   `test_no_route_leaks_other_market_identifiers` ni O'Z-O'ZIDAN
+    #   yiqitardi (`POST /stalls/{id}/category` bilan bir xil mulohaza).
+    RouteSpec("PATCH", "/api/v1/reconciliation/cases/{case_id}"): lambda _: {"status": "in_review"},
 }
 """Tana TALAB QILADIGAN marshrutlar uchun YAROQLI so'rov tanasi.
 
@@ -1029,6 +1080,42 @@ sinalmasdi (OP-9).
   `market_a.cashier_user_id`), ya'ni YANGI SEED YOZILMAYDI (Gotcha 22):
   ikkinchi `cashier` rolli hisob a'zolik sanog'iga tayanadigan RBAC
   testlarini jimgina siljitardi.
+=============================================================================
+"""
+
+DIRECTOR_ROUTES: frozenset[RouteSpec] = frozenset(
+    {
+        RouteSpec("PATCH", "/api/v1/reconciliation/cases/{case_id}"),
+    }
+)
+"""Matritsa DIREKTOR sessiyasi bilan chaqiradigan marshrutlar (07-10).
+
+=============================================================================
+`CASHIER_ROUTES` / `INSPECTOR_ROUTES` BILAN AYNAN BIR XIL MULOHAZA, BOSHQA
+ROL — VA U HAM «PASTGA» EMAS, «YUQORIGA» QARAB ISHLAYDI.
+
+Marshrut `DISPUTE_DECIDE` talab qiladi, u esa D-07 matritsasida ⛔ **FAQAT
+`director`** da bor — bozor adminida YO'Q (UI-SPEC §5.6: navbatni bozor
+admini KO'RADI, «asosli / asossiz» HUKMINI esa direktor chiqaradi, chunki
+nizoda sotuvchi oldida u javob beradi). Ya'ni odatdagi `market_a_headers`
+(bozor admini) sessiyasi bilan javob **403** bo'lardi va
+`test_cross_tenant_object_returns_404` aynan 403 ga qarshi yozilgan
+assertion'da yiqilardi.
+
+«Yiqilmasin» deb 403 ni ruxsat etish eng yomon yechim bo'lardi: o'shanda
+HUQUQ darvozasi TENANT darvozasini butunlay YOPIB qo'yardi va «begona
+bozorning case'ini yopib bo'lmaydi» degan da'vo HECH QACHON sinalmasdi
+(OP-9 ning aynan takrori).
+
+⛔ **TO'RTALA `GET` BU RO'YXATDA ATAYIN YO'Q:** ular `REPORT_VIEW` ostida
+   va o'sha huquq `market_admin` da HAM bor, ya'ni ular ODATDAGI
+   sessiyadan o'tadi. Ularni bu yerga qo'shish marshrutlarni KUCHLIROQ
+   sessiyaga ko'chirardi va «bozor admini ham ko'radi» kafolati
+   matritsada umuman sinalmasdi.
+
+⚠ DIREKTOR `two_markets` SEED'IDAN KELADI (`market_a.director_phone`),
+  ya'ni YANGI SEED YOZILMAYDI (Gotcha 22) — `CASHIER_ROUTES` ning
+  `AuthSeed.cashier` qarori bilan aynan bir xil.
 =============================================================================
 """
 
@@ -1475,6 +1562,24 @@ def billing_rows(
         "INSERT INTO cashier_shifts (id, market_id, cashier_id, status) VALUES (%s, %s, %s, %s)",
         (str(shift_id), str(market_b.id), str(market_b.cashier_user_id), MATRIX_SHIFT_OPEN),
     )
+    # ⛔ B BOZORINING NOMUVOFIQLIK CASE'I — `case_id` FILLERI UCHUN (07-10).
+    #
+    # ⚠ NISHON — YUQORIDAGI HISOB, ya'ni case va uning nishoni AYNI
+    #   bozorda va AYNI kunda (`service_date`). Kompozit FK
+    #   (`(market_id, charge_id)`) buni STRUKTURAVIY ravishda talab
+    #   qiladi — boshqa bozorning hisobiga bog'lash IMKONSIZ.
+    #
+    # ⚠ HOLAT `new` bo'lib QOLADI (`seed_case` standarti): matritsaning
+    #   `PATCH` tanasi `in_review` yuboradi, ya'ni so'rov tenant
+    #   darvozasigacha yetib bormagan taqdirda ham nol o'tish (409)
+    #   shoxiga tushmasdi — `shift_id` ning ochiq holati bilan aynan bir
+    #   xil mulohaza (`MatrixBillingRows.case_id` docstringi).
+    case_id = seed_case(
+        sync_owner_conn,
+        market_id=market_b.id,
+        service_date=service_date,
+        charge_id=charge_id,
+    )
 
     payer_stall_id = domain_a.handover_stall_id
     assert payer_stall_id is not None, "seed `handover_stall_id` ni to'ldirmagan"
@@ -1496,6 +1601,7 @@ def billing_rows(
             payment_id=payment_id,
             payer_stall_code=payer_stall_code,
             shift_id=shift_id,
+            case_id=case_id,
         )
     finally:
         market_ids = [str(market_a.id), str(market_b.id)]
@@ -1513,6 +1619,23 @@ def billing_rows(
         # xil saqlanadi — u yerdagi qoida bu yerda ham o'qiladi.
         sync_owner_conn.execute(
             "DELETE FROM payments WHERE market_id = ANY(%s::uuid[])", (market_ids,)
+        )
+        # ⛔ CASE VA UNING TARIXI HISOBDAN OLDIN (07-10): `reconciliation_
+        #    cases.charge_id` `daily_charges` ga KOMPOZIT FK bilan
+        #    bog'langan, `reconciliation_case_events` esa case'ga —
+        #    teskari tartibda tozalash FK ni buzardi.
+        #
+        # ⚠ TARIX QATORLARI MATRITSA CHAQIRUVIDAN TUG'ILISHI MUMKIN:
+        #   `PATCH` A bozorining case'ida muvaffaqiyatli bo'lsa (bugun
+        #   bunday case YO'Q, lekin seed o'zgarishi mumkin) qator
+        #   qoladi. Shuning uchun o'chirish BOZOR bo'yicha, `case_id`
+        #   bo'yicha EMAS — `payments` bilan aynan bir xil qaror.
+        sync_owner_conn.execute(
+            "DELETE FROM reconciliation_case_events WHERE market_id = ANY(%s::uuid[])",
+            (market_ids,),
+        )
+        sync_owner_conn.execute(
+            "DELETE FROM reconciliation_cases WHERE market_id = ANY(%s::uuid[])", (market_ids,)
         )
         sync_owner_conn.execute(
             "DELETE FROM daily_charges WHERE market_id = ANY(%s::uuid[])", (market_ids,)
@@ -1632,23 +1755,52 @@ async def market_a_cashier_headers(
 
 
 @pytest.fixture
+async def market_a_director_headers(
+    api_client: httpx.AsyncClient, tenant_seed: TenantSeed
+) -> dict[str, str]:
+    """A bozori DIREKTORINING sessiyasi (`DISPUTE_DECIDE` bilan) — 07-10.
+
+    `market_a_cashier_headers` bilan aynan bir xil shakl, boshqa rol.
+    A'zoligi bitta -> bozor avtomatik tanlanadi.
+
+    ⚠ MAVJUD SEED ISHLATILADI (`two_markets.market_a.director_phone`):
+      yangi direktor hisobi YARATILMAYDI (Gotcha 22) — ikkinchi
+      `director` rolli hisob a'zolik sanog'iga tayanadigan RBAC
+      testlarini jimgina siljitardi.
+
+    ⚠ `must_change_password` bayrog'i `false` (`two_markets` seed'i
+      barcha oddiy rollarni shunday yozadi), ya'ni parol darvozasi bu
+      sessiyada UMUMAN qatnashmaydi va 403 ning sababi bir ma'noli
+      qoladi.
+    """
+    market_a = tenant_seed.base.market_a
+    return await session_headers(api_client, market_a.director_phone, SEED_PASSWORD)
+
+
+@pytest.fixture
 def headers_for(
     market_a_headers: dict[str, str],
     market_a_admin_headers: dict[str, str],
     market_a_inspector_headers: dict[str, str],
     market_a_cashier_headers: dict[str, str],
+    market_a_director_headers: dict[str, str],
 ) -> Callable[[RouteSpec], dict[str, str]]:
     """Marshrutga MOS keladigan A-bozor sessiyasini tanlaydi.
 
-    Tanlov UCH ro'yxat bo'yicha (`PLATFORM_ADMIN_ROUTES`,
-    `INSPECTOR_ROUTES`, `CASHIER_ROUTES`) va boshqa hech qanday shart
-    yo'q: sessiya HAR DOIM **A bozoriga** tegishli, ya'ni "begona bozor
-    obyekti -> 404" da'vosi o'zgarmaydi. Farq faqat HUQUQ darajasida.
+    Tanlov TO'RT ro'yxat bo'yicha (`PLATFORM_ADMIN_ROUTES`,
+    `INSPECTOR_ROUTES`, `CASHIER_ROUTES`, `DIRECTOR_ROUTES`) va boshqa
+    hech qanday shart yo'q: sessiya HAR DOIM **A bozoriga** tegishli,
+    ya'ni "begona bozor obyekti -> 404" da'vosi o'zgarmaydi. Farq faqat
+    HUQUQ darajasida.
 
     ⛔ UCHINCHI SHOX 06-09 DA QO'SHILDI VA U MAJBURIY: usiz
        `test_cross_tenant_object_returns_404` ikkala to'lov marshrutida
        ham **403** olardi (bozor adminida `payment_create` YO'Q) va 404
        asserti yiqilardi — `CASHIER_ROUTES` docstringidagi OP-9.
+
+    ⛔ TO'RTINCHI SHOX 07-10 DA QO'SHILDI VA SABAB AYNAN O'SHA:
+       `PATCH /reconciliation/cases/{id}` `DISPUTE_DECIDE` talab qiladi
+       va u bozor adminida YO'Q (`DIRECTOR_ROUTES` docstringi).
     """
 
     def _pick(route: RouteSpec) -> dict[str, str]:
@@ -1658,6 +1810,8 @@ def headers_for(
             return market_a_inspector_headers
         if route in CASHIER_ROUTES:
             return market_a_cashier_headers
+        if route in DIRECTOR_ROUTES:
+            return market_a_director_headers
         return market_a_headers
 
     return _pick
@@ -1992,6 +2146,12 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             #   ham smena yoziladi, LEKIN u bu ro'yxatga KIRMAYDI —
             #   `payment_id` bandi bilan aynan bir xil sabab.
             tenant_seed.billing.shift_id,
+            # --- 07-10 ---
+            #
+            # ⚠ AYNAN o'sha fixture yozgan B bozorining nomuvofiqlik
+            #   case'i (`charge_id` ga bog'langan). A bozorida case
+            #   UMUMAN yo'q, ya'ni bu ro'yxat bo'shashmaydi.
+            tenant_seed.billing.case_id,
         )
     }
 
@@ -2322,6 +2482,48 @@ async def test_cashier_routes_really_need_the_payment_permission(
     assert response.status_code == 403, (
         f"{route.test_id}: bozor admini {response.status_code} oldi — "
         "marshrut `CASHIER_ROUTES` da bo'lishi shart emas"
+    )
+
+
+def test_director_routes_point_at_live_routes() -> None:
+    """`DIRECTOR_ROUTES` da o'chirilgan marshrut QOLIB KETMAGAN (07-10).
+
+    `CASHIER_ROUTES` / `INSPECTOR_ROUTES` bilan aynan bir xil sabab:
+    eskirgan yozuv o'zi zararsiz, lekin marshrut BOSHQA ma'noda qayta
+    paydo bo'lganda u tug'ilishidanoq direktor sessiyasi bilan
+    chaqirilardi va uning haqiqiy huquq darvozasi umuman sinalmasdi.
+    """
+    live = set(all_routes(fastapi_app))
+    stale = sorted(route.test_id for route in DIRECTOR_ROUTES if route not in live)
+
+    assert not stale, f"`DIRECTOR_ROUTES` da mavjud bo'lmagan marshrutlar: {stale}"
+
+
+@pytest.mark.parametrize("route", sorted(DIRECTOR_ROUTES), ids=_route_id)
+async def test_director_routes_really_need_the_dispute_permission(
+    api_client: httpx.AsyncClient,
+    tenant_seed: TenantSeed,
+    market_a_headers: dict[str, str],
+    route: RouteSpec,
+) -> None:
+    """Ro'yxatdagi marshrut bozor admini uchun ROSTDAN 403 beradi (07-10).
+
+    `test_cashier_routes_really_need_the_payment_permission` ning aynan
+    jufti va u `DIRECTOR_ROUTES` ning O'ZINI himoya qiladi: usiz kimdir
+    `REPORT_VIEW` ostidagi marshrutni ro'yxatga qo'shib, uni KUCHLIROQ
+    sessiyaga ko'chirardi — o'shanda «bozor admini ham navbatni ko'radi»
+    kafolati matritsada umuman sinalmasdi.
+
+    ⚠ `dispute_decide` huquqi `Depends()` da, ya'ni u handler tanasidan
+      OLDIN baholanadi va 403 har qanday yo'l parametrida keladi —
+      begona `case_id` ham SHU sababdan xavfsiz (404 undan KEYIN
+      bo'lardi, oldin emas).
+    """
+    response = await call_route(api_client, route, tenant_seed, headers=market_a_headers)
+
+    assert response.status_code == 403, (
+        f"{route.test_id}: bozor admini {response.status_code} oldi — "
+        "marshrut `DIRECTOR_ROUTES` da bo'lishi shart emas"
     )
 
 

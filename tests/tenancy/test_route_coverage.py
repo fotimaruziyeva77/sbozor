@@ -400,6 +400,119 @@ def test_no_bot_internal_route_enters_the_personal_data_gate() -> None:
 
 
 # ===========================================================================
+# `/reconciliation/*` — BESH MARSHRUT, IKKI HUQUQ (07-10, RECON-01/RECON-02)
+# ===========================================================================
+
+RECONCILIATION_PREFIX = "/api/v1/reconciliation"
+"""⛔ Nomuvofiqlik yuzasi — REYESTRDA QAYD ETILADI, «unutilgan» emas.
+
+=============================================================================
+⛔⛔ NEGA BU YERDA, VA NEGA `/internal/bot/*` DAN BOSHQA SHAKLDA.
+
+Bot yuzasi matritsadan CHIQARILGAN (`EXEMPT_ROUTES`), ya'ni uning
+mavjudligini alohida qayd etish kerak edi. Bu yuza esa TO'LIQ tenant
+resursi va u matritsaga AVTOMATIK tushadi — `test_no_unclassified_routes`
+`case_id` uchun filler talab qiladi va u `PARAM_FILLERS` da B bozorining
+HAQIQIY case'i bilan yozilgan.
+
+Shunday bo'lsa ham quyidagi uch da'vo KERAK va ular avtomatik qamrovdan
+CHIQIB QOLADI:
+
+  (a) marshrutlar soni va nomlari — router jimgina o'chirilsa yoki qayta
+      nomlansa (b) va (c) TRIVIAL ravishda rost bo'lardi (05-16 ning W-2
+      darsi, `test_the_bot_internal_surface_is_exactly_three_routes` ning
+      aynan sababi);
+  (b) beshalasi ham OpenAPI'da BOR — bot yuzasidan ATAYIN TESKARI da'vo:
+      bu yuzaning mijozi BRAUZER va kontrakt `frontend/src/lib/*` ga
+      shu sxemadan ko'chiriladi (07-15/07-16);
+  (c) beshalasi ham `PERSONAL_ROUTES` GA TUSHMAYDI (G7-6, D-05).
+=============================================================================
+"""
+
+RECONCILIATION_ROUTES = (
+    "/api/v1/reconciliation/cases",
+    "/api/v1/reconciliation/cases/{case_id}",
+    "/api/v1/reconciliation/hit-rate",
+    "/api/v1/reconciliation/report",
+)
+"""To'rt YO'L, besh MARSHRUT: `cases/{case_id}` da `GET` VA `PATCH` bor."""
+
+
+def _reconciliation_paths() -> list[str]:
+    """`/api/v1/reconciliation` bilan boshlanadigan yo'llar — YURISHDAN olinadi."""
+    return sorted(
+        {
+            route.path
+            for route in all_routes(fastapi_app)
+            if route.path.startswith(RECONCILIATION_PREFIX)
+        }
+    )
+
+
+def test_the_reconciliation_surface_is_exactly_five_routes() -> None:
+    """DARVOZANING NAZORATI — pastdagi ikki test BO'SH to'plamda yashil bo'lmaydi.
+
+    ⛔ To'plam TENGLIGI bilan (D-31), «kamida beshtasi» bilan EMAS: oltinchi
+       marshrut qo'shilishi ONGLI qaror va u shu yerda ko'rinishi kerak —
+       ayniqsa u `PATCH` yoki `DELETE` bo'lsa (case tarixi o'zgarmas,
+       D-14).
+    """
+    walked = {
+        (route.method, route.path)
+        for route in all_routes(fastapi_app)
+        if route.path.startswith(RECONCILIATION_PREFIX)
+    }
+
+    assert _reconciliation_paths() == list(RECONCILIATION_ROUTES)
+    assert walked == {
+        ("GET", "/api/v1/reconciliation/report"),
+        ("GET", "/api/v1/reconciliation/cases"),
+        ("GET", "/api/v1/reconciliation/cases/{case_id}"),
+        ("PATCH", "/api/v1/reconciliation/cases/{case_id}"),
+        ("GET", "/api/v1/reconciliation/hit-rate"),
+    }, sorted(walked)
+
+
+def test_every_reconciliation_route_is_documented_in_openapi() -> None:
+    """⛔ Beshalasi ham OpenAPI'da BOR — `/internal/bot/*` dan TESKARI da'vo.
+
+    Bu yuzaning mijozi BRAUZER: 07-15 (hisobot) va 07-16 (case navbati)
+    klient sxemasini shu kontraktdan oladi. `include_in_schema=False`
+    bilan yozilgan marshrut frontend darvozalariga UMUMAN ko'rinmasdi va
+    ikki tomon jimgina ajralib ketardi.
+    """
+    documented = {
+        (method.upper(), path)
+        for path, operations in fastapi_app.openapi()["paths"].items()
+        for method in operations
+        if path.startswith(RECONCILIATION_PREFIX)
+    }
+
+    assert len(documented) == 5, sorted(documented)
+    assert {path for _, path in documented} == set(RECONCILIATION_ROUTES)
+
+
+def test_no_reconciliation_route_enters_the_personal_data_gate() -> None:
+    """⛔ G7-6 / D-05: `PERSONAL_ROUTES` O'SMAYDI.
+
+    Case yuzasi 6-fazaning C-10 qoidasini ⛔ KENGAYTIRMAYDI: u ham faqat
+    `vendor_id` qaytaradi. Ismni qo'shish moliyaviy-nomuvofiqlik yuzasini
+    shaxsiy-ma'lumot yuzasiga aylantirardi va undan `audit_read` +
+    `VENDOR_VIEW` talab qilinardi.
+
+    ⚠ Da'vo `test_personal_data_coverage.py::
+      test_reconciliation_routes_are_not_personal` da IKKINCHI, MUSTAQIL
+      shaklda o'lchanadi (u javob MODELINING maydonlaridan yuradi).
+      Bu yerdagisi MARSHRUT REYESTRIDAN yuradi — ikki yo'nalish ATAYIN.
+    """
+    from tenancy.test_personal_data_coverage import PERSONAL_ROUTES
+
+    leaked = [path for path in PERSONAL_ROUTES if path.startswith(RECONCILIATION_PREFIX)]
+
+    assert leaked == [], leaked
+
+
+# ===========================================================================
 # BILLING DOMENINING `detail` KONVENSIYASI (CR-04 / WR-06)
 # ===========================================================================
 
