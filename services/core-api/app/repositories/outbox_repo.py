@@ -274,17 +274,22 @@ _CLAIM_DUE = text(
          ORDER BY o.created_at, o.id
          LIMIT :batch
          FOR UPDATE OF o SKIP LOCKED
+    ),
+    claimed AS (
+        UPDATE notification_outbox o
+           SET status = :sent,
+               attempt_count = o.attempt_count + 1,
+               lease_until = :now + make_interval(secs => :lease_seconds),
+               updated_at = now()
+          FROM due
+         WHERE o.market_id = :market_id
+           AND o.id = due.id
+        RETURNING o.id, o.market_id, o.kind, o.recipient_kind, o.vendor_id,
+                  o.payload, o.attempt_count, o.created_at
     )
-    UPDATE notification_outbox o
-       SET status = :sent,
-           attempt_count = o.attempt_count + 1,
-           lease_until = :now + make_interval(secs => :lease_seconds),
-           updated_at = now()
-      FROM due
-     WHERE o.market_id = :market_id
-       AND o.id = due.id
-    RETURNING o.id, o.market_id, o.kind, o.recipient_kind, o.vendor_id,
-              o.payload, o.attempt_count
+    SELECT id, market_id, kind, recipient_kind, vendor_id, payload, attempt_count
+      FROM claimed
+     ORDER BY created_at, id
     """
 ).bindparams(
     bindparam("market_id", type_=_UUID),
@@ -332,6 +337,36 @@ olardi — jimgina, xatosiz, «to'g'ri ishlagan» so'rov bilan.
 ⚠ TARTIB `created_at, id` — ENG ESKI BIRINCHI. Aks holda partiya
   chegarasiga (`LIMIT`) urilgan navbatda eski qator har tikda ORQAGA
   surilardi va kvitansiya cheksiz kutardi.
+
+=============================================================================
+⛔⛔ TARTIB IKKI JOYDA YOZILGAN VA IKKALASI HAM MAJBURIY — BU O'LCHANGAN
+    NUQSON (07-12 ning topilmasi, 07-14 da tuzatildi).
+
+CTE ning `ORDER BY` i faqat ⛔ QAYSI qatorlar tanlanishini belgilaydi
+(`LIMIT` bilan birga ishlaydi). Tashqi `UPDATE ... FROM due ... RETURNING`
+ning CHIQISH TARTIBI esa PostgreSQL da ⛔ KAFOLATLANMAYDI: planer `due`
+ni jadval bilan hash yoki merge join qiladi va natija tartibi rejaga
+qarab o'zgaradi.
+
+Oqibati AYNAN kuzatilgan: `test_the_oldest_row_is_claimed_first` to'liq
+to'plamning 1-yugurishida QIZIL, 2-yugurishida YASHIL bo'ldi, yolg'iz
+yugurtirilganda esa 21/21 yashil edi. Qatorlar TO'G'RI tanlangan —
+faqat ularning TARTIBI o'zgargan.
+
+⛔ TUZATISH TESTDA EMAS, SO'ROVDA: `UPDATE` `claimed` CTE siga o'raldi va
+   yakuniy `SELECT` ⛔ O'Z `ORDER BY` ini oladi. `UPDATE ... RETURNING`
+   ning O'ZIGA `ORDER BY` yozib bo'lmaydi (PostgreSQL grammatikasi buni
+   qabul qilmaydi), shuning uchun tartib yakuniy proyeksiyada beriladi.
+   `created_at` shu sababdan `RETURNING` ro'yxatida turadi va yakuniy
+   `SELECT` dan CHIQARIB tashlanadi: u tartib uchun kerak, chaqiruvchiga
+   emas (`OutboxClaim` maydonlari O'ZGARMADI).
+
+⚠ NEGA TESTNI «yumshatish» RAD ETILDI: test tartibni ATAYIN o'lchaydi
+  (yuqoridagi ⚠) va uni to'plam tengligiga aylantirish D-21 ning
+  «kvitansiya cheksiz kutmaydi» da'vosini o'lchovsiz qoldirardi.
+  Vaqti-vaqti bilan qizaradigan darvoza esa eng yomon sinf: u odamlarni
+  QARASHGA emas, QAYTA YUGURTIRISHGA o'rgatadi.
+=============================================================================
 
 ⚠ `FOR UPDATE OF o` — FAQAT navbat qatori qulflanadi. `markets` va
   `market_notification_settings` O'QISH uchun qo'shilgan; ularni qulflash
