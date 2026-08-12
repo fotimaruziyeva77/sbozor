@@ -43,6 +43,7 @@ bilan qo'riqlanadi (`test_compose_parser_reads_both_command_shapes`).
 
 from __future__ import annotations
 
+import ast
 import importlib
 import inspect
 import re
@@ -101,12 +102,57 @@ FOREIGN_HOOK_MARKERS: Final[tuple[str, ...]] = (
     "TaskiqEvents.WORKER_STARTUP",
     "TaskiqEvents.CLIENT_STARTUP",
     "lifespan=",
+    "dp.startup.register",
 )
 """Kirish nuqtasi faylida ISHGA TUSHISH reyestriga ulanish belgilari.
 
 Faqat `init_sentry(` ni izlash yetmasdi: chaqiruv hech qachon
 chaqirilmaydigan yordamchi funksiyada ham turishi mumkin. Bu belgilar
 faylda ishga tushish ilmog'i UMUMAN mavjudligini talab qiladi.
+
+=============================================================================
+⚠⚠ `dp.startup.register` 07-01 DA QO'SHILDI VA U «YANA BITTA NOM» EMAS.
+
+7-faza loyihaning UCHINCHI servisini keltirdi (aiogram bilan) va uning
+ishga tushish ilmog'i yuqoridagi UCHALA belgiga ham MOS KELMAYDI: aiogram
+na `taskiq` hodisalarini, na FastAPI ning `lifespan=` argumentini
+ishlatadi. Ishga tushish reyestriga ulanishning aiogram dagi nomi —
+`Dispatcher` ning `startup` observeri.
+
+⛔ MARKER **SHAKL** BO'YICHA YOZILGAN, SERVIS **NOMI** BO'YICHA EMAS
+   (04-12 darsi): bu fayl birorta servis nomini HECH QAYERDA tashimaydi
+   va bu `grep` bilan o'lchanadi. Ertaga to'rtinchi konteyner o'sha
+   aiogram shaklida qo'shilsa, u AVTOMATIK ravishda shu talab ostiga
+   tushadi.
+=============================================================================
+"""
+
+MODULE_RUN_ATTRIBUTE: Final = "main"
+"""`python -m <modul>` shaklida ishga tushiriladigan jarayonning ATRIBUTI.
+
+=============================================================================
+⚠⚠ NEGA (b) BOSQICHIGA IKKINCHI SHAKL KERAK BO'LDI (07-01).
+
+`uvicorn` va `taskiq` kirish nuqtasini ARGUMENT sifatida oladi
+(`app.main:app`), ya'ni `command` ning o'zi «qaysi obyekt?» savoliga javob
+beradi. `aiogram` esa bunday argumentni UMUMAN QABUL QILMAYDI — uning
+yagona to'g'ri ishga tushirish yo'li `python -m app.main`.
+
+O'shanda `command` da `modul:atribut` shaklidagi token BO'LMAYDI va (b)
+bosqichi «kirish nuqtasi topilmadi» deb yiqilardi — nosozlik KO'RINARDI,
+lekin sababi NOTO'G'RI o'qilardi («compose buzuq» deb). Shuning uchun
+darvoza kengaytirildi: `modul:atribut` topilmasa, `-m <modul>` juftligi
+o'qiladi va atribut sifatida SHU konstanta olinadi.
+
+⛔ SHUNING UCHUN KIRISH NUQTASI MODULI `main` NOMLI **MODUL DARAJASIDAGI**
+   ATRIBUTNI E'LON QILISHI SHART — (c) bosqichi aynan shuni tekshiradi
+   (`^main\\s*[:=]`). `async def main()` bu shartni BAJARMAYDI va bu
+   o'sha kirish nuqtasi faylining O'ZIDA ochiq yozilgan.
+
+⛔ «IKKALASI HAM TOPILMADI» -> HAMON `pytest.fail`. «O'tkazib yuborish»
+   shoxi qo'shilmadi: aynan o'sha yo'l 04-12 ning darvozasini uchinchi
+   jarayonda jimgina bo'shatgan edi.
+=============================================================================
 """
 
 SENTRY_ENV_KEY: Final = "SENTRY_DSN"
@@ -164,6 +210,16 @@ _ENTRYPOINT = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*:[A-Za-z_]\w*$")
   `${FORWARDED_ALLOW_IPS:-172.16.0.0/12}` bor va u ham ikki nuqta tashiydi.
   Naqsh identifikatordan boshlanishni talab qiladi, ya'ni compose
   o'zgaruvchisi kirish nuqtasi bo'lib ko'rinmaydi (o'lchandi).
+"""
+
+_MODULE_NAME = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
+"""`-m` dan KEYIN kelishi mumkin bo'lgan yagona shakl — nuqtali modul yo'li.
+
+⚠ `_ENTRYPOINT` BILAN BIR XIL SHAKL, LEKIN IKKI NUQTASIZ. Alohida naqsh
+  yozilgani ataylab: `-m` dan keyin bayroq (`-q`) yoki compose o'zgaruvchisi
+  (`${...}`) kelsa, uni modul nomi deb qabul qilish (c) bosqichini MAVJUD
+  BO'LMAGAN faylga yuborardi va xato matni «fayl topilmadi» bo'lib,
+  haqiqiy sabab («buyruq shakli boshqa») YO'QOLARDI.
 """
 
 
@@ -383,6 +439,105 @@ def test_compose_parser_reads_both_command_shapes(compose_services: dict[str, _S
 # ---------------------------------------------------------------------------
 
 
+def test_entrypoint_reader_handles_both_launch_shapes(
+    sentry_services: tuple[_Service, ...],
+) -> None:
+    """NAZORAT TESTI: (b) bosqichining IKKALA shoxi ham HAQIQATAN ishlatilyapti.
+
+    =========================================================================
+    ⚠⚠ USIZ 07-01 NING KENGAYTMASI JIMGINA ESKIRARDI.
+
+    `-m` shoxi qo'shilgandan keyin ikki xil jimgina yemirilish mumkin:
+
+      1. `modul:atribut` shakli compose'dan yo'qoladi (masalan hamma
+         jarayon `python -m` ga o'tadi) — o'shanda birinchi shox HECH
+         QACHON ishlamasdi va uning buzilgani BILINMASDI;
+      2. `-m` shakli yo'qoladi — o'shanda kengaytmaning O'ZI o'lik kodga
+         aylanardi va keyingi ijrochi uni «ortiqcha» deb olib tashlardi.
+
+    Ikkala holatda ham yuqoridagi darvoza YASHIL qolardi, chunki u har
+    servisni ALOHIDA ko'radi va «qaysi shoxlar ishlatildi?» degan savolni
+    umuman so'ramaydi.
+
+    ⛔ NAZORAT SERVIS NOMI BO'YICHA EMAS, **SHAKL** BO'YICHA yozilgan
+       (`test_compose_parser_reads_both_command_shapes` naqshi): nom
+       ro'yxati aynan shu darvozani 04-12 da eskirtirgan naqsh edi. Shu
+       sababdan bu faylda birorta servis nomi literal sifatida YO'Q.
+    =========================================================================
+    """
+    colon_shaped = [service.name for service in sentry_services if _colon_targets(service.command)]
+    module_shaped = [
+        service.name
+        for service in sentry_services
+        if not _colon_targets(service.command) and _module_run_targets(service.command)
+    ]
+
+    assert colon_shaped, (
+        "`SENTRY_DSN` oladigan birorta jarayon `modul:atribut` shaklida ishga "
+        f"tushirilmayapti (ko'rilgan buyruqlar: "
+        f"{[list(service.command) for service in sentry_services]}). (b) bosqichining "
+        "BIRINCHI shoxi endi hech qachon ishlamaydi, ya'ni u sinalmagan kodga "
+        "aylandi — shoxni olib tashlash yoki bu nazoratni qayta o'lchash kerak."
+    )
+    assert module_shaped, (
+        "`SENTRY_DSN` oladigan birorta jarayon `-m <modul>` shaklida ishga "
+        f"tushirilmayapti (ko'rilgan buyruqlar: "
+        f"{[list(service.command) for service in sentry_services]}). Bu shox 07-01 da "
+        "aiogram uchun qo'shilgan edi (u `modul:atribut` argumentini UMUMAN qabul "
+        "qilmaydi); ishlatilmayotgan bo'lsa kengaytma O'LIK KOD va uni keyingi "
+        "ijrochi «ortiqcha» deb olib tashlardi."
+    )
+
+
+def test_source_layer_ignores_comments_and_docstrings() -> None:
+    """NAZORAT TESTI: IZOH darvozani QANOATLANTIRMAYDI (07-01 sabotaj topilmasi).
+
+    =========================================================================
+    ⚠⚠ BU TEST BO'LMASA `_executable_source` JIMGINA QAYTA BUZILARDI.
+
+    O'lchangan holat: kirish nuqtasidan `init_sentry(...)` chaqiruvi olib
+    tashlanganda darvoza YASHIL qolgan edi, chunki o'sha nom faylning
+    DOCSTRINGIDA tushuntirilgan. Ya'ni «yaxshi hujjatlangan fayl» darvozani
+    avtomatik qanoatlantirardi.
+
+    Quyidagi namuna aynan o'sha shaklni takrorlaydi: `init_sentry(` VA
+    ilmoq markeri FAQAT izoh va docstringda uchraydi, bajariladigan kodda
+    esa YO'Q.
+    =========================================================================
+    """
+    disguised = (
+        '"""Modul docstringi: bu yerda `init_sentry(` va `dp.startup.register` bor."""\n'
+        "\n"
+        "# Izoh: init_sentry(settings.sentry_dsn) va dp.startup.register(_on_startup)\n"
+        "main = 1\n"
+        "\n"
+        "\n"
+        "def _hook() -> None:\n"
+        '    """Funksiya docstringi: init_sentry( shu yerda ham eslatiladi."""\n'
+        "    return None\n"
+    )
+
+    executable = _executable_source(disguised)
+
+    assert INIT_MARKER not in executable, (
+        f"`{INIT_MARKER}` faqat izoh/docstringda bo'lsa ham BAJARILADIGAN kodda "
+        f"ko'rinyapti — `_executable_source` buzilgan:\n{executable}"
+    )
+    for marker in FOREIGN_HOOK_MARKERS:
+        assert marker not in executable, (
+            f"ilmoq markeri `{marker}` faqat izoh/docstringda bo'lsa ham "
+            f"BAJARILADIGAN kodda ko'rinyapti:\n{executable}"
+        )
+
+    # QUYI CHEGARA: transformator hamma narsani o'chirib tashlagan bo'lsa
+    # yuqoridagi ikki da'vo BO'SH satrda jimgina o'tardi.
+    assert re.search(r"^main\s*[:=]", executable, re.MULTILINE), (
+        "bajariladigan e'lon (`main = 1`) ham yo'qolgan — `_executable_source` "
+        f"manbani BUTUNLAY yo'q qilyapti va u holda hamma «yo'q» da'vosi "
+        f"ma'nosiz bo'lardi:\n{executable}"
+    )
+
+
 def test_every_sentry_process_is_found(sentry_services: tuple[_Service, ...]) -> None:
     """(a) BOSQICHI: `SENTRY_DSN` oladigan jarayonlar topildi va ular kamida uchta."""
     assert len(sentry_services) >= MIN_SENTRY_SERVICES, (
@@ -393,28 +548,62 @@ def test_every_sentry_process_is_found(sentry_services: tuple[_Service, ...]) ->
     )
 
 
+def _colon_targets(command: tuple[str, ...]) -> list[str]:
+    """`modul:atribut` shaklidagi tokenlar (`uvicorn`/`taskiq` shakli)."""
+    return [token for token in command if _ENTRYPOINT.match(token)]
+
+
+def _module_run_targets(command: tuple[str, ...]) -> list[str]:
+    """`-m <modul>` juftligidagi MODUL nomlari (`python -m app.main` shakli).
+
+    ⚠ `-m` DAN KEYINGI TOKEN O'ZI HAM TEKSHIRILADI: `python -m` dan keyin
+      bayroq kelsa (masalan `-m -q`) u modul nomi EMAS va uni shunday deb
+      qabul qilish (c) bosqichini mavjud bo'lmagan faylga yuborardi.
+    """
+    return [
+        nxt
+        for flag, nxt in zip(command, command[1:], strict=False)
+        if flag == "-m" and _MODULE_NAME.match(nxt)
+    ]
+
+
 def _entrypoint_of(service: _Service) -> tuple[str, str]:
-    """(b) BOSQICHI: buyruq tokenlaridan AYNAN BITTA `modul:atribut` chiqariladi.
+    """(b) BOSQICHI: buyruq tokenlaridan AYNAN BITTA kirish nuqtasi chiqariladi.
+
+    IKKI ISHGA TUSHIRISH SHAKLI HAM QO'LLAB-QUVVATLANADI VA IKKALASI HAM
+    `compose.yaml` DA MAVJUD (`MODULE_RUN_ATTRIBUTE` docstringi):
+
+        `uvicorn`/`taskiq` shakli          `python -m` shakli
+        -------------------------          ------------------
+        `app.main:app`                     `python -m app.main`
+        `app.worker:broker`                -> (`app.main`, `main`)
 
     ⛔ TOPILMASA `pytest.fail` — VA AYNAN SHU YOLG'IZ SATR DARVOZANI
-       «HOSILA» QILADI. To'rtinchi jarayon boshqa shakldagi buyruq bilan
-       qo'shilsa (masalan `["python", "-m", "app.something"]`) darvoza uni
-       JIMGINA o'tkazib yubormaydi — u yiqiladi va sabab xabarda yoziladi.
+       «HOSILA» QILADI. Beshinchi jarayon UCHINCHI shakldagi buyruq bilan
+       qo'shilsa (masalan `["sh", "-c", "..."]`) darvoza uni JIMGINA
+       o'tkazib yubormaydi — u yiqiladi va sabab xabarda yoziladi.
     """
-    matches = [token for token in service.command if _ENTRYPOINT.match(token)]
-    if len(matches) != 1:
-        pytest.fail(
-            f"`{service.name}` servisi `{SENTRY_ENV_KEY}` ni oladi, lekin darvoza uning "
-            f"kirish nuqtasini `command` dan chiqara olmadi: `modul:atribut` shaklidagi "
-            f"{len(matches)} ta token topildi ({matches}), AYNAN BITTA kutilgan.\n"
-            f"  command = {list(service.command)}\n"
-            "Bu servis bizning kodimizni boshqa shaklda yuritayotgan bo'lsa, "
-            "darvozani (b) bosqichida kengaytiring — TESTNI O'CHIRMANG: aynan "
-            "«jimgina o'tkazib yuborish» 04-12 ning darvozasini uchinchi jarayonda "
-            "bo'shatgan edi."
-        )
-    module_name, _, attribute = matches[0].partition(":")
-    return module_name, attribute
+    colon_matches = _colon_targets(service.command)
+    if len(colon_matches) == 1:
+        module_name, _, attribute = colon_matches[0].partition(":")
+        return module_name, attribute
+
+    module_matches = _module_run_targets(service.command)
+    if not colon_matches and len(module_matches) == 1:
+        return module_matches[0], MODULE_RUN_ATTRIBUTE
+
+    pytest.fail(
+        f"`{service.name}` servisi `{SENTRY_ENV_KEY}` ni oladi, lekin darvoza uning "
+        f"kirish nuqtasini `command` dan chiqara olmadi: `modul:atribut` shaklidagi "
+        f"{len(colon_matches)} ta token ({colon_matches}) va `-m <modul>` shaklidagi "
+        f"{len(module_matches)} ta token ({module_matches}) topildi — ikkala "
+        "ro'yxatdan AYNAN BITTASIDA bitta element kutilgan.\n"
+        f"  command = {list(service.command)}\n"
+        "Bu servis bizning kodimizni UCHINCHI shaklda yuritayotgan bo'lsa, "
+        "darvozani (b) bosqichida kengaytiring — TESTNI O'CHIRMANG: aynan "
+        "«jimgina o'tkazib yuborish» 04-12 ning darvozasini uchinchi jarayonda "
+        "bo'shatgan edi."
+    )
 
 
 def _lifespan_sources(app: FastAPI) -> list[str]:
@@ -467,6 +656,61 @@ def _handler_sources(broker: AsyncBroker, event: TaskiqEvents) -> list[str]:
     return [inspect.getsource(handler) for handler in broker.event_handlers[event]]
 
 
+class _DocstringStripper(ast.NodeTransformer):
+    """Modul/sinf/funksiya DOCSTRINGLARINI olib tashlaydi."""
+
+    def _strip(self, node: ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):  # type: ignore[no-untyped-def]
+        self.generic_visit(node)
+        body = node.body
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            node.body = body[1:] or [ast.Pass()]
+        return node
+
+    visit_Module = _strip
+    visit_ClassDef = _strip
+    visit_FunctionDef = _strip
+    visit_AsyncFunctionDef = _strip
+
+
+def _executable_source(source: str) -> str:
+    """Manbaning FAQAT BAJARILADIGAN qismi — izohlarsiz va docstringlarsiz.
+
+    =========================================================================
+    ⚠⚠ BU O'ZGARISH 07-01 DA SABOTAJ BILAN TOPILDI — TAXMIN QILINMADI.
+
+    O'lchov (2026-08-12, `tests` konteyneri): begona kirish nuqtasidan
+    `init_sentry(...)` CHAQIRUVI olib tashlandi va bu darvoza YASHIL
+    qoldi. Sabab — `INIT_MARKER in source` XOM MATNNI ko'radi, kirish
+    nuqtasi fayli esa o'sha nomni O'Z DOCSTRINGIDA tushuntiradi
+    («`init_sentry()` ni modul darajasida chaqirish...»). Ya'ni IZOHNING
+    O'ZI darvozani qanoatlantirardi.
+
+    Bu aynan shu darvoza qarshi kurashayotgan «jimgina yolg'on» sinfi,
+    faqat bir qavat yuqorida: hujjat qanchalik yaxshi yozilsa, darvoza
+    shunchalik BO'SH bo'lardi.
+
+    Yechim: manba `ast` bilan qayta quriladi. `ast.unparse` izohlarni
+    UMUMAN tashlaydi, docstringlar esa yuqoridagi transformer bilan
+    olinadi. Natijada UCHALA shart ham (`atribut`, `ilmoq`, `init_sentry(`)
+    BAJARILADIGAN kod ustida tekshiriladi.
+
+    ⚠ CHEGARASI OCHIQ VA U YASHIRILMAYDI: docstring bo'lmagan satr
+      literali (masalan `log.info("init_sentry(")`) hamon o'tib ketardi.
+      Bu ANCHA tor teshik va uni yopish uchun to'liq chaqiruv grafi kerak
+      bo'lardi; obyekt darajasidagi to'liq o'lchov esa o'sha servisning
+      O'Z konteynerida yuradi (`test_sentry_entrypoints.py`).
+    =========================================================================
+    """
+    tree = _DocstringStripper().visit(ast.parse(source))
+    ast.fix_missing_locations(tree)
+    return ast.unparse(tree)
+
+
 def _assert_foreign_entrypoint_installs_sentry(
     service: _Service, code_root: Path, module_name: str, attribute: str
 ) -> None:
@@ -500,7 +744,10 @@ def _assert_foreign_entrypoint_installs_sentry(
         "ishga tushishda `ModuleNotFoundError` bilan yiqilardi."
     )
 
-    source = module_file.read_text(encoding="utf-8")
+    # ⚠⚠ XOM MATN EMAS, BAJARILADIGAN KOD (`_executable_source` docstringi):
+    #    izoh va docstring quyidagi UCHALA shartni ham SOXTA qanoatlantirardi
+    #    va bu 07-01 da sabotaj bilan O'LCHANDI.
+    source = _executable_source(module_file.read_text(encoding="utf-8"))
 
     assert re.search(rf"^{re.escape(attribute)}\s*[:=]", source, re.MULTILINE), (
         f"{label}: `{attribute}` atributi `{module_file.name}` da modul darajasida "

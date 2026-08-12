@@ -73,12 +73,14 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-# ⚠ `services/cv-service` — LOYIHANING IKKINCHI TOOLCHAIN'I (05-02, W0-2).
-#   U o'z `pyproject.toml` idagi ruff/mypy bloklari bilan `npm run cv:lint`
-#   ostida, `cv-tests` konteynerida tekshiriladi. Ikki konfiguratsiya bir
-#   xil fayllarni tekshirsa ular sekin-asta ajralib ketardi: `cv-service`
-#   ga qo'shilgan per-file-ignore `npm run cv:lint` da o'tib, `npm run
-#   lint` da yiqilardi va sabab kodda emas, ikki nusxada bo'lardi.
+# ⚠ `services/cv-service` — LOYIHANING IKKINCHI TOOLCHAIN'I (05-02, W0-2),
+#   `services/bot-service` — UCHINCHISI (07-01, D-09).
+#   Ikkalasi ham o'z `pyproject.toml` idagi ruff/mypy bloklari bilan
+#   `npm run cv:lint` / `npm run bot:lint` ostida, O'Z konteynerida
+#   tekshiriladi. Ikki konfiguratsiya bir xil fayllarni tekshirsa ular
+#   sekin-asta ajralib ketardi: begona servisga qo'shilgan per-file-ignore
+#   o'sha servisning lintida o'tib, `npm run lint` da yiqilardi va sabab
+#   kodda emas, IKKI NUSXADA bo'lardi.
 extend-exclude = [
     ".venv",
     "node_modules",
@@ -86,6 +88,7 @@ extend-exclude = [
     "frontend",
     ".next",
     "services/cv-service",
+    "services/bot-service",
 ]
 
 [tool.ruff.lint]
@@ -117,7 +120,20 @@ plugins = []
 #    konfiguratsiyasi va O'Z bog'liqliklari bilan yuritadi (u yerda
 #    `onnxruntime`/`supervision` stublari kerak, bu yerda esa ular
 #    o'rnatilmagan ham).
-exclude = ["^frontend/", "^\\.planning/", "^services/cv-service/"]
+#
+# ⚠⚠ `services/bot-service` 07-01 DA QO'SHILDI VA SABAB AYNAN O'SHA —
+#    QAYTA O'LCHANDI (2026-08-12, `tests` konteynerida):
+#
+#      services/core-api/app/__init__.py: error: Duplicate module named
+#      "app" (also at "./services/bot-service/app/__init__.py")
+#      Found 1 error in 1 file (errors prevented further checking)
+#
+#    Ya'ni uchinchi servisning tug'ilishi `npm run lint` ni BUTUNLAY
+#    to'xtatardi va nosozlik `bot-service` da emas, `core-api` da
+#    ko'rsatilardi. `bot-service` o'z `mypy` ini `npm run bot:lint`
+#    ostida yuritadi (u yerda `aiogram` bor, bu yerda esa u ATAYIN
+#    o'rnatilmagan — `tests/unit/test_runtime_deps.py`).
+exclude = ["^frontend/", "^\\.planning/", "^services/cv-service/", "^services/bot-service/"]
 # `tests/fixtures` paketi test modullaridan `fixtures.*` sifatida, `app` esa
 # `services/core-api` dan import qilinadi (pytest `pythonpath` bilan bir xil yo'l).
 mypy_path = "tests:services/core-api"

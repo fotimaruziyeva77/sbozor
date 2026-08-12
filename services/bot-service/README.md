@@ -39,8 +39,7 @@ mexanik qulflangan:
 ```python
 # tests/unit/test_runtime_deps.py::test_redis_pin_is_not_downgraded
 assert specs == ["redis[hiredis]==8.0.1"], (
-    "`redis` pini o'zgargan: ... pasayish `arq` sinfidagi to'qnashuv "
-    "sodir bo'lganini bildiradi"
+    "`redis` pini o'zgargan — pasayish `arq` sinfidagi to'qnashuv belgisi"
 )
 ```
 
