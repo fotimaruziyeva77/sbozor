@@ -159,6 +159,12 @@ None — yangi tashqi xizmat ham, yangi paket ham qo'shilmadi (T-07-SC: `pip`/`n
 - **403 — normal holat, xato emas:** platforma admini (va kelajakdagi «faqat ko'rsin» rollari) 403 oladi; UI kartani umuman chizmasligi kerak (`null`), qizil blok emas.
 - **Ochiq savol (bloklovchi emas):** platforma adminiga bosh ko'rsatkich kerak bo'lsa, `HEADLINE_ORDER` ga to'rtinchi yozuv qo'shiladi (masalan `MARKET_VIEW_ALL` -> bozorlar soni) va o'sha payt tartib savoli qaytadan beriladi.
 
+## Self-Check: PASSED
+
+- Fayllar mavjud: `headline_repo.py`, `test_headline.py`, `07-03-SUMMARY.md`
+- Commit'lar mavjud: `3a2b823`, `4bd1d15`, `bb422e2`, `1066a0e`
+- STATE.md / ROADMAP.md **tegilmagan** (worktree rejimi — orkestrator markazlashgan holda yangilaydi)
+
 ---
 *Phase: 07-nomuvofiqlik-bildirishnoma-va-botlar*
 *Completed: 2026-08-12*
