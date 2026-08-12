@@ -1,0 +1,101 @@
+# SBOZOR bot-service — o'zbek KIRILL katalogi (D-30, D-31).
+#
+# ⛔⛔ BU FAYL QO'LDA YOZILGAN VA U TRANSLITERATSIYA HOSILASI EMAS.
+#
+#    `frontend/messages/uz-Cyrl.json` `gen-cyrillic.mjs` bilan generatsiya
+#    qilinadi; bot katalogi esa YO'Q. Sabab 07-05 da O'LCHANGAN: mexanik
+#    transliterator o'zlashma so'zlarda SEMANTIK JIHATDAN NOTO'G'RI natija
+#    beradi (`kvitansiyalar` -> «квитансиялар», to'g'ri shakl —
+#    «квитанциялар») va bu defekt sinfini na «lotin qoldi» detektori, na
+#    kalit-parity darvozasi KO'RADI.
+#
+#    Shuning uchun bu yerdagi o'zlashmalar QO'LDA tekshirilgan:
+#      смена (rus o'zlashmasi, shu shaklda), кассир, бот, маъмурият.
+#    ⛔ Yangi o'zlashma qo'shilganda u ham QO'LDA tekshiriladi — mexanik
+#      darvoza bu sinfni ushlamaydi va uni ushlaydigan darvoza YO'Q.
+#
+# ⛔ Taqiqlangan sinonimlar (`йиғим`, `дўкон`) bu yerda 0 marta (G7-9 c).
+msgid ""
+msgstr ""
+"Project-Id-Version: sbozor-bot 0.1.0\n"
+"Language: uz_Cyrl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+# --- /start va menyu ---------------------------------------------------
+msgid "bot.start.greeting"
+msgstr ""
+"Ассалому алайкум! Бу — бозор боти.\n"
+"\n"
+"Қуйидаги тугма орқали рақамингизни улашинг — шундан сўнг қарзингиз ва "
+"тўловларингизни шу ерда кўрасиз."
+
+msgid "bot.start.bound"
+msgstr "Ассалому алайкум! Қуйидаги тугмалардан бирини танланг."
+
+msgid "bot.shareContact"
+msgstr "Рақамни улашиш"
+
+msgid "bot.menu.debt"
+msgstr "Қарзим"
+
+msgid "bot.menu.payments"
+msgstr "Тўловларим"
+
+msgid "bot.menu.more"
+msgstr "Кўпроқ"
+
+# --- Bog'lanish (BOT-01) -----------------------------------------------
+msgid "bot.binding.neutral"
+msgstr "Боғланиб бўлмади. Бозор маъмуриятига мурожаат қилинг."
+
+msgid "bot.binding.ok"
+msgstr "Уландингиз. Энди қарзингиз ва тўловларингизни шу ерда кўрасиз."
+
+msgid "bot.notBound"
+msgstr "Аввал рақамингизни улашинг: /start"
+
+msgid "bot.error.retry"
+msgstr "Ҳозир жавоб бериб бўлмади. Бироздан кейин қайта уриниб кўринг."
+
+# --- Qoldiq (BOT-02, 1/2) ----------------------------------------------
+msgid "bot.summary.header"
+msgstr "Бугунги ҳолат:"
+
+msgid "bot.summary.market"
+msgstr "Раста {stalls} — қарз: {amount} сўм."
+
+msgid "bot.summary.noStalls"
+msgstr "бириктирилмаган"
+
+# --- To'lov tarixi (BOT-02, 2/2) ---------------------------------------
+msgid "bot.payments.header.one"
+msgid_plural "bot.payments.header.many"
+msgstr[0] "Охирги {count} та тўлов ёзуви:"
+msgstr[1] "Охирги {count} та тўлов ёзуви:"
+
+msgid "bot.payments.row"
+msgstr "{date} · раста {stall}: патта {due} сўм, тўланди {paid} сўм — {state}"
+
+msgid "bot.payments.settled"
+msgstr "тўлиқ"
+
+msgid "bot.payments.unsettled"
+msgstr "қолдиқ бор"
+
+msgid "bot.payments.empty"
+msgstr "Тўлов ёзуви топилмади."
+
+msgid "bot.payments.noMore"
+msgstr "Бошқа ёзув қолмади."
+
+# --- /help — atamalar izohi --------------------------------------------
+msgid "bot.help.terms"
+msgstr ""
+"Атамалар:\n"
+"патта — кунлик савдо ҳақи;\n"
+"раста — сизнинг савдо жойингиз;\n"
+"қарз — тўланмаган патта;\n"
+"смена — кассирнинг иш навбати."
