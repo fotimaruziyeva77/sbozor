@@ -61,7 +61,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sbozor_core.enums import AuditAction, ReconciliationCaseStatus, ReconciliationSubjectKind
+from sbozor_core.enums import ReconciliationCaseStatus, ReconciliationSubjectKind
 from sbozor_core.timeutil import business_today
 
 from app.deps import Principal, TenantSessionDep, require_permission
@@ -76,7 +76,6 @@ from app.schemas import (
     ReconciliationReportResponse,
     ReconciliationReportRow,
 )
-from app.security.audit import write_app_audit
 from app.security.rbac import Permission
 
 if TYPE_CHECKING:
@@ -423,6 +422,7 @@ async def reconciliation_cases(
     day: Annotated[date | None, Query()] = None,
     case_status: Annotated[ReconciliationCaseStatus | None, Query(alias="status")] = None,
     cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int | None, Query(ge=1, le=reconciliation_repo.CASE_PAGE_SIZE)] = None,
 ) -> CaseListResponse:
     """Kun kesimidagi case navbati — keyset bilan sahifalangan (RECON-02, DQ-4).
 
@@ -441,6 +441,21 @@ async def reconciliation_cases(
       `status` moduli bilan to'qnashardi (`status.HTTP_404_NOT_FOUND`),
       ya'ni parametr nomi KLIENT kontraktida `status`, Python imzosida
       esa `case_status`.
+
+    ⚠⚠ `limit` REJADA YO'Q EDI VA U KEYSET NI ⛔ **YETIB BORILADIGAN**
+      QILADI. Repo kursorni FAQAT sahifa TO'LGANDA beradi
+      (`CaseListPage.next_cursor` docstringi), ya'ni `CASE_PAGE_SIZE`
+      (50) qat'iy bo'lganda ikkinchi sahifa 51 ta case'siz UMUMAN
+      tug'ilmasdi. Bozor seedida esa bir kunda ko'pi bilan ~18 case
+      bo'ladi (6 rasta × [1 hisob + 2 case'ga arzir anomaliya turi]),
+      ya'ni `cursor` shoxi ⛔ **hech qachon ochilmasdi** va u sinalmagan
+      kod bo'lib qolardi — 07-08 ning 4-ochiq bandi aynan shu holatni
+      qayd etgan.
+
+      ⛔ CHEGARA IKKI TOMONLAMA: `le=CASE_PAGE_SIZE` HTTP da, repo esa
+         qiymatni yana bir marta qisqartiradi. Klient bir so'rov bilan
+         butun navbatni tortib ololmaydi va bu qaror IKKI qatlamda ham
+         mustaqil turadi (`list_cases()` ning `max(1, min(...))` i).
     """
     market_id = _market_id(principal)
     business_date = _report_day(day)
@@ -451,6 +466,7 @@ async def reconciliation_cases(
         day=business_date,
         status=None if case_status is None else case_status.value,
         cursor=_decode_cursor(cursor),
+        limit=reconciliation_repo.CASE_PAGE_SIZE if limit is None else limit,
     )
 
     return CaseListResponse(
@@ -586,10 +602,30 @@ async def reconciliation_case_update(
        birinchisi bilan ham: `reconciliation_case_events` FAQAT case
        domenini biladi.
 
-    ⚠ TARIX QATORINI ⛔ **REPO YOZADI** (`transition()` bitta
-      tranzaksiyada ikkala yozuvni ham bajaradi), marshrut esa faqat
-      `audit_log` qatorini qo'shadi. Tarix yozuvini bu yerga ko'chirish
-      uni tranzaksiyadan CHIQARIB yuborardi.
+    =======================================================================
+    ⛔⛔ IKKALA QATORNI HAM BU MARSHRUT ⛔ **YOZMAYDI** — VA BU O'LCHANGAN.
+
+      tarix qatorini  -> `reconciliation_repo.transition()` yozadi
+                         (bitta tranzaksiyada, D-14);
+      audit qatorini  -> ⛔ **DB-TRIGGER** yozadi: `0023` migratsiyasi
+                         `reconciliation_cases` ni `NOTIFICATION_AUDITED_
+                         TABLES` ga qo'shgan va unga `attach_audit_
+                         trigger()` ulagan.
+
+    ⛔ SHUNING UCHUN BU YERDA `write_app_audit(...)` ⛔ **CHAQIRILMAYDI**.
+       Chaqirilganda `audit_log` ga AYNI hodisa uchun IKKINCHI qator
+       tushardi va «bugun nechta case yopildi?» savoli jurnaldan IKKI
+       XIL javob berardi. Taqiq loyihada NOMMA-NOM yozilgan:
+       `sbozor_core.enums.AuditAction` docstringi `shift_open` /
+       `shift_close` / `charge_adjust` a'zolarini AYNAN shu sabab bilan
+       rad etgan («jadval `AUDITED_TABLES` da BOR, ya'ni DB-trigger
+       qatorni O'ZI yozadi va app darajasidagi audit DUBLIKAT bo'lardi»).
+
+    ⚠ «IKKI JURNAL» KAFOLATI BUZILMAYDI, U BOSHQA QATLAMDAN KELADI:
+      `PATCH` dan keyin `reconciliation_case_events` da **+1** VA
+      `audit_log` da **+1** qator bo'ladi — buni
+      `test_reconciliation_api.py::test_case_transition_writes_to_both_
+      journals` ikkala jadval ustidan O'LCHAYDI.
     =======================================================================
 
     ⛔ BIR XIL HOLATGA O'TISH -> **409**. Repo `ValueError` beradi
@@ -603,8 +639,11 @@ async def reconciliation_case_update(
     """
     market_id = _market_id(principal)
 
-    before = await reconciliation_repo.case_detail(session, market_id=market_id, case_id=case_id)
-    if before is None:
+    # ⚠ MAVJUDLIK OLDINDAN TEKSHIRILADI: `transition()` topilmagan case
+    #   uchun `LookupError` beradi, lekin uni USHLAB 404 ga aylantirish
+    #   `ValueError` (nol o'tish -> 409) bilan bir blokda turardi va ikki
+    #   BUTUNLAY boshqa holat bitta `except` zanjiriga bog'lanardi.
+    if await reconciliation_repo.case_detail(session, market_id=market_id, case_id=case_id) is None:
         raise _reject(_NOT_FOUND, status.HTTP_404_NOT_FOUND)
 
     try:
@@ -621,16 +660,20 @@ async def reconciliation_case_update(
     except ValueError as exc:
         raise _reject(_STATUS_UNCHANGED, status.HTTP_409_CONFLICT) from exc
 
-    await write_app_audit(
-        session,
-        action=AuditAction.UPDATE,
-        table_name="reconciliation_cases",
-        row_id=case_id,
-        principal=principal,
-        old={"status": before.case.status, "resolution_note": before.case.resolution_note},
-        new={"status": payload.status.value, "resolution_note": payload.resolution_note},
-    )
-    await session.commit()
+    # ⛔ `session.commit()` BU YERDA CHAQIRILMAYDI VA BU O'LCHANGAN.
+    #
+    # `TenantSessionDep` tranzaksiyani O'ZI boshqaradi (`deps.py::
+    # get_tenant_session` — `async with session.begin()`), ya'ni commit
+    # dependency CHIQISHIDA bo'ladi. Marshrut ichida commit qilish o'sha
+    # kontekst menejerini YOPADI va keyingi har qanday so'rov
+    # `InvalidRequestError: Can't operate on closed transaction inside
+    # context manager` bilan yiqiladi — quyidagi javob qurilishi aynan
+    # shunday so'rov.
+    #
+    # ⛔ IKKALA YOZUV HAM BITTA TRANZAKSIYADA QOLADI: tarix qatori
+    #    (`transition()`) va DB-trigger yozgan audit qatori birga commit
+    #    bo'ladi yoki birga rollback — «hukm yozildi, izi yozilmadi»
+    #    holati STRUKTURAVIY imkonsiz (T-07-61).
 
     return await _case_detail_response(session, market_id=market_id, case_id=case_id)
 
