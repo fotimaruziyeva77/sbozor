@@ -1,0 +1,119 @@
+# SBOZOR bot-service — o'zbek LOTIN katalogi (D-30, D-31).
+#
+# ⛔ MSGID — SIMVOLIK KALIT (`app/i18n.py` docstringi). Bo'sh `msgstr`
+#    gettext'da MSGID NING O'ZINI qaytaradi, ya'ni sotuvchi ekranda
+#    «bot.binding.neutral» degan matnni ko'rardi va HECH NIMA QIZARMASDI —
+#    shuning uchun `tests/unit/test_locale_parity.py::test_no_msgstr_is_empty`
+#    majburiy.
+#
+# ⛔ UCHALA KATALOGDA HAM MSGID TO'PLAMI AYNAN BIR XIL (to'plam tengligi).
+#
+# ⛔ ATAMALAR VEB BILAN YAGONA (D-30): patta / rasta / qarz / smena.
+#    Taqiqlangan sinonimlar (`yig'im`, `do'kon`) bu yerda 0 marta —
+#    o'lchov `frontend/scripts/glossary.test.mjs` (G7-9) da.
+msgid ""
+msgstr ""
+"Project-Id-Version: sbozor-bot 0.1.0\n"
+"Language: uz_Latn\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+# --- /start va menyu ---------------------------------------------------
+#
+# ⛔ MATN RO'YXATGA A'ZOLIK HAQIDA HECH NIMA AYTMAYDI (D-26a): «raqamingizni
+#    ulashing» — «bozor reyestrida bo'lsangiz» EMAS. Shart qo'yilgan matn
+#    javobning O'ZINI reyestrni tashqaridan tekshirish yo'liga aylantirardi.
+msgid "bot.start.greeting"
+msgstr ""
+"Assalomu alaykum! Bu — bozor boti.\n"
+"\n"
+"Quyidagi tugma orqali raqamingizni ulashing — shundan so'ng qarzingiz va "
+"to'lovlaringizni shu yerda ko'rasiz."
+
+msgid "bot.start.bound"
+msgstr "Assalomu alaykum! Quyidagi tugmalardan birini tanlang."
+
+msgid "bot.shareContact"
+msgstr "Raqamni ulashish"
+
+msgid "bot.menu.debt"
+msgstr "Qarzim"
+
+msgid "bot.menu.payments"
+msgstr "To'lovlarim"
+
+msgid "bot.menu.more"
+msgstr "Ko'proq"
+
+# --- Bog'lanish (BOT-01) -----------------------------------------------
+#
+# ⛔ `bot.binding.neutral` UCHALA RAD ETISH SHOXIDA HAM BIR XIL: mos
+#    kelmadi / bir nechta moslik / kontakt begona. Farqli matn sotuvchiga
+#    reyestr haqida ma'lumot berardi (D-26a).
+msgid "bot.binding.neutral"
+msgstr "Bog'lanib bo'lmadi. Bozor ma'muriyatiga murojaat qiling."
+
+msgid "bot.binding.ok"
+msgstr "Ulandingiz. Endi qarzingiz va to'lovlaringizni shu yerda ko'rasiz."
+
+msgid "bot.notBound"
+msgstr "Avval raqamingizni ulashing: /start"
+
+# ⛔ ISTISNO MATNI BU YERGA QO'YILMAYDI (D-04): foydalanuvchi nima
+#    qilishini biladi, tafsilot esa faqat jurnalda.
+msgid "bot.error.retry"
+msgstr "Hozir javob berib bo'lmadi. Birozdan keyin qayta urinib ko'ring."
+
+# --- Qoldiq (BOT-02, 1/2) ----------------------------------------------
+#
+# ⛔ «balans» SO'ZI YO'Q (D-06): saqlangan qoldiq ustuni loyihada MAVJUD
+#    EMAS va uni matn darajasida ham tiklamaslik kerak.
+msgid "bot.summary.header"
+msgstr "Bugungi holat:"
+
+msgid "bot.summary.market"
+msgstr "Rasta {stalls} — qarz: {amount} so'm."
+
+msgid "bot.summary.noStalls"
+msgstr "biriktirilmagan"
+
+# --- To'lov tarixi (BOT-02, 2/2) ---------------------------------------
+#
+# ⛔ KO'PLIK `.po` NING `Plural-Forms` I BILAN, `if n == 1` BILAN EMAS:
+#    ruschada uchta shakl bor va qo'lda yozilgan shart birinchi
+#    «2 ta yozuv» da buzilardi.
+msgid "bot.payments.header.one"
+msgid_plural "bot.payments.header.many"
+msgstr[0] "Oxirgi {count} ta to'lov yozuvi:"
+msgstr[1] "Oxirgi {count} ta to'lov yozuvi:"
+
+# ⛔ KADR, HAVOLA VA OBYEKT KALITI QO'SHILMAYDI (D-03) — faqat matn.
+msgid "bot.payments.row"
+msgstr "{date} · rasta {stall}: patta {due} so'm, to'landi {paid} so'm — {state}"
+
+msgid "bot.payments.settled"
+msgstr "to'liq"
+
+msgid "bot.payments.unsettled"
+msgstr "qoldiq bor"
+
+msgid "bot.payments.empty"
+msgstr "To'lov yozuvi topilmadi."
+
+msgid "bot.payments.noMore"
+msgstr "Boshqa yozuv qolmadi."
+
+# --- /help — atamalar izohi --------------------------------------------
+#
+# ⚠ Bu matn G7-9(b) ning YAGONA joyi emas, lekin `smena` atamasi
+#   sotuvchi yuzasida faqat shu yerda tabiiy uchraydi: qolgan uchtasi
+#   qoldiq va tarix matnlarida ishlatiladi.
+msgid "bot.help.terms"
+msgstr ""
+"Atamalar:\n"
+"patta — kunlik savdo haqi;\n"
+"rasta — sizning savdo joyingiz;\n"
+"qarz — to'lanmagan patta;\n"
+"smena — kassirning ish navbati."

@@ -38,6 +38,29 @@ WORKDIR /app
 COPY services/bot-service/pyproject.toml services/bot-service/uv.lock /app/services/bot-service/
 
 
+# =============================================================================
+# ⛔⛔ GETTEXT KATALOGLARI `pybabel` BILAN KOMPILYATSIYA QILINADI — TASHQI
+#    GETTEXT BINARI BILAN EMAS (07-RESEARCH § Environment Availability).
+#
+#    Sabab o'lchangan: o'sha binarning bu bazada mavjudligi TEKSHIRILMAGAN
+#    va uni `apt-get install` bilan qo'shish image'ga butun bir toolchain
+#    olib kirardi. `Babel` esa `aiogram[i18n]` orqali ALLAQACHON bog'liqlik
+#    va `pybabel` uning konsol skripti. Taqiqning to'liq matni
+#    `app/i18n.py` docstringida (u yerda binarning nomi ham yozilgan —
+#    bu faylda esa ATAYIN yozilmaydi, chunki rejaning qabul mezoni shu
+#    faylni SANOQ bilan o'lchaydi).
+#
+# ⚠ REJA KOMPILYATSIYANI `base` BOSQICHIDA SO'RAGAN EDI, LEKIN U YERDA
+#   BAJARIB BO'LMAYDI: `base` da na `uv sync` bajarilgan (ya'ni `pybabel`
+#   yo'q), na `app/` ko'chirilgan (ya'ni `.po` yo'q). Shuning uchun qadam
+#   ikkala HOSILA bosqichda ham — manba va venv ikkalasi ham mavjud
+#   bo'lgan eng erta nuqtada — takrorlanadi.
+#
+# ⚠ `bot-tests` repo ildizini `/app` USTIGA mount qiladi va bu yerda
+#   qurilgan `.mo` fayllari o'shanda KO'RINMAY QOLADI — test yo'lidagi
+#   kompilyatsiya `services/bot-service/tests/conftest.py` da.
+# =============================================================================
+
 # ---------- dev: dev guruh bilan (pytest, ruff, mypy) ----------
 FROM base AS dev
 
@@ -53,6 +76,8 @@ COPY . /app
 
 WORKDIR /app/services/bot-service
 
+RUN pybabel compile --directory app/locales --domain bot --statistics
+
 
 # ---------- runtime: dev bog'liqliklarisiz, non-root ----------
 FROM base AS runtime
@@ -60,6 +85,13 @@ FROM base AS runtime
 RUN uv sync --frozen --no-dev --project services/bot-service
 
 COPY services/bot-service/app/ /app/services/bot-service/app/
+
+# ⛔ Kompilyatsiya `useradd`/`USER` DAN OLDIN: `appuser` `/app` ga yozish
+#    huquqiga ega emas va u holda qadam ruxsat xatosi bilan yiqilardi.
+RUN pybabel compile \
+        --directory /app/services/bot-service/app/locales \
+        --domain bot \
+        --statistics
 
 # Konteyner root bilan ishlamaydi (T-01-07).
 RUN useradd --create-home --uid 10001 appuser

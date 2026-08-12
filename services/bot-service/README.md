@@ -118,17 +118,52 @@ FSM holati qayta ko'tarilganda **yo'qoladi**. Bu qonuniy: FSM — bir necha
 soniyalik dialog bosqichi, biznes holati emas. Biznes holati Postgres'da
 (`vendor_telegram_bindings`) va u **bu servisga tegishli emas**.
 
-## 5. ⛔ Bot bugun `/start` ga JAVOB BERMAYDI
+## 5. Handlerlar va `/start` (07-11 da ulandi)
 
-`app/main.py` da `dp` **bo'sh router** bilan ishga tushadi — handlerlar bu
-rejada **yozilmagan**, ular 07-11 niki. Skelet ulardan oldin yoziladi,
-chunki uchinchi servisning tug'ilishi `compose.yaml`, `package.json` va
+07-01 skeletni **ataylab** handlerlarsiz qurgan edi (sabab: uchinchi
+servisning tug'ilishi `compose.yaml`, `package.json` va
 `tests/unit/test_sentry_processes.py` darvozasiga tegadi; bu uchtasi
 handlerlar bilan bir commitda aralashsa, darvozaning qizarishi «handler
-buzuq» deb o'qilardi.
+buzuq» deb o'qilardi).
 
-Ya'ni **bugungi to'g'ri xulq**: konteyner ko'tariladi, Telegram'ga
-ulanadi, update oladi va **hech nima qilmaydi**.
+07-11 da uch router ulandi va bot javob beradi:
+
+| Modul | Filtr | Nima qiladi |
+|-------|-------|-------------|
+| `app/handlers/start.py` | `CommandStart()`, `Command("help")` | salomlashuv + ⛔ `request_contact=True` tugmasi; bog'langan foydalanuvchiga menyu |
+| `app/handlers/binding.py` | `F.contact` | ⛔ **uch darvoza** (D-24, Pitfall 8), so'ng `POST /internal/bot/resolve` |
+| `app/handlers/vendor.py` | `F.text.in_(...)` | «Qarzim» / «To'lovlarim» / «Ko'proq» (BOT-02) |
+
+⛔ **Qo'lda terilgan raqamni o'qiydigan handler YO'Q va bu strukturaviy**
+(D-24): yo'qlik `tests/unit/test_binding.py::
+test_typed_phone_number_is_not_handled` da **butun dispatcher** bo'yicha
+o'lchanadi.
+
+## 5.1. ⛔ Gettext kataloglari KOMPILYATSIYA QILINISHI SHART
+
+`aiogram.utils.i18n.I18n` `.po` topib `.mo` topmasa **`RuntimeError`**
+ko'taradi, ya'ni kompilyatsiyani unutish **jimgina emas** — servis
+umuman ko'tarilmaydi.
+
+Kompilyatsiya **ikki joyda** va ikkalasi ham **`pybabel`** (Babel) bilan.
+⛔ Tashqi gettext binariga (`msgfmt`) **tayanilmaydi**: uning bu bazada
+mavjudligi 07-RESEARCH § Environment Availability da **tekshirilmagan**
+deb yozilgan, Babel esa `aiogram[i18n]` orqali allaqachon bog'liqlik.
+
+| Joy | Nima uchun kerak |
+|-----|------------------|
+| `Dockerfile` (`dev` va `runtime`) | ishlab chiqarish image'i uchun. ⚠ `base` da bajarib bo'lmaydi: u yerda na `uv sync`, na `app/` bor |
+| `tests/conftest.py` | test uchun. ⚠ `bot-tests` repo ildizini `/app` **ustiga** mount qiladi va image'dagi `.mo` mount ostida **ko'rinmay qoladi** |
+
+⛔ `.mo` — build artefakti, `.gitignore` da. Commit qilingan `.mo` `.po`
+dan **jimgina eskirardi** va darvoza eski matnni o'lchardi.
+
+⚠ **`uz_Cyrl` bugun `language_code` orqali TANLANMAYDI**: Telegram
+«o'zbek kirillcha» degan til kodini bermaydi. Katalog o'lik emas — uning
+mazmuni G7-9 (`frontend/scripts/glossary.test.mjs`) va
+`tests/unit/test_locale_parity.py` bilan o'lchanadi; iste'molchisi til
+tanlagichi bo'ladi. ⛔ Uni «ishlatilmayapti» deb o'chirish D-31 ni
+buzardi.
 
 ## 6. Kuzatuv — ikkita darvoza, ikkita qatlam
 

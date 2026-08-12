@@ -1,14 +1,16 @@
 """`bot-service` ning YAGONA kirish nuqtasi — aiogram long-polling (DQ-1).
 
 =============================================================================
-⛔ HANDLERLAR BU FAYLDA (VA BU REJADA) YO'Q — VA BU ATAYIN.
+⛔ HANDLERLAR ALOHIDA MODULLARDA (`app/handlers/`), BU FAYLDA EMAS.
 
-`dp` bo'sh router bilan ishga tushadi: bot bugun `/start` ga ham JAVOB
-BERMAYDI. Handlerlar 07-11 niki. Skelet ulardan OLDIN yoziladi, chunki
-uchinchi servisning tug'ilishi `compose.yaml`, `package.json` va
-`test_sentry_processes.py` darvozasiga TEGADI — bu uch o'zgarish
-handlerlar bilan bir commitda aralashsa, darvozaning qizarishi «handler
-buzuq» deb o'qilardi. Holat `README.md` §5 da ochiq yozilgan.
+07-01 skeletni handlerlarsiz qurgan edi (sabab: uchinchi servisning
+tug'ilishi `compose.yaml`, `package.json` va `test_sentry_processes.py`
+darvozasiga TEGADI va bu o'zgarishlar handlerlar bilan bir commitda
+aralashsa, darvozaning qizarishi «handler buzuq» deb o'qilardi).
+07-11 da routerlar ULANDI, lekin ular baribir shu faylga KO'CHIRILMADI:
+bu fayl ikkita darvozaning (`tests/unit/test_sentry_processes.py` va
+`tests/unit/test_sentry_entrypoints.py`) o'lchov maydoni va uni
+handlerlar bilan to'ldirish o'sha o'lchovni shovqinga ko'mardi.
 
 =============================================================================
 ⚠⚠ WEBHOOK QURILMAYDI — LONG-POLLING (DQ-1).
@@ -34,7 +36,11 @@ import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramConflictError
 from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.utils.i18n import SimpleI18nMiddleware
 
+from app.core_client import CoreClient
+from app.handlers import build_router
+from app.i18n import get_i18n
 from app.observability import init_sentry
 from app.settings import Settings, get_settings
 
@@ -58,8 +64,38 @@ storage = RedisStorage.from_url(settings.valkey_url)
   DANGASA quradi va birinchi buyruqqacha soket ochilmaydi.
 """
 
-dp = Dispatcher(storage=storage)
-"""Update yo'naltiruvchi. ⛔ ROUTERLAR HOZIRCHA ULANMAGAN (07-11)."""
+core = CoreClient(
+    base_url=settings.core_api_url,
+    token=settings.bot_service_token,
+)
+"""Botning YAGONA ma'lumot manbai (D-08/D-10).
+
+⚠ MODUL DARAJASIDA: `httpx.AsyncClient` konstruktori tarmoqqa CHIQMAYDI
+  (ulanish puli dangasa), ya'ni `bot-tests` konteynerida ham import
+  qilinadi. Klient `_main()` ning `finally` blokida yopiladi.
+"""
+
+dp = Dispatcher(storage=storage, core=core)
+"""Update yo'naltiruvchi.
+
+⚠ `core=` ARGUMENTI DISPATCHER NING `workflow_data` IGA TUSHADI va
+  aiogram uni handlerlarga NOM BO'YICHA uzatadi (`async def
+  on_contact(message, core)`). Modul darajasidagi global o'rniga shu
+  yo'l tanlandi: testda handler AYNAN o'sha imzo bilan, soxta klient
+  bilan chaqiriladi va bu «tarmoqqa chiqmaslik» ni STRUKTURAVIY qiladi.
+"""
+
+dp.include_router(build_router())
+
+SimpleI18nMiddleware(get_i18n()).setup(dp)
+"""⛔ MIDDLEWARE `include_router` DAN KEYIN — VA BU TARTIB SHART.
+
+`I18nMiddleware.setup()` routerning O'SHA PAYTDAGI observerlariga
+`outer_middleware` qo'shadi. Dispatcher darajasida o'rnatilgani esa
+BARCHA ichki routerlarga ta'sir qiladi, chunki outer middleware update
+yo'naltirilishidan OLDIN ishlaydi — ya'ni `_()` chaqiruvi har bir
+handlerda tayyor kontekstni ko'radi.
+"""
 
 
 async def _on_startup() -> None:
@@ -139,6 +175,14 @@ async def _main() -> None:
         )
         sentry_sdk.capture_exception(error)
         raise
+    finally:
+        # ⚠ `finally` — `dp.shutdown` ilmog'i EMAS. Sabab o'lchov
+        #   maydonida: `tests/unit/test_sentry_processes.py` kirish
+        #   nuqtasining ilmoq REYESTRINI o'qiydi va u yerga ikkinchi
+        #   ilmoq qo'shish darvozaning predikatini kengaytirishni talab
+        #   qilardi. Klientni yopish esa ilmoq semantikasiga muhtoj
+        #   emas: u aynan shu korutina tugaganda kerak.
+        await core.aclose()
 
 
 main = _main
