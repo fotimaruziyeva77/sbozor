@@ -62,23 +62,23 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 - [x] **CASH-02**: Kassir summani faqat sabab-kod bilan o'zgartira oladi; har o'zgartirish auditda ko'rinadi
 - [x] **CASH-03**: To'lov kiritish idempotent (takror bosish dublikat yaratmaydi); to'lov tuzatish faqat storno + qayta kiritish orqali, o'chirish/tahrirlash yo'q
 - [x] **CASH-04**: Kassir smenani ochadi/yopadi; yopishda yig'ilgan naqdni ko'r (tizim summasini ko'rmasdan) deklaratsiya qiladi; tizim farqni (variance) hisoblab direktor hisobotiga chiqaradi
-- [ ] **CASH-05**: To'lov kiritilishi bilan sotuvchiga Telegram orqali zudlik push-kvitansiya boradi (summa, rasta, kassir, vaqt)
+- [x] **CASH-05**: To'lov kiritilishi bilan sotuvchiga Telegram orqali zudlik push-kvitansiya boradi (summa, rasta, kassir, vaqt)
 
 ### Nomuvofiqlik va hisobotlar (RECON)
 
-- [ ] **RECON-01**: Kunlik nomuvofiqlik hisoboti: "band, lekin to'lovsiz" rastalar + "ro'yxatga olinmagan savdo" anomaliyalari, rasm-dalil havolalari bilan
-- [ ] **RECON-02**: Har nomuvofiqlik case sifatida yuritiladi: mas'ul, holat (yangi/ko'rilmoqda/asosli/asossiz), yechim; hit-rate metrikasi hisoblanadi
-- [ ] **RECON-03**: Direktor ertalab dayjesta oladi (kechagi tushum, bandlik %, TOP-10 qarzdor), kechqurun nomuvofiqlik xabarini oladi
+- [x] **RECON-01**: Kunlik nomuvofiqlik hisoboti: "band, lekin to'lovsiz" rastalar + "ro'yxatga olinmagan savdo" anomaliyalari, rasm-dalil havolalari bilan
+- [x] **RECON-02**: Har nomuvofiqlik case sifatida yuritiladi: mas'ul, holat (yangi/ko'rilmoqda/asosli/asossiz), yechim; hit-rate metrikasi hisoblanadi
+- [x] **RECON-03**: Direktor ertalab dayjesta oladi (kechagi tushum, bandlik %, TOP-10 qarzdor), kechqurun nomuvofiqlik xabarini oladi
 - [ ] **RECON-04**: Davr bo'yicha hisobotlar: tushum (kunlik/oylik), qarzdorlik reestri, nomuvofiqlik arxivi — har biri Excel (.xlsx) yuklab olinadi
 - [ ] **RECON-05**: AI aniqlik hisoboti: ko'r audit namunasidan, xatolik turlari ajratilgan ("band deb xato" = nizo xavfi, "bo'sh deb xato" = yo'qotish)
-- [ ] **RECON-06**: Har rol bosh ekranida o'ziga mos bitta asosiy ko'rsatkich (direktor: bugungi tushum; nazoratchi: kutayotgan navbat; kassir: bugungi yig'im)
+- [x] **RECON-06**: Har rol bosh ekranida o'ziga mos bitta asosiy ko'rsatkich (direktor: bugungi tushum; nazoratchi: kutayotgan navbat; kassir: bugungi yig'im)
 
 ### Telegram-bot (BOT)
 
-- [ ] **BOT-01**: Sotuvchi botga telefon raqamini contact ulashish orqali tasdiqlab ulanadi — raqam admin kiritgan reestrga mos bo'lsa
-- [ ] **BOT-02**: Sotuvchi botda qoldiq/qarz va to'lov tarixini ko'radi
-- [ ] **BOT-03**: Qarz N kundan oshsa sotuvchiga avtomatik eslatma (N sozlanadigan; quiet hours hurmat qilinadi)
-- [ ] **BOT-04**: Barcha xabarlar outbox orqali throttling bilan yuboriladi; yetkazilganlik holati saqlanadi; botni bloklagan foydalanuvchi belgilanadi
+- [x] **BOT-01**: Sotuvchi botga telefon raqamini contact ulashish orqali tasdiqlab ulanadi — raqam admin kiritgan reestrga mos bo'lsa
+- [x] **BOT-02**: Sotuvchi botda qoldiq/qarz va to'lov tarixini ko'radi
+- [x] **BOT-03**: Qarz N kundan oshsa sotuvchiga avtomatik eslatma (N sozlanadigan; quiet hours hurmat qilinadi)
+- [x] **BOT-04**: Barcha xabarlar outbox orqali throttling bilan yuboriladi; yetkazilganlik holati saqlanadi; botni bloklagan foydalanuvchi belgilanadi
 
 ## v2 Requirements
 
@@ -173,17 +173,17 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | CASH-02 | Phase 6 | Done |
 | CASH-03 | Phase 6 | Done |
 | CASH-04 | Phase 6 | Done |
-| CASH-05 | Phase 7 | Pending |
-| RECON-01 | Phase 7 | Pending |
-| RECON-02 | Phase 7 | Pending |
-| RECON-03 | Phase 7 | Pending |
+| CASH-05 | Phase 7 | Done |
+| RECON-01 | Phase 7 | Done |
+| RECON-02 | Phase 7 | Done |
+| RECON-03 | Phase 7 | Done |
 | RECON-04 | Phase 8 | Pending |
 | RECON-05 | Phase 8 | Pending |
-| RECON-06 | Phase 7 | Pending |
-| BOT-01 | Phase 7 | Pending |
-| BOT-02 | Phase 7 | Pending |
-| BOT-03 | Phase 7 | Pending |
-| BOT-04 | Phase 7 | Pending |
+| RECON-06 | Phase 7 | Done |
+| BOT-01 | Phase 7 | Done |
+| BOT-02 | Phase 7 | Done |
+| BOT-03 | Phase 7 | Done |
+| BOT-04 | Phase 7 | Done |
 
 **Belgilash qoidasi va uning chegarasi** (2026-08-02, 2-faza yopish to'lqini —
 `02-22`). Bu jadvaldagi belgi **talab MATNI** bo'yicha qo'yiladi: band `Done`
@@ -359,6 +359,49 @@ To'qqizala talabning har jumlasi CI'da real artefakt bilan bajariladi.
 Yuqoridagi «Nima o'lchanMAGAN» ustuni **inson idroki, real qurilma va
 tashkiliy shart** haqida — ya'ni ular talab MATNINING jumlalari emas.
 Aynan shu sababdan bu fazada `06-HUMAN-UAT.md` fayli **YARATILMADI**.
+
+### Qoidaning 7-fazadagi qo'llanishi (2026-08-12, `07-17`) — DALIL BILAN
+
+To'qqizala band `Pending` -> **`Done`**.
+
+⛔ **LEKIN BU FAZA 6-FAZADAN BIR JIHATI BILAN JIDDIY FARQ QILADI VA U
+YASHIRILMAYDI:** bu yerda birinchi marta **ishonch chegarasi ochiladi** —
+har xabar **Telegram serverlariga**, ya'ni O'zR data-rezidentlik
+chegarasidan **tashqariga** chiqadi. CI'da esa haqiqiy Telegram **YO'Q**.
+
+Yechim soxtalashtirish EMAS: mahsulot jo'natuvchisi (`AlertSender`)
+**oxirigacha** yuritiladi va `respx` faqat **tarmoq chegarasini** tutadi
+(`assert_all_mocked=True` — tutilmagan so'rov QIZIL). O'lchanadigan narsa
+navbat qatorining holati emas, **AYNAN CHIQQAN HTTP SO'ROVI va uning
+tanasi**. Ya'ni «xabar ketdi» da'vosi mahsulot yo'lining chiqishidan
+o'qiladi. ⚠ O'lchanmagani — **Telegram ning o'zi qabul qilishi**: u
+`07-HUMAN-UAT.md` ning 1-bandi (ega: Ops, tetik: birinchi deploy).
+
+⚠ **IKKINCHI CHEGARA — IKKI KOD BAZASI.** `BOT-01`/`BOT-02` ning
+`contact` yarmi `bot-service` konteynerida yashaydi va u mezon
+modulida **import qilinmaydi** (ikkala kod bazasi ham `app` paketiga ega;
+aiogram `pydantic<2.14` va `redis<8` ni, core-api esa `redis==8.0.1` ni
+qadaydi). Shuning uchun o'sha ikki qator **IKKI buyruq** bilan
+belgilangan va ikkalasi ham quyida yozilgan.
+
+| Talab | Yangi holat | Nima o'lchandi va QAYSI test bilan | Nima o'lchanMAGAN |
+|---|---|---|---|
+| **RECON-01** | `Pending` -> **`Done`** | `test_phase7_criteria.py::test_sc1_report_shows_both_classes_with_evidence_links` — seed IKKALA sinfni ham yozadi (to'lanmagan `daily_charges` + dalilli `billing_anomalies`), `reconciliation_open` jobi **CHAQIRILADI** (case qo'lda yozilmaydi), so'ng `GET /reconciliation/report` HTTP orqali: `subject_kind` to'plami AYNAN `{occupied_unpaid, anomaly}`, ikki sanoq ALOHIDA, har qatorda `evidence_snapshot_ids` BO'SH EMAS va har biri `UUID`. ⛔ Javob tanasida `presigned`/`http`/`image` satrlari **YO'Q** va rekursiv skanda shaxsiy maydon **0** (`vendor_id` nazorat sifatida BOR). Marshrutning qolgan qirralari — `test_reconciliation_api.py` | Dalil kadrining direktor uchun **o'qilishi** (nizoda yetarlimi) — inson idroki. ⚠ Hisobot qatorlari **case'dan hosila**, ya'ni SINF A kechikish chegarasidan (`overdue_days`, bugun 3) o'tgandan keyin ko'rinadi — test buni ikki `recon.open` chaqiruvi bilan OCHIQ ifodalaydi |
+| **RECON-02** | `Pending` -> **`Done`** | `test_sc2_case_is_managed_and_hit_rate_is_derived` — job UCHTA case ochadi (`(anomaly_cases, unpaid_cases) == (2, 1)`), `PATCH` bilan `new`->`in_review`->`justified`: `reconciliation_case_events` da **AYNAN 2** qator, `events[].to_status` ketma-ketligi, `actor_user_id` **direktorning identifikatori** (`None` «TIZIM» degani bo'lardi), `resolution_note` javobda. Holat to'plami **YOPIQ**: `"other"` -> **422**. Hit-rate `justified=1, unjustified=1` da **0.5**, `open_cases=1` maxrajga **kirmaydi** (uchinchi case ATAYIN `new`), o'lchovsiz oraliqda **`null`** | Direktorning case'ni **amalda yuritishi** (kim mas'ul qilib tayinlanadi, yechim matni qanday yoziladi) — tashkiliy shart |
+| **RECON-03** | `Pending` -> **`Done`** | `test_sc3_...` (a) — `digest_evening(as_of=D)` + `digest_morning(business_date=D)` chaqiriladi, so'ng `outbox_tick` **`respx` bilan**: Telegram'ga **AYNAN 2** so'rov, ikkalasi ham **direktorning chatiga**, kechkida «kutilayotgan», ertalabkida «yozilgan» o'zagi va ular **ARALASHMAYDI** (G-35), ikki matnning pul qatori **BIR XIL EMAS** (D-15/D-16 ning manba farqi), matnlarda **sotuvchi ismi YO'Q**. Manba farqi alohida — `test_notifications.py` | ⛔ **HAQIQIY TELEGRAM YETKAZISHI CI'DA BAJARILMAYDI** — `respx` tarmoq chegarasini tutadi. Bu `07-HUMAN-UAT.md` **1-bandi** (ega: Ops, tetik: birinchi deploy). Dayjestning direktor uchun **o'qilishi** — 3-band (5 sotuvchi/direktor sinovi) |
+| **RECON-06** | `Pending` -> **`Done`** | `test_sc3_...` (b) — `GET /me/headline` UCH rolda (direktor/kassir/nazoratchi) **UCH XIL** `metric` beradi va javob maydonlari to'plami **AYNAN** `{"metric","value"}` (`len(body)==2` YETARLI EMAS: maydon almashtirilganda yashil qolardi). ⛔ Kassir qiymati **SANOQ** (`1`) va kunning summasiga (`15 000`) **TENG EMAS**. Rol matritsasi va ikki rolli foydalanuvchi — `test_headline.py` | Bosh ekranning **telefon**da ko'rinishi (jsdom brauzer emas) |
+| **CASH-05** | `Pending` -> **`Done`** | `test_sc5_...` (1-qadam) — `POST /payments` **o'sha tranzaksiyada** navbat qatori qoldiradi; bir xil `idempotency_key` bilan takror `POST` **ikkinchi qator bermaydi** (`dedupe_key == receipt:{payment_id}`). Tranzaksiya birligi va Telegram yiqilganda to'lovning o'tishi — `test_receipt_outbox.py` (07-12). Matn mazmuni (summa/rasta/kassir/vaqt) — `outbox.py::_receipt_text` + `test_outbox.py` | Kvitansiyaning sotuvchi **telefonida** ko'rinishi va «zudlik» ning **his qilinishi** — UAT 3-bandi |
+| **BOT-01** | `Pending` -> **`Done`** | ⛔ **IKKI MANBADAN.** (a) Server yarmi — `test_sc4_vendor_binds_and_sees_own_debt_and_history`: `POST /internal/bot/resolve` telefon reestrda **yagona** bo'lganda `bound`, `Set-Cookie` **YO'Q** (D-10); ikki bozorda **bir xil telefon** -> `multiple_matches` va `vendor_telegram_bindings` da qator **0** (D-26b). Buyruq: `docker compose --profile test run --rm tests pytest tests/integration/test_phase7_criteria.py -q`. (b) `contact` yarmi — **BOSHQA KONTEYNERDA**: `docker compose --profile test run --rm bot-tests pytest tests/unit/test_binding.py -q` (D-24 ning uch rad javobi: `user_id is None`, `user_id != from_user.id`, guruh chati) | ⛔ **`request_contact` tugmasining HAQIQIY klientlardagi xulqi** — `Contact.user_id` ning sender bilan teng kelishi iOS/Android/Desktop da (tadqiqot buni MEDIUM-HIGH ishonch bilan yozgan). UAT **4-bandi** |
+| **BOT-02** | `Pending` -> **`Done`** | ⛔ **IKKI MANBADAN.** (a) `test_sc4_...` — `GET /internal/bot/vendor/summary` qaytargan son `billing_repo.vendor_outstanding()` bilan **`==` TENG** (nol emasligi nazorat bilan), `GET /internal/bot/vendor/payments` qatorlari `vendor_charge_allocation()` **DAN HOSILA** (`service_date`/`stall_code`/`due_soum` uchligi bo'yicha ro'yxat tengligi); javobda `balance` va shaxsiy maydon **yo'q**. (b) Bot tomonidagi ekran matni — `docker compose --profile test run --rm bot-tests pytest tests/unit/test_vendor_handlers.py -q` | Matnning **sotuvchi uchun tushunarliligi** («qoldiq» va «patta» ni ajrata oladimi) — UAT **3-bandi**, o'qish savodxonligi past foydalanuvchi bilan |
+| **BOT-03** | `Pending` -> **`Done`** | `test_sc5_...` (2- va 3-qadam) — 30 kunlik qarz: `overdue_days=3` bo'lgan A bozorida eslatma **1**, `overdue_days=90` bo'lgan B bozorida **0** (chegara bozor kesimida). Quiet oynada (22:30) eslatma **YUBORILMAYDI** va u **navbatdan ham OLINMAYDI** (`attempt_count == 0` — «ushlab qolindi» ni «manzili topilmadi» dan ajratadigan da'vo), o'sha tikda kvitansiya esa **BORADI**. Idempotentlik (kuniga bitta) va knobning `recon.open` bilan umumiyligi — `test_notifications.py` | `overdue_days` va quiet-hours **standartlari** buyurtmachi bilan tasdiqlanmagan (`[ASSUMED]` A2/A3) — UAT **7-bandi** |
+| **BOT-04** | `Pending` -> **`Done`** | `test_sc5_...` (4- va 5-qadam) — `403` -> `blocked`, `attempt_count == 1` va **ikkinchi tikda `respx` chaqiruvlari soni O'SMAYDI** (holat ustuniga qarash YETARLI EMAS). ⛔ **SABOTAJ BAJARILDI:** `outbox.py::_classify` da `403` shoxi `RETRY` ga o'zgartirilganda test **QIZARDI** (`1 -> 2`). Holat direktor yuzasida **KO'RINADI** (`GET /reconciliation/delivery` — `blocked` qatori va hisoblagichi), javobda shaxsiy maydon yo'q. Throttling, backoff, `429`/`retry_after` va token sizmasligi (G7-5) — `test_outbox.py` | ⛔ **«Yetkazildi» so'zining sotuvchi uchun MA'NOSI**: Bot API yetkazilganlik kvitansiyasini **BERMAYDI** — `delivered` = «Telegram 200 qaytardi», «o'qildi» EMAS. Kod buni to'g'ri yozadi; nizoda direktor buni **tushuntira oladimi** — UAT **2-bandi** |
+
+⚠ **`Blocked` BAND YO'Q, LEKIN «hammasi o'lchandi» HAM DEYILMAYDI.**
+5-fazadan farqli o'laroq bu yerda talab matnining birorta jumlasi
+o'lchovsiz qolmadi — shuning uchun `Blocked` yo'q. Lekin yuqoridagi
+oxirgi ustun **yettita** bandni nomlaydi va ular `07-HUMAN-UAT.md` ga
+**ega va tetik bilan** chiqarildi. Ular talab jumlalari emas: ular
+**tashqi xizmat**, **haqiqiy klient** va **inson idroki** haqida.
 
 Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 `node scripts/check-requirements-sync.mjs` — qo'lda, har faza yopilishida
