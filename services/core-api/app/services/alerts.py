@@ -107,6 +107,8 @@ kadr olish esa uch kundan beri to'xtagan.
 
 from __future__ import annotations
 
+from contextvars import ContextVar
+from dataclasses import dataclass
 from types import TracebackType
 from typing import TYPE_CHECKING, Final, Self
 
@@ -121,8 +123,10 @@ __all__ = [
     "ALERTS_DISABLED_REASON",
     "AlertError",
     "AlertSender",
+    "SendFailure",
     "TELEGRAM_API_BASE",
     "TELEGRAM_SEND_METHOD",
+    "last_message_id",
 ]
 
 log = structlog.get_logger(__name__)
@@ -198,6 +202,178 @@ def _failure(exc: Exception, status: int | None) -> AlertError:
     return AlertError(f"telegram `{TELEGRAM_SEND_METHOD}` yiqildi: {type(exc).__name__} ({detail})")
 
 
+@dataclass(frozen=True, slots=True)
+class SendFailure:
+    """Oxirgi urinishning SIRSIZ natijasi — uch maydon va BOSHQA HECH NIMA.
+
+    =========================================================================
+    ⛔⛔ BU SINF ISTISNO OBYEKTINI HAM, UNING MATNINI HAM, SO'ROV URL'INI HAM
+       SAQLAMAYDI.
+
+    Sabab modul docstringining 2-taqig'ida: Telegram Bot API ning URL'i bot
+    tokenini TASHIYDI va `httpx` istisnosining matni to'liq URL'ni o'z
+    ichiga oladi. Istisnoni (yoki uning matnini) ATRIBUTGA yozish sirni
+    JURNALDAN (bir marta ko'rinib o'tadigan satr) SAQLANADIGAN HOLATGA
+    ko'chirardi — ya'ni xavfni kengaytirardi, toraytirmasdi.
+
+    Shuning uchun dataklassning STANDART `__repr__` i ham SIRSIZ: u aynan
+    shu uch maydondan iborat va ularning uchalasi ham son yoki tur nomi.
+    ⛔ `slots=True` qo'shimcha atribut yozishni ham IMKONSIZ qiladi —
+    «keyin bitta maydon qo'shamiz» yo'li strukturaviy ravishda yopiq.
+    =========================================================================
+    """
+
+    status: int | None
+    """HTTP status kodi. `None` — javob umuman kelmadi (tarmoq/timeout).
+
+    ⛔ MARSHRUTLASH AYNAN SHU SONGA QARAYDI, xato MATNIGA emas: Telegram
+       `403 Forbidden: bot was blocked by the user` matnini istalgan kuni
+       o'zgartirishi mumkin (LOW-confidence manba), status kodi esa
+       protokol kontrakti.
+    """
+
+    error_type: str
+    """⛔ AYNAN `type(exc).__name__` — boshqa hech qanday shakl emas (D-04)."""
+
+    retry_after: int | None
+    """Telegram `429` javobining `parameters.retry_after` qiymati.
+
+    ⛔ FORMULADAN USTUN (DQ-3): Telegram aniq soniya aytganda o'sha qiymat
+       ishlatiladi. Boshqa har qanday holatda `None`.
+    """
+
+
+_LAST_FAILURE: Final[ContextVar[SendFailure | None]] = ContextVar(
+    "alerts_last_send_failure", default=None
+)
+"""Oxirgi yiqilishning uch fakti — ⛔ `ContextVar`, INSTANS ATRIBUTI EMAS.
+
+=============================================================================
+⛔⛔ NEGA `ContextVar` VA NEGA `self._last_failure` EMAS.
+
+`AlertSender` `TaskiqState` da AYNAN BITTA NUSXA bo'lib saqlanadi
+(`worker.py`), `alert_sweep` va `notify.outbox_tick` esa BIR XIL worker
+jarayonida asyncio vazifalari sifatida PARALLEL yugurishi mumkin.
+
+Instans atributi bo'lganda bir vazifaning `403` i ikkinchisining `429` ini
+JIMGINA almashtirardi va outbox qatori NOTO'G'RI holatga o'tardi: bloklangan
+foydalanuvchining xabari qayta navbatga tushardi, chegaraga urilgan xabar esa
+`blocked` bo'lib MANGU to'xtardi. Ikkala xato ham xatosiz, jimgina va faqat
+yuklama ostida ko'rinardi.
+
+`ContextVar` esa har asyncio vazifasiga O'Z NUSXASINI beradi — poyga
+strukturaviy ravishda imkonsiz bo'ladi. Bu qaror
+`test_alerting.py::test_last_failure_is_isolated_between_concurrent_tasks`
+da `asyncio.gather` bilan O'LCHANADI.
+=============================================================================
+"""
+
+_LAST_MESSAGE_ID: Final[ContextVar[int | None]] = ContextVar("alerts_last_message_id", default=None)
+"""Telegram QABUL QILGAN xabarning `message_id` si — `_LAST_FAILURE` ning jufti.
+
+=============================================================================
+⛔ NEGA BU MODUL DARAJASIDAGI FUNKSIYA, `AlertSender` NING XOSSASI EMAS.
+
+`notification_outbox.provider_message_id` uchun qiymat KERAK
+(`outbox_repo.mark_delivered(..., provider_message_id: int)`), lekin uni
+olishning ikkala tabiiy yo'li ham YOPIQ:
+
+  1. `send_message()` ning QAYTISH TIPINI o'zgartirish — `bool` kontrakti
+     3-taqiqning o'zi va mavjud test uni `is False` bilan qulflagan;
+  2. sinfga IKKINCHI XOSSA qo'shish — ommaviy yuza to'plami
+     `{aclose, enabled, last_failure, send_message}` LITERAL tenglik bilan
+     qulflangan (`test_sender_public_surface_did_not_grow`).
+
+Uchinchi yo'l — modul darajasidagi O'QISH-UCHUN funksiya — ikkala
+darvozani ham TEGMAY qoldiradi va eng muhimi: u YANGI BOT API METODI
+QO'SHMAYDI. `TELEGRAM_SEND_METHOD` hamon yagona qiymat, ya'ni 1-taqiq
+(D-03) strukturaviy jihatdan KUCHSIZLANMAYDI — qo'shilgan narsa AYNAN
+o'sha bitta chaqiruv qaytargan sonni O'QISH imkoni.
+
+⚠ QIYMAT SIRSIZ: u javob TANASIDAN olingan butun son. So'rov URL'i,
+  javob matni va istisno obyekti bu yerga HECH QACHON tushmaydi.
+=============================================================================
+"""
+
+
+def last_message_id() -> int | None:
+    """Oxirgi MUVAFFAQIYATLI chaqiruvning `message_id` si (`_LAST_MESSAGE_ID`).
+
+    `None` — hali chaqiruv bo'lmagan, chaqiruv YIQILGAN yoki javob tanasidan
+    identifikator O'QILMAGAN. Chaqiruvchi buni «Telegram qabul qilmadi» deb
+    o'qimasligi kerak: qabul qilinganlikning yagona belgisi
+    `send_message()` ning `True` javobi.
+    """
+    return _LAST_MESSAGE_ID.get()
+
+
+def _retry_after(response: httpx.Response) -> int | None:
+    """`429` javobidan Telegram bergan kutish soniyasini oladi (DQ-3).
+
+    ⛔ IKKI MANBA, SHU TARTIBDA: `Retry-After` SARLAVHASI, keyin javob
+       TANASIDAGI `parameters.retry_after`. Bot API ikkinchisini beradi,
+       oraliqdagi proksi va CDN esa birinchisini — ikkalasini ham o'qish
+       «chegara hurmat qilindi» da'vosini bitta joyga bog'lamaydi.
+
+    ⛔ JAVOB TANASI HECH QAYERGA YOZILMAYDI VA JURNALGA HAM TUSHMAYDI: u
+       Telegramning xato matnini tashiydi va o'sha matn kelajakda so'rov
+       tafsilotlarini o'z ichiga olishi mumkin. Bu yerdan faqat BUTUN SON
+       chiqadi.
+
+    ⚠ MANFIY VA NOL QIYMAT RAD ETILADI: ular kutishni umuman bekor qilardi
+      va tik `429` girdobiga tushardi (T-07-49).
+    """
+    header = response.headers.get("retry-after", "")
+    if header.strip().isdigit():
+        seconds = int(header.strip())
+        if seconds > 0:
+            return seconds
+
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    parameters = body.get("parameters")
+    if not isinstance(parameters, dict):
+        return None
+    value = parameters.get("retry_after")
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+def _message_id(response: httpx.Response) -> int | None:
+    """`sendMessage` javobidan `result.message_id` ni oladi (Pitfall 2).
+
+    ⛔ BU «YETKAZILGANLIK KVITANSIYASI» EMAS. Bot API `sendMessage` faqat
+       `Message` obyektini qaytaradi — yetkazilganlik yoki o'qilganlik
+       signali YO'Q. Identifikator faqat «Telegram xabarni QABUL QILDI VA
+       unga raqam berdi» faktini tasdiqlaydi.
+
+    ⚠ JAVOB TANASI XOM HOLDA HECH QAYERGA CHIQMAYDI: parse yiqilsa yoki
+      shakl kutilganidan boshqa bo'lsa `None` qaytadi va SABAB matni
+      jurnalga yozilmaydi.
+
+    ⚠ `bool` ALOHIDA RAD ETILADI: `isinstance(True, int)` rost va `True`
+      jimgina `1` raqamli xabar identifikatoriga aylanardi.
+    """
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict):
+        return None
+    result = body.get("result")
+    if not isinstance(result, dict):
+        return None
+    value = result.get("message_id")
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
 def _should_retry(exc: BaseException) -> bool:
     """Retry predikati — FAQAT tarmoq sinfi.
 
@@ -237,6 +413,12 @@ class AlertSender:
          TO'PLAMINI literal to'plam bilan TENGLIK bo'yicha solishtiradi,
          ya'ni yangi metod nima deb atalishidan QAT'I NAZAR ushlanadi —
          grep esa faqat oldindan sanab chiqilgan nomlarni ko'rardi.
+
+    ⛔ `last_failure` — AMAL EMAS, HOLAT (07-09). U yangi Bot API metodi
+       QO'SHMAYDI: `TELEGRAM_SEND_METHOD` hamon yagona qiymat. Qo'shilgan
+       narsa — AYNAN o'sha bitta chaqiruvning SIRSIZ natijasini o'qish
+       imkoni, chunki `bool` javob `403` ni `429` dan ajratmaydi va outbox
+       uchun bu farq butun marshrutlashning o'zi.
 
     Klient `TaskiqState` da SAQLANADI (worker resursi, `worker.py`):
     `alert_sweep` har 5 daqiqada ishlaydi va har safar yangi TLS qo'l
@@ -320,6 +502,37 @@ class AlertSender:
         """Alertlar sozlanganmi. UI va `alert_sweep` shu qiymatga qaraydi."""
         return self._enabled
 
+    @property
+    def last_failure(self) -> SendFailure | None:
+        """Oxirgi chaqiruvning SIRSIZ yiqilish fakti — ⛔ XOSSA, METOD EMAS.
+
+        =====================================================================
+        ⛔ NEGA BU XOSSA MAVJUD: `send_message()` `bool` qaytaradi (3-taqiq),
+           ya'ni chaqiruvchi `403` ni `429` dan AJRATA OLMASDI. Outbox uchun
+           bu farq butun marshrutlashning o'zi — `403` `blocked` (qayta
+           urinish YO'Q, D-22), `429` esa `retry_after` bilan navbatga
+           qaytish. Farqsiz job bloklangan foydalanuvchini mangu qayta
+           urinardi va chegaraga urilgan xabarni butunlay yo'qotardi.
+
+        ⛔ NEGA METOD EMAS: metod «amal» ni, xossa esa HOLATNI bildiradi.
+           Bu yerda hech qanday amal yo'q — chaqiruv allaqachon bo'lgan va
+           o'qilayotgani uning natijasi. Metod bo'lganda o'quvchi «bu ikkinchi
+           so'rov yubormaydimi?» degan savolni har safar qaytadan berardi.
+
+        ⚠ QIYMAT `ContextVar` DAN (`_LAST_FAILURE` docstringi): bir jarayondagi
+          parallel vazifalar bir-birining natijasini KO'RMAYDI.
+        =====================================================================
+
+        Returns:
+            Oxirgi chaqiruv YIQILGAN bo'lsa uch fakt; `None` — chaqiruv
+            muvaffaqiyatli tugadi, hali chaqiruv bo'lmadi, YOKI so'rov
+            umuman yuborilmadi (alertlar o'chiq / manzil yo'q). ⛔ OXIRGI
+            HOLAT ATAYIN `None`: u Telegram nosozligi EMAS va uni `blocked`
+            deb o'qish «aloqa uzildi» ro'yxatini hali ULANMAGAN sotuvchilar
+            bilan to'ldirardi (`resolve_chat_id()` ning aynan o'sha qoidasi).
+        """
+        return _LAST_FAILURE.get()
+
     async def send_message(self, text: str, *, chat_id: str | None = None) -> bool:
         """Matnli xabar yuboradi. ISTISNO KO'TARMAYDI (3-taqiq).
 
@@ -368,6 +581,20 @@ class AlertSender:
             status xato. Chaqiruvchi `False` ni `notified_at IS NULL` ga
             aylantiradi va UI uni ochiq ko'rsatadi.
         """
+        # =================================================================
+        # ⛔ HOLAT HAYOT SIKLINING (a) NUQTASI — BIRORTA I/O DAN OLDIN.
+        #
+        # O'tgan chaqiruvning natijasi keyingisiga OQIB O'TMASLIGI kerak:
+        # aks holda muvaffaqiyatli chaqiruvdan keyin ham `last_failure`
+        # eski `403` ni ko'rsatib turardi va outbox SOG'LOM qatorni
+        # `blocked` ga o'tkazardi. Erta `return False` shoxlari (alertlar
+        # o'chiq / manzil yo'q) ham shu tozalashdan KEYIN keladi, ya'ni
+        # ularda qiymat ATAYIN `None` bo'lib qoladi — bu Telegram
+        # nosozligi emas.
+        # =================================================================
+        _LAST_FAILURE.set(None)
+        _LAST_MESSAGE_ID.set(None)
+
         client = self._client
         target = chat_id or self._chat_id
         if client is None or not target:
@@ -375,16 +602,36 @@ class AlertSender:
 
         try:
             response = await self._post(client, text, target)
-        except AlertError as error:
-            # ⚠ `str(error)` XAVFSIZ: `_failure()` unga faqat amal, xato
-            #   turi va statusni beradi.
-            log.warning("alert_not_delivered", error=str(error))
+        except AlertError:
+            # ⛔ ISTISNO MATNI JURNALGA YOZILMAYDI (D-04 / G7-4). Ilgari
+            #   bu satr `error=str(error)` yozardi va u BUGUN xavfsiz edi
+            #   (`_failure()` sirsiz matn quradi), lekin darvoza bunday
+            #   nozik farqni ko'ra olmaydi: `str(<istisno>)` shakli
+            #   `AlertError` uchun xavfsiz, `httpx` istisnosi uchun esa
+            #   TOKENNI olib chiqadi va ikkalasi bir xil ko'rinadi.
+            #   Shuning uchun diagnostika STRUKTURAVIY maydonlarga ko'chdi:
+            #   ular ko'proq ma'lumot beradi va sirni tashiy olmaydi.
+            failure = _LAST_FAILURE.get()
+            if failure is None:  # pragma: no cover - `_post` uni HAR DOIM yozadi
+                log.warning("alert_not_delivered")
+            else:
+                log.warning(
+                    "alert_not_delivered",
+                    status=failure.status,
+                    error_type=failure.error_type,
+                    retry_after=failure.retry_after,
+                )
             return False
 
-        log.info("alert_delivered", chars=len(text), status=response)
+        # ⛔ HAYOT SIKLINING (c) NUQTASI: muvaffaqiyatli shoxda
+        #   `_LAST_FAILURE` `None` bo'lib QOLADI — «xato yo'q» holati
+        #   YO'QLIK bilan ifodalanadi, ikkinchi bayroq bilan emas.
+        message_id = _message_id(response)
+        _LAST_MESSAGE_ID.set(message_id)
+        log.info("alert_delivered", chars=len(text), status=response.status_code)
         return True
 
-    async def _post(self, client: httpx.AsyncClient, text: str, target: str) -> int:
+    async def _post(self, client: httpx.AsyncClient, text: str, target: str) -> httpx.Response:
         """Retry qatlami — FAQAT tarmoq sinfi (`_should_retry`).
 
         ⚠ ISTISNO `except` BLOKIDAN TASHQARIDA KO'TARILADI (04-06 ning
@@ -397,6 +644,18 @@ class AlertSender:
           Uni bu yerda qayta o'qish argumentli chaqiruvni JIMGINA ops
           chatiga burardi — ya'ni sotuvchining kvitansiyasi begona chatga
           ketardi.
+
+        ⚠ JAVOB OBYEKTI QAYTADI, STATUS KODI EMAS: `message_id` javob
+          TANASIDA va uni bu yerda o'qish `_post` ni «yubor + parse»
+          ikki vazifali qilardi. Obyekt chaqiruvchida BIR MARTA, bitta
+          joyda parse qilinadi.
+
+        Returns:
+            Muvaffaqiyatli `httpx.Response` (status allaqachon tekshirilgan).
+
+        Raises:
+            AlertError: SIRSIZ yiqilish — uch fakt `_LAST_FAILURE` ga ham
+                yozilgan bo'ladi.
         """
         payload = {
             "chat_id": target,
@@ -417,14 +676,24 @@ class AlertSender:
 
         captured: Exception | None = None
         status: int | None = None
+        retry_after: int | None = None
         try:
             response: httpx.Response = await retrying(client.post, self._url, json=payload)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             captured, status = exc, exc.response.status_code
+            retry_after = _retry_after(exc.response)
         except httpx.HTTPError as exc:
             captured = exc
         else:
-            return int(response.status_code)
+            return response
 
+        # ⛔ HAYOT SIKLINING (b) NUQTASI — `AlertError` KO'TARILISHIDAN OLDIN.
+        #   Uch fakt AYNAN shu yerda yig'iladi, chunki istisno obyekti faqat
+        #   shu yerda mavjud: yuqoriroq qatlam uni umuman KO'RMAYDI va
+        #   ko'rmasligi ham kerak (3-taqiq). `_failure()` esa TEGILMAYDI —
+        #   u hamon o'sha uch faktdan `AlertError` quradi.
+        _LAST_FAILURE.set(
+            SendFailure(status=status, error_type=type(captured).__name__, retry_after=retry_after)
+        )
         raise _failure(captured, status) from None
