@@ -885,9 +885,7 @@ async def test_the_headline_needs_a_selected_market(
     ma'nosiz. RLS ostida kontekstsiz so'rov jimgina 0 qator qaytarardi
     va klient buni «tushum yo'q» deb o'qirdi (`deps.get_tenant_session`).
     """
-    headers = await session_headers(
-        api_client, env.auth.platform_admin.phone, env.auth.password
-    )
+    headers = await session_headers(api_client, env.auth.platform_admin.phone, env.auth.password)
 
     response = await api_client.get(HEADLINE_URL, headers=headers)
 
