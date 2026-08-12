@@ -111,7 +111,9 @@ __all__ = [
     "OUTBOX_BATCH_SIZE",
     "OUTBOX_COMPONENT",
     "OUTBOX_LEASE_SECONDS",
+    "OUTBOX_TICK_BUDGET_SECONDS",
     "PER_CHAT_INTERVAL_SECONDS",
+    "UNRESOLVED_MAX_AGE_HOURS",
     "UNRESOLVED_RETRY_SECONDS",
     "OutboxDisposition",
     "OutboxFailure",
@@ -182,12 +184,28 @@ GLOBAL_RATE_PER_SECOND: Final[int] = 25
 """
 
 OUTBOX_TICK_BUDGET_SECONDS: Final[int] = 20
-"""Bitta tikning JO'NATISHGA sarflaydigan vaqt byudjeti.
+"""Bitta tikning JO'NATISHGA sarflaydigan vaqt byudjeti — ⛔ HAQIQIY DEADLINE.
 
 ⚠ DAQIQALIK JADVALNING UCHDAN BIRI: tik keyingi tik boshlanishidan oldin
   tugashi SHART, aks holda ikki nusxa bir vaqtda yugurib navbatni
   bir-biriga taqardi (ijara va `SKIP LOCKED` bunday holatda ham to'g'ri
   ishlaydi, lekin qatorlar keraksiz qulflanardi).
+
+=============================================================================
+⛔⛔ QIYMAT `OUTBOX_BATCH_SIZE` ARIFMETIKASIDA EMAS, TIKNING O'ZIDA
+    O'LCHANADI (07-19 da tuzatilgan O'LCHANGAN nuqson, B-3).
+
+Ilgari u faqat partiya hajmini hisoblardi va tikning tsiklida HECH QACHON
+tekshirilmasdi. Partiya hajmi esa BIR bozorga tegishli: 7+ to'la navbatli
+tik ketma-ket yugurib `OUTBOX_LEASE_SECONDS` (120 s) dan UZUN yashardi.
+O'shanda `release_expired_leases()` HALI JO'NATILAYOTGAN qatorlarni
+`pending` ga qaytarardi va keyingi tik ularni QAYTA olardi — sotuvchi AYNI
+kvitansiyani IKKI MARTA olardi.
+
+⛔ `dedupe_key` BU NOSOZLIKKA QARSHI EMAS: u `enqueue()` ni qo'riqlaydi,
+   ya'ni bir niyat IKKI QATOR bo'lmasligini. Bitta qatorning ikki marta
+   JO'NATILISHIGA uning aloqasi yo'q.
+=============================================================================
 """
 
 OUTBOX_BATCH_SIZE: Final[int] = GLOBAL_RATE_PER_SECOND * OUTBOX_TICK_BUDGET_SECONDS
@@ -218,6 +236,38 @@ UNRESOLVED_RETRY_SECONDS: Final[int] = 900
   urardi; 15 daqiqa esa ulanishdan keyin xabarni tez yetkazadi.
 """
 
+UNRESOLVED_MAX_AGE_HOURS: Final[int] = 72
+"""Manzilsiz qator navbatda TURA OLADIGAN eng uzun muddat — uch kun.
+
+=============================================================================
+⛔⛔ CHEGARA YOSH BO'YICHA, URINISH SONI BO'YICHA EMAS — VA BU MAJBURIY.
+
+`UNRESOLVED` shoxi hisoblagichga UMUMAN tegmaydi (`outbox_repo.
+defer_unresolved()`), ya'ni sanoq bo'yicha chegara YANGI USTUN — demak
+MIGRATSIYA — talab qilardi. Yosh esa `notification_outbox.created_at` da
+ALLAQACHON bor va u `_CLAIM_DUE` orqali `OutboxClaim.created_at` bo'lib
+keladi: hech qanday sxema o'zgarishisiz.
+
+⚠ 72 SOAT — HISOBLANGAN, TANLANMAGAN:
+  * `UNRESOLVED_RETRY_SECONDS` (15 daqiqa) bo'yicha ~288 qayta jadvallash,
+    ya'ni sotuvchiga (yoki direktorga) botga ulanish uchun UCH KUN;
+  * undan keyin xabarning O'ZI eskirgan. Bu `MAX_ATTEMPTS` docstringidagi
+    «bir soatdan ko'p kechikkan kvitansiya ALLAQACHON zudlik emas»
+    mulohazasining kengaytmasi, dayjest esa AYNAN BIR KUNGA tegishli —
+    uch kunlik «kechki holat» xabari hech qanday qarorga xizmat qilmaydi.
+
+⛔ CHEGARASIZ VARIANT O'LCHANGAN OQIBAT BERADI (B-1): yiliga ~730 o'lik
+   qator/bozor to'planardi va ular `_CLAIM_DUE` ning `ORDER BY o.created_at`
+   ida ENG ESKI bo'lib partiyaning BOSHINI egallardi. ~250 kundan keyin
+   `OUTBOX_BATCH_SIZE` (500) to'lardi va HAQIQIY kvitansiya umuman
+   jo'natilmasdi — navbat xatosiz, jimgina o'lardi (head-of-line bloklash).
+
+⚠ SABAB `UnresolvedRecipient` BO'LIB QOLADI: direktorning yuzasida u
+  «sotuvchi botga ulanmadi» deb o'qiladi va `HTTPStatusError` bilan
+  ARALASHMAYDI (D-22 ning ajratish qoidasi).
+=============================================================================
+"""
+
 
 class OutboxDisposition(StrEnum):
     """Bitta urinish natijasining MARSHRUTI — yopiq to'plam.
@@ -233,7 +283,14 @@ class OutboxDisposition(StrEnum):
     """`403` — foydalanuvchi botni bloklagan. ⛔ QAYTA URINILMAYDI (D-22)."""
 
     FAILED = "failed"
-    """Qayta urinib bo'lmaydigan xato (`400`/`401`/`404`) yoki byudjet tugadi."""
+    """Qayta urinib bo'lmaydigan xato (`400`/`401`/`404`), urinishlar tugadi
+    yoki manzilsiz qator YOSH chegarasidan o'tdi.
+
+    ⛔ VAQT BYUDJETINING TUGASHI BU YERGA TUSHMAYDI (WR-08): byudjet
+       tugaganda qolgan qatorlarning holati UMUMAN yozilmaydi — ijara
+       o'z-o'zidan bo'shaydi va keyingi tik ularni qayta oladi. Xabar
+       yiqilmagan, u shunchaki YUBORILMAGAN.
+    """
 
     RETRY = "retry"
     """Vaqtinchalik nosozlik (`429`, `5xx`, tarmoq) — navbatga qaytadi."""
@@ -338,6 +395,21 @@ class OutboxTickResult:
     """
 
     markets: int = 0
+    skipped_markets: int = 0
+    """⛔ VAQT BYUDJETI TUGAGANI UCHUN UMUMAN OLINMAGAN bozorlar soni.
+
+    ⚠ NOL — NATIJA: «byudjet yetdi» degan FAKT. Maydonsiz esa «tik hamma
+      bozorni ko'rdi» bilan «tik yarim yo'lda to'xtadi» bir xil ko'rinardi
+      va navbat jimgina orqada qolaverardi.
+    """
+    budget_exhausted: bool = False
+    """Tik byudjetga URILDIMI — ⛔ `skipped_markets` DAN MUSTAQIL fakt.
+
+    ⚠ IKKI MAYDON HAM KERAK: byudjet OXIRGI bozorning ichida tugasa
+      `skipped_markets` NOL bo'lib qoladi (o'tkazib yuborilgan bozor yo'q),
+      lekin o'sha bozorning qolgan qatorlari HAMON jo'natilmagan. Yolg'iz
+      sanoq bu holatni «hammasi yetdi» deb ko'rsatardi.
+    """
     released: int = 0
     """Muddati o'tgan ijaradan qaytarilgan qatorlar."""
     claimed: int = 0
@@ -423,9 +495,13 @@ def _next_attempt_at(attempt: int, *, now: datetime, retry_after: int | None) ->
        holatni yomonlashtiradi» qoidasining aynan takrori.
 
     Args:
-        attempt: qatorning `attempt_count` i (⛔ `claim()` da allaqachon
-            oshirilgan, ya'ni birinchi urinishda u `1`).
-        now: tikning payti — ARGUMENT, `now()` EMAS (test soatni
+        attempt: ⛔ HOZIR YOZILAYOTGAN urinishning RAQAMI, birinchisida `1`.
+            Chaqiruvchi uni `claim.attempt_count + 1` bilan beradi:
+            `claim()` hisoblagichni oshirmaydi (`OutboxClaim.attempt_count`
+            docstringi), ya'ni xom `attempt_count` ni uzatish jadvalni
+            butun bir qadamga SURIB yuborardi — beshinchi urinish ham
+            30 soniyadan keyin bo'lardi va `429` lar zanjiri tug'ilardi.
+        now: tikning JORIY payti — ARGUMENT, `now()` EMAS (test soatni
             siljitmasdan o'lchaydi).
         retry_after: Telegram bergan soniya yoki `None`.
     """
@@ -850,6 +926,16 @@ def _tick_detail(result: OutboxTickResult) -> dict[str, Any]:
     """
     return {
         "markets": result.markets,
+        "skipped_markets": result.skipped_markets,
+        # ⛔ `bool` EMAS, `int`: maydon `jsonb` ga tushadi va detalning
+        #   «faqat sanoqlar» qoidasi TIP darajasida ushlab turiladi
+        #   (`isinstance(True, int)` Python'da ROST — ya'ni bayroq
+        #   darvozadan JIMGINA o'tib ketardi).
+        #
+        # ⚠ MAYDON `skipped_markets` DAN HOSILA EMAS: byudjet oxirgi
+        #   bozorning ichida tugaganda sanoq nol bo'lib qoladi, bayroq esa
+        #   `1` — ya'ni ikkalasi ham kuzatuvga chiqadi.
+        "budget_exhausted": int(result.budget_exhausted),
         "released": result.released,
         "claimed": result.claimed,
         "delivered": result.delivered,
@@ -909,6 +995,35 @@ async def outbox_tick(
     partiya butun poolni yeb qo'yardi.
     =========================================================================
 
+    =========================================================================
+    ⛔⛔ VAQT BYUDJETI IKKI NUQTADA O'LCHANADI VA IKKALASI HAM MAJBURIY.
+
+      1. HAR BOZORDAN OLDIN — qolgan bozorlar keyingi tikka qoladi
+         (`skipped_markets`), ya'ni tik `OUTBOX_LEASE_SECONDS` dan uzun
+         yashamaydi;
+      2. HAR QATORDAN OLDIN — bitta bozorning navbati byudjetdan
+         KATTA bo'lishi mumkin (partiya 500 gacha), ya'ni faqat birinchi
+         tekshiruv tikni ijara ichida ushlab tura olmasdi.
+
+    ⛔ BYUDJET TUGAGANDA QOLGAN QATORLARNING HOLATI YOZILMAYDI: `_settle()`
+       CHAQIRILMAYDI. Ijara o'z-o'zidan bo'shaydi va keyingi tikning
+       `release_expired_leases()` i ularni `pending` ga qaytaradi. Bu
+       byudjetning TUGASHINI `failed` ga aylantirmaslikning yagona to'g'ri
+       yo'li — xabar yiqilmagan, u shunchaki YUBORILMAGAN.
+
+    ⚠ IBORA BU FAYLDA LITERAL YOZILMAYDI (1-taqiqning o'lchangan qoidasi):
+      `OutboxDisposition.FAILED` ning eski docstringi aynan shu jumlani
+      tashigan va u YOLG'ON bo'lib qolgan edi — takrorlanishi darvozani
+      (`grep`) o'z tushuntirishiga qarshi qo'yardi.
+
+    ⚠ SOAT MONOTON (`monotonic`), DEVOR SOATI EMAS: NTP sakrashi yoki yoz
+      vaqti tikning byudjetini uzaytirib yoki qisqartirib yuborardi.
+    =========================================================================
+
+    ⚠ SAQLANADIGAN VAQT ESA DEVOR SOATIDAN: `moment = now + o'tgan vaqt`.
+      Yolg'iz `now` bilan hisoblangan ijara va backoff tikning BOSHIDAGI
+      paytdan yurardi, ya'ni uzun tikda ijara AMALDA qisqarardi.
+
     ⛔ HAR XATO YUTILADI (`_swallow()`): bitta bozorning yoki bitta
        qatorning nosozligi qolgan hammasini to'xtatmaydi (D-23).
 
@@ -916,15 +1031,20 @@ async def outbox_tick(
         sessionmaker: sessiya fabrikasi — ARGUMENT, modul globali emas.
         sender: Telegram jo'natuvchisi. ARGUMENT: testda `respx` bilan
             o'lchanadi, mahsulotda `TaskiqState` dan keladi.
-        now: tikning payti. ⛔ ARGUMENT: quiet-hours darvozasi ham, backoff
-            arifmetikasi ham aynan shu qiymatga qaraydi, ya'ni «22:30 da
-            nima bo'ladi?» savoli soatni siljitmasdan o'lchanadi.
-        monotonic: throttling soati — FAQAT test almashtiradi.
+        now: tikning BOSHLANISH payti. ⛔ ARGUMENT: quiet-hours darvozasi
+            ham, backoff arifmetikasi ham aynan shu qiymatdan yuradi,
+            ya'ni «22:30 da nima bo'ladi?» savoli soatni siljitmasdan
+            o'lchanadi.
+        monotonic: byudjet VA throttling soati — FAQAT test almashtiradi.
+            ⛔ `time.monotonic` TO'G'RIDAN-TO'G'RI chaqirilmaydi: o'shanda
+            byudjet darvozasini boshqarib bo'lmasdi.
         sleep: throttling uyqusi — FAQAT test almashtiradi.
     """
     result = OutboxTickResult()
     throttle = _Throttle(monotonic=monotonic, sleep=sleep)
     request_id = f"job-outbox-{now.isoformat()}"
+    started = monotonic()
+    deadline = started + OUTBOX_TICK_BUDGET_SECONDS
 
     try:
         market_ids = await active_market_ids(sessionmaker)
@@ -937,11 +1057,31 @@ async def outbox_tick(
         return result
 
     result.markets = len(market_ids)
-    for market_id in market_ids:
+    for index, market_id in enumerate(market_ids):
+        if monotonic() >= deadline:
+            # ⛔ QOLGAN BOZORLAR KEYINGI TIKKA QOLADI. Ularning navbati
+            #   TEGILMAGAN: birorta qator olinmagan, ijara olinmagan.
+            result.skipped_markets = len(market_ids) - index
+            result.budget_exhausted = True
+            log.info("outbox_tick_budget_exhausted", skipped=result.skipped_markets)
+            break
+
         claims = await _claim_batch(
-            sessionmaker, market_id=market_id, request_id=request_id, now=now, result=result
+            sessionmaker,
+            market_id=market_id,
+            request_id=request_id,
+            now=_moment(now, started=started, monotonic=monotonic),
+            result=result,
         )
         for claim in claims:
+            if monotonic() >= deadline:
+                # ⛔ QOLGAN `claim` LAR UCHUN `_settle()` CHAQIRILMAYDI:
+                #   ijara o'z-o'zidan bo'shaydi va keyingi tik ularni
+                #   qayta oladi. Holat yozish «yuborilmadi» ni
+                #   «YIQILDI» ga aylantirardi.
+                result.budget_exhausted = True
+                break
+
             await _deliver(
                 sessionmaker,
                 sender,
@@ -949,13 +1089,34 @@ async def outbox_tick(
                 market_id=market_id,
                 request_id=request_id,
                 claim=claim,
-                now=now,
+                now=_moment(now, started=started, monotonic=monotonic),
                 result=result,
             )
 
     await _write_heartbeat(OUTBOX_COMPONENT, sessionmaker, _tick_detail(result))
     log.info("outbox_tick_done", **_tick_detail(result))
     return result
+
+
+def _moment(now: datetime, *, started: float, monotonic: Callable[[], float]) -> datetime:
+    """Tikning JORIY payti — `now` + tik boshlanganidan beri o'tgan vaqt.
+
+    =========================================================================
+    ⛔ IJARA VA BACKOFF TIKNING BOSHIDAGI EMAS, JORIY PAYTDAN HISOBLANADI.
+
+    Yolg'iz `now` bilan yozilgan `lease_until` tikning 15-soniyasida
+    olingan qator uchun ham BOSHLANISH paytidan yurardi, ya'ni ijara
+    AMALDA 15 soniyaga qisqa bo'lardi. Backoff ham xuddi shunday: uzun
+    tikda `next_attempt_at` o'tmishga yaqinlashardi va qator kutilganidan
+    ERTA qayta olinardi.
+
+    ⚠ IKKI SOAT IKKI VAZIFADA: o'tgan vaqt MONOTON soatdan (u NTP
+      sakrashidan himoyalangan), saqlanadigan qiymat esa DEVOR soatidan
+      (`now` — tz-aware `Asia/Tashkent`). Monoton soatning O'ZI kalendar
+      qiymat bermaydi, devor soati esa orqaga sakrashi mumkin.
+    =========================================================================
+    """
+    return now + timedelta(seconds=monotonic() - started)
 
 
 async def _claim_batch(
@@ -1023,14 +1184,26 @@ async def _deliver(
                 vendor_id=claim.vendor_id,
             )
     except SQLAlchemyError as exc:
+        # ⛔ QATOR `_settle()` GA UMUMAN BORMAYDI — ijara ostida qoladi va
+        #   uni keyingi tikning `release_expired_leases()` i qaytaradi.
+        #
+        # ⚠ BU ENDI XAVFSIZ: `claim()` hisoblagichni oshirmaydi (07-19),
+        #   ya'ni takroriy DB nosozligi sotuvchining urinish byudjetini
+        #   YEMAYDI. Ilgari har bunday qaytish bittadan «urinish» yozardi
+        #   va baza bir necha daqiqa yiqilganda kvitansiya `failed`
+        #   bo'lardi — Telegram bilan hech qanday muammo bo'lmagan holda.
         _swallow(result, "outbox_chat_lookup_failed", exc, market_id=market_id)
         return
 
     if chat_id is None:
         # ⛔ `blocked` EMAS: sotuvchi hali botga ULANMAGAN va bu QONUNIY
         #   holat (`resolve_chat_id()` docstringi). Urinish UMUMAN
-        #   qilinmadi — HTTP so'rovi yo'q — shuning uchun byudjet
-        #   tekshiruvi ham qo'llanmaydi (pastdagi `_settle`).
+        #   qilinmadi — HTTP so'rovi yo'q — shuning uchun URINISH SONI
+        #   bo'yicha byudjet tekshiruvi qo'llanmaydi.
+        #
+        # ⚠ QATOR BARIBIR ABADIY QOLMAYDI: `_settle()` uni YOSHI bo'yicha
+        #   (`UNRESOLVED_MAX_AGE_HOURS`) terminal holatga chiqaradi, ya'ni
+        #   navbat KONVERGENT bo'lib qoladi.
         await _settle(
             sessionmaker,
             market_id=market_id,
@@ -1152,15 +1325,45 @@ async def _settle(
 ) -> None:
     """Yiqilgan (yoki umuman qilinmagan) urinishning holatini yozadi.
 
+    =========================================================================
     ⛔ BYUDJET FAQAT HAQIQIY URINISHGA QO'LLANADI: `unresolved` shoxida
        HTTP so'rovi UMUMAN yuborilmagan, ya'ni uni `MAX_ATTEMPTS` ga
        hisoblash sotuvchining byudjetini u hali BOTGA ULANMAGANI uchun
        yeb qo'yardi — kvitansiya `failed` bo'lardi va Telegram bilan hech
        qanday muammo bo'lmasdi (`release_expired_leases()` ning aynan o'sha
        qoidasi).
+
+    ⛔ KAFOLAT ENDI STRUKTURAVIY: `outbox_repo.defer_unresolved()`
+       hisoblagichga UMUMAN tegmaydi, `claim()` ham. Ya'ni «byudjet
+       yeyilmasin» intizomga emas, IKKI ALOHIDA BAYONOTGA tayanadi.
+    =========================================================================
+
+    =========================================================================
+    ⛔⛔ IKKI TERMINAL CHEGARA, IKKI XIL O'LCHOV BILAN — VA BU ATAYIN.
+
+      * `RETRY` -> `attempt_count + 1 >= MAX_ATTEMPTS` (URINISH SONI).
+        `claim.attempt_count` — bu urinishdan OLDINGI hisob (`OutboxClaim`
+        docstringi), ya'ni hozir yozilayotgani `+1` -inchisi. `+1` siz
+        chegara bir urinishga KECHIKARDI va oltinchi so'rov ketardi.
+
+      * `UNRESOLVED` -> qatorning YOSHI (`UNRESOLVED_MAX_AGE_HOURS`).
+        Bu shox hisoblagichni oshirmaydi, ya'ni sanoq bo'yicha chegara bu
+        yerda HECH QACHON ishlamasdi — qator MANGU qayta jadvallanardi
+        (o'lchangan nuqson B-1) va navbatning eng eski qismini egallardi.
+
+    ⚠ YOSH QATORNING O'ZIDAN (`claim.created_at`), tikdan EMAS: tik «hozir
+      soat nechi» ni biladi, «bu kvitansiya qachon tug'ilgan» ni emas.
+    =========================================================================
     """
     disposition = outcome.disposition
-    if disposition is OutboxDisposition.RETRY and claim.attempt_count >= MAX_ATTEMPTS:
+    if disposition is OutboxDisposition.RETRY and claim.attempt_count + 1 >= MAX_ATTEMPTS:
+        disposition = OutboxDisposition.FAILED
+    elif disposition is OutboxDisposition.UNRESOLVED and now - claim.created_at >= timedelta(
+        hours=UNRESOLVED_MAX_AGE_HOURS
+    ):
+        # ⚠ `error_type` O'ZGARMAYDI (`UnresolvedRecipient`): direktor
+        #   ekranida sabab «sotuvchi botga ulanmadi» bo'lib qoladi va
+        #   texnik nosozlik shovqiniga aralashmaydi (D-22).
         disposition = OutboxDisposition.FAILED
 
     try:
@@ -1182,19 +1385,24 @@ async def _settle(
                     error_type=outcome.error_type,
                     status_code=outcome.status_code,
                 )
-            else:
-                next_attempt_at = (
-                    now + timedelta(seconds=UNRESOLVED_RETRY_SECONDS)
-                    if disposition is OutboxDisposition.UNRESOLVED
-                    else _next_attempt_at(
-                        claim.attempt_count, now=now, retry_after=outcome.retry_after
-                    )
+            elif disposition is OutboxDisposition.UNRESOLVED:
+                # ⛔ `reschedule()` EMAS: urinish UMUMAN bo'lmagan, ya'ni
+                #   sanaladigan narsa yo'q (`defer_unresolved()` docstringi).
+                await outbox_repo.defer_unresolved(
+                    session,
+                    market_id=market_id,
+                    outbox_id=claim.id,
+                    next_attempt_at=now + timedelta(seconds=UNRESOLVED_RETRY_SECONDS),
+                    error_type=outcome.error_type,
                 )
+            else:
                 await outbox_repo.reschedule(
                     session,
                     market_id=market_id,
                     outbox_id=claim.id,
-                    next_attempt_at=next_attempt_at,
+                    next_attempt_at=_next_attempt_at(
+                        claim.attempt_count + 1, now=now, retry_after=outcome.retry_after
+                    ),
                     error_type=outcome.error_type,
                     status_code=outcome.status_code,
                 )
