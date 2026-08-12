@@ -139,13 +139,32 @@ o'tkazmaydi. `httpx` istisnosining MATNI esa to'liq URL'ni (ya'ni tokenni)
 tashiydi va u har doim bu chegaradan uzun bo'ladi.
 """
 
-_ERROR_TYPE_FORBIDDEN: Final[tuple[str, ...]] = (" ", "http", "api.telegram.org", "/")
+_ERROR_TYPE_FORBIDDEN: Final[tuple[str, ...]] = (" ", "://", "api.telegram.org", "/")
 """`last_error_type` da UCHRAMASLIGI kerak bo'lgan parchalar (D-04).
 
 ⛔ UZUNLIK YOLG'IZ O'ZI YETMAYDI: `str(exc)` ning BOSHLANG'ICH 64 belgisi
    ham tokenning bir qismini tashishi mumkin. Probel — «bu jumla, tur
-   nomi emas» degan eng arzon belgi; `http`, xost nomi va `/` esa
-   URL'ning o'zi.
+   nomi emas» degan eng arzon belgi; sxema ajratgichi, xost nomi va `/`
+   esa URL'ning o'zi.
+
+=============================================================================
+⛔⛔ `"http"` PARCHASI `"://"` GA ALMASHTIRILDI (07-09 da O'LCHANDI).
+
+Eski ro'yxat `"http"` ni taqiqlagan, ya'ni u `str(exc)` ni emas, `httpx`
+istisno SINFLARINING NOMLARINI rad etardi: `HTTPStatusError`,
+`HTTPError`, `HTTPFrameError` — hammasi «http» bilan boshlanadi. Natijada
+D-04 ga TO'LIQ MOS keladigan qiymat (`type(exc).__name__`) yozib
+bo'lmasdi va Telegram ning HAR BIR status xatosi `ValueError` bilan
+qaytardi — ya'ni qator yakuniy holatga UMUMAN o'tolmasdi va navbat
+jimgina to'lib borardi.
+
+⚠ DA'VO SUSAYMADI, KUCHAYDI: har qanday `http(s)` URL'i `"://"` ni ham,
+  `"/"` ni ham o'z ichiga oladi (ikkalasi ham ro'yxatda qoldi), ya'ni
+  o'sha URL avvalgidek rad etiladi. Ustiga `isidentifier()` SHAKL talabi
+  qo'shildi — u denylist emas, ALLOWLIST: Python sinf nomi HAR DOIM
+  identifikator, `str(exc)` esa (nuqta, ikki nuqta, qavs, probel bilan)
+  HECH QACHON emas.
+=============================================================================
 """
 
 
@@ -541,19 +560,26 @@ def _validate_error_type(error_type: str) -> str:
        bitta `str(exc)` sirni bazaga, u yerdan `pg_dump` -> restic ->
        TASHQI BUCKET ga olib chiqardi.
 
+    ⛔ SHAKL TALABI ALLOWLIST (`isidentifier()`), DENYLIST EMAS: Python
+       sinf nomi HAR DOIM identifikator, `str(exc)` esa (nuqta, ikki
+       nuqta, qavs va probel bilan) HECH QACHON emas. Denylist ro'yxati
+       o'z joyida qoladi va u XATO XABARINI aniq qiladi — «nima noto'g'ri»
+       degan savolga `isidentifier()` yolg'iz o'zi javob bera olmasdi.
+
     Raises:
-        ValueError: qiymat tur nomiga o'xshamaganda (uzun, probelli yoki
-            URL parchasini tashiganda).
+        ValueError: qiymat tur nomiga o'xshamaganda (uzun, probelli,
+            identifikator bo'lmagan yoki URL parchasini tashiganda).
     """
     lowered = error_type.lower()
     matched = sorted(token for token in _ERROR_TYPE_FORBIDDEN if token in lowered)
-    if len(error_type) > ERROR_TYPE_MAX_LENGTH or matched or not error_type:
+    if len(error_type) > ERROR_TYPE_MAX_LENGTH or matched or not error_type.isidentifier():
         raise ValueError(
             f"`last_error_type` faqat `type(exc).__name__` shaklidagi qisqa satrni "
-            f"qabul qiladi (uzunligi <= {ERROR_TYPE_MAX_LENGTH}, probelsiz va "
-            f"URL'siz). Berilgani: uzunlik={len(error_type)}, taqiqlangan "
-            f"parcha(lar)={matched}. Telegram URL'i BOT TOKENINI tashiydi va "
-            "istisno matni uni bazaga olib chiqardi (D-04)."
+            f"qabul qiladi (uzunligi <= {ERROR_TYPE_MAX_LENGTH}, probelsiz, "
+            f"URL'siz va Python identifikatori shaklida). Berilgani: "
+            f"uzunlik={len(error_type)}, identifikatormi={error_type.isidentifier()}, "
+            f"taqiqlangan parcha(lar)={matched}. Telegram URL'i BOT TOKENINI "
+            "tashiydi va istisno matni uni bazaga olib chiqardi (D-04)."
         )
     return error_type
 
