@@ -395,6 +395,7 @@ emas, **oddiy mahsulot oqimi**.
 
 | Darvoza | Buyruq | Natija |
 |---|---|---|
+| **Yakuniy birlashgan yugurish** (beshala commit ustida) | `pytest tests/integration/test_bot_internal_api.py tests/integration/test_phase7_criteria.py tests/tenancy -q` | **EXIT=0**, ~860 test, **0 nosozlik** |
 | Repo + HTTP xulqi | `pytest tests/integration/test_bot_internal_api.py -q` | **47 passed** |
 | Mezon #3 | `pytest ...::test_sc3_director_gets_two_messages_and_every_role_gets_one_number -q` | **1 passed** |
 | Tenancy reyestrlari | `pytest tests/tenancy -q` | **passed** (yuza 3 -> 4, `==` shakli saqlangan) |
