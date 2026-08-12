@@ -706,6 +706,257 @@ test("⛔ G-36 (07-UI-SPEC) (d): destruktiv variant 0 marta (§14.8)", () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* G-31 / G-34 — YOPIQ HOLAT TO'PLAMLARI × 3 LOCALE (07-UI-SPEC §16.6)        */
+/* -------------------------------------------------------------------------- */
+
+const API_TYPES = path.join(SRC, "lib", "api-types.ts");
+const ENUMS = path.join(
+  REPO_ROOT,
+  "packages",
+  "sbozor-core",
+  "sbozor_core",
+  "enums.py",
+);
+
+/**
+ * `export const NAME = [ "a", "b" ] as const;` — TS reyestrini o'qiydi.
+ *
+ * ⛔ IMPORT QILINMAYDI, MATN SIFATIDA O'QILADI (05-13 darsi): darvoza o'zi
+ *   tekshirayotgan qiymatni tekshirilayotgan moduldan olsa, ikkalasi BIRGA
+ *   o'zgarganda JIMGINA yashil qolardi.
+ */
+function readTsRegistry(source, name) {
+  const block = new RegExp(
+    `export const ${name}\\s*=\\s*\\[([\\s\\S]*?)\\]\\s*as const;`,
+    "u",
+  ).exec(source);
+  assert.ok(block, `\`${name}\` topilmadi — parser sinigan`);
+  return [...block[1].matchAll(/"([a-z_]+)"/gu)].map((match) => match[1]);
+}
+
+/**
+ * ⛔⛔ BACKEND LANGARI: `enums.py` dagi a'zolarni MATN sifatida parse qiladi.
+ *
+ * =============================================================================
+ * ⛔ NEGA LANGAR BACKEND REYESTRIDA VA NEGA KATALOGDA EMAS (04-10 darsi).
+ *
+ * Ko'zgu darvozasi faqat frontend reyestriga qaralsa, u ⛔ ICHKI
+ * IZCHILLIKNI o'lchardi: «reyestrda nima bo'lsa, matni ham bor». Bu
+ * savol MUHIM, lekin u ⛔ TO'LIQLIKNI o'lchamaydi — backend oltinchi
+ * holat qo'shsa, frontend reyestri ⛔ BESHTA bo'lib QOLARDI va ikkala
+ * darvoza ham YASHIL qaytardi. Ekranda esa o'sha oltinchi holat
+ * ⛔ ZAXIRA YORLIQ bilan chiqardi va direktor uni «noma'lum» deb
+ * ko'rardi — ya'ni yuza jimgina TO'LIQSIZ bo'lib qolardi.
+ * =============================================================================
+ *
+ * ⚠ DOCSTRING'DAGI MATN PARSE'GA TUSHMAYDI: naqsh `NOM = "qiymat"`
+ *   shaklini talab qiladi va enum'ning izohida bunday satr yo'q.
+ */
+function readPythonStrEnum(source, name) {
+  const start = source.indexOf(`class ${name}(StrEnum):`);
+  assert.ok(start >= 0, `\`${name}\` topilmadi — parser sinigan`);
+
+  const nextClass = source.indexOf("\nclass ", start + 1);
+  const body = source.slice(start, nextClass === -1 ? undefined : nextClass);
+
+  return [...body.matchAll(/^\s{4}[A-Z][A-Z_]*\s*=\s*"([a-z_]+)"/gmu)].map(
+    (match) => match[1],
+  );
+}
+
+const apiTypesSource = read(API_TYPES);
+const enumsSource = read(ENUMS);
+
+const caseStatuses = readTsRegistry(apiTypesSource, "CASE_STATUSES");
+const deliveryStates = readTsRegistry(apiTypesSource, "DELIVERY_STATES");
+
+/**
+ * ⛔ ZAXIRA YORLIQNING KALITI — reyestr a'zosi ⛔ EMAS, va to'plam
+ *   ⛔ AYNAN BITTA a'zoli.
+ *
+ * Sxema reyestr bilan qulflanmagan (04-10), ya'ni noma'lum qiymat ekranga
+ * yetib keladi va u ⛔ NOMLANGAN yorliq oladi. Lekin istisnolar ro'yxati
+ * o'sib ketsa, to'plam tengligi darvozasi asta-sekin ⛔ BO'SHASHARDI —
+ * shuning uchun uning O'LCHAMI alohida assert bilan qulflanadi
+ * (`page.test.tsx::CONTENT_EXEMPT` bilan aynan bir naqsh).
+ */
+const FALLBACK_KEYS = new Set(["unknown"]);
+
+/** Locale × namespace -> kalitlar to'plami. */
+function messageKeys(locale, group) {
+  const node = loadMessages(locale).recon?.[group];
+  assert.ok(node, `${locale}: \`recon.${group}\` topilmadi`);
+  return new Set(Object.keys(node));
+}
+
+test("⛔ ZAXIRA KALITLARI TO'PLAMI — AYNAN BITTA a'zoli (alohida assert)", () => {
+  assert.equal(FALLBACK_KEYS.size, 1);
+  assert.ok(FALLBACK_KEYS.has("unknown"));
+});
+
+test("⛔ G-31 (07-UI-SPEC) (b): reyestr AYNAN 4 a'zo va erkin a'zo YO'Q", () => {
+  assert.equal(
+    caseStatuses.length,
+    4,
+    `\`CASE_STATUSES\` da ${caseStatuses.length} a'zo (kutilgan 4)`,
+  );
+
+  /*
+   * ⛔ ENG MUHIM BAND: erkin matnli a'zo hisobotda GURUHLANMASDI va u
+   *   AMALDA eng katta guruh bo'lib qolardi. Undan qimmatrog'i —
+   *   aniqlik ulushining MAXRAJI (`justified / (justified +
+   *   unjustified)`) aniqlanmagan bo'lib qolardi: beshinchi a'zo
+   *   maxrajga kiradimi yoki yo'qmi, HECH QAYERDA yozilmagan bo'lardi.
+   */
+  const freeform = caseStatuses.filter((value) =>
+    ["other", "custom", "unknown", "free", "misc"].includes(value),
+  );
+  assert.deepEqual(freeform, [], `reyestrga erkin a'zo kirdi: ${freeform}`);
+});
+
+test("⛔ G-31 (07-UI-SPEC) (a): `recon.caseStatus.*` UCHALA locale'da — TENGLIK", () => {
+  const expected = new Set([...caseStatuses, ...FALLBACK_KEYS]);
+
+  for (const locale of LOCALES) {
+    /*
+     * ⛔ TO'PLAM TENGLIGI, «bormi?» EMAS: yetishmagan matnni ham,
+     *   O'LIK kalitni ham AYNAN shu shakl ushlaydi. «Bormi?» tekshiruvi
+     *   reyestrdan olib tashlangan a'zoning matnini abadiy qoldirardi.
+     */
+    assert.deepEqual(
+      messageKeys(locale, "caseStatus"),
+      expected,
+      `${locale}: \`recon.caseStatus.*\` reyestrdan AJRALGAN`,
+    );
+  }
+});
+
+test("⛔ G-34 (07-UI-SPEC) (a): `DELIVERY_STATES` AYNAN 5 a'zo × 3 locale", () => {
+  assert.equal(
+    deliveryStates.length,
+    5,
+    `\`DELIVERY_STATES\` da ${deliveryStates.length} a'zo (kutilgan 5)`,
+  );
+
+  const expected = new Set([...deliveryStates, ...FALLBACK_KEYS]);
+
+  for (const locale of LOCALES) {
+    assert.deepEqual(
+      messageKeys(locale, "deliveryState"),
+      expected,
+      `${locale}: \`recon.deliveryState.*\` reyestrdan AJRALGAN`,
+    );
+  }
+});
+
+test("⛔ G-34 (07-UI-SPEC): reyestr BACKEND ENUM'IGA LANGARLANGAN", () => {
+  /*
+   * ⛔ `enums.py::OutboxStatus` — HAQIQATNING MANBAI. Frontend reyestri
+   *   uning KO'ZGUSI va ular AJRALIB KETSA, ekran to'liqsiz bo'lardi
+   *   (`readPythonStrEnum` docstringi).
+   */
+  const backend = readPythonStrEnum(enumsSource, "OutboxStatus");
+
+  assert.equal(backend.length, 5, `backend enum'ida ${backend.length} a'zo`);
+  assert.deepEqual(
+    new Set(deliveryStates),
+    new Set(backend),
+    `frontend reyestri {${deliveryStates}} ↔ backend enum'i {${backend}}`,
+  );
+});
+
+/**
+ * ⛔⛔ ISBOTLANGANDAN ORTIQ DA'VONING LEKSIKASI — ⛔ QUYI CHEGARA: ≥9 token.
+ *
+ * =============================================================================
+ * Bot API ning `sendMessage` javobi — `Message` obyekti. ⛔ Yetkazilganlik
+ * yoki o'qilganlik KVITANSIYASI ⛔ UMUMAN YO'Q, ya'ni tizim bilishi mumkin
+ * bo'lgan yagona fakt: «Telegram 200 qaytardi».
+ *
+ * ⛔ UCHALA SINF HAM TAQIQLANADI VA UCHINCHISI ENG NOZIGI:
+ *
+ *   «o'qildi» / «ko'rildi» — QABUL QILUVCHI haqidagi eng kuchli da'vo;
+ *   «prochitan» / «prosmotr» — o'shaning ruscha shakli;
+ *   ⛔ YOLG'IZ «yetkazildi» — ⛔ U HAM isbotlanmagan. Telegram xabarning
+ *      qurilmaga YETIB BORGANINI tasdiqlamaydi; u faqat SO'ROVNI qabul
+ *      qilganini aytadi. Nizoda (D-02) bu farq HAL QILUVCHI.
+ *
+ * ⚠ «yetkazilishi» / «etkazilishi» SINGARI SHAKLLAR TAQIQLANMAYDI va bu
+ *   ATAYIN: blokning SARLAVHASI («Xabar yetkazilishi») — JARAYONNING
+ *   nomi, HOLAT haqidagi da'vo emas. Token ANIQ shaklda («…ildi» —
+ *   tugallangan o'tgan zamon) yoziladi; o'zak («yetkazil») bo'lsa,
+ *   darvoza o'z sarlavhasini birinchi kunidayoq qizartirardi.
+ * =============================================================================
+ */
+const OVERCLAIM_TOKENS = {
+  "uz-Latn": ["o'qildi", "ko'rildi", "yetkazildi"],
+  "uz-Cyrl": ["ўқилди", "кўрилди", "етказилди"],
+  ru: ["прочитан", "просмотр", "доставлен"],
+};
+
+/** Apostrof shakllarini bir xillashtiradi — matn va token bir o'lchovda. */
+function normalize(value) {
+  return value.toLowerCase().replaceAll(/[‘’ʻʼ]/gu, "'");
+}
+
+test("⛔ G-34 (07-UI-SPEC) (b): ortiqcha da'vo leksikasi UCHALA locale'da 0", () => {
+  const tokens = Object.values(OVERCLAIM_TOKENS).flat();
+  assert.ok(
+    tokens.length >= 9,
+    `taqiq reyestrida atigi ${tokens.length} token (quyi chegara 9)`,
+  );
+
+  const problems = [];
+
+  for (const locale of LOCALES) {
+    const values = reconValues(locale).map(normalize);
+    assert.ok(
+      values.length >= 20,
+      `${locale}: atigi ${values.length} ta \`recon.*\` qiymati skanerlandi`,
+    );
+
+    for (const token of OVERCLAIM_TOKENS[locale]) {
+      for (const value of values) {
+        if (value.includes(normalize(token))) {
+          problems.push(`${locale}: «${token}» -> «${value}»`);
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ tizim ISBOTLAMAGAN narsani da'vo qilmoqda (Pitfall 2):\n  " +
+      problems.join("\n  ") +
+      "\n  Matn «Telegram qabul qildi» ma'nosini beradi — yolg'iz " +
+      "«yetkazildi» ham, «o'qildi» ham TAQIQ.",
+  );
+});
+
+test("⛔ G-34 (07-UI-SPEC) (b): NAZORAT — detektor sun'iy da'voni USHLAYDI", () => {
+  /*
+   * ⛔ Usiz yuqoridagi bo'sh natija «toza copy» emas, «ishlamayotgan
+   *   skaner» degani bo'lishi mumkin edi.
+   */
+  const probe = normalize("Xabar Yetkazildi");
+  const found = OVERCLAIM_TOKENS["uz-Latn"].filter((token) =>
+    probe.includes(normalize(token)),
+  );
+
+  assert.deepEqual(found, ["yetkazildi"]);
+
+  /* Va NAZORATNING TESKARISI: jarayon nomi (sarlavha) TOZA qolishi shart. */
+  const title = normalize("Xabar yetkazilishi");
+  assert.deepEqual(
+    OVERCLAIM_TOKENS["uz-Latn"].filter((token) =>
+      title.includes(normalize(token)),
+    ),
+    [],
+  );
+});
+
+/* -------------------------------------------------------------------------- */
 /* NAVIGATSIYA — M-5 NING MEXANIK SHAKLI                                      */
 /* -------------------------------------------------------------------------- */
 
