@@ -452,6 +452,47 @@ class LocaleResponse(BaseModel):
     locale: str
 
 
+class HeadlineResponse(BaseModel):
+    """`GET /api/v1/me/headline` — ⛔ AYNAN BITTA SON VA BITTA i18n KALITI (D-29).
+
+    =========================================================================
+    ⛔⛔ UCHINCHI MAYDON QO'SHILMAYDI. `label`, `total`, `rows`,
+        `secondary`, `unit` va `*_soum` bilan tugaydigan HAR QANDAY nom —
+        ⛔ **TAQIQLANGAN**.
+
+    Sabab «yuza toza bo'lsin» degan estetika emas. Bosh ekranning butun
+    qarori (D-28/D-29) shundan iborat: foydalanuvchi BITTA raqamni
+    ko'radi. Ikkinchi son qo'shilishi bilan komponent «qaysi biri
+    asosiy?» degan savolga javob berishga majbur bo'ladi va o'sha javob
+    ROLGA bog'liq bo'lardi — ya'ni klient rolni o'qishga qaytardi va
+    D-28 ning server tomonidagi qarori IKKINCHI HAQIQAT MANBAI bilan
+    dublikatlanardi.
+
+    ⛔ `extra="forbid"` — yuzaning JIMGINA kengayishiga qarshi (T-07-15).
+       Uning jufti testda: javob kalitlari to'plamining LITERAL tengligi
+       (`set(body) == {"metric", "value"}`), `len()` EMAS.
+    =========================================================================
+
+    ⚠ `label` MAYDONINING YO'QLIGI ATAYIN. Server MATN emas, KALIT
+      qaytaradi (`alerting.py:1003-1008` naqshi): matn qaytarsa server
+      uchala locale'ni (`uz-Latn`, `uz-Cyrl`, `ru`) bilishi kerak
+      bo'lardi va i18n IKKI joyda — serverda ham, klientda ham —
+      yashardi. Tarjima klientda, `headline.*` kalitlari bo'yicha.
+
+    ⚠ `value` ning MA'NOSI `metric` ga bog'liq va u SERVERDA hal
+      qilinadi: `headline.revenue_today` — so'm, qolgan ikkitasi —
+      DONA. Birlikni klient `HEADLINE_UNIT` reyestridan oladi; uni
+      javobga qo'shish yuqoridagi «uchinchi maydon» taqiqiga tushardi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    metric: str
+    """i18n KALITI — `headline.revenue_today` | `.review_queue` | `.receipts_written`."""
+    value: int
+    """⛔ Yagona son. Kassir uchun bu SANOQ (Pitfall 1) — `me.py::HEADLINE_ORDER`."""
+
+
 class MarketListItem(BaseModel):
     """`GET /api/v1/markets` qatori (D-06)."""
 

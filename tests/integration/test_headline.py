@@ -33,8 +33,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from app.api.v1.me import HEADLINE_ORDER
 from app.repositories import headline_repo
 from app.repositories.review_repo import ReviewRepository
+from fixtures.admin_api import platform_admin_headers, session_headers
 from fixtures.billing_domain import (
     BillingDomainSeed,
     add_payment,
@@ -44,7 +46,7 @@ from fixtures.market_domain import MarketDomainSeed
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import OccupancyDomainSeed, occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
-from fixtures.two_markets import TwoMarketSeed
+from fixtures.two_markets import SEED_PASSWORD, TwoMarketSeed
 from sbozor_core.enums import PaymentKind, ReversalReason, ReviewQueueKind
 
 if TYPE_CHECKING:
@@ -52,10 +54,21 @@ if TYPE_CHECKING:
     from datetime import date
     from uuid import UUID
 
+    import httpx
     from fixtures import TenantSessionFactory
     from fixtures.auth_users import AuthSeed
     from psycopg import Connection
     from psycopg.rows import TupleRow
+
+HEADLINE_URL = "/api/v1/me/headline"
+
+HEADLINE_KEYS = frozenset({"metric", "value"})
+"""⛔ Javobning AYNAN IKKI kaliti (D-29) — RO'YXAT QO'LDA YOZILGAN.
+
+`HeadlineResponse.model_fields` dan hosila qilish testni «model o'ziga
+teng» degan tavtologiyaga aylantirardi (`test_payments_api.py::
+PAYMENT_KEYS` da o'rnatilgan qoida). Bu — KUTILGAN NATIJA.
+"""
 
 PUBLIC_REPO_FUNCTIONS = frozenset(
     {"receipts_written_count", "review_queue_count", "revenue_today_soum"}
@@ -106,7 +119,30 @@ class Env:
 
     @property
     def cashier_id(self) -> UUID:
-        return self.billing.market_a.cashier_id
+        """⛔ LOGIN QILADIGAN kassir — `billing.market_a.cashier_id` DAN EMAS.
+
+        =================================================================
+        ⛔⛔ FARQ O'LCHANGAN VA U SEED'LARNING KESISHUVIDAN TUG'ILADI.
+
+        `billing_domain._cashier_of()` kassirni ROL bo'yicha izlaydi:
+        `WHERE 'cashier' = ANY(roles) ORDER BY user_id LIMIT 1`. Bu
+        `test_payments_api.py` da BIR MA'NOLI, chunki u seedda A
+        bozorida `cashier` rolli AYNAN BITTA foydalanuvchi bor.
+
+        Bu faylda esa `auth_seed` ham bor (nazoratchi undan keladi) va u
+        A bozoriga IKKINCHI `cashier` rolli qator yozadi — `blocked`
+        foydalanuvchisi (`fixtures/auth_users.py:167-172`). Ikki tasodifiy
+        UUID orasidan `ORDER BY ... LIMIT 1` qaysi birini tanlashi
+        TASODIF, ya'ni `billing.market_a.cashier_id` ba'zan LOGIN QILA
+        OLMAYDIGAN (bloklangan) hisobga tushadi.
+
+        Marshrut esa sanoqni `principal.user_id` bo'yicha oladi. Ikkalasi
+        ajralganda HTTP javobi `0` bo'lardi va nosozlik «kod noto'g'ri»
+        kabi ko'rinardi — holbuki sabab seedda. Shuning uchun bu yerda
+        YAGONA manba: sessiya egasining O'ZI.
+        =================================================================
+        """
+        return self.base.market_a.cashier_user_id
 
     @property
     def director_id(self) -> UUID:
@@ -115,10 +151,6 @@ class Env:
     @property
     def vendor_id(self) -> UUID:
         return self.billing.market_a.vendor_id
-
-    @property
-    def shift_id(self) -> UUID:
-        return self.billing.market_a.open_shift_id
 
     @property
     def stall_id(self) -> UUID:
@@ -139,14 +171,24 @@ class Env:
     # ------------------------------------------------------------------
 
     def add_receipt(self, amount_soum: int, *, cashier_id: UUID | None = None) -> UUID:
-        """BUGUNGI kun uchun bitta to'lov qatori."""
+        """BUGUNGI kun uchun bitta to'lov qatori.
+
+        ⚠ `shift_id = NULL` va bu ATAYIN. Ustun NULLABLE (OQ-6/A5) va bosh
+          ko'rsatkichning uchala so'rovi ham smenani UMUMAN o'qimaydi —
+          ular bozor + kun (+ kassir) kesimida ishlaydi. Seed'dagi ochiq
+          smena esa `billing._cashier_of()` topgan foydalanuvchiga
+          tegishli va u `cashier_id` xossasidagi sababga ko'ra BOSHQA odam
+          bo'lishi mumkin; o'sha smenani begona kassirning to'loviga
+          ulash qatorni ICHDAN ZID qilardi (smena egasi bir odam, to'lovni
+          yozgan boshqa) va keyingi o'qiyotgan odamni chalg'itardi.
+        """
         return add_payment(
             self.conn,
             market_id=self.market_id,
             stall_id=self.stall_id,
             vendor_id=self.vendor_id,
             cashier_id=cashier_id if cashier_id is not None else self.cashier_id,
-            shift_id=self.shift_id if cashier_id is None else None,
+            shift_id=None,
             service_date=self.today,
             amount_soum=amount_soum,
             quote_soum=amount_soum,
@@ -160,7 +202,7 @@ class Env:
             stall_id=self.stall_id,
             vendor_id=self.vendor_id,
             cashier_id=self.cashier_id,
-            shift_id=self.shift_id,
+            shift_id=None,
             service_date=self.today,
             amount_soum=amount_soum,
             quote_soum=amount_soum,
@@ -223,6 +265,23 @@ class Env:
                 queue_kind,
                 str(self.base.market_a.admin_user_id),
             ),
+        )
+
+    def set_roles(self, user_id: UUID, roles: list[str]) -> None:
+        """A bozoridagi a'zolik rollarini ALMASHTIRADI (D-05: bir odam, ko'p rol).
+
+        ⚠ YANGI FOYDALANUVCHI YARATILMAYDI (Gotcha 22): ikkinchi hisob
+          a'zolik sanog'iga tayanadigan RBAC testlarini jimgina
+          siljitardi. `two_markets` har testda yangi UUID'lar bilan
+          quriladi va to'liq tozalanadi, ya'ni mavjud qatorni
+          o'zgartirish qo'shni testlarga OQIB O'TMAYDI.
+
+        ⚠ Rollar TOKENGA login paytida tushadi, ya'ni bu chaqiruv
+          sessiya OLINISHIDAN OLDIN bajarilishi shart.
+        """
+        self.conn.execute(
+            "UPDATE user_market_roles SET roles = %s WHERE market_id = %s AND user_id = %s",
+            (roles, str(self.market_id), str(user_id)),
         )
 
     def drop_review(self, assignment_id: UUID) -> None:
@@ -488,7 +547,7 @@ async def test_repo_receipts_written_is_scoped_to_the_given_day(
         stall_id=env.stall_id,
         vendor_id=env.vendor_id,
         cashier_id=env.cashier_id,
-        shift_id=env.shift_id,
+        shift_id=None,
         amount_soum=23_000,
         quote_soum=23_000,
     )
@@ -580,3 +639,298 @@ async def test_repo_review_queue_ignores_the_blind_audit_queue(
     assert actual != len(uncertain_pending) + len(blind_pending), (
         "sanoq ikkala navbatni ham qo'shib yubordi — ko'r auditning hajmi oshkor bo'lardi"
     )
+
+
+# ===========================================================================
+# 5. `GET /me/headline` — BITTA MARSHRUT, SERVERDA HAL QILINGAN TANLOV
+# ===========================================================================
+
+
+@pytest.fixture
+async def director_headers(api_client: httpx.AsyncClient, env: Env) -> dict[str, str]:
+    """Direktor — `REPORT_VIEW` BOR (D-07)."""
+    return await session_headers(api_client, env.base.market_a.director_phone, SEED_PASSWORD)
+
+
+@pytest.fixture
+async def cashier_headers(api_client: httpx.AsyncClient, env: Env) -> dict[str, str]:
+    """Kassir — `PAYMENT_CREATE` D-07 matritsasida FAQAT unda."""
+    return await session_headers(api_client, env.base.market_a.cashier_phone, SEED_PASSWORD)
+
+
+@pytest.fixture
+async def inspector_headers(api_client: httpx.AsyncClient, env: Env) -> dict[str, str]:
+    """Nazoratchi — `OCCUPANCY_REVIEW` FAQAT unda."""
+    return await session_headers(api_client, env.auth.inspector.phone, SEED_PASSWORD)
+
+
+async def test_the_director_gets_the_daily_revenue(
+    api_client: httpx.AsyncClient, env: Env, director_headers: dict[str, str]
+) -> None:
+    """Direktor -> `headline.revenue_today` va u kunning belgili yig'indisi."""
+    expected_total, _ = env.seed_day()
+
+    response = await api_client.get(HEADLINE_URL, headers=director_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"metric": "headline.revenue_today", "value": expected_total}
+
+
+async def test_the_inspector_gets_the_review_queue(
+    api_client: httpx.AsyncClient, env: Env, inspector_headers: dict[str, str]
+) -> None:
+    """Nazoratchi -> `headline.review_queue`, NAZORAT: son navbat bilan bir xil."""
+    pending = env.pending_assignments(queue_kind=ReviewQueueKind.UNCERTAIN.value)
+    assert pending, "nazorat: seedda javobsiz topshiriq yo'q"
+
+    response = await api_client.get(HEADLINE_URL, headers=inspector_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"metric": "headline.review_queue", "value": len(pending)}
+
+
+async def test_the_cashier_gets_the_receipt_count(
+    api_client: httpx.AsyncClient, env: Env, cashier_headers: dict[str, str]
+) -> None:
+    """Kassir -> `headline.receipts_written` (SANOQ)."""
+    _, expected_count = env.seed_day()
+
+    response = await api_client.get(HEADLINE_URL, headers=cashier_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"metric": "headline.receipts_written", "value": expected_count}
+
+
+async def test_the_response_body_has_exactly_two_keys(
+    api_client: httpx.AsyncClient, env: Env, director_headers: dict[str, str]
+) -> None:
+    """⛔ D-29 — kalitlar to'plamining LITERAL TENGLIGI (T-07-15).
+
+    =======================================================================
+    ⛔⛔ `len(body) == 2` YOKI `"label" not in body` YETARLI EMAS.
+
+    Birinchisi maydon ALMASHTIRILGANDA (`value` -> `amount_soum`) yashil
+    qolardi; ikkinchisi esa faqat SANAB O'TILGAN nomni ushlaydi va
+    uchinchi maydon boshqa nom bilan jimgina qo'shilardi. To'plam
+    tengligi ikkala yo'lni ham yopadi (T-06-75 naqshi).
+    =======================================================================
+    """
+    env.seed_day()
+
+    response = await api_client.get(HEADLINE_URL, headers=director_headers)
+
+    assert response.status_code == 200, response.text
+    assert set(response.json()) == HEADLINE_KEYS
+
+
+async def test_the_cashier_value_is_the_count_and_never_the_money_total(
+    api_client: httpx.AsyncClient, env: Env, cashier_headers: dict[str, str]
+) -> None:
+    """⛔⛔ PITFALL 1 NING XULQIY DARVOZASI — HTTP CHEGARASIDA.
+
+    =======================================================================
+    Repozitoriy darajasidagi jufti yuqorida
+    (`test_repo_receipts_written_is_never_the_money_total`), LEKIN BU
+    TEST UNING TAKRORI EMAS: u marshrutning QAYSI funksiyani
+    chaqirayotganini o'lchaydi. `_headline_value()` da shox almashib
+    ketsa (yoki `HEADLINE_ORDER` tartibi buzilsa) repozitoriy testi
+    YASHIL qolardi — funksiyaning o'zi hamon to'g'ri ishlaydi — va
+    kassir HTTP orqali SUMMANI olardi.
+
+    Da'vo ikki tomonlama:
+      (a) `value` o'sha kunning HAQIQIY summasiga ⛔ TENG EMAS;
+      (b) `value` yozilgan kvitansiyalar soniga TENG.
+
+    (b) siz (a) trivial bo'lardi: har qanday tasodifiy son ham summaga
+    teng emas.
+    =======================================================================
+    """
+    expected_total, expected_count = env.seed_day()
+    assert expected_total != expected_count, "nazorat: seed summa va sanoqni teng qilib qo'ygan"
+
+    response = await api_client.get(HEADLINE_URL, headers=cashier_headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["value"] != env.day_total(), (
+        "kassir bosh ekranda kun SUMMASINI ko'ryapti — u smena yopishda aynan shu "
+        "sonni deklaratsiya qilardi va variance HAR DOIM nol bo'lardi (CASH-04)"
+    )
+    assert body["value"] == expected_count
+
+
+async def test_the_cashier_response_carries_no_money_field(
+    api_client: httpx.AsyncClient, env: Env, cashier_headers: dict[str, str]
+) -> None:
+    """⛔ Kassir javobida `_soum` bilan tugaydigan maydon YO'Q.
+
+    ⚠ YUQORIDAGI TO'PLAM TENGLIGI BUNI ALLAQACHON BERADI — bu test ATAYIN
+      ALOHIDA va sababi BOSHQA. To'plam tengligi «yuza kengaymadi»
+      deydi; bu esa «PUL maydoni qo'shilmadi» deydi. Ikkinchisi buzilgan
+      kuni xato xabari TO'G'RI sababni ko'rsatishi kerak — CASH-04, D-29
+      emas. Bir xil faktni ikki xil savol bilan qulflash bu loyihada
+      o'rnatilgan naqsh (`test_personal_data_coverage.py` ning ikki
+      mustaqil da'vosi).
+    """
+    env.seed_day()
+
+    response = await api_client.get(HEADLINE_URL, headers=cashier_headers)
+
+    assert response.status_code == 200, response.text
+    money_fields = sorted(key for key in response.json() if key.endswith("_soum"))
+
+    assert not money_fields, (
+        f"kassir javobiga pul maydoni qo'shilgan: {money_fields} — Pitfall 1 / CASH-04"
+    )
+
+
+async def test_a_user_with_two_roles_gets_one_deterministic_answer(
+    api_client: httpx.AsyncClient, env: Env
+) -> None:
+    """⛔ D-28 — ikki rolli foydalanuvchi HAR DOIM `HEADLINE_ORDER` ning BIRINCHISINI oladi.
+
+    =======================================================================
+    ⛔⛔ AYNAN SHU HOLAT UCHUN TANLOV ROL NOMIGA TAYANMAYDI.
+
+    Karmanada bir odam ham direktor, ham kassir bo'lishi ODATIY hol
+    (D-05). «Rol -> ko'rsatkich» xaritasi bunday foydalanuvchida IKKI
+    javob berardi va qaysi biri qaytishi `frozenset` ning iteratsiya
+    tartibiga — ya'ni TASODIFGA — bog'liq bo'lardi.
+
+    Test IKKI MARTA chaqiradi: determinizm «bir marta to'g'ri chiqdi»
+    dan farq qiladi va aynan shu farq tasodifiy tartibni ushlaydi.
+    =======================================================================
+    """
+    expected_total, expected_count = env.seed_day()
+    assert expected_total != expected_count, "nazorat: ikki javob farqlanmaydigan seed"
+
+    env.set_roles(env.cashier_id, ["cashier", "director"])
+    headers = await session_headers(api_client, env.base.market_a.cashier_phone, SEED_PASSWORD)
+
+    first = await api_client.get(HEADLINE_URL, headers=headers)
+    second = await api_client.get(HEADLINE_URL, headers=headers)
+
+    assert first.status_code == 200, first.text
+    assert first.json() == {"metric": "headline.revenue_today", "value": expected_total}
+    assert second.json() == first.json(), (
+        "ikki chaqiruv boshqa javob berdi — tanlov determinlashmagan"
+    )
+
+
+async def test_a_user_without_any_headline_permission_is_refused(
+    api_client: httpx.AsyncClient, env: Env
+) -> None:
+    """⛔ Birorta huquq mos kelmasa — **403 `headline_unavailable`**, nol EMAS.
+
+    =======================================================================
+    ⛔ SUBYEKT `platform_admin` VA U TO'QILGAN HOLAT EMAS — O'LCHANGAN
+       FAKT: D-07 matritsasida u uchala huquqning BIRORTASINI ham
+       olmaydi (`REPORT_VIEW` / `OCCUPANCY_REVIEW` / `PAYMENT_CREATE`).
+       Ya'ni bu «rolsiz foydalanuvchi» degan sun'iy holat emas, bugungi
+       tizimning HAQIQIY roli.
+
+    ⛔ NEGA 403, NEGA `value: 0` EMAS: nol klientda O'LCHANGAN qiymat
+       bo'lib ko'rinardi («bugun tushum yo'q»), holbuki haqiqat boshqa —
+       «bu foydalanuvchi uchun ko'rsatkich YO'Q». Bu 05-14 ning
+       «o'lchanmagan sonning o'rniga NOL yozilmaydi» darsi.
+    =======================================================================
+    """
+    response = await api_client.get(
+        HEADLINE_URL,
+        headers=await platform_admin_headers(api_client, env.auth, env.market_id),
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "headline_unavailable"
+
+
+async def test_the_client_cannot_choose_the_day(
+    api_client: httpx.AsyncClient, env: Env, cashier_headers: dict[str, str]
+) -> None:
+    """⛔ `?day=` PARAMETRI JAVOBGA TA'SIR QILMAYDI (T-07-14).
+
+    Kun SERVERDA (`business_today()`). Parametr qabul qilinganda kassir
+    boshqa kunning sonini so'ray olardi va (muhimrog'i) direktorning
+    kunlik tushumi klient tanlagan oynaga bo'ysunardi.
+
+    ⚠ FastAPI e'lon qilinmagan query parametrini JIMGINA e'tiborsiz
+      qoldiradi, ya'ni kutilgan xulq — 422 emas, PARAMETRSIZ chaqiruv
+      bilan AYNAN bir xil javob. Test ikkala natijani ham qabul qiladi
+      (rejaning shartidagi «yoki 422»), lekin UCHINCHI holatni —
+      «boshqa kun uchun boshqa son» ni — RAD ETADI.
+    """
+    env.seed_day()
+
+    plain = await api_client.get(HEADLINE_URL, headers=cashier_headers)
+    with_day = await api_client.get(
+        HEADLINE_URL, params={"day": "2026-01-01"}, headers=cashier_headers
+    )
+
+    assert plain.status_code == 200, plain.text
+    if with_day.status_code == 422:
+        return
+    assert with_day.json() == plain.json(), (
+        "`?day=` javobni o'zgartirdi — klient kunni tanlay olyapti (T-07-14)"
+    )
+
+
+async def test_the_headline_needs_a_selected_market(
+    api_client: httpx.AsyncClient, env: Env
+) -> None:
+    """Bozorsiz sessiya -> **409**, `/auth/me` bilan bir xil shakl.
+
+    Platforma admini bozor tanlashdan OLDIN ham profilini (`GET /me`)
+    ko'radi, lekin bosh ko'rsatkich BOZORNING soni — u kontekstsiz
+    ma'nosiz. RLS ostida kontekstsiz so'rov jimgina 0 qator qaytarardi
+    va klient buni «tushum yo'q» deb o'qirdi (`deps.get_tenant_session`).
+    """
+    headers = await session_headers(
+        api_client, env.auth.platform_admin.phone, env.auth.password
+    )
+
+    response = await api_client.get(HEADLINE_URL, headers=headers)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "market_not_selected"
+
+
+def test_every_headline_order_entry_has_a_resolver() -> None:
+    """⛔ `HEADLINE_ORDER` va `_headline_value()` AJRALIB KETMAGAN — YOPIQLIK.
+
+    =======================================================================
+    ⛔⛔ USIZ TO'RTINCHI YOZUV JIMGINA 500 BERARDI — ISHLAB CHIQARISHDA.
+
+    `_headline_value()` oxirgi shoxi `raise`, ya'ni hal qilinmagan huquq
+    marshrutni yiqitadi. Bu «standart qiymat» dan YAXSHIROQ (jimgina
+    noto'g'ri son qaytarmaydi), lekin u SO'ROV PAYTIDA chiqadi. Bu test
+    o'sha nosozlikni CI'ga ko'chiradi: kortejga yozuv qo'shgan odam
+    darvozani DARHOL qizartiradi.
+
+    ⚠ To'plam tengligi ATAYIN emas: `_headline_value()` kelajakda
+      kortejda BO'LMAGAN huquqni ham hal qila olishi zarar qilmaydi.
+      Muhimi — teskarisi BO'LMASIN.
+    =======================================================================
+    """
+    resolved = {"report_view", "occupancy_review", "payment_create"}
+    declared = {permission.value for permission, _ in HEADLINE_ORDER}
+
+    assert declared <= resolved, (
+        f"`HEADLINE_ORDER` da hal qilinmagan huquq(lar): {sorted(declared - resolved)} — "
+        "`me.py::_headline_value()` ga mos shox qo'shing (aks holda marshrut 500 beradi)"
+    )
+
+
+def test_the_headline_metric_keys_are_the_three_registered_ones() -> None:
+    """⛔ i18n kalitlari to'plami — AYNAN uchta (UI-SPEC §10.3, G-33(a)).
+
+    Klientdagi `HEADLINE_UNIT` reyestri ham uch a'zoli va u shu kalitlar
+    bo'yicha indekslanadi. Server to'rtinchisini qaytarsa klient uni
+    tanimay birlik ko'rsata olmasdi — ya'ni bu to'plam TIL CHEGARASINING
+    server tomonidagi ustuni.
+    """
+    assert {metric for _, metric in HEADLINE_ORDER} == {
+        "headline.revenue_today",
+        "headline.review_queue",
+        "headline.receipts_written",
+    }
