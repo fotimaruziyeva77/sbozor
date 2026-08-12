@@ -2238,3 +2238,22 @@ export const NOTIFICATION_KINDS = [
   "digest_evening",
 ] as const;
 export type NotificationKindValue = (typeof NOTIFICATION_KINDS)[number];
+
+/**
+ * Yechim matnining uzunlik chegarasi — ⛔ SERVER BILAN AYNAN BIR SON.
+ *
+ * Manba: `app/schemas.py::RESOLUTION_NOTE_MAX` (07-10, T-07-57).
+ *
+ * ⛔ IKKI SON YOZILMAYDI VA SABAB MEXANIK: klientniki kattaroq bo'lsa
+ *    direktor uzun matn yozib, `[Holatni saqlash]` bosganda **422**
+ *    olardi — va yozgan matni FORMADA qolardi, lekin nima uchun rad
+ *    etilganini hech nima aytmasdi. Kichikroq bo'lsa esa server
+ *    qabul qiladigan matnni klient RAD ETARDI, ya'ni chegara ikki
+ *    joyda yashab, biri ikkinchisiga YOLG'ON gapirardi.
+ *
+ * ⛔ BU FAYLDA VA ⛔ BITTA MARTA: `components/reconciliation/**` da
+ *    literal son yozilsa, u serverdagi qiymat o'zgarganda JIMGINA
+ *    ajralib qolardi. Reyestrlarning qolgani bilan bir joyda turishi
+ *    ham ataylab — «server kontraktining ko'zgusi» shu fayl.
+ */
+export const RESOLUTION_NOTE_MAX = 2000;

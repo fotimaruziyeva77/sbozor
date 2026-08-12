@@ -8,7 +8,7 @@ import {
   ReconciliationDayPicker,
   useReconciliationDay,
 } from "@/components/reconciliation/day-picker";
-import { DeliveryPlaceholder } from "@/components/reconciliation/delivery-placeholder";
+import { DeliveryList } from "@/components/reconciliation/delivery-list";
 import { HitRateCard } from "@/components/reconciliation/hit-rate-card";
 import { UnpaidList } from "@/components/reconciliation/unpaid-list";
 import { UnregisteredList } from "@/components/reconciliation/unregistered-list";
@@ -157,7 +157,14 @@ function ReconciliationWorkspace() {
        * bugungi holat direktorga BUGUN kerak (yuqoridagi 1(b) bandi).
        */}
       <section data-recon-block="delivery">
-        <DeliveryPlaceholder day={selection.day} />
+        {/*
+         * ⛔ `isToday` SAHIFADAN BERILADI, blok ichida HISOBLANMAYDI:
+         *   biznes-kun kun tanlagichida YECHILADI va ikkinchi hisob
+         *   ikki manba tug'dirardi — Toshkent yarim tunidan keyingi
+         *   besh soatda ular BOSHQA-BOSHQA kunni ko'rsatardi. Kesh
+         *   siyosati (bugun -> jonli) aynan shu bayroqqa qaraydi.
+         */}
+        <DeliveryList day={selection.day} isToday={selection.isToday} />
       </section>
     </div>
   );

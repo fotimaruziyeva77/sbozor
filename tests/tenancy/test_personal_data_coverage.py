@@ -728,12 +728,24 @@ def test_the_reconciliation_gate_sees_the_routes() -> None:
        nomlangan holatda TRIVIAL ravishda rost bo'lardi (05-16 ning W-2
        darsi va `test_gate_covers_a_meaningful_number_of_routes` ning
        aynan mulohazasi).
+
+    ⛔ SON ANIQ VA U ATAYIN «>=» EMAS: bu da'vo qamrovni emas,
+       YUZANING O'LCHAMINI qulflaydi. Yangi marshrut qo'shgan odam bu
+       yerga kelib sonni oshiradi va o'shanda ⛔ pastdagi uch da'voning
+       (shaxsiy maydon / Telegram identifikatori / binar tasnif) uning
+       marshrutini ham qamrab olganini KO'RADI.
+
+    ⚠ 07-16 BITTASINI QO'SHDI (`GET /delivery`, BOT-04): to'rt YO'L ->
+      BESH YO'L. ⚠ «Yo'l», «marshrut» EMAS: `GET` va `PATCH`
+      `/cases/{case_id}` da BITTA yo'lni bo'lishadi, ya'ni lug'atning
+      kaliti oltita marshrut uchun beshta.
     """
     found = reconciliation_routes(fastapi_app)
 
-    assert len(found) == 4, sorted(found)
+    assert len(found) == 5, sorted(found)
     assert f"{RECONCILIATION_PREFIX}/report" in found
     assert f"{RECONCILIATION_PREFIX}/cases/{{case_id}}" in found
+    assert f"{RECONCILIATION_PREFIX}/delivery" in found
 
 
 def test_reconciliation_routes_are_not_personal() -> None:

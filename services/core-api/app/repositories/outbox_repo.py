@@ -87,7 +87,7 @@ from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID
 
 from sbozor_core.enums import OutboxRecipientKind, OutboxStatus
-from sqlalchemy import Integer, Text, bindparam, text
+from sqlalchemy import Date, DateTime, Integer, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 
@@ -99,16 +99,21 @@ from app.jobs.notification_meta import (
 )
 
 if TYPE_CHECKING:
-    from datetime import datetime
+    from datetime import date, datetime
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
+    "DELIVERY_PAGE_SIZE",
     "ERROR_TYPE_MAX_LENGTH",
+    "DeliveryCursor",
+    "DeliveryPage",
+    "DeliveryRow",
     "OutboxClaim",
     "RecipientMismatch",
     "claim",
     "enqueue",
+    "list_deliveries",
     "mark_blocked",
     "mark_delivered",
     "mark_failed",
@@ -118,6 +123,7 @@ __all__ = [
 ]
 
 _UUID = PgUuid(as_uuid=True)
+_TIMESTAMPTZ = DateTime(timezone=True)
 
 _PENDING: Final[str] = OutboxStatus.PENDING.value
 _SENT: Final[str] = OutboxStatus.SENT.value
@@ -835,3 +841,334 @@ async def release_expired_leases(
         {"market_id": market_id, "pending": _PENDING, "sent": _SENT, "now": now},
     )
     return len(result.fetchall())
+
+
+# ===========================================================================
+# ⛔⛔ 5-MAJBURIYAT: FAQAT-O'QISH YUZASI — DIREKTORNING «XABAR BORDIMI?»
+#     SAVOLI (BOT-04, 07-UI-SPEC §11).
+#
+# Bu bo'lim navbatga YOZMAYDI va uni O'ZGARTIRMAYDI. Yozuv yo'li shu
+# fayldagi to'rtta terminal funksiyada (`mark_*`, `reschedule`) va u
+# JO'NATUVCHIGA tegishli — ekran uchun yo'l ⛔ UMUMAN OCHILMAYDI (D-20
+# append-only; qo'lda `delivered` qo'yish nizoda SOXTA DALIL bo'lardi).
+#
+# ⛔⛔ VA JAVOBGA CHIQMAYDIGANLAR — HAR BIRI O'Z SABABI BILAN:
+#
+#   `payload`             — unda summa va rasta kodi bor. U ⛔ XABAR uchun,
+#                           ekran uchun EMAS: ekranda takrorlash IKKINCHI
+#                           PUL YUZASI bo'lardi va u yig'indiga olib
+#                           borardi (07-UI-SPEC §11.3).
+#   `chat_id`             — ⛔ USTUNNING O'ZI YO'Q (4-majburiyat). Manzil
+#                           jo'natish paytida o'qiladi, qatorda
+#                           saqlanmaydi.
+#   tayyor MATN           — ⛔ SAQLANMAYDI (Pitfall 6): matn `kind` +
+#                           `payload` dan jo'natish paytida quriladi.
+#   `provider_message_id` — Telegram ning ICHKI identifikatori. Direktorga
+#                           hech nima aytmaydi va nizoda ham ishlatib
+#                           bo'lmaydi — u faqat Bot API ning o'zi uchun.
+#   `lease_until`         — IJARA, ya'ni ichki qulf mexanizmi. Ekranda u
+#                           «xabar bordimi?» savoliga javob bermaydi.
+#   `dedupe_key`          — u `<kind>:<manba-id>` shaklida MANBA
+#                           identifikatorini tashiydi (`receipt:<payment_
+#                           id>`) va uni ekranga chiqarish to'lov
+#                           identifikatorini yetkazilganlik yuzasiga
+#                           ko'chirardi.
+#
+# ⚠ `last_error_type` — ⛔ TUR NOMI, xato MATNI EMAS (D-04). Ustunga
+#   yozilayotgan qiymat `_validate_error_type()` dan o'tgan, ya'ni bu
+#   yerda ikkinchi filtr QO'YILMAYDI: qo'yilsa, chegara ikki joyda
+#   yashab, ular ajralib ketardi.
+# ===========================================================================
+
+DELIVERY_PAGE_SIZE: Final[int] = 50
+"""Bir sahifadagi eng ko'p yetkazilganlik qatori (DQ-4, `CASE_PAGE_SIZE` naqshi).
+
+⛔ CHEGARA IKKI QATLAMDA: HTTP `le=` va bu funksiyaning `min()` i. Klient
+   bir so'rov bilan kunning butun navbatini tortib ololmasligi kerak —
+   Karmana konvertida bir kunda ~1000 kvitansiya bo'lishi mumkin.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryRow:
+    """Direktor ekranidagi bitta yetkazilganlik qatori — ⛔ HOLAT VA VAQT.
+
+    ⛔ BU `OutboxClaim` NING NUSXASI EMAS va ikkalasi BIRLASHTIRILMAYDI:
+       `OutboxClaim` JO'NATUVCHI uchun (`payload` bor, chunki matn
+       shundan quriladi), bu esa EKRAN uchun (`payload` YO'Q). Bitta
+       dataclass ikkalasiga xizmat qilganda `payload` maydoni ekran
+       yo'lida ham mavjud bo'lardi va uni javobga qo'shish bir qatorlik
+       «qulaylik» bo'lib qolardi.
+
+    ⚠ `updated_at` — ⛔ OXIRGI HOLAT O'ZGARISHI, va u `last_attempt_at`
+      DEB NOMLANMAYDI: bunday USTUN jadvalda ⛔ UMUMAN YO'Q. Holatni
+      o'zgartiradigan har bir bayonot (`_CLAIM_DUE`, `_MARK_DELIVERED`,
+      `_MARK_TERMINAL`, `_RESCHEDULE`, `_RELEASE_EXPIRED`) `updated_at`
+      ni yangilaydi, ya'ni u aynan «oxirgi marta nima bo'ldi?» savoliga
+      javob beradi. Yangi ustun qo'shish MIGRATSIYA bo'lardi va u
+      mavjud qiymatdan ko'proq narsa AYTMASDI.
+    """
+
+    outbox_id: UUID
+    kind: str
+    recipient_kind: str
+    vendor_id: UUID | None
+    """⛔ IDENTIFIKATOR, ISM EMAS: yorliq klientda `GET /vendors` bilan joinlanadi."""
+    status: str
+    """`OutboxStatus` a'zosining qiymati — besh a'zoli YOPIQ to'plam."""
+    attempt_count: int
+    created_at: datetime
+    updated_at: datetime
+    last_error_type: str | None
+    """⛔ `type(exc).__name__` — xato MATNI HECH QACHON (D-04)."""
+    last_status_code: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryCursor:
+    """Keyset kursori — `(created_at, id)` JUFTLIGI (`CaseCursor` naqshi).
+
+    Yolg'iz `created_at` bilan yozilgan kursor bir xil vaqtda yozilgan
+    qatorlar ustidan SAKRAB o'tardi va outbox aynan shunday yozadi:
+    kunlik dayjest ikkala qatorni ham BITTA tranzaksiyada (bir `now()`)
+    qo'yadi.
+    """
+
+    created_at: datetime
+    outbox_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryPage:
+    """Kunning yetkazilganligi — qatorlar, ⛔ BESHALA hisoblagich va kursor.
+
+    ⛔ BESHALA HISOBLAGICH HAM NOL BO'LGANDA HAM QAYTADI
+       (`CaseListPage` va `ChargeListResponse` bilan AYNAN bir xil
+       qaror): «bu kunda bloklangan sotuvchi yo'q» bilan «hisoblagich
+       ishlamayapti» bir xil ko'rinsa, direktor D-02 nizosida noto'g'ri
+       xulosaga kelardi.
+
+    ⚠ HISOBLAGICHLAR SAHIFAGA EMAS, KUNGA (+ sotuvchi filtriga) tegishli:
+      ikkinchi sahifaga o'tganda «bugun nechta xabar yetdi?» savolining
+      javobi O'ZGARMASLIGI kerak.
+    """
+
+    day: date
+    rows: tuple[DeliveryRow, ...]
+    pending_count: int
+    sent_count: int
+    delivered_count: int
+    failed_count: int
+    blocked_count: int
+    next_cursor: DeliveryCursor | None
+
+
+_DELIVERY_ROWS = text(
+    """
+    SELECT o.id              AS outbox_id,
+           o.kind            AS kind,
+           o.recipient_kind  AS recipient_kind,
+           o.vendor_id       AS vendor_id,
+           o.status          AS status,
+           o.attempt_count   AS attempt_count,
+           o.created_at      AS created_at,
+           o.updated_at      AS updated_at,
+           o.last_error_type AS last_error_type,
+           o.last_status_code AS last_status_code
+      FROM notification_outbox o
+      JOIN markets m
+        ON m.id = o.market_id
+     WHERE o.market_id = :market_id
+       AND (o.created_at AT TIME ZONE m.timezone)::date = :day
+       AND (:vendor_id IS NULL OR o.vendor_id = :vendor_id)
+       AND (
+             :cursor_created_at IS NULL
+             OR (o.created_at, o.id) < (:cursor_created_at, :cursor_outbox_id)
+           )
+     ORDER BY o.created_at DESC, o.id DESC
+     LIMIT :page_limit
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("day", type_=Date()),
+    bindparam("vendor_id", type_=_UUID),
+    bindparam("cursor_created_at", type_=_TIMESTAMPTZ),
+    bindparam("cursor_outbox_id", type_=_UUID),
+    bindparam("page_limit", type_=Integer()),
+)
+"""Kunning bir sahifasi — ⛔ KEYSET, `OFFSET` EMAS (DQ-4).
+
+⛔ USTUNLAR RO'YXATI TO'LIQ EMAS VA BU ATAYIN: `payload`, `dedupe_key`,
+   `lease_until` va `provider_message_id` bu `SELECT` da ⛔ UMUMAN
+   YO'Q. `SELECT o.*` yozish ularni javob shaklidan bir qatorlik
+   e'tiborsizlik bilan ajratardi — bo'lim izohidagi to'rt taqiq
+   shundan keyin faqat INTIZOMGA tayanardi.
+
+⛔ KUN CHEGARASI BOZORNING MINTAQASIDA (`markets.timezone`), UTC da
+   EMAS — `_CLAIM_DUE` ning `AT TIME ZONE m.timezone` qarori bilan
+   AYNAN bir xil. UTC da baholangan chegara Toshkent yarim tunidan
+   keyingi besh soatdagi kvitansiyalarni OLDINGI kunga yozardi, ya'ni
+   kechqurun to'lagan sotuvchining xabari direktorning bugungi
+   ekranida UMUMAN ko'rinmasdi.
+
+⚠ TARTIB `(created_at DESC, id DESC)` — eng YANGISI birinchi. Bu
+  `_CLAIM_DUE` ning teskarisi va ikkalasi ham to'g'ri: jo'natuvchiga
+  eng eski qator kerak (navbat), direktorga esa eng yangisi (hozir
+  nima bo'lyapti).
+
+⚠ QATOR SOLISHTIRUVI (`(a, b) < (x, y)`) ATAYIN — ikki ustunli `OR`
+  zanjiri bilan yozilgan shart indeksdan foydalana olmasdi.
+
+⚠ ALOHIDA INDEKS QO'SHILMADI va bu O'LCHANGAN qaror: `OUTBOX_DUE_INDEX`
+  navbat uchun (`next_attempt_at`, qisman predikat bilan) va u bu
+  so'rovga TUSHMAYDI. Yangi indeks MIGRATSIYA bo'lardi; kunlik hajm esa
+  strukturaviy jihatdan chegaralangan (bir kunda ko'pi bilan bir necha
+  ming qator: kvitansiya + eslatma + ikki dayjest). Chegara oshsa —
+  to'g'ri tuzatish `(market_id, created_at DESC)` indeksi, sahifani
+  kattalashtirish EMAS.
+"""
+
+_DELIVERY_COUNTS = text(
+    """
+    SELECT count(*) FILTER (WHERE o.status = :pending)::int   AS pending_count,
+           count(*) FILTER (WHERE o.status = :sent)::int      AS sent_count,
+           count(*) FILTER (WHERE o.status = :delivered)::int AS delivered_count,
+           count(*) FILTER (WHERE o.status = :failed)::int    AS failed_count,
+           count(*) FILTER (WHERE o.status = :blocked)::int   AS blocked_count
+      FROM notification_outbox o
+      JOIN markets m
+        ON m.id = o.market_id
+     WHERE o.market_id = :market_id
+       AND (o.created_at AT TIME ZONE m.timezone)::date = :day
+       AND (:vendor_id IS NULL OR o.vendor_id = :vendor_id)
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("day", type_=Date()),
+    bindparam("vendor_id", type_=_UUID),
+    bindparam("pending", type_=Text()),
+    bindparam("sent", type_=Text()),
+    bindparam("delivered", type_=Text()),
+    bindparam("failed", type_=Text()),
+    bindparam("blocked", type_=Text()),
+)
+"""Kunning BESH hisoblagichi — ⛔ SAHIFADAN MUSTAQIL (`_CASE_COUNTS` naqshi).
+
+⛔ `count(*) FILTER (...)` ⛔ `GROUP BY status` DAN AFZAL VA SABAB
+   MEXANIK: `GROUP BY` faqat MAVJUD holatlarni qaytaradi, ya'ni
+   bloklangan sotuvchi bo'lmagan kunda `blocked_count` javobda UMUMAN
+   bo'lmasdi va uni Python tomonda nol bilan to'ldirish kerak bo'lardi.
+   O'sha to'ldirish unutilganda «bu kunda blok yo'q» bilan «hisoblagich
+   yo'q» bir xil ko'rinardi — aynan shu darvoza qarshi turgan nosozlik.
+
+⚠ HOLAT QIYMATLARI ENUMDAN, LITERAL EMAS: literal yozilganda enum
+  o'zgargan kuni filtr JIMGINA hech nimaga tushmasdi va hisoblagich
+  abadiy nol bo'lib qolardi.
+"""
+
+
+async def list_deliveries(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    day: date,
+    vendor_id: UUID | None = None,
+    cursor: DeliveryCursor | None = None,
+    limit: int = DELIVERY_PAGE_SIZE,
+) -> DeliveryPage:
+    """Kunning yetkazilganlik yozuvi — ⛔ FAQAT O'QISH (BOT-04, §11).
+
+    ⛔ BU FUNKSIYA NAVBATGA TEGMAYDI: `SELECT` dan boshqa bayonot
+       yo'q, ya'ni ekran yo'li orqali qatorni o'zgartirish
+       STRUKTURAVIY jihatdan imkonsiz. Qo'lda `delivered` qo'yish
+       nizoda (D-02) SOXTA DALIL bo'lardi.
+
+    ⛔ JAVOBGA CHIQMAYDIGANLAR VA SABABLARI — bo'lim izohida (`payload`,
+       `chat_id`, tayyor matn, `provider_message_id`, `lease_until`,
+       `dedupe_key`).
+
+    Args:
+        session: chaqiruvchining tranzaksiyasidagi sessiya.
+        market_id: tenant kaliti (RLS ustidagi ikkinchi qatlam).
+        day: BIZNES-KUNI; chegara bozorning mintaqasida baholanadi.
+        vendor_id: ixtiyoriy filtr — bitta sotuvchining xabarlari.
+            ⚠ Hisoblagichlarga ham QO'LLANADI: filtr QAMROVNI
+            toraytiradi (holatni emas), ya'ni «shu sotuvchiga bugun
+            nechta xabar yetdi?» savoli o'z sanog'ini olishi kerak.
+        cursor: oldingi sahifaning `next_cursor` i.
+        limit: sahifa o'lchami; `DELIVERY_PAGE_SIZE` dan katta qiymat
+            SHU chegaraga qisqartiriladi.
+
+    Returns:
+        `DeliveryPage` — qatorlar, ⛔ beshala hisoblagich va kursor.
+    """
+    page_limit = max(1, min(limit, DELIVERY_PAGE_SIZE))
+
+    rows = (
+        await session.execute(
+            _DELIVERY_ROWS,
+            {
+                "market_id": market_id,
+                "day": day,
+                "vendor_id": vendor_id,
+                "cursor_created_at": None if cursor is None else cursor.created_at,
+                "cursor_outbox_id": None if cursor is None else cursor.outbox_id,
+                "page_limit": page_limit,
+            },
+        )
+    ).mappings()
+
+    items = tuple(
+        DeliveryRow(
+            outbox_id=row["outbox_id"],
+            kind=str(row["kind"]),
+            recipient_kind=str(row["recipient_kind"]),
+            vendor_id=row["vendor_id"],
+            status=str(row["status"]),
+            attempt_count=int(row["attempt_count"]),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            last_error_type=row["last_error_type"],
+            last_status_code=row["last_status_code"],
+        )
+        for row in rows
+    )
+
+    counts = (
+        (
+            await session.execute(
+                _DELIVERY_COUNTS,
+                {
+                    "market_id": market_id,
+                    "day": day,
+                    "vendor_id": vendor_id,
+                    "pending": _PENDING,
+                    "sent": _SENT,
+                    "delivered": OutboxStatus.DELIVERED.value,
+                    "failed": OutboxStatus.FAILED.value,
+                    "blocked": OutboxStatus.BLOCKED.value,
+                },
+            )
+        )
+        .mappings()
+        .one()
+    )
+
+    next_cursor = None
+    if len(items) == page_limit:
+        # ⚠ SAHIFA TO'LGANDA kursor beriladi — «yana bor» degan DA'VO
+        #   emas, «tekshirib ko'r» degan taklif (`list_cases()` bilan
+        #   aynan bir xil qaror).
+        last = items[-1]
+        next_cursor = DeliveryCursor(created_at=last.created_at, outbox_id=last.outbox_id)
+
+    return DeliveryPage(
+        day=day,
+        rows=items,
+        pending_count=int(counts["pending_count"]),
+        sent_count=int(counts["sent_count"]),
+        delivered_count=int(counts["delivered_count"]),
+        failed_count=int(counts["failed_count"]),
+        blocked_count=int(counts["blocked_count"]),
+        next_cursor=next_cursor,
+    )

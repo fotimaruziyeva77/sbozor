@@ -41,6 +41,9 @@ from sbozor_core.enums import (
     DiscoveryRunStatus,
     Locale,
     OccupancyVerdict,
+    OutboxKind,
+    OutboxRecipientKind,
+    OutboxStatus,
     ReconciliationCaseStatus,
     ReconciliationSubjectKind,
     ReversalReason,
@@ -204,6 +207,9 @@ __all__ = [
     "HitRateResponse",
     "ReconciliationReportResponse",
     "ReconciliationReportRow",
+    # --- 07-16: xabar yetkazilishi — direktor ko'radigan yozuv (BOT-04) ---
+    "DeliveryListResponse",
+    "DeliveryRow",
     "validate_password_strength",
 ]
 
@@ -4041,3 +4047,151 @@ class HitRateResponse(BaseModel):
     """`new` + `in_review` — ⛔ MAXRAJGA KIRMAYDI, lekin YASHIRILMAYDI ham."""
     hit_rate: float | None
     """⛔ `None` — «hali o'lchov yo'q». `0.0` bilan ALMASHTIRILMAYDI."""
+
+
+# ---------------------------------------------------------------------------
+# 07-16: XABAR YETKAZILISHI — DIREKTOR KO'RADIGAN YOZUV (BOT-04)
+#
+# ⛔⛔ BU IKKI MODELDA YUQORIDAGI UCH TAQIQ (a1)/(a)/(b) KUCHDA QOLADI VA
+#     ULARGA TO'RTINCHISI QO'SHILADI:
+#
+#   (c) ⛔ XABARNING O'ZI JAVOBDA YO'Q. Na `payload` (unda summa va rasta
+#       kodi bor), na tayyor MATN (u umuman SAQLANMAYDI — matn `kind` +
+#       `payload` dan JO'NATISH paytida quriladi, Pitfall 6), na
+#       `provider_message_id` (Telegram ning ichki identifikatori).
+#
+#       Sabab MAHSULOT darajasida: kvitansiya matnini yetkazilganlik
+#       jadvalida takrorlash ⛔ IKKINCHI PUL YUZASI bo'lardi va u
+#       yig'indiga olib borardi (07-UI-SPEC §11.3). `chat_id` esa
+#       USTUN bo'lib ham mavjud emas (`outbox_repo` ning 4-majburiyati).
+# ---------------------------------------------------------------------------
+
+
+class DeliveryRow(BaseModel):
+    """Yetkazilganlik jadvalining bitta qatori — ⛔ HOLAT VA VAQT (§11.3).
+
+    =======================================================================
+    ⛔⛔ MATN VA HOLAT ⛔ IKKI BOSHQA NARSA, VA JAVOBDA FAQAT HOLAT BOR.
+
+    Bot API ning `sendMessage` javobi — `Message` obyekti (`message_id`,
+    `date`); Telegram yetkazilganlik yoki o'qilganlik kvitansiyasini
+    ⛔ UMUMAN BERMAYDI (Pitfall 2). Ya'ni `delivered` = «Telegram
+    **200** qaytardi», ⛔ «foydalanuvchi o'qidi» EMAS. Shuning uchun bu
+    modelda ⛔ `label` / `title` / `text` maydoni YO'Q: matn KLIENTDA,
+    `recon.deliveryState.*` kalitlaridan quriladi va u uchala locale'da
+    «Telegram qabul qildi» ma'nosini beradi (G-34).
+
+    ⛔ SERVERDAN TAYYOR YORLIQ QAYTARISH TAQIQLANADI: matn serverga
+       ko'chganda uch tilning biri backendda, ikkitasi frontendda
+       yashardi — va `alerting.py:1003-1008` bu qarorni loyihada
+       ALLAQACHON o'rnatgan (server i18n KALITINI beradi, matnni emas).
+    =======================================================================
+
+    ⚠ `updated_at` — OXIRGI HOLAT O'ZGARISHI. ⛔ `last_attempt_at` DEB
+      NOMLANMAYDI: bunday USTUN `notification_outbox` da YO'Q va uni
+      qo'shish migratsiya bo'lardi, holbuki mavjud qiymat aynan shu
+      savolga javob beradi (`outbox_repo.DeliveryRow` docstringi).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    outbox_id: UUID
+    kind: OutboxKind
+    """⛔ YOPIQ TO'PLAM — yorliq klientda, `NOTIFICATION_KINDS` reyestridan."""
+    recipient_kind: OutboxRecipientKind
+    vendor_id: UUID | None
+    """⛔ IDENTIFIKATOR, ISM EMAS (modul izohidagi (a) taqig'i).
+
+    `None` = direktorning xabari (`recipient_matches_vendor` buni ikki
+    tomonlama majburlaydi).
+    """
+    status: OutboxStatus
+    """⛔ YOPIQ ENUM — besh a'zo (D-20). `label` maydoni ⛔ YO'Q."""
+    attempt_count: int
+    created_at: datetime
+    updated_at: datetime
+    error_type: str | None
+    """⛔ TUR NOMI (`type(exc).__name__`), xato MATNI ⛔ HECH QACHON (D-04).
+
+    Telegram Bot API ning URL'i BOT TOKENINI tashiydi va `httpx`
+    istisnosining matni to'liq URL'ni o'z ichiga oladi. Chegara
+    `outbox_repo._validate_error_type()` da YOZISH paytida qo'yiladi,
+    ya'ni bu ustunga matn UMUMAN tusha olmaydi.
+
+    =======================================================================
+    ⛔⛔ SIM USTUNI `last_error_type`, SIM MAYDONI `error_type` — VA FARQ
+        ATAYIN, «unutish» EMAS.
+
+    07-UI-SPEC §16.6 (**G-36**) `last_error` tokenini nomuvofiqlik
+    yuzasida ⛔ **0** ga qulflaydi va taqiqning SABABI aynan ⛔ **xom
+    istisno MATNI** (u bot tokenini tashiydi). Darvoza esa tokenni
+    ⛔ **PREFIKS** sifatida qidiradi, ya'ni u `last_error_type` ni
+    `last_error` dan ⛔ **AJRATA OLMAYDI**: xavfsiz maydon nomining
+    O'ZI darvozani qizartirardi.
+
+    ⛔ DARVOZAGA ISTISNO YOZILMADI (07-15 ning `hitRate*` -> `accuracy*`
+       pretsedenti): «... dan tashqari» degan carve-out keyingi ijrochi
+       tomonidan kengaytirilardi va reyestr asta-sekin bo'shashardi.
+       Nomni o'zgartirish darvozani ⛔ **ISTISNOSIZ** qoldiradi.
+
+    ⚠ Va yangi nom MAZMUNAN ham aniqroq: maydon «oxirgi xato» emas,
+      «xatoning TURI» — `_type` qo'shimchasi bilan `last_` prefiksi
+      bir narsani ikki marta aytardi.
+    =======================================================================
+    """
+    error_status_code: int | None
+    """HTTP status kodi (`429`, `400`, …). ⛔ `403` -> `blocked` (D-22).
+
+    ⚠ Nomi `error_type` bilan JUFTLASHTIRILGAN: bir manbadan kelgan ikki
+      maydon ikki xil prefiks bilan turishi o'quvchida «ular boshqa
+      hodisadan» degan noto'g'ri taassurot qoldirardi.
+    """
+
+
+class DeliveryListResponse(BaseModel):
+    """`GET /reconciliation/delivery?day=` — kunning yetkazilganlik yozuvi.
+
+    =======================================================================
+    ⛔⛔ BESHALA HISOBLAGICH HAM NOL BO'LGANDA HAM QAYTADI.
+
+    `CaseListResponse` / `ChargeListResponse` / `AnomalyListResponse`
+    bilan AYNAN bir xil qaror: «bu kunda bloklangan sotuvchi yo'q»
+    bilan «hisoblagich ishlamayapti» bir xil ko'rinsa, direktor D-02
+    nizosida («xabar kelmadi») noto'g'ri xulosaga kelardi — va aynan
+    o'sha nizo uchun bu yuza qurilgan.
+
+    ⛔ `blocked_count` ALOHIDA va u `failed_count` GA QO'SHILMAYDI
+       (D-22): blok — sotuvchining HUQUQI va qarz undirish jarayonining
+       bir qismi, texnik nosozlik EMAS. Ikkalasini bitta songa qo'shish
+       aloqa uzilishini nosozlik shovqiniga ko'mib yuborardi va
+       direktor «bevosita bog'laning» degan yagona foydali qadamni
+       topa olmasdi.
+    =======================================================================
+
+    ⛔ YOZISH MARSHRUTI YO'Q: bu yo'lda `POST` / `PATCH` / `DELETE`
+       ⛔ UMUMAN yozilmagan (append-only, D-20). Qo'lda `delivered`
+       qo'yish nizoda SOXTA DALIL bo'lardi, `[Qayta yuborish]` esa
+       `uq_notification_outbox_market_id_dedupe_key` bilan
+       to'qnashardi yoki uni aylanib o'tib IKKINCHI kvitansiya
+       yuborardi (07-UI-SPEC §17.2).
+
+    ⚠ `day` javobda ATAYIN bor: standart kun SERVERDA hisoblanadi
+      (⛔ **BUGUN** — §4.4/§5.4: kvitansiya HOZIR ketadi va nizo O'SHA
+      KUNI chiqadi) va klient qaysi kunni ko'rayotganini javobning
+      O'ZIDAN biladi. ⚠ Bu `GET /reconciliation/report` DAN farq
+      qiladi (u yerda standart KECHA) va farq MAHSULOT qarori:
+      hisobot D+1 04:10 da tug'iladi, yetkazilganlik esa BUGUN kerak.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    rows: list[DeliveryRow]
+    pending_count: int
+    sent_count: int
+    delivered_count: int
+    failed_count: int
+    blocked_count: int
+    """⛔ `failed_count` GA QO'SHILMAYDI — klass docstringi (D-22)."""
+    next_cursor: str | None
+    """Keyingi sahifa kaliti; `None` — sahifa to'lmadi, ya'ni oxiri."""

@@ -61,17 +61,25 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sbozor_core.enums import ReconciliationCaseStatus, ReconciliationSubjectKind
+from sbozor_core.enums import (
+    OutboxKind,
+    OutboxRecipientKind,
+    OutboxStatus,
+    ReconciliationCaseStatus,
+    ReconciliationSubjectKind,
+)
 from sbozor_core.timeutil import business_today
 
 from app.deps import Principal, TenantSessionDep, require_permission
-from app.repositories import billing_repo, reconciliation_repo
+from app.repositories import billing_repo, outbox_repo, reconciliation_repo
 from app.schemas import (
     CaseDetailResponse,
     CaseEventRow,
     CaseListResponse,
     CaseRowResponse,
     CaseUpdateRequest,
+    DeliveryListResponse,
+    DeliveryRow,
     HitRateResponse,
     ReconciliationReportResponse,
     ReconciliationReportRow,
@@ -723,4 +731,185 @@ async def reconciliation_hit_rate(
         unjustified=measured.unjustified,
         open_cases=measured.pending,
         hit_rate=measured.rate,
+    )
+
+
+# ===========================================================================
+# 07-16: XABAR YETKAZILISHI — ⛔ FAQAT O'QISH (BOT-04)
+#
+# =========================================================================
+# ⛔⛔ BU YO'LDA YOZISH MARSHRUTI ⛔ UMUMAN YOZILMAYDI — VA BU TAQIQ.
+#
+#   `POST /reconciliation/delivery/{id}/retry`   -> ⛔ QURILMAYDI
+#   `PATCH /reconciliation/delivery/{id}`        -> ⛔ QURILMAYDI
+#   `DELETE /reconciliation/delivery/{id}`       -> ⛔ QURILMAYDI
+#
+# Uchta mustaqil sabab (07-UI-SPEC §17.2):
+#
+#   1. Outbox O'ZI qayta uradi (DQ-3 backoff) — qo'lda urinish
+#      mexanizmning IKKINCHI nusxasi bo'lardi;
+#   2. ⛔ Qo'lda yuborish `uq_notification_outbox_market_id_dedupe_key`
+#      (D-21) bilan TO'QNASHARDI yoki uni aylanib o'tib sotuvchiga
+#      IKKINCHI kvitansiya yuborardi — 6-fazaning T-06-49 sinfi;
+#   3. ⛔ Holatni QO'LDA `delivered` ga o'tkazish nizoda (D-02)
+#      SOXTA DALIL bo'lardi: tizim Telegram tasdiqlamagan narsani
+#      tasdiqlangan deb ko'rsatardi. `blocked` da esa qayta urinish
+#      TA'RIFAN foydasiz (D-22).
+#
+# ⛔ Navbat APPEND-ONLY (D-20) va uning yagona yozuvchisi — JO'NATUVCHI
+#    (`app/jobs/outbox.py`). Bu fayl faqat O'QIYDI.
+# =========================================================================
+# ===========================================================================
+
+
+def _delivery_day(day: date | None) -> date:
+    """Yetkazilganlik kunini yechadi — ⛔ STANDARTI **BUGUN** (§4.4, §5.4).
+
+    ⛔⛔ VA BU `_report_day()` NING TESKARISI — FARQ MAHSULOT QARORI,
+        NUQSON EMAS:
+
+      hisobot     -> standart **KECHA**, chunki `daily_charges` D+1
+                     04:10 da, case'lar D+1 04:25 da tug'iladi va
+                     bugungi hisobot HAR DOIM bo'sh ochilardi;
+      yetkazilish -> standart **BUGUN**, chunki kvitansiya ⛔ HOZIR
+                     ketadi (D-18) va «xabar kelmadi» nizosi ⛔ O'SHA
+                     KUNI chiqadi. Kechaga qulflangan yuza BOT-04 ning
+                     amaliy qiymatini NOLGA tushirardi (07-CONTEXT
+                     `<specifics>`).
+
+    ⛔ KELAJAK KUNI **422** — `_report_day()` bilan bir xil qoida:
+       «kelajakda xabar yo'q» degan MA'NOSIZ javob «bu kunda xabar
+       yuborilmagan» bilan bir xil ko'rinardi.
+    """
+    today = business_today()
+    resolved = today if day is None else day
+    if resolved > today:
+        raise _reject(_DAY_IN_FUTURE, status.HTTP_422_UNPROCESSABLE_CONTENT)
+    return resolved
+
+
+def _encode_delivery_cursor(cursor: outbox_repo.DeliveryCursor | None) -> str | None:
+    """Keyset kursorini UNUMSIZ SATRGA aylantiradi (`_encode_cursor()` naqshi).
+
+    ⚠ SHAKL KLIENT KONTRAKTI EMAS: klient uni PARSE QILMAYDI,
+      o'zgarmasdan qaytaradi.
+    """
+    if cursor is None:
+        return None
+    return f"{cursor.created_at.isoformat()}|{cursor.outbox_id}"
+
+
+def _decode_delivery_cursor(raw: str | None) -> outbox_repo.DeliveryCursor | None:
+    """Kursor satrini yechadi — buzilgan qiymat ⛔ **422**, jim e'tiborsizlik EMAS.
+
+    ⛔ JIM TASHLAB YUBORISH TAQIQLANADI: direktor «Yana» bosganda
+       BIRINCHI sahifani qayta ko'rardi va ro'yxat cheksiz aylanardi.
+    """
+    if raw is None:
+        return None
+    head, _, tail = raw.partition("|")
+    try:
+        created_at = datetime.fromisoformat(head)
+        outbox_id = UUID(tail)
+    except ValueError as exc:
+        raise _reject("cursor_invalid", status.HTTP_422_UNPROCESSABLE_CONTENT) from exc
+    return outbox_repo.DeliveryCursor(created_at=created_at, outbox_id=outbox_id)
+
+
+@router.get("/delivery", response_model=DeliveryListResponse)
+async def reconciliation_delivery(
+    principal: ReportViewerDep,
+    session: TenantSessionDep,
+    day: Annotated[date | None, Query()] = None,
+    vendor_id: Annotated[UUID | None, Query()] = None,
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int | None, Query(ge=1, le=outbox_repo.DELIVERY_PAGE_SIZE)] = None,
+) -> DeliveryListResponse:
+    """Kunning yetkazilganlik yozuvi — ⛔ NIZO PAYTIDA KO'RSATILADI (BOT-04).
+
+    =======================================================================
+    ⛔⛔ NEGA BU DIREKTOR KO'RADIGAN YUZADA VA NEGA FAQAT JADVALDA EMAS.
+
+    D-02 nizo modeli 7-fazada KENGAYDI: 6-fazada nizo «sotuvchi pul
+    to'laganini isbotlay olmasligi» edi, bu yerda IKKINCHISI qo'shildi —
+    «xabar kelmadi». Yetkazilganlik holati ⛔ MAHSULOT XOSSASI, log
+    EMAS: u faqat `psql` da yashasa, direktor sotuvchi bilan
+    tortishayotganda unga YETIB BORMASDI va BOT-04 ning amaliy qiymati
+    NOLGA tushardi.
+    =======================================================================
+
+    ⛔⛔ JAVOB ⛔ ISBOTLANGANDAN ORTIQ DA'VO QILMAYDI (Pitfall 2).
+       `status` — `OutboxStatus` ning yopiq a'zosi va `delivered`
+       ning ma'nosi enum docstringida AYNAN yozilgan: «Telegram **200**
+       qaytardi va `message_id` berdi». ⛔ Javobda `label` maydoni YO'Q
+       — matn KLIENTDA quriladi va u «Telegram qabul qildi» ma'nosini
+       beradi (G-34). Serverdan tayyor yorliq qaytarish uch tilning
+       birini backendga ko'chirardi.
+
+    ⛔ JAVOBDA ⛔ YO'Q: `payload` (summa va rasta kodi — u XABAR uchun),
+       `chat_id` (⛔ USTUNNING O'ZI yo'q), tayyor MATN (⛔ SAQLANMAYDI),
+       `provider_message_id` (Telegram ning ichki identifikatori).
+       Sabablar `outbox_repo` ning 5-majburiyatida.
+
+    ⛔ `read_audit` E'LON QILINMAYDI — modul docstringining ikkinchi
+       bo'limi: javobda shaxsiy maydon YO'Q, ya'ni D-09 darvozasining
+       talabi bu marshrutga qo'llanmaydi. Sotuvchi qatorda ⛔
+       `vendor_id` bilan aytiladi va ismi klientda, MAVJUD va AUDIT
+       QILINGAN `GET /vendors` bilan joinlanadi.
+
+    ⛔ KASSIR VA NAZORATCHI **403**: marshrut `REPORT_VIEW` ostida va
+       ikkalasida ham bu huquq YO'Q (`ReportViewerDep` docstringi).
+
+    ⚠ IKKI SO'ROV (qatorlar + hisoblagichlar) va bu ⛔ ATAYIN: sanoq
+      SAHIFAGA emas, KUNGA tegishli. Bitta so'rovga birlashtirish
+      (`count(*) OVER ()`) ikkinchi sahifada boshqa son qaytarardi va
+      direktor «raqam o'zgarib ketdi» degan xulosaga kelardi.
+    """
+    market_id = _market_id(principal)
+    business_date = _delivery_day(day)
+
+    page = await outbox_repo.list_deliveries(
+        session,
+        market_id=market_id,
+        day=business_date,
+        vendor_id=vendor_id,
+        cursor=_decode_delivery_cursor(cursor),
+        limit=outbox_repo.DELIVERY_PAGE_SIZE if limit is None else limit,
+    )
+
+    return DeliveryListResponse(
+        day=page.day,
+        rows=[_delivery_row(row) for row in page.rows],
+        pending_count=page.pending_count,
+        sent_count=page.sent_count,
+        delivered_count=page.delivered_count,
+        failed_count=page.failed_count,
+        blocked_count=page.blocked_count,
+        next_cursor=_encode_delivery_cursor(page.next_cursor),
+    )
+
+
+def _delivery_row(row: outbox_repo.DeliveryRow) -> DeliveryRow:
+    """Repo qatorini HTTP shakliga o'tkazadi — ⛔ FAQAT SHAKL, hisob YO'Q.
+
+    ⚠ Uch enum ATAYIN BU YERDA qurilади: repo `str` qaytaradi (xom SQL),
+      sxema esa yopiq to'plamni talab qiladi. Noma'lum qiymat shu
+      chegarada `ValueError` beradi — ya'ni DB'da enum'dan tashqari
+      holat paydo bo'lsa, u ekranga JIMGINA chiqmaydi.
+    """
+    return DeliveryRow(
+        outbox_id=row.outbox_id,
+        kind=OutboxKind(row.kind),
+        recipient_kind=OutboxRecipientKind(row.recipient_kind),
+        vendor_id=row.vendor_id,
+        status=OutboxStatus(row.status),
+        attempt_count=row.attempt_count,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        # ⛔ SIM NOMI USTUN NOMIDAN FARQ QILADI (`DeliveryRow.error_type`
+        #   docstringi): `last_error` tokeni frontend darvozasida 0 ga
+        #   qulflangan va u prefiks bo'yicha ishlaydi — xavfsiz ustun
+        #   nomining O'ZI o'sha darvozani qizartirardi.
+        error_type=row.last_error_type,
+        error_status_code=row.last_status_code,
     )

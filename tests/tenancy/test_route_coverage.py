@@ -162,6 +162,21 @@ Ulardan AYNAN **11 tasi** 6-fazaniki va ular nomma-nom sanaladi:
   ko'tarish D-32 intizomi bo'yicha faza OXIRIDA, yakuniy o'lchov bilan
   bajariladi.
 
+⚠ 07-10 BESHTASINI (`GET /reconciliation/report` · `/cases` ·
+  `/cases/{case_id}` · `PATCH /cases/{case_id}` · `GET /hit-rate`),
+  07-16 esa BITTASINI (`GET /reconciliation/delivery`, BOT-04) qo'shdi
+  — CHEGARA YANA KO'TARILMADI, sabab yuqoridagi bilan AYNI.
+
+⛔ `GET /reconciliation/delivery` DA YO'L PARAMETRI YO'Q, ya'ni u
+   `PARAM_FILLERS` ni TALAB QILMAYDI va matritsaga o'zi tushadi
+   (`test_no_unclassified_routes` yashil qoladi). U `EXEMPT_ROUTES` ga
+   ham QO'SHILMAYDI: marshrut to'liq tenant resursi — bozorsiz
+   sessiyada `403`, begona bozor qatorlari esa RLS bilan 0 qator.
+   Uning yozuv YO'QLIGI (`POST`/`PATCH`/`DELETE` — 0 ta) alohida,
+   `tests/integration/test_delivery_surface.py` da OpenAPI ustidan
+   o'lchanadi: bu fayl marshrutlar BOR-YO'QLIGINI emas, ularning
+   TASNIFLANGANINI qo'riqlaydi.
+
 ⛔ `/api/v1/me/headline` `EXEMPT_ROUTES` GA QO'SHILMAYDI, garchi qo'shni
    `/api/v1/me` o'sha ro'yxatda bo'lsa ham. Istisno YO'L bo'yicha aniq
    moslikda ishlaydi va ikki marshrut BOSHQA toifada: `/me` — PROFIL
@@ -400,7 +415,8 @@ def test_no_bot_internal_route_enters_the_personal_data_gate() -> None:
 
 
 # ===========================================================================
-# `/reconciliation/*` — BESH MARSHRUT, IKKI HUQUQ (07-10, RECON-01/RECON-02)
+# `/reconciliation/*` — OLTI MARSHRUT, IKKI HUQUQ
+# (07-10: RECON-01/RECON-02 · 07-16: BOT-04)
 # ===========================================================================
 
 RECONCILIATION_PREFIX = "/api/v1/reconciliation"
@@ -422,20 +438,29 @@ CHIQIB QOLADI:
       nomlansa (b) va (c) TRIVIAL ravishda rost bo'lardi (05-16 ning W-2
       darsi, `test_the_bot_internal_surface_is_exactly_three_routes` ning
       aynan sababi);
-  (b) beshalasi ham OpenAPI'da BOR — bot yuzasidan ATAYIN TESKARI da'vo:
+  (b) oltalasi ham OpenAPI'da BOR — bot yuzasidan ATAYIN TESKARI da'vo:
       bu yuzaning mijozi BRAUZER va kontrakt `frontend/src/lib/*` ga
       shu sxemadan ko'chiriladi (07-15/07-16);
-  (c) beshalasi ham `PERSONAL_ROUTES` GA TUSHMAYDI (G7-6, D-05).
+  (c) oltalasi ham `PERSONAL_ROUTES` GA TUSHMAYDI (G7-6, D-05).
 =============================================================================
 """
 
 RECONCILIATION_ROUTES = (
     "/api/v1/reconciliation/cases",
     "/api/v1/reconciliation/cases/{case_id}",
+    "/api/v1/reconciliation/delivery",
     "/api/v1/reconciliation/hit-rate",
     "/api/v1/reconciliation/report",
 )
-"""To'rt YO'L, besh MARSHRUT: `cases/{case_id}` da `GET` VA `PATCH` bor."""
+"""Besh YO'L, olti MARSHRUT: `cases/{case_id}` da `GET` VA `PATCH` bor.
+
+⚠ 07-16 BITTASINI QO'SHDI — `GET /delivery` (BOT-04). ⛔ VA U YOLG'IZ
+  `GET`: yetkazilganlik navbati APPEND-ONLY (D-20) va uning yagona
+  yozuvchisi JO'NATUVCHI (`app/jobs/outbox.py`). Qayta yuborish yoki
+  holatni qo'lda o'zgartirish marshruti ⛔ UMUMAN yozilmagan —
+  quyidagi to'plam tengligi buni AYNAN o'lchaydi va yangi metod
+  qo'shilgan zahoti qizaradi.
+"""
 
 
 def _reconciliation_paths() -> list[str]:
@@ -449,13 +474,20 @@ def _reconciliation_paths() -> list[str]:
     )
 
 
-def test_the_reconciliation_surface_is_exactly_five_routes() -> None:
+def test_the_reconciliation_surface_is_exactly_six_routes() -> None:
     """DARVOZANING NAZORATI — pastdagi ikki test BO'SH to'plamda yashil bo'lmaydi.
 
-    ⛔ To'plam TENGLIGI bilan (D-31), «kamida beshtasi» bilan EMAS: oltinchi
+    ⛔ To'plam TENGLIGI bilan (D-31), «kamida oltitasi» bilan EMAS: yettinchi
        marshrut qo'shilishi ONGLI qaror va u shu yerda ko'rinishi kerak —
        ayniqsa u `PATCH` yoki `DELETE` bo'lsa (case tarixi o'zgarmas,
-       D-14).
+       D-14; yetkazilganlik navbati append-only, D-20).
+
+    ⛔⛔ VA AYNAN SHU YERDA `[Qayta yuborish]` NING SERVER YARMI
+        QULFLANADI: `/delivery` yo'lida ⛔ FAQAT `GET` bor. Qo'lda
+        yuborish `uq_notification_outbox_market_id_dedupe_key` (D-21)
+        bilan to'qnashardi yoki uni aylanib o'tib sotuvchiga IKKINCHI
+        kvitansiya yuborardi; qo'lda `delivered` qo'yish esa nizoda
+        (D-02) SOXTA DALIL bo'lardi (07-UI-SPEC §17.2).
     """
     walked = {
         (route.method, route.path)
@@ -470,16 +502,18 @@ def test_the_reconciliation_surface_is_exactly_five_routes() -> None:
         ("GET", "/api/v1/reconciliation/cases/{case_id}"),
         ("PATCH", "/api/v1/reconciliation/cases/{case_id}"),
         ("GET", "/api/v1/reconciliation/hit-rate"),
+        ("GET", "/api/v1/reconciliation/delivery"),
     }, sorted(walked)
 
 
 def test_every_reconciliation_route_is_documented_in_openapi() -> None:
-    """⛔ Beshalasi ham OpenAPI'da BOR — `/internal/bot/*` dan TESKARI da'vo.
+    """⛔ Oltalasi ham OpenAPI'da BOR — `/internal/bot/*` dan TESKARI da'vo.
 
-    Bu yuzaning mijozi BRAUZER: 07-15 (hisobot) va 07-16 (case navbati)
-    klient sxemasini shu kontraktdan oladi. `include_in_schema=False`
-    bilan yozilgan marshrut frontend darvozalariga UMUMAN ko'rinmasdi va
-    ikki tomon jimgina ajralib ketardi.
+    Bu yuzaning mijozi BRAUZER: 07-15 (hisobot) va 07-16 (case navbati +
+    yetkazilganlik) klient sxemasini shu kontraktdan oladi.
+    `include_in_schema=False` bilan yozilgan marshrut frontend
+    darvozalariga UMUMAN ko'rinmasdi va ikki tomon jimgina ajralib
+    ketardi.
     """
     documented = {
         (method.upper(), path)
@@ -488,7 +522,7 @@ def test_every_reconciliation_route_is_documented_in_openapi() -> None:
         if path.startswith(RECONCILIATION_PREFIX)
     }
 
-    assert len(documented) == 5, sorted(documented)
+    assert len(documented) == 6, sorted(documented)
     assert {path for _, path in documented} == set(RECONCILIATION_ROUTES)
 
 

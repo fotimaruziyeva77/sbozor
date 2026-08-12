@@ -2,6 +2,7 @@
 
 import { EMPTY_VENDOR_FILTERS, useVendorsQuery } from "@/lib/market-queries";
 import { useAuthStore } from "@/lib/auth-store";
+import { useUsersQuery } from "@/lib/queries";
 import { hasPermission } from "@/lib/rbac";
 
 /*
@@ -68,5 +69,76 @@ export function useVendorLabels(options?: { enabled?: boolean }): VendorLabels {
     labelOf: (vendorId) =>
       vendorId === null ? null : (byId.get(vendorId) ?? null),
     isPending: enabled && vendors.isPending,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* MAS'UL — `assignee_user_id` -> EKRANDA KO'RINADIGAN NOM (§5.5, DL-5)        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⛔⛔ NEGA BU SHU MODULDA VA NEGA `user-labels.ts` OCHILMADI.
+ *
+ * Modulning chegarasi «sotuvchi» EMAS: u ⛔ **shaxsiy ISMNI TAQIQLANGAN
+ * YUZADAN TASHQARIDA o'qish** chegarasi. `full_name` tokeni
+ * `components/reconciliation/**` da ham, `lib/reconciliation-queries.ts`
+ * da ham ⛔ **0** ga qulflangan (07-UI-SPEC §16.6) — ya'ni mas'ulning
+ * ismi ham AYNAN SHU tomonda o'qilishi kerak.
+ *
+ * Ikkinchi modul ochish o'sha chegarani ⛔ **IKKIGA** bo'lardi: keyingi
+ * ijrochi uchinchisini ochish uchun pretsedent topardi va taqiq
+ * «qaysi fayl skanlanadi?» degan kontekstga bog'liq shartga aylanardi.
+ * Bu yerda esa qoida bitta jumla: ⛔ **ism SHU faylda o'qiladi, yuzaga
+ * faqat TAYYOR YORLIQ chiqadi.**
+ *
+ * ⛔ HUQUQ YO'Q -> SO'ROV HAM YO'Q: `user_view` bo'lmagan sessiyada
+ *    `GET /users` ⛔ **umuman yubormaydi** (`useVendorLabels` bilan
+ *    aynan bir qoida — ko'rinmaydigan ekran uchun fon so'rovi audit
+ *    jurnalini ma'nosiz yozuvlar bilan to'ldirardi).
+ */
+export type AssigneeOption = {
+  id: string;
+  /** ⛔ TAYYOR YORLIQ: ism bo'lmasa identifikatorning qisqa shakli. */
+  label: string;
+};
+
+export type AssigneeLabels = {
+  /** `null` — biriktirilmagan, huquq yo'q yoki reestrda topilmadi. */
+  labelOf: (userId: string | null) => string | null;
+  /** DL-5 dagi native `<select>` ning variantlari — BARQAROR tartibda. */
+  options: readonly AssigneeOption[];
+  isPending: boolean;
+};
+
+export function useAssigneeLabels(options?: {
+  enabled?: boolean;
+}): AssigneeLabels {
+  const { principal } = useAuthStore();
+  const allowed = hasPermission(principal?.roles ?? [], "user_view");
+  const enabled = allowed && (options?.enabled ?? true);
+
+  const users = useUsersQuery({ enabled });
+
+  const items = users.data?.items ?? [];
+
+  /*
+   * ⚠ FAOL BO'LMAGAN FOYDALANUVCHI VARIANTLARDA YO'Q, lekin YORLIQDA
+   *   BOR: bloklangan xodimga YANGI case biriktirib bo'lmaydi, ammo u
+   *   ilgari biriktirilgan case'da ⛔ NOMI BILAN ko'rinishi SHART —
+   *   aks holda audit izi «kimdir» ga aylanardi.
+   */
+  const byId = new Map(
+    items.map(
+      (user) =>
+        [user.id, user.full_name ?? user.phone] as const,
+    ),
+  );
+
+  return {
+    labelOf: (userId) => (userId === null ? null : (byId.get(userId) ?? null)),
+    options: items
+      .filter((user) => user.is_active)
+      .map((user) => ({ id: user.id, label: user.full_name ?? user.phone })),
+    isPending: enabled && users.isPending,
   };
 }
