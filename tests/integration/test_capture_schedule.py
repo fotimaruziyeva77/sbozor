@@ -723,6 +723,15 @@ async def test_self_check_is_ok_when_the_heartbeat_is_fresh(
         "hech qachon yozilmagan komponent javobda KO'RINISHI kerak — "
         "jimgina yashirish uni abadiy ko'rinmas qilardi"
     )
+    # ⚠ 07-14: reyestr to'rtta 7-faza komponentiga o'sdi. Da'vo AYNAN
+    #   o'sha: job hali ishlamagan bo'lsa nom `never_seen` da KO'RINADI va
+    #   endpoint HAMON `200` qaytaradi. Ro'yxatning o'sishi endpointni
+    #   `503` qilib qo'yganda tashqi kuzatuvchi uni O'CHIRIB qo'yardi —
+    #   ya'ni reyestrni kengaytirish darvozani O'LDIRARDI.
+    seven = {"outbox_tick", "reconciliation_open", "notify_digest", "notify_overdue"}
+    assert seven <= set(body["never_seen"]), (
+        f"7-faza komponentlari javobda ko'rinmadi: {sorted(seven - set(body['never_seen']))}"
+    )
 
 
 async def test_self_check_reports_a_stale_component_with_503(
