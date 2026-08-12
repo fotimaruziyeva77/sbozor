@@ -39,10 +39,15 @@ TO'RTTA QOIDA BU FAYLNING SHAKLINI BELGILAYDI.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
+from app.jobs.reconciliation import (
+    DEFAULT_OVERDUE_DAYS,
+    RECON_OPEN_COMPONENT,
+    reconciliation_open,
+)
 from app.repositories.reconciliation_repo import (
     CASE_PAGE_SIZE,
     CASE_WORTHY_ANOMALY_KINDS,
@@ -56,6 +61,7 @@ from app.repositories.reconciliation_repo import (
 from fixtures.billing_domain import (
     TARIFF_SOUM,
     BillingDomainSeed,
+    MarketBillingRows,
     add_daily_charge,
     add_payment,
     billing_domain_before_day_close,
@@ -65,12 +71,19 @@ from fixtures.notification_domain import (
     cleanup_notification_domain,
     seed_case,
     seed_no_coverage_anomaly,
+    seed_notification_settings,
 )
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import TwoMarketSeed
-from sbozor_core.enums import AnomalyKind, ReconciliationCaseStatus, ReconciliationSubjectKind
+from sbozor_core.enums import (
+    AdjustmentDirection,
+    AdjustmentReason,
+    AnomalyKind,
+    ReconciliationCaseStatus,
+    ReconciliationSubjectKind,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -79,6 +92,7 @@ if TYPE_CHECKING:
     from fixtures import TenantSessionFactory
     from psycopg import Connection
     from psycopg.rows import TupleRow
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 pytestmark = pytest.mark.usefixtures("migrated")
 
@@ -131,6 +145,32 @@ _EVIDENCE_PAIR = (
 juftlikni test o'zi yig'ishga urinsa u tekshirilayotgan mexanizmning
 (kompozit FK + juftlangan `CHECK`) NUSXASINI qurgan bo'lardi.
 """
+
+_INSERT_ADJUSTMENT = (
+    "INSERT INTO charge_adjustments "
+    "(id, market_id, charge_id, direction, reason_code, amount_soum, actor_user_id) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s)"
+)
+"""Hisob tuzatishi — job darajasidagi NOSOZLIK holatining YAGONA qurilishi.
+
+Hisobning O'ZIDAN katta `decrease` o'sha kunning qoldig'ini MANFIY qiladi
+va `allocate_charge_credit()` uni `ValueError` bilan rad etadi. Bu holat
+o'sha funksiyaning O'Z docstringida nomlab qo'yilgan («o'ta katta
+`decrease` — D-07 ning o'z savoli»), ya'ni u erishib bo'ladigan ma'lumot
+holati, soxta nosozlik EMAS.
+"""
+
+_SET_MARKET_GUC = "SELECT set_config('app.market_id', %s, false)"
+"""Sessiya darajasidagi tenant konteksti — `charge_adjustments` AUDIT ostida.
+
+Jadval `BILLING_AUDITED_TABLES` da va uning DB-triggeri `app.market_id`
+GUC'idan o'qiydi. Kontekstsiz `INSERT` audit qatorini EGASIZ qoldirardi.
+Blok tugagach kontekst BO'SHATILADI: `sync_owner_conn` autocommit
+rejimida ishlaydi va qoldirilgan qiymat keyingi testga sizib o'tardi
+(`fixtures/two_markets.py` da o'lchangan sabab).
+"""
+
+_HEARTBEAT = "SELECT last_seen_at, detail FROM system_heartbeats WHERE component = %s"
 
 _COUNT_CASES = "SELECT count(*) FROM reconciliation_cases WHERE market_id = %s"
 _COUNT_EVENTS = (
@@ -981,3 +1021,244 @@ async def test_case_evidence_on_a_missing_case_is_a_lookup_error(
     async with tenant_session(recon.market_id) as session:
         with pytest.raises(LookupError):
             await case_evidence(session, market_id=recon.market_id, case_id=uuid4())
+
+
+# ===========================================================================
+# 7. JOB DARAJASI — `active_market_ids()` BO'YLAB, YURAK URISHI BILAN
+# ===========================================================================
+
+
+def _overdue_unpaid_charge(
+    conn: Connection[TupleRow],
+    *,
+    rows: MarketBillingRows,
+    stall_id: UUID,
+    service_date: date,
+    amount_soum: int = TARIFF_SOUM,
+) -> UUID:
+    """To'lovsiz, chegaradan o'tgan hisob — SINF A ning minimal kirishi."""
+    charge_id, _ = add_daily_charge(
+        conn,
+        market_id=rows.market_id,
+        stall_id=stall_id,
+        vendor_id=rows.vendor_id,
+        tariff_id=rows.tariff_id,
+        service_date=service_date,
+        amount_soum=amount_soum,
+    )
+    return charge_id
+
+
+async def test_job_opens_cases_in_every_active_market(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    recon: Env,
+) -> None:
+    """⛔ JOB `active_market_ids()` BO'YLAB YURADI — bitta bozor bilan cheklanmaydi.
+
+    Bir bozorli seed bilan yozilgan test bu da'voni HECH QACHON
+    o'lchamasdi: tsikl birinchi elementdan keyin `break` qilganda ham
+    yashil qolardi (Pitfall 10 ning aynan sinfi).
+    """
+    today = _days_ago(sync_owner_conn, 0)
+    overdue_day = _days_ago(sync_owner_conn, _OVERDUE_DAYS + 1)
+    _overdue_unpaid_charge(
+        sync_owner_conn,
+        rows=recon.billing.market_a,
+        stall_id=recon.domain.market_a.stall_ids[0],
+        service_date=overdue_day,
+    )
+    _overdue_unpaid_charge(
+        sync_owner_conn,
+        rows=recon.billing.market_b,
+        stall_id=recon.domain.market_b.stall_ids[0],
+        service_date=overdue_day,
+    )
+
+    result = await reconciliation_open(app_sessionmaker, business_date=today)
+
+    assert result.markets == 2, f"job ikkala faol bozorni ham ko'rishi kerak edi: {result}"
+    assert result.errors == []
+    assert result.unpaid_cases == 2, f"ikkala bozorda ham case ochilmadi: {result}"
+    for market_id in recon.market_ids:
+        assert _case_count(sync_owner_conn, market_id) == 1, (
+            f"{market_id}: case ochilmadi — job bu bozorga umuman yetib bormadi"
+        )
+
+
+async def test_one_broken_market_does_not_stop_the_others(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    recon: Env,
+) -> None:
+    """⛔ BITTA BOZORNING NUQSONI QOLGANLARINI TO'XTATMAYDI (mahsulot qoidasi #5).
+
+    =======================================================================
+    ⛔ NOSOZLIK SOXTA EMAS, HAQIQIY MA'LUMOT HOLATI. B bozorining bir
+       hisobiga hisobning O'ZIDAN KATTA `decrease` tuzatishi yoziladi,
+       ya'ni o'sha kunning qoldig'i MANFIY bo'ladi.
+       `allocate_charge_credit()` uni `ValueError` bilan rad etadi va
+       uning O'Z docstringi bu holatni «D-07 ning o'z savoli, taqsimlash
+       qoidasiniki emas» deb ATAYIN nomlab qo'ygan — ya'ni bu erishib
+       bo'ladigan, hujjatlashtirilgan holat.
+
+    ⚠ REJADAGI MISOL («sozlamada `overdue_days` yo'q») BU YERDA
+      ISHLATIB BO'LMAYDI va sabab mexanik: sozlama qatorining yo'qligi
+      XATO EMAS — `_MARKET_OVERDUE_DAYS` `COALESCE` bilan kod
+      standartiga tushadi va job muvaffaqiyatli yakunlanadi. O'sha misol
+      bilan yozilgan test `errors == 1` ni HECH QACHON ko'rmasdi.
+
+    ⚠ IKKINCHI HISOB MAJBURIY: yolg'iz manfiy hisob bilan sotuvchining
+      umumiy qoldig'i ham manfiy bo'lardi va u qarzdorlar ro'yxatiga
+      UMUMAN kirmasdi — ya'ni taqsimlash chaqirilmasdi va nosozlik
+      TUG'ILMASDI.
+    =======================================================================
+    """
+    today = _days_ago(sync_owner_conn, 0)
+    overdue_day = _days_ago(sync_owner_conn, _OVERDUE_DAYS + 1)
+
+    _overdue_unpaid_charge(
+        sync_owner_conn,
+        rows=recon.billing.market_a,
+        stall_id=recon.domain.market_a.stall_ids[0],
+        service_date=overdue_day,
+    )
+
+    broken_charge_id = _overdue_unpaid_charge(
+        sync_owner_conn,
+        rows=recon.billing.market_b,
+        stall_id=recon.domain.market_b.stall_ids[0],
+        service_date=overdue_day,
+    )
+    _overdue_unpaid_charge(
+        sync_owner_conn,
+        rows=recon.billing.market_b,
+        stall_id=recon.domain.market_b.stall_ids[1],
+        service_date=overdue_day,
+    )
+    sync_owner_conn.execute(_SET_MARKET_GUC, (str(recon.billing.market_b.market_id),))
+    try:
+        sync_owner_conn.execute(
+            _INSERT_ADJUSTMENT,
+            (
+                str(uuid4()),
+                str(recon.billing.market_b.market_id),
+                str(broken_charge_id),
+                AdjustmentDirection.DECREASE.value,
+                AdjustmentReason.DIRECTOR_WAIVER.value,
+                TARIFF_SOUM + 5_000,
+                None,
+            ),
+        )
+    finally:
+        sync_owner_conn.execute(_SET_MARKET_GUC, ("",))
+
+    result = await reconciliation_open(app_sessionmaker, business_date=today)
+
+    assert result.markets == 2, f"job ikkala bozorni ham ko'rishi kerak edi: {result}"
+    assert len(result.errors) == 1, f"aynan bitta bozor xato berishi kerak edi: {result}"
+    assert result.errors[0].startswith("reconciliation_open_failed:"), (
+        f"xato SANOQQA aylanmadi: {result.errors!r}"
+    )
+    assert ":ValueError" in result.errors[0], (
+        f"xatoning TURI yozilmadi: {result.errors!r} — matn yozilsa u sotuvchi "
+        "telefonini yoki ombor manzilini tashishi mumkin edi (T-04-59)."
+    )
+    assert _case_count(sync_owner_conn, recon.billing.market_a.market_id) == 1, (
+        "sog'lom bozorning navbati B bozorining nuqsoni tufayli bo'sh qoldi"
+    )
+    assert _case_count(sync_owner_conn, recon.billing.market_b.market_id) == 0
+
+
+async def test_job_writes_its_heartbeat_even_with_errors(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    recon: Env,
+) -> None:
+    """⛔ YURAK URISHI XATOLAR BO'LGANDA HAM YOZILADI — job ISHLADI.
+
+    Yugurishning YO'QLIGI («cron o'lmadimi?») va yugurishning QISMAN
+    muvaffaqiyati IKKI BOSHQA savol. Ularni bitta signalga siqish
+    `/internal/self-check` ni bir bozorning nuqsoni tufayli butun cron
+    o'lgandek ko'rsatardi.
+    """
+    before = sync_owner_conn.execute(_HEARTBEAT, (RECON_OPEN_COMPONENT,)).fetchone()
+    seen_before = None if before is None else before[0]
+
+    today = _days_ago(sync_owner_conn, 0)
+    result = await reconciliation_open(app_sessionmaker, business_date=today)
+
+    row = sync_owner_conn.execute(_HEARTBEAT, (RECON_OPEN_COMPONENT,)).fetchone()
+    assert row is not None, "`reconciliation_open` yurak urishini YOZMADI"
+    assert row[0] is not None, "`last_seen_at` bo'sh qoldi"
+    if seen_before is not None:
+        assert row[0] >= seen_before, "`last_seen_at` yangilanmadi"
+
+    detail: dict[str, Any] = row[1]
+    assert detail, "yurak urishi BO'SH `detail` bilan yozildi"
+    assert all(isinstance(value, int) for value in detail.values()), (
+        f"`detail` da sanoq bo'lmagan qiymat bor: {detail}. `market_id`, "
+        "sotuvchi yoki rasta kodi GLOBAL jadvalga tushsa u hamma uchun "
+        "ko'rinadigan joyda qolardi."
+    )
+    assert {"anomaly_cases", "unpaid_cases", "errors"} <= set(detail), (
+        f"ikkala sinfning sanog'i ham va xato soni ham `detail` da bo'lishi kerak: {sorted(detail)}"
+    )
+    assert detail["markets"] == result.markets
+
+
+async def test_job_reads_the_overdue_threshold_from_market_settings(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    recon: Env,
+) -> None:
+    """⛔ CHEGARA BOZOR SOZLAMASIDAN — global konstanta EMAS (D-19).
+
+    A bozorida chegara KENGAYTIRILADI (`overdue_days = 30`), B bozorida
+    sozlama qatori UMUMAN yo'q va u kod standartiga tushadi. Bir xil
+    yoshdagi hisob ikki bozorda IKKI XIL javob olishi kerak — aks holda
+    «yangi bozor kod yozmasdan ulanadi» va'dasi buzilardi.
+    """
+    today = _days_ago(sync_owner_conn, 0)
+    charge_day = _days_ago(sync_owner_conn, DEFAULT_OVERDUE_DAYS + 1)
+    assert DEFAULT_OVERDUE_DAYS < 30, (
+        "NAZORAT: kengaytirilgan chegara kod standartidan katta bo'lishi shart — "
+        "aks holda ikki bozor bir xil javob berardi va test hech nimani o'lchamasdi."
+    )
+
+    seed_notification_settings(
+        sync_owner_conn, market_id=recon.billing.market_a.market_id, overdue_days=30
+    )
+    _overdue_unpaid_charge(
+        sync_owner_conn,
+        rows=recon.billing.market_a,
+        stall_id=recon.domain.market_a.stall_ids[0],
+        service_date=charge_day,
+    )
+    _overdue_unpaid_charge(
+        sync_owner_conn,
+        rows=recon.billing.market_b,
+        stall_id=recon.domain.market_b.stall_ids[0],
+        service_date=charge_day,
+    )
+
+    result = await reconciliation_open(app_sessionmaker, business_date=today)
+
+    assert result.errors == []
+    assert _case_count(sync_owner_conn, recon.billing.market_a.market_id) == 0, (
+        "kengaytirilgan chegara (30 kun) hisobni baribir navbatga qo'ydi — "
+        "job bozor sozlamasini o'qimayapti"
+    )
+    assert _case_count(sync_owner_conn, recon.billing.market_b.market_id) == 1, (
+        "sozlamasiz bozor kod standartiga tushmadi (`COALESCE` shoxi)"
+    )
+    assert result.unpaid_cases == 1
+
+
+async def test_component_name_matches_the_heartbeat_contract() -> None:
+    """⛔ KOMPONENT NOMI SATRI — 07-14 uni AYNAN shu qiymat bilan ro'yxatga oladi.
+
+    Nom ayrilsa `/internal/self-check` komponentni MANGU `never_seen` da
+    ko'rsatardi: xato yo'q, jurnal yozuvi yo'q, faqat sukunat.
+    """
+    assert RECON_OPEN_COMPONENT == "reconciliation_open"
