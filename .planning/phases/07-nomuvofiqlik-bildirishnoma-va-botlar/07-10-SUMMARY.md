@@ -154,8 +154,8 @@ Chaqiruv **olib tashlandi**; rejaning MAQSADI («ikki jurnal, ikkalasi ham
 |---|---|
 | `pytest tests/integration/test_reconciliation_api.py -q` | **17 yashil** (reja ≥ 8 so'ragan) |
 | `pytest tests/tenancy/test_personal_data_coverage.py test_route_coverage.py -q` | **36 yashil** |
-| `pytest tests/tenancy -q` (07-08 darvozalari bilan) | TENANCY_RESULT |
-| `pytest tests/unit/test_rbac_matrix.py -q` | RBAC_RESULT |
+| `pytest tests/tenancy tests/unit/test_rbac_matrix.py -q` | **747 yashil, `EXIT=0`** |
+| `pytest tests/integration -q -m "not sim and not slow"` | **962 yashil, 5 skip, `EXIT=0`** |
 | `node --test frontend/scripts/role-gate.test.mjs` | **6/6 yashil** (G-8 parity) |
 | `ruff check .` + `ruff format --check .` + `mypy .` | **toza** (326 fayl) |
 | `MINIMUM_PERSONAL_ROUTES` | **4 — O'ZGARMAGAN** (`git diff` da yo'q) |
@@ -389,4 +389,33 @@ Rejaning `<threat_model>` idagi yettala mitigatsiya bajarildi:
 | T-07-60 | oraliq majburiy, maksimal 92 kun | oraliqsiz/93/teskari → 422; nazorat: 92 → 200 |
 | T-07-61 | ikki jurnal, ikkalasi ham `+1` | `case_events` +1 **va** `audit_log` +1 (⛔ `+2` EMAS — dublikat topildi va olib tashlandi) |
 
-## Self-Check: SELFCHECK_RESULT
+## Self-Check: PASSED
+
+Yaratilgan fayllar diskda mavjud:
+- `services/core-api/app/api/v1/reconciliation.py` ✓ (726 satr, `min_lines` 240 talab qilgan)
+- `tests/integration/test_reconciliation_api.py` ✓ (17 test)
+- `.planning/phases/07-nomuvofiqlik-bildirishnoma-va-botlar/07-10-SUMMARY.md` ✓
+
+Commitlar mavjud: `2387b73` · `1a3e83c` · `a21c1d7` · `63b38ef`
+(baza `4aec616`).
+
+`git diff --diff-filter=D --name-only 4aec616 HEAD` — ⛔ **BO'SH**, ya'ni
+birorta fayl o'chirilmadi. `git diff --name-only 4aec616 HEAD` — **aynan
+sakkizta fayl** va oltitasi rejaning `files_modified` ro'yxatida;
+qolgan ikkitasi (`reconciliation_repo.py`, `test_cross_tenant.py`)
+Rule 3 chetlanishi sifatida yuqorida **nomma-nom** hujjatlashtirilgan.
+
+⛔ TEGILMAGANI ALOHIDA TEKSHIRILDI (`git diff --name-only` da **YO'Q**):
+`services/core-api/app/worker.py` (cron reyestri — 07-14 niki),
+`services/core-api/app/security/rbac.py` (huquq matritsasi),
+`.planning/STATE.md`, `.planning/ROADMAP.md` (worktree rejimida ularni
+orkestrator markazlashgan holda yangilaydi), `pyproject.toml` (yangi
+bog'liqlik yo'q) va `migrations/**` (sxema o'zgarishi yo'q).
+
+⛔ Sir commitga tushmadi: `.env` va `ops/seaweedfs/s3.json` gitignored va
+`git status` ularni ko'rmaydi (ikkalasi ham asosiy checkout'dan
+NUSXALANDI — `--profile test` uchun majburiy muhit sharti).
+
+⚠ Sabotaj kodi commitga TUSHMADI: u qo'llanildi, o'lchandi va
+`git checkout -- services/core-api/app/schemas.py` bilan qaytarildi;
+`grep -c SABOTAJ` → **0**, `git diff` → **bo'sh**.
