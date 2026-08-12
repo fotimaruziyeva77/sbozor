@@ -42,7 +42,8 @@
     "review": "Ko'rib chiqish",
     "occupancy": "Bandlik",
     "collect": "Yig'ish",
-    "billing": "Patta hisobi"
+    "billing": "Patta hisobi",
+    "reconciliation": "Nomuvofiqliklar"
   },
   "auth": {
     "phoneLabel": "Telefon raqami",
@@ -1221,6 +1222,70 @@
     },
     "errorFix": {
       "charge_immutable": "Tuzatishni alohida yozuv sifatida kiriting"
+    }
+  },
+  "recon": {
+    "title": "Nomuvofiqliklar",
+    "unpaidTitle": "Band, lekin to'lovsiz",
+    "unpaidBadge": "To'lovsiz",
+    "unpaidHint": "Kecha hisob yozilgan, lekin to'lov to'liq kelmagan rastalar.",
+    "unpaidCountLabel": "Rasta soni",
+    "unpaidSoumLabel": "Kutilgan patta",
+    "unregisteredTitle": "Ro'yxatga olinmagan savdo",
+    "unregisteredHint": "Kamera band deb ko'rsatgan, lekin sotuvchi biriktirilmagan rastalar.",
+    "unregisteredCountLabel": "Rasta soni",
+    "evidenceOpen": "Dalilni ochish",
+    "stallColumn": "Rasta",
+    "vendorColumn": "Sotuvchi",
+    "vendorUnknown": "Ko'rsatilmagan",
+    "expectedColumn": "Hisob summasi",
+    "paidColumn": "To'langan",
+    "outstandingColumn": "Qarz",
+    "evidenceColumn": "Dalil",
+    "statusColumn": "Holat",
+    "dayColumn": "Sana",
+    "subjectColumn": "Sinf",
+    "assigneeColumn": "Mas'ul",
+    "openedColumn": "Ochilgan",
+    "casesTitle": "Nomuvofiqlik navbati",
+    "caseUnqueued": "Navbatga olinmagan",
+    "assigneeNone": "Biriktirilmagan",
+    "caseStatus": {
+      "new": "Yangi",
+      "in_review": "Ko'rilmoqda",
+      "justified": "Asosli",
+      "unjustified": "Asossiz",
+      "unknown": "Noma'lum holat"
+    },
+    "accuracyTitle": "Aniqlik ulushi",
+    "accuracyBody": "Hal qilingan {resolved} ta nomuvofiqlikdan {justified} tasi asosli chiqdi.",
+    "accuracyExcluded": "Hali hal qilinmagan {pending} ta (yangi, ko'rilmoqda) hisobga olinmagan.",
+    "accuracyNone": "Hali hal qilingan nomuvofiqlik yo'q",
+    "accuracyNoneHint": "Navbatda {pending} ta nomuvofiqlik ko'rib chiqilmoqda.",
+    "deliveryTitle": "Xabar yetkazilishi",
+    "emptyUnpaid": "To'lanmagan hisob yo'q",
+    "emptyUnpaidHint": "{date} kuni yozilgan har bir hisob to'liq to'langan.",
+    "emptyUnregistered": "Ro'yxatga olinmagan savdo yo'q",
+    "emptyUnregisteredHint": "{date} kuni har band rasta sotuvchiga biriktirilgan.",
+    "emptyCases": "Nomuvofiqlik navbati bo'sh",
+    "emptyCasesHint": "{date} kuni ko'rib chiqiladigan nomuvofiqlik topilmadi.",
+    "emptyDelivery": "Bu kuni xabar yuborilmagan",
+    "emptyDeliveryHint": "{date} kuni to'lov yoki eslatma bo'lmasa, xabar ham bo'lmaydi.",
+    "qualifier": {
+      "expected": "kutilayotgan",
+      "recorded": "yozilgan"
+    },
+    "errorCause": {
+      "case_not_found": "Bu nomuvofiqlik topilmadi.",
+      "case_status_conflict": "Holatni boshqa foydalanuvchi allaqachon o'zgartirgan.",
+      "case_resolution_required": "Yakuniy holat uchun yechim matni kerak.",
+      "case_forbidden": "Bu amalga ruxsatingiz yo'q."
+    },
+    "errorFix": {
+      "case_not_found": "Ro'yxatni yangilang — u boshqa kunga tegishli bo'lishi mumkin.",
+      "case_status_conflict": "Yangilang va o'zgarishlar tarixini ko'ring.",
+      "case_resolution_required": "Qaroringiz sababini yozing.",
+      "case_forbidden": "Direktorga murojaat qiling."
     }
   },
   "headline": {

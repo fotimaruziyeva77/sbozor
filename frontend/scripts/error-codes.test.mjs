@@ -1229,3 +1229,146 @@ test("G-17: `market_closed` matni §9.4 dagi EKRAN matni bilan AYNAN bir xil", (
     );
   }
 });
+
+/* ---------------------------------------------------------------------------
+ * G-17 — 7-FAZA: SAKKIZINCHI REYESTR va u ⛔ FRONTENDДА LANGAR.
+ *
+ * Zanjir bu safar IKKI bo'g'inli va bu ATAYIN:
+ *
+ *   lib/reconciliation-errors.ts::RECON_ERROR_CODES   (TypeScript — LANGAR)
+ *     -> messages/*.json::recon.errorCause/errorFix   (sabab va tuzatish)
+ *
+ * ⛔⛔ NEGA BACKEND BO'G'INI YO'Q — O'LCHOV BILAN (07-10 SUMMARY, 3-band).
+ *
+ *   07-10 marshrut kodlarini (`status_unchanged`, `range_too_wide`,
+ *   `cursor_invalid`, `day_in_future`, …) `billing_errors.py` ga ATAYIN
+ *   QO'SHMAGAN: yuqoridagi billing bloki `billingConstants.size === 14`
+ *   nazorat qiymatini talab qiladi va yangi kod uni DARHOL qizartirardi.
+ *   Uni «tuzatish» yagona yo'li sonni oshirish, ya'ni nazoratning butun
+ *   ma'nosini yo'q qilish bo'lardi — o'sha faylning
+ *   `occupancyConstants.size === 15` bandida ochiq yozilgan sinf.
+ *
+ * ⛔ SHUNING UCHUN LANGAR FRONTENDДА: `RECON_ERROR_CODES` — EKRAN
+ *    kodlarining ro'yxati, marshrut kodlariniki EMAS. Ikkinchisi
+ *    `reconciliation-errors.ts::SERVER_CODE_MAP` da xaritalanadi va u
+ *    quyida ALOHIDA o'lchanadi: xaritaning har NATIJASI reyestrda
+ *    bo'lishi shart, aks holda server kod qaytarib, ekran `errors.generic`
+ *    ga tushardi va D-02 ning «sabab + nima qilish kerak» kontrakti
+ *    JIMGINA buzilardi.
+ * ------------------------------------------------------------------------ */
+
+const RECON_ERRORS = path.join(
+  FRONTEND_ROOT,
+  "src",
+  "lib",
+  "reconciliation-errors.ts",
+);
+
+/** `recon.*` — nomuvofiqlik yuzasining YAGONA matn namespace'i (§14.2). */
+const RECON_NAMESPACE = "recon";
+
+/** §14.9 — nomuvofiqlik ekranining to'rt kodi. */
+const RECON_ERROR_CODE_COUNT = 4;
+
+const reconSource = read(RECON_ERRORS);
+const reconCodes = readTsStringArray(reconSource, "RECON_ERROR_CODES");
+
+/** `xom_kod: "ekran_kodi",` — `SERVER_CODE_MAP` ning natijalari. */
+function readServerCodeMap(source) {
+  const block = /const SERVER_CODE_MAP[^{]*\{([\s\S]*?)\n\};/u.exec(source);
+  assert.ok(block, "`SERVER_CODE_MAP` topilmadi — parser sinigan");
+  return [...block[1].matchAll(/^\s+([a-z_]+):\s*"([a-z_]+)"/gmu)].map(
+    (match) => [match[1], match[2]],
+  );
+}
+
+test("G-17: nomuvofiqlik reyestri o'qildi va AYNAN to'rt kod (nazorat)", () => {
+  /*
+   * Nazorat: parser sinsa (masalan reyestr `Record` ga aylantirilsa)
+   * quyidagi darvozalar ham JIMGINA yashil bo'lardi — bo'sh to'plam
+   * bo'yicha aylanish hech nimani tekshirmaydi.
+   */
+  assert.equal(
+    reconCodes.length,
+    RECON_ERROR_CODE_COUNT,
+    `RECON_ERROR_CODES dan ${reconCodes.length} kod o'qildi, kutilgan ` +
+      `${RECON_ERROR_CODE_COUNT} (07-UI-SPEC §14.9)`,
+  );
+  assert.equal(
+    new Set(reconCodes).size,
+    reconCodes.length,
+    `takrorlangan kod: ${reconCodes}`,
+  );
+});
+
+test("G-17: `SERVER_CODE_MAP` ning HAR natijasi reyestrda bor", () => {
+  /*
+   * ⛔ ENG QIMMAT BAND. Server 07-10 da yetti xil mexanik kod qaytaradi
+   *   (`not_found`, `status_unchanged`, …) va ular ekran kodlariga
+   *   xaritalanadi. Xarita reyestrdan AJRALIB KETSA, marshrut kod
+   *   qaytarib turadi, `reconErrorView()` esa mavjud bo'lmagan matn
+   *   kalitini qurardi — `t()` chegarada yiqilardi yoki xato bloki
+   *   BO'SH chiqardi.
+   */
+  const pairs = readServerCodeMap(reconSource);
+
+  assert.ok(
+    pairs.length >= 4,
+    `SERVER_CODE_MAP dan atigi ${pairs.length} juftlik o'qildi — parser sinigan`,
+  );
+
+  const unknown = pairs
+    .filter(([, screen]) => !reconCodes.includes(screen))
+    .map(([raw, screen]) => `${raw} -> ${screen} (reyestrda YO'Q)`);
+
+  assert.deepEqual(
+    unknown,
+    [],
+    "xarita reyestrdan AJRALIB KETGAN — server kod qaytarardi, ekran esa " +
+      "mavjud bo'lmagan matn kalitini qurardi:\n  " + unknown.join("\n  "),
+  );
+});
+
+test("G-17: HAR NOMUVOFIQLIK kodi uchun sabab va tuzatish UCHALA tilda bor", () => {
+  const problems = [];
+
+  for (const locale of LOCALES) {
+    const messages = loadMessages(locale);
+    const causes = messages[RECON_NAMESPACE]?.errorCause ?? {};
+    const fixes = messages[RECON_NAMESPACE]?.errorFix ?? {};
+
+    // OLDINGA: reyestrdan boshlanadi (LANGAR).
+    for (const code of reconCodes) {
+      if (typeof causes[code] !== "string" || causes[code].trim() === "") {
+        problems.push(
+          `${locale}.json: ${RECON_NAMESPACE}.errorCause.${code} YO'Q`,
+        );
+      }
+      if (typeof fixes[code] !== "string" || fixes[code].trim() === "") {
+        problems.push(
+          `${locale}.json: ${RECON_NAMESPACE}.errorFix.${code} YO'Q`,
+        );
+      }
+    }
+
+    // TESKARI: matn bor, kod yo'q — O'LIK KALIT.
+    for (const group of ["errorCause", "errorFix"]) {
+      for (const code of Object.keys(
+        messages[RECON_NAMESPACE]?.[group] ?? {},
+      )) {
+        if (!reconCodes.includes(code)) {
+          problems.push(
+            `${locale}.json: ${RECON_NAMESPACE}.${group}.${code} reyestrda YO'Q`,
+          );
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "D-02 buzilgan — nomuvofiqlik sabab/tuzatish JUFT bo'lishi SHART:\n  " +
+      problems.join("\n  "),
+  );
+});

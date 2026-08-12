@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   Ellipsis,
+  FileWarning,
   HandCoins,
   LayoutDashboard,
   Map,
@@ -69,6 +70,7 @@ type NavItem = {
     | "/occupancy"
     | "/collect"
     | "/billing"
+    | "/reconciliation"
     | "/users"
     | "/audit"
     | "/markets/new";
@@ -85,6 +87,7 @@ type NavItem = {
     | "occupancy"
     | "collect"
     | "billing"
+    | "reconciliation"
     | "users"
     | "audit"
     | "newMarket";
@@ -298,6 +301,38 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/billing",
     labelKey: "billing",
     icon: ReceiptText,
+    permission: "report_view",
+    group: "market",
+  },
+  /*
+   * "Nomuvofiqliklar" — 7-fazaning YAGONA yangi bo'limi (07-UI-SPEC §4.7).
+   *
+   * `/billing` DAN BEVOSITA KEYIN: domen zanjiri kamera -> kadr -> ko'rib
+   * chiqish -> bandlik -> yig'ish -> patta hisobi -> NOMUVOFIQLIK bo'lib
+   * o'qiladi. Nomuvofiqlik — patta hisobining NATIJASI, ya'ni u hisobdan
+   * KEYIN turadi va oldin emas.
+   *
+   * ⛔ YANGI `Permission` QO'SHILMAYDI: `report_view` ikkala matritsada
+   * ham ALLAQACHON bor va bu faza `rbac.ts` ↔ `rbac.py` juftligiga
+   * UMUMAN TEGMAYDI. Hukm (holat o'zgartirish) esa `dispute_decide`
+   * ostida va u ham MAVJUD — bugungacha iste'molchisiz turgan edi.
+   *
+   * MOBIL KONTRAKT BUZILMAYDI [O'LCHANDI: 07-UI-SPEC M-5]: ro'yxat
+   * 15 -> 16 ga o'sdi, `MOBILE_PRIMARY_COUNT` esa 4 bo'lib qoladi.
+   * ⛔ Kassirda jami YANA IKKI yozuv (`/dashboard` + `/collect`) —
+   * `report_view` unda YO'Q, ya'ni overflow NOL bo'lib qoladi va
+   * 6-fazaning kassir kontrakti O'ZGARMAYDI.
+   *
+   * `FileWarning` ATAYIN: hujjat (hisobot) + ogohlantirish — bo'limning
+   * ikkala mazmuni. ⛔ `Gavel`/`Scale` RAD ETILDI: bolg'a va tarozi —
+   * HUKM metaforasi; ular navbatni "sud" qilib ko'rsatib, "asossiz"
+   * holatini AYBLOVGA aylantirardi. `TriangleAlert` ham rad etildi — u
+   * XATO ikonkasi va yetkazilmagan xabar uchun band.
+   */
+  {
+    href: "/reconciliation",
+    labelKey: "reconciliation",
+    icon: FileWarning,
     permission: "report_view",
     group: "market",
   },

@@ -42,7 +42,8 @@
     "review": "Проверка",
     "occupancy": "Занятость",
     "collect": "Сбор",
-    "billing": "Начисление патты"
+    "billing": "Начисление патты",
+    "reconciliation": "Расхождения"
   },
   "auth": {
     "phoneLabel": "Номер телефона",
@@ -1221,6 +1222,70 @@
     },
     "errorFix": {
       "charge_immutable": "Внесите поправку отдельной записью"
+    }
+  },
+  "recon": {
+    "title": "Расхождения",
+    "unpaidTitle": "Занято, но без оплаты",
+    "unpaidBadge": "Без оплаты",
+    "unpaidHint": "Торговые места, по которым вчера начислено, но оплата пришла не полностью.",
+    "unpaidCountLabel": "Количество мест",
+    "unpaidSoumLabel": "Ожидаемая патта",
+    "unregisteredTitle": "Незарегистрированная торговля",
+    "unregisteredHint": "Камера показала занятость, но продавец не закреплён за торговым местом.",
+    "unregisteredCountLabel": "Количество мест",
+    "evidenceOpen": "Открыть доказательство",
+    "stallColumn": "Место",
+    "vendorColumn": "Продавец",
+    "vendorUnknown": "Не указан",
+    "expectedColumn": "Сумма начисления",
+    "paidColumn": "Оплачено",
+    "outstandingColumn": "Долг",
+    "evidenceColumn": "Доказательство",
+    "statusColumn": "Статус",
+    "dayColumn": "Дата",
+    "subjectColumn": "Класс",
+    "assigneeColumn": "Ответственный",
+    "openedColumn": "Открыто",
+    "casesTitle": "Очередь расхождений",
+    "caseUnqueued": "Не поставлено в очередь",
+    "assigneeNone": "Не назначен",
+    "caseStatus": {
+      "new": "Новое",
+      "in_review": "На рассмотрении",
+      "justified": "Обоснованное",
+      "unjustified": "Необоснованное",
+      "unknown": "Неизвестный статус"
+    },
+    "accuracyTitle": "Доля точности",
+    "accuracyBody": "Из {resolved} разобранных расхождений {justified} оказались обоснованными.",
+    "accuracyExcluded": "Ещё не разобранные {pending} (новые, на рассмотрении) не учтены.",
+    "accuracyNone": "Разобранных расхождений пока нет",
+    "accuracyNoneHint": "В очереди рассматривается {pending} расхождений.",
+    "deliveryTitle": "Доставка сообщений",
+    "emptyUnpaid": "Неоплаченных начислений нет",
+    "emptyUnpaidHint": "Каждое начисление за {date} оплачено полностью.",
+    "emptyUnregistered": "Незарегистрированной торговли нет",
+    "emptyUnregisteredHint": "За {date} каждое занятое место закреплено за продавцом.",
+    "emptyCases": "Очередь расхождений пуста",
+    "emptyCasesHint": "За {date} расхождений для разбора не найдено.",
+    "emptyDelivery": "В этот день сообщения не отправлялись",
+    "emptyDeliveryHint": "Если за {date} не было оплат и напоминаний, не будет и сообщений.",
+    "qualifier": {
+      "expected": "ожидаемый",
+      "recorded": "записанный"
+    },
+    "errorCause": {
+      "case_not_found": "Это расхождение не найдено.",
+      "case_status_conflict": "Статус уже изменил другой пользователь.",
+      "case_resolution_required": "Для окончательного статуса нужен текст решения.",
+      "case_forbidden": "У вас нет прав на это действие."
+    },
+    "errorFix": {
+      "case_not_found": "Обновите список — оно может относиться к другому дню.",
+      "case_status_conflict": "Обновите и посмотрите историю изменений.",
+      "case_resolution_required": "Напишите причину вашего решения.",
+      "case_forbidden": "Обратитесь к директору."
     }
   },
   "headline": {
