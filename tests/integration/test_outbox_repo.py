@@ -164,6 +164,23 @@ def _row(conn: Connection[TupleRow], outbox_id: UUID) -> dict[str, object]:
     }
 
 
+def _created_at(conn: Connection[TupleRow], outbox_id: UUID) -> datetime:
+    """Qatorning `created_at` i — ⛔ `OutboxClaim` ning YOSH CHEGARASI uchun.
+
+    `_settle()` manzilsiz qatorni AYNAN shu qiymatga qarab terminal holatga
+    chiqaradi (`UNRESOLVED_MAX_AGE_HOURS`), ya'ni `claim()` uni qatordan
+    OLIB CHIQISHI shart. Tikning `now` i bu savolga javob bera olmasdi: u
+    «hozir soat nechi» ni biladi, «bu qator qachon tug'ilgan» ni emas.
+    """
+    row = conn.execute(
+        "SELECT created_at FROM notification_outbox WHERE id = %s", (str(outbox_id),)
+    ).fetchone()
+    assert row is not None, f"qator YO'QOLDI: {outbox_id}"
+    created_at = row[0]
+    assert isinstance(created_at, datetime)
+    return created_at
+
+
 def _set_quiet_window(conn: Connection[TupleRow], market_id: UUID, *, start: str, end: str) -> None:
     """Sozlama qatoriga BOSHQA oyna yozadi (fixture ATAYIN bermaydi).
 
@@ -611,12 +628,32 @@ async def test_two_open_transactions_never_get_the_same_row_skip_locked(
     assert second_ids == set()
 
 
-async def test_claim_takes_a_lease_and_counts_the_attempt(
+async def test_claim_takes_a_lease_without_counting_an_attempt(
     sync_owner_conn: Connection[TupleRow],
     bed: MarketDomainSeed,
     tenant_session: TenantSessionFactory,
 ) -> None:
-    """Ijara olindi, urinish SANALDI — ikkalasi ham BIR bayonotda."""
+    """⛔⛔ IJARA OLINADI, URINISH ESA `claim()` DA SANALMAYDI.
+
+    =======================================================================
+    ⛔ HISOBLAGICH JO'NATISH JOYIGA KO'CHDI VA BU O'LCHANGAN TUZATISH.
+
+    Ilgari `_CLAIM_DUE` `attempt_count` ni SHARTSIZ oshirardi — ya'ni HTTP
+    so'rovi UMUMAN yuborilmagan holat (`UNRESOLVED`: sotuvchi hali botga
+    ulanmagan) ham byudjetdan yechilardi. Kech ulangan sotuvchi navbatga
+    ~288 «urinish» bilan kelardi va birinchi vaqtinchalik `502` uni darhol
+    `failed` ga tushirardi: kvitansiya MANGU yo'qolardi, holbuki Telegram
+    bilan hech qanday muammo bo'lmagan edi.
+
+    ⚠ NAZORAT SHU YERDA: bayonot ISHLAGANI holat va ijara bilan
+      isbotlanadi. Usiz «hisoblagich oshmadi» natijasi `UPDATE` umuman
+      bajarilmagan holatda ham yashil bo'lardi.
+    =======================================================================
+
+    ⛔ IKKINCHI DA'VO — `created_at` CLAIMGA CHIQADI: `_settle()` manzilsiz
+       qatorning YOSHINI aynan shu qiymatdan hisoblaydi. U ⛔ QATORDAN
+       keladi, tikning `now` idan emas.
+    """
     market = bed.market_a
     outbox_id = seed_outbox_row(
         sync_owner_conn,
@@ -637,8 +674,21 @@ async def test_claim_takes_a_lease_and_counts_the_attempt(
         )
 
     assert [row.id for row in claimed] == [outbox_id]
-    assert claimed[0].attempt_count == 1, "urinish `claim()` da SANALISHI shart"
+    assert claimed[0].attempt_count == 0, (
+        f"`claim()` urinishni SANADI ({claimed[0].attempt_count}). Qaytarilgan son "
+        "bu urinishdan OLDINGI hisob bo'lishi shart — birinchi olishda `0`"
+    )
+    assert claimed[0].created_at == _created_at(sync_owner_conn, outbox_id), (
+        "`OutboxClaim.created_at` qatorning haqiqiy tug'ilish payti emas — yosh "
+        "chegarasi (`UNRESOLVED_MAX_AGE_HOURS`) noto'g'ri qiymatdan hisoblanardi"
+    )
+
     row = _row(sync_owner_conn, outbox_id)
+    assert row["attempt_count"] == 0, (
+        f"`claim()` bazadagi hisoblagichni oshirdi: {row['attempt_count']}. Urinish "
+        "AYNAN jo'natish joyida (terminal yozuvchilarda) sanaladi"
+    )
+    # NAZORAT — bayonotning O'ZI ishladi.
     assert row["status"] == OutboxStatus.SENT.value
     assert row["lease_until"] == QUIET_MOMENT + timedelta(seconds=LEASE)
 
@@ -747,12 +797,22 @@ async def test_every_terminal_transition_keeps_the_row(
     assert _row(sync_owner_conn, ids[2])["last_status_code"] == 500
 
 
-async def test_reschedule_moves_the_row_back_without_counting_a_new_attempt(
+async def test_reschedule_counts_the_attempt_it_just_finished(
     sync_owner_conn: Connection[TupleRow],
     bed: MarketDomainSeed,
     tenant_session: TenantSessionFactory,
 ) -> None:
-    """Qayta rejalashtirish `attempt_count` ga TEGMAYDI — urinish `claim()` da sanalgan.
+    """⛔ Qayta rejalashtirish urinishni SANAYDI — u AYNAN shu joyda tugadi.
+
+    =======================================================================
+    ⛔ HISOB `claim()` DAN KO'CHDI VA IKKI JOYDA SANALMAYDI.
+
+    `reschedule()` FAQAT haqiqiy jo'natishdan keyin chaqiriladi (Telegram
+    `429`/`5xx` yoki tarmoq uzilishi), ya'ni urinish HAQIQATAN bo'lgan.
+    Manzilsiz qatorning yo'li esa BOSHQA funksiya — `defer_unresolved()` —
+    va u hisoblagichga TEGMAYDI. Ikki nomning bo'lishi chaqiruv joyida
+    NIYATNI aytadi; bitta bayroqli funksiya `True`/`False` bo'lib adashardi.
+    =======================================================================
 
     ⚠ `next_attempt_at` CHAQIRUVCHIDAN: backoff arifmetikasi (DQ-3) va
       Telegram ning `retry_after` qiymati 07-09 da hisoblanadi. Uni ikki
@@ -782,9 +842,137 @@ async def test_reschedule_moves_the_row_back_without_counting_a_new_attempt(
 
     row = _row(sync_owner_conn, outbox_id)
     assert row["status"] == OutboxStatus.PENDING.value
-    assert row["attempt_count"] == 2, "qayta rejalashtirish urinishni IKKINCHI marta sanadi"
+    assert row["attempt_count"] == 3, (
+        f"urinish sanalmadi: {row['attempt_count']}, kutilgani 3. Hisob `claim()` "
+        "dan jo'natish joyiga ko'chdi — aks holda `MAX_ATTEMPTS` chegarasi HECH "
+        "QACHON ishlamasdi va qator mangu aylanardi"
+    )
     assert row["next_attempt_at"] == retry_at
     assert row["lease_until"] is None
+
+
+async def test_every_terminal_writer_counts_exactly_one_attempt(
+    sync_owner_conn: Connection[TupleRow],
+    bed: MarketDomainSeed,
+    tenant_session: TenantSessionFactory,
+) -> None:
+    """⛔ UCHALA TERMINAL YOZUVCHI HAM urinishni AYNAN BIR MARTA sanaydi.
+
+    =======================================================================
+    ⛔ NEGA UCHALASI BIR TESTDA VA UCHALASI HAM MAJBURIY.
+
+    Hisob `claim()` dan ko'chgach, u BARCHA yakuniy yo'llarga qo'yilishi
+    shart. Bitta yo'lda unutilsa chegara JIMGINA ajralardi: masalan
+    `mark_failed()` sanamasa, `5xx` bilan yiqilayotgan qator har tikda
+    hisobni O'SHA joyda qoldirib, `MAX_ATTEMPTS` ga HECH QACHON yetmasdi.
+
+    ⚠ HAR YOZUVCHI O'Z QATORINI OLADI: bittasini uchala funksiyadan
+      o'tkazish «oshdi» ni «kim oshirdi» dan ajrata olmasdi.
+    =======================================================================
+    """
+    market = bed.market_a
+    ids = [
+        seed_outbox_row(
+            sync_owner_conn,
+            market_id=market.market_id,
+            kind=RECEIPT,
+            vendor_id=market.vendor_ids[0],
+            payload={"amount_soum": 4_000 + index},
+            status=OutboxStatus.SENT.value,
+            attempt_count=1,
+        )
+        for index in range(3)
+    ]
+
+    async with tenant_session(market.market_id) as session:
+        await outbox_repo.mark_delivered(
+            session, market_id=market.market_id, outbox_id=ids[0], provider_message_id=987_654_321
+        )
+        await outbox_repo.mark_blocked(
+            session, market_id=market.market_id, outbox_id=ids[1], error_type="TelegramForbidden"
+        )
+        await outbox_repo.mark_failed(
+            session,
+            market_id=market.market_id,
+            outbox_id=ids[2],
+            error_type="HTTPStatusError",
+            status_code=500,
+        )
+
+    counted = {
+        "mark_delivered": _row(sync_owner_conn, ids[0])["attempt_count"],
+        "mark_blocked": _row(sync_owner_conn, ids[1])["attempt_count"],
+        "mark_failed": _row(sync_owner_conn, ids[2])["attempt_count"],
+    }
+    assert counted == {"mark_delivered": 2, "mark_blocked": 2, "mark_failed": 2}, (
+        f"terminal yozuvchi(lar) urinishni sanamadi: {counted} (har biri 1 -> 2 "
+        "bo'lishi kerak edi). Urinish AYNAN shu joyda tugaydi va shu joyda sanaladi"
+    )
+
+
+async def test_defer_unresolved_returns_the_row_without_counting_an_attempt(
+    sync_owner_conn: Connection[TupleRow],
+    bed: MarketDomainSeed,
+    tenant_session: TenantSessionFactory,
+) -> None:
+    """⛔⛔ MANZILSIZ QATOR NAVBATGA QAYTADI VA BYUDJETI YEYILMAYDI.
+
+    =======================================================================
+    ⛔ URINISH UMUMAN QILINMAGAN: sotuvchi hali botga ULANMAGAN, ya'ni HTTP
+       so'rovi YUBORILMAGAN. Uni hisobga qo'shish botga uch kunda ulangan
+       sotuvchining butun byudjetini yeb qo'yardi va birinchi HAQIQIY
+       urinishdayoq kvitansiya `failed` bo'lardi.
+
+    ⚠ ALOHIDA FUNKSIYA, BAYROQ EMAS (`reschedule(count=False)` EMAS):
+      bayroq chaqiruv joyida `True`/`False` bo'lib adashishi mumkin, alohida
+      nom esa niyatni O'QIYOTGAN odamga aytadi.
+    =======================================================================
+
+    ⛔ `last_error_type` HAMON `_validate_error_type()` DAN O'TADI (D-04):
+       yangi yo'l ochilishi sir chegarasini aylanib o'tish yo'li bo'lmasligi
+       kerak.
+    """
+    market = bed.market_a
+    outbox_id = seed_outbox_row(
+        sync_owner_conn,
+        market_id=market.market_id,
+        kind=RECEIPT,
+        vendor_id=market.vendor_ids[0],
+        payload={"amount_soum": 15_000},
+        status=OutboxStatus.SENT.value,
+        attempt_count=0,
+    )
+    defer_to = QUIET_MOMENT + timedelta(minutes=15)
+
+    async with tenant_session(market.market_id) as session:
+        await outbox_repo.defer_unresolved(
+            session,
+            market_id=market.market_id,
+            outbox_id=outbox_id,
+            next_attempt_at=defer_to,
+            error_type="UnresolvedRecipient",
+        )
+
+    row = _row(sync_owner_conn, outbox_id)
+    assert row["status"] == OutboxStatus.PENDING.value
+    assert row["attempt_count"] == 0, (
+        f"manzilsiz qator urinish sarfladi: {row['attempt_count']}. HTTP so'rovi "
+        "UMUMAN yuborilmagan — byudjet faqat HAQIQIY urinishga qo'llanadi"
+    )
+    assert row["next_attempt_at"] == defer_to
+    assert row["lease_until"] is None
+    assert row["last_error_type"] == "UnresolvedRecipient"
+
+    # ⛔ SIR CHEGARASI YANGI YO'LDA HAM KUCHDA (D-04).
+    async with tenant_session(market.market_id) as session:
+        with pytest.raises(ValueError, match="last_error_type"):
+            await outbox_repo.defer_unresolved(
+                session,
+                market_id=market.market_id,
+                outbox_id=outbox_id,
+                next_attempt_at=defer_to,
+                error_type="https://api.telegram.org/bot123:ABC/sendMessage",
+            )
 
 
 @pytest.mark.parametrize(

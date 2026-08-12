@@ -56,7 +56,10 @@ import respx
 from app.jobs.notification_meta import outbox_payload
 from app.jobs.outbox import (
     OUTBOX_COMPONENT,
+    OUTBOX_LEASE_SECONDS,
+    OUTBOX_TICK_BUDGET_SECONDS,
     PER_CHAT_INTERVAL_SECONDS,
+    UNRESOLVED_MAX_AGE_HOURS,
     UNRESOLVED_RETRY_SECONDS,
     outbox_tick,
 )
@@ -73,7 +76,7 @@ from sbozor_core.timeutil import MARKET_TZ
 from structlog.testing import capture_logs
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from uuid import UUID
 
     from fixtures import TenantSessionFactory
@@ -134,11 +137,47 @@ Farqsiz «`retry_after` o'qildimi?» savoliga formulaning tasodifan mos
 kelgan qiymati bilan ham «ha» deb javob berilardi.
 """
 
+FIRST_BACKOFF_SECONDS = 30
+"""DQ-3 formulasining BIRINCHI hadi — ⛔ TESTNING O'ZIDA, mahsulotdan EMAS.
+
+⚠ NUSXA ATAYIN (`test_outbox_repo.py::LEASE` bilan bir xil qaror): qiymatni
+  `_next_attempt_at()` dan olish testni formulaning NUSXASIGA aylantirardi
+  va formula xato bo'lgan kuni test u bilan BIRGA xato bo'lardi. Bu yerda u
+  SPETSIFIKATSIYA: «birinchi urinishdan keyin 30 soniya kutiladi».
+"""
+
+BUDGET_TRIP_AFTER = 2
+"""Soxta soat byudjetdan CHIQADIGAN nuqta — nechta xabar chiqqandan keyin.
+
+⚠ SON KICHIK VA ATAYIN: byudjet o'lchovi partiya HAJMIGA emas, DEADLINE
+  tekshiruvining mavjudligiga bog'liq. Haqiqiy 500 qatorli partiyani seed
+  qilish o'sha darvozani BIR ZARRA ham kuchaytirmasdi, testni esa
+  daqiqalarga cho'zardi.
+"""
+
+QUEUE_MARKERS_A = ("BUDGET-A-1", "BUDGET-A-2", "BUDGET-A-3")
+QUEUE_MARKERS_B = ("BUDGET-B-1", "BUDGET-B-2", "BUDGET-B-3")
+"""Har qatorning O'ZIGA XOS BELGISI — u `stall_code` bo'lib MATNGA chiqadi.
+
+⛔ BELGI CHIQQAN SO'ROVNI QATOR BILAN BOG'LAYDI: «ikki marta yuborilmadi»
+   da'vosi holat ustuniga emas, HTTP sanog'iga qo'yiladi (07-17 ning
+   qoidasi) va buning uchun so'rovni qatorga bog'laydigan iz kerak.
+"""
+
 _ROW = (
     "SELECT status, attempt_count, provider_message_id, last_error_type, "
     "last_status_code, next_attempt_at, lease_until "
     "FROM notification_outbox WHERE id = %s"
 )
+_SET_CREATED_AT = "UPDATE notification_outbox SET created_at = %s WHERE id = %s"
+"""Qatorning YOSHINI testda BOSHQARADIGAN yagona yo'l.
+
+⛔ SERVER SOATIGA TAYANMASLIK MAJBURIY: `seed_outbox_row()` `created_at` ni
+   `now()` dan oladi, tik esa `LOUD_MOMENT` bilan chaqiriladi — ya'ni
+   qatorning yoshi TEST YUGURGAN KUNGA bog'liq bo'lib qolardi va
+   `UNRESOLVED_MAX_AGE_HOURS` darvozasi kalendar surilgach JIMGINA
+   ag'darilardi.
+"""
 _HEARTBEAT_DROP = "DELETE FROM system_heartbeats WHERE component = %s"
 
 
@@ -167,6 +206,38 @@ class _Clock:
     async def sleep(self, delay: float) -> None:
         self.slept.append(delay)
         self.now += delay
+
+
+class _BudgetClock:
+    """Byudjet o'lchovining soxta soati — u ⛔ CHIQQAN XABAR soniga qaraydi.
+
+    =========================================================================
+    ⛔ SOAT `monotonic()` CHAQIRUVLARINI SANAMAYDI VA BU ATAYIN.
+
+    Chaqiruvlar soni tikning ICHKI tuzilishiga bog'liq (deadline tekshiruvi,
+    joriy paytning hisobi, throttle), ya'ni har refaktoringda o'zgarardi va
+    test o'sha kuni SABABSIZ qizarardi — bunday darvoza odamlarni QARASHGA
+    emas, sonni TUZATISHGA o'rgatadi.
+
+    Kuzatiladigan fakt esa barqaror: «nechta xabar Telegram'ga CHIQDI».
+    Byudjet aynan shu nuqtadan keyin tugaydi.
+    =========================================================================
+    """
+
+    def __init__(self, *, trips_after: int) -> None:
+        self.sent = 0
+        self.slept: list[float] = []
+        self._trips_after = trips_after
+
+    def monotonic(self) -> float:
+        if self.sent < self._trips_after:
+            return 0.0
+        return float(OUTBOX_TICK_BUDGET_SECONDS + 1)
+
+    async def sleep(self, delay: float) -> None:
+        # ⛔ SOAT SILJIMAYDI: byudjetning tugashini FAQAT `sent` boshqaradi,
+        #   aks holda throttling uyqusi o'lchovga shovqin qo'shardi.
+        self.slept.append(delay)
 
 
 class _ExplodingSender(AlertSender):
@@ -271,8 +342,71 @@ def _seed_receipt(
     )
 
 
+def _seed_market_queue(
+    conn: Connection[TupleRow],
+    *,
+    market_id: UUID,
+    vendor_id: UUID,
+    chat_id: int,
+    markers: tuple[str, ...],
+) -> list[UUID]:
+    """Bitta sotuvchining navbati — har qator O'ZINING BELGISI bilan.
+
+    ⚠ BOG'LANISH BIR MARTA YOZILADI: `uq_vendor_telegram_bindings_vendor_
+      active` bir sotuvchida ikkinchi FAOL bog'lanishni rad etadi, ya'ni
+      `_seed_receipt()` ni takror chaqirish seed'ning O'ZINI yiqitardi.
+    """
+    seed_binding(conn, market_id=market_id, vendor_id=vendor_id, telegram_user_id=chat_id)
+    return [
+        seed_outbox_row(
+            conn,
+            market_id=market_id,
+            kind=RECEIPT,
+            vendor_id=vendor_id,
+            payload={"amount_soum": 15_000, "stall_code": marker},
+            next_attempt_at=LOUD_MOMENT - timedelta(hours=1),
+        )
+        for marker in markers
+    ]
+
+
+def _age_the_row(conn: Connection[TupleRow], outbox_id: UUID, *, created_at: datetime) -> None:
+    """Qatorning tug'ilish paytini ANIQ belgilaydi (`_SET_CREATED_AT` docstringi)."""
+    conn.execute(_SET_CREATED_AT, (created_at, str(outbox_id)))
+
+
 def _ok_response() -> httpx.Response:
     return httpx.Response(200, json={"ok": True, "result": {"message_id": MESSAGE_ID}})
+
+
+def _counting_ok(clock: _BudgetClock) -> Callable[[httpx.Request], httpx.Response]:
+    """`200` qaytaradi va soatga «yana bitta xabar chiqdi» deb aytadi.
+
+    ⚠ SANOQ AYNAN JAVOB QAYTARILAYOTGAN JOYDA: `route.call_count` ni tikning
+      ichidan o'qib bo'lmaydi, soat esa byudjetni AYNAN shu faktdan
+      hisoblaydi.
+    """
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        clock.sent += 1
+        return _ok_response()
+
+    return respond
+
+
+def _untouched(rows: list[dict[str, Any]]) -> bool:
+    """Bozorning navbati UMUMAN QO'LGA OLINMAGANmi.
+
+    ⛔ UCHALA USTUN HAM TEKSHIRILADI: `pending` yolg'iz o'zi «olindi, keyin
+       qaytarildi» holatidan farq qilmasdi, `lease_until is None` esa ijara
+       umuman olinmaganini beradi.
+    """
+    return all(
+        row["status"] == OutboxStatus.PENDING.value
+        and row["attempt_count"] == 0
+        and row["lease_until"] is None
+        for row in rows
+    )
 
 
 async def _tick(
@@ -788,17 +922,23 @@ async def test_unresolved_chat_stays_pending_without_consuming_an_attempt(
        soni NOL. Ya'ni «urinish sarflanmadi» da'vosi holat nomidan emas,
        HTTP sanog'idan kelib chiqadi.
 
-    ⚠ CHEGARA OCHIQ YOZILADI: `claim()` `attempt_count` ni O'ZI oshiradi
-      (u urinishlarni SANAYDIGAN yagona joy, `outbox_repo` ning qarori)
-      va bu modul uni ORQAGA QAYTARA OLMAYDI. Shuning uchun byudjet ikki
-      mustaqil mexanizm bilan himoyalanadi va ikkalasi ham shu yerda
-      o'lchanadi:
+    ⚠ CHEGARA OCHIQ YOZILADI VA U 07-19 DA KUCHAYDI: ilgari `claim()`
+      `attempt_count` ni O'ZI oshirardi va bu modul uni ORQAGA QAYTARA
+      OLMASDI — ya'ni «urinish sarflanmadi» faqat KECHIKTIRISH bilan
+      ta'minlanardi. Endi hisob AYNAN jo'natish tugagan joyda sanaladi,
+      shuning uchun byudjet UCH mustaqil mexanizm bilan himoyalangan:
 
-        1. `MAX_ATTEMPTS` tekshiruvi manzilsiz shoxga QO'LLANMAYDI —
-           ya'ni bog'lanmagan sotuvchining kvitansiyasi HECH QACHON
+        1. `claim()` hisoblagichga UMUMAN tegmaydi;
+        2. `MAX_ATTEMPTS` tekshiruvi manzilsiz shoxga QO'LLANMAYDI —
+           ya'ni bog'lanmagan sotuvchining kvitansiyasi vaqtidan OLDIN
            `failed` bo'lmaydi;
-        2. qator 15 daqiqaga KECHIKTIRILADI — ya'ni keyingi tiklar uni
+        3. qator 15 daqiqaga KECHIKTIRILADI — ya'ni keyingi tiklar uni
            qayta OLMAYDI va sanoq tik-be-tik o'smaydi.
+
+    ⚠ QATOR ATAYIN YOSH: `UNRESOLVED_MAX_AGE_HOURS` chegarasi bu testning
+      predmeti EMAS (u alohida o'lchanadi), ya'ni yosh SERVER SOATIGA
+      qoldirilmaydi — aks holda darvoza kalendar surilgach jimgina
+      ag'darilardi.
     =======================================================================
     """
     market = bed.market_a
@@ -809,6 +949,7 @@ async def test_unresolved_chat_stays_pending_without_consuming_an_attempt(
         stall_code=market.stall_codes[0],
         bind_chat=None,
     )
+    _age_the_row(sync_owner_conn, outbox_id, created_at=LOUD_MOMENT - timedelta(hours=1))
 
     async with respx.mock(assert_all_called=False, assert_all_mocked=True) as router:
         route = router.post(SEND_URL).mock(return_value=_ok_response())
@@ -972,4 +1113,388 @@ async def test_the_tick_writes_its_own_heartbeat(
     )
     assert str(CHAT_A) not in json.dumps(detail), (
         f"`chat_id` yurak urishi detaliga tushdi: {detail}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 6. ⛔ VAQT BYUDJETI — TIK IJARADAN UZUN YASHAY OLMAYDI
+# ---------------------------------------------------------------------------
+
+
+async def test_a_full_queue_stops_at_the_budget_and_leaves_the_rest(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    sender: AlertSender,
+    bed: MarketDomainSeed,
+) -> None:
+    """⛔⛔ BYUDJET TUGAGANDA TIK TO'XTAYDI — QOLGANI KEYINGI TIKKA QOLADI.
+
+    =======================================================================
+    ⛔ NIMA UCHUN BU «OPTIMIZATSIYA» EMAS, IKKI NUSXAGA QARSHI DARVOZA.
+
+    `OUTBOX_TICK_BUDGET_SECONDS` (20 s) `OUTBOX_LEASE_SECONDS` (120 s) dan
+    ATAYIN kichik: partiyaning oxirgi qatori yuborilayotganda ijara hali
+    amal qilishi shart. Byudjet HECH QAYERDA o'lchanmaganda esa 7+ to'la
+    navbatli tik ijara muddatidan UZUN yashardi — `release_expired_leases()`
+    hali jo'natilayotgan qatorlarni `pending` ga qaytarardi va sotuvchi
+    AYNI kvitansiyani IKKI MARTA olardi.
+
+    ⛔ `dedupe_key` BU YERDA YORDAM BERMAYDI: u faqat `enqueue()` ni
+       qo'riqlaydi, ya'ni bir NIYAT ikki qator bo'lmasligini. Bitta
+       qatorning ikki marta JO'NATILISHIGA uning aloqasi yo'q.
+    =======================================================================
+
+    ⛔ IKKINCHI DA'VO — «BYUDJET TUGADI» `failed` GA AYLANMAYDI: qolgan
+       qatorlar uchun holat UMUMAN yozilmaydi. Xabar yiqilmagan, u
+       shunchaki YUBORILMAGAN.
+    """
+    a_ids = _seed_market_queue(
+        sync_owner_conn,
+        market_id=bed.market_a.market_id,
+        vendor_id=bed.market_a.vendor_ids[0],
+        chat_id=CHAT_A,
+        markers=QUEUE_MARKERS_A,
+    )
+    b_ids = _seed_market_queue(
+        sync_owner_conn,
+        market_id=bed.market_b.market_id,
+        vendor_id=bed.market_b.vendor_ids[0],
+        chat_id=CHAT_B,
+        markers=QUEUE_MARKERS_B,
+    )
+
+    clock = _BudgetClock(trips_after=BUDGET_TRIP_AFTER)
+    async with respx.mock(assert_all_called=False, assert_all_mocked=True) as router:
+        router.post(SEND_URL).mock(side_effect=_counting_ok(clock))
+        result = await outbox_tick(
+            api_sessionmaker,
+            sender,
+            now=LOUD_MOMENT,
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+        )
+
+    rows_a = [_row(sync_owner_conn, outbox_id) for outbox_id in a_ids]
+    rows_b = [_row(sync_owner_conn, outbox_id) for outbox_id in b_ids]
+
+    # NAZORAT — o'lchov AYNAN ikki bozor ustida yuguradi.
+    assert result.markets == 2, (
+        f"faol bozorlar soni {result.markets}, kutilgani 2 — `skipped_markets` "
+        "ning kutilgan qiymati boshqa seed'ning shovqiniga taqalib qolardi"
+    )
+    assert result.delivered == BUDGET_TRIP_AFTER, (
+        f"byudjet {result.delivered} xabardan keyin tugadi, kutilgani "
+        f"{BUDGET_TRIP_AFTER} — soxta soat o'z farazini tasdiqlamadi"
+    )
+
+    assert result.budget_exhausted is True, (
+        f"tik byudjetni O'LCHAMADI: {result}. `OUTBOX_TICK_BUDGET_SECONDS` "
+        "faqat `OUTBOX_BATCH_SIZE` arifmetikasida qolgan bo'lsa, uzun tik "
+        "ijara muddatidan oshib ketardi va kvitansiya IKKI MARTA ketardi"
+    )
+    assert result.skipped_markets == 1, (
+        f"o'tkazib yuborilgan bozorlar soni {result.skipped_markets}, kutilgani 1"
+    )
+
+    untouched = [name for name, rows in (("A", rows_a), ("B", rows_b)) if _untouched(rows)]
+    assert len(untouched) == 1, (
+        f"AYNAN BITTA bozor tegilmagan bo'lishi kerak edi, tegilmaganlari: "
+        f"{untouched}. Ikkalasi ham tegilmagan bo'lsa tik umuman ishlamagan, "
+        "birortasi ham tegilmagan bo'lsa byudjet to'xtatmagan"
+    )
+
+    processed = rows_b if untouched == ["A"] else rows_a
+    left_behind = [row for row in processed if row["status"] == OutboxStatus.SENT.value]
+    assert len(left_behind) == 1, (
+        f"byudjet tugagan paytdagi qator(lar)ning holati kutilmagan: {processed}"
+    )
+    assert left_behind[0]["attempt_count"] == 0, (
+        f"yuborilmagan qator urinish sarfladi: {left_behind[0]}. Byudjetning "
+        "tugashi URINISH emas — HTTP so'rovi umuman ketmagan"
+    )
+    assert not any(row["status"] == OutboxStatus.FAILED.value for row in processed), (
+        f"«byudjet tugadi» `failed` ga aylandi: {processed}. Xabar yiqilmagan, "
+        "u shunchaki YUBORILMAGAN — ijara o'z-o'zidan bo'shaydi va keyingi tik "
+        "uni qayta oladi"
+    )
+
+
+async def test_a_row_left_by_an_exhausted_tick_is_delivered_once(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    sender: AlertSender,
+    bed: MarketDomainSeed,
+) -> None:
+    """⛔⛔ BYUDJET QOLDIRGAN QATOR KEYINGI TIKDA AYNAN BIR MARTA KETADI.
+
+    =======================================================================
+    ⛔ DA'VO HOLAT USTUNIGA EMAS, CHIQQAN SO'ROVGA QO'YILADI.
+
+    `status = 'delivered'` «bir marta yuborildi» ni ISBOTLAMAYDI: qator ikki
+    marta yuborilib, ikkinchisidan keyin ham AYNI holatga kelardi. Sotuvchi
+    esa ikkita tasdiq olardi va D-02 nizo modelining butun asosi qulardi —
+    «qancha to'ladim?» savoliga tizimning O'ZI ikki xil javob berardi.
+
+    Shuning uchun har qator O'ZINING BELGISI bilan seed qilinadi va belgi
+    xabar MATNIGA chiqadi: sanoq `respx` tutgan so'rovlar ustidan yuradi.
+    =======================================================================
+
+    ⚠ IKKINCHI TIK IJARA MUDDATIDAN KEYIN chaqiriladi: byudjet tugaganda
+      qolgan qator `sent` bo'lib, ijara ostida qoladi va uni navbatga
+      `release_expired_leases()` QAYTARADI. Ijara ichida chaqirilgan tik
+      uni umuman ko'rmasdi va test «yetkazilmadi» ni «ikki marta
+      yetkazilmadi» deb noto'g'ri o'qirdi.
+    """
+    _seed_market_queue(
+        sync_owner_conn,
+        market_id=bed.market_a.market_id,
+        vendor_id=bed.market_a.vendor_ids[0],
+        chat_id=CHAT_A,
+        markers=QUEUE_MARKERS_A,
+    )
+    _seed_market_queue(
+        sync_owner_conn,
+        market_id=bed.market_b.market_id,
+        vendor_id=bed.market_b.vendor_ids[0],
+        chat_id=CHAT_B,
+        markers=QUEUE_MARKERS_B,
+    )
+    markers = (*QUEUE_MARKERS_A, *QUEUE_MARKERS_B)
+
+    clock = _BudgetClock(trips_after=BUDGET_TRIP_AFTER)
+    async with respx.mock(assert_all_called=False, assert_all_mocked=True) as router:
+        router.post(SEND_URL).mock(side_effect=_counting_ok(clock))
+        exhausted = await outbox_tick(
+            api_sessionmaker,
+            sender,
+            now=LOUD_MOMENT,
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+        )
+        # NAZORAT: birinchi tik HAQIQATAN byudjetga urildi, aks holda
+        # quyidagi «bir marta» da'vosi oddiy bir tikni o'lchagan bo'lardi.
+        assert exhausted.budget_exhausted is True, exhausted
+
+        after_lease = LOUD_MOMENT + timedelta(seconds=OUTBOX_LEASE_SECONDS + 60)
+        await _tick(api_sessionmaker, sender, now=after_lease)
+        texts = [json.loads(call.request.content)["text"] for call in router.calls]
+
+    per_marker = {marker: sum(marker in text for text in texts) for marker in markers}
+
+    assert per_marker == dict.fromkeys(markers, 1), (
+        f"qator(lar) bir martadan boshqa marta yuborildi: {per_marker}. Nol — "
+        "kvitansiya YO'QOLDI (byudjet uni tashlab ketdi), ikki — sotuvchi bir "
+        "to'lov uchun IKKITA tasdiq oldi (D-21/T-07-53)"
+    )
+    assert len(texts) == len(markers), (
+        f"jami {len(texts)} so'rov ketdi, kutilgani {len(markers)}: navbatda "
+        "belgisiz (ya'ni kutilmagan) xabar bor"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 7. ⛔ URINISH BYUDJETI VA MANZILSIZ QATORNING YAKUNI
+# ---------------------------------------------------------------------------
+
+
+async def test_an_unbound_vendor_does_not_burn_the_attempt_budget(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    sender: AlertSender,
+    bed: MarketDomainSeed,
+) -> None:
+    """⛔⛔ KECH ULANGAN SOTUVCHINING BYUDJETI TO'LIQ QOLADI.
+
+    =======================================================================
+    ⛔ O'LCHANGAN NUQSON (B-4) AYNAN SHU YERDA YOPILADI.
+
+    `claim()` hisoblagichni SHARTSIZ oshirganda botga hali ulanmagan
+    sotuvchining kvitansiyasi har 15 daqiqada bittadan «urinish» to'plardi:
+    uch kunda ~288 ta. Sotuvchi ulangan kuni Telegram'ning BIRINCHI
+    vaqtinchalik `502` si uni darhol `failed` ga tushirardi — kvitansiya
+    MANGU yo'qolardi va Telegram bilan hech qanday muammo bo'lmasdi.
+
+    ⛔ TEST IKKI BOSQICHLI VA IKKINCHISI MAJBURIY: faqat «`attempt_count`
+       nol» da'vosi hisoblagich BUTUNLAY ishlamayotgan holatda ham yashil
+       bo'lardi. Ikkinchi bosqich HAQIQIY urinishdan keyin sanoqning
+       AYNAN `1` bo'lishini talab qiladi.
+    =======================================================================
+    """
+    market = bed.market_a
+    outbox_id = _seed_receipt(
+        sync_owner_conn,
+        market_id=market.market_id,
+        vendor_id=market.vendor_ids[0],
+        stall_code=market.stall_codes[0],
+        bind_chat=None,
+    )
+    _age_the_row(sync_owner_conn, outbox_id, created_at=LOUD_MOMENT - timedelta(hours=1))
+
+    # 1-BOSQICH: sotuvchi hali ULANMAGAN — uch tik, birorta so'rovsiz.
+    async with respx.mock(assert_all_called=False, assert_all_mocked=True) as router:
+        idle = router.post(SEND_URL).mock(return_value=_ok_response())
+        for index in range(3):
+            await _tick(
+                api_sessionmaker,
+                sender,
+                now=LOUD_MOMENT + timedelta(seconds=UNRESOLVED_RETRY_SECONDS * index),
+            )
+
+    unbound = _row(sync_owner_conn, outbox_id)
+    assert idle.call_count == 0, (
+        f"manzilsiz qator uchun {idle.call_count} so'rov ketdi — urinish QILINMASLIGI kerak edi"
+    )
+    assert unbound["attempt_count"] == 0, (
+        f"ulanmagan sotuvchining byudjeti yeyildi: {unbound['attempt_count']} "
+        "urinish. HTTP so'rovi UMUMAN yuborilmagan"
+    )
+    assert unbound["status"] == OutboxStatus.PENDING.value, unbound
+
+    # 2-BOSQICH: sotuvchi ULANDI va Telegram vaqtinchalik `502` qaytardi.
+    seed_binding(
+        sync_owner_conn,
+        market_id=market.market_id,
+        vendor_id=market.vendor_ids[0],
+        telegram_user_id=CHAT_A,
+    )
+    bound_moment = LOUD_MOMENT + timedelta(seconds=UNRESOLVED_RETRY_SECONDS * 3)
+    async with respx.mock(assert_all_called=False, assert_all_mocked=True) as router:
+        route = router.post(SEND_URL).mock(return_value=httpx.Response(502, text="bad gateway"))
+        result = await _tick(api_sessionmaker, sender, now=bound_moment)
+
+    row = _row(sync_owner_conn, outbox_id)
+    waited = (row["next_attempt_at"] - bound_moment).total_seconds()
+
+    assert route.call_count == 1, f"{route.call_count} so'rov ketdi, kutilgani 1"
+    assert result.rescheduled == 1 and result.failed == 0, result
+    assert row["attempt_count"] == 1, (
+        f"birinchi HAQIQIY urinishdan keyin sanoq {row['attempt_count']}, "
+        "kutilgani 1 — hisob AYNAN jo'natish tugagan joyda oshadi"
+    )
+    assert row["status"] == OutboxStatus.PENDING.value, (
+        f"bitta vaqtinchalik `502` qatorni {row['status']} ga tushirdi. Byudjet "
+        "ulanishni kutish bilan yeyilgan bo'lsa AYNAN shunday bo'lardi"
+    )
+    assert waited == pytest.approx(FIRST_BACKOFF_SECONDS, abs=1), (
+        f"keyingi urinish {waited} s ga qo'yildi, kutilgani "
+        f"{FIRST_BACKOFF_SECONDS} s (DQ-3 ning BIRINCHI hadi). Boshqa qiymat — "
+        "backoff arifmetikasi eski hisob semantikasida qolgani belgisi"
+    )
+
+
+async def test_an_undeliverable_row_reaches_a_terminal_state_and_leaves_the_queue(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    sender: AlertSender,
+    bed: MarketDomainSeed,
+) -> None:
+    """⛔⛔ MANZILSIZ QATOR YOSH CHEGARASIDAN KEYIN NAVBATDAN CHIQADI.
+
+    =======================================================================
+    ⛔ CHEKSIZ QAYTA JADVALLASH — O'LCHANGAN NUQSON (B-1).
+
+    `_settle()` ning `UNRESOLVED` shoxi terminal chegaradan chetlab o'tganda
+    qator har 15 daqiqada qayta jadvallanardi va HECH QACHON tugamasdi.
+    Yiliga ~730 o'lik qator/bozor to'planardi va ular `_CLAIM_DUE` ning
+    `ORDER BY created_at` ida ENG ESKI bo'lib partiyaning BOSHINI egallardi
+    — ~250 kundan keyin `OUTBOX_BATCH_SIZE` to'lardi va HAQIQIY kvitansiya
+    umuman jo'natilmasdi (head-of-line bloklash).
+
+    ⛔ DA'VO «HOLAT `failed`» BILAN TUGAMAYDI: yagona haqiqiy o'lchov —
+       IKKINCHI TIK QATORNI QAYTA OLMAYDI. Holat ustuni qatorning
+       partiyada turishini yoki turmasligini AYTMAYDI.
+    =======================================================================
+
+    ⚠ SABAB `UnresolvedRecipient` BO'LIB QOLADI, `HTTPStatusError` EMAS:
+      direktorning yuzasida u «sotuvchi botga ulanmadi» deb o'qiladi va
+      texnik nosozlik shovqiniga ARALASHMAYDI (D-22).
+    """
+    market = bed.market_a
+    outbox_id = _seed_receipt(
+        sync_owner_conn,
+        market_id=market.market_id,
+        vendor_id=market.vendor_ids[0],
+        stall_code=market.stall_codes[0],
+        bind_chat=None,
+    )
+    _age_the_row(
+        sync_owner_conn,
+        outbox_id,
+        created_at=LOUD_MOMENT - timedelta(hours=UNRESOLVED_MAX_AGE_HOURS + 1),
+    )
+
+    async with respx.mock(assert_all_called=False, assert_all_mocked=True) as router:
+        route = router.post(SEND_URL).mock(return_value=_ok_response())
+        first = await _tick(api_sessionmaker, sender, now=LOUD_MOMENT)
+        row = _row(sync_owner_conn, outbox_id)
+        second = await _tick(api_sessionmaker, sender, now=LOUD_MOMENT + timedelta(hours=1))
+
+    assert route.call_count == 0, (
+        f"manzilsiz qator uchun {route.call_count} so'rov ketdi — chegara HTTP "
+        "urinishini emas, YOSHNI o'lchaydi"
+    )
+    assert first.failed == 1 and first.unresolved == 0, first
+    assert row["status"] == OutboxStatus.FAILED.value, (
+        f"uch kundan oshgan manzilsiz qator terminal holatga chiqmadi: {row}. "
+        "Chegarasiz navbat KONVERGENT emas — o'lik qatorlar partiyaning eng "
+        "eski qismini abadiy egallardi"
+    )
+    assert row["last_error_type"] == "UnresolvedRecipient", (
+        f"sabab {row['last_error_type']!r} — direktor ekranida «sotuvchi botga "
+        "ulanmadi» o'rniga texnik nosozlik ko'rinardi"
+    )
+    assert second.claimed == 0, (
+        f"ikkinchi tik qatorni QAYTA OLDI ({second.claimed} ta): u navbatdan "
+        "CHIQMAGAN. Holat ustuni yolg'iz o'zi buni ko'rsata olmasdi"
+    )
+
+
+async def test_a_young_unresolved_row_stays_in_the_queue(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    sender: AlertSender,
+    bed: MarketDomainSeed,
+) -> None:
+    """⛔ NAZORAT — YOSH manzilsiz qator navbatda QOLADI (chegara ANIQ).
+
+    =======================================================================
+    ⛔ USIZ YUQORIDAGI TEST HECH NIMANI ISBOTLAMASDI: «manzilsiz qatorni
+       BARIBIR `failed` qil» degan implementatsiya ham uni yashil qilardi
+       va o'sha kod hali botga ulanmagan HAR BIR sotuvchining kvitansiyasini
+       BIRINCHI tikdayoq yo'q qilardi.
+
+    Ikki test AYNAN bitta o'zgaruvchi bilan farq qiladi — qatorning YOSHI.
+    =======================================================================
+    """
+    market = bed.market_a
+    outbox_id = _seed_receipt(
+        sync_owner_conn,
+        market_id=market.market_id,
+        vendor_id=market.vendor_ids[0],
+        stall_code=market.stall_codes[0],
+        bind_chat=None,
+    )
+    _age_the_row(
+        sync_owner_conn,
+        outbox_id,
+        created_at=LOUD_MOMENT - timedelta(hours=UNRESOLVED_MAX_AGE_HOURS - 1),
+    )
+
+    async with respx.mock(assert_all_called=False, assert_all_mocked=True) as router:
+        router.post(SEND_URL).mock(return_value=_ok_response())
+        result = await _tick(api_sessionmaker, sender, now=LOUD_MOMENT)
+
+    row = _row(sync_owner_conn, outbox_id)
+    deferred = (row["next_attempt_at"] - LOUD_MOMENT).total_seconds()
+
+    assert result.unresolved == 1 and result.failed == 0, result
+    assert row["status"] == OutboxStatus.PENDING.value, (
+        f"chegaradan YOSH qator terminal holatga chiqdi: {row}. Sotuvchining "
+        "ulanishiga berilgan uch kun BIRINCHI tikdayoq tugab qolardi"
+    )
+    assert row["attempt_count"] == 0, (
+        f"yosh manzilsiz qator urinish sarfladi: {row['attempt_count']}"
+    )
+    assert deferred == pytest.approx(UNRESOLVED_RETRY_SECONDS, abs=1), (
+        f"qator {deferred} s ga kechiktirildi, kutilgani {UNRESOLVED_RETRY_SECONDS} s"
     )

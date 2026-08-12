@@ -87,7 +87,7 @@ from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID
 
 from sbozor_core.enums import OutboxRecipientKind, OutboxStatus
-from sqlalchemy import Date, DateTime, Integer, Text, bindparam, text
+from sqlalchemy import BigInteger, Date, DateTime, Integer, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 
@@ -112,6 +112,7 @@ __all__ = [
     "OutboxClaim",
     "RecipientMismatch",
     "claim",
+    "defer_unresolved",
     "enqueue",
     "list_deliveries",
     "mark_blocked",
@@ -202,11 +203,35 @@ class OutboxClaim:
     vendor_id: UUID | None
     payload: dict[str, Any]
     attempt_count: int
-    """URINISH SONI — bu qator BILAN BIRGA oshirilgan qiymat.
+    """URINISH SONI — ⛔ BU URINISHDAN OLDINGI hisob (birinchi olishda `0`).
 
-    Ya'ni birinchi ijara `1` beradi, `0` emas. Backoff formulasi (DQ-3)
-    aynan shu songa qaraydi va uni 07-09 hisoblaydi — bu modul faqat
-    `next_attempt_at` USTUNINI boshqaradi.
+    =========================================================================
+    ⛔ QIYMAT `claim()` DA OSHIRILMAYDI VA BU O'LCHANGAN TUZATISH.
+
+    Ilgari `_CLAIM_DUE` uni SHARTSIZ oshirardi, ya'ni HTTP so'rovi UMUMAN
+    yuborilmagan holat (`UNRESOLVED` — sotuvchi hali botga ulanmagan) ham
+    byudjetdan yechilardi. Hisob endi AYNAN jo'natish tugagan joyda —
+    `mark_delivered()`, `mark_blocked()`, `mark_failed()` va `reschedule()`
+    da — oshadi.
+
+    ⚠ CHAQIRUVCHI UCHUN OQIBAT: hozir yozilayotgan urinish
+      `attempt_count + 1` -inchisi. Backoff formulasi (DQ-3) va
+      `MAX_ATTEMPTS` chegarasi shu arifmetikaga qaraydi va ikkalasi ham
+      07-09 da (`app/jobs/outbox.py`) hisoblanadi — bu modul faqat
+      USTUNLARNI boshqaradi.
+    =========================================================================
+    """
+    created_at: datetime
+    """Qator NAVBATGA TUSHGAN payt — ⛔ YOSH CHEGARASI uchun (`_settle()`).
+
+    ⛔ QIYMAT QATORDAN KELADI, TIKDAN EMAS: manzilsiz qator `UNRESOLVED_MAX_
+       AGE_HOURS` dan keyin terminal holatga chiqadi va bu qaror qatorning
+       O'Z yoshiga tayanadi. Tikning `now` i «hozir soat nechi» ni biladi,
+       «bu kvitansiya qachon tug'ilgan» ni emas.
+
+    ⚠ USTUN YANGI EMAS: u `_CLAIM_DUE` da ALLAQACHON o'qilardi (`ORDER BY`
+      uchun) — bu maydon faqat o'sha mavjud qiymatni chaqiruvchiga
+      CHIQARADI. Migratsiya YO'Q.
     """
 
 
@@ -284,7 +309,6 @@ _CLAIM_DUE = text(
     claimed AS (
         UPDATE notification_outbox o
            SET status = :sent,
-               attempt_count = o.attempt_count + 1,
                lease_until = :now + make_interval(secs => :lease_seconds),
                updated_at = now()
           FROM due
@@ -293,7 +317,8 @@ _CLAIM_DUE = text(
         RETURNING o.id, o.market_id, o.kind, o.recipient_kind, o.vendor_id,
                   o.payload, o.attempt_count, o.created_at
     )
-    SELECT id, market_id, kind, recipient_kind, vendor_id, payload, attempt_count
+    SELECT id, market_id, kind, recipient_kind, vendor_id, payload, attempt_count,
+           created_at
       FROM claimed
      ORDER BY created_at, id
     """
@@ -304,6 +329,7 @@ _CLAIM_DUE = text(
     bindparam("never_suppressed", type_=ARRAY(Text())),
     bindparam("batch", type_=Integer()),
     bindparam("lease_seconds", type_=Integer()),
+    bindparam("now", type_=_TIMESTAMPTZ),
 )
 """Muddati kelgan qatorlarni IJARA bilan oladi — `capture_repo._CLAIM_DUE` shakli.
 
@@ -363,9 +389,35 @@ faqat ularning TARTIBI o'zgargan.
    yakuniy `SELECT` ⛔ O'Z `ORDER BY` ini oladi. `UPDATE ... RETURNING`
    ning O'ZIGA `ORDER BY` yozib bo'lmaydi (PostgreSQL grammatikasi buni
    qabul qilmaydi), shuning uchun tartib yakuniy proyeksiyada beriladi.
-   `created_at` shu sababdan `RETURNING` ro'yxatida turadi va yakuniy
-   `SELECT` dan CHIQARIB tashlanadi: u tartib uchun kerak, chaqiruvchiga
-   emas (`OutboxClaim` maydonlari O'ZGARMADI).
+   `created_at` shu sababdan `RETURNING` ro'yxatida turadi — va u ENDI
+   yakuniy `SELECT` ga ham chiqadi (`OutboxClaim.created_at`): ⛔ YANGI
+   USTUN O'QILMADI, MAVJUD qiymat chaqiruvchiga uzatildi, ya'ni migratsiya
+   YO'Q.
+=============================================================================
+
+=============================================================================
+⛔⛔ `claimed` CTE SINING HISOB OSHIRUVCHI BANDI BU YERDAN OLIB TASHLANDI.
+
+⚠ BAND SHU IZOHDA LITERAL YOZILMAYDI (`outbox.py` ning 1-taqig'idagi
+  o'lchangan qoida): «bu yerda bo'lmasligi kerak» degan matnning O'ZI
+  darvozani (`grep`) qizartirardi, ya'ni tushuntirish o'zi tushuntirayotgan
+  qoidani buzardi. Shakl esa pastdagi uch bayonotda KO'RINADI.
+
+Hisoblagich `claim()` da oshirilganda `_settle()` ning O'Z docstringi
+e'lon qilgan kafolat — «⛔ BYUDJET FAQAT HAQIQIY URINISHGA QO'LLANADI» —
+bajarilmasdi: `UNRESOLVED` shoxida HTTP so'rovi UMUMAN yuborilmagan
+holatda ham byudjet yeyilardi.
+
+O'lchangan oqibat: botga hali ulanmagan sotuvchining kvitansiyasi har 15
+daqiqada qayta olinardi (`UNRESOLVED_RETRY_SECONDS`), ya'ni uch kunda
+~288 «urinish» to'planardi. Sotuvchi ulangan kuni birinchi vaqtinchalik
+`502` uni darhol `failed` ga tushirardi — Telegram bilan hech qanday
+muammo bo'lmagan holda kvitansiya MANGU yo'qolardi.
+
+⛔ ENDI URINISH AYNAN TUGAGAN JOYIDA SANALADI: `_MARK_DELIVERED`,
+   `_MARK_TERMINAL` va `_RESCHEDULE`. Manzilsiz qatorning yo'li
+   (`_DEFER_UNRESOLVED`) esa hisoblagichga UMUMAN tegmaydi —
+   `_RELEASE_EXPIRED` bilan aynan bir sababdan.
 
 ⚠ NEGA TESTNI «yumshatish» RAD ETILDI: test tartibni ATAYIN o'lchaydi
   (yuqoridagi ⚠) va uni to'plam tengligiga aylantirish D-21 ning
@@ -517,6 +569,9 @@ async def claim(
     ⚠ `market_id` ARGUMENT BO'LISHI SHART: RLS himoya TO'RI, aniq filtr
       esa so'rovning O'ZIDA turadi (modul docstringining 3-majburiyati).
 
+    ⛔ URINISH BU YERDA SANALMAYDI (`_CLAIM_DUE` docstringining oxirgi
+       bandi): qaytarilgan `attempt_count` — bu urinishdan OLDINGI hisob.
+
     Returns:
         Ijara olingan qatorlar. Bo'sh ro'yxat — «navbat bo'sh» YOKI
         «tenant konteksti o'rnatilmagan»: RLS ikkinchi holatda ham 0 qator
@@ -545,6 +600,7 @@ async def claim(
             vendor_id=row.vendor_id,
             payload=row.payload,
             attempt_count=row.attempt_count,
+            created_at=row.created_at,
         )
         for row in result
     ]
@@ -630,6 +686,7 @@ _MARK_DELIVERED = text(
     UPDATE notification_outbox
        SET status = 'delivered',
            provider_message_id = :provider_message_id,
+           attempt_count = attempt_count + 1,
            lease_until = NULL,
            updated_at = now()
      WHERE market_id = :market_id
@@ -638,8 +695,18 @@ _MARK_DELIVERED = text(
 ).bindparams(
     bindparam("market_id", type_=_UUID),
     bindparam("outbox_id", type_=_UUID),
+    bindparam("provider_message_id", type_=BigInteger()),
 )
 """⛔ `UPDATE`, `DELETE` EMAS (D-20). Yetkazilgan qator TARIXDA qoladi.
+
+⛔ URINISH AYNAN SHU YERDA TUGADI VA SHU YERDA SANALADI: HTTP so'rovi
+   ketdi, Telegram javob berdi. Hisoblagich `claim()` da emas, ijara
+   OLINGANIDA emas — natija YOZILGANIDA oshadi.
+
+⚠ `provider_message_id` TIPLANGAN (`BigInteger`): ustun `BIGINT` va
+  Telegram ning identifikatorlari 32-bit diapazondan chiqib ketgan.
+  Tipsiz bind `text()` da ustundan CHIQARILMAYDI (modulning 2-majburiyati)
+  va qiymat asyncpg'ga xom holda borardi.
 
 ⚠ `delivered` — «Telegram 200 qaytardi va `message_id` berdi», ya'ni xabar
   CHATGA JOYLANDI. U foydalanuvchi xabarni O'QIGANINI bildirmaydi va
@@ -653,6 +720,7 @@ _MARK_TERMINAL = text(
        SET status = :status,
            last_error_type = :error_type,
            last_status_code = :status_code,
+           attempt_count = attempt_count + 1,
            lease_until = NULL,
            updated_at = now()
      WHERE market_id = :market_id
@@ -667,6 +735,11 @@ _MARK_TERMINAL = text(
 )
 """`blocked` va `failed` — BITTA bayonot, ikki chaqiruvchi.
 
+⛔ URINISH AYNAN SHU YERDA TUGADI VA SHU YERDA SANALADI: ikkala holatga
+   ham HTTP so'rovi ketgan (`403` yoki qayta urinib bo'lmaydigan status).
+   `claim()` da sanash `UNRESOLVED` shoxini — ya'ni so'rov UMUMAN
+   yuborilmagan holatni — ham byudjetdan yechardi.
+
 ⚠ IKKI HOLAT IKKI FUNKSIYADA, LEKIN BIR SQL: farq faqat `status` da,
   ya'ni ikkinchi bayonot yozish ikkala yo'lni ham alohida yangilashni
   talab qilardi va ular jimgina ajralib ketardi. MA'NO farqi esa
@@ -680,6 +753,7 @@ _RESCHEDULE = text(
            next_attempt_at = :next_attempt_at,
            last_error_type = :error_type,
            last_status_code = :status_code,
+           attempt_count = attempt_count + 1,
            lease_until = NULL,
            updated_at = now()
      WHERE market_id = :market_id
@@ -689,17 +763,59 @@ _RESCHEDULE = text(
     bindparam("market_id", type_=_UUID),
     bindparam("outbox_id", type_=_UUID),
     bindparam("pending", type_=Text()),
+    bindparam("next_attempt_at", type_=_TIMESTAMPTZ),
     bindparam("error_type", type_=Text()),
     bindparam("status_code", type_=Integer()),
 )
-"""Qatorni navbatga QAYTARADI — `attempt_count` TEGILMAYDI.
+"""Qatorni navbatga QAYTARADI — ⛔ URINISH SHU YERDA SANALADI.
 
-⚠ URINISH `claim()` DA SANALGAN, ya'ni uni bu yerda yana oshirish har
-  yiqilishni IKKI marta hisoblardi va byudjet ikki barobar tez tugardi.
+⛔ CHAQIRUV SHARTI: bu bayonot FAQAT haqiqiy jo'natishdan keyin ishlaydi
+   (`429`, `5xx`, tarmoq uzilishi), ya'ni urinish AMALDA bo'lgan va u shu
+   yerda tugadi. Manzilsiz qatorning yo'li BOSHQA — `_DEFER_UNRESOLVED` —
+   va u hisoblagichga tegmaydi.
 
 ⚠ `next_attempt_at` CHAQIRUVCHIDAN: backoff formulasi (DQ-3) va Telegram
   ning `retry_after` qiymati 07-09 da hisoblanadi. Bu modul faqat
   USTUNNI boshqaradi — arifmetikani ikki joyga bo'lish ularni ajratardi.
+"""
+
+_DEFER_UNRESOLVED = text(
+    """
+    UPDATE notification_outbox
+       SET status = :pending,
+           next_attempt_at = :next_attempt_at,
+           last_error_type = :error_type,
+           last_status_code = NULL,
+           lease_until = NULL,
+           updated_at = now()
+     WHERE market_id = :market_id
+       AND id = :outbox_id
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("outbox_id", type_=_UUID),
+    bindparam("pending", type_=Text()),
+    bindparam("next_attempt_at", type_=_TIMESTAMPTZ),
+    bindparam("error_type", type_=Text()),
+)
+"""Manzilsiz qatorni navbatga qaytaradi — ⛔ `attempt_count` OSHIRILMAYDI.
+
+=============================================================================
+⛔⛔ NEGA ALOHIDA BAYONOT, `_RESCHEDULE` GA BAYROQ EMAS.
+
+Farq BITTA ustunda, lekin MA'NOSI butunlay boshqa: `_RESCHEDULE` «urinish
+bo'ldi va yiqildi» ni yozadi, bu esa «urinish UMUMAN bo'lmadi» ni. Bayroqli
+bitta funksiya (`reschedule(..., count=False)`) chaqiruv joyida
+`True`/`False` bo'lib adashardi va o'sha adashuv JIMGINA — sotuvchining
+byudjeti yeyilganini faqat kvitansiya yo'qolganda ko'rinardi.
+
+⚠ `last_status_code` ATAYIN `NULL`: HTTP javobi UMUMAN bo'lmagan. Oldingi
+  urinishning kodini qoldirish direktorning ekranida «Telegram 500 berdi»
+  degan YOLG'ON sabab ko'rsatardi.
+
+⛔ QOIDA `_RELEASE_EXPIRED` NIKI BILAN AYNAN BIR XIL: u ham urinishni
+   sanamaydi, chunki u ham so'rov YUBORILMAGAN holatni yozadi.
+=============================================================================
 """
 
 _RELEASE_EXPIRED = text(
@@ -718,6 +834,7 @@ _RELEASE_EXPIRED = text(
     bindparam("market_id", type_=_UUID),
     bindparam("pending", type_=Text()),
     bindparam("sent", type_=Text()),
+    bindparam("now", type_=_TIMESTAMPTZ),
 )
 """O'lgan worker qoldirgan ijarani qaytaradi (`capture_repo.release_expired` jufti).
 
@@ -739,7 +856,10 @@ async def mark_delivered(
     outbox_id: UUID,
     provider_message_id: int,
 ) -> None:
-    """Telegram 200 qaytardi va `message_id` berdi (`_MARK_DELIVERED` docstringi)."""
+    """Telegram 200 qaytardi va `message_id` berdi (`_MARK_DELIVERED` docstringi).
+
+    ⛔ URINISH SHU YERDA SANALADI: so'rov ketdi va javob keldi.
+    """
     await session.execute(
         _MARK_DELIVERED,
         {
@@ -763,6 +883,9 @@ async def mark_blocked(
        chegarani qattiqroq urardi. Holat `failed` DAN AJRATILGAN — uni
        texnik nosozlik shovqiniga qo'shish direktordan «bu sotuvchi bilan
        aloqa uzildi» faktini YASHIRARDI.
+
+    ⛔ URINISH SHU YERDA SANALADI: `403` — Telegram ning HAQIQIY javobi,
+       ya'ni so'rov yuborilgan.
     """
     await session.execute(
         _MARK_TERMINAL,
@@ -789,6 +912,13 @@ async def mark_failed(
     ⚠ QATOR O'CHIRILMAYDI (D-20): «yuborilmadi» — bu ham FAKT va u
       direktorning ekranida ko'rinishi kerak. O'chirilgan qator nosozlikni
       «xabar umuman rejalashtirilmagan edi» ga aylantirardi.
+
+    ⛔ URINISH SHU YERDA SANALADI — ⚠ VA BITTA ISTISNO BILAN: manzili
+       topilmagan qator yosh chegarasidan (`UNRESOLVED_MAX_AGE_HOURS`)
+       o'tganda ham SHU funksiya bilan yopiladi. U holatda oxirgi «urinish»
+       ham amalda bo'lmagan, lekin bu ⛔ YAKUNIY yozuv: qator navbatdan
+       CHIQADI, ya'ni hisob boshqa hech qachon o'qilmaydi va byudjetni
+       hech nimadan yechmaydi.
     """
     await session.execute(
         _MARK_TERMINAL,
@@ -811,7 +941,11 @@ async def reschedule(
     error_type: str,
     status_code: int | None,
 ) -> None:
-    """Qatorni navbatga qaytaradi (`_RESCHEDULE` docstringi)."""
+    """Qatorni navbatga qaytaradi va URINISHNI SANAYDI (`_RESCHEDULE` docstringi).
+
+    ⛔ FAQAT HAQIQIY JO'NATISHDAN KEYIN: manzil topilmagan qator uchun
+       `defer_unresolved()` chaqiriladi — u hisoblagichga tegmaydi.
+    """
     await session.execute(
         _RESCHEDULE,
         {
@@ -821,6 +955,44 @@ async def reschedule(
             "next_attempt_at": next_attempt_at,
             "error_type": _validate_error_type(error_type),
             "status_code": status_code,
+        },
+    )
+
+
+async def defer_unresolved(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    outbox_id: UUID,
+    next_attempt_at: datetime,
+    error_type: str,
+) -> None:
+    """Manzilsiz qatorni kechiktiradi — ⛔ URINISH SANALMAYDI.
+
+    `reschedule()` bilan AYNI shakl, BITTA farq bilan: `attempt_count`
+    OSHIRILMAYDI. Sabab `_DEFER_UNRESOLVED` docstringida: HTTP so'rovi
+    UMUMAN yuborilmagan, ya'ni byudjetdan yechadigan urinish YO'Q.
+
+    Args:
+        session: chaqiruvchining OCHIQ tranzaksiyasidagi sessiya.
+        market_id: tenant kaliti (RLS ustidagi ikkinchi qatlam).
+        outbox_id: kechiktirilayotgan qator.
+        next_attempt_at: keyingi urinish payti — CHAQIRUVCHIDAN
+            (`UNRESOLVED_RETRY_SECONDS` arifmetikasi 07-09 da).
+        error_type: ⛔ AYNAN `UnresolvedRecipient.__name__` shakli;
+            `_validate_error_type()` dan O'TADI (D-04).
+
+    Raises:
+        ValueError: `error_type` tur nomiga o'xshamaganda.
+    """
+    await session.execute(
+        _DEFER_UNRESOLVED,
+        {
+            "market_id": market_id,
+            "outbox_id": outbox_id,
+            "pending": _PENDING,
+            "next_attempt_at": next_attempt_at,
+            "error_type": _validate_error_type(error_type),
         },
     )
 
@@ -917,6 +1089,15 @@ class DeliveryRow:
     status: str
     """`OutboxStatus` a'zosining qiymati — besh a'zoli YOPIQ to'plam."""
     attempt_count: int
+    """⛔ HAQIQIY JO'NATISH URINISHLARI SONI — «navbatdan olingan marta» EMAS.
+
+    ⚠ QIYMATNING MA'NOSI O'ZGARDI (T-07-108): ilgari hisoblagich `claim()`
+      da oshardi, ya'ni manzili topilmagan qator har 15 daqiqada bittadan
+      «urinish» to'plardi va direktor ekranda `288` kabi sonni ko'rardi —
+      holbuki Telegram'ga BIRORTA so'rov ketmagan edi. Endi son faqat
+      jo'natish TUGAGANDA oshadi, ya'ni u `MAX_ATTEMPTS` byudjeti bilan
+      bir xil o'lchovda.
+    """
     created_at: datetime
     updated_at: datetime
     last_error_type: str | None

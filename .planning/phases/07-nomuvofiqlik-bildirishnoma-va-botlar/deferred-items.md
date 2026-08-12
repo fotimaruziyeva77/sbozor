@@ -87,3 +87,43 @@ o'lchagan: ism qo'shilganda to'rt tenancy testi qizaradi).
 
 **Egasi:** 8-faza (§5.5 shu bandni `deferred-items.md` ning 9-bandi
 bilan bir sinfga qo'ygan).
+
+---
+
+## 3. `test_overdue_reminder_is_held_by_quiet_hours` — DEVOR SOATIGA bog'liq
+
+**Topildi:** 07-19 ijrosi (2026-08-12, mahalliy vaqt ~23:03).
+
+**Fayl:** `tests/integration/test_notifications.py:711-773`
+
+**Nosozlik:** test nazorat bandi uchun kvitansiya qatorini
+`outbox_repo.enqueue()` bilan yozadi. `notification_outbox.next_attempt_at`
+ning `server_default` i — `now()`, ya'ni qator **HAQIQIY** server
+soatidan muddat oladi. Keyin `claim(now=_wall(today, time(22, 30)))`
+chaqiriladi va `_CLAIM_DUE` ning `o.next_attempt_at <= :now` sharti
+**mahalliy vaqt 22:30 dan keyin** yugurgan har qanday yugurishda
+YOLG'ON bo'ladi — qator olinmaydi va nazorat bandi qulaydi:
+
+```
+assert 'payment_receipt' in set()
+```
+
+Ya'ni test **kuniga ~1.5 soat** (22:30 → 00:00) qizil bo'ladi.
+
+**⛔ 07-19 NING O'ZGARISHI SABAB EMAS — O'LCHANDI:** ikkala mahsulot
+fayli (`jobs/outbox.py`, `repositories/outbox_repo.py`) `3b1e964`
+holatiga qaytarilib, AYNAN shu test qayta yugurtirildi — u **BAZADA
+HAM QIZIL**. Fayllar `git checkout --` bilan tiklandi.
+
+**Nega 07-19 da tuzatilmadi:** `tests/integration/test_notifications.py`
+rejaning `files_modified` ro'yxatidan **tashqarida** va nosozlik
+navbat mexanikasiga umuman aloqador emas.
+
+**To'g'ri tuzatish:** kvitansiya qatorini `next_attempt_at` ni ANIQ
+berib seed qilish (`seed_outbox_row(..., next_attempt_at=quiet_moment -
+timedelta(hours=1))`) — `test_outbox.py` va `test_outbox_repo.py` dagi
+barcha o'lchovlar allaqachon shu naqshni ishlatadi. `enqueue()` ning
+idempotentligi bu testning predmeti EMAS, ya'ni mahsulot yo'lidan
+yurishning bu yerda hech qanday qiymati yo'q.
+
+**Egasi:** faza yakuni yoki 8-faza.
