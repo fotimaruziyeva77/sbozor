@@ -27,8 +27,13 @@ __all__ = [
     "DiscoveryRunStatus",
     "Locale",
     "OccupancyVerdict",
+    "OutboxKind",
+    "OutboxRecipientKind",
+    "OutboxStatus",
     "PaymentKind",
     "PaymentMethod",
+    "ReconciliationCaseStatus",
+    "ReconciliationSubjectKind",
     "ResolutionSource",
     "ReversalReason",
     "ReviewPurpose",
@@ -656,3 +661,173 @@ class ActorKind(StrEnum):
 
     USER = "user"
     SYSTEM = "system"
+
+
+class ReconciliationCaseStatus(StrEnum):
+    """`reconciliation_cases.status` — YOPIQ TO'RT A'ZOLI ro'yxat (D-12).
+
+    ⚠ QIYMATLAR INGLIZCHA, ko'rsatiladigan matn esa i18n KALITI —
+    `PaymentKind` / `AnomalyKind` bilan AYNAN bir xil shakl. 7-fazaning
+    kontekstidagi o'zbekcha nomlar (`yangi` / `ko'rilmoqda` / `asosli` /
+    `asossiz`) MA'NO, qiymat emas.
+
+    =========================================================================
+    ⛔ `other` / `custom` A'ZOSI YO'Q VA U QO'SHILMAYDI.
+
+    Sabab `AdjustmentReason` docstringidagi bilan AYNAN bir sinfda
+    (6-faza D-19 / T-06-07): erkin matnni qaytarib keltiradigan a'zo
+    hisobotda GURUHLANMAYDI — u AMALDA eng katta guruh bo'lib qolardi va
+    nomuvofiqlik navbatining haqiqiy natijasi hech qachon o'lchanmasdi.
+
+    ⛔ HIT-RATE NING MAXRAJI HAM SHU YERDA QULFLANADI (D-13):
+
+        hit_rate = justified / (justified + unjustified)
+
+    `new` va `in_review` maxrajga ⛔ KIRMAYDI. Sabab mexanik: hali
+    ko'rilmagan case metrikani PASAYTIRARDI, ya'ni navbatni tez ko'rib
+    chiqmaslik ko'rsatkichni yomonlashtirardi va ko'rsatkich o'z
+    jarayonini o'lchash o'rniga uning KECHIKISHINI o'lchardi.
+
+    ⛔ `hit_rate` USTUNI HECH QAYERDA SAQLANMAYDI — u `NULLIF` bilan
+    so'rovda hisoblanadi (D-06 bilan bir sinf: saqlangan hosila ikkinchi
+    haqiqat manbai bo'lardi).
+    =========================================================================
+
+    `new`         — case tug'ildi, hali hech kim qaramagan
+    `in_review`   — mas'ul biriktirildi, tekshiruv ketmoqda
+    `justified`   — nomuvofiqlik TASDIQLANDI (haqiqiy yo'qotish/qoida buzilishi)
+    `unjustified` — nomuvofiqlik TASDIQLANMADI (tizim xatosi, oqlangan holat)
+    """
+
+    NEW = "new"
+    IN_REVIEW = "in_review"
+    JUSTIFIED = "justified"
+    UNJUSTIFIED = "unjustified"
+
+
+class ReconciliationSubjectKind(StrEnum):
+    """`reconciliation_cases.subject_kind` — case NIMAGA ochilgan (DQ-5).
+
+    =========================================================================
+    ⛔ YOPIQ DISKRIMINATOR — `NULL` TEKSHIRISH EMAS.
+
+    Case ikki xil o'zgarmas qatorga ishora qiladi va ular BIR JADVALDA
+    yashamaydi: `anomaly_id` (`billing_anomalies` qatori — HODISA) yoki
+    `charge_id` (`daily_charges` qatori — HISOB). Sinfni «qaysi ustun
+    bo'sh?» mantig'i bilan aniqlash hisobotni USTUN SHAKLIGA bog'lardi:
+    uchinchi manba qo'shilgan kuni har bir `GROUP BY` qayta yozilishi
+    kerak bo'lardi va eski so'rovlar JIMGINA noto'g'ri guruh berardi.
+
+    Yopiq diskriminator `GROUP BY` ni BITTA ustunga tushiradi va uning
+    ustundan ajralib ketishi `subject_kind_matches_target` `CHECK` bilan
+    STRUKTURAVIY imkonsiz qilingan.
+    =========================================================================
+
+    `anomaly`         — «ro'yxatga olinmagan savdo» sinfi: `billing_anomalies`
+                        qatori (`unassigned_occupied` / `closed_day_occupied`).
+                        ⛔ `no_coverage_stall` ga case OCHILMAYDI — u kamera
+                        qamrovi nuqsoni, tushum nomuvofiqligi EMAS.
+    `occupied_unpaid` — «band, lekin to'lovsiz» sinfi: `daily_charges`
+                        qatori. ⛔ Bu sinf uchun TO'RTINCHI `AnomalyKind`
+                        qo'shilmaydi — «to'lanmagan» hosila, hodisa emas
+                        (D-06/D-13), va uni 04:10 da qator qilib yozish
+                        ertaga to'lov kelganda YOLG'ONGA aylanardi.
+    """
+
+    ANOMALY = "anomaly"
+    OCCUPIED_UNPAID = "occupied_unpaid"
+
+
+class OutboxKind(StrEnum):
+    """`notification_outbox.kind` — QANDAY xabar navbatga qo'yilgan (BOT-04).
+
+    =========================================================================
+    ⛔ TAYYOR MATN QATORDA SAQLANMAYDI — U JO'NATISH PAYTIDA QURILADI.
+
+    Qatorda faqat `kind` (shu yopiq to'plam) va `payload` (allowlist bilan
+    cheklangan kalitlar, `alerting.py::_detail()` naqshi) bo'ladi. Tayyor
+    matnni ustunga yozish sotuvchining ismini, rasta kodini va summani
+    bazaga, u yerdan `pg_dump` → restic → TASHQI BUCKET ga chiqarardi
+    (D-03 ning aynan shu sababdan yozilgan tashqi chegara bandi).
+    =========================================================================
+
+    `payment_receipt`  — kvitansiya (CASH-05). ⛔ HECH QACHON to'xtatilmaydi:
+                         na quiet hours, na throttling uni ushlab qolmaydi
+                         (D-18) — u sotuvchining HOZIRGINA to'laganini
+                         isbotlaydigan yozuv va uni kechiktirish nizo
+                         modelini buzardi.
+    `overdue_reminder` — qarz eslatmasi (BOT-03). Quiet hours ga BO'YSUNADI.
+    `digest_morning`   — direktorning ertalabki dayjesti (08:00): manba
+                         `daily_charges` + `payments`, ya'ni kechagi
+                         YOZILGAN kun (D-16).
+    `digest_evening`   — kechki nomuvofiqlik xabari (20:45): manba
+                         `pending_projection()`, ya'ni bugungi KUTILAYOTGAN
+                         holat (D-15). ⛔ Ikki sonning farq qilishi NUQSON
+                         EMAS, DIZAYN — va matn buni ochiq aytadi.
+    """
+
+    PAYMENT_RECEIPT = "payment_receipt"
+    OVERDUE_REMINDER = "overdue_reminder"
+    DIGEST_MORNING = "digest_morning"
+    DIGEST_EVENING = "digest_evening"
+
+
+class OutboxRecipientKind(StrEnum):
+    """`notification_outbox.recipient_kind` — xabar KIMGA ketadi.
+
+    =========================================================================
+    ⛔ `chat_id` OUTBOX QATORIDA SAQLANMAYDI (D-26c).
+
+    Manzil jo'natish PAYTIDA olinadi: sotuvchi uchun
+    `vendor_telegram_bindings` dan (faqat `revoked_at IS NULL` qatori),
+    direktor uchun `market_notification_settings.director_chat_id` dan.
+
+    Sabab mexanik: qayta ulanish (o'sha telefon, BOSHQA Telegram akkaunti)
+    eski bog'lanishni BEKOR QILADI. `chat_id` qatorga muzlatilgan bo'lsa,
+    navbatda turgan qarz eslatmasi ESKI chatga ketardi — ya'ni sotuvchining
+    moliyaviy ma'lumoti u boshqarmaydigan akkauntga tushardi.
+    =========================================================================
+
+    `vendor`          — sotuvchi (`vendor_id` MAJBURIY,
+                        `recipient_matches_vendor` `CHECK` bilan qulflangan)
+    `market_director` — bozor direktori (`vendor_id` BO'LMAYDI)
+    """
+
+    VENDOR = "vendor"
+    MARKET_DIRECTOR = "market_director"
+
+
+class OutboxStatus(StrEnum):
+    """`notification_outbox.status` — append-only holat mashinasi (D-20).
+
+        pending -> sent -> delivered | failed | blocked
+
+    =========================================================================
+    ⛔⛔ HAR A'ZONING MA'NOSI AYNAN SHU — KAM HAM, KO'P HAM EMAS.
+
+    `pending`   — qator yozilgan, urinish hali QILINMAGAN.
+    `sent`      — ijara olingan, HTTP so'rov YO'LDA.
+    `delivered` — Telegram **200** qaytardi va `message_id` berdi, ya'ni
+                  xabar chatga JOYLANDI.
+    `failed`    — urinishlar tugadi yoki qayta urinib bo'lmaydigan xato.
+    `blocked`   — `403`: foydalanuvchi botni bloklagan (D-22).
+
+    ⛔ `delivered` FOYDALANUVCHI XABARNI OCHGANINI BILDIRMAYDI. Bot API ning
+    `sendMessage` javobi — `Message` obyekti (`message_id`, `date`); Telegram
+    yetkazilganlik yoki ochilganlik KVITANSIYASINI UMUMAN BERMAYDI. Nizoda
+    (D-02) bunday da'vo tizimni ISBOTLAB BO'LMAYDIGAN gapga majburlardi,
+    ya'ni dalil o'rniga taxmin qo'yardi. Uchala locale'dagi UI matni ham
+    «Telegram qabul qildi» ma'nosini beradi.
+
+    ⚠ `blocked` — MA'LUMOT, XATO EMAS (D-22). U sotuvchi bilan aloqa
+    uzilganini bildiradi: keyingi urinishlar QILINMAYDI va direktor buni
+    ekranda topishi kerak. Uni `failed` ga qo'shish aloqa uzilishini
+    texnik nosozlik shovqiniga ko'mib yuborardi.
+    =========================================================================
+    """
+
+    PENDING = "pending"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+    BLOCKED = "blocked"
