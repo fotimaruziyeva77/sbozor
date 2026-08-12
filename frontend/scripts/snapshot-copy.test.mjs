@@ -426,3 +426,150 @@ test("G-4: skaner haqiqatan fayl mazmunini o'qiydi (nazorat)", () => {
     "skaner fayl mazmunini o'qimayapti — yuqoridagi darvoza ma'nosiz",
   );
 });
+
+/* ---------------------------------------------------------------------------
+ * G-36 — `ALERT_TITLE_KEYS` REYESTRI UCHALA LOCALE BILAN MEXANIK BOG'LANADI.
+ *
+ * ⛔⛔ NEGA BU BAND MAVJUD — VA U «YAXSHI BO'LARDI» EMAS, BO'SHLIQ EDI.
+ *
+ *   `deferred-items.md` ning 1-bandi (07-15 da o'lchangan): reyestrning
+ *   o'n beshala a'zosi bugun uchala tilda ham matnga ega — buni 07-15
+ *   ⛔ QO'LDA sanagan. Lekin `frontend/scripts/*.test.mjs` ichida
+ *   reyestrni `messages/*.json` bilan bog'laydigan BIRORTA darvoza yo'q
+ *   edi. Ya'ni holat bugun TOZA, uni ushlab turadigan mexanizm esa
+ *   YO'Q: o'n oltinchi a'zo matnsiz qo'shilsa ekranda zaxira yorlig'i
+ *   chiqardi va buni HECH NIMA aytmasdi.
+ *
+ *   Bu `error-codes.test.mjs` ning G-17 bloki allaqachon yopgan sinfning
+ *   AYNAN O'ZI, faqat boshqa reyestr ustida. Shakl ham o'sha yerdan
+ *   ko'chiriladi: reyestrdan OLDINGA (tur -> matn) va TESKARI
+ *   (matn -> tur).
+ *
+ * ⛔ ZAXIRA YORLIQ (`errors.generic`) — REYESTRDAN TASHQARIDA VA BU
+ *    ATAYIN. `alert-row.tsx` noma'lum `alert_key` uchun uni chizadi,
+ *    ya'ni u `snapshots.alertKey.*` guruhiga KIRMAYDI va teskari skanni
+ *    ifloslantirmaydi. Uning MAVJUDLIGI esa alohida o'lchanadi: zaxira
+ *    yo'lning o'zi buzilgan bo'lsa noma'lum ogohlantirish ekranni BO'SH
+ *    qoldirardi.
+ *
+ * ⚠ O'LCHAM QULFLANGAN (`ALERT_TITLE_KEY_COUNT`): parser sinsa yoki
+ *   reyestr boshqa shaklga o'tkazilsa quyidagi sikllar BO'SH to'plamda
+ *   yugurib jimgina yashil bo'lardi. Yangi a'zo qo'shgan ijrochi bu
+ *   sonni ATAYIN yangilaydi va o'shanda uchala matnni ham yozadi.
+ * ------------------------------------------------------------------------ */
+
+const ALERT_ROW = path.join(SNAPSHOT_COMPONENTS_DIR, "alert-row.tsx");
+
+/** §11.7 — bugungi ogohlantirish turlarining soni (07-08 + 07-14). */
+const ALERT_TITLE_KEY_COUNT = 15;
+
+/** `snapshots.alertKey.*` — ogohlantirish sarlavhalarining YAGONA guruhi. */
+const ALERT_KEY_GROUP = "alertKey";
+
+/** Noma'lum `alert_key` uchun chiziladigan zaxira yorliq (`alert-row.tsx`). */
+const ALERT_FALLBACK_TRAIL = ["errors", "generic"];
+
+/** `alert_kind: "snapshots.alertKey.xxx",` juftliklarini o'qiydi. */
+function readAlertTitleKeys() {
+  const source = readFileSync(ALERT_ROW, "utf8");
+  const block = /const ALERT_TITLE_KEYS[^{]*\{([\s\S]*?)\n\} as const;/u.exec(source);
+  assert.ok(block, "`ALERT_TITLE_KEYS` topilmadi — parser sinigan");
+  return [
+    ...block[1].matchAll(/^\s+([a-z_]+):\s*"snapshots\.alertKey\.([A-Za-z]+)"/gmu),
+  ].map((match) => [match[1], match[2]]);
+}
+
+function lookupTrail(tree, trail) {
+  return trail.reduce((node, step) => (node ?? {})[step], tree);
+}
+
+test("G-36: `ALERT_TITLE_KEYS` o'qildi va AYNAN o'n besh a'zo (nazorat)", () => {
+  const pairs = readAlertTitleKeys();
+
+  assert.equal(
+    pairs.length,
+    ALERT_TITLE_KEY_COUNT,
+    `ALERT_TITLE_KEYS dan ${pairs.length} a'zo o'qildi, kutilgan ` +
+      `${ALERT_TITLE_KEY_COUNT}. Yangi tur qo'shgan bo'lsangiz — bu sonni ` +
+      "yangilang VA uchala locale'ga matn yozing, aks holda ekranda zaxira " +
+      "yorlig'i chiqadi va buni hech nima aytmaydi.",
+  );
+  assert.equal(
+    new Set(pairs.map(([kind]) => kind)).size,
+    pairs.length,
+    "takrorlangan `alert_key`",
+  );
+  assert.equal(
+    new Set(pairs.map(([, leaf]) => leaf)).size,
+    pairs.length,
+    "ikki tur BITTA matn kalitiga ishora qilyapti — biri o'zgarsa ikkinchisi " +
+      "jimgina noto'g'ri sarlavha chizardi",
+  );
+});
+
+test("G-36: HAR reyestr a'zosining matni UCHALA tilda bor (OLDINGA)", () => {
+  const pairs = readAlertTitleKeys();
+  const problems = [];
+
+  for (const locale of LOCALES) {
+    const group = loadMessages(locale).snapshots?.[ALERT_KEY_GROUP] ?? {};
+    for (const [kind, leaf] of pairs) {
+      if (typeof group[leaf] !== "string" || group[leaf].trim() === "") {
+        problems.push(
+          `${locale}.json: snapshots.${ALERT_KEY_GROUP}.${leaf} YO'Q ` +
+            `(\`${kind}\` turi uchun)`,
+        );
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "reyestrda tur bor, matn YO'Q — ekranda zaxira yorlig'i chiziladi:\n  " +
+      problems.join("\n  "),
+  );
+});
+
+test("G-36: HAR matn kaliti reyestrda bor — O'LIK KALIT yo'q (TESKARI)", () => {
+  const leaves = new Set(readAlertTitleKeys().map(([, leaf]) => leaf));
+  const problems = [];
+
+  for (const locale of LOCALES) {
+    const group = loadMessages(locale).snapshots?.[ALERT_KEY_GROUP] ?? {};
+    for (const leaf of Object.keys(group)) {
+      if (!leaves.has(leaf)) {
+        problems.push(
+          `${locale}.json: snapshots.${ALERT_KEY_GROUP}.${leaf} reyestrda YO'Q`,
+        );
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "matn bor, uni chizadigan tur YO'Q — o'lik kalit tarjimonni ham, keyingi " +
+      "ijrochini ham chalg'itadi:\n  " + problems.join("\n  "),
+  );
+});
+
+test("G-36: zaxira yorliq UCHALA tilda bor (reyestrdan TASHQARIDA)", () => {
+  /*
+   * ⛔ NEGA ALOHIDA: `errors.generic` `snapshots.alertKey.*` guruhida
+   *   EMAS, ya'ni yuqoridagi ikki darvoza uni UMUMAN ko'rmaydi. Lekin
+   *   AYNAN u noma'lum `alert_key` kelganda chiziladi — u yo'q bo'lsa
+   *   yangi backend turi ekranni BO'SH qoldirardi.
+   */
+  const missing = LOCALES.filter(
+    (locale) =>
+      typeof lookupTrail(loadMessages(locale), ALERT_FALLBACK_TRAIL) !== "string",
+  );
+
+  assert.deepEqual(
+    missing,
+    [],
+    `zaxira yorliq (${ALERT_FALLBACK_TRAIL.join(".")}) yo'q: ${missing.join(", ")} — ` +
+      "noma'lum ogohlantirish turi ekranni BO'SH qoldirardi",
+  );
+});
