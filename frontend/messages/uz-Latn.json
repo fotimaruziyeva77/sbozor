@@ -1250,6 +1250,8 @@
     "casesTitle": "Nomuvofiqlik navbati",
     "caseUnqueued": "Navbatga olinmagan",
     "caseReview": "Ko'rib chiqish",
+    "loadMore": "Yana yuklash",
+    "loadMoreFailed": "Keyingi sahifa yuklanmadi — ro'yxat to'liq emas.",
     "assigneeNone": "Biriktirilmagan",
     "caseStatus": {
       "new": "Yangi",

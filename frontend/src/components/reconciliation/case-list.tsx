@@ -70,6 +70,23 @@ import { useReconciliationCases } from "@/lib/reconciliation-queries";
  *    SO'ROVSIZ. Ikki so'rov ikki lahzani ko'rsatib, ekranda «ikki xil
  *    raqam» tug'dirardi.
  *
+ * ⛔ SANOQ ⛔ BIRINCHI SAHIFADAN o'qiladi va sahifalar bo'ylab
+ *    ⛔ YIG'ILMAYDI: server kontrakti bo'yicha u filtrdan ham, sahifadan
+ *    ham MUSTAQIL va HAR javobda BUTUN kunning soni bo'lib keladi.
+ *
+ * -----------------------------------------------------------------------
+ * ⛔⛔ 4b. RO'YXAT 50 QATORDA ⛔ QIRQILMAYDI (B-6)
+ * -----------------------------------------------------------------------
+ * Sanoq kun bo'yicha to'liq, jadval esa bir sahifada 50 qator edi —
+ * ya'ni direktor «Yangi 120» yozuvini 50 qatorli jadval ustida ko'rardi
+ * va qolgan 70 tasiga ⛔ HECH QANDAY YO'L YO'Q edi. Bu shu faylning O'Z
+ * printsipiga («yo'qolgan sanoq — jim xato») ⛔ TO'G'RIDAN-TO'G'RI zid.
+ *
+ * ⛔ YECHIM — KEYSET KURSOR va `[Yana yuklash]`, ⛔ AVTOMATIK YUKLASH
+ *    EMAS: skroll bilan o'zi yuklanadigan ro'yxat direktor «oxiriga
+ *    yetdim» deb o'ylagan paytda ham o'sib turardi va u nechta qator
+ *    ko'rganini BILMASDI. Yuklash — foydalanuvchining OCHIQ NIYATI.
+ *
  * -----------------------------------------------------------------------
  * ⚠⚠ 5. SOTUVCHI USTUNI ⛔ YO'Q — DIZAYN KONTRAKTIDAN ASOSLI CHETLANISH
  * -----------------------------------------------------------------------
@@ -101,12 +118,14 @@ const STATUS_COUNT: Record<
 
 export function CaseList({ day }: { day: string }) {
   const t = useTranslations();
-  const cases = useReconciliationCases(day, "");
+  const cases = useReconciliationCases(day);
 
   /* ⛔ Dialog holati SHU YERDA, URL'da EMAS (modul izohining 2-bandi). */
   const [openCaseId, setOpenCaseId] = useState<string | null>(null);
 
-  const rows = cases.data?.rows ?? [];
+  /* ⛔ Qatorlar BARCHA sahifalardan; sanoqlar esa BIRINCHISIDAN (4-band). */
+  const rows = cases.rows;
+  const counts = cases.counts;
 
   return (
     /* ⛔ Atribut ENG TASHQI elementda va HAR holatda — yuklanishda ham. */
@@ -120,7 +139,13 @@ export function CaseList({ day }: { day: string }) {
         </div>
       ) : null}
 
-      {cases.isError ? (
+      {/*
+       * ⛔ BLOK DARAJASIDAGI XATO — KEYINGI SAHIFANIKIDAN AJRATILGAN.
+       *   Sahifa yuklanmagani «butun blok yiqildi» degani EMAS: qatorlar
+       *   ham, sanoq ham ekranda TURADI. Ikkalasini bir matn bilan
+       *   ko'rsatish direktorga ro'yxat BUTUNLAY yo'q deb aytardi.
+       */}
+      {cases.isError && !cases.isFetchNextPageError ? (
         <p
           className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
           role="alert"
@@ -129,22 +154,33 @@ export function CaseList({ day }: { day: string }) {
         </p>
       ) : null}
 
-      {cases.data !== undefined ? (
-        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm" role="status">
+      {/*
+       * ⛔ `role` YO'Q (WR-08): `role="status"` `<dl>` ning implicit rolini
+       *   ALMASHTIRADI va «Yangi 120 Ko'rilmoqda 7» skrinriderda
+       *   atama–qiymat bog'lanishini yo'qotib, oddiy matn oqimiga
+       *   aylanardi.
+       *
+       * ⛔ JONLI HUDUD HAM YO'Q: bu blokda foydalanuvchi BOSHLAYDIGAN
+       *   yangilash yo'q, ya'ni e'lon faqat sahifa yuklanganda — hech kim
+       *   kutmagan paytda — sodir bo'lardi. Jonli hudud AYNAN BITTA
+       *   joyda: `[Yangilash]` tugmasi bor yetkazilganlik blokida.
+       */}
+      {counts !== undefined ? (
+        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
           {CASE_STATUSES.map((status) => (
             <div className="flex items-center gap-2" key={status}>
               <dt className="order-2 text-xs text-text-muted">
                 {t(`recon.caseStatus.${status}`)}
               </dt>
               <dd className="order-1 m-0 font-mono tabular-nums">
-                {STATUS_COUNT[status](cases.data as CaseListResponse)}
+                {STATUS_COUNT[status](counts as CaseListResponse)}
               </dd>
             </div>
           ))}
         </dl>
       ) : null}
 
-      {cases.data !== undefined && rows.length === 0 ? (
+      {counts !== undefined && rows.length === 0 ? (
         <EmptyState
           description={t("recon.emptyCasesHint", { date: day })}
           title={t("recon.emptyCases")}
@@ -178,6 +214,52 @@ export function CaseList({ day }: { day: string }) {
               ))}
             </tbody>
           </table>
+        </div>
+      ) : null}
+
+      {/*
+       * ⛔ KEYINGI SAHIFA YIQILGANDA — NOMLANGAN MATN, JIM BO'SH SAHIFA
+       *   EMAS. 07-20 o'lchagan: buzilgan kursor bazada `200` + BO'SH
+       *   `rows` qaytarardi (ya'ni ekran JIMGINA yolg'on gapirardi); endi
+       *   u `422`. Klient uni KO'RSATADI va allaqachon kelgan qatorlar
+       *   ⛔ JOYIDA QOLADI.
+       */}
+      {cases.isFetchNextPageError ? (
+        <p
+          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
+          role="alert"
+        >
+          {t("recon.loadMoreFailed")}
+        </p>
+      ) : null}
+
+      {/*
+       * ⛔ TUGMA `next_cursor === null` DA UMUMAN CHIZILMAYDI (o'chirilgan
+       *   emas): mavjud lekin ishlamaydigan boshqaruv MAVJUD BO'LMAGAN
+       *   imkoniyatni e'lon qilardi.
+       *
+       * ⛔ `secondary`, `default` EMAS: fazadagi yagona aksent fonli tugma
+       *   — DL-5 dagi yakuniy amal (§13.3).
+       */}
+      {cases.hasNextPage ? (
+        <div>
+          <Button
+            aria-disabled={cases.isFetchingNextPage}
+            onClick={() => {
+              /*
+               * ⛔ ERTA `return` — `aria-disabled` bosishni TO'XTATMAYDI
+               *   (u faqat E'LON QILADI). `disabled` esa fokusni
+               *   YO'QOTARDI va klaviatura foydalanuvchisi yuklanish
+               *   tugagan lahzada sahifa boshiga otilib ketardi.
+               */
+              if (cases.isFetchingNextPage) return;
+              void cases.fetchNextPage();
+            }}
+            size="sm"
+            variant="secondary"
+          >
+            {t("recon.loadMore")}
+          </Button>
         </div>
       ) : null}
 

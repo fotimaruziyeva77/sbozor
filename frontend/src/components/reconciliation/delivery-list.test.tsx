@@ -22,7 +22,13 @@
  *    yuradi.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -79,7 +85,10 @@ function row(status: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
-function envelope(rows: ReturnType<typeof row>[]) {
+function envelope(
+  rows: ReturnType<typeof row>[],
+  nextCursor: string | null = null,
+) {
   return {
     day: DAY,
     rows,
@@ -88,7 +97,7 @@ function envelope(rows: ReturnType<typeof row>[]) {
     delivered_count: rows.filter((r) => r.status === "delivered").length,
     failed_count: rows.filter((r) => r.status === "failed").length,
     blocked_count: rows.filter((r) => r.status === "blocked").length,
-    next_cursor: null,
+    next_cursor: nextCursor,
   };
 }
 
@@ -191,6 +200,138 @@ describe("⛔ G-34 (a): beshala holat va ularning matni", () => {
         messages.recon.deliveryState[state],
       );
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* B-6 — YETKAZILGANLIK RO'YXATI HAM JIM QIRQILMAYDI                          */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ B-6: yetkazilganlik ro'yxati ham sahifalanadi", () => {
+  const CURSOR = `${DAY}T09:15:00+00:00|55555555-5555-4555-8555-555555555009`;
+
+  /** Ikki sahifali server — kursor BOR/YO'Q bo'yicha shox tanlanadi. */
+  function routeTwoPages() {
+    apiClientMock.apiFetch.mockImplementation((path: string) => {
+      if (path.startsWith("/reconciliation/delivery")) {
+        return Promise.resolve(
+          path.includes("cursor=")
+            ? envelope([row("failed")], null)
+            : envelope([row("delivered"), row("pending")], CURSOR),
+        );
+      }
+      if (path.startsWith("/vendors")) {
+        return Promise.resolve({ items: [], next_cursor: null });
+      }
+      return Promise.reject(new Error(`kutilmagan marshrut: ${path}`));
+    });
+  }
+
+  test("⛔ `next_cursor` bo'lganda [Yana yuklash] bor va u qator QO'SHADI", async () => {
+    routeTwoPages();
+
+    const { container } = await renderList();
+
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(2);
+
+    const more = screen.getByRole("button", { name: messages.recon.loadMore });
+    fireEvent.click(more);
+
+    /* ⛔ QO'SHADI, ALMASHTIRMAYDI: kursor kesh kalitida bo'lsa 2 -> 1 bo'lardi. */
+    await waitFor(() => {
+      expect(container.querySelectorAll("tbody tr")).toHaveLength(3);
+    });
+
+    expect(
+      screen.queryByRole("button", { name: messages.recon.loadMore }),
+    ).toBeNull();
+  });
+
+  test("⛔ so'rov `limit=50` ni YUBORADI va sanoq BIRINCHI sahifadan qoladi", async () => {
+    routeTwoPages();
+
+    const { container } = await renderList();
+
+    const first = apiClientMock.apiFetch.mock.calls
+      .map((call: unknown[]) => call[0] as string)
+      .find((path: string) => path.startsWith("/reconciliation/delivery"));
+    expect(first).toContain("limit=50");
+
+    const before = (container.querySelector("dl") as HTMLElement).textContent;
+
+    fireEvent.click(screen.getByRole("button", { name: messages.recon.loadMore }));
+    await waitFor(() => {
+      expect(container.querySelectorAll("tbody tr")).toHaveLength(3);
+    });
+
+    /*
+     * ⛔ Sanoq SAHIFADAN MUSTAQIL (server kontrakti): ikkinchi sahifada
+     *   `failed_count: 1` kelgan bo'lsa ham, ekrandagi sanoq BIRINCHI
+     *   sahifaniki bo'lib qoladi. Yig'ish «bugun nechta yuborildi?»
+     *   savoliga IKKINCHI javob tug'dirardi.
+     */
+    expect((container.querySelector("dl") as HTMLElement).textContent).toBe(before);
+  });
+
+  test("⛔ `next_cursor === null` da tugma UMUMAN chizilmaydi", async () => {
+    routeFetch([row("delivered")]);
+
+    await renderList();
+
+    expect(
+      screen.queryByRole("button", { name: messages.recon.loadMore }),
+    ).toBeNull();
+  });
+
+  test("⛔ keyingi sahifa RAD ETILGANDA nomlangan matn chiqadi (`422`)", async () => {
+    apiClientMock.apiFetch.mockImplementation((path: string) => {
+      if (path.includes("cursor=")) {
+        return Promise.reject(new Error("cursor_invalid"));
+      }
+      if (path.startsWith("/reconciliation/delivery")) {
+        return Promise.resolve(envelope([row("delivered")], CURSOR));
+      }
+      return Promise.resolve({ items: [], next_cursor: null });
+    });
+
+    const { container } = await renderList();
+
+    fireEvent.click(screen.getByRole("button", { name: messages.recon.loadMore }));
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(messages.recon.loadMoreFailed);
+    });
+
+    /* ⛔ Allaqachon kelgan qator JOYIDA — jim bo'sh sahifa EMAS. */
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WR-08 — JONLI HUDUD O'RAMDA, `<dl>` SEMANTIKASI SAQLANADI                  */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ WR-08: e'lon O'RAMDA, `<dl>` ning rolida EMAS", () => {
+  test("⛔ `<dl>` da `role` YO'Q; jonli hudud O'RAMDA va AYNAN BITTA", async () => {
+    const { container } = await renderList();
+
+    const dl = container.querySelector("dl") as HTMLElement;
+
+    /*
+     * ⛔ `role="status"` `<dl>` ning implicit rolini ALMASHTIRARDI va
+     *   `<dt>`/`<dd>` juftligi atama–qiymat bog'lanishini yo'qotardi.
+     */
+    expect(dl.hasAttribute("role")).toBe(false);
+    expect(dl.querySelectorAll("dt")).toHaveLength(DELIVERY_STATES.length);
+    expect(dl.querySelectorAll("dd")).toHaveLength(DELIVERY_STATES.length);
+
+    /* ⛔ E'LON SAQLANADI — `[Yangilash]` foydalanuvchining OCHIQ NIYATI. */
+    const live = container.querySelectorAll('[aria-live="polite"]');
+    expect(live).toHaveLength(1);
+    expect(live[0].contains(dl)).toBe(true);
+
+    /* ⛔ Doimiy `role="status"` hududi YO'Q (platsholder allaqachon ketgan). */
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(0);
   });
 });
 

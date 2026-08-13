@@ -1250,6 +1250,8 @@
     "casesTitle": "Номувофиқлик навбати",
     "caseUnqueued": "Навбатга олинмаган",
     "caseReview": "Кўриб чиқиш",
+    "loadMore": "Яна юклаш",
+    "loadMoreFailed": "Кейинги саҳифа юкланмади — рўйхат тўлиқ эмас.",
     "assigneeNone": "Бириктирилмаган",
     "caseStatus": {
       "new": "Янги",

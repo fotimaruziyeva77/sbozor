@@ -78,11 +78,28 @@ import { useVendorLabels } from "@/lib/vendor-labels";
  * -----------------------------------------------------------------------
  * Taymer bilan JIMGINA o'zgaradigan raqam «men boshqa raqam ko'rgandim»
  * nizosini tug'dirardi. Yangilash — foydalanuvchining ⛔ OCHIQ NIYATI,
- * va u `role="status"` bilan e'lon qilinadi (skrinrider foydalanuvchisi
- * o'zgarishni ESHITADI).
+ * va u ⛔ `aria-live="polite"` O'RAMI bilan e'lon qilinadi (skrinrider
+ * foydalanuvchisi o'zgarishni ESHITADI).
+ *
+ * ⛔ E'LON `<dl>` NING O'ZIGA QO'YILMAYDI: `role="status"` uning implicit
+ *    rolini ALMASHTIRIB, `<dt>`/`<dd>` bog'lanishini yo'q qilardi (WR-08).
+ *    O'ram esa ikkalasini ham saqlaydi. ⛔ Va bu yuzadagi ⛔ YAGONA doimiy
+ *    jonli hudud: qo'shni uch blokda foydalanuvchi boshlaydigan yangilash
+ *    YO'Q, ya'ni ular e'lonni hech kim kutmagan paytda berardi.
  *
  * ⚠ `[Yangilash]` FAQAT BUGUN chiziladi: o'tgan kunning yetkazilganligi
  *   ⛔ O'ZGARMAS va tugma hech nima qilmasdi.
+ *
+ * -----------------------------------------------------------------------
+ * ⛔ 7. RO'YXAT 50 QATORDA ⛔ QIRQILMAYDI (B-6)
+ * -----------------------------------------------------------------------
+ * Marshrut `next_cursor` qaytaradi va u bir muddat ⛔ HECH KIM TOMONIDAN
+ * o'qilmasdi. Kvitansiya soni kunlik to'lov soniga TENG — Karmana
+ * konvertida 50 dan oshishi ODATIY hol, ya'ni jadval kunning bir qismini
+ * ko'rsatib, sanoq esa BUTUNINI aytib turardi.
+ *
+ * ⛔ `[Yana yuklash]` — `[Yangilash]` DAN ALOHIDA: biri ekrandagini QAYTA
+ *    so'raydi, ikkinchisi KEYINGISINI qo'shadi.
  * =============================================================================
  */
 
@@ -121,8 +138,10 @@ export function DeliveryList({
   const deliveries = useDeliveries(day, isToday);
   const vendors = useVendorLabels();
 
-  const rows = deliveries.data?.rows ?? [];
-  const hasBlocked = (deliveries.data?.blocked_count ?? 0) > 0;
+  /* ⛔ Qatorlar BARCHA sahifalardan; sanoqlar esa BIRINCHISIDAN (4-band). */
+  const rows = deliveries.rows;
+  const counts = deliveries.counts;
+  const hasBlocked = (counts?.blocked_count ?? 0) > 0;
 
   return (
     /* ⛔ Atribut ENG TASHQI elementda va HAR holatda — yuklanishda ham. */
@@ -156,7 +175,8 @@ export function DeliveryList({
         </div>
       ) : null}
 
-      {deliveries.isError ? (
+      {/* ⛔ Blok darajasidagi xato — KEYINGI SAHIFANIKIDAN ajratilgan. */}
+      {deliveries.isError && !deliveries.isFetchNextPageError ? (
         <p
           className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
           role="alert"
@@ -167,24 +187,36 @@ export function DeliveryList({
 
       {/*
        * ⛔ BESHALA SANOQ — REYESTRDAN, «nolmaslari» EMAS (4-band).
-       * `role="status"` — `[Yangilash]` dan keyin sonlar E'LON QILINADI.
+       *
+       * ⛔⛔ JONLI HUDUD ⛔ O'RAMDA, `<dl>` NING O'ZIDA EMAS (WR-08).
+       *   `role="status"` `<dl>` ning implicit rolini ALMASHTIRARDI va
+       *   `<dt>`/`<dd>` juftligi skrinriderda atama–qiymat bog'lanishini
+       *   yo'qotib, oddiy matn oqimiga aylanardi. O'ram esa e'lonni
+       *   SAQLAYDI va semantikaga TEGMAYDI.
+       *
+       * ⛔ VA E'LON FAQAT SHU BLOKDA ASOSLI: `[Yangilash]` —
+       *   foydalanuvchining OCHIQ NIYATI, ya'ni u natijani KUTADI.
+       *   Qo'shni uch blokda bunday amal YO'Q va o'sha yerda jonli hudud
+       *   hech kim kutmagan paytda e'lon qilardi.
        */}
-      {deliveries.data !== undefined ? (
-        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm" role="status">
-          {DELIVERY_STATES.map((state) => (
-            <div className="flex items-center gap-2" key={state}>
-              <dt className="order-2 text-xs text-text-muted">
-                {t(`recon.deliveryState.${state}`)}
-              </dt>
-              <dd className="order-1 m-0 font-mono tabular-nums">
-                {STATE_COUNT[state](deliveries.data as DeliveryListResponse)}
-              </dd>
-            </div>
-          ))}
-        </dl>
+      {counts !== undefined ? (
+        <div aria-live="polite">
+          <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            {DELIVERY_STATES.map((state) => (
+              <div className="flex items-center gap-2" key={state}>
+                <dt className="order-2 text-xs text-text-muted">
+                  {t(`recon.deliveryState.${state}`)}
+                </dt>
+                <dd className="order-1 m-0 font-mono tabular-nums">
+                  {STATE_COUNT[state](counts as DeliveryListResponse)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       ) : null}
 
-      {deliveries.data !== undefined && rows.length === 0 ? (
+      {counts !== undefined && rows.length === 0 ? (
         <EmptyState
           description={t("recon.emptyDeliveryHint", { date: day })}
           title={t("recon.emptyDelivery")}
@@ -216,6 +248,38 @@ export function DeliveryList({
               ))}
             </tbody>
           </table>
+        </div>
+      ) : null}
+
+      {/* ⛔ Keyingi sahifa yiqilganda — NOMLANGAN matn (`case-list.tsx` naqshi). */}
+      {deliveries.isFetchNextPageError ? (
+        <p
+          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
+          role="alert"
+        >
+          {t("recon.loadMoreFailed")}
+        </p>
+      ) : null}
+
+      {/*
+       * ⛔ `[Yana yuklash]` — `[Yangilash]` DAN ALOHIDA JOYDA (jadvaldan
+       *   keyin) va ALOHIDA ma'noda: biri ekrandagini QAYTA so'raydi,
+       *   ikkinchisi KEYINGISINI qo'shadi. Ularni yonma-yon qo'yish ikki
+       *   xil amalni bir xil ko'rsatardi.
+       */}
+      {deliveries.hasNextPage ? (
+        <div>
+          <Button
+            aria-disabled={deliveries.isFetchingNextPage}
+            onClick={() => {
+              if (deliveries.isFetchingNextPage) return;
+              void deliveries.fetchNextPage();
+            }}
+            size="sm"
+            variant="secondary"
+          >
+            {t("recon.loadMore")}
+          </Button>
         </div>
       ) : null}
 

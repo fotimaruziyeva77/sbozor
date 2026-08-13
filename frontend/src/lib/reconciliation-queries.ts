@@ -1,6 +1,12 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { apiFetch } from "@/lib/api-client";
@@ -78,8 +84,24 @@ export const RECONCILIATION_DELIVERY_PATH = "/reconciliation/delivery";
  *    bo'lib qaytariladi va klient uni PARSE QILMAYDI. Siljish bo'yicha
  *    sahifalash ⛔ ISHLATILMAYDI — navbat kun davomida o'sadi va u
  *    takroriy yoki tushib qolgan qatorlar berardi.
+ *
+ * ⛔⛔ KONSTANTA SO'ROVGA YUBORILADI — VA BU O'LCHANGAN NUQSONNING
+ *    TUZATISHI (B-6). U bir muddat e'lon qilingan, lekin ⛔ HECH QAYERDA
+ *    ishlatilmagan edi: ro'yxat serverning standart 50 tasini olardi,
+ *    sanoqlar esa KUN BO'YICHA to'liq kelardi va direktor «Yangi 120»
+ *    yozuvini 50 qatorli jadval ustida ko'rardi. ⛔ Yonidagi songa ZID
+ *    ro'yxat — yetishmayotgan funksiyadan QIMMATROQ nuqson: u ekranning
+ *    HAMMASIGA bo'lgan ishonchni yo'qotadi.
  */
 export const CASE_PAGE_SIZE = 50;
+
+/**
+ * Bitta sahifadagi eng ko'p yetkazilganlik qatori — `CASE_PAGE_SIZE` naqshi.
+ *
+ * ⛔ Server `le=DELIVERY_PAGE_SIZE` bilan CHEGARALAYDI, ya'ni bu son
+ *    o'sha chegaraning ko'zgusi; kattaroq qiymat `422` bilan qaytardi.
+ */
+export const DELIVERY_PAGE_SIZE = 50;
 
 /* --- Yopiq to'plamlarning YUMSHOQ o'qilishi -------------------------------- */
 
@@ -382,8 +404,17 @@ export type DeliveryList = z.infer<typeof deliveryListSchema>;
 export const reportKey = (marketId: string, day: string) =>
   domainKey(marketId, "recon-report", day);
 
-export const casesKey = (marketId: string, day: string, cursor: string) =>
-  domainKey(marketId, "recon-cases", day, cursor);
+/**
+ * ⛔ KURSOR KALITNING BIR QISMI ⛔ EMAS — sahifalar BITTA zanjirda yashaydi.
+ *
+ * Avval har sahifa O'Z kesh yozuvida edi va bu `useInfiniteQuery` bilan
+ * ⛔ TO'QNASHADI: TanStack sahifalarni bitta kalit ostida `pages[]` bo'lib
+ * saqlaydi. Kursor kalitga qo'shilsa, ikkinchi sahifa YANGI zanjir
+ * boshlardi va birinchisi ⛔ YO'QOLARDI — ya'ni «Yana yuklash» 50 qatorni
+ * boshqa 20 taga ALMASHTIRARDI (`useStallsQuery` naqshi bilan ayni sabab).
+ */
+export const casesKey = (marketId: string, day: string) =>
+  domainKey(marketId, "recon-cases", day);
 
 export const deliveryKey = (marketId: string, day: string) =>
   domainKey(marketId, "recon-delivery", day);
@@ -476,31 +507,89 @@ export function useReconciliationReport(
   });
 }
 
+/* --- Sahifalangan so'rovning YUPQA O'RAMI --------------------------------- */
+
+/*
+ * =============================================================================
+ * ⛔⛔ NEGA O'RAM BOR VA NEGA U «QULAYLIK» EMAS.
+ *
+ * Sahifalangan javobda IKKI XIL narsa bor va ular ⛔ BOSHQA-BOSHQA
+ * qoidaga bo'ysunadi:
+ *
+ *   `rows`   — sahifalar bo'ylab ⛔ YIG'ILADI (birlashma);
+ *   sanoqlar — ⛔ BIRINCHI SAHIFADAN o'qiladi va ⛔ YIG'ILMAYDI.
+ *
+ * Sabab server kontraktida: sanoq `status` filtridan HAM, sahifadan HAM
+ * MUSTAQIL — u HAR javobda BUTUN kunning soni bo'lib keladi. Ularni
+ * qo'shish «Yangi 120» ni ikkinchi sahifadan keyin «Yangi 240» qilardi,
+ * ya'ni B-6 ni ⛔ TESKARI tomondan takrorlardi.
+ *
+ * ⛔ O'RAM IKKALA ISTE'MOLCHINI BITTA SHAKLGA QARATADI: navbat bloki ham,
+ *    aniqlik ulushi ham AYNAN shu maydonlarni o'qiydi, ya'ni ulush
+ *    ARIFMETIKASI o'zgarishsiz qoladi (u hamon to'rt sanoqning hosilasi
+ *    va ⛔ IKKINCHI SO'ROV QILMAYDI).
+ * =============================================================================
+ */
+
+/** Sahifalangan so'rov + ikki hosila maydon. ⛔ Nisbat bu yerda YO'Q. */
+export type PagedQuery<TPage, TRow> = UseInfiniteQueryResult<
+  InfiniteData<TPage>,
+  Error
+> & {
+  /** Barcha yuklangan sahifalarning qatorlari — TARTIB SAQLANADI. */
+  readonly rows: readonly TRow[];
+  /** ⛔ BIRINCHI sahifaning envelope'i — sanoqlarning YAGONA manbai. */
+  readonly counts: TPage | undefined;
+};
+
+function withPages<TPage, TRow>(
+  query: UseInfiniteQueryResult<InfiniteData<TPage>, Error>,
+  pick: (page: TPage) => readonly TRow[],
+): PagedQuery<TPage, TRow> {
+  const pages = query.data?.pages ?? [];
+  return Object.assign(query, {
+    rows: pages.flatMap((page) => [...pick(page)]),
+    counts: pages[0],
+  });
+}
+
 /**
  * `GET /reconciliation/cases?day=` — navbat va uning to'rt sanog'i.
  *
- * ⚠ `cursor` — serverdan kelgan satr O'ZGARISHSIZ. Bo'sh satr = birinchi
- *   sahifa; u kalitning bir qismi, ya'ni har sahifa O'Z keshida yashaydi.
+ * ⛔⛔ SAHIFALASH KEYSET (DQ-4) va `useStallsQuery` NAQSHINING AYNAN
+ *    NUSXASI: `initialPageParam: null` + `getNextPageParam: (last) =>
+ *    last.next_cursor`. Yangi shakl o'ylab topilmaydi — kodbazada
+ *    sahifalashning BITTA naqshi bo'lishi kerak.
+ *
+ * ⚠ `cursor` ARGUMENTI OLIB TASHLANDI: uni chaqiruvchi bergan paytda
+ *   ikkala iste'molchi ham `""` yozardi va ikkinchi sahifaga yo'l
+ *   ⛔ UMUMAN OCHILMASDI (B-6). Endi kursorni TanStack olib yuradi va
+ *   klient uni ⛔ PARSE QILMAYDI, faqat qaytaradi.
  */
 export function useReconciliationCases(
   day: string,
-  cursor: string,
   options?: { enabled?: boolean },
-) {
+): PagedQuery<CaseList, CaseRow> {
   const marketId = useMarketId();
 
-  return useQuery({
-    queryKey: casesKey(marketId ?? "", day, cursor),
-    queryFn: () => {
+  const query = useInfiniteQuery({
+    queryKey: casesKey(marketId ?? "", day),
+    queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ day });
-      if (cursor !== "") params.set("cursor", cursor);
+      /* ⛔ KONSTANTANING HAQIQIY ISTE'MOLCHISI — chegara AYTIB yuboriladi. */
+      params.set("limit", String(CASE_PAGE_SIZE));
+      if (pageParam !== null) params.set("cursor", pageParam);
       return apiFetch(`${RECONCILIATION_CASES_PATH}?${params.toString()}`, {
         schema: caseListSchema,
       });
     },
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
     enabled: marketId !== null && day !== "" && (options?.enabled ?? true),
     staleTime: CASES_STALE_TIME_MS,
   });
+
+  return withPages(query, (page) => page.rows);
 }
 
 /**
@@ -553,26 +642,47 @@ export function useCaseDetail(
  *   yechiladi (`useReconciliationDay()`) va ikkinchi hisob ikki manba
  *   tug'dirardi — Toshkent yarim tunidan keyingi besh soatda ular
  *   BOSHQA-BOSHQA kunni ko'rsatardi.
+ *
+ * ⛔⛔ BU RO'YXAT HAM SAHIFALANADI (B-6 ning ikkinchi yarmi): marshrut
+ *    `next_cursor` qaytaradi va u ham bir muddat ⛔ HECH KIM TOMONIDAN
+ *    o'qilmasdi. Kvitansiya soni kunlik to'lov soniga TENG, ya'ni
+ *    Karmana konvertida 50 dan oshishi ODATIY holat.
+ *
+ * ⚠ `refetch()` `[Yangilash]` TUGMASIDA ishlatiladi va `useInfiniteQuery`
+ *   da u ⛔ BARCHA yuklangan sahifalarni QAYTA so'raydi. Bu ⛔ KUTILGAN
+ *   xulq: direktor «hozirgi holat» so'raganda ekrandagi HAMMA qator
+ *   yangilanishi kerak — yarmi yangi, yarmi eski ro'yxat aynan
+ *   `deliveryCachePolicy()` oldini olmoqchi bo'lgan yolg'on bo'lardi.
+ *
+ * ⛔ `refetchInterval` HAMON YOZILMAYDI (§11.4) va `deliveryCachePolicy()`
+ *    ning `staleTime`/`gcTime` qarori ⛔ O'ZGARMAYDI.
  */
 export function useDeliveries(
   day: string,
   isToday: boolean,
   options?: { enabled?: boolean },
-) {
+): PagedQuery<DeliveryList, DeliveryRow> {
   const marketId = useMarketId();
   const policy = deliveryCachePolicy(isToday);
 
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: deliveryKey(marketId ?? "", day),
-    queryFn: () =>
-      apiFetch(
-        `${RECONCILIATION_DELIVERY_PATH}?day=${encodeURIComponent(day)}`,
-        { schema: deliveryListSchema },
-      ),
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ day });
+      params.set("limit", String(DELIVERY_PAGE_SIZE));
+      if (pageParam !== null) params.set("cursor", pageParam);
+      return apiFetch(`${RECONCILIATION_DELIVERY_PATH}?${params.toString()}`, {
+        schema: deliveryListSchema,
+      });
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
     enabled: marketId !== null && day !== "" && (options?.enabled ?? true),
     staleTime: policy.staleTime,
     gcTime: policy.gcTime,
   });
+
+  return withPages(query, (page) => page.rows);
 }
 
 /**
