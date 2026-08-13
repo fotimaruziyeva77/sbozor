@@ -1267,8 +1267,36 @@ const RECON_ERRORS = path.join(
 /** `recon.*` — nomuvofiqlik yuzasining YAGONA matn namespace'i (§14.2). */
 const RECON_NAMESPACE = "recon";
 
-/** §14.9 — nomuvofiqlik ekranining to'rt kodi. */
-const RECON_ERROR_CODE_COUNT = 4;
+/**
+ * §14.9 — nomuvofiqlik ekranining kodlari soni.
+ *
+ * ⛔ 4 -> 5 (07-23): 07-20 serverda `422 assignee_not_in_market` ni ochdi va
+ *    u klientda xaritalanmagan edi — begona bozor xodimini biriktirish
+ *    urinishi direktorga `errors.generic` bo'lib chiqardi.
+ *
+ * ⛔ BU SON — O'LCHAM QULFI, «yangilanadigan raqam» EMAS. Uni oshirish
+ *    FAQAT uchala locale'ga matn qo'shilgandan keyin mumkin: quyidagi
+ *    darvoza reyestrdan ITERATSIYA qiladi va yetishmagan tilni nomma-nom
+ *    ko'rsatadi. Parser sinsa (masalan reyestr `Record` ga aylantirilsa)
+ *    sikllar BO'SH to'plamda jimgina yashil bo'lardi — G-36 ning aynan
+ *    darsi.
+ */
+const RECON_ERROR_CODE_COUNT = 5;
+
+/**
+ * ⛔ ZAXIRA KALIT — `recon.errorCause.*` GURUHIDAN TASHQARIDA.
+ *
+ * `case-detail-dialog.tsx` xaritada YO'Q har qanday kodni shu kalitga
+ * tushiradi (B-5). Ya'ni u reyestrning a'zosi EMAS, lekin reyestrning
+ * butun zaxira mexanizmi unga SUYANADI: kalit yo'qolsa `t()` chegarada
+ * yiqilardi yoki xato bloki BO'SH chiqardi — va yiqilgan hukm yana
+ * muvaffaqiyatlisidan farq qilmasdi.
+ *
+ * ⛔ SHUNING UCHUN U ALOHIDA O'LCHANADI: `recon.errorCause` guruhiga
+ *    qo'shilsa TESKARI skan uni «reyestrda YO'Q o'lik kalit» deb
+ *    ushlab, darvozani ifloslantirardi.
+ */
+const RECON_FALLBACK_KEY = ["errors", "generic"];
 
 const reconSource = read(RECON_ERRORS);
 const reconCodes = readTsStringArray(reconSource, "RECON_ERROR_CODES");
@@ -1282,7 +1310,7 @@ function readServerCodeMap(source) {
   );
 }
 
-test("G-17: nomuvofiqlik reyestri o'qildi va AYNAN to'rt kod (nazorat)", () => {
+test("G-17: nomuvofiqlik reyestri o'qildi va AYNAN besh kod (nazorat)", () => {
   /*
    * Nazorat: parser sinsa (masalan reyestr `Record` ga aylantirilsa)
    * quyidagi darvozalar ham JIMGINA yashil bo'lardi — bo'sh to'plam
@@ -1370,5 +1398,50 @@ test("G-17: HAR NOMUVOFIQLIK kodi uchun sabab va tuzatish UCHALA tilda bor", () 
     [],
     "D-02 buzilgan — nomuvofiqlik sabab/tuzatish JUFT bo'lishi SHART:\n  " +
       problems.join("\n  "),
+  );
+});
+
+test("G-17: ZAXIRA kalit (`errors.generic`) UCHALA tilda bor", () => {
+  /*
+   * ⛔ ENG JIM NOSOZLIK SHU YERDA YASHIRINADI. Reyestr to'liq bo'lishi
+   *   mumkin va yuqoridagi uchala darvoza yashil qolaverardi, lekin
+   *   xaritada YO'Q kod (`NetworkError`, `422` massiv detali, `429`,
+   *   `5xx`, `market_not_selected`) ZAXIRA matnga tushadi. Kalit
+   *   yo'qolsa, direktor saqlash tugmasini bosib YANA hech nima
+   *   ko'rmasdi — ya'ni B-5 aynan o'sha shaklda qaytardi.
+   *
+   * ⛔ DA'VO REYESTRDAN MUSTAQIL: u `recon` namespace'ida ham emas,
+   *    `RECON_ERROR_CODES` da ham yo'q — shuning uchun teskari skanga
+   *    tegmaydi va uni ifloslantirmaydi.
+   */
+  const problems = [];
+
+  for (const locale of LOCALES) {
+    let node = loadMessages(locale);
+    for (const segment of RECON_FALLBACK_KEY) {
+      node = node?.[segment];
+    }
+
+    if (typeof node !== "string" || node.trim() === "") {
+      problems.push(`${locale}.json: ${RECON_FALLBACK_KEY.join(".")} YO'Q`);
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ xaritada YO'Q kod uchun ZAXIRA matn yo'q — yiqilgan hukm yana " +
+      "muvaffaqiyatlisidan farq qilmaydi (B-5):\n  " + problems.join("\n  "),
+  );
+
+  /*
+   * ⛔ NAZORAT: zaxira kaliti reyestr a'zosi BO'LMASLIGI kerak. Aks holda
+   *   u `recon.errorCause.generic` juftligini ham talab qilardi va ikki
+   *   mexanizm bir-birini yeb qo'yardi.
+   */
+  assert.ok(
+    !reconCodes.includes("generic"),
+    "`generic` reyestrga kirib qolgan — zaxira mexanizmi reyestr bilan " +
+      "ARALASHDI",
   );
 });
