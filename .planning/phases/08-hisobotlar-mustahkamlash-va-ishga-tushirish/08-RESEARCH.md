@@ -1439,7 +1439,7 @@ async def test_a_dump_restores_into_a_clean_server_with_data_intact(
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`fn_audit_row()` `id` ustunisiz jadvalda HAQIQATAN yiqiladimi?**
    - **Bilamiz:** funksiya `(v_new ->> 'id')::uuid` yozadi;
