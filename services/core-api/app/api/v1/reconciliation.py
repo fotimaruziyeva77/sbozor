@@ -72,6 +72,7 @@ from sbozor_core.timeutil import business_today
 
 from app.deps import Principal, TenantSessionDep, require_permission
 from app.repositories import billing_repo, outbox_repo, reconciliation_repo
+from app.repositories.user_repo import UserRepository
 from app.schemas import (
     CaseDetailResponse,
     CaseEventRow,
@@ -156,6 +157,29 @@ _RANGE_TOO_WIDE = "range_too_wide"
 
 _STATUS_UNCHANGED = "status_unchanged"
 """Case allaqachon so'ralgan holatda (**409**) — D-14 ning nol o'tishi."""
+
+_ASSIGNEE_NOT_IN_MARKET = "assignee_not_in_market"
+"""Berilgan mas'ul JORIY BOZOR a'zosi emas (**422**) — T-07-109.
+
+=============================================================================
+⛔⛔ **403 EMAS VA «NOT FOUND» HAM EMAS — 422.**
+
+`member_roles()` docstringidagi qoida bu yerda ham amal qiladi: 403
+javobining O'ZI «bunday foydalanuvchi bor, lekin sizniki emas» degan
+ma'lumotni oshkor qilardi va hujumchi identifikatorlarni javob kodi
+bo'yicha sanab chiqa olardi. Shuning uchun MAVJUD BO'LMAGAN `user_id`
+ham AYNAN shu kodni va AYNAN shu matnni oladi (T-07-110).
+
+422 esa «yuborilgan qiymat bu bozorda yaroqsiz» degan KIRISH xatosi va
+u `_DAY_IN_FUTURE` / `cursor_invalid` bilan bir sinfda.
+
+⛔ BU TEKSHIRUV YAGONA TO'SIQ: `reconciliation_cases.assignee_user_id`
+   da `users` ga FK ⛔ YO'Q va `0023:344-347` migratsiyasining O'ZI
+   tekshiruvni «ilova qatlamida» deb yozgan. Ya'ni uni olib tashlash
+   begona bozor xodimini biriktirish yo'lini ochadi — baza bu savolni
+   UMUMAN bermaydi.
+=============================================================================
+"""
 
 HIT_RATE_MAX_DAYS = 92
 """Hit-rate oralig'ining maksimal uzunligi, KUNLARDA (T-07-60).
@@ -644,6 +668,38 @@ async def reconciliation_case_update(
     ⛔ HOLAT — YOPIQ RO'YXAT: `CaseUpdateRequest.status` `Reconciliation
        CaseStatus` tipida, ya'ni `"other"` HTTP chegarasida **422** oladi
        va u yechim MATNI bo'lib ham kira olmaydi (D-12).
+
+    =======================================================================
+    ⛔⛔ MAS'UL VA AKTOR — IKKI BOSHQA SAVOLNING JAVOBI (B-2 ning ildizi).
+
+      `actor_user_id`    -> «KIM QAROR QILDI?». Tarix qatorining egasi;
+                            nizoda (D-02) sotuvchi oldida javob beradigan
+                            odam. U HAR DOIM `principal.user_id`.
+      `assignee_user_id` -> «KIM ISH QILADI?». Case'ning joriy egasi va
+                            uni DIREKTOR tanlaydi.
+
+    Ikkalasini bitta ustunga siqish (`assignee_user_id = COALESCE(:actor_
+    user_id, ...)`) 07-20 gacha davom etgan va u UCHTA nosozlik tug'dirgan:
+    direktorning tanlovi JIMGINA tashlanardi, har holat o'zgarishi mavjud
+    biriktirishni O'G'IRLARDI, «Biriktirilmagan» tanlovi esa IMKONSIZ
+    amalni va'da qilardi — javob esa har uch holatda ham `200` edi.
+
+    ⛔ «MAYDON YO'Q» VA «MAYDON `null`» AJRATILADI: Pydantic v2 ning
+       `model_fields_set` i mijoz maydonni YUBORDIMI degan savolga javob
+       beradi. Usiz `None` ning o'zi ikki xil ma'no tashib qolardi.
+
+    ⛔ A'ZOLIK TEKSHIRUVI `transition()` DAN **OLDIN**: keyin qilinsa
+       holat allaqachon o'zgargan bo'lardi va rad etish `rollback` ga
+       tayanardi — ya'ni «case umuman o'zgarmadi» kafolati tranzaksiya
+       xulqining nojo'ya ta'siriga aylanardi.
+
+    ⛔ AKTIVLIK (`is_active`) TEKSHIRILMAYDI VA BU ONGLI: `member_roles()`
+       A'ZOLIKNI o'lchaydi, FAOLLIKNI emas. Nofaol xodimni serverda
+       bloklash mavjud biriktirishni ham (u nofaol bo'lib qolganda)
+       QAYTA YOZIB BO'LMAYDIGAN qilardi — case abadiy o'sha odamda
+       qolardi. UI esa variantlarni allaqachon faol xodimlar bilan
+       cheklaydi (07-16 qarori).
+    =======================================================================
     """
     market_id = _market_id(principal)
 
@@ -654,6 +710,14 @@ async def reconciliation_case_update(
     if await reconciliation_repo.case_detail(session, market_id=market_id, case_id=case_id) is None:
         raise _reject(_NOT_FOUND, status.HTTP_404_NOT_FOUND)
 
+    assignee_explicit = "assignee_user_id" in payload.model_fields_set
+    assignee = payload.assignee_user_id
+    if (
+        assignee is not None
+        and await UserRepository(session, market_id).member_roles(assignee) is None
+    ):
+        raise _reject(_ASSIGNEE_NOT_IN_MARKET, status.HTTP_422_UNPROCESSABLE_CONTENT)
+
     try:
         await reconciliation_repo.transition(
             session,
@@ -661,6 +725,8 @@ async def reconciliation_case_update(
             case_id=case_id,
             to_status=payload.status.value,
             actor_user_id=principal.user_id,
+            assignee_user_id=assignee,
+            assignee_explicit=assignee_explicit,
             note=payload.resolution_note,
         )
     except LookupError as exc:  # pragma: no cover — yuqoridagi o'qish uni oldindan tutadi

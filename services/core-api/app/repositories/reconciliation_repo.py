@@ -89,7 +89,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Final
 
 from sbozor_core.enums import AnomalyKind, ReconciliationCaseStatus, ReconciliationSubjectKind
-from sqlalchemy import ARRAY, Date, DateTime, Integer, Text, bindparam, text
+from sqlalchemy import ARRAY, Boolean, Date, DateTime, Integer, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 
 from app.repositories.billing_repo import vendor_charge_allocation, vendor_outstanding
@@ -874,7 +874,10 @@ _UPDATE_CASE_STATUS = text(
     """
     UPDATE reconciliation_cases
        SET status = :to_status,
-           assignee_user_id = COALESCE(:actor_user_id, assignee_user_id),
+           assignee_user_id = CASE
+               WHEN :assignee_explicit THEN :assignee_user_id
+               ELSE COALESCE(assignee_user_id, :actor_user_id)
+           END,
            resolution_note = COALESCE(:note, resolution_note),
            updated_at = now()
      WHERE market_id = :market_id
@@ -885,18 +888,38 @@ _UPDATE_CASE_STATUS = text(
     bindparam("case_id", type_=_UUID),
     bindparam("to_status", type_=Text()),
     bindparam("actor_user_id", type_=_UUID),
+    bindparam("assignee_user_id", type_=_UUID),
+    bindparam("assignee_explicit", type_=Boolean()),
     bindparam("note", type_=Text()),
 )
 """Case'ning JORIY holati — tarix EMAS, KO'RINISH.
 
-⚠ `COALESCE` IKKALA USTUNDA HAM: berilmagan qiymat mavjudini
-  O'CHIRMAYDI. Mas'ulni tozalash uchun `NULL` yuborish yo'li ATAYIN
-  yo'q — «case egasiz qoldi» holati ilova qatlamining qarori va u
-  bugungi oqimda mavjud emas.
+=============================================================================
+⛔⛔ MAS'UL USTUNIDA IKKI SHOX VA IKKALASI HAM NOMLANGAN.
 
-⚠ `assignee_user_id` — O'TISHNI QILGAN ODAM. Ya'ni case'ni oxirgi marta
-  qo'lga olgan kishi uning egasi bo'lib qoladi; tizim o'tishlari
-  (`actor_user_id IS NULL`) egani O'ZGARTIRMAYDI.
+  «MIJOZ AYTDI» (`:assignee_explicit` -> rost) — qiymat AYNAN yoziladi,
+      `NULL` ham. Ya'ni «Biriktirilmagan» tanlovi HAQIQIY amal:
+      biriktirish BEKOR bo'ladi. `COALESCE` bu shoxda ISHLATILMAYDI —
+      u `NULL` ni «tegmang» deb o'qib, amalni imkonsiz qilardi.
+
+  «MIJOZ JIM» (`:assignee_explicit` -> yolg'on) — mavjud egasi
+      SAQLANADI, egasiz case esa uni QO'LGA OLGAN odamga tushadi.
+
+⛔ ARGUMENTLAR TARTIBI `COALESCE(assignee_user_id, :actor_user_id)` —
+   TESKARISI EMAS. Eski shakl (`COALESCE(:actor_user_id,
+   assignee_user_id)`) AKTORNI tanlardi, ya'ni HAR holat o'zgarishi
+   mavjud biriktirishni JIMGINA o'g'irlardi: direktor case'ni
+   nazoratchiga bergandan keyin uni yopishi biriktirishni o'ziga
+   qaytarib olardi va navbatda «bu case kimda?» savoli yolg'on javob
+   berardi (B-2).
+
+⛔ IKKI QIYMAT BILAN IFODALAB BO'LMAYDI: `:assignee_user_id` ning
+   `NULL` i «tegmang» va «bekor qiling» degan IKKI xil ma'no tashiydi,
+   shuning uchun bayroq ALOHIDA parametr bo'lishi SHART.
+=============================================================================
+
+⚠ `resolution_note` da `COALESCE` QOLADI: berilmagan izoh mavjudini
+  o'chirmaydi va yechim matnini «tozalash» amali mahsulotda YO'Q.
 
 ⚠ `updated_at` OCHIQ YOZILADI: bu so'rov ORM orqali emas, xom SQL bilan
   ketadi va `onupdate` hodisasi bu yo'lda UMUMAN ishlamasdi.
@@ -945,6 +968,8 @@ async def transition(
     case_id: UUID,
     to_status: str,
     actor_user_id: UUID | None = None,
+    assignee_user_id: UUID | None = None,
+    assignee_explicit: bool = False,
     note: str | None = None,
 ) -> CaseTransition:
     """Case holatini o'zgartiradi — ⛔ IKKI YOZUV, BITTA TRANZAKSIYA (D-14).
@@ -970,6 +995,20 @@ async def transition(
             to'rtlikdan tashqari qiymatni sxemaning `CHECK` i rad etadi —
             bu yerda TAKRORLANMAYDI (nusxa jimgina ajralib ketardi).
         actor_user_id: ⛔ `None` = TIZIM, «noma'lum» EMAS (`0022` qarori).
+            Bu — «KIM QAROR QILDI?» savolining javobi va u `assignee_
+            user_id` («KIM ISH QILADI?») dan BOSHQA fakt.
+        assignee_user_id: case'ning yangi egasi. ⛔ FAQAT `assignee_
+            explicit` rost bo'lganda qo'llanadi; aks holda e'tiborsiz
+            qoldiriladi.
+        assignee_explicit: ⛔ MIJOZ MAYDONNI YUBORDIMI. `None` ning O'ZI
+            ikki xil ma'no tashiydi («tegmang» va «biriktirishni bekor
+            qiling») va ularni bitta qiymat bilan ifodalab bo'lmaydi —
+            shakl `_UPDATE_CASE_STATUS` docstringida.
+            ⛔ CHAQIRUVCHI a'zolikni TEKSHIRGAN bo'lishi SHART: bu
+            funksiya `assignee_user_id` ning JORIY BOZOR a'zosi ekanini
+            o'lchamaydi va sxemada `users` ga FK ham YO'Q
+            (`0023:344-347`). Tekshiruv `reconciliation.py` marshrutida,
+            `UserRepository.member_roles()` bilan.
         note: erkin izoh; tarix qatoriga VA case'ning yechim matniga
             yoziladi. Uzunlik chegarasi sxemada
             (`RESOLUTION_NOTE_LENGTH_CHECK`).
@@ -1010,6 +1049,8 @@ async def transition(
             "case_id": case_id,
             "to_status": to_status,
             "actor_user_id": actor_user_id,
+            "assignee_user_id": assignee_user_id,
+            "assignee_explicit": assignee_explicit,
             "note": note,
         },
     )
