@@ -125,7 +125,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.jobs.billing_close import BILLING_CLOSE_COMPONENT
-from app.jobs.notifications import DIGEST_COMPONENT, OVERDUE_COMPONENT
+from app.jobs.notifications import (
+    DIGEST_EVENING_COMPONENT,
+    DIGEST_MORNING_COMPONENT,
+    OVERDUE_COMPONENT,
+)
 from app.jobs.outbox import OUTBOX_COMPONENT
 from app.jobs.reconciliation import RECON_OPEN_COMPONENT
 from app.jobs.retention import RETENTION_COMPONENT, active_market_ids, disk_usage_percent
@@ -697,12 +701,32 @@ async def _platform_signals(
         #   bilan yozardi, supurgi esa BOSHQA nomni kutib «yo'q» alertini
         #   MANGU ko'tarib turardi.
         #
-        # ⚠ TO'RTTA JUFTLIK, BESHTA VAZIFA: ikkala dayjest ham bitta
-        #   `notify_digest` qatorini yangilaydi (07-13 ning ongli narxi va u
-        #   `self_check.py` docstringida ham qayd etilgan).
+        # ⛔⛔ BESHTA JUFTLIK, BESHTA VAZIFA — 07-13 NING ONGLI NARXI
+        #   07-21 DA YOPILDI (WR-10). Ilgari ikkala dayjest BITTA
+        #   `notify_digest` qatorini yangilardi, ya'ni kechkisi ishlab
+        #   ertalabkisi o'lganda yurak urishi HAMON YANGI ko'rinardi va
+        #   `digest_stale` HECH QACHON ko'tarilmasdi — D-20 ning «alert
+        #   MUVAFFAQIYAT SIGNALINING YO'QLIGIGA qo'yiladi» qoidasi yarim
+        #   ishlardi.
+        #
+        # ⛔ ALERT KALITI BITTA QOLADI (`digest_stale`) VA BU ONGLI QAROR,
+        #   UNUTISH EMAS. Ikkinchi kalit `ALERT_META` reyestriga,
+        #   frontend ning `ALERT_TITLE_KEYS` xaritasiga va uchala locale
+        #   matniga tegardi — ya'ni ikkita frontend faylni sof backend
+        #   o'zgarishiga tortardi. Operatorga kerakli FAKT («dayjest
+        #   o'lgan») bitta kalit bilan ham to'liq yetadi; QAYSI BIRI
+        #   o'lgani esa `/internal/self-check` ning `stale` va
+        #   `never_seen` ro'yxatlarida NOMMA-NOM ko'rinadi.
+        #
+        # ⚠ `_upsert()` NING DEBOUNCE'I IKKI SIGNALNI BITTA QATORGA
+        #   YIG'ADI (`occurrences` o'sadi) — bu MAVJUD va O'LCHANGAN xulq
+        #   (`uq_alert_events_market_id_alert_key_open` qisman UNIQUE
+        #   indeksi), ya'ni ikkala dayjest ham o'lgan kunda admin IKKI
+        #   emas, BITTA xabar oladi.
         (OUTBOX_COMPONENT, "outbox_stale"),
         (RECON_OPEN_COMPONENT, "reconciliation_stale"),
-        (DIGEST_COMPONENT, "digest_stale"),
+        (DIGEST_MORNING_COMPONENT, "digest_stale"),
+        (DIGEST_EVENING_COMPONENT, "digest_stale"),
         (OVERDUE_COMPONENT, "overdue_stale"),
     )
     for component, key in watched:

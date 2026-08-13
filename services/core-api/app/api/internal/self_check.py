@@ -114,7 +114,8 @@ EXPECTED_COMPONENTS: Final[tuple[str, ...]] = (
     "billing_close",
     "outbox_tick",
     "reconciliation_open",
-    "notify_digest",
+    "notify_digest_morning",
+    "notify_digest_evening",
     "notify_overdue",
 )
 """Yurak urishi KUTILADIGAN fon komponentlari.
@@ -169,9 +170,10 @@ ushlamaydi (testlar reyestrni jarayonning O'ZIDA o'qiydi). Bu qator
 =============================================================================
 
 =============================================================================
-⛔⛔ OXIRGI TO'RT SATR — 7-FAZANING FON OQIMI (07-14, D-17).
+⛔⛔ OXIRGI BESH SATR — 7-FAZANING FON OQIMI (07-14, D-17; 07-21 da BESHTA).
 
-`outbox_tick` · `reconciliation_open` · `notify_digest` · `notify_overdue`
+`outbox_tick` · `reconciliation_open` · `notify_digest_morning` ·
+`notify_digest_evening` · `notify_overdue`
 
 ⛔ (a) SATRLAR `app/jobs/*.py` DAGI KOMPONENT KONSTANTALARI BILAN AYNAN
    BIR XIL BO'LISHI SHART va ular MATN sifatida bog'langan — reyestr
@@ -179,7 +181,8 @@ ushlamaydi (testlar reyestrni jarayonning O'ZIDA o'qiydi). Bu qator
 
        app/jobs/outbox.py::OUTBOX_COMPONENT
        app/jobs/reconciliation.py::RECON_OPEN_COMPONENT
-       app/jobs/notifications.py::DIGEST_COMPONENT / OVERDUE_COMPONENT
+       app/jobs/notifications.py::DIGEST_MORNING_COMPONENT /
+                                 DIGEST_EVENING_COMPONENT / OVERDUE_COMPONENT
 
    Nom ayrilsa endpoint komponentni MANGU `never_seen` da ko'rsatardi,
    holbuki job ishlab turardi. Tenglik `tests/unit/test_heartbeat_
@@ -203,12 +206,15 @@ ushlamaydi (testlar reyestrni jarayonning O'ZIDA o'qiydi). Bu qator
    eslatma jobi hech qanday xato bermaydi — sotuvchilar shunchaki
    eslatma olmay qo'yadi va buni ma'muriyat OYLAR keyin sezadi.
 
-⚠ IKKALA DAYJEST HAM BITTA `notify_digest` QATORINI YANGILAYDI (07-13
-  ning ongli narxi): kechkisi ishlab, ertalabkisi o'lsa yurak urishi
-  HAMON YANGI ko'rinadi. Bu reyestr o'sha bo'shliqni YOPMAYDI — u
-  «ikkalasi ham o'ldi» holatini ko'radi. Ikki alohida komponentga
-  bo'lish `notifications.py` ning konstantalar sonini o'zgartiradi va
-  egasi — o'sha faylni ochadigan keyingi reja.
+⛔ (d) IKKI DAYJEST — IKKI SATR (07-21, WR-10). Ilgari bu yerda BITTA
+   `notify_digest` turardi va u 07-13 ning OCHIQ NARXI edi: ikkala job
+   ham o'sha bitta qatorni yangilardi, ya'ni kechkisi ishlab
+   ertalabkisi o'lganda yurak urishi HAMON YANGI ko'rinardi va reyestr
+   faqat «IKKALASI HAM o'ldi» holatini ko'rardi. Endi HAR BIRI o'z
+   nomini yozadi, ya'ni yarim o'lgan juftlik `stale` yoki `never_seen`
+   ro'yxatida NOMMA-NOM ko'rinadi.
+   ⚠ `alerting.py::watched` da esa alert KALITI bitta qoladi
+     (`digest_stale`) — sabab o'sha kortej ustidagi izohda.
 =============================================================================
 """
 

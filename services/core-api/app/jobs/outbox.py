@@ -714,7 +714,7 @@ _EVENING_TEXT: Final[dict[str, dict[str, str]]] = {
         "expected": "Bugun {qualifier} patta",
         "collected": "Yig'ildi",
         "unpaid": "To'lovsiz rastalar",
-        "anomalies": "Anomaliyalar",
+        "prev_anomalies": "Kecha aniqlangan nomuvofiqliklar",
         "details": "Batafsil",
     },
     Locale.UZ_CYRL.value: {
@@ -723,7 +723,7 @@ _EVENING_TEXT: Final[dict[str, dict[str, str]]] = {
         "expected": "Бугун {qualifier} патта",
         "collected": "Йиғилди",
         "unpaid": "Тўловсиз расталар",
-        "anomalies": "Аномалиялар",
+        "prev_anomalies": "Кеча аниқланган номувофиқликлар",
         "details": "Батафсил",
     },
     Locale.RU.value: {
@@ -732,11 +732,35 @@ _EVENING_TEXT: Final[dict[str, dict[str, str]]] = {
         "expected": "{qualifier} сегодня патта",
         "collected": "Собрано",
         "unpaid": "Места без оплаты",
-        "anomalies": "Аномалии",
+        "prev_anomalies": "Выявленные вчера расхождения",
         "details": "Подробнее",
     },
 }
-"""Kechki dayjestning yorliqlari — uchala locale (`_MORNING_TEXT` naqshi)."""
+"""Kechki dayjestning yorliqlari — uchala locale (`_MORNING_TEXT` naqshi).
+
+=============================================================================
+⛔⛔ `anomalies` -> `prev_anomalies` VA MATN SONNING MA'NOSINI AYTADI
+   (07-21, WR-02).
+
+Eski yorliq («Anomaliyalar») sonni SIFATLAMASDI, holbuki manba
+o'zgardi: son endi KECHAGI kunning nomuvofiqliklarini sanaydi
+(`notifications._evening_market()` dagi sabab bloki). Sifatlovchisiz
+raqam direktorga «bugun shuncha nomuvofiqlik» degan YOLG'ON o'qishni
+berardi va bu §12.2 sifatlovchi kontraktining aynan buzilishi bo'lardi:
+kechki xabarning HAR RAQAMI qaysi vaqt kesimiga tegishli ekanini
+matnning O'ZI aytishi shart.
+
+⚠ ATAMA — «nomuvofiqlik» / «номувофиқлик» / «расхождение», «case» EMAS
+  (`07-UI-SPEC.md` §8.5 va `_MORNING_TEXT["cases"]` = «Новые
+  расхождения» bilan bir xil tanlov). Eski «Anomaliyalar» / «Аномалии»
+  o'zlashmasi shu bilan birga chiqib ketdi.
+
+⚠ uz-Cyrl QO'LDA YOZILDI VA `ns`/`ts` KLASTERLI O'ZLASHMA SO'Z
+  ISHLATILMADI: «номувофиқлик» va «аниқланган» — sof o'zbek o'zaklari,
+  ya'ni 07-16 da `kvitansiya` -> `квитанси…` bilan o'lchangan
+  translitteratsiya nuqsoni bu satrlarga UMUMAN tegmaydi.
+=============================================================================
+"""
 
 _SUPPORTED_LOCALES: Final[frozenset[str]] = frozenset(member.value for member in Locale)
 """Qo'llab-quvvatlanadigan tillar — ⛔ ENUMDAN HOSILA, qo'lda sanalmagan.
@@ -817,7 +841,7 @@ def _digest_evening_text(payload: dict[str, Any], locale: str) -> str:
         f"{expected}: {_soum(payload, 'expected_soum', locale=locale)}",
         f"{label['collected']}: {_soum(payload, 'collected_soum', locale=locale)}",
         f"{label['unpaid']}: {_plain(payload, 'unpaid_stall_count')}",
-        f"{label['anomalies']}: {_plain(payload, 'anomaly_count')}",
+        f"{label['prev_anomalies']}: {_plain(payload, 'prev_day_case_count')}",
         f"{label['details']}: {_RECONCILIATION_PATH}{day}",
     ]
     return "\n".join(lines)

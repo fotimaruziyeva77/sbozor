@@ -82,7 +82,11 @@ _EVENING_PAYLOAD: Final[dict[str, Any]] = {
     "expected_soum": 4_200_000,
     "collected_soum": 3_100_000,
     "unpaid_stall_count": 26,
-    "anomaly_count": 3,
+    # ⛔ `anomaly_count` -> `prev_day_case_count` (07-21, WR-02). Eski nom
+    #   qoldirilganda test JIMGINA eskirardi: `_plain()` yo'q kalit uchun
+    #   `KeyError` bermaydi, `-` chizadi — ya'ni matn quruvchisi buzilgan
+    #   holatda ham bu fayldagi barcha da'volar yashil qolardi.
+    "prev_day_case_count": 3,
 }
 PAYLOADS: Final[dict[str, dict[str, Any]]] = {MORNING: _MORNING_PAYLOAD, EVENING: _EVENING_PAYLOAD}
 """⚠ SONLAR §12.1 NING SSENARIYSIDAN: kechqurun 4 200 000 (proyeksiya),
@@ -228,6 +232,79 @@ def test_the_gate_catches_a_mixed_qualifier() -> None:
     # Teskari nazorat: sifatlovchisiz matn BO'SH to'plam beradi, ya'ni
     # predikat «har doim topadigan» funksiya emas.
     assert _found("Kun: 2026-08-12", Locale.UZ_LATN.value) == set()
+
+
+# ---------------------------------------------------------------------------
+# 4. WR-02 — kechagi sonning YORLIG'I uning MA'NOSINI aytadi
+# ---------------------------------------------------------------------------
+
+PREV_DAY_WORDS: Final[dict[str, str]] = {
+    Locale.UZ_LATN.value: "kecha",
+    Locale.UZ_CYRL.value: "кеча",
+    Locale.RU.value: "вчера",
+}
+"""«Kechagi kun» ni bildiruvchi so'z — uchala locale, MAHSULOTDAN MUSTAQIL.
+
+⚠ `QUALIFIER_WORDS` bilan aynan bir xil qaror va aynan bir xil sabab:
+  ro'yxat `outbox._EVENING_TEXT` dan import qilinsa, test yorliqni O'ZI
+  bilan solishtirgan bo'lardi va matn butunlay o'zgarganda ham yashil
+  qolardi.
+"""
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_the_evening_case_count_says_it_is_yesterdays(locale: str) -> None:
+    """⛔⛔ WR-02 — SON KECHAGI KUNNIKI VA MATN BUNI AYTADI.
+
+    =========================================================================
+    ⛔ NEGA YORLIQ O'ZGARDI: son endi KECHAGI kunning nomuvofiqliklarini
+       sanaydi (`notifications._evening_market()`), holbuki xabarning
+       qolgan RAQAMLARI bugungi kutilayotgan holatni aytadi. Sifatlovchisiz
+       yorliq («Anomaliyalar») direktorga «BUGUN shuncha nomuvofiqlik»
+       degan YOLG'ON o'qishni berardi — §12.2 sifatlovchi kontraktining
+       aynan buzilishi: kechki xabarning HAR RAQAMI qaysi vaqt kesimiga
+       tegishli ekanini matnning O'ZI aytishi shart.
+
+    ⛔ DA'VO QATOR DARAJASIDA, MATN DARAJASIDA EMAS: «kecha» so'zi
+       xabarning BOSHQA joyida turib qolsa (masalan sarlavhada) yorliq
+       hamon sifatlovchisiz bo'lardi. Shuning uchun so'z SON bilan AYNI
+       qatorda talab qilinadi — `test_the_qualifier_shares_the_line_with_
+       the_number` ning aynan shakli va aynan sababi (Telegram ning qisqa
+       ko'rinishida sarlavha KESILADI).
+    =========================================================================
+    """
+    number = str(_EVENING_PAYLOAD["prev_day_case_count"])
+    word = PREV_DAY_WORDS[locale]
+    carriers = [
+        line
+        for line in _build(EVENING, locale).splitlines()
+        if word.casefold() in line.casefold() and number in line
+    ]
+    assert len(carriers) == 1, (
+        f"{locale}: «{word}» + son bir qatorda {len(carriers)} marta uchradi, "
+        f"kutilgani AYNAN 1. Matn:\n{_build(EVENING, locale)}"
+    )
+
+
+def test_the_evening_text_no_longer_carries_the_old_anomaly_label() -> None:
+    """⛔ NAZORAT: eski, SIFATLOVCHISIZ yorliq matndan BUTUNLAY chiqdi.
+
+    ⚠ Usiz yuqoridagi test bo'sh-rost bo'lardi: yangi qator qo'shilib
+      eskisi QOLGAN matn ham «kecha + son bir qatorda» shartini bajarardi
+      va direktor ekranida IKKI raqam turardi — biri sifatlovchisiz.
+
+    ⚠ SO'ZLAR SHU YERDA QAYTA YOZILGAN (mahsulotdan import qilinmagan):
+      import darvozani o'zi tekshirayotgan qiymatga bog'lardi.
+    """
+    stale = {
+        Locale.UZ_LATN.value: "anomaliyalar",
+        Locale.UZ_CYRL.value: "аномалиялар",
+        Locale.RU.value: "аномалии",
+    }
+    for locale, word in stale.items():
+        assert word not in _build(EVENING, locale).casefold(), (
+            f"{locale}: eski «{word}» yorlig'i matnda qoldi"
+        )
 
 
 def test_the_vocabulary_is_closed_and_matches_the_spec() -> None:

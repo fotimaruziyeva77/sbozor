@@ -59,7 +59,8 @@ import pytest
 import respx
 from app.jobs import notification_meta, notifications, reconciliation
 from app.jobs.notifications import (
-    DIGEST_COMPONENT,
+    DIGEST_EVENING_COMPONENT,
+    DIGEST_MORNING_COMPONENT,
     OVERDUE_COMPONENT,
     digest_evening,
     digest_morning,
@@ -80,7 +81,9 @@ from fixtures.market_domain import MarketDomainSeed
 from fixtures.notification_domain import (
     cleanup_case_targets,
     cleanup_notification_domain,
+    seed_case,
     seed_notification_settings,
+    seed_outbox_row,
 )
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
@@ -370,6 +373,29 @@ def _unpaid_case_count(conn: Connection[TupleRow], market_id: UUID, vendor_id: U
     return int(row[0])
 
 
+_SET_DUE = "UPDATE notification_outbox SET next_attempt_at = %s WHERE market_id = %s AND kind = %s"
+
+
+def _set_due(conn: Connection[TupleRow], *, market_id: UUID, kind: str, moment: datetime) -> None:
+    """Navbat qatorining MUDDATINI aniq paytga qadaydi — devor soatidan ajratadi.
+
+    =========================================================================
+    ⛔ NEGA KERAK: `enqueue()` `next_attempt_at` ni `server_default` dan
+       (`now()`) oladi, ya'ni JOB YOZGAN qatorning muddati HAQIQIY server
+       soatiga bog'lanadi. Quiet-hours o'lchovi esa `claim(now=22:30)` ni
+       chaqiradi — mahalliy vaqt 22:30 dan keyin yugurgan test uchun
+       `o.next_attempt_at <= :now` YOLG'ON bo'lardi va «eslatma olinmadi»
+       da'vosi quiet oynani emas, MUDDATNI o'lchagan bo'lardi (bo'sh-rost).
+
+    ⚠ BU MAHSULOT YO'LINI CHETLAB O'TMAYDI: qatorni baribir JOB yozgan
+      (uning `dedupe_key` i, `payload` i va `kind` i mahsulotniki).
+      Faqat muddat — bu testning PREDMETI BO'LMAGAN o'lchov —
+      determinlashtiriladi.
+    =========================================================================
+    """
+    conn.execute(_SET_DUE, (moment, str(market_id), kind))
+
+
 def _wall(day: date, moment: time) -> datetime:
     """Bozorning DEVOR-SOATI — `Asia/Tashkent`, UTC EMAS.
 
@@ -560,6 +586,108 @@ async def test_the_two_digests_name_their_difference_in_the_payload(
     assert _one(rows, _EVENING)["dedupe_key"] != _one(rows, _MORNING)["dedupe_key"]
 
 
+async def test_evening_case_count_comes_from_the_previous_day(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    notify: Env,
+) -> None:
+    """⛔⛔ WR-02 — STRUKTURAVIY NOL O'RNIGA O'LCHANGAN SON.
+
+    =======================================================================
+    ⛔ NUQSONNING MEXANIKASI: `list_cases(day=...)` `service_date = :day`
+       bo'yicha filtrlaydi, BUGUNGI `service_date` li case esa faqat
+       ERTAGA 04:25 da (`RECON_OPEN_CRON`) tug'iladi. Ya'ni 20:45 dagi
+       so'rov har kuni, ISTISNOSIZ `0` qaytarardi va direktor
+       «nomuvofiqlik yo'q» degan YOLG'ON xulosani ko'rardi.
+
+    ⛔ SEED IKKI SONNI ATAYIN FARQLI QILADI (kecha 2, bugun 1) VA BU
+       NAZORAT BANDINING O'ZI. «Bugun 0» bilan qurilgan seed ham eski
+       kodni qizartirardi, lekin u YANA BIR nosozlikni o'tkazib
+       yuborardi: sanoq umuman ishlamay qolib HAR DOIM `0` qaytarsa,
+       o'sha seedda ham `0 != 2` bo'lib test qizarardi va sabab
+       noaniq qolardi. Ikki FARQLI musbat son esa «qaysi kun o'qilyapti?»
+       degan savolga BIR QIYMATLI javob beradi: `2` -> kecha, `1` ->
+       bugun, `0` -> umuman o'qilmadi.
+    =======================================================================
+    """
+    day = _recent_open_day(sync_owner_conn)
+    yesterday = day - timedelta(days=1)
+
+    # ⚠ HAR CASE O'Z RASTASIDA: `daily_charges` bitta rasta uchun bir kunda
+    #   BITTA qator saqlaydi, ya'ni ikkala kechagi case'ni bir rastaga
+    #   yozish seedning O'ZINI yiqitardi.
+    for stall_id in (notify.stall_ids[0], notify.stall_ids[1]):
+        charge_id, _ = add_daily_charge(
+            sync_owner_conn,
+            market_id=notify.market_id,
+            stall_id=stall_id,
+            vendor_id=notify.vendor_id,
+            tariff_id=notify.tariff_id,
+            service_date=yesterday,
+        )
+        seed_case(
+            sync_owner_conn,
+            market_id=notify.market_id,
+            service_date=yesterday,
+            charge_id=charge_id,
+        )
+
+    today_charge_id, _ = add_daily_charge(
+        sync_owner_conn,
+        market_id=notify.market_id,
+        stall_id=notify.stall_ids[0],
+        vendor_id=notify.vendor_id,
+        tariff_id=notify.tariff_id,
+        service_date=day,
+    )
+    seed_case(
+        sync_owner_conn,
+        market_id=notify.market_id,
+        service_date=day,
+        charge_id=today_charge_id,
+    )
+
+    result = await digest_evening(app_sessionmaker, as_of=day)
+    assert result.errors == [], f"kechki dayjest xato berdi: {result.errors}"
+    payload = _one(_outbox(sync_owner_conn, notify.market_id), _EVENING)["payload"]
+
+    assert payload["prev_day_case_count"] == 2, (
+        f"kechki xabar {payload.get('prev_day_case_count')} ta nomuvofiqlik "
+        "ko'rsatdi, kutilgani 2 (KECHAGI kun). `1` chiqsa job hamon BUGUNGI "
+        "kunni o'qiyapti, `0` chiqsa sanoq umuman ishlamayapti"
+    )
+    assert "anomaly_count" not in payload, (
+        "eski `anomaly_count` kaliti payloadda qoldi — u strukturaviy ravishda "
+        "HAR DOIM `0` edi va uning yashab qolishi ikki nomni bir vaqtda "
+        "qonuniy qilardi"
+    )
+
+
+async def test_the_evening_payload_rejects_the_old_anomaly_key() -> None:
+    """⛔ ALLOWLIST ESKI NOMNI RAD ETADI — WR-02 ning ikkinchi yarmi.
+
+    ⚠ Bu `test_evening_case_count_comes_from_the_previous_day` ning
+      TAKRORI EMAS, BOSHQA QATLAM: yuqoridagi test JOB nima yozishini
+      o'lchaydi, bu esa REYESTRNING chegarasini. Eski nom allowlistda
+      qolganda job to'g'ri ishlab tursa ham, «bugungi kunni sanaydigan»
+      yangi chaqiruvchi darvozadan JIMGINA o'tib ketardi.
+    """
+    with pytest.raises(ValueError, match="anomaly_count"):
+        notification_meta.outbox_payload(
+            _EVENING,
+            business_date="2026-08-13",
+            expected_soum=1,
+            collected_soum=0,
+            unpaid_stall_count=0,
+            anomaly_count=0,
+        )
+
+    allowed = notification_meta.NOTIFICATION_META[_EVENING].payload_keys
+    assert "prev_day_case_count" in allowed and "anomaly_count" not in allowed, (
+        f"kechki payload allowlisti kutilmagan holatda: {sorted(allowed)}"
+    )
+
+
 async def test_morning_digest_carries_no_vendor_name(
     sync_owner_conn: Connection[TupleRow],
     app_sessionmaker: async_sessionmaker[AsyncSession],
@@ -721,23 +849,54 @@ async def test_overdue_reminder_is_held_by_quiet_hours(
       Usiz test «22:30 da hech nima olinmaydi» ni o'lchardi va quiet
       oynaning butunlay buzuq bo'lgan holati ham YASHIL bo'lardi — farq
       `kind` da, OYNADA emas.
+
+    =======================================================================
+    ⛔⛔ NAZORAT QATORI `enqueue()` BILAN EMAS, ANIQ `next_attempt_at`
+       BILAN SEED QILINADI — VA BU DEVOR SOATIGA BOG'LIQLIKNI YOPADI
+       (`deferred-items.md` 3-bandi, 07-19 da o'lchangan, 07-21 da
+       tuzatilgan).
+
+    `notification_outbox.next_attempt_at` ning `server_default` i —
+    `now()`, ya'ni `enqueue()` bilan yozilgan qator HAQIQIY SERVER
+    soatidan muddat olardi. Keyingi `claim(now=_wall(today, 22:30))`
+    chaqiruvida `_CLAIM_DUE` ning `o.next_attempt_at <= :now` sharti
+    mahalliy vaqt 22:30 dan KEYIN yugurgan har qanday yugurishda YOLG'ON
+    bo'lardi — qator olinmasdi va nazorat bandi `assert 'payment_receipt'
+    in set()` bo'lib qulardi. Ya'ni test kuniga ~1.5 soat (22:30 -> 00:00)
+    QIZIL edi va sabab mahsulotda emas, SOATDA edi.
+
+    ⛔ `enqueue()` NING IDEMPOTENTLIGI BU TESTNING PREDMETI EMAS (u
+       `test_digests_are_idempotent` va `test_overdue_reminder_is_
+       idempotent_per_vendor_and_day` da o'lchanadi), ya'ni mahsulot
+       yo'lidan yurishning bu yerda hech qanday qiymati yo'q. Naqsh
+       `test_outbox.py` va `test_outbox_repo.py` dagi BARCHA o'lchovlar
+       bilan bir xil.
+    =======================================================================
     """
     _seed_overdue_vendor(sync_owner_conn, notify, days=5)
     seed_notification_settings(sync_owner_conn, market_id=notify.market_id, overdue_days=3)
     today = _today(sync_owner_conn)
     await overdue_reminder(app_sessionmaker, business_date=today)
 
-    async with tenant_session(notify.market_id) as session:
-        receipt_id = await outbox_repo.enqueue(
-            session,
-            market_id=notify.market_id,
-            kind=_RECEIPT,
-            recipient_kind=OutboxRecipientKind.VENDOR.value,
-            vendor_id=notify.vendor_id,
-            dedupe_key=f"receipt:{uuid4()}",
-            payload=notification_meta.outbox_payload(_RECEIPT, amount_soum=15_000),
-        )
-    assert receipt_id is not None, "kvitansiya qatori yozilmadi — nazorat bandi qurilmadi"
+    quiet_moment = _wall(today, time(22, 30))
+    # ⛔ ESLATMANING MUDDATI HAM QADALADI — usiz «22:30 da eslatma
+    #   olinmaydi» da'vosi mahalliy vaqt 22:30 dan keyin BO'SH-ROST
+    #   bo'lardi (qator quiet oyna tufayli emas, MUDDATI kelmagani uchun
+    #   qolib ketardi) va quiet-hours darvozasi butunlay buzuq holatda
+    #   ham test yashil bo'lardi.
+    _set_due(sync_owner_conn, market_id=notify.market_id, kind=_REMINDER, moment=quiet_moment)
+    seed_outbox_row(
+        sync_owner_conn,
+        market_id=notify.market_id,
+        kind=_RECEIPT,
+        recipient_kind=OutboxRecipientKind.VENDOR.value,
+        vendor_id=notify.vendor_id,
+        payload={"amount_soum": 15_000},
+        # ⛔ MUDDAT O'LCHOV PAYTIDAN OLDIN — nazorat qatori 22:30 da DUE
+        #   bo'lishi SHART, aks holda «kvitansiya olinadi» da'vosi quiet
+        #   oynani emas, muddat arifmetikasini o'lchagan bo'lardi.
+        next_attempt_at=quiet_moment - timedelta(hours=1),
+    )
 
     async with tenant_session(notify.market_id) as session:
         quiet = await outbox_repo.claim(
@@ -745,7 +904,7 @@ async def test_overdue_reminder_is_held_by_quiet_hours(
             market_id=notify.market_id,
             batch_size=10,
             lease_seconds=60,
-            now=_wall(today, time(22, 30)),
+            now=quiet_moment,
         )
     quiet_kinds = {row.kind for row in quiet}
     assert _RECEIPT in quiet_kinds, (
@@ -831,13 +990,18 @@ async def test_jobs_write_their_heartbeats(
     app_sessionmaker: async_sessionmaker[AsyncSession],
     notify: Env,
 ) -> None:
-    """⛔ RO'YXATGA OLINMAGAN CRON JIMGINA O'LADI (D-17) — ikki komponent."""
+    """⛔ RO'YXATGA OLINMAGAN CRON JIMGINA O'LADI (D-17) — ⛔ UCH komponent.
+
+    ⚠ 07-21: dayjestlar endi IKKI ALOHIDA qator yozadi (WR-10). Ilgari
+      bu tsikl ikkitasini aylanardi va u BITTA `notify_digest` qatorini
+      ikki marta ko'rardi.
+    """
     day = _recent_open_day(sync_owner_conn)
     await digest_morning(app_sessionmaker, business_date=day)
     await digest_evening(app_sessionmaker, as_of=day)
     await overdue_reminder(app_sessionmaker, business_date=_today(sync_owner_conn))
 
-    for component in (DIGEST_COMPONENT, OVERDUE_COMPONENT):
+    for component in (DIGEST_MORNING_COMPONENT, DIGEST_EVENING_COMPONENT, OVERDUE_COMPONENT):
         row = sync_owner_conn.execute(_HEARTBEAT, (component,)).fetchone()
         assert row is not None, (
             f"`{component}` uchun yurak urishi YOZILMAGAN — 07-14 ning "
@@ -850,6 +1014,49 @@ async def test_jobs_write_their_heartbeats(
             "`system_heartbeats` GLOBAL jadval — bozor yoki sotuvchi identifikatori "
             "u yerda hamma uchun ko'rinadigan joyda qolardi"
         )
+
+
+async def test_each_digest_writes_only_its_own_heartbeat(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    notify: Env,
+) -> None:
+    """⛔⛔ WR-10 — YARIM O'LGAN JUFTLIK BITTA SIGNAL ORTIGA YASHIRINA OLMAYDI.
+
+    =======================================================================
+    ⛔ DA'VO IKKI YO'NALISHLI VA IKKINCHI YO'NALISH MAJBURIY.
+
+    Faqat «ertalabkisi o'z qatorini yozdi» tekshirilganda eski xulq
+    (ikkala job BITTA `notify_digest` qatorini yangilaydi) HAM yashil
+    bo'lardi: nom o'zgargani bilan qator baribir bitta bo'lib qolardi.
+    Nuqson aynan IKKINCHISINING YO'QLIGIDA — shuning uchun test
+    ertalabki job yugurgandan keyin KECHKI qator YO'Qligini, keyin esa
+    teskarisini o'lchaydi.
+
+    Oqibati o'lchangan: bitta qatorda kechkisi ishlab ertalabkisi
+    o'lganda yurak urishi HAMON YANGI ko'rinardi va `digest_stale`
+    HECH QACHON ko'tarilmasdi (D-20 ning yarim ishlashi).
+    =======================================================================
+    """
+    day = _recent_open_day(sync_owner_conn)
+    sync_owner_conn.execute(
+        "DELETE FROM system_heartbeats WHERE component = ANY(%s)",
+        ([DIGEST_MORNING_COMPONENT, DIGEST_EVENING_COMPONENT],),
+    )
+
+    await digest_morning(app_sessionmaker, business_date=day)
+
+    assert sync_owner_conn.execute(_HEARTBEAT, (DIGEST_MORNING_COMPONENT,)).fetchone() is not None
+    assert sync_owner_conn.execute(_HEARTBEAT, (DIGEST_EVENING_COMPONENT,)).fetchone() is None, (
+        "ertalabki dayjest KECHKI komponentning qatorini ham yangiladi — ikki job "
+        "hamon BITTA yurak urishini bo'lishyapti va yarim o'lgan juftlik "
+        "kuzatuvda TIRIK ko'rinardi (WR-10)"
+    )
+
+    await digest_evening(app_sessionmaker, as_of=day)
+
+    evening_row = sync_owner_conn.execute(_HEARTBEAT, (DIGEST_EVENING_COMPONENT,)).fetchone()
+    assert evening_row is not None, "kechki dayjest O'Z komponentini yozmadi"
 
 
 async def test_one_broken_market_does_not_stop_the_others(

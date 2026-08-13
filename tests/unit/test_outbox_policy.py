@@ -208,9 +208,13 @@ def test_payload_allowlist_is_per_kind_not_a_union() -> None:
     kutmasdi — xabar yarim bo'sh chiqardi, xato esa hech qayerda
     ko'rinmasdi.
     """
-    assert "anomaly_count" in OUTBOX_PAYLOAD_KEYS, "birlashma test farazini tasdiqlamadi"
+    # ⚠ 07-21 (WR-02): kalit `anomaly_count` -> `prev_day_case_count`.
+    #   Test faraziga TEGISHLI narsa — kechki dayjestga tegishli, lekin
+    #   kvitansiyaga ruxsat etilmagan BIROR kalitning birlashmada
+    #   BO'LISHI; nomning o'zi emas.
+    assert "prev_day_case_count" in OUTBOX_PAYLOAD_KEYS, "birlashma test farazini tasdiqlamadi"
     with pytest.raises(ValueError, match="ruxsat etilmagan payload"):
-        outbox_payload(_RECEIPT, anomaly_count=3)
+        outbox_payload(_RECEIPT, prev_day_case_count=3)
 
     derived_union = {key for meta in NOTIFICATION_META.values() for key in meta.payload_keys}
     assert derived_union == OUTBOX_PAYLOAD_KEYS, "birlashma reyestrdan hosila emas"

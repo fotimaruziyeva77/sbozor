@@ -55,7 +55,11 @@ from app.jobs.alerting import (
 )
 from app.jobs.billing_close import BILLING_CLOSE_COMPONENT
 from app.jobs.capture import CapturePolicy, capture_tick
-from app.jobs.notifications import DIGEST_COMPONENT, OVERDUE_COMPONENT
+from app.jobs.notifications import (
+    DIGEST_EVENING_COMPONENT,
+    DIGEST_MORNING_COMPONENT,
+    OVERDUE_COMPONENT,
+)
 from app.jobs.outbox import OUTBOX_COMPONENT
 from app.jobs.reconciliation import RECON_OPEN_COMPONENT
 from app.jobs.retention import RETENTION_COMPONENT
@@ -99,7 +103,8 @@ _PLATFORM_COMPONENTS = (
     BILLING_CLOSE_COMPONENT,
     OUTBOX_COMPONENT,
     RECON_OPEN_COMPONENT,
-    DIGEST_COMPONENT,
+    DIGEST_MORNING_COMPONENT,
+    DIGEST_EVENING_COMPONENT,
     OVERDUE_COMPONENT,
 )
 """Platforma darajasidagi yurak urishlari — `bed` ularni YANGI qilib qo'yadi.
@@ -126,6 +131,13 @@ shovqin bilan aralashtiradi.
    JIMGINA qaytardi va keyingi ishlovchi uni «flaky test» deb o'qirdi.
    To'rtala kalitning O'ZI esa pastdagi `test_missing_new_heartbeat_
    raises_an_alert` da XULQ bilan o'lchanadi.
+
+⚠⚠ 07-21 DA RO'YXAT YETTIGA O'SDI (WR-10): bitta `notify_digest` o'rniga
+   IKKI komponent (`notify_digest_morning` / `notify_digest_evening`) va
+   ikkalasi ham `watched` da. `bed` ularning IKKALASINI ham yangi qilib
+   qo'yishi SHART — bittasi qoldirilganda guruhlash testlari yana
+   `assert 2 == 1` bilan qizarardi va sabab MAHSULOTDA emas, seedda
+   bo'lardi (07-14 da AYNAN shu nosozlik o'lchangan).
 """
 
 _INSERT_RUN = (
@@ -739,6 +751,56 @@ async def test_missing_new_heartbeat_raises_an_alert(
     assert "outbox_stale" in PLATFORM_SCOPED_ALERT_KEYS, (
         "platforma alerti bozor darajasiga tushib qolgan — u har bozorga alohida "
         "Telegram xabari bo'lib chiqardi"
+    )
+
+
+async def test_a_dead_morning_digest_is_visible_while_the_evening_one_lives(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sender: AlertSender,
+    bed: _Bed,
+) -> None:
+    """⛔⛔ WR-10 — YARIM O'LGAN DAYJEST JUFTLIGI ENDI KO'RINADI (07-21).
+
+    =========================================================================
+    ⛔ ILGARI BU HOLAT STRUKTURAVIY RAVISHDA KO'RINMAS EDI.
+
+    Ikkala job ham BITTA `notify_digest` qatorini yangilardi, ya'ni kechki
+    job har kuni 20:45 da o'sha qatorni YANGILAB turardi va ertalabki job
+    butunlay o'lgan bo'lsa ham yurak urishi HAMON YANGI ko'rinardi:
+    `digest_stale` HECH QACHON ko'tarilmasdi. D-20 ning «alert MUVAFFAQIYAT
+    SIGNALINING YO'QLIGIGA qo'yiladi» qoidasi yarim ishlardi — signal ikki
+    jobning YO'QLIGINI bitta qatorga qo'shib yuborardi.
+
+    ⛔ DA'VO IKKI YO'NALISHLI (`test_missing_new_heartbeat_raises_an_alert`
+       bilan aynan bir xil qoida): ertalabkisi o'lgan -> alert OCHILADI;
+       IKKALASI ham yangi -> alert OCHILMAYDI. Faqat birinchisi
+       yozilganda «supurgi har doim `digest_stale` ochadi» degan nosozlik
+       ham yashil qolardi.
+    =========================================================================
+    """
+    # Kechkisi TIRIK, ertalabkisi O'LIK — aynan yashiringan holat.
+    bed.set_heartbeat(DIGEST_EVENING_COMPONENT, hours_ago=1)
+    bed.drop_heartbeat(DIGEST_MORNING_COMPONENT)
+    moment = datetime.now(tz=MARKET_TZ)
+
+    async with respx.mock(assert_all_called=False) as router:
+        router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+        await _sweep(api_sessionmaker, sender, now=moment)
+        half_dead = [row["alert_key"] for row in bed.alerts()]
+
+        bed.set_heartbeat(DIGEST_MORNING_COMPONENT, hours_ago=1)
+        bed.conn.execute("DELETE FROM alert_events WHERE market_id = %s", (str(bed.market_id),))
+        await _sweep(api_sessionmaker, sender, now=moment + timedelta(minutes=1))
+        both_fresh = [row["alert_key"] for row in bed.alerts()]
+
+    assert "digest_stale" in half_dead, (
+        "ertalabki dayjest o'lgan, kechkisi tirik — `digest_stale` KO'TARILMADI. "
+        "Ikki job hamon bitta yurak urishini bo'lishyapti, ya'ni WR-10 ochiq "
+        "(kechki job ertalabkisining o'limini har kuni YASHIRARDI)"
+    )
+    assert "digest_stale" not in both_fresh, (
+        "ikkala yurak urishi ham YANGI bo'lgan holatda ham alert ochildi — "
+        "supurgi har yugurishda shovqin qo'shardi"
     )
 
 
