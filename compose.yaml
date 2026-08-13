@@ -717,8 +717,30 @@ services:
       #
       # ⚠ QIYMAT SIR EMAS, USKUNA: u Telegram'da mavjud emas va tarmoqqa
       #   umuman chiqmaydi (testlar `MockedBot` bilan ishlaydi).
-      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-123456:TEST-TOKEN-NOT-REAL}"
-      BOT_SERVICE_TOKEN: "${BOT_SERVICE_TOKEN:-test-service-token}"
+      #
+      # ⛔⛔ QIYMAT LITERAL — `${...:-...}` INDIREKTSIYASI OLIB TASHLANDI
+      #   (07-21, WR-10/B-9). Yuqoridagi «sir emas, uskuna» jumlasi ilgari
+      #   ROST EMAS EDI: `:-` STANDART emas, MAJBURLASH — u faqat
+      #   o'zgaruvchi BO'SH bo'lganda ishlaydi, ya'ni ISHLAYDIGAN har
+      #   qanday `.env` da (dev mashinasida u HAR DOIM to'ldirilgan)
+      #   konteynerga PROD Telegram tokeni va PROD servis tokeni oqib
+      #   o'tardi.
+      #
+      # ⛔ OQIBAT IKKI TOMONLAMA:
+      #   * `app/main.py:51` `Bot(token=...)` ni MODUL DARAJASIDA quradi,
+      #     ya'ni token `import app.main` bilan yuklanadi va tasodifiy
+      #     tarmoq chaqirig'i prod botni `409 Conflict` bilan JIM
+      #     qoldirishi mumkin edi (DQ-1);
+      #   * CI chiqishida yoki xato izida qiymat ko'rinsa u PROD siri
+      #     bo'lardi, uskuna emas.
+      #
+      # ⚠ AJRATILGANLIK MEXANIK DARVOZA BILAN QO'RIQLANADI:
+      #   `tests/unit/test_dev_environment.py` bu ikki qiymatda `${` YO'Q
+      #   ekanini VA `bot-service` blokida u BOR ekanini birga o'lchaydi —
+      #   ya'ni «hamma joyda literal» emas, AYNAN test konteynerining
+      #   ajratilgani.
+      TELEGRAM_BOT_TOKEN: "123456:TEST-TOKEN-NOT-REAL"
+      BOT_SERVICE_TOKEN: "test-service-token"
       CORE_API_URL: http://core-api:8000
       VALKEY_URL: ${BOT_VALKEY_URL:-redis://cache:6379/1}
       TZ: Asia/Tashkent
