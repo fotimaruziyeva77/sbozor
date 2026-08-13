@@ -359,7 +359,24 @@ matni emas — jadval shunga muvofiq to'ldirildi.
 
 ---
 
-## 8. `bot:lint` MYPY BOSQICHIDA QIZIL — 07-21 dan OLDIN ham
+## 8. ✅ YOPILDI (orkestrator, `e32e40a`) — `bot:lint` MYPY BOSQICHIDA QIZIL edi
+
+> **Yopildi:** 2026-08-13, gap 2-to'lqinidan keyin, orkestrator tomonidan
+> (hech bir gap rejasining `files_modified` ida bu fayl yo'q edi, darvoza
+> esa butun `npm run gate` zanjirini to'xtatib turardi).
+>
+> Tuzatish repodagi **mavjud** naqshni takrorlaydi — `fixtures/telegram.py`
+> dagi `sent_texts` aynan shunday qiladi: `isinstance(request, SendMessage)`.
+> `type: ignore` **ishlatilmadi** (quyidagi tahlil aynan shuni taqiqlaydi).
+>
+> ⛔ **Bu tipni tinchlantirish emas, darvozani KUCHAYTIRISH:** endi test
+> javobning `SendMessage` ekanini ham tasdiqlaydi — avval u faqat
+> `.text`/`.reply_markup` mavjudligiga umid qilardi.
+>
+> **O'lchandi:** `npm run bot:lint` EXIT=0 (`ruff` toza, 21 fayl
+> formatlangan, mypy 20 faylda 0 xato); `npm run bot:test` EXIT=0, 76 test.
+
+**Asl yozuv (2026-08-13, 07-21):**
 
 **Topildi:** 07-21 ijrosi (2026-08-13), `docker compose --profile test
 run --rm bot-tests sh -c "… && mypy ."` yugurtirilganda.
