@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 import pytest
 from aiogram.enums import ChatType
+from aiogram.methods import SendMessage
 from fixtures.core_double import MARKET_ID, VENDOR_ID, CoreDouble
 from fixtures.telegram import make_bot, make_contact, make_message, sent_texts
 
@@ -246,7 +247,9 @@ async def test_the_director_answer_carries_no_vendor_menu(locale: I18n) -> None:
     await on_contact(message, core=core)
 
     (request,) = [
-        item for item in session.requests if getattr(item, "text", None) == director_text()
+        item
+        for item in session.requests
+        if isinstance(item, SendMessage) and item.text == director_text()
     ]
     assert request.reply_markup is None, (
         f"direktorga sotuvchi menyusi ko'rsatildi: {request.reply_markup}"
@@ -292,6 +295,7 @@ async def test_a_director_lookup_failure_shows_the_retry_text(locale: I18n) -> N
     await on_contact(message, core=core)
 
     (request,) = session.requests
+    assert isinstance(request, SendMessage), f"nosozlik javobi xabar EMAS: {type(request).__name__}"
     assert request.text == get_i18n().gettext("bot.error.retry", locale="uz_Latn")
     assert "ConnectError" not in request.text
     assert request.reply_markup is None
