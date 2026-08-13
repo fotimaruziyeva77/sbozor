@@ -97,10 +97,14 @@ const patchCalls: unknown[] = [];
  * @param initial birinchi GET javobi.
  * @param options.patchRejectsWith PATCH ni yiqitadigan istisno FABRIKASI
  *   (`ApiError` ham, undan TASHQARIDAGI sinf ham bo'lishi mumkin — B-5).
+ * @param options.users `GET /users` javobining qatorlari (WR-09).
  */
 function routeFetch(
   initial = detail(),
-  options: { patchRejectsWith?: () => unknown } = {},
+  options: {
+    patchRejectsWith?: () => unknown;
+    users?: Record<string, unknown>[];
+  } = {},
 ) {
   patchCalls.length = 0;
   let served = initial;
@@ -128,7 +132,7 @@ function routeFetch(
       }
       if (path.startsWith("/users")) {
         return Promise.resolve({
-          items: [
+          items: options.users ?? [
             {
               id: USER_ID,
               phone: "+998900000000",
@@ -491,6 +495,153 @@ describe("⛔ B-5: HAR saqlash xatosi ekranda MATN bilan ko'rinadi", () => {
       messages.recon.errorFix.case_status_conflict,
     );
     expect(alert.textContent).not.toContain(messages.errors.generic);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 07-20 CHEGARASI: `422 assignee_not_in_market` KLIENTDA NOMLANGAN            */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ IKKI REJA CHEGARASI: `assignee_not_in_market` uchidan-uchiga", () => {
+  test("⛔ begona bozor xodimini biriktirish NOMLANGAN matn beradi", async () => {
+    /*
+     * ⛔⛔ BU YAGONA BOG'LANISH VA U AYNAN SINOVDAN O'TMAGAN SINF.
+     *
+     *   07-20 serverda `422 assignee_not_in_market` ni ochdi (`user_market_
+     *   _roles` ustidagi ILOVA QATLAMI — sxemada FK YO'Q, ya'ni bu tekshiruv
+     *   YAGONA to'siq). Klientda esa kod xaritalanmagan edi, ya'ni juda
+     *   ANIQ va TUZATSA bo'ladigan muammo direktorga `errors.generic`
+     *   bo'lib chiqardi: «Kutilmagan xato yuz berdi» — u nima qilishni
+     *   bilmasdi.
+     *
+     * ⛔ DA'VO IKKI TOMONLAMA: nomlangan matn BOR va zaxira matn YO'Q.
+     *   Faqat birinchisi B-5 ning zaxira shoxi bilan ham yashil bo'lardi.
+     */
+    routeFetch(detail(), {
+      patchRejectsWith: () => new ApiError(422, "assignee_not_in_market"),
+    });
+    await renderDialog();
+
+    decide("in_review");
+
+    const alert = await within(dialogNode()).findByRole("alert");
+    expect(alert.textContent).toContain(
+      messages.recon.errorCause.assignee_not_in_market,
+    );
+    expect(alert.textContent).toContain(
+      messages.recon.errorFix.assignee_not_in_market,
+    );
+    expect(alert.textContent).not.toContain(messages.errors.generic);
+
+    /* ⛔ XOM SERVER KODI EKRANDA YO'Q. */
+    expect(dialogNode().textContent).not.toContain("assignee_not_in_market");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WR-09: MAS'UL YORLIG'I SHAXSIY MA'LUMOT CHIQARMAYDI                        */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ WR-09: yorliq zaxirasi TELEFON RAQAMI EMAS", () => {
+  const NAMELESS_ID = "55555555-5555-4555-8555-555555555555";
+  const NAMELESS_PHONE = "+998911234567";
+  const NAMED_LABEL = "Nazoratchi Alisher";
+
+  /**
+   * ⛔ IKKI XODIM — VA IKKINCHISI «RO'YXAT YUKLANDI» DETEKTORI.
+   *
+   * Ismsiz xodimning to'g'ri yorlig'i (`id.slice(0, 8)`) `ActorLabel` ning
+   * ⛔ YUKLANMAGAN holatdagi zaxirasi bilan AYNAN BIR XIL satr. Ya'ni
+   * yolg'iz ismsiz xodim bilan test «tuzatildi» ni «ro'yxat hali
+   * kelmadi» dan ⛔ AJRATA OLMASDI va sabotajda ham yashil qolardi.
+   * Ismli xodim esa ro'yxat kelganini ⛔ ISHONCHLI bildiradi.
+   */
+  function mixedStaff() {
+    return [
+      {
+        id: USER_ID,
+        phone: "+998900000000",
+        full_name: NAMED_LABEL,
+        roles: ["director"],
+        is_active: true,
+        must_change_password: false,
+        locale: "uz-Latn",
+        created_at: `${DAY}T00:00:00Z`,
+      },
+      {
+        id: NAMELESS_ID,
+        phone: NAMELESS_PHONE,
+        full_name: null,
+        roles: ["controller"],
+        is_active: true,
+        must_change_password: false,
+        locale: "uz-Latn",
+        created_at: `${DAY}T00:00:00Z`,
+      },
+    ];
+  }
+
+  /** Tanlagich variantlari — ro'yxat KELGANDAN keyin. */
+  async function loadedAssigneeLabels(): Promise<(string | null)[]> {
+    return waitFor(() => {
+      const select = within(dialogNode()).getByLabelText(
+        messages.recon.assigneeLabel,
+      ) as HTMLSelectElement;
+      const labels = [...select.options].map((option) => option.textContent);
+      expect(labels).toContain(NAMED_LABEL);
+      return labels;
+    });
+  }
+
+  test("⛔ ismsiz xodim TANLAGICHDA identifikator bilan yorliqlanadi", async () => {
+    routeFetch(detail(), { users: mixedStaff() });
+    await renderDialog();
+
+    const labels = await loadedAssigneeLabels();
+
+    expect(labels).toContain(NAMELESS_ID.slice(0, 8));
+
+    /*
+     * ⛔ TELEFON RAQAMI — O'zR qonuni ostidagi SHAXSIY MA'LUMOT va u UI
+     *   bezagi bo'lolmaydi. Da'vo BUTUN hujjat bo'yicha: raqam
+     *   tanlagichda ham, audit izida ham, `title` atributida ham
+     *   chiqmasligi kerak.
+     */
+    expect(document.body.textContent).not.toContain(NAMELESS_PHONE);
+    expect(document.body.innerHTML).not.toContain(NAMELESS_PHONE);
+  });
+
+  test("⛔ AUDIT IZIDAGI aktor ham telefon raqami bilan yorliqlanmaydi", async () => {
+    routeFetch(
+      detail({
+        events: [
+          {
+            from_status: null,
+            to_status: "new",
+            actor_user_id: null,
+            note: null,
+            created_at: `${DAY}T04:25:00Z`,
+          },
+          {
+            from_status: "new",
+            to_status: "in_review",
+            actor_user_id: NAMELESS_ID,
+            note: null,
+            created_at: `${DAY}T09:00:00Z`,
+          },
+        ],
+      }),
+      { users: mixedStaff() },
+    );
+    await renderDialog();
+
+    /* ⛔ Ro'yxat KELGANIGA ishonch — usiz da'vo trivial yashil bo'lardi. */
+    await loadedAssigneeLabels();
+
+    expect(document.body.innerHTML).not.toContain(NAMELESS_PHONE);
+
+    /* NAZORAT: aktor qatori chizilgan va u BO'SH emas. */
+    expect(dialogNode().textContent).toContain(NAMELESS_ID.slice(0, 8));
   });
 });
 
