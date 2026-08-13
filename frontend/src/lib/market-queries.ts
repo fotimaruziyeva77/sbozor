@@ -42,7 +42,7 @@ import type {
   ImportResult,
   StaffImportResult,
 } from "@/lib/api-types";
-import { USERS_QUERY_KEY } from "@/lib/queries";
+import { usersKey } from "@/lib/queries";
 
 /*
  * =============================================================================
@@ -1059,18 +1059,19 @@ const importSideEffects = (
     ];
   }
   /*
-   * ⚠ `staff` — YAGONA doiralanMAGAN kalitli tarmoq va bu ATAYIN emas,
-   * MEROS: `USERS_QUERY_KEY` 01-07 da global qilib yozilgan
-   * (`queries.ts`) va u shu yerda QAYTA IXTIRO QILINMAYDI. Yangi kalit
-   * o'ylab topish ro'yxatni ikki xil kalit ostida bo'lardi va ekran
-   * import tugagandan keyin ham eski a'zolarni ko'rsatib turardi.
+   * `staff` tarmog'i ham endi DOIRALANGAN (WR-09, 07-23).
    *
-   * Tenant chegarasi bu kalitda BOSHQA chora bilan ta'minlanadi: sessiya
-   * identifikatori o'zgarganda butun kesh `client.clear()` bilan
-   * bo'shaydi (`query-provider.tsx`, CR-01) — `MARKETS_KEY` dagi bilan
-   * aynan bir xil holat.
+   * ⚠ ILGARI BU YERDA «YAGONA doiralanMAGAN kalitli tarmoq» deb yozilgan
+   *   edi va sabab MEROS deb ko'rsatilgan: xodimlar kaliti 01-07 da
+   *   global (`["users"]`) qilib yozilgan edi. O'sha meros `usersKey()` bilan
+   *   tugatildi, ya'ni izohning O'ZI ham eskirdi — uni qoldirish kodda
+   *   ⛔ YOLG'ON hujjat qoldirardi.
+   *
+   * ⛔ KALIT SHU YERDA QAYTA IXTIRO QILINMAYDI: fabrikasi `queries.ts` da
+   *    va ro'yxatning EGASI o'sha modul. Ikkinchi nusxa bir muddat bir xil
+   *    shakl berib, keyin jimgina ajralib ketardi.
    */
-  return [USERS_QUERY_KEY, setupStatusKey(marketId)];
+  return [usersKey(marketId), setupStatusKey(marketId)];
 };
 
 /**

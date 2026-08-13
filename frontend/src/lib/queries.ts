@@ -17,6 +17,8 @@ import {
   resetPasswordResponseSchema,
   userListResponseSchema,
 } from "@/lib/api-types";
+import { useAuthStore } from "@/lib/auth-store";
+import { domainKey } from "@/lib/market-queries";
 
 /*
  * =============================================================================
@@ -33,8 +35,49 @@ import {
 /** `/api/v1/users` — to'liq yo'l `API_BASE_URL` bilan quriladi. */
 export const USERS_PATH = "/users";
 
-/** React Query kaliti — barcha mutatsiyalar shu kalitni invalidatsiya qiladi. */
-export const USERS_QUERY_KEY = ["users"] as const;
+/**
+ * React Query kaliti — ⛔ BOZORGA DOIRALANGAN (WR-09).
+ *
+ * =============================================================================
+ * ⛔⛔ NEGA GLOBAL `["users"]` OLIB TASHLANDI.
+ *
+ * `market-queries.ts` ning `domainKey` docstringi qoidani ochiq yozgan:
+ * «HAR BIR domen kaliti `["m", marketId, ...]` bilan boshlanadi va ISTISNO
+ * YO'Q». Xodimlar ro'yxati esa AYNAN shu istisno bo'lib qolgan edi va u
+ * ikkita mustaqil zarar berardi:
+ *
+ *   1. ⛔ TENANT SIZIB CHIQISHI: bozor almashtirilganda `staleTime` (30 s)
+ *      ichida oldingi bozorning xodimlari HECH QANDAY SO'ROVSIZ qayta
+ *      chizilardi — va `useAssigneeLabels` orqali audit izidagi aktor
+ *      ⛔ BEGONA BOZOR xodimining nomi bilan yorliqlanardi.
+ *   2. ⛔ TOZALASH YETIB BORMASDI: `domainKey(marketId)` prefiksi bo'yicha
+ *      bekor qilish global kalitni ⛔ UMUMAN ko'rmasdi.
+ *
+ * ⛔ `domainKey` `market-queries.ts` DAN IMPORT QILINADI, ikkinchi nusxa
+ *    yozilmaydi: ikki fabrika bir muddat bir xil shakl berib, keyin
+ *    JIMGINA ajralib ketardi.
+ *
+ * ⚠ ISTE'MOLCHILAR UCHUN BU O'ZGARISH KO'RINMAS: oltala chaqiruvchi
+ *   (`audit-filters`, `audit-list`, `charge-detail-dialog`, `variance-list`,
+ *   `user-list`, `vendor-labels`) hookni ARGUMENTSIZ chaqiradi va kalitni
+ *   bilmaydi. Shuning uchun bozor `useMarketId()` dan SHU YERDA o'qiladi,
+ *   chaqiruvchidan talab qilinmaydi.
+ * =============================================================================
+ */
+export const usersKey = (marketId: string) => domainKey(marketId, "users");
+
+/**
+ * Joriy bozor — kalit qurish uchun YAGONA manba (eksport QILINMAYDI).
+ *
+ * ⚠ Nusxa `reconciliation-queries.ts`, `camera-queries.ts` va boshqa
+ *   modullardagi bilan AYNI: har modul o'z bozorini o'zi o'qiydi va
+ *   umumiy hook `auth-store` ga qo'shimcha bog'liqlik tugunini
+ *   tug'dirmaydi (mavjud konvensiya).
+ */
+function useMarketId(): string | null {
+  const { principal } = useAuthStore();
+  return principal?.marketId ?? null;
+}
 
 export type CreateUserInput = {
   phone: string;
@@ -51,11 +94,38 @@ export type CreateUserInput = {
  * ro'yxatidagi kursor mexanizmiga o'tkaziladi.
  */
 export function useUsersQuery(options?: { enabled?: boolean }) {
+  const marketId = useMarketId();
+
   return useQuery({
-    queryKey: USERS_QUERY_KEY,
+    queryKey: usersKey(marketId ?? ""),
+    /*
+     * ⛔ `marketId !== null` — SHART, «har ehtimolga qarshi» EMAS: bozorsiz
+     *   sessiyada so'rov `["m", "", "users"]` kalitiga yozilardi va o'sha
+     *   yozuv keyingi bozorlarning HECH BIRIGA tegishli bo'lmagan holda
+     *   keshda yashab qolardi.
+     */
+    enabled: marketId !== null && (options?.enabled ?? true),
     queryFn: () => apiFetch(USERS_PATH, { schema: userListResponseSchema }),
-    enabled: options?.enabled ?? true,
   });
+}
+
+/**
+ * Mutatsiyalardan keyin xodimlar ro'yxatini bekor qiladi.
+ *
+ * ⛔ TO'RT MUTATSIYA UCHUN BITTA JOY: kalit fabrikasi va bozorni o'qish
+ *    to'rt marta takrorlansa, ulardan bittasi kelajakda ortda qolardi va
+ *    admin bloklagan foydalanuvchini ekranda hamon «faol» ko'rib turardi —
+ *    faylning O'Z docstringi aynan shu sinfdagi xatoni sabab qilib
+ *    ko'rsatgan.
+ */
+function useUsersInvalidator(): () => void {
+  const queryClient = useQueryClient();
+  const marketId = useMarketId();
+
+  return () => {
+    if (marketId === null) return;
+    void queryClient.invalidateQueries({ queryKey: usersKey(marketId) });
+  };
 }
 
 /**
@@ -66,7 +136,7 @@ export function useUsersQuery(options?: { enabled?: boolean }) {
  * bazaga yozib qo'yardi.
  */
 export function useCreateUser() {
-  const queryClient = useQueryClient();
+  const invalidateUsers = useUsersInvalidator();
 
   return useMutation({
     mutationFn: (input: CreateUserInput) =>
@@ -81,14 +151,14 @@ export function useCreateUser() {
         schema: createUserResponseSchema,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
+      invalidateUsers();
     },
   });
 }
 
 /** Bloklash — DARHOL kuchga kiradi (D-08). Javob 204, tanasi yo'q. */
 export function useBlockUser() {
-  const queryClient = useQueryClient();
+  const invalidateUsers = useUsersInvalidator();
 
   return useMutation({
     mutationFn: (userId: string) =>
@@ -97,14 +167,14 @@ export function useBlockUser() {
         schema: emptyResponseSchema,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
+      invalidateUsers();
     },
   });
 }
 
 /** Blokdan chiqarish (D-08). */
 export function useUnblockUser() {
-  const queryClient = useQueryClient();
+  const invalidateUsers = useUsersInvalidator();
 
   return useMutation({
     mutationFn: (userId: string) =>
@@ -113,7 +183,7 @@ export function useUnblockUser() {
         schema: emptyResponseSchema,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
+      invalidateUsers();
     },
   });
 }
@@ -126,7 +196,7 @@ export function useUnblockUser() {
  * "bir marta ko'rsatiladi" kafolati jimgina yo'qolardi (T-01-68).
  */
 export function useResetPassword() {
-  const queryClient = useQueryClient();
+  const invalidateUsers = useUsersInvalidator();
 
   return useMutation({
     mutationFn: (userId: string) =>
@@ -135,7 +205,7 @@ export function useResetPassword() {
         schema: resetPasswordResponseSchema,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: USERS_QUERY_KEY });
+      invalidateUsers();
     },
   });
 }

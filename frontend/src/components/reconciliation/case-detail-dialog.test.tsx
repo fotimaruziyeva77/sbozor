@@ -47,6 +47,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
 
 import messages from "../../../messages/uz-Latn.json";
 import { CaseDetailDialog } from "@/components/reconciliation/case-detail-dialog";
+import { ApiError, NetworkError } from "@/lib/api-client";
 import { CASE_STATUSES } from "@/lib/api-types";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 
@@ -84,21 +85,56 @@ function detail(overrides: Record<string, unknown> = {}) {
 /** PATCH chaqiruvlari — «bitta so'rov = bitta qaror» qulfining o'lchovi. */
 const patchCalls: unknown[] = [];
 
-function routeFetch(current = detail()) {
+/**
+ * Marshrut mocki.
+ *
+ * ⛔ PATCH SERVERNI HAQIQATAN O'ZGARTIRADI (`served` yangilanadi): usiz
+ *    «ketma-ket ikkinchi qaror» da'vosi YOLG'ON-YASHIL bo'lardi. Muvaffaqiyatdan
+ *    keyin `invalidateQueries` tafsilotni qayta so'raydi va agar javob ESKI
+ *    holatni qaytarsa, `unchanged` hech qachon `true` bo'lmasdi — ya'ni test
+ *    real oqimni emas, o'zi qurgan sun'iy holatni o'lchardi.
+ *
+ * @param initial birinchi GET javobi.
+ * @param options.patchRejectsWith PATCH ni yiqitadigan istisno FABRIKASI
+ *   (`ApiError` ham, undan TASHQARIDAGI sinf ham bo'lishi mumkin — B-5).
+ * @param options.users `GET /users` javobining qatorlari (WR-09).
+ */
+function routeFetch(
+  /* ⛔ `Record<string, unknown>` ATAYIN: `detail()` ning `resolution_note`
+     maydoni `null` deb TORAYTIRILADI va PATCH uni satr bilan yangilaydi. */
+  initial: Record<string, unknown> = detail(),
+  options: {
+    patchRejectsWith?: () => unknown;
+    users?: Record<string, unknown>[];
+  } = {},
+) {
   patchCalls.length = 0;
+  let served: Record<string, unknown> = initial;
 
   apiClientMock.apiFetch.mockImplementation(
-    (path: string, options?: { method?: string; body?: unknown }) => {
+    (path: string, opts?: { method?: string; body?: unknown }) => {
       if (path.startsWith("/reconciliation/cases/")) {
-        if (options?.method === "PATCH") {
-          patchCalls.push(options.body);
-          return Promise.resolve(detail({ status: "in_review" }));
+        if (opts?.method === "PATCH") {
+          patchCalls.push(opts.body);
+          if (options.patchRejectsWith !== undefined) {
+            return Promise.reject(options.patchRejectsWith());
+          }
+          const body = opts.body as {
+            status: string;
+            resolution_note: string | null;
+          };
+          served = {
+            ...served,
+            status: body.status,
+            resolution_note: body.resolution_note,
+          };
+          return Promise.resolve(served);
         }
-        return Promise.resolve(current);
+        return Promise.resolve(served);
       }
       if (path.startsWith("/users")) {
         return Promise.resolve({
-          items: [
+          items: options.users ?? [
             {
               id: USER_ID,
               phone: "+998900000000",
@@ -346,6 +382,441 @@ describe("⛔ §9.4: terminal holat YECHIMSIZ saqlanmaydi", () => {
       resolution_note: null,
       assignee_user_id: null,
     });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* B-5: YIQILGAN HUKM MUVAFFAQIYATLI HUKMDAN FARQ QILADI                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Holatni tanlab `[Saqlash]` ni bosadi (yechim matni ixtiyoriy).
+ *
+ * ⛔ Yordamchi ATAYIN QISQA: har testda takrorlanadigan uch qator o'rniga
+ *    bitta chaqiruv qolsa, testning O'ZI nima da'vo qilayotgani ko'rinadi.
+ */
+function decide(status: string, note?: string): void {
+  const dialog = dialogNode();
+
+  fireEvent.change(within(dialog).getByLabelText(messages.recon.caseStatusLabel), {
+    target: { value: status },
+  });
+
+  if (note !== undefined) {
+    fireEvent.change(
+      within(dialog).getByLabelText(messages.recon.resolutionLabel),
+      { target: { value: note } },
+    );
+  }
+
+  fireEvent.click(within(dialog).getByText(messages.recon.save));
+}
+
+describe("⛔ B-5: HAR saqlash xatosi ekranda MATN bilan ko'rinadi", () => {
+  /*
+   * ⛔⛔ BU SINFNING NARXI ENG QIMMAT. `reconErrorView()` besh kodni biladi
+   *    va qolgan HAMMASI `null` qaytaradi. Chizilmagan `null` yiqilgan
+   *    hukmni muvaffaqiyatli hukmdan AJRATIB BO'LMAYDIGAN qilardi:
+   *    dialog ochiq, tanlangan holat `<Select>` da turibdi, tugma yana
+   *    faol — direktor nizo hujjatini (D-02) YOZILGAN deb hisoblardi.
+   *
+   * ⚠ `reconciliation-errors.ts` ning modul izohi (106-108) shartnomani
+   *   ALLAQACHON yozgan: «Xaritada YO'Q kod `null` qaytaradi va
+   *   chaqiruvchi `errors.generic` ga tushadi». Bu darvoza aynan o'sha
+   *   yozilgan shartnomani O'LCHAYDI.
+   */
+  test("⛔ TARMOQ uzilganda (`ApiError` EMAS) `errors.generic` chiziladi", async () => {
+    routeFetch(detail(), { patchRejectsWith: () => new NetworkError() });
+    await renderDialog();
+
+    decide("in_review");
+
+    const alert = await within(dialogNode()).findByRole("alert");
+    expect(alert.textContent).toBe(messages.errors.generic);
+
+    /* ⛔ XOM ISTISNO MATNI EKRANDA YO'Q — faqat lokalizatsiya kaliti. */
+    expect(dialogNode().textContent).not.toContain("network_error");
+  });
+
+  test("⛔ `429` va `500` — AYNI zaxira matn (kod xaritada YO'Q)", async () => {
+    for (const status of [429, 500]) {
+      routeFetch(detail(), {
+        patchRejectsWith: () => new ApiError(status, ""),
+      });
+      const view = await renderDialog();
+
+      decide("in_review");
+
+      const alert = await within(dialogNode()).findByRole("alert");
+      expect(alert.textContent).toBe(messages.errors.generic);
+
+      /* ⛔ STATUS KODI EKRANGA CHIQMAYDI. */
+      expect(dialogNode().textContent).not.toContain(String(status));
+      expect(dialogNode().textContent).not.toContain("api_error_");
+
+      view.unmount();
+    }
+  });
+
+  test("⛔ `market_not_selected` (403) ham JIM O'TMAYDI", async () => {
+    /*
+     * ⚠ `reconciliation.py:212` bu kodni QAYTARADI, `SERVER_CODE_MAP` da esa
+     *   u YO'Q — ya'ni u aynan zaxira shoxidan o'tadigan REAL kod.
+     */
+    routeFetch(detail(), {
+      patchRejectsWith: () => new ApiError(403, "market_not_selected"),
+    });
+    await renderDialog();
+
+    decide("in_review");
+
+    const alert = await within(dialogNode()).findByRole("alert");
+    expect(alert.textContent).toBe(messages.errors.generic);
+    expect(dialogNode().textContent).not.toContain("market_not_selected");
+  });
+
+  test("⛔ NAZORAT: NOMLANGAN kod hamon sabab+tuzatish JUFTLIGINI chizadi", async () => {
+    /*
+     * ⛔ Zaxira shoxi NOMLANGAN matnni YUTIB YUBORMASLIGI kerak: usiz
+     *   «hamma xato ko'rinadi» tuzatishi «hamma xato BIR XIL ko'rinadi»
+     *   regressiyasiga aylanardi va D-02 ning «sabab + nima qilish kerak»
+     *   kontrakti jimgina yo'qolardi.
+     */
+    routeFetch(detail(), {
+      patchRejectsWith: () => new ApiError(409, "status_unchanged"),
+    });
+    await renderDialog();
+
+    decide("in_review");
+
+    const alert = await within(dialogNode()).findByRole("alert");
+    expect(alert.textContent).toContain(
+      messages.recon.errorCause.case_status_conflict,
+    );
+    expect(alert.textContent).toContain(
+      messages.recon.errorFix.case_status_conflict,
+    );
+    expect(alert.textContent).not.toContain(messages.errors.generic);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 07-20 CHEGARASI: `422 assignee_not_in_market` KLIENTDA NOMLANGAN            */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ IKKI REJA CHEGARASI: `assignee_not_in_market` uchidan-uchiga", () => {
+  test("⛔ begona bozor xodimini biriktirish NOMLANGAN matn beradi", async () => {
+    /*
+     * ⛔⛔ BU YAGONA BOG'LANISH VA U AYNAN SINOVDAN O'TMAGAN SINF.
+     *
+     *   07-20 serverda `422 assignee_not_in_market` ni ochdi (`user_market_
+     *   _roles` ustidagi ILOVA QATLAMI — sxemada FK YO'Q, ya'ni bu tekshiruv
+     *   YAGONA to'siq). Klientda esa kod xaritalanmagan edi, ya'ni juda
+     *   ANIQ va TUZATSA bo'ladigan muammo direktorga `errors.generic`
+     *   bo'lib chiqardi: «Kutilmagan xato yuz berdi» — u nima qilishni
+     *   bilmasdi.
+     *
+     * ⛔ DA'VO IKKI TOMONLAMA: nomlangan matn BOR va zaxira matn YO'Q.
+     *   Faqat birinchisi B-5 ning zaxira shoxi bilan ham yashil bo'lardi.
+     */
+    routeFetch(detail(), {
+      patchRejectsWith: () => new ApiError(422, "assignee_not_in_market"),
+    });
+    await renderDialog();
+
+    decide("in_review");
+
+    const alert = await within(dialogNode()).findByRole("alert");
+    expect(alert.textContent).toContain(
+      messages.recon.errorCause.assignee_not_in_market,
+    );
+    expect(alert.textContent).toContain(
+      messages.recon.errorFix.assignee_not_in_market,
+    );
+    expect(alert.textContent).not.toContain(messages.errors.generic);
+
+    /* ⛔ XOM SERVER KODI EKRANDA YO'Q. */
+    expect(dialogNode().textContent).not.toContain("assignee_not_in_market");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WR-09: MAS'UL YORLIG'I SHAXSIY MA'LUMOT CHIQARMAYDI                        */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ WR-09: yorliq zaxirasi TELEFON RAQAMI EMAS", () => {
+  const NAMELESS_ID = "55555555-5555-4555-8555-555555555555";
+  const NAMELESS_PHONE = "+998911234567";
+  const NAMED_LABEL = "Nazoratchi Alisher";
+
+  /**
+   * ⛔ IKKI XODIM — VA IKKINCHISI «RO'YXAT YUKLANDI» DETEKTORI.
+   *
+   * Ismsiz xodimning to'g'ri yorlig'i (`id.slice(0, 8)`) `ActorLabel` ning
+   * ⛔ YUKLANMAGAN holatdagi zaxirasi bilan AYNAN BIR XIL satr. Ya'ni
+   * yolg'iz ismsiz xodim bilan test «tuzatildi» ni «ro'yxat hali
+   * kelmadi» dan ⛔ AJRATA OLMASDI va sabotajda ham yashil qolardi.
+   * Ismli xodim esa ro'yxat kelganini ⛔ ISHONCHLI bildiradi.
+   */
+  function mixedStaff() {
+    return [
+      {
+        id: USER_ID,
+        phone: "+998900000000",
+        full_name: NAMED_LABEL,
+        roles: ["director"],
+        is_active: true,
+        must_change_password: false,
+        locale: "uz-Latn",
+        created_at: `${DAY}T00:00:00Z`,
+      },
+      {
+        id: NAMELESS_ID,
+        phone: NAMELESS_PHONE,
+        full_name: null,
+        roles: ["controller"],
+        is_active: true,
+        must_change_password: false,
+        locale: "uz-Latn",
+        created_at: `${DAY}T00:00:00Z`,
+      },
+    ];
+  }
+
+  /** Tanlagich variantlari — ro'yxat KELGANDAN keyin. */
+  async function loadedAssigneeLabels(): Promise<(string | null)[]> {
+    return waitFor(() => {
+      const select = within(dialogNode()).getByLabelText(
+        messages.recon.assigneeLabel,
+      ) as HTMLSelectElement;
+      const labels = [...select.options].map((option) => option.textContent);
+      expect(labels).toContain(NAMED_LABEL);
+      return labels;
+    });
+  }
+
+  test("⛔ ismsiz xodim TANLAGICHDA identifikator bilan yorliqlanadi", async () => {
+    routeFetch(detail(), { users: mixedStaff() });
+    await renderDialog();
+
+    const labels = await loadedAssigneeLabels();
+
+    expect(labels).toContain(NAMELESS_ID.slice(0, 8));
+
+    /*
+     * ⛔ TELEFON RAQAMI — O'zR qonuni ostidagi SHAXSIY MA'LUMOT va u UI
+     *   bezagi bo'lolmaydi. Da'vo BUTUN hujjat bo'yicha: raqam
+     *   tanlagichda ham, audit izida ham, `title` atributida ham
+     *   chiqmasligi kerak.
+     */
+    expect(document.body.textContent).not.toContain(NAMELESS_PHONE);
+    expect(document.body.innerHTML).not.toContain(NAMELESS_PHONE);
+  });
+
+  test("⛔ AUDIT IZIDAGI aktor ham telefon raqami bilan yorliqlanmaydi", async () => {
+    routeFetch(
+      detail({
+        events: [
+          {
+            from_status: null,
+            to_status: "new",
+            actor_user_id: null,
+            note: null,
+            created_at: `${DAY}T04:25:00Z`,
+          },
+          {
+            from_status: "new",
+            to_status: "in_review",
+            actor_user_id: NAMELESS_ID,
+            note: null,
+            created_at: `${DAY}T09:00:00Z`,
+          },
+        ],
+      }),
+      { users: mixedStaff() },
+    );
+    await renderDialog();
+
+    /* ⛔ Ro'yxat KELGANIGA ishonch — usiz da'vo trivial yashil bo'lardi. */
+    await loadedAssigneeLabels();
+
+    expect(document.body.innerHTML).not.toContain(NAMELESS_PHONE);
+
+    /* NAZORAT: aktor qatori chizilgan va u BO'SH emas. */
+    expect(dialogNode().textContent).toContain(NAMELESS_ID.slice(0, 8));
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* B-7: KETMA-KET IKKINCHI HAQIQIY QAROR SERVERGA YETADI                      */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ B-7: qulf QARORGA bog'lanadi, case'ga EMAS", () => {
+  test("⛔ `new→in_review` dan keyin `in_review→justified` HAQIQATAN yuboriladi", async () => {
+    await renderDialog();
+
+    decide("in_review");
+    await waitFor(() => {
+      expect(patchCalls).toHaveLength(1);
+    });
+
+    /*
+     * ⛔ ORALIQ DA'VO MAJBURIY: muvaffaqiyatdan keyin tafsilot yangilanadi
+     *   va tugma NOL O'TISHDA faol EMAS. Usiz keyingi bosish «qulf
+     *   bo'shadimi?» emas, «holat o'zgardimi?» degan boshqa savolni
+     *   o'lchardi.
+     */
+    await waitFor(() => {
+      expect(
+        within(dialogNode())
+          .getByText(messages.recon.save)
+          .getAttribute("aria-disabled"),
+      ).toBe("true");
+    });
+
+    decide("justified", "Hujjat tekshirildi");
+
+    await waitFor(() => {
+      expect(patchCalls).toHaveLength(2);
+    });
+
+    expect(patchCalls[1]).toEqual({
+      status: "justified",
+      resolution_note: "Hujjat tekshirildi",
+      assignee_user_id: null,
+    });
+
+    /* ⛔ Muvaffaqiyatli ikkinchi qarordan keyin xato bloki YO'Q. */
+    expect(within(dialogNode()).queryByRole("alert")).toBeNull();
+  });
+
+  test("⛔ YIQILGAN qarordan keyin AYNI qarorni QAYTA yuborish mumkin", async () => {
+    /*
+     * `onSettled` ning ikkinchi yarmi: xatodan keyin ham qulf bo'shaydi.
+     * Bu ilgari `onError` bilan ishlagan va u REGRESSIYA bo'lmasligi kerak.
+     */
+    routeFetch(detail(), {
+      patchRejectsWith: () => new ApiError(500, ""),
+    });
+    await renderDialog();
+
+    decide("in_review");
+    await waitFor(() => {
+      expect(patchCalls).toHaveLength(1);
+    });
+
+    fireEvent.click(within(dialogNode()).getByText(messages.recon.save));
+    await waitFor(() => {
+      expect(patchCalls).toHaveLength(2);
+    });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WR-16: «YECHIM MAJBURIY» QOIDASI ERISHIB BO'LADIGAN                        */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ WR-16: bloklangan tugmaning SABABI o'qiladi", () => {
+  test("⛔ sabab+tuzatish CHIZILADI va `aria-describedby` unga ISHORA qiladi", async () => {
+    await renderDialog();
+
+    fireEvent.change(
+      within(dialogNode()).getByLabelText(messages.recon.caseStatusLabel),
+      { target: { value: "justified" } },
+    );
+
+    const save = within(dialogNode()).getByText(messages.recon.save);
+    expect(save.getAttribute("aria-disabled")).toBe("true");
+
+    const describedBy = save.getAttribute("aria-describedby");
+    expect(describedBy).not.toBeNull();
+
+    const reason = document.getElementById(describedBy as string);
+    expect(reason).not.toBeNull();
+    expect(reason?.textContent).toContain(
+      messages.recon.errorCause.case_resolution_required,
+    );
+    expect(reason?.textContent).toContain(
+      messages.recon.errorFix.case_resolution_required,
+    );
+  });
+
+  test("⛔ sabab JONLI HUDUD EMAS — u XATO emas, BAJARILMAGAN shart", async () => {
+    await renderDialog();
+
+    fireEvent.change(
+      within(dialogNode()).getByLabelText(messages.recon.caseStatusLabel),
+      { target: { value: "unjustified" } },
+    );
+
+    /*
+     * ⛔ `role="alert"` YARAMAYDI (§14.9 jonli hududlar qatori: `alert` —
+     *   FAQAT xato). Foydalanuvchi hech nimani buzmagan: maydon shunchaki
+     *   to'ldirilmagan va `RECON_ERROR_TONE` ham buni `neutral` deb yozgan.
+     *
+     * ⛔ `role="status"` HAM YARAMAYDI: 07-22 ning G-38 darvozasi bu
+     *   katalogda `role="status"` ni AYNAN olti joyga va HAR birini
+     *   `aria-busy` bilan BIR elementda bo'lishga qulflagan. Yettinchi
+     *   jonli hudud o'sha darvozani qizartirardi — va u haqli bo'lardi:
+     *   shart RENDER paytida rost, ya'ni e'lon hech kim kutmagan paytda
+     *   yangrardi.
+     *
+     * ⛔ TO'G'RI KANAL — `aria-describedby`: skrinrider foydalanuvchisi
+     *    sababni AYNAN tugmaga fokuslanganda, ya'ni SO'RAGANDA eshitadi.
+     */
+    expect(within(dialogNode()).queryByRole("alert")).toBeNull();
+
+    const save = within(dialogNode()).getByText(messages.recon.save);
+    const reason = document.getElementById(
+      save.getAttribute("aria-describedby") as string,
+    );
+    expect(reason).not.toBeNull();
+    expect(reason?.getAttribute("role")).toBeNull();
+  });
+
+  test("⛔ yechim yozilgach sabab YO'QOLADI va tugma FAOLLASHADI", async () => {
+    await renderDialog();
+
+    fireEvent.change(
+      within(dialogNode()).getByLabelText(messages.recon.caseStatusLabel),
+      { target: { value: "justified" } },
+    );
+
+    const describedBy = within(dialogNode())
+      .getByText(messages.recon.save)
+      .getAttribute("aria-describedby") as string;
+
+    /* ⛔ Boshlang'ich holat MA'NOLI: usiz quyidagi «yo'qoldi» da'vosi
+       hech qachon mavjud bo'lmagan elementni «yo'q» deb topardi. */
+    expect(describedBy).not.toBeNull();
+    expect(document.getElementById(describedBy)).not.toBeNull();
+
+    fireEvent.change(
+      within(dialogNode()).getByLabelText(messages.recon.resolutionLabel),
+      { target: { value: "Bozor kengashi qarori" } },
+    );
+
+    const save = within(dialogNode()).getByText(messages.recon.save);
+    expect(save.getAttribute("aria-disabled")).toBe("false");
+    expect(save.getAttribute("aria-describedby")).toBeNull();
+    expect(document.getElementById(describedBy)).toBeNull();
+  });
+
+  test("⛔ NOL O'TISHDA sabab bloki chizilmaydi (u BOSHQA to'siq)", async () => {
+    await renderDialog();
+
+    /*
+     * ⛔ NAZORAT: `blocked` uch sababdan iborat va matn FAQAT bittasiga
+     *   tegishli. Nol o'tishda «yechim matni kerak» YOLG'ON bo'lardi —
+     *   §9.4 ning nol o'tish qarori aynan yolg'on matnning oldini olish
+     *   uchun yozilgan.
+     */
+    const save = within(dialogNode()).getByText(messages.recon.save);
+    expect(save.getAttribute("aria-disabled")).toBe("true");
+    expect(save.getAttribute("aria-describedby")).toBeNull();
+    expect(dialogNode().textContent).not.toContain(
+      messages.recon.errorCause.case_resolution_required,
+    );
   });
 });
 

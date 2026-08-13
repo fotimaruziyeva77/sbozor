@@ -127,18 +127,33 @@ export function useAssigneeLabels(options?: {
    *   ilgari biriktirilgan case'da ⛔ NOMI BILAN ko'rinishi SHART —
    *   aks holda audit izi «kimdir» ga aylanardi.
    */
-  const byId = new Map(
-    items.map(
-      (user) =>
-        [user.id, user.full_name ?? user.phone] as const,
-    ),
-  );
+  /*
+   * ⛔⛔ ZAXIRA — IDENTIFIKATORNING QISQA SHAKLI, ⛔ TELEFON RAQAMI EMAS.
+   *
+   * Telefon raqami — O'zR qonuni ostidagi ⛔ SHAXSIY MA'LUMOT va u
+   * ⛔ UI BEZAGI bo'lolmaydi. Eski zaxira (ism yo'q bo'lganda RAQAM)
+   * uni ikki yuzaga chiqarardi: mas'ul TANLAGICHIGA va ⛔ AUDIT IZIGA —
+   * ya'ni raqam nizo hujjatining (D-02) o'zgarmas nusxasiga tushardi.
+   *
+   * ⛔ `ActorLabel` NING O'Z IZOHI SHUNI KO'ZDA TUTGAN: «Ism kelmasa
+   *    identifikatorning qisqa shakli — bo'sh katak EMAS». Ya'ni bu
+   *    tuzatish yangi qoida joriy qilmaydi, ⛔ ALLAQACHON YOZILGAN
+   *    qoidani tiklaydi.
+   *
+   * ⛔ IKKI JOYDA BIR VAQTDA (`byId` va `options`): faqat bittasini
+   *    tuzatish raqamni ikkinchisida qoldirardi va darvoza «tuzatildi»
+   *    deb yashil bo'lardi.
+   */
+  const labelOfUser = (user: { id: string; full_name: string | null }) =>
+    user.full_name ?? user.id.slice(0, 8);
+
+  const byId = new Map(items.map((user) => [user.id, labelOfUser(user)] as const));
 
   return {
     labelOf: (userId) => (userId === null ? null : (byId.get(userId) ?? null)),
     options: items
       .filter((user) => user.is_active)
-      .map((user) => ({ id: user.id, label: user.full_name ?? user.phone })),
+      .map((user) => ({ id: user.id, label: labelOfUser(user) })),
     isPending: enabled && users.isPending,
   };
 }

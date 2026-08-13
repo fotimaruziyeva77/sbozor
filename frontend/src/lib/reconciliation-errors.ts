@@ -50,6 +50,7 @@ export const RECON_ERROR_CODES = [
   "case_status_conflict",
   "case_resolution_required",
   "case_forbidden",
+  "assignee_not_in_market",
 ] as const;
 
 export type ReconErrorCode = (typeof RECON_ERROR_CODES)[number];
@@ -79,6 +80,15 @@ const RECON_ERROR_TONE: Readonly<Record<ReconErrorCode, ReconErrorTone>> = {
   /* Foydalanuvchi hech nimani buzmagan — maydon shunchaki to'ldirilmagan. */
   case_resolution_required: "neutral",
   case_forbidden: "danger",
+  /*
+   * ⛔ `warning`, `danger` EMAS: direktor ro'yxatdan tanladi va tanlov
+   *    NOTO'G'RI chiqdi — bu KIRISH xatosi, nosozlik emas (server ham uni
+   *    `422` bilan, `403` bilan EMAS rad etadi). `danger` uni «ruxsat
+   *    yo'q» bilan bir shkalaga qo'yardi va direktor o'z huquqidan
+   *    shubhalanardi, holbuki tuzatish bir bosishlik: boshqa xodimni
+   *    tanlash.
+   */
+  assignee_not_in_market: "warning",
 };
 
 export type ReconErrorView = {
@@ -113,6 +123,22 @@ const SERVER_CODE_MAP: Readonly<Record<string, ReconErrorCode>> = {
   case_status_conflict: "case_status_conflict",
   case_resolution_required: "case_resolution_required",
   forbidden: "case_forbidden",
+  /*
+   * 07-20 ochgan `422` (`reconciliation.py:736`, T-07-109).
+   *
+   * ⛔ SERVER KODI VA EKRAN KODI BIR XIL NOM BILAN ATALGAN, LEKIN IKKI
+   *    RO'YXAT AJRATILGAN HOLICHA QOLADI (modulning mavjud qarori). Bu
+   *    yozuvni «ortiqcha» deb olib tashlash `isReconErrorCode()` ning
+   *    tasodifiy yordamiga tayanardi: ekran kodlarining nomi kelajakda
+   *    o'zgarsa (masalan `case_assignee_foreign`), xarita JIMGINA
+   *    uzilardi va begona-bozor rad etishi yana `errors.generic` ga
+   *    tushardi.
+   *
+   * ⚠ MAVJUD BO'LMAGAN `user_id` ham AYNAN shu kodni oladi (T-07-110) —
+   *   ya'ni matn «bunday xodim yo'q» DEMASLIGI kerak, aks holda javob
+   *   kodi bo'yicha identifikatorlarni sanab chiqish yo'li ochilardi.
+   */
+  assignee_not_in_market: "assignee_not_in_market",
 };
 
 /** Kod -> sabab va tuzatish kalitlari; noma'lum kod -> `null`. */

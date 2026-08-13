@@ -61,6 +61,7 @@ import {
 } from "@/lib/auth-store";
 import { useZonesQuery, zonesKey } from "@/lib/market-queries";
 import { QueryProvider } from "@/lib/query-provider";
+import { useUsersQuery, usersKey } from "@/lib/queries";
 
 const MARKET_A = "11111111-1111-4111-8111-111111111111";
 const MARKET_B = "22222222-2222-4222-8222-222222222222";
@@ -69,10 +70,18 @@ const MARKET_B = "22222222-2222-4222-8222-222222222222";
 const ZONE_A = "A bozori sabzavot qatori";
 const ZONE_B = "B bozori go'sht qatori";
 
+/** XODIM ISMLARI — `users` domeni uchun ayni o'lchov (WR-09). */
+const STAFF_A = "A bozori nazoratchisi";
+const STAFF_B = "B bozori nazoratchisi";
+
 type ZoneList = { items: { id: string; name: string; stall_count: number }[] };
+type UserList = { items: { id: string; full_name: string }[] };
 
 /** `GET /zones` javobi — test uni bozor almashishidan OLDIN almashtiradi. */
 let currentZones: ZoneList;
+
+/** `GET /users` javobi — AYNI naqsh, boshqa domen. */
+let currentUsers: UserList;
 
 let capturedClient: QueryClient | null = null;
 
@@ -99,12 +108,47 @@ function Probe(): ReactElement {
   );
 }
 
+/**
+ * `users` domeni uchun sinov komponenti — HAQIQIY `useUsersQuery()`.
+ *
+ * ⛔ ALOHIDA PROBE, `Probe` ga qo'shimcha maydon EMAS: ikki domen bitta
+ *    komponentda o'lchansa, zona kalitining sabotaji xodim da'vosini ham
+ *    qizartirardi va darvoza qaysi domen buzilganini ⛔ AYTMASDI.
+ */
+function UsersProbe(): ReactElement {
+  const client = useQueryClient();
+  const users = useUsersQuery();
+
+  useEffect(() => {
+    capturedClient = client;
+  }, [client]);
+
+  return (
+    <div data-testid="users">
+      {(users.data?.items ?? [])
+        .map((item) => item.full_name ?? "")
+        .join(", ")}
+    </div>
+  );
+}
+
 /** Provayderlar PRODUKSIYADAGI tartibda: `QueryProvider` tashqarida. */
 function renderProbe(): ReturnType<typeof render> {
   return render(
     <QueryProvider>
       <AuthProvider>
         <Probe />
+      </AuthProvider>
+    </QueryProvider>,
+  );
+}
+
+/** AYNI provayderlar, boshqa domen. */
+function renderUsersProbe(): ReturnType<typeof render> {
+  return render(
+    <QueryProvider>
+      <AuthProvider>
+        <UsersProbe />
       </AuthProvider>
     </QueryProvider>,
   );
@@ -150,10 +194,17 @@ beforeEach(() => {
   currentZones = {
     items: [{ id: "zone-a", name: ZONE_A, stall_count: 3 }],
   };
+  currentUsers = { items: [{ id: "user-a", full_name: STAFF_A }] };
   // Javob HAR CHAQIRUVDA joriy qiymatdan olinadi: test bozor almashishidan
   // oldin uni almashtiradi va shu bilan "eski qatormi yoki yangimi?"
   // savolini o'lchay oladi.
-  apiFetch.mockImplementation(() => Promise.resolve(currentZones));
+  //
+  // ⛔ YO'L BO'YICHA AJRATILADI: ikkala domen bir xil javob olsa, xodim
+  //   probe'i zona ma'lumotini chizardi va "sizib chiqish" da'vosi
+  //   o'lchamoqchi bo'lgan narsani UMUMAN o'lchamasdi.
+  apiFetch.mockImplementation((path: string) =>
+    Promise.resolve(String(path).startsWith("/users") ? currentUsers : currentZones),
+  );
 });
 
 afterEach(() => {
@@ -214,6 +265,88 @@ describe("sizib chiqish (doiralash yarmi)", () => {
     await waitFor(() =>
       expect(screen.getByTestId("zones")).toHaveTextContent(ZONE_B),
     );
+  });
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * `users` DOMENI — WR-09 ning doiralash yarmi.
+ *
+ * ⛔⛔ NEGA BU YERGA QO'SHILDI VA NEGA ALOHIDA FAYL OCHILMADI.
+ *
+ * Global `["users"]` kaliti bu faylning butun mantiqidan ⛔ ISTISNO edi:
+ * qolgan har bir domen `["m", marketId, ...]` bilan boshlanadi, xodimlar
+ * ro'yxati esa GLOBAL kalitda yashardi. Ikki oqibat o'lchanadi:
+ *
+ *   1. bozor almashtirilganda oldingi bozorning xodimlar ro'yxati keshda
+ *      qolardi va audit izidagi aktor ⛔ BEGONA BOZOR xodimining nomi
+ *      bilan yorliqlanardi (`vendor-labels.ts::useAssigneeLabels`);
+ *   2. `domainKey(marketId)` prefiksi bo'yicha bekor qilish bu kalitga
+ *      ⛔ YETIB BORMASDI.
+ *
+ * ⛔ ISTISNO SHU FAYLDA O'LCHANADI, chunki bu faylning O'ZI doiralash
+ *    konvensiyasining darvozasi. Ikkinchi fayl ochish «qaysi domen qayerda
+ *    qulflangan?» degan ikkinchi savolni tug'dirardi.
+ * ------------------------------------------------------------------------- */
+
+describe("kalit izolyatsiyasi: `users` domeni (WR-09)", () => {
+  test("ikki bozorning `users` kaliti TENG EMAS va `market_id` PREFIKSDA", () => {
+    const keyA = usersKey(MARKET_A);
+    const keyB = usersKey(MARKET_B);
+
+    expect(keyA).not.toEqual(keyB);
+
+    /* ⛔ AYNI da'vo shakli, ayni sabab: tasodifiy farq YETARLI EMAS. */
+    expect(keyA[0]).toBe("m");
+    expect(keyB[0]).toBe("m");
+    expect(keyA[1]).toBe(MARKET_A);
+    expect(keyB[1]).toBe(MARKET_B);
+  });
+});
+
+describe("sizib chiqish: `users` domeni (WR-09)", () => {
+  test("A bozorining xodimlari B kontekstida KO'RINMAYDI", async () => {
+    seedSession(MARKET_A, "A bozori");
+    renderUsersProbe();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("users")).toHaveTextContent(STAFF_A),
+    );
+
+    currentUsers = { items: [{ id: "user-b", full_name: STAFF_B }] };
+
+    /*
+     * ⚠ `updatePrincipal` ATAYIN (fayl docstringi): sessiya-tozalash
+     *   kanali ISHGA TUSHMAYDI, ya'ni himoyaning YAGONA qatlami — kalit
+     *   doiralashi. Doiralanmagan kalitda 30 soniyalik `staleTime` ichida
+     *   ekran hech qanday so'rovsiz A bozorining xodimini chizardi.
+     */
+    act(() => {
+      updatePrincipal({ marketId: MARKET_B, marketName: "B bozori" });
+    });
+
+    expect(screen.getByTestId("users")).not.toHaveTextContent(STAFF_A);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("users")).toHaveTextContent(STAFF_B),
+    );
+  });
+
+  test("bozorsiz sessiyada `GET /users` UMUMAN yuborilmaydi", async () => {
+    /*
+     * ⛔ `marketId === null` da kalit `["m", null, "users"]` bo'lardi va
+     *   u BOZORSIZ javobni keshga yozardi — keyingi bozor o'sha yozuvni
+     *   ko'rmasa ham, kesh «kimningdir xodimlari» qatorini saqlab
+     *   qolardi. `enabled` sharti buni ILDIZIDAN kesadi.
+     */
+    clearSession();
+    renderUsersProbe();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("users")).toBeInTheDocument();
+    });
+
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 });
 

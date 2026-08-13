@@ -1321,13 +1321,15 @@
       "case_not_found": "Bu nomuvofiqlik topilmadi.",
       "case_status_conflict": "Holatni boshqa foydalanuvchi allaqachon o'zgartirgan.",
       "case_resolution_required": "Yakuniy holat uchun yechim matni kerak.",
-      "case_forbidden": "Bu amalga ruxsatingiz yo'q."
+      "case_forbidden": "Bu amalga ruxsatingiz yo'q.",
+      "assignee_not_in_market": "Tanlangan xodim bu bozorga biriktirilmagan."
     },
     "errorFix": {
       "case_not_found": "Ro'yxatni yangilang — u boshqa kunga tegishli bo'lishi mumkin.",
       "case_status_conflict": "Yangilang va o'zgarishlar tarixini ko'ring.",
       "case_resolution_required": "Qaroringiz sababini yozing.",
-      "case_forbidden": "Direktorga murojaat qiling."
+      "case_forbidden": "Direktorga murojaat qiling.",
+      "assignee_not_in_market": "Ro'yxatdan shu bozor xodimini tanlang."
     }
   },
   "headline": {
