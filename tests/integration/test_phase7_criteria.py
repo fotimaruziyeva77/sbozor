@@ -222,6 +222,14 @@ burib yuborardi — holbuki o'lchanayotgan narsa NORMAL kassa oqimi.
 _COUNT_CASE_EVENTS = (
     "SELECT count(*) FROM reconciliation_case_events WHERE market_id = %s AND case_id = %s"
 )
+_CASE_ASSIGNEE = (
+    "SELECT assignee_user_id FROM reconciliation_cases WHERE market_id = %s AND id = %s"
+)
+"""Case'ning BAZADAGI mas'uli — mezon #2 ning «mas'ul... yoziladi» bandi.
+
+⛔ JAVOBGA QARASH YETMAYDI: marshrut qiymatni javob modeliga qo'yib
+   bazaga yozmagan holat o'shanda yashil qolardi.
+"""
 _OUTBOX_ROWS = (
     "SELECT id, kind, status, dedupe_key, attempt_count, last_status_code, vendor_id "
     "FROM notification_outbox WHERE market_id = %s ORDER BY created_at, id"
@@ -841,6 +849,22 @@ async def test_sc2_case_is_managed_and_hit_rate_is_derived(
        ham (`open_cases` alohida qaytadi). Uchinchi case ATAYIN `new`
        holatida qoldiriladi va nisbat O'ZGARMAYDI — usiz «maxrajga
        kirmaydi» da'vosi BO'SH-ROST bo'lardi (05-15 ning S-D darsi).
+
+    =======================================================================
+    ⛔⛔ MEZONNING «MAS'UL... YOZILADI» BANDI 07-20 GACHA ⛔ AMALDA YO'Q EDI.
+
+    `PATCH` marshruti `payload.assignee_user_id` ni JIMGINA tashlab
+    yuborardi va SQL har o'tishda case'ni HUKM CHIQARGAN odamga
+    biriktirardi (`COALESCE(:actor_user_id, assignee_user_id)`). Ya'ni
+    bu darvoza «mas'ul bor» ni o'lchasa YASHIL qolardi — mas'ul HAR
+    DOIM bor edi, faqat u DIREKTORNING O'ZI edi.
+
+    ⛔ SHUNING UCHUN DA'VO IKKI QISMLI VA IKKINCHISI MAJBURIY:
+       (a) bazadagi `assignee_user_id` — direktor TANLAGAN odam;
+       (b) ⛔ u DIREKTORNING identifikatoriga **TENG EMAS**.
+
+    ⛔ VA U ⛔ BAZADAN o'qiladi, javobdan emas: marshrut qiymatni javob
+       modeliga qo'yib bazaga yozmagan holat aks holda yashil qolardi.
     =======================================================================
     """
     day = _criteria_day()
@@ -876,34 +900,74 @@ async def test_sc2_case_is_managed_and_hit_rate_is_derived(
     assert rejected.status_code == 422, rejected.text
 
     # ---- `new` -> `in_review` -> `justified`: IKKI o'tish, IKKI qator.
+    #      BIRINCHISI MAS'ULNI ham yozadi — mezonning «mas'ul... yoziladi»
+    #      bandi aynan shu qadamda o'lchanadi.
     managed = case_ids[0]
-    for to_status in (ReconciliationCaseStatus.IN_REVIEW, ReconciliationCaseStatus.JUSTIFIED):
+    director_id = env.base.market_a.director_user_id
+    assignee_id = env.base.market_a.admin_user_id
+    assert assignee_id != director_id, (
+        "nazorat: seed mas'ul bilan aktorni BIR ODAM qilib qo'ygan — «direktorga "
+        "teng emas» da'vosi o'shanda hech nimani o'lchamasdi"
+    )
+    for index, to_status in enumerate(
+        (ReconciliationCaseStatus.IN_REVIEW, ReconciliationCaseStatus.JUSTIFIED)
+    ):
+        body: dict[str, Any] = {
+            "status": to_status.value,
+            "resolution_note": "Sotuvchi kechqurun to'lagan — kvitansiya bor.",
+        }
+        if index == 0:
+            body["assignee_user_id"] = str(assignee_id)
         moved = await api_client.patch(
-            f"{CASES_URL}/{managed}",
-            json={
-                "status": to_status.value,
-                "resolution_note": "Sotuvchi kechqurun to'lagan — kvitansiya bor.",
-            },
-            headers=director_headers,
+            f"{CASES_URL}/{managed}", json=body, headers=director_headers
         )
         assert moved.status_code == 200, moved.text
 
     detail = moved.json()
     assert detail["status"] == ReconciliationCaseStatus.JUSTIFIED.value
     assert detail["resolution_note"] == "Sotuvchi kechqurun to'lagan — kvitansiya bor."
+
+    # ---- MAS'UL: ⛔ BAZADAN o'qiladi va u AKTORDAN farq qiladi (RECON-02).
+    assigned = sync_owner_conn.execute(
+        _CASE_ASSIGNEE, (str(env.market_id), str(managed))
+    ).fetchone()
+    assert assigned is not None, "nazorat: case qatori bazada yo'q"
+    assert str(assigned[0]) == str(assignee_id), (
+        f"⛔ MEZON #2: direktor TANLAGAN mas'ul bazaga yozilmadi: {assigned[0]} != {assignee_id}"
+    )
+    assert str(assigned[0]) != str(director_id), (
+        "⛔ MEZON #2: case HUKM CHIQARGAN odamga biriktirilgan — «mas'ul» bandi "
+        "aktorning ikkinchi nusxasi bo'lib qolgan (B-2)"
+    )
+    # ⛔ MAS'UL O'ZGARSA HAM AKTOR O'ZGARMAYDI: ikkinchi o'tish maydonsiz
+    #    ketdi, ya'ni mavjud biriktirish SAQLANDI, tarix qatorining egasi
+    #    esa HAMON direktor.
+    assert detail["assignee_user_id"] == str(assignee_id), detail
+
     events = sync_owner_conn.execute(
         _COUNT_CASE_EVENTS, (str(env.market_id), str(managed))
     ).fetchone()
-    assert events is not None and events[0] == 2, (
-        f"case tarixiga IKKI qator yozilishi kerak edi (`new`->`in_review`->"
-        f"`justified`), yozilgani: {events}"
+    assert events is not None and events[0] == 3, (
+        f"case tarixiga UCH qator yozilishi kerak edi (TUG'ILISH + `new`->"
+        f"`in_review` + `in_review`->`justified`), yozilgani: {events}"
     )
     assert [event["to_status"] for event in detail["events"]] == [
+        ReconciliationCaseStatus.NEW.value,
         ReconciliationCaseStatus.IN_REVIEW.value,
         ReconciliationCaseStatus.JUSTIFIED.value,
     ], detail["events"]
-    assert detail["events"][0]["actor_user_id"] == str(env.base.market_a.director_user_id), (
-        "⛔ MAS'UL YOZILMADI: `None` aktor «TIZIM» degani bo'lardi va nizoda "
+
+    # ---- BIRINCHI QATOR — TUG'ILISH VA U TIZIMNIKI (WR-01).
+    # ⛔ SONNI «OSHIRIB QO'YISH» YETMAYDI: birinchi qatorning TIZIM ekani
+    #    o'lchanmasa, uchinchi qator qayerdan kelgani NOMA'LUM qolardi va
+    #    darvoza «tarixda uchta qator bor» degan MA'NOSIZ da'voga aylanardi.
+    assert detail["events"][0]["from_status"] is None, detail["events"][0]
+    assert detail["events"][0]["actor_user_id"] is None, (
+        "⛔ tug'ilish qatorining aktori TIZIM (`NULL`) bo'lishi SHART — case'ni "
+        f"cron ochadi, odam emas: {detail['events'][0]}"
+    )
+    assert detail["events"][1]["actor_user_id"] == str(director_id), (
+        "⛔ AKTOR YOZILMADI: `None` aktor «TIZIM» degani bo'lardi va nizoda "
         "hukmni KIM chiqarganini ko'rsatmasdi"
     )
 
