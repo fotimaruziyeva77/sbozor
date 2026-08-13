@@ -728,7 +728,16 @@ async def test_self_check_is_ok_when_the_heartbeat_is_fresh(
     #   endpoint HAMON `200` qaytaradi. Ro'yxatning o'sishi endpointni
     #   `503` qilib qo'yganda tashqi kuzatuvchi uni O'CHIRIB qo'yardi —
     #   ya'ni reyestrni kengaytirish darvozani O'LDIRARDI.
-    seven = {"outbox_tick", "reconciliation_open", "notify_digest", "notify_overdue"}
+    # ⚠ 07-21: `notify_digest` IKKI komponentga bo'lindi (WR-10) — ro'yxat
+    #   to'rttadan BESHTAGA o'sdi va da'vo SUSAYMADI: ikkala dayjest ham
+    #   endi ALOHIDA nom bilan ko'rinishi talab qilinadi.
+    seven = {
+        "outbox_tick",
+        "reconciliation_open",
+        "notify_digest_morning",
+        "notify_digest_evening",
+        "notify_overdue",
+    }
     assert seven <= set(body["never_seen"]), (
         f"7-faza komponentlari javobda ko'rinmadi: {sorted(seven - set(body['never_seen']))}"
     )

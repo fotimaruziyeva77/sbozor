@@ -365,10 +365,26 @@ def captured_requests() -> Iterator[list[httpx.Request]]:
     yield []
 
 
-async def _failing_client(recorded: list[httpx.Request], status_code: int) -> CoreClient:
+async def _failing_client(
+    recorded: list[httpx.Request],
+    status_code: int,
+    *,
+    body: dict[str, object] | None = None,
+    text: str | None = None,
+) -> CoreClient:
+    """`MockTransport` ustidagi klient — ⛔ SOKET OCHILMAYDI.
+
+    ⚠ `body` / `text` 07-21 da qo'shildi (WR-01): `404` ning MA'NOSI endi
+      javob TANASIDAN keladi, ya'ni darvoza tanani boshqara olishi shart.
+      `text` esa JSON BO'LMAGAN javobni (nginx ning HTML `404` sahifasi)
+      ifodalaydi.
+    """
+
     def handler(request: httpx.Request) -> httpx.Response:
         recorded.append(request)
-        return httpx.Response(status_code, json={"detail": "nope"})
+        if text is not None:
+            return httpx.Response(status_code, text=text)
+        return httpx.Response(status_code, json=body if body is not None else {"detail": "nope"})
 
     return CoreClient(
         base_url="http://core-api.invalid",
@@ -424,13 +440,98 @@ async def test_the_token_is_absent_from_the_raised_error_and_the_log(
 async def test_a_not_bound_response_becomes_its_own_type(
     captured_requests: list[httpx.Request],
 ) -> None:
-    """`404` — `NotBoundError`, ya'ni handler uni XATO deb ko'rsatmaydi."""
+    """NOMLANGAN `404` — `NotBoundError`, ya'ni handler uni XATO deb ko'rsatmaydi.
+
+    ⚠ TANA 07-21 da NOMLANDI (WR-01): ilgari bu yerda `{"detail": "nope"}`
+      turardi va test HAMON yashil edi — aynan shu narsa nuqsonning O'ZI
+      edi (har qanday `404` shu shoxga tushardi).
+    """
     from app.core_client import NotBoundError
 
-    client = await _failing_client(captured_requests, 404)
+    client = await _failing_client(captured_requests, 404, body={"detail": "not_bound"})
     with pytest.raises(NotBoundError):
         await client.vendor_summary(telegram_user_id=42)
     await client.aclose()
+
+
+@pytest.mark.parametrize(
+    ("body", "text", "label"),
+    [
+        ({"detail": "Not Found"}, None, "FastAPI ning standart marshrutsiz javobi"),
+        ({}, None, "detali umuman yo'q JSON"),
+        (None, "<html><body>404 Not Found</body></html>", "nginx ning HTML sahifasi"),
+        (None, "", "bo'sh tana"),
+    ],
+)
+async def test_an_unnamed_404_is_a_plain_error_not_a_not_bound_state(
+    captured_requests: list[httpx.Request],
+    body: dict[str, object] | None,
+    text: str | None,
+    label: str,
+) -> None:
+    """⛔⛔ WR-01 — NOTO'G'RI SOZLANGAN `CORE_API_URL` «BOG'LANMAGANSIZ» BERMAYDI.
+
+    =========================================================================
+    ⛔ NUQSONNING OQIBATI FOYDALANUVCHI TOMONIDA O'LCHANADI, KODDA EMAS.
+
+    `start.py:97-98` ochiq taqiqlaydi: sotuvchiga «siz bog'lanmagansiz»
+    deyish FAQAT reyestr haqiqatan javob berganda mumkin. Ilgari HAR
+    QANDAY `404` shu xulosaga olib borardi, ya'ni:
+
+      * `CORE_API_URL` noto'g'ri sozlangan,
+      * `/internal/bot/*` prefiksi o'zgargan,
+      * oradagi proxy HTML `404` sahifasi qaytargan
+
+    uchala holatda ham sotuvchi kontakt tugmasini KO'RARDI, raqamini
+    QAYTA yuborardi va natija O'ZGARMASDI — infratuzilma nosozligi
+    UNING nuqsoni bo'lib ko'rinardi.
+
+    ⛔ `NotBoundError` — `CoreApiError` NING AVLODI, ya'ni «`CoreApiError`
+       ko'tarildimi?» degan sodda tekshiruv ikkala shoxda ham yashil
+       bo'lardi. Shuning uchun da'vo TURNI AYNIQ solishtiradi
+       (`type(...) is CoreApiError`), a'zolik bilan emas.
+    =========================================================================
+    """
+    from app.core_client import NotBoundError
+
+    client = await _failing_client(captured_requests, 404, body=body, text=text)
+    with pytest.raises(CoreApiError) as excinfo:
+        await client.vendor_summary(telegram_user_id=42)
+    await client.aclose()
+
+    assert not isinstance(excinfo.value, NotBoundError), (
+        f"{label}: `404` «bog'lanmagansiz» ga aylandi — sotuvchi infratuzilma "
+        "nosozligini O'Z nuqsoni deb ko'rardi (WR-01)"
+    )
+    assert type(excinfo.value) is CoreApiError, f"{label}: kutilmagan tur {type(excinfo.value)}"
+
+
+async def test_the_response_detail_never_reaches_the_log_or_the_error(
+    captured_requests: list[httpx.Request],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """⛔ D-04 — javob tanasidagi `detail` FAQAT TENGLIK uchun o'qiladi.
+
+    ⚠ Manba skani (yuqoridagi `ast` darvozasi) bu da'voni BAJARA
+      OLMAYDI: u istisno OBYEKTINI kuzatadi, `detail` esa oddiy satr.
+      Shuning uchun bu qatlam XULQIY — javobga o'ziga xos «marker» satr
+      qo'yiladi va u jurnal chiqishida ham, istisno matnida ham
+      qidiriladi.
+    """
+    marker = "MARKER-DETAIL-SHOULD-NEVER-BE-ECHOED"
+    client = await _failing_client(captured_requests, 404, body={"detail": marker})
+    with pytest.raises(CoreApiError) as excinfo:
+        await client.vendor_summary(telegram_user_id=42)
+    await client.aclose()
+
+    rendered = str(excinfo.value) + repr(excinfo.value)
+    stream = capsys.readouterr()
+    combined = stream.out + stream.err
+
+    # Nazorat: jurnal HAQIQATAN yozildi (aks holda «yo'q» da'vosi bo'sh).
+    assert "core_api_call_failed" in combined
+    assert marker not in rendered, "javob detali istisno matniga tushdi (D-04)"
+    assert marker not in combined, "javob detali jurnalga tushdi (D-04)"
 
 
 async def test_the_phone_number_never_reaches_the_url(

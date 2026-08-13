@@ -115,7 +115,8 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 __all__ = [
-    "DIGEST_COMPONENT",
+    "DIGEST_EVENING_COMPONENT",
+    "DIGEST_MORNING_COMPONENT",
     "OVERDUE_COMPONENT",
     "DigestResult",
     "ReminderResult",
@@ -129,27 +130,54 @@ _UUID = PgUuid(as_uuid=True)
 _DIRECTOR: Final[str] = OutboxRecipientKind.MARKET_DIRECTOR.value
 _VENDOR: Final[str] = OutboxRecipientKind.VENDOR.value
 
-DIGEST_COMPONENT: Final[str] = "notify_digest"
-"""`system_heartbeats.component` — IKKALA dayjestning yagona tashqi izi.
+DIGEST_MORNING_COMPONENT: Final[str] = "notify_digest_morning"
+"""`system_heartbeats.component` — ERTALABKI dayjestning YAKKA tashqi izi.
 
 =============================================================================
 ⛔⛔ SATR UCH JOYDA O'QILADI VA UCHALASI HAM SHU KONSTANTANI IMPORT
    QILISHI SHART: bu modul uni YOZADI, `app/jobs/alerting.py` uning
    eskirganini o'lchaydi, `app/api/internal/self_check.py` esa uning
-   UMUMAN yozilmaganini ko'rsatadi (`never_seen`). Ikkinchi va uchinchi
-   chaqiruvchi 07-14 da qo'shiladi va o'sha yerdagi `EXPECTED_COMPONENTS`
-   bilan bu satr AYNAN bir xil bo'lishi shart.
+   UMUMAN yozilmaganini ko'rsatadi (`never_seen`).
 
 Nom ayrilsa endpoint komponentni MANGU `never_seen` da ko'rsatardi,
 holbuki job ishlab turardi — xato yo'q, jurnal yozuvi yo'q, faqat
 sukunat (`self_check.py` ning o'lchangan darsi).
 =============================================================================
 
-⚠ IKKALA DAYJEST HAM SHU BITTA QATORNI YANGILAYDI va bu ONGLI narx:
-  konstantalar soni rejada AYNAN IKKITA. Oqibati ochiq — kechkisi ishlab,
-  ertalabkisi o'lsa yurak urishi HAMON YANGI ko'rinadi. Ikkinchi
-  komponent qo'shish 07-14 ning reyestrini kengaytiradi, ya'ni qaror
-  o'sha rejaniki.
+=============================================================================
+⛔⛔ 07-13 NING OCHIQ NARXI SHU YERDA YOPILDI (07-21, WR-10).
+
+O'sha reja SUMMARY sining «Struktura bo'yicha ongli qarorlar» B bandi
+ochiq yozgan edi: IKKALA dayjest ham BITTA `notify_digest` qatorini
+yangilaydi va oqibati — «kechkisi ishlab, ertalabkisi o'lsa yurak urishi
+HAMON YANGI ko'rinadi».
+
+Narx endi TO'LANDI, chunki u D-20 ning yagona qoidasini YARIM ishlatardi:
+alert MUVAFFAQIYAT SIGNALINING YO'QLIGIGA qo'yiladi — bitta qator esa
+ikki jobning YO'QLIGINI bir signalga qo'shib yuborardi va yarim o'lgan
+juftlik tirik ko'rinardi. Ikki komponent bilan `digest_stale` endi
+ERTALABKISI o'lganda ham ko'tariladi, QAYSI BIRI o'lgani esa
+`/internal/self-check` ning `stale` / `never_seen` ro'yxatlarida
+NOMMA-NOM turadi.
+
+⛔ ESKI `DIGEST_COMPONENT` ALIASI QOLDIRILMADI: qolgan alias eski nomni
+   yozadigan YANGI chaqiruvchi uchun ochiq eshik bo'lardi va o'sha
+   chaqiruvchi ikkala reyestrda ham ko'rinmasdi (nom `EXPECTED_COMPONENTS`
+   da ham, `watched` da ham yo'q) — ya'ni bu reja yopgan bo'shliq
+   jimgina qayta ochilardi.
+=============================================================================
+"""
+
+DIGEST_EVENING_COMPONENT: Final[str] = "notify_digest_evening"
+"""`system_heartbeats.component` — KECHKI dayjestning YAKKA tashqi izi.
+
+⛔ `DIGEST_MORNING_COMPONENT` NING JUFTI VA UNING BUTUN SABABI O'SHA
+   KONSTANTANING DOCSTRINGIDA. Ikkalasi ATAYIN ikki qator: bitta qator
+   ikki jobni yashirardi.
+
+⚠ IKKALASI HAM `digest_stale` ALERT KALITIGA BOG'LANADI va bu ONGLI
+  qaror — sabab `alerting.py::_platform_signals` dagi `watched` korteji
+  ustidagi izohda.
 """
 
 OVERDUE_COMPONENT: Final[str] = "notify_overdue"
@@ -299,7 +327,7 @@ async def digest_morning(
 
     await _write_heartbeat(
         sessionmaker,
-        component=DIGEST_COMPONENT,
+        component=DIGEST_MORNING_COMPONENT,
         detail={
             "markets": result.markets,
             "enqueued": result.enqueued,
@@ -375,7 +403,7 @@ async def digest_evening(
 
     await _write_heartbeat(
         sessionmaker,
-        component=DIGEST_COMPONENT,
+        component=DIGEST_EVENING_COMPONENT,
         detail={
             "markets": result.markets,
             "enqueued": result.enqueued,
@@ -555,15 +583,37 @@ async def _evening_market(
             )
 
         ledger = await digest_repo.ledger_day(session, market_id=market_id, business_date=as_of)
-        cases = await list_cases(session, market_id=market_id, day=as_of)
+        # ===================================================================
+        # ⛔⛔ KECHAGI KUN, BUGUNGISI EMAS — VA BU STRUKTURAVIY NOLNI YOPADI
+        #    (07-21, WR-10 ning jufti WR-02).
+        #
+        # `list_cases(day=...)` `reconciliation_cases.service_date = :day`
+        # bo'yicha filtrlaydi. Bugungi `service_date` li case esa faqat
+        # ERTAGA 04:25 da (`RECON_OPEN_CRON`) tug'iladi — ya'ni 20:45 dagi
+        # so'rov har kuni, ISTISNOSIZ `0` qaytarardi. O'lchanmagan holat
+        # o'lchangan nol bo'lib chiqardi va direktor «bugun nomuvofiqlik
+        # yo'q» degan YOLG'ON xulosani ko'rardi.
+        #
+        # Kecha esa `recon.open` ALLAQACHON yugurgan kun, ya'ni son YOZILGAN
+        # guruhga tegishli. §12.2 ning sifatlovchi kontrakti BUZILMAYDI:
+        # `expected_soum` (proyeksiya) va `unpaid_stall_count` hamon
+        # BUGUNGI kutilayotgan holatni aytadi — yorliq esa bu sonning
+        # KECHAGI kunga tegishli ekanini matnda OCHIQ aytadi
+        # (`outbox.py::_EVENING_TEXT["prev_anomalies"]`).
+        # ===================================================================
+        cases = await list_cases(session, market_id=market_id, day=as_of - timedelta(days=1))
 
         payload = outbox_payload(
             OutboxKind.DIGEST_EVENING.value,
             business_date=as_of.isoformat(),
             expected_soum=market.pending_amount_soum,
             collected_soum=ledger.collected_soum,
+            # ⛔ `unpaid_stall_count` PROYEKSIYADAN (D-15) VA U TEGILMADI:
+            #   kechki xabarning ASOSIY nomuvofiqlik raqami shu bo'lib
+            #   qoladi, `prev_day_case_count` esa uning yonidagi TARIXIY
+            #   kontekst.
             unpaid_stall_count=max(0, market.pending_stall_count - ledger.paid_stall_count),
-            anomaly_count=(
+            prev_day_case_count=(
                 cases.new_count
                 + cases.in_review_count
                 + cases.justified_count

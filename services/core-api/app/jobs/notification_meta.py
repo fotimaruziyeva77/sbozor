@@ -169,13 +169,20 @@ NOTIFICATION_META: Final[dict[str, NotificationMeta]] = {
             kind=OutboxKind.DIGEST_EVENING.value,
             never_suppressed=False,
             recipient_kind=OutboxRecipientKind.MARKET_DIRECTOR.value,
+            # ⛔ `anomaly_count` -> `prev_day_case_count` (07-21, WR-02) VA
+            #   IKKALA NOM BIR VAQTDA TURMAYDI. Eski nom qoldirilsa
+            #   `outbox_payload()` uni HAMON qabul qilardi, ya'ni «bugungi
+            #   kun» ni sanaydigan eski chaqiruvchi (u strukturaviy
+            #   ravishda HAR KUNI `0` qaytarardi) darvozadan JIMGINA o'tib
+            #   ketardi — allowlistning butun mazmuni aynan shu YO'Q
+            #   kalitning `ValueError` berishida.
             payload_keys=frozenset(
                 {
                     "business_date",
                     "expected_soum",
                     "collected_soum",
                     "unpaid_stall_count",
-                    "anomaly_count",
+                    "prev_day_case_count",
                 }
             ),
         ),
