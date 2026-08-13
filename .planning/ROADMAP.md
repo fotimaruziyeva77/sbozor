@@ -49,7 +49,7 @@ Decimal phases appear between their surrounding integers in numeric order.
  (completed 2026-08-09)
 
 - [x] **Phase 6: Billing va kassir** - O'zgarmas kunlik patta, dalil bog'lash, qarz, ≤3 bosishli kassir, smena hisobi (14/14 reja bajarildi; beshala mezon `tests/integration/test_phase6_criteria.py` bilan BITTA buyruqda o'lchanadi va uchala darvozasi — mezon boshiga bitta test, meta-test, soxtalashtirishsiz o'lchov — yashil. BILL-01…05 va CASH-01…04 dalil bilan `Done` (9/9). `## Manual-Only Verifications` jadvali BO'SH qoldi va bu fazaning NATIJASI: 5-fazadan farqli o'laroq bu yerda haqiqat to'liq mavjud edi (pul aniq, tarif jadvalda, bandlik materializatsiya qilingan), ya'ni «hozir o'lchab bo'lmaydi» bandining o'rni yo'q edi. 5-fazadan meros `gate` byudjeti TINCH XOSTDAGI uch o'lchov bilan qayta belgilandi: 1703/1733/1899 s, chegara 1250 s → **2300 s**; `gate:fast` 160/154/152 s, 180 s → **200 s** — ikkalasi ham o'sish TO'PLAMNING o'sishidan ekani raqam bilan asoslandi (173 backend testi, vitest 620 → 738, uchta yangi SSG marshruti). ⚠ **KOD KO'RIGI BO'SHLIQ TOPDI VA U YOPILDI:** `06-REVIEW.md` (2026-08-11) **5 bloker + 9 ogohlantirish** berdi — hammasi qatlam CHEGARALARIDA, ya'ni fazaning testlari to'xtagan joyda. Eng og'iri D-21 ning buzilishi edi: idempotentlik kvota darvozasidan KEYIN tekshirilardi, ya'ni qarz bilan to'lovni qayta yuborish 200 emas 422 berardi va to'lov ALLAQACHON yozilgan bo'lardi. O'n bir commitda yopildi va har blokerning tuzatilishi SABOTAJ bilan o'lchandi — har safar yangi test qizardi, mavjud testlar YASHIL qoldi (WR-09 ning aynan ko'rligi). ✅ **QAYTA TEKSHIRUV O'TDI (2026-08-11): 5/5, 9/9, holat `human_needed`** — `06-VERIFICATION.md`. Tekshiruvchi da'volarni o'qimay kodni O'ZI o'qidi, beshala tuzatishni mustaqil tasdiqladi va kafolatlarni migratsiya DDL'idan tekshirdi (idempotentlik kaliti — `UNIQUE` cheklov, ilova intizomi EMAS; o'zgarmaslik — shartsiz triggerlar; saqlangan `balance*` ustuni sxemada YO'Q). `human_needed` — `06-HUMAN-UAT.md` dagi to'rt band inson idroki, real qurilma va tashkiliy shart haqida, kod bo'shlig'i EMAS) (plans completed 2026-08-11)
-- [ ] **Phase 7: Nomuvofiqlik, bildirishnoma va botlar** - "Band, lekin to'lovsiz" case oqimi, sotuvchi va direktor botlari (17/17 reja bajarildi va merge qilindi, lekin ⚠ **TEKSHIRUV BO'SHLIQ TOPDI:** `07-VERIFICATION.md` (2026-08-12) fazaga `2/5` ball qo'yib `gaps_found` deb yopdi. Beshta mezondan #1 va #4 — MET; #2 va #5 — qisman; **#3 — NOT MET**: `market_notification_settings` ga butun repo bo'ylab yozuv yo'li yo'q, ya'ni direktor produksiyada dayjest hech qachon olmaydi (`test_sc3` yashil, chunki u sozlama qatorini fixture orqali to'g'ridan-to'g'ri SQL bilan yozadi). Kod ko'rigi `07-REVIEW.md` da 9 blocker qayd etdi. ⚠ **BELGI ATAYIN `- [ ]`:** fazani yopish qarori QAYTA TEKSHIRUVNIKI, ijrochi yoki reja sanog'iniki emas)
+- [x] **Phase 7: Nomuvofiqlik, bildirishnoma va botlar** - "Band, lekin to'lovsiz" case oqimi, sotuvchi va direktor botlari (17/17 reja bajarildi va merge qilindi, lekin ⚠ **TEKSHIRUV BO'SHLIQ TOPDI:** `07-VERIFICATION.md` (2026-08-12) fazaga `2/5` ball qo'yib `gaps_found` deb yopdi. Beshta mezondan #1 va #4 — MET; #2 va #5 — qisman; **#3 — NOT MET**: `market_notification_settings` ga butun repo bo'ylab yozuv yo'li yo'q, ya'ni direktor produksiyada dayjest hech qachon olmaydi (`test_sc3` yashil, chunki u sozlama qatorini fixture orqali to'g'ridan-to'g'ri SQL bilan yozadi). Kod ko'rigi `07-REVIEW.md` da 9 blocker qayd etdi. ⚠ **BELGI ATAYIN `- [ ]`:** fazani yopish qarori QAYTA TEKSHIRUVNIKI, ijrochi yoki reja sanog'iniki emas) (completed 2026-08-13)
 - [ ] **Phase 8: Hisobotlar, mustahkamlash va ishga tushirish** - Excel eksport, AI aniqlik hisoboti, backup mashqi, go-live
 
 ## Phase Details
@@ -482,21 +482,21 @@ Plans:
 
 **Gap Wave 1** — Mezon #3 (NOT MET) va navbat konvergentligi
 
-- [ ] 07-18-PLAN.md — Direktor bog'lanishi: `director_chat_id` ning yagona yozuv yo'li (B-1)
-- [ ] 07-19-PLAN.md — Outbox: urinish byudjeti, tik deadline va UNRESOLVED terminal chegara (B-3/B-4)
+- [x] 07-18-PLAN.md — Direktor bog'lanishi: `director_chat_id` ning yagona yozuv yo'li (B-1)
+- [x] 07-19-PLAN.md — Outbox: urinish byudjeti, tik deadline va UNRESOLVED terminal chegara (B-3/B-4)
 
 **Gap Wave 2** *(blocked on Gap Wave 1)*
 
-- [ ] 07-20-PLAN.md — Case mas'uli serverga yetadi + `user_market_roles` tekshiruvi (B-2, WR-01/WR-05)
-- [ ] 07-21-PLAN.md — Kuzatuv, matn rostgo'yligi va dev muhiti (WR-10/WR-02/WR-03, B-8/B-9)
+- [x] 07-20-PLAN.md — Case mas'uli serverga yetadi + `user_market_roles` tekshiruvi (B-2, WR-01/WR-05)
+- [x] 07-21-PLAN.md — Kuzatuv, matn rostgo'yligi va dev muhiti (WR-10/WR-02/WR-03, B-8/B-9)
 
 **Gap Wave 3** *(blocked on Gap Wave 2)*
 
-- [ ] 07-22-PLAN.md — Frontend: to'rt ro'yxat yuzasi — sahifalash, a11y, arifmetika (B-6, WR-06/WR-08)
+- [x] 07-22-PLAN.md — Frontend: to'rt ro'yxat yuzasi — sahifalash, a11y, arifmetika (B-6, WR-06/WR-08)
 
 **Gap Wave 4** *(blocked on Gap Wave 3)*
 
-- [ ] 07-23-PLAN.md — Frontend: hukm dialogi yiqilganda buni AYTADI (B-5/B-7, WR-09/WR-16)
+- [x] 07-23-PLAN.md — Frontend: hukm dialogi yiqilganda buni AYTADI (B-5/B-7, WR-09/WR-16)
 
 **UI hint**: yes
 
@@ -568,7 +568,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
 | 6. Billing va kassir | 14/14 | Complete   | 2026-08-11 |
-| 7. Nomuvofiqlik, bildirishnoma va botlar | 17/17 | Complete   | 2026-08-12 |
+| 7. Nomuvofiqlik, bildirishnoma va botlar | 23/23 | Complete   | 2026-08-13 |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
 
 ---
