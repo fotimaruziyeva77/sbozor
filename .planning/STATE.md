@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 8 context gathered
-last_updated: "2026-08-13T04:57:28.455Z"
+stopped_at: Phase 8 UI-SPEC approved
+last_updated: "2026-08-13T05:32:36.238Z"
 last_activity: 2026-08-12 -- Phase 07 execution started
 progress:
   total_phases: 9
@@ -286,6 +286,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-13T04:57:28.417Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-hisobotlar-mustahkamlash-va-ishga-tushirish/08-CONTEXT.md
+Last session: 2026-08-13T05:32:36.229Z
+Stopped at: Phase 8 UI-SPEC approved
+Resume file: .planning/phases/08-hisobotlar-mustahkamlash-va-ishga-tushirish/08-UI-SPEC.md
