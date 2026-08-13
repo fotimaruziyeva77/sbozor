@@ -278,6 +278,21 @@ def _decode_cursor(raw: str | None) -> reconciliation_repo.CaseCursor | None:
     ⛔ JIM TASHLAB YUBORISH TAQIQLANADI: nazoratchi «Yana» tugmasini
        bosganda BIRINCHI sahifani qayta ko'rardi va navbat cheksiz
        aylanardi — u buni sezmasdi ham, chunki qatorlar haqiqiy.
+
+    =======================================================================
+    ⛔⛔ TZ-SIZ QIYMAT HAM BUZILGAN QIYMAT (WR-05).
+
+    `2026-01-01|<uuid>` `datetime.fromisoformat()` dan MUVAFFAQIYATLI
+    o'tadi (u yaroqli ISO), lekin `tzinfo` siz qoladi. Kursorni esa
+    ⛔ SERVER quradi (`_encode_cursor()`) va u HAR DOIM tz-aware —
+    ya'ni naive qiymat qo'lda yasalgan kursor, ya'ni KIRISH xatosi.
+
+    ⚠ 07-20 DA O'LCHANGAN QIZIL: bunday kursor bazagacha borib **200**
+      qaytarardi — `rows` BO'SH, hisoblagich esa haqiqiy sonda. Ya'ni
+      yuqoridagi «JIM TASHLAB YUBORISH TAQIQLANADI» bandi AMALDA
+      bajarilmasdi va nosozlik `500` dan ham yomonroq shaklda —
+      YOLG'ON YASHIL javob bo'lib chiqardi.
+    =======================================================================
     """
     if raw is None:
         return None
@@ -287,6 +302,8 @@ def _decode_cursor(raw: str | None) -> reconciliation_repo.CaseCursor | None:
         case_id = UUID(tail)
     except ValueError as exc:
         raise _reject("cursor_invalid", status.HTTP_422_UNPROCESSABLE_CONTENT) from exc
+    if created_at.tzinfo is None:
+        raise _reject("cursor_invalid", status.HTTP_422_UNPROCESSABLE_CONTENT)
     return reconciliation_repo.CaseCursor(created_at=created_at, case_id=case_id)
 
 
@@ -870,6 +887,12 @@ def _decode_delivery_cursor(raw: str | None) -> outbox_repo.DeliveryCursor | Non
 
     ⛔ JIM TASHLAB YUBORISH TAQIQLANADI: direktor «Yana» bosganda
        BIRINCHI sahifani qayta ko'rardi va ro'yxat cheksiz aylanardi.
+
+    ⛔ TZ-SIZ QIYMAT HAM BUZILGAN QIYMAT — sabab `_decode_cursor()` da
+       (WR-05). ⛔ IKKI DEKODER MUSTAQIL: bittasini tuzatib ikkinchisini
+       unutish yetkazilganlik yuzasini AYNI nuqson bilan qoldirardi va
+       direktor «bugun xabar yuborilmagan» degan YOLG'ON xulosaga
+       kelardi (o'lchangan: **200**, `rows` bo'sh, `pending_count` 2).
     """
     if raw is None:
         return None
@@ -879,6 +902,8 @@ def _decode_delivery_cursor(raw: str | None) -> outbox_repo.DeliveryCursor | Non
         outbox_id = UUID(tail)
     except ValueError as exc:
         raise _reject("cursor_invalid", status.HTTP_422_UNPROCESSABLE_CONTENT) from exc
+    if created_at.tzinfo is None:
+        raise _reject("cursor_invalid", status.HTTP_422_UNPROCESSABLE_CONTENT)
     return outbox_repo.DeliveryCursor(created_at=created_at, outbox_id=outbox_id)
 
 

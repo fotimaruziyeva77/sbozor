@@ -190,10 +190,17 @@ _OPEN_ANOMALY_CASES = text(
           FROM candidates c
         ON CONFLICT (market_id, anomaly_id) WHERE anomaly_id IS NOT NULL
         DO NOTHING
+        RETURNING id AS case_id, market_id AS market_id
+    ), born AS (
+        INSERT INTO reconciliation_case_events
+                    (market_id, case_id, from_status, to_status, actor_user_id)
+        SELECT i.market_id, i.case_id, NULL::text, :status_new, NULL::uuid
+          FROM inserted i
         RETURNING 1 AS written
     )
     SELECT (SELECT count(*) FROM candidates)::int AS candidates,
-           (SELECT count(*) FROM inserted)::int   AS inserted
+           (SELECT count(*) FROM inserted)::int   AS inserted,
+           (SELECT count(*) FROM born)::int       AS born
     """
 ).bindparams(
     bindparam("market_id", type_=_UUID),
@@ -221,6 +228,39 @@ _OPEN_ANOMALY_CASES = text(
 ⚠ `service_date` NOMZOD QATORDAN (`a.service_date`), argumentdan EMAS:
   ikki manba bir kun ajralib ketardi va case «boshqa kunning» dalilini
   ko'rsatardi.
+
+=============================================================================
+⛔⛔ `born` — CASE TUG'ILISHINING TARIX QATORI (WR-01).
+
+Sxema, model va API uchta joyda `from_status IS NULL` ni ALLAQACHON
+e'lon qiladi (`EVENT_FROM_STATUS_CHECK`, `ReconciliationCaseEvent`
+docstringi, `CaseEvent.from_status: str | None`), lekin 07-20 gacha
+o'sha yo'ldan mahsulotda ⛔ HECH QACHON qator o'tmasdi: case'ni job
+ochardi, tarix esa BO'SH qolardi va u IKKINCHI qadamdan boshlanardi.
+
+⛔ `actor_user_id` — `NULL`, ya'ni ⛔ TIZIM («noma'lum» EMAS, `0022`
+   qarori). Case'ni odam emas, cron ochadi va u yerga biror odamning
+   identifikatorini yozish «kimdir qo'lda ochdi» degan YOLG'ON da'vo
+   bo'lardi.
+
+⛔ AYNI TRANZAKSIYADA VA AYNI BAYONOTDA: alohida `INSERT` case yozilib,
+   hodisa yozilmagan holatni tug'dirardi — nizo hujjatida (D-02) case
+   qayerdan kelgani javobsiz qolardi.
+
+⛔ TAKRORIY YUGURISHDA QATOR YOZILMAYDI: `ON CONFLICT DO NOTHING` tufayli
+   mavjud case `inserted` ga TUSHMAYDI, ya'ni `born` ham bo'sh qoladi.
+   Har kechagi cron aks holda tarixga YANGI «tug'ildi» qatorini
+   qo'shardi.
+
+⚠ `born` NING SANOG'I TASHQI `SELECT` DA ATAYIN BOR: PostgreSQL
+  ma'lumot o'zgartiruvchi CTE ni natijasi o'qilmasa ham OXIRIGACHA
+  bajaradi, ya'ni sanoq ZARURIYAT emas — u INVARIANTNI (`born` ==
+  `inserted`) o'qiladigan qiladi.
+
+⚠ `market_id` VA `case_id` NOMZOD QATORDAN EMAS, `inserted` DAN
+  (`RETURNING`): `:market_id` argumentini ikkinchi marta yozish ikki
+  manbani tug'dirardi — `service_date` bandidagi bilan AYNI qoida.
+=============================================================================
 """
 
 _OVERDUE_CHARGES = text(
@@ -273,10 +313,17 @@ _OPEN_UNPAID_CASES = text(
           FROM candidates c
         ON CONFLICT (market_id, charge_id) WHERE charge_id IS NOT NULL
         DO NOTHING
+        RETURNING id AS case_id, market_id AS market_id
+    ), born AS (
+        INSERT INTO reconciliation_case_events
+                    (market_id, case_id, from_status, to_status, actor_user_id)
+        SELECT i.market_id, i.case_id, NULL::text, :status_new, NULL::uuid
+          FROM inserted i
         RETURNING 1 AS written
     )
     SELECT (SELECT count(*) FROM candidates)::int AS candidates,
-           (SELECT count(*) FROM inserted)::int   AS inserted
+           (SELECT count(*) FROM inserted)::int   AS inserted,
+           (SELECT count(*) FROM born)::int       AS born
     """
 ).bindparams(
     bindparam("market_id", type_=_UUID),
@@ -293,6 +340,11 @@ _OPEN_UNPAID_CASES = text(
 
 ⛔ Idempotentlik jufti — `uq_reconciliation_cases_charge` qisman
    indeksi; sabab `_OPEN_ANOMALY_CASES` docstringi bilan bir xil.
+
+⛔ `born` CTE si ham AYNAN o'sha yerda sabablangan (WR-01): SINF A ning
+   case'i ham tarixga TUG'ILISH qatori bilan kiradi. Ikki sinfdan
+   birortasini qoldirish «case tarixi qayerdan boshlanadi?» savoliga
+   NISHONGA QARAB ikki xil javob berardi.
 """
 
 
