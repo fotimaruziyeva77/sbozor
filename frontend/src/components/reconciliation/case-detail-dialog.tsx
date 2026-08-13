@@ -82,14 +82,35 @@ import { useAssigneeLabels } from "@/lib/vendor-labels";
  * dialogi ham ⛔ ISHLATILMAYDI.
  *
  * -----------------------------------------------------------------------
- * ⛔⛔ 5. «BITTA SO'ROV = BITTA QAROR» QULFI
+ * ⛔⛔ 5. «BITTA SO'ROV = BITTA QAROR» QULFI — VA U AYNAN QARORGA BOG'LANGAN
  * -----------------------------------------------------------------------
- * Qulf ⛔ BAND IDENTIFIKATORINI saqlaydi, bayroqni emas: render
- * paytida hisoblangan bayroqni bir hodisa oqimidagi ikki bosish
- * IKKALASI ham ESKI qiymatda ko'rardi. Ikki so'rov ⛔ IKKI AUDIT
- * QATORI yozardi va tarix ⛔ YOLG'ON ko'rinardi — D-14 ning butun
- * mazmuni «kim, qachon, nima qildi» ekanini hisobga olsak, bu eng
- * qimmat nosozlik.
+ * Qulf ⛔ BAYROQNI saqlamaydi: render paytida hisoblangan bayroqni bir
+ * hodisa oqimidagi ikki bosish IKKALASI ham ESKI qiymatda ko'rardi. Ikki
+ * so'rov ⛔ IKKI AUDIT QATORI yozardi va tarix ⛔ YOLG'ON ko'rinardi —
+ * D-14 ning butun mazmuni «kim, qachon, nima qildi» ekanini hisobga
+ * olsak, bu eng qimmat nosozlik.
+ *
+ * ⛔⛔ LEKIN QULF ⛔ BAND IDENTIFIKATORINI HAM SAQLAMAYDI (B-7 tuzatildi).
+ *    U `case_id:status` juftligini — ya'ni ⛔ YUBORILGAN QARORNI saqlaydi.
+ *
+ *    Muvaffaqiyatdan keyin dialog ⛔ YOPILMAYDI (`case-list.tsx` —
+ *    `openCaseId` faqat `onOpenChange(false)` da tozalanadi) va bu forma
+ *    ⛔ UNMOUNT BO'LMAYDI. Ya'ni real oqim: `new→in_review` saqlanadi,
+ *    keyin direktor yechim matnini yozib `in_review→justified` qiladi.
+ *    Band identifikatoriga bog'langan qulf ikkinchi — ⛔ MUTLAQO
+ *    QONUNIY — qarorni ⛔ JIMGINA tashlab yuborardi: so'rov ketmasdi,
+ *    xato chiqmasdi, tugma esa faol ko'rinardi.
+ *
+ * ⛔ VA `onError` ⛔ `onSettled` GA ALMASHTIRILDI. Eski izoh
+ *    («muvaffaqiyatda ikkinchi so'rov nol o'tish (409) bo'lardi») faqat
+ *    holat O'ZGARMAGANDA rost, nol o'tish shoxini esa `unchanged`
+ *    bayrog'i ⛔ ALLAQACHON to'sib turibdi (6-band). Ya'ni qulfni
+ *    muvaffaqiyatda ushlab qolish 409 dan emas, ⛔ HAQIQIY ikkinchi
+ *    qarordan himoyalanardi.
+ *
+ * ⚠ Dublikat qulfi ⛔ SAQLANADI: `mutate` asinxron, ya'ni `onSettled`
+ *   bir hodisa oqimidagi ikkinchi bosishdan ⛔ KEYIN ishlaydi va o'sha
+ *   bosish hamon AYNI biletni ko'radi.
  *
  * -----------------------------------------------------------------------
  * ⛔⛔ 6. NOL O'TISHDA TUGMA ⛔ FAOL EMAS — VA BU YOLG'ONNING OLDINI OLADI
@@ -118,6 +139,17 @@ const TERMINAL_STATUSES: ReadonlySet<CaseStatusValue> = new Set([
   "justified",
   "unjustified",
 ]);
+
+/**
+ * To'siq SABABINING elementi — `aria-describedby` shu `id` ga ishora qiladi.
+ *
+ * ⛔ KONSTANTA, xom satr EMAS: `id` IKKI joyda (element va tugma) yoziladi
+ *    va ulardan birining o'zgarishi bog'lanishni ⛔ JIMGINA uzardi —
+ *    skrinrider foydalanuvchisi tugmaga fokuslanib HECH NIMA eshitmasdi,
+ *    ko'radigan foydalanuvchi esa matnni ko'raverardi. Ya'ni nosozlik
+ *    faqat ⛔ BIR SINF foydalanuvchida ko'rinardi.
+ */
+const BLOCKED_REASON_ID = "case-decision-blocked";
 
 /**
  * Audit izidagi holat YO'LI — ⛔ noma'lum qiymat YASHIRILMAYDI.
@@ -328,16 +360,18 @@ function DecisionForm({ detail }: { detail: CaseDetail }) {
   );
 
   /*
-   * ⛔ QULF BAND IDENTIFIKATORINI SAQLAYDI (5-band): render paytida
-   *   hisoblangan bayroqni bir hodisa oqimidagi ikki bosish IKKALASI
-   *   ham ESKI qiymatda ko'rardi.
+   * ⛔ QULF YUBORILGAN QARORNI SAQLAYDI (5-band): bayroq ham, band
+   *   identifikatori ham YARAMAYDI — birinchisi bir hodisa oqimidagi
+   *   ikki bosishni o'tkazardi, ikkinchisi esa AYNI dialogdagi ikkinchi
+   *   HAQIQIY qarorni jimgina tashlab yuborardi.
    */
   const submittedRef = useRef<string | null>(null);
 
   const noteRequired = TERMINAL_STATUSES.has(status as CaseStatusValue);
   const unchanged = status === detail.status;
-  const blocked =
-    unchanged || (noteRequired && note.trim() === "") || update.isPending;
+  /* ⛔ ALOHIDA BAYROQ: `blocked` UCH sababdan iborat, matn esa FAQAT shunga. */
+  const noteMissing = noteRequired && note.trim() === "";
+  const blocked = unchanged || noteMissing || update.isPending;
 
   const errorView = reconErrorView(
     update.error instanceof ApiError ? update.error.detail : null,
@@ -345,9 +379,15 @@ function DecisionForm({ detail }: { detail: CaseDetail }) {
 
   const onSave = () => {
     if (blocked) return;
-    /* ⛔ IKKINCHI BOSISH SHU YERDA TO'XTAYDI — so'rov yuborilmaydi. */
-    if (submittedRef.current === detail.case_id) return;
-    submittedRef.current = detail.case_id;
+
+    /*
+     * ⛔ BILET — `case:status`, band identifikatori EMAS. Ikkinchi bosish
+     *   AYNI qarorda shu yerda to'xtaydi; ikkinchi HAQIQIY qaror esa
+     *   BOSHQA bilet bo'lgani uchun o'tadi (B-7).
+     */
+    const ticket = `${detail.case_id}:${status}`;
+    if (submittedRef.current === ticket) return;
+    submittedRef.current = ticket;
 
     update.mutate(
       {
@@ -358,11 +398,12 @@ function DecisionForm({ detail }: { detail: CaseDetail }) {
       },
       {
         /*
-         * ⛔ QULF FAQAT XATODA BO'SHATILADI: muvaffaqiyatda qator
-         *   ALLAQACHON o'zgargan va ikkinchi so'rov nol o'tish (409)
-         *   bo'lardi.
+         * ⛔ `onSettled`, `onError` EMAS (5-band): muvaffaqiyatda ham
+         *   bo'shatiladi, chunki nol o'tishni `unchanged` allaqachon
+         *   to'sadi va qulfning ushlab qolishi FAQAT qonuniy ikkinchi
+         *   qarorga zarar berardi.
          */
-        onError: () => {
+        onSettled: () => {
           submittedRef.current = null;
         },
       },
@@ -423,7 +464,35 @@ function DecisionForm({ detail }: { detail: CaseDetail }) {
         />
       </Field>
 
-      {errorView === null ? null : (
+      {/*
+       * --- XATO: ⛔ SHART `update.isError`, `errorView !== null` EMAS ------
+       *
+       * ⛔⛔ `reconErrorView()` FAQAT BESH kodni biladi va qolgan HAMMASI
+       *    `null` qaytaradi: `NetworkError` (`ApiError` emas), `422`
+       *    (FastAPI `detail` ni MASSIV qiladi va `detailOf()` bo'sh satr
+       *    beradi), `429`, `5xx`, `market_not_selected` — hammasi.
+       *    `null` shoxida hech nima chizmaslik ⛔ YIQILGAN HUKMNI
+       *    MUVAFFAQIYATLI HUKMDAN AJRATIB BO'LMAYDIGAN qilardi: dialog
+       *    ochiq, tanlangan holat `<Select>` da, tugma yana faol — va
+       *    direktor nizo hujjatini (D-02) YOZILGAN deb hisoblardi (B-5).
+       *
+       * ⛔ ZAXIRA MATN — `reconciliation-errors.ts` ning modul izohida
+       *    (106-108) ALLAQACHON yozilgan shartnoma: «Xaritada YO'Q kod
+       *    `null` qaytaradi va chaqiruvchi `errors.generic` ga tushadi».
+       *    Yagona chaqiruvchi endi uni BAJARADI.
+       *
+       * ⛔ EKRANGA FAQAT LOKALIZATSIYA KALITI CHIQADI: xom `detail`,
+       *    istisno matni, stack izi yoki status kodi ⛔ HECH QACHON
+       *    (T-01-65 bilan bir sinf).
+       */}
+      {!update.isError ? null : errorView === null ? (
+        <p
+          className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
+          role="alert"
+        >
+          {t("errors.generic")}
+        </p>
+      ) : (
         <p
           className="flex flex-col gap-1 rounded-sm bg-surface-muted px-3 py-2 text-sm"
           role="alert"
@@ -432,6 +501,43 @@ function DecisionForm({ detail }: { detail: CaseDetail }) {
           <span className="text-text-muted">{t(errorView.fixKey)}</span>
         </p>
       )}
+
+      {/*
+       * --- TO'SIQ SABABI (WR-16) — ⛔ XATO EMAS, BAJARILMAGAN SHART -------
+       *
+       * ⛔⛔ MATN UCHALA LOCALE'DA YOZILGAN EDI, LEKIN UNGA OLIB BORADIGAN
+       *    YO'L YO'Q EDI: server `case_resolution_required` ni HECH QACHON
+       *    qaytarmaydi (bu qoida KLIENTDA yashaydi), klientdagi yagona
+       *    tekshiruv esa `blocked` ichida va u ⛔ HECH NIMA CHIZMASDI —
+       *    `onSave` jim `return` qilardi. Direktor «Asosli» ni tanlab
+       *    tugmani bosardi va HECH NIMA bo'lmasdi.
+       *
+       * ⛔ `role="alert"` ⛔ TAQIQLANGAN (§14.9 jonli hududlar qatori:
+       *    `alert` — FAQAT xato). Foydalanuvchi hech nimani buzmagan;
+       *    `RECON_ERROR_TONE` ham bu kodni `neutral` deb yozgan.
+       *
+       * ⛔ `role="status"` HAM ⛔ TAQIQLANGAN: 07-22 ning G-38 darvozasi bu
+       *    katalogda `role="status"` ni AYNAN olti joyga va HAR birini
+       *    `aria-busy` bilan BIR elementda bo'lishga qulflagan. Yettinchi
+       *    jonli hudud darvozani qizartirardi — va u HAQLI bo'lardi: shart
+       *    render paytida rost, ya'ni e'lon hech kim kutmagan paytda
+       *    yangrardi.
+       *
+       * ⛔ TO'G'RI KANAL — `aria-describedby`: sabab tugmaga fokuslanganda,
+       *    ya'ni foydalanuvchi ⛔ SO'RAGANDA o'qiladi.
+       *
+       * ⚠ SHART `noteMissing`, `blocked` EMAS: nol o'tishda «yechim matni
+       *   kerak» ⛔ YOLG'ON bo'lardi — 6-band aynan yolg'on matnning
+       *   oldini olish uchun yozilgan.
+       */}
+      {noteMissing ? (
+        <p className="flex flex-col gap-1 text-sm" id={BLOCKED_REASON_ID}>
+          <span>{t("recon.errorCause.case_resolution_required")}</span>
+          <span className="text-text-muted">
+            {t("recon.errorFix.case_resolution_required")}
+          </span>
+        </p>
+      ) : null}
 
       {/*
        * ⛔ FAZADAGI YAGONA AKSENT FONLI TUGMA (§13.3): u TANLOV emas,
@@ -443,6 +549,7 @@ function DecisionForm({ detail }: { detail: CaseDetail }) {
        *   eshitmasdi.
        */}
       <Button
+        aria-describedby={noteMissing ? BLOCKED_REASON_ID : undefined}
         aria-disabled={blocked}
         onClick={onSave}
         size="lg"
