@@ -514,8 +514,53 @@ Plans:
   4. Go-live runbook tayyor va uch tilli interfeys yakuniy tekshiruvdan o'tgan — kassir, nazoratchi va admin tizimda mashq qilib ko'rgan
   5. Parallel rejim uchun 3 tomonlama solishtiruv vositasi ishlaydi: daftar vs tizim vs AI-kutilgan — kunlik chiqariladi va imzolanadi
 
-**Plans**: TBD
+**Plans**: 20 plans in 7 waves
+Plans:
+**Wave 1** *(parallel — fayl to'plamlari kesishmaydi)*
+
+- [ ] 08-01-PLAN.md — Wave 0/A: bayt-determinik `xlsx_export`, `freeze_zip` mahsulotga, hisobot chegaralari (W1)
+- [ ] 08-02-PLAN.md — Wave 0/B: `0024_ledger_entries` + `0025_notification_settings_id`, reyestrlar, audit zondi (W1)
+- [ ] 08-03-PLAN.md — Wave 0/C: frontend kontrakti — reyestrlar, `report-queries`, uch locale, `report-copy` darvozasi (W1)
+- [ ] 08-04-PLAN.md — `report_repo`: tushum · qarzdorlik · nomuvofiqlik arxivining hosila so'rovlari (W1)
+- [ ] 08-05-PLAN.md — `backup` konteyneri: quvursiz zaxira, idempotent tsikl, yurak urishi, statik darvoza (W1)
+- [ ] 08-06-PLAN.md — Mustahkamlash A: backend WR-04/06/09 (W1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 08-07-PLAN.md — Hisobot API (JSON): huquq, bitta `audit_read`, davr chegaralari (W2)
+- [ ] 08-08-PLAN.md — Zaxira yurak urishi va tiklash mashqining CI qatlami (W2)
+- [ ] 08-09-PLAN.md — Frontend boshqaruvlari: davr tanlagichi (maks KECHA) va eksport tugmasi (W2)
+- [ ] 08-10-PLAN.md — Mustahkamlash B: frontend WR/IN + 07 №1-qo'shimcha + 07 №2 (ism bo'shlig'i) (W2)
+- [ ] 08-11-PLAN.md — Mustahkamlash C: bot WR-02/03/04 + IN-01/07 + WR-14 (W2)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 08-12-PLAN.md — `.xlsx` eksport marshrutlari va bayt-tasnif darvozasining KENGAYTIRILISHI (W3)
+- [ ] 08-13-PLAN.md — Frontend Y-1a: tushum va qarzdorlik ko'rinishlari (G-39) (W3)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 08-14-PLAN.md — Daftar importi: to'rtinchi shablon turi, validator, all-or-nothing marshrut (W4)
+- [ ] 08-15-PLAN.md — Frontend Y-1b: nomuvofiqlik arxivi va aniqlik bloki (G-40 a/b) (W4)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 08-16-PLAN.md — Uch tomonlama solishtiruv: hosila so'rov, marshrutlar, imzoli eksport (W5)
+- [ ] 08-17-PLAN.md — Frontend: `/reports` sahifasi, blok darvozasi (G-37), navigatsiya, manba skani (W5)
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 08-18-PLAN.md — Frontend Y-3: solishtiruv sahifasi, daftar importi, uch farq sinfi (W6)
+- [ ] 08-19-PLAN.md — Go-live runbook, `08-HUMAN-UAT.md` va runbook shakli darvozasi (W6)
+
+**Wave 7** *(blocked on Wave 6)*
+
+- [ ] 08-20-PLAN.md — Faza darvozasi: `test_phase8_criteria.py`, `gate` byudjeti, talab holatlari (W7)
+
 **UI hint**: yes
+**Note**: Faza belgisi (`- [ ] **Phase 8: ...**`) ijro tugagach ham
+O'ZGARTIRILMAYDI — fazani yopish qarori ⛔ **qayta tekshiruvniki**
+(`/gsd-verify-work`), ijrochi emas. 4–7-fazalarda aynan shunday saqlangan.
 
 ## Post-Launch: Parallel rejim (hafta 13–16, build'dan tashqari)
 
@@ -569,7 +614,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
 | 6. Billing va kassir | 14/14 | Complete   | 2026-08-11 |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 23/23 | Complete   | 2026-08-13 |
-| 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/TBD | Not started | - |
+| 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/20 | Planned (7 to'lqin) | - |
 
 ---
 *Roadmap yaratildi: 2026-07-29*
