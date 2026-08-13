@@ -54,6 +54,7 @@ from app.repositories.binding_repo import (
     active_bindings,
     resolve,
     resolve_director,
+    revoke,
 )
 from app.security.ratelimit import BOT_RESOLVE_LIMIT
 from fixtures.billing_domain import (
@@ -290,8 +291,14 @@ def _settings_rows(conn: Connection[TupleRow], market_ids: tuple[UUID, ...]) -> 
 
 
 def _binding_rows(conn: Connection[TupleRow], seed: TwoMarketPhoneSeed) -> list[tuple[Any, ...]]:
+    """Bog'lanish qatorlari — ⚠ `id` OXIRIDA (indeks `5`).
+
+    Ustun ATAYIN ro'yxatning oxiriga qo'shildi (07-21): boshiga qo'yish
+    mavjud o'nlab da'vodagi indekslarni siljitardi va ular JIMGINA
+    boshqa ustunni o'lchay boshlardi.
+    """
     return conn.execute(
-        "SELECT market_id, vendor_id, telegram_user_id, revoked_at, revoked_reason "
+        "SELECT market_id, vendor_id, telegram_user_id, revoked_at, revoked_reason, id "
         "FROM vendor_telegram_bindings WHERE market_id = ANY(%s::uuid[]) ORDER BY created_at",
         ([str(market_id) for market_id in seed.market_ids],),
     ).fetchall()
@@ -643,11 +650,26 @@ async def test_rebinding_revokes_the_old_row_and_keeps_it(
     sync_owner_conn: Connection[TupleRow],
     tenant_session: TenantSessionFactory,
 ) -> None:
-    """⛔ D-26(c): eski qator O'CHIRILMAYDI, BEKOR QILINADI + audit qatori.
+    """⛔ D-26(c): eski qator O'CHIRILMAYDI, BEKOR QILINADI — TARIX JADVALDA.
 
     `DELETE` yozish «eski bog'lanish qachon, nega bekor qilindi?»
     savolini javobsiz qoldirardi — holbuki aynan shu savol nizoda (D-02)
     «xabar kimga ketgan edi?» degan javobni beradi.
+
+    =======================================================================
+    ⛔⛔ AUDIT DA'VOSI `1` DAN `0` GA O'ZGARDI (07-21, WR-03) VA DA'VO
+       SUSAYMADI — U AUDIT JADVALIDAN TARIX JADVALIGA KO'CHDI.
+
+    `schema_contract.AUDITED_TABLES` `vendor_telegram_bindings` ni ATAYIN
+    chiqargan: jadvalning O'ZI TARIX va audit unga IKKINCHI NUSXA
+    yozardi. Ilgari `revoke()` ilova darajasida qo'lda audit qatori
+    yozardi, ya'ni reyestr qarori va kod bir-biriga ZID edi.
+
+    ⛔ YANGI JOY KUCHLIROQ: audit sanog'i faqat «bir qator yozildi» ni
+       aytardi, quyidagi da'volar esa QAYSI qator bekor qilinganini
+       (`telegram_user_id`), QACHON (`revoked_at NOT NULL`) va NEGA
+       (`revoked_reason = "rebound"`) ekanini ham o'lchaydi.
+    =======================================================================
     """
     _drop_second_vendor(sync_owner_conn, phone_seed)
     await resolve(
@@ -673,7 +695,80 @@ async def test_rebinding_revokes_the_old_row_and_keeps_it(
     assert int(active[0][2]) == TELEGRAM_ID_B
 
     audit_after = await _binding_audit_count(tenant_session, phone_seed.markets.market_a.id)
-    assert audit_after - audit_before == 1
+    assert audit_after - audit_before == 0, (
+        "bog'lanish jadvaliga audit qatori YOZILDI — `AUDITED_TABLES` uni "
+        "ATAYIN chiqargan va ilova darajasidagi qator IKKINCHI NUSXA bo'lardi "
+        "(WR-03). Tarix jadvalning O'ZIDA va u yuqorida o'lchandi."
+    )
+
+
+async def test_revoking_an_already_revoked_binding_rewrites_nothing(
+    phone_seed: TwoMarketPhoneSeed,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+) -> None:
+    """⛔⛔ WR-03 — QAYTA BEKOR QILISH TARIXNI QAYTA YOZMAYDI.
+
+    =======================================================================
+    ⛔ NUQSONNING MEXANIKASI: `revoke()` da `revoked_at IS NULL` qo'riqchisi
+       YO'Q edi, ya'ni ALLAQACHON bekor qilingan qatorga ikkinchi chaqiruv
+       `revoked_at = now()` va `revoked_reason = <yangi sabab>` yozardi.
+       Jadvalning butun mazmuni TARIX (D-27), ya'ni ASL bekor qilish
+       payti va ASL sabab YO'Q BO'LARDI — «o'chirmaymiz» qoidasi saqlanib
+       turib, dalil baribir yo'qolardi.
+
+    ⛔ DA'VO IKKI YO'NALISHLI: birinchi chaqiruv `True` (holat O'ZGARDI),
+       ikkinchisi `False` (NO-OP). Faqat «qiymatlar o'zgarmadi» ni
+       o'lchash yetmasdi — funksiya umuman ishlamay qolganda ham u yashil
+       bo'lardi.
+    =======================================================================
+    """
+    _drop_second_vendor(sync_owner_conn, phone_seed)
+    await resolve(
+        app_sessionmaker,
+        raw_phone=phone_seed.phone_e164,
+        telegram_user_id=TELEGRAM_ID_A,
+    )
+    (row,) = _binding_rows(sync_owner_conn, phone_seed)
+    binding_id = UUID(str(row[5]))
+    market_id = phone_seed.markets.market_a.id
+
+    async with tenant_session(market_id) as session:
+        first = await revoke(
+            session,
+            market_id=market_id,
+            binding_id=binding_id,
+            vendor_id=phone_seed.vendor_a_id,
+            telegram_user_id=TELEGRAM_ID_A,
+            reason="asl-sabab",
+        )
+    assert first is True, "birinchi bekor qilish HOLATNI o'zgartirmadi"
+
+    (after_first,) = _binding_rows(sync_owner_conn, phone_seed)
+    original_moment, original_reason = after_first[3], after_first[4]
+    assert original_moment is not None and original_reason == "asl-sabab"
+
+    async with tenant_session(market_id) as session:
+        second = await revoke(
+            session,
+            market_id=market_id,
+            binding_id=binding_id,
+            vendor_id=phone_seed.vendor_a_id,
+            telegram_user_id=TELEGRAM_ID_A,
+            reason="qayta-yozilgan-sabab",
+        )
+    assert second is False, (
+        "ikkinchi bekor qilish `True` qaytardi — `revoked_at IS NULL` qo'riqchisi "
+        "ishlamayapti va qator QAYTA YOZILDI (WR-03)"
+    )
+
+    (after_second,) = _binding_rows(sync_owner_conn, phone_seed)
+    assert after_second[3] == original_moment, (
+        "ASL bekor qilish PAYTI qayta yozildi — nizoda «xabar qachondan beri "
+        "bu akkauntga ketmayapti?» savoli javobsiz qolardi (D-02)"
+    )
+    assert after_second[4] == original_reason, "ASL bekor qilish SABABI qayta yozildi"
 
 
 async def test_resolving_the_same_pair_twice_writes_no_second_audit_row(
@@ -1076,18 +1171,29 @@ def test_resolve_director_never_breaks_out_of_the_market_loop() -> None:
     assert not breaks, "`resolve_director()` ichida `break` topildi (T-07-101)."
 
 
-def test_the_director_write_path_adds_no_audit_call() -> None:
-    """⛔ `market_notification_settings` GA AUDIT QATORI YOZILMAYDI (T-07-102).
+def test_the_binding_repo_writes_no_application_audit_at_all() -> None:
+    """⛔⛔ MODULDA AUDIT CHAQIRUVI AYNAN NOL — REYESTR VA KOD BIR NARSA AYTADI.
 
-    Jadval `AUDITED_TABLES` dan TEXNIK sababga ko'ra chiqarilgan: unda
-    `id uuid` ustuni yo'q va `fn_audit_row()` `row_id` ni `uuid` ga
-    keltiradi, ya'ni trigger har DML da yiqilardi. Ilova darajasida qo'lda
-    yozish esa `revoke()` da topilgan WR-03 nuqsonining takrori bo'lardi.
+    =========================================================================
+    ⛔ KUTILGAN SON `1` DAN `0` GA TUSHDI (07-21, WR-03) VA BU DA'VONING
+       SUSAYISHI EMAS, KUCHAYISHI.
+
+    Ilgari `revoke()` ilova darajasida audit qatori yozardi, holbuki
+    `schema_contract.AUDITED_TABLES` docstringi `vendor_telegram_bindings`
+    ni ATAYIN chiqargan («jadvalning O'ZI TARIX ... audit unga IKKINCHI
+    NUSXA yozardi»). Ya'ni reyestr qarori va kod BIR-BIRIGA ZID edi va
+    darvoza o'sha ziddiyatni `== 1` bilan QULFLAB turardi.
+
+    Endi shart bir tomonlama: bu modulda audit chaqiruvi UMUMAN yo'q,
+    ya'ni yangi qo'shilgan HAR QANDAY chaqiruv qizaradi — chegara `1`
+    bo'lganda «ikkinchisini qo'shmang» degani edi, `0` esa
+    «birinchisini ham qo'shmang».
 
     ⚠ SANOQ AST BILAN O'LCHANADI, GREP BILAN EMAS: mahsulot fayli
       taqiqning SABABINI o'z docstringida yozadi va sodda matn qidiruvi
       o'sha izohni «yangi chaqiruv» deb o'qirdi — yagona «tuzatish» yo'li
       sababni o'chirish bo'lardi (03-07 / G7-8 darsi).
+    =========================================================================
     """
     tree = ast.parse(BINDING_REPO_SOURCE.read_text(encoding="utf-8"))
     audit_calls = [
@@ -1098,9 +1204,10 @@ def test_the_director_write_path_adds_no_audit_call() -> None:
         and node.func.id == "write_app_audit"
     ]
 
-    assert len(audit_calls) == 1, (
+    assert audit_calls == [], (
         f"`binding_repo` da {len(audit_calls)} ta audit chaqiruvi bor — kutilgani "
-        "AYNAN BITTA (`revoke()`). Direktor yo'li audit qatori YOZMAYDI."
+        "NOL. Jadvalning O'ZI TARIX (D-27) va `AUDITED_TABLES` uni ATAYIN "
+        "chiqargan; ilova darajasidagi qator IKKINCHI NUSXA bo'lardi."
     )
 
 

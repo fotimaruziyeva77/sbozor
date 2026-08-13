@@ -78,7 +78,7 @@ from typing import TYPE_CHECKING, Final
 from uuid import UUID
 
 import structlog
-from sbozor_core.enums import ActorKind, AuditAction, Role
+from sbozor_core.enums import ActorKind, Role
 from sbozor_core.models import Stall, StallAssignment, Vendor, VendorTelegramBinding
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 from sbozor_core.tenancy import set_tenant_context
@@ -88,7 +88,6 @@ from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from app.jobs.alerting import raise_alert
 from app.jobs.retention import active_market_ids
 from app.repositories.user_repo import UserRepository
-from app.security.audit import write_app_audit
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -729,8 +728,8 @@ async def revoke(
     vendor_id: UUID,
     telegram_user_id: int,
     reason: str,
-) -> None:
-    """Faol bog'lanishni BEKOR QILADI va audit qatorini yozadi.
+) -> bool:
+    """FAOL bog'lanishni bekor qiladi — ⛔ IDEMPOTENT NO-OP va AUDITSIZ.
 
     ⛔ ESKI QATOR O'CHIRILMAYDI (append-only, D-20 sinfi). `DELETE` yozish
        «eski bog'lanish qachon, nega bekor qilindi?» savolini javobsiz
@@ -738,26 +737,66 @@ async def revoke(
        ketgan edi?» degan javobni beradi. Jadvalning O'Z docstringi
        (`models/notification.py::VendorTelegramBinding`) buni TARIX deb
        ta'riflaydi.
+
+    =======================================================================
+    ⛔⛔ (1) `revoked_at IS NULL` QO'RIQCHISI — APPEND-ONLY NING IKKINCHI
+       YARMI (07-21, WR-03).
+
+    Qo'riqchisiz `UPDATE` ALLAQACHON bekor qilingan qatorning `revoked_at`
+    va `revoked_reason` ustunlarini QAYTA YOZARDI. Jadvalning butun
+    mazmuni TARIX (D-27), ya'ni qayta yozish ASL bekor qilish paytini va
+    ASL sababini YO'Q QILARDI — «o'chirmaymiz» qoidasi saqlanib turib,
+    dalil baribir yo'qolardi. `RETURNING` bo'sh bo'lsa funksiya JIM
+    qaytadi: hech nima o'zgarmagan, ya'ni jurnalga ham yozadigan fakt
+    yo'q.
+
+    =======================================================================
+    ⛔⛔ (2) AUDIT QATORI YOZILMAYDI — REYESTR QARORI USTUN (07-21, WR-03).
+
+    `schema_contract.AUDITED_TABLES` docstringi `vendor_telegram_bindings`
+    ni ATAYIN chiqargan: jadvalning O'ZI TARIX va audit unga IKKINCHI
+    NUSXA yozardi. Ilgari bu funksiya ilova darajasida qo'lda audit
+    yozardi, ya'ni ⛔ REYESTR QARORI VA KOD BIR-BIRIGA ZID EDI — «bu
+    jadval auditsiz» degan hujjat bilan «audit yozilyapti» degan xulq bir
+    vaqtda mavjud edi.
+
+    ⛔ REYESTR TEGILMAYDI, KOD UNGA MOSLASHADI: teskarisi (jadvalni
+       reyestrga qo'shish) `fn_audit_row()` ni talab qilardi va u `row_id`
+       ni `uuid` ga keltiradi — bu jadvalda esa `id uuid` bor, ya'ni
+       texnik to'siq yo'q, LEKIN ikkinchi nusxa muammosi qoladi.
+
+    =======================================================================
+    ⛔ (3) `old={"revoked_at": None, ...}` TO'QILGAN QIYMAT EDI: kod
+       qatorning HAQIQIY oldingi holatini O'QIMASDAN, uni `None` deb
+       FARAZ QILARDI. Qayta bekor qilishda esa faraz YOLG'ON bo'lardi va
+       audit jurnali «avval bekor qilinmagan edi» deb YOLG'ON DALIL
+       yozardi. U (2) bilan birga yo'qoldi.
+
+    ⚠ TUZILMAVIY JURNAL QOLADI va uning argumentlari O'ZGARMAYDI: telefon
+      raqami u yerda YO'Q va qo'shilmaydi.
+    =======================================================================
+
+    Returns:
+        `True` — qator SHU chaqiruvda bekor qilindi; `False` — u
+        allaqachon bekor qilingan edi va hech nima o'zgarmadi.
     """
-    await session.execute(
-        update(VendorTelegramBinding)
-        .where(
-            VendorTelegramBinding.market_id == market_id,
-            VendorTelegramBinding.id == binding_id,
+    revoked = (
+        await session.execute(
+            update(VendorTelegramBinding)
+            .where(
+                VendorTelegramBinding.market_id == market_id,
+                VendorTelegramBinding.id == binding_id,
+                # ⛔ QO'RIQCHI — docstringning (1) bandi.
+                VendorTelegramBinding.revoked_at.is_(None),
+            )
+            .values(revoked_at=func.now(), revoked_reason=reason)
+            .returning(VendorTelegramBinding.id)
         )
-        .values(revoked_at=func.now(), revoked_reason=reason)
-    )
-    await write_app_audit(
-        session,
-        action=AuditAction.UPDATE,
-        table_name=VendorTelegramBinding.__tablename__,
-        row_id=binding_id,
-        old={"revoked_at": None, "revoked_reason": None},
-        new={"revoked_at": "now()", "revoked_reason": reason},
-        market_id=market_id,
-        actor_kind=ActorKind.SYSTEM,
-        actor_label="bot",
-    )
+    ).scalar_one_or_none()
+
+    if revoked is None:
+        return False
+
     log.info(
         "vendor_binding_revoked",
         market_id=str(market_id),
@@ -765,6 +804,7 @@ async def revoke(
         telegram_user_id=telegram_user_id,
         reason=reason,
     )
+    return True
 
 
 async def bind(

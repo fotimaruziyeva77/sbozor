@@ -58,6 +58,7 @@ TAFSILOTI ko'rinmaydi.
 
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import date
 from typing import Any, Final
 from uuid import UUID
@@ -104,8 +105,49 @@ tayanadi.
 """
 
 _NOT_BOUND_STATUS: Final = 404
+"""`core-api` ning «bog'lanmagan» javobining STATUSI — ⛔ YOLG'IZ O'ZI YETMAYDI.
+
+⚠ SHART IKKI QISMLI: status VA `_NOT_BOUND_DETAIL`. Sabab pastdagi
+  konstantaning docstringida.
+"""
+
+_NOT_BOUND_DETAIL: Final = "not_bound"
 """`core-api` ning «bu Telegram akkaunti hech qaysi sotuvchiga bog'lanmagan»
-javobi (`api/internal/bot.py::_NOT_BOUND`). Bu XATO EMAS, HOLAT."""
+javobidagi NOMLANGAN detal. Bu XATO EMAS, HOLAT.
+
+=============================================================================
+⛔⛔ SATR `api/internal/bot.py::_NOT_BOUND` BILAN AYNAN BIR XIL BO'LISHI
+   SHART VA U BU YERDA LITERAL TAKRORLANADI.
+
+Sabab mexanik: bu IKKINCHI KOD BAZASI (`bot-service` ning O'Z
+`pyproject.toml` va `uv.lock` i bor, D-09), ya'ni `core-api` dan import
+qilishning YO'LI YO'Q. To'plam a'zoligi bilan bog'lash ham imkonsiz.
+Shuning uchun juftlik LITERAL, va uning sababi shu yerda OCHIQ yozilgan —
+`binding_repo::VENDOR_BINDING_CONFLICT_ALERT_KEY` bilan aynan bir xil
+holat va aynan bir xil yechim.
+
+=============================================================================
+⛔⛔ NEGA STATUS YOLG'IZ O'ZI YETMAYDI — VA BU O'LCHANGAN NUQSON (WR-01).
+
+Ilgari HAR QANDAY `404` `NotBoundError` ga aylanardi. Ya'ni:
+
+  * noto'g'ri sozlangan `CORE_API_URL` (marshrut umuman yo'q -> nginx
+    yoki FastAPI ning `{"detail": "Not Found"}` i),
+  * `/internal/bot/*` prefiksining o'zgarishi,
+  * oradagi proxy ning HTML `404` sahifasi
+
+uchalasi ham sotuvchiga «SIZ BOG'LANMAGANSIZ» degan xulosani berardi va
+`/start` uni kontakt tugmasiga qaytarardi. Sotuvchi raqamini QAYTA
+yuborardi, natija O'ZGARMASDI — ya'ni infratuzilma nosozligi
+FOYDALANUVCHINING nuqsoni bo'lib ko'rinardi. `start.py:97-98` aynan shu
+YOLG'ON xulosani ochiq taqiqlaydi.
+
+⚠ Endi faqat NOMLANGAN detal shu shoxga olib boradi; qolgan har qanday
+  `404` oddiy `CoreApiError` bo'ladi va handler `bot.error.retry` ni
+  ko'rsatadi — ya'ni nosozlik KO'RINADI, lekin u sotuvchining aybi
+  bo'lib ko'rinmaydi.
+=============================================================================
+"""
 
 
 # ===========================================================================
@@ -136,21 +178,68 @@ class CoreApiError(Exception):
 
 
 class NotBoundError(CoreApiError):
-    """`404` — Telegram akkaunti hech qaysi sotuvchiga bog'lanmagan.
+    """`404` + NOMLANGAN `not_bound` detali — akkaunt hech kimga bog'lanmagan.
 
     ⛔ ALOHIDA TUR, `status == 404` TEKSHIRUVI EMAS. Sabab: bu HOLAT
     handlerda «xato» shoxidan BOSHQA javob beradi (foydalanuvchi
     `/start` ga qaytariladi), ya'ni farq handlerlarning har birida
     takrorlanadigan sehrli songa emas, TURGA tayanishi kerak.
+
+    ⛔⛔ SHART IKKI QISMLI VA IKKINCHI QISM 07-21 DA QO'SHILDI (WR-01):
+       statusning O'ZI yetmaydi, javob tanasida `detail == "not_bound"`
+       ham bo'lishi SHART. Sabab `_NOT_BOUND_DETAIL` docstringida —
+       qisqasi, noto'g'ri sozlangan `CORE_API_URL` ham `404` beradi va
+       u sotuvchiga «siz bog'lanmagansiz» degan YOLG'ON xulosani
+       berardi.
     """
 
 
-def _failure(operation: str, exc: Exception, status: int | None) -> CoreApiError:
+def _is_not_bound(response: httpx.Response) -> bool:
+    """Javob AYNAN «bog'lanmagansiz» holatimi — status VA nomlangan detal.
+
+    =========================================================================
+    ⛔ TANA FAQAT TENGLIK UCHUN O'QILADI (D-04). Olingan `detail` qiymati
+       ⛔ HECH QAYERGA yozilmaydi: na jurnalga, na istisno matniga, na
+       qaytish qiymatiga. Funksiya `bool` qaytaradi va aynan shu sababdan:
+       satrni qaytarish uni chaqiruvchining ixtiyoriga qo'yardi va ertami
+       kechmi u jurnalga chiqardi.
+
+    ⚠ `suppress(ValueError)` — `json.JSONDecodeError` ning ota-turi.
+      HTML `404` sahifasi, bo'sh tana va buzuq JSON uchalasi ham shu
+      yerda tugaydi va ⛔ `False` beradi, ya'ni ular «bog'lanmagansiz»
+      xulosasiga OLIB BORMAYDI (WR-01).
+
+    ⚠ `isinstance(..., dict)` MAJBURIY: `json()` ro'yxat yoki satr
+      qaytarishi mumkin va o'shanda `.get()` `AttributeError` berardi —
+      ya'ni infratuzilma nosozligi botni YIQITARDI.
+    =========================================================================
+    """
+    if response.status_code != _NOT_BOUND_STATUS:
+        return False
+    with suppress(ValueError):
+        body = response.json()
+        if isinstance(body, dict):
+            return bool(body.get("detail") == _NOT_BOUND_DETAIL)
+    return False
+
+
+def _failure(
+    operation: str, exc: Exception, status: int | None, *, not_bound: bool = False
+) -> CoreApiError:
     """`httpx` istisnosini SIRSIZ `CoreApiError` ga aylantiradi (D-04).
 
     ⛔ Bu funksiyaning tanasida istisnoni TASVIRLAYDIGAN hech narsa
        yozilmaydi: darvoza aynan shu tanani `ast` bilan o'qiydi va
        `str(exc)` / f-string ichidagi istisno uni QIZARTIRADI.
+
+    Args:
+        not_bound: ⛔ QAROR CHAQIRUVCHIDA QABUL QILINADI, bu yerda EMAS.
+            Ilgari shox `status == 404` bilan tanlanardi va o'sha shakl
+            HAR QANDAY `404` ni «bog'lanmagansiz» ga aylantirardi
+            (WR-01, `_NOT_BOUND_DETAIL` docstringi). Bayroq shaklida
+            javob TANASI ham qarorga kiradi, lekin uning QIYMATI bu
+            funksiyaga UMUMAN yetib kelmaydi — ya'ni D-04 darvozasi
+            (`ast` bilan shu tanani o'qiydi) yashil qoladi.
     """
     log.warning(
         "core_api_call_failed",
@@ -160,7 +249,7 @@ def _failure(operation: str, exc: Exception, status: int | None) -> CoreApiError
         error_type=type(exc).__name__,
         status=status,
     )
-    if status == _NOT_BOUND_STATUS:
+    if not_bound:
         return NotBoundError(operation=operation, error_type=type(exc).__name__, status=status)
     return CoreApiError(operation=operation, error_type=type(exc).__name__, status=status)
 
@@ -329,7 +418,13 @@ class CoreClient:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as exc:
-            raise _failure(operation, exc, exc.response.status_code) from exc
+            # ⛔ TANA SHU YERDA O'QILADI, `_failure()` ICHIDA EMAS: qaror
+            #   (qaysi istisno turi) chaqiruvchida qabul qilinadi va
+            #   `_failure()` faqat BAYROQ oladi — ya'ni javob mazmuni D-04
+            #   darvozasi qo'riqlaydigan tanaga umuman kirmaydi.
+            raise _failure(
+                operation, exc, exc.response.status_code, not_bound=_is_not_bound(exc.response)
+            ) from exc
         except httpx.HTTPError as exc:
             raise _failure(operation, exc, None) from exc
         except ValueError as exc:
@@ -391,9 +486,10 @@ class CoreClient:
         """BOT-02 (1/2) — sotuvchining qoldig'i, har bozor uchun alohida.
 
         Raises:
-            NotBoundError: `404` — akkaunt hech qaysi sotuvchiga
-                bog'lanmagan (HOLAT, xato emas).
-            CoreApiError: qolgan har qanday nosozlik.
+            NotBoundError: `404` + `detail == "not_bound"` — akkaunt hech
+                qaysi sotuvchiga bog'lanmagan (HOLAT, xato emas).
+            CoreApiError: qolgan har qanday nosozlik — ⛔ NOMLANMAGAN
+                `404` ham SHU YERGA tushadi (WR-01).
         """
         payload = await self._request(
             "vendor_summary",
