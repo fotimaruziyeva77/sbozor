@@ -73,8 +73,15 @@ export function HitRateCard({ day }: { day: string }) {
    * ⛔ AYNAN O'SHA KALIT — navbat bloki bilan BIR XIL. TanStack ikkala
    *   iste'molchini BITTA so'rovga birlashtiradi, ya'ni foiz va navbat
    *   AYNAN BIR LAHZANI ko'rsatadi.
+   *
+   * ⛔⛔ SANOQ ⛔ BIRINCHI SAHIFADAN (`counts`) — VA BU ARIFMETIKANI
+   *    O'ZGARTIRMAYDI. Server kontrakti bo'yicha sanoq filtrdan ham,
+   *    sahifadan ham MUSTAQIL: u HAR javobda BUTUN kunning soni. Ularni
+   *    sahifalar bo'ylab YIG'ISH maxrajni har «Yana yuklash» bosilganda
+   *    ⛔ IKKILANTIRARDI va foiz o'zi o'lchayotgan narsani emas, nechta
+   *    sahifa ochilganini ko'rsatardi.
    */
-  const cases = useReconciliationCases(day, "");
+  const cases = useReconciliationCases(day);
 
   if (cases.isPending) {
     return (
@@ -92,7 +99,7 @@ export function HitRateCard({ day }: { day: string }) {
     );
   }
 
-  if (cases.data === undefined) {
+  if (cases.counts === undefined) {
     /*
      * ⛔ Xatoda ⛔ NOL CHIZILMAYDI: nol O'LCHANGAN qiymat ma'nosini
      *   berardi. Nomlangan sabab qo'shni bloklarda allaqachon bor.
@@ -109,10 +116,10 @@ export function HitRateCard({ day }: { day: string }) {
     );
   }
 
-  const justified = cases.data.justified_count;
-  const unjustified = cases.data.unjustified_count;
+  const justified = cases.counts.justified_count;
+  const unjustified = cases.counts.unjustified_count;
   const resolved = justified + unjustified;
-  const pending = cases.data.new_count + cases.data.in_review_count;
+  const pending = cases.counts.new_count + cases.counts.in_review_count;
 
   return (
     /* ⛔ Atribut ENG TASHQI elementda va HAR holatda — yuklanishda ham. */

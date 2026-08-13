@@ -51,9 +51,44 @@ import { useVendorLabels } from "@/lib/vendor-labels";
  * AUDIT QILINGAN reestr marshrutidan, `lib/vendor-labels.ts` da
  * joinlanadi. Bu yerda shaxsiy maydonning NOMI ham uchramaydi.
  *
- * ⛔ ARIFMETIKA YO'Q: qarz serverdan KELGAN ikki sondan chiziladi va
- *    ularning birortasi ham klientda qayta hisoblanmaydi. `null` esa
- *    ⛔ NOLGA aylantirilmaydi — «yo'q summa» YO'Q SUMMA bo'lib qoladi.
+ * -----------------------------------------------------------------------
+ * ⛔⛔ ARIFMETIKA YO'Q — VA ENDI BU ROST (WR-06)
+ * -----------------------------------------------------------------------
+ * Bu invariant bir muddat ⛔ FAQAT IZOHDA turgan edi: qator ostida
+ * `expected − paid` ayirmasi bajarilardi va u «Qarz» ustunini to'ldirardi.
+ * Ayirma `int` ustida ketgani uchun pul TURI buzilmasdi (D-07 saqlanardi),
+ * lekin u ⛔ IKKINCHI HAQIQAT MANBAI edi: qarz serverda
+ * `billing_repo.vendor_outstanding()` va kredit taqsimoti qoidalari bilan
+ * chiqadi, bu yerda esa oddiy ayirma bilan. Serverga tuzatish
+ * (`charge_adjustments`) yoki kredit taqsimoti qo'shilgan kuni ikki son
+ * ⛔ JIMGINA ajralardi va nizo hujjatida (D-02) ikki xil raqam qolardi.
+ *
+ * ⛔⛔ NEGA UCHINCHI USTUN (server bergan «qoldiq») HAM QO'SHILMADI:
+ *
+ *   1. `ReportRowResponse` da `outstanding_soum` MAYDONI ⛔ UMUMAN YO'Q —
+ *      ya'ni bugungi kontrakt bilan uni CHIZISHNING yagona yo'li
+ *      klientda ayirish bo'lardi, ya'ni aynan olib tashlangan nuqson;
+ *   2. `paid_soum` ning O'Z docstringi buni ochiq taqiqlaydi: «⛔
+ *      HISOBLANMAYDI, BERILADI ... Uni bu yerda (yoki klientda) ayirish
+ *      bilan chiqarish «to'landimi?» savolining IKKINCHI javobini
+ *      tug'dirardi»;
+ *   3. Sotuvchining qarzi — `billing_repo.vendor_outstanding()` ning
+ *      javobi va u ⛔ SOTUVCHI kesimida (rasta-kun kesimida EMAS)
+ *      yashaydi, ya'ni bu jadvalning qatori uchun u TA'RIFAN boshqa son.
+ *      Uning uyi — qarzdorlik reestri yuzasi.
+ *
+ * ⚠⚠ DIZAYN KONTRAKTIDAN ⛔ ASOSLI CHETLANISH: 07-UI-SPEC §8.3 bu jadvalga
+ *   «Qarz (`outstanding_soum`)» ustunini yozgan. Kontraktning O'ZI manbani
+ *   ⛔ SERVER MAYDONI deb ko'rsatgan, server esa uni ⛔ BERMAYDI — ya'ni
+ *   ustunni ROST chizishning yo'li YO'Q. Ikki sonni ko'rsatish direktorga
+ *   «kutilgan va yig'ilgan» faktini beradi va ⛔ hech qanday yangi haqiqat
+ *   manbai tug'dirmaydi. (`case-list.tsx` va `unregistered-list.tsx` da
+ *   ayni sinfdagi chetlanishlar allaqachon yozilgan.)
+ *
+ * ⛔ `null` ⛔ NOLGA aylantirilmaydi — «yo'q summa» YO'Q SUMMA bo'lib
+ *    qoladi va katak NOMLANGAN holat matnini oladi: nol yozish «qarz
+ *    yo'q» degan YOLG'ON da'vo, bo'sh katak esa 4-fazada o'lchangan «jim
+ *    xato» sinfi bo'lardi.
  * =============================================================================
  */
 
@@ -103,7 +138,13 @@ export function UnpaidList({ day }: { day: string }) {
          * ⛔ SINFNING O'Z SANOG'I VA O'Z SUMMASI — BLOK ICHIDA. Ular
          *   qo'shni blokning soni bilan HECH QACHON bir qatorda turmaydi.
          */
-        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm" role="status">
+        /*
+         * ⛔ `role` YO'Q (WR-08): u `<dl>` ning implicit rolini
+         *   ALMASHTIRIB, `<dt>`/`<dd>` juftligining atama–qiymat
+         *   bog'lanishini yo'q qilardi. Jonli hudud ham YO'Q — bu blokda
+         *   foydalanuvchi boshlaydigan yangilash mavjud emas.
+         */
+        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
           <div className="flex items-center gap-2">
             <dt className="text-text-muted">{t("recon.unpaidCountLabel")}</dt>
             <dd className="m-0 font-mono tabular-nums">
@@ -112,9 +153,10 @@ export function UnpaidList({ day }: { day: string }) {
           </div>
           <div className="flex items-center gap-2">
             <dt className="text-text-muted">{t("recon.unpaidSoumLabel")}</dt>
+            {/* ⛔ Birlik O'Z namespace'idan (IN-05): `headline.*` — BOSHQA yuza. */}
             <dd className="m-0 font-mono tabular-nums">
               {format.number(report.data.unpaid_expected_soum)}{" "}
-              {t("headline.amountUnit")}
+              {t("recon.amountUnit")}
             </dd>
           </div>
         </dl>
@@ -136,11 +178,12 @@ export function UnpaidList({ day }: { day: string }) {
               <tr className="border-b border-border text-left text-xs text-text-muted">
                 <th className="p-3 font-normal">{t("recon.stallColumn")}</th>
                 <th className="p-3 font-normal">{t("recon.vendorColumn")}</th>
+                {/*
+                 * ⛔ IKKI USTUN, UCHTA EMAS: «qarz» ustuni SERVER
+                 *   maydonisiz ROST chizilmaydi (modul izohi).
+                 */}
                 <th className="p-3 font-normal">{t("recon.expectedColumn")}</th>
                 <th className="p-3 font-normal">{t("recon.paidColumn")}</th>
-                <th className="p-3 font-normal">
-                  {t("recon.outstandingColumn")}
-                </th>
                 <th className="p-3 font-normal">{t("recon.evidenceColumn")}</th>
                 <th className="p-3 font-normal">{t("recon.statusColumn")}</th>
               </tr>
@@ -172,15 +215,15 @@ function UnpaidRow({
   const format = useFormatter();
 
   /*
-   * ⛔ QARZ — SERVERDAN KELGAN IKKI SONDAN. Ikkalasidan biri `null`
-   *   bo'lsa ayirma ⛔ CHIZILMAYDI: nol yozish «qarz yo'q» degan
-   *   YOLG'ON da'vo bo'lardi, holbuki haqiqat «qancha ekanini tizim
-   *   BILMAYDI».
+   * ⛔⛔ IKKI SON — SERVERDAN KELGANICHA. Klient ularni ⛔ QO'SHMAYDI,
+   *   ⛔ AYIRMAYDI va ⛔ QAYTA HISOBLAMAYDI: u FORMATLAYDI, XOLOS.
+   *
+   * ⛔ `null` — NOMLANGAN holat: «qancha ekanini tizim BILMAYDI». Nol
+   *   yozish «to'lov yo'q» degan YOLG'ON da'vo, bo'sh katak esa jim xato
+   *   bo'lardi.
    */
   const expected = row.expected_soum;
   const paid = row.paid_soum;
-  const outstanding =
-    expected === null || paid === null ? null : expected - paid;
 
   return (
     <tr className="border-b border-border last:border-b-0">
@@ -191,13 +234,22 @@ function UnpaidRow({
         )}
       </td>
       <td className="p-3 font-mono tabular-nums">
-        {expected === null ? "—" : format.number(expected)}
+        {expected === null ? (
+          <span className="font-sans text-text-muted">
+            {t("recon.amountUnknown")}
+          </span>
+        ) : (
+          format.number(expected)
+        )}
       </td>
       <td className="p-3 font-mono tabular-nums">
-        {paid === null ? "—" : format.number(paid)}
-      </td>
-      <td className="p-3 font-mono tabular-nums text-danger-text">
-        {outstanding === null ? "—" : format.number(outstanding)}
+        {paid === null ? (
+          <span className="font-sans text-text-muted">
+            {t("recon.amountUnknown")}
+          </span>
+        ) : (
+          format.number(paid)
+        )}
       </td>
       <td className="p-3">
         <EvidenceLink

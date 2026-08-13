@@ -195,13 +195,17 @@ describe("⛔ G-30 (b): ikki blokdan TASHQARIDA raqam YO'Q", () => {
     const unpaid = container.querySelector('[data-recon-content="unpaid"]');
     const unregistered = container.querySelector('[data-recon-content="unregistered"]');
 
-    /* Sinf A — sanoq VA summa (qarz mavjud). */
+    /* Sinf A — sanoq VA summa. */
     expect(unpaid?.textContent).toContain("14-C");
     expect(within(unpaid as HTMLElement).getAllByRole("row").length).toBeGreaterThan(1);
 
-    /* ⛔ Sinf B — FAQAT sanoq. Summa MAVJUD EMAS (tarif bilinmaydi). */
+    /*
+     * ⛔ Sinf B — FAQAT sanoq. Summa MAVJUD EMAS (tarif bilinmaydi), ya'ni
+     *   pul ustunlarining BIRORTASI ham bu blokda uchramaydi.
+     */
     expect(unregistered?.textContent).toContain("31-A");
-    expect(unregistered?.textContent).not.toContain(messages.recon.outstandingColumn);
+    expect(unregistered?.textContent).not.toContain(messages.recon.expectedColumn);
+    expect(unregistered?.textContent).not.toContain(messages.recon.paidColumn);
   });
 
   test("⛔ sinf B da qarz ustuni YO'Q — nol qo'shilmaydi", async () => {
@@ -226,6 +230,167 @@ describe("⛔ G-30 (b): ikki blokdan TASHQARIDA raqam YO'Q", () => {
         messages.recon.statusColumn,
       ]),
     );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WR-06 — KLIENT PUL AYIRMASI QILMAYDI                                       */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ WR-06: qarz KLIENTDA hisoblanmaydi", () => {
+  test("⛔ USTUNLAR TO'PLAMI — server bermagan «qarz» ustuni YO'Q", async () => {
+    const { container } = await renderBothClasses();
+
+    const unpaid = container.querySelector('[data-recon-content="unpaid"]');
+    const headers = within(unpaid as HTMLElement)
+      .getAllByRole("columnheader")
+      .map((node) => node.textContent);
+
+    /*
+     * ⛔ TO'PLAM TENGLIGI: «qarz ustuni yo'qmi?» tekshiruvi uni BOSHQA
+     *   nom bilan qaytargan regressiyani KO'RMASDI. Tenglik esa HAR
+     *   QANDAY yangi ustunda qizaradi.
+     *
+     * ⛔ NEGA UCHINCHI USTUN UMUMAN YO'Q: `ReportRowResponse` da
+     *   `outstanding_soum` MAYDONI YO'Q va uni klientda ayirish
+     *   «to'landimi?» savolining IKKINCHI javobini tug'dirardi
+     *   (`paid_soum` ning O'Z docstringi aynan shuni taqiqlaydi).
+     */
+    expect(new Set(headers)).toEqual(
+      new Set([
+        messages.recon.stallColumn,
+        messages.recon.vendorColumn,
+        messages.recon.expectedColumn,
+        messages.recon.paidColumn,
+        messages.recon.evidenceColumn,
+        messages.recon.statusColumn,
+      ]),
+    );
+  });
+
+  test("⛔ IKKI SON ALOHIDA chiziladi va ULARNING AYIRMASI ekranda YO'Q", async () => {
+    const { container } = await renderBothClasses();
+
+    const unpaid = container.querySelector(
+      '[data-recon-content="unpaid"]',
+    ) as HTMLElement;
+    const cells = [...unpaid.querySelectorAll("tbody td")].map(
+      (node) => node.textContent ?? "",
+    );
+
+    /* Serverdan KELGAN ikki son — o'z kataklarida. */
+    const numbers = cells.flatMap((text) => text.match(/\d+/gu) ?? []);
+    expect(numbers).toContain("30");
+    expect(numbers).toContain("10");
+
+    /*
+     * ⛔ AYIRMA (30 000 − 10 000 = 20 000) ⛔ HECH QAYERDA. Da'vo
+     *   HISOBLANGAN qiymat ustidan, `outstanding` NOMI ustidan emas:
+     *   nomga qadalgan tekshiruv o'zgaruvchini qayta nomlagan
+     *   regressiyani ko'rmasdi.
+     */
+    expect(numbers).not.toContain("20");
+  });
+
+  test("⛔ `null` summa NOMLANGAN holat matnini oladi — `0` EMAS", async () => {
+    apiClientMock.apiFetch.mockImplementation((path: string) => {
+      if (path.startsWith("/reconciliation/report")) {
+        return Promise.resolve({
+          day: DAY,
+          /* ⛔ Sxema `null` ga RUXSAT beradi — ekran unga TAYYOR bo'lishi shart. */
+          rows: [{ ...UNPAID_ROW, expected_soum: null, paid_soum: null }],
+          unpaid_count: 1,
+          unregistered_count: 0,
+          unpaid_expected_soum: 0,
+        });
+      }
+      return Promise.resolve({ items: [], next_cursor: null });
+    });
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const { container } = render(
+      <NextIntlClientProvider locale="uz-Latn" messages={messages} timeZone="Asia/Tashkent">
+        <QueryClientProvider client={client}>
+          <AuthProvider>
+            <UnpaidList day={DAY} />
+          </AuthProvider>
+        </QueryClientProvider>
+      </NextIntlClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+    });
+
+    const body = container.querySelector("tbody") as HTMLElement;
+
+    /*
+     * ⛔ NOL YOZISH «qarz yo'q» degan YOLG'ON da'vo bo'lardi, holbuki
+     *   haqiqat «qancha ekanini tizim BILMAYDI». Bo'sh katak esa 4-fazada
+     *   o'lchangan «jim xato» sinfi.
+     */
+    expect(within(body).getAllByText(messages.recon.amountUnknown).length).toBe(2);
+
+    /*
+     * ⚠ DA'VO AYNAN PUL KATAKLARI USTIDAN: butun `tbody` bo'ylab raqam
+     *   qidirish rasta kodini («14-C») ushlab, testni O'ZINING
+     *   fikstureasiga qarshi qo'yardi.
+     */
+    const moneyCells = [...body.querySelectorAll("tr")].flatMap((tr) =>
+      [...tr.querySelectorAll("td")].slice(2, 4),
+    );
+    expect(moneyCells).toHaveLength(2);
+    for (const cell of moneyCells) {
+      expect(cell.textContent).toBe(messages.recon.amountUnknown);
+      expect((cell.textContent ?? "").match(/\d/gu)).toBeNull();
+    }
+  });
+
+  test("⛔ pul birligi `recon` namespace'idan o'qiladi (IN-05)", async () => {
+    const { container } = await renderBothClasses();
+
+    const unpaid = container.querySelector('[data-recon-content="unpaid"]');
+
+    /*
+     * ⛔ `headline.amountUnit` — BOSHQA yuzaning kaliti. Uni bu yerdan
+     *   o'qish IN-05 sinfidagi nuqson: qo'shni yuza o'z matnini
+     *   o'zgartirganda bu ekran JIMGINA u bilan ketardi.
+     */
+    expect(unpaid?.textContent).toContain(messages.recon.amountUnit);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WR-08 — SANOQ BLOKLARI `<dl>` SEMANTIKASINI SAQLAYDI                       */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ WR-08: ikkala blokda ham jonli hudud YO'Q", () => {
+  test("⛔ har `<dl>` da `role` atributi YO'Q va `<dt>`/`<dd>` juftligi tirik", async () => {
+    const { container } = await renderBothClasses();
+
+    const lists = [...container.querySelectorAll("dl")];
+    expect(lists).toHaveLength(2);
+
+    for (const dl of lists) {
+      expect(dl.hasAttribute("role")).toBe(false);
+      expect(dl.querySelectorAll("dt").length).toBeGreaterThan(0);
+      expect(dl.querySelectorAll("dt").length).toBe(dl.querySelectorAll("dd").length);
+    }
+  });
+
+  test("⛔ bu ikki blokda jonli hudud UMUMAN yo'q", async () => {
+    /*
+     * ⛔ Ikkalasida ham foydalanuvchi BOSHLAYDIGAN yangilash YO'Q, ya'ni
+     *   e'lon faqat sahifa yuklanganda — hech kim kutmagan paytda —
+     *   sodir bo'lardi. Jonli hudud AYNAN BITTA: yetkazilganlik bloki.
+     */
+    const { container } = await renderBothClasses();
+
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(0);
+    expect(container.querySelectorAll("[aria-live]")).toHaveLength(0);
   });
 });
 

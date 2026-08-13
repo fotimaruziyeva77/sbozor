@@ -706,6 +706,315 @@ test("⛔ G-36 (07-UI-SPEC) (d): destruktiv variant 0 marta (§14.8)", () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* G-37 — KLIENT PUL ARIFMETIKASI TAQIQI (WR-06)                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⛔⛔ PUL — SERVERNIKI. KLIENT FORMATLAYDI, HISOBLAMAYDI.
+ *
+ * =============================================================================
+ * `unpaid-list.tsx` bir muddat `expected − paid` ayirmasini bajarardi va
+ * fayl O'Z docstringida («⛔ ARIFMETIKA YO'Q») buni taqiqlab turgan edi.
+ * Ayirma `int` ustida ketgani uchun pul TURI buzilmasdi — lekin u
+ * ⛔ IKKINCHI HAQIQAT MANBAI edi: qarz serverda `vendor_outstanding()` va
+ * kredit taqsimoti qoidalari bilan chiqadi. Serverga tuzatish yoki kredit
+ * taqsimoti qo'shilgan kuni ikki son ⛔ JIMGINA ajralardi.
+ *
+ * ⛔⛔ SKAN IKKI SHAKLNI HAM KO'RADI — VA IKKINCHISI MAJBURIY:
+ *
+ *   (a) TO'G'RIDAN-TO'G'RI — `row.expected_soum - row.paid_soum`;
+ *   (b) ⛔ TAXALLUS ORQALI — `const expected = row.expected_soum; …
+ *       expected - paid`. ⛔ AYNAN SHU shakl kodda TURGAN edi, ya'ni
+ *       faqat (a) ni ko'radigan darvoza o'zi tug'ilgan nuqsonni
+ *       ⛔ O'TKAZIB YUBORARDI va u «toza kod» degan YOLG'ON signal
+ *       berardi.
+ *
+ * ⚠ SKAN ⛔ IZOHSIZ matnda yuradi (`SCANNED`): 03-07 ning o'lchangan
+ *   darsi — sodda skan izohni koddan ajratmaydi va taqiqni TUSHUNTIRISH
+ *   darvozani O'Z-O'ZIGA qarshi qo'yardi (yuqoridagi izohning o'zi
+ *   `expected − paid` ni yozadi).
+ * =============================================================================
+ */
+const MONEY_SUFFIX = "_soum";
+
+/** `_soum` bilan tugaydigan identifikatorlar — maydon nomlari. */
+function moneyFields(code) {
+  return new Set(
+    [...code.matchAll(/\b([A-Za-z_$][\w$]*_soum)\b/gu)].map((m) => m[1]),
+  );
+}
+
+/**
+ * ⛔ MAHALLIY TAXALLUSLAR: `const X = …<pul maydoni>…;` -> `X`.
+ *
+ * Faqat SHU fayl ichida yig'iladi — fayllar bo'ylab tarqatilgan nom
+ * tasodifan bir xil bo'lib, boshqa modulni aybdor qilardi.
+ */
+function moneyAliases(code) {
+  const found = new Set();
+  for (const match of code.matchAll(
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;]*);/gu,
+  )) {
+    if (match[2].includes(MONEY_SUFFIX)) found.add(match[1]);
+  }
+  return found;
+}
+
+/** Pul tokeni ustida `+` yoki `-` — ikkala tomondan ham qaraladi. */
+function moneyArithmetic(code) {
+  const tokens = [...moneyFields(code), ...moneyAliases(code)];
+  if (tokens.length === 0) return [];
+
+  const alternation = tokens
+    .map((token) => token.replaceAll(/[$]/gu, "\\$"))
+    .join("|");
+
+  /*
+   * ⛔ IKKI SHOX: token OPERATORDAN OLDIN yoki KEYIN. Bitta shox
+   *   `paid_soum - x` ni ko'rib, `x - paid_soum` ni ko'rmasdi.
+   *
+   * ⚠ `++` / `--` va `+=` / `-=` chiqarib tashlanadi: ular ayirma emas,
+   *   lekin ular ham bu katalogda YO'Q — filtr faqat noaniqlikni oldini
+   *   oladi.
+   */
+  const pattern = new RegExp(
+    `\\b(?:${alternation})\\b\\s*[-+](?![-+=])|(?<![-+])[-+](?![-+=])\\s*\\b(?:${alternation})\\b`,
+    "gu",
+  );
+
+  return [...code.matchAll(pattern)].map((m) => m[0].trim());
+}
+
+test("⛔ G-37 (WR-06): skan maydoni BO'SH EMAS (nazorat)", () => {
+  /*
+   * ⛔ Pul maydoni umuman topilmasa, quyidagi «arifmetika yo'q» natijasi
+   *   ⛔ JIMGINA rost bo'lardi — bu kodbazada bir necha marta o'lchangan
+   *   «bo'sh skan» nosozligi.
+   */
+  const fields = new Set(
+    SCANNED.flatMap(({ code }) => [...moneyFields(code)]),
+  );
+
+  assert.ok(
+    fields.size >= 3,
+    `atigi ${fields.size} ta pul maydoni skanerlandi: ${[...fields]}`,
+  );
+});
+
+test("⛔ G-37 (WR-06): klientda pul arifmetikasi 0 marta", () => {
+  const problems = [];
+
+  for (const { file, code } of SCANNED) {
+    for (const hit of moneyArithmetic(code)) {
+      problems.push(`${file} -> \`${hit}\``);
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ pul KLIENTDA hisoblanmoqda — ekranda IKKINCHI HAQIQAT MANBAI:\n  " +
+      problems.join("\n  ") +
+      "\n  Qarz serverda `vendor_outstanding()` va kredit taqsimoti " +
+      "qoidalari bilan chiqadi; klient FORMATLAYDI, HISOBLAMAYDI (D-07).",
+  );
+});
+
+test("⛔ G-37 (WR-06): NAZORAT — detektor IKKALA shaklni ham USHLAYDI", () => {
+  /*
+   * ⚠ HAR IFODADAN BITTA HIT KUTILADI: `g` bayrog'i birinchi moslikni
+   *   YUTADI (`expected_soum -`), ya'ni o'ng operand bir moslikning
+   *   ichida qolib ketadi. Buzilganini BILISH uchun bu YETARLI — darvoza
+   *   faylni nomma-nom ko'rsatadi va tuzatish o'sha yerda.
+   */
+
+  /* (a) to'g'ridan-to'g'ri maydon ustida. */
+  assert.deepEqual(
+    moneyArithmetic("const x = row.expected_soum - row.paid_soum;"),
+    ["expected_soum -"],
+  );
+
+  /*
+   * (b) ⛔ TAXALLUS ORQALI — AYNAN kodda turgan shakl. Bu band bo'lmasa
+   *   darvoza o'zi tug'ilgan nuqsonni O'TKAZIB YUBORARDI: `expected` va
+   *   `paid` nomlarida `_soum` YO'Q.
+   */
+  const aliased = [
+    "const expected = row.expected_soum;",
+    "const paid = row.paid_soum;",
+    "const outstanding = expected === null ? null : expected - paid;",
+  ].join("\n");
+  assert.deepEqual(moneyArithmetic(aliased), ["expected -"]);
+
+  /* Qo'shish ham TAQIQ — «umumiy jami» aynan shundan tug'ilardi. */
+  assert.deepEqual(
+    moneyArithmetic("const t = a.expected_soum + b.expected_soum;"),
+    ["expected_soum +"],
+  );
+
+  /* Va TESKARISI: pulsiz arifmetika TOZA qolishi shart. */
+  assert.deepEqual(moneyArithmetic("const n = pending + inReview;"), []);
+  assert.deepEqual(moneyArithmetic("const k = `${stall_code}-${index}`;"), []);
+
+  /* ⛔ Formatlash — arifmetika EMAS va u qizarmasligi SHART. */
+  assert.deepEqual(
+    moneyArithmetic("const v = format.number(row.paid_soum);"),
+    [],
+  );
+});
+
+/* -------------------------------------------------------------------------- */
+/* G-38 — JONLI HUDUD SONI VA `<dl>` SEMANTIKASI (WR-08)                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⛔⛔ `role="status"` GA HAQLI YAGONA JOY — YUKLANISH PLATSHOLDERI.
+ *
+ * =============================================================================
+ * To'rtta sanoq bloki `<dl role="status">` edi va bu IKKI zarar berardi:
+ *
+ *   1. ⛔ SEMANTIKA: `role` `<dl>` ning implicit rolini ALMASHTIRADI,
+ *      ya'ni `<dt>`/`<dd>` juftligi skrinriderda atama–qiymat
+ *      bog'lanishini YO'QOTADI — «Yangi 120 Ko'rilmoqda 7» oddiy matn
+ *      oqimiga aylanadi;
+ *   2. ⛔ E'LON: to'rtta mustaqil jonli hudud bir sahifada ochilardi va
+ *      ularning uchtasida foydalanuvchi boshlaydigan yangilash
+ *      ⛔ UMUMAN YO'Q — ya'ni e'lon faqat sahifa yuklanganda, HECH KIM
+ *      KUTMAGAN paytda sodir bo'lardi.
+ *
+ * ⛔ TO'PLAM QO'LDA YOZILGAN VA O'LCHAMI ALOHIDA QULFLANGAN: parser
+ *    sinsa yoki qamrov torayib ketsa, BO'SH to'plam «hammasi joyida»
+ *    deb JIMGINA yashil qaytardi (G-36 ning aynan darsi).
+ * =============================================================================
+ */
+const ALLOWED_STATUS_ROLES = new Set([
+  "components/reconciliation/case-detail-dialog.tsx",
+  "components/reconciliation/case-list.tsx",
+  "components/reconciliation/delivery-list.tsx",
+  "components/reconciliation/hit-rate-card.tsx",
+  "components/reconciliation/unpaid-list.tsx",
+  "components/reconciliation/unregistered-list.tsx",
+]);
+
+/**
+ * Yo'l ajratkichini BIR XILLASHTIRADI — ⛔ va bu ATAYIN.
+ *
+ * `path.relative()` Windows'da `\`, ubuntu'da `/` beradi. Reyestrni bir
+ * platformaning shakliga qadash darvozani IKKINCHISIDA qizartirardi —
+ * ya'ni u kod haqida emas, ⛔ OPERATSION TIZIM haqida gapirardi.
+ */
+function posix(file) {
+  return file.replaceAll("\\", "/");
+}
+
+/** Belgilangan indeksni O'RAB TURGAN ochuvchi tegning matni. */
+function enclosingTag(code, index) {
+  const start = code.lastIndexOf("<", index);
+  if (start === -1) return "";
+  const end = code.indexOf(">", index);
+  return end === -1 ? code.slice(start) : code.slice(start, end + 1);
+}
+
+/** `role="status"` uchraydigan HAR joy: {file, tag}. */
+function statusRoleSites(entries) {
+  const sites = [];
+  for (const { file, code } of entries) {
+    for (const match of code.matchAll(/role="status"/gu)) {
+      sites.push({ file: posix(file), tag: enclosingTag(code, match.index) });
+    }
+  }
+  return sites;
+}
+
+/** `<dl` ochuvchi teglari — atributlari bilan. */
+function definitionListTags(code) {
+  return [...code.matchAll(/<dl\b/gu)].map((m) => enclosingTag(code, m.index));
+}
+
+test("⛔ G-38 (WR-08): ruxsat etilgan to'plam O'LCHAMI qulflangan (alohida assert)", () => {
+  /*
+   * ⛔ ALOHIDA DA'VO va u MUZOKARASIZ: to'plamni o'stirish darvozani
+   *   BO'SHASHTIRADIGAN yagona yo'l, ya'ni u ko'zga tashlanishi kerak
+   *   (`page.test.tsx::CONTENT_EXEMPT` bilan aynan bir naqsh).
+   */
+  assert.equal(ALLOWED_STATUS_ROLES.size, 6);
+});
+
+test("⛔ G-38 (WR-08): `role=\"status\"` FAQAT yuklanish platsholderida", () => {
+  const sites = statusRoleSites(SCANNED);
+
+  /* ⛔ QUYI CHEGARA: platsholderlar yo'qolsa skan JIMGINA bo'shab qolardi. */
+  assert.equal(
+    sites.length,
+    ALLOWED_STATUS_ROLES.size,
+    `\`role="status"\` ${sites.length} joyda (kutilgan ` +
+      `${ALLOWED_STATUS_ROLES.size}):\n  ` +
+      sites.map((s) => `${s.file} -> ${s.tag}`).join("\n  "),
+  );
+
+  /* ⛔ TO'PLAM TENGLIGI: yangi blok ham, yo'qolgan blok ham qizartiradi. */
+  assert.deepEqual(new Set(sites.map((s) => s.file)), ALLOWED_STATUS_ROLES);
+
+  /*
+   * ⛔ VA HAR BIRI `aria-busy` BILAN BIR ELEMENTDA: bu «yuklanmoqda»
+   *   e'loni, ya'ni u foydalanuvchi KUTAYOTGAN paytga to'g'ri keladi.
+   *   Sanoq bloki esa hech kim kutmagan paytda gapirardi.
+   */
+  const detached = sites.filter((s) => !s.tag.includes("aria-busy"));
+  assert.deepEqual(
+    detached,
+    [],
+    "⛔ jonli hudud yuklanish platsholderidan TASHQARIDA:\n  " +
+      detached.map((s) => `${s.file} -> ${s.tag}`).join("\n  "),
+  );
+});
+
+test("⛔ G-38 (WR-08): `<dl>` ning implicit roli ALMASHTIRILMAYDI", () => {
+  const tags = SCANNED.flatMap(({ file, code }) =>
+    definitionListTags(code).map((tag) => ({ file, tag })),
+  );
+
+  /* ⛔ QUYI CHEGARA: sanoq bloklari BOR — bo'sh skan yashil qaytmaydi. */
+  assert.ok(
+    tags.length >= 4,
+    `atigi ${tags.length} ta \`<dl>\` topildi — skan jimgina qisqargan`,
+  );
+
+  const problems = tags.filter(({ tag }) => /\brole=/u.test(tag));
+  assert.deepEqual(
+    problems.map(({ file, tag }) => `${file} -> ${tag}`),
+    [],
+    "⛔ `role` `<dl>` ning implicit rolini ALMASHTIRADI va `<dt>`/`<dd>` " +
+      "juftligi skrinriderda atama–qiymat bog'lanishini YO'QOTADI (WR-08).",
+  );
+});
+
+test("⛔ G-38 (WR-08): NAZORAT — parser tegni HAQIQATAN o'qiydi", () => {
+  /*
+   * ⛔ Usiz yuqoridagi bo'sh natijalar «toza kod» emas, «ishlamayotgan
+   *   parser» degani bo'lishi mumkin edi.
+   */
+  const probe = '<dl className="x" role="status">\n<dt>a</dt>\n</dl>';
+
+  assert.deepEqual(
+    definitionListTags(probe),
+    ['<dl className="x" role="status">'],
+  );
+  assert.deepEqual(
+    statusRoleSites([{ file: "probe.tsx", code: probe }]).map((s) => s.tag),
+    ['<dl className="x" role="status">'],
+  );
+
+  /* Va platsholder shakli `aria-busy` bilan TANILADI. */
+  const placeholder = '<div aria-busy="true" role="status">';
+  assert.ok(
+    statusRoleSites([{ file: "probe.tsx", code: placeholder }])[0].tag.includes(
+      "aria-busy",
+    ),
+  );
+});
+
+/* -------------------------------------------------------------------------- */
 /* G-31 / G-34 — YOPIQ HOLAT TO'PLAMLARI × 3 LOCALE (07-UI-SPEC §16.6)        */
 /* -------------------------------------------------------------------------- */
 

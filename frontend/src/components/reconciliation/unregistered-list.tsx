@@ -98,8 +98,16 @@ export function UnregisteredList({ day }: { day: string }) {
       ) : null}
 
       {report.data !== undefined ? (
-        /* ⛔ AYNAN BITTA SON — RASTA SONI. Summa yo'q (yuqoriga qarang). */
-        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm" role="status">
+        /*
+         * ⛔ AYNAN BITTA SON — RASTA SONI. Summa yo'q (yuqoriga qarang).
+         *
+         * ⛔ `role` YO'Q (WR-08): `role="status"` `<dl>` ning implicit
+         *   rolini ALMASHTIRIB, `<dt>`/`<dd>` bog'lanishini yo'q qilardi.
+         *   Jonli hudud ham YO'Q — bu blokda foydalanuvchi boshlaydigan
+         *   yangilash mavjud emas, ya'ni e'lon HECH KIM KUTMAGAN paytda
+         *   sodir bo'lardi.
+         */
+        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
           <div className="flex items-center gap-2">
             <dt className="text-text-muted">
               {t("recon.unregisteredCountLabel")}

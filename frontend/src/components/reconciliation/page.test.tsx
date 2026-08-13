@@ -28,7 +28,7 @@
  * =============================================================================
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
@@ -139,12 +139,21 @@ function unregisteredRow(overrides: Partial<Row> = {}): Row {
   });
 }
 
+/**
+ * ⚠ `case_id` HOLATDAN hosila: bir testda bir nechta qator bo'lganda
+ *   ular ⛔ TURLI kalit olishi kerak. Bir xil kalit React'ga qatorlarni
+ *   birlashtirish erkinligini berardi va «qator soni o'sdi» da'vosi
+ *   o'zi o'lchamoqchi bo'lgan narsani emas, React'ning ichki qarorini
+ *   o'lchardi.
+ */
 function caseRow(status: string) {
+  const slot = ["new", "in_review", "justified", "unjustified"].indexOf(status);
+  const id = `${CASE_ID.slice(0, -1)}${slot < 0 ? 0 : slot}`;
   return {
-    case_id: CASE_ID,
+    case_id: id,
     subject_kind: "occupied_unpaid",
     anomaly_id: null,
-    charge_id: CASE_ID,
+    charge_id: id,
     service_date: YESTERDAY,
     status,
     assignee_user_id: null,
@@ -169,17 +178,47 @@ function deliveryRow(status: string) {
   };
 }
 
-/** Marshrutlarni mock'laydi — har blok O'Z ma'lumotini oladi. */
+/** Navbatning IKKINCHI sahifasi — serverning UNUMSIZ kursori ortida. */
+const CASE_CURSOR = `${YESTERDAY}T04:25:00+00:00|${CASE_ID}`;
+
+/**
+ * Marshrutlarni mock'laydi — har blok O'Z ma'lumotini oladi.
+ *
+ * ⚠ `nextCaseRows` — IXTIYORIY va standarti `null`: busiz mavjud
+ *   da'volarning HAMMASI bir sahifali javob ustida yuguradi va ular
+ *   ⛔ SUSAYTIRILMAYDI. Sahifalash da'vosi uni ATAYIN yoqadi.
+ */
 function routeFetch({
   reportRows,
   caseRows,
   deliveryRows = [deliveryRow("delivered")],
+  nextCaseRows = null,
 }: {
   reportRows: Row[];
   caseRows: ReturnType<typeof caseRow>[];
   deliveryRows?: ReturnType<typeof deliveryRow>[];
+  nextCaseRows?: ReturnType<typeof caseRow>[] | null;
 }) {
   apiClientMock.apiFetch.mockImplementation((path: string) => {
+    if (
+      nextCaseRows !== null &&
+      path.startsWith("/reconciliation/cases") &&
+      path.includes("cursor=")
+    ) {
+      return Promise.resolve({
+        day: YESTERDAY,
+        rows: nextCaseRows,
+        /*
+         * ⛔ SANOQLAR IKKINCHI SAHIFADA HAM BUTUN KUNNIKI (server
+         *   kontrakti) — klient ularni YIG'MASLIGI shu yerda o'lchanadi.
+         */
+        new_count: caseRows.filter((row) => row.status === "new").length,
+        in_review_count: 0,
+        justified_count: 3,
+        unjustified_count: 1,
+        next_cursor: null,
+      });
+    }
     if (path.startsWith("/reconciliation/report")) {
       return Promise.resolve({
         day: YESTERDAY,
@@ -201,7 +240,7 @@ function routeFetch({
         in_review_count: 0,
         justified_count: 3,
         unjustified_count: 1,
-        next_cursor: null,
+        next_cursor: nextCaseRows === null ? null : CASE_CURSOR,
       });
     }
     /*
@@ -452,6 +491,43 @@ describe("⛔ G-29 (c): mazmun MOCK'DAGI AYNAN QIYMATGA qadalgan", () => {
      */
     expect(block?.textContent).toContain(messages.recon.deliveryState.delivered);
     expect(block?.querySelectorAll("tbody tr").length).toBe(1);
+  });
+
+  test("⛔ IKKI SAHIFALI navbatda [Yana yuklash] KO'RINADI va qator soni O'SADI", async () => {
+    /*
+     * ⛔⛔ B-6 NING SAHIFA DARAJASIDAGI YARMI. Blok testi komponentni
+     *   YOLG'IZ render qiladi; bu yerda esa u O'Z sahifasida, qo'shni
+     *   bloklar bilan BIRGA turadi — ya'ni «Yana yuklash» boshqa blokning
+     *   tugmasi bilan ADASHMASLIGI ham o'lchanadi.
+     */
+    const first = [caseRow("new"), caseRow("in_review")];
+    const second = [caseRow("justified")];
+    routeFetch({ reportRows: [unpaidRow()], caseRows: first, nextCaseRows: second });
+
+    const { container } = await renderPage(YESTERDAY);
+    const block = container.querySelector(
+      '[data-recon-content="cases"]',
+    ) as HTMLElement;
+
+    expect(block.querySelectorAll("tbody tr").length).toBe(first.length);
+
+    /* ⛔ Tugma AYNAN navbat blokining ICHIDA — sahifa darajasida emas. */
+    const more = within(block).getByRole("button", {
+      name: messages.recon.loadMore,
+    });
+
+    fireEvent.click(more);
+
+    await waitFor(() => {
+      expect(block.querySelectorAll("tbody tr").length).toBe(
+        first.length + second.length,
+      );
+    });
+
+    /* ⛔ Oxirgi sahifadan keyin tugma UMUMAN yo'q (o'chirilgan emas). */
+    expect(
+      within(block).queryByRole("button", { name: messages.recon.loadMore }),
+    ).toBeNull();
   });
 
   test("⛔ BO'SH javob bergan blok O'Z bo'sh-holat matnini ko'rsatadi", async () => {

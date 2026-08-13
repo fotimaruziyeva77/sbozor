@@ -28,12 +28,15 @@ import {
 } from "@/lib/api-types";
 import {
   CASES_STALE_TIME_MS,
+  CASE_PAGE_SIZE,
+  DELIVERY_PAGE_SIZE,
   REPORT_STALE_TIME_MS,
   caseListSchema,
   caseRowSchema,
   casesKey,
   deliveryCachePolicy,
   deliveryKey,
+  deliveryListSchema,
   isCaseStatus,
   isSubjectKind,
   reportKey,
@@ -215,17 +218,76 @@ describe("kesh — kalitlar doiralangan, yetkazilganlik `bugun` da JONLI", () =>
   test("har kalit `[\"m\", marketId, ...]` prefiksi ostida (04-10)", () => {
     for (const key of [
       reportKey(MARKET, "2026-08-11"),
-      casesKey(MARKET, "2026-08-11", ""),
+      casesKey(MARKET, "2026-08-11"),
       deliveryKey(MARKET, "2026-08-11"),
     ]) {
       expect(key[0]).toBe("m");
       expect(key[1]).toBe(MARKET);
     }
 
-    /* Kursor kalitning bir qismi — har sahifa O'Z keshida. */
-    expect(casesKey(MARKET, "2026-08-11", "abc")).not.toEqual(
-      casesKey(MARKET, "2026-08-11", ""),
+    /* Kun kalitning bir qismi — boshqa kun BOSHQA zanjir. */
+    expect(casesKey(MARKET, "2026-08-12")).not.toEqual(
+      casesKey(MARKET, "2026-08-11"),
     );
+  });
+
+  test("⛔ KURSOR KALITNING BIR QISMI EMAS — sahifalar BITTA zanjirda (B-6)", () => {
+    /*
+     * ⛔ AVVAL kursor kalitda edi va aynan shu `useInfiniteQuery` bilan
+     *   TO'QNASHADI: TanStack sahifalarni BITTA kalit ostida `pages[]`
+     *   bo'lib saqlaydi. Kursor kalitga qo'shilsa, ikkinchi sahifa YANGI
+     *   zanjir boshlardi va birinchisi YO'QOLARDI — «Yana yuklash» 50
+     *   qatorni boshqa 20 taga ALMASHTIRARDI.
+     *
+     * ⛔ DA'VO KALITNING UZUNLIGI USTIDAN: uchinchi argument qo'shilsa
+     *   (nomi qanday bo'lishidan qat'i nazar) bu tenglik QIZARADI.
+     */
+    expect(casesKey(MARKET, "2026-08-11")).toEqual([
+      "m",
+      MARKET,
+      "recon-cases",
+      "2026-08-11",
+    ]);
+  });
+
+  test("⛔ sahifa o'lchamlari SERVER chegarasining ko'zgusi (B-6)", () => {
+    /*
+     * ⛔ Server ikkala marshrutda ham `le=…PAGE_SIZE` bilan CHEGARALAYDI:
+     *   kattaroq qiymat `422` bilan qaytardi, ya'ni ro'yxat UMUMAN
+     *   yuklanmasdi. Konstanta o'sha chegaraning ko'zgusi bo'lib qoladi.
+     */
+    expect(CASE_PAGE_SIZE).toBe(50);
+    expect(DELIVERY_PAGE_SIZE).toBe(50);
+  });
+
+  test("⛔ IKKALA envelope ham `next_cursor` ni PARSE qiladi (sahifalash tirik)", () => {
+    /*
+     * ⛔ `next_cursor` — ATAYIN UNUMSIZ SATR: klient uni PARSE QILMAYDI
+     *   (T-07-123) va serverga o'zgarishsiz qaytaradi. Sxema uni faqat
+     *   «satr yoki `null`» sifatida biladi.
+     */
+    const cases = caseListSchema.parse({
+      day: "2026-08-11",
+      rows: [],
+      new_count: 0,
+      in_review_count: 0,
+      justified_count: 0,
+      unjustified_count: 0,
+      next_cursor: "2026-08-12T04:25:00+00:00|" + CASE_ID,
+    });
+    expect(cases.next_cursor).toContain(CASE_ID);
+
+    const delivery = deliveryListSchema.parse({
+      day: "2026-08-11",
+      rows: [],
+      pending_count: 0,
+      sent_count: 0,
+      delivered_count: 0,
+      failed_count: 0,
+      blocked_count: 0,
+      next_cursor: "2026-08-12T09:15:00+00:00|" + CASE_ID,
+    });
+    expect(delivery.next_cursor).toContain(CASE_ID);
   });
 
   test("⛔ `bugun` da yetkazilganlik keshi IKKALA o'lchamda ham NOL", () => {
