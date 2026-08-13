@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
+from app.jobs.reconciliation import reconciliation_open
 from fixtures.admin_api import session_headers
 from fixtures.billing_domain import (
     BillingDomainSeed,
@@ -48,7 +49,11 @@ from fixtures.billing_domain import (
     billing_domain,
 )
 from fixtures.market_domain import MarketDomainSeed
-from fixtures.notification_domain import cleanup_notification_domain, seed_case
+from fixtures.notification_domain import (
+    cleanup_notification_domain,
+    seed_case,
+    seed_outbox_row,
+)
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
@@ -70,6 +75,14 @@ if TYPE_CHECKING:
 REPORT_URL = "/api/v1/reconciliation/report"
 CASES_URL = "/api/v1/reconciliation/cases"
 HIT_RATE_URL = "/api/v1/reconciliation/hit-rate"
+DELIVERY_URL = "/api/v1/reconciliation/delivery"
+"""⛔ FAQAT KURSOR DEKODERI UCHUN — yuzaning O'ZI `test_delivery_surface.py` da.
+
+Ikki dekoder (`_decode_cursor` / `_decode_delivery_cursor`) BIR fayldagi
+BIR sinf nuqsonni ko'taradi, ya'ni ularning testlari ham yonma-yon
+turishi kerak: bittasini tuzatib ikkinchisini unutish aynan shu yerda
+ko'zga tashlanadi.
+"""
 
 PERSONAL_FIELDS = frozenset({"vendor_name", "phone", "full_name"})
 """C-10 darvozasining maydonlari — `test_personal_data_coverage.py:59` bilan AYNI.
@@ -120,6 +133,24 @@ _EVIDENCE_PAIR = (
 _COUNT_EVENTS = (
     "SELECT count(*) FROM reconciliation_case_events WHERE market_id = %s AND case_id = %s"
 )
+
+_CASE_ROW = (
+    "SELECT status, assignee_user_id FROM reconciliation_cases WHERE market_id = %s AND id = %s"
+)
+"""Case'ning BAZADAGI holati — javobga emas, YOZILGAN qatorga qaraydi.
+
+⛔ FAQAT JAVOBGA QARASH YETMAYDI: marshrut qiymatni javob modeliga
+   qo'yib, bazaga yozmagan holat o'shanda YASHIL qolardi (05-14 darsi).
+"""
+
+_MEMBER_ROLES = "SELECT roles FROM user_market_roles WHERE market_id = %s AND user_id = %s"
+"""A'zolik NAZORATI — «begona bozor xodimi» testining eng muhim qismi.
+
+⛔ USIZ TENANCY DARVOZASI BO'SH-ROST BO'LARDI: tasodifiy UUID bilan
+   yozilgan test «mavjud bo'lmagan foydalanuvchi rad etildi» ni
+   o'lchardi va `member_roles()` tekshiruvi olib tashlanganda ham
+   yashil qolardi.
+"""
 
 
 # ===========================================================================
@@ -305,6 +336,27 @@ def _seed_unregistered_anomaly(
     Returns:
         `(anomaly_id, case_id)`.
     """
+    anomaly_id = _seed_evidenced_anomaly(conn, env, day=day, stall_index=stall_index, kind=kind)
+    case_id = seed_case(conn, market_id=env.market_id, service_date=day, anomaly_id=anomaly_id)
+    return anomaly_id, case_id
+
+
+def _seed_evidenced_anomaly(
+    conn: Connection[TupleRow],
+    env: Env,
+    *,
+    day: date,
+    stall_index: int = 1,
+    kind: AnomalyKind = AnomalyKind.UNASSIGNED_OCCUPIED,
+) -> UUID:
+    """Anomaliya qatori — ⛔ CASE'SIZ. `recon.open` uni O'ZI ochadi.
+
+    ⛔ `_seed_unregistered_anomaly()` DAN AJRATILDI VA BU ZARURIYAT:
+       o'sha yordamchi case'ni QO'LDA (`seed_case`) yozadi, ya'ni case
+       MAHSULOT yo'lidan tug'ilmaydi va TUG'ILISH hodisasi ham
+       yozilmaydi. «Har case tug'ilganda tarixga qator tushadi» da'vosini
+       o'lchash uchun case'ni ⛔ JOB ochishi SHART.
+    """
     row = conn.execute(_EVIDENCE_PAIR, (str(env.market_id),)).fetchone()
     assert row is not None, f"nazorat: {env.market_id} da kadrli bandlik hodisasi yo'q"
     event_id, snapshot_id = row
@@ -322,8 +374,7 @@ def _seed_unregistered_anomaly(
             str(snapshot_id),
         ),
     )
-    case_id = seed_case(conn, market_id=env.market_id, service_date=day, anomaly_id=anomaly_id)
-    return anomaly_id, case_id
+    return anomaly_id
 
 
 def _keys_at_every_depth(payload: Any) -> set[str]:
@@ -700,6 +751,310 @@ async def test_transition_to_the_same_status_is_a_conflict(
 
 
 # ===========================================================================
+# 3b. MAS'UL — DIREKTOR TANLAYDI, AKTOR EMAS (RECON-02, B-2)
+#
+# ⛔⛔ MAS'UL VA AKTOR — IKKI BOSHQA SAVOLNING JAVOBI.
+#
+#   aktor  (`actor_user_id`)     -> «KIM QAROR QILDI?» — tarix qatorining
+#                                   egasi, nizoda (D-02) javob beradigan odam;
+#   mas'ul (`assignee_user_id`)  -> «KIM ISH QILADI?» — case'ning joriy egasi.
+#
+# 07-20 gacha marshrut `payload.assignee_user_id` ni JIMGINA tashlab
+# yuborardi va SQL har o'tishda case'ni HUKM CHIQARGAN odamga biriktirardi
+# (`COALESCE(:actor_user_id, assignee_user_id)`). Ya'ni RECON-02 ning
+# «mas'ul... yoziladi» bandi AMALDA yo'q edi, javob esa `200`.
+#
+# ⛔ BU BO'LIMNING ENG QIMMAT DA'VOSI — TENANCY: `reconciliation_cases.
+#    assignee_user_id` da `users` ga FK ⛔ YO'Q (`0023:344-347` tekshiruvni
+#    «ilova qatlamida» deb yozgan), ya'ni yagona to'siq ILOVADA. Maydonni
+#    tekshiruvsiz «ulab qo'yish» begona bozor xodimini biriktirish yo'lini
+#    ochardi — u maydonni tashlab yuborishdan ham YOMONROQ holat.
+# ===========================================================================
+
+
+async def test_the_director_assigns_the_case_to_a_market_member(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ RECON-02: direktor TANLAGAN mas'ul bazaga yetadi va u AKTOR EMAS.
+
+    ⛔ IKKI ASSERT ATAYIN JUFT: javobdagi qiymat ham, BAZADAGI qator ham
+       o'lchanadi. Faqat javobga qarash marshrut qiymatni javob modeliga
+       qo'yib, bazaga yozmagan holatni KO'RMASDI.
+
+    ⛔ «DIREKTORGA TENG EMAS» ALOHIDA ASSERT: bugungi nuqson aynan shu —
+       case hukm chiqargan odamga biriktiriladi. Teng bo'lgan kun oddiy
+       «assignee bor» asserti darvozani o'tkazib yuborardi.
+    """
+    day = _report_day()
+    _, case_id = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    assignee = recon.base.market_a.admin_user_id
+    director = recon.base.market_a.director_user_id
+    assert assignee != director, (
+        "nazorat: seed mas'ul bilan aktorni BIR ODAM qilib qo'ygan — bu test "
+        "o'shanda hech nimani o'lchamasdi"
+    )
+
+    response = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(assignee),
+        },
+        headers=director_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["assignee_user_id"] == str(assignee), payload
+    assert payload["assignee_user_id"] != str(director), (
+        "⛔ B-2: javobdagi mas'ul HUKM CHIQARGAN odam — direktor tanlovi JIMGINA tashlab yuborildi"
+    )
+
+    row = sync_owner_conn.execute(_CASE_ROW, (str(recon.market_id), str(case_id))).fetchone()
+    assert row is not None, "nazorat: case qatori bazada yo'q"
+    assert row[0] == ReconciliationCaseStatus.IN_REVIEW.value, row
+    assert str(row[1]) == str(assignee), (
+        f"⛔ BAZAGA yozilgan mas'ul tanlangan odam emas: {row[1]} != {assignee}"
+    )
+
+    # ⛔ AKTOR O'ZGARMAYDI: tarix qatorining egasi HAMON direktor — mas'ul
+    #    uni ALMASHTIRMAYDI, chunki ular ikki boshqa savolning javobi.
+    assert payload["events"][-1]["actor_user_id"] == str(director), payload["events"]
+
+
+async def test_an_explicit_null_clears_the_assignment(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ «Biriktirilmagan» tanlovi HAQIQATAN biriktirishni bekor qiladi.
+
+    UI-SPEC ning `<option value="">Biriktirilmagan</option>` bandi bugun
+    IMKONSIZ amalni va'da qiladi: `COALESCE(:assignee, assignee_user_id)`
+    `NULL` ni E'TIBORSIZ qoldiradi va eski mas'ul o'z joyida qolardi —
+    direktor tanlovni bosardi, javob `200` bo'lardi, ekranda esa hech
+    nima o'zgarmasdi.
+    """
+    day = _report_day()
+    _, case_id = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    assignee = recon.base.market_a.admin_user_id
+
+    assigned = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(assignee),
+        },
+        headers=director_headers,
+    )
+    assert assigned.status_code == 200, assigned.text
+    assert assigned.json()["assignee_user_id"] == str(assignee), (
+        "nazorat: birinchi biriktirish ishlamadi — bekor qilish da'vosi BO'SH-ROST bo'lardi"
+    )
+
+    cleared = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={
+            "status": ReconciliationCaseStatus.JUSTIFIED.value,
+            "assignee_user_id": None,
+        },
+        headers=director_headers,
+    )
+
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["assignee_user_id"] is None, cleared.json()
+    # ⛔ HOLAT BARIBIR O'ZGARADI: bekor qilish o'tishni BLOKLAMAYDI.
+    assert cleared.json()["status"] == ReconciliationCaseStatus.JUSTIFIED.value
+
+    row = sync_owner_conn.execute(_CASE_ROW, (str(recon.market_id), str(case_id))).fetchone()
+    assert row is not None and row[1] is None, (
+        f"⛔ BAZADA mas'ul hamon turibdi: {row} — «Biriktirilmagan» tanlovi "
+        "IMKONSIZ amal bo'lib qolgan"
+    )
+
+
+async def test_a_silent_transition_keeps_the_existing_assignee(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ B-2: maydon YUBORILMAGAN o'tish mavjud biriktirishni O'G'IRLAMAYDI.
+
+    =======================================================================
+    ⛔⛔ IKKI SHOX BIR TESTDA — VA IKKALASI HAM KERAK.
+
+      (a) EGASI BOR case: mijoz JIM -> egasi O'ZGARMAYDI. Bugun
+          `COALESCE(:actor_user_id, assignee_user_id)` aktorni tanlaydi,
+          ya'ni har holat o'zgarishi biriktirishni jimgina o'g'irlaydi.
+
+      (b) EGASIZ case: mijoz JIM -> uni QO'LGA OLGAN odam egasi bo'ladi.
+          Bu BUGUNGI xulq va u ATAYIN saqlanadi
+          (`_UPDATE_CASE_STATUS` docstringidagi mavjud qoida).
+
+    ⛔ (b) SIZ (a) NI YOZIB BO'LMAYDI: `COALESCE` ni butunlay olib tashlash
+       ham (a) ni yashil qilardi, lekin egasiz case abadiy egasiz qolardi
+       va navbatda «bu case kimda?» savoli javobsiz bo'lardi.
+    =======================================================================
+    """
+    day = _report_day()
+    _, owned_case = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    _, orphan_case = _seed_unregistered_anomaly(sync_owner_conn, recon, day=day, stall_index=1)
+    assignee = recon.base.market_a.admin_user_id
+    director = recon.base.market_a.director_user_id
+
+    assigned = await api_client.patch(
+        f"{CASES_URL}/{owned_case}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(assignee),
+        },
+        headers=director_headers,
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    # ---- (a) MIJOZ JIM, EGASI BOR -> egasi SAQLANADI.
+    silent = await api_client.patch(
+        f"{CASES_URL}/{owned_case}",
+        json={"status": ReconciliationCaseStatus.JUSTIFIED.value},
+        headers=director_headers,
+    )
+    assert silent.status_code == 200, silent.text
+    assert silent.json()["assignee_user_id"] == str(assignee), (
+        "⛔ B-2: holat o'zgarishi mavjud biriktirishni JIMGINA o'g'irladi — "
+        f"case endi {silent.json()['assignee_user_id']} da"
+    )
+
+    # ---- (b) MIJOZ JIM, EGASI YO'Q -> uni QO'LGA OLGAN odam egasi bo'ladi.
+    taken = await api_client.patch(
+        f"{CASES_URL}/{orphan_case}",
+        json={"status": ReconciliationCaseStatus.IN_REVIEW.value},
+        headers=director_headers,
+    )
+    assert taken.status_code == 200, taken.text
+    assert taken.json()["assignee_user_id"] == str(director), (
+        "egasiz case uni qo'lga olgan odamga tushishi kerak edi — bu BUGUNGI "
+        f"xulq va u saqlanadi: {taken.json()['assignee_user_id']}"
+    )
+
+
+async def test_a_foreign_market_member_cannot_be_assigned(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔⛔ T-07-109: BEGONA BOZOR xodimini biriktirish **422** bilan RAD ETILADI.
+
+    =======================================================================
+    ⛔⛔ BU FAYLDAGI ENG QIMMAT DA'VO VA U «YO'Q FOYDALANUVCHI» NI EMAS,
+        HAQIQATAN MAVJUD BEGONA XODIMNI o'lchaydi.
+
+    `reconciliation_cases.assignee_user_id` da `users` ga FK ⛔ YO'Q
+    (`0023:344-347`), ya'ni baza «bu odam bu bozorda ishlaydimi?»
+    savolini UMUMAN bermaydi. Yagona to'siq — ilova qatlami.
+
+    ⛔ NAZORAT (b) MAJBURIY: agar test tasodifiy UUID bilan yozilsa, u
+       «mavjud bo'lmagan foydalanuvchi rad etildi» ni o'lchardi va
+       TENANCY haqida HECH NIMA isbotlamasdi — darvoza `member_roles()`
+       olib tashlanganda ham yashil qolardi.
+
+    ⛔ NAZORAT (a) HAM MAJBURIY: rad etish `rollback` ga TAYANMASLIGI
+       kerak. Tekshiruv `transition()` dan KEYIN qilinsa holat allaqachon
+       o'zgargan bo'lardi va «case umuman o'zgarmadi» da'vosi tranzaksiya
+       xulqiga bog'liq bo'lib qolardi.
+    =======================================================================
+    """
+    day = _report_day()
+    _, case_id = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    foreigner = recon.base.market_b.admin_user_id
+
+    # ---- NAZORAT (b): bu odam HAQIQATAN B bozorining a'zosi.
+    membership = sync_owner_conn.execute(
+        _MEMBER_ROLES, (str(recon.base.market_b.id), str(foreigner))
+    ).fetchone()
+    assert membership is not None, (
+        "nazorat: tanlangan `user_id` B bozorida A'ZO EMAS — test o'shanda "
+        "«yo'q foydalanuvchi» ni o'lchardi va TENANCY haqida hech nima "
+        "isbotlamasdi"
+    )
+    assert (
+        sync_owner_conn.execute(_MEMBER_ROLES, (str(recon.market_id), str(foreigner))).fetchone()
+        is None
+    ), "nazorat: o'sha odam A bozorida ham a'zo — chegara yo'q"
+
+    response = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(foreigner),
+        },
+        headers=director_headers,
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "assignee_not_in_market", response.json()
+
+    # ---- NAZORAT (a): case qatori UMUMAN o'zgarmagan.
+    row = sync_owner_conn.execute(_CASE_ROW, (str(recon.market_id), str(case_id))).fetchone()
+    assert row is not None
+    assert row[0] == ReconciliationCaseStatus.NEW.value, (
+        f"⛔ rad etilgan so'rov HOLATNI o'zgartirib yubordi: {row}"
+    )
+    assert row[1] is None, f"⛔ rad etilgan so'rov MAS'ULNI yozib yubordi: {row}"
+
+    events = sync_owner_conn.execute(_COUNT_EVENTS, (str(recon.market_id), str(case_id))).fetchone()
+    assert events is not None and events[0] == 0, (
+        f"⛔ rad etilgan so'rov TARIXGA qator yozdi: {events}"
+    )
+
+
+async def test_an_unknown_user_is_rejected_like_a_foreign_one(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ T-07-110: «yo'q odam» va «begona bozor xodimi» — AYNI javob.
+
+    ⛔ 403 YOKI BOSHQA KOD BERILMAYDI: farqning O'ZI «bunday foydalanuvchi
+       bor, lekin sizniki emas» degan ma'lumotni oshkor qilardi va
+       hujumchi identifikatorlarni javob kodi bo'yicha sanab chiqa olardi
+       — `member_roles()` docstringidagi qoidaning aynan takrori.
+    """
+    day = _report_day()
+    _, first_case = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    _, second_case = _seed_unregistered_anomaly(sync_owner_conn, recon, day=day, stall_index=1)
+
+    unknown = await api_client.patch(
+        f"{CASES_URL}/{first_case}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(uuid4()),
+        },
+        headers=director_headers,
+    )
+    foreign = await api_client.patch(
+        f"{CASES_URL}/{second_case}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(recon.base.market_b.cashier_user_id),
+        },
+        headers=director_headers,
+    )
+
+    assert unknown.status_code == 422, unknown.text
+    assert unknown.status_code == foreign.status_code
+    assert unknown.content == foreign.content, (
+        "javob tanalari farq qiladi — enumeration signali (T-07-110)"
+    )
+
+
+# ===========================================================================
 # 4. NAVBAT — KEYSET SAHIFALASH VA KUN KESIMIDAGI HISOBLAGICHLAR
 # ===========================================================================
 
@@ -939,6 +1294,227 @@ async def test_hit_rate_rejects_an_unbounded_range(
     )
     assert inverted.status_code == 422, inverted.text
     assert inverted.json()["detail"] == "range_invalid"
+
+
+# ===========================================================================
+# 5b. CASE TUG'ILISHI VA NAIVE KURSOR (WR-01, WR-05)
+#
+# ⛔⛔ IKKI ARZON, LEKIN HAQIQIY NUQSON.
+#
+#   WR-01 — sxema, model va API uchta joyda `from_status IS NULL` ni
+#           ALLAQACHON e'lon qiladi (`EVENT_FROM_STATUS_CHECK`,
+#           `ReconciliationCaseEvent` docstringi, `CaseEvent.from_status:
+#           str | None`), lekin o'sha yo'ldan mahsulotda HECH QACHON
+#           qator o'tmasdi: case'ni `recon.open` ochardi va tarix BO'SH
+#           qolardi. Ya'ni case tarixi IKKINCHI qadamdan boshlanardi.
+#
+#   WR-05 — `2026-01-01|<uuid>` shaklidagi kursor `datetime.fromisoformat()`
+#           dan MUVAFFAQIYATLI o'tadi (u yaroqli ISO), lekin `tzinfo`
+#           siz qoladi. `asyncpg` uni `timestamptz` ga kodlay olmaydi ->
+#           `DBAPIError` -> `500 internal_error`. Ya'ni `_decode_cursor()`
+#           ning O'Z docstringi («buzilgan qiymat ⛔ 422») bajarilmasdi.
+# ===========================================================================
+
+
+async def test_a_case_is_born_with_a_system_event(
+    api_client: httpx.AsyncClient,
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ WR-01: `recon.open` ochgan case tarixi TUG'ILISHDAN boshlanadi.
+
+    =======================================================================
+    ⛔ CASE ⛔ JOB TOMONIDAN ochiladi, `seed_case()` bilan EMAS: qo'lda
+       yozilgan qator mahsulot yo'lini CHETLAB o'tardi va bu test
+       o'zi seed qilgan narsani o'lchardi.
+
+    ⛔ UCH DA'VO BIRGA VA HECH BIRI ORTIQCHA EMAS:
+       (a) tug'ilish qatori BOR va u TIZIMNIKI (`actor_user_id IS NULL`);
+       (b) u direktor ekranida KO'RINADI (`events` bo'sh EMAS);
+       (c) takroriy yugurish IKKINCHI qator YOZMAYDI — `ON CONFLICT DO
+           NOTHING` tufayli `inserted` bo'sh qoladi.
+
+    ⛔ (c) SIZ (a) NI YOZIB BO'LMAYDI: hodisani case bilan bir
+       tranzaksiyada emas, ALOHIDA bayonot bilan yozgan yechim (a) ni
+       yashil qilardi va har kechagi qayta yugurish tarixga YANGI
+       «tug'ildi» qatorini qo'shardi.
+    =======================================================================
+    """
+    day = _report_day()
+    anomaly_id = _seed_evidenced_anomaly(sync_owner_conn, recon, day=day, stall_index=1)
+
+    opened = await reconciliation_open(app_sessionmaker, business_date=day)
+    assert opened.errors == [], f"`recon.open` xato berdi: {opened.errors}"
+    assert opened.anomaly_cases >= 1, (
+        f"job SINF B dan case ochmadi: {opened} — bu testning butun kirishi YO'Q"
+    )
+
+    listed = await api_client.get(
+        CASES_URL, params={"day": day.isoformat()}, headers=director_headers
+    )
+    assert listed.status_code == 200, listed.text
+    born = [row for row in listed.json()["rows"] if row["anomaly_id"] == str(anomaly_id)]
+    assert len(born) == 1, f"job ochgan case navbatda topilmadi: {listed.json()['rows']}"
+    case_id = born[0]["case_id"]
+
+    detail = await api_client.get(f"{CASES_URL}/{case_id}", headers=director_headers)
+    assert detail.status_code == 200, detail.text
+    events = detail.json()["events"]
+
+    # ---- (b) DIREKTOR EKRANIDA KO'RINADI.
+    assert events, (
+        "⛔ WR-01: yangi case tarixi BO'SH keldi — `from_status IS NULL` yo'li "
+        "sxemada e'lon qilingan, lekin mahsulotda HECH QACHON bajarilmaydi"
+    )
+    # ---- (a) QATOR TIZIMNIKI VA U TUG'ILISH.
+    assert len(events) == 1, events
+    assert events[0]["from_status"] is None, events[0]
+    assert events[0]["actor_user_id"] is None, (
+        "tug'ilish qatorining aktori TIZIM (`NULL`) bo'lishi SHART — odam "
+        f"identifikatori u yerda «kimdir ochdi» degan YOLG'ON da'vo bo'lardi: {events[0]}"
+    )
+    assert events[0]["to_status"] == ReconciliationCaseStatus.NEW.value, events[0]
+
+    # ---- (c) TAKRORIY YUGURISH IKKINCHI QATOR YOZMAYDI.
+    again = await reconciliation_open(app_sessionmaker, business_date=day)
+    assert again.errors == [], f"ikkinchi yugurish xato berdi: {again.errors}"
+    assert again.skipped_existing >= 1, (
+        f"nazorat: ikkinchi yugurish `skipped_existing` shoxiga TUSHMADI: {again}"
+    )
+    count = sync_owner_conn.execute(_COUNT_EVENTS, (str(recon.market_id), str(case_id))).fetchone()
+    assert count is not None and int(count[0]) == 1, (
+        f"⛔ takroriy yugurish IKKINCHI tug'ilish qatorini yozdi: {count} — "
+        "har kechagi cron tarixni shovqin bilan to'ldirardi"
+    )
+
+
+async def test_a_naive_cursor_is_a_422_not_a_500(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ WR-05: tz-siz kursor **422** — navbat kursorida.
+
+    =======================================================================
+    ⛔⛔ O'LCHANGAN XULQ REJADA KUTILGANIDAN ⛔ YOMONROQ CHIQDI.
+
+    Reja `500 internal_error` ni kutgan edi (`asyncpg` `timestamptz` ga
+    kodlay olmaydi degan farazda). O'LCHOV boshqasini ko'rsatdi:
+    so'rov bazagacha BORADI va **200** qaytadi — `rows` BO'SH, lekin
+    `new_count` 2 da turadi.
+
+    Ya'ni nuqson `500` emas, ⛔ **JIM YOLG'ON**: nazoratchi «Yana»
+    tugmasini bosganda BO'SH sahifani ko'radi, hisoblagich esa «bu kunda
+    2 ta case bor» deb turadi. Aynan shu holatni `_decode_cursor()` ning
+    O'Z docstringi taqiqlaydi («buzilgan qiymat ⛔ 422, JIM
+    E'TIBORSIZLIK EMAS») — ya'ni funksiya o'z va'dasini bajarmasdi.
+
+    ⛔ ASSERT IKKALASINI HAM QULFLAYDI (`!= 500` VA `== 422`): mexanizm
+       kelajakda o'zgarsa ham (masalan `asyncpg` qattiqlashsa) da'vo
+       o'sha bo'lib qoladi.
+    =======================================================================
+
+    ⛔ `"buzilgan-kursor"` DAN BOSHQA SINF: u `ValueError` beradi va
+       ALLAQACHON tutilgan. Bu yerdagi qiymat `datetime.fromisoformat()`
+       dan MUVAFFAQIYATLI o'tadi (`2026-01-01` yaroqli ISO), lekin
+       `tzinfo` siz qoladi — ya'ni u SERVER qurgan kursor EMAS, qo'lda
+       yasalgan qiymat, ya'ni KIRISH xatosi.
+
+    ⛔ NAZORAT: SERVER QURGAN kursor (tz-li) hamon ishlaydi — usiz test
+       «kursor umuman ishlamaydi» holatida ham yashil bo'lardi.
+    """
+    day = _report_day()
+    seeded = {
+        str(_seed_unregistered_anomaly(sync_owner_conn, recon, day=day, stall_index=index)[1])
+        for index in range(2)
+    }
+    assert len(seeded) == 2, "nazorat: seed ikkita MUSTAQIL case yozmadi"
+
+    naive = await api_client.get(
+        CASES_URL,
+        params={"day": day.isoformat(), "cursor": f"2026-01-01|{uuid4()}"},
+        headers=director_headers,
+    )
+
+    assert naive.status_code != 500, (
+        "⛔ tz-siz kursor bazagacha borib `DBAPIError` ga aylandi — kirish "
+        f"xatosi SERVER nosozligi bo'lib ko'rinyapti: {naive.text}"
+    )
+    assert naive.status_code == 422, naive.text
+    assert naive.json()["detail"] == "cursor_invalid", naive.json()
+
+    # ---- NAZORAT: SERVER QURGAN kursor ikkinchi sahifani BERADI.
+    first = await api_client.get(
+        CASES_URL, params={"day": day.isoformat(), "limit": 1}, headers=director_headers
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["next_cursor"] is not None, first.json()
+
+    second = await api_client.get(
+        CASES_URL,
+        params={"day": day.isoformat(), "limit": 1, "cursor": first.json()["next_cursor"]},
+        headers=director_headers,
+    )
+    assert second.status_code == 200, second.text
+    assert {row["case_id"] for row in second.json()["rows"]} & {
+        row["case_id"] for row in first.json()["rows"]
+    } == set()
+
+
+async def test_a_naive_delivery_cursor_is_a_422_not_a_500(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ WR-05 ning IKKINCHI dekoderi — `GET /delivery` kursori.
+
+    ⛔ IKKI DEKODER ⛔ IKKI TEST: `_decode_cursor()` va
+       `_decode_delivery_cursor()` — MUSTAQIL funksiyalar va bittasini
+       tuzatib ikkinchisini unutish aynan shu fayl qamramaydigan
+       nosozlik bo'lardi.
+
+    ⚠ O'LCHANGAN QIZIL — navbat kursoridagi bilan AYNI SINF: **200**
+      qaytardi, `rows` BO'SH, `pending_count` esa 2 da turdi. Ya'ni
+      direktor «bugun xabar yuborilmagan» degan YOLG'ON xulosaga
+      kelardi, holbuki navbatda ikkita qator bor edi.
+    """
+    day = business_today()
+    seeded = [
+        seed_outbox_row(sync_owner_conn, market_id=recon.market_id, vendor_id=recon.vendor_id)
+        for _ in range(2)
+    ]
+    assert len(set(seeded)) == 2, "nazorat: seed ikkita MUSTAQIL navbat qatori yozmadi"
+
+    naive = await api_client.get(
+        DELIVERY_URL,
+        params={"day": day.isoformat(), "cursor": f"2026-01-01|{uuid4()}"},
+        headers=director_headers,
+    )
+
+    assert naive.status_code != 500, f"⛔ tz-siz yetkazilganlik kursori `500` berdi: {naive.text}"
+    assert naive.status_code == 422, naive.text
+    assert naive.json()["detail"] == "cursor_invalid", naive.json()
+
+    # ---- NAZORAT: SERVER QURGAN kursor ikkinchi sahifani BERADI.
+    first = await api_client.get(
+        DELIVERY_URL, params={"day": day.isoformat(), "limit": 1}, headers=director_headers
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["next_cursor"] is not None, first.json()
+
+    second = await api_client.get(
+        DELIVERY_URL,
+        params={"day": day.isoformat(), "limit": 1, "cursor": first.json()["next_cursor"]},
+        headers=director_headers,
+    )
+    assert second.status_code == 200, second.text
+    assert {row["outbox_id"] for row in second.json()["rows"]} & {
+        row["outbox_id"] for row in first.json()["rows"]
+    } == set()
 
 
 # ===========================================================================

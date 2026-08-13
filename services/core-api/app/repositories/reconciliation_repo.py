@@ -89,7 +89,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Final
 
 from sbozor_core.enums import AnomalyKind, ReconciliationCaseStatus, ReconciliationSubjectKind
-from sqlalchemy import ARRAY, Date, DateTime, Integer, Text, bindparam, text
+from sqlalchemy import ARRAY, Boolean, Date, DateTime, Integer, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 
 from app.repositories.billing_repo import vendor_charge_allocation, vendor_outstanding
@@ -190,10 +190,17 @@ _OPEN_ANOMALY_CASES = text(
           FROM candidates c
         ON CONFLICT (market_id, anomaly_id) WHERE anomaly_id IS NOT NULL
         DO NOTHING
+        RETURNING id AS case_id, market_id AS market_id
+    ), born AS (
+        INSERT INTO reconciliation_case_events
+                    (market_id, case_id, from_status, to_status, actor_user_id)
+        SELECT i.market_id, i.case_id, NULL::text, :status_new, NULL::uuid
+          FROM inserted i
         RETURNING 1 AS written
     )
     SELECT (SELECT count(*) FROM candidates)::int AS candidates,
-           (SELECT count(*) FROM inserted)::int   AS inserted
+           (SELECT count(*) FROM inserted)::int   AS inserted,
+           (SELECT count(*) FROM born)::int       AS born
     """
 ).bindparams(
     bindparam("market_id", type_=_UUID),
@@ -221,6 +228,39 @@ _OPEN_ANOMALY_CASES = text(
 ⚠ `service_date` NOMZOD QATORDAN (`a.service_date`), argumentdan EMAS:
   ikki manba bir kun ajralib ketardi va case «boshqa kunning» dalilini
   ko'rsatardi.
+
+=============================================================================
+⛔⛔ `born` — CASE TUG'ILISHINING TARIX QATORI (WR-01).
+
+Sxema, model va API uchta joyda `from_status IS NULL` ni ALLAQACHON
+e'lon qiladi (`EVENT_FROM_STATUS_CHECK`, `ReconciliationCaseEvent`
+docstringi, `CaseEvent.from_status: str | None`), lekin 07-20 gacha
+o'sha yo'ldan mahsulotda ⛔ HECH QACHON qator o'tmasdi: case'ni job
+ochardi, tarix esa BO'SH qolardi va u IKKINCHI qadamdan boshlanardi.
+
+⛔ `actor_user_id` — `NULL`, ya'ni ⛔ TIZIM («noma'lum» EMAS, `0022`
+   qarori). Case'ni odam emas, cron ochadi va u yerga biror odamning
+   identifikatorini yozish «kimdir qo'lda ochdi» degan YOLG'ON da'vo
+   bo'lardi.
+
+⛔ AYNI TRANZAKSIYADA VA AYNI BAYONOTDA: alohida `INSERT` case yozilib,
+   hodisa yozilmagan holatni tug'dirardi — nizo hujjatida (D-02) case
+   qayerdan kelgani javobsiz qolardi.
+
+⛔ TAKRORIY YUGURISHDA QATOR YOZILMAYDI: `ON CONFLICT DO NOTHING` tufayli
+   mavjud case `inserted` ga TUSHMAYDI, ya'ni `born` ham bo'sh qoladi.
+   Har kechagi cron aks holda tarixga YANGI «tug'ildi» qatorini
+   qo'shardi.
+
+⚠ `born` NING SANOG'I TASHQI `SELECT` DA ATAYIN BOR: PostgreSQL
+  ma'lumot o'zgartiruvchi CTE ni natijasi o'qilmasa ham OXIRIGACHA
+  bajaradi, ya'ni sanoq ZARURIYAT emas — u INVARIANTNI (`born` ==
+  `inserted`) o'qiladigan qiladi.
+
+⚠ `market_id` VA `case_id` NOMZOD QATORDAN EMAS, `inserted` DAN
+  (`RETURNING`): `:market_id` argumentini ikkinchi marta yozish ikki
+  manbani tug'dirardi — `service_date` bandidagi bilan AYNI qoida.
+=============================================================================
 """
 
 _OVERDUE_CHARGES = text(
@@ -273,10 +313,17 @@ _OPEN_UNPAID_CASES = text(
           FROM candidates c
         ON CONFLICT (market_id, charge_id) WHERE charge_id IS NOT NULL
         DO NOTHING
+        RETURNING id AS case_id, market_id AS market_id
+    ), born AS (
+        INSERT INTO reconciliation_case_events
+                    (market_id, case_id, from_status, to_status, actor_user_id)
+        SELECT i.market_id, i.case_id, NULL::text, :status_new, NULL::uuid
+          FROM inserted i
         RETURNING 1 AS written
     )
     SELECT (SELECT count(*) FROM candidates)::int AS candidates,
-           (SELECT count(*) FROM inserted)::int   AS inserted
+           (SELECT count(*) FROM inserted)::int   AS inserted,
+           (SELECT count(*) FROM born)::int       AS born
     """
 ).bindparams(
     bindparam("market_id", type_=_UUID),
@@ -293,6 +340,11 @@ _OPEN_UNPAID_CASES = text(
 
 ⛔ Idempotentlik jufti — `uq_reconciliation_cases_charge` qisman
    indeksi; sabab `_OPEN_ANOMALY_CASES` docstringi bilan bir xil.
+
+⛔ `born` CTE si ham AYNAN o'sha yerda sabablangan (WR-01): SINF A ning
+   case'i ham tarixga TUG'ILISH qatori bilan kiradi. Ikki sinfdan
+   birortasini qoldirish «case tarixi qayerdan boshlanadi?» savoliga
+   NISHONGA QARAB ikki xil javob berardi.
 """
 
 
@@ -874,7 +926,10 @@ _UPDATE_CASE_STATUS = text(
     """
     UPDATE reconciliation_cases
        SET status = :to_status,
-           assignee_user_id = COALESCE(:actor_user_id, assignee_user_id),
+           assignee_user_id = CASE
+               WHEN :assignee_explicit THEN :assignee_user_id
+               ELSE COALESCE(assignee_user_id, :actor_user_id)
+           END,
            resolution_note = COALESCE(:note, resolution_note),
            updated_at = now()
      WHERE market_id = :market_id
@@ -885,18 +940,38 @@ _UPDATE_CASE_STATUS = text(
     bindparam("case_id", type_=_UUID),
     bindparam("to_status", type_=Text()),
     bindparam("actor_user_id", type_=_UUID),
+    bindparam("assignee_user_id", type_=_UUID),
+    bindparam("assignee_explicit", type_=Boolean()),
     bindparam("note", type_=Text()),
 )
 """Case'ning JORIY holati — tarix EMAS, KO'RINISH.
 
-⚠ `COALESCE` IKKALA USTUNDA HAM: berilmagan qiymat mavjudini
-  O'CHIRMAYDI. Mas'ulni tozalash uchun `NULL` yuborish yo'li ATAYIN
-  yo'q — «case egasiz qoldi» holati ilova qatlamining qarori va u
-  bugungi oqimda mavjud emas.
+=============================================================================
+⛔⛔ MAS'UL USTUNIDA IKKI SHOX VA IKKALASI HAM NOMLANGAN.
 
-⚠ `assignee_user_id` — O'TISHNI QILGAN ODAM. Ya'ni case'ni oxirgi marta
-  qo'lga olgan kishi uning egasi bo'lib qoladi; tizim o'tishlari
-  (`actor_user_id IS NULL`) egani O'ZGARTIRMAYDI.
+  «MIJOZ AYTDI» (`:assignee_explicit` -> rost) — qiymat AYNAN yoziladi,
+      `NULL` ham. Ya'ni «Biriktirilmagan» tanlovi HAQIQIY amal:
+      biriktirish BEKOR bo'ladi. `COALESCE` bu shoxda ISHLATILMAYDI —
+      u `NULL` ni «tegmang» deb o'qib, amalni imkonsiz qilardi.
+
+  «MIJOZ JIM» (`:assignee_explicit` -> yolg'on) — mavjud egasi
+      SAQLANADI, egasiz case esa uni QO'LGA OLGAN odamga tushadi.
+
+⛔ ARGUMENTLAR TARTIBI `COALESCE(assignee_user_id, :actor_user_id)` —
+   TESKARISI EMAS. Eski shakl (`COALESCE(:actor_user_id,
+   assignee_user_id)`) AKTORNI tanlardi, ya'ni HAR holat o'zgarishi
+   mavjud biriktirishni JIMGINA o'g'irlardi: direktor case'ni
+   nazoratchiga bergandan keyin uni yopishi biriktirishni o'ziga
+   qaytarib olardi va navbatda «bu case kimda?» savoli yolg'on javob
+   berardi (B-2).
+
+⛔ IKKI QIYMAT BILAN IFODALAB BO'LMAYDI: `:assignee_user_id` ning
+   `NULL` i «tegmang» va «bekor qiling» degan IKKI xil ma'no tashiydi,
+   shuning uchun bayroq ALOHIDA parametr bo'lishi SHART.
+=============================================================================
+
+⚠ `resolution_note` da `COALESCE` QOLADI: berilmagan izoh mavjudini
+  o'chirmaydi va yechim matnini «tozalash» amali mahsulotda YO'Q.
 
 ⚠ `updated_at` OCHIQ YOZILADI: bu so'rov ORM orqali emas, xom SQL bilan
   ketadi va `onupdate` hodisasi bu yo'lda UMUMAN ishlamasdi.
@@ -945,6 +1020,8 @@ async def transition(
     case_id: UUID,
     to_status: str,
     actor_user_id: UUID | None = None,
+    assignee_user_id: UUID | None = None,
+    assignee_explicit: bool = False,
     note: str | None = None,
 ) -> CaseTransition:
     """Case holatini o'zgartiradi — ⛔ IKKI YOZUV, BITTA TRANZAKSIYA (D-14).
@@ -970,6 +1047,20 @@ async def transition(
             to'rtlikdan tashqari qiymatni sxemaning `CHECK` i rad etadi —
             bu yerda TAKRORLANMAYDI (nusxa jimgina ajralib ketardi).
         actor_user_id: ⛔ `None` = TIZIM, «noma'lum» EMAS (`0022` qarori).
+            Bu — «KIM QAROR QILDI?» savolining javobi va u `assignee_
+            user_id` («KIM ISH QILADI?») dan BOSHQA fakt.
+        assignee_user_id: case'ning yangi egasi. ⛔ FAQAT `assignee_
+            explicit` rost bo'lganda qo'llanadi; aks holda e'tiborsiz
+            qoldiriladi.
+        assignee_explicit: ⛔ MIJOZ MAYDONNI YUBORDIMI. `None` ning O'ZI
+            ikki xil ma'no tashiydi («tegmang» va «biriktirishni bekor
+            qiling») va ularni bitta qiymat bilan ifodalab bo'lmaydi —
+            shakl `_UPDATE_CASE_STATUS` docstringida.
+            ⛔ CHAQIRUVCHI a'zolikni TEKSHIRGAN bo'lishi SHART: bu
+            funksiya `assignee_user_id` ning JORIY BOZOR a'zosi ekanini
+            o'lchamaydi va sxemada `users` ga FK ham YO'Q
+            (`0023:344-347`). Tekshiruv `reconciliation.py` marshrutida,
+            `UserRepository.member_roles()` bilan.
         note: erkin izoh; tarix qatoriga VA case'ning yechim matniga
             yoziladi. Uzunlik chegarasi sxemada
             (`RESOLUTION_NOTE_LENGTH_CHECK`).
@@ -1010,6 +1101,8 @@ async def transition(
             "case_id": case_id,
             "to_status": to_status,
             "actor_user_id": actor_user_id,
+            "assignee_user_id": assignee_user_id,
+            "assignee_explicit": assignee_explicit,
             "note": note,
         },
     )
