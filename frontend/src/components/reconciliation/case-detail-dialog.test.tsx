@@ -100,14 +100,16 @@ const patchCalls: unknown[] = [];
  * @param options.users `GET /users` javobining qatorlari (WR-09).
  */
 function routeFetch(
-  initial = detail(),
+  /* ⛔ `Record<string, unknown>` ATAYIN: `detail()` ning `resolution_note`
+     maydoni `null` deb TORAYTIRILADI va PATCH uni satr bilan yangilaydi. */
+  initial: Record<string, unknown> = detail(),
   options: {
     patchRejectsWith?: () => unknown;
     users?: Record<string, unknown>[];
   } = {},
 ) {
   patchCalls.length = 0;
-  let served = initial;
+  let served: Record<string, unknown> = initial;
 
   apiClientMock.apiFetch.mockImplementation(
     (path: string, opts?: { method?: string; body?: unknown }) => {

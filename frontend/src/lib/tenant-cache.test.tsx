@@ -274,7 +274,7 @@ describe("sizib chiqish (doiralash yarmi)", () => {
  *
  * ⛔⛔ NEGA BU YERGA QO'SHILDI VA NEGA ALOHIDA FAYL OCHILMADI.
  *
- * `USERS_QUERY_KEY = ["users"]` bu faylning butun mantiqidan ⛔ ISTISNO edi:
+ * Global `["users"]` kaliti bu faylning butun mantiqidan ⛔ ISTISNO edi:
  * qolgan har bir domen `["m", marketId, ...]` bilan boshlanadi, xodimlar
  * ro'yxati esa GLOBAL kalitda yashardi. Ikki oqibat o'lchanadi:
  *
