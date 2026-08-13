@@ -121,6 +121,24 @@ _COUNT_EVENTS = (
     "SELECT count(*) FROM reconciliation_case_events WHERE market_id = %s AND case_id = %s"
 )
 
+_CASE_ROW = (
+    "SELECT status, assignee_user_id FROM reconciliation_cases WHERE market_id = %s AND id = %s"
+)
+"""Case'ning BAZADAGI holati — javobga emas, YOZILGAN qatorga qaraydi.
+
+⛔ FAQAT JAVOBGA QARASH YETMAYDI: marshrut qiymatni javob modeliga
+   qo'yib, bazaga yozmagan holat o'shanda YASHIL qolardi (05-14 darsi).
+"""
+
+_MEMBER_ROLES = "SELECT roles FROM user_market_roles WHERE market_id = %s AND user_id = %s"
+"""A'zolik NAZORATI — «begona bozor xodimi» testining eng muhim qismi.
+
+⛔ USIZ TENANCY DARVOZASI BO'SH-ROST BO'LARDI: tasodifiy UUID bilan
+   yozilgan test «mavjud bo'lmagan foydalanuvchi rad etildi» ni
+   o'lchardi va `member_roles()` tekshiruvi olib tashlanganda ham
+   yashil qolardi.
+"""
+
 
 # ===========================================================================
 # Fixture'lar — `test_reconciliation_repo.py::env` naqshi
@@ -697,6 +715,310 @@ async def test_transition_to_the_same_status_is_a_conflict(
 
     events = sync_owner_conn.execute(_COUNT_EVENTS, (str(recon.market_id), str(case_id))).fetchone()
     assert events is not None and events[0] == 0, events
+
+
+# ===========================================================================
+# 3b. MAS'UL — DIREKTOR TANLAYDI, AKTOR EMAS (RECON-02, B-2)
+#
+# ⛔⛔ MAS'UL VA AKTOR — IKKI BOSHQA SAVOLNING JAVOBI.
+#
+#   aktor  (`actor_user_id`)     -> «KIM QAROR QILDI?» — tarix qatorining
+#                                   egasi, nizoda (D-02) javob beradigan odam;
+#   mas'ul (`assignee_user_id`)  -> «KIM ISH QILADI?» — case'ning joriy egasi.
+#
+# 07-20 gacha marshrut `payload.assignee_user_id` ni JIMGINA tashlab
+# yuborardi va SQL har o'tishda case'ni HUKM CHIQARGAN odamga biriktirardi
+# (`COALESCE(:actor_user_id, assignee_user_id)`). Ya'ni RECON-02 ning
+# «mas'ul... yoziladi» bandi AMALDA yo'q edi, javob esa `200`.
+#
+# ⛔ BU BO'LIMNING ENG QIMMAT DA'VOSI — TENANCY: `reconciliation_cases.
+#    assignee_user_id` da `users` ga FK ⛔ YO'Q (`0023:344-347` tekshiruvni
+#    «ilova qatlamida» deb yozgan), ya'ni yagona to'siq ILOVADA. Maydonni
+#    tekshiruvsiz «ulab qo'yish» begona bozor xodimini biriktirish yo'lini
+#    ochardi — u maydonni tashlab yuborishdan ham YOMONROQ holat.
+# ===========================================================================
+
+
+async def test_the_director_assigns_the_case_to_a_market_member(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ RECON-02: direktor TANLAGAN mas'ul bazaga yetadi va u AKTOR EMAS.
+
+    ⛔ IKKI ASSERT ATAYIN JUFT: javobdagi qiymat ham, BAZADAGI qator ham
+       o'lchanadi. Faqat javobga qarash marshrut qiymatni javob modeliga
+       qo'yib, bazaga yozmagan holatni KO'RMASDI.
+
+    ⛔ «DIREKTORGA TENG EMAS» ALOHIDA ASSERT: bugungi nuqson aynan shu —
+       case hukm chiqargan odamga biriktiriladi. Teng bo'lgan kun oddiy
+       «assignee bor» asserti darvozani o'tkazib yuborardi.
+    """
+    day = _report_day()
+    _, case_id = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    assignee = recon.base.market_a.admin_user_id
+    director = recon.base.market_a.director_user_id
+    assert assignee != director, (
+        "nazorat: seed mas'ul bilan aktorni BIR ODAM qilib qo'ygan — bu test "
+        "o'shanda hech nimani o'lchamasdi"
+    )
+
+    response = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(assignee),
+        },
+        headers=director_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["assignee_user_id"] == str(assignee), payload
+    assert payload["assignee_user_id"] != str(director), (
+        "⛔ B-2: javobdagi mas'ul HUKM CHIQARGAN odam — direktor tanlovi JIMGINA tashlab yuborildi"
+    )
+
+    row = sync_owner_conn.execute(_CASE_ROW, (str(recon.market_id), str(case_id))).fetchone()
+    assert row is not None, "nazorat: case qatori bazada yo'q"
+    assert row[0] == ReconciliationCaseStatus.IN_REVIEW.value, row
+    assert str(row[1]) == str(assignee), (
+        f"⛔ BAZAGA yozilgan mas'ul tanlangan odam emas: {row[1]} != {assignee}"
+    )
+
+    # ⛔ AKTOR O'ZGARMAYDI: tarix qatorining egasi HAMON direktor — mas'ul
+    #    uni ALMASHTIRMAYDI, chunki ular ikki boshqa savolning javobi.
+    assert payload["events"][-1]["actor_user_id"] == str(director), payload["events"]
+
+
+async def test_an_explicit_null_clears_the_assignment(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ «Biriktirilmagan» tanlovi HAQIQATAN biriktirishni bekor qiladi.
+
+    UI-SPEC ning `<option value="">Biriktirilmagan</option>` bandi bugun
+    IMKONSIZ amalni va'da qiladi: `COALESCE(:assignee, assignee_user_id)`
+    `NULL` ni E'TIBORSIZ qoldiradi va eski mas'ul o'z joyida qolardi —
+    direktor tanlovni bosardi, javob `200` bo'lardi, ekranda esa hech
+    nima o'zgarmasdi.
+    """
+    day = _report_day()
+    _, case_id = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    assignee = recon.base.market_a.admin_user_id
+
+    assigned = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(assignee),
+        },
+        headers=director_headers,
+    )
+    assert assigned.status_code == 200, assigned.text
+    assert assigned.json()["assignee_user_id"] == str(assignee), (
+        "nazorat: birinchi biriktirish ishlamadi — bekor qilish da'vosi BO'SH-ROST bo'lardi"
+    )
+
+    cleared = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={
+            "status": ReconciliationCaseStatus.JUSTIFIED.value,
+            "assignee_user_id": None,
+        },
+        headers=director_headers,
+    )
+
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["assignee_user_id"] is None, cleared.json()
+    # ⛔ HOLAT BARIBIR O'ZGARADI: bekor qilish o'tishni BLOKLAMAYDI.
+    assert cleared.json()["status"] == ReconciliationCaseStatus.JUSTIFIED.value
+
+    row = sync_owner_conn.execute(_CASE_ROW, (str(recon.market_id), str(case_id))).fetchone()
+    assert row is not None and row[1] is None, (
+        f"⛔ BAZADA mas'ul hamon turibdi: {row} — «Biriktirilmagan» tanlovi "
+        "IMKONSIZ amal bo'lib qolgan"
+    )
+
+
+async def test_a_silent_transition_keeps_the_existing_assignee(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ B-2: maydon YUBORILMAGAN o'tish mavjud biriktirishni O'G'IRLAMAYDI.
+
+    =======================================================================
+    ⛔⛔ IKKI SHOX BIR TESTDA — VA IKKALASI HAM KERAK.
+
+      (a) EGASI BOR case: mijoz JIM -> egasi O'ZGARMAYDI. Bugun
+          `COALESCE(:actor_user_id, assignee_user_id)` aktorni tanlaydi,
+          ya'ni har holat o'zgarishi biriktirishni jimgina o'g'irlaydi.
+
+      (b) EGASIZ case: mijoz JIM -> uni QO'LGA OLGAN odam egasi bo'ladi.
+          Bu BUGUNGI xulq va u ATAYIN saqlanadi
+          (`_UPDATE_CASE_STATUS` docstringidagi mavjud qoida).
+
+    ⛔ (b) SIZ (a) NI YOZIB BO'LMAYDI: `COALESCE` ni butunlay olib tashlash
+       ham (a) ni yashil qilardi, lekin egasiz case abadiy egasiz qolardi
+       va navbatda «bu case kimda?» savoli javobsiz bo'lardi.
+    =======================================================================
+    """
+    day = _report_day()
+    _, owned_case = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    _, orphan_case = _seed_unregistered_anomaly(sync_owner_conn, recon, day=day, stall_index=1)
+    assignee = recon.base.market_a.admin_user_id
+    director = recon.base.market_a.director_user_id
+
+    assigned = await api_client.patch(
+        f"{CASES_URL}/{owned_case}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(assignee),
+        },
+        headers=director_headers,
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    # ---- (a) MIJOZ JIM, EGASI BOR -> egasi SAQLANADI.
+    silent = await api_client.patch(
+        f"{CASES_URL}/{owned_case}",
+        json={"status": ReconciliationCaseStatus.JUSTIFIED.value},
+        headers=director_headers,
+    )
+    assert silent.status_code == 200, silent.text
+    assert silent.json()["assignee_user_id"] == str(assignee), (
+        "⛔ B-2: holat o'zgarishi mavjud biriktirishni JIMGINA o'g'irladi — "
+        f"case endi {silent.json()['assignee_user_id']} da"
+    )
+
+    # ---- (b) MIJOZ JIM, EGASI YO'Q -> uni QO'LGA OLGAN odam egasi bo'ladi.
+    taken = await api_client.patch(
+        f"{CASES_URL}/{orphan_case}",
+        json={"status": ReconciliationCaseStatus.IN_REVIEW.value},
+        headers=director_headers,
+    )
+    assert taken.status_code == 200, taken.text
+    assert taken.json()["assignee_user_id"] == str(director), (
+        "egasiz case uni qo'lga olgan odamga tushishi kerak edi — bu BUGUNGI "
+        f"xulq va u saqlanadi: {taken.json()['assignee_user_id']}"
+    )
+
+
+async def test_a_foreign_market_member_cannot_be_assigned(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔⛔ T-07-109: BEGONA BOZOR xodimini biriktirish **422** bilan RAD ETILADI.
+
+    =======================================================================
+    ⛔⛔ BU FAYLDAGI ENG QIMMAT DA'VO VA U «YO'Q FOYDALANUVCHI» NI EMAS,
+        HAQIQATAN MAVJUD BEGONA XODIMNI o'lchaydi.
+
+    `reconciliation_cases.assignee_user_id` da `users` ga FK ⛔ YO'Q
+    (`0023:344-347`), ya'ni baza «bu odam bu bozorda ishlaydimi?»
+    savolini UMUMAN bermaydi. Yagona to'siq — ilova qatlami.
+
+    ⛔ NAZORAT (b) MAJBURIY: agar test tasodifiy UUID bilan yozilsa, u
+       «mavjud bo'lmagan foydalanuvchi rad etildi» ni o'lchardi va
+       TENANCY haqida HECH NIMA isbotlamasdi — darvoza `member_roles()`
+       olib tashlanganda ham yashil qolardi.
+
+    ⛔ NAZORAT (a) HAM MAJBURIY: rad etish `rollback` ga TAYANMASLIGI
+       kerak. Tekshiruv `transition()` dan KEYIN qilinsa holat allaqachon
+       o'zgargan bo'lardi va «case umuman o'zgarmadi» da'vosi tranzaksiya
+       xulqiga bog'liq bo'lib qolardi.
+    =======================================================================
+    """
+    day = _report_day()
+    _, case_id = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    foreigner = recon.base.market_b.admin_user_id
+
+    # ---- NAZORAT (b): bu odam HAQIQATAN B bozorining a'zosi.
+    membership = sync_owner_conn.execute(
+        _MEMBER_ROLES, (str(recon.base.market_b.id), str(foreigner))
+    ).fetchone()
+    assert membership is not None, (
+        "nazorat: tanlangan `user_id` B bozorida A'ZO EMAS — test o'shanda "
+        "«yo'q foydalanuvchi» ni o'lchardi va TENANCY haqida hech nima "
+        "isbotlamasdi"
+    )
+    assert (
+        sync_owner_conn.execute(_MEMBER_ROLES, (str(recon.market_id), str(foreigner))).fetchone()
+        is None
+    ), "nazorat: o'sha odam A bozorida ham a'zo — chegara yo'q"
+
+    response = await api_client.patch(
+        f"{CASES_URL}/{case_id}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(foreigner),
+        },
+        headers=director_headers,
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "assignee_not_in_market", response.json()
+
+    # ---- NAZORAT (a): case qatori UMUMAN o'zgarmagan.
+    row = sync_owner_conn.execute(_CASE_ROW, (str(recon.market_id), str(case_id))).fetchone()
+    assert row is not None
+    assert row[0] == ReconciliationCaseStatus.NEW.value, (
+        f"⛔ rad etilgan so'rov HOLATNI o'zgartirib yubordi: {row}"
+    )
+    assert row[1] is None, f"⛔ rad etilgan so'rov MAS'ULNI yozib yubordi: {row}"
+
+    events = sync_owner_conn.execute(_COUNT_EVENTS, (str(recon.market_id), str(case_id))).fetchone()
+    assert events is not None and events[0] == 0, (
+        f"⛔ rad etilgan so'rov TARIXGA qator yozdi: {events}"
+    )
+
+
+async def test_an_unknown_user_is_rejected_like_a_foreign_one(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ T-07-110: «yo'q odam» va «begona bozor xodimi» — AYNI javob.
+
+    ⛔ 403 YOKI BOSHQA KOD BERILMAYDI: farqning O'ZI «bunday foydalanuvchi
+       bor, lekin sizniki emas» degan ma'lumotni oshkor qilardi va
+       hujumchi identifikatorlarni javob kodi bo'yicha sanab chiqa olardi
+       — `member_roles()` docstringidagi qoidaning aynan takrori.
+    """
+    day = _report_day()
+    _, first_case = _seed_unpaid_charge(sync_owner_conn, recon, day=day)
+    _, second_case = _seed_unregistered_anomaly(sync_owner_conn, recon, day=day, stall_index=1)
+
+    unknown = await api_client.patch(
+        f"{CASES_URL}/{first_case}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(uuid4()),
+        },
+        headers=director_headers,
+    )
+    foreign = await api_client.patch(
+        f"{CASES_URL}/{second_case}",
+        json={
+            "status": ReconciliationCaseStatus.IN_REVIEW.value,
+            "assignee_user_id": str(recon.base.market_b.cashier_user_id),
+        },
+        headers=director_headers,
+    )
+
+    assert unknown.status_code == 422, unknown.text
+    assert unknown.status_code == foreign.status_code
+    assert unknown.content == foreign.content, (
+        "javob tanalari farq qiladi — enumeration signali (T-07-110)"
+    )
 
 
 # ===========================================================================
