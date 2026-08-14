@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from app.security.tokens import REFRESH_COOKIE_NAME
 from fixtures.admin_api import (
     AUDIT_URL,
     PROFILE_URL,
@@ -46,6 +47,7 @@ from fixtures.auth_api import (
     CHANGE_PASSWORD_URL,
     LOGOUT_URL,
     ME_URL,
+    REFRESH_URL,
     SELECT_MARKET_URL,
     login,
 )
@@ -336,6 +338,95 @@ async def test_a_fresh_session_after_the_change_is_not_gated(
     assert reopened.json()["must_change_password"] is False
     headers = bearer(reopened.json()["access_token"])
     assert (await api_client.get(USERS_URL, headers=headers)).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Parol almashtirilgach JORIY qurilma tizimda QOLADI (06-nuqson)
+#
+# Bu ikki test JUFT va ular birga o'qilishi kerak: birinchisi "sessiya
+# saqlanadi" ni, ikkinchisi esa "faqat JORIY qurilmaniki saqlanadi" ni
+# qulflaydi. Yolg'iz birinchisi `refresh_revoke_user()` ni umuman olib
+# tashlagan taqdirda ham yashil qolardi — ya'ni u ASVS V7 kafolatini
+# jimgina yo'q qilgan tuzatishni o'tkazib yuborardi.
+# ---------------------------------------------------------------------------
+
+
+async def test_password_change_keeps_the_current_device_signed_in(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """Parolni almashtirgan qurilma tizimda QOLADI (D-03 uzluksizligi).
+
+    NUQSON TARIXI: `change-password` `refresh_revoke_user()` bilan BARCHA
+    oilalarni o'ldirib, ustiga brauzerdagi cookie'ni ham o'chirardi va
+    o'rniga hech narsa bermasdi. Buni DARHOL sezib bo'lmasdi — xotiradagi
+    access token yana ~15 daqiqa yashaydi va ilova ishlayotgandek
+    ko'rinadi. Mina keyingi TO'LIQ SAHIFA navigatsiyasida portlardi:
+    u xotirani tozalaydi, `restoreSession()` cookie'siz `/auth/refresh`
+    chaqiradi va 401 oladi — foydalanuvchi sababsiz `/login` ga uchardi.
+
+    Shuning uchun bu yerda AYNAN `/auth/refresh` chaqiriladi: 204 javobning
+    o'zi hech nima isbotlamaydi, chunki eski (buzuq) xulqda ham javob 204
+    edi. Yagona farq — cookie'ning keyin ISHLASHIDA.
+    """
+    phone, temporary = await _create_market_admin(api_client, auth_seed)
+    headers = bearer(await _token(api_client, phone, temporary))
+    before = api_client.cookies.get(REFRESH_COOKIE_NAME)
+    assert before is not None
+
+    changed = await api_client.post(
+        CHANGE_PASSWORD_URL,
+        json={"current_password": temporary, "new_password": NEW_PASSWORD},
+        headers=headers,
+    )
+    assert changed.status_code == 204, changed.text
+
+    after = api_client.cookies.get(REFRESH_COOKIE_NAME)
+    assert after is not None, "parol almashtirilgach refresh cookie BERILMADI"
+    assert after != before, "cookie almashmadi — eski (bekor qilingan) oila qaytarildi"
+
+    refreshed = await api_client.post(REFRESH_URL)
+    assert refreshed.status_code == 200, refreshed.text
+
+
+async def test_password_change_still_kills_the_other_devices(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """BOSHQA qurilmalar baribir o'ladi — ASVS V7 kafolati saqlanadi.
+
+    Yuqoridagi testning zaruriy juftligi: joriy qurilmaga yon berish
+    "parolni almashtirish barcha sessiyalarni yopadi" va'dasini
+    KENGAYTIRMASLIGI kerak. Ikki MUSTAQIL login ikki oila ochadi va
+    tekshiruv aynan ular orasidan o'tadi.
+    """
+    phone, temporary = await _create_market_admin(api_client, auth_seed)
+
+    # "Boshqa qurilma" — birinchi, mustaqil sessiya.
+    await _token(api_client, phone, temporary)
+    other_cookie = api_client.cookies.get(REFRESH_COOKIE_NAME)
+    assert other_cookie is not None
+
+    # "Joriy qurilma" — ikkinchi login, YANGI oila.
+    headers = bearer(await _token(api_client, phone, temporary))
+    assert api_client.cookies.get(REFRESH_COOKIE_NAME) != other_cookie
+
+    changed = await api_client.post(
+        CHANGE_PASSWORD_URL,
+        json={"current_password": temporary, "new_password": NEW_PASSWORD},
+        headers=headers,
+    )
+    assert changed.status_code == 204, changed.text
+
+    # TARTIB MUHIM: joriy qurilma AVVAL tekshiriladi. Bekor qilingan cookie
+    # bilan kelgan 401 javobi cookie'ni TOZALOVCHI sarlavha yuboradi
+    # (`_invalid_refresh(clear_cookie=True)`) va httpx uni jar'ga qo'llaydi,
+    # ya'ni teskari tartibda ikkinchi tekshiruv o'z shartini buzardi.
+    alive = await api_client.post(REFRESH_URL)
+    assert alive.status_code == 200, alive.text
+
+    dead = await api_client.post(
+        REFRESH_URL, headers={"Cookie": f"{REFRESH_COOKIE_NAME}={other_cookie}"}
+    )
+    assert dead.status_code == 401, "boshqa qurilmaning sessiyasi omon qoldi (ASVS V7 buzildi)"
 
 
 # ---------------------------------------------------------------------------

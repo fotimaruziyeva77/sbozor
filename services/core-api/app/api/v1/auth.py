@@ -845,12 +845,38 @@ async def change_password(
     principal: PrincipalDep,
     cache: CacheDep,
     session: AuthSessionDep,
+    settings: SettingsDep,
 ) -> Response:
-    """Parolni almashtiradi (D-02) va BARCHA sessiyalarni bekor qiladi.
+    """Parolni almashtiradi (D-02) va BOSHQA barcha sessiyalarni bekor qiladi.
 
     Sessiyalarni bekor qilish majburiy (ASVS V7): parol almashtirishning
     asosiy sababi — "parolim boshqasiga ma'lum" shubhasi. Eski sessiyalar
     yashab qolsa, almashtirishning ma'nosi qolmaydi.
+
+    LEKIN JORIY QURILMA BUNDAN MUSTASNO — va bu tuzatilgan xato edi.
+
+    Avval bu endpoint `refresh_revoke_user()` bilan BARCHA oilalarni
+    o'ldirib, ustiga `clear_refresh_cookie()` bilan brauzerdagi cookie'ni
+    ham o'chirar, o'rniga esa HECH NARSA bermasdi. Foydalanuvchi buni
+    DARHOL sezmasdi: xotiradagi access token yana ~15 daqiqa yashaydi va
+    ilova ishlayotgandek ko'rinadi. Mina keyingi TO'LIQ SAHIFA
+    navigatsiyasida portlardi — u xotirani tozalaydi, `restoreSession()`
+    esa cookie'siz `/auth/refresh` chaqirib 401 olardi (yuqoridagi
+    `if not refresh_token` shoxi, u LOG HAM, AUDIT HAM yozmaydi) va
+    foydalanuvchi sababsiz `/login` ga uchardi. Aynan shu 6-fazadagi
+    "sahifa almashishda sessiya o'chadi" nuqsoni edi.
+
+    Shuning uchun bekor qilishdan KEYIN joriy qurilmaga YANGI oila va
+    yangi cookie beriladi. Bu ASVS kafolatini buzmaydi: `refresh_revoke_user`
+    joyida qoladi, ya'ni qolgan HAMMA sessiya baribir o'ladi.
+
+    NEGA BU WR-02/CR-01 TESHIGINI QAYTA OCHMAYDI: yangi oila faqat
+    `current_password` tekshiruvidan (pastda) O'TGAN so'rovga beriladi,
+    ya'ni bu qayta autentifikatsiya. O'g'irlangan access token bilan
+    kelgan hujumchi joriy parolni bilmaydi; admin `reset-password`
+    qilgandan keyin esa yangi vaqtinchalik parol undan ham yashirin.
+    Shu bilan `select-market` ni darvoza ostiga olib kelgan mulohaza
+    (u parol so'ramasdan sessiya ochardi) bu yerda BUZILMAYDI.
     """
     weak = HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="weak_password")
     if not validate_password_strength(payload.new_password):
@@ -874,6 +900,26 @@ async def change_password(
     )
     revoked = await auth_repo.refresh_revoke_user(session, principal.user_id)
 
+    out = Response(status_code=status.HTTP_204_NO_CONTENT)
+    if principal.market_id is not None:
+        # TARTIB MUHIM: avval bekor qilish, keyin yangi oila. Teskarisi
+        # yangi tokenni ham o'ldirardi. `revoked` sanog'i ham shu tartib
+        # tufayli halol qoladi — u faqat HAQIQATAN yopilgan sessiyalarni
+        # sanaydi, endigina ochilganini emas.
+        await _issue_session_cookie(
+            session,
+            out,
+            user_id=principal.user_id,
+            market_id=principal.market_id,
+            family_id=None,
+            settings=settings,
+        )
+    else:
+        # Bozor tanlanmagan sessiya (platforma admini login qilgan payt) —
+        # unda refresh cookie UMUMAN chiqarilmagan (`refresh_tokens.market_id`
+        # `NOT NULL`), ya'ni tiklanadigan narsa yo'q. Eski xulq saqlanadi.
+        clear_refresh_cookie(out)
+
     await write_app_audit(
         session,
         action=AuditAction.PASSWORD_CHANGED,
@@ -886,8 +932,6 @@ async def change_password(
     await session.commit()
     await invalidate_user_state(cache, principal.user_id)
 
-    out = Response(status_code=status.HTTP_204_NO_CONTENT)
-    clear_refresh_cookie(out)
     return out
 
 
