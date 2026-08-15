@@ -29,7 +29,7 @@ Phase: 07 (nomuvofiqlik-bildirishnoma-va-botlar) — EXECUTING
 Plan: 1 of 17
 Total Plans in Phase: 20
 Status: Ready to execute
-Last activity: 2026-08-13 -- Phase 8 planning complete
+Last activity: 2026-08-14 -- Completed quick task 260814-p4g: Topilma №8 (Enter) tashxisi
 
 Progress: [██████████] 100% (15/15 reja — 05-01…05-15)
 
@@ -274,6 +274,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260814-p4g | Topilma №8: kassir rasta qidiruvida Enter — tashxis: kod sog'lom, fokus-yo'naltirilgan regressiya darvozasi qo'shildi | 2026-08-14 | 8ee8e2e, e3e0cf4 | [260814-p4g-topilma-8-kassir-rasta-qidiruvida-enter-](./quick/260814-p4g-topilma-8-kassir-rasta-qidiruvida-enter-/) |
 | 260811-kyz | 06-14-SUMMARY.md eskirgan byudjet da'vosini yopilgan holatga moslash (xavfsizlik auditi F-2) | 2026-08-11 | 8b5cf6f | [260811-kyz-06-14-summary-md-eskirgan-byudjet-da-vos](./quick/260811-kyz-06-14-summary-md-eskirgan-byudjet-da-vos/) |
 
 ## Deferred Items
