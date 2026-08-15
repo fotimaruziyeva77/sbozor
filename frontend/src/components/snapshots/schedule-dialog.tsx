@@ -127,14 +127,35 @@ export function ScheduleDialog({
         size="md"
         title={title}
       >
+        {/*
+         * ⛔⛔ DL-1 NING UCH HOLATI UCH MUSTAQIL SHOX — VA TARTIB MUHIM.
+         *
+         *     Ilgari uchalasi BITTA shartga (`target === null`) yig'ilgan
+         *     va `common.loading` chizgan edi. Bo'sh ro'yxatda
+         *     (`200 {"items":[]}`) bu SOF YOLG'ON bo'lardi: so'rov
+         *     TUGAGAN, dialog esa kutishni taklif qilardi va hech qachon
+         *     tugamasdi. Admin buni o'z tarmog'i yoki o'z sabri bilan
+         *     bog'lardi — ya'ni nosozlik NOTO'G'RI ODAMGA yozilardi
+         *     (TEST-REPORT 2026-08-14, Topilma №6).
+         *
+         *     `isPending` BIRINCHI turadi: u YAGONA holat bo'lib, unda
+         *     «yuklanmoqda» ROST. Qolgan ikkisi so'rov TUGAGANIDAN keyin
+         *     yashaydi va ular boshqa-boshqa javob beradi — xato
+         *     QAYTA URINISHNI, ma'lumot nosozligi esa YANGILASHNI
+         *     talab qiladi.
+         */}
         {request === null ? null : isCreate ? (
           <CreateForm
             defaultTimes={active?.times ?? []}
             nextProfileName={active?.name ?? null}
             onDone={() => onOpenChange(false)}
           />
-        ) : target === null ? (
+        ) : schedules.isPending ? (
           <p className="text-sm text-text-muted">{t("common.loading")}</p>
+        ) : schedules.isError ? (
+          <FormError message={t(marketErrorMessageKey(schedules.error))} />
+        ) : target === null ? (
+          <ScheduleMissing />
         ) : (
           <EditForm
             key={target.id}
@@ -161,6 +182,42 @@ function EditNote({ id }: { id: string }) {
       <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       {t("snapshots.editNote")}
     </p>
+  );
+}
+
+/* --- Jadval profili topilmadi ---------------------------------------------- */
+
+/**
+ * Ma'lumot nosozligi — FAKT, chaqiriq EMAS.
+ *
+ * ⛔⛔ «JADVAL QO'SHING» TUGMASI YOKI HAVOLASI BU YERGA QO'SHILMAYDI.
+ *
+ *     04-UI-SPEC §10.4 buni ATAYIN taqiqlaydi: D-01 bo'yicha jadvalni
+ *     bozor sozlash ustasi AVTOMATIK yozadi, ya'ni uning yo'qligi
+ *     adminning bajarmagan ishi emas — TIZIMNING nosozligi. «Qo'shing»
+ *     chaqirig'i javobgarlikni noto'g'ri odamga yuklardi va ayni paytda
+ *     D-01 ni jimgina yolg'onga aylantirardi («demak jadvalni admin
+ *     yozar ekan-da»).
+ *
+ * ⚠ MAVSUMIY PROFIL YO'LI BU YERDA TAKRORLANMAYDI: u kartada
+ *   (`schedule-card.tsx`) allaqachon bor va profilsiz bozorda ham
+ *   ko'rinadi. Ikkinchi kirish nuqtasi ikki xil yo'lni tug'dirardi.
+ *
+ * ⚠ E'LONLI ROL QO'YILMAYDI: bu dialogning ASOSIY mazmuni, chekka
+ *   xabar emas — u ochilishi bilan o'qiladi. Xato bloki (`FormError`)
+ *   esa mavjud mazmunni ALMASHTIRADI va aynan shuning uchun e'lon
+ *   qilinadi.
+ */
+function ScheduleMissing() {
+  const t = useTranslations();
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-semibold">{t("snapshots.scheduleMissing")}</p>
+      <p className="text-sm text-text-muted">
+        {t("snapshots.scheduleMissingHint")}
+      </p>
+    </div>
   );
 }
 

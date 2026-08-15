@@ -183,7 +183,7 @@ function SnapshotsWorkspace() {
           canManage={canManage}
           onAddSeasonal={() => setDialog({ kind: "create" })}
           onEdit={(profile) =>
-            setDialog({ kind: "edit", scheduleId: profile?.id ?? null })
+            setDialog({ kind: "edit", scheduleId: profile.id })
           }
         />
       </section>

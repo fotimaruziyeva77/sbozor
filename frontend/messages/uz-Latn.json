@@ -662,6 +662,8 @@
     "scheduleModeFuture": "Boshlanmagan",
     "editSchedule": "Jadvalni tahrirlash",
     "addSeasonal": "Mavsumiy jadval qo'shish",
+    "scheduleMissing": "Jadval profili topilmadi",
+    "scheduleMissingHint": "Bu bozorda jadval yozilmagan — bu ma'lumot nosozligi (jadvalni bozor sozlash ustasi avtomatik yozadi). Dialogni yoping va sahifani yangilang.",
     "takesEffectTomorrow": "Bugungi reja o'zgarmaydi — yangi vaqtlar ertadan kuchga kiradi.",
     "editNote": "Bugungi reja allaqachon tuzilgan. Yangi vaqtlar ertadan boshlab ishlaydi — bugungi kadrlar eski jadval bo'yicha olinadi.",
     "closedDaysIncluded": "Yopiq kunlarda ham kadr olinadi",

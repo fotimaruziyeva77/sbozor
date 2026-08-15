@@ -100,8 +100,14 @@ export function ScheduleCard({
    *   chunki RBAC ko'zgusining testi aynan uning MAVJUDLIGINI o'lchaydi.
    */
   onAddSeasonal?: () => void;
-  /** DL-1 ni ochadi (yuqoridagi bilan bir xil sabab). */
-  onEdit?: (profile: SnapshotScheduleProfile | null) => void;
+  /**
+   * DL-1 ni ochadi (yuqoridagi bilan bir xil sabab).
+   *
+   * ⚠ TIP `null` NI QABUL QILMAYDI va bu tuzatishning ikkinchi yarmi:
+   *   chaqiruvchi profilsiz holatni umuman ko'ra olmaydi, ya'ni «dialog
+   *   nima bilan ochiladi?» savoli KOMPILYATSIYA paytida hal bo'ladi.
+   */
+  onEdit?: (profile: SnapshotScheduleProfile) => void;
 }) {
   const t = useTranslations();
   const schedule = useScheduleToday();
@@ -229,9 +235,27 @@ export function ScheduleCard({
 
         {canManage ? (
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button onClick={() => onEdit?.(profile)} variant="secondary">
-              {t("snapshots.editSchedule")}
-            </Button>
+            {/*
+             * ⛔ TAHRIR TUGMASI IKKI SHARTNI TALAB QILADI: huquq VA
+             *    OBYEKT. Ilgari faqat birinchisi tekshirilardi va
+             *    `profile === null` da tugma `onEdit?.(null)` ni
+             *    chaqirib, dialogni obyektsiz ochardi — ya'ni u
+             *    va'dasini HECH QACHON bajarmasdi (Topilma №6).
+             *
+             *    Bu yuqoridagi RBAC ko'zgusi bilan AYNI qoida, boshqa
+             *    sabab bilan: ishlamaydigan tugma yo'q tugmadan yomonroq
+             *    — u tizimni buzuq ko'rsatadi va foydalanuvchini o'z
+             *    xatosini izlashga majbur qiladi.
+             *
+             * ⚠ MAVSUMIY TUGMA FAQAT `canManage` ostida QOLADI va bu
+             *   FARQ mazmunli: u YANGI profil yaratadi, ya'ni profilsiz
+             *   bozorda ham to'liq ma'noli amal.
+             */}
+            {profile !== null ? (
+              <Button onClick={() => onEdit?.(profile)} variant="secondary">
+                {t("snapshots.editSchedule")}
+              </Button>
+            ) : null}
             <Button onClick={() => onAddSeasonal?.()} variant="secondary">
               {t("snapshots.addSeasonal")}
             </Button>

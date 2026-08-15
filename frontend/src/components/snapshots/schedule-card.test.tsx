@@ -255,6 +255,48 @@ describe("`camera_manage` ko'zgusi", () => {
 });
 
 /* ---------------------------------------------------------------------------
+ * ⛔ PROFILSIZ KARTA — ISHLAMAYDIGAN TUGMA YO'Q TUGMADAN YOMONROQ
+ *
+ * TEST-REPORT 2026-08-14, Topilma №6 ning IKKINCHI QATLAMI. `profile ===
+ * null` bo'lganda «Jadvalni tahrirlash» tugmasi CHIZILARDI va bosilganda
+ * dialogni ochib, uni «Yuklanmoqda» da qoldirardi — ya'ni tugma o'z
+ * va'dasini HECH QACHON bajarmasdi.
+ *
+ * ⚠ HUQUQ KO'ZGUSI BILAN BIR XIL QOIDA, LEKIN BOSHQA SABAB: yuqoridagi
+ *   T-04-77 «huquq yo'q» holatini qamraydi, bu esa «obyekt yo'q»
+ *   holatini. Ikkovi mustaqil — huquqi bor admin ham ishlamaydigan
+ *   tugmani ko'rmasligi kerak.
+ *
+ * ⛔ MAVSUMIY TUGMA QOLADI va bu FARQ mazmunli: mavsumiy profil qo'shish
+ *    profilsiz bozorda ham MA'NOLI amal (u yangi profil YARATADI), tahrir
+ *    esa mavjud obyektni talab qiladi.
+ * ------------------------------------------------------------------------ */
+
+describe("profil yo'q bo'lganda tugmalar", () => {
+  test("⛔ `profile === null` da tahrir tugmasi RENDER QILINMAYDI", () => {
+    renderCard(makeToday({ profile: null }), { canManage: true });
+
+    expect(screen.queryByRole("button", { name: EDIT_LABEL })).toBeNull();
+    expect(document.body.textContent).not.toContain(EDIT_LABEL);
+  });
+
+  test("mavsumiy jadval tugmasi esa QOLADI — u yangi profil yaratadi", () => {
+    renderCard(makeToday({ profile: null }), { canManage: true });
+
+    expect(
+      screen.getByRole("button", { name: ADD_SEASONAL_LABEL }),
+    ).toBeInTheDocument();
+  });
+
+  test("huquq ham, profil ham yo'q bo'lsa hech qanday tugma yo'q", () => {
+    renderCard(makeToday({ profile: null }), { canManage: false });
+
+    expect(screen.queryByRole("button", { name: EDIT_LABEL })).toBeNull();
+    expect(screen.queryByRole("button", { name: ADD_SEASONAL_LABEL })).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
  * QOPLANMAGAN KUN — JIM MA'LUMOT YO'QOTISH EMAS (§10.5)
  * ------------------------------------------------------------------------ */
 

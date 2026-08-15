@@ -911,6 +911,8 @@ Aksent rang **faqat** quyidagilarda:
 
 ⛔ **«Jadval qo'shing» bo'sh holati YO'Q** — D-01 bo'yicha jadval har doim mavjud. Agar u yo'q bo'lsa, bu ma'lumot nosozligi va u E-2 ning tavsifi orqali ko'rinadi, «qo'shing» chaqirig'i orqali emas.
 
+**DL-1 ning «profil topilmadi» holati** [quick 260815-86p]. Yuqoridagi qoida endi dialog ichida ham nomlangan holat: `GET /snapshot-schedules` bo'sh ro'yxat qaytarganda DL-1 `snapshots.scheduleMissing` sarlavhasi va `snapshots.scheduleMissingHint` izohini chizadi. Bu **E-5 emas** va yuqoridagi to'rtlikka qo'shilmaydi — u bo'sh holat emas, **ma'lumot nosozligining ta'rifi**: matn faktni aytadi (jadval yozilmagan, uni usta avtomatik yozadi) va dialogni yopib sahifani yangilashni so'raydi. ⛔ Unda **tugma ham, havola ham yo'q** — «qo'shing» chaqirig'i D-01 ni jimgina yolg'onga aylantirardi va nosozlik uchun javobgarlikni adminga yuklardi. Ilgari bu holat `common.loading` chizardi, ya'ni tugagan so'rovni tugamagan deb ko'rsatardi (TEST-REPORT 2026-08-14, Topilma №6). Bir xil sababdan **profilsiz kartada «Jadvalni tahrirlash» tugmasi umuman render qilinmaydi**; «Mavsumiy jadval qo'shish» esa qoladi — u yangi profil yaratadi va obyektsiz ham ma'noli.
+
 ⛔ **E-3 «hammasi yaxshi» degani EMAS** — u filtr natijasi. Matni «Bu kunda barcha kadrlar yaroqli» — bu **fakt**, tabrik emas.
 
 ### 10.5 Xato kontrakti — SABAB + NIMA QILISH KERAK + KIM
