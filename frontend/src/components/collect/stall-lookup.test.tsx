@@ -54,6 +54,43 @@
  * Ya'ni bu darvoza ISHLOVCHI + FOKUS marshrutini qoplaydi, brauzerning
  * KIRISH QATLAMINI emas. Artefakt gipotezasini faqat brauzerda hal
  * qilish mumkin va uning retsepti SUMMARY da yozilgan.
+ *
+ * -----------------------------------------------------------------------
+ * (d) ⛔⛔ SABOTAJ JURNALI — DARVOZANING O'ZI O'LCHANGAN (2026-08-14)
+ * -----------------------------------------------------------------------
+ * Asl holat: 8/8 YASHIL. Ya'ni jsdom da mahsulot kodi SOG'LOM va darvoza
+ * yashilligi o'z-o'zidan hech nimani isbotlamaydi — quyidagi uch o'lchov
+ * uning NIMANI ushlashini ko'rsatadi.
+ *
+ *   S-A  `onKeyDown` -> `onKeyUp`  (stall-lookup.tsx:116)
+ *        QIZARDI: T3, T5, T7, T8   (4 qizil / 4 yashil)
+ *        Ushlaydi: «ishlovchi noto'g'ri hodisani tinglaydi».
+ *
+ *   S-B  `event.key !== "Enter"` -> `event.code !== "Enter"`  (:117)
+ *        QIZARDI: T8               (1 qizil / 7 yashil)
+ *        Ushlaydi: «ishlovchi noto'g'ri MAYDONNI o'qiydi» (NumpadEnter).
+ *
+ *   S-C  `<Input>` dan `autoFocus` OLIB TASHLANDI  (:109)
+ *        QIZARDI: T1, T2, T3, T4, T5, T6, T7, T8  (8 qizil / 0 yashil)
+ *        Ushlaydi: «fokus maydonda emas» — brauzer kuzatuvining eng
+ *        jiddiy mahsulot-tomon gipotezasi.
+ *
+ * ⛔⛔ S-B BIRINCHI O'LCHOVDA DARVOZANI FOSH QILDI (05-15 ning darsi).
+ *   Dastlabki holatda S-B ham AYNAN S-A bilan bir xil to'rtta testni
+ *   qizartirdi (T3/T5/T7/T8), ya'ni darvoza ikki BOSHQA nuqsonni
+ *   FARQLAY OLMASDI. Sabab da'voda emas, TEST HOLATIDA edi: T3/T5/T7
+ *   hodisani `code: ""` bilan yuborardi, HAQIQIY klaviatura esa `Enter`
+ *   ni HAR DOIM `key: "Enter"` + `code: "Enter"` juftligi bilan beradi.
+ *   Holat haqiqiy klaviaturaga moslangach (`code` har bir holatga
+ *   yozildi: `"Enter"`, T4 da `"KeyA"`, T8 da `"NumpadEnter"`) S-B
+ *   AYNAN T8 ni qizartirdi va imzolar ajraldi: S-A = 4 qizil,
+ *   S-B = 1 qizil. ⚠ Bu tuzatish da'voni kuchsizlantirmadi — S-A
+ *   moslashtirilgan holat bilan QAYTA yugurtirildi va o'sha to'rtta
+ *   testni qizartirgani tasdiqlandi.
+ *
+ * ⛔ Har uch sabotajdan keyin fayl ASLIGA qaytarildi va tiklanish
+ *   `git diff -- src/components/collect/stall-lookup.tsx` ning BO'SH
+ *   bo'lishi + yashil yugurish bilan tasdiqlandi.
  * =============================================================================
  */
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -173,7 +210,7 @@ describe("Topilma №8: `Enter` fokuslangan elementga yuborilganda", () => {
 
     const active = document.activeElement;
     assertFocusedInput(active);
-    fireEvent.keyDown(active, { bubbles: true, key: "Enter" });
+    fireEvent.keyDown(active, { bubbles: true, code: "Enter", key: "Enter" });
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit).toHaveBeenCalledWith(CODE);
@@ -191,7 +228,7 @@ describe("Topilma №8: `Enter` fokuslangan elementga yuborilganda", () => {
 
     const active = document.activeElement;
     assertFocusedInput(active);
-    fireEvent.keyDown(active, { bubbles: true, key: "a" });
+    fireEvent.keyDown(active, { bubbles: true, code: "KeyA", key: "a" });
 
     expect(onSubmit).not.toHaveBeenCalled();
   });
@@ -204,7 +241,7 @@ describe("Topilma №8: `Enter` fokuslangan elementga yuborilganda", () => {
 
     const active = document.activeElement;
     assertFocusedInput(active);
-    fireEvent.keyDown(active, { bubbles: true, key: "Enter" });
+    fireEvent.keyDown(active, { bubbles: true, code: "Enter", key: "Enter" });
 
     expect(onSubmit).toHaveBeenCalledWith(CODE);
   });
@@ -217,7 +254,7 @@ describe("Topilma №8: `Enter` fokuslangan elementga yuborilganda", () => {
 
     const active = document.activeElement;
     assertFocusedInput(active);
-    fireEvent.keyDown(active, { bubbles: true, key: "Enter" });
+    fireEvent.keyDown(active, { bubbles: true, code: "Enter", key: "Enter" });
 
     expect(onSubmit).not.toHaveBeenCalled();
   });
@@ -247,6 +284,7 @@ describe("Topilma №8: `Enter` fokuslangan elementga yuborilganda", () => {
     const event = new KeyboardEvent("keydown", {
       bubbles: true,
       cancelable: true,
+      code: "Enter",
       key: "Enter",
     });
     fireEvent(active, event);
