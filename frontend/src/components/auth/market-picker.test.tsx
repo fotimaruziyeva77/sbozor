@@ -26,6 +26,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import messages from "../../../messages/uz-Latn.json";
 import { MarketPicker } from "@/components/auth/market-picker";
+import { ACTIVATION_STEP } from "@/components/wizard/wizard-steps";
 import { apiRequest, errorMessageKey } from "@/lib/api-client";
 import type { MarketSummary } from "@/lib/api-types";
 import {
@@ -106,7 +107,9 @@ const setupStatusPath = (marketId: string): string =>
  */
 function mockSelectMarket(
   market: typeof KARMANA | typeof DRAFT,
-  setupStatus?: { blocking: { step: number }[] } | Error,
+  setupStatus?:
+    | { blocking: { step: number }[]; can_activate?: boolean }
+    | Error,
 ): void {
   apiFetch.mockImplementation((path: string) => {
     if (path === SELECT_MARKET_PATH) {
@@ -370,6 +373,77 @@ describe("MarketPicker — qoralama bozor (§6.4 uzilishdan tiklanish)", () => {
     }
     expect(apiFetch).toHaveBeenCalledTimes(1);
     expect(apiFetch.mock.calls[0]?.[0]).toBe(SELECT_MARKET_PATH);
+  });
+});
+
+/*
+ * =============================================================================
+ * TOPILMA №A — 7/7 BAJARILGAN QORALAMA «DAVOM ETISH» KARUSELIDA QOLARDI.
+ *
+ * Yuqoridagi blok CHALA qoralamani o'lchaydi (`blocking` to'la). Bu blok
+ * uning YETISHMAYOTGAN yarmini o'lchaydi: `blocking` BO'SH bo'lganda, ya'ni
+ * ustaning yettala qadami bajarilganda, foydalanuvchi qayerga tushadi.
+ *
+ * Nuqson: `fetchFirstIncompleteStep` bo'sh `blocking` uchun 1-qadamni
+ * qaytarardi, ya'ni tugallangan bozor ham ustaning BOSHIGA tushardi va
+ * faollashtirish paneliga (7-qadam) yetib borishning ishonchli yo'li yo'q
+ * edi. Aynan shu sabab №B (bozorni jonlantirish) ni ham qulflab turardi.
+ *
+ * ⚠ QADAM RAQAMI KONSTANTADAN: URL `?step=7` deb literal yozilsa da'vo
+ *   `ACTIVATION_STEP` o'zgargan kuni yolg'onga aylanardi.
+ * =============================================================================
+ */
+describe("MarketPicker — 7/7 qoralama (Topilma №A)", () => {
+  test("to'liq qoralama FAOLLASHTIRISH qadamiga marshrutlanadi", async () => {
+    seedSessionWithMarkets([KARMANA, DRAFT]);
+    // Server «hech narsa qolmadi» dedi: `blocking` bo'sh, `can_activate` rost.
+    mockSelectMarket(DRAFT, { blocking: [], can_activate: true });
+
+    renderPicker();
+    fireEvent.click(
+      screen.getByRole("button", { name: `${DRAFT.name} ${DRAFT_BADGE}` }),
+    );
+
+    await waitFor(() => {
+      expect(routerMock.replace).toHaveBeenCalledWith(
+        `/markets/setup?step=${ACTIVATION_STEP}`,
+      );
+    });
+
+    /*
+     * KARUSEL QAYTIB KELMASLIGI UCHUN ALOHIDA DA'VO: 1-qadam
+     * `RequisitesSummary` ni ochadi va u yerdan yagona yo'l «Davom etish»
+     * -> `?step=2` edi. Bironta marshrut o'sha boshlanish nuqtasiga
+     * tegmasligi kerak.
+     */
+    for (const [path] of routerMock.replace.mock.calls as [string][]) {
+      expect(path).not.toBe("/markets/setup?step=1");
+    }
+  });
+
+  test("NAZORAT: faol bozorda `setup-status` UMUMAN so'ralmaydi", async () => {
+    seedSessionWithMarkets([KARMANA, DRAFT]);
+    mockSelectMarket(KARMANA);
+
+    renderPicker();
+    fireEvent.click(screen.getByRole("button", { name: KARMANA.name }));
+
+    await waitFor(() => {
+      expect(routerMock.replace).toHaveBeenCalledWith("/dashboard");
+    });
+
+    /*
+     * SANOQ BILAN EMAS, YO'L BILAN: yuqoridagi blokdagi nazorat
+     * `toHaveBeenCalledTimes(1)` ga tayanadi va u kelajakda qo'shiladigan
+     * begona so'rovdan (masalan telemetriya) yolg'on-qizil bo'lardi. Bu
+     * yerdagi da'vo AYNAN bitta narsani aytadi: faol bozorda usta holati
+     * so'ralmaydi, chunki uning ma'nosi yo'q.
+     */
+    const paths = apiFetch.mock.calls.map((call) => call[0] as string);
+    expect(paths).not.toContain(setupStatusPath(KARMANA.id));
+    for (const path of paths) {
+      expect(path).not.toContain("setup-status");
+    }
   });
 });
 

@@ -8,6 +8,21 @@ import {
 } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 
+/*
+ * ⚠ IMPORT YO'NALISHI ONGLI QAROR — «qatlam buzilishi» deb qaytarib
+ *   tashlanmasin (Topilma №A).
+ *
+ * `wizard-steps.ts` — SOF domen moduli: JSX yo'q, `"use client"` yo'q va
+ * yagona importi `@/lib/api-types`. Ya'ni bu yerdan uni chaqirish sikl
+ * hosil QILMAYDI.
+ *
+ * Ko'rib chiqilgan va RAD ETILGAN ikki muqobil:
+ *   (a) qoidani shu faylga NUSXALASH — aynan tuzatilayotgan nuqsonni
+ *       (bitta qoida, ikki nusxa, ajralib ketish) qaytarardi;
+ *   (b) funksiyani KOMPONENTGA ko'chirish — render qatlamiga tarmoq
+ *       chaqiruvini kiritardi.
+ */
+import { fallbackStep } from "@/components/wizard/wizard-steps";
 import { ApiError, apiFetch, apiRequest } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
 import {
@@ -853,6 +868,12 @@ export function useMarketsQuery(options?: { enabled?: boolean }) {
 /**
  * `setup-status` javobsiz qolganda tushiladigan qadam.
  *
+ * ⚠ MA'NOSI TORAYDI (Topilma №A): bu qiymat endi FAQAT "javob umuman
+ * kelmadi" holatiga tegishli. Ilgari u ikkinchi vazifani ham bajarardi —
+ * "javob keldi va `blocking` bo'sh" — va aynan o'sha ikkinchi ma'no
+ * `fallbackStep()` bilan ZIDDIYATDA edi: bitta savolga ikki javob. Endi
+ * javob BOR bo'lgan har qanday holatda qarorni `fallbackStep()` beradi.
+ *
  * FAIL-SAFE, fail-closed EMAS — bu navigatsiya, xavfsizlik chegarasi emas.
  * Endpoint yiqilsa foydalanuvchi baribir ustaga kiradi va 1-qadamdan davom
  * etadi; muqobil variant — "xato" ekrani — uni qoralama bozor ichiga
@@ -861,11 +882,17 @@ export function useMarketsQuery(options?: { enabled?: boolean }) {
 export const FIRST_WIZARD_STEP = 1;
 
 /**
- * Birinchi TUGALLANMAGAN qadam raqami (UI-SPEC §6.4 qoidasi).
+ * Bozor tanlangandan keyin qo'niladigan qadam (UI-SPEC §6.4 qoidasi).
  *
- * `blocking[]` dagi ENG KICHIK qadam olinadi, "oxirgi ochilgan qadam"
- * EMAS: klientda hech qanday xotira yo'q va bo'lmasligi ham kerak —
- * haqiqat manbai DB'dagi qoralama bozorning O'ZI.
+ * ⛔ QARORNING O'ZI BU YERDA EMAS: u `wizard-steps.ts::fallbackStep()` da
+ * va bu YAGONA manba. Ilgari qoida shu funksiya tanasida IKKINCHI marta
+ * yozilgan edi va ikki nusxa ajralib ketgandi — bo'sh `blocking` uchun
+ * `fallbackStep()` faollashtirish qadamini, bu yer esa birinchi qadamni
+ * qaytarardi. Natijada 7/7 bajarilgan qoralama bozor har safar ustaning
+ * boshiga tushib, "Davom etish" karuselida aylanardi.
+ *
+ * Bu funksiyaning qolgan mas'uliyati — TARMOQ: javobni olib kelish va
+ * javobsizlikni fail-safe qadamga aylantirish.
  *
  * HOOK EMAS: chaqiruv bozor tanlangan LAHZADA, mutatsiya `onSuccess` i
  * ichida bo'ladi. `useQuery` ga o'ralsa u render tsikliga bog'lanardi va
@@ -878,8 +905,7 @@ export async function fetchFirstIncompleteStep(
     const status = await apiFetch(`${MARKETS_PATH}/${marketId}/setup-status`, {
       schema: setupStatusResponseSchema,
     });
-    const steps = status.blocking.map((item) => item.step);
-    return steps.length > 0 ? Math.min(...steps) : FIRST_WIZARD_STEP;
+    return fallbackStep(status);
   } catch {
     return FIRST_WIZARD_STEP;
   }

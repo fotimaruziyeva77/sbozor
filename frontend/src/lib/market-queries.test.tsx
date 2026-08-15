@@ -34,8 +34,11 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
 
 const { apiFetch } = apiClientMock;
 
+import { ACTIVATION_STEP } from "@/components/wizard/wizard-steps";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 import {
+  FIRST_WIZARD_STEP,
+  fetchFirstIncompleteStep,
   useCloseAssignment,
   useCreateAssignment,
   useCreateStall,
@@ -314,5 +317,72 @@ describe("NAZORAT: o'lchov usuli haqiqiy", () => {
 
     const options = apiFetch.mock.calls[0][1] as { body: unknown };
     expect(options.body).toBeInstanceOf(FormData);
+  });
+});
+
+/*
+ * =============================================================================
+ * BOZOR TANLASHDAN KEYINGI QO'NISH QADAMI (TEST-REPORT 2026-08-15, Topilma №A).
+ *
+ * ⛔ NUQSON SINFI: BITTA QOIDA, IKKI NUSXA, AJRALIB KETGAN.
+ *
+ * «Qaysi qadamga qo'namiz?» savoliga kod bazasi IKKI marta javob berardi:
+ *   `wizard-steps.ts::fallbackStep()`   -> bo'sh `blocking` = ACTIVATION_STEP;
+ *   `market-queries.ts::fetchFirst...`  -> bo'sh `blocking` = FIRST_WIZARD_STEP.
+ * Bozor tanlash ekrani ikkinchisini chaqiradi, ya'ni 7/7 bajarilgan qoralama
+ * bozor HAR SAFAR ustaning boshiga tushardi va foydalanuvchi «Davom etish»
+ * karuselida aylanardi. Faollashtirish qadamiga esa bosh yo'l yo'q edi.
+ *
+ * ⚠ KUTILGAN QIYMATLAR KONSTANTA BILAN, SONLI LITERAL BILAN EMAS: `7` deb
+ *   yozilgan da'vo `ACTIVATION_STEP` o'zgargan kuni JIMGINA yolg'onga
+ *   aylanardi — u qadam raqamini emas, o'z nusxasini o'lchardi.
+ *
+ * ⚠ `apiFetch` MOCK, ya'ni zod sxemasi ishga tushmaydi: bu blokning mavzusi
+ *   javob SHAKLI emas, javobdan chiqariladigan QAROR.
+ * =============================================================================
+ */
+describe("fetchFirstIncompleteStep — qo'nish qadami (Topilma №A)", () => {
+  test("NAZORAT: uchala qadam bir-biridan farq qiladi", () => {
+    /*
+     * Usiz quyidagi uch da'vo trivial bo'lardi: `ACTIVATION_STEP === 1`
+     * bo'lgan kuni birinchi va uchinchi test AYNI qiymatni kutib, ikkalasi
+     * ham yashil qolardi — ya'ni qo'nish qoidasi umuman o'lchanmasdi.
+     */
+    expect(ACTIVATION_STEP).not.toBe(FIRST_WIZARD_STEP);
+  });
+
+  test("7/7 bajarilgan qoralama FAOLLASHTIRISH qadamiga qo'nadi", async () => {
+    // `blocking: []` = server «hech narsa qolmadi» dedi. Foydalanuvchining
+    // qiladigan yagona ishi — faollashtirish.
+    apiFetch.mockResolvedValueOnce({ blocking: [] });
+
+    await expect(fetchFirstIncompleteStep("m-1")).resolves.toBe(
+      ACTIVATION_STEP,
+    );
+  });
+
+  test("chala bozor birinchi TO'SIQNING qadamiga qo'nadi (eng kichigi)", async () => {
+    // Tartib ATAYIN o'sish bo'yicha emas: kerakli javob massivning birinchi
+    // elementi EMAS, eng kichik qadam.
+    const blocking = [{ step: 5 }, { step: 2 }];
+    apiFetch.mockResolvedValueOnce({ blocking });
+
+    await expect(fetchFirstIncompleteStep("m-1")).resolves.toBe(
+      Math.min(...blocking.map((item) => item.step)),
+    );
+  });
+
+  test("`setup-status` yiqilsa navigatsiya ISHLAYDI (fail-safe)", async () => {
+    apiFetch.mockRejectedValueOnce(new Error("setup-status mavjud emas"));
+
+    /*
+     * IKKI DA'VO, VA IKKALASI HAM KERAK: qiymat fail-safe qadam bo'lishi
+     * ham, istisno TASHQARIGA CHIQMASLIGI ham shart. Faqat qiymatni
+     * tekshirgan test `throw` qiluvchi implementatsiyada ham... qizarardi,
+     * lekin SABABI ko'rinmasdi; `resolves` esa buni ochiq aytadi.
+     */
+    await expect(fetchFirstIncompleteStep("m-1")).resolves.toBe(
+      FIRST_WIZARD_STEP,
+    );
   });
 });
