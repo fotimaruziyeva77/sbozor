@@ -519,6 +519,8 @@
     "back": "Orqaga",
     "activate": "Bozorni faollashtirish",
     "activated": "Bozor faollashtirildi",
+    "activateConfirmTitle": "Bozorni faollashtirasizmi?",
+    "activateConfirmBody": "Faollashtirilgan bozorni qoralamaga qaytarib ham, o'chirib ham bo'lmaydi. Kunlik patta hisobi faollashtirish kunidan boshlab yoziladi: undan oldingi kunlar uchun, jumladan bozor ish boshlagan sanadan beri o'tgan kunlar uchun, hisob yozilmaydi.",
     "optional": "ixtiyoriy",
     "stepDone": "{n}-qadam: {name} — bajarilgan",
     "stepPending": "{n}-qadam: {name} — to'ldirilmagan",

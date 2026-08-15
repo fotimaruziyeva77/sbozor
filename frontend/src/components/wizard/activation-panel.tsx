@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ACTIVATION_STEP,
@@ -48,6 +49,14 @@ import {
  *
  *  6. Muvaffaqiyatda toast + boshqaruv paneliga o'tish.
  *
+ *  7. ⛔ TASDIQ DIALOGI (Topilma №B) — 3-band bilan CHALKASHTIRILMASIN.
+ *     3-band CHALA bozor haqida: so'rov yuborilmaydi, sabab e'lon
+ *     qilinadi, dialog OCHILMAYDI. Bu band esa TO'LIQ bozor haqida:
+ *     amal qaytarib bo'lmaydi (`market_deactivate()` ATAYIN yo'q —
+ *     `markets.py:500-504`) va pul oqibati bor, shuning uchun tugma
+ *     so'rov yubormaydi, tasdiq so'raydi.
+ *
+
  * ⚠ QAT'IY TAQIQ (D-16, §6.7): ogohlantirish ikonkalari, ogohlantirish/xavf
  * fon sinflari va shoshilinch e'lon roli bu faylda ISHLATILMAYDI. Bozorning
  * chala bo'lishi — NORMAL ish jarayoni holati, nosozlik emas. Taqiq mexanik
@@ -109,6 +118,8 @@ export function ActivationPanel() {
   /** Faollashtirishga URINILDIMI — e'lon faqat shundan keyin chiqadi. */
   const [attempted, setAttempted] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  /** Tasdiq dialogi ochiqmi — 7-band. */
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const firstUnmetRef = useRef<HTMLAnchorElement | null>(null);
 
@@ -283,10 +294,36 @@ export function ActivationPanel() {
     firstUnmetRef.current?.focus();
   }
 
+  /**
+   * Tugma bosildi — IKKI YO'LNING BIRI, VA UCHINCHISI YO'Q.
+   *
+   * Chala bozorda 3-bandning MAVJUD yo'li ishlaydi (so'rov yo'q, fokus
+   * birinchi bajarilmagan bandga, `aria-live` e'loni) va dialog
+   * OCHILMAYDI: chala bozorni tasdiqlab bo'ladigan narsaga aylantirish
+   * §6.6 ning "chala bo'lish nosozlik emas, ish jarayoni" xabarini
+   * buzardi.
+   *
+   * To'liq bozorda esa BU YERDA hech qanday so'rov ketmaydi — faqat
+   * dialog ochiladi (7-band).
+   */
+  function onActivateClick(): void {
+    if (!canActivate) {
+      focusFirstUnmet();
+      return;
+    }
+    setConfirmOpen(true);
+  }
+
   async function onActivate(): Promise<void> {
     setFailure(null);
 
-    // 3-band: chala bozorda so'rov UMUMAN yuborilmaydi.
+    /*
+     * 3-bandning IKKINCHI QATLAMI. Bu yo'l endi faqat dialog tasdig'idan
+     * chaqiriladi, ya'ni odatda `canActivate` rost bo'ladi — lekin
+     * qo'riqchi OLIB TASHLANMAYDI: server 409 qaytarganda `conflict`
+     * o'rnatiladi va `canActivate` yolg'onga aylanadi, ya'ni holat
+     * dialogning umri davomida O'ZGARISHI mumkin.
+     */
     if (!canActivate) {
       focusFirstUnmet();
       return;
@@ -364,7 +401,7 @@ export function ActivationPanel() {
           <Button
             aria-disabled={canActivate ? undefined : true}
             className="self-start"
-            onClick={() => void onActivate()}
+            onClick={onActivateClick}
             size="lg"
             variant={canActivate ? "default" : "secondary"}
           >
@@ -395,6 +432,50 @@ export function ActivationPanel() {
          * kamerasiz bozorni chala ko'rsatardi.
          */}
         <p className="text-sm text-text-muted">{t("wizard.cameraNote")}</p>
+
+        {/*
+         * =====================================================================
+         * TASDIQ DIALOGI — UCHTA PARAMETR QARORI, UCHTASI HAM SABABI BILAN.
+         *
+         * 1. `level` QO'YILMAYDI (ya'ni 1-daraja, nom yozdirish YO'Q).
+         *    Primitivning o'z docstringi (`confirm-dialog.tsx:15-22`)
+         *    2-darajani AYNAN ikki holat uchun ajratgan — qoralamani
+         *    kaskad o'chirish va rastani yopish — va faollashtirish ular
+         *    orasida yo'q. Qolaversa panelning O'ZI (yuqoridagi 1-band)
+         *    allaqachon "faollashtirishdan oldingi oxirgi ko'z yugurtirish"
+         *    ro'yxati; matn yozdirish ikkinchi to'siqni EMAS, ikkinchi
+         *    ishqalanishni qo'shardi.
+         *
+         * 2. `confirmVariant="default"` — `destructive` EMAS. Qizil rang
+         *    YO'QOTISH signali, faollashtirish esa butun ustaning
+         *    MAQSADI: uni qizil qilish foydalanuvchini o'z maqsadidan
+         *    qo'rqitardi va rangning ma'nosini yemirardi (primitivning o'z
+         *    istisno bandi bilan bir sinf). Qaytarib bo'lmaslik RANG bilan
+         *    emas, TAVSIF matni bilan aytiladi.
+         *
+         * 3. `confirmLabel` — O'Z FE'LI (`wizard.activate`), generic
+         *    "Tasdiqlash" TAQIQ (`confirm-dialog.tsx:33-35`): foydalanuvchi
+         *    ko'pincha dialog matnini o'qimasdan tugmaga qarab qaror qiladi.
+         *
+         * ⚠ `setConfirmOpen(false)` so'rovdan OLDIN: server 409 qaytarsa
+         *   ro'yxat almashadi va fokus birinchi bajarilmagan bandga
+         *   ko'chadi — ikkalasi ham ochiq dialog ostida qolib ketardi.
+         * =====================================================================
+         */}
+        <ConfirmDialog
+          cancelLabel={t("common.cancel")}
+          confirmLabel={t("wizard.activate")}
+          confirmVariant="default"
+          description={t("wizard.activateConfirmBody")}
+          isBusy={activate.isPending}
+          onConfirm={() => {
+            setConfirmOpen(false);
+            void onActivate();
+          }}
+          onOpenChange={setConfirmOpen}
+          open={confirmOpen}
+          title={t("wizard.activateConfirmTitle")}
+        />
       </CardContent>
     </Card>
   );
