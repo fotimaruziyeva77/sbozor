@@ -1028,3 +1028,105 @@ async def test_the_run_writes_a_heartbeat_with_counters_only(
     assert "charged" in detail and "no_slot_rows" in detail, (
         f"Pitfall 2 ning ikkala sanog'i ham `detail` da bo'lishi kerak: {sorted(detail)}"
     )
+
+
+# ===========================================================================
+# 9. QORALAMA -> FAOL ZANJIRI — «FAOLLASHGACH BILLING HISOB YOZADI»
+# ===========================================================================
+
+
+_SET_MARKET_ACTIVE = "UPDATE markets SET is_active = %s WHERE id = %s"
+"""`PastDay.cleanup()` dagi AYNI chaqiruv shakli — `sbozor_owner` bilan.
+
+Nusxa ONGLI: bu satr `markets` jadvalining bitta ustuniga tegadi va u
+`0013_market_delete_guard` triggeri bilan allaqachon qo'riqlangan. Uni
+umumiy fixture'ga chiqarish tozalash yo'lini test ehtiyojiga bog'lardi.
+"""
+
+
+async def test_a_draft_market_is_skipped_and_activation_starts_the_daily_charge(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    scenario: Scenario,
+    env: Env,
+) -> None:
+    """Qoralama bozorda hisob YO'Q; AYNI bozor faollashgach AYNI kunga hisob BOR.
+
+    =========================================================================
+    ⛔ 1. BU TEST ENDPOINTNI EMAS, OQIBATNI O'LCHAYDI.
+
+    `POST /markets/{id}/activate` ning O'ZI allaqachon uchta MUSTAQIL da'vo
+    bilan qamralgan: `test_wizard_flow.py:354-366` (draft -> active),
+    `:875-885` (takror -> 409 `market_is_active`) va `:1106-1132` (audit
+    yozuvi). `market_activate()` esa AYNAN shu ustunni o'zgartiradi, ya'ni
+    bu yerda endpointni ikkinchi marta chaqirish reyestrning O'LCHANMAGAN
+    bandini (billing zanjiri) allaqachon o'lchangan bandi bilan
+    ALMASHTIRARDI.
+
+    O'lchanmagan band aynan shu edi: №B ning qabul mezoni «faollashgach
+    billing kunlik hisob yozadi» deydi, `is_active` esa bu faylda faqat
+    `PastDay.cleanup()` da — tozalash uchun, DA'VO uchun emas — uchrardi.
+
+    -------------------------------------------------------------------------
+    ⛔ 2. SUKUNAT NOSOZLIKDAN AJRATILADI.
+
+    Birinchi yarimda `charges == {}` bilan BIRGA `result.errors == []` ham
+    tasdiqlanadi. Usiz yiqilgan job ham «qoralama filtri ishladi» deb
+    yashil qolardi — bu faylning Pitfall 2 bandi bilan AYNI sinfdagi xato:
+    «ishladi va hech nima yozilmadi» «biz umuman ko'rmadik» dan mexanik
+    ravishda ajralishi shart.
+
+    -------------------------------------------------------------------------
+    ⚠ 3. O'TMISHDAGI KUN — TEST QULAYLIGI, MAHSULOT XULQI EMAS.
+
+    Mahsulotda `BILLING_CLOSE_CRON = "10 4 * * *"` faqat KECHAGI kunni
+    yopadi, ya'ni faollashtirishdan OLDINGI kunlar hech qachon yopilmaydi
+    va retroaktiv hisob YO'LI umuman yo'q. Testning ikkinchi yarmi
+    `retention.py:162-164` dagi `WHERE is_active` FILTRINI o'lchaydi,
+    retroaktiv hisobni EMAS.
+
+    -------------------------------------------------------------------------
+    ⚠ TOZALASH QO'LDA QILINMAYDI: `PastDay.cleanup()` (`:373-376`)
+      teardown'da ikkala bozorni `is_active = false` ga qaytaradi, ya'ni bu
+      test o'zidan keyin holat qoldirmaydi. Ikkinchi «tiklovchi» flip
+      qo'shish o'sha tozalashning ustiga yozardi va uni ortiqcha ko'rsatib
+      qo'yardi.
+    =========================================================================
+    """
+    # (1) QORALAMA — usta yakunlanmagan bozorning holati.
+    sync_owner_conn.execute(_SET_MARKET_ACTIVE, (False, str(env.market_id)))
+
+    await day_close(app_sessionmaker, business_date=scenario.day)
+    draft_run = await billing_close(app_sessionmaker, business_date=scenario.day)
+
+    assert charges(sync_owner_conn, env.market_id, scenario.day) == {}, (
+        "QORALAMA bozorga kunlik hisob yozildi — `WHERE is_active` filtri ishlamadi"
+    )
+    assert draft_run.errors == [], (
+        f"sukunat FILTRDAN emas, NOSOZLIKDAN kelib chiqdi: {draft_run.errors}"
+    )
+
+    # (2) FAOLLASHTIRISH — `market_activate()` AYNAN shu ustunni ko'taradi.
+    sync_owner_conn.execute(_SET_MARKET_ACTIVE, (True, str(env.market_id)))
+
+    await day_close(app_sessionmaker, business_date=scenario.day)
+    live_run = await billing_close(app_sessionmaker, business_date=scenario.day)
+
+    written = charges(sync_owner_conn, env.market_id, scenario.day)
+
+    assert written, (
+        "faollashtirilgan bozorga AYNI kun uchun birorta hisob yozilmadi — "
+        "«faollashgach billing kunlik hisob yozadi» zanjiri UZILGAN (№B)"
+    )
+    assert live_run.charged > 0, (
+        f"hisob qatorlari bor, lekin yugurish {live_run.charged} deb hisobot berdi"
+    )
+    assert live_run.errors == [], f"kutilmagan xato: {live_run.errors}"
+
+    # NAZORAT: hisob AYNAN o'lchanayotgan kunga tegishli va tarif zanjiridan
+    # hosila (D-09) — qadalgan son kalendar tarif chegarasidan o'tgan kuni
+    # JIMGINA noto'g'ri bo'lardi.
+    assert scenario.billable_ai in written, (
+        "ikki slotda band bo'lgan rasta faollashgandan keyin ham hisobga tushmadi"
+    )
+    assert written[scenario.billable_ai][1] == expected_tariff(scenario.day)
