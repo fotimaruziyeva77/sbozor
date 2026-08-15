@@ -253,9 +253,27 @@ function RequisitesSummary() {
   );
 }
 
-/** 5-qadam: import + reestr; tahrir dialoglari reestr bilan BIR XIL. */
+/**
+ * 5-qadam: import + QO'LDA QO'SHISH + reestr; dialoglar reestr bilan BIR XIL.
+ *
+ * ⛔ QO'LDA QO'SHISH TUGMASI MAJBURIY va u 6-qadamning (`:192-214`)
+ *    TUZILISHINI aynan takrorlaydi: `ImportPanel` -> `Button` -> ro'yxat.
+ *
+ *    Ilgari bu qadamda faqat import bor edi, holbuki ro'yxatning bo'sh
+ *    holati «…yoki birinchi rastani qo'lda qo'shing» deb VA'DA berardi —
+ *    va'daning yo'li esa YO'Q edi (TEST-REPORT 2026-08-14, Topilma №2).
+ *    Foydalanuvchi buni nosozlik deb emas, o'z xatosi deb o'qirdi va bir
+ *    dona rasta uchun ham Excel fayl yasashga majbur bo'lardi.
+ *
+ * ⚠ YARATISH DIALOGI QAYTA ISHLATILADI (`stalls/page.tsx:121-126` bilan
+ *   AYNI chaqiruv). Usta uchun ikkinchi nusxa YOZILMAYDI — fayl
+ *   boshidagi qoida (`:44-49`): nusxa server qoidasidan ajralib ketardi.
+ */
 function StallsStep({ canManage }: { canManage: boolean }) {
+  const t = useTranslations();
+
   const [selectedStallId, setSelectedStallId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [editStallId, setEditStallId] = useState<string | null>(null);
   const [categoryStall, setCategoryStall] = useState<StallListItem | null>(
     null,
@@ -268,6 +286,18 @@ function StallsStep({ canManage }: { canManage: boolean }) {
   return (
     <div className="flex flex-col gap-4">
       <ImportPanel kind="stalls" />
+
+      {/*
+       * ⚠ KALIT `stalls.create` — reestr sahifasi ham AYNAN shuni
+       *   ishlatadi. Usta uchun ikkinchi kalit yozish bir amalga ikki
+       *   xil yorliq berardi va uchala tilda uch marta ajralardi.
+       */}
+      {canManage ? (
+        <Button className="self-start" onClick={() => setCreateOpen(true)}>
+          <Plus aria-hidden="true" />
+          {t("stalls.create")}
+        </Button>
+      ) : null}
 
       <StallList
         canManage={canManage}
@@ -288,6 +318,13 @@ function StallsStep({ canManage }: { canManage: boolean }) {
 
       {canManage ? (
         <>
+          <StallDialog
+            mode="create"
+            onOpenChange={setCreateOpen}
+            open={createOpen}
+            stallId={null}
+          />
+
           <StallDialog
             mode="edit"
             onOpenChange={(next) => {
