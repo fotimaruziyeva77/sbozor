@@ -57,6 +57,17 @@ type CreateUserValues = {
   locale: ApiLocale;
 };
 
+/**
+ * Rol guruhining xato izohi — BARQAROR `id` (`Field` konvensiyasi).
+ *
+ * `useId()` EMAS va bu ataylab: bu dialog sahifada AYNAN BITTA marta
+ * render qilinadi (`open` bilan boshqariladi) va qo'shni maydonlar ham
+ * qat'iy `create-*` identifikatorlarini ishlatadi. Ikki xil sxemani
+ * aralashtirish `aria-describedby` ni kod ko'rigida tekshirib bo'lmas
+ * qilardi.
+ */
+const ROLES_ERROR_ID = "create-roles-error";
+
 const EMPTY_VALUES: CreateUserValues = {
   phone: "",
   fullName: "",
@@ -97,7 +108,7 @@ export function CreateUserDialog({
 
   const {
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitted, isSubmitting },
     handleSubmit,
     register,
     reset,
@@ -114,11 +125,26 @@ export function CreateUserDialog({
    */
   const selectedRoles = useWatch({ control, name: "roles" });
 
+  /*
+   * ⛔ QAYTA VALIDATSIYA SHARTI — FORMA YUBORILGANMI, ROL BORMI EMAS.
+   *
+   *   Ilgari shart `selectedRoles.length > 0` edi va u AYNAN 0 -> 1
+   *   o'tishini qamramasdi — ya'ni foydalanuvchi xatoni tuzatgan
+   *   lahzada qayta validatsiya BO'LMASDI va `users.rolesRequired`
+   *   ekranda QOLARDI. Bu «tuzatdim, lekin hech nima o'zgarmadi»
+   *   holati va u boshlang'ich nuqsondan ham chalg'ituvchiroq.
+   *
+   *   `isSubmitted` — RHF ning O'Z bayrog'i: forma bir marta
+   *   yuborilgunicha jim turamiz (terish paytida qichqirmaslik
+   *   qoidasi), yuborilgandan keyin esa HAR toggle darhol qayta
+   *   baholanadi. Shartsiz `true` ham ishlardi, lekin u dialog
+   *   ochilishi bilanoq xato ko'rsatishga yo'l ochib qo'yardi.
+   */
   function toggleRole(role: Role) {
     const next = selectedRoles.includes(role)
       ? selectedRoles.filter((item) => item !== role)
       : [...selectedRoles, role];
-    setValue("roles", next, { shouldValidate: selectedRoles.length > 0 });
+    setValue("roles", next, { shouldValidate: isSubmitted });
   }
 
   function handleOpenChange(next: boolean) {
@@ -191,7 +217,10 @@ export function CreateUserDialog({
            * elementi emas, checkbox GURUHI. `Field` ning `htmlFor` i
            * guruhga bog'lana olmaydi, `legend` esa aynan shu uchun bor.
            */}
-          <fieldset className="flex flex-col gap-2">
+          <fieldset
+            aria-describedby={errors.roles ? ROLES_ERROR_ID : undefined}
+            className="flex flex-col gap-2"
+          >
             <legend className="mb-1 text-sm font-semibold">
               {t("users.rolesLabel")}
             </legend>
@@ -208,8 +237,22 @@ export function CreateUserDialog({
                 />
               );
             })}
+            {/*
+             * `role="alert"` — xabar formaning O'RTASIDA tug'iladi va
+             * fokus saqlash tugmasida qoladi; e'lonsiz u skrinriderda
+             * umuman eshitilmasdi. `id` esa `Field` ning `${id}-error`
+             * konvensiyasi bilan BIR CHIZIQDA: checkbox guruhi `Field`
+             * ga o'ralmaydi (yuqoridagi izohdagi sabab kuchda), lekin
+             * xatoni boshqaruvga bog'lash qoidasi baribir amal qiladi.
+             */}
             {errors.roles ? (
-              <p className="text-sm text-danger-text">{errors.roles.message}</p>
+              <p
+                className="text-sm text-danger-text"
+                id={ROLES_ERROR_ID}
+                role="alert"
+              >
+                {errors.roles.message}
+              </p>
             ) : null}
           </fieldset>
 
@@ -236,7 +279,7 @@ export function CreateUserDialog({
           <Dialog.Footer>
             <Button
               className="sm:flex-1"
-              disabled={selectedRoles.length === 0 || isSubmitting}
+              disabled={isSubmitting}
               size="lg"
               type="submit"
             >
