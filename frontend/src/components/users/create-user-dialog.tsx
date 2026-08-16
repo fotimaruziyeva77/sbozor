@@ -297,29 +297,44 @@ export function CreateUserDialog({
   );
 }
 
-/** Bitta rol katakchasi — `type="checkbox"` (D-05: ko'p tanlovli). */
-function RoleCheckbox({
+/**
+ * Bitta rol katakchasi — `type="checkbox"` (D-05: ko'p tanlovli).
+ *
+ * EKSPORT QILINGAN (Topilma №G): rollarni TAHRIRLASH dialogi ham AYNAN
+ * shu katakchani ishlatadi. Ikkinchi nusxa ikkita a11y kontrakti
+ * yaratardi va ular bir kun ajralib ketardi — `nvr-form.tsx::
+ * PasswordInput` eksportining aynan o'sha sababi.
+ *
+ * ⚠ `idPrefix` NING STANDART QIYMATI MAJBURIY: mavjud
+ *   `create-user-dialog.test.tsx` `create-role-{role}` identifikatorlariga
+ *   qadalgan va standartsiz prop ularni SABABSIZ qizartirardi.
+ */
+export function RoleCheckbox({
   checked,
+  idPrefix = "create",
   label,
   onToggle,
   role,
 }: {
   checked: boolean;
+  idPrefix?: string;
   label: string;
   onToggle: () => void;
   role: string;
 }) {
+  const id = `${idPrefix}-role-${role}`;
+
   return (
     <label
       // `border-ui` — bu yorliq checkbox'ning barmoq nishoni, ya'ni
       // boshqaruv elementi (WCAG 2.2 SC 1.4.11, 1.28:1 -> 3.64:1).
       className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-border-ui px-3 py-2 text-sm transition-colors hover:bg-surface-muted"
-      htmlFor={`create-role-${role}`}
+      htmlFor={id}
     >
       <input
         checked={checked}
         className="size-4 accent-accent"
-        id={`create-role-${role}`}
+        id={id}
         onChange={onToggle}
         type="checkbox"
         value={role}

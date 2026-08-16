@@ -71,6 +71,7 @@ from app.schemas import (
     CreateUserRequest,
     CreateUserResponse,
     ResetPasswordResponse,
+    UpdateUserRolesRequest,
     UserListItem,
     UserListResponse,
 )
@@ -258,6 +259,103 @@ async def create_user(
     )
 
     return CreateUserResponse(id=user_id, temporary_password=temporary)
+
+
+@router.patch(
+    "/{user_id}/roles",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def update_user_roles(
+    user_id: UUID,
+    payload: UpdateUserRolesRequest,
+    principal: UserManagerDep,
+    session: TenantSessionDep,
+) -> Response:
+    """Mavjud a'zoning rollarini almashtiradi (D-04, IKKI YO'NALISHDA).
+
+    `PATCH`, `POST` EMAS: `/block` va `/reset-password` — HODISALAR (yon
+    ta'siri bor amallar), rollar esa resursning MAYDONI. `nvr.py` dagi
+    `PATCH /{nvr_id}` bilan aynan bir xil sabab. Javob 204 va tanasiz —
+    `/block` bilan bir xil, chunki ikkalasi ham AYNI `user_market_roles`
+    qatorining mutatsiyasi; klient ro'yxatni qayta o'qiydi.
+
+    DARVOZALAR AYNAN SHU TARTIBDA (tartib shartnomaning bir qismi — har
+    biri o'zidan keyingisiga ma'lumot oshkor qilmasligi kerak):
+
+    1. O'ZINING roli -> 400 `cannot_change_own_roles`. `block_user` dagi
+       `cannot_block_self` bilan BIR XIL sinf: bozorda yagona admin o'zini
+       pasaytirib qo'ysa, bozor boshqaruvsiz qoladi va uni faqat platforma
+       admini tiklay oladi. Ikkinchi sabab: bu qoida o'z-o'zini KO'TARISH
+       urinishini ham ifodalab bo'lmas qiladi.
+    2. A'zolik tekshiruvi -> 404 (cross-tenant va mavjud emas — BIR XIL
+       javob, fayl docstringi).
+    3. **JORIY rollar darvozasi.** D-04 «bozor admini o'ziga teng yoki
+       undan yuqori rol YARATA olmaydi» deydi; bu darvoza uning TESKARI
+       teshigini yopadi — usiz bozor admini direktorni yoki teng adminni
+       bitta so'rov bilan kassirga PASAYTIRIB, o'z nazoratchisini yo'q
+       qila olardi. Platforma adminiga ta'sir qilmaydi: uning
+       `assignable_roles()` to'plami to'rttala rolni qamraydi.
+    4. YANGI to'plam uchun o'sha darvoza (`platform_admin` a'zolik roli
+       sifatida HAR DOIM rad etiladi — CR-03).
+
+    ⛔ `write_app_audit()` BU YERDA CHAQIRILMAYDI va bu ataylab.
+       `user_market_roles` — `0002_audit.py` dagi `AUDITED_TABLE`, ya'ni
+       `fn_audit_row()` triggeri har `UPDATE` uchun `old`/`new` ni
+       `changed_keys` bilan o'zi qo'yadi. Ilova darajasidagi ikkinchi
+       yozuv DUBLIKAT bo'lardi — aynan `AuditAction` docstringida
+       `shift_open`/`charge_adjust` uchun rad etilgan sinf. Yangi
+       `AuditAction` a'zosi ham qo'shilmaydi: audit jurnali
+       `user_market_roles` ni ALLAQACHON «Bozor a'zoliklari» deb
+       yorliqlaydi.
+
+    ⛔ `refresh_revoke_user()` HAM CHAQIRILMAYDI. Rollar JWT da'volarida
+       yashaydi (`deps.py`), `auth.py` ning refresh endpointi esa
+       huquqlarni HAR SAFAR DB'dan qayta o'qiydi — ya'ni yangi to'plam
+       keyingi token yangilanishida (≤15 daq) O'ZI kuchga kiradi.
+       Sessiyalarni bekor qilish foydalanuvchini tizimdan CHIQARIB
+       yuborardi va bu parol tiklashning semantikasi («parolim boshqasiga
+       ma'lum» shubhasi), rol tahririniki emas.
+
+       ⚠ HUQUQNI DARHOL TORTIB OLISH YO'LI — ROL TAHRIRI EMAS,
+         **BLOKLASH** (D-08): u `user:state` keshi orqali birinchi
+         so'rovdayoq kuchga kiradi.
+    """
+    if user_id == principal.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="cannot_change_own_roles",
+        )
+
+    repo = UserRepository(session, _market_id(principal))
+    current = await repo.member_roles(user_id)
+    if current is None:
+        raise _not_found()
+
+    _assert_roles_assignable(principal, _known_roles(current))
+    _assert_roles_assignable(principal, payload.roles)
+
+    await repo.set_roles(user_id, [str(role) for role in payload.roles])
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _known_roles(stored: Sequence[str]) -> list[Role]:
+    """DB'dagi rol satrlarini `Role` a'zolariga aylantiradi.
+
+    NOMA'LUM SATR 403 BERADI, 500 EMAS va bu qaror ataylab: `roles` —
+    erkin `text[]` ustuni va u yerga migratsiya yoki qo'lda yozilgan
+    `UPDATE` orqali enum'da yo'q qiymat tushishi MUMKIN. Bunday qatorni
+    "tanimadim, demak zararsiz" deb o'tkazib yuborish 3-darvozani
+    jimgina ochib qo'yardi — noma'lum rol eng katta imtiyozli bo'lishi
+    ham mumkin. `ValueError` -> `role_not_allowed` esa fail-closed.
+    """
+    try:
+        return [Role(value) for value in stored]
+    except ValueError as exc:
+        log.info("unknown_stored_role", stored=sorted(stored))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=_ROLE_NOT_ALLOWED
+        ) from exc
 
 
 @router.post(

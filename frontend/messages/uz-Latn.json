@@ -84,6 +84,9 @@
     "block": "Bloklash",
     "unblock": "Blokdan chiqarish",
     "resetPassword": "Parolni tiklash",
+    "editRoles": "Rollarni tahrirlash",
+    "editRolesTitle": "Rollarni tahrirlash",
+    "editRolesHint": "Yangi rollar foydalanuvchining keyingi kirishida to'liq kuchga kiradi. Huquqni darhol tortib olish kerak bo'lsa — bloklang.",
     "confirm": "Tasdiqlash",
     "confirmBlock": "Bu foydalanuvchi bloklansinmi? Blok darhol kuchga kiradi va u tizimga kira olmaydi.",
     "confirmUnblock": "Bu foydalanuvchi blokdan chiqarilsinmi? U yana tizimga kira oladi.",
@@ -100,6 +103,7 @@
     "phoneTaken": "Bu telefon raqami allaqachon ro'yxatdan o'tgan",
     "roleNotAllowed": "Bu rolni berishga ruxsatingiz yo'q",
     "cannotBlockSelf": "O'zingizni bloklay olmaysiz",
+    "cannotChangeOwnRoles": "O'z rollaringizni o'zgartirib bo'lmaydi",
     "createdAt": "Yaratildi",
     "createdBy": "{name} tomonidan yaratildi"
   },

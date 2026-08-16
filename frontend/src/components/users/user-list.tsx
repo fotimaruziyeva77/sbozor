@@ -2,15 +2,17 @@
 
 import { useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { KeyRound, Lock, MoreHorizontal, Unlock } from "lucide-react";
+import { KeyRound, Lock, MoreHorizontal, Unlock, UserCog } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 
+import { EditRolesDialog } from "@/components/users/edit-roles-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { UserListItem } from "@/lib/api-types";
+import { assignableRoles } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import {
   adminErrorMessageKey,
@@ -38,6 +40,40 @@ type PendingAction = {
   user: UserListItem;
 };
 
+/**
+ * Rol bandi ko'rinadimi — SERVER DARVOZASINING KO'ZGUSI (Topilma №G).
+ *
+ * IKKI SHART VA IKKALASINING SABABI BOSHQA:
+ *
+ *   (a) O'Z QATORI EMAS. Server buni 400 `cannot_change_own_roles` bilan
+ *       rad etadi, ya'ni bandning bu qatorda HECH QANDAY muvaffaqiyat
+ *       yo'li yo'q — u o'lik affordans bo'lardi (Topilma №F bilan aynan
+ *       bir xil sinf).
+ *
+ *       ⚠ «Bloklash» esa YASHIRILMAYDI va farq ataylab: uning
+ *         muvaffaqiyat yo'li BOR (boshqa qatorda), o'z qatorida esa
+ *         server sababni aytadi. Yashirish «bu amal umuman yo'q» degan
+ *         yolg'on berardi.
+ *
+ *   (b) NISHONNING JORIY ROLLARI CHAQIRUVCHI BERA OLADIGAN TO'PLAM
+ *       ICHIDA. Bu server endpointidagi 3-darvozaning (JORIY rollar)
+ *       ko'zgusi: bozor admini teng adminni yoki direktorni pasaytira
+ *       olmaydi va urinishi 403 bilan qaytardi.
+ *
+ * ⛔ BU TEKSHIRUV DARVOZANING TAKRORI EMAS — haqiqiy qaror hamon
+ *    serverda (`users.py::update_user_roles`). Bu yerdagisi faqat
+ *    bosilganda 403 beradigan bandni ekranga chiqarmaslik uchun.
+ */
+function canEditRolesOf(
+  user: UserListItem,
+  selfUserId: string | null,
+  isPlatformAdmin: boolean,
+): boolean {
+  if (selfUserId !== null && user.id === selfUserId) return false;
+  const allowed = new Set<string>(assignableRoles(isPlatformAdmin));
+  return user.roles.every((role) => allowed.has(role));
+}
+
 export function UserList({
   onTemporaryPassword,
 }: {
@@ -53,6 +89,13 @@ export function UserList({
   const { principal } = useAuthStore();
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  /*
+   * ⛔ `PendingAction["kind"]` GA QO'SHILMAYDI: rol tahriri tasdiq
+   *    dialogi emas, ALOHIDA forma. Uni `ConfirmDialog` mashinasiga
+   *    tiqish `confirmTitle`/`confirmQuestion` shoxlarini uchinchi
+   *    holatga majburlardi va o'sha holat matn emas, forma talab qiladi.
+   */
+  const [rolesFor, setRolesFor] = useState<UserListItem | null>(null);
 
   const blockUser = useBlockUser();
   const unblockUser = useUnblockUser();
@@ -136,11 +179,17 @@ export function UserList({
         {items.map((user) => (
           <li key={user.id}>
             <UserCard
+              canEditRoles={canEditRolesOf(
+                user,
+                principal?.userId ?? null,
+                principal?.isPlatformAdmin ?? false,
+              )}
               canManage={canManage}
               onAction={(kind) => {
                 setActionError(null);
                 setPending({ kind, user });
               }}
+              onEditRoles={() => setRolesFor(user)}
               user={user}
             />
           </li>
@@ -185,17 +234,33 @@ export function UserList({
           </p>
         ) : null}
       </ConfirmDialog>
+
+      {/*
+       * Rol tahriri — `ConfirmDialog` YONIDA, uning ICHIDA emas: bu amal
+       * tasdiq emas, forma (yuqoridagi `rolesFor` izohi).
+       */}
+      <EditRolesDialog
+        onOpenChange={(next) => {
+          if (!next) setRolesFor(null);
+        }}
+        open={rolesFor !== null}
+        user={rolesFor}
+      />
     </>
   );
 }
 
 function UserCard({
+  canEditRoles,
   canManage,
   onAction,
+  onEditRoles,
   user,
 }: {
+  canEditRoles: boolean;
   canManage: boolean;
   onAction: (kind: PendingAction["kind"]) => void;
+  onEditRoles: () => void;
   user: UserListItem;
 }) {
   const t = useTranslations();
@@ -220,8 +285,10 @@ function UserCard({
 
         {canManage ? (
           <UserActions
+            canEditRoles={canEditRoles}
             isActive={user.is_active}
             onAction={onAction}
+            onEditRoles={onEditRoles}
             userLabel={user.full_name ?? user.phone}
           />
         ) : null}
@@ -258,12 +325,16 @@ function UserCard({
 }
 
 function UserActions({
+  canEditRoles,
   isActive,
   onAction,
+  onEditRoles,
   userLabel,
 }: {
+  canEditRoles: boolean;
   isActive: boolean;
   onAction: (kind: PendingAction["kind"]) => void;
+  onEditRoles: () => void;
   userLabel: string;
 }) {
   const t = useTranslations();
@@ -294,6 +365,16 @@ function UserActions({
             )}
             {isActive ? t("users.block") : t("users.unblock")}
           </DropdownMenu.Item>
+
+          {canEditRoles ? (
+            <DropdownMenu.Item
+              className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm outline-none select-none data-[highlighted]:bg-surface-muted"
+              onSelect={onEditRoles}
+            >
+              <UserCog aria-hidden="true" className="size-4" />
+              {t("users.editRoles")}
+            </DropdownMenu.Item>
+          ) : null}
 
           <DropdownMenu.Item
             className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm outline-none select-none data-[highlighted]:bg-surface-muted"

@@ -156,6 +156,46 @@ export function useCreateUser() {
   });
 }
 
+/**
+ * Mavjud a'zoning rollarini ALMASHTIRADI (Topilma №G).
+ *
+ * `PATCH`, `POST` EMAS: `/block` va `/reset-password` — HODISALAR,
+ * rollar esa resursning MAYDONI (server tomonidagi sabab
+ * `users.py::update_user_roles` docstringida).
+ *
+ * ⚠ TO'PLAM TO'LIQ YUBORILADI, DELTA EMAS: UI foydalanuvchiga butun
+ *   to'plamni ko'rsatadi, ya'ni u ko'rgan narsa aynan yuboriladi. "Rol
+ *   qo'sh"/"rolni olib tashla" shakli ikki admin bir vaqtda
+ *   tahrirlaganda poyga oynasi tug'dirardi.
+ *
+ * ⚠ YANGI ROLLAR DARHOL KUCHGA KIRMAYDI va bu server qarori: rollar JWT
+ *   da'volarida yashaydi, `/auth/refresh` esa ularni DB'dan qayta
+ *   o'qiydi. Shuning uchun `usersKey` bekor qilinadi (RO'YXAT
+ *   yangilanadi), lekin sessiyaga tegilmaydi — foydalanuvchiga buni
+ *   `users.editRolesHint` AYTADI.
+ */
+export function useUpdateUserRoles() {
+  const invalidateUsers = useUsersInvalidator();
+
+  return useMutation({
+    mutationFn: ({
+      userId,
+      roles,
+    }: {
+      userId: string;
+      roles: readonly string[];
+    }) =>
+      apiFetch(`${USERS_PATH}/${userId}/roles`, {
+        method: "PATCH",
+        body: { roles },
+        schema: emptyResponseSchema,
+      }),
+    onSuccess: () => {
+      invalidateUsers();
+    },
+  });
+}
+
 /** Bloklash — DARHOL kuchga kiradi (D-08). Javob 204, tanasi yo'q. */
 export function useBlockUser() {
   const invalidateUsers = useUsersInvalidator();
@@ -287,7 +327,8 @@ export function useAuditQuery(filters: AuditFilters) {
 export type AdminErrorMessageKey =
   | "users.phoneTaken"
   | "users.roleNotAllowed"
-  | "users.cannotBlockSelf";
+  | "users.cannotBlockSelf"
+  | "users.cannotChangeOwnRoles";
 
 /**
  * `ApiError.detail` -> tarjima kaliti.
@@ -298,6 +339,9 @@ export type AdminErrorMessageKey =
  *                        "ruxsat yo'q" deb ko'rsatardi va admin nima
  *                        noto'g'ri ekanini bilmasdi)
  *   `cannot_block_self`— o'zini bloklash rad etildi (400)
+ *   `cannot_change_own_roles` — o'z rollarini tahrirlash rad etildi (400;
+ *                        `cannot_block_self` bilan bir xil sinf va shu
+ *                        sababdan qo'shni tarmoq)
  *
  * Qolgan hamma narsa umumiy xaritaga tushadi, ya'ni server tafsiloti
  * foydalanuvchiga hech qachon xom holda ko'rsatilmaydi (T-01-65).
@@ -313,6 +357,8 @@ export function adminErrorMessageKey(
         return "users.roleNotAllowed";
       case "cannot_block_self":
         return "users.cannotBlockSelf";
+      case "cannot_change_own_roles":
+        return "users.cannotChangeOwnRoles";
       default:
         break;
     }
