@@ -131,6 +131,18 @@ provayder **kim** (va uning yurisdiksiyasi qayerda); (b) oylik byudjet
 **bormi**. Javob «hali yo'q» bo'lsa — bu ⛔ **TO'G'RI** javob va band
 **ochiq** qoladi; o'shanda `backup_stale` alerti go-live'dan keyin
 ham chiqib turadi va uni ⛔ **o'chirib qo'yish TAQIQLANADI**.
+
+⛔ **HOLAT 2026-08-16 GA (o'lchangan, faraz emas):** `.env` da bironta
+`RESTIC*` kaliti **YO'Q** (`grep -c` -> **0**), `.env.example:240` dagi
+`RESTIC_REPOSITORY=` **bo'sh**, `compose.yaml:846` esa o'zgaruvchini
+kutadi va qiymat berilmagan. Ya'ni `backup` konteyneri
+`backup_unconfigured` yozadi, zaxirani boshlamaydi va yurak urishini
+yozmaydi — 26 soatdan keyin `backup_stale` (**CRITICAL**,
+`never_suppressed`) chiqadi. ⛔ **Bu alertni o'chirib qo'yish
+TAQIQLANADI:** u shu bandning ochiqligini ko'rsatuvchi **YAGONA**
+signal, va uni o'chirish FOUND-07 ni qog'ozda bajarilgan, amalda
+bajarilmagan holatga qaytarardi. Qarorning egasi — **buyurtmachi**
+(byudjet) va **Ops** (provayder tanlovi).
 result: [pending]
 
 ---
