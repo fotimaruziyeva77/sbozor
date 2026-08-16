@@ -39,8 +39,8 @@
  *   izohdan ajratmaydi (2–5 fazalarda 15+ marta takrorlangan sinf).
  *
  * ⚠ TEST FAYLLARI SKANDAN CHIQARILADI: taqiq MAHSULOT yuzasiga qo'yilgan.
- *   `stall-dialog.test.tsx` ning O'ZI tri-state qulfini o'lchaydi — ya'ni
- *   u taqiqni BUZMAYDI, uni QO'RIQLAYDI.
+ *   `stall-dialog.test.tsx` ning O'ZI tahrir rejimining tri-state
+ *   holatlarini o'lchaydi — ya'ni u taqiqni BUZMAYDI, uni QO'RIQLAYDI.
  */
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -94,17 +94,23 @@ const SUBMITTING_TOKENS = new Set([
  * ⚠ QOLDIQ REJADAN KO'CHIRILMAGAN — u detektor CHIQARGAN qiymat
  *   (2026-08-16 o'lchovi).
  */
-const D1_EXCEPTIONS = [
-  {
-    file: "components/stalls/stall-dialog.tsx",
-    residue: ["detail", "mode", "undefined"],
-    why:
-      "tahrir rejimida `GET /stalls/{id}` javobi kelmaguncha saqlash yopiq: " +
-      "urug'lanmagan forma `note` ni bo'sh yuborib mavjud izohni JIMGINA " +
-      "o'chirardi",
-    closesWith: "260816-5yz (rasta dialogining tri-state masalasi)",
-  },
-];
+/**
+ * ⛔ RO'YXAT BO'SH — VA U O'Z QOIDASI BILAN BO'SHATILDI.
+ *
+ * Yagona yozuv (`components/stalls/stall-dialog.tsx`, qoldiq
+ * `["detail", "mode", "undefined"]`) 260816-5yz da YOPILDI: tahrir rejimi
+ * endi tri-state guard zanjiriga ega, ya'ni batafsil javob kelmaguncha
+ * forma UMUMAN chizilmaydi va jim-disabled shartning o'zi mantiqan
+ * erishib bo'lmas holga keldi. Yozuv shundan keyin darvozaning
+ * «ESKIRGAN ISTISNO» da'vosini qizartirdi — ro'yxat o'z-o'zini tozalashga
+ * majbur qilgani AYNAN shu.
+ *
+ * ⚠ BO'SH RO'YXAT DARVOZANI BO'SHATMAYDI: `MIN_SUBMIT_BUTTONS` quyi
+ *   chegarasi va ijobiy/salbiy meta-nazoratlar detektorning o'zini
+ *   o'lchashda davom etadi; asosiy D-1 da'vosi esa endi ISTISNOSIZ
+ *   butun `src/` ga qo'llanadi.
+ */
+const D1_EXCEPTIONS = [];
 
 const D2_EXCEPTIONS = [
   {

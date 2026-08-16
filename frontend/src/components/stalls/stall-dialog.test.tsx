@@ -16,14 +16,35 @@
  *   Etalon — `create-user-dialog.tsx`: `disabled={isSubmitting}`.
  * =============================================================================
  *
- * ⚠ T4 — CHEGARA. Tahrir rejimidagi `detail === undefined` qulfi ATAYIN
- *   SAQLANADI: urug'lanmagan forma mavjud izohni jimgina o'chirardi. U
- *   boshqa masala (tri-state) va uning yopilish tetigi — 260816-5yz.
- *   Bu test o'sha chegarani muzlatadi: tuzatish undan oshib ketmasin.
- *
  * ⚠ T3 — QULF HADDAN TASHQARI OCHILIB KETMAGANIGA nazorat: to'g'ri
  *   to'ldirilgan formada AYNAN BITTA `POST /stalls` ketadi va `code`
  *   trim qilinadi.
+ *
+ * =============================================================================
+ * IKKINCHI DA'VO (KR-01, quick 260816-5yz) — TAHRIR REJIMINING TRI-STATE'I.
+ *
+ *   Ilgari bu fayl `detail === undefined` jim-disabled qulfini MUZLATIB
+ *   turardi va bu ONGLI chegara edi: 260816-5ys faqat `code.trim()`
+ *   disjunktini olib tashlagan. Qulfning O'ZI esa yuqoridagi qoidaning
+ *   ISTISNOSI edi — u ham NIMA yetishmayotganini aytmasdi, faqat boshqa
+ *   sababdan (javob kelmagan).
+ *
+ *   Endi istisno YO'Q, chunki holat KO'RINADIGAN bo'ldi:
+ *     T5  so'rov ketyapti -> skeleton + `common.loading` (bo'sh forma EMAS);
+ *     T6  so'rov yiqildi  -> `errors.loadFailed*` + `common.retry` ISHLAYDI;
+ *     T7  javob keldi     -> forma urug'langan, «Saqlash» OCHIQ (nazorat);
+ *     T8  `create` rejimi -> forma DARHOL, guard unga TEGMAYDI.
+ *
+ *   ⛔ T8 ENG MUHIM DA'VO: `useStallQuery(null)` `enabled: false` bilan
+ *      ishlaydi va TanStack bunday so'rovni ABADIY `isPending: true` deb
+ *      ushlab turadi. Rejimga bog'lanmagan (`isEdit &&` prefiksisiz)
+ *      guard yaratish oqimini butunlay o'ldirardi va bu test aynan shu
+ *      regressiyani ushlaydi.
+ *
+ *   ⛔ T6 SALBIY YARMI ham majburiy: xom xato matni (`Error.message`)
+ *      ekranga CHIQMAYDI — T-02-99 (server tafsiloti hech qachon
+ *      ko'rsatilmaydi).
+ * =============================================================================
  *
  * DIQQAT: bosish `fireEvent` bilan — loyihada `user-event` ishlatilmaydi.
  */
@@ -58,7 +79,11 @@ const CATEGORY_NAME = "Sabzavotlar";
 
 /** uz-Latn kataloglaridagi AYNAN qiymatlar. */
 const SAVE = messages.common.save;
+const LOADING = messages.common.loading;
+const RETRY = messages.common.retry;
 const REQUIRED = messages.errors.required;
+const LOAD_FAILED_TITLE = messages.errors.loadFailedTitle;
+const LOAD_FAILED_BODY = messages.errors.loadFailedBody;
 const CODE_LABEL = messages.stalls.codeLabel;
 const ZONE_LABEL = messages.stalls.zoneLabel;
 const CATEGORY_LABEL = messages.stalls.categoryLabel;
@@ -87,6 +112,22 @@ const CREATED_STALL = {
   assignment_from: null,
   note: null,
 };
+
+/**
+ * `GET /stalls/{id}` ning TO'LIQ javobi (`stallDetailSchema`).
+ *
+ * ⚠ `code` va `note` ATAYIN `CREATED_STALL` dan farqli: forma aynan SHU
+ *   javobdan urug'langanini o'lchash uchun qiymat boshqa manbadan
+ *   kelmasligi kerak.
+ */
+const STALL_DETAIL = {
+  ...CREATED_STALL,
+  code: "17",
+  note: "Burchakdagi rasta",
+};
+
+/** Xom xato matni — u EKRANGA CHIQMASLIGI kerak (T-02-99). */
+const RAW_ERROR = "connection refused by 10.0.0.7";
 
 function seedSession(): void {
   setSession({
@@ -129,6 +170,35 @@ function mockLookups(): void {
     if (path === STALLS_PATH) return Promise.resolve(CREATED_STALL);
     return Promise.reject(new Error(`kutilmagan yo'l: ${path}`));
   });
+}
+
+/**
+ * TAHRIR rejimining dispetcheri: `/zones` HAR DOIM javob beradi, batafsil
+ * javobning TAQDIRI esa testga qoldiriladi.
+ *
+ * ⚠ `/categories` bu yerda YO'Q va bu kutilgan: tahrir rejimida toifa
+ *   maydoni umuman render qilinmaydi (D-04), ya'ni so'rov ham ketmaydi.
+ *   Kutilmagan yo'l ATAYIN otiladi — jimgina `undefined` qaytarish
+ *   testni o'zi o'lchashi kerak bo'lgan holatga tushirardi.
+ */
+function mockEditDetail(detail: () => Promise<unknown>): void {
+  apiFetch.mockImplementation((path: string) => {
+    if (path === ZONES_PATH) {
+      return Promise.resolve({
+        items: [{ id: ZONE_ID, name: ZONE_NAME }],
+        next_cursor: null,
+      });
+    }
+    if (path === STALL_DETAIL_PATH) return detail();
+    return Promise.reject(new Error(`kutilmagan yo'l: ${path}`));
+  });
+}
+
+/** `GET /stalls/{id}` chaqiruvlari — qayta urinish AYNAN shu yerda o'lchanadi. */
+function detailCalls(): unknown[][] {
+  return apiFetch.mock.calls.filter(
+    (args: unknown[]) => args[0] === STALL_DETAIL_PATH,
+  );
 }
 
 function renderDialog(
@@ -280,32 +350,119 @@ describe("to'ldirilgan forma (nazorat)", () => {
 });
 
 /* ---------------------------------------------------------------------------
- * T4 — CHEGARA: TAHRIR REJIMIDAGI TRI-STATE QULFI TEGILMAYDI
+ * ⛔ T5 — SO'ROV KETAYOTGANDA HOLAT KO'RINADI (BO'SH FORMA EMAS)
  * ------------------------------------------------------------------------ */
 
-describe("tahrir rejimi (chegara)", () => {
-  test("batafsil javob KELMAGUNCHA saqlash tugmasi YOPIQ qoladi", async () => {
-    apiFetch.mockImplementation((path: string) => {
-      if (path === ZONES_PATH) {
-        return Promise.resolve({
-          items: [{ id: ZONE_ID, name: ZONE_NAME }],
-          next_cursor: null,
-        });
-      }
-      // `GET /stalls/{id}` ATAYIN javob bermaydi: forma urug'lanmagan
-      // holatda qoladi va aynan shu holat o'lchanadi.
-      if (path === STALL_DETAIL_PATH) return new Promise(() => {});
-      return Promise.reject(new Error(`kutilmagan yo'l: ${path}`));
-    });
+describe("tahrir rejimi: batafsil so'rov ketayotganda", () => {
+  test("⛔ yuklanish holati KO'RINADI va forma CHIZILMAYDI", async () => {
+    // Hech qachon hal bo'lmaydigan promise — holat MUZLATILADI.
+    mockEditDetail(() => new Promise(() => {}));
 
     renderDialog("edit", STALL_ID);
-    await screen.findByRole("option", { name: ZONE_NAME });
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText(LOADING)).toBeInTheDocument();
 
     /*
-     * ⛔ BU QULF BU VAZIFADA OLIB TASHLANMAYDI. Urug'lanmagan forma
-     *   `note` ni bo'sh yuborib mavjud izohni JIMGINA o'chirardi.
-     *   Yopilish tetigi — 260816-5yz (tri-state).
+     * ⛔ SALBIY YARIM MAJBURIY: «bo'sh forma» aynan SHU maydon bilan
+     *   o'lchanadi. Usiz test skeleton formaning USTIGA qo'shilgan
+     *   holatda ham yashil qolardi — ya'ni hech nimani o'lchamasdi.
      */
-    expect(screen.getByRole("button", { name: SAVE })).toBeDisabled();
+    expect(screen.queryByLabelText(CODE_LABEL)).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * ⛔ T6 — SO'ROV YIQILGANDA SABAB VA QAYTA URINISH BOR
+ * ------------------------------------------------------------------------ */
+
+describe("tahrir rejimi: batafsil so'rov yiqilganda", () => {
+  test("⛔ xato SABAB bilan ko'rinadi, xom matn EKRANGA CHIQMAYDI", async () => {
+    mockEditDetail(() => Promise.reject(new Error(RAW_ERROR)));
+
+    renderDialog("edit", STALL_ID);
+
+    expect(await screen.findByText(LOAD_FAILED_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(LOAD_FAILED_BODY)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    // Xato holatida ham bo'sh forma CHIZILMAYDI.
+    expect(screen.queryByLabelText(CODE_LABEL)).toBeNull();
+
+    // T-02-99: server tafsiloti HECH QACHON ko'rsatilmaydi.
+    expect(screen.queryByText(RAW_ERROR)).toBeNull();
+  });
+
+  test("⛔ «Qayta urinish» so'rovni QAYTA yuboradi", async () => {
+    mockEditDetail(() => Promise.reject(new Error(RAW_ERROR)));
+
+    renderDialog("edit", STALL_ID);
+    await screen.findByText(LOAD_FAILED_TITLE);
+
+    const before = detailCalls().length;
+    expect(before).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: RETRY }));
+
+    await waitFor(() => {
+      expect(detailCalls().length).toBeGreaterThan(before);
+    });
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * T7 — NAZORAT: JAVOB KELGACH FORMA O'ZGARISHSIZ VA «SAQLASH» OCHIQ
+ * ------------------------------------------------------------------------ */
+
+describe("tahrir rejimi: batafsil javob kelganda (nazorat)", () => {
+  test("forma javobdan urug'lanadi va «Saqlash» OCHIQ", async () => {
+    mockEditDetail(() => Promise.resolve(STALL_DETAIL));
+
+    renderDialog("edit", STALL_ID);
+
+    /*
+     * ⚠ `waitFor` MAJBURIY, `findBy` YETMAYDI: urug'lantirish maydon
+     *   MONTAJ QILINGANDAN keyingi effektda bajariladi
+     *   (`stall-dialog.tsx` dagi `seededFor` naqshi), ya'ni maydonning
+     *   MAVJUDLIGI hali uning QIYMATI degani emas.
+     */
+    await waitFor(() => {
+      expect(screen.getByLabelText(CODE_LABEL)).toHaveValue(STALL_DETAIL.code);
+    });
+
+    /*
+     * ⛔ Jim-disabled qulf YO'Q: forma endi javob kelmaguncha UMUMAN
+     *   chizilmaydi, ya'ni «urug'lanmagan forma» holati erishib bo'lmas.
+     */
+    expect(screen.getByRole("button", { name: SAVE })).toBeEnabled();
+
+    expect(screen.queryByText(LOADING)).toBeNull();
+    expect(screen.queryByText(LOAD_FAILED_TITLE)).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * ⛔ T8 — `create` NAZORATI: `enabled: false` TUZOG'I
+ * ------------------------------------------------------------------------ */
+
+describe("`create` rejimi (⛔ `enabled: false` tuzog'ining nazorati)", () => {
+  test("forma DARHOL chiziladi — guard `create` ni QAMRAMAYDI", () => {
+    mockLookups();
+
+    renderDialog();
+
+    /*
+     * ⛔ `useStallQuery(null)` -> `enabled: false` -> TanStack `isPending`
+     *   ni ABADIY `true` deb qaytaradi. Rejimga bog'lanmagan guard
+     *   yaratish oqimini butunlay o'ldirardi: admin skeletonga qamalib,
+     *   birorta rasta qo'sha olmasdi.
+     */
+    expect(screen.getByLabelText(CODE_LABEL)).toBeInTheDocument();
+    expect(screen.queryByText(LOADING)).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+
+    // Batafsil so'rov `create` da UMUMAN yuborilmaydi.
+    expect(detailCalls()).toHaveLength(0);
   });
 });
