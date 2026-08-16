@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from app.main import app as fastapi_app
+from app.security.audit import TABLE_VENDORS
 from app.security.rbac import ROLE_PERMISSIONS, Permission
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
@@ -481,6 +482,59 @@ def test_every_binary_response_route_is_classified() -> None:
 
     overlap = sorted(set(BINARY_PERSONAL_ROUTES) & set(NON_PERSONAL_BINARY_ROUTES))
     assert not overlap, f"marshrut IKKALA ro'yxatda ham: {overlap}"
+
+
+def test_no_non_personal_claim_survives_a_vendor_data_guard() -> None:
+    """⛔⛔ «NOMASHAXSIY» DA'VOSI MARSHRUTNING O'Z E'LONIGA ZID BO'LOLMAYDI.
+
+    =========================================================================
+    ⛔ BU TEST 08-12 NING MAJBURIY SABOTAJI TOPGAN BO'SHLIQNI YOPADI VA U
+       «qo'shimcha ehtiyot chorasi» EMAS — O'LCHANGAN ZARURIYAT.
+
+    SABOTAJ (reja Task 3, №1): `/api/v1/reports/debtors.xlsx` IKKALA
+    reyestrdan ham `NON_PERSONAL_BINARY_ROUTES` ga ko'chirildi va butun
+    `tests/tenancy` to'plami yugurtirildi:
+
+        854 passed — BIRORTA TEST QIZARMADI.
+
+    Ya'ni sotuvchi F.I.Sh. chiqadigan hujjatdan `audit_read` talabi
+    JIMGINA yo'qoldi va yagona to'siq — o'sha ro'yxatga yozilgan
+    izohning ROSTLIGI — ya'ni INSON INTIZOMI edi. Bu esa aynan 05-15
+    ning darsi: sabotaj yetib borsa ham hech nima qizarmasa, tuzatish
+    testda emas, HOLATDA.
+
+    ⛔ SHUNING UCHUN TASNIF ENDI MEXANIK LANGARGA EGA: `VENDOR_VIEW`
+       huquqi va `vendors` o'qish auditi MAHSULOT KODIDA e'lon qilinadi
+       (`api/v1/reports.py`), ya'ni ular bu fayldagi ro'yxatdan MUSTAQIL
+       dalil. Marshrut «menda shaxsiy ma'lumot yo'q» deb turib, o'sha
+       ma'lumotni qo'riqlaydigan darvozani ko'tarib turolmaydi.
+
+    ⚠ TESKARI YO'NALISH BU YERDA O'LCHANMAYDI («`VENDOR_VIEW` bor bo'lsa
+      shaxsiy») — u yuqoridagi `BINARY_PERSONAL_ROUTES` darvozasining
+      ishi. Bu yerdagi da'vo TOR va shuning uchun kuchli: nomashaxsiy
+      DEB ATALGAN marshrut shaxsiy ma'lumot darvozalarini ko'tarmaydi.
+    =========================================================================
+    """
+    routes = binary_routes(fastapi_app)
+
+    for path in sorted(NON_PERSONAL_BINARY_ROUTES):
+        # ⛔ `.get()` EMAS: yopiqlik testi (yuqorida) ro'yxatdagi HAR yo'l
+        #    tirik ekanini ALLAQACHON kafolatlaydi, ya'ni `KeyError` shu
+        #    kafolatning buzilgani haqidagi BALAND OVOZLI signal bo'ladi.
+        route = routes[path]
+
+        assert Permission.VENDOR_VIEW not in required_permissions(route), (
+            f"{path} «shaxsiy ma'lumot YO'Q» deb tasniflangan, lekin `VENDOR_VIEW` "
+            "darvozasini ko'taradi — bu huquq AYNAN sotuvchining shaxsiy ma'lumotini "
+            "qo'riqlash uchun mavjud. Tasnif YOLG'ON: yo'lni "
+            "`BINARY_PERSONAL_ROUTES` ga ko'chiring (va `BINARY_PERSONAL_ALLOWED` "
+            "ga uning huquqlarini yozing)"
+        )
+        assert TABLE_VENDORS not in audit_resources(route), (
+            f"{path} «shaxsiy ma'lumot YO'Q» deb tasniflangan, lekin `{TABLE_VENDORS}` "
+            "ustidan o'qish auditini e'lon qiladi — audit AYNAN shaxsiy ma'lumot "
+            "o'qilgani uchun yoziladi (D-09). Ikki e'lon bir-biriga ZID"
+        )
 
 
 EVIDENCE_FRAME_ALLOWED = frozenset({Permission.CAMERA_VIEW, Permission.OCCUPANCY_REVIEW})
