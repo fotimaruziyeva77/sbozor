@@ -603,22 +603,37 @@ qamraydi.
 async def bind_director(session: AsyncSession, *, market_id: UUID, chat_id: int) -> bool:
     """Bozorning dayjest manzilini yozadi; `True` = qator YANGI yaratildi.
 
-    ⛔ AUDIT QATORI YOZILMAYDI VA BU TEXNIK TO'SIQ, UNUTISH EMAS.
-       `market_notification_settings` `schema_contract.AUDITED_TABLES` dan
-       ATAYIN chiqarilgan: jadvalning birlamchi kaliti `market_id`, ya'ni
-       unda `id uuid` ustuni YO'Q, `fn_audit_row()` esa `row_id` ni `uuid`
-       ga keltiradi va bunday jadvalda har DML da YIQILARDI
-       (`stall_code_registry` / `nvr_credentials` bilan aynan bir xil
-       to'siq). Ilova darajasida qo'lda yozish esa `revoke()` da topilgan
-       WR-03 nuqsonining aynan takrori bo'lardi.
+    ✅ AUDIT QATORI ENDI YOZILADI — DB TRIGGERI BILAN (`0025`, 8-faza).
+       `market_notification_settings` `schema_contract.AUDITED_TABLES` ga
+       QO'SHILDI va unga `fn_audit_row()` ulandi, ya'ni «direktor chatini
+       kim, qachon almashtirdi?» savoli endi `audit_log` dan javob oladi
+       (`row_id` = qatorning `id` si). 07 `deferred-items.md` №4 SHU BILAN
+       yopildi.
+
+       ⛔ ILOVA DARAJASIDA QO'LDA AUDIT YOZILMAYDI VA BU O'ZGARMADI:
+          u `revoke()` da topilgan WR-03 nuqsonining aynan takrori
+          bo'lardi (to'qilgan `old` qiymat + reyestr qarori bilan zid
+          xulq). Iz DB triggeridan keladi, ilovadan EMAS.
        ⚠ SHU SABABNI YOZUVCHI FUNKSIYA NOMI BU YERDA LITERAL
          KELTIRILMAYDI: `test_bot_internal_api.py` uning SANOG'INI
          qulflaydi (yangi chaqiruv qo'shilmagani shu bilan o'lchanadi) va
          izohning O'ZI sanoqni oshirib, darvozani sababi bilan
          qizartirardi — 03-07 / 07-02 darsining aynan takrori.
-       ⚠ «Direktor chati qachon, kim tomonidan almashtirildi?» savoli
-         bugun `updated_at` va tuzilmaviy jurnal bilan javob oladi; band
-         `deferred-items.md` da EGASI (8-faza) bilan yozilgan.
+
+    ⛔ ESKI SABAB O'LCHOV BILAN RAD ETILDI, TAKRORLANMASIN. Bu docstring
+       avval «`fn_audit_row()` `id` ustunisiz jadvalda har DML da
+       YIQILARDI» degan edi. 2026-08-16 da `PostgreSQL 18.4` da
+       o'lchandi: trigger YIQILMAYDI — u `row_id IS NULL` bo'lgan qator
+       yozadi va o'sha qator QAYSI qatorga tegishli ekanini aytmaydi.
+       To'siq TEXNIK emas, MA'NOVIY edi; `0025` unga `id uuid` PK berib
+       (va ⛔ `UNIQUE (market_id)` ni SAQLAB) hal qildi.
+
+    ⛔⛔ `ON CONFLICT (market_id)` NING TAYANCHI — `uq_market_notification_
+       settings_market_id`. PK `id` ga ko'chgan, ya'ni bu cheklov olib
+       tashlansa quyidagi so'rov «there is no unique or exclusion
+       constraint matching the ON CONFLICT specification» bilan yiqiladi
+       va direktor botga UMUMAN ULANA OLMAYDI. Bu SABOTAJ bilan
+       o'lchangan (`08-02` / T3).
 
     ⛔ FUNKSIYA `session` OLADI, `sessionmaker` EMAS: u chaqiruvchining
        tranzaksiyasida ishlaydi (`outbox_repo` funksiyalarining aynan

@@ -826,12 +826,31 @@ class MarketNotificationSettings(Base, TenantMixin, TimestampMixin):
     ketardi va sotuvchi eslatma olmagan qarz uchun case ochilardi (yoki
     teskarisi) — ya'ni sotuvchi ogohlantirilmagan holda navbatga tushardi.
 
-    ⚠ `market_id` BIRLAMCHI KALIT (1:1), ya'ni bu jadvalda alohida `id`
-    ustuni YO'Q. Naqsh loyihada bor: `nvr_credentials` (PK `nvr_id`) va
-    `stall_code_registry` (PK `(market_id, code)`). Oqibati SHU YERDA
-    yozilgan: `fn_audit_row()` `row_id` ni `uuid` ga keltiradi va `id`
-    ustuni yo'q jadvalda har DML da yiqilardi — jadval shuning uchun ham
-    `AUDITED_TABLES` ga QO'SHILMAYDI.
+    ⚠⚠ `id uuid` BIRLAMCHI KALIT — `0025` DAN BERI (D-24, 07 `deferred-
+    items.md` №4 ning yopilishi). Avval PK `market_id` edi (1:1) va jadval
+    aynan shu sababdan `AUDITED_TABLES` dan chiqarilgan edi.
+
+    ⛔ ESKI SABAB O'LCHOV BILAN RAD ETILDI, TAKRORLANMASIN:
+    `fn_audit_row()` `id` ustunisiz jadvalda YIQILMAYDI. U `COALESCE((v_new
+    ->> 'id')::uuid, ...)` yozadi, `jsonb ->> '<yo'q kalit>'` esa `NULL`
+    beradi va `NULL::uuid` istisno KO'TARMAYDI (`audit_log.row_id` ham
+    `nullable`). O'lchov: 2026-08-16, `PostgreSQL 18.4` — DML O'TDI va
+    `row_id IS NULL` bo'lgan qator yozildi
+    (`tests/integration/test_notification_settings_audit.py::
+    AUDIT_ROW_WITHOUT_ID_COLUMN_RAISES`).
+
+    HAQIQIY NUQSON BOSHQA EDI: `row_id IS NULL` bo'lgan audit qatori QAYSI
+    QATORGA tegishli ekanini AYTMAYDI — ya'ni «direktor chatini kim,
+    qachon almashtirdi?» savoli javobsiz qolardi. `id uuid` AYNAN SHUNI
+    tuzatadi.
+
+    ⛔⛔ `UNIQUE (market_id)` PK KO'CHGANDAN KEYIN HAM SAQLANADI va bu
+    MUZOKARA QILINMAYDI: `binding_repo._BIND_DIRECTOR_CHAT`
+    `ON CONFLICT (market_id) DO UPDATE` yozadi va cheklovsiz Postgres
+    «there is no unique or exclusion constraint matching the ON CONFLICT
+    specification» beradi — ya'ni direktor botga UMUMAN ULANA OLMASDI.
+    Jadval 1:1 bo'lib QOLAVERADI (bir bozor — bir sozlama qatori), faqat
+    endi qatorning O'Z identifikatori bor.
 
     ⚠ `market_profile` GA USTUN QO'SHILMADI va bu ATAYIN (DQ-6): u jadval
     AUDIT ostida va uning diffini bildirishnoma sozlamalari bilan
@@ -851,9 +870,14 @@ class MarketNotificationSettings(Base, TenantMixin, TimestampMixin):
         #   «sozladim» degan direktor nazoratni jimgina yo'qotardi.
         CheckConstraint("overdue_days > 0", name="overdue_days_positive"),
         CheckConstraint("overdue_days <= 90", name="overdue_days_bounded"),
+        # ⛔⛔ `ON CONFLICT (market_id)` NING YAGONA TAYANCHI — klass
+        #    docstringi. PK `id` ga ko'chgach 1:1 kafolati AYNAN shu
+        #    cheklovda qoladi; u olib tashlansa `bind_director()` ishlamay
+        #    qoladi va direktor dayjestni HECH QACHON olmasdi.
+        UniqueConstraint("market_id", name="uq_market_notification_settings_market_id"),
     )
 
-    market_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = uuid_pk()
     # [ASSUMED] A2 — klass docstringi.
     quiet_hours_start: Mapped[time] = mapped_column(
         Time(), nullable=False, server_default=text("'21:00'")

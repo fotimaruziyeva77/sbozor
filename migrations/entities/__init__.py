@@ -58,6 +58,7 @@ __all__ = [
     "OCCUPANCY_DELETE_ORDER",
     "OCCUPANCY_TENANT_TABLES",
     "RLS_TABLES",
+    "SETTINGS_AUDITED_TABLES",
     "SNAPSHOT_AUDITED_TABLES",
     "SNAPSHOT_DELETE_ORDER",
     "SNAPSHOT_TENANT_TABLES",
@@ -623,9 +624,13 @@ yozilgan. Qisqacha:
     audit jurnalini TEXNIK SHOVQIN bilan to'ldirardi (5-fazaning
     `UNAUDITED_OCCUPANCY_TABLES` qarori bilan bir sinf);
   * `vendor_telegram_bindings`     — jadvalning O'ZI tarix (D-27);
-  * `market_notification_settings` — `id uuid` ustuni YO'Q (PK
-    `market_id`), ya'ni `fn_audit_row()` unda har DML da YIQILARDI
-    (`stall_code_registry` / `nvr_credentials` bilan bir xil to'siq).
+  * ~~`market_notification_settings`~~ — ✅ QARZ YOPILDI (`0025`, 8-faza):
+    jadvalga `id uuid` PK berildi va u `schema_contract.AUDITED_TABLES`
+    ga qo'shildi. ⛔ ESKI SABAB («`fn_audit_row()` unda har DML da
+    yiqilardi») O'LCHOV BILAN RAD ETILDI — trigger YIQILMAYDI, u
+    `row_id IS NULL` bo'lgan qator yozadi va o'sha qator QAYSI qatorga
+    tegishli ekanini aytmasdi. To'liq o'lchov `schema_contract.
+    AUDITED_TABLES` docstringining «O'LCHANGAN FAKT» bandida.
 
 Bittasi esa AUDITDA va bu ro'yxatning butun mazmuni: `reconciliation_cases`
 INSONNING qarori (`charge_adjustments` / `zone_reviews` / `cashier_shifts`
@@ -747,6 +752,21 @@ DARVOZA BUNI SEZMASDI (matnda jadval baribir bor) —
 ⚠ BLOK KASKADNING ENG BOSHIGA QO'YILADI va bu eng xavfsiz o'rin: bu
 jadvalga HECH KIM tayanmaydi (unga kompozit FK bilan keladigan bola
 yo'q), ya'ni uni birinchi o'chirish hech qanday FK ni buzmaydi.
+"""
+
+SETTINGS_AUDITED_TABLES: tuple[str, ...] = ("market_notification_settings",)
+"""`0025_notification_settings_id` da `attach_audit_trigger()` ULANADIGAN jadval.
+
+⛔ RO'YXAT `LEDGER_AUDITED_TABLES` DAN ALOHIDA va bu MAJBURIY: ikkala nom
+BOSHQA MIGRATSIYADA triggerga ulanadi (`0024` va `0025`). Bitta ro'yxat
+bo'lganda `0024` hali `id` ustuniga ega bo'lmagan jadvalga trigger
+ulashga urinardi — ya'ni tartib qarzini kod ichida `if` bilan hal
+qilishga to'g'ri kelardi.
+
+⚠ JADVAL `LEDGER_TENANT_TABLES` GA O'XSHAB `ALL_TENANT_TABLES` GA
+QO'SHILMAYDI: u u yerda 7-fazadan beri BOR
+(`NOTIFICATION_TENANT_TABLES` ning beshinchi a'zosi). `0025` jadval
+YARATMAYDI — u mavjud jadvalning birlamchi kalitini KO'CHIRADI.
 """
 
 ALL_TENANT_TABLES: tuple[str, ...] = (

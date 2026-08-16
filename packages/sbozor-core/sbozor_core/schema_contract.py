@@ -319,6 +319,20 @@ AUDITED_TABLES: frozenset[str] = frozenset(
         # `PENDING_AUDIT_TRIGGERS` BO'SH qoladi va
         # `test_audited_tables_have_trigger` UZLUKSIZ yashil turadi.
         "ledger_entries",
+        # --- 8-faza: 07 `deferred-items.md` №4 NING YOPILISHI (0025) ---
+        # Direktorning dayjest manzili (`director_chat_id`). Qator
+        # almashtirilishi BUTUN BOZORNING kunlik tushumi, bandligi va
+        # TOP-10 qarzdorining summasi BOSHQA chatga ketishini bildiradi —
+        # ya'ni «kim, qachon almashtirdi?» savoli javobsiz qolmasligi
+        # kerak (D-24).
+        #
+        # ⛔ JADVAL AVVAL BU RO'YXATDAN «TEXNIK TO'SIQ» SABABI BILAN
+        # CHIQARILGAN EDI VA O'SHA SABAB O'LCHOV BILAN RAD ETILDI —
+        # `market_notification_settings` bandiga (pastda) qarang. `0025`
+        # unga `id uuid` PK berdi va `UNIQUE (market_id)` ni SAQLADI.
+        #
+        # ⚠ NOM `0025` BILAN AYNI COMMITDA qo'shildi.
+        "market_notification_settings",
     }
 )
 """`fn_audit_row()` triggeri O'RNATILGAN jadvallar (hozirgi holat, kutilgan emas).
@@ -342,16 +356,20 @@ RO'YXATGA KIRMAYDIGANLAR va sababi:
     huquqiy ham yozuv emas; ularga havola qiluvchi jadvallar
     (`stalls`, `stall_category_periods`) allaqachon auditda.
   * `stall_code_registry` — birlamchi kaliti `(market_id, code)`, ya'ni
-    unda `id uuid` ustuni YO'Q. `fn_audit_row()` esa `row_id` ni `uuid` ga
-    keltiradi va bunday jadvalda ishga tushirilsa har DML da yiqilardi
-    (`attach_audit_trigger()` docstringidagi TALAB).
+    unda `id uuid` ustuni YO'Q va audit qatori `row_id IS NULL` bilan
+    yozilardi (yuqoridagi O'LCHOV bandi: trigger YIQILMAYDI, lekin qator
+    QAYSI kodga tegishli ekanini aytmasdi). Ikkinchi, MUSTAQIL sabab:
+    reyestr `stalls` ning hosilasi va kod o'zgarishi `stalls` auditida
+    ALLAQACHON ko'rinadi — ya'ni bu yerda audit ikkinchi nusxa bo'lardi.
   * `nvr_credentials` — IKKI MUSTAQIL sabab, bir xil qaror (3-faza, SC#4):
       (a) `fn_audit_row()` `to_jsonb(NEW)` yozadi, ya'ni Fernet SHIFRMATNI
           `audit_log.new_value` ga tushardi. Kalit buzilganda bu TARIXIY
           parollarni beradi va `audit_log` (append-only, o'chirib
           bo'lmaydigan) eng uzoq yashaydigan sir omboriga aylanardi;
-      (b) birlamchi kaliti `nvr_id`, ya'ni `id uuid` ustuni YO'Q — yuqoridagi
-          `stall_code_registry` bilan aynan bir xil texnik to'siq.
+      (b) birlamchi kaliti `nvr_id`, ya'ni `id uuid` ustuni YO'Q va audit
+          qatori `row_id IS NULL` bilan yozilardi (yuqoridagi O'LCHOV
+          bandi). ⚠ BU SABAB YOLG'IZ YETARLI EMAS EDI va u hech qachon
+          yolg'iz turmagan: (a) MUSTAQIL ravishda hal qiluvchi.
     Audit izi yo'qolmaydi: parol o'zgarishining FAKTI ilova qatlamida
     `nvr_devices` ustiga QIYMATSIZ yoziladi
     (`action='nvr_credentials_updated'`).
@@ -411,14 +429,41 @@ RO'YXATGA KIRMAYDIGANLAR va sababi:
     «kim, qachon, nega uzildi?» savolining javobi qatorlar KETMA-KETLIGIDA
     — audit unga ikkinchi nusxa yozardi (`charge_adjustments` naqshining
     TESKARISI: u yerda tarix yo'q edi, bu yerda BOR).
-  * `market_notification_settings` (7-faza) — IKKI sabab:
-      (a) TEXNIK TO'SIQ: birlamchi kaliti `market_id`, ya'ni `id uuid`
-          ustuni YO'Q. `fn_audit_row()` `row_id` ni `uuid` ga keltiradi va
-          bunday jadvalda har DML da YIQILARDI — `stall_code_registry` va
-          `nvr_credentials` bilan aynan bir xil to'siq;
-      (b) qator sozlama, moliyaviy yoki huquqiy yozuv emas.
-    ⚠ BU BAND OCHIQ QARZ: quiet hours ni kengaytirish eslatmani AMALDA
-    o'chirish yo'li va u bir kun audit talab qilishi mumkin. O'shanda
-    yechim `id uuid` ustuni qo'shish bo'ladi, audit funksiyasini
-    o'zgartirish EMAS.
+  * ~~`market_notification_settings`~~ (7-faza) — ✅ QARZ YOPILDI (`0025`,
+    8-faza). Jadval endi YUQORIDAGI ro'yxatda; band shu yerda TARIX
+    sifatida qoldirilgan, chunki uning SABABI o'lchov bilan RAD ETILDI
+    va o'sha xato mulohaza qaytib kelmasligi kerak.
+
+=============================================================================
+⛔⛔ O'LCHANGAN FAKT — «`id` USTUNISIZ JADVALDA TRIGGER YIQILADI» DA'VOSI
+   YOLG'ON EDI (2026-08-16, `PostgreSQL 18.4`).
+
+Bu docstring (va repo'ning yana ikki joyi) uzoq vaqt shunday degan edi:
+«`fn_audit_row()` `row_id` ni `uuid` ga keltiradi va `id` ustuni yo'q
+jadvalda har DML da YIQILADI». Da'vo HECH QACHON o'lchanmagan edi.
+
+O'LCHOV NATIJASI (`tests/integration/test_notification_settings_audit.py::
+AUDIT_ROW_WITHOUT_ID_COLUMN_RAISES`): trigger `market_notification_settings`
+ga (PK `market_id`, `id` ustuni YO'Q holatida) qo'lda ulandi va bitta
+`UPDATE` bajarildi ->
+
+    DML O'TDI (istisno YO'Q); `audit_log` ga 1 qator yozildi;
+    `row_id = NULL`; `action = 'update'`; `changed_keys = ['overdue_days']`.
+
+MEXANIKA: `jsonb ->> '<yo'q kalit>'` `NULL` beradi, `NULL::uuid` esa
+istisno KO'TARMAYDI va `audit_log.row_id` `nullable` (`0002_audit.py`).
+
+⛔ HAQIQIY OQIBAT — YIQILISH EMAS, JIMGINA MA'NOSIZ AUDIT QATORI:
+`row_id IS NULL` bo'lgan qator QAYSI QATORGA tegishli ekanini AYTMAYDI.
+Bitta qatorli (1:1) jadvalda bu deyarli sezilmasdi, ko'p qatorli
+jadvalda esa audit jurnali «nimadir o'zgardi» dan boshqa hech nima
+demasdi. Ya'ni to'siq TEXNIK emas, MA'NOVIY edi — va uni `id uuid`
+ustuni hal qiladi (D-24), audit funksiyasini o'zgartirish EMAS.
+
+⚠ QUYIDAGI IKKI BANDGA HAM SHU TUZATISH TEGISHLI: `stall_code_registry`
+va `nvr_credentials` ham «to'siq» so'zi bilan chiqarilgan edi. Ularning
+chiqarilishi KUCHDA QOLADI, lekin sabab endi to'g'ri nomlanadi (o'sha
+bandlarga qarang) — `nvr_credentials` da esa sabab ALLAQACHON mustaqil
+va yetarli edi (Fernet shifrmatni `audit_log` ga tushardi).
+=============================================================================
 """
