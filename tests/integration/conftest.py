@@ -31,6 +31,7 @@ from fixtures import MarketScope
 from fixtures.admin_api import cleanup_test_users
 from fixtures.financial import FinancialProbe, create_financial_probe, drop_financial_probe
 from fixtures.nvr_flow import cleanup_api_nvr_rows, record_enqueue
+from fixtures.restore_drill import RestoreTarget, libpq_dsn, start_restore_target
 from psycopg import Connection
 from psycopg.rows import TupleRow
 from pydantic import SecretStr
@@ -272,3 +273,53 @@ def market_today(sync_app_conn: Connection[TupleRow]) -> date:
     assert row is not None, "DB bugungi sanani qaytarmadi"
     today: date = row[0]
     return today
+
+
+# ===========================================================================
+# TIKLASH MASHQI (08-08, FOUND-07 / D-16a)
+#
+# ⚠ MEXANIKA BU YERDA EMAS — `fixtures/restore_drill.py` da (shu faylning
+#   modul docstringidagi qoida: conftest fixture'lar REYESTRI bo'lib
+#   qoladi). Sabab o'sha modulning docstringida MEXANIK ham: `pythonpath`
+#   ga `tests` katalogi kiradi, ya'ni `import conftest` ILDIZDAGI
+#   `tests/conftest.py` ni topadi va bu yerda e'lon qilingan tipni test
+#   faylida tiplab bo'lmasdi.
+# ===========================================================================
+
+
+@pytest.fixture(scope="session")
+def source_dsn(superuser_url: str) -> str:
+    """Manba bazaning libpq DSN'i — ⛔ SUPERUSER, VA BU ZARURIYAT.
+
+    =======================================================================
+    ⛔⛔ RLS OSTIDA `pg_dump` NI ODDIY ROL BILAN CHAQIRIB BO'LMAYDI.
+
+    `pg_dump` ishini `row_security = off` bilan boshlaydi; bu qiymatni
+    o'rnatish esa SUPERUSER yoki `BYPASSRLS` talab qiladi. `sbozor_app`
+    ham, `sbozor_owner` ham ATAYIN `NOSUPERUSER NOBYPASSRLS`
+    (`ops/db/init/01-roles.sql`), ya'ni ular bilan chaqirilgan `pg_dump`
+    YIQILADI.
+
+    ⚠ VA BU TO'G'RI XULQ: muqobil shakl (`--enable-row-security`) dumpga
+      FAQAT KO'RINADIGAN qatorlarni yozardi — ya'ni zaxira JIMGINA
+      qisman bo'lardi va nosozlik faqat tiklash kunida ko'rinardi.
+      Yiqilish esa `run-backup.sh` ning `set -e` si orqali yurak
+      urishini YOZDIRMAYDI va 26 soatdan keyin `backup_stale` beradi.
+
+    ⛔ Ya'ni prod'dagi `BACKUP_DATABASE_URL` ham superuser yoki
+       `BYPASSRLS` roliga ishora qilishi SHART — bu band
+       `ops/backup/README.md` §2 da yozilgan.
+    =======================================================================
+    """
+    return libpq_dsn(superuser_url)
+
+
+@pytest.fixture
+def restore_target() -> Iterator[RestoreTarget]:
+    """TOZA `postgres` konteyneri — rollar bor, sxema YO'Q.
+
+    Konteyner `finally` da ALBATTA to'xtaydi (T-08-33) — mexanika va
+    sabablar `fixtures/restore_drill.py` da.
+    """
+    with start_restore_target() as target:
+        yield target

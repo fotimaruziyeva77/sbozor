@@ -68,6 +68,22 @@ markers = [
     # umuman ishga tushmaydi.
     "golden: oltin to'plam harness'i — UXLAB YOTADIGAN aniqlik darvozasi; `source='karmana'` qatorlar paydo bo'lgan kuni KODSIZ uyg'onadi (D-01/D-02, W0-9)",
     "model: HAQIQIY ONNX artefaktini talab qiladigan o'lchov — artefakt repoda saqlanmaydi (D-24: build paytida `COPY`), shuning uchun standart `addopts` uni OCHIQ filtr bilan chiqaradi; artefakt yo'qligida test SKIP emas, YIQILADI",
+    # 8-FAZA (08-08, FOUND-07). ⛔ `slow` QAYTA ISHLATILMADI VA SABAB
+    #   O'SHA MARKERNING O'Z TA'RIFIDA: u «uzoq davom etadigan SIM
+    #   stsenariylari» deb e'lon qilingan va `npm run test:sim` /
+    #   `test:sim:slow` uni AYNAN `sim` bilan juftlab filtrlaydi
+    #   (`-m "sim and not slow"` / `-m "sim and slow"`). Tiklash mashqi
+    #   simulyatorga UMUMAN tegmaydi, ya'ni uni `slow` ga qo'shish
+    #   markerning ta'rifini JIMGINA kengaytirardi va `-m slow` yozgan
+    #   odam kutmagan testni olardi.
+    #
+    # ⛔⛔ MARKER STANDART `addopts` DAN CHIQARILMAYDI VA BU TAQIQ.
+    #   `addopts = -m "not hardware and not model"` — `restore` u yerda
+    #   YO'Q, ya'ni test `npm run test` va `npm run gate` da YUGURADI.
+    #   Marker faqat NARXNI hujjatlaydi (qo'shimcha postgres konteyneri),
+    #   o'lchovni CHETLATMAYDI: chiqarilsa 08-20 ning faza mezoni testi
+    #   uni chaqira olmasdi va FOUND-07 ning CI qatlami jimgina yo'qolardi.
+    "restore: tiklash mashqi — dump'ni TOZA postgres konteyneriga tiklaydi (D-16a); QO'SHIMCHA konteyner ko'taradi, lekin standart to'plamdan CHIQARILMAYDI",
 ]
 
 [tool.ruff]
