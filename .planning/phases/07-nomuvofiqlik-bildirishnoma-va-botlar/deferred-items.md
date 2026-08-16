@@ -159,7 +159,34 @@ yurishning bu yerda hech qanday qiymati yo'q.
 
 ---
 
-## 4. `market_notification_settings` AUDIT ostida emas — direktor chatining tarixi yo'q
+## 4. ✅ YOPILDI (08-02) — `market_notification_settings` AUDIT ostida emas edi
+
+**Yopilish:** `0025_notification_settings_id` jadvalga `id uuid` PK berdi
+(PK `market_id` dan ko'chdi), ⛔ `UNIQUE (market_id)` ni **saqladi**
+(`uq_market_notification_settings_market_id` — usiz
+`bind_director()` ning `ON CONFLICT (market_id)` bandi sinardi) va
+`attach_audit_trigger()` ni ulab, nomni `schema_contract.AUDITED_TABLES`
+ga **ayni commitda** qo'shdi. Endi «direktor chatini kim, qachon
+almashtirdi?» savoli `audit_log` dan javob oladi va `row_id` qatorning
+`id` siga **teng** (`tests/integration/test_notification_settings_audit.py`
+— uchta test).
+
+⛔⛔ **QUYIDAGI «TEXNIK TO'SIQ» IZOHI O'LCHOV BILAN RAD ETILDI** va u
+shu yerda TARIX sifatida qoldirilgan (matn o'zgartirilmadi), chunki
+xato mulohaza qaytib kelmasligi kerak:
+
+> `fn_audit_row()` `id` ustunisiz jadvalda **YIQILMAYDI**. O'lchov
+> (2026-08-16, `PostgreSQL 18.4`, zond `08-02` / T1): trigger qo'lda
+> ulanib bitta `UPDATE` bajarildi → **DML o'tdi**, `audit_log` ga 1
+> qator yozildi, `row_id = NULL`, `action = 'update'`. Mexanika:
+> `jsonb ->> '<yo'q kalit>'` `NULL` beradi, `NULL::uuid` istisno
+> ko'tarmaydi, `audit_log.row_id` esa `nullable`.
+>
+> Haqiqiy nuqson **yomonroq** edi: `row_id IS NULL` bo'lgan qator qaysi
+> qatorga tegishli ekanini **aytmaydi** — yiqilish darhol ko'rinardi,
+> `NULL` esa jimgina yozilib turardi. Ya'ni to'siq **texnik emas,
+> ma'noviy** edi. Yechim SHAKLI esa quyida to'g'ri nomlangan: `id uuid`
+> qo'shildi, `fn_audit_row()` **o'zgartirilmadi**.
 
 **Manba:** 07-18 ijrosi (`binding_repo.bind_director()` yozilgan reja).
 

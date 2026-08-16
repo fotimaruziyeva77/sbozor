@@ -244,8 +244,22 @@ def attach_audit_trigger(table: str) -> None:
         attach_audit_trigger("payments")            # <- bu satr
         # + `AUDITED_TABLES` reyestriga "payments" qo'shiladi
 
-    TALAB: jadvalning birlamchi kaliti `id uuid` bo'lishi shart —
-    `fn_audit_row()` `row_id` ni `uuid` ga keltiradi.
+    TALAB: jadvalning birlamchi kaliti `id uuid` bo'lishi SHART.
+
+    ⛔ SABAB MA'NOVIY, TEXNIK EMAS — VA BU FARQ O'LCHANGAN (2026-08-16,
+    `PostgreSQL 18.4`). `fn_audit_row()` `id` ustunisiz jadvalda
+    YIQILMAYDI: `jsonb ->> '<yo'q kalit>'` `NULL` beradi, `NULL::uuid`
+    istisno ko'tarmaydi va `audit_log.row_id` `nullable`. Trigger jimgina
+    ishlaydi va `row_id IS NULL` bo'lgan qator yozadi.
+
+    Aynan SHU yomonroq: audit qatori QAYSI QATORGA tegishli ekanini
+    AYTMAYDI, ya'ni jurnal «nimadir o'zgardi» dan boshqa hech nima
+    demaydi. Yiqilish darhol ko'rinardi; `NULL` esa yillar davomida
+    sezilmasdi.
+
+    To'liq o'lchov va uning oqibatlari
+    `sbozor_core.schema_contract.AUDITED_TABLES` docstringining
+    «O'LCHANGAN FAKT» bandida.
     """
     tbl = _ident(table)
     op.execute(

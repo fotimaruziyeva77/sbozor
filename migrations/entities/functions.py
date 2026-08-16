@@ -1153,6 +1153,27 @@ BEGIN
     RETURN false;
   END IF;
 
+  -- 8-faza qog'oz daftar reyestri (0024_ledger_entries). BLOK ENG BOSHDA
+  -- va bu ENG XAVFSIZ o'rin: `ledger_entries` ga HECH KIM tayanmaydi
+  -- (unga kompozit FK bilan keladigan bola yo'q), ya'ni uni birinchi
+  -- o'chirish birorta FK ni buzmaydi.
+  --
+  -- ⛔ BLOK `stalls` O'CHIRILISHIDAN OLDIN TURISHI SHART: `ledger_entries`
+  -- unga kompozit FK `(market_id, stall_id)` bilan tayanadi (`ondelete`
+  -- YO'Q, ya'ni NO ACTION), `stalls` esa 2-faza blokining ichida —
+  -- kaskadning ANCHA PASTIDA. Blok keyinga qo'yilganda chaqiruv
+  -- `ForeignKeyViolation: update or delete on table "stalls" violates
+  -- foreign key constraint "fk_ledger_entries_stall"` bilan yiqilardi va
+  -- STATIK DARVOZA BUNI SEZMASDI (matnda jadval baribir bor) —
+  -- `0013`/`0015`/`0019`/`0021`/`0023` juftliklarining OLTINCHI takrori.
+  --
+  -- ⚠ JADVALDA O'ZGARMASLIK QO'RIQCHISI YO'Q va shuning uchun bu blok
+  --   yuqoridagi `IS DISTINCT FROM false` shartiga TEXNIK jihatdan
+  --   bog'liq emas: daftar qatori qonuniy ravishda ALMASHTIRILADI
+  --   (`ON CONFLICT DO UPDATE`, D-21). Shart baribir kuchda — u butun
+  --   funksiyaning kirish darvozasi.
+  DELETE FROM public.ledger_entries               WHERE market_id = p_market_id;
+
   -- 7-faza bildirishnoma domeni (0023_notification_domain). BLOK BILLING
   -- BLOKIDAN OLDIN TURISHI SHART va bu O'LCHANGAN, taxmin emas:
   -- `reconciliation_cases` IKKI MUSTAQIL kompozit FK bilan

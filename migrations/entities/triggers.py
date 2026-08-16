@@ -130,9 +130,19 @@ aynan bir xil sinf xato). Kontekst umuman o'rnatilmagan bo'lsa audit qatori
 BARIBIR yoziladi, faqat aktori `NULL` bo'ladi — "kim" noma'lum bo'lgani
 yozuvni yo'qotish uchun sabab emas.
 
-CHEKLOV: `row_id` `uuid` ga keltiriladi, ya'ni bu triggerni birlamchi kaliti
-`uuid` bo'lmagan jadvalga ulash mumkin emas (`audit_log` ning o'ziga ham —
-u append-only va o'z-o'zini audit qilmaydi).
+CHEKLOV: `row_id` `uuid` ga keltiriladi, ya'ni bu trigger `id uuid` ustuniga
+EGA jadvallar uchun mo'ljallangan.
+
+⛔ ANIQLIK (O'LCHANGAN, 2026-08-16 · `PostgreSQL 18.4`): `id` ustunisiz
+jadvalda trigger YIQILMAYDI — `jsonb ->> '<yo'q kalit>'` `NULL` beradi,
+`NULL::uuid` istisno ko'tarmaydi va `audit_log.row_id` `nullable`. U
+jimgina ishlaydi va `row_id IS NULL` bo'lgan qator yozadi, ya'ni audit
+qatori QAYSI QATORGA tegishli ekanini AYTMAYDI. Repo uzoq vaqt «har DML
+da yiqiladi» deb yozgan edi va bu da'vo YOLG'ON edi — batafsili
+`sbozor_core.schema_contract.AUDITED_TABLES` docstringida.
+
+`audit_log` ning O'ZIGA baribir ulanmaydi — u append-only va o'z-o'zini
+audit qilmaydi.
 """
 
 AUDIT_IMMUTABLE = PGFunction(
