@@ -98,6 +98,17 @@ msgstr "Тўлов ёзуви топилмади."
 msgid "bot.payments.noMore"
 msgstr "Бошқа ёзув қолмади."
 
+# --- Qaysi BOZOR (WR-03) -----------------------------------------------
+msgid "bot.payments.marketHeader"
+msgstr "Раста {stalls} бўйича:"
+
+msgid "bot.payments.marketFallback"
+msgstr "Бозор {market} бўйича:"
+
+# --- Buzuq sahifa navbati (WR-02) --------------------------------------
+msgid "bot.payments.stale"
+msgstr "Саҳифа маълумоти эскирган. «Тўловларим» тугмасини қайта босинг."
+
 # --- Zaxira javob (WR-04) ----------------------------------------------
 #
 # ⛔ QO'LDA TEKSHIRILGAN O'ZLASHMA YO'Q: matndagi barcha so'zlar o'zbekcha

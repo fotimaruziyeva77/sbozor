@@ -112,6 +112,30 @@ msgstr "To'lov yozuvi topilmadi."
 msgid "bot.payments.noMore"
 msgstr "Boshqa yozuv qolmadi."
 
+# --- Qaysi BOZOR (WR-03) -----------------------------------------------
+#
+# ⛔ IKKI ALOHIDA KALIT, BITTA «{label}» LI KALIT EMAS. Sabab MA'NODA:
+#    rasta kodi va bozor identifikatori BOSHQA-BOSHQA narsalar va ularni
+#    bitta shablonga tiqish «Rasta 11111111» kabi YOLG'ON satr berardi.
+msgid "bot.payments.marketHeader"
+msgstr "Rasta {stalls} bo'yicha:"
+
+# ⚠ Rasta biriktirilmagan bozor uchun — ⛔ TO'QILGAN NOM EMAS, aynan
+#   bozor identifikatorining qisqartirilgan shakli. Sotuvchi uni o'qib
+#   ma'no chiqara olmaydi, LEKIN ikki blokni bir-biridan AJRATA oladi va
+#   savol berganda uni ma'muriyatga ayta oladi.
+msgid "bot.payments.marketFallback"
+msgstr "Bozor {market} bo'yicha:"
+
+# --- Buzuq sahifa navbati (WR-02) --------------------------------------
+#
+# ⛔ «Boshqa yozuv qolmadi» BILAN ALMASHTIRILMAYDI: u O'LCHANGAN FAKT
+#    da'vosi («tarix tugadi»), holbuki haqiqat butunlay boshqa —
+#    saqlangan holat buzuq yoki eskirgan. Foydalanuvchiga aytiladigan
+#    yagona foydali narsa — NIMA QILISH kerakligi.
+msgid "bot.payments.stale"
+msgstr "Sahifa ma'lumoti eskirgan. «To'lovlarim» tugmasini qayta bosing."
+
 # --- Zaxira javob (WR-04) ----------------------------------------------
 #
 # ⛔ MATN FOYDALANUVCHI TERGAN NARSANI O'QIMAYDI VA TAKRORLAMAYDI (D-24).

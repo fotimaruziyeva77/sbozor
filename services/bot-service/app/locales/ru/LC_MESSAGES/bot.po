@@ -103,6 +103,20 @@ msgstr "Записей об оплате не найдено."
 msgid "bot.payments.noMore"
 msgstr "Больше записей нет."
 
+# --- Qaysi BOZOR (WR-03) -----------------------------------------------
+#
+# ⛔ Taqiqlangan tokenlar (`лавк`, `магазин`) bu yerda YO'Q: savdo joyi —
+#    `место`, bozor esa `рынок` (reyestrdagi atamalar bilan bir xil).
+msgid "bot.payments.marketHeader"
+msgstr "По торговому месту {stalls}:"
+
+msgid "bot.payments.marketFallback"
+msgstr "По рынку {market}:"
+
+# --- Buzuq sahifa navbati (WR-02) --------------------------------------
+msgid "bot.payments.stale"
+msgstr "Данные страницы устарели. Нажмите «Мои оплаты» ещё раз."
+
 # --- Zaxira javob (WR-04) ----------------------------------------------
 #
 # ⛔ MUSTAQIL TARJIMA. Taqiqlangan tokenlar (`лавк`, `магазин`) bu matnda

@@ -68,7 +68,26 @@ if TYPE_CHECKING:
 router = Router(name="vendor")
 
 PAGES_KEY: Final = "payment_pages"
-"""FSM kaliti — (bozor, kursor) juftliklari navbati (modul docstringi)."""
+"""FSM kaliti — (bozor, kursor, RASTA KODLARI) uchliklari navbati.
+
+⚠⚠ ELEMENT UCH A'ZOLI VA UCHINCHISI 08-11 DA QO'SHILDI (WR-03): «Ko'proq»
+  dan kelgan sahifa ham qaysi bozorniki ekanini AYTISHI shart, aks holda
+  ikki bozorli sotuvchi A-sahifa2 / B-sahifa2 / A-sahifa3 ketma-ketligini
+  ajratmasdan o'qirdi. Yorliq FSM da SAQLANADI — ⛔ uni qayta olish uchun
+  ikkinchi so'rov OCHILMAYDI.
+
+⛔ SXEMA VERSIYASI YO'Q VA U QO'SHILMAYDI: FSM `db 1` da `--save ""
+   --appendonly no` bilan yashaydi, ya'ni bu o'zgarish tirik Valkey'da
+   qolgan ESKI (ikki a'zoli) yozuvlarga duch keladi. Ularni versiya
+   raqami emas, `_take_first_page()` ning SHAKL tekshiruvi ushlaydi.
+"""
+
+MARKET_ID_PREFIX_LENGTH: Final = 8
+"""Bozor identifikatorining ko'rsatiladigan qismi (WR-03 ning zaxira yo'li).
+
+⚠ To'liq UUID sotuvchi uchun o'qib bo'lmas satr, qisqartirilgani esa ikki
+  blokni AJRATISHGA yetadi — bu yerda kerak bo'lgan yagona narsa shu.
+"""
 
 THOUSANDS_SEPARATOR: Final = " "
 """Uzilmas bo'shliq: son satr oxirida IKKIGA BO'LINMASIN.
@@ -130,6 +149,30 @@ def _render_page(page: PaymentsPage) -> str:
     return "\n".join(lines)
 
 
+def _market_header(stalls: str, market_id: UUID | str) -> str:
+    """Blok sarlavhasi — ⛔ QAYSI BOZOR ekanini AYTADI (WR-03).
+
+    ⛔ MANBA `vendor_summary` JAVOBI: bozor nomi uchun ikkinchi so'rov
+       OCHILMAYDI. Server `market_id` dan boshqa hech nima bermaydi
+       (D-05), shuning uchun yorliq rasta kodlaridan quriladi — aynan
+       `on_debt` da allaqachon ishlatilgan shakl.
+
+    ⛔ RASTA KODI YO'Q BO'LSA SARLAVHA BO'SH QOLMAYDI va TO'QILGAN NOM
+       ham yozilmaydi: bozor identifikatorining qisqargan shakli
+       ko'rsatiladi. Bo'sh yorliq ikki bozorli sotuvchida ikkala blokni
+       AJRATIB BO'LMAS qilardi, o'ylab topilgan nom esa mavjud bo'lmagan
+       ma'lumotni da'vo qilardi.
+    """
+    if stalls:
+        return _("bot.payments.marketHeader").format(stalls=stalls)
+    return _("bot.payments.marketFallback").format(market=str(market_id)[:MARKET_ID_PREFIX_LENGTH])
+
+
+def _market_block(stalls: str, market_id: UUID | str, page: PaymentsPage) -> str:
+    """Sarlavha + sahifa — ikkala javob yo'li uchun BITTA shakl."""
+    return f"{_market_header(stalls, market_id)}\n{_render_page(page)}"
+
+
 async def _answer_not_bound(message: Message) -> None:
     """Bog'lanmagan foydalanuvchini `/start` ga qaytaradi — NEYTRAL matn.
 
@@ -183,9 +226,12 @@ async def on_payments(message: Message, core: CoreClient, state: FSMContext) -> 
                 telegram_user_id=message.from_user.id,
                 market_id=market.market_id,
             )
-            chunks.append(_render_page(page))
+            stalls = ", ".join(market.stall_codes)
+            chunks.append(_market_block(stalls, market.market_id, page))
             if page.next_cursor is not None:
-                pending.append([str(market.market_id), page.next_cursor])
+                # ⚠ Yorliq NAVBATGA ham yoziladi: «Ko'proq» keyin uni
+                #   ikkinchi so'rovsiz qayta ishlatadi (PAGES_KEY).
+                pending.append([str(market.market_id), page.next_cursor, stalls])
     except NotBoundError:
         await _answer_not_bound(message)
         return
@@ -217,11 +263,38 @@ async def on_more(message: Message, core: CoreClient, state: FSMContext) -> None
         await message.answer(_("bot.payments.noMore"), reply_markup=main_menu_keyboard())
         return
 
-    market_id_raw, cursor = pages[0]
+    # =====================================================================
+    # ⛔⛔ SAQLANGAN HOLAT ISHONCHSIZ — VA BU FARAZ EMAS, SHU MODULNING
+    #    FAKTI: navbat elementi 08-11 da IKKI a'zolidan UCH a'zoliga
+    #    o'tdi, ya'ni tirik Valkey'da qolgan eski yozuvlar aynan shu
+    #    yo'ldan o'tadi (`PAGES_KEY` docstringi).
+    #
+    # Ilgari quyidagi ochish (`unpack`) `try` dan TASHQARIDA edi va
+    # `UUID(...)` ning `ValueError` i ham hech qayerda ushlanmasdi.
+    # Ushlanmagan istisno aiogram jurnaliga tushardi, foydalanuvchi esa
+    # HECH QANDAY javob olmasdi — ya'ni «Ko'proq» tugmasi MUTLAQ
+    # SUKUNAT berardi (WR-02).
+    # =====================================================================
+    try:
+        market_id_raw, cursor, stalls = pages[0]
+        # ⚠ `str(...)` ORTIQCHA EMAS: FSM qiymatlari JSON dan qaytadi va
+        #   son yozilgan yozuvda `UUID(5)` `AttributeError` berardi —
+        #   quyidagi `except` esa uni USHLAMASDI. `str()` bilan bu holat
+        #   ham `ValueError` ga aylanadi, ya'ni bitta yo'lga tushadi.
+        market_id = UUID(str(market_id_raw))
+    except (ValueError, TypeError):
+        # ⛔ NAVBAT TOZALANADI: aks holda har bosish shu yo'lga tushardi.
+        await state.update_data({PAGES_KEY: []})
+        # ⛔ `bot.payments.noMore` EMAS — u «tarix tugadi» degan O'LCHANGAN
+        #    FAKT da'vosi bo'lardi, holbuki haqiqat «saqlangan holat
+        #    buzuq». Matn foydalanuvchiga NIMA QILISHNI aytadi.
+        await message.answer(_("bot.payments.stale"), reply_markup=main_menu_keyboard())
+        return
+
     try:
         page = await core.vendor_payments(
             telegram_user_id=message.from_user.id,
-            market_id=UUID(market_id_raw),
+            market_id=market_id,
             cursor=cursor,
         )
     except NotBoundError:
@@ -233,9 +306,9 @@ async def on_more(message: Message, core: CoreClient, state: FSMContext) -> None
 
     rest = pages[1:]
     if page.next_cursor is not None:
-        rest.append([market_id_raw, page.next_cursor])
+        rest.append([market_id_raw, page.next_cursor, stalls])
     await state.update_data({PAGES_KEY: rest})
     await message.answer(
-        _render_page(page),
+        _market_block(stalls, market_id, page),
         reply_markup=main_menu_keyboard(with_more=bool(rest)),
     )
