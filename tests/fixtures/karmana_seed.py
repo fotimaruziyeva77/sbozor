@@ -38,16 +38,24 @@ DETERMINIZM MAJBURIY VA U IKKI QATLAMDA TA'MINLANADI.
 1. `random.Random(SEED)` — har chaqiruvda YANGI generator, modul darajasida
    umumiy holat YO'Q. Qizargan test qayta tiklanadigan bo'lishi shart, aks
    holda «gohida yiqiladi» degan eng yomon test turi tug'iladi.
-2. ZIP metama'lumoti QAYTA YOZILADI (`xlsx_export.freeze_zip`).
-   `XlsxWriter` `ZipFile.writestr()` ni ishlatadi va u a'zo sanasini
-   SOAT'dan oladi — ya'ni ikki qo'shni chaqiruv baytlari sekundlar
-   chegarasida FARQ qilardi. Baytlar tengligi da'vosi shu tufayli aniq.
+2. HUJJAT SANASI MUZLATILADI (`xlsx_export.new_workbook` ->
+   `set_properties({"created": ...})`). Soat faylga AYNAN SHU YO'LDAN
+   kiradi — `docProps/core.xml` dagi `dcterms:created` — va usiz ikki
+   qo'shni chaqiruv baytlari FARQ qilardi.
 
-   ⚠ Bu qatlam 08-01 da MAHSULOTGA ko'chirildi va bu yerdan o'chirildi
-   (quyidagi izohga qarang). Fikstur uni endi `app.services.xlsx_export`
-   dan oladi — bu paketga ruxsat etilgan YAGONA bog'lanish va u
-   `test_karmana_seed.py::test_generator_does_not_import_the_template_
-   module` da simvol darajasida qulflangan.
+   ⚠ 08-01 DA TUZATILGAN ESKI DA'VO: bu ro'yxat ilgari «`XlsxWriter`
+   `ZipFile.writestr()` ni ishlatadi va u a'zo sanasini SOAT'dan
+   oladi» der edi. O'lchandi va `XlsxWriter` 3.2.9 da bu TO'G'RI EMAS:
+   kutubxona a'zo sanasini o'zi `(1980, 1, 1, 0, 0, 0)` qilib yozadi.
+   `freeze_zip` shu sababdan determinizm qatlami emas — u a'zo sanasi
+   invariantining qo'riqchisi (`xlsx_export.freeze_zip` docstringi).
+
+   Ikkala qatlam ham 08-01 da MAHSULOTGA ko'chirildi va bu yerdan
+   o'chirildi (quyidagi izohga qarang). Fikstur ularni endi
+   `app.services.xlsx_export` dan oladi — bu paketga ruxsat etilgan
+   YAGONA bog'lanish va u `test_karmana_seed.py::
+   test_generator_does_not_import_the_template_module` da simvol
+   darajasida qulflangan.
 -----------------------------------------------------------------------------
 
 TOZA FAYL — IFLOS FAYLNING FILTRLANGAN KO'RINISHI, IKKINCHI RO'YXAT EMAS.

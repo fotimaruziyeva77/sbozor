@@ -19,12 +19,15 @@ from __future__ import annotations
 
 import ast
 import io
+import time
 import zipfile
 from pathlib import Path
 
 import openpyxl
+import pytest
 from app.services import xlsx_export
 from app.services.xlsx_export import (
+    FORMULA_PREFIXES,
     FROZEN_ZIP_TIME,
     MONEY_NUM_FORMAT,
     finish,
@@ -35,6 +38,7 @@ from app.services.xlsx_export import (
     write_optional_text,
     write_text,
 )
+from app.services.xlsx_reader import read_rows
 
 SHEET = "Varaq"
 
@@ -78,25 +82,89 @@ def members(raw: bytes) -> list[tuple[str, int, int]]:
 
 
 def test_two_builds_of_the_same_data_are_byte_identical() -> None:
-    """AYNI ma'lumot -> AYNI baytlar.
+    """1-O'LCHOV — AYNI ma'lumot -> AYNI baytlar.
 
-    Bu butun modulning MAVJUD BO'LISH SABABI: imzoli sololishtiruv
+    Bu butun modulning MAVJUD BO'LISH SABABI: imzoli solishtiruv
     eksporti (08-16) faylning xeshini da'vo qiladi, ya'ni soatga bog'liq
     bayt farqi o'sha da'voni ma'nosiz qilardi.
+
+    ⚠ `sleep(1.1)` MAJBURIY. `zipfile` a'zo sanasini SOAT'dan oladi va
+    DOS sana maydonining aniqligi 2 sekund. Ikki chaqiruv ayni sekundda
+    tugasa test MUZLATISHSIZ HAM yashil bo'lardi — ya'ni u aynan
+    o'lchamoqchi bo'lgan nosozlikni (T-02-172) KO'RMASDI va darvoza
+    bo'sh qolardi.
+
+    ⛔ SABOTAJ O'LCHANDI VA U REJANING DA'VOSINI RAD ETDI:
+      1. `new_workbook()` dan `set_properties({"created": ...})` olindi
+         -> QIZARDI, baytlar 3942-indeksda ajraldi.
+      2. Qaytarildi; `finish()` dan `freeze_zip` olindi
+         -> **QIZARMADI.** Butun fayl (14 test) YASHIL qoldi.
+
+    Sabab o'lchandi (`freeze_zip` docstringi): `XlsxWriter` 3.2.9 ZIP
+    a'zo sanasini O'ZI `(1980, 1, 1, 0, 0, 0)` qilib yozadi, ya'ni soat
+    faylga FAQAT `docProps/core.xml` orqali kiradi. Reja «ikki mustaqil
+    qatlam» deb taxmin qilgan edi; aslida determinizm qatlami BITTA.
+
+    ⚠ Shuning uchun bu test `freeze_zip` ni O'LCHAMAYDI — uni
+    `test_freeze_zip_normalises_clock_dated_members` shartnoma
+    darajasida o'lchaydi. Ikkalasini bitta testga qo'shish aynan
+    yuqoridagi yolg'on xotirjamlikni qaytarardi.
     """
     rows = (("Rasta 1", 150_000, "izoh"), ("Rasta 2", None, None))
 
-    assert build(rows) == build(rows)
+    first = build(rows)
+    time.sleep(1.1)
+    second = build(rows)
+
+    assert first == second
 
 
 def test_frozen_zip_time_is_the_dos_epoch_start() -> None:
-    """A'zo sanasi SOAT'dan emas, konstantadan keladi."""
+    """Chiqqan faylda a'zo sanasi AYNAN `FROZEN_ZIP_TIME`.
+
+    ⚠ BU TEST YOLG'IZ O'ZI `freeze_zip` NI O'LCHAMAYDI: `XlsxWriter`
+    3.2.9 a'zo sanasini o'zi ham shu qiymatga qo'yadi, ya'ni
+    `freeze_zip` olib tashlansa u YASHIL QOLADI (o'lchandi). U
+    faylning KUTILGAN holatini qulflaydi; funksiyaning O'Z hissasi
+    quyidagi shartnoma testida o'lchanadi.
+    """
     raw = build((("Rasta 1", 1, None),))
 
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         dates = {info.date_time for info in archive.infolist()}
 
     assert dates == {FROZEN_ZIP_TIME}
+
+
+def test_freeze_zip_normalises_clock_dated_members() -> None:
+    """`freeze_zip` ning O'Z SHARTNOMASI — soatli arxiv ustida o'lchanadi.
+
+    Kirish ATAYIN `XlsxWriter` dan olinmaydi: u a'zo sanasini allaqachon
+    muzlatib beradi va o'shanda bu test funksiyani emas, KUTUBXONANI
+    sinardi (aynan shu yolg'on xotirjamlik 08-01 sabotajida fosh
+    bo'lgan). Shuning uchun arxiv `zipfile` bilan, SOAT sanasi bilan
+    quriladi.
+
+    Shartnoma: sana muzlatiladi, qolgan hamma narsa — nom, siqish turi
+    va OCHILGAN hajm — o'zgarmaydi.
+    """
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        # Nom bilan yozish = sana SOAT'dan olinadi.
+        archive.writestr("xl/worksheets/sheet1.xml", b"<x/>" * 100)
+        archive.writestr("docProps/core.xml", b"<c/>" * 100)
+
+    clock_dated = buffer.getvalue()
+    with zipfile.ZipFile(io.BytesIO(clock_dated)) as archive:
+        before = {info.date_time for info in archive.infolist()}
+
+    assert before != {FROZEN_ZIP_TIME}, "kirish arxivi allaqachon muzlatilgan"
+
+    frozen = freeze_zip(clock_dated)
+
+    with zipfile.ZipFile(io.BytesIO(frozen)) as archive:
+        assert {info.date_time for info in archive.infolist()} == {FROZEN_ZIP_TIME}
+    assert members(frozen) == members(clock_dated)
 
 
 def test_freeze_zip_preserves_names_compression_and_sizes() -> None:
@@ -133,26 +201,62 @@ def test_core_properties_carry_the_frozen_creation_date() -> None:
     assert "2026-08-01" in core
 
 
-def test_write_text_escapes_a_formula_payload() -> None:
-    """`=cmd|' /c calc'!A1` faylga APOSTROF bilan tushadi.
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "=cmd|' /c calc'!A1",
+        "+1",
+        "-1",
+        "@SUM(1)",
+        "\t=1+1",
+        "\r=1+1",
+    ],
+    ids=["equals", "plus", "minus", "at", "tab", "carriage-return"],
+)
+def test_formula_injection_is_escaped_for_every_prefix(payload: str) -> None:
+    """2-O'LCHOV — OLTALA xavfli prefiks `'` bilan zararsizlantiriladi.
 
-    Hujum mijoz mashinasida bajariladi — qarzdorlik reestrida
+    Hujum MIJOZ MASHINASIDA bajariladi — qarzdorlik reestrida
     `vendor_name` bor, ya'ni `=HYPERLINK(...)` nomli sotuvchi
-    direktorning Excelida kod bajartirardi.
-    """
-    payload = "=cmd|' /c calc'!A1"
+    DIREKTORNING Excelida kod bajartirardi. Bu saqlangan hujum: nomni
+    bir marta yozgan odam keyinchalik boshqa odamning mashinasida kod
+    ishga tushiradi.
 
+    ⚠ Qiymat FAYLDAN QAYTA O'QILADI (`openpyxl`), fayl BAYTLARIDAN
+    `in` bilan izlanmaydi: `.xlsx` — siqilgan ZIP va matn u yerda
+    umuman topilmasdi, ya'ni "baytda yo'q" degan da'vo HAR DOIM yashil
+    bo'lardi va hech nimani o'lchamasdi.
+
+    `\\t` va `\\r` ALOHIDA holat: ular ko'rinmaydi, lekin Excel ularni
+    tashlab yuborib KEYINGI belgiga qaraydi — oddiy `startswith("=")`
+    ularni O'TKAZIB YUBORARDI.
+    """
     book = open_book(build(((payload, 1, None),)))
     stored = str(book[SHEET].cell(row=1, column=1).value)
 
-    assert stored == "'" + payload
+    # XAVFSIZLIK DA'VOSI — faylning O'ZIDA.
+    assert stored.startswith("'"), f"qochirilmagan qiymat: {stored!r}"
+    assert not stored.startswith(FORMULA_PREFIXES)
+
+    # MAZMUN DA'VOSI — faqat KO'RINADIGAN prefikslar uchun. `\t`/`\r`
+    # OOXML da `_x0009_`/`_x000D_` bo'lib kodlanadi, ya'ni aynan tenglik
+    # ularda kutubxona konvensiyasini sinardi, bizning kodni emas.
+    if payload.isprintable():
+        assert stored == "'" + payload
 
 
 def test_write_money_writes_an_integer_in_the_money_format() -> None:
-    """Pul SON bo'lib yoziladi va `#,##0` formatini oladi.
+    """4-O'LCHOV — pul SON bo'lib yoziladi va `#,##0` formatini oladi.
 
     Matn bo'lib yozilgan pul Excelda YIG'ILMASDI va saralash "100" ni
-    "20" dan oldin qo'yardi.
+    "20" dan oldin qo'yardi — qarzdorlik reestrida bu ikkalasi ham
+    hisobotni foydasiz qilardi.
+
+    ⚠ `float` HOLATI TEST EMAS, IZOH: `write_money` ning annotatsiyasi
+    `int` va `float` uzatilganda `mypy` xato beradi. Ish vaqtida
+    tekshirilmaydi — pul `BIGINT` so'm sifatida saqlanadi va `float`
+    loyiha darajasida taqiqlangan (yaxlitlash drifti kunlik patta
+    yig'indisida sotuvchi bilan nizoga aylanardi).
     """
     book = open_book(build((("Rasta 1", 150_000, None),)))
     cell = book[SHEET].cell(row=1, column=2)
@@ -206,13 +310,45 @@ def test_raw_worksheet_writes_live_only_inside_write_text() -> None:
 
 
 def test_write_optional_text_leaves_an_empty_cell_for_none() -> None:
-    """O'LCHANMAGAN qiymat BO'SH katak — `0` ham, `""` ham, `"—"` ham EMAS.
+    """3-O'LCHOV — O'LCHANMAGAN qiymat BO'SH katak.
 
-    D-10: nol o'lchangan nol bilan bir xil ko'rinadi va direktor
-    hisobotdagi nolni «to'lov yo'q» deb o'qirdi.
+    ⛔ `0` ham, `""` ham, `"—"` ham EMAS va uchalasi ALOHIDA rad
+    etiladi. D-10 ning sababi: o'lchanmagan nol O'LCHANGAN noldan farq
+    qilmasdi va direktor hisobotdagi nolni «to'lov yig'ilmagan» deb
+    o'qirdi — ya'ni mahsulotning butun da'vosi (raqam bilan fosh qilish)
+    o'z ustidan kulardi.
     """
-    book = open_book(build((("Rasta 1", None, None),)))
-    sheet = book[SHEET]
+    sheet = open_book(build((("Rasta 1", None, None),)))[SHEET]
 
-    assert sheet.cell(row=1, column=2).value is None
-    assert sheet.cell(row=1, column=3).value is None
+    for column in (2, 3):
+        stored = sheet.cell(row=1, column=column).value
+        assert stored is None, f"{column}-ustunda o'rin to'ldiruvchi: {stored!r}"
+        assert stored != 0
+        assert stored != ""
+        assert stored != "—"
+
+
+def test_frozen_bytes_still_pass_the_product_reader() -> None:
+    """5-O'LCHOV — muzlatilgan fayl `xlsx_reader` darvozalaridan O'TADI.
+
+    `freeze_zip` arxivni QAYTA O'RAYDI, ya'ni u o'qish tomonini
+    buzishi MUMKIN bo'lgan yagona qadam. `_check_zip()` a'zolar SONI va
+    e'lon qilingan OCHILGAN hajmlar yig'indisi bo'yicha qaror qiladi —
+    ikkalasi ham qayta o'rashdan omon chiqishi SHART.
+
+    O'lchov mahsulot o'quvchisining O'ZI bilan olinadi: `zipfile` bilan
+    qo'lda tekshirish o'qish darvozalarining haqiqiy ketma-ketligini
+    (hajm -> ZIP -> parse -> varaq/qator/ustun) chetlab o'tardi.
+    """
+    buffer = io.BytesIO()
+    workbook = new_workbook(buffer)
+    worksheet = workbook.add_worksheet(SHEET)
+    # 1-qator SARLAVHA (o'quvchi uni tashlaydi), 2-qator MA'LUMOT.
+    write_text(worksheet, 0, 0, "kod")
+    write_text(worksheet, 0, 1, "zona")
+    write_text(worksheet, 1, 0, "12")
+    write_text(worksheet, 1, 1, "Markaziy")
+
+    rows = read_rows(finish(workbook, buffer), expected_columns=2)
+
+    assert [row.values for row in rows] == [("12", "Markaziy")]

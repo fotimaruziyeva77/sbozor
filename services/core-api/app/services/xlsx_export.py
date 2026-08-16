@@ -7,9 +7,15 @@ UCH FAKT — KEYINGI O'QUVCHI UCHUN, LITERAL.
    va fikstursdagi nusxa O'CHIRILDI. Naqsh mahsulotda emas, TEST
    fikstursida tug'ilgan edi (`karmana_seed._freeze_zip`), ya'ni
    mahsulot eksport yo'llari (`build_template`, `build_error_report`)
-   bayt-determinik EMAS edi. Ikki nusxa saqlansa `_FROZEN_ZIP_TIME` bir
+   bayt-determinik EMAS edi. Ikki nusxa saqlansa sana konstantalari bir
    kun ajralib ketardi va o'shanda «fayl determinik» degan da'vo IKKI
    XIL ma'noni anglatardi.
+
+   ⚠ DETERMINIZMNI BUGUN NIMA TA'MINLAYDI: `new_workbook()` dagi
+   `set_properties({"created": FROZEN_CREATED})` — YOLG'IZ O'ZI.
+   `freeze_zip` ikkinchi qatlam EMAS (reja shunday deb taxmin qilgan
+   edi; sabotaj bilan o'lchandi va rad etildi) — u a'zo sanasi
+   invariantining qo'riqchisi. Batafsil: `freeze_zip` docstringi.
 
 2. `worksheet.write()` va `worksheet.write_string()` BU MODULDA HAM,
    UNING ISTE'MOLCHILARIDA HAM TO'G'RIDAN-TO'G'RI CHAQIRILMAYDI. Yagona
@@ -139,13 +145,39 @@ def escape_formula(value: str) -> str:
 
 
 def freeze_zip(raw: bytes) -> bytes:
-    """ZIP a'zolarining sanasini MUZLATADI (determinizm, 2-qatlam).
+    """ZIP a'zolarining sanasini MUZLATADI — MUDOFAA qatlami, TIRIK EMAS.
 
-    `XlsxWriter` `in_memory` rejimida `ZipFile.writestr(nom, ...)` ni
-    chaqiradi, `zipfile` esa bunday chaqiruvda a'zo sanasini SOAT'dan
-    oladi. Ya'ni ikki qo'shni chaqiruv baytlari sekund chegarasida farq
-    qilardi va «determinizm» testi GOHIDA yiqilardi — bu esa aynan
-    generator yo'q qilishi kerak bo'lgan test turi (T-02-172).
+    =======================================================================
+    ⚠ MEROS QILIB OLINGAN DA'VO YOLG'ON CHIQDI VA U SHU YERDA TUZATILADI.
+
+    02-23 dan kelgan docstring shunday deydi: «`XlsxWriter` `in_memory`
+    rejimida `ZipFile.writestr(nom, ...)` ni chaqiradi, `zipfile` esa
+    a'zo sanasini SOAT'dan oladi». 08-01 buni O'LCHADI va u
+    `XlsxWriter` **3.2.9** da TO'G'RI EMAS:
+
+        XOM xlsxwriter a'zo sanalari: {(1980, 1, 1, 0, 0, 0)}
+        set_properties SIZ,   freeze_zip SIZ, 1.1 s oraliq -> teng? False
+        set_properties BILAN, freeze_zip SIZ, 1.1 s oraliq -> teng? True
+
+    Ya'ni `XlsxWriter` a'zo sanasini O'ZI muzlatadi va SOAT faylga
+    FAQAT bitta yo'ldan kiradi — `docProps/core.xml` dagi
+    `dcterms:created`. Determinizmni bugun `new_workbook()` dagi
+    `set_properties()` YOLG'IZ ta'minlaydi.
+
+    ⛔ SHUNDAY EKAN, NEGA SAQLANADI? Chunki bu funksiya endi
+    DETERMINIZM QATLAMI emas, INVARIANT QO'RIQCHISI: u a'zo sanasi
+    `FROZEN_ZIP_TIME` ekanini `XlsxWriter` ning ichki tanlovidan
+    QAT'I NAZAR kafolatlaydi. Kutubxona paketlovchisini o'zgartirsa
+    (yoki eksport boshqa yozuvchidan o'tsa) da'vo baribir rost qoladi.
+    Uning O'Z shartnomasi `test_freeze_zip_normalises_clock_dated_
+    members` da to'g'ridan-to'g'ri o'lchanadi — «ikkinchi qatlam»
+    hikoyasi orqali EMAS.
+
+    ⚠ KEYINGI O'QUVCHIGA: reja bu funksiyani «ikki mustaqil qatlamning
+    biri» deb ta'riflagan va sabotaj bilan ISBOTLASHNI buyurgan edi.
+    Sabotaj bajarildi va da'voni RAD ETDI (SUMMARY, S-2). Yozilgan
+    hikoyaga ishonib, o'lchovni o'tkazib yubormang.
+    =======================================================================
 
     Qayta o'rash mazmunga tegmaydi: nom, siqish turi va ochilgan hajm
     o'zgarmaydi, ya'ni `xlsx_reader._check_zip()` darvozalari ham xuddi
@@ -168,11 +200,12 @@ def freeze_zip(raw: bytes) -> bytes:
 def new_workbook(buffer: io.BytesIO) -> Workbook:
     """Determinizm 1-qatlami bilan ochilgan kitob.
 
-    `set_properties({"created": ...})` MAJBURIY va u `freeze_zip` DAN
-    MUSTAQIL: `dcterms:created` siqilgan MAZMUN ichida (`docProps/
-    core.xml`) yotadi, ZIP a'zo sanasi esa arxiv METAMA'LUMOTIDA. Bitta
-    qatlam ikkinchisini QOPLAMAYDI — ikkalasi ham olib tashlanganda
-    determinizm testi mustaqil ravishda qizaradi (08-01 Task 3 sabotaji).
+    ⚠ `set_properties({"created": ...})` — BUGUNGI KUNDA DETERMINIZMNI
+    TA'MINLAYDIGAN YAGONA MEXANIZM, va bu o'lchangan (`freeze_zip`
+    docstringiga qarang): `XlsxWriter` 3.2.9 ZIP a'zo sanasini o'zi
+    muzlatadi, ya'ni soat faylga faqat `docProps/core.xml` orqali
+    kiradi. Bu qator olib tashlanganda determinizm testi QIZARADI
+    (o'lchandi: baytlar 3942-indeksda ajraladi).
 
     ⛔ `constant_memory` QO'YILMAYDI — modul docstringiga qarang
     (`freeze_panes`/`autofilter` buziladi, Pitfall 13).
