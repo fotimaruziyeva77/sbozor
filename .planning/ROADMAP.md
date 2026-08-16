@@ -616,5 +616,45 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 23/23 | Complete   | 2026-08-13 |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 20/20 | Complete    | 2026-08-16 |
 
+### Phase 9: UI-polish — motion qatlami
+
+**Goal:** Foydalanuvchi ilovada Apple-darajadagi jilo his qiladi: to'lov muvaffaqiyati Apple Pay xoreografiyasi bilan yakunlanadi, direktor paneli skeleton→count-up bilan jonlanadi, iliq fon (rang 2.0) va dark rejim token-almashtirish orqali ishlaydi, barcha harakat `prefers-reduced-motion`ni hurmat qiladi
+**Requirements**: TBD (plan bosqichida — manba: `sketch-findings-bozor` skill, `UI-UX-MASTERPLAN.md`)
+**Depends on:** Phase 8
+**Success Criteria** (what must be TRUE):
+
+  1. Kassir to'lovni tasdiqlaganda 6-qadam xoreografiya (check-draw → halqa pulsi → summa uchishi → qator qo'nishi → count-up → avtofokus) ishlaydi va input ~150ms ichida keyingi mijozga tayyor — bayram bloklamaydi
+  2. Direktor paneli skeleton (shimmer, spinner YO'Q) bilan ochiladi, kartalar stagger bilan kiradi, tushum count-up bilan sanaydi, sparkline/donut chizilib chiqadi
+  3. Iliq fon (rang 2.0) va dark rejim token-almashtirish bilan ishlaydi — komponent kodi o'zgarmaydi; kassir "quyosh rejimi" tugmasi kontrast maksimal qiladi
+  4. `prefers-reduced-motion` da barcha harakat o'chadi (G-motion-1 darvozasi), kassir interaktiv javoblari ≤150ms (G-motion-2 darvozasi) — ikkalasi testda o'lchanadi
+  5. Motion faqat `transform`/`opacity` bilan (60fps arzon Androidda), `motion` kutubxonasi +35KB gzip byudjetida, mavjud G-* darvozalar yashil qoladi
+
+**Chegaralar:** redesign EMAS — mavjud dizayn-tizim ustiga; konfetti FAQAT kunlik plan bajarilganda; masterplan §7 mikro-UX tuzatishlaridan 8-fazada yopilmagani shu fazaga kiradi
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 9 to break down)
+
+### Phase 10: Landing — sbozor.uz
+
+**Goal:** Anonim tashrif buyuruvchi sbozor.uz'da 30 soniyada mahsulotni tushunadi va demo so'raydi: hero 12s "jonli bozor" sikli, 3-qadam "qanday ishlaydi" seksiyasi, davlat-ishonch bloki, demo-forma → admin Telegram-bot
+**Requirements**: TBD (plan bosqichida — manba: `LANDING-BRIEF.md`, `sketch-findings-bozor` landing-sehri reference)
+**Depends on:** Phase 9
+**Success Criteria** (what must be TRUE):
+
+  1. `sbozor.uz/` (anonim root) landing ko'rsatadi, uchala tilda SSG; «Kirish» app loginiga olib boradi
+  2. Hero 12s "jonli bozor" siklini o'ynaydi (sketch 003-B: xarita → kamera nuri → amber «Band, lekin to'lovsiz» → to'lov → hisobot); video EMAS, `prefers-reduced-motion`da statik final-kadr
+  3. Demo-forma yuborilganda so'rov admin Telegram-botga yetadi (mavjud bot-service orqali) — alohida CRM yo'q
+  4. Ishonch bloki: ma'lumotlar O'zbekistonda · NVR faqat VPN · har amal auditda · 3 til; pilot holati halol («Karmana sinovda», yolg'on raqam YO'Q)
+  5. Lighthouse ≥95, LCP <1.5s (statik sahifada), SEO meta/OG/structured data to'liq
+
+**Chegaralar:** mavjud Next.js ichida `(marketing)` route-guruhi — alohida sayt EMAS; copy brief matnidan (yakuniy tahrir shu fazada, 3 tilda); maxfiylik siyosati sahifasi majburiy (CCTV shaxsiy ma'lumot)
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 10 to break down)
+
 ---
 *Roadmap yaratildi: 2026-07-29*

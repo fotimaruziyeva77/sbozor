@@ -157,6 +157,11 @@ ekranida farqni ISM bilan ko'rishi kerakmi? -- ijrochi hal qilmaydi).
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Phase 9 added (2026-08-16): UI-polish — motion qatlami (sketch 001/002 g'oliblari asosida, foydalanuvchi tasdiqlagan)
+- Phase 10 added (2026-08-16): Landing — sbozor.uz (sketch 003-B asosida, go-live'dan oldin shart)
+
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
