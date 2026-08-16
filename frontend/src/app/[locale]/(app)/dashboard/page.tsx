@@ -3,6 +3,7 @@
 import { ScrollText, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { MarketStatusCard } from "@/components/dashboard/market-status-card";
 import { HeadlineCard } from "@/components/headline/headline-card";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Link } from "@/i18n/navigation";
@@ -79,6 +80,34 @@ export default function DashboardPage() {
        *    klient buni takrorlay olmasligi kerak.
        */}
       <HeadlineCard marketId={principal?.marketId ?? null} />
+
+      {/*
+       * BOZOR HOLATI KARTASI — `HeadlineCard` dan KEYIN, `SECTIONS` dan
+       * OLDIN (Topilma №H). `HeadlineCard` ham, `SECTIONS` ham
+       * TEGILMAYDI: bosh ekranning mavjud tartibi (UI-SPEC §10.4)
+       * o'zgarmaydi, karta ular ORASIGA qo'yiladi.
+       *
+       * ⛔ DARVOZA AYNAN `market_manage` VA TANLOV ASOSLANGAN:
+       *    (a) `rbac.ts` matritsasida u FAQAT `platform_admin` da bor —
+       *        direktorda ham, bozor adminida ham YO'Q, ya'ni topshiriqning
+       *        «direktor bosh ekraniga tegmang» sharti mexanik bajariladi
+       *        (uni 8-faza boyitadi);
+       *    (b) kartaning birlamchi amali bozorni faollashtirishga olib
+       *        boradi va u aynan `MARKET_MANAGE` ostidagi endpoint;
+       *    (c) `market_data_view` bilan darvozalash DIREKTORNI ham
+       *        qamrab, o'sha taqiqni buzardi.
+       *
+       * ⛔ SHART KOMPONENTDAN TASHQARIDA: huquqsiz sessiyada
+       *    `GET /markets/{id}/setup-status` ga so'rov HAM ketmaydi
+       *    (`cameras/page.tsx` da o'rnatilgan naqsh). Haqiqiy nazorat
+       *    serverda.
+       */}
+      {hasPermission(roles, "market_manage") && principal?.marketId ? (
+        <MarketStatusCard
+          isActive={principal.marketIsActive}
+          marketId={principal.marketId}
+        />
+      ) : null}
 
       {sections.length > 0 ? (
         <ul className="grid gap-3 sm:grid-cols-2">

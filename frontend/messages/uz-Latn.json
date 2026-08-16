@@ -1358,5 +1358,15 @@
     "receipts_written": "{count, plural, other {Bugun yozilgan kvitansiyalar (bekor qilingani ham)}}",
     "unknown": "Ko'rsatkich",
     "amountUnit": "so'm"
+  },
+  "dashboard": {
+    "marketStatus": "Bozor holati",
+    "statusDraft": "Qoralama",
+    "statusActive": "Faol",
+    "activateHint": "Ishga tushirish uchun faollashtirish qadamiga o'ting",
+    "countStalls": "Rastalar",
+    "countVendors": "Sotuvchilar",
+    "countCameras": "Kameralar",
+    "countUsers": "Foydalanuvchilar"
   }
 }

@@ -63,6 +63,23 @@ export type Principal = {
   roles: readonly string[];
   marketId: string | null;
   marketName: string | null;
+  /**
+   * Tanlangan bozor FAOLMI (`markets.is_active`) — Topilma №H.
+   *
+   * ⚠⚠ MAYDON IXTIYORIY VA BU O'LCHANGAN QAROR. `frontend/src` da
+   *   `isPlatformAdmin:` satri **47 dan ortiq** faylda uchraydi (deyarli
+   *   hammasi test), ya'ni majburiy maydon o'sha fayllarni NUQSON
+   *   sababli emas, TIP sababli qizartirardi. 6r1 dagi «majburiy prop»
+   *   qaroridan chetlashish ataylab va sabab boshqa: u yerda
+   *   chaqiruvchi BITTA edi.
+   *
+   * ⛔ `undefined` VA `null` — «NOMA'LUM», «QORALAMA» EMAS. Noma'lumni
+   *   qoralama deb talqin qilish faol bozorga «hali ishga
+   *   tushmagansiz» degan yolg'on yorliq yopishtirardi. Bu loyihaning
+   *   takrorlangan qoidasi (05-13, 05-14, 03-08): o'lchanmagan qiymat
+   *   o'rniga na taxmin, na nol yoziladi.
+   */
+  marketIsActive?: boolean | null;
   isPlatformAdmin: boolean;
   locale: ApiLocale;
   mustChangePassword: boolean;
@@ -223,6 +240,14 @@ export function applySession(next: {
           roles: next.roles,
           marketId: next.market.id,
           marketName: next.market.name,
+          /*
+           * ⚠ `MarketSummary` da `is_active` ALLAQACHON bor
+           * (`api-types.ts::marketRefSchema`) va u shu paytgacha JIMGINA
+           * TASHLAB YUBORILARDI. Shu bitta qator uchala kirish yo'lini
+           * qamraydi: `/auth/refresh`, `/auth/select-market` va usta
+           * rekvizitlari — uchalasi ham bu funksiyaga keladi.
+           */
+          marketIsActive: next.market.is_active,
         }
       : null,
   };

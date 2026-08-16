@@ -103,6 +103,13 @@ export function LoginForm() {
           roles: response.roles,
           marketId: response.market?.id ?? null,
           marketName: response.market?.name ?? null,
+          /*
+           * ⚠ `?? null` — «bozor tanlanmagan, ya'ni holat NOMA'LUM».
+           *   `false` YOZILMAYDI: u «qoralama» degani bo'lardi va
+           *   platforma admini bozor tanlashdan OLDIN bosh ekranda
+           *   yolg'on yorliq ko'rardi (Topilma №H, H3).
+           */
+          marketIsActive: response.market?.is_active ?? null,
           isPlatformAdmin: response.is_platform_admin,
           locale: response.locale,
           mustChangePassword: response.must_change_password,

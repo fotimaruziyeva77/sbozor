@@ -1358,5 +1358,15 @@
     "receipts_written": "{count, plural, other {Бугун ёзилган квитанциялар (бекор қилингани ҳам)}}",
     "unknown": "Кўрсаткич",
     "amountUnit": "сўм"
+  },
+  "dashboard": {
+    "marketStatus": "Бозор ҳолати",
+    "statusDraft": "Қоралама",
+    "statusActive": "Фаол",
+    "activateHint": "Ишга тушириш учун фаоллаштириш қадамига ўтинг",
+    "countStalls": "Расталар",
+    "countVendors": "Сотувчилар",
+    "countCameras": "Камералар",
+    "countUsers": "Фойдаланувчилар"
   }
 }

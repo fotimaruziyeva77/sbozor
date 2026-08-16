@@ -1358,5 +1358,15 @@
     "receipts_written": "{count, plural, other {Выписанные сегодня квитанции (включая отменённые)}}",
     "unknown": "Показатель",
     "amountUnit": "сум"
+  },
+  "dashboard": {
+    "marketStatus": "Состояние рынка",
+    "statusDraft": "Черновик",
+    "statusActive": "Активен",
+    "activateHint": "Чтобы запустить рынок, перейдите к шагу активации",
+    "countStalls": "Торговые места",
+    "countVendors": "Продавцы",
+    "countCameras": "Камеры",
+    "countUsers": "Пользователи"
   }
 }
