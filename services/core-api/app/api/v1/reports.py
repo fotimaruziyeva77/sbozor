@@ -78,16 +78,22 @@ so'rovda beradi. Bu qatlam faqat DTO ga o'giradi va sahifalaydi.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import date, timedelta
-from typing import Annotated, Final
+from typing import TYPE_CHECKING, Annotated, Final
 from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sbozor_core.timeutil import business_today
 
+from app.api.v1.imports import XLSX_SUFFIX, _locale_of, _xlsx_response
 from app.deps import Principal, SettingsDep, TenantSessionDep, require_permission
 from app.repositories import report_repo
+from app.repositories.market_repo import MarketRepository
+from app.repositories.occupancy_repo import OccupancyRepository
 from app.schemas import (
     AnomalyArchiveResponse,
     AnomalyArchiveRowResponse,
@@ -98,6 +104,20 @@ from app.schemas import (
 )
 from app.security.audit import TABLE_VENDORS, AuditReadIntent, audit_read
 from app.security.rbac import Permission
+from app.services import xlsx_export
+from app.services.accuracy_report import accuracy_report
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+# ⚠ `StreamingResponse` ISH VAQTIDA IMPORT QILINADI, `TYPE_CHECKING`
+#   OSTIDA EMAS — VA BU `date`/`UUID` bilan AYNI SABAB. U
+#   `@router.get(..., response_class=StreamingResponse)` da ARGUMENT
+#   sifatida, ya'ni dekorator BAJARILAYOTGANDA kerak bo'ladi; annotatsiya
+#   esa `from __future__ import annotations` ostida SATR bo'lib qoladi va
+#   FastAPI uni javob turini aniqlash uchun YECHISHI kerak.
 
 # ⚠ `date` VA `UUID` ISH VAQTIDA IMPORT QILINADI, `TYPE_CHECKING` OSTIDA
 #   EMAS — VA BU O'LCHANGAN ZARURIYAT (`billing.py:82-88` va
@@ -336,6 +356,68 @@ qaytarardi va `shown_count` sababsiz farq qilardi.
 
 
 # ===========================================================================
+# QATOR O'GIRUVCHILAR — ⛔ EKRAN VA FAYL AYNAN SHU YERDAN YURADI
+#
+# ⛔⛔ NEGA UCH FUNKSIYA, NEGA HANDLER ICHIDA EMAS.
+#
+# Har hisobotning IKKI iste'molchisi bor: JSON marshruti va `.xlsx`
+# eksporti. O'girish handler ichida qolsa, u IKKI marta yozilardi va
+# `diff_soum` kabi bitta ayirish IKKI JOYDA yashardi — ya'ni ekran bilan
+# imzolanadigan varaq bir kun BOSHQA son ko'rsatardi. Nizoda so'raladigan
+# savol esa aynan shu: «qaysi raqamni aytdingiz?» (D-03, 05-14 darsi).
+#
+# ⚠ SAHIFALASH BU YERDA YO'Q: o'giruvchilar BUTUN davrni beradi va kesim
+#   JSON handlerida qo'llanadi. Eksport esa umuman kesilmaydi (§8.6).
+# ===========================================================================
+
+
+def _revenue_rows(rows: Sequence[report_repo.RevenueRow]) -> list[RevenueReportRow]:
+    """Kunlik tushum qatorlari — ⛔ `diff_soum` NING YAGONA hisoblanish joyi."""
+    return [
+        RevenueReportRow(
+            business_date=row.business_date,
+            collected_soum=row.collected_soum,
+            charged_soum=row.charged_soum,
+            diff_soum=row.collected_soum - row.charged_soum,
+        )
+        for row in rows
+    ]
+
+
+def _receivable_rows(rows: Sequence[report_repo.ReceivableRow]) -> list[ReceivablesReportRow]:
+    """Qarzdorlik qatorlari — ⛔ SATRDAN RO'YXATGA o'girish shu yerda.
+
+    Repo `string_agg` bilan `code_sort` TARTIBIDA yopishtiradi, ya'ni
+    bo'linish tartibni SAQLAYDI. `None` -> BO'SH RO'YXAT: «davrda
+    biriktirish yo'q» — nol NATIJA, yo'qlik emas.
+    """
+    return [
+        ReceivablesReportRow(
+            vendor_id=row.vendor_id,
+            vendor_name=row.vendor_name,
+            stall_codes=[] if row.stall_codes is None else row.stall_codes.split(", "),
+            outstanding_soum=row.outstanding_soum,
+            oldest_debt_date=row.oldest_unpaid_date,
+        )
+        for row in rows
+    ]
+
+
+def _archive_rows(rows: Sequence[report_repo.AnomalyArchiveRow]) -> list[AnomalyArchiveRowResponse]:
+    """Arxiv qatorlari — ⛔ MANBA `service_date` (PATTA kuni, Pitfall 14)."""
+    return [
+        AnomalyArchiveRowResponse(
+            business_date=row.service_date,
+            kind=row.kind,
+            stall_code=row.stall_code,
+            snapshot_id=row.evidence_snapshot_id,
+            case_status=row.case_status,
+        )
+        for row in rows
+    ]
+
+
+# ===========================================================================
 # 1. TUSHUM — `GET /revenue`
 # ===========================================================================
 
@@ -376,20 +458,13 @@ async def revenue_report(
         session, market_id=market_id, from_date=period_from, to_date=period_to
     )
     _guard_row_count(len(period.rows), settings.report_max_rows)
-    visible = period.rows[_page(len(period.rows), limit, offset)]
+    rows = _revenue_rows(period.rows)
+    visible = rows[_page(len(rows), limit, offset)]
 
     return RevenueReportResponse(
         from_date=period_from,
         to_date=period_to,
-        rows=[
-            RevenueReportRow(
-                business_date=row.business_date,
-                collected_soum=row.collected_soum,
-                charged_soum=row.charged_soum,
-                diff_soum=row.collected_soum - row.charged_soum,
-            )
-            for row in visible
-        ],
+        rows=visible,
         total_collected_soum=period.total_collected_soum,
         total_charged_soum=period.total_charged_soum,
         row_count=len(period.rows),
@@ -470,10 +545,11 @@ async def receivables_report(
     market_id = _market_id(principal)
     period_from, period_to = _report_period(from_date, to_date, settings.report_max_period_days)
 
-    rows = await report_repo.receivables(
+    found = await report_repo.receivables(
         session, market_id=market_id, from_date=period_from, to_date=period_to
     )
-    _guard_row_count(len(rows), settings.report_max_rows)
+    _guard_row_count(len(found), settings.report_max_rows)
+    rows = _receivable_rows(found)
     visible = rows[_page(len(rows), limit, offset)]
 
     # ⛔ NIYAT JAVOB QURILISHIDAN OLDIN TO'LDIRILADI: fon vazifasi
@@ -494,20 +570,7 @@ async def receivables_report(
     return ReceivablesReportResponse(
         from_date=period_from,
         to_date=period_to,
-        rows=[
-            ReceivablesReportRow(
-                vendor_id=row.vendor_id,
-                vendor_name=row.vendor_name,
-                # ⛔ SATRDAN RO'YXATGA SHU YERDA: repo `string_agg` bilan
-                #    `code_sort` TARTIBIDA yopishtiradi, ya'ni bo'linish
-                #    tartibni SAQLAYDI. `None` -> BO'SH RO'YXAT: «davrda
-                #    biriktirish yo'q» — nol NATIJA, yo'qlik emas.
-                stall_codes=[] if row.stall_codes is None else row.stall_codes.split(", "),
-                outstanding_soum=row.outstanding_soum,
-                oldest_debt_date=row.oldest_unpaid_date,
-            )
-            for row in visible
-        ],
+        rows=visible,
         total_outstanding_soum=sum(row.outstanding_soum for row in rows),
         row_count=len(rows),
         shown_count=len(visible),
@@ -556,27 +619,357 @@ async def anomaly_archive_report(
         session, market_id=market_id, from_date=period_from, to_date=period_to
     )
     _guard_row_count(len(archive.rows), settings.report_max_rows)
-    visible = archive.rows[_page(len(archive.rows), limit, offset)]
+    rows = _archive_rows(archive.rows)
+    visible = rows[_page(len(rows), limit, offset)]
 
     return AnomalyArchiveResponse(
         from_date=period_from,
         to_date=period_to,
-        rows=[
-            AnomalyArchiveRowResponse(
-                # ⛔ MANBA `service_date` — PATTA kuni. Nom klient
-                #    kontraktidan (`anomalyArchiveRowSchema.business_date`),
-                #    ma'no esa repodaniki va u `payments.business_date`
-                #    bilan ARALASHTIRILMAYDI (Pitfall 14).
-                business_date=row.service_date,
-                kind=row.kind,
-                stall_code=row.stall_code,
-                snapshot_id=row.evidence_snapshot_id,
-                case_status=row.case_status,
-            )
-            for row in visible
-        ],
+        rows=visible,
         unpaid_count=archive.unpaid_count,
         unregistered_count=archive.unregistered_count,
         row_count=len(archive.rows),
         shown_count=len(visible),
     )
+
+
+# ===========================================================================
+# 4. `.xlsx` EKSPORTI — TO'RT `GET` MARSHRUTI (08-12, RECON-04)
+#
+# =========================================================================
+# ⛔⛔ METOD `GET`, `POST` EMAS — VA SABAB DARVOZADA, DID'DA EMAS (R-3).
+#
+# `tests/tenancy/test_personal_data_coverage.py::get_routes()` FAQAT
+# `GET` marshrutlarini yuradi (D-09 O'QISH haqida). Eksport `POST`
+# bo'lganda `debtors.xlsx` na `BINARY_PERSONAL_ROUTES` ga, na
+# `NON_PERSONAL_BINARY_ROUTES` ga tushardi va YOPIQLIK testi ham uni
+# KO'RMASDI — ya'ni «har bayt-marshrut tasniflanadi» kafolati AYNAN eng
+# xavfli marshrutda, sotuvchi F.I.Sh. chiqadigan joyda teshilardi. Bu
+# «darvozani chetlash» yechimi bo'lardi va u shu rejada ATAYIN rad
+# etilgan.
+#
+# ⛔ `?format=xlsx` HAM EMAS: bitta marshrut ikki javob turini berardi
+#    va `response_model` YOLG'ON bo'lardi (bir shox JSON, ikkinchisi
+#    bayt). Klient ham buni bilib turadi va ikki yo'l quradi
+#    (`report-queries.ts::buildReportDataPath` ↔ `buildReportPath`).
+#
+# =========================================================================
+# ⛔⛔ FAYL NOMINI SERVER QURADI (D-06, UI-SPEC §12.3).
+#
+# Bozor nomi O'ZBEKCHA MATN: bo'sh joy, apostrof, qo'shtirnoq, kirill.
+# U `Content-Disposition` sarlavhasiga tushadi — HTTP protokolining bir
+# qismiga. Slug qoidasi ikki tilda IKKI MARTA yozilsa bir kun ajralib
+# ketardi (server `karmana_revenue_....xlsx`, klient
+# `Karmana-bozori_....xlsx`) va «qaysi biri hujjat?» savoli javobsiz
+# qolardi. Klient (`report-queries.ts::filenameFrom()`) nomni faqat
+# O'QIYDI.
+#
+# =========================================================================
+# ⛔⛔ TIL PROFILDAN, SO'ROV PARAMETRIDAN EMAS (D-06).
+#
+# `?locale=` qo'shilsa bitta haqiqat manbai ikkiga bo'linardi va bir
+# foydalanuvchi ekranda o'zbekcha, faylda ruscha hisobot olardi.
+# `_locale_of()` `imports.py` DAN IMPORT qilinadi — ikkinchi nusxa
+# yozilsa profil o'qish qoidasi (topilmasa uz-Latn) ikki joyda yashardi.
+# ===========================================================================
+
+_SLUG_FALLBACK: Final = "bozor"
+"""Bozor nomi butunlay ASCII'ga o'girilmaganda ishlatiladigan nom.
+
+⛔ BO'SH SLUG TAQIQ: nom `_revenue_2026-08-01_2026-08-07.xlsx` bo'lib
+   boshlanardi va ba'zi fayl menejerlari uni yashirin fayl deb
+   ko'rsatardi.
+"""
+
+_SLUG_MAX_LENGTH: Final = 40
+"""Slugning eng katta uzunligi — sarlavha cheksiz o'smasin.
+
+Ba'zi proksilar sarlavha uzunligini cheklaydi va uzun nom butun javobni
+rad etardi; bozor nomining birinchi 40 belgisi esa uni ajratish uchun
+yetarlidan ham ko'p.
+"""
+
+_CYRILLIC_TO_LATIN: Final[dict[str, str]] = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "ғ": "g", "д": "d", "е": "e",
+    "ё": "yo", "ж": "j", "з": "z", "и": "i", "й": "y", "к": "k", "қ": "q",
+    "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r", "с": "s",
+    "т": "t", "у": "u", "ў": "o", "ф": "f", "х": "x", "ҳ": "h", "ц": "ts",
+    "ч": "ch", "ш": "sh", "щ": "sh", "ъ": "", "ы": "i", "ь": "", "э": "e",
+    "ю": "yu", "я": "ya",
+}  # fmt: skip
+"""Kirill -> lotin jadvali — ⛔ BELGILAR TASHLAB YUBORILMAYDI.
+
+`unicodedata.normalize("NFKD")` kirillni ASCII'ga o'gira OLMAYDI (u
+faqat diakritikani ajratadi), ya'ni jadvalsiz «Кармана» butunlay
+yo'qolardi va HAR kirill nomli bozor AYNAN BIR XIL fayl nomini olardi:
+`bozor_revenue_....xlsx`. O'shanda ikki bozorning hujjatlari bitta
+papkada bir-birini ustiga yozardi.
+
+⚠ Jadval O'ZBEK kirillicha alifbosi uchun (`ғ`, `қ`, `ў`, `ҳ` bor).
+  Ro'yxatda yo'q belgi keyingi qadamda `-` ga aylanadi, ya'ni nom
+  baribir ASCII bo'lib qoladi.
+"""
+
+
+def _ascii_slug(name: str) -> str:
+    """Bozor nomini ASCII slug'ga aylantiradi — ⛔ YAGONA joyda (D-06).
+
+    Ketma-ketlik: kichik harf -> kirilldan lotinga -> NFKD (diakritika
+    tushadi) -> ASCII'dan tashqarisi tashlanadi -> `[a-z0-9]` dan
+    boshqasi `-` ga -> uzunlik cheklanadi.
+
+    ⛔ `'` (apostrof) ALOHIDA e'tibor talab qiladi: o'zbek lotin
+       alifbosida u HARFNING QISMI (`o'`, `g'`) va bu yerda `-` ga
+       aylanadi — ya'ni «Do'stlik» `do-stlik` bo'ladi. Bu ONGLI: nom
+       INSON UCHUN mo'ljallangan yorliq, IDENTIFIKATOR emas
+       (identifikator — davr va hisobot turi).
+    """
+    lowered = name.casefold()
+    latin = "".join(_CYRILLIC_TO_LATIN.get(char, char) for char in lowered)
+    folded = unicodedata.normalize("NFKD", latin).encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", folded).strip("-")
+    return slug[:_SLUG_MAX_LENGTH].strip("-") or _SLUG_FALLBACK
+
+
+def _export_filename(market_name: str, kind: str, period: xlsx_export.ReportPeriod) -> str:
+    """`{bozor-slug}_{tur}_{from}_{to}.xlsx` — ⛔ TO'LIQ ASCII.
+
+    Davr NOMDA ham bor: bir nechta hisobot bitta papkaga tushganda ular
+    faqat shu bilan ajraladi (UI-SPEC §1.2 qoida 2). Sanalar ISO, ya'ni
+    fayl menejerida saralash XRONOLOGIK bo'ladi.
+    """
+    return (
+        f"{_ascii_slug(market_name)}_{kind}"
+        f"_{period.from_date.isoformat()}_{period.to_date.isoformat()}{XLSX_SUFFIX}"
+    )
+
+
+async def _export_head(
+    session: AsyncSession,
+    principal: Principal,
+    *,
+    kind: str,
+    from_date: date,
+    to_date: date,
+    max_days: int,
+) -> tuple[UUID, xlsx_export.ReportPeriod, str, str]:
+    """To'rtala eksportning UMUMIY boshi — bozor, davr, til, fayl nomi.
+
+    Returns:
+        `(market_id, period, locale, filename)`.
+
+    ⚠ Nusxa YOZILMAYDI: to'rt marshrutda takrorlangan «bozorni ol,
+      davrni yech, tilni oq, nomni qur» ketma-ketligi bir kun uchtasida
+      yangilanib, to'rtinchisida qolib ketardi.
+
+    ⚠ Bozor qatori topilmasa (`None`) nom `_SLUG_FALLBACK` ga tushadi va
+      ISTISNO ko'tarilmaydi: bu holat RLS konteksti bilan ta'minlangan
+      so'rovda amalda mumkin emas, lekin u yerda 500 berish hujjatni
+      butunlay to'sardi — sababi esa faqat NOMGA tegishli bo'lardi.
+    """
+    market_id = _market_id(principal)
+    period_from, period_to = _report_period(from_date, to_date, max_days)
+    period = xlsx_export.ReportPeriod(from_date=period_from, to_date=period_to)
+
+    locale = await _locale_of(session, principal)
+    market = await MarketRepository(session).current_market()
+
+    return (
+        market_id,
+        period,
+        locale,
+        _export_filename("" if market is None else market.name, kind, period),
+    )
+
+
+ReceivablesExportIntentDep = Annotated[
+    AuditReadIntent,
+    Depends(audit_read(TABLE_VENDORS, reason="report_receivables_export")),
+]
+"""⛔ EKSPORTNING `reason` I JSON NIKIDAN FARQ QILADI — VA BU ONGLI.
+
+`report_receivables` — «ekranda ko'rdi», `report_receivables_export` —
+«FAYLNI OLDI». Ikkinchisi jiddiyroq hodisa: fayl tizimdan CHIQIB
+ketadi va u boshqa odamning pochtasida, USB'sida, chop etilgan
+varaqda yashashda davom etadi. Bir xil `reason` bilan jurnalni
+o'qiyotgan odam bu farqni ko'rmasdi — `vendors.py:105-113` da
+o'rnatilgan qoidaning aynan takrori.
+
+⛔ BITTA SO'ROV = BITTA YOZUV: eksport butun davrni yozadi, ya'ni
+   «har sotuvchi uchun bitta yozuv» xatosi bu yerda JSON dagidan ham
+   shovqinliroq bo'lardi.
+"""
+
+
+@router.get("/revenue.xlsx", response_class=StreamingResponse)
+async def revenue_export(
+    principal: ReportViewerDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    from_date: FromDateDep,
+    to_date: ToDateDep,
+) -> StreamingResponse:
+    """Davr tushumi `.xlsx` bo'lib — ⛔ SAHIFALANMAYDI (§8.6).
+
+    `limit`/`offset` parametrlari ATAYIN YO'Q: hujjat BUTUN davrni
+    yozadi va chegaraga urilsa `report_too_large` bilan RAD ETILADI.
+    Kesilgan faylni jimgina berish TAQIQ — chop etilgan varaqdan
+    tushib qolgan qatorlarni hech kim sezmasdi.
+    """
+    market_id, period, locale, filename = await _export_head(
+        session,
+        principal,
+        kind="revenue",
+        from_date=from_date,
+        to_date=to_date,
+        max_days=settings.report_max_period_days,
+    )
+
+    found = await report_repo.revenue_by_day(
+        session, market_id=market_id, from_date=period.from_date, to_date=period.to_date
+    )
+    _guard_row_count(len(found.rows), settings.report_max_rows)
+
+    payload = xlsx_export.build_revenue_workbook(_revenue_rows(found.rows), locale, period)
+    return _xlsx_response(payload, filename)
+
+
+@router.get("/debtors.xlsx", response_class=StreamingResponse)
+async def receivables_export(
+    principal: ReportViewerDep,
+    vendor_guard: VendorFieldGuardDep,
+    intent: ReceivablesExportIntentDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    from_date: FromDateDep,
+    to_date: ToDateDep,
+) -> StreamingResponse:
+    """Qarzdorlik reestri `.xlsx` — ⛔ SHAXSIY HUJJAT, AUDIT MAJBURIY.
+
+    =======================================================================
+    ⛔⛔ E'LON TARTIBI MAJBURIY VA U BEZAK EMAS (JSON marshrutidagi
+        bilan AYNI): huquq -> huquq -> niyat -> ma'lumot. FastAPI
+        dependency'larni shu tartibda hal qiladi, ya'ni 403 olgan so'rov
+        `audit_read` gacha YETIB KELMAYDI. Teskari tartibda jurnalda
+        «kassir qarzdorlik hujjatini yuklab oldi» degan YOLG'ON DALIL
+        paydo bo'lardi — hech nima berilmagan bo'lsa ham (T-02-71).
+
+    ⛔ JAVOBNING MODELI YO'Q, ya'ni `PERSONAL_FIELDS` darvozasi bu
+       marshrutni HECH QACHON topa olmaydi. Shuning uchun u
+       `test_personal_data_coverage.py::BINARY_PERSONAL_ROUTES` ga
+       QO'LDA yoziladi va o'sha yerdan `audit_read` + huquq talabi
+       MEXANIK ravishda qaytadi.
+    =======================================================================
+    """
+    market_id, period, locale, filename = await _export_head(
+        session,
+        principal,
+        kind="debtors",
+        from_date=from_date,
+        to_date=to_date,
+        max_days=settings.report_max_period_days,
+    )
+
+    found = await report_repo.receivables(
+        session, market_id=market_id, from_date=period.from_date, to_date=period.to_date
+    )
+    _guard_row_count(len(found), settings.report_max_rows)
+
+    # ⛔ NIYAT HUJJAT QURILISHIDAN OLDIN TO'LDIRILADI (JSON marshrutidagi
+    #    bilan AYNI sabab): bo'sh niyat jurnalda «kimdir nimadir o'qidi»
+    #    degan foydasiz qator qoldirardi.
+    intent.filters = {
+        "from_date": period.from_date.isoformat(),
+        "to_date": period.to_date.isoformat(),
+        "format": "xlsx",
+    }
+    intent.result_count = len(found)
+
+    payload = xlsx_export.build_receivables_workbook(_receivable_rows(found), locale, period)
+    return _xlsx_response(payload, filename)
+
+
+@router.get("/anomalies.xlsx", response_class=StreamingResponse)
+async def anomaly_archive_export(
+    principal: ReportViewerDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    from_date: FromDateDep,
+    to_date: ToDateDep,
+) -> StreamingResponse:
+    """Nomuvofiqlik arxivi `.xlsx` — ⛔ DALIL IDENTIFIKATOR, KADR EMAS.
+
+    ⛔ `audit_read` BU MARSHRUTDA YO'Q va bu ONGLI (JSON juftidagi bilan
+       AYNI sabab): javobda shaxsiy maydon yo'q — rasta KODI, sana,
+       sinf nomi, case holati va kadr IDENTIFIKATORI.
+
+    ⛔ KADR BAYTI, OMBOR KALITI VA IMZOLANGAN HAVOLA FAYLGA TUSHMAYDI
+       (07 D-03, T-06-81): u yerda birorta huquq darvozasi ishlamaydi.
+    """
+    market_id, period, locale, filename = await _export_head(
+        session,
+        principal,
+        kind="anomalies",
+        from_date=from_date,
+        to_date=to_date,
+        max_days=settings.report_max_period_days,
+    )
+
+    archive = await report_repo.anomaly_archive(
+        session, market_id=market_id, from_date=period.from_date, to_date=period.to_date
+    )
+    _guard_row_count(len(archive.rows), settings.report_max_rows)
+
+    payload = xlsx_export.build_discrepancies_workbook(_archive_rows(archive.rows), locale, period)
+    return _xlsx_response(payload, filename)
+
+
+@router.get("/accuracy.xlsx", response_class=StreamingResponse)
+async def accuracy_export(
+    principal: ReportViewerDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    from_date: FromDateDep,
+    to_date: ToDateDep,
+) -> StreamingResponse:
+    """AI aniqlik hisoboti `.xlsx` — ⛔ MAVJUD XIZMATDAN, YANGI HISOBSIZ.
+
+    =======================================================================
+    ⛔⛔ D-09: BU YERDA HISOB-KITOB YOZILMAYDI.
+
+    Manba — `accuracy_report()`, ya'ni `GET /occupancy/accuracy` (05-12)
+    ishlatadigan AYNI sof funksiya va AYNI repozitoriy so'rovi. Ikkinchi
+    hisob arifmetik jihatdan to'g'ri bo'lib turib BOSHQA savolga javob
+    berardi (05-14 darsi) va «5,4 % mi, 3,8 % mi?» savoli aynan nizo
+    paytida so'ralardi.
+
+    ⚠ IKKI FILTR (`purpose='eval'`, `queue_kind='blind_audit'`) SHU
+      YERDA YOZILMAYDI — ular `accuracy_report()` ning ichida
+      (`occupancy.py::occupancy_accuracy()` bilan AYNI qaror).
+    =======================================================================
+
+    ⛔ `/reports/accuracy` (JSON) MARSHRUTI QO'SHILMAYDI: aniqlikning
+       JSON yuzasi ALLAQACHON `GET /occupancy/accuracy` da yashaydi va
+       ikkinchisi ikkinchi haqiqat manbai bo'lardi. Klient ham shuni
+       biladi — `report-queries.ts` `accuracy` uchun `occupancy-queries`
+       kalitini ishlatadi.
+
+    ⚠ DAVR PARAMETRLARI MAJBURIY va `_report_period()` qoidasida —
+      `/occupancy/accuracy` dagi IXTIYORIY `from`/`to` dan FARQLI.
+      Standart davrli hujjat imzolanadigan varaqda «qaysi davr?»
+      savolini javobsiz qoldirardi.
+    """
+    market_id, period, locale, filename = await _export_head(
+        session,
+        principal,
+        kind="accuracy",
+        from_date=from_date,
+        to_date=to_date,
+        max_days=settings.report_max_period_days,
+    )
+
+    repo = OccupancyRepository(session, market_id)
+    report = accuracy_report(await repo.accuracy_rows(period.from_date, period.to_date))
+
+    payload = xlsx_export.build_accuracy_workbook(report, locale, period)
+    return _xlsx_response(payload, filename)

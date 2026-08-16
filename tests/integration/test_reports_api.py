@@ -49,6 +49,8 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
+from app.services import xlsx_export
+from app.services.xlsx_reader import read_rows
 from fixtures.admin_api import session_headers
 from fixtures.auth_api import audit_rows
 from fixtures.billing_domain import (
@@ -1070,3 +1072,400 @@ async def test_the_offset_walks_the_period_without_moving_the_totals(
     assert first.json()["rows"][0]["vendor_id"] != second.json()["rows"][0]["vendor_id"]
     assert second.json()["row_count"] == 2
     assert second.json()["total_outstanding_soum"] == 2 * TARIFF_SOUM
+
+
+# ===========================================================================
+# 8. `.xlsx` EKSPORTI — TO'RT `GET` MARSHRUTI (08-12, RECON-04)
+#
+# ⛔⛔ METOD `GET` VA U MUZOKARA QILINMAYDI (R-3).
+#
+# `POST` bo'lganda marshrut bayt-tasnif darvozasidan JIMGINA chetlab
+# o'tardi: `test_personal_data_coverage.py::get_routes()` FAQAT `GET` ni
+# yuradi, ya'ni `POST /reports/debtors.xlsx` na `BINARY_PERSONAL_ROUTES`
+# ga, na `NON_PERSONAL_BINARY_ROUTES` ga tushardi va yopiqlik testi ham
+# uni KO'RMASDI — auditsiz shaxsiy eksport yashil CI ostida yashardi.
+#
+# ⛔ `?format=xlsx` HAM EMAS: bitta marshrut ikki javob turini berardi va
+#    `response_model` yolg'on bo'lardi (bir shox JSON, ikkinchisi bayt).
+# ===========================================================================
+
+REVENUE_XLSX_URL = f"{REVENUE_URL}.xlsx"
+DEBTORS_XLSX_URL = f"{DEBTORS_URL}.xlsx"
+ANOMALIES_XLSX_URL = f"{ANOMALIES_URL}.xlsx"
+ACCURACY_XLSX_URL = "/api/v1/reports/accuracy.xlsx"
+
+EXPORT_URLS = (REVENUE_XLSX_URL, DEBTORS_XLSX_URL, ANOMALIES_XLSX_URL, ACCURACY_XLSX_URL)
+EXPORT_IDS = ("revenue", "debtors", "anomalies", "accuracy")
+"""⛔ NOMLAR KLIENT KONTRAKTIDAN — `/receivables.xlsx` / `/discrepancies.xlsx` EMAS.
+
+08-12 rejasi o'sha ikki nomni yozgan edi, lekin
+`report-queries.ts::buildReportPath()` yo'lni AYNAN `REPORT_KINDS`
+a'zosidan quradi: `${REPORTS_PATH}/${kind}.xlsx`. Ya'ni jo'natilgan
+klient `/debtors.xlsx` va `/anomalies.xlsx` ga boradi — bu 08-07 da
+JSON yarmi uchun qabul qilingan qarorning AYNAN takrori (server
+klientni kuzatadi).
+"""
+
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+"""⚠ NUSXA ONGLI: `app.api.v1.imports` dan import qilish integratsiya
+to'plamini marshrut modulining ICHKI nomiga bog'lardi. Ajralib qolish
+darhol ko'rinadi — javobning `content-type` i shu satr bilan
+solishtiriladi.
+"""
+
+EXPORT_COLUMNS = {"revenue": 4, "debtors": 4, "anomalies": 5, "accuracy": 4}
+
+CYRILLIC_MARKET_NAME = "Кармана «Марказий» бозори"
+"""⛔ T-08-52 NING KIRISH HOLATI: kirill, bo'sh joy va qo'shtirnoq.
+
+Uchalasi ham `Content-Disposition` sarlavhasida XAVFSIZ EMAS va ular
+bozor nomida MUTLAQO ODATIY (Karmana pilotining o'zi shunday nomlanishi
+mumkin). Sarlavha esa HTTP protokolining bir qismi — u yerdagi
+qo'shtirnoq nomni «yopib» qo'yardi.
+"""
+
+_RENAME_MARKET = "UPDATE markets SET name = %s WHERE id = %s"
+
+
+def _export_header_row(kind: str, locale: str) -> tuple[str, ...]:
+    """Hujjatning SARLAVHA qatori — `xlsx_export` matnlaridan HOSILA.
+
+    ⛔ Satrlar test faylida TAKRORLANMAYDI: nusxa bir kun ajralib
+       ketardi va o'shanda test hujjatni emas, o'zining eski nusxasini
+       o'lchardi.
+    """
+    texts = xlsx_export.report_texts(locale)
+    if kind == "revenue":
+        return (
+            texts["revenue_date"],
+            texts["revenue_paid"],
+            texts["revenue_charged"],
+            texts["revenue_diff"],
+        )
+    if kind == "debtors":
+        return (
+            texts["receivables_vendor"],
+            texts["receivables_stalls"],
+            texts["receivables_debt"],
+            texts["receivables_oldest"],
+        )
+    if kind == "anomalies":
+        return (
+            texts["discrepancies_date"],
+            texts["discrepancies_kind"],
+            texts["discrepancies_stall"],
+            texts["discrepancies_status"],
+            texts["discrepancies_evidence"],
+        )
+    return (
+        texts["accuracy_metric"],
+        texts["accuracy_value"],
+        texts["accuracy_lower"],
+        texts["accuracy_upper"],
+    )
+
+
+def _disposition_filename(response: httpx.Response) -> str:
+    """`attachment; filename="..."` dan nomni ajratadi — SODDA, ATAYIN.
+
+    Server `filename*=UTF-8''` shaklini UMUMAN ishlatmaydi va bu qaror
+    o'lchanadi: nom ASCII bo'lgani uchun kengaytirilgan shakl KERAK
+    EMAS. Agar u paydo bo'lsa, bu yordamchi nomni topa olmaydi va test
+    qizaradi — ya'ni «ASCII» da'vosi shu yerda ham ushlanadi.
+    """
+    header = response.headers["content-disposition"]
+    assert header.startswith('attachment; filename="'), header
+    return header.removeprefix('attachment; filename="').removesuffix('"')
+
+
+@pytest.fixture
+def cyrillic_market(sync_owner_conn: Connection[TupleRow], reports: Env) -> Iterator[None]:
+    """Bozor nomini KIRILL qiladi va testdan keyin tiklaydi.
+
+    ⚠ Tiklash MAJBURIY: `two_markets` seed'i nomni boshqa testlarda ham
+      ishlatadi va tiklanmagan qiymat ular uchun sizib o'tardi.
+    """
+    original = sync_owner_conn.execute(
+        "SELECT name FROM markets WHERE id = %s", (str(reports.market_id),)
+    ).fetchone()
+    assert original is not None, "nazorat: bozor qatori topilmadi"
+
+    sync_owner_conn.execute(_RENAME_MARKET, (CYRILLIC_MARKET_NAME, str(reports.market_id)))
+    try:
+        yield
+    finally:
+        sync_owner_conn.execute(_RENAME_MARKET, (original[0], str(reports.market_id)))
+
+
+@pytest.mark.parametrize(
+    ("url", "kind"), list(zip(EXPORT_URLS, EXPORT_IDS, strict=True)), ids=EXPORT_IDS
+)
+async def test_every_export_returns_a_real_xlsx_document(
+    api_client: httpx.AsyncClient,
+    reports: Env,
+    director_headers: dict[str, str],
+    url: str,
+    kind: str,
+) -> None:
+    """(a) + (e) ⛔ `200` MEZON EMAS — BAYTLAR QAYTA O'QILADI.
+
+    =======================================================================
+    ⛔⛔ NEGA STATUS KODI YETARLI EMAS.
+
+    `report-queries.ts` modul docstringi buni o'lchagan holat sifatida
+    yozadi: brauzer 401 javob TANASINI ham `revenue.xlsx` nomi bilan
+    diskka saqlaydi. Foydalanuvchi «fayl yuklandi» deb o'ylaydi, Excel
+    «fayl buzilgan» deydi va xato HECH QAYERDA ko'rinmaydi. Ya'ni
+    `200` + `content-type` juftligi «bu haqiqatan hujjatmi?» degan
+    savolga javob BERMAYDI.
+
+    Shuning uchun baytlar MAHSULOTNING O'Z o'quvchisidan o'tkaziladi
+    (`xlsx_reader.read_rows` — hajm -> ZIP -> parse -> varaq/qator
+    ketma-ketligi) va SARLAVHA QATORI o'qiladi.
+    =======================================================================
+
+    ⚠ 1-qator DAVR, ya'ni `read_rows` tashlab yuboradigan qator aynan
+      o'sha; qaytgan BIRINCHI qator — hujjatning sarlavhasi.
+    """
+    response = await api_client.get(url, params=_period(), headers=director_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == XLSX_MEDIA_TYPE
+
+    rows = read_rows(response.content, expected_columns=EXPORT_COLUMNS[kind])
+
+    assert rows, "hujjatda birorta qator yo'q — sarlavha ham yozilmagan"
+    assert rows[0].values in {
+        _export_header_row(kind, locale) for locale in ("uz-Latn", "uz-Cyrl", "ru")
+    }, rows[0].values
+
+
+@pytest.mark.parametrize("url", EXPORT_URLS, ids=EXPORT_IDS)
+async def test_the_server_names_the_export_file_in_ascii(
+    api_client: httpx.AsyncClient,
+    reports: Env,
+    director_headers: dict[str, str],
+    url: str,
+) -> None:
+    """(b) Fayl nomini SERVER quradi va u ASCII + davrni o'z ichiga oladi (D-06).
+
+    =======================================================================
+    ⛔ NOMNING EGASI — SERVER, KLIENT FAQAT O'QIYDI.
+
+    `report-queries.ts::filenameFrom()` sarlavhadan nomni O'QIYDI va
+    QURMAYDI. Slug qoidasi ikki tilda ikki marta yozilsa bir kun
+    ajralib ketardi: server `karmana_revenue_....xlsx` deb, klient
+    `Karmana-bozori_....xlsx` deb nomlardi va «qaysi biri hujjat?»
+    savoli javobsiz qolardi.
+    =======================================================================
+
+    ⛔ DAVR NOMDA HAM BOR: bir nechta hisobot bitta papkaga tushganda
+       ular faqat shu bilan ajraladi (§1.2 qoida 2).
+    """
+    period = _period()
+    response = await api_client.get(url, params=period, headers=director_headers)
+
+    assert response.status_code == 200, response.text
+
+    filename = _disposition_filename(response)
+
+    assert filename.isascii(), filename
+    assert filename.endswith(".xlsx"), filename
+    assert period["from"] in filename, filename
+    assert period["to"] in filename, filename
+
+
+@pytest.mark.usefixtures("cyrillic_market")
+async def test_the_export_filename_survives_a_cyrillic_market_name(
+    api_client: httpx.AsyncClient, reports: Env, director_headers: dict[str, str]
+) -> None:
+    """⛔ T-08-52 — KIRILL nomli bozor sarlavhani BUZMAYDI.
+
+    =======================================================================
+    Bozor nomi FOYDALANUVCHI KIRITGAN matn va u `Content-Disposition`
+    sarlavhasiga tushadi. Sarlavha — HTTP protokolining bir qismi:
+    qo'shtirnoq nomni «yopib» qo'yardi, kirill esa eski proksilarni
+    buzardi (`imports.py::_xlsx_response()` da o'rnatilgan qoida).
+
+    ⛔ NOM YO'QOLMAYDI HAM: kirill LOTINGA o'giriladi, ya'ni «Кармана»
+       `karmana` bo'lib qoladi. Belgilarni shunchaki TASHLAB YUBORISH
+       barcha kirill nomli bozorlarga BIR XIL fayl nomini berardi.
+    =======================================================================
+    """
+    response = await api_client.get(REVENUE_XLSX_URL, params=_period(), headers=director_headers)
+
+    assert response.status_code == 200, response.text
+
+    filename = _disposition_filename(response)
+
+    assert filename.isascii(), filename
+    assert '"' not in filename, filename
+    assert " " not in filename, filename
+    assert filename.startswith("karmana-markaziy-bozori_"), filename
+
+
+@pytest.mark.parametrize("url", EXPORT_URLS, ids=EXPORT_IDS)
+async def test_no_role_without_report_view_can_export(
+    api_client: httpx.AsyncClient,
+    reports: Env,
+    cashier_headers: dict[str, str],
+    inspector_headers: dict[str, str],
+    platform_admin_headers: dict[str, str],
+    url: str,
+) -> None:
+    """(c) `report_view` siz uchala rol ham 403 — ⛔ EKSPORTDA HAM.
+
+    ⛔ EKSPORT HUQUQI JSON HUQUQIDAN AJRALMASLIGI SHART: ajralganda
+       kassir ekranda hech nima ko'rmay turib, faylni yuklab olardi va
+       hujjat butun bozorning qarzdorlari bilan tashqariga chiqardi.
+
+    ⛔ `platform_admin` HAM (Pitfall 11 varianti A, UI-SPEC O-07) va
+       uning sessiyasida bozor TANLANGAN — ya'ni 403 aynan HUQUQDAN
+       keladi, `market_not_selected` dan emas.
+
+    ⚠ UCH SESSIYA FIXTURE ARGUMENTI SIFATIDA OLINADI,
+      `request.getfixturevalue()` BILAN EMAS — o'lchandi: sessiya
+      fixture'lari ASYNC va `getfixturevalue()` ularni ishlab turgan
+      hodisa siklidan qayta yugurtirishga urinib
+      `RuntimeError: Runner.run() cannot be called from a running event
+      loop` beradi. Ya'ni «qaysi rol» ni parametrizatsiya qilish emas,
+      ARGUMENT qilish yagona ishlaydigan shakl.
+    """
+    for role, headers in (
+        ("cashier", cashier_headers),
+        ("inspector", inspector_headers),
+        ("platform-admin", platform_admin_headers),
+    ):
+        response = await api_client.get(url, params=_period(), headers=headers)
+
+        assert response.status_code == 403, f"{role} -> {url}: {response.text}"
+
+
+async def test_one_debtors_export_writes_exactly_one_audit_row(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    reports: Env,
+    director_headers: dict[str, str],
+    debtors: DebtorFactory,
+) -> None:
+    """(d) ⛔ SHAXSIY EKSPORT AUDIT YOZADI — VA U AYNAN BITTA.
+
+    =======================================================================
+    ⛔ `reason` JSON NIKIDAN FARQ QILADI: `report_receivables_export`.
+
+    Jurnalni o'qiyotgan odam «kim ekranda ko'rdi» bilan «kim FAYLNI
+    OLDI» ni ajrata olishi kerak: fayl tizimdan CHIQIB ketadi va u
+    boshqa odamning pochtasida yashashda davom etadi. Bir xil `reason`
+    bilan bu farq yo'qolardi — `vendors.py:105-113` da o'rnatilgan
+    qoidaning aynan takrori.
+    =======================================================================
+
+    ⚠ Sanoq NATIJAGA BOG'LIQ EMAS: eksport butun davrni yozadi, ya'ni
+      «har sotuvchi uchun bitta yozuv» xatosi bu yerda JSON dagidan ham
+      shovqinliroq bo'lardi.
+    """
+    debtors(3)
+    before = await _vendor_read_count(
+        tenant_session, reports.market_id, reason="report_receivables_export"
+    )
+
+    response = await api_client.get(
+        DEBTORS_XLSX_URL, params=_period(days=4), headers=director_headers
+    )
+
+    assert response.status_code == 200, response.text
+
+    after = await _vendor_read_count(
+        tenant_session, reports.market_id, reason="report_receivables_export"
+    )
+
+    assert after - before == 1, (
+        f"qarzdorlik eksporti {after - before} ta audit qatori yozdi — kutilgan AYNAN 1"
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [REVENUE_XLSX_URL, ANOMALIES_XLSX_URL, ACCURACY_XLSX_URL],
+    ids=["revenue", "anomalies", "accuracy"],
+)
+async def test_the_moneyless_exports_leave_no_vendor_read_trace(
+    api_client: httpx.AsyncClient,
+    tenant_session: TenantSessionFactory,
+    reports: Env,
+    director_headers: dict[str, str],
+    url: str,
+) -> None:
+    """NAZORAT: audit AYNAN qarzdorlik eksportida bor, BOSHQA JOYDA yo'q.
+
+    Usiz yuqoridagi da'vo «hamma eksportga audit yopishtirilgan»
+    holatda ham yashil bo'lardi va jurnal har tushum faylida qator
+    olardi (`audit.py` da ATAYIN rad etilgan «blanket» holati).
+    """
+    reasons = ("report_receivables", "report_receivables_export")
+    before = [
+        await _vendor_read_count(tenant_session, reports.market_id, reason=reason)
+        for reason in reasons
+    ]
+
+    response = await api_client.get(url, params=_period(), headers=director_headers)
+    assert response.status_code == 200, response.text
+
+    after = [
+        await _vendor_read_count(tenant_session, reports.market_id, reason=reason)
+        for reason in reasons
+    ]
+
+    assert after == before, f"{url} sotuvchi o'qish auditini yozdi"
+
+
+@pytest.mark.parametrize("url", EXPORT_URLS, ids=EXPORT_IDS)
+async def test_the_export_rejects_a_period_that_reaches_today(
+    api_client: httpx.AsyncClient, reports: Env, director_headers: dict[str, str], url: str
+) -> None:
+    """Eksport ham davr chegarasini MAJBURLAYDI — ⛔ va bu yerda MUHIMROQ.
+
+    Ekranda ko'rilgan kam ko'rsatilgan raqam tuzatiladi; FAYLGA
+    tushgani esa imzolanadi va tarqaladi (UI-SPEC §1.2 qoida 1). Ya'ni
+    JSON da 422 berib, eksportda jimgina bugungi kunni qamrash aynan
+    eng qimmat shox bo'lardi.
+    """
+    today = business_today()
+    params = {"from": (today - timedelta(days=3)).isoformat(), "to": today.isoformat()}
+
+    response = await api_client.get(url, params=params, headers=director_headers)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "report_period_future", response.text
+
+
+async def test_the_accuracy_export_reads_the_existing_accuracy_service(
+    api_client: httpx.AsyncClient, reports: Env, director_headers: dict[str, str]
+) -> None:
+    """⛔ D-09 — ANIQLIK EKSPORTI YANGI HISOB-KITOB YOZMAYDI.
+
+    =======================================================================
+    Da'vo MEXANIK o'lchanadi: `GET /occupancy/accuracy` javobidagi `n`
+    bilan fayldagi «matritsaga tushgan javoblar» qatori TENG bo'lishi
+    shart. Ikkinchi hisob-kitob yozilganda ular bir kun ajralardi va
+    «qaysi son to'g'ri?» savoli aynan nizo paytida so'ralardi (05-14
+    darsi: klientdagi qayta hisob xato bo'lib emas, IKKINCHI JAVOB
+    bo'lib chiqadi).
+    =======================================================================
+    """
+    period = _period()
+
+    live = await api_client.get(
+        "/api/v1/occupancy/accuracy", params=period, headers=director_headers
+    )
+    exported = await api_client.get(ACCURACY_XLSX_URL, params=period, headers=director_headers)
+
+    assert live.status_code == 200, live.text
+    assert exported.status_code == 200, exported.text
+
+    rows = read_rows(exported.content, expected_columns=4)
+    labelled = {row.values[0]: row.values[1] for row in rows}
+    texts = xlsx_export.report_texts("uz-Latn")
+
+    assert labelled[texts["accuracy_n"]] == str(live.json()["n"]), labelled
+    assert texts["accuracy_disclaimer"] in labelled, "AI-02 holati jumlasi hujjatda yo'q"

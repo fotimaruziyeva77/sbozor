@@ -591,26 +591,45 @@ to'rtinchi hisobot marshrutiga ism qo'shish ONGLI qaror bo'lib qoladi.
 """
 
 REPORTS_ROUTES = (
+    "/api/v1/reports/accuracy.xlsx",
     "/api/v1/reports/anomalies",
+    "/api/v1/reports/anomalies.xlsx",
     "/api/v1/reports/debtors",
+    "/api/v1/reports/debtors.xlsx",
     "/api/v1/reports/revenue",
+    "/api/v1/reports/revenue.xlsx",
 )
-"""Uch YO'L, uch MARSHRUT — har birida FAQAT `GET`.
+"""Yetti YO'L, yetti MARSHRUT — har birida FAQAT `GET`.
 
 ⛔ NOMLAR KLIENT KONTRAKTIDAN (`REPORT_KINDS`, 08-03; UI-SPEC §12.1,
    G-43a): `report-queries.ts::buildReportDataPath()` yo'lni AYNAN
-   reyestr a'zosidan quradi. 08-07 rejasi `/receivables` va
-   `/discrepancies` degan edi — sabab va tanlov
-   `app/api/v1/reports.py` modul docstringining 2-bandida.
+   reyestr a'zosidan quradi, `buildReportPath()` esa o'sha a'zoga
+   `.xlsx` qo'shadi. 08-07 rejasi `/receivables` va `/discrepancies`,
+   08-12 rejasi esa `/receivables.xlsx` va `/discrepancies.xlsx` degan
+   edi — sabab va tanlov `app/api/v1/reports.py` modul docstringining
+   2-bandida.
 
-⛔ `POST`/`PATCH`/`DELETE` UMUMAN YO'Q: hisobot HOSILA (D-03) va uni
+⛔⛔ TO'RT EKSPORT MARSHRUTI HAM `GET` — VA BU DARVOZA MASALASI (R-3).
+
+`POST` qilingan eksport `test_personal_data_coverage.py::get_routes()`
+dan (u FAQAT `GET` ni yuradi) JIMGINA chiqib ketardi, ya'ni
+`debtors.xlsx` na shaxsiy, na nomashaxsiy ro'yxatga tushardi va
+yopiqlik testi ham uni ko'rmasdi. Ya'ni «bayt-marshrut tasniflanmay
+qolmaydi» kafolati AYNAN eng xavfli marshrutda teshilardi.
+
+⛔ `PATCH`/`DELETE` UMUMAN YO'Q: hisobot HOSILA (D-03) va uni
    «tuzatish» mumkin bo'lsa u ikkinchi haqiqat manbaiga aylanardi.
    Quyidagi to'plam tengligi buni AYNAN o'lchaydi.
 
+⚠ `/accuracy` JSON marshruti bu ro'yxatda YO'Q va bu KUTILGAN: aniqlik
+  hisobining JSON yuzasi `GET /occupancy/accuracy` da yashaydi (05-12)
+  va eksport AYNAN o'sha xizmatni chaqiradi. Ikkinchi JSON marshruti
+  ikkinchi haqiqat manbai bo'lardi.
+
 ⚠ SON TEST NOMIDA YOZILGAN va u har safar QO'LDA yangilanadi (R-11
   darsi: chetlash JIMGINA, ONGLI yangilash esa NOMDA ko'rinadi).
-  08-12 to'rtta `.xlsx` marshrutini, 08-14/08-16 esa solishtiruvni
-  qo'shadi — o'shanda bu test nomi ham, ro'yxat ham o'zgaradi.
+  08-14/08-16 solishtiruvni qo'shadi — o'shanda bu test nomi ham,
+  ro'yxat ham yana o'zgaradi.
 """
 
 
@@ -621,12 +640,17 @@ def _reports_paths() -> list[str]:
     )
 
 
-def test_the_reports_surface_is_exactly_three_routes() -> None:
+def test_the_reports_surface_is_exactly_seven_routes() -> None:
     """DARVOZANING NAZORATI — pastdagi testlar BO'SH to'plamda yashil bo'lmaydi.
 
-    ⛔ To'plam TENGLIGI bilan (D-31), «kamida uchtasi» bilan EMAS:
-       to'rtinchi marshrut qo'shilishi ONGLI qaror va u shu yerda
+    ⛔ To'plam TENGLIGI bilan (D-31), «kamida yettitasi» bilan EMAS:
+       sakkizinchi marshrut qo'shilishi ONGLI qaror va u shu yerda
        ko'rinishi kerak — ayniqsa u YOZUV metodi bo'lsa.
+
+    ⚠ SON 3 DAN 7 GA ONGLI RAVISHDA OSHIRILDI (08-12): to'rt `.xlsx`
+      eksporti qo'shildi va ularning HAMMASI `GET`. Metodlar to'plami
+      ham shu yerda qulflanadi — `POST` bo'lgan eksport bayt-tasnif
+      darvozasidan jimgina chetlab o'tardi (ro'yxat docstringi).
     """
     walked = {
         (route.method, route.path)
@@ -635,20 +659,20 @@ def test_the_reports_surface_is_exactly_three_routes() -> None:
     }
 
     assert _reports_paths() == list(REPORTS_ROUTES)
-    assert walked == {
-        ("GET", "/api/v1/reports/revenue"),
-        ("GET", "/api/v1/reports/debtors"),
-        ("GET", "/api/v1/reports/anomalies"),
-    }, sorted(walked)
+    assert walked == {("GET", path) for path in REPORTS_ROUTES}, sorted(walked)
 
 
 def test_every_reports_route_is_documented_in_openapi() -> None:
-    """⛔ Uchalasi ham OpenAPI'da BOR — mijoz BRAUZER (`/reconciliation` naqshi).
+    """⛔ Yettalasi ham OpenAPI'da BOR — mijoz BRAUZER (`/reconciliation` naqshi).
 
     08-13/08-15 klient sxemasini shu kontraktdan oladi.
     `include_in_schema=False` bilan yozilgan marshrut frontend
     darvozalariga UMUMAN ko'rinmasdi va ikki tomon jimgina ajralib
     ketardi.
+
+    ⚠ `.xlsx` marshrutlarining `response_model` i YO'Q (javob — BAYT),
+      lekin ular ham hujjatlanadi: klient ularning MAVJUDLIGINI va
+      so'rov parametrlarini shu kontraktdan biladi.
     """
     documented = {
         (method.upper(), path)
@@ -657,7 +681,7 @@ def test_every_reports_route_is_documented_in_openapi() -> None:
         if path.startswith(REPORTS_PREFIX)
     }
 
-    assert len(documented) == 3, sorted(documented)
+    assert len(documented) == 7, sorted(documented)
     assert {path for _, path in documented} == set(REPORTS_ROUTES)
 
 
@@ -690,6 +714,15 @@ def test_only_the_debtors_route_carries_personal_data() -> None:
       REYESTRIDAN yuradi — ikki yo'nalish ATAYIN
       (`test_no_reconciliation_route_enters_the_personal_data_gate`
       bilan bir xil juftlik).
+
+    ⚠⚠ TO'RT `.xlsx` MARSHRUTI BU TO'PLAMDA YO'Q VA BU KUTILGAN:
+      `PERSONAL_ROUTES` javob MODELIDAN hosila bo'ladi, eksportning
+      javobi esa BAYT — modeli umuman yo'q. Ular BOSHQA darvoza
+      ostida: `test_personal_data_coverage.py::BINARY_PERSONAL_ROUTES`
+      (`debtors.xlsx`) va `NON_PERSONAL_BINARY_ROUTES` (qolgan
+      uchtasi). Ya'ni bu test «uchtadan bittasi shaxsiy» degan JSON
+      da'vosini o'lchaydi va u eksport qo'shilgach ham AYNAN o'sha
+      da'vo bo'lib qoladi.
     """
     from tenancy.test_personal_data_coverage import PERSONAL_ROUTES
 

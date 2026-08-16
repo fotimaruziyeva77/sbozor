@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from app.main import app as fastapi_app
+from app.security.audit import TABLE_VENDORS
 from app.security.rbac import ROLE_PERMISSIONS, Permission
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
@@ -118,6 +119,16 @@ BINARY_PERSONAL_ROUTES: dict[str, str] = {
         "shaxsiy ma'lumotlar qonuni ostidagi ma'lumot. Javob modeli YO'Q, "
         "shuning uchun `PERSONAL_FIELDS` uni HECH QACHON topa olmaydi."
     ),
+    "/api/v1/reports/debtors.xlsx": (
+        "qarzdorlik reestrining `.xlsx` HUJJATI — unda sotuvchi F.I.Sh. BOR "
+        "(D-07: ism bu yuzada QONUNIY, chunki hujjat «kimdan undirish "
+        "kerak?» savoliga javob beradi). Javob MODELI YO'Q — javob BAYT — "
+        "shuning uchun `PERSONAL_FIELDS` uni HECH QACHON topa olmaydi, "
+        "garchi AYNI ma'lumot JSON juftida (`/reports/debtors`) o'sha "
+        "darvoza tomonidan topilsa ham. Bu ro'yxatsiz eksport auditsiz va "
+        "`VENDOR_VIEW` siz qolardi va bu JSON dan ham xavfliroq: fayl "
+        "tizimdan CHIQIB ketadi."
+    ),
 }
 """Javobi MODEL EMAS, BAYT bo'lgan va o'sha baytlarning O'ZI shaxsiy ma'lumot.
 
@@ -156,6 +167,19 @@ NON_PERSONAL_BINARY_ROUTES: dict[str, str] = {
         "test_self_check_needs_no_authentication_and_leaks_no_tenant_data`)."
     ),
     "/readyz": "DB/Valkey ping natijasi — sog'liq signali, ma'lumot emas.",
+    "/api/v1/reports/revenue.xlsx": (
+        "kun x summa — odamni aniqlaydigan maydon YO'Q (JSON juftida ham "
+        "yo'q va `test_route_coverage.py` buni AYNAN o'lchaydi)."
+    ),
+    "/api/v1/reports/anomalies.xlsx": (
+        "rasta KODI, sana, sinf nomi, case holati va kadr IDENTIFIKATORI — "
+        "kadrning O'ZI ham, imzolangan havola ham faylga tushmaydi (07 D-03)."
+    ),
+    "/api/v1/reports/accuracy.xlsx": (
+        "chalkashlik matritsasi va uch Wilson oralig'i — AGREGAT sonlar. "
+        "Nazoratchining KIMLIGI hisobotga umuman kirmaydi (D-16: ichki "
+        "moslik o'lchovi na son, na maydon sifatida mavjud)."
+    ),
 }
 """Javobi model EMAS, lekin shaxsiy ma'lumot ham EMAS — sabab bilan.
 
@@ -460,6 +484,59 @@ def test_every_binary_response_route_is_classified() -> None:
     assert not overlap, f"marshrut IKKALA ro'yxatda ham: {overlap}"
 
 
+def test_no_non_personal_claim_survives_a_vendor_data_guard() -> None:
+    """⛔⛔ «NOMASHAXSIY» DA'VOSI MARSHRUTNING O'Z E'LONIGA ZID BO'LOLMAYDI.
+
+    =========================================================================
+    ⛔ BU TEST 08-12 NING MAJBURIY SABOTAJI TOPGAN BO'SHLIQNI YOPADI VA U
+       «qo'shimcha ehtiyot chorasi» EMAS — O'LCHANGAN ZARURIYAT.
+
+    SABOTAJ (reja Task 3, №1): `/api/v1/reports/debtors.xlsx` IKKALA
+    reyestrdan ham `NON_PERSONAL_BINARY_ROUTES` ga ko'chirildi va butun
+    `tests/tenancy` to'plami yugurtirildi:
+
+        854 passed — BIRORTA TEST QIZARMADI.
+
+    Ya'ni sotuvchi F.I.Sh. chiqadigan hujjatdan `audit_read` talabi
+    JIMGINA yo'qoldi va yagona to'siq — o'sha ro'yxatga yozilgan
+    izohning ROSTLIGI — ya'ni INSON INTIZOMI edi. Bu esa aynan 05-15
+    ning darsi: sabotaj yetib borsa ham hech nima qizarmasa, tuzatish
+    testda emas, HOLATDA.
+
+    ⛔ SHUNING UCHUN TASNIF ENDI MEXANIK LANGARGA EGA: `VENDOR_VIEW`
+       huquqi va `vendors` o'qish auditi MAHSULOT KODIDA e'lon qilinadi
+       (`api/v1/reports.py`), ya'ni ular bu fayldagi ro'yxatdan MUSTAQIL
+       dalil. Marshrut «menda shaxsiy ma'lumot yo'q» deb turib, o'sha
+       ma'lumotni qo'riqlaydigan darvozani ko'tarib turolmaydi.
+
+    ⚠ TESKARI YO'NALISH BU YERDA O'LCHANMAYDI («`VENDOR_VIEW` bor bo'lsa
+      shaxsiy») — u yuqoridagi `BINARY_PERSONAL_ROUTES` darvozasining
+      ishi. Bu yerdagi da'vo TOR va shuning uchun kuchli: nomashaxsiy
+      DEB ATALGAN marshrut shaxsiy ma'lumot darvozalarini ko'tarmaydi.
+    =========================================================================
+    """
+    routes = binary_routes(fastapi_app)
+
+    for path in sorted(NON_PERSONAL_BINARY_ROUTES):
+        # ⛔ `.get()` EMAS: yopiqlik testi (yuqorida) ro'yxatdagi HAR yo'l
+        #    tirik ekanini ALLAQACHON kafolatlaydi, ya'ni `KeyError` shu
+        #    kafolatning buzilgani haqidagi BALAND OVOZLI signal bo'ladi.
+        route = routes[path]
+
+        assert Permission.VENDOR_VIEW not in required_permissions(route), (
+            f"{path} «shaxsiy ma'lumot YO'Q» deb tasniflangan, lekin `VENDOR_VIEW` "
+            "darvozasini ko'taradi — bu huquq AYNAN sotuvchining shaxsiy ma'lumotini "
+            "qo'riqlash uchun mavjud. Tasnif YOLG'ON: yo'lni "
+            "`BINARY_PERSONAL_ROUTES` ga ko'chiring (va `BINARY_PERSONAL_ALLOWED` "
+            "ga uning huquqlarini yozing)"
+        )
+        assert TABLE_VENDORS not in audit_resources(route), (
+            f"{path} «shaxsiy ma'lumot YO'Q» deb tasniflangan, lekin `{TABLE_VENDORS}` "
+            "ustidan o'qish auditini e'lon qiladi — audit AYNAN shaxsiy ma'lumot "
+            "o'qilgani uchun yoziladi (D-09). Ikki e'lon bir-biriga ZID"
+        )
+
+
 EVIDENCE_FRAME_ALLOWED = frozenset({Permission.CAMERA_VIEW, Permission.OCCUPANCY_REVIEW})
 """DALIL-KADRNI KO'RISHI MUMKIN BO'LGAN HUQUQLARNING YOPIQ TO'PLAMI (05-15).
 
@@ -471,6 +548,53 @@ EVIDENCE_FRAME_ALLOWED = frozenset({Permission.CAMERA_VIEW, Permission.OCCUPANCY
   aynan kerakli xulq — qaror bu yerda ham ONGLI ravishda takrorlanishi
   kerak (§S-9 ning «fixture mexanizmni takrorlamaydi» qoidasining
   darvoza tomonidagi jufti).
+"""
+
+BINARY_PERSONAL_ALLOWED: dict[str, frozenset[Permission]] = {
+    "/api/v1/snapshots/{snapshot_id}/image": EVIDENCE_FRAME_ALLOWED,
+    "/api/v1/reports/debtors.xlsx": frozenset({Permission.REPORT_VIEW, Permission.VENDOR_VIEW}),
+}
+"""HAR bayt-shaxsiy marshrutning O'Z ruxsat etilgan huquqlar to'plami.
+
+=============================================================================
+⛔⛔ NEGA PER-ROUTE XARITA, VA NEGA QOLGAN UCH YO'L XATO EDI (08-12).
+
+05-15 gacha bu ro'yxat BITTA marshrutdan iborat edi va darvoza
+`granted <= EVIDENCE_FRAME_ALLOWED` deb yozilgandi — ya'ni «bayt-shaxsiy
+marshrut» bilan «dalil-kadr marshruti» AYNI narsa deb faraz qilingan.
+08-12 ikkinchi bayt-shaxsiy marshrutni (`debtors.xlsx`) qo'shdi va u
+`REPORT_VIEW` + `VENDOR_VIEW` talab qiladi, ya'ni eski shart QIZARARDI.
+
+Uch «tuzatish» yo'li bor edi va UCHALASI HAM DARVOZANI BO'SHATARDI:
+
+  1. `EVIDENCE_FRAME_ALLOWED` GA `REPORT_VIEW` QO'SHISH — dalil-kadr
+     marshruti hisobot huquqi bilan OCHILARDI. Direktor (`REPORT_VIEW`
+     BOR) bozor tashrifchilarining tasvirini ko'ra boshlardi va 05-15
+     ning butun ishi bekor bo'lardi. ⛔ Shuning uchun
+     `EVIDENCE_FRAME_ALLOWED` ning O'ZI ⛔ TEGILMAGAN va u AYNAN
+     `{CAMERA_VIEW, OCCUPANCY_REVIEW}` bo'lib qoladi;
+
+  2. EKSPORTNI `POST` QILISH — `get_routes()` faqat `GET` ni yuradi,
+     ya'ni marshrut yopiqlik testidan ham, bu darvozadan ham JIMGINA
+     chiqib ketardi. Bu «tuzatish» emas, DARVOZANI CHETLASH bo'lardi;
+
+  3. SHAXSIY EKSPORTNI `NON_PERSONAL_BINARY_ROUTES` GA YOZISH — yolg'on
+     tasnif. U `audit_read` talabini butunlay o'chirardi va sotuvchi
+     F.I.Sh. IZSIZ fayl bo'lib chiqardi.
+
+To'g'ri javob — savolni ANIQROQ qo'yish: «bu marshrut huquqsiz
+qolmasinmi?» emas, «BU marshrut QAYSI huquqlar bilan ochiladi?».
+
+⛔ `SNAPSHOT_EVIDENCE_FRAME_ROUTES` HAM TEGILMAGAN: u «yo P yo Q»
+   darvozasini ko'tarishga haqli marshrutlarni sanaydi va u BITTA
+   elementli bo'lib qoladi. `debtors.xlsx` ikki huquqni **VA** bilan
+   talab qiladi, ya'ni u o'sha ro'yxatga umuman tegishli emas.
+=============================================================================
+
+⚠ KALITLAR `BINARY_PERSONAL_ROUTES` NIKI BILAN AYNAN TENG bo'lishi SHART
+  va u ALOHIDA assert bilan qulflangan (pastdagi test). Usiz ikki ro'yxat
+  ajralib ketardi va yangi marshrut `KeyError` o'rniga JIMGINA
+  tekshirilmay o'tardi.
 """
 
 SNAPSHOT_SURFACE_MODULE = "app.api.v1.snapshots"
@@ -537,32 +661,112 @@ def snapshot_surface_routes(app: FastAPI) -> dict[str, APIRoute]:
     }
 
 
+def test_the_two_binary_personal_registries_have_identical_keys() -> None:
+    """⛔ IKKI LUG'ATNING KALITLARI AYNAN TENG — DARVOZANING POYDEVORI.
+
+    =======================================================================
+    Pastdagi test `BINARY_PERSONAL_ALLOWED[path]` ni TO'G'RIDAN-TO'G'RI
+    indekslaydi (⛔ `.get()` EMAS), ya'ni yetishmayotgan kalit `KeyError`
+    bilan BALAND OVOZDA yiqiladi. `.get()` bo'lganda esa u jimgina
+    `frozenset()` qaytarardi va `granted <= frozenset()` sharti — ya'ni
+    «bu marshrut HECH QANDAY huquq bilan ochilmasin» — tasodifan
+    QIZARARDI yoki, agar standart qiymat keng tanlansa, jimgina
+    YASHIL qolardi. Ikkala natija ham yolg'on.
+
+    Bu test o'sha `KeyError` dan OLDIN turadi va sababni ANIQ aytadi:
+    «yangi bayt-shaxsiy marshrut qo'shdingiz, ruxsat xaritasini
+    to'ldiring» — `KeyError: '/api/v1/...'` degan xom xabar o'rniga.
+    =======================================================================
+    """
+    mapped = set(BINARY_PERSONAL_ALLOWED)
+    listed = set(BINARY_PERSONAL_ROUTES)
+
+    assert mapped == listed, (
+        "`BINARY_PERSONAL_ALLOWED` va `BINARY_PERSONAL_ROUTES` kalitlari ajralib "
+        f"ketdi: faqat xaritada {sorted(mapped - listed)}, "
+        f"faqat ro'yxatda {sorted(listed - mapped)}"
+    )
+
+
+def test_the_evidence_frame_allowance_stayed_exactly_as_05_15_left_it() -> None:
+    """⛔ `EVIDENCE_FRAME_ALLOWED` KENGAYMAGAN — 08-12 ning eng qimmat da'vosi.
+
+    =======================================================================
+    08-12 ikkinchi bayt-shaxsiy marshrutni qo'shdi (`debtors.xlsx`,
+    `REPORT_VIEW` + `VENDOR_VIEW`) va eng oson «tuzatish» yo'li
+    `EVIDENCE_FRAME_ALLOWED` ga `REPORT_VIEW` qo'shish bo'lardi — bir
+    qatorlik o'zgarish, butun to'plam darhol yashil.
+
+    ⛔ VA U DALIL-KADR MARSHRUTINI HISOBOT HUQUQI BILAN OCHARDI:
+       direktorda `REPORT_VIEW` BOR, ya'ni u bozor tashrifchilarining
+       tasvirini ko'ra boshlardi. Bu O'zR shaxsiy ma'lumotlar qonuni
+       ostidagi ma'lumot va 05-15 uni ATAYIN ikki huquq bilan
+       chegaralagan.
+
+    Bu test o'sha bir qatorlik «tuzatish» ni MEXANIK ravishda to'sadi:
+    to'plam TENGLIGI bilan o'lchanadi, «ichida bormi?» bilan emas.
+    =======================================================================
+
+    ⚠ `snapshots.py::EVIDENCE_FRAME_PERMISSIONS` dan IMPORT QILINMAYDI
+      (ro'yxat docstringi): import qilingan darvoza o'z tekshirayotgan
+      qiymatini tekshirgan bo'lardi.
+    """
+    as_05_15_left_it = frozenset({Permission.CAMERA_VIEW, Permission.OCCUPANCY_REVIEW})
+
+    # ⚠ TENGLIKNING TARTIBI `SIM300` (Yoda condition) TALABI: ruff KATTA
+    #   HARFLI nomni konstanta deb biladi va uni O'NG tomonda ko'rishni
+    #   kutadi. Da'vo tarafsiz — bu TENGLIK, kirish emas.
+    assert as_05_15_left_it == EVIDENCE_FRAME_ALLOWED, sorted(EVIDENCE_FRAME_ALLOWED)
+    assert BINARY_PERSONAL_ALLOWED["/api/v1/snapshots/{snapshot_id}/image"] == (
+        EVIDENCE_FRAME_ALLOWED
+    )
+    assert SNAPSHOT_EVIDENCE_FRAME_ROUTES == ("/api/v1/snapshots/{snapshot_id}/image",), (
+        "«yo P yo Q» darvozasini ko'tarishga haqli marshrutlar ro'yxati o'zgardi — "
+        "08-12 unga TEGMASLIGI kerak edi: `debtors.xlsx` ikki huquqni **VA** bilan "
+        "talab qiladi va u bu ro'yxatga umuman tegishli emas"
+    )
+
+
 def test_binary_personal_routes_declare_read_audit_and_permission() -> None:
-    """Bayt-shaxsiy marshrut o'qish auditini VA dalil-kadr huquqini e'lon qiladi.
+    """Bayt-shaxsiy marshrut o'qish auditini VA O'Z huquqlarini e'lon qiladi.
 
     ⚠ IKKI DA'VO BITTA TESTDA va bu yuqoridagi juftlikdan ATAYIN farq
       qiladi: u yerda ikkalasi ALOHIDA o'lchanadi, chunki ro'yxatda beshta
       marshrut bor va «qaysi biri qaysi talabni bajarmadi» savoli amaliy.
-      Bu yerda ro'yxat bitta marshrutdan iborat, ya'ni ajratish faqat
-      ikkinchi nusxa berardi.
+      Bu yerda xabar yo'lni O'ZI aytadi, ya'ni ajratish faqat ikkinchi
+      nusxa berardi.
 
-    `CAMERA_VIEW`/`OCCUPANCY_REVIEW` — `VENDOR_VIEW` EMAS: kadr sotuvchining
-    reyestr yozuvi emas, kamera tasviri. `VENDOR_VIEW` ni talab qilish ikkita
-    bog'liq bo'lmagan huquqni birlashtirardi (`EXEMPT_ROUTES` dagi `/users`
-    mulohazasi bilan bir xil).
+    =======================================================================
+    ⛔⛔ 08-12: SHART `EVIDENCE_FRAME_ALLOWED` DAN PER-ROUTE XARITAGA
+        KO'CHDI — VA BU KENGAYTIRISH, BO'SHATISH EMAS.
 
-    ⚠⚠ DA'VO 05-15 DA KENGAYDI, LEKIN BO'SHASHMADI — VA FARQ SHU YERDA.
-      Ilgari test AYNAN `CAMERA_VIEW` ni talab qilardi. Endi u ikki
-      shartni o'lchaydi: (a) darvoza UMUMAN BOR, (b) uning ruxsat etgan
-      huquqlari `EVIDENCE_FRAME_ALLOWED` ICHIDA. «Darvoza bor» yolg'iz
-      o'zi yetarli bo'lsa, `require_any_permission(PAYMENT_CREATE)`
-      ham o'tib ketardi; «aynan CAMERA_VIEW» esa nazoratchining o'z
-      ekranini qaytadan buzardi.
+    Ilgari HAR bayt-shaxsiy marshrutdan `granted <= EVIDENCE_FRAME_ALLOWED`
+    talab qilinardi. O'sha shart 05-15 da AYNAN BITTA marshrut (dalil-kadr)
+    uchun yozilgan edi va u «bayt-shaxsiy» ni «dalil-kadr» bilan
+    tenglashtirardi. Qarzdorlik eksporti esa `REPORT_VIEW` + `VENDOR_VIEW`
+    talab qiladi — ya'ni eski shart uni RAD ETARDI.
+
+    ⛔ TUZATISH `EVIDENCE_FRAME_ALLOWED` NI KENGAYTIRISH EMAS (u dalil-kadr
+       marshrutini hisobot huquqiga ochardi — yuqoridagi test buni mexanik
+       to'sadi), balki SAVOLNI ANIQROQ QO'YISH: har marshrutning O'Z
+       ruxsat to'plami bor va u `BINARY_PERSONAL_ALLOWED` da NOMLANGAN.
+
+    ⛔ `.get()` ISHLATILMAYDI: yetishmayotgan kalit `KeyError` bilan
+       BALAND OVOZDA yiqilishi kerak. Sabab yuqoridagi kalit-tengligi
+       testida to'liq yozilgan.
+    =======================================================================
+
+    `CAMERA_VIEW`/`OCCUPANCY_REVIEW` — dalil-kadr uchun `VENDOR_VIEW` EMAS:
+    kadr sotuvchining reyestr yozuvi emas, kamera tasviri. `VENDOR_VIEW` ni
+    talab qilish ikkita bog'liq bo'lmagan huquqni birlashtirardi
+    (`EXEMPT_ROUTES` dagi `/users` mulohazasi bilan bir xil).
     """
     routes = binary_routes(fastapi_app)
 
     for path in sorted(BINARY_PERSONAL_ROUTES):
         route = routes[path]
+        allowed = BINARY_PERSONAL_ALLOWED[path]
+
         assert audit_resources(route), (
             f"{path} shaxsiy BAYT qaytaradi, lekin o'qish auditini e'lon "
             "qilmaydi — `Depends(audit_read(<resurs>, reason=...))` qo'shing"
@@ -573,13 +777,13 @@ def test_binary_personal_routes_declare_read_audit_and_permission() -> None:
         granted = strict.union(*any_gates) if any_gates else strict
 
         assert granted, (
-            f"{path} birorta huquq darvozasini e'lon qilmaydi — dalil-kadr huquqsiz o'qilardi"
+            f"{path} birorta huquq darvozasini e'lon qilmaydi — shaxsiy baytlar huquqsiz o'qilardi"
         )
-        assert granted <= EVIDENCE_FRAME_ALLOWED, (
-            f"{path} dalil-kadrni {sorted(granted - EVIDENCE_FRAME_ALLOWED)} huquqiga "
-            "ham ochib qo'ydi. Ruxsat etilgan to'plam — `EVIDENCE_FRAME_ALLOWED` va u "
-            "ATAYIN tor: bozor tashrifchilarining tasviri O'zR shaxsiy ma'lumotlar "
-            "qonuni ostida"
+        assert granted <= allowed, (
+            f"{path} shaxsiy baytlarni {sorted(granted - allowed)} huquqiga ham ochib "
+            "qo'ydi. Ruxsat etilgan to'plam — `BINARY_PERSONAL_ALLOWED[path]` va u HAR "
+            "MARSHRUT UCHUN ALOHIDA: dalil-kadr hisobot huquqi bilan, qarzdorlik "
+            "hujjati esa kamera huquqi bilan OCHILMAYDI"
         )
 
 
