@@ -1851,3 +1851,303 @@ async def test_the_export_names_the_vendor_and_the_json_never_does(
         "sotuvchi ismi JSON yuzasiga chiqdi — klient `strictObject` i uni RAD "
         "ETARDI va butun sahifa parse chegarasida yiqilardi"
     )
+
+
+# ===========================================================================
+# (i) FARQ SINFLARI — HAR BIRI ALOHIDA SEED BILAN (§10.5, D-18)
+#
+# =========================================================================
+# ⛔⛔ HAR SINF UCHUN ALOHIDA HOLAT VA U «ko'proq test» EMAS, O'LCHOV.
+#
+# To'rt sinfni bitta seedda o'lchash sanoqlarni bir-biriga BOG'LARDI:
+# `ledger_over` ni `system_over` deb hisoblagan implementatsiya
+# yig'indisi to'g'ri bo'lgan holatda ham YASHIL qolardi. Alohida
+# holatda esa har sanoq AYNAN BITTA bo'lishi kerak va QOLGAN UCHTASI
+# NOL — ya'ni sinflarning ARALASHUVI ham o'lchanadi.
+# ===========================================================================
+
+
+async def _diff_classes(
+    tenant_session: TenantSessionFactory, env: CompareEnv
+) -> tuple[ThreeWayReport, dict[str, int]]:
+    """Hisobot va uning to'rt sanog'i — testlarning UMUMIY oxirgi qadami."""
+    async with tenant_session(env.market_id) as session:
+        report = await three_way(session, market_id=env.market_id, business_date=env.day)
+    return report, {
+        "ledger_over": report.ledger_over_count,
+        "system_over": report.system_over_count,
+        "ai_mismatch": report.ai_mismatch_count,
+        "match": report.matched_count,
+    }
+
+
+async def test_a_ledger_larger_than_the_system_is_a_loss_suspicion(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    compare: CompareEnv,
+) -> None:
+    """⛔ DAFTAR > TIZIM -> `ledger_over` (§10.5: «Yo'qotish shubhasi»).
+
+    Qog'ozda 30 000 yozilgan, tizimda esa 15 000 ko'ringan — ya'ni
+    15 000 so'm yig'ilgan, lekin tizimga KIRITILMAGAN. Mahsulot AYNAN
+    shu holatni fosh qilish uchun mavjud (D-02).
+    """
+    stall_id = compare.billed_stall(0)
+    charge_and_pay(sync_owner_conn, compare, stall_id=stall_id, paid_soum=TARIFF_SOUM)
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.market_id,
+        day=compare.day,
+        stall_id=stall_id,
+        amount_soum=COMPARE_LEDGER_SOUM,
+        imported_by=compare.live.cashier_id,
+    )
+
+    report, counts = await _diff_classes(tenant_session, compare)
+
+    assert counts == {"ledger_over": 1, "system_over": 0, "ai_mismatch": 0, "match": 0}
+    assert by_code(report)[_code_of(sync_owner_conn, stall_id)].diff_class == "ledger_over"
+
+
+async def test_a_system_larger_than_the_ledger_is_a_bookkeeping_gap(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    compare: CompareEnv,
+) -> None:
+    """⛔ TIZIM > DAFTAR -> `system_over` (§10.5: «Daftar kamchiligi»).
+
+    ⛔⛔ DAFTARDA BU RASTA UMUMAN YO'Q va aynan shu holat sinfning
+        MAVJUD BO'LISH SABABI: kun uchun daftar YUKLANGAN, ya'ni u
+        o'sha kunning TO'LIQ qog'oz yozuvi va unda ko'rinmagan rasta
+        «qog'ozda hech nima yig'ilmagan» degani. Daftar summasini
+        `None` qilib qo'ygan implementatsiya bu sinfni HECH QACHON
+        hisoblab chiqara olmasdi.
+    """
+    paid_stall, ledger_stall = compare.billed_stall(0), compare.billed_stall(1)
+    charge_and_pay(sync_owner_conn, compare, stall_id=paid_stall, paid_soum=TARIFF_SOUM)
+    # ⚠ Daftar BOSHQA rastaga yoziladi — kun uchun daftar MAVJUD, lekin
+    #   to'lov qilingan rasta unda YO'Q.
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.market_id,
+        day=compare.day,
+        stall_id=ledger_stall,
+        amount_soum=0,
+        imported_by=compare.live.cashier_id,
+    )
+
+    report, counts = await _diff_classes(tenant_session, compare)
+
+    assert counts["system_over"] == 1
+    assert counts["ledger_over"] == 0
+    assert by_code(report)[_code_of(sync_owner_conn, paid_stall)].diff_class == "system_over"
+
+
+async def test_an_occupied_but_unpaid_stall_is_an_occupancy_gap(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    compare: CompareEnv,
+) -> None:
+    """⛔ AI-KUTILGAN ≠ TIZIM -> `ai_mismatch` (§10.5: «Bandlik farqi»).
+
+    ⛔ SBOZOR NING YADRO HOLATI: rasta BAND, qog'ozda ham, tizimda ham
+       pul YO'Q. Daftar va tizim MOS (ikkalasi ham 0), ya'ni birinchi
+       ikki sinf JIM qoladi — «band, lekin to'lovsiz» ni FAQAT uchinchi
+       manba ko'radi.
+    """
+    stall_id = compare.billed_stall(0)
+    occupy(sync_owner_conn, compare, stall_id=stall_id, center=(0.27, 0.63))
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.market_id,
+        day=compare.day,
+        stall_id=stall_id,
+        amount_soum=0,
+        imported_by=compare.live.cashier_id,
+    )
+
+    report, counts = await _diff_classes(tenant_session, compare)
+
+    row = by_code(report)[_code_of(sync_owner_conn, stall_id)]
+    assert (row.ledger_soum, row.system_soum) == (0, 0), (
+        "nazorat: daftar va tizim MOS bo'lishi kerak — aks holda birinchi ikki "
+        "sinf ishga tushib, uchinchisi umuman o'lchanmasdi"
+    )
+    assert row.ai_expected_soum == TARIFF_SOUM
+    assert counts == {"ledger_over": 0, "system_over": 0, "ai_mismatch": 1, "match": 0}
+
+
+async def test_a_matching_stall_stays_in_the_table_as_the_denominator(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    compare: CompareEnv,
+) -> None:
+    """⛔⛔ MOS QATOR `rows` DA QOLADI — YASHIRILMAYDI (§10.5, 07 G-32).
+
+    «300 rastadan 287 tasi mos» — MAXRAJ imzolanadigan hujjatda
+    MAJBURIY. Mos qatorlarni filtrlab tashlagan javob 13 qatorli varaq
+    berardi va u «bozorda 13 ta rasta bor» bo'lib o'qilardi.
+    """
+    stall_id = seed_one_matching_stall(sync_owner_conn, compare)
+
+    report, counts = await _diff_classes(tenant_session, compare)
+
+    assert counts["match"] == 1
+    row = by_code(report)[_code_of(sync_owner_conn, stall_id)]
+    assert row.diff_class == "match", "mos qator ro'yxatdan TUSHIB QOLDI"
+    assert (row.ledger_soum, row.system_soum, row.ai_expected_soum) == (
+        TARIFF_SOUM,
+        TARIFF_SOUM,
+        TARIFF_SOUM,
+    )
+
+
+async def test_four_classes_in_one_market_stay_four_independent_counters(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    compare_director_headers: dict[str, str],
+    compare: CompareEnv,
+) -> None:
+    """⛔⛔ TO'RT SANOQ MUSTAQIL VA ULARNI QO'SHIB BO'LMAYDI (D-18).
+
+    =======================================================================
+    ⛔ DA'VO UCH QATLAMLI VA UCHALASI HAM MAJBURIY:
+
+      1. HAR SANOQ AYNAN BITTA — sinflar bir-biriga OQIB O'TMAYDI;
+      2. JAVOBDA YIG'INDI MAYDONI YO'Q — to'plam tengligi bilan
+         (`total_diff` ham, `combined_diff` ham, boshqa nom ham);
+      3. ⛔⛔ TO'RT SANOQNING YIG'INDISI `len(rows)` GA TENG EMAS.
+
+    Uchinchisi eng qimmat va u ATAYIN o'lchanadi: seedda BESHINCHI
+    rasta bor — daftar va tizimi MOS, AI-kutilgani esa O'LCHANMAGAN.
+    Bunday qator na farq DA'VO QILADI, na moslik, ya'ni birorta
+    sanoqqa tushmaydi. Tenglikni «tiklashga» urinish uni
+    `matched_count` ga qo'shishni talab qilardi — ya'ni imzolanadigan
+    varaqda «uchala manba mos» degan YOLG'ON maxrajni shishirardi
+    (D-10 ning bevosita buzilishi).
+    =======================================================================
+    """
+    over_stall, under_stall = compare.billed_stall(0), compare.billed_stall(1)
+    mismatch_stall, match_stall = compare.billed_stall(2), compare.billed_stall(3)
+    unmeasured_stall = compare.stall(1)
+
+    # (a) daftar ortiq
+    charge_and_pay(sync_owner_conn, compare, stall_id=over_stall, paid_soum=TARIFF_SOUM)
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.market_id,
+        day=compare.day,
+        stall_id=over_stall,
+        amount_soum=COMPARE_LEDGER_SOUM,
+        imported_by=compare.live.cashier_id,
+    )
+    # (b) tizim ortiq — daftarda YO'Q
+    charge_and_pay(sync_owner_conn, compare, stall_id=under_stall, paid_soum=TARIFF_SOUM)
+    # (c) bandlik farqi — band, lekin to'lovsiz
+    occupy(sync_owner_conn, compare, stall_id=mismatch_stall, center=(0.26, 0.61), slot_index=0)
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.market_id,
+        day=compare.day,
+        stall_id=mismatch_stall,
+        amount_soum=0,
+        imported_by=compare.live.cashier_id,
+    )
+    # (d) mos
+    occupy(sync_owner_conn, compare, stall_id=match_stall, center=(0.64, 0.36), slot_index=1)
+    charge_and_pay(sync_owner_conn, compare, stall_id=match_stall, paid_soum=TARIFF_SOUM)
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.market_id,
+        day=compare.day,
+        stall_id=match_stall,
+        amount_soum=TARIFF_SOUM,
+        imported_by=compare.live.cashier_id,
+    )
+    # (e) SINFSIZ — AI o'lchanmagan, daftar va tizim MOS
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.market_id,
+        day=compare.day,
+        stall_id=unmeasured_stall,
+        amount_soum=0,
+        imported_by=compare.live.cashier_id,
+    )
+
+    report, counts = await _diff_classes(tenant_session, compare)
+
+    assert counts == {"ledger_over": 1, "system_over": 1, "ai_mismatch": 1, "match": 1}, (
+        f"sinflar bir-biriga oqib o'tdi: {counts}"
+    )
+    assert len(report.rows) == 5
+    assert sum(counts.values()) != len(report.rows), (
+        "to'rt sanoqning yig'indisi qatorlar soniga TENG bo'lib qoldi — demak "
+        "o'lchanmagan AI-kutilganli qator birorta sinfga QO'SHILGAN va u "
+        "imzolanadigan varaqda maxrajni SHISHIRADI (D-10)"
+    )
+
+    response = await api_client.get(
+        COMPARE_URL, params=_compare_params(compare.day), headers=compare_director_headers
+    )
+    assert response.status_code == 200, response.text
+    assert set(response.json()) == COMPARE_RESPONSE_KEYS, (
+        "javobga yig'indi maydoni qo'shildi — uch sinf uch TURLI harakatni "
+        "talab qiladi va ularni bitta songa siqish solishtiruvni foydasiz qilardi"
+    )
+
+
+async def test_the_other_markets_director_sees_none_of_market_a_stalls(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    compare_market_b_headers: dict[str, str],
+    compare: CompareEnv,
+) -> None:
+    """⛔⛔ B BOZORINING DIREKTORI A NING KUNIDA A NING RASTALARINI KO'RMAYDI.
+
+    =======================================================================
+    ⛔ NAZORAT HOLATI MAJBURIY: B ning O'Z daftar qatori ham yoziladi va
+       javobda u KO'RINISHI shart. Faqat «A ning kodi yo'q» degan assert
+       bo'sh javobda ham YASHIL bo'lardi — ya'ni «marshrut umuman
+       ishlamadi» bilan «tenant chegarasi ishladi» ni ajratmasdi.
+
+    ⚠ `A_ONLY_STALL_CODE` ATAYIN: `"2"` IKKALA bozorda ham mavjud, ya'ni
+      u bilan yozilgan test B ning O'Z rastasini ko'rib «sizib chiqdi»
+      degan YOLG'ON xulosa berardi.
+    =======================================================================
+    """
+    a_stall = compare.stall(2)
+    assert _code_of(sync_owner_conn, a_stall) == A_ONLY_STALL_CODE, (
+        "nazorat: seedning rasta tartibi o'zgargan"
+    )
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.market_id,
+        day=compare.day,
+        stall_id=a_stall,
+        amount_soum=COMPARE_LEDGER_SOUM,
+        imported_by=compare.live.cashier_id,
+    )
+
+    b_stall = compare.domain.market_b.stall_ids[0]
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.other.market_id,
+        day=compare.day,
+        stall_id=b_stall,
+        amount_soum=TARIFF_SOUM,
+        imported_by=compare.other.cashier_id,
+    )
+
+    response = await api_client.get(
+        COMPARE_URL, params=_compare_params(compare.day), headers=compare_market_b_headers
+    )
+
+    assert response.status_code == 200, response.text
+    codes = {row["stall_code"] for row in response.json()["rows"]}
+
+    assert codes == {_code_of(sync_owner_conn, b_stall)}, (
+        f"B ning javobida BEGONA rastalar bor: {sorted(codes)}"
+    )
+    assert A_ONLY_STALL_CODE not in codes
+    assert B_STALL_CODES[0] in codes, "nazorat: B ning O'Z qatori ham chiqmadi"
