@@ -1400,6 +1400,7 @@
     "periodFrom": "Boshlanish",
     "periodTo": "Tugash",
     "periodShown": "{from} — {to}",
+    "presetLabel": "Tayyor oraliq",
     "preset": {
       "last30": "Oxirgi 30 kun",
       "yesterday": "Kecha",
@@ -1408,6 +1409,7 @@
       "custom": "Tanlangan oraliq"
     },
     "maxDayHint": "Hisobot kechagi kungacha yopilgan ma'lumotdan chiqadi.",
+    "emptyMonth": "Joriy oyda hali yopilgan kun yo'q",
     "export": "Excel bo'lib yuklab olish",
     "exporting": "Tayyorlanmoqda",
     "revenueTitle": "Tushum",
