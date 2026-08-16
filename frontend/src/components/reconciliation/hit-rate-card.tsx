@@ -132,8 +132,36 @@ export function HitRateCard({ day }: { day: string }) {
 
   if (cases.counts === undefined) {
     /*
-     * ⛔ Xatoda ⛔ NOL CHIZILMAYDI: nol O'LCHANGAN qiymat ma'nosini
-     *   berardi. Nomlangan sabab qo'shni bloklarda allaqachon bor.
+     * =====================================================================
+     * ⛔⛔ SO'ROV YIQILDI — ⛔ O'LCHANGAN FAKT DA'VO QILINMAYDI (WR-05).
+     *
+     * Bu shox bir muddat `recon.accuracyNone` ni chizardi, matni esa
+     * «Hali hal qilingan nomuvofiqlik yo'q». Bu ⛔ O'LCHANGAN QIYMAT
+     * DA'VOSI, holbuki haqiqat ⛔ «o'lchov UMUMAN kelmadi» — va
+     * ikkalasining xulosasi ⛔ QARAMA-QARSHI: birinchisi direktorni
+     * «navbat toza» deb XOTIRJAM qilardi.
+     *
+     * Bu ⛔ AYNAN fayl izohining 2-bandidagi sinf («`0 %` ... TESKARI
+     * XULOSANI berardi — holbuki hech nima hali tekshirilmagan») va
+     * 05-14 ning «o'lchanmagan sonning o'rniga NOL yozilmaydi» darsi.
+     *
+     * ⛔ NOLGA TUSHIRUVCHI ZAXIRA OPERATORLARI (`??` / `||` ning nol
+     *    bilan juftligi) ⛔ TAQIQ: ular aynan shu yolg'onning arifmetik
+     *    shakli bo'lardi. O'lchandi (08-10 sabotaji): xato shoxi shunday
+     *    zaxiraga almashtirilganda ekranda «0 %» paydo bo'ldi va to'rt
+     *    darvoza bir vaqtda qizardi.
+     *    ⚠ Taqiqlangan shakl bu izohda LITERAL yozilmaydi — nusxa
+     *      mexanik skanni o'ziga qarshi qo'yardi (`badge.tsx` konvensiyasi).
+     *
+     * ⛔ `role="alert"` — VA U BU YERDA QONUNIY: bu ⛔ XATO (§14.9 ning
+     *    jonli hududlar reyestri `alert` ni AYNAN xatoga beradi), qo'shni
+     *    bloklarning yuklanish platsholderi emas. `role="status"`
+     *    darvozasi (G-38) esa AYNAN OLTI joyni qulflagan va bu shox
+     *    ularning birortasi EMAS.
+     *
+     * ⚠ Bandning IKKINCHI yarmi — yangi `accuracy-block` — 08-15 da AYNI
+     *   qoida bilan quriladi (G-40(b)): ikkalasi bir sinf.
+     * =====================================================================
      */
     return (
       <Card data-recon-content="hitrate">
@@ -141,7 +169,12 @@ export function HitRateCard({ day }: { day: string }) {
           <h2 className="text-lg font-semibold">{t("recon.accuracyTitle")}</h2>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-text-muted">{t("recon.accuracyNone")}</p>
+          <p
+            className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
+            role="alert"
+          >
+            {t("errors.loadFailedBody")}
+          </p>
         </CardContent>
       </Card>
     );
