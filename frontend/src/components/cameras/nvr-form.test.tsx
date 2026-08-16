@@ -29,7 +29,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { ReactElement } from "react";
+import type { ComponentProps, ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import messages from "../../../messages/uz-Latn.json";
@@ -63,6 +63,8 @@ const AUTH_LOCK_HINT = messages.cameras.authLockHint;
 const RETRY_LABEL = messages.cameras.retryCheck;
 const PUBLIC_BLOCKED = messages.cameras.publicAddressBlocked;
 const INVALID_PORT = messages.cameras.invalidPort;
+const DIAGNOSE_LEGEND = messages.cameras.diagnoseLegend;
+const DIAGNOSE_HINT = messages.cameras.diagnoseHint;
 
 /* ---------------------------------------------------------------------------
  * (a) MANZILNI AJRATISH — UI-SPEC §4.1 jadvalining OLTALA qatori
@@ -125,7 +127,9 @@ describe("splitNvrAddress — UI-SPEC §4.1 jadvali", () => {
  * DOM — forma
  * ------------------------------------------------------------------------ */
 
-function renderForm(): ReturnType<typeof render> {
+function renderForm(
+  props: ComponentProps<typeof NvrForm> = {},
+): ReturnType<typeof render> {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   });
@@ -134,7 +138,7 @@ function renderForm(): ReturnType<typeof render> {
     <NextIntlClientProvider locale="uz-Latn" messages={messages}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <NvrForm />
+          <NvrForm {...props} />
         </AuthProvider>
       </QueryClientProvider>
     </NextIntlClientProvider>
@@ -519,6 +523,22 @@ describe("NvrForm — saqlash va kashfiyot", () => {
     expect(loginInput().value).toBe("admin");
   });
 
+  test("REGRESSIYA: `mode` berilmaganda «Saqlash va kameralarni topish» BOR va u submit", () => {
+    /*
+     * ⚠ Bu test 1-taskning IKKINCHI yarmi: diagnostika rejimi qo'shilishi
+     *   NVR YO'Q holatidagi formani O'ZGARTIRMASLIGI shart. Standart
+     *   `mode="create"` bo'lgani uchun bu yerda prop UZATILMAYDI — ya'ni
+     *   test standart qiymatning O'ZINI ham qulflaydi.
+     */
+    renderForm();
+
+    expect(screen.getByRole("button", { name: SAVE_LABEL })).toBe(saveButton());
+    expect(
+      screen.getByRole("group", { name: messages.cameras.nvrLegend }),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(DIAGNOSE_LEGEND);
+  });
+
   test("serverga XOM `address` yuboriladi (ajratish serverning kontrakti)", async () => {
     apiFetch.mockResolvedValue({ has_password: true, id: "x" });
 
@@ -540,5 +560,115 @@ describe("NvrForm — saqlash va kashfiyot", () => {
         }),
       );
     });
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * DIAGNOSTIKA REJIMI — YORLIQ VA MAZMUN BIR-BIRIGA MOS (Topilma №F)
+ *
+ * ⚠ ILDIZ O'LIK AFFORDANS EDI, YORLIQ NOMUVOFIQLIGI EMAS. «Diagnostika»
+ *   tugmasi ochgan formaning birlamchi tugmasi `saveAndDiscover` bo'lib,
+ *   u MAVJUD qurilmaning `host:port` i uchun `UNIQUE (market_id, host,
+ *   port)` ga urilib **409 `nvr_host_taken`** dan boshqa hech nima
+ *   qaytara olmasdi. Ya'ni tugmaning HECH QANDAY muvaffaqiyat yo'li yo'q
+ *   edi.
+ *
+ * ⚠ SHUNING UCHUN `disabled` EMAS, RENDER QILINMAYDI (02-UI-SPEC §6.6):
+ *   o'chirilgan tugma «nega bosilmayapti?» savolini tug'diradi va unga
+ *   javob yo'q. Bu yerdagi da'vo AYNAN «matn EKRANDA YO'Q» shaklida
+ *   yozilgan — `aria-disabled` bilan qoldirilgan tugma uni qizartiradi.
+ *
+ * ⚠ IKKINCHI DA'VO YO'L RO'YXATI BO'YICHA o'lchanadi, birinchisining
+ *   MUVAFFAQIYATI bilan emas: `test-connection` chaqirilgani `POST
+ *   /nvr-devices` chaqirilMAGANINI isbotlamaydi.
+ * ------------------------------------------------------------------------ */
+
+describe("NvrForm — diagnostika rejimi (Topilma №F)", () => {
+  beforeEach(() => {
+    apiFetch.mockReset();
+    clearSession();
+    seedSession();
+  });
+
+  afterEach(() => {
+    clearSession();
+  });
+
+  /** `apiFetch` ga tushgan yo'llar — birinchi argument satri. */
+  function requestedPaths(): string[] {
+    return apiFetch.mock.calls.map((call) => String(call[0]));
+  }
+
+  test("legenda DIAGNOSTIKANI aytadi va «Saqlash…» EKRANDA YO'Q", () => {
+    renderForm({ mode: "diagnose" });
+
+    expect(
+      screen.getByRole("group", { name: DIAGNOSE_LEGEND }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(DIAGNOSE_HINT)).toBeInTheDocument();
+
+    // ⛔ «Saqlash va kameralarni topish» — na tugma sifatida, na matn.
+    expect(screen.queryByRole("button", { name: SAVE_LABEL })).toBeNull();
+    expect(document.body.textContent).not.toContain(SAVE_LABEL);
+
+    // BIRLAMCHI tugma — «Ulanishni tekshirish» va u submit.
+    expect(screen.getByRole("button", { name: TEST_LABEL })).toBe(saveButton());
+  });
+
+  test("yuborish `test-connection` ga boradi, `POST /nvr-devices` CHAQIRILMAYDI", async () => {
+    apiFetch.mockResolvedValue({
+      auth_locked: false,
+      channels_preview: 6,
+      clock_drift_seconds: 12,
+      device_type: "NVR",
+      model: "DS-7732NI-M4",
+      ok: true,
+      rtsp_port_assumed: false,
+    });
+
+    renderForm({
+      defaultAddress: "192.168.1.64",
+      defaultUsername: "admin",
+      mode: "diagnose",
+    });
+    fireEvent.change(passwordInput(), { target: { value: "correct-password" } });
+    fireEvent.click(saveButton());
+
+    await waitFor(() => {
+      expect(screen.getByText(messages.cameras.deviceFound)).toBeInTheDocument();
+    });
+
+    // ⚠ RO'YXAT BO'YICHA: yaratish yo'li UMUMAN yo'q.
+    expect(requestedPaths()).toEqual(["/nvr-devices/test-connection"]);
+  });
+
+  test("auth qulfi diagnostika rejimida ham ishlaydi (D-03)", async () => {
+    /*
+     * NAZORAT: rejimlashtirishda qulfni «faqat yaratish yo'lida kerak»
+     * deb tashlab yuborish eng ehtimolli xato bo'lardi — holbuki
+     * diagnostika AYNAN noto'g'ri parol bilan bajariladigan amal va
+     * NVR hisobi ~5 urinishdan keyin 30 daqiqaga qulflanadi.
+     */
+    mockAuthFailure();
+
+    renderForm({
+      defaultAddress: "192.168.1.64",
+      defaultUsername: "admin",
+      mode: "diagnose",
+    });
+    fireEvent.change(passwordInput(), { target: { value: "wrong-password" } });
+    fireEvent.click(saveButton());
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(AUTH_LOCK_HINT);
+    });
+
+    apiFetch.mockClear();
+    fireEvent.click(saveButton());
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(passwordInput());
+    });
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 });

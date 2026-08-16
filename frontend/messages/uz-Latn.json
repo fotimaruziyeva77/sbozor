@@ -84,6 +84,9 @@
     "block": "Bloklash",
     "unblock": "Blokdan chiqarish",
     "resetPassword": "Parolni tiklash",
+    "editRoles": "Rollarni tahrirlash",
+    "editRolesTitle": "Rollarni tahrirlash",
+    "editRolesHint": "Yangi rollar foydalanuvchining keyingi kirishida to'liq kuchga kiradi. Huquqni darhol tortib olish kerak bo'lsa — bloklang.",
     "confirm": "Tasdiqlash",
     "confirmBlock": "Bu foydalanuvchi bloklansinmi? Blok darhol kuchga kiradi va u tizimga kira olmaydi.",
     "confirmUnblock": "Bu foydalanuvchi blokdan chiqarilsinmi? U yana tizimga kira oladi.",
@@ -100,6 +103,7 @@
     "phoneTaken": "Bu telefon raqami allaqachon ro'yxatdan o'tgan",
     "roleNotAllowed": "Bu rolni berishga ruxsatingiz yo'q",
     "cannotBlockSelf": "O'zingizni bloklay olmaysiz",
+    "cannotChangeOwnRoles": "O'z rollaringizni o'zgartirib bo'lmaydi",
     "createdAt": "Yaratildi",
     "createdBy": "{name} tomonidan yaratildi"
   },
@@ -191,6 +195,8 @@
     "refreshList": "Ro'yxatni yangilash",
     "clearFilters": "Filtrlarni tozalash",
     "nvrLegend": "Qurilma ma'lumotlari",
+    "diagnoseLegend": "NVR ulanishini tekshirish",
+    "diagnoseHint": "Parol ko'rsatilmaydi, shuning uchun tekshirish uchun uni qayta kiriting. Bu forma saqlangan qurilma yozuvini o'zgartirmaydi.",
     "nvrAddress": "NVR manzili",
     "nvrAddressHint": "Standart port — 80. Boshqa port bo'lsa manzilga qo'shing: 192.168.1.64:8080",
     "nvrLogin": "Foydalanuvchi nomi",
@@ -1373,5 +1379,15 @@
     "receipts_written": "{count, plural, other {Bugun yozilgan kvitansiyalar (bekor qilingani ham)}}",
     "unknown": "Ko'rsatkich",
     "amountUnit": "so'm"
+  },
+  "dashboard": {
+    "marketStatus": "Bozor holati",
+    "statusDraft": "Qoralama",
+    "statusActive": "Faol",
+    "activateHint": "Ishga tushirish uchun faollashtirish qadamiga o'ting",
+    "countStalls": "Rastalar",
+    "countVendors": "Sotuvchilar",
+    "countCameras": "Kameralar",
+    "countUsers": "Foydalanuvchilar"
   }
 }

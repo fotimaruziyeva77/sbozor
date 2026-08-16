@@ -335,6 +335,17 @@ function NvrZoneWithoutDevice({
       <NvrForm
         defaultAddress={device === null ? "" : formatAddress(device)}
         defaultUsername={device?.username ?? ""}
+        /*
+         * ⚠ REJIM QURILMANING BORLIGIDAN HOSIL QILINADI, tugmadan EMAS
+         *   (Topilma №F). Qurilma bor bo'lsa bu forma FAQAT «Diagnostika»
+         *   yo'lidan ochiladi va o'sha holatda `saveAndDiscover` 409
+         *   `nvr_host_taken` dan boshqa hech nima qaytara olmaydi.
+         *   `onDiagnose` ga bog'lash bir xil natija berardi-yu, lekin
+         *   ikkinchi haqiqat manbai bo'lardi: kelajakda karta yangi amal
+         *   qo'shsa, u ham `setFormOpen(true)` chaqirib rejimni jimgina
+         *   noto'g'ri olardi.
+         */
+        mode={device === null ? "create" : "diagnose"}
         onCancel={onCancel}
         onSaved={onSaved}
       />

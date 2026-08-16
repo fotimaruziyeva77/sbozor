@@ -19,7 +19,10 @@
 | ✅ KR-tri | Kod-review: stall-dialog tri-state kolapsi + schedule-dialog yolg'on tashxis/ternary/EmptyState tozalash | `067a4dd`, `8c142a3` |
 | ✅ №J | NVR kartasining uchta amali `camera_manage` ostiga o'tdi (majburiy `canManage` propi + WIRING testi, sabotaj bilan tasdiqlangan) | `154c751` |
 | ✅ №K | Rad etish ekrani bitta `ForbiddenNotice` komponentiga yig'ildi (20 sahifa) + `/dashboard` havolasi + mexanik darvoza | `1708fa7` |
-| ✅ №C | MARKET-06 ning ikkinchi yarmi: `GET /billing/map` (yopiq `MapDayState` enumi, ustuvorlik serverda) + xaritada rang/ikonka/`aria-label` qatlami + rasta kartasidagi «Bugungi holat» bo'limi va dalil HAVOLASI. ⚠ «Yashil bo'sh» MARKET-06 matnidan CHETLANDI: bandlik o'lchanmagan (AI-02 `Blocked`), yashil endi «sotuvchi biriktirilmagan» degani. ⚠ Karta bosish yo'li nosoz emas edi — o'lchandi | `9dbd631`, `192eb2e` + shu commit |
+| ✅ №C | MARKET-06 ning ikkinchi yarmi: `GET /billing/map` (yopiq `MapDayState` enumi, ustuvorlik serverda) + xaritada rang/ikonka/`aria-label` qatlami + rasta kartasidagi «Bugungi holat» bo'limi va dalil HAVOLASI. ⚠ «Yashil bo'sh» MARKET-06 matnidan CHETLANDI: bandlik o'lchanmagan (AI-02 `Blocked`), yashil endi «sotuvchi biriktirilmagan» degani. ⚠ Karta bosish yo'li nosoz emas edi — o'lchandi | `9dbd631`, `192eb2e`, `43b4628` |
+| ✅ №F | «Diagnostika» tugmasi endi DIAGNOSTIKA panelini ochadi (o'lik `saveAndDiscover` affordansi olib tashlandi, forma rejimlashtirildi) | `4d0e583` |
+| ✅ №G | Mavjud foydalanuvchining rollarini tahrirlash: `PATCH /users/{id}/roles` + dialog; D-04 darajasi ikki yo'nalishda | `f57c3da` |
+| ✅ №H | Platforma admini bosh ekranida bozor holati (Qoralama/Faol/`—`) va to'rt hisoblagich | `a13c447` |
 
 ## 1. BLOKER — birinchi navbatda (`/gsd:quick` bilan)
 
@@ -45,9 +48,9 @@
 | ✅ №E | *(yopildi 2026-08-16 — `aed8391`)* Kelajak tarif davri "Hozircha amalda" deb yorliqlanadi | Kelajak davr uchun "…dan kuchga kiradi" yorlig'i |
 | ✅ №K | "Ruxsat yo'q" sahifasi yalang'och — qaytish havolasi yo'q | Nazoratchi 7 ta URL'da ko'rgan, o'lchov esa 20 ta sahifa ko'rsatdi. Yalang'och blok BITTA `ForbiddenNotice` komponentiga yig'ildi: tushuntirish + `/dashboard` havolasi (u `permission: null`). `localeHref` ning 7 nusxasi 1 modulga (`src/lib/locale-href.ts`). Darvoza: `scripts/forbidden-notice.test.mjs` |
 | ✅ №M | *(yopildi 2026-08-16 — `93c0a78`)* Bekor qilingan to'lov ro'yxatda ikkita bir xil qator; hisoblagich bekordan keyin ham "1" | Bekor hodisasini vizual ajratish (kim/qachon/sabab); hisoblagich semantikasini aniqlashtirish |
-| ⬜ №F | "Diagnostika" tugmasi ulanish-tahrirlash formasini ochadi | Yorliq-mazmun mosligini tekshirish: alohida diagnostika paneli yoki tugma nomini to'g'rilash |
-| ⬜ №G | Foydalanuvchi rollarini keyin tahrirlash yo'li yo'q | Amallar menyusiga "Rollarni tahrirlash" (dizayn qarori bilan) |
-| ⬜ №H | Admin dashboardi bo'sh (bozor holati, hisoblagichlar yo'q) | Holat kartasi ("Qoralama — ishga tushirish uchun ...") + asosiy hisoblagichlar |
+| ✅ №F | *(yopildi 2026-08-16 — `4d0e583`)* "Diagnostika" tugmasi ulanish-tahrirlash formasini ochadi | Ildiz yorliq nomuvofiqligi EMAS, O'LIK AFFORDANS edi: forma birlamchi tugmasi `POST /nvr-devices` ga borardi va mavjud `host:port` uchun 409 `nvr_host_taken` dan boshqa hech nima qaytara olmasdi. Forma rejimlashtirildi (`mode="diagnose"`) — yangi panel ham, yangi endpoint ham qurilmadi; "Saqlash va kameralarni topish" o'sha panelda UMUMAN render qilinmaydi |
+| ✅ №G | *(yopildi 2026-08-16 — `f57c3da`)* Foydalanuvchi rollarini keyin tahrirlash yo'li yo'q | `PATCH /users/{id}/roles` (204) + amallar menyusida "Rollarni tahrirlash". D-04 endi IKKI YO'NALISHDA: bozor admini teng adminni yoki direktorni PASAYTIRA olmaydi. Audit — mavjud `fn_audit_row()` triggeridan (ilova darajasida dublikat YOZILMAYDI); yangi rollar `/auth/refresh` dan keyin kuchga kiradi va bu ekranda halol aytiladi |
+| ✅ №H | *(yopildi 2026-08-16 — shu commit)* Admin dashboardi bo'sh (bozor holati, hisoblagichlar yo'q) | Bozor holati kartasi (`market_manage` ostida — u FAQAT platforma adminida bor, ya'ni direktor bosh ekrani tegilmadi) + to'rt hisoblagich MAVJUD ikki so'rovdan (`setup-status` + `GET /users`), yangi endpoint YO'Q. Noma'lum qiymat o'rniga NOL yozilmaydi — `—` chiziladi va faollashtirish havolasi CHIZILMAYDI |
 
 ## 4. 8-FAZA IJROSIGA KIRITILGAN (alohida quick kerak emas)
 

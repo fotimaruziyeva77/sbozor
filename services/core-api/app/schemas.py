@@ -401,6 +401,27 @@ class CreateUserResponse(BaseModel):
     temporary_password: str
 
 
+class UpdateUserRolesRequest(BaseModel):
+    """`PATCH /users/{user_id}/roles` — MAVJUD a'zoning rollari (D-04).
+
+    Shakl `CreateUserRequest.roles` bilan AYNAN bir xil va bu ataylab:
+    `Role` enum'i noma'lum rol nomini 422 bilan rad etadi, `min_length=1`
+    esa bo'sh to'plamni. Rolsiz a'zolik qatori
+    `ck_user_market_roles_roles_not_empty` bilan baribir rad etilardi,
+    lekin o'shanda javob 500 bo'lardi.
+
+    ⚠ TO'PLAM ALMASHTIRILADI, QO'SHILMAYDI. "Rol qo'sh"/"rolni olib
+    tashla" shaklidagi ikki amal ikkita poyga oynasi tug'dirardi (ikki
+    admin bir vaqtda tahrirlasa) va UI baribir butun to'plamni
+    ko'rsatadi — ya'ni foydalanuvchi ko'rgan narsa aynan yuboriladi.
+
+    KIM qaysi rolni bera olishi bu yerda EMAS — u `users.py` dagi ikki
+    darvozada (JORIY rollar + YANGI to'plam).
+    """
+
+    roles: Annotated[list[Role], Field(min_length=1)]
+
+
 class ResetPasswordResponse(BaseModel):
     """`POST /users/{id}/reset-password` javobi (D-02)."""
 

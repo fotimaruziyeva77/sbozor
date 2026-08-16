@@ -63,7 +63,7 @@ from typing import TYPE_CHECKING
 
 from sbozor_core.models import UserMarketRole
 from sbozor_core.tenancy import TenantScopedRepository
-from sqlalchemy import insert, select, text
+from sqlalchemy import insert, select, text, update
 
 from app.repositories import auth_repo
 
@@ -329,6 +329,31 @@ class UserRepository(TenantScopedRepository):
                 roles=roles,
             )
         )
+
+    async def set_roles(self, user_id: UUID, roles: list[str]) -> bool:
+        """A'zolik qatorining rollarini ALMASHTIRADI; qator topilmasa `False`.
+
+        `scoped()` ISHLATILMAYDI va bu majburiy: u AYNAN `Select` ustida
+        ishlaydi (`sbozor_core.tenancy`), ya'ni `UPDATE` uchun predikat
+        SHU YERDA yoziladi — `nvr_repo.py::update_device` bilan aynan bir
+        xil naqsh. Ikki qatlam saqlanadi: RLS himoya to'ri, `market_id`
+        predikati esa aniq filtr.
+
+        Audit yozuvi bu yerda YOZILMAYDI — `add_membership` dagi bilan
+        AYNI sabab: `user_market_roles` da `fn_audit_row()` triggeri bor
+        va u `old`/`new` ni `changed_keys` bilan birga o'zi qo'yadi.
+        Ilova darajasidagi ikkinchi yozuv DUBLIKAT bo'lardi.
+        """
+        result = await self.session.execute(
+            update(UserMarketRole)
+            .where(
+                UserMarketRole.market_id == self.market_id,
+                UserMarketRole.user_id == user_id,
+            )
+            .values(roles=roles)
+            .returning(UserMarketRole.id)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def set_active(self, user_id: UUID, *, is_active: bool) -> None:
         """Bloklaydi/tiklaydi (D-08).

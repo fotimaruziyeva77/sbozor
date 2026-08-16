@@ -799,6 +799,23 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
         "full_name": "Matritsa Xodimi",
         "roles": ["cashier"],
     },
+    # --- 260816-75g: mavjud a'zoning rollarini tahrirlash (Topilma №G) ---
+    #
+    # ⚠ ROL YANA `cashier` VA SABAB YUQORIDAGI BILAN AYNI EMAS, IKKI
+    #   BARAVAR KUCHLI. Bu endpointda IKKI darvoza bor: nishonning JORIY
+    #   rollari va so'ralayotgan YANGI to'plam. `market_admin` so'ralsa
+    #   ikkinchisi 403 berardi; nishon `market_admin` bo'lsa birinchisi
+    #   403 berardi. Matritsa esa cross-tenant nishonga boradi, ya'ni
+    #   javob **404** bo'lishi kerak — va u faqat tana YAROQLI bo'lganda
+    #   404 bo'ladi.
+    #
+    # ⚠ TO'PLAM `["cashier"]` — nishon A bozorining kassiri bo'lganda ham
+    #   xavfsiz: rollar ALMASHTIRILADI, ya'ni matritsa qatorni
+    #   o'zgartirmagan holda qoldiradi va ketma-ket chaqiruvlar
+    #   idempotent bo'ladi.
+    RouteSpec("PATCH", "/api/v1/users/{user_id}/roles"): lambda _: {
+        "roles": ["cashier"],
+    },
     # --- 06-09: kassirning YOZUV yuzasi (CASH-01, CASH-03) ---
     #
     # ⛔⛔ TANA **A** BOZORINING BUGUN BIRIKTIRILGAN RASTASINI KO'RSATADI.

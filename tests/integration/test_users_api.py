@@ -42,7 +42,7 @@ from fixtures.admin_api import (
     platform_admin_headers,
     session_headers,
 )
-from fixtures.auth_api import CHANGE_PASSWORD_URL, ME_URL, login
+from fixtures.auth_api import CHANGE_PASSWORD_URL, ME_URL, REFRESH_URL, login
 from sbozor_core.enums import AuditAction
 
 if TYPE_CHECKING:
@@ -571,6 +571,281 @@ async def test_temp_password_not_in_audit(
     assert reset_temporary not in serialized
     assert "password_hash" not in serialized
     assert "argon2" not in serialized.lower()
+
+
+# ---------------------------------------------------------------------------
+# №G — MAVJUD FOYDALANUVCHINING ROLLARINI TAHRIRLASH (`PATCH /{id}/roles`)
+#
+# =============================================================================
+# BU BLOKNING ENG MUHIM DA'VOSI — D-04 DARAJASI IKKI YO'NALISHDA ISHLAYDI.
+#
+# Yaratish darvozasi («bozor admini direktor YARATA olmaydi») yolg'iz
+# o'zi TESKARI teshikni ochiq qoldirardi: bozor admini mavjud direktorni
+# yoki teng adminni BITTA so'rov bilan kassirga PASAYTIRIB, o'z
+# nazoratchisini yo'q qila olardi. Shuning uchun endpoint IKKALA
+# to'plamni ham darvozadan o'tkazadi — JORIYSINI ham, YANGISINI ham
+# (B5/B6 juftligi aynan shuni ajratadi).
+#
+# IKKINCHI MUHIM DA'VO — AUDIT YOZUVI YANGI KOD EMAS. `user_market_roles`
+# `0002_audit.py` dagi `AUDITED_TABLE`, ya'ni `fn_audit_row()` triggeri
+# har `UPDATE` uchun `old`/`new` bilan qator qo'yadi. Ilova darajasidagi
+# ikkinchi `write_app_audit()` DUBLIKAT bo'lardi va B2 uning
+# YO'QLIGINI ham o'lchaydi.
+# =============================================================================
+
+
+def _roles_url(user_id: object) -> str:
+    """`PATCH /api/v1/users/{id}/roles` — `POST` EMAS.
+
+    `/block` va `/reset-password` — HODISALAR (yon ta'siri bor amallar);
+    rollar esa resursning MAYDONI. `nvr.py` dagi `PATCH /{nvr_id}` bilan
+    aynan bir xil sabab.
+    """
+    return f"{USERS_URL}/{user_id}/roles"
+
+
+async def _roles_of(
+    api_client: httpx.AsyncClient, headers: dict[str, str], user_id: object
+) -> list[str]:
+    """`GET /users` dan bitta a'zoning rollari — DB holatining mahsulot yo'li."""
+    response = await api_client.get(USERS_URL, headers=headers)
+    assert response.status_code == 200, response.text
+    item = next(row for row in response.json()["items"] if row["id"] == str(user_id))
+    return list(item["roles"])
+
+
+async def _seed_market_admin_target(api_client: httpx.AsyncClient, auth_seed: AuthSeed) -> str:
+    """A bozorida `["market_admin"]` rolli IKKINCHI hisob (B5/B6 nishoni).
+
+    Platforma admini yaratadi — D-04 ning birinchi bosqichi. `auth_seed`
+    dagi bozor adminining O'ZI nishon bo'la olmaydi: u chaqiruvchi bilan
+    bir xil va so'rov 1-darvozada (`cannot_change_own_roles`) to'xtardi,
+    ya'ni 3-darvoza (JORIY rollar) umuman o'lchanmasdi.
+    """
+    platform = await platform_admin_headers(api_client, auth_seed)
+    created = await _create(api_client, platform, roles=["market_admin"])
+    assert created.status_code == 201, created.text
+    return str(created.json()["id"])
+
+
+async def test_market_admin_adds_inspector_to_a_cashier(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """B1: rol qo'shish ISHLAYDI va ro'yxat IKKALA rolni qaytaradi."""
+    headers = await _market_admin_headers(api_client, auth_seed)
+
+    response = await api_client.patch(
+        _roles_url(auth_seed.cashier.user_id),
+        json={"roles": ["cashier", "inspector"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 204, response.text
+    assert sorted(await _roles_of(api_client, headers, auth_seed.cashier.user_id)) == [
+        "cashier",
+        "inspector",
+    ]
+
+
+async def test_role_change_is_audited_by_the_db_trigger_and_not_duplicated(
+    api_client: httpx.AsyncClient,
+    auth_seed: AuthSeed,
+    tenant_session: TenantSessionFactory,
+) -> None:
+    """B2: audit qatori TRIGGERDAN keladi va ilova darajasida DUBLIKAT YO'Q.
+
+    ⚠ IKKI DA'VO BIR TESTDA ATAYIN: «yozildi» ni «ikki marta yozilmadi»
+      dan ajratib bo'lmaydi — ikkinchisi birinchisining SIFATI. Alohida
+      testda ikkinchisi «umuman yozilmadi» holatida ham yashil qolardi.
+    """
+    headers = await _market_admin_headers(api_client, auth_seed)
+    changed = await api_client.patch(
+        _roles_url(auth_seed.cashier.user_id),
+        json={"roles": ["cashier", "inspector"]},
+        headers=headers,
+    )
+    assert changed.status_code == 204, changed.text
+
+    rows = await audit_entries(tenant_session, auth_seed.market_a_id)
+    membership = [row for row in rows if row.table_name == "user_market_roles"]
+    updates = [row for row in membership if row.action == str(AuditAction.UPDATE)]
+
+    assert updates, "trigger `update` qatorini yozmadi"
+    entry = updates[-1]
+    assert entry.source == "db_trigger"
+    assert entry.old_value["roles"] == ["cashier"]
+    assert sorted(entry.new_value["roles"]) == ["cashier", "inspector"]
+    assert entry.actor_user_id == auth_seed.market_admin.user_id
+
+    # ⛔ ILOVA DARAJASIDAGI IKKINCHI YOZUV YO'Q — u dublikat bo'lardi.
+    assert [row for row in membership if row.source == "app"] == []
+
+
+async def test_cannot_change_own_roles(api_client: httpx.AsyncClient, auth_seed: AuthSeed) -> None:
+    """B3: o'z rolini o'zgartirish 400 va DB'da hech nima o'zgarmaydi.
+
+    `cannot_block_self` bilan BIR XIL sinf: bozorda yagona admin o'zini
+    pasaytirib qo'ysa, bozor boshqaruvsiz qoladi. Ikkinchi sabab — bu
+    qoida o'z-o'zini KO'TARISH urinishini ham ifodalab bo'lmas qiladi.
+    """
+    headers = await _market_admin_headers(api_client, auth_seed)
+
+    response = await api_client.patch(
+        _roles_url(auth_seed.market_admin.user_id),
+        json={"roles": ["market_admin", "cashier"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "cannot_change_own_roles"}
+    assert await _roles_of(api_client, headers, auth_seed.market_admin.user_id) == ["market_admin"]
+
+
+async def test_market_admin_cannot_grant_the_director_role(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """B4: YANGI to'plam darvozasi — mavjud D-04 tekshiruvi (4-qadam)."""
+    headers = await _market_admin_headers(api_client, auth_seed)
+
+    response = await api_client.patch(
+        _roles_url(auth_seed.cashier.user_id),
+        json={"roles": ["director"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "role_not_allowed"}
+    assert await _roles_of(api_client, headers, auth_seed.cashier.user_id) == ["cashier"]
+
+
+async def test_market_admin_cannot_demote_an_equal_admin(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """B5: JORIY rollar darvozasi (3-qadam) — D-04 ning TESKARI teshigi.
+
+    ⚠ Bu testning yagona vazifasi — YANGI to'plam darvozasidan YASHIRIN
+      farq qilish: so'ralayotgan `["cashier"]` bozor admini uchun to'liq
+      ruxsat etilgan, ya'ni 4-qadam buni O'TKAZIB YUBORARDI. Rad etishni
+      faqat NISHONNING joriy rollari keltirib chiqaradi.
+    """
+    target = await _seed_market_admin_target(api_client, auth_seed)
+    headers = await _market_admin_headers(api_client, auth_seed)
+
+    response = await api_client.patch(
+        _roles_url(target), json={"roles": ["cashier"]}, headers=headers
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "role_not_allowed"}
+    assert await _roles_of(api_client, headers, target) == ["market_admin"]
+
+
+async def test_platform_admin_can_demote_the_same_market_admin(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """B6: NAZORAT — AYNAN o'sha so'rov platforma adminida 204.
+
+    Usiz B5 «endpoint hamma pasaytirishni rad etadi» holatida ham yashil
+    qolardi, ya'ni darvozaning DARAJAGA bog'liqligi isbotlanmasdi.
+    """
+    target = await _seed_market_admin_target(api_client, auth_seed)
+    platform = await platform_admin_headers(api_client, auth_seed)
+
+    response = await api_client.patch(
+        _roles_url(target), json={"roles": ["cashier"]}, headers=platform
+    )
+
+    assert response.status_code == 204, response.text
+    assert await _roles_of(api_client, platform, target) == ["cashier"]
+
+
+async def test_cross_tenant_role_change_returns_404(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """B7: begona bozor a'zosi -> 404 `not_found`, 403 EMAS (T-01-51)."""
+    headers = await _market_admin_headers(api_client, auth_seed)
+
+    response = await api_client.patch(
+        _roles_url(auth_seed.other_market_admin.user_id),
+        json={"roles": ["cashier"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "not_found"}
+
+
+async def test_new_roles_take_effect_after_refresh(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """B8: KUCHGA KIRISH LAHZASI o'lchanadi va HALOL aytiladi.
+
+    Rollar JWT da'volarida yashaydi (`deps.py`), ya'ni pasaytirilgan
+    foydalanuvchining QO'LIDAGI access token yana ≤15 daqiqa eski
+    to'plam bilan ishlaydi. `/auth/refresh` esa huquqlarni HAR SAFAR
+    DB'dan qayta o'qiydi — shuning uchun yangi to'plam keyingi token
+    yangilanishida O'ZI kuchga kiradi va sessiyalarni bekor qilish
+    KERAK EMAS. Darhol tortib olish yo'li — BLOKLASH (D-08).
+
+    ⚠ TARTIB MUHIM: qurbon admin sessiyasidan KEYIN login qiladi, chunki
+      `httpx` mijozi bitta va refresh cookie'si oxirgi loginniki bo'ladi.
+    """
+    headers = await _market_admin_headers(api_client, auth_seed)
+    victim_login = await login(api_client, auth_seed.cashier.phone, auth_seed.password)
+    assert victim_login.status_code == 200, victim_login.text
+    assert victim_login.json()["roles"] == ["cashier"]
+
+    changed = await api_client.patch(
+        _roles_url(auth_seed.cashier.user_id),
+        json={"roles": ["cashier", "inspector"]},
+        headers=headers,
+    )
+    assert changed.status_code == 204, changed.text
+
+    refreshed = await api_client.post(REFRESH_URL)
+
+    assert refreshed.status_code == 200, refreshed.text
+    assert sorted(refreshed.json()["roles"]) == ["cashier", "inspector"]
+
+
+async def test_role_change_requires_user_manage(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """DARVOZA `USER_MANAGE`: direktorda `USER_VIEW` bor, bu esa yo'q (D-07)."""
+    platform = await platform_admin_headers(api_client, auth_seed)
+    director_phone = new_phone()
+    created = await _create(api_client, platform, roles=["director"], phone=director_phone)
+    assert created.status_code == 201, created.text
+    director = await _onboarded_headers(
+        api_client, director_phone, created.json()["temporary_password"]
+    )
+
+    response = await api_client.patch(
+        _roles_url(auth_seed.cashier.user_id),
+        json={"roles": ["cashier", "inspector"]},
+        headers=director,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "forbidden"}
+
+
+async def test_empty_roles_in_update_is_rejected(
+    api_client: httpx.AsyncClient, auth_seed: AuthSeed
+) -> None:
+    """Bo'sh to'plam 422 — `CreateUserRequest` bilan AYNI shakl (`min_length=1`).
+
+    403 EMAS: so'rovda huquq muammosi yo'q, so'rovning O'ZI yaroqsiz.
+    Rolsiz a'zolik qatori `ck_user_market_roles_roles_not_empty` bilan
+    baribir rad etilardi, lekin o'shanda javob 500 bo'lardi.
+    """
+    headers = await _market_admin_headers(api_client, auth_seed)
+
+    response = await api_client.patch(
+        _roles_url(auth_seed.cashier.user_id), json={"roles": []}, headers=headers
+    )
+
+    assert response.status_code == 422
 
 
 async def test_created_user_is_visible_in_the_audit_api(

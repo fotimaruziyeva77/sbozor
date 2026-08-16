@@ -28,7 +28,7 @@
  * =============================================================================
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -81,6 +81,22 @@ function routeFetch(): void {
   apiClientMock.apiFetch.mockImplementation((path: string) => {
     if (path.startsWith("/nvr-devices")) {
       return Promise.resolve({ items: [DEVICE] });
+    }
+    if (path.startsWith("/cameras?")) {
+      return Promise.resolve({ items: [], next_cursor: null });
+    }
+    if (path.startsWith("/camera-zones/coverage")) {
+      return Promise.resolve(COVERAGE);
+    }
+    return Promise.reject(new Error(`kutilmagan so'rov: ${path}`));
+  });
+}
+
+/** AYNI marshrutlash, LEKIN bozorda hali NVR yo'q (E-1 holati). */
+function routeFetchWithoutDevice(): void {
+  apiClientMock.apiFetch.mockImplementation((path: string) => {
+    if (path.startsWith("/nvr-devices")) {
+      return Promise.resolve({ items: [] });
     }
     if (path.startsWith("/cameras?")) {
       return Promise.resolve({ items: [], next_cursor: null });
@@ -228,5 +244,56 @@ describe("nazoratchi", () => {
     await waitFor(() => {
       expect(apiClientMock.apiFetch).not.toHaveBeenCalled();
     });
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * «DIAGNOSTIKA» TUGMASI -> DIAGNOSTIKA PANELI (Topilma №F)
+ *
+ * ⛔ BU YERDA HAM O'LCHANADIGAN NARSA — ULANISH, KOMPONENT EMAS.
+ *
+ *    `nvr-form.test.tsx` `mode` PROPI bo'yicha o'lchaydi, ya'ni forma
+ *    rejimga bo'ysunishini isbotlaydi. Topilma №F esa aynan SHU YERDA
+ *    tug'ilgan edi: `onDiagnose={() => setFormOpen(true)}` `NvrForm` ni
+ *    ochardi va sahifa unga rejim UZATMASDI. Prop bo'yicha o'lchov bunday
+ *    nosozlikni HECH QACHON ko'rmasdi.
+ *
+ * ⚠ IKKINCHI TEST — TESKARISI VA U MAJBURIY. Usiz «rejim uzatilyapti»
+ *   da'vosi «forma HAR DOIM diagnostika rejimida» dan farqlanmasdi, ya'ni
+ *   `mode` ni konstantaga qadash ham yashil qolardi.
+ * ------------------------------------------------------------------------ */
+
+describe("diagnostika rejimi (Topilma №F)", () => {
+  test("«Diagnostika» bosilganda diagnostika legendasi ochiladi, «Saqlash…» YO'Q", async () => {
+    routeFetch();
+    renderPage(["market_admin"]);
+
+    const diagnose = await screen.findByRole("button", {
+      name: DIAGNOSTICS_LABEL,
+    });
+    fireEvent.click(diagnose);
+
+    await screen.findByRole("group", { name: messages.cameras.diagnoseLegend });
+    expect(document.body.textContent).not.toContain(
+      messages.cameras.saveAndDiscover,
+    );
+  });
+
+  test("NVR YO'Q sahifada «NVR ulash» AVVALGIDEK saqlash formasini ochadi", async () => {
+    routeFetchWithoutDevice();
+    renderPage(["market_admin"]);
+
+    const connect = await screen.findByRole("button", {
+      name: messages.cameras.connectNvr,
+    });
+    fireEvent.click(connect);
+
+    await screen.findByRole("group", { name: messages.cameras.nvrLegend });
+    expect(
+      screen.getByRole("button", { name: messages.cameras.saveAndDiscover }),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(
+      messages.cameras.diagnoseLegend,
+    );
   });
 });
