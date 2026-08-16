@@ -555,7 +555,7 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6)*
 
-- [ ] 08-20-PLAN.md — Faza darvozasi: `test_phase8_criteria.py`, `gate` byudjeti, talab holatlari (W7)
+- [x] 08-20-PLAN.md — Faza darvozasi: `test_phase8_criteria.py`, `gate` byudjeti, talab holatlari (W7)
 
 **UI hint**: yes
 **Note**: Faza belgisi (`- [ ] **Phase 8: ...**`) ijro tugagach ham
@@ -614,7 +614,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Tekshirildi (human_needed — 4/5 to'liq, SC2 ONNX'ga bog'liq) | 2026-08-16 |
 | 6. Billing va kassir | 14/14 | Complete   | 2026-08-11 |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 23/23 | Complete   | 2026-08-13 |
-| 8. Hisobotlar, mustahkamlash va ishga tushirish | 19/20 | In Progress|  |
+| 8. Hisobotlar, mustahkamlash va ishga tushirish | 20/20 | Ijro tugadi (qayta tekshiruv kutilmoqda) | 2026-08-16 |
 
 ---
 *Roadmap yaratildi: 2026-07-29*

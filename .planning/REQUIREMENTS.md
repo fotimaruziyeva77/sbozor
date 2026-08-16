@@ -69,8 +69,8 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 - [x] **RECON-01**: Kunlik nomuvofiqlik hisoboti: "band, lekin to'lovsiz" rastalar + "ro'yxatga olinmagan savdo" anomaliyalari, rasm-dalil havolalari bilan
 - [x] **RECON-02**: Har nomuvofiqlik case sifatida yuritiladi: mas'ul, holat (yangi/ko'rilmoqda/asosli/asossiz), yechim; hit-rate metrikasi hisoblanadi
 - [x] **RECON-03**: Direktor ertalab dayjesta oladi (kechagi tushum, bandlik %, TOP-10 qarzdor), kechqurun nomuvofiqlik xabarini oladi
-- [ ] **RECON-04**: Davr bo'yicha hisobotlar: tushum (kunlik/oylik), qarzdorlik reestri, nomuvofiqlik arxivi — har biri Excel (.xlsx) yuklab olinadi
-- [ ] **RECON-05**: AI aniqlik hisoboti: ko'r audit namunasidan, xatolik turlari ajratilgan ("band deb xato" = nizo xavfi, "bo'sh deb xato" = yo'qotish)
+- [x] **RECON-04**: Davr bo'yicha hisobotlar: tushum (kunlik/oylik), qarzdorlik reestri, nomuvofiqlik arxivi — har biri Excel (.xlsx) yuklab olinadi
+- [x] **RECON-05**: AI aniqlik hisoboti: ko'r audit namunasidan, xatolik turlari ajratilgan ("band deb xato" = nizo xavfi, "bo'sh deb xato" = yo'qotish)
 - [x] **RECON-06**: Har rol bosh ekranida o'ziga mos bitta asosiy ko'rsatkich (direktor: bugungi tushum; nazoratchi: kutayotgan navbat; kassir: bugungi yig'im)
 
 ### Telegram-bot (BOT)
@@ -141,7 +141,7 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | FOUND-04 | Phase 1 | Pending |
 | FOUND-05 | Phase 1 | Pending |
 | FOUND-06 | Phase 4 | Done |
-| FOUND-07 | Phase 8 | Pending |
+| FOUND-07 | Phase 8 | Blocked (1-da'vo YARIM, 2-da'vo umuman o'lchanmagan: zaxira zanjirining O'ZI to'liq qurilgan va statik darvoza bilan qulflangan (tests/unit/test_backup_contract.py), yurak urishi halqasi mahsulot skripti orqali o'lchanadi (tests/integration/test_backup_heartbeat.py, test_phase8_criteria.py::test_sc3_*) va dump -> TOZA server -> ma'lumot zanjiri bajariladi (tests/integration/test_restore_drill.py); LEKIN «boshqa lokatsiyaga ketadi» REAL offsite restic repo'sini talab qiladi — RESTIC_REPOSITORY/RESTIC_PASSWORD .env da YO'Q — va «toza serverda tiklash mashqi kamida bir marta muvaffaqiyatli o'tkazilgan» REAL VPS ni talab qiladi. Egasi: Ops, tetigi: VPS deploy'i, bandlari 08-HUMAN-UAT.md #1 va #2. ⛔ Qo'shimcha: tiklangan bazada sbozor_app ning 0 GRANT'i bor (deferred-items №5), ya'ni tiklash tartibiga migratsiyani qayta yugurtirish qadami kerak) |
 | MARKET-01 | Phase 2 | Done |
 | MARKET-02 | Phase 2 | Done |
 | MARKET-03 | Phase 2 | Done |
@@ -177,8 +177,8 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | RECON-01 | Phase 7 | Done |
 | RECON-02 | Phase 7 | Done |
 | RECON-03 | Phase 7 | Done |
-| RECON-04 | Phase 8 | Pending |
-| RECON-05 | Phase 8 | Pending |
+| RECON-04 | Phase 8 | Done |
+| RECON-05 | Phase 8 | Done |
 | RECON-06 | Phase 7 | Done |
 | BOT-01 | Phase 7 | Done |
 | BOT-02 | Phase 7 | Done |
@@ -402,6 +402,45 @@ o'lchovsiz qolmadi — shuning uchun `Blocked` yo'q. Lekin yuqoridagi
 oxirgi ustun **yettita** bandni nomlaydi va ular `07-HUMAN-UAT.md` ga
 **ega va tetik bilan** chiqarildi. Ular talab jumlalari emas: ular
 **tashqi xizmat**, **haqiqiy klient** va **inson idroki** haqida.
+
+### Qoidaning 8-fazadagi qo'llanishi (2026-08-16, `08-20`) — DALIL BILAN
+
+Uch banddan **ikkitasi** `Pending` -> **`Done`**, **bittasi**
+`Pending` -> **`Blocked`**. ⛔ Uchinchisi 7-fazadan qaytish emas —
+u **qoidaning aynan o'zi**: talab MATNINING bir jumlasi CI'da
+bajarilmasa, band `Done` bo'lmaydi.
+
+⛔ **FOUND-07 NING IKKI JUMLASI IKKI XIL NARSA VA ULARNI QO'SHIB
+BO'LMAYDI.** Birinchisi mexanizm haqida («kunlik avtomatik backup ...
+boshqa lokatsiyaga»), ikkinchisi FAKT haqida («tiklash mashqi kamida bir
+marta o'tkazilgan»). Mexanizm to'liq qurilgan va uch qatlamda
+qulflangan; fakt esa **hech qachon** CI'da tug'ilmaydi — u REAL offsite
+repo va REAL toza serverda, bir marta, ODAM tomonidan yoziladi. Bu
+farq `test_phase8_criteria.py::test_sc3_*` docstringida ham **literal**
+yozilgan, ya'ni u ikki joyda bir xil aytiladi.
+
+⚠ **RECON-05 `Done` VA AI-02 `Blocked` — BU ZIDDIYAT EMAS.** Ikkalasi
+BOSHQA talab: AI-02 «RF-DETR ONNX Runtime CPU da har zonani baholaydi»
+deydi (model artefakti va uning ANIQLIGI haqida, 5-faza), RECON-05 esa
+«aniqlik HISOBOTI ko'r audit namunasidan chiqadi va xatolik turlarini
+ajratadi» deydi (o'lchov qurilmasi haqida). O'lchov qurilmasi
+detektorning qanchalik yaxshi ekanidan **mustaqil** ishlaydi va aynan
+shuning uchun u xolis: u model yomon bo'lganda ham to'g'ri raqam
+beradi. AI-02 ning `Blocked` holati RECON-05 ni **bloklamaydi**.
+
+| Talab | Yangi holat | Nima o'lchandi va QAYSI test bilan | Nima o'lchanMAGAN |
+|---|---|---|---|
+| **RECON-04** | `Pending` -> **`Done`** | `test_phase8_criteria.py::test_sc1_director_reads_three_reports_and_downloads_each_as_a_real_xlsx` — uchala JSON marshruti (`/reports/revenue`, `/debtors`, `/anomalies`) direktor sessiyasida `200` va BO'SH EMAS (tushum qatorida `charged_soum`, reestrda kamida bitta qator, arxivda `unpaid_count == 1`), so'ng uchala `.xlsx` bayti **QAYTA O'QILADI** (`xlsx_reader.read_rows` — hajm -> ZIP -> parse) va sarlavha qatori matn katalogidan hosila. ⛔ `200` mezon EMAS va bu MEXANIK: mezon modulining 4-darvozasi hujjat yo'liga tegib javob KODI haqida da'vo qilgan HAR testda o'quvchining chaqirilishini talab qiladi. Marshrutning qolgan qirralari (huquq matritsasi, bitta `audit_read`, davr chegaralari, cross-tenant, sahifalash, bayt-determinizm) — `test_reports_api.py` + `test_report_repo.py` + `test_xlsx_export.py`. To'rtinchi eksport (`accuracy.xlsx`) va imzoli beshinchisi (`compare.xlsx`) — SC#2/SC#5 | Direktorning hisobotni **amalda o'qishi va qarorga aylantirishi** — inson idroki; `08-HUMAN-UAT.md`. ⚠ Davr arxivida uchinchi/to'rtinchi anomaliya sinfi (`closed_day`, `no_coverage`) YO'Q — ular KUNLIK ekranda ko'rinadi, davr hisobotida emas (`deferred-items.md` №1) |
+| **RECON-05** | `Pending` -> **`Done`** | `test_sc2_accuracy_report_comes_from_the_blind_sample_and_splits_two_error_kinds` — 30 zona-hodisali doira quriladi, namuna **`audit_draw` bilan TORTILADI** (qo'lda yozilmaydi), butun namuna nazoratchi sessiyasidan javoblanadi va `.xlsx` bayti qayta o'qiladi. IKKI da'vo: (a) **manba** — hujjatdagi son `eval` javoblariga TENG (`train` yarmi tushmaydi) va `eval` bandlarining navbat turi AYNAN `blind_audit`; (b) **ajratilganlik** — «band deb xato» va «bo'sh deb xato» ALOHIDA qator va ularning MAXRAJI boshqa: shu namunada birinchisi **o'lchanadi** (`fp/(tp+fp)` = 1,0), ikkinchisi esa **BO'SH KATAK** bo'lib qoladi (`tp+fn = 0`). Ikkalasi bir maxrajga qo'shilganda ikkala katak ham to'lardi. Formulalarning SOF arifmetikasi — `tests/unit/test_accuracy_report.py`; ko'r serializer va 70/30 — `test_blind_audit.py` | ⛔ **DETEKTORNING HAQIQIY ANIQLIGI** — u BOSHQA talab (AI-02, `Blocked`) va u bu yerda o'lchanmaydi. Hisobot xolis o'lchov QURILMASI: u model yomon bo'lganda ham to'g'ri raqam beradi. Namunaning HAJMI (kunlik 30) real bozorda yetarlimi — `08-HUMAN-UAT.md`, egasi direktor |
+| **FOUND-07** | `Pending` -> ⛔ **`Blocked`** | **Mexanizm uch qatlamda o'lchangan:** (a) zanjirning statik shakli — `tests/unit/test_backup_contract.py` (quvur YO'Q, `--compress=0`, yurak urishi ENG OXIRIDA va `trap` ichida emas, komponent nomi `alerting.BACKUP_COMPONENT` bilan bir xil); (b) yurak urishi halqasi — `test_backup_heartbeat.py` va `test_phase8_criteria.py::test_sc3_*`: SQL **mahsulot faylidan** (`ops/backup/heartbeat.sql`) o'qiladi, yozilishidan OLDIN `/internal/self-check` komponentni `never_seen` da ko'rsatadi, yozilgandan KEYIN chiqaradi; (c) tiklash MEXANIZMI — `test_restore_drill.py` (`pg_dump` -> TOZA `postgres:18.4` konteyneri -> `pg_restore` -> moliyaviy qatorlar, `pg_policies` va `audit_log` joyida) va u standart to'plamdan CHIQARILMAGAN (mezon `addopts` ni o'qib tekshiradi). ⛔ Mezon modulida yurak urishini QO'LDA yozadigan xom SQL **AST bilan taqiqlangan** | ⛔ **TALAB MATNINING IKKALA JUMLASI HAM YARIM QOLDI.** «Boshqa lokatsiyaga ketadi» — REAL offsite `restic` repo'si kerak, `RESTIC_REPOSITORY`/`RESTIC_PASSWORD` esa `.env` da **YO'Q** (`docker compose` ularni bo'sh satr bilan almashtiradi), ya'ni zanjir bugun **umuman yugurmaydi** va `backup_stale` (CRITICAL, `never_suppressed`) go-live'dan keyin ham chiqib turadi — ⛔ uni o'chirish TAQIQ. «Toza serverda tiklash mashqi kamida bir marta muvaffaqiyatli o'tkazilgan» — REAL VPS kerak. **Egasi: Ops. Tetigi: VPS deploy'i. Bandlari: `08-HUMAN-UAT.md` #1 va #2.** ⚠ Uchinchi ochiq band: tiklangan bazada `sbozor_app` ning **0 GRANT**i bor (`deferred-items.md` №5) — tiklash tartibiga migratsiyani qayta yugurtirish qadami kerak va u **o'lchanmagan** |
+
+⛔ **NEGA `Blocked`, «deyarli tayyor» EMAS.** Uchala qatlam ham yashil,
+zanjir kodda to'liq va u ishlashga tayyor — lekin **bugun u hech qachon
+yugurmagan**. `Done` qo'yish 2-fazaning `02-VERIFICATION.md` da
+hujjatlashtirilgan xatosining aynan takrori bo'lardi (890 yashil test
+ortida to'rtta haqiqiy bo'shliq) va u **falokat kunida**, eng yomon
+paytda ko'rinardi. ⚠ `Blocked` bu yerda ham «ish to'xtadi» degani EMAS —
+u «dalil to'liq emas va yetishmayotgan dalil NOMLANGAN» degani.
 
 Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 `node scripts/check-requirements-sync.mjs` — qo'lda, har faza yopilishida
