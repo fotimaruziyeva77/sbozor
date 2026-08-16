@@ -43,7 +43,8 @@
     "occupancy": "Bandlik",
     "collect": "Yig'ish",
     "billing": "Patta hisobi",
-    "reconciliation": "Nomuvofiqliklar"
+    "reconciliation": "Nomuvofiqliklar",
+    "reports": "Hisobotlar"
   },
   "auth": {
     "phoneLabel": "Telefon raqami",

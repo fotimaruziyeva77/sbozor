@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   Ellipsis,
+  FileSpreadsheet,
   FileWarning,
   HandCoins,
   LayoutDashboard,
@@ -71,6 +72,7 @@ type NavItem = {
     | "/collect"
     | "/billing"
     | "/reconciliation"
+    | "/reports"
     | "/users"
     | "/audit"
     | "/markets/new";
@@ -88,6 +90,7 @@ type NavItem = {
     | "collect"
     | "billing"
     | "reconciliation"
+    | "reports"
     | "users"
     | "audit"
     | "newMarket";
@@ -336,7 +339,59 @@ const NAV_ITEMS: readonly NavItem[] = [
     permission: "report_view",
     group: "market",
   },
-  { href: "/users", labelKey: "users", icon: Users, permission: "user_view", group: "system" },
+  /*
+   * "Hisobotlar" — 8-fazaning YAGONA yangi bo'limi (08-UI-SPEC §4.7).
+   *
+   * `/reconciliation` DAN BEVOSITA KEYIN, `system` guruhidan OLDIN: domen
+   * zanjiri kamera -> kadr -> ko'rib chiqish -> bandlik -> yig'ish ->
+   * patta hisobi -> nomuvofiqlik -> HISOBOT bo'lib o'qiladi. Hisobot —
+   * hamma oldingi bosqichning DAVR KESIMIDAGI hosilasi, ya'ni u kunlik
+   * yuzalardan KEYIN turadi.
+   *
+   * ⛔ YANGI `Permission` QO'SHILMAYDI: `report_view` ikkala matritsada
+   *    ham ALLAQACHON bor (`lib/rbac.ts`, `rbac.py`) va bu faza o'sha
+   *    juftlikka UMUMAN TEGMAYDI (08-UI-SPEC M-6). Haqiqiy darvoza —
+   *    server marshrutlaridagi `require_permission` (08-07/08-12/08-16).
+   *
+   * MOBIL KONTRAKT BUZILMAYDI [O'LCHANDI: 08-UI-SPEC M-5]: ro'yxat
+   * 16 -> 17 ga o'sdi, `MOBILE_PRIMARY_COUNT` esa 4 bo'lib qoladi.
+   * ⛔ Kassirda jami YANA IKKI yozuv (`/dashboard` + `/collect`) va
+   *    nazoratchida ham IKKI (`/dashboard` + `/review`) — ikkalasida ham
+   *    `report_view` YO'Q, ya'ni overflow NOL bo'lib qoladi va 6/5-faza
+   *    kontraktlari O'ZGARMAYDI.
+   *
+   * ⛔ `/reports/compare` NAVIGATSIYAGA KIRMAYDI (§4.7): u parallel
+   *    rejimning 2–4 haftasi uchun va doimiy navigatsiya sloti uni
+   *    cutover'dan keyin ham ABADIY qoldirardi. Havola `/reports`
+   *    sahifasining sarlavhasida — `/collect` -> `/collect/shift` bilan
+   *    AYNI naqsh (bola marshrut nav elementi emas).
+   *
+   * `FileSpreadsheet` ATAYIN: `FileText` — `/audit` da band bo'lgan
+   * «hujjat» ma'nosi; `Download` esa AMALNI bildiradi va u sahifa
+   * ichidagi to'rtta tugmada takrorlanadi — navigatsiyada amal ikonkasi
+   * JOY ikonkasidan kuchsizroq.
+   */
+  {
+    href: "/reports",
+    labelKey: "reports",
+    icon: FileSpreadsheet,
+    permission: "report_view",
+    group: "market",
+  },
+  /*
+   * ⚠ IN-06 (07-faza deferred §7b): bu yozuv 7-fazagacha BIR QATORDA
+   *   turgan va faylning qolgan o'n oltitasi ko'p qatorda edi. Yangi
+   *   yozuv qo'shilayotgan commitda o'sha nomuvofiqlik ham tugatildi —
+   *   diff'ni o'qiydigan odam ikki xil shaklni «ma'noli farq» deb
+   *   o'qishi mumkin edi.
+   */
+  {
+    href: "/users",
+    labelKey: "users",
+    icon: Users,
+    permission: "user_view",
+    group: "system",
+  },
   {
     href: "/audit",
     labelKey: "audit",

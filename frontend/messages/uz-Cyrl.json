@@ -43,7 +43,8 @@
     "occupancy": "Бандлик",
     "collect": "Йиғиш",
     "billing": "Патта ҳисоби",
-    "reconciliation": "Номувофиқликлар"
+    "reconciliation": "Номувофиқликлар",
+    "reports": "Ҳисоботлар"
   },
   "auth": {
     "phoneLabel": "Телефон рақами",
