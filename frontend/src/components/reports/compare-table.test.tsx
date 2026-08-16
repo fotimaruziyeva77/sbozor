@@ -218,7 +218,49 @@ function numbersIn(text: string): number[] {
   return [...text.matchAll(/\d+/gu)].map((match) => Number(match[0]));
 }
 
-function bodyRows(view: RenderResult): HTMLTableRowElement[] {
+/**
+ * ⛔ KO'RINADIGAN MATN BO'LAKLARI — chegaralari SAQLANGAN holda.
+ *
+ * =========================================================================
+ * ⛔⛔ BU YORDAMCHI ⛔ O'LCHANGAN KO'R NUQTANI YOPADI (08-13/08-15 sinfi).
+ *
+ * Dastlabki shakl butun blokning `textContent` ini olardi va u
+ * ⛔ QO'SHNI JUMLALARNI YOPISHTIRARDI: «… Bandlik farqi: 1» + «287 rasta
+ * …» -> `…farqi: 1287 rasta…`, ya'ni regeks `1` va `287` o'rniga
+ * ⛔ `1287` ni topardi. Da'vo shu sababdan yolg'on-qizil bo'lardi va
+ * keyingi ijrochi uni «shovqin» deb bo'shatardi — holbuki mahsulotda
+ * hech qanday nosozlik YO'Q (ikki `<p>` orasida ko'z uchun qator uzilishi
+ * bor, matn oqimida esa yo'q).
+ *
+ * ⛔ Shuning uchun matn ⛔ TUGUNMA-TUGUN yig'iladi: har text tuguni
+ *    alohida bo'lak bo'lib qoladi va qo'shnisi bilan yopishmaydi.
+ *    `sr-only` shajaralari esa BUTUNLAY tashlab ketiladi — da'vo
+ *    KO'RINADIGAN matn haqida.
+ * =========================================================================
+ */
+function visibleChunks(root: Element): string[] {
+  const chunks: string[] = [];
+
+  const walk = (node: Node): void => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      chunks.push(node.textContent ?? "");
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    if ((node as Element).classList.contains("sr-only")) return;
+    for (const child of [...node.childNodes]) walk(child);
+  };
+
+  walk(root);
+  return chunks;
+}
+
+/** ⛔ Ko'rinadigan sonlar — yopishgan qo'shnilardan MUSTAQIL. */
+function visibleNumbers(root: Element): number[] {
+  return visibleChunks(root).flatMap(numbersIn);
+}
+
+function bodyRows(view: RenderResult): Element[] {
   return [...view.container.querySelectorAll("tbody tr")];
 }
 
@@ -344,11 +386,38 @@ describe("⛔ G-41 (08-UI-SPEC) (c): uch sanoq HECH QACHON qo'shilmaydi", () => 
     /*
      * ⛔ DA'VO TINISH BELGISIDAN MUSTAQIL: sonlar regeks bilan
      *   AJRATILADI, ya'ni «· 6 ·» ham, «(6)» ham, «6.» ham ushlanadi.
+     *   ⛔ VA QO'SHNI JUMLA BILAN YOPISHIB KETMAYDI — `visibleChunks`
+     *   izohidagi o'lchangan ko'r nuqta.
      */
-    const shown = numbersIn(visibleText(summary as Element));
+    const shown = visibleNumbers(summary as Element);
 
     expect(shown).toEqual([LEDGER_OVER, SYSTEM_OVER, AI_MISMATCH, MATCHED]);
     expect(shown).not.toContain(COMBINED);
+  });
+
+  test("⛔ O'LCHOV — sodda `textContent` shakli SHU YERDA yolg'on-qizil berardi", async () => {
+    /*
+     * ⛔⛔ BU TEST DARVOZANING O'Z MEXANIZMINI O'LCHAYDI (08-17 dagi
+     *   «import filtri haqiqatan kerak» testining aynan sinfi).
+     *
+     * Sodda shakl butun blokning `textContent` ini olardi va ikki
+     * qo'shni jumlani ⛔ YOPISHTIRARDI: «…farqi: 1» + «287 rasta…» ->
+     * `1287`. Ya'ni yuqoridagi da'vo mahsulotda hech qanday nosozlik
+     * BO'LMAGAN holda qizarardi va keyingi ijrochi uni «shovqin» deb
+     * bo'shatardi.
+     *
+     * ⚠ Faraz eskirsa (razmetka o'zgarib jumlalar yopishmay qolsa) shu
+     *   assert QIZARADI va `visibleChunks` ni saqlash sababi QAYTA
+     *   baholanadi — jimgina qolib ketmaydi.
+     */
+    const view = await renderTable(payload());
+    const summary = view.container.querySelector("[data-compare-summary]");
+
+    const naive = numbersIn(visibleText(summary as Element));
+    const chunked = visibleNumbers(summary as Element);
+
+    expect(naive).not.toEqual(chunked);
+    expect(naive).toContain(Number(`${AI_MISMATCH}${MATCHED}`));
   });
 });
 
