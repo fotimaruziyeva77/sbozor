@@ -1445,3 +1445,146 @@ test("G-17: ZAXIRA kalit (`errors.generic`) UCHALA tilda bor", () => {
       "ARALASHDI",
   );
 });
+
+/* ---------------------------------------------------------------------------
+ * G-17 — 8-FAZA: TO'QQIZINCHI REYESTR (HISOBOT YUZASI, W0-F4).
+ *
+ * Zanjir yuqoridagi nomuvofiqlik bloki bilan AYNI shaklda — IKKI bo'g'inli:
+ *
+ *   lib/report-errors.ts::REPORT_ERROR_CODES         (TypeScript — LANGAR)
+ *     -> messages/*.json::reports.errorCause/errorFix (sabab va tuzatish)
+ *
+ * ⛔⛔ NEGA BU BLOK BOR — 08-UI-SPEC §5.1 (W0-F4) UNI NOMMA-NOM TALAB
+ *     QILADI: «`REPORT_ERROR_CODES` … `error-codes.test.mjs` (G-17)
+ *     UCHALA TILDA talab qiladi».
+ *
+ *     Usiz sakkiz kod × 3 locale × 2 guruh = 48 matn O'LCHANMAGAN qolardi.
+ *     `i18n:check` bu sinfni USHLAY OLMAYDI (shu faylning bosh izohi):
+ *     u uchala faylning bir-biriga mosligini ko'radi, ro'yxatning
+ *     TO'LIQLIGINI emas — kalit uchala tilda ham yo'q bo'lsa, parity
+ *     baribir yashil. Ya'ni `reportErrorView()` mavjud bo'lmagan kalit
+ *     qurardi va xato bloki BO'SH chiqardi.
+ *
+ * ⛔ BACKEND BO'G'INI YO'Q va sabab `reconciliation-errors.ts` nikiga
+ *    AYNAN teng: `billing_errors.py` ga qo'shish o'sha faylning
+ *    `billingConstants.size === 14` nazorat qiymatini DARHOL qizartirardi.
+ * ------------------------------------------------------------------------ */
+
+const REPORT_ERRORS = path.join(
+  FRONTEND_ROOT,
+  "src",
+  "lib",
+  "report-errors.ts",
+);
+
+/** `reports.*` — hisobot yuzasining matn namespace'i (08-UI-SPEC §14.2). */
+const REPORT_NAMESPACE = "reports";
+
+/**
+ * §14.9 — hisobot va daftar yuzasining kodlari soni.
+ *
+ * ⛔ SAKKIZ, YETTI EMAS. 08-UI-SPEC §14.9 jadvali YETTITASINI sanaydi;
+ *    sakkizinchisi (`report_period_too_long`) 08-03 rejasining ONGLI
+ *    qo'shimchasi va sababi `lib/report-errors.ts` da LITERAL yozilgan:
+ *    §4.4 davr tanlagichiga uzunlik chegarasi ATAYIN qo'ymaydi, server
+ *    esa `report_max_period_days = 366` ni majburlaydi. O'sha rad
+ *    javobini `report_period_invalid` ga yig'ish ekranda «Boshlanish
+ *    sanasi tugash sanasidan keyin bo'lmasin» degan YOLG'ON sababni
+ *    ko'rsatardi.
+ *
+ * ⛔ BU SON — O'LCHAM QULFI, «yangilanadigan raqam» EMAS. Uni oshirish
+ *    FAQAT uchala locale'ga matn qo'shilgandan keyin mumkin.
+ */
+const REPORT_ERROR_CODE_COUNT = 8;
+
+const reportSource = read(REPORT_ERRORS);
+const reportCodes = readTsStringArray(reportSource, "REPORT_ERROR_CODES");
+
+test("G-17: hisobot reyestri o'qildi va AYNAN sakkiz kod (nazorat)", () => {
+  /*
+   * Nazorat: parser sinsa (masalan reyestr `Record` ga aylantirilsa)
+   * quyidagi darvozalar BO'SH to'plam bo'yicha aylanib, JIMGINA yashil
+   * qolardi — bu kodbazada bir necha marta o'lchangan nosozlik sinfi.
+   */
+  assert.equal(
+    reportCodes.length,
+    REPORT_ERROR_CODE_COUNT,
+    `REPORT_ERROR_CODES dan ${reportCodes.length} kod o'qildi, kutilgan ` +
+      `${REPORT_ERROR_CODE_COUNT} (08-UI-SPEC §14.9 + 08-03 qo'shimchasi)`,
+  );
+  assert.equal(
+    new Set(reportCodes).size,
+    reportCodes.length,
+    `takrorlangan kod: ${reportCodes}`,
+  );
+});
+
+test("G-17: hisobot `SERVER_CODE_MAP` ining HAR natijasi reyestrda bor", () => {
+  /*
+   * ⛔ Xarita reyestrdan AJRALIB KETSA, marshrut kod qaytarib turadi,
+   *   `reportErrorView()` esa mavjud bo'lmagan matn kalitini qurardi —
+   *   `t()` chegarada yiqilardi yoki xato bloki BO'SH chiqardi. Eksport
+   *   tugmasi yonidagi jim xato esa foydalanuvchini tugmani qayta-qayta
+   *   bosishga majburlardi (§12.2 — xato INLINE, toast emas).
+   */
+  const pairs = readServerCodeMap(reportSource);
+
+  assert.ok(
+    pairs.length >= 4,
+    `SERVER_CODE_MAP dan atigi ${pairs.length} juftlik o'qildi — parser sinigan`,
+  );
+
+  const unknown = pairs
+    .filter(([, screen]) => !reportCodes.includes(screen))
+    .map(([raw, screen]) => `${raw} -> ${screen} (reyestrda YO'Q)`);
+
+  assert.deepEqual(
+    unknown,
+    [],
+    "hisobot xaritasi reyestrdan AJRALIB KETGAN:\n  " + unknown.join("\n  "),
+  );
+});
+
+test("G-17: HAR HISOBOT kodi uchun sabab va tuzatish UCHALA tilda bor", () => {
+  const problems = [];
+
+  for (const locale of LOCALES) {
+    const messages = loadMessages(locale);
+    const causes = messages[REPORT_NAMESPACE]?.errorCause ?? {};
+    const fixes = messages[REPORT_NAMESPACE]?.errorFix ?? {};
+
+    // OLDINGA: reyestrdan boshlanadi (LANGAR).
+    for (const code of reportCodes) {
+      if (typeof causes[code] !== "string" || causes[code].trim() === "") {
+        problems.push(
+          `${locale}.json: ${REPORT_NAMESPACE}.errorCause.${code} YO'Q`,
+        );
+      }
+      if (typeof fixes[code] !== "string" || fixes[code].trim() === "") {
+        problems.push(
+          `${locale}.json: ${REPORT_NAMESPACE}.errorFix.${code} YO'Q`,
+        );
+      }
+    }
+
+    // TESKARI: matn bor, kod yo'q — O'LIK KALIT.
+    for (const group of ["errorCause", "errorFix"]) {
+      for (const code of Object.keys(
+        messages[REPORT_NAMESPACE]?.[group] ?? {},
+      )) {
+        if (!reportCodes.includes(code)) {
+          problems.push(
+            `${locale}.json: ${REPORT_NAMESPACE}.${group}.${code} reyestrda YO'Q`,
+          );
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "D-02 buzilgan — hisobot sabab/tuzatish JUFT bo'lishi SHART:\n  " +
+      problems.join("\n  "),
+  );
+});

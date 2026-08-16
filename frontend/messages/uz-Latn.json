@@ -1389,5 +1389,81 @@
     "countVendors": "Sotuvchilar",
     "countCameras": "Kameralar",
     "countUsers": "Foydalanuvchilar"
+  },
+  "reports": {
+    "title": "Hisobotlar",
+    "periodLabel": "Davr",
+    "periodFrom": "Boshlanish",
+    "periodTo": "Tugash",
+    "periodShown": "{from} — {to}",
+    "preset": {
+      "last30": "Oxirgi 30 kun",
+      "yesterday": "Kecha",
+      "thisMonth": "Joriy oy",
+      "lastMonth": "O'tgan oy",
+      "custom": "Tanlangan oraliq"
+    },
+    "maxDayHint": "Hisobot kechagi kungacha yopilgan ma'lumotdan chiqadi.",
+    "export": "Excel bo'lib yuklab olish",
+    "exporting": "Tayyorlanmoqda",
+    "revenueTitle": "Tushum",
+    "revenueTotal": "Davr tushumi",
+    "revenueCharged": "Hisoblangan",
+    "revenuePaid": "To'langan",
+    "revenueDiff": "Farq",
+    "debtorsTitle": "Qarzdorlik ro'yxati",
+    "debtorsTotal": "Jami qarz",
+    "debtorsOldest": "Eng eski qarz",
+    "vendorUnknown": "Sotuvchi ko'rsatilmagan",
+    "anomaliesTitle": "Nomuvofiqlik arxivi",
+    "anomaliesUnpaid": "Band, lekin to'lovsiz",
+    "anomaliesUnregistered": "Ro'yxatga olinmagan savdo",
+    "accuracyTitle": "AI aniqlik hisoboti",
+    "accuracyDisclaimer": "Bu ulush nazoratchining ko'r javoblaridan hisoblanadi. Modelning o'zi avtomatik sinovda o'lchanmagan.",
+    "accuracyNotMeasured": "Bu davrda javoblar soni o'lchov uchun yetarli emas: {n} ta, kamida {min} kerak.",
+    "rowsShown": "{shown} qatordan {total} tasi ko'rsatilmoqda",
+    "amountUnit": "so'm",
+    "compareLink": "Uch tomonlama solishtiruv",
+    "errorCause": {
+      "report_period_invalid": "Tanlangan davr yaroqsiz.",
+      "report_period_future": "Hisobot kechagi kungacha yopilgan ma'lumotdan chiqadi.",
+      "report_period_too_long": "Tanlangan davr juda uzun.",
+      "report_too_large": "Bu davrda qator soni faylga sig'maydi.",
+      "report_export_failed": "Fayl tayyorlanmadi.",
+      "report_forbidden": "Bu hisobotga ruxsatingiz yo'q.",
+      "ledger_day_locked": "Bu kun uchun daftar yopilgan.",
+      "ledger_stall_unknown": "Faylda tizimda yo'q rasta kodi bor."
+    },
+    "errorFix": {
+      "report_period_invalid": "Boshlanish sanasi tugash sanasidan keyin bo'lmasin.",
+      "report_period_future": "Tugash sanasini kechagi kun yoki undan oldin qilib tanlang.",
+      "report_period_too_long": "Davrni bir yildan qisqa qilib tanlang.",
+      "report_too_large": "Davrni qisqartiring va qayta yuklab oling.",
+      "report_export_failed": "Qayta urinib ko'ring — muammo takrorlansa, davrni qisqartiring.",
+      "report_forbidden": "Direktorga murojaat qiling.",
+      "ledger_day_locked": "Bozor ma'muriyatiga murojaat qiling.",
+      "ledger_stall_unknown": "Rasta kodlarini shablondagi ro'yxat bilan solishtiring."
+    }
+  },
+  "compare": {
+    "title": "Uch tomonlama solishtiruv",
+    "ledger": "Daftar",
+    "system": "Tizim",
+    "aiExpected": "AI-kutilgan",
+    "diff": {
+      "ledgerOver": "Daftar ortiq",
+      "systemOver": "Tizim ortiq",
+      "aiMismatch": "Bandlik farqi"
+    },
+    "diffCounts": "Daftar ortiq: {ledgerOver} · Tizim ortiq: {systemOver} · Bandlik farqi: {aiMismatch}",
+    "matched": "{matched} rasta uchala manbada mos",
+    "ledgerUpload": "Daftarni yuklash",
+    "ledgerTemplate": "Shablonni yuklab olish",
+    "ledgerMissing": "Bu kun uchun daftar yuklanmagan",
+    "ledgerMissingHint": "Daftar summalarini Excel shabloni orqali yuklang — solishtiruv shundan keyin chiqadi.",
+    "ledgerReplaceTitle": "Daftarni almashtirasizmi?",
+    "ledgerReplaceBody": "{day} kuni uchun daftar allaqachon yuklangan. Yangi fayl eskisining o'rnini oladi.",
+    "ledgerReplaceConfirm": "Almashtirish",
+    "ledgerLoaded": "Daftar yuklandi: {rows} qator"
   }
 }
