@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryState } from "nuqs";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { CameraList } from "@/components/cameras/camera-list";
 import { isDiscoveryRunId } from "@/components/cameras/camera-page-state";
 import { CoverageCard } from "@/components/camera-zones/coverage-card";
@@ -84,14 +85,7 @@ export default function CamerasPage() {
   const { principal } = useAuthStore();
 
   if (!hasPermission(principal?.roles ?? [], "camera_view")) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

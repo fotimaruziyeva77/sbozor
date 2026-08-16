@@ -4,6 +4,7 @@ import { Suspense, useCallback, useState } from "react";
 import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { StallCardDialog } from "@/components/stalls/stall-card-dialog";
 import { StallCategoryDialog } from "@/components/stalls/stall-category-dialog";
 import { StallDialog } from "@/components/stalls/stall-dialog";
@@ -58,14 +59,7 @@ export default function StallsPage() {
   }, []);
 
   if (!canView) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

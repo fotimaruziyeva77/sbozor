@@ -3,6 +3,7 @@
 import { Suspense, useRef } from "react";
 import { useTranslations } from "next-intl";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { AnomalyList } from "@/components/billing/anomaly-list";
 import { ChargeList } from "@/components/billing/charge-list";
 import { BillingDayPicker, useBillingDay } from "@/components/billing/day-picker";
@@ -84,14 +85,7 @@ export default function BillingPage() {
   const { principal } = useAuthStore();
 
   if (!hasPermission(principal?.roles ?? [], "report_view")) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

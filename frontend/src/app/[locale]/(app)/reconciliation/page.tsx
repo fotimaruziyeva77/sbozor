@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { useTranslations } from "next-intl";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { CaseList } from "@/components/reconciliation/case-list";
 import {
   ReconciliationDayPicker,
@@ -83,14 +84,7 @@ export default function ReconciliationPage() {
   const { principal } = useAuthStore();
 
   if (!hasPermission(principal?.roles ?? [], "report_view")) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { CategoryList } from "@/components/categories/category-list";
 import { TariffList } from "@/components/tariffs/tariff-list";
 import { Button } from "@/components/ui/button";
@@ -43,14 +44,7 @@ export default function TariffsPage() {
   const canManage = hasPermission(roles, "tariff_manage");
 
   if (!canView) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

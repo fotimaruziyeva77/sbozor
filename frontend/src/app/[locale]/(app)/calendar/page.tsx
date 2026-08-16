@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { ExceptionDialog } from "@/components/calendar/exception-dialog";
 import { ExceptionList } from "@/components/calendar/exception-list";
 import { WeekdayPicker } from "@/components/calendar/weekday-picker";
@@ -43,14 +44,7 @@ export default function CalendarPage() {
   const canManage = hasPermission(roles, "stall_manage");
 
   if (!canView) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

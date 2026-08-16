@@ -4,6 +4,8 @@ import { LockKeyhole } from "lucide-react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 
+import { localeHref } from "@/lib/locale-href";
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +17,6 @@ import { useAuthStore } from "@/lib/auth-store";
 import { domainKey } from "@/lib/market-queries";
 import { hasPermission } from "@/lib/rbac";
 import { useReviewBudget } from "@/lib/review-queries";
-import { routing } from "@/i18n/routing";
 
 /*
  * =============================================================================
@@ -57,29 +58,6 @@ import { routing } from "@/i18n/routing";
  * =============================================================================
  */
 
-/**
- * Til prefiksli manzil — `@/i18n/navigation` NING O'RNIGA.
- *
- * ⚠ 05-09 (deviatsiya #2) O'LCHAGAN: `@/i18n/navigation` ->
- *   `next-intl/navigation` -> `next/navigation` zanjiri VITEST ostida
- *   YECHILMAYDI va uni import qilgan fayl «0 test» bilan yiqiladi. Bu
- *   sahifa `review-queries.test.tsx` da render qilinadi, ya'ni u ham
- *   o'sha zanjirga tegmaydi.
- *
- * ⚠ IKKINCHI NUSXA (birinchisi `camera-row.tsx:96`) OCHIQ QAYD ETILADI:
- *   uni umumiy modulga chiqarish TO'G'RI qadam, lekin o'sha modul bu
- *   rejaning fayl to'plamidan tashqarida. Prefiks XARITASI esa nusxa
- *   ko'chirilmaydi — u `routing.localePrefix` dan o'qiladi.
- */
-function localeHref(locale: string, path: string): string {
-  const config = routing.localePrefix;
-  const prefixes: Partial<Record<string, string>> =
-    typeof config === "object" && "prefixes" in config
-      ? (config.prefixes ?? {})
-      : {};
-  return `${prefixes[locale] ?? `/${locale}`}${path}`;
-}
-
 export default function ReviewHomePage() {
   const t = useTranslations();
   const { principal } = useAuthStore();
@@ -90,14 +68,7 @@ export default function ReviewHomePage() {
    *   Haqiqiy nazorat serverda (`require_permission(OCCUPANCY_REVIEW)`).
    */
   if (!hasPermission(principal?.roles ?? [], "occupancy_review")) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return <ReviewHome />;

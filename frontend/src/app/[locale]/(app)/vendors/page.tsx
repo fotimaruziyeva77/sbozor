@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { Info, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VendorList } from "@/components/vendors/vendor-list";
@@ -46,14 +47,7 @@ export default function VendorsPage() {
   const canManage = hasPermission(roles, "vendor_manage");
 
   if (!canView) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { parseAsInteger, useQueryState } from "nuqs";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { CategoryList } from "@/components/categories/category-list";
 import { ExceptionDialog } from "@/components/calendar/exception-dialog";
 import { ExceptionList } from "@/components/calendar/exception-list";
@@ -65,14 +66,7 @@ export default function MarketSetupPage() {
   const canView = hasPermission(roles, "market_data_view");
 
   if (!canView) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

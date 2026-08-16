@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { MarketRequisitesForm } from "@/components/wizard/market-requisites-form";
 import { WizardShell } from "@/components/wizard/wizard-shell";
 import { useAuthStore } from "@/lib/auth-store";
@@ -41,14 +42,7 @@ export default function NewMarketPage() {
     (principal?.isPlatformAdmin ?? false);
 
   if (!canCreate) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

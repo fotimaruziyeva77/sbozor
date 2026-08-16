@@ -4,6 +4,7 @@ import { Suspense, useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { StallCardDialog } from "@/components/stalls/stall-card-dialog";
 import { StallMap } from "@/components/stalls/stall-map";
 import { Field } from "@/components/ui/field";
@@ -44,14 +45,7 @@ export default function MapPage() {
   }, []);
 
   if (!canView) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

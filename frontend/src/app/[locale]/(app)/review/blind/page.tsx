@@ -1,11 +1,12 @@
 "use client";
 
-import { useLocale, useTranslations } from "next-intl";
+import { useLocale } from "next-intl";
 
+import { localeHref } from "@/lib/locale-href";
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { BlindSession } from "@/components/blind-audit/blind-session";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/rbac";
-import { routing } from "@/i18n/routing";
 
 /*
  * =============================================================================
@@ -34,30 +35,12 @@ import { routing } from "@/i18n/routing";
  * =============================================================================
  */
 
-/** Til prefiksli manzil — sabab `review/page.tsx:64` da. */
-function localeHref(locale: string, path: string): string {
-  const config = routing.localePrefix;
-  const prefixes: Partial<Record<string, string>> =
-    typeof config === "object" && "prefixes" in config
-      ? (config.prefixes ?? {})
-      : {};
-  return `${prefixes[locale] ?? `/${locale}`}${path}`;
-}
-
 export default function BlindReviewPage() {
-  const t = useTranslations();
   const locale = useLocale();
   const { principal } = useAuthStore();
 
   if (!hasPermission(principal?.roles ?? [], "occupancy_review")) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return <BlindSession exitHref={localeHref(locale, "/review")} />;

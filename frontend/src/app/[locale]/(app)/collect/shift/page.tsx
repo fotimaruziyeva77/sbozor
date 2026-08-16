@@ -4,12 +4,13 @@ import { useCallback, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
+import { localeHref } from "@/lib/locale-href";
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { ShiftCloseForm } from "@/components/collect/shift-close-form";
 import { ShiftOpenCard } from "@/components/collect/shift-open-card";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/rbac";
 import { useOpenShift } from "@/lib/shift-queries";
-import { routing } from "@/i18n/routing";
 
 /*
  * =============================================================================
@@ -68,25 +69,6 @@ import { routing } from "@/i18n/routing";
  *   (06-10).
  * =============================================================================
  */
-
-/**
- * Til prefiksli manzil — `@/i18n/navigation` NING O'RNIGA.
- *
- * ⚠ 05-09 (deviatsiya #2) O'LCHAGAN: `@/i18n/navigation` zanjiri VITEST
- *   ostida YECHILMAYDI va uni import qilgan fayl «0 test» bilan
- *   yiqiladi. Bu OLTINCHI nusxa (`camera-row.tsx`, `review/page.tsx`,
- *   `review/uncertain/page.tsx`, `occupancy/page.tsx`, `collect/page.tsx`);
- *   prefiks XARITASI esa nusxa ko'chirilmaydi — u `routing.localePrefix`
- *   dan o'qiladi.
- */
-function localeHref(locale: string, path: string): string {
-  const config = routing.localePrefix;
-  const prefixes: Partial<Record<string, string>> =
-    typeof config === "object" && "prefixes" in config
-      ? (config.prefixes ?? {})
-      : {};
-  return `${prefixes[locale] ?? `/${locale}`}${path}`;
-}
 
 export default function CollectShiftPage() {
   const t = useTranslations();
@@ -155,14 +137,7 @@ export default function CollectShiftPage() {
   const reopen = useCallback(() => setClosingShiftId(null), []);
 
   if (!canManage) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

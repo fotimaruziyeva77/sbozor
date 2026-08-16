@@ -3,6 +3,7 @@
 import { Suspense, useId, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { AlertList } from "@/components/snapshots/alert-list";
 import { captureCellState } from "@/components/snapshots/capture-cell";
 import { CaptureGrid } from "@/components/snapshots/capture-grid";
@@ -81,14 +82,7 @@ export default function SnapshotsPage() {
   const { principal } = useAuthStore();
 
   if (!hasPermission(principal?.roles ?? [], "camera_view")) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (

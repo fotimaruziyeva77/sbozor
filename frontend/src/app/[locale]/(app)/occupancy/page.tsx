@@ -3,6 +3,8 @@
 import { Suspense, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
+import { localeHref } from "@/lib/locale-href";
+import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { ConfusionMatrix } from "@/components/occupancy/confusion-matrix";
 import { DayBreakdown } from "@/components/occupancy/day-breakdown";
 import { RoundSummary } from "@/components/occupancy/round-summary";
@@ -24,7 +26,6 @@ import {
   useOccupancyDay,
 } from "@/lib/occupancy-queries";
 import { hasPermission } from "@/lib/rbac";
-import { routing } from "@/i18n/routing";
 
 /*
  * =============================================================================
@@ -64,38 +65,12 @@ import { routing } from "@/i18n/routing";
  * =============================================================================
  */
 
-/**
- * Til prefiksli manzil — `@/i18n/navigation` NING O'RNIGA.
- *
- * ⚠ 05-09 (deviatsiya #2) O'LCHAGAN: `@/i18n/navigation` zanjiri VITEST
- *   ostida YECHILMAYDI va uni import qilgan fayl «0 test» bilan
- *   yiqiladi. ⚠ TO'RTINCHI NUSXA (`camera-row.tsx`, `review/page.tsx`,
- *   `review/uncertain/page.tsx`) va u 05-13 ning 4-ochiq bandi sifatida
- *   ochiq qayd etilgan; prefiks XARITASI esa nusxa ko'chirilmaydi — u
- *   `routing.localePrefix` dan o'qiladi.
- */
-function localeHref(locale: string, path: string): string {
-  const config = routing.localePrefix;
-  const prefixes: Partial<Record<string, string>> =
-    typeof config === "object" && "prefixes" in config
-      ? (config.prefixes ?? {})
-      : {};
-  return `${prefixes[locale] ?? `/${locale}`}${path}`;
-}
-
 export default function OccupancyPage() {
   const t = useTranslations();
   const { principal } = useAuthStore();
 
   if (!hasPermission(principal?.roles ?? [], "report_view")) {
-    return (
-      <p
-        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
-        role="alert"
-      >
-        {t("errors.forbidden")}
-      </p>
-    );
+    return <ForbiddenNotice />;
   }
 
   return (
