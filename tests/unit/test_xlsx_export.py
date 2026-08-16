@@ -17,10 +17,13 @@ sanasi (`freeze_zip`).
 
 from __future__ import annotations
 
+import ast
 import io
 import zipfile
+from pathlib import Path
 
 import openpyxl
+from app.services import xlsx_export
 from app.services.xlsx_export import (
     FROZEN_ZIP_TIME,
     MONEY_NUM_FORMAT,
@@ -62,6 +65,18 @@ def open_book(raw: bytes) -> openpyxl.Workbook:
     return openpyxl.load_workbook(io.BytesIO(raw))
 
 
+def members(raw: bytes) -> list[tuple[str, int, int]]:
+    """A'zolarning `xlsx_reader._check_zip()` KO'RADIGAN xossalari.
+
+    Sana ATAYIN ro'yxatda yo'q — muzlatish aynan uni o'zgartiradi.
+    Qolgan uchtasi esa o'zgarmasligi SHART: o'qish darvozasi a'zolar
+    SONI va e'lon qilingan OCHILGAN hajmlar yig'indisi bo'yicha qaror
+    qiladi.
+    """
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        return [(i.filename, i.compress_type, i.file_size) for i in archive.infolist()]
+
+
 def test_two_builds_of_the_same_data_are_byte_identical() -> None:
     """AYNI ma'lumot -> AYNI baytlar.
 
@@ -100,19 +115,7 @@ def test_freeze_zip_preserves_names_compression_and_sizes() -> None:
 
     frozen = freeze_zip(original)
 
-    with (
-        zipfile.ZipFile(io.BytesIO(original)) as before,
-        zipfile.ZipFile(io.BytesIO(frozen)) as after,
-    ):
-        assert [i.filename for i in before.infolist()] == [
-            i.filename for i in after.infolist()
-        ]
-        assert [i.compress_type for i in before.infolist()] == [
-            i.compress_type for i in after.infolist()
-        ]
-        assert [i.file_size for i in before.infolist()] == [
-            i.file_size for i in after.infolist()
-        ]
+    assert members(frozen) == members(original)
 
 
 def test_core_properties_carry_the_frozen_creation_date() -> None:
@@ -156,6 +159,50 @@ def test_write_money_writes_an_integer_in_the_money_format() -> None:
 
     assert cell.value == 150_000
     assert cell.number_format == MONEY_NUM_FORMAT
+
+
+def test_raw_worksheet_writes_live_only_inside_write_text() -> None:
+    """YOZISH INTIZOMI — `ast` bilan, `grep` bilan EMAS.
+
+    ⚠ NEGA `grep` EMAS: reja qabul mezoni
+    `grep -c 'worksheet.write(' ... -> 0` deb yozgan edi, lekin AYNI
+    reja modul docstringiga `worksheet.write()` NI LITERAL YOZISHNI ham
+    buyuradi (2-fakt: "to'g'ridan-to'g'ri chaqirilmaydi"). O'lchandi:
+    naiv `grep` **2** qaytaradi va ikkalasi ham DOKUMENTATSIYA. Ya'ni
+    darvoza o'z-o'ziga qarshi turardi va uni yashil qilishning yagona
+    yo'li taqiqning SABABINI o'chirish bo'lardi — 02-23 aynan shu
+    to'qnashuvni `ast` foydasiga hal qilgan.
+
+    `ast` esa HAQIQIY da'voni o'lchaydi: `worksheet.write*` chaqiruvi
+    faqat `write_text`/`write_money`/`write_optional_text` ichida
+    bo'lishi va `write()` ning O'ZI umuman chaqirilmasligi.
+    """
+    tree = ast.parse(Path(xlsx_export.__file__).read_text(encoding="utf-8"))
+
+    calls: dict[str, list[str]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Attribute)
+                and isinstance(inner.func.value, ast.Name)
+                and inner.func.value.id == "worksheet"
+            ):
+                calls.setdefault(node.name, []).append(inner.func.attr)
+
+    # `write()` — Excel turini O'ZI taxmin qiladigan yagona metod: u
+    # `"123"` ni songa, `"=1+1"` ni esa FORMULAGA aylantirardi, ya'ni
+    # qochirishdan KEYIN ham hujumni tiklardi.
+    every = [attr for attrs in calls.values() for attr in attrs]
+    assert "write" not in every, f"turini taxmin qiladigan write() chaqirilgan: {calls}"
+
+    assert calls == {
+        "write_text": ["write_string"],
+        "write_money": ["write_number"],
+        "write_optional_text": ["write_blank"],
+    }, f"xom yozish yo'li ochilgan: {calls}"
 
 
 def test_write_optional_text_leaves_an_empty_cell_for_none() -> None:
