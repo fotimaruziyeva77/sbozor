@@ -234,7 +234,7 @@ tekshirishda. Sabotaj sistemaga yetib borib ham hech nima qizartirmasa —
 tuzatish testda emas, ⛔ **HOLATDA** yoki **PREDIKATDA**.
 
 ⚠ Reja bu naqsh uchun majburiy meta-band talab qilmagani uchun u
-**qo'shilmadi**; kuzatuv `deferred-items.md` №14 da ham yozilgan.
+**qo'shilmadi**; kuzatuv `deferred-items.md` №15 da ham yozilgan.
 
 ---
 

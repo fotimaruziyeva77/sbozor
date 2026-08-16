@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 8 UI-SPEC approved
-last_updated: "2026-08-16T09:30:57.734Z"
-last_activity: 2026-08-16 -- Phase 08 execution started
+status: verifying
+stopped_at: 08-20 yakunlandi — 8-fazaning ijrosi tugadi (20/20)
+last_updated: "2026-08-16T18:29:40.446Z"
+last_activity: 2026-08-16 -- 08-20 faza darvozasi yakunlandi
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 139
-  completed_plans: 130
-  percent: 78
+  completed_plans: 139
+  percent: 89
 ---
 
 # Project State
@@ -25,82 +25,88 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 
 ## Current Position
 
-Phase: 08 (hisobotlar-mustahkamlash-va-ishga-tushirish) — EXECUTING
-Plan: 1 of 20
+Phase: 08 (hisobotlar-mustahkamlash-va-ishga-tushirish) — IJRO TUGADI
+Plan: 20 of 20
 Total Plans in Phase: 20
-Status: Executing Phase 08
-Last activity: 2026-08-16 -- Phase 08 execution started
+Status: Qayta tekshiruv kutilmoqda (`/gsd-verify-work`)
+Last activity: 2026-08-16 -- 08-20 faza darvozasi yakunlandi
 
-Progress: [██████████] 100% (15/15 reja — 05-01…05-15)
+Progress: [██████████] 100% (20/20 reja -- 08-01...08-20)
 
-✅ **5-FAZANING IJROSI TUGADI (15/15 reja).** `05-15` fazani yopdi:
-beshala ROADMAP mezoni `tests/integration/test_phase5_criteria.py` da
-**BITTA buyruqda** o'lchanadi va uchala darvozasi (mezon boshiga bitta
-test · meta-test · soxtalashtirishsiz o'lchov) yashil.
+✅ **8-FAZANING IJROSI TUGADI (20/20 reja).** `08-20` faza darvozasini
+yopdi: beshala ROADMAP mezoni `tests/integration/test_phase8_criteria.py`
+da **BITTA buyruqda** o'lchanadi (9 test: 5 mezon + meta-test +
+soxtalashtirish darvozasi + reyestr nazorati + seed nazorati).
 
-⚠ **ROADMAP dagi faza belgisi HAMON `- [ ]`** va bu ataylab: fazani
+⚠ **ROADMAP dagi FAZA belgisi HAMON `- [ ]`** va bu ataylab: fazani
 yopish qarori **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas.
-4-fazada ham aynan shunday saqlangan.
+4-, 5-, 6- va 7-fazalarda aynan shunday saqlangan; izoh ROADMAP ning
+Phase 8 bo'limida LITERAL yozilgan.
 
-✅ **UCH REJA DAVOMIDA OCHIQ TURGAN XAVFSIZLIK BANDI YOPILDI.** Sof
-`inspector` roli dalil kadrini endi **KO'RADI**: `GET /snapshots/{id}/
-image` `CAMERA_VIEW` **YOKI** `OCCUPANCY_REVIEW` ostiga o'tdi
-(`require_any_permission()`, `EVIDENCE_FRAME_PERMISSIONS`). Kengaytma
-**AYNAN BITTA marshrutda** — kadr metama'lumoti, kun jurnali va alert
-oqimi nazoratchiga YOPIQ QOLDI va bu ikki MUSTAQIL darvoza bilan
-o'lchanadi (struktura: marshrut grafi; xulq: HTTP). `ROLE_PERMISSIONS`
-matritsasi va `rbac.py`/`rbac.ts` juftligi **TEGILMADI**, ya'ni M-8
-bandining o'zi hamon rost.
+⛔ **IKKI YANGI SOXTALASHTIRISH TAQIG'I MEXANIK REYESTRDA.** Bu
+fazaning eng arzon ikki yolg'oni nomma-nom yopildi: (1) zaxira zanjiri
+yugurmasdan turib «ishladi» degan qatorni QO'LDA yozish -- yurak urishi
+FAQAT `ops/backup/heartbeat.sql` dan kelishi mumkin (`DELETE` taqiqdan
+CHIQARILGAN: u faktni yozmaydi, u o'lchov boshlanadigan bo'sh holatni
+quradi); (2) `.xlsx` javobini faqat `status_code` bilan tasdiqlash --
+hujjat yo'liga tegib javob KODI haqida da'vo qilgan HAR test
+`read_rows` ni ham chaqirishi SHART. Ikkalasi ham `ast` daraxtidan.
 
-✅ **4-FAZADAN MEROS `gate` BANDI (D-26/W0-13) YOPILDI.** O'lchov
-**TINCH XOSTDA** olindi: xostdagi 6 ta `parnikkpi-*` konteyner (aynan
-`04-14` ni ifloslantirgan stek) `docker stop` bilan to'xtatildi va
-o'lchovdan keyin tiklandi. Uch o'lchov: **1009 / 1004 / 983 s**
-(tarqoqlik 26 s = 2,6 %). Nazorat: `gate:fast` **87 s** (chegara 180 s,
-o'zgarmadi). Yangi chegara = 1009 × 1,20 → **1250 s**, `package.json`
-dagi `//gate-budget` izohida ham, `05-VALIDATION.md` da ham BIR XIL.
-⚠ Ko'tarish sababi degradatsiya EMAS: zanjirga `cv:lint` + `cv:test`
-qo'shildi (05-02) va to'plam o'sdi.
-⚠ **`C:` diski 91 % to'la (bo'sh 15 GB)** — Docker VHDX o'sha yerda;
-kelajakdagi o'lchovlar uchun xavf sifatida yozib qo'yildi.
+⛔ **FOUND-07 `Blocked` -- VA BU FAZANING ENG MUHIM HALOLLIGI.**
+Mexanizm UCH qatlamda yashil (zanjirning statik shakli, yurak urishi
+halqasi, dump -> TOZA server -> `pg_restore`), LEKIN talab matnining
+IKKALA jumlasi ham yarim qoldi: `.env` da `RESTIC_REPOSITORY`/
+`RESTIC_PASSWORD` YO'Q, ya'ni zanjir bugungacha **HECH QACHON
+YUGURMAGAN**, va toza serverda tiklash mashqi CI'da bajarilmaydi.
+Egasi **Ops**, tetigi **VPS deploy'i**, bandlari `08-HUMAN-UAT.md` #1
+va #2. Mexanika qatlamining yashilligi bilan haqiqat qatlamining
+yo'qligini yopish TAQIQLANADI (3- va 5-fazaning darsi).
+RECON-04 va RECON-05 esa dalil bilan `Done`.
+Sanoq: Done 41 · Pending 5 · Blocked 3.
 
-⛔ **AI-02 `Blocked` — VA BU FAZANING ENG MUHIM HALOLLIGI.** Talab
-matnining ikkinchi jumlasi («AI natijasi confidence bilan saqlanadi va
-hech qachon o'zgartirilmaydi») to'liq o'lchangan. Birinchi jumlasi
-(«RF-DETR ONNX Runtime CPU da har zonani baholaydi») CI'da **real
-artefakt bilan bajarilmaydi** — `.onnx` fayli yo'q, `-m model` bandlari
-umuman chaqirilmaydi — va **modelning ANIQLIGI umuman o'lchanmagan**,
-chunki oltin to'plam bo'sh. Mexanika qatlamining yashilligi bilan
-aniqlik qatlamining yo'qligini yopish TAQIQLANADI (D-01) va bu endi
-mexanik darvoza bilan ham qo'llab-quvvatlanadi: mezon modulida
-`precision`/`recall`/`f1`/`map` **nomlari** `ast` daraxtidan taqiqlangan.
-AI-01/03/04/05/06 esa dalil bilan `Done`. Sanoq: Done 21 · Pending 26 ·
-Blocked 2.
+⛔ **GO-LIVE'DAN KEYIN HAM CHIQIB TURADIGAN ALERT VA UNI O'CHIRISH
+TAQIQ.** Offsite hisob ochilmaguncha `backup_stale` (CRITICAL,
+`never_suppressed`) 26 soatda bir chiqadi. U aynan o'z ishini
+bajarayapti: zaxira olinmayotganini AYTAYAPTI.
 
-⚠⚠ **D-16 (nazoratchining ichki mosligi) QURILMADI VA QURILMAYDI.**
-`05-14` gacha u «ekranda yo'q» edi; `05-15` uni **spetsifikatsiyadan
-ham** olib tashladi (UI-SPEC §11.6). Sabab: `audit_draw` har hodisani
-eng ko'pi bilan bir marta tortadi va takroriy band mexanizmi YO'Q.
-Spetsifikatsiya qurilmagan narsani ta'riflab tursa, keyingi faza uni
-**yo'qolgan funksiya** deb o'qirdi. §11.7 (DL-5 per-slot jadvali) ham
-shu sababdan tuzatildi — u marshrut YO'Q bo'lgan qatorlarni talab
-qilardi.
+✅ **`gate` BYUDJETI O'LCHANDI VA O'ZGARMADI.** Tinch xostda (6 ta
+`parnikkpi-*` + qayta-qayta yiqilayotgan `sbozor-bot-service-1`
+to'xtatilib, o'lchovdan keyin TIKLANDI): `gate` **1909 / 1842 s**
+(tarqoqlik 3,5 %), chegara **2300 s** -- zaxira 391 s (17 %);
+`gate:fast` **155 / 152 s**, chegara **200 s**.
+⚠ **HALOLLIK: uch emas, IKKI o'lchov olindi** -- ijro paytida tezlik
+ustuvor deb belgilandi va uchinchisi BOSHLANMADI. «Uch marta o'lchandi»
+da'vosi BERILMAYDI; darvoza byudjet sababli yolg'on qizil bersa,
+birinchi shubha shu yerga tushadi.
+WARN `C:` diski **84 % to'la (28 GB bo'sh)** -- 5-fazadagi 91 % dan
+yaxshiroq, `docker system prune` kerak bo'lmadi.
 
-⚠ **SABOTAJ O'LCHOVINING YANGI DARSI (`05-15`, S-D).** `accuracy_report`
-ning `purpose AND queue_kind` filtri `or` ga o'zgartirilganda SC#4
-**umuman qizarmadi** — sabotaj sistemaga yetib borgan, lekin test
-tanlagan MA'LUMOT ikkala shoxda ham bir xil natija berardi. Tuzatish
-testni emas, **HOLATNI** kengaytirish bo'ldi: endi butun ko'r namuna
-javoblanadi (70/30 kvota `eval` ham, `train` ham beradi) va hisobotdagi
-son `eval` lar soniga TENG bo'lishi talab qilinadi. Shundan keyin
-sabotaj qizardi.
+⚠ **SABOTAJ O'LCHOVINING YANGI DARSI (`08-20`).** Beshala sabotaj
+aynan o'z mezonini qizartirdi, LEKIN S-5 ning BIRINCHI shakli
+(`:ai_mismatch` -> `:match`) modulni YIG'ILISH xatosi bilan yiqitdi
+(ishlatilmagan `bindparam`) -- ya'ni u mezonni emas, yig'ilishni
+o'lchardi. **Sabotaj modulni IMPORT QILINADIGAN holda qoldirishi
+shart**, aks holda «qo'shnilari yashil qoladimi?» degan yarim
+o'lchanmay qoladi.
+
+⚠ **MEROS FLAKE NOMLANDI VA O'LCHANDI (`deferred-items.md` №12).**
+`test_phase5_criteria.py::test_sc4_*` **1/70 = 1,4 %** ehtimollik bilan
+yiqiladi: market A ning doirasi 8 hodisadan iborat (seed 2 + test 6),
+ulardan 4 tasi `uncertain`, `audit_draw` esa 4 tasini tasodifiy
+tanlaydi. Yakka holda 20/20 yashil. SCOPE BOUNDARY sababli
+TUZATILMADI -- u boshqa fazaning mezon fayli.
+
+⚠ **`npm run gate` ning frontend yarmi bog'liqliksiz umuman
+yugurmaydi** (`deferred-items.md` №13): `frontend/node_modules` BO'SH
+edi va nosozlik faqat 29-daqiqada ko'rindi. `npm ci` (qulflangan
+lockfile) bilan tiklandi; yo'nalish -- zanjir boshiga arzon
+mavjudlik darvozasi.
 
 ⚠ **OCHIQ BANDLAR (bloklamaydi, LEKIN nomlangan):**
-`05-HUMAN-UAT.md` — sakkiz band, har birida ega va tetik. Birinchisi
-**detektorning aniqligi**. Ikki `SECURITY DEFINER` funksiya
-(`audit_draw_due_markets()`, `occupancy_day_close_markets()`) hamon
-chaqiruvchisiz — qarori 6-fazaning billing tikida (Rule 4, yuzasi tor
-va `FORBIDDEN_SURFACE_TOKENS` darvozasi bilan qulflangan).
+`08-HUMAN-UAT.md` -- besh band, har birida ega va tetik; uchtasi
+FOUND-07 ni bloklaydi. `deferred-items.md` -- 14 band, shundan 7 tasi
+ochiq; ular ichida MAHSULOT SAVOLI ham bor (#9: direktor solishtiruv
+ekranida farqni ISM bilan ko'rishi kerakmi? -- ijrochi hal qilmaydi).
 
 **Muddat:** 12 hafta, 2026-07-28 → ~2026-10-18 (Karmanada jonli). Zaxira yo'q.
 
@@ -147,6 +153,7 @@ va `FORBIDDEN_SURFACE_TOKENS` darvozasi bilan qulflangan).
 | Phase 05 P13 | 165min | 3 tasks | 20 files |
 | Phase 05 P14 | 150 | 3 tasks | 17 files |
 | Phase 05 P15 | 235min | 3 tasks | 12 files |
+| Phase 08 P20 | 385 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -247,6 +254,14 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-15: AI-02 `Blocked` — talab matnining birinchi jumlasi CI'da REAL ONNX artefakti bilan bajarilmaydi va modelning aniqligi umuman o'lchanmagan; mexanika qatlamining yashilligi bilan aniqlik qatlamining yo'qligini yopish TAQIQLANADI (D-01)
 - [Phase 05]: 05-15: UI-SPEC ning ikki eskirgan bo'limi (§11.6 D-16 qatori, §11.7 DL-5 per-slot jadvali) TUZATILDI — qurilmagan narsani ta'riflagan spetsifikatsiyani keyingi faza «yo'qolgan funksiya» deb o'qiydi
 - [Phase 05]: 05-15: sabotaj sistemaga YETIB BORSA ham hech nima qizarmasa, tuzatish TESTDA emas — HOLATDA. SC#4 `and`->`or` sabotajini o'tkazib yuborgan edi; endi butun ko'r namuna javoblanadi (70/30 kvota `eval` ham, `train` ham beradi) va shundan keyin sabotaj qizardi
+- [Phase ?]: 08-20: mezon moduli mavjud testlarni TAKRORLAMAYDI — u ularni zanjir sifatida bog'laydi va yagona savol beradi: ROADMAP dagi jumla bugun rostmi?
+- [Phase ?]: 08-20: SC#2 namunasi shunday qurildi-ki «band deb xato» O'LCHANADI, «bo'sh deb xato» esa BO'SH KATAK qoladi — ikki maxrajning boshqaligi FAQAT shunda hujjatning O'ZIDA ko'rinadi
+- [Phase ?]: 08-20: AST darvozasining TETIGI «nomni ishlatgan» emas, «javob haqida DA'VO qilgan» (status_code) — birinchi shakl nazorat testini yolg'on-qizil qilgan edi
+- [Phase ?]: 08-20: zaxira yurak urishi FAQAT ops/backup/heartbeat.sql dan; DELETE taqiqdan CHIQARILGAN — u faktni yozmaydi, o'lchov boshlanadigan bo'sh holatni quradi
+- [Phase ?]: 08-20: respx bu fazada TAQIQLANGAN ildizlarga qo'shildi (7-fazada ATAYIN yo'q edi) — bu fazaning birorta mezoni tashqi tarmoqqa chiqmaydi
+- [Phase ?]: 08-20: FOUND-07 Blocked — mexanizm uch qatlamda yashil, lekin zanjir BUGUNGACHA HECH QACHON yugurmagan (.env da RESTIC kalitlari yo'q)
+- [Phase ?]: 08-20: gate byudjeti KO'TARILMADI (1909/1842 s < 2300 s); HALOLLIK — uch emas, IKKI o'lchov olindi va bu uch joyda yozildi
+- [Phase ?]: 08-20: sabotaj modulni IMPORT QILINADIGAN holda qoldirishi shart — aks holda u mezonni emas, yig'ilishni o'lchaydi (S-5 ning birinchi shakli)
 
 ### Pending Todos
 
@@ -297,6 +312,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-13T05:32:36.229Z
-Stopped at: Phase 8 UI-SPEC approved
-Resume file: .planning/phases/08-hisobotlar-mustahkamlash-va-ishga-tushirish/08-UI-SPEC.md
+Last session: 2026-08-16T18:28:29.985Z
+Stopped at: 08-20 yakunlandi — 8-fazaning ijrosi tugadi (20/20)
+Resume file: .planning/phases/08-hisobotlar-mustahkamlash-va-ishga-tushirish/08-20-SUMMARY.md
