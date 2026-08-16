@@ -276,3 +276,12 @@ Yo'q — bu reja mavjud xulqni tuzatdi, yangi yuza ochmadi.
 Yo'q — yangi tarmoq endpointi, auth yo'li, fayl kirish naqshi yoki
 ishonch chegarasidagi sxema o'zgarishi qo'shilmadi. Reja `<threat_model>`
 dagi uchala `mitigate` bandi (T-08-23, T-08-24, T-08-25) bajarildi.
+
+## Self-Check: PASSED
+
+- `08-06-SUMMARY.md` — FOUND
+- 7 ta commit (`5939839`, `c40c530`, `6978331`, `280e7d7`, `10cf06a`,
+  `c30816e`, `2f69ea2`) — hammasi `git log` da FOUND
+- Ishchi daraxt toza (`git status --short` bo'sh)
+- ⚠ `.env` va `ops/seaweedfs/s3.json` ATAYIN commit qilinmadi —
+  ikkalasi ham `.gitignore` da (sirlar)
