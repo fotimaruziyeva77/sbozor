@@ -1,6 +1,7 @@
 ---
 phase: 09-ui-polish-motion-qatlami
-status: draft
+status: approved
+reviewed_at: 2026-08-17
 shadcn_initialized: false
 preset: none
 design_system: shadcn-pattern (manual, CVA + Radix — 1/2-faza tokenlari)
