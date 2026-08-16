@@ -346,7 +346,7 @@ Architecture not yet mapped. Follow existing patterns found in the codebase.
 
 ## Project Skills
 
-No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.github/skills/`, or `.codex/skills/` with a `SKILL.md` index file.
+- **Sketch findings for SBOZOR** (dizayn qarorlari, CSS naqshlari, vizual yo'nalish — motion/dashboard/landing) → `Skill("sketch-findings-bozor")` — har qanday UI implementatsiyasidan OLDIN yuklansin
 <!-- GSD:skills-end -->
 
 <!-- GSD:workflow-start source:GSD defaults -->
