@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -130,7 +130,6 @@ export function StallDialog({
   );
 
   const {
-    control,
     formState: { errors, isSubmitting },
     handleSubmit,
     register,
@@ -139,20 +138,6 @@ export function StallDialog({
     resolver: zodResolver(schema),
     defaultValues: EMPTY_VALUES,
   });
-
-  /*
-   * Maydon qiymati `useWatch` HOOKI bilan kuzatiladi.
-   *
-   * `useForm()` qaytaradigan bir xil vazifadagi ODDIY FUNKSIYA ataylab
-   * ishlatilmaydi: u hook emas, ya'ni React Compiler uni memoizatsiya qila
-   * olmaydi va tugma holati eskirib qolishi mumkin. `useWatch` esa
-   * obunani to'g'ri e'lon qiladi.
-   *
-   * ⚠ Taqiqlangan funksiyaning NOMI bu izohda literal sifatida
-   * yozilmaydi — qoida mexanik grep darvozasi bilan qulflangan va nom
-   * qaytarilsa darvoza o'z-o'ziga qarshi turadi (kodbaza konvensiyasi).
-   */
-  const code = useWatch({ control, name: "code" });
 
   /*
    * Forma HAR OCHILISHDA bir marta urug'lanadi.
@@ -348,16 +333,22 @@ export function StallDialog({
 
           <Dialog.Footer>
             {/*
-             * Tahrir rejimida batafsil javob kelmaguncha saqlash YOPIQ:
-             * aks holda urug'lanmagan forma mavjud izohni o'chirardi.
+             * ⛔ KODBAZA QOIDASI: submit tugmasi FAQAT yuborish jarayoni
+             *   davomida yopiladi. Domen sharti (maydon bo'sh, ro'yxat
+             *   bo'sh, tanlov yo'q) tugmaga EMAS, validatsiya xabariga
+             *   aylanadi — o'chirilgan tugma NIMA yetishmayotganini
+             *   AYTMAYDI. Qoidaning mexanik darvozasi:
+             *   `scripts/submit-gate.test.mjs`.
+             *
+             * ⚠ IKKINCHI SHART — ISTISNO va u darvozada NOM BILAN
+             *   yozilgan. Tahrir rejimida batafsil javob kelmaguncha
+             *   saqlash YOPIQ: urug'lanmagan forma mavjud izohni jimgina
+             *   o'chirardi. Bu yopilmagan tri-state masalasi va uning
+             *   tetigi — 260816-5yz.
              */}
             <Button
               className="sm:flex-1"
-              disabled={
-                code.trim() === "" ||
-                isSubmitting ||
-                (mode === "edit" && detail === undefined)
-              }
+              disabled={isSubmitting || (mode === "edit" && detail === undefined)}
               size="lg"
               type="submit"
             >

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTimeZone, useTranslations } from "next-intl";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -104,7 +104,6 @@ export function StallCategoryDialog({
   );
 
   const {
-    control,
     formState: { errors, isSubmitting },
     handleSubmit,
     register,
@@ -113,11 +112,6 @@ export function StallCategoryDialog({
     resolver: zodResolver(schema),
     defaultValues: EMPTY_VALUES,
   });
-
-  // `useWatch` HOOKI — `useForm()` ning bir xil vazifadagi oddiy funksiyasi
-  // emas: oxirgisini React Compiler memoizatsiya qila olmaydi (eskirgan UI
-  // xavfi). Taqiqlangan nom mexanik darvoza sababli literal yozilmaydi.
-  const categoryId = useWatch({ control, name: "category_id" });
 
   useEffect(() => {
     if (!open) return;
@@ -227,9 +221,16 @@ export function StallCategoryDialog({
           </Field>
 
           <Dialog.Footer>
+            {/*
+             * ⛔ KODBAZA QOIDASI: submit tugmasi FAQAT yuborish jarayoni
+             *   davomida yopiladi. Tanlanmagan toifa — tugmaning holati
+             *   emas, VALIDATSIYA XABARI: yopiq tugma nima yetishmayotganini
+             *   aytmaydi va foydalanuvchi uchun «saqlandi» dan
+             *   farqlanmaydi. Mexanik darvoza: `scripts/submit-gate.test.mjs`.
+             */}
             <Button
               className="sm:flex-1"
-              disabled={categoryId === "" || isSubmitting}
+              disabled={isSubmitting}
               size="lg"
               type="submit"
             >

@@ -337,9 +337,18 @@ export function TariffDialog({
           ) : null}
 
           <Dialog.Footer>
+            {/*
+             * ⛔ KODBAZA QOIDASI: submit tugmasi FAQAT yuborish jarayoni
+             *   davomida yopiladi. Bo'sh toifa ro'yxati tugmani YOPMAYDI —
+             *   u zodning `tariffs.categoryRequired` xabariga aylanadi.
+             *   Ilgari yopiq tugma yonidagi `tariffs.noCategories`
+             *   placeholder'iga ZID turardi: matn nima qilish kerakligini
+             *   aytardi, tugma esa sababsiz bosilmasdi. Mexanik darvoza:
+             *   `scripts/submit-gate.test.mjs`.
+             */}
             <Button
               className="sm:flex-1"
-              disabled={categories.length === 0 || isSubmitting}
+              disabled={isSubmitting}
               size="lg"
               type="submit"
             >
