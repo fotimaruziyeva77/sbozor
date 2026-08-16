@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Info } from "lucide-react";
 import { useFormatter, useNow, useTimeZone, useTranslations } from "next-intl";
@@ -13,6 +14,7 @@ import { SlotEditor } from "@/components/snapshots/slot-editor";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { ScheduleModeValue, SnapshotSchedule } from "@/lib/api-types";
@@ -119,6 +121,53 @@ export function ScheduleDialog({
       ? t("snapshots.scheduleTitle")
       : periodText(target);
 
+  /*
+   * DL-1 NING SHOXLARI — GUARD ZANJIRI, TARTIB O'ZI O'QILADI.
+   *
+   * ⚠ `isPending` BIRINCHI turadi: u YAGONA holat bo'lib, unda
+   *   «yuklanmoqda» ROST. Bo'sh ro'yxat esa yuklanish EMAS — so'rov
+   *   TUGAGAN, ya'ni kutishni taklif qilish hech qachon tugamaydigan
+   *   yolg'on bo'lardi (TEST-REPORT 2026-08-14, Topilma №6).
+   *
+   * ⚠ 5- va 6-shoxlar ATAYIN ikkiga bo'lingan: ro'yxat BOR bo'lsa
+   *   «jadval yozilmagan» faktik yolg'on — jadval yozilgan, faqat
+   *   so'ralgani topilmagan [quick 260816-5yz].
+   */
+  function renderBody(): ReactNode {
+    if (request === null) return null;
+
+    if (isCreate) {
+      return (
+        <CreateForm
+          defaultTimes={active?.times ?? []}
+          nextProfileName={active?.name ?? null}
+          onDone={() => onOpenChange(false)}
+        />
+      );
+    }
+
+    if (schedules.isPending) {
+      return <p className="text-sm text-text-muted">{t("common.loading")}</p>;
+    }
+
+    if (schedules.isError) {
+      return <FormError message={t(marketErrorMessageKey(schedules.error))} />;
+    }
+
+    if (items.length === 0) return <ScheduleMissing />;
+
+    if (target === null) return <ScheduleNotFound />;
+
+    return (
+      <EditForm
+        key={target.id}
+        onDone={() => onOpenChange(false)}
+        periodLabel={periodText(target)}
+        profile={target}
+      />
+    );
+  }
+
   return (
     <Dialog.Root onOpenChange={onOpenChange} open={request !== null}>
       <Dialog.Content
@@ -127,43 +176,7 @@ export function ScheduleDialog({
         size="md"
         title={title}
       >
-        {/*
-         * ⛔⛔ DL-1 NING UCH HOLATI UCH MUSTAQIL SHOX — VA TARTIB MUHIM.
-         *
-         *     Ilgari uchalasi BITTA shartga (`target === null`) yig'ilgan
-         *     va `common.loading` chizgan edi. Bo'sh ro'yxatda
-         *     (`200 {"items":[]}`) bu SOF YOLG'ON bo'lardi: so'rov
-         *     TUGAGAN, dialog esa kutishni taklif qilardi va hech qachon
-         *     tugamasdi. Admin buni o'z tarmog'i yoki o'z sabri bilan
-         *     bog'lardi — ya'ni nosozlik NOTO'G'RI ODAMGA yozilardi
-         *     (TEST-REPORT 2026-08-14, Topilma №6).
-         *
-         *     `isPending` BIRINCHI turadi: u YAGONA holat bo'lib, unda
-         *     «yuklanmoqda» ROST. Qolgan ikkisi so'rov TUGAGANIDAN keyin
-         *     yashaydi va ular boshqa-boshqa javob beradi — xato
-         *     QAYTA URINISHNI, ma'lumot nosozligi esa YANGILASHNI
-         *     talab qiladi.
-         */}
-        {request === null ? null : isCreate ? (
-          <CreateForm
-            defaultTimes={active?.times ?? []}
-            nextProfileName={active?.name ?? null}
-            onDone={() => onOpenChange(false)}
-          />
-        ) : schedules.isPending ? (
-          <p className="text-sm text-text-muted">{t("common.loading")}</p>
-        ) : schedules.isError ? (
-          <FormError message={t(marketErrorMessageKey(schedules.error))} />
-        ) : target === null ? (
-          <ScheduleMissing />
-        ) : (
-          <EditForm
-            key={target.id}
-            onDone={() => onOpenChange(false)}
-            periodLabel={periodText(target)}
-            profile={target}
-          />
-        )}
+        {renderBody()}
       </Dialog.Content>
     </Dialog.Root>
   );
@@ -185,12 +198,19 @@ function EditNote({ id }: { id: string }) {
   );
 }
 
-/* --- Jadval profili topilmadi ---------------------------------------------- */
+/* --- Jadval profili topilmadi — IKKI BOSHQA-BOSHQA FAKT ------------------- */
 
 /**
- * Ma'lumot nosozligi — FAKT, chaqiriq EMAS.
+ * IKKALA HOLAT HAM FAKT, chaqiriq EMAS — VA ULAR BIR-BIRINI ALMASHTIRMAYDI.
  *
- * ⛔⛔ «JADVAL QO'SHING» TUGMASI YOKI HAVOLASI BU YERGA QO'SHILMAYDI.
+ * `ScheduleMissing` — ro'yxat BO'SH: bozorda jadval umuman yozilmagan.
+ * `ScheduleNotFound` — ro'yxat bo'sh EMAS, lekin so'ralgan profil yo'q
+ * (o'chirilgan yoki ro'yxat yangilangan). Ikkinchisida «jadval
+ * yozilmagan» deyish FAKTIK YOLG'ON bo'lardi va u adminni mavjud
+ * bo'lmagan nosozlikni izlashga yuborardi [quick 260816-5yz].
+ *
+ * ⛔⛔ «JADVAL QO'SHING» TUGMASI YOKI HAVOLASI IKKALASIGA HAM
+ *     QO'SHILMAYDI (`action` proppi BERILMAYDI).
  *
  *     04-UI-SPEC §10.4 buni ATAYIN taqiqlaydi: D-01 bo'yicha jadvalni
  *     bozor sozlash ustasi AVTOMATIK yozadi, ya'ni uning yo'qligi
@@ -207,17 +227,32 @@ function EditNote({ id }: { id: string }) {
  *   xabar emas — u ochilishi bilan o'qiladi. Xato bloki (`FormError`)
  *   esa mavjud mazmunni ALMASHTIRADI va aynan shuning uchun e'lon
  *   qilinadi.
+ *
+ * ⚠ `py-6` — `EmptyState` ning standarti `py-12` va u DIALOG ichida
+ *   haddan tashqari bo'sh joy berardi. `cn()` `twMerge` ustida
+ *   qurilgani uchun oxirgi qiymat yutadi (`lib/cn.ts`).
  */
 function ScheduleMissing() {
   const t = useTranslations();
 
   return (
-    <div className="flex flex-col gap-2">
-      <p className="text-sm font-semibold">{t("snapshots.scheduleMissing")}</p>
-      <p className="text-sm text-text-muted">
-        {t("snapshots.scheduleMissingHint")}
-      </p>
-    </div>
+    <EmptyState
+      className="py-6"
+      description={t("snapshots.scheduleMissingHint")}
+      title={t("snapshots.scheduleMissing")}
+    />
+  );
+}
+
+function ScheduleNotFound() {
+  const t = useTranslations();
+
+  return (
+    <EmptyState
+      className="py-6"
+      description={t("snapshots.scheduleNotFoundHint")}
+      title={t("snapshots.scheduleNotFound")}
+    />
   );
 }
 

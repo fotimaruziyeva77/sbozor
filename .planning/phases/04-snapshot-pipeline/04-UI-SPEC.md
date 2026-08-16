@@ -913,6 +913,15 @@ Aksent rang **faqat** quyidagilarda:
 
 **DL-1 ning «profil topilmadi» holati** [quick 260815-86p]. Yuqoridagi qoida endi dialog ichida ham nomlangan holat: `GET /snapshot-schedules` bo'sh ro'yxat qaytarganda DL-1 `snapshots.scheduleMissing` sarlavhasi va `snapshots.scheduleMissingHint` izohini chizadi. Bu **E-5 emas** va yuqoridagi to'rtlikka qo'shilmaydi — u bo'sh holat emas, **ma'lumot nosozligining ta'rifi**: matn faktni aytadi (jadval yozilmagan, uni usta avtomatik yozadi) va dialogni yopib sahifani yangilashni so'raydi. ⛔ Unda **tugma ham, havola ham yo'q** — «qo'shing» chaqirig'i D-01 ni jimgina yolg'onga aylantirardi va nosozlik uchun javobgarlikni adminga yuklardi. Ilgari bu holat `common.loading` chizardi, ya'ni tugagan so'rovni tugamagan deb ko'rsatardi (TEST-REPORT 2026-08-14, Topilma №6). Bir xil sababdan **profilsiz kartada «Jadvalni tahrirlash» tugmasi umuman render qilinmaydi**; «Mavsumiy jadval qo'shish» esa qoladi — u yangi profil yaratadi va obyektsiz ham ma'noli.
 
+**Va bu holat AYNAN BITTA emas, IKKITA** [quick 260816-5yz]. `target === null` bo'lishining ikki sababi bor va ular **boshqa-boshqa fakt**:
+
+| Shart | Sarlavha / izoh | Nima ro'y bergan |
+|-------|-----------------|------------------|
+| `items.length === 0` | `snapshots.scheduleMissing` / `scheduleMissingHint` | Bozorda jadval **umuman yozilmagan** — D-01 bo'yicha bu tizimning nosozligi |
+| `items.length > 0 && target === null` | `snapshots.scheduleNotFound` / `scheduleNotFoundHint` | Jadval **yozilgan**, faqat so'ralgan profil ro'yxatda yo'q (o'chirilgan yoki ro'yxat yangilangan) |
+
+⛔ Ikkinchi holatda «Bu bozorda jadval yozilmagan» deyish **faktik yolg'on** edi va u adminni mavjud bo'lmagan nosozlikni izlashga yuborardi. ⛔ **Ikkalasi ham `EmptyState` bilan chiziladi va `action` proppi BERILMAYDI** — yuqoridagi «tugma ham, havola ham yo'q» qoidasining mexanik shakli. Ikkalasi ham **E-1…E-4 to'rtligiga qo'shilmaydi**.
+
 ⛔ **E-3 «hammasi yaxshi» degani EMAS** — u filtr natijasi. Matni «Bu kunda barcha kadrlar yaroqli» — bu **fakt**, tabrik emas.
 
 ### 10.5 Xato kontrakti — SABAB + NIMA QILISH KERAK + KIM

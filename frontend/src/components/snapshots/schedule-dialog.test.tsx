@@ -22,6 +22,25 @@
  *   bog'lash T2 ni qizartirmaydi va aksincha.
  * =============================================================================
  *
+ * ⛔ IKKINCHI DA'VO (KR-02, quick 260816-5yz): «YOZILMAGAN» BILAN
+ *    «TOPILMADI» BIR XIL GAP EMAS.
+ *
+ *    `target` `null` bo'lishining IKKI sababi bor va ular boshqa-boshqa
+ *    fakt: ro'yxat BO'SH (jadval umuman yozilmagan — D-01 bo'yicha
+ *    tizimning nosozligi) yoki ro'yxat BOR, lekin so'ralgan profil unda
+ *    yo'q (o'chirilgan / ro'yxat yangilangan). Ilgari ikkalasi ham
+ *    `snapshots.scheduleMissing` chizardi va ikkinchi holatda bu SOF
+ *    YOLG'ON edi — jadval yozilgan.
+ *
+ *      T5  ro'yxat bor, so'ralgani yo'q -> `scheduleNotFound*`, va
+ *          `scheduleMissing` EKRANDA YO'Q;
+ *      T6  ro'yxat bo'sh -> hamon `scheduleMissing`, `scheduleNotFound`
+ *          esa YO'Q.
+ *
+ *    Ikki da'vo QARAMA-QARSHI tomonlardan yozilgan: bitta matnni
+ *    ikkinchisi bilan almashtirib qo'yish IKKALASINI ham qizartiradi.
+ * =============================================================================
+ *
  * ⛔ T1 «JADVAL QO'SHING» CHAQIRIG'INI TALAB QILMAYDI va TALAB QILA
  *    OLMAYDI — 04-UI-SPEC §10.4 uni ATAYIN taqiqlaydi: D-01 bo'yicha
  *    jadvalni bozor sozlash ustasi avtomatik yozadi, ya'ni «qo'shing»
@@ -74,6 +93,8 @@ const LOADING = messages.common.loading;
 const SAVE = messages.common.save;
 const SCHEDULE_MISSING = messages.snapshots.scheduleMissing;
 const SCHEDULE_MISSING_HINT = messages.snapshots.scheduleMissingHint;
+const SCHEDULE_NOT_FOUND = messages.snapshots.scheduleNotFound;
+const SCHEDULE_NOT_FOUND_HINT = messages.snapshots.scheduleNotFoundHint;
 const ADD_SEASONAL = messages.snapshots.addSeasonal;
 const EDIT_SCHEDULE = messages.snapshots.editSchedule;
 const TIMES_LEGEND = messages.snapshots.times;
@@ -87,6 +108,24 @@ const ACTIVE_PROFILE: SnapshotSchedule = {
   mode: "active",
   times: ["06:00:00", "06:30:00"],
 };
+
+/**
+ * ⛔ `mode: "future"` ATAYIN: shunda `active` `null` bo'ladi va
+ *   `items.find(...) ?? active` zanjiri `null` qaytaradi — RO'YXAT BO'SH
+ *   BO'LMASA HAM. Aynan shu holat bugun «jadval yozilmagan» degan FAKTIK
+ *   YOLG'ONNI chizardi.
+ */
+const FUTURE_PROFILE: SnapshotSchedule = {
+  id: "44444444-4444-4444-8444-444444444444",
+  name: "Qovun mavsumi",
+  starts_on: "2026-09-01",
+  ends_on: "2026-10-15",
+  mode: "future",
+  times: ["07:00:00"],
+};
+
+/** Ro'yxatda YO'Q identifikator — so'ralgani topilmaydigan holat. */
+const UNKNOWN_SCHEDULE_ID = "55555555-5555-4555-8555-555555555555";
 
 function seedSession(): void {
   setSession({
@@ -239,6 +278,66 @@ describe("DL-1: amaldagi profil bo'lganda (nazorat)", () => {
 
     expect(screen.queryByText(SCHEDULE_MISSING)).toBeNull();
     expect(screen.queryByText(LOADING)).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * ⛔ T5 — RO'YXAT BOR, SO'RALGANI YO'Q: «YOZILMAGAN» DEYISH YOLG'ON
+ * ------------------------------------------------------------------------ */
+
+describe("DL-1: ro'yxat bo'sh emas, lekin so'ralgan profil topilmaganda", () => {
+  test("⛔ «jadval yozilmagan» DEYILMAYDI — boshqa fakt aytiladi", async () => {
+    apiFetch.mockResolvedValue({ items: [FUTURE_PROFILE] });
+
+    renderDialog({ kind: "edit", scheduleId: UNKNOWN_SCHEDULE_ID });
+
+    expect(await screen.findByText(SCHEDULE_NOT_FOUND)).toBeInTheDocument();
+    expect(screen.getByText(SCHEDULE_NOT_FOUND_HINT)).toBeInTheDocument();
+
+    /*
+     * ⛔ MARKAZIY ASSERT: jadval YOZILGAN (ro'yxatda mavsumiy profil bor),
+     *   faqat SO'RALGANI topilmadi. «Bu bozorda jadval yozilmagan» bu
+     *   yerda faktik yolg'on va u adminni yo'q nosozlikni izlashga
+     *   yuborardi.
+     */
+    expect(screen.queryByText(SCHEDULE_MISSING)).toBeNull();
+    expect(screen.queryByText(LOADING)).toBeNull();
+  });
+
+  test("⛔ bu holatda ham tugma ham, havola ham YO'Q (§10.4)", async () => {
+    apiFetch.mockResolvedValue({ items: [FUTURE_PROFILE] });
+
+    renderDialog({ kind: "edit", scheduleId: UNKNOWN_SCHEDULE_ID });
+
+    await screen.findByText(SCHEDULE_NOT_FOUND);
+
+    // Matn FAKTNI aytadi, amal TAKLIF QILMAYDI — bo'sh ro'yxat holati
+    // bilan aynan bir xil qoida, aynan bir xil sabab.
+    expect(screen.queryByRole("button", { name: ADD_SEASONAL })).toBeNull();
+    expect(screen.queryByRole("button", { name: SAVE })).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * T6 — BO'SH RO'YXAT NAZORATI: ESKI DA'VO QIZARMAYDI
+ * ------------------------------------------------------------------------ */
+
+describe("DL-1: bo'sh ro'yxat (kuchaytiruvchi nazorat)", () => {
+  test("bo'sh ro'yxatda hamon «jadval yozilmagan» aytiladi", async () => {
+    apiFetch.mockResolvedValue({ items: [] });
+
+    renderDialog({ kind: "edit", scheduleId: null });
+
+    expect(await screen.findByText(SCHEDULE_MISSING)).toBeInTheDocument();
+
+    /*
+     * ⚠ IKKI DA'VO QARAMA-QARSHI TOMONLARDAN yozilgan: bitta matnni
+     *   ikkinchisi bilan almashtirib qo'yish IKKALASINI ham qizartiradi.
+     *   Bittasi yolg'iz qolsa, «hamma holatda bitta matn» yechimi
+     *   jimgina o'tib ketardi.
+     */
+    expect(screen.queryByText(SCHEDULE_NOT_FOUND)).toBeNull();
   });
 });
 
