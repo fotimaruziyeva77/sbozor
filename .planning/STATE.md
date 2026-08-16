@@ -29,7 +29,7 @@ Phase: 07 (nomuvofiqlik-bildirishnoma-va-botlar) — EXECUTING
 Plan: 1 of 17
 Total Plans in Phase: 20
 Status: Ready to execute
-Last activity: 2026-08-16 -- Completed quick 260816-75c: L+E+M kassir
+Last activity: 2026-08-16 -- Barcha reestr quick'lari yakunlandi (75e, 75g bilan)
 
 Progress: [██████████] 100% (15/15 reja — 05-01…05-15)
 
@@ -274,6 +274,8 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260816-75e | Topilma №C: MARKET-06 plan-xarita to'lov ranglari + rasta kartasi + /billing/map | 2026-08-16 | 9dbd631, 192eb2e, 43b4628 | [260816-75e-topilma-c-market-06-plan-xarita-tolov-ra](./quick/260816-75e-topilma-c-market-06-plan-xarita-tolov-ra/) |
+| 260816-75g | Topilma №F+№G+№H: diagnostika rejimi, rol tahrirlash, admin dashboard holati | 2026-08-16 | 4d0e583, f57c3da, a13c447 | [260816-75g-topilma-f-g-h-diagnostika-yorligi-rol-ta](./quick/260816-75g-topilma-f-g-h-diagnostika-yorligi-rol-ta/) |
 | 260816-75c | Topilma №L+№E+№M: kassir lookup konteksti, kelajak tarif yorlig'i, bekor qatorlarini ajratish | 2026-08-16 | f2b1830, aed8391, 93c0a78 | [260816-75c-topilma-l-e-m-kassir-lookup-kontksti-kel](./quick/260816-75c-topilma-l-e-m-kassir-lookup-kontksti-kel/) |
 | 260816-6r3 | Topilma №I: notification_stale alerti (navbat yoshi) + yetkazish jadvalida sana/sabab | 2026-08-16 | 1ea9c5d, 55535f0 | [260816-6r3-topilma-i-xabar-navbati-stale-alerti-va-](./quick/260816-6r3-topilma-i-xabar-navbati-stale-alerti-va-/) |
 | 260816-6r1 | Topilma №J+№K: kamera amallari RBAC-ko'zgusi (majburiy prop) + 20 sahifada ForbiddenNotice | 2026-08-16 | 154c751, 1708fa7 | [260816-6r1-topilma-j-k-direktor-kamera-tugmalari-rb](./quick/260816-6r1-topilma-j-k-direktor-kamera-tugmalari-rb/) |
