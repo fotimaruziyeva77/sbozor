@@ -236,6 +236,20 @@ Yo'q — tashqi xizmat sozlamasi talab qilinmaydi.
 - ⚠ `gate:fast` byudjeti to'liq o'lchanmadi (yuqoriga qarang) — egasi fazani yopuvchi reja
 - ⚠ Server yarmi (`reports.py`) hali yo'q — kontrakt ataylab oldinda
 
+## Self-Check: PASSED
+
+**Fayllar (4/4 topildi):**
+- `frontend/src/lib/report-errors.ts`
+- `frontend/src/lib/report-queries.ts`
+- `frontend/scripts/report-copy.test.mjs`
+- `.planning/phases/08-hisobotlar-mustahkamlash-va-ishga-tushirish/08-03-SUMMARY.md`
+
+**Commitlar (4/4 topildi):** `0396c28` · `c069e90` · `e276f76` · `893725f`
+
+⚠ `STATE.md` va `ROADMAP.md` **ATAYIN tegilmadi** — worktree rejimida ular
+orkestratorning zimmasida (to'lqin merge qilingandan keyin markazlashgan holda
+yangilanadi).
+
 ---
 *Phase: 08-hisobotlar-mustahkamlash-va-ishga-tushirish*
 *Completed: 2026-08-16*
