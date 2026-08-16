@@ -1400,6 +1400,7 @@
     "periodFrom": "Бошланиш",
     "periodTo": "Тугаш",
     "periodShown": "{from} — {to}",
+    "presetLabel": "Тайёр оралиқ",
     "preset": {
       "last30": "Охирги 30 кун",
       "yesterday": "Кеча",
@@ -1408,6 +1409,7 @@
       "custom": "Танланган оралиқ"
     },
     "maxDayHint": "Ҳисобот кечаги кунгача ёпилган маълумотдан чиқади.",
+    "emptyMonth": "Жорий ойда ҳали ёпилган кун йўқ",
     "export": "Excel бўлиб юклаб олиш",
     "exporting": "Тайёрланмоқда",
     "revenueTitle": "Тушум",
