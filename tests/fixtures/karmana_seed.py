@@ -38,11 +38,16 @@ DETERMINIZM MAJBURIY VA U IKKI QATLAMDA TA'MINLANADI.
 1. `random.Random(SEED)` — har chaqiruvda YANGI generator, modul darajasida
    umumiy holat YO'Q. Qizargan test qayta tiklanadigan bo'lishi shart, aks
    holda «gohida yiqiladi» degan eng yomon test turi tug'iladi.
-2. ZIP metama'lumoti QAYTA YOZILADI (`_freeze_zip`). `XlsxWriter`
-   `ZipFile.writestr()` ni ishlatadi va u a'zo sanasini SOAT'dan oladi —
-   ya'ni ikki qo'shni chaqiruv baytlari sekundlar chegarasida FARQ
-   qilardi. Baytlar tengligi da'vosi shu tufayli aniq (`_FROZEN_ZIP_TIME`
-   va `_FROZEN_CREATED`).
+2. ZIP metama'lumoti QAYTA YOZILADI (`xlsx_export.freeze_zip`).
+   `XlsxWriter` `ZipFile.writestr()` ni ishlatadi va u a'zo sanasini
+   SOAT'dan oladi — ya'ni ikki qo'shni chaqiruv baytlari sekundlar
+   chegarasida FARQ qilardi. Baytlar tengligi da'vosi shu tufayli aniq.
+
+   ⚠ Bu qatlam 08-01 da MAHSULOTGA ko'chirildi va bu yerdan o'chirildi
+   (quyidagi izohga qarang). Fikstur uni endi `app.services.xlsx_export`
+   dan oladi — bu paketga ruxsat etilgan YAGONA bog'lanish va u
+   `test_karmana_seed.py::test_generator_does_not_import_the_template_
+   module` da simvol darajasida qulflangan.
 -----------------------------------------------------------------------------
 
 TOZA FAYL — IFLOS FAYLNING FILTRLANGAN KO'RINISHI, IKKINCHI RO'YXAT EMAS.
@@ -67,13 +72,12 @@ from __future__ import annotations
 import argparse
 import io
 import random
-import zipfile
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Final
 
-import xlsxwriter
+from app.services.xlsx_export import freeze_zip, new_workbook
 
 __all__ = [
     "KARMANA_CATEGORY_NAMES",
@@ -177,16 +181,16 @@ POZITSIYA bo'yicha o'qiydi, ya'ni fayl JIMGINA noto'g'ri yozilmaydi —
 u 422 bilan RAD ETILADI.
 """
 
-_FROZEN_ZIP_TIME: Final = (1980, 1, 1, 0, 0, 0)
-"""ZIP a'zolarining sobit sanasi (DOS epoxasining boshi) — `_freeze_zip`."""
-
-_FROZEN_CREATED: Final = datetime(2026, 8, 1, 0, 0, 0)  # noqa: DTZ001
-"""`docProps/core.xml` dagi sobit `dcterms:created`.
-
-Naive datetime ATAYIN: `XlsxWriter` uni tz'siz kutadi va bu qiymat hech
-qachon biznes-kunga aylanmaydi — u faqat baytlarni muzlatish uchun.
-"""
-
+# ⚠ `_FROZEN_ZIP_TIME`, `_FROZEN_CREATED` va `_freeze_zip` BU YERDAN
+#   O'CHIRILDI (08-01). Ular endi `app.services.xlsx_export` da — ya'ni
+#   MAHSULOTDA — va bu fikstur ularni o'sha yerdan oladi.
+#
+#   Naqsh shu faylda tug'ilgan edi, lekin uning o'rni bu yer emas:
+#   mahsulot eksport yo'llari (`build_template`, `build_error_report`)
+#   determinizmsiz qolgan edi, ya'ni "faylimiz determinik" degan da'vo
+#   FAQAT test fiksturasiga tegishli bo'lib turardi. Ikki nusxa
+#   saqlansa esa sana konstantalari bir kun ajralib ketardi va o'shanda
+#   ikki fayl ikki xil "muzlatilgan" holatda chiqardi.
 # ---------------------------------------------------------------------------
 # Telefon diapazoni — `+998 90 995 xx xx`
 # ---------------------------------------------------------------------------
@@ -676,33 +680,6 @@ def _dirty_vendor_cells(slot: _Slot, rows: list[VendorRow]) -> tuple[object | No
 # ---------------------------------------------------------------------------
 
 
-def _freeze_zip(raw: bytes) -> bytes:
-    """ZIP a'zolarining sanasini MUZLATADI (determinizm, 2-qatlam).
-
-    `XlsxWriter` `in_memory` rejimida `ZipFile.writestr(nom, ...)` ni
-    chaqiradi, `zipfile` esa bunday chaqiruvda a'zo sanasini SOAT'dan
-    oladi. Ya'ni ikki qo'shni chaqiruv baytlari sekund chegarasida farq
-    qilardi va «determinizm» testi GOHIDA yiqilardi — bu esa aynan
-    generator yo'q qilishi kerak bo'lgan test turi (T-02-172).
-
-    Qayta o'rash mazmunga tegmaydi: nom, siqish turi va ochilgan hajm
-    o'zgarmaydi, ya'ni `xlsx_reader._check_zip()` darvozalari ham xuddi
-    shu qiymatlarni ko'radi.
-    """
-    buffer = io.BytesIO()
-    with (
-        zipfile.ZipFile(io.BytesIO(raw)) as source,
-        zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as target,
-    ):
-        for info in source.infolist():
-            frozen = zipfile.ZipInfo(info.filename, date_time=_FROZEN_ZIP_TIME)
-            frozen.compress_type = info.compress_type
-            frozen.external_attr = info.external_attr
-            frozen.create_system = info.create_system
-            target.writestr(frozen, source.read(info.filename))
-    return buffer.getvalue()
-
-
 def _write_workbook(
     sheet_name: str,
     header: tuple[str, ...],
@@ -718,8 +695,7 @@ def _write_workbook(
     chiqadi.
     """
     buffer = io.BytesIO()
-    workbook = xlsxwriter.Workbook(buffer, {"in_memory": True})
-    workbook.set_properties({"created": _FROZEN_CREATED})
+    workbook = new_workbook(buffer)
     worksheet = workbook.add_worksheet(sheet_name)
 
     header_format = workbook.add_format({"bold": True})
@@ -745,7 +721,11 @@ def _write_workbook(
                 worksheet.write_string(offset, column, str(value))
 
     workbook.close()
-    return _freeze_zip(buffer.getvalue())
+    # ⛔ `xlsx_export.finish()` ATAYIN ISHLATILMAYDI: u eksport
+    #    MARSHRUTINING yuzasi (yopish + muzlatish), bu yerda esa yozish
+    #    tartibi boshqa (matn XOM yoziladi — `_FORMULA_NOTE` ga qarang).
+    #    Faqat muzlatish qatlami qayta ishlatiladi.
+    return freeze_zip(buffer.getvalue())
 
 
 def _reorder(
