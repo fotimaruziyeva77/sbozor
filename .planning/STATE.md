@@ -29,7 +29,7 @@ Phase: 07 (nomuvofiqlik-bildirishnoma-va-botlar) — EXECUTING
 Plan: 1 of 17
 Total Plans in Phase: 20
 Status: Ready to execute
-Last activity: 2026-08-16 -- Completed quick 260816-5yz: tri-state tozalash
+Last activity: 2026-08-16 -- Completed quick 260816-6r1: J+K RBAC ko'zgu
 
 Progress: [██████████] 100% (15/15 reja — 05-01…05-15)
 
@@ -274,6 +274,8 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260816-6r1 | Topilma №J+№K: kamera amallari RBAC-ko'zgusi (majburiy prop) + 20 sahifada ForbiddenNotice | 2026-08-16 | 154c751, 1708fa7 | [260816-6r1-topilma-j-k-direktor-kamera-tugmalari-rb](./quick/260816-6r1-topilma-j-k-direktor-kamera-tugmalari-rb/) |
+| 260816-6r1 | Topilma №J+№K: NVR kartasining uchta amali `camera_manage` ostiga (majburiy prop + WIRING testi, sabotaj bilan) va rad etish ekrani 20 sahifadan bitta `ForbiddenNotice` ga (+`localeHref` 7→1) | 2026-08-16 | 154c751, 1708fa7 | [260816-6r1-topilma-j-k-direktor-kamera-tugmalari-rb](./quick/260816-6r1-topilma-j-k-direktor-kamera-tugmalari-rb/) |
 | 260816-5yz | Kod-review: stall-dialog tri-state + schedule-dialog 3 tozalash (halol topilmadi-holati, guard-clause, EmptyState) | 2026-08-16 | 067a4dd, 8c142a3 | [260816-5yz-tri-state-va-schedule-dialog-tozalash-st](./quick/260816-5yz-tri-state-va-schedule-dialog-tozalash-st/) |
 | 260816-5ys | Kod-review: jim-disabled submit anti-naqshi 5 saytda supurildi + G-SUBMIT darvozasi | 2026-08-16 | 04a473b, 486fdb1, 0315196 | [260816-5ys-jim-forma-supurish-disabled-submit-anti-](./quick/260816-5ys-jim-forma-supurish-disabled-submit-anti-/) |
 | 260816-5mn | Topilma №B+№A: bozorni faollashtirish yo'li ochildi, qoralama-redirect tuzatildi | 2026-08-16 | b90bb09, 9e52fd5, 96171c1 | [260816-5mn-topilma-b-a-bozorni-faollashtirish-yo-li](./quick/260816-5mn-topilma-b-a-bozorni-faollashtirish-yo-li/) |
