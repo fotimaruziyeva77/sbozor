@@ -50,6 +50,7 @@ from app.jobs.reconciliation import (
     reconciliation_open,
 )
 from app.repositories.reconciliation_repo import (
+    CASE_LOOKBACK_DAYS,
     CASE_PAGE_SIZE,
     CASE_WORTHY_ANOMALY_KINDS,
     CaseRow,
@@ -649,6 +650,131 @@ async def test_a_settled_vendor_gets_no_unpaid_case(
         "boshlanardi (D-02)."
     )
     assert _case_count(sync_owner_conn, recon.market_id) == 0
+
+
+async def test_a_charge_inside_the_lookback_window_opens_a_case(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    recon: Env,
+) -> None:
+    """NOMZODLAR OYNASI — oyna ICHIDAGI eski hisob avvalgidek case ochadi.
+
+    ⚠ Bu (b) va (c) ning MAJBURIY nazorati: yolg'iz «oynadan eskisi
+      tushmadi» da'vosi oyna BUTUN SINF A ni o'ldirganda ham rost
+      bo'lardi (5-fazaning W-2 darsi).
+    """
+    today = _days_ago(sync_owner_conn, 0)
+    inside = _days_ago(sync_owner_conn, CASE_LOOKBACK_DAYS - 1)
+    add_daily_charge(
+        sync_owner_conn,
+        market_id=recon.market_id,
+        stall_id=recon.stall_ids[0],
+        vendor_id=recon.vendor_id,
+        tariff_id=recon.tariff_id,
+        service_date=inside,
+    )
+
+    async with tenant_session(recon.market_id) as session:
+        result = await open_cases(
+            session,
+            market_id=recon.market_id,
+            business_date=today,
+            cutoff=overdue_cutoff(today, _OVERDUE_DAYS),
+        )
+
+    assert result.unpaid_cases == 1, (
+        f"oyna ICHIDAGI ({CASE_LOOKBACK_DAYS - 1} kunlik) to'lanmagan hisob "
+        f"navbatga tushmadi: {result}. Oyna SINF A ning o'zini o'chirib qo'ydi."
+    )
+
+
+async def test_a_charge_older_than_the_lookback_window_opens_no_case(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    recon: Env,
+) -> None:
+    """⛔ WR-09 — OYNADAN ESKI QARZ NAVBATGA TUSHMAYDI, U REESTRDA KO'RINADI.
+
+    Chegarasiz har yugurishda BUTUN tarixning to'lanmagan hisoblari
+    nomzod bo'lardi va ular uchun case O'SHA HISOBNING KUNI bilan
+    ochilardi. Yagona ro'yxat yuzasi esa KUN kesimida (`?day=`,
+    standart kun KECHA), ya'ni bu case'lar ekranda ⛔ HECH QACHON
+    ko'rinmasdi — `hit_rate()` ning `pending` sanog'i esa ular bilan
+    doimiy shishib, «hali O'LCHOV YO'Q» signalini shovqinga aylantirardi.
+
+    ⚠ MA'LUMOT YO'QOLMAYDI, YUZASI ALMASHADI: oynadan eski to'lanmagan
+      hisob QARZDORLIK REESTRIGA (RECON-04) tegishli.
+    """
+    today = _days_ago(sync_owner_conn, 0)
+    ancient = _days_ago(sync_owner_conn, CASE_LOOKBACK_DAYS + 1)
+    add_daily_charge(
+        sync_owner_conn,
+        market_id=recon.market_id,
+        stall_id=recon.stall_ids[0],
+        vendor_id=recon.vendor_id,
+        tariff_id=recon.tariff_id,
+        service_date=ancient,
+    )
+
+    async with tenant_session(recon.market_id) as session:
+        result = await open_cases(
+            session,
+            market_id=recon.market_id,
+            business_date=today,
+            cutoff=overdue_cutoff(today, _OVERDUE_DAYS),
+        )
+
+    assert result.unpaid_cases == 0, (
+        f"oynadan ESKI ({CASE_LOOKBACK_DAYS + 1} kunlik) hisob uchun case "
+        f"ochildi: {result}. U kun kesimidagi ekranda ko'rinmasdi va "
+        "`hit_rate()` ning `pending` sanog'ini doimiy shishirardi (WR-09)."
+    )
+    assert _case_count(sync_owner_conn, recon.market_id) == 0
+
+
+async def test_the_lookback_boundary_day_still_opens_a_case(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    recon: Env,
+) -> None:
+    """⛔ CHEGARAVIY KUN — `>=`, `>` EMAS. Aynan `business_date - N` KIRADI.
+
+    `>` yozilganda oynaning eng chekkasidagi kun JIMGINA tushib qolardi
+    va farq FAQAT o'sha bir kunda ko'rinardi — ya'ni nosozlik oyiga bir
+    marta, tasodifiy bozorda chiqardi. `_OVERDUE_CHARGES` ning yuqori
+    chegarasi (`<= :cutoff`) bilan AYNAN bir xil qoida va bir xil sabab.
+    """
+    today = _days_ago(sync_owner_conn, 0)
+    boundary = _days_ago(sync_owner_conn, CASE_LOOKBACK_DAYS)
+    add_daily_charge(
+        sync_owner_conn,
+        market_id=recon.market_id,
+        stall_id=recon.stall_ids[0],
+        vendor_id=recon.vendor_id,
+        tariff_id=recon.tariff_id,
+        service_date=boundary,
+    )
+
+    async with tenant_session(recon.market_id) as session:
+        result = await open_cases(
+            session,
+            market_id=recon.market_id,
+            business_date=today,
+            cutoff=overdue_cutoff(today, _OVERDUE_DAYS),
+        )
+
+    assert result.unpaid_cases == 1, (
+        f"chegaraviy kun (`business_date - {CASE_LOOKBACK_DAYS}`) qamralmadi: "
+        f"{result}. Quyi chegara `>` bo'lib qolgan — oynaning eng chekkasidagi "
+        "kun jimgina tushib qoladi."
+    )
+    row = sync_owner_conn.execute(
+        "SELECT service_date FROM reconciliation_cases WHERE market_id = %s",
+        (str(recon.market_id),),
+    ).fetchone()
+    assert row is not None and row[0] == boundary, (
+        "case chegaraviy kun bilan ochilmadi — `service_date` manbasi ajralgan"
+    )
 
 
 async def test_open_cases_refuses_a_non_positive_threshold(
