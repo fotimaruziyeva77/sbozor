@@ -1,8 +1,11 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -35,6 +38,18 @@ import { marketErrorMessageKey } from "@/lib/market-errors";
  *   TERAYOTGAN matnni bosib ketardi. Montaj esa qiymatni AYNAN bir
  *   marta, aynan dialog ochilganda oladi. Bu 03-09 dagi taymer
  *   qarorining aynan bir xil mantiqi.
+ *
+ * ⛔ SAQLASH TUGMASI QANDAY QULFLANMAYDI — VA NEGA ILGARIGISI YOLG'ON EDI.
+ *   Tugma bir vaqtlar bo'sh nomda ARIA holati bilan «yopilardi», lekin
+ *   `Button` ning CSS'i faqat NATIVE `disabled` ni biladi
+ *   (`disabled:pointer-events-none disabled:opacity-50`). Natijada tugma
+ *   ko'rinishda ham, amalda ham OCHIQ turardi — skrinrider esa «yopiq»
+ *   deb e'lon qilardi va bosilganda hech nima bo'lmasdi: so'rov yo'q,
+ *   xato yo'q, dialog ochiq. Ikki foydalanuvchi ikki xil ilova ko'rardi.
+ *
+ *   Endi qoida bitta: submit tugmasi FAQAT yuborish jarayoni davomida
+ *   yopiladi, bo'sh nom esa zod xabari bo'lib EKRANGA chiqadi. Mexanik
+ *   darvoza — `scripts/submit-gate.test.mjs`.
  * =============================================================================
  */
 
@@ -66,6 +81,8 @@ export function CameraRenameDialog({
   );
 }
 
+type RenameValues = { name: string };
+
 function RenameForm({
   camera,
   onSaved,
@@ -77,8 +94,35 @@ function RenameForm({
   const rename = useRenameCamera();
   const fieldId = useId();
 
-  const [name, setName] = useState(() => camera.name);
+  /*
+   * Server xatosi ALOHIDA holatda qoladi — u zod xatosi EMAS va forma
+   * maydoniga bog'lanmaydi (`marketErrorMessageKey` domen javobini
+   * tarjima qiladi). Forma tepasidagi `role="alert"` bloki uning joyi.
+   */
   const [error, setError] = useState<string | null>(null);
+
+  const schema = useMemo(
+    () =>
+      z.object({
+        name: z.string().trim().min(1, { error: t("errors.required") }),
+      }),
+    [t],
+  );
+
+  /*
+   * `defaultValues` — montaj lahzasidagi qiymat. Komponent `key={camera.id}`
+   * bilan montaj qilinadi (fayl boshidagi izoh), ya'ni urug'lanish
+   * semantikasi `useState` bilan boshqarilgan eski shakl bilan AYNAN bir xil
+   * qoladi: fon refetch'i admin terayotgan matnni bosib ketmaydi.
+   */
+  const {
+    formState: { errors, isSubmitting },
+    handleSubmit,
+    register,
+  } = useForm<RenameValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: camera.name },
+  });
 
   async function run(
     input:
@@ -95,33 +139,37 @@ function RenameForm({
     }
   }
 
-  const busy = rename.isPending;
-  const invalid = name.trim().length === 0;
-
-  function save(): void {
-    if (invalid || busy) return;
-    void run({ cameraId: camera.id, name: name.trim() });
+  async function onSubmit(values: RenameValues): Promise<void> {
+    await run({ cameraId: camera.id, name: values.name.trim() });
   }
+
+  const busy = rename.isPending || isSubmitting;
 
   return (
     <form
       className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        save();
-      }}
+      noValidate
+      onSubmit={handleSubmit(onSubmit)}
     >
       <Field
+        error={errors.name?.message}
         hint={t("cameras.renameHint")}
         id={fieldId}
         label={t("cameras.nameLabel")}
       >
+        {/*
+         * Xato IZOHNI ALMASHTIRMAYDI, unga QO'SHILADI (`tariff-dialog.tsx`
+         * naqshi): izoh `name_overridden` ning ma'nosini tushuntiradi va
+         * usiz admin qayta skanerlashdan qo'rqadi (§6.5).
+         */}
         <Input
-          aria-describedby={`${fieldId}-hint`}
+          aria-describedby={
+            errors.name ? `${fieldId}-error ${fieldId}-hint` : `${fieldId}-hint`
+          }
+          aria-invalid={errors.name ? true : undefined}
           autoComplete="off"
           id={fieldId}
-          onChange={(event) => setName(event.target.value)}
-          value={name}
+          {...register("name")}
         />
       </Field>
 
@@ -138,6 +186,10 @@ function RenameForm({
        * `ghost` — ikkilamchi yo'l, aksent budjetiga (§2.4) kirmaydi.
        * Tasdiq so'ralmaydi: amal qaytariladi (nomni qayta yozish mumkin)
        * va u hech qanday ma'lumotni yo'qotmaydi.
+       *
+       * ⚠ `type` ATAYIN yozilmaydi va bu XAVFSIZ: `Button` ning standarti
+       *   `type="button"` (`ui/button.tsx`), ya'ni bu tugma formani
+       *   YUBORMAYDI. Aks holda bitta bosish ikkita so'rov yuborardi.
        */}
       <Button
         className="self-start"
@@ -151,10 +203,14 @@ function RenameForm({
       </Button>
 
       <Dialog.Footer>
+        {/*
+         * ⛔ FAQAT «yuborilyapti» qulfi (fayl boshidagi izoh): bo'sh nom
+         *   tugmani YOPMAYDI, u zod xabari bo'lib maydon ostida chiqadi.
+         */}
         <Button
-          aria-disabled={invalid || busy ? true : undefined}
           className="sm:flex-1"
-          onClick={save}
+          disabled={rename.isPending}
+          type="submit"
           variant="default"
         >
           {busy ? t("common.loading") : t("common.save")}

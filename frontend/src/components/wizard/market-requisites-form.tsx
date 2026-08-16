@@ -205,7 +205,7 @@ export function MarketRequisitesForm() {
 
   const {
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitted, isSubmitting },
     handleSubmit,
     register,
     setValue,
@@ -222,16 +222,26 @@ export function MarketRequisitesForm() {
    */
   const selectedWeekdays = useWatch({ control, name: "openWeekdays" });
 
+  /*
+   * ⛔ QAYTA VALIDATSIYA SHARTI — FORMA YUBORILGANMI, KUN BORMI EMAS.
+   *
+   *   Ilgari shart `selectedWeekdays.length > 0` (toggle'DAN OLDINGI
+   *   uzunlik) edi va u AYNAN 0 -> 1 o'tishini qamramasdi: foydalanuvchi
+   *   oxirgi kunni olib tashlab, `wizard.weekdaysRequired` ni ko'rgach
+   *   BIRINCHI kunni qayta belgilaganda qayta validatsiya BO'LMASDI va
+   *   qizil matn ekranda QOLARDI. «Tuzatdim, lekin hech nima
+   *   o'zgarmadi» — boshlang'ich nuqsondan ham chalg'ituvchiroq.
+   *
+   *   `isSubmitted` — RHF ning O'Z bayrog'i: forma bir marta
+   *   yuborilgunicha jim turamiz (terish paytida qichqirmaslik qoidasi),
+   *   yuborilgandan keyin esa HAR toggle darhol qayta baholanadi.
+   *   Etalon: `create-user-dialog.tsx` dagi `toggleRole`.
+   */
   function toggleWeekday(day: number) {
     const next = selectedWeekdays.includes(day)
       ? selectedWeekdays.filter((item) => item !== day)
       : [...selectedWeekdays, day].sort((a, b) => a - b);
-    // `shouldValidate` faqat to'plam BO'SH BO'LMAGANDA: birinchi belgini
-    // olib tashlashda darhol qizil matn chiqarish "hali tugatmadim"
-    // holatini xato deb ko'rsatardi (create-user-dialog naqshi).
-    setValue("openWeekdays", next, {
-      shouldValidate: selectedWeekdays.length > 0,
-    });
+    setValue("openWeekdays", next, { shouldValidate: isSubmitted });
   }
 
   /*

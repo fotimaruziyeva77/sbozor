@@ -258,4 +258,43 @@ describe("MarketRequisitesForm — haftalik ish rejimi", () => {
       expect(routerMock.replace).toHaveBeenCalled();
     });
   });
+
+  /* -------------------------------------------------------------------------
+   * ⛔ T6 — XATO TUZATILGANDA EKRANDAN CHIQADI (AYNAN 0 -> 1 O'TISHI)
+   * ---------------------------------------------------------------------- */
+
+  test("⛔ birinchi kun qayta belgilanganda xato EKRANDAN CHIQADI", async () => {
+    mockCreateFlow();
+    renderForm();
+    fillRequiredFields();
+
+    for (const label of [
+      MONDAY_LABEL,
+      "Seshanba",
+      "Chorshanba",
+      "Payshanba",
+      "Juma",
+      "Shanba",
+      SUNDAY_LABEL,
+    ]) {
+      fireEvent.click(weekdayBox(label));
+    }
+    fireEvent.click(screen.getByRole("button", { name: SUBMIT_LABEL }));
+
+    await screen.findByText(WEEKDAYS_REQUIRED);
+
+    /*
+     * ⛔ AYNAN 0 -> 1 O'TISHI. Eski shart `selectedWeekdays.length > 0`
+     *   (toggle'DAN OLDINGI uzunlik) shu yagona o'tishda qayta
+     *   validatsiya QILMASDI: foydalanuvchi xatoni tuzatgan lahzada
+     *   qizil matn ekranda QOLARDI va u «tuzatdim, lekin hech nima
+     *   o'zgarmadi» holatiga tushardi — boshlang'ich nuqsondan ham
+     *   chalg'ituvchiroq. Etalon: `create-user-dialog.test.tsx:230-244`.
+     */
+    fireEvent.click(weekdayBox(MONDAY_LABEL));
+
+    await waitFor(() => {
+      expect(screen.queryByText(WEEKDAYS_REQUIRED)).toBeNull();
+    });
+  });
 });
