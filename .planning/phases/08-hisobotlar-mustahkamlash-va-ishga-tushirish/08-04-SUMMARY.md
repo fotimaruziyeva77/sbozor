@@ -38,7 +38,7 @@ decisions:
   - "anomaly_archive() sinf nomlarini ENUMDAN oladi; yangi lug'at javob bilan bazani ajratardi"
   - "arxiv `closed_day_occupied` va `no_coverage_stall` ni QAMRAMAYDI — nomlangan qaror, deferred-items №1"
 metrics:
-  duration: 105 min
+  duration: 67 min
   completed: 2026-08-16
 ---
 
