@@ -43,8 +43,9 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from app.repositories.report_repo import revenue_by_day
+from app.repositories.report_repo import receivables, revenue_by_day
 from fixtures.billing_domain import (
+    BILLING_VALID_FROM,
     TARIFF_SOUM,
     BillingDomainSeed,
     MarketBillingRows,
@@ -100,6 +101,42 @@ ishlaydi va qoldirilgan qiymat keyingi testga sizib o'tardi.
 
 _PAYMENT_BUSINESS_DATE = "SELECT business_date FROM payments WHERE id = %s"
 """To'lovning KASSA KUNI — ⛔ BAZADAN, `date.today()` DAN EMAS (3-qoida)."""
+
+_STALL_CODE = "SELECT code FROM stalls WHERE id = %s"
+"""Rasta kodi — SEED RO'YXATIDAN EMAS, BAZADAN.
+
+`fixtures/billing_domain._nvr_of()` da o'rnatilgan qoida: qo'shni faylning
+ro'yxat TARTIBIGA tayangan test u qayta tartiblangan kuni boshqa obyektni
+o'lchardi va buni SEZMASDI ham.
+"""
+
+_DELETE_VENDOR = "DELETE FROM vendors WHERE id = %s"
+_REPLICA_ON = "SET session_replication_role = replica"
+_REPLICA_OFF = "SET session_replication_role = origin"
+"""⛔ SOTUVCHINI FK QO'RIQCHISIDAN O'TKAZIB O'CHIRISH — HOLATNI KENGAYTIRISH.
+
+=============================================================================
+⛔⛔ NEGA BU KERAK VA NEGA U SOXTALASHTIRISH EMAS.
+
+`daily_charges` `(market_id, vendor_id)` bo'yicha `vendors` ga FK bilan
+tayanadi (`fk_daily_charges_market_id_vendor_id_vendors`, `ondelete` YO'Q).
+Ya'ni «hisobi bor, lekin sotuvchi qatori yo'q» holati ILOVA yo'lidan
+ERISHIB BO'LMAYDI. Shunga qaramay hisobot so'rovi `LEFT JOIN` ishlatadi va
+`vendor_name` `str | None` — chunki ichki `JOIN` bilan yozilgan reestrda
+ism topilmagan qator BUTUNLAY YO'QOLARDI, ya'ni QARZ hujjatdan tushib
+qolardi va buni hech kim sezmasdi. Bu himoyaning o'lchovi shu yerda.
+
+⛔ 05-15 NING DARSI: sabotaj o'lchanmasa TESTNI emas, HOLATNI kengaytirish
+   kerak. Shuning uchun holat AYNAN bir operator bilan kengaytiriladi —
+   superuser sessiyasida `session_replication_role = replica` FK
+   triggerlarini o'chiradi va o'chirish bajariladi. Bu «testni yashil
+   qilish» emas: himoya AYNAN o'zi qo'riqlayotgan holatda sinaladi.
+
+⚠ SUPERUSER ULANISHI MAJBURIY: `sbozor_owner` superuser EMAS
+   (`conftest.py:377-379`) va u bu parametrni o'zgartira olmaydi.
+⚠ BAYROQ HAR DOIM QAYTARILADI (`try/finally`): `sync_superuser_conn`
+   autocommit rejimida va qoldirilgan qiymat keyingi testga sizib o'tardi.
+"""
 
 
 class Env:
@@ -200,6 +237,23 @@ def _add_adjustment(
     finally:
         conn.execute(_SET_MARKET_GUC, ("",))
     return adjustment_id
+
+
+def _stall_code_of(conn: Connection[TupleRow], stall_id: UUID) -> str:
+    """Rasta kodi — bazadan (`_STALL_CODE` docstringi)."""
+    row = conn.execute(_STALL_CODE, (str(stall_id),)).fetchone()
+    assert row is not None, f"nazorat: {stall_id} rastasi yo'q"
+    code: str = row[0]
+    return code
+
+
+def _orphan_vendor(conn: Connection[TupleRow], vendor_id: UUID) -> None:
+    """Sotuvchi qatorini FK triggerlarisiz o'chiradi (`_REPLICA_ON` docstringi)."""
+    conn.execute(_REPLICA_ON)
+    try:
+        conn.execute(_DELETE_VENDOR, (str(vendor_id),))
+    finally:
+        conn.execute(_REPLICA_OFF)
 
 
 def _by_day(rows: tuple[RevenueRow, ...]) -> dict[date, RevenueRow]:
@@ -418,4 +472,179 @@ async def test_revenue_splits_a_yesterday_charge_from_a_today_payment(
     assert rows[pay_day].collected_soum == TARIFF_SOUM
     assert rows[pay_day].charged_soum == 0, (
         "bugun PATTA HISOBLANMAGAN — hisob kechagi `service_date` ga yozilgan"
+    )
+
+
+# ===========================================================================
+# 2. QARZDORLIK REESTRI — ISM SERVERDA JOINLANADI (06 №9 ning yechimi)
+# ===========================================================================
+
+
+async def test_receivables_leaves_out_a_vendor_whose_balance_is_zero(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """⛔ NOL QOLDIQLI SOTUVCHI REESTRDA YO'Q — `outstanding_soum <> 0`.
+
+    =========================================================================
+    ⛔ IKKI SOTUVCHI, IKKI NATIJA — NAZORAT SHU YERDA.
+
+    Bitta sotuvchi bilan yozilgan test «filtr ishladi» bilan «so'rov umuman
+    qator topmadi» ni ajratmasdi. To'lagan sotuvchi ro'yxatdan CHIQADI,
+    to'lamagani esa QOLADI: ikkala shox ham AYNI chaqiruvda o'lchanadi.
+
+    ⚠ «Nol qoldiq» yozuv YO'Qligi bilan bir xil EMAS: to'lagan sotuvchining
+      hisobi ham, to'lovi ham bazada TURIBDI. Reestrga tushmaslik —
+      arifmetikaning natijasi, ma'lumotning yo'qligi emas.
+    """
+    settled_vendor = env.live.vendor_id
+    debtor_vendor = env.domain.market_a.vendor_ids[1]
+    stalls = env.domain.market_a.stall_ids
+
+    _, settled_day = add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=stalls[0],
+        vendor_id=settled_vendor,
+        tariff_id=env.live.tariff_id,
+    )
+    add_payment(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=stalls[0],
+        vendor_id=settled_vendor,
+        cashier_id=env.live.cashier_id,
+        shift_id=env.live.open_shift_id,
+    )
+    _, debt_day = add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=stalls[1],
+        vendor_id=debtor_vendor,
+        tariff_id=env.live.tariff_id,
+    )
+
+    async with tenant_session(env.market_id) as session:
+        rows = await receivables(
+            session,
+            market_id=env.market_id,
+            from_date=BILLING_VALID_FROM,
+            to_date=max(settled_day, debt_day),
+        )
+
+    listed = {row.vendor_id: row for row in rows}
+    assert settled_vendor not in listed, (
+        "to'liq to'lagan sotuvchi reestrda TURMASLIGI kerak — "
+        "`outstanding_soum <> 0` sharti so'rovdan tushib qolgan bo'lishi mumkin"
+    )
+    assert debtor_vendor in listed, "nazorat: qarzdor sotuvchi reestrda BO'LISHI kerak"
+    assert listed[debtor_vendor].outstanding_soum == TARIFF_SOUM
+    assert listed[debtor_vendor].oldest_unpaid_date == debt_day, (
+        "eng eski TO'LANMAGAN kun `FIFO_OLDEST_SERVICE_DATE_FIRST` dan chiqadi"
+    )
+
+
+async def test_receivables_orders_the_largest_debt_first(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """⛔ TARTIB SERVERDA: qarz summasi bo'yicha KAMAYISH.
+
+    Uch sotuvchi, uch xil summa (45 000 / 30 000 / 15 000) — teng
+    summalarsiz, ya'ni tartib da'vosi tenglik uzgichiga TAYANMAYDI va
+    o'lchov aynan `ORDER BY outstanding_soum DESC` ni ko'rsatadi.
+
+    ⚠ TARTIB KLIENTDA QAYTA HISOBLANMAYDI: `.xlsx` eksporti (08-10) shu
+      ro'yxatni BAYT-BAYT yozadi va ikkinchi saralash ikkinchi haqiqat
+      manbai bo'lardi — ekrandagi tartib bilan fayldagi tartib farq
+      qilardi.
+    """
+    stalls = env.domain.market_a.stall_ids
+    vendors = env.domain.market_a.vendor_ids
+    biggest, middle, smallest = vendors[2], vendors[0], vendors[1]
+
+    day: date | None = None
+    for stall_id, vendor_id in (
+        (stalls[0], biggest),
+        (stalls[1], biggest),
+        (stalls[2], biggest),
+        (stalls[3], middle),
+        (stalls[4], middle),
+        (stalls[5], smallest),
+    ):
+        _, day = add_daily_charge(
+            sync_owner_conn,
+            market_id=env.market_id,
+            stall_id=stall_id,
+            vendor_id=vendor_id,
+            tariff_id=env.live.tariff_id,
+        )
+    assert day is not None
+
+    async with tenant_session(env.market_id) as session:
+        rows = await receivables(
+            session, market_id=env.market_id, from_date=BILLING_VALID_FROM, to_date=day
+        )
+
+    assert [row.vendor_id for row in rows] == [biggest, middle, smallest]
+    assert [row.outstanding_soum for row in rows] == [
+        3 * TARIFF_SOUM,
+        2 * TARIFF_SOUM,
+        TARIFF_SOUM,
+    ]
+
+
+async def test_receivables_reports_a_missing_vendor_name_as_none(
+    sync_owner_conn: Connection[TupleRow],
+    sync_superuser_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    env: Env,
+) -> None:
+    """⛔ ISM TOPILMASA `None` — VA QATOR REESTRDA QOLADI.
+
+    =========================================================================
+    ⛔⛔ IKKI DA'VO, IKKALASI HAM MAJBURIY:
+
+      1. `vendor_name is None` — ⛔ `""` HAM, `"Noma'lum"` HAM EMAS
+         (05-14 darsi: o'lchanmagan qiymatning o'rniga hech nima
+         TO'QILMAYDI). Bo'sh satr «ismi yo'q sotuvchi» degan YOLG'ON
+         faktni tug'dirardi.
+      2. QATORNING O'ZI YO'QOLMAYDI va `stall_codes` BARIBIR TO'LDIRILGAN.
+         Ichki `JOIN` bilan yozilgan reestrda bu qator butunlay tushib
+         qolardi — ya'ni QARZ hujjatdan yo'qolardi va nizoda «bunday qarz
+         yo'q edi» degan xulosa chiqardi. Rasta kodi esa nizoda kerak
+         bo'ladigan identifikator: u sotuvchi ismidan MUSTAQIL manbadan
+         (`stall_assignments`) keladi.
+
+    ⚠ HOLAT `_REPLICA_ON` bilan KENGAYTIRILGAN va sabab o'sha konstantaning
+      docstringida: FK bu holatni ilova yo'lidan ERISHIB BO'LMAS qiladi,
+      himoya esa AYNAN shu holat uchun yozilgan.
+    """
+    orphan_vendor = env.live.vendor_id
+    stall_id = env.stall("stall_with_two_occupied_slots")
+    stall_code = _stall_code_of(sync_owner_conn, stall_id)
+
+    _, debt_day = add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=stall_id,
+        vendor_id=orphan_vendor,
+        tariff_id=env.live.tariff_id,
+    )
+    _orphan_vendor(sync_superuser_conn, orphan_vendor)
+
+    async with tenant_session(env.market_id) as session:
+        rows = await receivables(
+            session, market_id=env.market_id, from_date=BILLING_VALID_FROM, to_date=debt_day
+        )
+
+    listed = {row.vendor_id: row for row in rows}
+    assert orphan_vendor in listed, (
+        "ismi topilmagan sotuvchining QARZI reestrda QOLISHI kerak — "
+        "ichki `JOIN` bilan u jimgina yo'qolardi"
+    )
+    row = listed[orphan_vendor]
+    assert row.vendor_name is None, f"ism TO'QILGAN: {row.vendor_name!r}"
+    assert row.outstanding_soum == TARIFF_SOUM
+    assert row.stall_codes is not None
+    assert stall_code in row.stall_codes, (
+        "rasta kodi sotuvchi ismidan MUSTAQIL manbadan kelishi kerak edi"
     )
