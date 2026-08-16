@@ -527,9 +527,9 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 08-07-PLAN.md — Hisobot API (JSON): huquq, bitta `audit_read`, davr chegaralari (W2)
-- [ ] 08-08-PLAN.md — Zaxira yurak urishi va tiklash mashqining CI qatlami (W2)
-- [ ] 08-09-PLAN.md — Frontend boshqaruvlari: davr tanlagichi (maks KECHA) va eksport tugmasi (W2)
+- [x] 08-07-PLAN.md — Hisobot API (JSON): huquq, bitta `audit_read`, davr chegaralari (W2)
+- [x] 08-08-PLAN.md — Zaxira yurak urishi va tiklash mashqining CI qatlami (W2)
+- [x] 08-09-PLAN.md — Frontend boshqaruvlari: davr tanlagichi (maks KECHA) va eksport tugmasi (W2)
 - [x] 08-10-PLAN.md — Mustahkamlash B: frontend WR/IN + 07 №1-qo'shimcha + 07 №2 (ism bo'shlig'i) (W2)
 - [x] 08-11-PLAN.md — Mustahkamlash C: bot WR-02/03/04 + IN-01/07 + WR-14 (W2)
 
@@ -614,7 +614,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Tekshirildi (human_needed — 4/5 to'liq, SC2 ONNX'ga bog'liq) | 2026-08-16 |
 | 6. Billing va kassir | 14/14 | Complete   | 2026-08-11 |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 23/23 | Complete   | 2026-08-13 |
-| 8. Hisobotlar, mustahkamlash va ishga tushirish | 8/20 | In Progress|  |
+| 8. Hisobotlar, mustahkamlash va ishga tushirish | 11/20 | In Progress|  |
 
 ---
 *Roadmap yaratildi: 2026-07-29*
