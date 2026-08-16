@@ -152,6 +152,7 @@ DEFAULT_OVERDUE_DAYS: Final[int] = _schema_default_overdue_days()
   tushadi.
 """
 
+
 def overdue_cutoff(business_date: date, overdue_days: int) -> date:
     """Kechikish chegarasi — ⛔ QOIDANING YAGONA TA'RIFI (D-19, WR-06).
 
