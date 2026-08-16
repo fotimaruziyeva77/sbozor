@@ -38,12 +38,22 @@ aynan uch qoidasi, chunki o'lchanayotgan narsa AYNI qatlam.
 
 from __future__ import annotations
 
+from dataclasses import fields
 from datetime import timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-from app.repositories.report_repo import receivables, revenue_by_day
+from app.repositories.billing_repo import write_anomaly
+from app.repositories.report_repo import (
+    ARCHIVE_KIND_UNPAID,
+    ARCHIVE_KIND_UNREGISTERED,
+    AnomalyArchive,
+    AnomalyArchiveRow,
+    anomaly_archive,
+    receivables,
+    revenue_by_day,
+)
 from fixtures.billing_domain import (
     BILLING_VALID_FROM,
     TARIFF_SOUM,
@@ -54,11 +64,19 @@ from fixtures.billing_domain import (
     billing_domain_before_day_close,
 )
 from fixtures.market_domain import MarketDomainSeed
+from fixtures.notification_domain import cleanup_notification_domain, seed_case
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import TwoMarketSeed
-from sbozor_core.enums import AdjustmentDirection, AdjustmentReason, PaymentKind, ReversalReason
+from sbozor_core.enums import (
+    AdjustmentDirection,
+    AdjustmentReason,
+    AnomalyKind,
+    PaymentKind,
+    ReconciliationCaseStatus,
+    ReversalReason,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -237,6 +255,20 @@ def _add_adjustment(
     finally:
         conn.execute(_SET_MARKET_GUC, ("",))
     return adjustment_id
+
+
+@pytest.fixture
+def archive_cleanup(sync_owner_conn: Connection[TupleRow], env: Env) -> Iterator[None]:
+    """`reconciliation_cases` ni `env` TOZALANISHIDAN OLDIN o'chiradi.
+
+    ⛔ TARTIB MAJBURIY: case `billing_anomalies` va `daily_charges` ga
+       KOMPOZIT FK bilan tayanadi (`ondelete` YO'Q). `cleanup_billing_domain()`
+       avval yugursa u nishonni o'chirishga urinib FK buzilishi bilan
+       yiqilardi. Fixture `env` GA BOG'LIQ, ya'ni pytest uni `env` dan
+       OLDIN yiqadi.
+    """
+    yield
+    cleanup_notification_domain(sync_owner_conn, market_ids=list(env.billing.market_ids))
 
 
 def _stall_code_of(conn: Connection[TupleRow], stall_id: UUID) -> str:
@@ -648,3 +680,214 @@ async def test_receivables_reports_a_missing_vendor_name_as_none(
     assert stall_code in row.stall_codes, (
         "rasta kodi sotuvchi ismidan MUSTAQIL manbadan kelishi kerak edi"
     )
+
+
+# ===========================================================================
+# 3. NOMUVOFIQLIK ARXIVI — IKKI SINF, IKKI SANOQ, HECH QACHON QO'SHILMAYDI
+# ===========================================================================
+
+
+async def test_anomaly_archive_puts_both_classes_in_one_list(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    env: Env,
+    archive_cleanup: None,
+) -> None:
+    """⛔ IKKI SINF BITTA XRONOLOGIYADA, `kind` USTUNI BILAN AJRALADI.
+
+    =========================================================================
+    ⛔ NEGA BITTA RO'YXAT (UI-SPEC §8.5): ikki alohida ro'yxat bir hodisani
+       IKKI JOYDA qidirtirardi — nazoratchi «shu rasta bilan nima bo'ldi?»
+       degan savolga javobni ikki jadvaldan yig'ib olardi. Sinf esa `kind`
+       USTUNIDA, ya'ni bitta xronologiyada ham ko'rinadi, ham filtrlanadi.
+
+    ⛔ DALIL — FAQAT IDENTIFIKATOR (07 D-03). Qatorning maydonlari to'plami
+       LITERAL tenglik bilan qulflanadi: kadr baytlari, ombor kaliti yoki
+       imzolangan havola uchun maydon MAVJUD EMAS, ya'ni ularni javobga
+       qo'shish qatorning SHAKLINI o'zgartiradi va test darhol qizaradi.
+       Inkor tasdiq esa faqat AYNAN o'sha nomni ushlardi (D-31 darsi).
+    """
+    stalls = env.domain.market_a.stall_ids
+    charge_id, day = add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=stalls[0],
+        vendor_id=env.live.vendor_id,
+        tariff_id=env.live.tariff_id,
+    )
+    snapshot_id = env.live.snapshot_ids[0]
+
+    async with tenant_session(env.market_id) as session:
+        anomaly_id = await write_anomaly(
+            session,
+            market_id=env.market_id,
+            stall_id=stalls[1],
+            service_date=day,
+            kind=AnomalyKind.UNASSIGNED_OCCUPIED,
+            occupancy_event_id=env.live.event_ids[0],
+            snapshot_id=snapshot_id,
+        )
+    assert anomaly_id is not None, "nazorat: anomaliya yozilmadi"
+
+    seed_case(
+        sync_owner_conn,
+        market_id=env.market_id,
+        service_date=day,
+        anomaly_id=anomaly_id,
+        status=ReconciliationCaseStatus.IN_REVIEW.value,
+    )
+    seed_case(
+        sync_owner_conn,
+        market_id=env.market_id,
+        service_date=day,
+        charge_id=charge_id,
+        status=ReconciliationCaseStatus.NEW.value,
+    )
+
+    async with tenant_session(env.market_id) as session:
+        archive = await anomaly_archive(
+            session, market_id=env.market_id, from_date=day, to_date=day
+        )
+
+    assert len(archive.rows) == 2
+    by_kind = {row.kind: row for row in archive.rows}
+    assert set(by_kind) == {ARCHIVE_KIND_UNPAID, ARCHIVE_KIND_UNREGISTERED}
+
+    unregistered = by_kind[ARCHIVE_KIND_UNREGISTERED]
+    assert unregistered.stall_code == _stall_code_of(sync_owner_conn, stalls[1])
+    assert unregistered.case_status == ReconciliationCaseStatus.IN_REVIEW.value
+    assert unregistered.evidence_snapshot_id == snapshot_id
+    assert unregistered.amount_soum is None, (
+        "«ro'yxatga olinmagan savdo» da HISOB YOZILMAYDI (D-28) — summa TO'QILMAYDI"
+    )
+
+    unpaid = by_kind[ARCHIVE_KIND_UNPAID]
+    assert unpaid.stall_code == _stall_code_of(sync_owner_conn, stalls[0])
+    assert unpaid.case_status == ReconciliationCaseStatus.NEW.value
+    assert unpaid.amount_soum == TARIFF_SOUM
+
+    assert {field.name for field in fields(AnomalyArchiveRow)} == {
+        "service_date",
+        "kind",
+        "stall_code",
+        "case_status",
+        "amount_soum",
+        "evidence_snapshot_id",
+    }, "dalil FAQAT identifikator — kadr baytlari uchun maydon MAVJUD EMAS (07 D-03)"
+
+
+async def test_anomaly_archive_keeps_the_two_counts_apart(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    env: Env,
+    archive_cleanup: None,
+) -> None:
+    """⛔ IKKI SANOQ ALOHIDA VA ULARNING YIG'INDISI JAVOBDA YO'Q (6-faza D-05).
+
+    =========================================================================
+    ⛔ SANOQLAR ATAYIN TENG EMAS (2 va 1): teng bo'lganda «har biri O'Z
+       sinfini sanadi» bilan «ikkalasi bir xil songa qaraydi» MEXANIK
+       ravishda bir xil ko'rinardi.
+
+    ⛔ YIG'INDI MAYDONINING YO'QLIGI MAYDONLAR TO'PLAMINING LITERAL
+       TENGLIGI bilan o'lchanadi, inkor tasdiq bilan EMAS (D-31): bitta
+       nomni izlagan tasdiq boshqa nom bilan qo'shilgan maydonni jimgina
+       o'tkazib yuborardi.
+
+    ⚠ SABAB MAHSULOTNIKI: «ro'yxatga olinmagan savdo» va «band, lekin
+      to'lovsiz» IKKI BOSHQA qarordan chiqadi. Ularni bitta songa qo'shish
+      ikki xil nomuvofiqlikni bitta raqamga siqardi va nazoratchi qaysi
+      sinf o'sganini KO'RMASDI.
+    """
+    stalls = env.domain.market_a.stall_ids
+    charge_id, day = add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=stalls[0],
+        vendor_id=env.live.vendor_id,
+        tariff_id=env.live.tariff_id,
+    )
+    seed_case(sync_owner_conn, market_id=env.market_id, service_date=day, charge_id=charge_id)
+
+    async with tenant_session(env.market_id) as session:
+        for stall_id in (stalls[1], stalls[2]):
+            await write_anomaly(
+                session,
+                market_id=env.market_id,
+                stall_id=stall_id,
+                service_date=day,
+                kind=AnomalyKind.UNASSIGNED_OCCUPIED,
+                occupancy_event_id=env.live.event_ids[0],
+                snapshot_id=env.live.snapshot_ids[0],
+            )
+
+    async with tenant_session(env.market_id) as session:
+        archive = await anomaly_archive(
+            session, market_id=env.market_id, from_date=day, to_date=day
+        )
+
+    assert archive.unpaid_count == 1
+    assert archive.unregistered_count == 2
+    assert len(archive.rows) == 3
+
+    assert {field.name for field in fields(AnomalyArchive)} == {
+        "rows",
+        "unpaid_count",
+        "unregistered_count",
+    }, "yig'indi maydoni QO'SHILGAN — ikki sinf hech qachon bitta songa qo'shilmaydi (D-05)"
+
+
+async def test_anomaly_archive_excludes_another_markets_anomaly(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    env: Env,
+    archive_cleanup: None,
+) -> None:
+    """⛔ BEGONA BOZORNING NOMUVOFIQLIGI NATIJAGA TUSHMAYDI (T-08-13).
+
+    Ikki bozorda AYNAN bir xil shakldagi qator yoziladi va faqat A
+    bozorining hisoboti so'raladi. B bozorining qatori chiqsa bu MOLIYAVIY
+    ma'lumotning tenant chegarasidan sizishi bo'lardi.
+
+    ⚠ NAZORAT SHART: A ning O'Z qatori BOR bo'lishi ham tekshiriladi. Usiz
+      bo'sh natija «chegara ishladi» bilan «so'rov umuman ishlamadi» ni
+      ajratmasdi.
+    """
+    own_stall = env.domain.market_a.stall_ids[0]
+    other_stall = env.domain.market_b.stall_ids[0]
+
+    own_charge, own_day = add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=own_stall,
+        vendor_id=env.live.vendor_id,
+        tariff_id=env.live.tariff_id,
+    )
+    other_charge, other_day = add_daily_charge(
+        sync_owner_conn,
+        market_id=env.other.market_id,
+        stall_id=other_stall,
+        vendor_id=env.other.vendor_id,
+        tariff_id=env.other.tariff_id,
+    )
+    seed_case(sync_owner_conn, market_id=env.market_id, service_date=own_day, charge_id=own_charge)
+    seed_case(
+        sync_owner_conn,
+        market_id=env.other.market_id,
+        service_date=other_day,
+        charge_id=other_charge,
+    )
+
+    async with tenant_session(env.market_id) as session:
+        archive = await anomaly_archive(
+            session,
+            market_id=env.market_id,
+            from_date=min(own_day, other_day),
+            to_date=max(own_day, other_day),
+        )
+
+    assert archive.unpaid_count == 1, "nazorat: A bozorining O'Z qatori chiqishi kerak"
+    assert [row.stall_code for row in archive.rows] == [_stall_code_of(sync_owner_conn, own_stall)]
+    assert _stall_code_of(sync_owner_conn, other_stall) not in {
+        row.stall_code for row in archive.rows
+    }
