@@ -1096,27 +1096,58 @@ test("⛔ G-41 (08-UI-SPEC) (b): hisobot katalogida birlashtirilgan farq YO'Q", 
  */
 const ACCENT_OWNER = "ledger-import.tsx";
 
+/**
+ * `token` (satr YOKI `g` bayroqli regeks) uchrashlarining INDEKSLARI.
+ *
+ * =========================================================================
+ * ⛔⛔ REGEKS SHAKLI 08-18 DA ⛔ ZARUR BO'LIB CHIQDI VA SABAB MEXANIK.
+ *
+ * `ConfirmDialog` ning propi ⛔ `confirmVariant`, yalang'och `variant`
+ * EMAS (`ui/confirm-dialog.tsx`: `confirmVariant?: ButtonProps["variant"]`).
+ * Ya'ni haqiqiy chaqiruv `confirmVariant="destructive"` bo'lib yoziladi va
+ * unda token ⛔ KATTA HARF bilan (`Variant=`) uchraydi.
+ *
+ * ⛔ Registrga sezgir qidiruv shu sababdan `Set(0)` qaytarardi va darvoza
+ *    ⛔ TIP JIHATIDAN TO'G'RI YOZILGAN yagona shaklda ham qizarardi —
+ *    ya'ni u bajarilmas talab bo'lardi (`<ConfirmDialog variant="…">`
+ *    `tsc` da xato: bunday prop YO'Q). 08-17 ning S-5c simulyatsiyasi
+ *    `tsc` dan o'tmaydigan SUN'IY fayl edi va shu bo'shliqni ko'rmagan.
+ *
+ * ⚠ Registrsiz shakl darvozani ⛔ BO'SHATMAYDI, KENGAYTIRADI: u
+ *   `<Button variant="destructive">` ni ham ushlaydi (o'shanda teg egasi
+ *   `Button` bo'lib qizaradi) — ya'ni eski da'volarning HAMMASI kuchda
+ *   qoladi.
+ * =========================================================================
+ */
+function matchIndexes(code, token) {
+  if (typeof token !== "string") {
+    return [...code.matchAll(token)].map((match) => match.index);
+  }
+
+  const out = [];
+  let index = code.indexOf(token);
+  while (index !== -1) {
+    out.push(index);
+    index = code.indexOf(token, index + token.length);
+  }
+  return out;
+}
+
 /** `variant="…"` ni CHIQARADIGAN JSX tegining nomi (eng yaqin ochuvchi `<`). */
 function jsxOwnersOf(code, token) {
-  const owners = [];
-  let index = code.indexOf(token);
-
-  while (index !== -1) {
+  return matchIndexes(code, token).map((index) => {
     const before = code.slice(0, index);
     const open = before.lastIndexOf("<");
     const match = /^<\s*([A-Za-z][\w.]*)/u.exec(before.slice(open));
-    owners.push(match === null ? "(noma'lum)" : match[1]);
-    index = code.indexOf(token, index + token.length);
-  }
-
-  return owners;
+    return match === null ? "(noma'lum)" : match[1];
+  });
 }
 
 /** `token` ni chiqaradigan fayllar va ularning sanog'i. */
 function countByFile(sources, token) {
   const out = new Map();
   for (const [file, code] of sources) {
-    const count = code.split(token).length - 1;
+    const count = matchIndexes(code, token).length;
     if (count > 0) out.set(path.basename(file), count);
   }
   return out;
@@ -1159,8 +1190,14 @@ test('⛔ G-42 (08-UI-SPEC) (a): `variant="default"` — AYNAN BITTA va FAQAT eg
   );
 });
 
+/**
+ * ⛔ Destruktiv variant — ⛔ REGISTRSIZ (yuqoridagi `matchIndexes` izohi):
+ *    haqiqiy chaqiruv `confirmVariant="destructive"` bo'lib yoziladi.
+ */
+const DESTRUCTIVE_VARIANT = /variant="destructive"/giu;
+
 test('⛔ G-42 (08-UI-SPEC) (a): `variant="destructive"` — AYNAN BITTA va `ConfirmDialog` da', () => {
-  const counts = countByFile(componentSources, 'variant="destructive"');
+  const counts = countByFile(componentSources, DESTRUCTIVE_VARIANT);
 
   assert.deepEqual(
     new Set(counts.keys()),
@@ -1175,12 +1212,44 @@ test('⛔ G-42 (08-UI-SPEC) (a): `variant="destructive"` — AYNAN BITTA va `Con
    *   destruktiv tugma tasdiqsiz yakunlovchi amal bo'lardi (§14.8).
    */
   const owners = [...componentSources.values()].flatMap((code) =>
-    jsxOwnersOf(code, 'variant="destructive"'),
+    jsxOwnersOf(code, DESTRUCTIVE_VARIANT),
   );
   assert.deepEqual(
     owners,
     accentOwnerPresent ? ["ConfirmDialog"] : [],
     `⛔ destruktiv variant \`ConfirmDialog\` dan tashqarida: ${owners}`,
+  );
+});
+
+test("⛔ G-42 (08-UI-SPEC) (a): ⛔ O'LCHOV — registrsiz qidiruv HAQIQATAN kerak", () => {
+  /*
+   * ⛔⛔ BU TEST DARVOZANING O'Z MEXANIZMINI O'LCHAYDI (08-17 dagi
+   *   «import filtri haqiqatan kerak» testining aynan sinfi).
+   *
+   * Registrga sezgir shakl BUGUNGI TOZA KODDA ⛔ 0 qaytaradi, ya'ni u
+   * hech nimani o'lchamasdi va «destruktiv tugma yo'q» degan da'vo
+   * ⛔ JIMGINA ROST bo'lib qolardi — holbuki u BOR va u ConfirmDialog
+   * chaqiruvida.
+   *
+   * ⚠ Faraz eskirsa (`ConfirmDialog` propi bir kun `variant` deb
+   *   nomlansa) bu assert QIZARADI va registrsiz shaklni saqlash sababi
+   *   QAYTA baholanadi — jimgina qolib ketmaydi.
+   */
+  const insensitive = totalOf(countByFile(componentSources, DESTRUCTIVE_VARIANT));
+  const sensitive = totalOf(
+    countByFile(componentSources, 'variant="destructive"'),
+  );
+
+  assert.equal(
+    insensitive,
+    accentOwnerPresent ? 1 : 0,
+    "registrsiz shakl destruktiv variantni topmadi",
+  );
+  assert.equal(
+    sensitive,
+    0,
+    "⛔ registrga sezgir shakl endi ham topyapti — `ConfirmDialog` propi " +
+      "o'zgargan bo'lishi mumkin, farazni QAYTA baholang",
   );
 });
 
