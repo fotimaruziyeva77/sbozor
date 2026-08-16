@@ -792,7 +792,8 @@
       "outboxStale": "Билдиришнома навбати тўхтади",
       "reconciliationStale": "Номувофиқлик текшируви бажарилмади",
       "digestStale": "Кунлик ҳисобот хабари тайёрланмади",
-      "overdueStale": "Қарздорлик эслатмаси тайёрланмади"
+      "overdueStale": "Қарздорлик эслатмаси тайёрланмади",
+      "notificationStale": "Навбатдаги хабар узоқ вақт юборилмади"
     },
     "alertOpenCount": "Очиқ: {count}",
     "alertFirstSeen": "Биринчи марта: {time}",
@@ -808,6 +809,8 @@
     "alertMarket": "Бозор: {name}",
     "alertTime": "Вақт: {time}",
     "alertStaleHours": "{count} соатдан бери янгиланмаган",
+    "alertStaleMinutes": "{count} дақиқадан бери навбатда",
+    "alertPendingCount": "Навбатда: {count} та хабар",
     "alertDiskUsed": "Диск банд: {percent} фоиз",
     "emptyClosedAlerts": "Ёпилган огоҳлантириш йўқ",
     "emptyClosedAlertsHint": "Ёпилган огоҳлантиришлар шу ерда кўринади.",

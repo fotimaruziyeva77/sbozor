@@ -792,7 +792,8 @@
       "outboxStale": "Очередь уведомлений остановилась",
       "reconciliationStale": "Проверка расхождений не выполнялась",
       "digestStale": "Ежедневная сводка не подготовлена",
-      "overdueStale": "Напоминание о долге не подготовлено"
+      "overdueStale": "Напоминание о долге не подготовлено",
+      "notificationStale": "Сообщение долго не уходит из очереди"
     },
     "alertOpenCount": "Открытых: {count}",
     "alertFirstSeen": "Впервые: {time}",
@@ -808,6 +809,8 @@
     "alertMarket": "Рынок: {name}",
     "alertTime": "Время: {time}",
     "alertStaleHours": "Не обновлялось {count} ч",
+    "alertStaleMinutes": "В очереди {count} мин",
+    "alertPendingCount": "В очереди: {count} сообщений",
     "alertDiskUsed": "Диск занят: {percent} процентов",
     "emptyClosedAlerts": "Закрытых оповещений нет",
     "emptyClosedAlertsHint": "Закрытые оповещения появятся здесь.",

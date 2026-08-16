@@ -49,6 +49,7 @@ from app.jobs.alerting import (
     ALERT_SWEEP_COMPONENT,
     BACKUP_COMPONENT,
     NEVER_SUPPRESSED_ALERT_KEYS,
+    NOTIFICATION_STALE_MINUTES,
     PLATFORM_SCOPED_ALERT_KEYS,
     alert_sweep,
     daily_digest,
@@ -72,7 +73,7 @@ from app.services.alerts import (
 from app.services.quality import QualityThresholds
 from fixtures.nvr_domain import nvr_rows
 from pydantic import SecretStr
-from sbozor_core.enums import AlertSeverity, CaptureMethod, CaptureRunStatus
+from sbozor_core.enums import AlertSeverity, CaptureMethod, CaptureRunStatus, OutboxStatus
 from sbozor_core.models.snapshot import DEFAULT_SNAPSHOT_SLOTS
 from sbozor_core.timeutil import MARKET_TZ, business_date, business_today
 from taskiq import Context, TaskiqMessage, TaskiqState
@@ -161,6 +162,27 @@ _HEARTBEAT_UPSERT = (
 )
 _HEARTBEAT_DROP = "DELETE FROM system_heartbeats WHERE component = %s"
 _HEARTBEAT_READ = "SELECT last_seen_at FROM system_heartbeats WHERE component = %s"
+
+_INSERT_OUTBOX = (
+    "INSERT INTO notification_outbox "
+    "(id, market_id, kind, recipient_kind, vendor_id, dedupe_key, payload, status, "
+    " attempt_count, next_attempt_at, last_error_type, created_at, updated_at) "
+    "VALUES (%s, %s, %s, 'market_director', NULL, %s, '{}'::jsonb, %s, %s, %s, %s, %s, %s)"
+)
+"""Navbat qatorini QO'LDA yozadi — ⛔ `created_at` ARGUMENT.
+
+⚠ `created_at` odatda `server_default = now()` bilan to'ladi, ya'ni «90
+  daqiqa oldin navbatga tushgan xabar» holatini soatni siljitmasdan
+  qurishning yagona yo'li — ustunni OSHKORA yozish (`alert_sweep(...,
+  now=...)` bilan aynan bir xil qaror: vaqt ARGUMENT bo'ladi, global
+  emas).
+
+⛔ QABUL QILUVCHI — DIREKTOR (`recipient_kind = 'market_director'`,
+   `vendor_id NULL`): `RECIPIENT_MATCHES_VENDOR_CHECK` ikki tomonlama
+   tenglik va `vendor` shoxi mavjud sotuvchi qatorini talab qilardi.
+   Alert manbai qabul qiluvchini UMUMAN ajratmaydi, ya'ni bu tanlov
+   o'lchovga ta'sir qilmaydi va seedni yengil qoldiradi.
+"""
 
 
 class _Bed:
@@ -258,6 +280,41 @@ class _Bed:
     def drop_heartbeat(self, component: str) -> None:
         self.conn.execute(_HEARTBEAT_DROP, (component,))
 
+    def write_outbox(
+        self,
+        *,
+        minutes_ago: float,
+        status: str = OutboxStatus.PENDING.value,
+        attempt_count: int = 0,
+        next_attempt_in_minutes: float = 0.0,
+        last_error_type: str | None = None,
+    ) -> None:
+        """Navbatga bitta qator qo'yadi — YOSHI va KELAJAGI alohida boshqariladi.
+
+        ⚠ IKKI VAQT MUSTAQIL: `minutes_ago` — qator NAVBATDA TURGAN vaqti
+          (`created_at`), `next_attempt_in_minutes` esa keyingi urinish
+          nuqtasi (`next_attempt_at`). Ularni bitta argumentga qo'shish
+          `defer_unresolved()` ning aynan shaklini (o'tmishdagi `created_at`
+          + KELAJAKDAGI `next_attempt_at`) qurib bo'lmas qilardi.
+        """
+        moment = datetime.now(tz=MARKET_TZ)
+        created_at = moment - timedelta(minutes=minutes_ago)
+        self.conn.execute(
+            _INSERT_OUTBOX,
+            (
+                str(uuid4()),
+                str(self.market_id),
+                "digest_evening",
+                f"zond:{uuid4()}",
+                status,
+                attempt_count,
+                moment + timedelta(minutes=next_attempt_in_minutes),
+                last_error_type,
+                created_at,
+                created_at,
+            ),
+        )
+
 
 @pytest.fixture
 def bed(
@@ -327,6 +384,13 @@ def bed(
             )
             sync_owner_conn.execute(
                 "DELETE FROM capture_runs WHERE market_id = ANY(%s::uuid[])", (market_ids,)
+            )
+            # ⚠ NAVBAT HAM TOZALANADI: qolgan `pending` qator KEYINGI testda
+            #   `notification_stale` ni ko'tarib, guruhlash da'volarini
+            #   («bitta xabar») jimgina buzardi — bu `_PLATFORM_COMPONENTS`
+            #   ro'yxatining tug'ilish sababi bilan AYNAN bir xil sinf.
+            sync_owner_conn.execute(
+                "DELETE FROM notification_outbox WHERE market_id = ANY(%s::uuid[])", (market_ids,)
             )
             for component in (ALERT_SWEEP_COMPONENT, *_PLATFORM_COMPONENTS):
                 sync_owner_conn.execute(_HEARTBEAT_DROP, (component,))
@@ -860,6 +924,160 @@ async def test_the_sweep_writes_its_own_heartbeat(
 
 
 # ===========================================================================
+# 4b. ⛔ NAVBAT QOTDI — «JOB TIRIK, LEKIN NATIJA YO'Q» (Topilma №I)
+#
+# ⛔⛔ MAVJUD `outbox_stale` BU HOLATNI KO'RMAYDI VA BU O'LCHANGAN, TAXMIN
+#     EMAS. Uning manbai `system_heartbeats['outbox_tick']`, ya'ni JOBNING
+#     TIRIKLIGI. Kuzatilgan nosozlikda job tirik va HAR DAQIQADA yuguradi
+#     (`OUTBOX_TICK_CRON = "* * * * *"`) — shunchaki navbat BO'SHAMAYDI.
+#     Yurak urishi yangi, demak `outbox_stale` HECH QACHON ko'tarilmaydi.
+#
+#     D-20 ning uchta jimligidan IKKINCHISI («ish bajarildi, natija yomon»)
+#     shu yerda materializatsiya qilinadi: manba — YURAK URISHI emas,
+#     NAVBATNING O'ZI.
+# ===========================================================================
+
+
+async def test_a_frozen_queue_raises_a_market_level_alert(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sender: AlertSender,
+    bed: _Bed,
+) -> None:
+    """⛔ 30 daqiqadan uzoq `pending` turgan xabar ALERT beradi (Topilma №I).
+
+    =========================================================================
+    KUZATILGAN HOLAT: kvitansiya 18+ soat «Navbatda» turdi, hech qanday
+    alert bo'lmadi va uni FAQAT direktor ekranga qarab topdi. Prodda bu
+    «sotuvchi kvitansiya olmayapti va hech kim sezmayapti» — D-02 (nizodagi
+    dalil) ning to'g'ridan-to'g'ri yo'qolishi.
+    =========================================================================
+
+    ⚠ DARAJA `warning` VA BU ONGLI: `outbox_stale` (`critical`) jobning
+      O'LIMI — u o'z-o'zidan tuzalmaydi. Bu esa DAVOM ETAYOTGAN holat va
+      mavjud `ESCALATION_HOURS` (3 soat) mexanizmi uni `critical` ga
+      KO'TARADI, ya'ni o'tkinchi uzilish bilan haqiqatan qotgan navbat
+      AJRALADI. `critical` bo'lib tug'ilsa eskalatsiya shoxi ikkalasini
+      bir xil ko'rsatardi.
+    """
+    bed.write_outbox(minutes_ago=90)
+
+    async with respx.mock(assert_all_called=False) as router:
+        router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+        await _sweep(api_sessionmaker, sender)
+
+    stale = [row for row in bed.alerts() if row["alert_key"] == "notification_stale"]
+
+    assert len(stale) == 1, (
+        f"90 daqiqadan beri navbatda turgan xabar uchun {len(stale)} qator yozildi — "
+        "qotgan navbat JIMGINA qoldi va uni faqat ekranga qaragan odam topardi"
+    )
+    assert stale[0]["severity"] == AlertSeverity.WARNING.value, (
+        "alert `critical` bo'lib tug'ildi — o'shanda `ESCALATION_HOURS` mexanizmi "
+        "o'tkinchi uzilishni qotgan navbatdan AJRATA olmasdi"
+    )
+    assert stale[0]["subject_id"] is None, (
+        "signal bitta xabarga bog'landi — 500 qatorli navbat 500 ta alert berardi"
+    )
+
+
+async def test_a_young_queue_stays_silent(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sender: AlertSender,
+    bed: _Bed,
+) -> None:
+    """⛔ SALBIY NAZORAT: yangi qator alert BERMAYDI.
+
+    Ikkala yo'nalish ham o'lchanadi — aks holda «har doim rost» qaytaradigan
+    shox (masalan `pending_count > 0` sharti) yashil turardi va supurgi har
+    yugurishda shovqin qo'shardi (D-22: shovqin alert kanalini o'ldiradi).
+    """
+    bed.write_outbox(minutes_ago=5)
+
+    async with respx.mock(assert_all_called=False) as router:
+        router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+        await _sweep(api_sessionmaker, sender)
+
+    keys = [row["alert_key"] for row in bed.alerts()]
+
+    assert "notification_stale" not in keys, (
+        f"navbatga endigina ({NOTIFICATION_STALE_MINUTES} daqiqadan kam) tushgan qator "
+        "alert berdi — chegara umuman qo'llanmayapti"
+    )
+
+
+async def test_a_future_next_attempt_cannot_hide_a_frozen_queue(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sender: AlertSender,
+    bed: _Bed,
+) -> None:
+    """⛔⛔ ENG MUHIM O'LCHOV: MANBA `created_at`, `next_attempt_at` EMAS.
+
+    =========================================================================
+    Qator AYNAN `outbox_repo.defer_unresolved()` ning shaklida yoziladi
+    (`outbox_repo.py::_DEFER_UNRESOLVED`):
+
+        status          = 'pending'              (o'zgarmaydi)
+        next_attempt_at = now + 15 daqiqa        (OLDINGA suriladi)
+        last_error_type = 'UnresolvedRecipient'
+        attempt_count   — ⛔ UMUMAN OSHIRILMAYDI
+
+    Shundan ikki xulosa chiqadi va ikkalasi ham shu testda qulflanadi:
+
+      * URINISHLAR SONI BO'YICHA chegara bu nosozlikni KO'RMASDI —
+        `attempt_count` mangu 0 bo'lib qoladi (bu mahsulotning TO'G'RI
+        xulqi: manzilsiz shox urinish sanamaydi);
+      * `next_attempt_at` MANBA SIFATIDA YAROQSIZ — u har 15 daqiqada
+        oldinga suriladi, ya'ni supurgi qaragan payt `next_attempt_at <=
+        now` sharti deyarli HECH QACHON rost bo'lmaydi.
+
+    ⛔ Kimdir manbani `created_at` dan `next_attempt_at` ga almashtirsa
+       AYNAN SHU test qizaradi — chegaraning o'zi emas, MANBA TANLOVI
+       mexanik ravishda qulflangan.
+    =========================================================================
+    """
+    bed.write_outbox(
+        minutes_ago=90,
+        attempt_count=0,
+        next_attempt_in_minutes=15,
+        last_error_type="UnresolvedRecipient",
+    )
+
+    async with respx.mock(assert_all_called=False) as router:
+        router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+        await _sweep(api_sessionmaker, sender)
+
+    keys = [row["alert_key"] for row in bed.alerts()]
+
+    assert "notification_stale" in keys, (
+        "kelajakdagi `next_attempt_at` alertni YASHIRDI — manba navbat YOSHI "
+        "(`created_at`) emas, keyingi urinish nuqtasi bo'lib qolgan. Kuzatilgan "
+        "nosozlikda (18 soat, urinishlar = 0) alert AYNAN shu sababdan chiqmasdi"
+    )
+
+
+def test_the_frozen_queue_alert_is_market_scoped() -> None:
+    """⛔ Alert BOZOR darajasida — `notification_outbox` TENANT jadvali.
+
+    `platform_scoped=True` bo'lsa ikki bozorning navbati bitta Telegram
+    xabariga birlashardi va ikkinchi bozor direktori O'Z qotgan navbatini
+    UMUMAN ko'rmasdi — `vendor_binding_conflict` bilan aynan bir xil sabab.
+    """
+    assert "notification_stale" in ALERT_META, (
+        "kalit reyestrga olinmagan — `_upsert()` `ALERT_META[key]` ustida `KeyError` "
+        "berardi va (xato yutilsa) alert JIMGINA yo'qolardi"
+    )
+    assert "notification_stale" not in PLATFORM_SCOPED_ALERT_KEYS, (
+        "bozor darajasidagi alert platformaga ko'tarildi — ikkinchi bozor direktori "
+        "o'z navbatining qotganini ko'rmasdi"
+    )
+    assert ALERT_META["notification_stale"].never_suppressed is False, (
+        "alert debounce'dan chiqarilgan — botga hali ulanmagan sotuvchining xabari "
+        "navbatda 72 soatgacha QONUNIY turadi va bo'g'ilmagan kalit o'sha davrda "
+        "har supurgida xabar berardi (D-22 ning «75 ta xabar» sinfi)"
+    )
+
+
+# ===========================================================================
 # 5. TELEGRAM YIQILGANDA
 # ===========================================================================
 
@@ -982,11 +1200,17 @@ async def test_no_request_ever_carries_an_image(
 
 
 def test_the_detail_allowlist_matches_the_ui_contract() -> None:
-    """`alert_events.detail` FAQAT oltita kalitni qabul qiladi (§6.7, D-19).
+    """`alert_events.detail` FAQAT sakkizta kalitni qabul qiladi (§6.7, D-19).
 
     ⚠ ALLOWLIST YOZISH PAYTIDA qo'yiladi, render paytida emas. UI noma'lum
       kalitni ko'rsatmaydi, lekin u BAZAGA baribir yozilardi va u yerdan
       zaxiraga, zaxiradan esa tashqi bucketga chiqardi.
+
+    ⚠ OXIRGI IKKITASI (Topilma №I) — IKKALASI HAM BUTUN SON: navbatning
+      yoshi va uning hajmi. Sotuvchi ismi, telefoni, `chat_id` yoki xabar
+      matni uchun kalit YO'Q va qo'shilmaydi: `notification_stale` alerti
+      Telegramga ham ketadi, Telegram serverlari esa loyiha zimmasiga
+      olgan O'zR data-rezidentlik chegarasidan TASHQARIDA.
     """
     assert {
         "market_name",
@@ -995,6 +1219,8 @@ def test_the_detail_allowlist_matches_the_ui_contract() -> None:
         "slot_time",
         "stale_hours",
         "disk_pct",
+        "stale_minutes",
+        "pending_count",
     } == ALERT_DETAIL_KEYS
 
 

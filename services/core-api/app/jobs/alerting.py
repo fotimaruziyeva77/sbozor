@@ -109,7 +109,8 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final
 
 import structlog
-from sbozor_core.enums import ActorKind, AlertSeverity, CaptureRunStatus
+from sbozor_core.enums import ActorKind, AlertSeverity, CaptureRunStatus, OutboxStatus
+from sbozor_core.models.notification import NotificationOutbox
 from sbozor_core.models.ops import SystemHeartbeat
 from sbozor_core.models.snapshot import (
     ALERT_OPEN_EXPR,
@@ -156,6 +157,7 @@ __all__ = [
     "ALERT_SWEEP_COMPONENT",
     "BACKUP_COMPONENT",
     "NEVER_SUPPRESSED_ALERT_KEYS",
+    "NOTIFICATION_STALE_MINUTES",
     "PLATFORM_SCOPED_ALERT_KEYS",
     "STORABLE_ALERT_KEYS",
     "DigestResult",
@@ -239,8 +241,46 @@ butun asosi yo'qoladi. Shuning uchun `capture_stopped` HECH QACHON
 bo'g'ilmaydi.
 """
 
+NOTIFICATION_STALE_MINUTES: Final[int] = 30
+"""`notification_outbox` da `pending` qator ALERTGA aylanadigan YOSHI.
+
+=============================================================================
+CHEGARANING IKKALA TOMONI — VA BACKOFF BILAN QOPLANISHI OCHIQ TAN OLINADI.
+
+`outbox.py:136-153` dagi qayta urinish arifmetikasi (`MAX_ATTEMPTS`:
+30 s + 2 + 8 + 32 daqiqa ≈ 42 daqiqa) bo'yicha QONUNIY ketma-ketlik
+qatorni ~42 daqiqagacha `pending` da ushlab turishi MUMKIN. Ya'ni 30
+daqiqalik chegara o'tkinchi Telegram uzilishida HAM ateshlaydi.
+
+⚠ BU QABUL QILINGAN VA ATAYIN, kelishuv emas: 30 daqiqa kechikkan
+  kvitansiya direktorga AYTILISHI kerak (CASH-05 -> D-02). Narxi esa
+  daraja bilan to'lanadi — alert `warning` bo'lib tug'iladi, o'tkinchi
+  holat 3 soatgacha o'z-o'zidan yopiladi va faqat HAQIQATAN qotgan
+  navbat `ESCALATION_HOURS` bilan `critical` ga ko'tariladi.
+
+⛔ QIYMAT `Settings` GA QO'SHILMAYDI. Shu fayldagi BARCHA chegaralar
+   (`DEBOUNCE_MINUTES`, `CAMERA_OFFLINE_SLOTS`, `HEARTBEAT_STALE_HOURS`,
+   `SLOT_FAILURE_RATIO`) modul konstantasi; ikkinchi konvensiya ochish
+   «bu chegara qayerda?» savolini har o'quvchi uchun qaytadan tug'dirardi.
+=============================================================================
+"""
+
 ALERT_DETAIL_KEYS: Final[frozenset[str]] = frozenset(
-    {"market_name", "camera_count", "error_code", "slot_time", "stale_hours", "disk_pct"}
+    {
+        "market_name",
+        "camera_count",
+        "error_code",
+        "slot_time",
+        "stale_hours",
+        "disk_pct",
+        # ⛔ IKKALASI HAM BUTUN SON VA ULAR NAVBAT HAQIDA, XABAR HAQIDA
+        #   EMAS: `stale_minutes` — navbat boshining yoshi, `pending_count`
+        #   — navbatning hajmi. Sotuvchi ismi, telefoni, `chat_id` yoki
+        #   xabar matni uchun kalit YO'Q va qo'shilmaydi — bu alert
+        #   Telegramga ham ketadi (D-19).
+        "stale_minutes",
+        "pending_count",
+    }
 )
 """`alert_events.detail` ga tushishi MUMKIN bo'lgan YAGONA kalitlar (D-19).
 
@@ -377,6 +417,42 @@ ALERT_META: Final[dict[str, AlertMeta]] = {
         #   va ikkinchi bozor ma'muriyati hech nima ko'rmasdi.
         AlertMeta(
             "vendor_binding_conflict",
+            AlertSeverity.WARNING.value,
+            never_suppressed=False,
+            platform_scoped=False,
+        ),
+        # -------------------------------------------------------------
+        # 6-GURUH — NAVBAT QOTDI, BOZOR DARAJASIDA (Topilma №I).
+        # -------------------------------------------------------------
+        # ⛔⛔ BU `outbox_stale` NING TAKRORI EMAS VA FARQ O'LCHANGAN.
+        #   `outbox_stale` ning manbai — `system_heartbeats['outbox_tick']`,
+        #   ya'ni JOBNING TIRIKLIGI. Kuzatilgan nosozlikda job TIRIK va
+        #   har daqiqada yuguradi, navbat esa BO'SHAMAYDI: yurak urishi
+        #   yangi, demak `outbox_stale` HECH QACHON ko'tarilmaydi. Bu D-20
+        #   ning IKKINCHI jimligi («job ishlayapti, lekin natija bormi?»)
+        #   va u shu yerda materializatsiya qilinadi.
+        #
+        # * `WARNING`, `CRITICAL` EMAS — `outbox_stale` dan FARQI ONGLI: u
+        #   jobning O'LIMI (o'z-o'zidan tuzalmaydi), bu esa DAVOM ETAYOTGAN
+        #   holat va supurgi uni har yugurishda qayta ko'radi. `warning`
+        #   bo'lib tug'ilishi mavjud `ESCALATION_HOURS` (3 soat)
+        #   mexanizmini ISHLATADI; `critical` bo'lib tug'ilsa eskalatsiya
+        #   shoxi (`_reconcile()`) o'tkinchi uzilishni haqiqatan qotgan
+        #   navbatdan AJRATA olmasdi.
+        # * `never_suppressed=False` — debounce (60 daq) QO'LLANADI: botga
+        #   hali ulanmagan sotuvchining xabari navbatda 72 soatgacha
+        #   QONUNIY turadi (`UNRESOLVED_MAX_AGE_HOURS`) va bo'g'ilmagan
+        #   kalit o'sha davrda har supurgida (`SWEEP_CRON = "*/5 * * * *"`)
+        #   xabar berardi — D-22 ning «75 ta xabar» sinfining aynan o'zi.
+        #   Eskalatsiya esa debounce'dan USTUN (`escalated or fresh or
+        #   never_suppressed`), ya'ni haqiqatan qotgan navbat 3 soatda
+        #   baribir yetib boradi.
+        # * `platform_scoped=False` — `notification_outbox` TENANT jadvali;
+        #   `True` bo'lsa ikki bozorning navbati bitta xabarga birlashardi
+        #   va ikkinchi bozor direktori hech nima ko'rmasdi
+        #   (`vendor_binding_conflict` bilan aynan bir xil sabab).
+        AlertMeta(
+            "notification_stale",
             AlertSeverity.WARNING.value,
             never_suppressed=False,
             platform_scoped=False,
@@ -577,7 +653,11 @@ async def alert_sweep(
     for market_id in market_ids:
         try:
             market_signals = await _market_signals(
-                sessionmaker, market_id=market_id, request_id=request_id, today=today
+                sessionmaker,
+                market_id=market_id,
+                request_id=request_id,
+                today=today,
+                moment=moment,
             )
         except SQLAlchemyError as exc:
             _swallow(result, "alert_sweep_market_scan_failed", exc, market_id=market_id)
@@ -769,12 +849,17 @@ async def _market_signals(
     market_id: UUID,
     request_id: str,
     today: date,
+    moment: datetime,
 ) -> list[_Signal]:
-    """Bugungi `capture_runs` dan chiqadigan signallar.
+    """Bugungi `capture_runs` va CHIQUVCHI NAVBATdan chiqadigan signallar.
 
     ⚠⚠ MANBA — QATOR, ISTISNO EMAS (D-20). «Slot umuman bajarilmadi»
        holatida hech qanday istisno yo'q; uni faqat `mark_missed()` yozgan
        `missed` qatori ko'rinadigan qiladi.
+
+    ⚠ IKKINCHI SO'ROV MAVJUD TENANT SESSIYASIDA — yangi sessiya
+      OCHILMAYDI. Har bozorga bitta qo'shimcha agregat, supurgi esa 5
+      daqiqada bir marta yuguradi (`SWEEP_CRON`).
     """
     async with _tenant_session(sessionmaker, market_id=market_id, request_id=request_id) as session:
         rows = (
@@ -790,7 +875,75 @@ async def _market_signals(
             )
         ).all()
 
-    return _signals_from_runs(rows)
+        # ⛔ SO'ROVDA CHEGARA YO'Q VA BU ATAYIN: `pending_count` navbatning
+        #   TO'LIQ hajmi («qancha xabar turibdi»), `min(created_at)` esa
+        #   navbat BOSHINING yoshi («qachondan beri»). Chegarani SQL ga
+        #   qo'yish sanoqni «faqat eskirganlar» ga aylantirib, detaldagi
+        #   ikki sonni bir-biriga bog'lardi.
+        #
+        # ⛔ MANBA `created_at`, `next_attempt_at` EMAS: manzilsiz shox
+        #   (`outbox_repo.defer_unresolved()`) `next_attempt_at` ni har 15
+        #   daqiqada OLDINGA suradi, ya'ni «muddati o'tgan» sharti aynan
+        #   kuzatilgan nosozlikda (18 soat, urinishlar = 0) hech qachon
+        #   rost bo'lmasdi.
+        queue = (
+            await session.execute(
+                select(
+                    func.count(NotificationOutbox.id),
+                    func.min(NotificationOutbox.created_at),
+                ).where(
+                    NotificationOutbox.market_id == market_id,
+                    NotificationOutbox.status == OutboxStatus.PENDING.value,
+                )
+            )
+        ).one()
+
+    return [
+        *_signals_from_runs(rows),
+        *_notification_signals(pending_count=queue[0], oldest_created_at=queue[1], moment=moment),
+    ]
+
+
+def _notification_signals(
+    *,
+    pending_count: int,
+    oldest_created_at: datetime | None,
+    moment: datetime,
+) -> list[_Signal]:
+    """Chiquvchi navbatning YOSHIDAN signal chiqaradi — sof funksiya.
+
+    Sof, chunki chegara (`NOTIFICATION_STALE_MINUTES`) qarorning O'ZI va u
+    bazasiz o'lchanishi kerak (`_signals_from_runs()` bilan bir xil qoida).
+
+    ⛔ `subject_id` `None` — signal BUTUN NAVBATGA tegishli, bitta xabarga
+       emas: har xabar uchun alohida qator 500 qatorli navbatda 500 ta
+       alert bergan bo'lardi (`camera_offline` ning bozor darajasidagi
+       shoxi bilan aynan bir xil qaror).
+
+    Args:
+        pending_count: `pending` holatidagi qatorlarning TO'LIQ soni.
+        oldest_created_at: navbatdagi ENG ESKI qatorning tug'ilgan payti;
+            navbat bo'sh bo'lsa `None`.
+        moment: joriy payt — ARGUMENT, `now_tz()` chaqiruvi emas.
+
+    Returns:
+        Bo'sh ro'yxat yoki AYNAN BITTA `notification_stale` signali.
+    """
+    if oldest_created_at is None:
+        return []
+    age = moment - oldest_created_at
+    if age < timedelta(minutes=NOTIFICATION_STALE_MINUTES):
+        return []
+    return [
+        _Signal(
+            "notification_stale",
+            None,
+            _detail(
+                stale_minutes=int(age.total_seconds() // 60),
+                pending_count=pending_count,
+            ),
+        )
+    ]
 
 
 def _signals_from_runs(rows: Sequence[Any]) -> list[_Signal]:

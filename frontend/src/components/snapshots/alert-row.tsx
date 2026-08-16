@@ -103,6 +103,12 @@ const SEVERITY_VIEW = {
  *   (Pitfall 2): u navbatning TO'XTAGANINI aytadi. Telegram Bot API
  *   yetkazilganlik kvitansiyasini umuman bermaydi va bu semantika butun
  *   fazada BIR XIL (`outbox.py` ning `delivered` bandi).
+ * ⚠ `notification_stale` (Topilma №I) `outboxStale` DAN AJRALIB TURISHI
+ *   SHART va bu matn tanlovining o'zi: `outboxStale` — jobning O'LIMI,
+ *   `notificationStale` — job TIRIK bo'lgani holda BO'SHAMAYOTGAN navbat.
+ *   Ikkalasiga bir xil jumla yozish adminni «navbat to'xtadi» degan
+ *   xulosaga olib borardi, holbuki tik har daqiqada yugurib turibdi va
+ *   tuzatish yo'li BOSHQA (manzil/bog'lanish, jarayon emas).
  */
 const ALERT_TITLE_KEYS = {
   capture_stopped: "snapshots.alertKey.captureStopped",
@@ -120,6 +126,7 @@ const ALERT_TITLE_KEYS = {
   reconciliation_stale: "snapshots.alertKey.reconciliationStale",
   digest_stale: "snapshots.alertKey.digestStale",
   overdue_stale: "snapshots.alertKey.overdueStale",
+  notification_stale: "snapshots.alertKey.notificationStale",
 } as const;
 
 type AlertTitleKey = (typeof ALERT_TITLE_KEYS)[keyof typeof ALERT_TITLE_KEYS];
@@ -174,13 +181,17 @@ export function AlertRow({ alert }: { alert: AlertEvent }) {
   const clock = asText(alert.detail.slot_time);
   const staleHours = asNumber(alert.detail.stale_hours);
   const diskPercent = asNumber(alert.detail.disk_pct);
+  const staleMinutes = asNumber(alert.detail.stale_minutes);
+  const pendingCount = asNumber(alert.detail.pending_count);
   const hasDetail =
     marketName !== null ||
     cameraCount !== null ||
     errorCode !== null ||
     clock !== null ||
     staleHours !== null ||
-    diskPercent !== null;
+    diskPercent !== null ||
+    staleMinutes !== null ||
+    pendingCount !== null;
 
   const duration = isClosed
     ? alertDurationParts(alert.first_seen_at, resolvedAt)
@@ -264,6 +275,16 @@ export function AlertRow({ alert }: { alert: AlertEvent }) {
           )}
           {staleHours === null ? null : (
             <span>{t("snapshots.alertStaleHours", { count: staleHours })}</span>
+          )}
+          {staleMinutes === null ? null : (
+            <span>
+              {t("snapshots.alertStaleMinutes", { count: staleMinutes })}
+            </span>
+          )}
+          {pendingCount === null ? null : (
+            <span>
+              {t("snapshots.alertPendingCount", { count: pendingCount })}
+            </span>
           )}
           {diskPercent === null ? null : (
             <span>{t("snapshots.alertDiskUsed", { percent: diskPercent })}</span>

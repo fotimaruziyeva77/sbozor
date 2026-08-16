@@ -460,8 +460,8 @@ test("G-4: skaner haqiqatan fayl mazmunini o'qiydi (nazorat)", () => {
 
 const ALERT_ROW = path.join(SNAPSHOT_COMPONENTS_DIR, "alert-row.tsx");
 
-/** §11.7 — bugungi ogohlantirish turlarining soni (07-08 + 07-14). */
-const ALERT_TITLE_KEY_COUNT = 15;
+/** §11.7 — bugungi ogohlantirish turlarining soni (07-08 + 07-14 + Topilma №I). */
+const ALERT_TITLE_KEY_COUNT = 16;
 
 /** `snapshots.alertKey.*` — ogohlantirish sarlavhalarining YAGONA guruhi. */
 const ALERT_KEY_GROUP = "alertKey";

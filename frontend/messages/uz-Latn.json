@@ -792,7 +792,8 @@
       "outboxStale": "Bildirishnoma navbati to'xtadi",
       "reconciliationStale": "Nomuvofiqlik tekshiruvi bajarilmadi",
       "digestStale": "Kunlik hisobot xabari tayyorlanmadi",
-      "overdueStale": "Qarzdorlik eslatmasi tayyorlanmadi"
+      "overdueStale": "Qarzdorlik eslatmasi tayyorlanmadi",
+      "notificationStale": "Navbatdagi xabar uzoq vaqt yuborilmadi"
     },
     "alertOpenCount": "Ochiq: {count}",
     "alertFirstSeen": "Birinchi marta: {time}",
@@ -808,6 +809,8 @@
     "alertMarket": "Bozor: {name}",
     "alertTime": "Vaqt: {time}",
     "alertStaleHours": "{count} soatdan beri yangilanmagan",
+    "alertStaleMinutes": "{count} daqiqadan beri navbatda",
+    "alertPendingCount": "Navbatda: {count} ta xabar",
     "alertDiskUsed": "Disk band: {percent} foiz",
     "emptyClosedAlerts": "Yopilgan ogohlantirish yo'q",
     "emptyClosedAlertsHint": "Yopilgan ogohlantirishlar shu yerda ko'rinadi.",
