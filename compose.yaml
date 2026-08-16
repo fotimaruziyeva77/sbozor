@@ -883,8 +883,36 @@ services:
     profiles: ["web"]
     build:
       context: ./frontend
+    # =====================================================================
+    # ⛔⛔ `NEXT_PUBLIC_API_BASE_URL` BU YERDA YO'Q — VA U QAYTARILMAYDI
+    #    (WR-14, 08-11).
+    #
+    # Ikki sabab, ikkalasi ham o'lchangan:
+    #
+    #  1. `NEXT_PUBLIC_*` Next.js da BUILD paytida bandlga inline
+    #     qilinadi. Runtime `environment` kaliti `node server.js` ga
+    #     yetib borardi-yu, allaqachon qadalgan qiymatni O'ZGARTIRA
+    #     OLMASDI. Operator uni almashtirsa, o'zgarish JIMGINA
+    #     e'tiborsiz qolardi — aynan `tests/unit/test_compose_sim_env.py`
+    #     yopgan «o'lik konfiguratsiya» sinfi.
+    #
+    #  2. ⛔ KALIT `build.args` GA KO'CHIRILMADI (ya'ni «tiriltirilmadi»)
+    #     VA BU ONGLI QAROR: `08-UI-SPEC.md` M-9 ga ko'ra core-api'da
+    #     `CORSMiddleware` UMUMAN YO'Q va refresh cookie'si `SameSite=Lax`
+    #     (T-01-61). Boshqa origin qo'yilishi bilan AVTORIZATSIYANING
+    #     O'ZI yiqiladi. Ya'ni ishlaydigan tugma qilib qo'yish o'lik
+    #     kalitni ishlaydigan TUZOQQA aylantirardi.
+    #
+    # Yagona haqiqat manbai — `frontend/src/lib/api-client.ts:31` dagi
+    # `"/api/v1"` zaxirasi (bitta domen topologiyasi, nginx orqali).
+    # Boshqa origin haqiqatan kerak bo'lganda avval CORS va cookie
+    # siyosati qayta ko'rib chiqiladi — o'shanda bu kalit `build.args`
+    # bilan qaytadi.
+    #
+    # Regressiya to'sig'i: `tests/unit/test_compose_sim_env.py::
+    # test_the_dead_frontend_api_base_url_key_does_not_come_back`.
+    # =====================================================================
     environment:
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api/v1}
       TZ: ${TZ:-Asia/Tashkent}
     depends_on:
       - core-api

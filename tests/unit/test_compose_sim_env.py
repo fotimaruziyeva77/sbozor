@@ -181,6 +181,62 @@ def test_removed_rtsp_host_keys_do_not_come_back() -> None:
         )
 
 
+def test_the_dead_frontend_api_base_url_key_does_not_come_back() -> None:
+    """⛔ `NEXT_PUBLIC_API_BASE_URL` `compose.yaml` ga QAYTMAYDI (WR-14, 08-11).
+
+    =========================================================================
+    NEGA BU DARVOZA SHU FAYLDA.
+
+    Bu faylning butun mavzusi — «niyat qilingan, lekin bajarilmagan
+    ishning mexanik izi» sifatidagi O'LIK MUHIT KALITI. `SIM_RTSP_HOST`
+    va bu kalit AYNI sinfdan, faqat mexanizmi boshqacha: `NEXT_PUBLIC_*`
+    Next.js da BUILD paytida bandlga inline qilinadi, ya'ni runtime
+    `environment` qiymati ishga tushgan konteynerga yetib boradi-yu,
+    allaqachon qadalgan qiymatni O'ZGARTIRA OLMAYDI.
+
+    Nosozlik shakli o'sha eng yomon sinfdan: operator qiymatni
+    o'zgartiradi, konteyner muvaffaqiyatli ko'tariladi, hech nima
+    qizarmaydi — va frontend eski manzilga boradi.
+
+    =========================================================================
+    ⛔ KALIT `build.args` BILAN «TIRILTIRILMAYDI» — VA BU HAM QARORNING
+       QISMI. `08-UI-SPEC.md` M-9: core-api'da `CORSMiddleware` UMUMAN
+       YO'Q va refresh cookie'si `SameSite=Lax` (T-01-61), ya'ni boshqa
+       origin qo'yilishi bilan AVTORIZATSIYANING O'ZI yiqiladi.
+       Ishlaydigan tugma qilib qo'yish o'lik kalitni ishlaydigan TUZOQQA
+       aylantirardi.
+
+    ⚠ Kalit nomi SHU FAYLNING O'ZIDA bor va bu muammo emas: skaner
+      `compose.yaml` ni o'qiydi, o'zini emas (yuqoridagi 2-qoida).
+    """
+    code = _compose_code_lines()
+    hits = [line.strip() for line in code if "NEXT_PUBLIC_API_BASE_URL" in line]
+
+    assert not hits, (
+        f"`NEXT_PUBLIC_API_BASE_URL` `compose.yaml` ning IZOHSIZ qismiga qaytdi: "
+        f"{hits}\n\n`NEXT_PUBLIC_*` BUILD paytida inline qilinadi, ya'ni runtime "
+        "kaliti JIMGINA e'tiborsiz qolardi. Qiymat haqiqatan sozlanadigan "
+        "bo'lishi kerak bo'lsa u `build.args` ga o'tishi SHART — lekin avval "
+        "CORS (core-api'da `CORSMiddleware` yo'q) va `SameSite=Lax` refresh "
+        "cookie'si qayta ko'rib chiqilsin, aks holda boshqa origin "
+        "avtorizatsiyani butunlay yiqitadi (08-UI-SPEC M-9)."
+    )
+
+
+def test_the_frontend_service_block_is_still_scanned() -> None:
+    """⛔ NAZORAT — usiz yuqoridagi test BO'SH-ROST bo'lardi.
+
+    `frontend` bloki `compose.yaml` dan ko'chirilsa (yoki nomi
+    o'zgarsa) «kalit yo'q» da'vosi MAZMUNIDAN QAT'I NAZAR yashil
+    bo'lardi: yo'q blokda hech qanday kalit bo'lmaydi.
+    """
+    code = _compose_code_lines()
+    assert any(line.strip() == "frontend:" for line in code), (
+        "`compose.yaml` da `frontend` servisi topilmadi — yuqoridagi "
+        "regressiya to'sig'i endi hech nimani o'lchamaydi"
+    )
+
+
 def test_sim_password_matches_between_compose_and_rtsp_config() -> None:
     """`SIM_PASSWORD` ning standart qiymati MediaMTX rekviziti bilan bir xil.
 
