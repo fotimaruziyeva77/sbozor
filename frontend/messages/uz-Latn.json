@@ -1491,7 +1491,7 @@
     "matched": "{matched} rasta uchala manbada mos",
     "ledgerUpload": "Daftarni yuklash",
     "ledgerTemplate": "Shablonni yuklab olish",
-    "ledgerFile": "Daftar fayli (.xlsx)",
+    "ledgerFile": "Daftar fayli (Excel)",
     "ledgerHint": "Shablondagi ikki ustun: rasta kodi va daftar summasi.",
     "ledgerPresent": "Bu kun uchun daftar yuklangan",
     "ledgerMissing": "Bu kun uchun daftar yuklanmagan",

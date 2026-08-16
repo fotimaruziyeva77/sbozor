@@ -1491,7 +1491,7 @@
     "matched": "{matched} раста учала манбада мос",
     "ledgerUpload": "Дафтарни юклаш",
     "ledgerTemplate": "Шаблонни юклаб олиш",
-    "ledgerFile": "Дафтар файли (.xlsx)",
+    "ledgerFile": "Дафтар файли (Excel)",
     "ledgerHint": "Шаблондаги икки устун: раста коди ва дафтар суммаси.",
     "ledgerPresent": "Бу кун учун дафтар юкланган",
     "ledgerMissing": "Бу кун учун дафтар юкланмаган",
