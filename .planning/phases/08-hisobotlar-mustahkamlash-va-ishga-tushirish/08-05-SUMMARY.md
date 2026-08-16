@@ -291,6 +291,13 @@ shart):
 - **`08-HUMAN-UAT.md` ga IKKI band ochiq qoladi:** (1) «`RESTIC_PASSWORD` qayerda saqlangani yozildi va IKKI ODAM biladi»; (2) «offsite repodan tiklash bir marta bajarildi». Ikkalasining egasi Ops va ikkalasi ham CI'da hech qachon o'lchanmaydi.
 - **Ochiq band (V2):** `restic check` nosozligi bugun faqat `stderr` ga chiqadi. Alohida signal (`backup_check_stale`) yangi alert kaliti talab qiladi va u `ALERT_TITLE_KEY_COUNT` qulfini qizartiradi — D-25 sinfi.
 
+## Self-Check: PASSED
+
+Yaratilgani da'vo qilingan ETTALA fayl ham diskda mavjud
+(`ops/backup/` ning beshtasi, `tests/unit/test_backup_contract.py`, shu
+SUMMARY) va UCHALA commit ham `git log` da:
+`3690225` → `8b37b2c` → `f38f2fd`. Yo'qolgan artefakt yo'q.
+
 ---
 *Phase: 08-hisobotlar-mustahkamlash-va-ishga-tushirish*
 *Completed: 2026-08-16*
