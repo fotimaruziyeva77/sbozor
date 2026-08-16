@@ -53,6 +53,7 @@ ning qiymati (T-08-15).
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Final
@@ -60,8 +61,10 @@ from typing import TYPE_CHECKING, Final
 from sbozor_core.enums import (
     AdjustmentDirection,
     AnomalyKind,
+    OccupancyVerdict,
     PaymentKind,
     ReconciliationSubjectKind,
+    ResolutionSource,
 )
 from sqlalchemy import BigInteger, Date, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -73,6 +76,7 @@ from app.repositories.billing_repo import (
     vendor_charge_allocation,
     vendor_outstanding,
 )
+from app.repositories.occupancy_repo import _PER_STALL_CTE
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -86,6 +90,10 @@ if TYPE_CHECKING:
 __all__ = [
     "ARCHIVE_KIND_UNPAID",
     "ARCHIVE_KIND_UNREGISTERED",
+    "DIFF_AI_MISMATCH",
+    "DIFF_LEDGER_OVER",
+    "DIFF_MATCH",
+    "DIFF_SYSTEM_OVER",
     "AnomalyArchive",
     "AnomalyArchiveRow",
     "LedgerDay",
@@ -93,11 +101,14 @@ __all__ = [
     "ReceivableRow",
     "RevenuePeriod",
     "RevenueRow",
+    "ThreeWayReport",
+    "ThreeWayRow",
     "anomaly_archive",
     "ledger_day",
     "ledger_upsert",
     "receivables",
     "revenue_by_day",
+    "three_way",
 ]
 
 _UUID = PgUuid(as_uuid=True)
@@ -1078,3 +1089,470 @@ async def ledger_day(
         for row in result.mappings()
     )
     return LedgerDay(rows=rows, has_ledger=bool(rows))
+
+
+# ===========================================================================
+# 5. UCH TOMONLAMA SOLISHTIRUV — DAFTAR · TIZIM · AI-KUTILGAN (D-18, 08-16)
+#
+# =========================================================================
+# ⛔⛔ 1. «AI-KUTILGAN» HOSILA VA U SAQLANMAYDI (D-03/D-18).
+#
+# Uchinchi ustun HECH QANDAY jadvalda yashamaydi: u shu so'rovda, band
+# rasta x O'SHA KUNNING tarifi sifatida tug'iladi. Uni jadvalga yozish
+# modul docstringining 1-bandidagi taqiqning aynan buzilishi bo'lardi —
+# saqlangan agregat `daily_charges` bilan drift qiladi va nizoda «qaysi
+# son to'g'ri?» savoli javobsiz qoladi.
+#
+# =========================================================================
+# ⛔⛔ 2. UCH USTUN UCH SANANI EMAS, BITTA DOMEN SANASINI KO'RADI.
+#
+#     ledger_entries.business_date  — daftarda YOZILGAN kun (domen)
+#     payments.service_date         — to'lov QAYSI KUN UCHUN (domen)
+#     daily_charges.service_date    — QAYSI KUNNING pattasi (domen)
+#     stall_slot_occupancy.business_date — MA'LUMOT TEGISHLI kun (domen)
+#
+# ⛔ `payments.business_date` (kassa kuni, `created_at` DAN generated)
+#    BU YERDA ISHLATILMAYDI va bu modul docstringining 3-bandidan
+#    CHEKINISH EMAS, uning aynan qo'llanishi: tushum hisoboti «pul qachon
+#    yig'ildi?» degan KASSA savoliga javob beradi, solishtiruv esa «shu
+#    KUNNING pattasi to'liq yig'ildimi?» degan DOMEN savoliga. Kassa
+#    sanasi olinganda yarim tundan keyin kiritilgan to'lov qog'oz daftar
+#    yozgan kundan BOSHQA kunga tushardi va imzolanadigan varaqda soxta
+#    farq paydo bo'lardi. `ledger.py` model docstringi ham daftarning
+#    sanasini AYNAN `daily_charges.service_date` bilan «bir oilada» deb
+#    e'lon qilgan.
+#
+# =========================================================================
+# ⛔⛔ 3. BANDLIK BO'LAGI `occupancy_repo._PER_STALL_CTE` DAN IMPORT
+#     QILINADI, QAYTA YOZILMAYDI.
+#
+# O'sha konstanta docstringi «BITTA `CASE`, IKKI ISTE'MOLCHI» deydi —
+# endi UCHTA. Bu yerda uchinchi nusxa yozilsa `/occupancy` ekranidagi
+# «Bo'sh 68» bilan solishtiruvdagi bo'sh rastalar soni sekin-asta
+# ajralib ketardi va IKKALASI HAM XATOSIZ ko'rinardi.
+# ===========================================================================
+
+DIFF_LEDGER_OVER: Final[str] = "ledger_over"
+DIFF_SYSTEM_OVER: Final[str] = "system_over"
+DIFF_AI_MISMATCH: Final[str] = "ai_mismatch"
+DIFF_MATCH: Final[str] = "match"
+"""To'rt farq sinfi — ⛔ SO'ROV PARAMETRI, so'rov MATNIDAGI literal EMAS.
+
+`_REVERSAL`/`_INCREASE` da o'rnatilgan qoidaning aynan takrori: nom ikki
+joyda (Pythonda va SQL matnida) yozilsa ular ajralib ketardi va sanoq
+JIMGINA nolga tushardi — so'rov ishlayverardi.
+
+⛔ UCHTASI KLIENT REYESTRIDA (`api-types.ts::DIFF_CLASSES`, AYNAN UCH
+   A'ZO), TO'RTINCHISI (`match`) esa YO'Q va bu ATAYIN: mos qator badge
+   OLMAYDI (UI-SPEC §13.4). Sim ustida u `null` bo'lib ketadi va
+   o'girish `api/v1/reports.py` da, BIR joyda bajariladi. Bu yerda u
+   NOM bilan qoladi, chunki `matched_count` AYNAN shu nomga tayanadi:
+   nomsiz holat sanoqni «qolganlari» degan ayirmaga aylantirardi va
+   o'lchanmagan qatorlar ham unga qo'shilardi.
+"""
+
+_THREE_WAY = text(
+    f"""
+    WITH {_PER_STALL_CTE},
+    ledger AS (
+        SELECT le.stall_id      AS stall_id,
+               le.amount_soum   AS amount_soum
+          FROM ledger_entries le
+         WHERE le.market_id = :market_id
+           AND le.business_date = CAST(:business_date AS date)
+    ),
+    paid AS (
+        SELECT p.stall_id                          AS stall_id,
+               sum({_SIGNED_PAYMENT_EXPR})::bigint AS system_soum
+          FROM payments p
+         WHERE p.market_id = :market_id
+           AND p.service_date = CAST(:business_date AS date)
+         GROUP BY p.stall_id
+    ),
+    charged AS (
+        SELECT ch.stall_id            AS stall_id,
+               ch.vendor_id           AS vendor_id,
+               ch.tariff_amount_soum  AS tariff_amount_soum
+          FROM daily_charges ch
+         WHERE ch.market_id = :market_id
+           AND ch.service_date = CAST(:business_date AS date)
+    ),
+    involved AS (
+        SELECT stall_id FROM ledger
+        UNION
+        SELECT stall_id FROM paid
+        UNION
+        SELECT stall_id FROM charged
+        UNION
+        SELECT stall_id FROM per_stall
+    ),
+    measured AS (
+        SELECT s.id        AS stall_id,
+               s.code      AS stall_code,
+               s.code_sort AS code_sort,
+               v.full_name AS vendor_name,
+               COALESCE(l.amount_soum, 0)::bigint   AS ledger_soum,
+               COALESCE(pay.system_soum, 0)::bigint AS system_soum,
+               CASE
+                   WHEN ps.bucket = :occupied
+                       THEN COALESCE(chg.tariff_amount_soum, tar.amount_soum)::bigint
+                   WHEN ps.bucket = :empty
+                       THEN 0::bigint
+               END AS ai_expected_soum
+          FROM involved i
+          JOIN stalls s
+            ON s.market_id = :market_id
+           AND s.id = i.stall_id
+          LEFT JOIN per_stall ps ON ps.stall_id = s.id
+          LEFT JOIN ledger    l  ON l.stall_id  = s.id
+          LEFT JOIN paid      pay ON pay.stall_id = s.id
+          LEFT JOIN charged   chg ON chg.stall_id = s.id
+          LEFT JOIN LATERAL (
+            SELECT cp.category_id
+              FROM stall_category_periods cp
+             WHERE cp.market_id = s.market_id
+               AND cp.stall_id = s.id
+               AND cp.valid_from <= CAST(:business_date AS date)
+             ORDER BY cp.valid_from DESC
+             LIMIT 1
+          ) cur ON true
+          LEFT JOIN LATERAL (
+            SELECT t.amount_soum
+              FROM tariffs t
+             WHERE t.market_id = s.market_id
+               AND t.category_id = cur.category_id
+               AND t.valid_from <= CAST(:business_date AS date)
+             ORDER BY t.valid_from DESC
+             LIMIT 1
+          ) tar ON true
+          LEFT JOIN LATERAL (
+            SELECT sa.vendor_id
+              FROM stall_assignments sa
+             WHERE sa.market_id = s.market_id
+               AND sa.stall_id = s.id
+               AND sa.period @> CAST(:business_date AS date)
+             LIMIT 1
+          ) asg ON true
+          LEFT JOIN vendors v
+            ON v.market_id = s.market_id
+           AND v.id = COALESCE(chg.vendor_id, asg.vendor_id)
+    )
+    SELECT stall_id,
+           stall_code,
+           vendor_name,
+           ledger_soum,
+           system_soum,
+           ai_expected_soum,
+           CASE
+               WHEN ledger_soum > system_soum        THEN :ledger_over
+               WHEN system_soum > ledger_soum        THEN :system_over
+               WHEN ai_expected_soum IS NULL         THEN NULL
+               WHEN ai_expected_soum <> system_soum  THEN :ai_mismatch
+               ELSE :match
+           END AS diff_class
+      FROM measured
+     ORDER BY code_sort, stall_code
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("business_date", type_=Date()),
+    bindparam("reversal", type_=Text()),
+    bindparam("occupied", type_=Text()),
+    bindparam("empty", type_=Text()),
+    bindparam("default_empty", type_=Text()),
+    bindparam("no_coverage", type_=Text()),
+    bindparam("ai", type_=Text()),
+    bindparam("human", type_=Text()),
+    bindparam("ledger_over", type_=Text()),
+    bindparam("system_over", type_=Text()),
+    bindparam("ai_mismatch", type_=Text()),
+    bindparam("match", type_=Text()),
+)
+"""Uch ustun, bitta so'rov — ⛔ HAR BANDNING SABABI BU YERDA.
+
+=============================================================================
+⛔⛔ QATORLAR TO'PLAMI — `involved`, «bozorning hamma rastasi» EMAS.
+
+Qator TO'RT signaldan KAMIDA BITTASI bo'lgan rasta uchun tug'iladi:
+daftar qatori, patta hisobi, to'lov yoki bandlik qatori. Bozorning
+HAMMA rastasini yozish 1000 rastali bozorda 700 ta «0 · 0 · bo'sh»
+qatorini qo'shardi va ular `matched_count` ga tushardi — «287 tasi mos»
+o'rniga «987 tasi mos» chiqardi, ya'ni 13 ta farq imzolanadigan varaqda
+KO'MILIB ketardi (UI-SPEC §10.5 ning aynan ogohlantirishi).
+
+⚠ Buning teskarisi ham qamralgan: bandlik qatori BOR (hatto
+  `no_coverage` bo'lsa ham) rasta ro'yxatga TUSHADI, ya'ni «hech kim
+  qaramagan» holat KO'RINADI, yashirilmaydi.
+
+=============================================================================
+⛔⛔ DAFTARDA YO'Q RASTANING SUMMASI `0` — VA BU O'LCHANGAN NOL.
+
+`COALESCE(l.amount_soum, 0)`: kunga daftar YUKLANGAN bo'lsa u o'sha
+kunning TO'LIQ qog'oz yozuvi va unda ko'rinmagan rasta «qog'ozda hech
+nima yig'ilmagan» degani. AYNAN shu o'qish `system_over` sinfini
+(«daftar kamchiligi / yozuv xatosi», §10.5) mumkin qiladi: ro'yxatda
+yo'q rasta `NULL` bo'lganda o'sha sinf HECH QACHON hisoblanmasdi.
+
+⛔ «Daftar umuman yuklanmagan» holati BU YERDA emas, `three_way()` da
+   hal qilinadi — u KUN darajasidagi savol (§10.6) va uni qator
+   darajasiga tushirish ikkalasini aralashtirardi.
+
+=============================================================================
+⛔⛔ AI-KUTILGAN: `occupied` -> TARIF, `empty` -> `0`, QOLGANI -> `NULL`.
+
+    `occupied`      -> o'sha kunning tarifi              (O'LCHANGAN)
+    `empty`         -> `0` («AI rastani bo'sh dedi»)     (O'LCHANGAN)
+    `default_empty` -> `NULL` («hech kim qaramadi»)      (O'LCHANMAGAN)
+    `no_coverage`   -> `NULL` («qamrov yo'q», D-22)      (O'LCHANMAGAN)
+    qator YO'Q      -> `NULL` («o'sha kun materializatsiya qilinmagan»)
+
+⛔ `default_empty` NI `0` GA AYLANTIRISH D-10 NING BEVOSITA BUZILISHI
+   bo'lardi: `stall_slot_occupancy` model docstringi uni «HECH KIM
+   QARAMADI» (AI-06/D-19) deb ta'riflaydi, ya'ni u bo'shlik DALILI EMAS.
+   `CASE` da uchinchi shox ATAYIN yozilmagan — `ELSE` siz `CASE` `NULL`
+   qaytaradi va o'sha `NULL` bu yerda YAGONA to'g'ri javob.
+
+=============================================================================
+⛔⛔ TARIF: AVVAL MUZLATILGAN NUSXA, SO'NG O'SHA KUNNING QATORI.
+
+`COALESCE(chg.tariff_amount_soum, tar.amount_soum)` — tartib MAJBURIY:
+
+  1. `daily_charges.tariff_amount_soum` — kun yopilishida MUZLATILGAN
+     summa (D-09). `tariffs` qatori KEYIN TAHRIRLANSA ham o'tgan kunning
+     kutilgani O'ZGARMAYDI. Faqat `tariffs` dan o'qigan so'rov o'tmishni
+     RETROAKTIV qayta yozardi — D-09 aynan shuning uchun ikkala qiymatni
+     ham saqlaydi;
+  2. hisobi YO'Q, lekin BAND rasta (BILL-04/D-28: biriktirilmagan
+     savdo) uchun esa muzlatilgan nusxa MAVJUD EMAS va tarif AYNI
+     qoida bilan — `valid_from <= kun` — `tariffs` dan olinadi. Bu
+     shoxsiz o'sha rasta BO'SH katak olardi va u «bandlik o'lchanmagan»
+     bo'lib O'QILARDI, holbuki bandlik AYNAN o'lchangan.
+
+⛔ `valid_from <= :business_date` — «bugungi tarif» EMAS. Kelajakdagi
+   tarif qatori olinsa o'tgan kunning kutilgani bugungi narxdan
+   chiqardi va uch ustundan ikkitasi bitta savolga IKKI XIL javob
+   berardi (Open Question 3).
+
+⚠ Ikki `LATERAL` `billing_repo._STALL_DAY_MONEY` ning AYNI qoidasini
+  takrorlaydi va bu NUSXA ONGLI: u yerdagi so'rov `market_is_open()`,
+  `tariff_id` va rasta holatini ham oladi (pul YECHIMI uchun), bu yerda
+  esa faqat SUMMA kerak. To'liq so'rovni chaqirish 1000 rasta uchun
+  kalendar hisobini ham olib kelardi — natijaga esa umuman ta'sir
+  qilmasdi.
+
+=============================================================================
+⛔⛔ FARQ SINFI SO'ROVDA HISOBLANADI — SANOQ VA QATOR BIR MANBADAN.
+
+Sanoqlar shu ustundan `Counter` bilan chiqadi (`three_way()`), ya'ni
+blok sarlavhasidagi son bilan jadvaldagi badge BIR XIL `CASE` dan
+keladi. Ikkinchi joyda (Pythonda) yozilgan qoida sekin-asta ajralib
+ketardi va nosozlik ENG YOMON shaklda ko'rinardi — sarlavhada «Daftar
+ortiq: 3», jadvalda esa 4 ta belgi, ikkalasi ham xatosiz
+(`occupancy_repo._PER_STALL_CTE` da o'lchangan aynan o'sha sinf).
+
+⛔ TARTIB OG'IRLIK BO'YICHA VA U TANLOV EMAS, MAJBURIYAT: qatorda BITTA
+   sinf bo'ladi, ya'ni ikki shart birga rost bo'lganda OG'IRROG'I
+   yozilishi kerak. `ledger_over` («yo'qotish shubhasi», `danger`)
+   birinchi; `ai_mismatch` («detektorni tekshiring», `neutral`) oxirgi.
+
+⛔ `ai_expected_soum IS NULL` SHOXI `ai_mismatch` DAN OLDIN VA U `NULL`
+   QAYTARADI — bu bo'shliq emas, D-10:
+     — `ai_mismatch` yozish O'LCHANMAGAN qiymatdan farq CHIQARARDI;
+     — `match` yozish esa «uchala manba mos» degan YOLG'ON tasdiq
+       bo'lardi va u `matched_count` ga tushib imzolanadigan varaqda
+       maxrajni SHISHIRARDI.
+   Ya'ni bunday qator na farq DA'VO QILADI, na moslik — va aynan shu
+   sababdan to'rt sanoqning yig'indisi `len(rows)` GA TENG EMAS.
+   Tenglashtirishga urinish bu shoxni o'chirishni talab qilardi.
+
+=============================================================================
+⛔ `S608` SHU SO'ROVDA O'CHIRILGAN VA SABAB TOR (`_REVENUE_BY_DAY` bilan
+   AYNAN bir xil): f-string ga tushadigan qiymatlar — `billing_repo` dan
+   IMPORT qilingan `_SIGNED_PAYMENT_EXPR` va `occupancy_repo` dan
+   IMPORT qilingan `_PER_STALL_CTE` SOBIT konstantalari. Tashqi kirish
+   f-string ga umuman kelmaydi; har qiymat `bindparam(...)` bilan
+   TIPLANGAN (T-08-14).
+
+⚠ TARTIB `code_sort` BO'YICHA: oddiy `ORDER BY code` «1, 10, 100, 11, 2»
+  berardi va IMZOLANADIGAN varaqdagi ro'yxat odam o'qiy olmaydigan
+  tartibda chiqardi (`_LEDGER_DAY` va `_RECEIVABLE_ROWS` bilan AYNI).
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class ThreeWayRow:
+    """Bir rastaning bir kundagi UCH manbasi va ularning farqi (D-18).
+
+    `ledger_soum` — ⛔ `int`, `int | None` EMAS. Kunga daftar yuklangan
+        bo'lsa u o'sha kunning TO'LIQ qog'oz yozuvi, ya'ni ro'yxatda
+        ko'rinmagan rasta «qog'ozda hech nima yig'ilmagan» degani.
+        `None` qilib qo'yish `system_over` sinfini («daftar kamchiligi»)
+        HISOBLAB BO'LMAYDIGAN qilardi — holbuki o'sha sinf AYNAN shu
+        holat uchun mavjud (`_THREE_WAY` docstringi).
+
+    `system_soum` — o'sha kun uchun BELGILI to'lovlar yig'indisi
+        (`payments.service_date`, storno MINUS bilan). `0` — HAQIQIY nol
+        (UI-SPEC §10.4).
+
+    `ai_expected_soum` — ⛔ `int | None` va IKKALASI BOSHQA NARSA:
+        `0` = «AI rastani BO'SH dedi» (O'LCHANGAN);
+        `None` = «o'sha kun uchun bandlik ma'lumoti yo'q» (O'LCHANMAGAN).
+        Ularni tenglashtirish D-10 ning bevosita buzilishi bo'lardi.
+
+    `diff_class` — to'rt sinfdan biri yoki ⛔ `None`. `None` — «farq
+        sinfi ANIQLANMADI»: daftar va tizim mos, AI-kutilgan esa
+        o'lchanmagan, ya'ni na `ai_mismatch`, na `match` da'vo qilib
+        bo'lmaydi (`_THREE_WAY` docstringining oxirgi bandi).
+
+    `vendor_name` — ⛔ `None` = ism TOPILMADI («ismi yo'q» EMAS). Maydon
+        FAQAT `.xlsx` hujjatiga chiqadi: JSON javobida u YO'Q va bu
+        klient kontraktining (`api-types.ts::threeWayRowSchema`,
+        `strictObject`) talabi.
+    """
+
+    stall_id: UUID
+    stall_code: str
+    vendor_name: str | None
+    ledger_soum: int
+    system_soum: int
+    ai_expected_soum: int | None
+    diff_class: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ThreeWayReport:
+    """Kunning solishtiruvi — ⛔ TO'RT SANOQ ALOHIDA, YIG'INDI MAYDONI YO'Q.
+
+    =========================================================================
+    ⛔⛔ `total_diff` (yoki `combined_diff`, `grand_total`) MAYDONI
+        TUG'ILMAYDI — VA BU BEZAK EMAS.
+
+    Uch farq sinfi uch BOSHQA harakatni talab qiladi: «pulni qidiring»
+    (`ledger_over`), «daftarni tuzating» (`system_over`), «detektorni
+    tekshiring» (`ai_mismatch`). Bitta songa siqilgan hisobot qaysi sinf
+    o'sganini yashirardi va solishtiruvni FOYDASIZ qilardi (6-faza D-05
+    va 07 Pattern 4 ning aynan sinfi, UI-SPEC §10.5).
+
+    ⚠ TO'RT SANOQNING YIG'INDISI `len(rows)` GA TENG EMAS va bu NOSOZLIK
+      EMAS: AI-kutilgani o'lchanmagan, daftar va tizimi mos qator
+      BIRORTA sanoqqa tushmaydi (`_THREE_WAY` docstringi). Tenglikni
+      «tiklash» o'sha qatorlarni `matched_count` ga qo'shishni talab
+      qilardi — ya'ni imzolanadigan varaqda maxrajni SHISHIRARDI.
+    =========================================================================
+
+    `has_ledger` — ⛔ `rows` NING UZUNLIGIDAN HOSILA EMAS (`LedgerDay`
+        klass docstringi, UI-SPEC §10.6): daftar yuklanmagan kunda uch
+        ustunli jadvalni «hamma farq 0» bilan chizish MUVAFFAQIYATLI
+        solishtiruv bo'lib ko'rinardi va IMZOLANARDI.
+    """
+
+    day: date
+    has_ledger: bool
+    rows: tuple[ThreeWayRow, ...]
+    ledger_over_count: int
+    system_over_count: int
+    ai_mismatch_count: int
+    matched_count: int
+
+
+async def three_way(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    business_date: date,
+) -> ThreeWayReport:
+    """Kunning uch tomonlama solishtiruvi — ⛔ UCHINCHI USTUN HOSILA (D-18).
+
+    ⛔ CHAQIRUVCHI TENANT KONTEKSTINI O'RNATGAN BO'LISHI SHART
+       (`TenantSessionDep`): so'rovdagi `market_id` NIYAT, RLS esa
+       KAFOLAT (`revenue_by_day()` dagi bilan aynan bir qoida).
+
+    =========================================================================
+    ⛔⛔ DAFTAR YO'Q KUN UCHUN SO'ROV UMUMAN YUBORILMAYDI.
+
+    `ledger_day()` avval chaqiriladi va `has_ledger is False` bo'lsa
+    javob BO'SH qaytadi. Bu tezlik uchun emas, TO'G'RILIK uchun: daftar
+    yuklanmagan kunda qatorlarni baribir qurish «hamma farq 0» degan
+    jadvalni tug'dirardi va u ekranda MUVAFFAQIYATLI solishtiruv bo'lib
+    ko'rinardi (UI-SPEC §10.6, SC#5 ning jimgina yo'qolishi).
+
+    ⚠ IKKI SO'ROV BITTA TRANZAKSIYADA: sessiya `TenantSessionDep` dan
+      keladi va u allaqachon tranzaksiya ichida, ya'ni ikki so'rov
+      orasida yozilgan daftar qatori javobni ikkiga bo'lolmaydi.
+    =========================================================================
+
+    Args:
+        market_id: tenant kaliti.
+        business_date: solishtiruv KUNI — ⛔ DOMEN sanasi. Yuqori chegara
+            (kecha) CHAQIRUVCHI qatlamda majburlanadi (`api/v1/
+            reports.py`), bu yerda emas: HTTP javob kodi repodan
+            chiqib ketardi (modul docstringidagi qoida).
+
+    Returns:
+        `ThreeWayReport` — qatorlar rasta kodining TABIIY tartibida
+        (`code_sort`) va TO'RT MUSTAQIL sanoq.
+    """
+    ledger = await ledger_day(session, market_id=market_id, business_date=business_date)
+    if not ledger.has_ledger:
+        return ThreeWayReport(
+            day=business_date,
+            has_ledger=False,
+            rows=(),
+            ledger_over_count=0,
+            system_over_count=0,
+            ai_mismatch_count=0,
+            matched_count=0,
+        )
+
+    result = await session.execute(
+        _THREE_WAY,
+        {
+            "market_id": market_id,
+            "business_date": business_date,
+            "reversal": _REVERSAL,
+            # ⚠ Bandlik bo'lagining parametrlari `occupancy_repo::
+            #   _bucket_params()` bilan AYNAN bir xil to'plam: `CASE`
+            #   o'sha moduldan IMPORT qilingan va u shu nomlarni kutadi.
+            "occupied": OccupancyVerdict.OCCUPIED.value,
+            "empty": OccupancyVerdict.EMPTY.value,
+            "default_empty": ResolutionSource.DEFAULT_EMPTY.value,
+            "no_coverage": ResolutionSource.NO_COVERAGE.value,
+            "ai": ResolutionSource.AI.value,
+            "human": ResolutionSource.HUMAN.value,
+            "ledger_over": DIFF_LEDGER_OVER,
+            "system_over": DIFF_SYSTEM_OVER,
+            "ai_mismatch": DIFF_AI_MISMATCH,
+            "match": DIFF_MATCH,
+        },
+    )
+
+    rows = tuple(
+        ThreeWayRow(
+            stall_id=row["stall_id"],
+            stall_code=str(row["stall_code"]),
+            vendor_name=row["vendor_name"],
+            ledger_soum=int(row["ledger_soum"]),
+            system_soum=int(row["system_soum"]),
+            ai_expected_soum=(
+                None if row["ai_expected_soum"] is None else int(row["ai_expected_soum"])
+            ),
+            diff_class=row["diff_class"],
+        )
+        for row in result.mappings()
+    )
+
+    # ⛔ SANOQ QATORLARDAN, IKKINCHI SO'ROVDAN EMAS: `count(*) FILTER`
+    #    bilan olingan sonlar AYNI tranzaksiyada ham ikkinchi marta
+    #    yugurgan `CASE` dan chiqardi, ya'ni ular bilan qatorlar orasida
+    #    ikkinchi haqiqat manbai paydo bo'lardi. Bu yerda esa sanoq
+    #    ro'yxatning O'ZIDAN chiqadi va ular AJRALA OLMAYDI.
+    counts = Counter(row.diff_class for row in rows)
+    return ThreeWayReport(
+        day=business_date,
+        has_ledger=True,
+        rows=rows,
+        ledger_over_count=counts[DIFF_LEDGER_OVER],
+        system_over_count=counts[DIFF_SYSTEM_OVER],
+        ai_mismatch_count=counts[DIFF_AI_MISMATCH],
+        matched_count=counts[DIFF_MATCH],
+    )

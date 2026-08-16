@@ -113,6 +113,8 @@ from app.schemas import (
     ReceivablesReportRow,
     RevenueReportResponse,
     RevenueReportRow,
+    ThreeWayReportResponse,
+    ThreeWayReportRow,
 )
 from app.security.audit import (
     TABLE_LEDGER_ENTRIES,
@@ -450,6 +452,54 @@ def _archive_rows(rows: Sequence[report_repo.AnomalyArchiveRow]) -> list[Anomaly
             stall_code=row.stall_code,
             snapshot_id=row.evidence_snapshot_id,
             case_status=row.case_status,
+        )
+        for row in rows
+    ]
+
+
+def _wire_diff_class(diff_class: str | None) -> str | None:
+    """`match` -> `None`; qolgan uch sinf O'ZGARMAYDI — ⛔ YAGONA o'girish joyi.
+
+    =======================================================================
+    ⛔⛔ NEGA SERVER `"match"` NI SIM USTIGA CHIQARMAYDI.
+
+    `api-types.ts::DIFF_CLASSES` — AYNAN UCH a'zo (`ledger_over`,
+    `system_over`, `ai_mismatch`) va `match` unda ATAYIN yo'q; javob
+    sxemasi esa `diff_class` ni `z.string().nullable()` deb o'qiydi,
+    ya'ni `"match"` PARSE'dan O'TIB KETADI. Klient uni NOMA'LUM sinf
+    deb ZAXIRA YORLIQ bilan chizardi — natijada 287 ta mos qator badge
+    olardi va 13 ta HAQIQIY farq ular ostida KO'MILIB ketardi (§13.4:
+    «Mos qator badge OLMAYDI»).
+
+    ⛔ Nosozlik JIMGINA bo'lardi: status kodi 200, sxema yashil, xato
+       jurnalida hech nima — faqat imzolanadigan varaqning ma'nosi
+       yo'qolardi.
+
+    ⚠ SERVERDA SINF NOM BILAN QOLADI (`report_repo.DIFF_MATCH`):
+      `matched_count` AYNAN shu nomga tayanadi. Repoda ham `None` qilib
+      qo'yish uni «AI o'lchanmagan» holati bilan ARALASHTIRARDI — u ham
+      `None` va u sanoqqa TUSHMAYDI.
+    =======================================================================
+    """
+    return None if diff_class == report_repo.DIFF_MATCH else diff_class
+
+
+def _three_way_rows(rows: Sequence[report_repo.ThreeWayRow]) -> list[ThreeWayReportRow]:
+    """Solishtiruv qatorlari — ⛔ `vendor_name` JSON GA KO'CHIRILMAYDI.
+
+    Ism `.xlsx` quruvchisiga TO'G'RIDAN-TO'G'RI repo qatoridan boradi,
+    ya'ni u bu o'giruvchidan umuman o'tmaydi. Sabab klient kontraktida:
+    `threeWayRowSchema` — `strictObject` va ortiqcha maydon butun
+    sahifani parse chegarasida yiqitardi (`schemas.ThreeWayReportRow`
+    docstringi).
+    """
+    return [
+        ThreeWayReportRow(
+            stall_code=row.stall_code,
+            ledger_soum=row.ledger_soum,
+            system_soum=row.system_soum,
+            ai_expected_soum=row.ai_expected_soum,
+            diff_class=_wire_diff_class(row.diff_class),
         )
         for row in rows
     ]
@@ -1166,3 +1216,240 @@ async def ledger_import(
     log.info("ledger_import_done", day=day.isoformat(), rows=len(accepted), replaced=replaced)
 
     return LedgerImportResponse(day=day, rows=len(accepted), replaced=replaced > 0)
+
+
+# ===========================================================================
+# 6. UCH TOMONLAMA SOLISHTIRUV — `GET /compare` va `/compare.xlsx` (08-16)
+#
+# =========================================================================
+# ⛔⛔ YO'LLAR KLIENT KONTRAKTIDAN: `/compare` va `/compare.xlsx`, reja
+#     aytgan `/three-way` va `/three-way.xlsx` EMAS.
+#
+# `report-queries.ts` (08-03, TO'LQIN 1) AYNAN shu ikkisiga boradi:
+# `${REPORTS_PATH}/compare?day=` (:253) va `${REPORTS_PATH}/compare.xlsx
+# ?day=` (:383). Bu modul docstringining 2-bandidagi qarorning
+# TO'RTINCHI takrori (`/debtors`, `/anomalies`, `/compare/ledger` dan
+# keyin): SERVER KLIENTNI KUZATADI.
+#
+# =========================================================================
+# ⛔⛔ IKKI YUZA, IKKI SHAXSIY-MA'LUMOT QARORI VA ULAR ZID EMAS.
+#
+#   `GET /compare`      -> javobda ISM YO'Q  -> `REPORT_VIEW` yetadi
+#   `GET /compare.xlsx` -> hujjatda ISM BOR  -> `VENDOR_VIEW` + `audit_read`
+#
+# Sabab foydalanishda: ekrandagi jadval rasta kesimida ishlaydi va unga
+# ism KERAK EMAS; imzolanadigan hujjatda esa «kimdan so'raladi?» savoli
+# QOG'OZDA javob olishi kerak. JSON ga ism qo'shish ikki narsani birdan
+# buzardi — klientning `strictObject` ini VA jurnalni (har hisobot
+# ochilishida `audit_read` yozilardi, ya'ni HAQIQIY o'qish hodisasi
+# shovqin ichida ko'milardi).
+#
+# ⛔ EKSPORT SHU SABABDAN `BINARY_PERSONAL_ROUTES` VA
+#    `BINARY_PERSONAL_ALLOWED` NING IKKALASIGA ham yoziladi (08-12
+#    qarori): javobi BAYT bo'lgan marshrutni `PERSONAL_FIELDS` darvozasi
+#    HECH QACHON topa olmaydi.
+#
+# =========================================================================
+# ⛔⛔ SAHIFALASH YO'Q (R-8) — VA BU QULAYLIK EMAS, HUJJATNING SHAKLI.
+#
+# Solishtiruv KUNLIK va u chop etilib IMZOLANADI. Sahifalangan hujjatni
+# imzolab bo'lmaydi: ikkinchi sahifadagi farq imzo chekilgan varaqda
+# UMUMAN bo'lmasdi. Chegara `settings.report_max_rows` va u oshsa javob
+# `422 report_too_large` — ⛔ JIMGINA KESISH TAQIQ (T-08-73).
+# ===========================================================================
+
+
+def _compare_day(day: date) -> date:
+    """Solishtiruv kunini yechadi — ⛔ YUQORI CHEGARA **KECHA** (UI-SPEC §10.2).
+
+    =======================================================================
+    ⛔⛔ NEGA «BUGUN» RAD ETILADI.
+
+    Bugungi tizim summasi HALI YOPILMAGAN: `daily_charges` D+1 **04:10**
+    da tug'iladi (`BILLING_CLOSE_CRON`, C-3). Qog'oz daftar ham kun
+    OXIRIDA yig'iladi va odatda ertasi kuni kiritiladi. Ya'ni «bugun»
+    ni solishtirish HAR DOIM farq ko'rsatardi va uchala sinf ham
+    SOXTA bo'lardi — «Daftar ortiq» belgisi bilan chiqqan rasta aslida
+    shunchaki hali yopilmagan kun bo'lardi.
+
+    ⛔ Va u EKRANDA QOLMASDI: aynan shu javob `.xlsx` bo'lib yuklab
+       olinadi va IMZOLANADI. Soxta farq bilan imzolangan varaq
+       sotuvchiga qarshi «dalil» bo'lib ishlatilardi — mahsulot aynan
+       shu nosozlikni yo'q qilish uchun bor (D-02).
+
+    ⚠ `_report_period()` DAN AYRIM funksiya va bu ATAYIN: u ikki
+      chegarali DAVR bilan ishlaydi va uning uch xato kodidan ikkitasi
+      (`report_period_invalid`, `report_period_too_long`) bir kunlik
+      so'rovda MA'NOSIZ. Bitta kunga uch shartli funksiyani cho'zish
+      «qaysi shart ishladi?» savolini javobsiz qoldirardi.
+    =======================================================================
+
+    Returns:
+        Tekshirilgan kun — ⛔ SILJITILMAGAN holda. Server kunni JIMGINA
+        kechaga ko'chirmaydi: so'ralmagan kunning hisoboti «men bugunni
+        so'radim, bugun keldi» degan YOLG'ON tasdiq berardi va u faylga
+        tushib TARQALARDI (§8.7 ning kunlik shakli).
+    """
+    if day > business_today() - timedelta(days=1):
+        raise _reject(_PERIOD_FUTURE, status.HTTP_422_UNPROCESSABLE_CONTENT)
+    return day
+
+
+ThreeWayExportIntentDep = Annotated[
+    AuditReadIntent,
+    Depends(audit_read(TABLE_VENDORS, reason="report_three_way_export")),
+]
+"""⛔ SOLISHTIRUV HUJJATINING O'Z `reason` I — `report_receivables_export` EMAS.
+
+`vendors.py:105-113` da o'rnatilgan qoida: jurnalni o'qiyotgan odam
+«kim QARZDORLIK hujjatini oldi» bilan «kim SOLISHTIRUV hujjatini oldi»
+ni ajrata olishi kerak. Ikkinchisi boshqa savolga javob beradi va
+boshqa jarayonda (imzolash) ishlatiladi — bir xil `reason` bilan o'sha
+farq yo'qolardi.
+
+⛔ BITTA SO'ROV = BITTA YOZUV, RASTA BOSHIGA EMAS: 1000 rastali bozorda
+   «qator boshiga bitta yozuv» jurnalni bir so'rovda 1000 qator bilan
+   to'ldirardi va HAQIQIY o'qish hodisasi ko'milib ketardi (06 №9 da
+   rad etilgan (a) yo'lining aynan oqibati).
+"""
+
+
+def _compare_filename(market_name: str, day: date) -> str:
+    """`{bozor-slug}_compare_{kun}.xlsx` — ⛔ TO'LIQ ASCII, SERVERDA.
+
+    ⛔ `_export_filename()` ISHLATILMAYDI va sabab TURDA: u davrni IKKI
+       sana bilan yozadi (`_{from}_{to}`), bir kunlik hujjatda esa u
+       `..._2026-08-15_2026-08-15.xlsx` berardi — ya'ni chop etilgan
+       varaqning nomi «bir kunlik oraliq» degan savolni tug'dirardi.
+       Slug qoidasining O'ZI esa `_ascii_slug()` da, YAGONA joyda
+       qoladi (D-06).
+
+    ⚠ Nom klientning zaxira nomi bilan BIR OILADA:
+      `report-queries.ts:391` sarlavha o'qilmasa `sbozor-compare-{day}.
+      xlsx` yozadi — ikkalasida ham `compare` va AYNAN BITTA sana bor.
+    """
+    return f"{_ascii_slug(market_name)}_compare_{day.isoformat()}{XLSX_SUFFIX}"
+
+
+async def _compare_report(
+    session: AsyncSession,
+    principal: Principal,
+    *,
+    day: date,
+    max_rows: int,
+) -> tuple[UUID, report_repo.ThreeWayReport]:
+    """Ikkala marshrutning UMUMIY yadrosi — bozor, kun, chegara, hisobot.
+
+    ⚠ Nusxa YOZILMAYDI: JSON va `.xlsx` da takrorlangan «bozorni ol,
+      kunni yech, hisobotni qur, chegarani tekshir» ketma-ketligi bir
+      kun bittasida yangilanib, ikkinchisida qolib ketardi — va aynan
+      o'sha ikkinchisi IMZOLANADIGAN hujjat bo'lardi.
+
+    ⛔ CHEGARA HISOBOTDAN KEYIN TEKSHIRILADI, oldin emas: `row_count`
+       ni ikkinchi `count(*)` so'rovi bilan olish ikki so'rov orasida
+       yozilgan yangi qatorni ro'yxatdan ajratardi (`_page()` da
+       o'lchangan aynan o'sha sinf).
+    """
+    market_id = _market_id(principal)
+    report = await report_repo.three_way(
+        session, market_id=market_id, business_date=_compare_day(day)
+    )
+    _guard_row_count(len(report.rows), max_rows)
+    return market_id, report
+
+
+@router.get("/compare", response_model=ThreeWayReportResponse)
+async def three_way_report(
+    principal: ReportViewerDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    day: DayDep,
+) -> ThreeWayReportResponse:
+    """Kunning uch tomonlama solishtiruvi — daftar · tizim · AI-kutilgan (SC#5).
+
+    =======================================================================
+    ⛔⛔ `VENDOR_VIEW` VA `audit_read` BU MARSHRUTDA YO'Q — VA BU ONGLI,
+        «UNUTILGAN» EMAS.
+
+    Javobda shaxsiy maydon YO'Q: rasta KODI va uch summa
+    (`schemas.ThreeWayReportRow` — klient `strictObject` ining aynan
+    nusxasi). Ism FAQAT `.xlsx` hujjatiga chiqadi va o'sha marshrut
+    ikkala darvozani ham ko'taradi.
+
+    ⛔ Bu yerga audit qo'yish jurnalni har hisobot ochilishida shovqin
+       bilan to'ldirardi va HAQIQIY o'qish hodisasi (`/debtors`,
+       `/compare.xlsx`) ko'milib ketardi — `audit.py` da ATAYIN rad
+       etilgan «blanket middleware» holatining aynan sinfi
+       (`anomaly_archive_report()` bilan AYNI qaror).
+    =======================================================================
+
+    ⛔ TO'RT SANOQ ALOHIDA VA ULARNING YIG'INDISI JAVOBDA YO'Q (D-18):
+       uch sinf uch TURLI harakatni talab qiladi va bitta songa siqilgan
+       hisobot qaysi sinf o'sganini yashirardi.
+
+    ⛔ `has_ledger is False` bo'lgan kun uchun `rows` BO'SH keladi
+       (§10.6): daftarsiz kunda «hamma farq 0» jadvali MUVAFFAQIYATLI
+       solishtiruv bo'lib ko'rinardi va imzolanardi.
+    """
+    _, report = await _compare_report(
+        session, principal, day=day, max_rows=settings.report_max_rows
+    )
+
+    return ThreeWayReportResponse(
+        day=report.day,
+        has_ledger=report.has_ledger,
+        rows=_three_way_rows(report.rows),
+        ledger_over_count=report.ledger_over_count,
+        system_over_count=report.system_over_count,
+        ai_mismatch_count=report.ai_mismatch_count,
+        matched_count=report.matched_count,
+    )
+
+
+@router.get("/compare.xlsx", response_class=StreamingResponse)
+async def three_way_export(
+    principal: ReportViewerDep,
+    vendor_guard: VendorFieldGuardDep,
+    intent: ThreeWayExportIntentDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    day: DayDep,
+) -> StreamingResponse:
+    """Solishtiruvning IMZOLANADIGAN `.xlsx` hujjati (D-19, §12.6).
+
+    =======================================================================
+    ⛔⛔ E'LON TARTIBI MAJBURIY VA U BEZAK EMAS (`receivables_export()`
+        bilan AYNI): huquq -> huquq -> niyat -> ma'lumot. FastAPI
+        dependency'larni shu tartibda hal qiladi, ya'ni 403 olgan so'rov
+        `audit_read` gacha YETIB KELMAYDI. Teskari tartibda jurnalda
+        «kassir solishtiruv hujjatini yuklab oldi» degan YOLG'ON DALIL
+        paydo bo'lardi — hech nima berilmagan bo'lsa ham (T-02-71).
+
+    ⛔ JAVOBNING MODELI YO'Q (javob — BAYT), ya'ni `PERSONAL_FIELDS`
+       darvozasi bu marshrutni HECH QACHON topa olmaydi. Shuning uchun u
+       `BINARY_PERSONAL_ROUTES` va `BINARY_PERSONAL_ALLOWED` ga QO'LDA
+       yoziladi va o'sha yerdan `audit_read` + huquq talabi MEXANIK
+       ravishda qaytadi (08-12 qarori).
+    =======================================================================
+
+    ⛔ IMZO QATORLARI FAYLDA, ISMLAR BO'SH: tizim kim imzolashini
+       BILMAYDI (D-19 — bu QOG'OZ jarayon). Raqamli imzo yo'q va
+       ekranda `[Imzolash]` tugmasi ham qurilmaydi (§10.7).
+    """
+    market_id, report = await _compare_report(
+        session, principal, day=day, max_rows=settings.report_max_rows
+    )
+
+    locale = await _locale_of(session, principal)
+    market = await MarketRepository(session).current_market()
+
+    # ⛔ NIYAT HUJJAT QURILISHIDAN OLDIN TO'LDIRILADI (`receivables_export()`
+    #    dagi bilan AYNI sabab): bo'sh niyat jurnalda «kimdir nimadir
+    #    o'qidi» degan foydasiz qator qoldirardi. `result_count` — hujjatga
+    #    tushgan RASTALAR soni, ya'ni «bu odam necha rastaning sotuvchisini
+    #    ko'rdi» degan savolga javob.
+    intent.filters = {"day": report.day.isoformat(), "format": "xlsx"}
+    intent.result_count = len(report.rows)
+
+    payload = xlsx_export.build_three_way_workbook(report.rows, locale, report.day)
+    return _xlsx_response(payload, _compare_filename("" if market is None else market.name, day))

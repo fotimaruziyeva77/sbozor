@@ -80,11 +80,18 @@ from sbozor_core.enums import (
     ReconciliationSubjectKind,
 )
 
+from app.repositories.report_repo import (
+    DIFF_AI_MISMATCH,
+    DIFF_LEDGER_OVER,
+    DIFF_SYSTEM_OVER,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from xlsxwriter import Workbook
 
+    from app.repositories.report_repo import ThreeWayRow
     from app.schemas import (
         AnomalyArchiveRowResponse,
         ReceivablesReportRow,
@@ -93,6 +100,7 @@ if TYPE_CHECKING:
     from app.services.accuracy_report import AccuracyReport
 
 __all__ = [
+    "COMPARE_EXPORT_COLUMNS",
     "COUNT_NUM_FORMAT",
     "FORMULA_PREFIXES",
     "FROZEN_CREATED",
@@ -105,6 +113,7 @@ __all__ = [
     "build_discrepancies_workbook",
     "build_receivables_workbook",
     "build_revenue_workbook",
+    "build_three_way_workbook",
     "escape_formula",
     "finish",
     "freeze_zip",
@@ -114,6 +123,7 @@ __all__ = [
     "report_texts",
     "write_header",
     "write_money",
+    "write_optional_money",
     "write_optional_number",
     "write_optional_text",
     "write_text",
@@ -336,6 +346,43 @@ def write_optional_text(
     write_text(worksheet, row, column, value, cell_format)
 
 
+def write_optional_money(
+    worksheet: Any,
+    row: int,
+    column: int,
+    value: int | None,
+    cell_format: Any,
+) -> None:
+    """O'LCHANMAGAN PUL uchun BO'SH katak — ⛔ `0` EMAS (D-10, 08-16).
+
+    =======================================================================
+    ⛔⛔ NEGA `write_optional_number()` ISHLATILMAYDI VA NEGA BU ALOHIDA
+        FUNKSIYA.
+
+    Qo'shni funksiyaning annotatsiyasi `float` va uning docstringi
+    «BU FUNKSIYA PUL UCHUN EMAS» deb LITERAL yozilgan: pul `BIGINT`
+    so'm bo'lib qoladi va `float` ga UMUMAN aylanmaydi (yaxlitlash
+    drifti kunlik patta yig'indisida sotuvchi bilan nizoga aylanardi —
+    mahsulot aynan shu nosozlikni yo'q qilish uchun bor). Uni «shunchaki
+    ishlataverish» o'sha qoidani BIRINCHI qulay lahzada bekor qilardi.
+
+    ⛔ QURUVCHIDA `worksheet.write_blank(...)` NI XOM YOZISH HAM YO'L
+       EMAS: `test_xlsx_export.py::test_raw_worksheet_writes_live_only_
+       inside_write_text` varaqqa tegadigan funksiyalarni YOPIQ to'plam
+       bilan qulflaydi va u buni O'LCHADI (`build_three_way_workbook`
+       ro'yxatda paydo bo'ldi va darvoza QIZARDI). To'g'ri javob —
+       darvozani bo'shatish emas, YANGI NOMLANGAN yordamchi qo'shish.
+    =======================================================================
+
+    `cell_format` MAJBURIY va standart qiymati YO'Q (`write_money` bilan
+    AYNI sabab): formatsiz katak `150000` bo'lib chiqardi.
+    """
+    if value is None:
+        worksheet.write_blank(row, column, None, cell_format)
+        return
+    write_money(worksheet, row, column, value, cell_format)
+
+
 def write_optional_number(
     worksheet: Any,
     row: int,
@@ -508,6 +555,24 @@ _REPORT_TEXTS: Final[dict[str, dict[str, str]]] = {
             "Bu ulush nazoratchining ko'r javoblaridan hisoblanadi. "
             "Modelning o'zi avtomatik sinovda o'lchanmagan."
         ),
+        "compare_sheet": "Uch tomonlama solishtiruv",
+        "compare_day": "Kun",
+        "compare_stall": "Rasta",
+        "compare_vendor": "Sotuvchi",
+        "compare_ledger": "Daftar (so'm)",
+        "compare_system": "Tizim (so'm)",
+        "compare_ai_expected": "AI-kutilgan (so'm)",
+        "compare_diff": "Farq: daftar − tizim (so'm)",
+        "compare_class": "Farq sinfi",
+        "diff_ledger_over": "Daftar ortiq",
+        "diff_system_over": "Tizim ortiq",
+        "diff_ai_mismatch": "Bandlik farqi",
+        "compare_sign_executor": (
+            "Bajaruvchi (nazoratchi / bozor admini): ______________________  Sana: __________"
+        ),
+        "compare_sign_approver": (
+            "Tasdiqlovchi (direktor): ______________________  Sana: __________"
+        ),
     },
     "uz-Cyrl": {
         "period": "Давр",
@@ -555,6 +620,24 @@ _REPORT_TEXTS: Final[dict[str, dict[str, str]]] = {
             "Бу улуш назоратчининг кўр жавобларидан ҳисобланади. "
             "Моделнинг ўзи автоматик синовда ўлчанмаган."
         ),
+        "compare_sheet": "Уч томонлама солиштирув",
+        "compare_day": "Кун",
+        "compare_stall": "Раста",
+        "compare_vendor": "Сотувчи",
+        "compare_ledger": "Дафтар (сўм)",
+        "compare_system": "Тизим (сўм)",
+        "compare_ai_expected": "АИ-кутилган (сўм)",
+        "compare_diff": "Фарқ: дафтар − тизим (сўм)",
+        "compare_class": "Фарқ синфи",
+        "diff_ledger_over": "Дафтар ортиқ",
+        "diff_system_over": "Тизим ортиқ",
+        "diff_ai_mismatch": "Бандлик фарқи",
+        "compare_sign_executor": (
+            "Бажарувчи (назоратчи / бозор админи): ______________________  Сана: __________"
+        ),
+        "compare_sign_approver": (
+            "Тасдиқловчи (директор): ______________________  Сана: __________"
+        ),
     },
     "ru": {
         "period": "Период",
@@ -601,6 +684,25 @@ _REPORT_TEXTS: Final[dict[str, dict[str, str]]] = {
         "accuracy_disclaimer": (
             "Эта доля считается по слепым ответам контролёра. "
             "Сама модель в автоматических тестах не измерялась."
+        ),
+        "compare_sheet": "Трёхстороннее сравнение",
+        "compare_day": "День",
+        "compare_stall": "Прилавок",
+        "compare_vendor": "Продавец",
+        "compare_ledger": "Тетрадь (сум)",
+        "compare_system": "Система (сум)",
+        "compare_ai_expected": "Ожидание ИИ (сум)",
+        "compare_diff": "Разница: тетрадь − система (сум)",
+        "compare_class": "Класс расхождения",
+        "diff_ledger_over": "Тетрадь больше",
+        "diff_system_over": "Система больше",
+        "diff_ai_mismatch": "Разница по занятости",
+        "compare_sign_executor": (
+            "Исполнитель (контролёр / администратор рынка): ______________________  "
+            "Дата: __________"
+        ),
+        "compare_sign_approver": (
+            "Утверждающий (директор): ______________________  Дата: __________"
         ),
     },
 }
@@ -678,24 +780,37 @@ def _enum_label(texts: dict[str, str], keys: dict[str, str], value: str) -> str:
     return value if key is None else texts[key]
 
 
-def _open_report(locale: str, sheet_key: str, period: ReportPeriod) -> tuple[Any, Any, Any, Any]:
-    """Kitob + varaq + davr qatori — to'rtala hujjatning UMUMIY boshi.
+def _open_document(locale: str, sheet_key: str, banner_text: str) -> tuple[Any, Any, Any, Any]:
+    """Kitob + varaq + 1-QATORDAGI sarlavha — HAMMA hujjatning UMUMIY boshi.
 
     Returns:
         `(workbook, worksheet, buffer, texts)`.
 
-    ⚠ Nusxa YOZILMAYDI: to'rt quruvchida to'rt marta takrorlangan
-      «kitobni och, varaq qo'sh, davrni yoz» ketma-ketligi bir kun
-      uchtasida yangilanib, to'rtinchisida qolib ketardi — va aynan
-      o'sha to'rtinchisi davri yo'qolgan hujjat bo'lardi.
+    ⚠ Nusxa YOZILMAYDI: har quruvchida takrorlangan «kitobni och, varaq
+      qo'sh, sarlavhani yoz» ketma-ketligi bir kun to'rttasida
+      yangilanib, beshinchisida qolib ketardi — va aynan o'sha
+      beshinchisi DAVRI YO'QOLGAN hujjat bo'lardi (§1.2 qoida 2).
+
+    ⛔ MATN ARGUMENT, DAVR OBYEKTI EMAS — VA BU 08-16 NING ZARURATI:
+       solishtiruv hujjatining «davri» BITTA KUN va uni
+       `ReportPeriod(day, day)` bilan ifodalash varaqning birinchi
+       qatoriga `2026-08-15 — 2026-08-15` deb yozardi. Chop etilgan
+       varaqda bu «bir kunlik oraliq» degan savolni tug'dirardi;
+       hujjatning O'ZI esa kunlik ekanini AYTISHI kerak.
     """
     texts = report_texts(locale)
     buffer = io.BytesIO()
     workbook = new_workbook(buffer)
     worksheet = workbook.add_worksheet(texts[sheet_key])
     banner = workbook.add_format({"bold": True})
-    write_text(worksheet, 0, 0, f"{texts['period']}: {period.label}", banner)
+    write_text(worksheet, 0, 0, banner_text, banner)
     return workbook, worksheet, buffer, texts
+
+
+def _open_report(locale: str, sheet_key: str, period: ReportPeriod) -> tuple[Any, Any, Any, Any]:
+    """Davr hisobotining boshi — sarlavha `Davr: {from} — {to}`."""
+    texts = report_texts(locale)
+    return _open_document(locale, sheet_key, f"{texts['period']}: {period.label}")
 
 
 def build_revenue_workbook(
@@ -995,6 +1110,147 @@ def build_accuracy_workbook(
             row_count=metric_rows,
             column_count=4,
             widths=(34, 16, 16, 16),
+        )
+    except BaseException:
+        workbook.close()
+        raise
+    return finish(workbook, buffer)
+
+
+# ===========================================================================
+# 08-16 — UCH TOMONLAMA SOLISHTIRUVNING IMZOLANADIGAN HUJJATI (D-19)
+# ===========================================================================
+
+COMPARE_EXPORT_COLUMNS: Final = 7
+"""Ustunlar soni — ⛔ SERVERDA E'LON QILINADI, o'quvchida SANALMAYDI.
+
+`xlsx_reader.read_rows(expected_columns=...)` qisqa qatorni shu songacha
+`None` bilan to'ldiradi. Test uni O'ZI yozgan bo'lsa, ustun qo'shilganda
+hujjat va o'quvchi JIMGINA ajralib ketardi va imzo qatorlarining
+tekshiruvi noto'g'ri katakka qarardi.
+"""
+
+_DIFF_CLASS_TEXT_KEYS: Final[dict[str, str]] = {
+    DIFF_LEDGER_OVER: "diff_ledger_over",
+    DIFF_SYSTEM_OVER: "diff_system_over",
+    DIFF_AI_MISMATCH: "diff_ai_mismatch",
+}
+"""Farq sinfi -> matn kaliti — ⛔ AYNAN UCH A'ZO, `match` UNDA YO'Q.
+
+`_KIND_TEXT_KEYS` bilan AYNI naqsh va kalitlar `report_repo` ning
+KONSTANTALARIDAN, satr literalidan EMAS.
+
+⛔⛔ `match` GA MATN BERILMAYDI VA BU BO'SHLIQ EMAS, QAROR (§13.4):
+    mos qator hujjatda ham BELGISIZ qoladi. 287 ta «Mos» yozuvi 13 ta
+    farqni KO'MIB yuborardi — ko'z imzolanadigan varaqda FARQNI
+    qidiradi, moslikni emas. Maxraj esa qatorlarning O'ZIDA:
+    mos qator jadvalda QOLADI (07 G-32 darsi).
+"""
+
+
+def build_three_way_workbook(
+    rows: Sequence[ThreeWayRow],
+    locale: str,
+    day: date,
+) -> bytes:
+    """Kunning uch tomonlama solishtiruvi — ⛔ IMZOLANADIGAN HUJJAT (D-19).
+
+    =======================================================================
+    ⛔⛔ 1. FAYLNING PASTIDA IKKI BO'SH IMZO QATORI (§12.6) VA ISMLAR
+        OLDINDAN TO'LDIRILMAYDI.
+
+    Tizim KIM imzolashini BILMAYDI: bu QOG'OZ jarayon va varaqni
+    so'rovni yuborgan odamdan BOSHQA kishi imzolashi mumkin.
+    Sessiyadagi foydalanuvchining ismini yozish «u imzoladi» degan
+    YOLG'ON dalil bo'lardi va u nizoda aynan dalil sifatida
+    ishlatilardi (T-08-74). Raqamli imzo YO'Q, ekranda `[Imzolash]`
+    tugmasi ham QURILMAYDI (§10.7).
+
+    =======================================================================
+    ⛔⛔ 2. `ai_expected_soum is None` -> BO'SH KATAK, `0` EMAS (D-10).
+
+    `write_optional_number` ATAYIN ISHLATILMAYDI: uning annotatsiyasi
+    `float` va u O'Z docstringida «PUL UCHUN EMAS» deb yozilgan. Pul
+    yo'li `write_money` bo'lib qoladi, bo'shlik esa `write_blank`
+    bilan — ya'ni bu funksiya ikkalasini SHART bilan ajratadi.
+
+    =======================================================================
+    ⛔⛔ 3. FARQ USTUNI BITTA O'QDA VA U SARLAVHADA NOM BILAN AYTILADI.
+
+    `Farq: daftar − tizim` — ya'ni ustun QAYSI ikki manbani
+    solishtirayotgani sarlavhada LITERAL. Uni shunchaki «Farq» deb
+    atash uch manbani bitta songa siqqandek o'qilardi va D-18 ning
+    taqig'i (uch sinf hech qachon qo'shilmaydi) hujjatda JIMGINA
+    buzilardi. AI-kutilgan bilan farq ALOHIDA ustun sifatida
+    YOZILMAYDI: u o'z ustunida turibdi va uni qo'shish varaqda
+    to'rtinchi «farq» sonini tug'dirardi.
+
+    Args:
+        rows: `report_repo.three_way()` qatorlari — ⛔ MOS QATORLAR
+            BILAN BIRGA (§10.5: maxraj imzolanadigan hujjatda majburiy).
+        locale: so'rovchining PROFILIDAN (D-06).
+        day: solishtiruv KUNI — hujjatning birinchi qatoriga tushadi.
+    """
+    texts = report_texts(locale)
+    workbook, worksheet, buffer, texts = _open_document(
+        locale, "compare_sheet", f"{texts['compare_day']}: {day.isoformat()}"
+    )
+    try:
+        header = workbook.add_format({"bold": True, "bg_color": "#F2F2F2"})
+        money = money_format(workbook)
+
+        write_header(
+            worksheet,
+            1,
+            (
+                texts["compare_stall"],
+                texts["compare_vendor"],
+                texts["compare_ledger"],
+                texts["compare_system"],
+                texts["compare_ai_expected"],
+                texts["compare_diff"],
+                texts["compare_class"],
+            ),
+            header,
+        )
+        for offset, row in enumerate(rows, start=2):
+            write_text(worksheet, offset, 0, row.stall_code)
+            # ⛔ ISM `None` BO'LSA BO'SH KATAK (D-08): na «—», na
+            #    «Noma'lum». Chop etilgan varaqda o'rin to'ldiruvchi
+            #    buxgalter uchun HAQIQIY nom bo'lib o'qilardi.
+            write_optional_text(worksheet, offset, 1, row.vendor_name)
+            write_money(worksheet, offset, 2, row.ledger_soum, money)
+            write_money(worksheet, offset, 3, row.system_soum, money)
+            write_optional_money(worksheet, offset, 4, row.ai_expected_soum, money)
+            # ⚠ AYIRISH SHU YERDA EMAS, chaqiruvchida ham emas — u SON
+            #   sifatida yoziladi va Excel uni qayta hisoblamaydi.
+            #   Ikkala manba ham HAR DOIM o'lchangan, ya'ni bu ustun
+            #   bo'sh bo'lmaydi.
+            write_money(worksheet, offset, 5, row.ledger_soum - row.system_soum, money)
+            write_optional_text(
+                worksheet,
+                offset,
+                6,
+                None
+                if row.diff_class is None
+                else texts.get(_DIFF_CLASS_TEXT_KEYS.get(row.diff_class, ""), row.diff_class),
+            )
+
+        # ⚠ IMZO BLOKI FILTR DIAPAZONIDAN TASHQARIDA va oradan bir qator
+        #   tashlab yoziladi (`build_accuracy_workbook` dagi jumla bilan
+        #   AYNI qoida): filtr ichiga tushgan imzo qatori saralashda
+        #   MA'LUMOT qatori bo'lib yuqoriga chiqib ketardi va varaqning
+        #   o'rtasida «Bajaruvchi: ____» paydo bo'lardi.
+        signature_row = 2 + len(rows) + 1
+        write_text(worksheet, signature_row, 0, texts["compare_sign_executor"])
+        write_text(worksheet, signature_row + 1, 0, texts["compare_sign_approver"])
+
+        layout_sheet(
+            worksheet,
+            header_row=1,
+            row_count=len(rows),
+            column_count=COMPARE_EXPORT_COLUMNS,
+            widths=(12, 32, 18, 18, 20, 24, 22),
         )
     except BaseException:
         workbook.close()

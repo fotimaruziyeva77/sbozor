@@ -608,13 +608,15 @@ REPORTS_ROUTES = (
     "/api/v1/reports/accuracy.xlsx",
     "/api/v1/reports/anomalies",
     "/api/v1/reports/anomalies.xlsx",
+    "/api/v1/reports/compare",
     LEDGER_IMPORT_ROUTE,
+    "/api/v1/reports/compare.xlsx",
     "/api/v1/reports/debtors",
     "/api/v1/reports/debtors.xlsx",
     "/api/v1/reports/revenue",
     "/api/v1/reports/revenue.xlsx",
 )
-"""Sakkiz YO'L, sakkiz MARSHRUT — yettitasi `GET`, BITTASI `POST`.
+"""O'N YO'L, o'n MARSHRUT — to'qqiztasi `GET`, BITTASI `POST`.
 
 ⛔ NOMLAR KLIENT KONTRAKTIDAN (`REPORT_KINDS`, 08-03; UI-SPEC §12.1,
    G-43a): `report-queries.ts::buildReportDataPath()` yo'lni AYNAN
@@ -647,10 +649,20 @@ qolmaydi» kafolati AYNAN eng xavfli marshrutda teshilardi.
   va eksport AYNAN o'sha xizmatni chaqiradi. Ikkinchi JSON marshruti
   ikkinchi haqiqat manbai bo'lardi.
 
+⛔⛔ SOLISHTIRUV NOMLARI HAM KLIENTDAN: `/compare` va `/compare.xlsx`,
+    reja aytgan `/three-way` va `/three-way.xlsx` EMAS (08-16).
+    `report-queries.ts:253` va `:383` AYNAN shu ikkisiga boradi va ular
+    08-03 da, TO'LQIN 1 da yozilgan — ya'ni bu `/debtors`,
+    `/anomalies` va `/compare/ledger` dan keyingi TO'RTINCHI takror.
+
+⚠ SOLISHTIRUV `REPORT_KINDS` GA QO'SHILMAYDI (UI-SPEC §12.1, G-43a:
+  reyestr AYNAN to'rt a'zo). Uning davri KUN (`?day=`), qolgan
+  to'rttaniki esa ORALIQ (`?from=&to=`) — bitta reyestrga tiqish
+  davr parametrlarini IXTIYORIY qilardi va davrsiz eksport chaqiruvi
+  tip tizimidan JIMGINA o'tib ketardi.
+
 ⚠ SON TEST NOMIDA YOZILGAN va u har safar QO'LDA yangilanadi (R-11
   darsi: chetlash JIMGINA, ONGLI yangilash esa NOMDA ko'rinadi).
-  08-16 solishtiruvning O'QISH yuzasini qo'shadi — o'shanda bu test
-  nomi ham, ro'yxat ham yana o'zgaradi.
 """
 
 REPORTS_ROUTE_METHODS: dict[str, str] = {path: "GET" for path in REPORTS_ROUTES} | {
@@ -673,16 +685,17 @@ def _reports_paths() -> list[str]:
     )
 
 
-def test_the_reports_surface_is_exactly_eight_routes() -> None:
+def test_the_reports_surface_is_exactly_ten_routes() -> None:
     """DARVOZANING NAZORATI — pastdagi testlar BO'SH to'plamda yashil bo'lmaydi.
 
-    ⛔ To'plam TENGLIGI bilan (D-31), «kamida sakkiztasi» bilan EMAS:
-       to'qqizinchi marshrut qo'shilishi ONGLI qaror va u shu yerda
+    ⛔ To'plam TENGLIGI bilan (D-31), «kamida o'ntasi» bilan EMAS:
+       o'n birinchi marshrut qo'shilishi ONGLI qaror va u shu yerda
        ko'rinishi kerak — ayniqsa u YOZUV metodi bo'lsa.
 
     ⚠ SON 3 -> 7 (08-12: to'rt `.xlsx` eksporti) -> 8 (08-14: daftar
-      importi) tarzida ONGLI ravishda oshirildi va HAR SAFAR TEST NOMI
-      bilan birga. Nom sonni aytadi, ya'ni o'sish diff'da ko'rinadi.
+      importi) -> 10 (08-16: solishtiruvning JSON va `.xlsx` yuzasi)
+      tarzida ONGLI ravishda oshirildi va HAR SAFAR TEST NOMI bilan
+      birga. Nom sonni aytadi, ya'ni o'sish diff'da ko'rinadi.
 
     ⛔ METODLAR MARSHRUT BO'YICHA o'lchanadi (`REPORTS_ROUTE_METHODS`):
        `POST` bo'lgan EKSPORT bayt-tasnif darvozasidan jimgina chetlab
@@ -707,7 +720,7 @@ def test_the_reports_surface_is_exactly_eight_routes() -> None:
 
 
 def test_every_reports_route_is_documented_in_openapi() -> None:
-    """⛔ Sakkizalasi ham OpenAPI'da BOR — mijoz BRAUZER (`/reconciliation` naqshi).
+    """⛔ O'nalasi ham OpenAPI'da BOR — mijoz BRAUZER (`/reconciliation` naqshi).
 
     08-13/08-15 klient sxemasini shu kontraktdan oladi.
     `include_in_schema=False` bilan yozilgan marshrut frontend
@@ -729,7 +742,7 @@ def test_every_reports_route_is_documented_in_openapi() -> None:
         if path.startswith(REPORTS_PREFIX)
     }
 
-    assert len(documented) == 8, sorted(documented)
+    assert len(documented) == 10, sorted(documented)
     assert {path for _, path in documented} == set(REPORTS_ROUTES)
 
 
@@ -763,14 +776,22 @@ def test_only_the_debtors_route_carries_personal_data() -> None:
       (`test_no_reconciliation_route_enters_the_personal_data_gate`
       bilan bir xil juftlik).
 
-    ⚠⚠ TO'RT `.xlsx` MARSHRUTI BU TO'PLAMDA YO'Q VA BU KUTILGAN:
+    ⚠⚠ BESH `.xlsx` MARSHRUTI BU TO'PLAMDA YO'Q VA BU KUTILGAN:
       `PERSONAL_ROUTES` javob MODELIDAN hosila bo'ladi, eksportning
       javobi esa BAYT — modeli umuman yo'q. Ular BOSHQA darvoza
       ostida: `test_personal_data_coverage.py::BINARY_PERSONAL_ROUTES`
-      (`debtors.xlsx`) va `NON_PERSONAL_BINARY_ROUTES` (qolgan
-      uchtasi). Ya'ni bu test «uchtadan bittasi shaxsiy» degan JSON
-      da'vosini o'lchaydi va u eksport qo'shilgach ham AYNAN o'sha
-      da'vo bo'lib qoladi.
+      (`debtors.xlsx`, `compare.xlsx`) va `NON_PERSONAL_BINARY_ROUTES`
+      (qolgan uchtasi).
+
+    ⛔⛔ `GET /compare` (JSON) HAM BU TO'PLAMDA YO'Q VA BU ONGLI QAROR,
+        UNUTILGAN BAND EMAS (08-16): uning javob modelida
+        (`schemas.ThreeWayReportRow`) `vendor_name` UMUMAN yo'q, chunki
+        klient kontrakti (`api-types.ts::threeWayRowSchema`,
+        `strictObject`) uni QABUL QILMAYDI. Ism FAQAT `.xlsx`
+        hujjatiga chiqadi va o'sha marshrut `VENDOR_VIEW` + `audit_read`
+        darvozalarini ko'taradi. Ismni JSON ga «qulaylik uchun»
+        qo'shish IKKI narsani birdan buzardi — klient parse
+        chegarasini VA jurnalni (har hisobot ochilishida `audit_read`).
     """
     from tenancy.test_personal_data_coverage import PERSONAL_ROUTES
 
@@ -783,12 +804,13 @@ def test_only_the_ledger_import_needs_a_query_param_exemption() -> None:
     """⛔ ISTISNO AYNAN BITTA — VA SABAB METODDA, KELISHUVDA EMAS.
 
     =======================================================================
-    ⛔⛔ YETTI `GET` MARSHRUTI ISTISNOSIZ QOLADI — O'LCHANGAN.
+    ⛔⛔ TO'QQIZ `GET` MARSHRUTI ISTISNOSIZ QOLADI — O'LCHANGAN.
 
-    Ularning hammasida `from`/`to` MAJBURIY query parametrlari bor va
-    cross-tenant matritsasi query parametrlarini TO'LDIRMAYDI
-    (`call_route()` faqat YO'L parametrlarini va tanani beradi), ya'ni
-    so'rov validatsiya darvozasida **422** bilan to'xtaydi.
+    Ularning hammasida MAJBURIY query parametri bor (`from`/`to`, yoki
+    solishtiruvda `day`) va cross-tenant matritsasi query
+    parametrlarini TO'LDIRMAYDI (`call_route()` faqat YO'L
+    parametrlarini va tanani beradi), ya'ni so'rov validatsiya
+    darvozasida **422** bilan to'xtaydi.
 
     ⛔ LEKIN 422 ULAR UCHUN HECH NIMANI BUZMAYDI: `QUERY_PARAM_ROUTES`
        ning YAGONA iste'molchisi — `test_no_matrix_route_returns_422`, u
@@ -813,11 +835,13 @@ def test_only_the_ledger_import_needs_a_query_param_exemption() -> None:
        bozorining admini A ning kuniga daftar yozolmaydi).
 
     =======================================================================
-    ⚠ Yetti `GET` ning TENANT CHEGARASI ham ALOHIDA o'lchanadi:
+    ⚠ To'qqiz `GET` ning TENANT CHEGARASI ham ALOHIDA o'lchanadi:
       `tests/integration/test_reports_api.py::
       test_the_other_markets_director_never_sees_market_a_rows` —
       B bozorining direktori A ning davrini HAQIQIY parametrlar bilan
-      so'raydi va javobda A ning izi YO'Q (nazorat holati bilan).
+      so'raydi va javobda A ning izi YO'Q (nazorat holati bilan);
+      solishtiruv uchun esa `tests/integration/test_three_way.py::
+      test_the_other_markets_director_sees_none_of_market_a_stalls`.
     =======================================================================
     """
     from tenancy.test_cross_tenant import QUERY_PARAM_ROUTES
