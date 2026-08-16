@@ -9,6 +9,7 @@ import {
   isValidIsoDay,
   shiftIsoDay,
 } from "@/components/snapshots/day-picker";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import { PERIOD_PRESETS, type PeriodPreset } from "@/lib/api-types";
 
@@ -352,16 +353,47 @@ export function PeriodPicker() {
         </div>
       </div>
 
-      {/*
-       * ⚠ CHEGARA MATNI TANLAGICH YONIDA: `max` atributi bloklaydi, lekin
-       *   SABABINI aytmaydi — foydalanuvchi «nega bugunni tanlay
-       *   olmayapman?» holatida qolardi.
-       */}
-      <p className="text-sm text-text-muted">{t("reports.maxDayHint")}</p>
+      {selection.isEmpty ? (
+        /*
+         * ⛔⛔ BO'SH HOLAT 5 (§14.7) — NOMLANGAN HOLAT, JIM SILJISH EMAS.
+         *
+         * `thisMonth` oyning 1-kunida `from > to` beradi: joriy oyda hali
+         * YOPILGAN KUN YO'Q. Bu holatda tanlagich ⛔ `lastMonth` ga
+         * TUSHMAYDI — jimgina boshqa oyni ko'rsatish direktorga NOTO'G'RI
+         * OYNING raqamini berardi va u buni SEZMASDI (§4.4).
+         *
+         * ⛔ DAVR JUMLASI (`reports.periodShown`) BU YERDA CHIZILMAYDI:
+         *    «2026-09-01 — 2026-08-31» o'qilishi mumkin bo'lgan davr
+         *    bo'lib ko'rinardi, holbuki u BO'SH to'plam. G-38(d) shu
+         *    yo'qlikni o'lchaydi.
+         *
+         * ⚠ Tavsif AYNAN `reports.maxDayHint`: sabab bitta va u ikki
+         *   marta boshqacha yozilsa, ikki jumla bir kun ajralib ketardi.
+         *   Shuning uchun chegara matni bu holatda TAKRORLANMAYDI — u shu
+         *   bloknining ICHIDA turadi.
+         */
+        <EmptyState
+          className="py-6"
+          description={t("reports.maxDayHint")}
+          title={t("reports.emptyMonth")}
+        />
+      ) : (
+        <>
+          {/*
+           * ⚠ CHEGARA MATNI TANLAGICH YONIDA: `max` atributi bloklaydi,
+           *   lekin SABABINI aytmaydi — foydalanuvchi «nega bugunni
+           *   tanlay olmayapman?» holatida qolardi.
+           */}
+          <p className="text-sm text-text-muted">{t("reports.maxDayHint")}</p>
 
-      <p className="text-sm text-text-muted">
-        {t("reports.periodShown", { from: selection.from, to: selection.to })}
-      </p>
+          <p className="text-sm text-text-muted">
+            {t("reports.periodShown", {
+              from: selection.from,
+              to: selection.to,
+            })}
+          </p>
+        </>
+      )}
     </fieldset>
   );
 }

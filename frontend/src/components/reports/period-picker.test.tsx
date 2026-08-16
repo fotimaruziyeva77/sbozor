@@ -166,7 +166,16 @@ describe("⛔ G-38(c): bugungi sana yuzaga CHIQMAYDI", () => {
     const now = freezeClock(today);
     const expected = defaultRange(today);
 
-    const { view } = renderPicker(`?to=${today}`, now);
+    /*
+     * ⛔⛔ `from` HAM UZATILADI VA U YAROQLI — bu band O'LCHOV BILAN
+     *    qo'shilgan. Yolg'iz `?to=<bugun>` bilan chaqirilganda oraliq
+     *    `from` NING YO'QLIGI tufayli standartga tushardi, ya'ni test
+     *    «kelajakdagi `to` rad etiladi» ni EMAS, «yarim oraliq rad
+     *    etiladi» ni o'lchardi. O'lchandi: chegara filtri olib
+     *    tashlanganda test YASHIL qolgan.
+     */
+    const validFrom = shiftIsoDay(today, -10);
+    const { view } = renderPicker(`?from=${validFrom}&to=${today}`, now);
 
     /*
      * ⛔ TO'PLAM TENGLIGI: bugungi sana DOM'ning HECH QAYERIDA yo'q —

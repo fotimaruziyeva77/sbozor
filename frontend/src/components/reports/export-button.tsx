@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -89,8 +89,28 @@ export function ExportButton(props: ExportButtonProps) {
   /** `null` — xato yo'q; aks holda serverning MEXANIK kodi. */
   const [errorCode, setErrorCode] = useState<string | null>(null);
 
+  /*
+   * =========================================================================
+   * ⛔⛔ POYGA QULFI — `useRef`, `useState` EMAS (T-08-38, 05-13 darsi).
+   *
+   * «Bitta so'rov = bitta qaror». Uch tez bosish BITTA brauzer vazifasida
+   * yetib keladi va React ular ORASIDA qayta chizmaydi — ya'ni
+   * `busy` HOLATI uchala bosishda ham hali `false` bo'ladi va uchala
+   * so'rov ham ketadi. Eksport esa OG'IR: uch marta yuborilgan yillik
+   * hisobot serverni sababsiz uch marta ishlatardi va foydalanuvchi
+   * diskiga uchta bir xil fayl tushardi.
+   *
+   * ⚠ `busy` HOLATI baribir KERAK — u `aria-busy` ni boshqaradi, ya'ni
+   *   EKRANGA gapiradi. Ref esa MEXANIZMNI qulflaydi. Ikkalasi ikki
+   *   vazifani bajaradi va bittasi ikkinchisini almashtira olmaydi.
+   * =========================================================================
+   */
+  const running = useRef(false);
+
   async function run(): Promise<void> {
     if (props.unavailable === true) return;
+    if (running.current) return;
+    running.current = true;
 
     setErrorCode(null);
     setBusy(true);
@@ -111,6 +131,11 @@ export function ExportButton(props: ExportButtonProps) {
         error instanceof ApiError ? error.detail : FALLBACK_ERROR_CODE,
       );
     } finally {
+      /*
+       * ⛔ QULF DAVR, YON TA'SIR EMAS: `finally` da qaytariladi, aks holda
+       *    direktor IKKINCHI davrni umuman yuklab ololmasdi.
+       */
+      running.current = false;
       setBusy(false);
     }
   }
