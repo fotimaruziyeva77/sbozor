@@ -45,6 +45,9 @@ __all__ = [
     "GENERATED_FROM_COLUMN_SUPPORTED",
     "IDEMPOTENT_GET_OR_CREATE_MEASURED_AT",
     "IDEMPOTENT_GET_OR_CREATE_SUPPORTED",
+    "LEDGER_AUDITED_TABLES",
+    "LEDGER_DELETE_ORDER",
+    "LEDGER_TENANT_TABLES",
     "MARKET_DOMAIN_TENANT_TABLES",
     "NOTIFICATION_AUDITED_TABLES",
     "NOTIFICATION_DELETE_ORDER",
@@ -670,6 +673,82 @@ zanjir. Qolgan uchtasi `vendors` / `markets` ga tayanadi, ya'ni ular
 o'rni bilan allaqachon bajarilgan.
 """
 
+# ===========================================================================
+# 8-FAZA — QOG'OZ DAFTAR REYESTRI (SC#5 NING UCHINCHI MANBASI)
+# ===========================================================================
+
+LEDGER_TENANT_TABLES: tuple[str, ...] = ("ledger_entries",)
+"""`0024_ledger_entries` yaratadigan tenant jadvali (RECON-04, D-17/D-21/R-4).
+
+BITTA JADVAL, lekin shakl `NOTIFICATION_TENANT_TABLES` dagi kabi TUPLE
+bo'lib qoladi: `0024` uning ustidan `enable_tenant_rls` + `tenant_policy` +
+`owner_bootstrap_policy` tsiklini bajaradi va keyingi reja ikkinchi jadval
+qo'shganda tsikl allaqachon tayyor turadi (`IMMUTABILITY_TRIGGERS` ning
+`0023` dagi bitta uchligi bilan aynan bir xil mulohaza).
+
+⛔ RO'YXAT `0024` BILAN AYNI COMMITDA `ALL_TENANT_TABLES` GA SPLICE
+QILINADI (`06-04` / T2 naqshi, OP-3) va bu IKKI TOMONLAMA majburiy —
+sabab `NOTIFICATION_TENANT_TABLES` docstringida O'LCHOV bilan yozilgan
+(2026-08-04, `UndefinedTable`):
+  * OLDIN qilinsa -> `alembic_utils` komparatori mavjud bo'lmagan jadvalga
+    policy'ni HAQIQATAN yaratib ko'radi (`simulate_entity`) va
+    `test_autogenerate_is_empty` yiqiladi;
+  * KEYIN qilinsa -> `born <= ALL_TENANT_TABLES` sharti QIZARADI, chunki
+    jadval bazada allaqachon bor.
+
+⛔ JADVAL `FINANCIAL_TABLES` GA QO'SHILMAYDI va sabab
+`sbozor_core.models.ledger` modulining docstringida (1-band): daftar
+tashqi QOG'OZ manbaning nusxasi va u `0` summani ham yozishi mumkin,
+`financial_guards()` esa `CHECK (amount_soum > 0)` ni talab qilardi.
+"""
+
+LEDGER_AUDITED_TABLES: tuple[str, ...] = ("ledger_entries",)
+"""`0024` da `attach_audit_trigger()` ULANADIGAN jadval.
+
+⚠ BU YERDA RO'YXAT `LEDGER_TENANT_TABLES` BILAN USTMA-UST TUSHADI va bu
+domenda audit ASSIMETRIYASI YO'Q — `NVR_AUDITED_TABLES` /
+`NOTIFICATION_AUDITED_TABLES` dan farqli o'laroq. Ro'yxat shunga qaramay
+ALOHIDA e'lon qilinadi: ikkalasi IKKI XIL SAVOLGA javob beradi (RLS
+qamrovi va audit qamrovi) va ular bir-biridan MUSTAQIL o'zgaradi —
+`OCCUPANCY_DELETE_ORDER` docstringidagi «ustma-ustlik qiymatni hosila
+qilish uchun sabab emas» qoidasining aynan takrori.
+
+⛔ DAFTAR AUDITDA BO'LISHI SHART (C-10): qator KIM tomonidan va QACHON
+ALMASHTIRILGANI nizoda dalil bo'ladi. Jadval `ON CONFLICT DO UPDATE`
+bilan yoziladi (modul docstringining 2-bandi), ya'ni u HAQIQATAN
+`UPDATE` ni ko'radi — audit bu yerda «ikkinchi nusxa» EMAS, YAGONA iz.
+`cashier_shifts` va `reconciliation_cases` bilan BIR OILADA.
+
+⚠ NOM `schema_contract.AUDITED_TABLES` GA SHU MIGRATSIYA BILAN BIR
+COMMITDA qo'shildi (`06-04` OP-4 naqshi), ya'ni `PENDING_AUDIT_TRIGGERS`
+BO'SH qoladi va `test_audited_tables_have_trigger` UZLUKSIZ yashil
+turadi — «kutilgan qizil» holat HECH QACHON bo'lmaydi.
+"""
+
+LEDGER_DELETE_ORDER: tuple[str, ...] = ("ledger_entries",)
+"""`market_delete_draft()` kaskadiga qo'shiladigan tartib (`0024`).
+
+⛔ RO'YXAT LITERAL — HOSILA EMAS. Bugun u bitta elementli, ya'ni
+`tuple(reversed(LEDGER_TENANT_TABLES))` bilan ustma-ust TUSHADI, lekin
+qiymatni shunday yozish `BILLING_DELETE_ORDER` / `OCCUPANCY_DELETE_ORDER`
+docstringlaridagi taqiqni buzardi: RLS tartibi (ota-onadan bolalarga) va
+o'chirish tartibi (bolalardan ota-onaga) IKKI XIL SAVOLGA javob beradi va
+ular BIR-BIRIDAN MUSTAQIL o'zgaradi.
+
+**BLOK `stalls` O'CHIRILISHIDAN OLDIN TURISHI SHART.** `ledger_entries`
+`stalls` ga kompozit FK `(market_id, stall_id)` bilan tayanadi
+(`ondelete` YO'Q, ya'ni NO ACTION), `stalls` esa 2-faza blokining
+ichida — kaskadning ANCHA PASTIDA. Blok keyinga qo'yilganda chaqiruv
+`ForeignKeyViolation: update or delete on table "stalls" violates foreign
+key constraint "fk_ledger_entries_stall"` bilan yiqilardi va ⛔ STATIK
+DARVOZA BUNI SEZMASDI (matnda jadval baribir bor) —
+`0015`/`0019`/`0021`/`0023` juftliklarining OLTINCHI takrori.
+
+⚠ BLOK KASKADNING ENG BOSHIGA QO'YILADI va bu eng xavfsiz o'rin: bu
+jadvalga HECH KIM tayanmaydi (unga kompozit FK bilan keladigan bola
+yo'q), ya'ni uni birinchi o'chirish hech qanday FK ni buzmaydi.
+"""
+
 ALL_TENANT_TABLES: tuple[str, ...] = (
     *TENANT_TABLES,
     *MARKET_DOMAIN_TENANT_TABLES,
@@ -741,6 +820,17 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     # policy'ni yaratib ko'radi va `test_autogenerate_is_empty` yiqiladi;
     # keyin qilinsa `born <= ALL_TENANT_TABLES` sharti qizaradi.
     *NOTIFICATION_TENANT_TABLES,
+    # ✅ QARZ UMUMAN OCHILMADI (`08-02` / T2) — splice `0024_ledger_entries`
+    # BILAN AYNI COMMITDA qilindi, ya'ni `06-04` / T2 ning (OP-3) qadami
+    # UCHINCHI marta qo'llanadi.
+    #
+    # SPLICE IKKI TOMONLAMA QULFLANGAN va sabab yuqoridagi
+    # `NOTIFICATION_TENANT_TABLES` bandida O'LCHOV bilan yozilgan
+    # (2026-08-04, `UndefinedTable`): oldin qilinsa `alembic_utils`
+    # komparatori mavjud bo'lmagan jadvalga policy'ni yaratib ko'radi va
+    # `test_autogenerate_is_empty` yiqiladi; keyin qilinsa
+    # `born <= ALL_TENANT_TABLES` sharti qizaradi.
+    *LEDGER_TENANT_TABLES,
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 

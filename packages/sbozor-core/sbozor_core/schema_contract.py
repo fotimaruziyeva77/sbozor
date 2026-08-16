@@ -165,6 +165,32 @@ bo'lardi, ya'ni `stall_assignments` (2-faza, Pitfall 3) va
 `overdue_days` BOZOR KESIMIDA sozlanadi (D-19), ya'ni
 `market_notification_settings` `market_id` siz UMUMAN ma'nosiz bo'lardi —
 u bitta bozorning sozlamasi, platformaniki emas.
+
+8-FAZA HAM BU REYESTRGA HECH NIMA QO'SHMAYDI va bu ATAYIN — LEKIN SABAB
+YUQORIDAGILARDAN FARQ QILADI VA AYNAN SHU FARQ MUHIM.
+
+`ledger_entries` (`0024`) da `amount_soum` NOMLI USTUN HAQIQATAN BOR,
+ya'ni u yuqoridagi `cashier_shifts` / `billing_anomalies` bilan BIR
+SINFDA EMAS: u `test_financial_tables_have_guards` ning regeksini
+qanoatlantirardi va reyestrga qo'shilsa test SOXTA PUL USTUNI talab
+QILMASDI. Shunga qaramay u ro'yxatda YO'Q va sabab MEXANIK:
+
+  * `financial_guards()` `CHECK (amount_soum > 0)` ni majburlaydi;
+  * daftar esa `0` summani ham yozishi mumkin va bu QONUNIY holat —
+    «bu rastadan bugun hech nima yig'ilmadi» degan yozuv AYNAN
+    nomuvofiqlikning dalili (SC#5 ning eng muhim holati);
+  * cheklov qo'yilsa importer o'sha qatorni jimgina tashlab ketardi va
+    solishtiruv o'zi fosh qilishi kerak bo'lgan holatni KO'RMAY qolardi.
+
+Ikkinchi, mustaqil sabab: `financial_guards()` `business_date` ni
+`created_at` DAN hosila qilardi, holbuki daftarda u DOMEN sanasi (daftar
+qaysi kunga yozilgan) — import kechikib ertasi kuni bajarilsa hosila
+ustun qatorni NOTO'G'RI kunga tushirardi. Bu `daily_charges.service_date`
+(C-2) bilan aynan bir xil ajratma.
+
+⛔ JADVAL `AUDITED_TABLES` GA ESA QO'SHILDI (yuqoriga qarang): D-17/C-10
+aynan AUDITni talab qiladi, pul konstraytini emas — `stall_assignments`
+(2-faza) qarorining AYNAN takrori.
 """
 
 AUDITED_TABLES: frozenset[str] = frozenset(
@@ -278,6 +304,21 @@ AUDITED_TABLES: frozenset[str] = frozenset(
         # `test_audited_tables_have_trigger` UZLUKSIZ yashil turadi —
         # «kutilgan qizil» holat HECH QACHON bo'lmaydi.
         "reconciliation_cases",
+        # --- 8-faza qog'oz daftar reyestri (0024_ledger_entries) ---
+        # Daftar qatori — SC#5 ning uch tomonlama solishtiruvidagi TASHQI
+        # manba va u nizoda dalil bo'ladi: «bu rastadan o'sha kuni qancha
+        # yig'ilgan deb YOZILGAN edi?». Jadval `ON CONFLICT DO UPDATE`
+        # bilan yoziladi (takroriy import ALMASHTIRADI — `models/ledger.py`
+        # docstringining 2-bandi), ya'ni u HAQIQATAN `UPDATE` ni ko'radi
+        # va audit bu yerda «ikkinchi nusxa» EMAS, YAGONA iz: qiymat
+        # almashtirilgach ESKI qiymat faqat `audit_log.old_value` da
+        # qoladi. `cashier_shifts` va `reconciliation_cases` bilan BIR
+        # OILADA (C-10).
+        #
+        # ⚠ NOM `0024` BILAN AYNI COMMITDA qo'shildi, ya'ni
+        # `PENDING_AUDIT_TRIGGERS` BO'SH qoladi va
+        # `test_audited_tables_have_trigger` UZLUKSIZ yashil turadi.
+        "ledger_entries",
     }
 )
 """`fn_audit_row()` triggeri O'RNATILGAN jadvallar (hozirgi holat, kutilgan emas).

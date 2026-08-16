@@ -158,7 +158,14 @@ FUNCTION_BODY = "SELECT pg_get_functiondef('public.market_delete_draft(uuid)'::r
 # taqdirda ham quyi chegara qanoatlanardi, ya'ni
 # `test_cascade_covers_every_table_referencing_markets` ularni UMUMAN
 # ko'rmasdi va kaskad qarzi JIMGINA ochiq qolardi.
-KNOWN_TENANT_TABLE_COUNT = 34
+#
+# ⚠ SON `34` DAN `35` GA KO'TARILDI (`08-02` / T2) — `0024_ledger_entries`
+# bitta jadval qo'shdi (`ledger_entries`). KO'TARISH MAJBURIY va bu
+# yuqoridagi bandlarning aynan takrori: eski qiymat (34) bilan YANGI
+# jadval `markets` ga FK'siz yaratilgan taqdirda ham quyi chegara
+# qanoatlanardi, ya'ni `test_cascade_covers_every_table_referencing_
+# markets` uni UMUMAN ko'rmasdi va kaskad qarzi JIMGINA ochiq qolardi.
+KNOWN_TENANT_TABLE_COUNT = 35
 
 # Tuzatish yo'riqnomasi ALOHIDA konstantada, f-satr ICHIDA emas: ruff'ning
 # `S608` qoidasi SQL kalit so'zi bo'lgan formatlangan satrni "so'rov
