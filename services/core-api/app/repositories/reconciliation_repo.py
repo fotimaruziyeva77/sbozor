@@ -85,6 +85,7 @@ ITERATSIYA bilan quriladi (pastdagi docstring).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import TYPE_CHECKING, Final
 
 from sbozor_core.enums import AnomalyKind, ReconciliationCaseStatus, ReconciliationSubjectKind
@@ -100,6 +101,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
+    "CASE_LOOKBACK_DAYS",
     "CASE_PAGE_SIZE",
     "CASE_WORTHY_ANOMALY_KINDS",
     "NON_CASE_ANOMALY_KINDS",
@@ -151,6 +153,40 @@ docstringida o'lchangan aynan o'sha sinf.
 
 CASE_PAGE_SIZE: Final[int] = 50
 """Navbat sahifasining o'lchami (DQ-4) — `ChargeListResponse` naqshi bilan bir xil."""
+
+CASE_LOOKBACK_DAYS: Final[int] = 30
+"""⛔ NOMZODLAR OYNASI — SINF A qancha orqaga qaraydi (WR-09).
+
+=============================================================================
+⛔⛔ UNDAN ESKI TO'LANMAGAN HISOB **ALOHIDA YUZAGA — QARZDORLIK
+    REESTRIGA (RECON-04, 08-07/08-10)** TEGISHLI. MA'LUMOT YO'QOLMAYDI,
+    YUZASI ALMASHADI.
+
+Oyna 07-fazada UMUMAN yo'q edi: `_OVERDUE_CHARGES` da faqat YUQORI
+chegara (`<= :cutoff`) turardi, ya'ni har yugurishda BUTUN TARIXNING
+to'lanmagan hisoblari nomzod bo'lardi va ular uchun case O'SHA
+HISOBNING KUNI bilan ochilardi. Oqibati uch qatlamda o'lchangan:
+
+  1. ⛔ CASE EKRANDA HECH QACHON KO'RINMASDI. Yagona ro'yxat yuzasi KUN
+     kesimida — `GET /reconciliation/cases?day=` va `GET /reconciliation/
+     report?day=` ikkalasi ham `service_date = :day` bilan filtrlaydi va
+     standart kun KECHA. Ya'ni direktor aniq eski sanani QO'LDA
+     tanlamasa, o'sha case'lar mavjud bo'lib turib ko'rinmasdi.
+
+  2. ⛔ `hit_rate()` NING `pending` SANOG'I DOIMIY SHISHARDI. Eski
+     nomzodlar hech qachon ko'rilmaydi, ya'ni ular maxrajga kirmagan
+     holda `pending` ni mangu ko'tarib turardi va «hali O'LCHOV YO'Q»
+     signali SHOVQINGA aylanardi (`HitRate` docstringining butun
+     mazmuni shu farqda).
+
+  3. ⚠ `skipped_existing` har kuni o'sha eski nomzodlarni QAYTA sanardi,
+     ya'ni konvergentlikning o'lchovi ham ma'nosini yo'qotardi.
+
+⛔ QIYMAT 30 — QARZDORLIK REESTRINING OYLIK KESIMI BILAN BIR XIL TOIFA.
+   Kichikroq oyna hali ko'rilishi mumkin bo'lgan qarzni navbatdan
+   chiqarardi; kattaroq oyna esa (1) va (2) ni qaytarardi.
+=============================================================================
+"""
 
 _STATUS_NEW: Final[str] = ReconciliationCaseStatus.NEW.value
 _STATUS_IN_REVIEW: Final[str] = ReconciliationCaseStatus.IN_REVIEW.value
@@ -275,11 +311,13 @@ _OVERDUE_CHARGES = text(
      WHERE c.market_id = :market_id
        AND c.vendor_id = ANY(:vendor_ids)
        AND c.service_date <= :cutoff
+       AND c.service_date >= :floor
     """
 ).bindparams(
     bindparam("market_id", type_=_UUID),
     bindparam("vendor_ids", type_=_UUID_ARRAY),
     bindparam("cutoff", type_=Date()),
+    bindparam("floor", type_=Date()),
 )
 """KECHIKKAN hisoblar va ularning `(sotuvchi, kun, rasta kodi)` kaliti.
 
@@ -291,6 +329,25 @@ _OVERDUE_CHARGES = text(
 ⚠ FILTR SHU YERDA: kechikmagan hisob xaritaga umuman KIRMAYDI, ya'ni
   taqsimlash uni «to'lanmagan» deb ko'rsatsa ham case ochilmaydi.
   Chegara Pattern 5 ning butun mazmuni (modul docstringining 2-bandi).
+
+=============================================================================
+⛔⛔ IKKI CHEGARA, IKKI BOSHQA SAVOL (WR-09).
+
+    `<= :cutoff`  — «YETARLICHA ESKIMI?» (Pattern 5, `overdue_days`)
+    `>= :floor`   — «HALI SHU YUZAGA TEGISHLIMI?» (`CASE_LOOKBACK_DAYS`)
+
+Ular bir songa SIQILMAYDI: birinchisi bozorning SOZLAMASIDAN
+(`market_notification_settings.overdue_days`) keladi va bozorga qarab
+o'zgaradi, ikkinchisi esa MAHSULOT QARORI — nomuvofiqlik navbati kun
+kesimidagi yuza, oydan eski qarz esa qarzdorlik reestrining yuzasi
+(RECON-04). Bitta sozlama ikkalasini boshqarsa, chegarani kengaytirgan
+bozor o'zining butun tarixini navbatga ag'darardi.
+
+⛔ `>=`, `>` EMAS: chegaraviy kun (`business_date - CASE_LOOKBACK_DAYS`)
+   oynaga KIRADI — yuqori chegaraning `<=` si bilan aynan bir xil qoida.
+   Farq FAQAT o'sha bir kunda ko'rinardi, ya'ni nosozlik oyiga bir marta
+   chiqardi (`test_the_lookback_boundary_day_still_opens_a_case`).
+=============================================================================
 
 ⚠ `vendor_id IS NULL` bo'lgan hisob `= ANY(...)` bilan CHIQIB KETADI va
   bu to'g'ri: sotuvchisi noma'lum bandlik D-28 ning anomaliyasi, ya'ni u
@@ -503,7 +560,17 @@ async def _open_unpaid_cases(
     rows = (
         await session.execute(
             _OVERDUE_CHARGES,
-            {"market_id": market_id, "vendor_ids": debtors, "cutoff": cutoff},
+            {
+                "market_id": market_id,
+                "vendor_ids": debtors,
+                "cutoff": cutoff,
+                # ⛔ QUYI CHEGARA `business_date` DAN SANALADI, `cutoff`
+                #   DAN EMAS: oyna YUGURISH kuniga bog'langan mahsulot
+                #   qarori, `overdue_days` esa bozorning sozlamasi.
+                #   `cutoff` dan sanash chegarani kengaytirgan bozorda
+                #   oynani ham jimgina siljitardi.
+                "floor": business_date - timedelta(days=CASE_LOOKBACK_DAYS),
+            },
         )
     ).mappings()
     overdue: dict[tuple[UUID, date, str], UUID] = {
