@@ -191,6 +191,8 @@
     "refreshList": "Ro'yxatni yangilash",
     "clearFilters": "Filtrlarni tozalash",
     "nvrLegend": "Qurilma ma'lumotlari",
+    "diagnoseLegend": "NVR ulanishini tekshirish",
+    "diagnoseHint": "Parol ko'rsatilmaydi, shuning uchun tekshirish uchun uni qayta kiriting. Bu forma saqlangan qurilma yozuvini o'zgartirmaydi.",
     "nvrAddress": "NVR manzili",
     "nvrAddressHint": "Standart port — 80. Boshqa port bo'lsa manzilga qo'shing: 192.168.1.64:8080",
     "nvrLogin": "Foydalanuvchi nomi",

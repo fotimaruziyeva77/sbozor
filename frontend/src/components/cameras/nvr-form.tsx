@@ -249,12 +249,40 @@ export type NvrSaveResult = {
   runId: string | null;
 };
 
+/**
+ * Formaning IKKI REJIMI — YANGI PANEL EMAS (Topilma №F).
+ *
+ * ⚠ ILDIZ YORLIQ NOMUVOFIQLIGI EMAS, O'LIK AFFORDANS EDI. «Diagnostika»
+ *   tugmasi shu formani ochardi, uning birlamchi tugmasi esa
+ *   `saveAndDiscover` -> `POST /nvr-devices` ga borardi. MAVJUD
+ *   qurilmaning `host:port` i uchun bu chaqiruv `UNIQUE (market_id, host,
+ *   port)` ga urilib **409 `nvr_host_taken`** dan boshqa hech nima qaytara
+ *   olmasdi (`nvr.py::_device_conflict`) — ya'ni tugmaning hech qanday
+ *   muvaffaqiyat yo'li YO'Q edi. Yorliq nomuvofiqligi shuning ko'rinadigan
+ *   qismi, xolos.
+ *
+ * ⚠ YANGI PANEL QURILMAYDI VA YANGI ENDPOINT YOZILMAYDI: diagnostika
+ *   ma'lumoti tizimda ALLAQACHON bor — `nvr-test-result.tsx` (model,
+ *   qurilma turi, kanallar soni, soat farqi) va `nvr-error-block.tsx`
+ *   (xato kodi + tuzatish yo'li). Ular `POST /nvr-devices/test-connection`
+ *   javobidan keyin chiziladi, ya'ni kerak bo'lgani — formaning O'ZINI
+ *   o'sha chaqiruvga qaratish.
+ *
+ * ⚠ PROP MAJBURIY QILINMAGAN (standart `"create"`). Sabab o'lchangan:
+ *   `nvr-form.test.tsx` da propsiz render chaqiruvlari bor va majburiy
+ *   prop ularni SABABSIZ qizartirardi. Wiring esa prop TIPI bilan emas,
+ *   `cameras/page.test.tsx` dagi ikki tomonlama o'lchov bilan qulflanadi.
+ */
+export type NvrFormMode = "create" | "diagnose";
+
 export type NvrFormProps = {
   className?: string;
   /** Diagnostika rejimida mavjud qurilmaning manzili oldindan to'ldiriladi. */
   defaultAddress?: string;
   /** Diagnostika rejimida mavjud qurilmaning logini oldindan to'ldiriladi. */
   defaultUsername?: string;
+  /** Standart `"create"` — yuqoridagi izohdagi sabab. */
+  mode?: NvrFormMode;
   /** «Bekor qilish» — faqat berilganda render qilinadi. */
   onCancel?: () => void;
   /** Qurilma saqlanib kashfiyot boshlanganda. */
@@ -265,6 +293,7 @@ export function NvrForm({
   className,
   defaultAddress = "",
   defaultUsername = "",
+  mode = "create",
   onCancel,
   onSaved,
 }: NvrFormProps) {
@@ -441,13 +470,22 @@ export function NvrForm({
     }
   }
 
+  /*
+   * ⚠ REJIM FAQAT SHU IKKI QATORDA HAL BO'LADI: yuborish nishoni va
+   *   birlamchi tugma. Auth qulfi (`authLocked`, `refuseUnderLock`,
+   *   `blocked`) IKKALA rejimda ham AYNI — D-03 ning qulflanish himoyasi
+   *   diagnostika rejimida ayni darajada kerak, chunki bu amal aynan
+   *   noto'g'ri parol bilan bajariladi.
+   */
+  const diagnosing = mode === "diagnose";
+
   return (
     <Card className={className}>
       <CardContent className="pt-5">
         <form
           className="flex flex-col gap-4"
           noValidate
-          onSubmit={handleSubmit(saveAndDiscover)}
+          onSubmit={handleSubmit(diagnosing ? runTestConnection : saveAndDiscover)}
         >
           {/* Server 4xx — forma TEPASIDA (UI-SPEC §4.7). */}
           {formError !== null ? (
@@ -469,8 +507,23 @@ export function NvrForm({
            */}
           <fieldset className="m-0 border-0 p-0">
             <legend className="mb-4 text-lg font-semibold">
-              {t("cameras.nvrLegend")}
+              {t(diagnosing ? "cameras.diagnoseLegend" : "cameras.nvrLegend")}
             </legend>
+
+            {/*
+             * Diagnostika izohi IKKI FAKTNI aytadi va ikkalasi ham
+             * adminning keyingi harakatiga ta'sir qiladi:
+             *   (a) parol ko'rsatilmaydi (D-12), shuning uchun uni qayta
+             *       kiritish KERAK — bo'sh maydon nosozlik emas;
+             *   (b) bu forma saqlangan qurilma yozuvini O'ZGARTIRMAYDI,
+             *       ya'ni «tekshirsam, parolim almashib qoladimi?» degan
+             *       savol tug'ilmaydi.
+             */}
+            {diagnosing ? (
+              <p className="mb-4 text-sm text-text-muted">
+                {t("cameras.diagnoseHint")}
+              </p>
+            ) : null}
 
             <div className="flex flex-col gap-4">
               <Field
@@ -542,6 +595,21 @@ export function NvrForm({
            *   o'qiladi va bosilganda sababni AYTADI (fokus parol
            *   maydoniga + `role="status"`).
            */}
+          {/*
+           * ⛔ DIAGNOSTIKA REJIMIDA «Saqlash va kameralarni topish»
+           *    UMUMAN RENDER QILINMAYDI — `disabled`/`aria-disabled` bilan
+           *    QOLDIRILMAYDI. 02-UI-SPEC §6.6 o'chirilgan tugmani rad
+           *    etadi, chunki u «nega bosilmayapti?» savolini tug'diradi va
+           *    unga javob beradigan holat bo'lishi kerak. Bu yerda esa
+           *    tugmaning HECH QANDAY muvaffaqiyat yo'li yo'q (409
+           *    `nvr_host_taken`), ya'ni ko'rsatib turishning ma'nosi ham
+           *    yo'q — u faqat adminni saqlab qo'yish xavfi bor formaga
+           *    olib borardi.
+           *
+           * ⛔ Ikkilamchi «Ulanishni tekshirish» ham chizilmaydi: u
+           *    birlamchi tugma bilan AYNI amalni bajarardi va ekranda bir
+           *    xil nomli ikki tugma paydo bo'lardi.
+           */}
           <div className="flex flex-col gap-2 sm:flex-row-reverse">
             <Button
               aria-disabled={blocked ? true : undefined}
@@ -550,18 +618,26 @@ export function NvrForm({
               type="submit"
               variant={authLocked ? "secondary" : "default"}
             >
-              {busy ? t("common.loading") : t("cameras.saveAndDiscover")}
+              {busy
+                ? t("common.loading")
+                : t(
+                    diagnosing
+                      ? "cameras.testConnection"
+                      : "cameras.saveAndDiscover",
+                  )}
             </Button>
 
-            <Button
-              aria-disabled={blocked ? true : undefined}
-              className="sm:flex-1"
-              onClick={() => void handleSubmit(runTestConnection)()}
-              size="lg"
-              variant="secondary"
-            >
-              {t("cameras.testConnection")}
-            </Button>
+            {diagnosing ? null : (
+              <Button
+                aria-disabled={blocked ? true : undefined}
+                className="sm:flex-1"
+                onClick={() => void handleSubmit(runTestConnection)()}
+                size="lg"
+                variant="secondary"
+              >
+                {t("cameras.testConnection")}
+              </Button>
+            )}
 
             {onCancel ? (
               <Button onClick={onCancel} size="lg" variant="ghost">
