@@ -305,6 +305,21 @@ def test_raw_worksheet_writes_live_only_inside_write_text() -> None:
     savoli hamon YOPIQ to'plam bilan javob oladi. Agar quruvchining
     O'ZI ro'yxatda paydo bo'lsa, bu test qizaradi.
 
+    ⚠⚠ 08-16 DA DARVOZA AYNAN SHUNI USHLADI — O'LCHANGAN, TAXMIN EMAS.
+
+    Solishtiruv quruvchisi `ai_expected_soum is None` uchun varaqqa
+    XOM `worksheet.write_blank(...)` bilan tegdi va test QIZARDI:
+
+        AssertionError: xom yozish yo'li ochilgan:
+        {..., 'build_three_way_workbook': ['write_blank']}
+
+    ⛔ TO'G'RI JAVOB — RO'YXATGA QURUVCHINI QO'SHISH EMAS (bu darvozani
+       bo'shatardi va keyingi ijrochiga «bu yerda xom yozsa ham
+       bo'larkan» degan pretsedent berardi), balki YANGI NOMLANGAN
+       yordamchi qo'shish: `write_optional_money`. U PUL uchun va u
+       `write_optional_number` DAN AYRIM — o'shanining annotatsiyasi
+       `float` va u O'Z docstringida «pul uchun emas» deb yozilgan.
+
     ⚠ QIYMATLAR `sorted(set(...))` BILAN SOLISHTIRILADI: `ast.walk`
       tugunlarni kenglik bo'yicha yuradi va bitta funksiya ichidagi
       IKKI xil chaqiruvning tartibi shart (`if`) shakliga bog'liq —
@@ -336,6 +351,7 @@ def test_raw_worksheet_writes_live_only_inside_write_text() -> None:
         "write_text": ["write_string"],
         "write_money": ["write_number"],
         "write_optional_text": ["write_blank"],
+        "write_optional_money": ["write_blank"],
         "write_optional_number": ["write_blank", "write_number"],
         "layout_sheet": ["autofilter", "freeze_panes", "set_column"],
     }, f"xom yozish yo'li ochilgan: {calls}"

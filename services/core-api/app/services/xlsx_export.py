@@ -123,6 +123,7 @@ __all__ = [
     "report_texts",
     "write_header",
     "write_money",
+    "write_optional_money",
     "write_optional_number",
     "write_optional_text",
     "write_text",
@@ -343,6 +344,43 @@ def write_optional_text(
         worksheet.write_blank(row, column, None, cell_format)
         return
     write_text(worksheet, row, column, value, cell_format)
+
+
+def write_optional_money(
+    worksheet: Any,
+    row: int,
+    column: int,
+    value: int | None,
+    cell_format: Any,
+) -> None:
+    """O'LCHANMAGAN PUL uchun BO'SH katak — ⛔ `0` EMAS (D-10, 08-16).
+
+    =======================================================================
+    ⛔⛔ NEGA `write_optional_number()` ISHLATILMAYDI VA NEGA BU ALOHIDA
+        FUNKSIYA.
+
+    Qo'shni funksiyaning annotatsiyasi `float` va uning docstringi
+    «BU FUNKSIYA PUL UCHUN EMAS» deb LITERAL yozilgan: pul `BIGINT`
+    so'm bo'lib qoladi va `float` ga UMUMAN aylanmaydi (yaxlitlash
+    drifti kunlik patta yig'indisida sotuvchi bilan nizoga aylanardi —
+    mahsulot aynan shu nosozlikni yo'q qilish uchun bor). Uni «shunchaki
+    ishlataverish» o'sha qoidani BIRINCHI qulay lahzada bekor qilardi.
+
+    ⛔ QURUVCHIDA `worksheet.write_blank(...)` NI XOM YOZISH HAM YO'L
+       EMAS: `test_xlsx_export.py::test_raw_worksheet_writes_live_only_
+       inside_write_text` varaqqa tegadigan funksiyalarni YOPIQ to'plam
+       bilan qulflaydi va u buni O'LCHADI (`build_three_way_workbook`
+       ro'yxatda paydo bo'ldi va darvoza QIZARDI). To'g'ri javob —
+       darvozani bo'shatish emas, YANGI NOMLANGAN yordamchi qo'shish.
+    =======================================================================
+
+    `cell_format` MAJBURIY va standart qiymati YO'Q (`write_money` bilan
+    AYNI sabab): formatsiz katak `150000` bo'lib chiqardi.
+    """
+    if value is None:
+        worksheet.write_blank(row, column, None, cell_format)
+        return
+    write_money(worksheet, row, column, value, cell_format)
 
 
 def write_optional_number(
@@ -1183,10 +1221,7 @@ def build_three_way_workbook(
             write_optional_text(worksheet, offset, 1, row.vendor_name)
             write_money(worksheet, offset, 2, row.ledger_soum, money)
             write_money(worksheet, offset, 3, row.system_soum, money)
-            if row.ai_expected_soum is None:
-                worksheet.write_blank(offset, 4, None, money)
-            else:
-                write_money(worksheet, offset, 4, row.ai_expected_soum, money)
+            write_optional_money(worksheet, offset, 4, row.ai_expected_soum, money)
             # ⚠ AYIRISH SHU YERDA EMAS, chaqiruvchida ham emas — u SON
             #   sifatida yoziladi va Excel uni qayta hisoblamaydi.
             #   Ikkala manba ham HAR DOIM o'lchangan, ya'ni bu ustun
