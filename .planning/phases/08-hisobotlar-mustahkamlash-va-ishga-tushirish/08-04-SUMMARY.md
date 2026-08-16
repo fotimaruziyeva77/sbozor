@@ -221,3 +221,14 @@ holda yashil bo'lmadi. REFACTOR bosqichi kerak bo'lmadi.
    compose proyekti + `--no-deps` + mavjud image'ni teglash. ⚠ To'lqin oxirida
    asosiy checkout'dan `docker compose up -d --force-recreate storage`
    yugurtirilsin.
+
+## Self-Check: PASSED
+
+| Tekshiruv | Natija |
+|---|---|
+| `services/core-api/app/repositories/report_repo.py` | FOUND (35 218 bayt) |
+| `tests/integration/test_report_repo.py` | FOUND (34 443 bayt) |
+| `.../08-04-SUMMARY.md` | FOUND |
+| `.../deferred-items.md` | FOUND |
+| Commitlar `31a2d3e · a8e3375 · d4a7d79 · 9361045 · 82839a5 · c9ba3d9 · af6a1f9` | Yettalasi ham `git log` da |
+| O'chirilgan fayllar | **YO'Q** — yettala commit ham faqat qo'shish (`git log --stat`) |
