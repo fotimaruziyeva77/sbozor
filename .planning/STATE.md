@@ -29,7 +29,7 @@ Phase: 07 (nomuvofiqlik-bildirishnoma-va-botlar) — EXECUTING
 Plan: 1 of 17
 Total Plans in Phase: 20
 Status: Ready to execute
-Last activity: 2026-08-16 -- Completed quick task 260816-5mn: bozor faollashtirish (No B+A)
+Last activity: 2026-08-16 -- Completed quick 260816-5ys: jim-forma supurish (kod-review)
 
 Progress: [██████████] 100% (15/15 reja — 05-01…05-15)
 
@@ -274,6 +274,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260816-5ys | Kod-review: jim-disabled submit anti-naqshi 5 saytda supurildi + G-SUBMIT darvozasi | 2026-08-16 | 04a473b, 486fdb1, 0315196 | [260816-5ys-jim-forma-supurish-disabled-submit-anti-](./quick/260816-5ys-jim-forma-supurish-disabled-submit-anti-/) |
 | 260816-5mn | Topilma №B+№A: bozorni faollashtirish yo'li ochildi, qoralama-redirect tuzatildi | 2026-08-16 | b90bb09, 9e52fd5, 96171c1 | [260816-5mn-topilma-b-a-bozorni-faollashtirish-yo-li](./quick/260816-5mn-topilma-b-a-bozorni-faollashtirish-yo-li/) |
 | 260815-86p | Topilma №2/№4/№6: usta 5-qadamiga qo'lda qo'shish, rolsiz saqlashda ko'rinadigan validatsiya, jadval dialogining bo'sh/xato holatlari — uchalasi TDD bilan | 2026-08-15 | c411636, d059a7d, dc2ea27 | [260815-86p-topilma-2-4-6-usta-rastalar-qadamiga-qo-](./quick/260815-86p-topilma-2-4-6-usta-rastalar-qadamiga-qo-/) |
 | 260814-p4g | Topilma №8: kassir rasta qidiruvida Enter — tashxis: kod sog'lom, fokus-yo'naltirilgan regressiya darvozasi qo'shildi | 2026-08-14 | 8ee8e2e, e3e0cf4 | [260814-p4g-topilma-8-kassir-rasta-qidiruvida-enter-](./quick/260814-p4g-topilma-8-kassir-rasta-qidiruvida-enter-/) |
