@@ -862,6 +862,147 @@ O'lchov natijasi (SPEC da'vosi ↔ hisoblangan):
 
 ---
 
+## Validation Architecture
+
+> ⛔ Bu bo'lim `09-VALIDATION.md` ning **manbai** (`scripts/check-validation-signoff.mjs`
+> shartlari bo'yicha). Yuqoridagi «Validatsiya arxitekturasi» bo'limi bilan **bir xil
+> faktlarga** tayanadi; farq — bu yerda `human_only_verifications` va
+> `automated_replacements` **shakl to'liqligi** bilan beriladi.
+> ⚠ Ziddiyat bo'lsa — **09-UI-SPEC.md §16 ustun** (u `approved`).
+
+### Test Framework
+
+| Property | Value |
+|----------|-------|
+| **Framework (birlamchi)** | **vitest 4.1.10** + jsdom 30.0.1 + `@testing-library/react` 16.3.2 — React komponent qatlami (`src/**/*.test.tsx`) |
+| **Framework (ikkilamchi)** | **`node --test`** (Node o'rnatilgan, ⛔ **nol bog'liqlik**) — CSS/JSON/matn skan darvozalari (`frontend/scripts/*.test.mjs`) |
+| **Framework (uchlamchi)** | **pytest 9.1.1** (`docker compose --profile test run --rm tests`) — ⛔ **bu fazada ISHLATILMAYDI**: yangi endpoint yo'q (SPEC §14.3). Zaxirada `market_day_cleared` **kelajak** fazasi uchun turadi (§Tuzoq 8) |
+| Config — komponent | `frontend/vitest.config.ts` (`environment: "jsdom"`, `include: ["src/**/*.test.tsx"]`, alias `@` → `./src`) |
+| Config — global setup | `frontend/vitest.setup.ts` (`@testing-library/jest-dom/vitest` + `afterEach(cleanup)`) — ⛔ **`matchMedia` stubi bu yerga QO'YILMAYDI** (sabab: Wave 0 bo'shliqlari) |
+| Config — skript darvozalari | Config **yo'q va kerak emas** — `node --test scripts/*.test.mjs` fayl nomidan ishlaydi |
+| Tez buyruq (task commit) | `npm run gate:fast` → `npm run test:fast && npm --prefix frontend test` |
+| Frontend-only tez buyruq | `npm --prefix frontend test` → `node --test scripts/*.test.mjs && vitest run` |
+| To'liq to'plam (faza darvozasi) | `npm run gate` (sim:up → backend lint/test → cv → bot → i18n:check → frontend test/typecheck/lint/build) |
+| **Taxminiy vaqt — `gate:fast`** | **155 s / 152 s** [O'LCHANDI: 08-20, tinch xost, ikkala o'lchov exit 0] · byudjet **200 s** · zaxira **45 s (23 %)** |
+| **Taxminiy vaqt — `gate`** | **1909 s / 1842 s** [O'LCHANDI: 08-20] · byudjet **2300 s** · zaxira **391 s (17 %)** |
+| Bugungi hajm | vitest ~**1110** test (94 fayl) · `scripts/` **18** fayl |
+| ⚠ Kutilayotgan o'sish | vitest **+~55** test · **+4** skript fayli (sof matn skani) → **~40–60 s** (SPEC §16.7). ⛔ `gate:fast` zaxirasi **45 s** — taxmin bilan deyarli teng, §A3 ga qarang |
+
+⛔ **Zanjir boshida majburiy nazorat:** `npm ci --prefix frontend` mavjudligi tekshirilsin.
+[MEROS: STATE.md `deferred-items.md` №13] — 8-fazada `frontend/node_modules` **bo'sh** edi va
+nosozlik faqat **29-daqiqada** ko'rindi.
+
+### Sampling Rate
+
+| Daraja | Buyruq | Nima kafolatlaydi | Byudjet |
+|--------|--------|--------------------|---------|
+| **Har task commit** | `npm run gate:fast` | Frontend'ning **butun** to'plami (skript darvozalari + vitest) + backend unit — ya'ni 9-fazada bu **to'liq qamrov** | **200 s** |
+| **Har to'lqin (wave) merge** | `npm --prefix frontend test` + `npm --prefix frontend run i18n:check` + `npm --prefix frontend run typecheck` | Kalit-parity, ICU-parity, transliteratsiya drifti va tip xatolari to'lqin ichida qolsin | ~180 s |
+| **Wave 1 dan keyin qo'shimcha** | `npm --prefix frontend run build` | ⛔ Tema qatlami `layout.tsx` + `<head>` skriptiga tegadi — SSG marshrutlari (3 locale × ~27 sahifa) **build paytida** yiqilishi mumkin va uni `vitest` ko'rmaydi | ~120 s |
+| **`/gsd-verify-work` dan oldin** | `npm run gate` — ⛔ **to'liq yashil** | Faza darvozasi | **2300 s** |
+| **Faza yopilishida** | `gate` va `gate:fast` ni **qayta o'lchash** (05-15 W0-13 protokoli: tinch xost, uch o'lchov, eng yomon × 1,20, sabab yozilgan) | §A3 — zaxira 45 s va o'sish taxmini 40–60 s | — |
+
+⛔ **9-fazada `npm run test:tenancy` va `cv:test`/`bot:test` alohida chaqirilmaydi** — faza
+`frontend/` dan tashqariga chiqmaydi. Ular `gate` zanjirida qoladi (regressiya nazorati sifatida),
+lekin to'lqin darajasida **namuna olinmaydi**: ular bu fazaning kodini umuman qamramaydi.
+
+### Mezon → O'lchov xaritasi
+
+⛔ Oxirgi ustun — bu fazaning **eng katta test-yozish xavfi** (§Tuzoq 1). U har qatorda
+**nomma-nom** yozilgan, chunki uni unutish testni «yashil, lekin hech nimani o'lchamaydigan»
+holga keltiradi.
+
+| Mezon / Darvoza | O'lchanadigan xulq | Turi | Avtomatik buyruq | ⛔ jsdom cheklovi qanday hisobga olinadi |
+|-----------------|--------------------|------|-------------------|------------------------------------------|
+| **SC#1** (xoreografiya ishlaydi) | 1–5-qadamning ulanish nuqtalari DOM'da; 6-qadam **tegilmagan** | komponent | `npx vitest run src/components/collect/` | `Element.animate` **yo'q** → animatsiya **CSS sinf/`@keyframes`** bilan; test **sinf qo'shilganini** o'lchaydi, harakatni emas |
+| **SC#1** / ⛔ **G-motion-2** (≤150ms, bloklamaydi) | (a) 150ms da input `activeElement` + `value===""` + `disabled===false` + `readOnly===false`; (b) 150ms da yozilgan belgi **to'liq** turadi; (c) klon `pointer-events==="none"` + `aria-hidden==="true"`; (d) `setTimeout` ichida `set[A-Z]` **0** (AST); (e) xoreografiya istisno otsa ham qator+fokus joyida | komponent + AST | `npx vitest run src/components/collect/success-choreography.test.tsx src/components/collect/collect-session.test.tsx` | ⛔ **(b) uchun `vi.useFakeTimers({ shouldAdvanceTime: true })`** — `userEvent` soxta taymer bilan aks holda osiladi [naqsh: `discovery-panel.test.tsx:245`]. ⛔ **(c) `el.style.pointerEvents` (inline)** — sinfdan `getComputedStyle` **`"auto"`** qaytaradi [O'LCHANDI]. ⛔ FLIP masofasi testda **0** (`getBoundingClientRect`) — bo'lish qilinmaydi |
+| **SC#2** (dashboard jonlanishi) | Skeleton → stagger → count-up → sparkline/donut; `null` qiymatda count-up **boshlanmaydi** | komponent | `npx vitest run src/components/dashboard/ src/components/headline/` | ⛔ `requestAnimationFrame` **mavjud** va `useFakeTimers` uni **patch qiladi** [O'LCHANDI] → `advanceTimersByTime` bilan oxirgi kadr deterministik; `vi.advanceTimersToNextFrame()` ham mavjud |
+| **SC#3** / ⛔ **G-motion-4** (tema token-scope) | (a) `className`/`cn(` ichida `dark:` **0**; (b) `@theme inline` **0**; (c) `[data-theme="dark"]` va `["sun"]` token to'plamlari **teng** va `--color-*-text` oilasi **ikkalasida ham**; (d) `data-theme` reyestri **aynan 3** + `theme.*` uchala locale'da; (e) `suppressHydrationWarning` + `<head>` skripti **bor** | skript (matn skani) | `node --test scripts/theme-tokens.test.mjs` | ⛔ jsdom **umuman ishtirok etmaydi** — sof fayl skani. ⛔ (a) `grep "dark:"` **2 yolg'on-ijobiy** beradi [O'LCHANDI: `capture-cell.tsx:106`, `api-types.ts:1400`] → skan `className=`/`cn(` argumentlari bilan **chegaralanadi** |
+| **SC#3** / ⛔ **G-motion-5** (kontrast) | (a) `oklch()` **parse**; (b) ≥12 juftlik × 3 tema (matn ≥4.5, chegara ≥3.0); (c) izohdagi `N.NN:1` ↔ hisoblangan **±0.01**, ≥4 da'vo; (d) `bg-accent` + `text-accent-text` bir `className` da **0** | skript (CSS parse + matematika) | `node --test scripts/contrast.test.mjs` | ⛔ jsdom ishtirok etmaydi. ⛔ **Gamut siyosati e'lon qilinadi** (gamma fazoda kesish) — usiz ikki implementatsiya ikki xil son beradi [O'LCHANDI: `--color-accent` gamutdan tashqarida]. ⛔ (c) izohlari kalkulyator `--print` chiqishidan **generatsiya** qilinadi (§Tuzoq 2) |
+| **SC#4** / ⛔ **G-motion-1** (reduced-motion) | (a) `globals.css` da `@media (prefers-reduced-motion: reduce)` bloki bor va `animation-duration` **va** `transition-duration` ni `!important` bilan ≤0.01ms qiladi (**parse**, grep emas); (b) `animate-*` ↔ `motion-reduce:` juftligi, qamrov `components/**` dan hosila, chegara **≥5**; (c) reduced mock'da klon **yaratilmaydi** (`document.body` bolalari o'zgarmaydi), halqa yo'q, **LEKIN** to'lov qatori bor va fokus inputda; (d) `confetti`/`burst`/`particle` ta'rifi **0** | skript + komponent | `node --test scripts/motion-tokens.test.mjs` && `npx vitest run src/components/collect/success-choreography.test.tsx` | ⛔ **(c) `vi.stubGlobal("matchMedia", …)` MAJBURIY** — jsdom'da `window.matchMedia` **`undefined`** [O'LCHANDI], ya'ni stubsiz `TypeError`. ⛔ Stub **har testda alohida**, `vitest.setup.ts` da **emas**: global bo'lsa teskari shox (reduced **o'chirilgan**) hech qachon o'lchanmasdi. ⛔ Komponent tomonda guard majburiy (`typeof window.matchMedia !== "function"`) |
+| **SC#5** / ⛔ **G-motion-3** (GPU + byudjet) | (a) har `@keyframes` xossalari **to'plam tengligi** bilan ruxsat etilgan to'plamda; `width/height/top/left/margin*/padding*` — har biri **0**; chegara **≥6 blok**; (b) `components/**` da `duration-<raqam>` **0**, `transition-[` va inline `animation:` **0**; (c) `@keyframes` **faqat** `globals.css` da; (d) `dependencies` **to'plam tengligi** | skript (CSS/JSON skani) | `node --test scripts/motion-tokens.test.mjs` | ⛔ jsdom ishtirok etmaydi. ⛔⛔ **(d) SON bilan yozilmasin** — bugungi holat **18 paket**, SPEC 20 deydi [O'LCHANDI] → `length === 20` **birinchi kuni qizil**; `deepEqual(actual, EXPECTED_18_NAMES)` esa paket **almashtirilganda** ham ushlaydi |
+| **Chegara** / ⛔ **G-motion-6** (ko'r deklaratsiya) | (a) mavjud `BLIND_DECLARATION_TOKENS` va `MIN_*` **o'zgarmaydi**; (b) `cashier` sessiyasida tushum kartasi DOM'da **yo'q** **va** so'rov **0** chaqiruv; `director` da **bor**; (c) `components/dashboard/**` da `hasPermission(` **0**; (d) bayram copy'si (`Ajoyib`/`Zo'r`/`Tabrik`/`Отлично`/`Поздравля`) **0**, uchala locale, chegara ≥5 token; (e) `components/collect/**` da `confetti`/`burst`/`particle` **0** | skript + komponent | `node --test scripts/collect-surface.test.mjs` (⛔ **MAVJUD, O'ZGARMAYDI**) && `npx vitest run "src/app/[locale]/(app)/dashboard"` | ⛔ **(b) ikki qatlam MAJBURIY**: `hidden` bilan yashirilgan karta so'rovni **baribir** yuborardi va summa tarmoq panelida ko'rinardi. So'rov qatlami `apiFetch` mock'ining **chaqiruvlar soni** bilan o'lchanadi [naqsh: `payment-bar.test.tsx`]. ⚠ Sessiya `setSession()`/`clearSession()` bilan quriladi |
+| **L-9** / ⛔ **G-motion-7** (CLS + Display-XL) | (a) `text-display` **≤2** mahsulot faylida va reyestrga **teng**; (b) `headline-card` da **shartli** — `unit==="soum"` da bor, `"count"` da **yo'q**, ikkalasi **bitta testda**; (c) `isPending` shoxidagi `Skeleton` ning `h-N` kontent qator qutisiga **teng** (reyestr **jadvaldan** o'qiladi); (d) `text-base ≤7`, `text-xl ≤4`, `text-3xl 0`, `text-[ 0`; (e) `font-medium ≤21` | skript + komponent | `node --test scripts/typography.test.mjs` && `npx vitest run src/components/headline/` | ⛔ (c) **sinf satri** ustida o'lchanadi (`className` ni o'qish), hisoblangan balandlik ustida **emas** — jsdom layout **qilmaydi** (`getBoundingClientRect` **0**). ⛔ Bu **CLS ning yagona mexanik proksisi**; haqiqiy CLS — HUMAN-UAT |
+| **FOUND-04** (3 til) | 11 yangi kalit uchala locale'da; ICU argumentlari teng; transliteratsiya drifti yo'q | skript | `npm --prefix frontend run i18n:check` (⛔ **MAVJUD, O'ZGARMAYDI**) | jsdom ishtirok etmaydi. ⚠ `gen-cyrillic.test.mjs` `[A-Za-z]+[0-9]` naqshini **taqiqlaydi** — yangi copy shuni hisobga olsin |
+
+⛔ **Sabotaj majburiyati (SPEC §16.3, MEROS 08-20 S-5):** yuqoridagi **har** darvoza uchun reja
+sabotaj o'lchovini yozadi va **ikki** natijani qayd etadi: (a) nishon test **qizardi**, (b) qo'shni
+testlar **yashil qoldi**. ⛔ Sabotaj modulni **import qilinadigan** holda qoldirishi shart — aks
+holda u mezonni emas, **yig'ilishni** o'lchaydi.
+
+### `human_only_verifications` (09-VALIDATION.md frontmatter'i uchun)
+
+⛔ To'rtala kalit har bandda to'ldirilgan — `check-validation-signoff.mjs` qoida (3) shuni talab
+qiladi. «Avtomatlashtirib bo'lmaydi» da'vosi **hech qachon bepul emas**: u ism va shart talab qiladi.
+
+⛔⛔ **QIYMATLAR BIR QATORDA — va bu uslub emas, MEXANIKA [O'LCHANDI].**
+`scripts/check-validation-signoff.mjs` ataylab **tor YAML qism to'plamini** o'qiydi
+(`parseFrontmatter`/`parseList`, `node:` dan boshqa bog'liqlik yo'q). Uning yagona qabul
+qiladigan shakli — `key: value` **bitta qatorda**. ⛔ Agar qiymat `>-` (folded) yoki `|`
+(literal) bilan yozilsa, parser `PAIR_RE` orqali qiymatni **literal `">-"`** deb o'qiydi,
+davomi qatorlarni esa **tashlab yuboradi** — va `filled(">-")` **`true`** qaytaradi.
+Ya'ni darvoza **yashil** bo'ladi, sabab matni esa `">-"` — bu aynan loyiha kurashadigan
+**bo'sh-yashil** sinfi. `08-VALIDATION.md` ham shu sababdan uzun bir qatorli qiymatlardan
+foydalanadi.
+
+```yaml
+human_only_verifications:
+  - item: 60fps arzon Android qurilmada — 6-qadam xoreografiya va dashboard stagger jank bermaydi (ROADMAP SC#5)
+    why_not_automatable: jsdom layout ham, kompozitsiya ham QILMAYDI — `getBoundingClientRect()` nol qaytaradi, `Element.animate` va `document.getAnimations()` UMUMAN yo'q [O'LCHANDI: jsdom 30.0.1 + vitest 4.1.10]. Ya'ni «kadr tushdimi?» savoliga test qatlamida javob beradigan sirt YO'Q. Mexanik proksi G-motion-3(a) — u `@keyframes` xossalari to'plamini `transform`/`opacity` bilan qulflaydi va `width`/`height`/`top`/`left` ni nolga tushiradi, ya'ni layout-thrash SABABINI yo'q qiladi. Lekin sabab yo'qligi natija borligini isbotlamaydi: to'g'ri xossalar bilan ham juda ko'p bir vaqtli animatsiya arzon GPU'ni to'ldiradi. Bu — o'lchov, kod emas
+    owner: Ijrochi (dala qurilmasi bilan)
+    trigger: Wave 3 yakuni — 09-HUMAN-UAT.md #1; natija KADR/SONIYA raqami bilan yoziladi
+  - item: Lighthouse Performance >= 90 va CLS < 0.05 (arzon Android profili, ROADMAP SC#5)
+    why_not_automatable: Lighthouse CI'da YO'Q va bu fazada QO'SHILMAYDI (09-UI-SPEC §16.6, [QAROR]) — u headless Chrome + yangi ishlab chiqish bog'liqligini talab qiladi va `gate` byudjetiga daqiqalar qo'shardi. Bundan ham muhimi: mexanik qatlamning yashilligi bilan o'lchov qatlamining yo'qligini yopish TAQIQLANADI [MEROS: D-01, FOUND-07 va AI-02 darsi]. CLS uchun mexanik proksi bor va u TOR: G-motion-7(c) skeleton `h-N` sinfini kontent qator qutisiga tenglaydi — bu CLS ning AYNAN sababi [M-25: bugun 8–12px farq], lekin YAGONA sababi emas (shrift yuklanishi, kech kelgan karta va rasm ham siljitadi)
+    owner: Ijrochi
+    trigger: Wave 3 yakuni — 09-HUMAN-UAT.md #2; ⛔ natija SON bilan yopiladi, «ko'rinishi yaxshi» bilan EMAS
+  - item: Iliq fon (rang 2.0), tungi va quyosh rejimlarining VIZUAL idroki — uch rol, real ekranlarda
+    why_not_automatable: G-motion-5 kontrast NISBATINI o'lchaydi va u matematik jihatdan to'liq (12+ juftlik × 3 tema, izohlar ±0.01 da qulflangan). O'lchanMAGANI — o'sha nisbatlarning ODAM KO'ZIDA ishlashi: `text-muted` iliq fonda 5.06:1 (AA dan o'tadi), lekin ierarxiya hamon o'qiladimi; dark rejimda `border-ui` 3.57:1 chegarani ushlaydi, lekin karta konturi quyuq fonda KO'RINADIMI; quyosh rejimida soya `none` qilingandan keyin karta yuzadan AJRALADIMI. Bu lug'at emas, IDROK savoli va u ekran yorqinligiga, burchagiga va foydalanuvchi yoshiga bog'liq — kassir ochiq havoda, direktor ofisda ishlaydi
+    owner: Mahsulot egasi (kassir va direktor bilan)
+    trigger: Pilot tayyorgarligi haftasi — 09-HUMAN-UAT.md #3
+  - item: "Bayram BLOKLAMAGANINING dala tasdig'i: kassir 20 ketma-ket to'lov yozadi va bironta rasta kodi yo'qolmaydi"
+    why_not_automatable: G-motion-2 buni SINTETIK ravishda o'lchaydi va o'lchovi halol — 150ms nuqtasida `userEvent.type` bilan yozilgan belgi input qiymatida to'liq turadi. Lekin u BITTA to'lovni, BITTA soxta taymer bilan, jsdom'da o'lchaydi. Dala sharoiti boshqacha: navbat turadi, kassir kodni YODDAN teradi, telefon issiq, tarmoq sekin va xoreografiya HAR to'lovda qayta ishga tushadi. Nosozlik shakli ham boshqacha — u «input bloklandi» emas, «kassir ikkilanib to'xtadi» bo'lib ko'rinadi va uni faqat kuzatish ko'radi. Bu fazaning eng qimmat nuqsoni aynan shu (09-UI-SPEC §1.2) va u sintetik testdan qochib qutula oladi
+    owner: Mahsulot egasi (kassir bilan)
+    trigger: Pilot tayyorgarligi haftasi — 09-HUMAN-UAT.md #4
+  - item: Vestibulyar sezgir foydalanuvchi tasdig'i — OS darajasida reduced-motion yoqilganda ilova to'liq harakatsiz
+    why_not_automatable: G-motion-1 `matchMedia` MOCK'i bilan o'lchaydi, ya'ni u «kod shoxi to'g'rimi?» degan savolga javob beradi. O'lchanMAGANI — brauzerning HAQIQIY `prefers-reduced-motion` signali bilan CSS `@media` blokining birgalikda ishlashi va uchinchi tomon xulqi (Radix dialog, `sonner` toast) o'sha rejimda TINCH qolishi. jsdom'da CSS umuman yuklanmaydi [O'LCHANDI: Tailwind sinfidan `getComputedStyle` «auto» qaytaradi], ya'ni `@media` blokining kuchga kirishi test qatlamida PRINSIPIAL ravishda ko'rinmaydi
+    owner: Ijrochi (OS sozlamasi yoqilgan holda)
+    trigger: Wave 3 yakuni — 09-HUMAN-UAT.md #5
+```
+
+### `automated_replacements` (09-VALIDATION.md frontmatter'i uchun)
+
+⛔ Qoida (4): har bandda `was` va **ishlaydigan** `now` buyrug'i. ⛔ Bu yerda ham qiymatlar
+**bir qatorda** — sabab yuqorida.
+
+```yaml
+automated_replacements:
+  - was: Brauzerda tugmani bosib «animatsiya ishladimi?» deb ko'z bilan qarash
+    now: "npx vitest run src/components/collect/success-choreography.test.tsx — klonning `pointer-events` INLINE qiymati «none», `aria-hidden` «true», 150ms nuqtasida input `activeElement` va yozilgan belgi to'liq turadi. ⛔ Sinf nomi YETARLI EMAS: jsdom Tailwind CSS ni yuklamaydi va `pointer-events-none` sinfidan `getComputedStyle` «auto» qaytaradi [O'LCHANDI]"
+  - was: Tema tugmasini bosib uchala rejimni ko'z bilan aylantirib chiqish
+    now: "node --test scripts/theme-tokens.test.mjs — `[data-theme=dark]` va `[data-theme=sun]` bloklaridagi o'zgaruvchi to'plamlari TENG va `--color-*-text` oilasi ikkalasida ham bor (M-18 ning besh AA buzilishi AYNAN shu tenglik bilan ushlanadi); `@theme inline` 0 marta; `dark:` varianti `className`/`cn(` argumentlari ichida 0 marta"
+  - was: DevTools da rangni tanlab kontrast nisbatini qo'lda tekshirish
+    now: "node --test scripts/contrast.test.mjs — `globals.css` dan `oklch()` qiymatlari PARSE qilinadi va WCAG 2.x nisbati hisoblanadi (12+ juftlik × 3 tema); izohdagi har `N.NN:1` da'vosi hisoblangan qiymat bilan ±0.01 da solishtiriladi. ⛔ Bog'liqlik YO'Q — ~30 qatorlik sof matematika, u 09-UI-SPEC ning 15 da'vosidan 13 tasini AYNAN takrorladi"
+  - was: "`prefers-reduced-motion` ni OS da yoqib, sahifani qo'lda aylanib chiqish"
+    now: "node --test scripts/motion-tokens.test.mjs — global `@media` bloki PARSE qilinadi (grep emas) va `animation-duration` HAM, `transition-duration` HAM `!important` bilan <=0.01ms ekani tekshiriladi; `animate-*` va `motion-reduce:` juftligi qamrovdan HOSILA. Klon shoxi esa `vi.stubGlobal(matchMedia, ...)` bilan komponent testida"
+  - was: Kassir hisobi bilan kirib dashboard'da tushum kartasi ko'rinmasligini ko'z bilan tekshirish
+    now: "npx vitest run src/app --dir src/app — `cashier` sessiyasida tushum kartasi DOM'da YO'Q VA `apiFetch` mock'ining chaqiruvlar soni 0; `director` sessiyasida BOR. ⛔ Ikki qatlam ataylab: `hidden` bilan yashirilgan karta so'rovni baribir yuborardi va summa tarmoq panelida ko'rinardi"
+  - was: Yangi og'ir paket qo'shilmaganini `package.json` ga qarab eslab qolish
+    now: "node --test scripts/motion-tokens.test.mjs — `dependencies` kalitlari TO'PLAM TENGLIGI bilan 18 ta nomdan iborat reyestrga solishtiriladi. ⛔ SON bilan emas: `length === N` shakli paket almashtirilganda (biri chiqib, biri kirganda) yolg'on yashil qolardi"
+  - was: Skeleton kontentga almashganda karta «sakraydimi?» deb ko'z bilan kuzatish
+    now: "node --test scripts/typography.test.mjs && npx vitest run src/components/headline/ — `isPending` shoxidagi `Skeleton` ning `h-N` sinfi kontent shoxining qator qutisiga TENG (reyestr jadvaldan o'qiladi, testda qayta yozilmaydi); `text-display` <=2 mahsulot faylida va `headline-card` da `unit === soum` shartiga bog'liq"
+```
+
+### Nyquist xulosasi
+
+| Savol | Javob |
+|-------|-------|
+| Har mezon uchun avtomatik buyruq bormi | ⛔ **Ha** — 5 ta SC va 7 ta `G-motion-*` ning har biri yuqoridagi xaritada buyruq bilan |
+| Namuna olish tezligi nuqsonni qanchada ushlaydi | **Bir task commit** — `gate:fast` frontend'ning **butun** to'plamini yugurtiradi, ya'ni 9-fazada namuna **to'liq qamrov** bilan teng |
+| Qo'lda qolgan bandlar egasi va tetigi bilanmi | ⛔ **Ha** — 5 band, har birida `why_not_automatable` + `owner` + `trigger` |
+| `nyquist_compliant` qachon `true` bo'ladi | ⛔ Wave 0 dagi **7** ta test fayli tug'ilgach va 5 ta qo'lda band `09-HUMAN-UAT.md` ga **ko'chirilgach**. ⛔ Undan **oldin** `false` |
+
+---
+
 ## Xavfsizlik domeni
 
 `security_enforcement: true`, `security_asvs_level: 1`.
