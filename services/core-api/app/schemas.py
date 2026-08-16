@@ -4555,3 +4555,29 @@ class AnomalyArchiveResponse(BaseModel):
     unregistered_count: int
     row_count: int
     shown_count: int
+
+
+class LedgerImportResponse(BaseModel):
+    """`POST /reports/compare/ledger?day=` — kunlik daftar importining natijasi (D-17).
+
+    ⛔⛔ MAYDONLAR TO'PLAMI KLIENT KONTRAKTIDAN: `api-types.ts::
+        ledgerImportResultSchema` — `z.strictObject({day, rows, replaced})`.
+        `strictObject` ORTIQCHA maydonni ham RAD ETADI, ya'ni bu yerga
+        «qulaylik uchun» qo'shilgan to'rtinchi maydon klientda import
+        muvaffaqiyatli bo'lgan holatda ham XATO bo'lib ko'rinardi.
+
+    ⛔ `replaced` — MANTIQIY (`bool`), SANOQ EMAS. Ekranda javob bitta
+       savolga kerak: «shu kun uchun daftar ALMASHTIRILDIMI?» (§14.8 dagi
+       tasdiq dialogining natijasi). Almashtirilgan qatorlarning SONI
+       auditga yoziladi — u yerda savol boshqa: «nima o'zgardi?».
+
+    ⚠ `rows` — YOZILGAN qatorlar soni, fayldagi qatorlar soni EMAS.
+      Bugungi kunda ular teng (validator xato bo'lsa HECH NARSA
+      yozilmaydi), lekin nom YOZILGANNI aytadi va u shunday qoladi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    rows: int
+    replaced: bool

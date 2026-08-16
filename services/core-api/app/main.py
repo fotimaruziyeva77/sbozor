@@ -474,18 +474,27 @@ app.include_router(reconciliation_router, prefix=f"{API_V1_PREFIX}/reconciliatio
 #    `/anomalies` — sabab `reports.py` modul docstringining 2-bandida
 #    LITERAL yozilgan.
 #
-# ⛔ YOZUV MARSHRUTI YO'Q: bu prefiksda `POST`/`PATCH`/`DELETE` UMUMAN
-#    yozilmagan. Hisobot HOSILA (D-03) — uni «tuzatish» mumkin bo'lsa
-#    u ikkinchi haqiqat manbaiga aylanardi. Yopiq to'plam
-#    `test_route_coverage.py::test_the_reports_surface_is_exactly_three_routes`
-#    bilan qulflangan.
+# ⛔ HISOBOTNI «TUZATADIGAN» MARSHRUT YO'Q: bu prefiksda `PATCH` ham,
+#    `DELETE` ham UMUMAN yozilmagan. Hisobot HOSILA (D-03) — uni
+#    tahrirlash mumkin bo'lsa u ikkinchi haqiqat manbaiga aylanardi.
+#
+# ⛔⛔ YAGONA `POST` — DAFTAR IMPORTI (`/compare/ledger`, 08-14) VA U
+#     O'SHA TAQIQ OSTIGA TUSHMAYDI: daftar hisobot EMAS, u tizimda
+#     UMUMAN YO'Q — tashqi qog'ozdan keladigan UCHINCHI manba (D-17).
+#     Ya'ni bu marshrut KIRISH yo'li, hosilaning tahriri emas. Yopiq
+#     to'plam (yo'llar VA metodlar) `test_route_coverage.py::
+#     test_the_reports_surface_is_exactly_eight_routes` bilan qulflangan
+#     va son test NOMIDA turadi.
 #
 # ⚠ Yangi yo'l parametri YO'Q, ya'ni `PARAM_FILLERS` TEGILMAYDI va
-#   marshrutlar cross-tenant matritsasiga O'ZI tushadi. `from`/`to`
-#   majburiy query parametrlari tufayli matritsa ularni 422 bilan
-#   chaqiradi — bu `GET /reconciliation/hit-rate` ning AYNAN xulqi va u
-#   ham `QUERY_PARAM_ROUTES` da YO'Q (sabab `test_reports_api.py` ning
-#   tenant testi docstringida).
+#   marshrutlar cross-tenant matritsasiga O'ZI tushadi. Yetti `GET` da
+#   `from`/`to` majburiy query parametrlari tufayli matritsa ularni 422
+#   bilan chaqiradi — bu `GET /reconciliation/hit-rate` ning AYNAN xulqi
+#   va ular `QUERY_PARAM_ROUTES` da YO'Q (sabab `test_reports_api.py`
+#   ning tenant testi docstringida). Daftar importi esa `POST`, ya'ni u
+#   `BODY_ROUTES` ga tushadi va SHU SABABDAN istisnoda — sabab
+#   `test_route_coverage.py::
+#   test_only_the_ledger_import_needs_a_query_param_exemption` da.
 app.include_router(reports_router, prefix=f"{API_V1_PREFIX}/reports")
 
 
