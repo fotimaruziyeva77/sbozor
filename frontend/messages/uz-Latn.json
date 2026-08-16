@@ -522,7 +522,15 @@
     "dayStateNoBilling": "bugun hisob yozilmaydi",
     "marketDraftNotice": "Bozor qoralama holatda — patta hisoblanmaydi va katak ranglari chizilmaydi.",
     "marketClosedNotice": "Bugun bozor yopiq — patta hisoblanmaydi.",
-    "dayLayerError": "To'lov holatini yuklab bo'lmadi — xarita rasta reestri ko'rinishida qoldi."
+    "dayLayerError": "To'lov holatini yuklab bo'lmadi — xarita rasta reestri ko'rinishida qoldi.",
+    "dayStatusTitle": "Bugungi holat",
+    "dayStatusState": "Holat",
+    "dayStatusAmount": "Bugungi patta",
+    "dayStatusPaid": "Bugun to'langan",
+    "dayStatusRemaining": "Qolgan qarz",
+    "dayStatusCaseDate": "Nomuvofiqlik sanasi",
+    "dayReasonMarketClosed": "Bugun bozor yopiq",
+    "dayReasonTariffMissing": "Tarif belgilanmagan"
   },
   "wizard": {
     "title": "Yangi bozor",

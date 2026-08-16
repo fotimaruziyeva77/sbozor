@@ -84,6 +84,7 @@ MAP_ROW_KEYS = frozenset(
         "amount_soum",
         "unavailable_reason",
         "paid_soum",
+        "remaining_soum",
         "open_case_id",
         "open_case_service_date",
     }
@@ -360,6 +361,9 @@ async def test_a_fully_paid_stall_is_blue(
     assert row["amount_soum"] == TARIFF_SOUM
     assert row["paid_soum"] == TARIFF_SOUM
     assert row["unavailable_reason"] is None
+    # ⛔ QOLDIQ SERVERDA AYIRILADI (D-20) va katakning rangi AYNI shu
+    #   songa qaraydi — klientdagi ikkinchi ayirish taqiqlanadi.
+    assert row["remaining_soum"] == 0
 
 
 async def test_an_unpaid_stall_is_red(
@@ -417,6 +421,7 @@ async def test_a_partially_paid_stall_stays_red(
     assert row["state"] == "due", row
     assert row["paid_soum"] == PARTIAL_SOUM
     assert row["amount_soum"] == TARIFF_SOUM
+    assert row["remaining_soum"] == TARIFF_SOUM - PARTIAL_SOUM
 
 
 async def test_a_stall_without_a_vendor_is_green(
@@ -462,6 +467,9 @@ async def test_a_closed_day_paints_nothing(
         assert row["state"] == "no_billing", (stall_id, row)
         assert row["unavailable_reason"] == "market_closed", (stall_id, row)
         assert row["amount_soum"] is None, (stall_id, row)
+        # ⛔ NOL EMAS, `null`: hisob yo'q kunda «qolgan qarz» MA'NOSIZ va
+        #   nol uni «to'liq to'langan» bilan bir xil ko'rsatardi.
+        assert row["remaining_soum"] is None, (stall_id, row)
 
 
 async def test_a_stall_without_a_tariff_paints_nothing(
@@ -671,6 +679,7 @@ async def test_a_reversed_payment_falls_back_to_red(
         "belgili yig'indi nolga tushishi SHART — aks holda storno jimgina "
         "e'tiborsiz qolardi va xarita to'lanmagan rastani ko'k ko'rsatardi"
     )
+    assert row["remaining_soum"] == TARIFF_SOUM
 
 
 # ===========================================================================

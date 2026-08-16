@@ -361,6 +361,7 @@ async def billing_map_day(
                 amount_soum=row.amount_soum,
                 unavailable_reason=row.unavailable_reason,  # type: ignore[arg-type]
                 paid_soum=row.paid_soum,
+                remaining_soum=row.remaining_soum,
                 open_case_id=row.open_case_id,
                 open_case_service_date=row.open_case_service_date,
             )

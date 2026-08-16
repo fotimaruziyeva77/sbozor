@@ -446,6 +446,87 @@ async def test_map_groups_by_zone_in_code_order(
         assert "has_vendor" in cell
 
 
+@pytest.mark.parametrize("role", ["platform_admin", "director", "market_admin"])
+async def test_every_role_that_sees_the_map_can_open_a_stall_card(
+    api_client: httpx.AsyncClient,
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+    role: str,
+) -> None:
+    """⛔ XARITANI KO'RADIGAN UCHALA ROL RASTA KARTASINI HAM OCHA OLADI (D-09).
+
+    =======================================================================
+    ⛔⛔ NEGA BU DA'VO ALOHIDA VA NEGA U KLIENTDA EMAS.
+
+    Xarita `MARKET_DATA_VIEW` ostida (`GET /stalls/map`), rasta kartasi
+    esa uning USTIGA `VENDOR_VIEW` ni ham talab qiladi (modul
+    docstringi, D-09). Ya'ni ikki huquq AJRALIB KETSA xarita ochiladi,
+    katak bosiladi va karta 403 bilan qaytadi — foydalanuvchi uchun bu
+    «bosildi, hech nima bo'lmadi» ko'rinishida bo'lardi.
+
+    Bu shox BUGUN yopiq (uchala rolda ikkala huquq ham bor), lekin u
+    HECH QAYERDA ROL BO'YICHA o'lchanmagan edi: `ROLE_PERMISSIONS` dan
+    `vendor_view` ni bittasidan olib tashlash birorta testni
+    qizartirmasdi.
+
+    ⛔ KLIENT DARVOZASI (`map/page.test.tsx`) BU SHOXNI KO'RA OLMAYDI:
+       u tarmoqni mock qiladi, ya'ni server huquqi umuman ishtirok
+       etmaydi. Shuning uchun da'vo AYNAN shu yerda yashaydi.
+    =======================================================================
+
+    ⚠ `platform_admin` uchun bozor MAJBURIY tanlanadi: uning a'zoligi bir
+      nechta va tokenda `mid` bo'lmasa javob huquqni emas, sessiyaning
+      bo'shligini o'lchagan bo'lardi (`admin_api.session_headers`).
+    """
+    market_a = two_markets.market_a
+    phone, password, market_id = {
+        "platform_admin": (two_markets.platform_admin_phone, SEED_PASSWORD, market_a.id),
+        "director": (market_a.director_phone, SEED_PASSWORD, None),
+        "market_admin": (market_a.admin_phone, market_a.admin_password, None),
+    }[role]
+    headers = await session_headers(api_client, phone, password, market_id=market_id)
+
+    stall_id = market_domain.market_a.stall_ids[0]
+    response = await api_client.get(f"{STALLS_URL}/{stall_id}", headers=headers)
+
+    assert response.status_code == 200, (
+        f"{role} xaritani ko'radi, lekin rasta kartasini OCHA OLMADI "
+        f"({response.status_code}): `market_data_view` va `vendor_view` "
+        f"ajralib ketgan — javob: {response.text}"
+    )
+    body = response.json()
+    assert body["id"] == str(stall_id)
+    # NAZORAT: karta AYNAN shaxsiy maydonlari bilan keladi — usiz da'vo
+    # `GET /stalls/map` bilan bir xil huquq yuzasini o'lchagan bo'lardi.
+    assert "vendor_name" in body
+    assert "phone" in body
+
+
+async def test_a_role_without_vendor_view_cannot_open_a_stall_card(
+    api_client: httpx.AsyncClient,
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+) -> None:
+    """SALBIY NAZORAT — `VENDOR_VIEW` siz rolda karta **403** (D-09).
+
+    Usiz yuqoridagi matritsa «har kim ocha oladi» degan holatda ham
+    yashil bo'lardi, ya'ni u huquqni emas, marshrutning MAVJUDLIGINI
+    o'lchardi.
+
+    ⚠ KASSIR TANLANDI, NAZORATCHI EMAS: `two_markets` seed'ida
+      `inspector` rolli foydalanuvchi YO'Q va uni shu test uchun yaratish
+      RBAC testlarining a'zolik sanog'ini jimgina o'zgartirardi
+      (`billing_domain` ning «Gotcha 22» qoidasi). Kassirda `vendor_view`
+      ATAYIN yo'q (C-10) va u da'voni to'liq ifodalaydi.
+    """
+    headers = await session_headers(api_client, two_markets.market_a.cashier_phone, SEED_PASSWORD)
+
+    stall_id = market_domain.market_a.stall_ids[0]
+    response = await api_client.get(f"{STALLS_URL}/{stall_id}", headers=headers)
+
+    assert response.status_code == 403, response.text
+
+
 async def test_director_cannot_manage_stalls(
     api_client: httpx.AsyncClient,
     market_domain: MarketDomainSeed,

@@ -522,7 +522,15 @@
     "dayStateNoBilling": "сегодня начисление не делается",
     "marketDraftNotice": "Рынок в черновике — сбор не начисляется, цвета ячеек не отображаются.",
     "marketClosedNotice": "Сегодня рынок закрыт — сбор не начисляется.",
-    "dayLayerError": "Не удалось загрузить статус оплаты — карта осталась в виде реестра мест."
+    "dayLayerError": "Не удалось загрузить статус оплаты — карта осталась в виде реестра мест.",
+    "dayStatusTitle": "Состояние на сегодня",
+    "dayStatusState": "Статус",
+    "dayStatusAmount": "Сегодняшний сбор",
+    "dayStatusPaid": "Оплачено сегодня",
+    "dayStatusRemaining": "Остаток долга",
+    "dayStatusCaseDate": "Дата расхождения",
+    "dayReasonMarketClosed": "Сегодня рынок закрыт",
+    "dayReasonTariffMissing": "Тариф не назначен"
   },
   "wizard": {
     "title": "Новый рынок",

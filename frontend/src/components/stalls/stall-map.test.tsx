@@ -24,8 +24,27 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { useCallback, useState } from "react";
-import type { ReactElement } from "react";
+import type { ComponentProps, ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+/*
+ * ⛔ `@/i18n/navigation` MOCK'I — `StallCardDialog` -> `EvidenceLink`
+ *    ZANJIRI TUFAYLI (quick 260816-75e).
+ *
+ * Karta dalil havolasini chizadi va u `Link` ni `@/i18n/navigation` dan
+ * oladi; `next-intl/navigation` -> `next/navigation` zanjiri esa vitest
+ * ESM ostida YECHILMAYDI. Mocksiz bu fayl «0 test» bilan yiqiladi —
+ * `forbidden-notice.tsx` da hujjatlashgan o'lchovning aynan o'zi.
+ */
+vi.mock("@/i18n/navigation", () => ({
+  Link: ({ children, href, ...rest }: ComponentProps<"a">) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/map",
+}));
 
 import messages from "../../../messages/uz-Latn.json";
 
@@ -133,6 +152,7 @@ type MockDayRow = {
   amount_soum: number | null;
   unavailable_reason: "market_closed" | "tariff_missing" | null;
   paid_soum: number;
+  remaining_soum: number | null;
   open_case_id: string | null;
   open_case_service_date: string | null;
 };
@@ -152,12 +172,14 @@ function dayRow(
   overrides: Partial<MockDayRow> = {},
 ): MockDayRow {
   const noBilling = state === "no_billing";
+  const paid = state === "paid" ? DAY_AMOUNT : 0;
   return {
     stall_id: stallId,
     state,
     amount_soum: noBilling ? null : DAY_AMOUNT,
     unavailable_reason: noBilling ? "tariff_missing" : null,
-    paid_soum: state === "paid" ? DAY_AMOUNT : 0,
+    paid_soum: paid,
+    remaining_soum: noBilling ? null : DAY_AMOUNT - paid,
     open_case_id: null,
     open_case_service_date: null,
     ...overrides,

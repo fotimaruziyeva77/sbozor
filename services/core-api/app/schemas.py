@@ -3185,6 +3185,14 @@ class MapDayStatusRow(BaseModel):
     unavailable_reason: AmountUnavailableReason | None
     paid_soum: int
     """Bugun shu rastaga tushgan BELGILI to'lov — ⛔ nol ham NATIJA."""
+    remaining_soum: int | None
+    """Bugun QOLGAN qarz — ⛔ SERVERDA ayirilgan (D-20).
+
+    Klient uni O'ZI hisoblay olardi (ikkala qo'shiluvchi ham javobda),
+    lekin o'shanda kartadagi son bilan katakning rangi IKKI BOSHQA
+    ayirishdan chiqardi va ular bir kun ajralib ketardi. Sabab to'liq
+    `billing_repo.MapDayStallStatus.remaining_soum` docstringida.
+    """
     open_case_id: UUID | None
     open_case_service_date: date | None
 
@@ -3193,11 +3201,19 @@ class MapDayStatusRow(BaseModel):
         """⛔ `StallDayMoney` NING JUFTLANGAN INVARIANTI — HTTP chegarasida ham.
 
             (amount_soum is None) == (unavailable_reason is not None)
+            (amount_soum is None) == (remaining_soum is None)
 
         `PendingStallResponse` dagi jufti bilan AYNAN bir xil shakl: ikki
         yo'nalish ikki ALOHIDA xabar bilan, chunki ular ikki boshqa server
         nosozligi.
         """
+        if (self.amount_soum is None) != (self.remaining_soum is None):
+            raise ValueError(
+                "SUMMA VA QOLDIQ AJRALDI: hisob yo'q kunda «qolgan qarz» "
+                "MA'NOSIZ va nol yozish uni «to'liq to'langan» bilan bir xil "
+                f"ko'rsatardi (amount_soum={self.amount_soum!r}, "
+                f"remaining_soum={self.remaining_soum!r})."
+            )
         if self.amount_soum is None and self.unavailable_reason is None:
             raise ValueError(
                 "SABABSIZ YO'Q SUMMA: `amount_soum` null, lekin sabab berilmagan. "

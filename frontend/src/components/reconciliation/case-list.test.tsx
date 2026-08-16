@@ -222,7 +222,22 @@ describe("⛔ B-6 (1): navbat 50 qatorda JIM QIRQILMAYDI", () => {
      *   boshqaruv MAVJUD BO'LMAGAN imkoniyatni e'lon qilardi.
      */
     expect(loadMoreButton()).toBeNull();
-  });
+    /*
+     * ⛔ ANIQ BYUDJET — VA U O'LCHOVDAN CHIQQAN (quick 260816-75e).
+     *
+     * Bu test IKKI marta render qiladi (50 qator, keyin 70) va YOLG'IZ
+     * yugurganda 4504 ms oladi — vitest'ning standart 5000 ms chegarasidan
+     * atigi ~10 % pastda. To'plamga ikkita yangi test FAYLI qo'shilgach
+     * (76 -> 78) parallel ishchilar orasidagi CPU raqobati uni chegaradan
+     * chiqarib yubordi: fayl YOLG'IZ yugurganda 12/12 yashil, to'plam
+     * ichida esa AYNAN shu test `Test timed out in 5000ms` beradi.
+     *
+     * ⚠ BU XULQ REGRESSIYASI EMAS va shuning uchun testning O'ZI
+     *   o'zgartirilmadi — faqat byudjeti o'lchovga MOSLANDI. Qiymat
+     *   `stall-map.test.tsx` ning 1000 katakli testlaridagi bilan bir xil
+     *   konvensiyada (`}, 30_000)`) yoziladi.
+     */
+  }, 20_000);
 
   test("⛔ SAHIFALAR KESISHMAYDI — ikkinchi sahifaning identifikatorlari birinchisida YO'Q", async () => {
     const { container } = await renderList();

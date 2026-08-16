@@ -522,7 +522,15 @@
     "dayStateNoBilling": "бугун ҳисоб ёзилмайди",
     "marketDraftNotice": "Бозор қоралама ҳолатда — патта ҳисобланмайди ва катак ранглари чизилмайди.",
     "marketClosedNotice": "Бугун бозор ёпиқ — патта ҳисобланмайди.",
-    "dayLayerError": "Тўлов ҳолатини юклаб бўлмади — харита раста реэстри кўринишида қолди."
+    "dayLayerError": "Тўлов ҳолатини юклаб бўлмади — харита раста реэстри кўринишида қолди.",
+    "dayStatusTitle": "Бугунги ҳолат",
+    "dayStatusState": "Ҳолат",
+    "dayStatusAmount": "Бугунги патта",
+    "dayStatusPaid": "Бугун тўланган",
+    "dayStatusRemaining": "Қолган қарз",
+    "dayStatusCaseDate": "Номувофиқлик санаси",
+    "dayReasonMarketClosed": "Бугун бозор ёпиқ",
+    "dayReasonTariffMissing": "Тариф белгиланмаган"
   },
   "wizard": {
     "title": "Янги бозор",

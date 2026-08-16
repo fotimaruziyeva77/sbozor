@@ -120,6 +120,20 @@ export const mapDayRowSchema = z.strictObject({
   unavailable_reason: z.enum(AMOUNT_UNAVAILABLE_REASONS).nullable(),
   /** Bugun shu rastaga tushgan BELGILI to'lov — nol ham NATIJA. */
   paid_soum: soumSchema,
+  /**
+   * Bugun QOLGAN qarz — ⛔ SERVERDA ayirilgan (D-20).
+   *
+   * Klient uni `amount_soum - paid_soum` bilan O'ZI hisoblay olardi va
+   * ⛔ AYNAN SHUNING UCHUN maydon bor: katakning rangini ham server AYNI
+   * shu songa qarab hal qiladi. Klientdagi ikkinchi ayirish bir kun
+   * serverdagisidan ajralib ketardi va o'shanda katak KO'K, karta esa
+   * «qoldi: 15 000» bo'lib ko'rinardi — ikkalasi ham «to'g'ri» holda.
+   *
+   * ⛔ `null` — AYNAN `amount_soum === null` bo'lganda: hisob yo'q kunda
+   *    «qolgan qarz» MA'NOSIZ va nol uni «to'liq to'langan» bilan bir xil
+   *    ko'rsatardi.
+   */
+  remaining_soum: soumSchema.nullable(),
   open_case_id: z.uuid().nullable(),
   /**
    * Ochiq case QAYSI KUNNIKI — ⛔ «bugun» DEB TAXMIN QILINMAYDI.

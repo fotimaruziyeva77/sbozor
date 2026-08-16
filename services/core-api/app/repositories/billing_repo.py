@@ -2105,6 +2105,25 @@ class MapDayStallStatus:
     amount_soum: int | None
     unavailable_reason: str | None
     paid_soum: int
+    remaining_soum: int | None
+    """Bugun QOLGAN qarz — ⛔ SERVERDA ayiriladi, klientda EMAS (D-20).
+
+    Ikkala qo'shiluvchi ham javobda bor, ya'ni klient uni O'ZI hisoblay
+    OLARDI — va aynan shuning uchun maydon mavjud: `_map_day_state()`
+    ham AYNI shu songa qaraydi (`remaining <= 0` -> `paid`). Klientdagi
+    ikkinchi ayirish bir kun serverdagisidan ajralib ketardi (masalan
+    tuzatishlar qo'shilganda) va o'shanda katak KO'K, karta esa
+    «qoldi: 15 000» bo'lib ko'rinardi — IKKALASI HAM «to'g'ri» holda.
+    Bu 05-14 da qulflangan qoidaning aynan o'zi (foiz klientda
+    hisoblanmaydi).
+
+    ⛔ `None` — AYNAN `amount_soum is None` bo'lganda: hisob yo'q kunda
+       «qolgan qarz» tushunchasi MA'NOSIZ va nol yozish uni «to'liq
+       to'langan» bilan bir xil ko'rsatardi.
+
+    ⚠ MANFIY QIYMAT RUXSAT ETILADI (avans, OQ-4/A4) va kattalikka
+      AYLANTIRILMAYDI — ortiqcha to'lov yo'qolmasligi kerak.
+    """
     open_case_id: UUID | None
     open_case_service_date: date | None
 
@@ -2132,7 +2151,7 @@ def _map_day_state(
     has_open_case: bool,
     amount_soum: int | None,
     vendor_id: UUID | None,
-    paid_soum: int,
+    remaining_soum: int | None,
 ) -> MapDayState:
     """D-C2 JADVALI — ⛔ BITTA SOF FUNKSIYA, BITTA TARTIB.
 
@@ -2141,7 +2160,7 @@ def _map_day_state(
         | 1 | rastada ochiq case bor         | `mismatch`   | sariq      |
         | 2 | `amount_soum is None`          | `no_billing` | rang YO'Q  |
         | 3 | `vendor_id is None`            | `free`       | yashil     |
-        | 4 | `amount_soum - paid_soum <= 0` | `paid`       | ko'k       |
+        | 4 | `remaining_soum <= 0`          | `paid`       | ko'k       |
         | 5 | qolgan hamma holat             | `due`        | qizil      |
 
     ⛔ 1-QATOR ENG YUQORIDA VA BU MAHSULOT QARORI: to'liq to'langan rasta
@@ -2149,19 +2168,22 @@ def _map_day_state(
        pul to'g'rimi?» degan ochiq savolni YOPMAYDI — nomuvofiqlik
        navbatining butun mavjudlik sababi shu.
 
-    ⛔ 4-QATORNING CHEGARASI `<= 0`, `paid_soum > 0` EMAS. Ikkinchisi
-       bo'lganda 1 so'm to'lagan rasta xaritada TO'LIQ to'langan
-       ko'rinardi — mahsulot aynan shu holatni fosh qilish uchun mavjud.
-       Ortiqcha to'lov (avans) ham `paid` beradi va bu to'g'ri: bugungi
-       patta yopilgan.
+    ⛔ 4-QATOR AYNAN `remaining_soum` GA QARAYDI, ayirishni O'ZI QAYTA
+       BAJARMAYDI: kartada ko'rinadigan «qolgan qarz» bilan katakning
+       rangi BITTA sondan chiqadi va ular ajralib keta OLMAYDI.
+
+    ⛔ CHEGARA `<= 0`, `paid_soum > 0` EMAS. Ikkinchisi bo'lganda 1 so'm
+       to'lagan rasta xaritada TO'LIQ to'langan ko'rinardi — mahsulot
+       aynan shu holatni fosh qilish uchun mavjud. Ortiqcha to'lov
+       (avans) ham `paid` beradi va bu to'g'ri: bugungi patta yopilgan.
     """
     if has_open_case:
         return MapDayState.MISMATCH
-    if amount_soum is None:
+    if amount_soum is None or remaining_soum is None:
         return MapDayState.NO_BILLING
     if vendor_id is None:
         return MapDayState.FREE
-    if amount_soum - paid_soum <= 0:
+    if remaining_soum <= 0:
         return MapDayState.PAID
     return MapDayState.DUE
 
@@ -2221,6 +2243,9 @@ async def map_day_status(session: AsyncSession, *, market_id: UUID, as_of: date)
         #   NATIJA («bugun hali to'lanmadi»), uning yo'qligi emas.
         paid_soum = paid_by_stall.get(item.stall_id, 0)
         open_case = case_by_stall.get(item.stall_id)
+        # ⛔ AYIRISH AYNAN SHU YERDA, BIR MARTA (D-20): rangni hal
+        #   qiladigan son bilan kartada ko'rinadigan son AYNI.
+        remaining_soum = None if item.amount_soum is None else item.amount_soum - paid_soum
         rows.append(
             MapDayStallStatus(
                 stall_id=item.stall_id,
@@ -2228,11 +2253,12 @@ async def map_day_status(session: AsyncSession, *, market_id: UUID, as_of: date)
                     has_open_case=open_case is not None,
                     amount_soum=item.amount_soum,
                     vendor_id=item.vendor_id,
-                    paid_soum=paid_soum,
+                    remaining_soum=remaining_soum,
                 ),
                 amount_soum=item.amount_soum,
                 unavailable_reason=item.unavailable_reason,
                 paid_soum=paid_soum,
+                remaining_soum=remaining_soum,
                 open_case_id=None if open_case is None else open_case[0],
                 open_case_service_date=None if open_case is None else open_case[1],
             )
