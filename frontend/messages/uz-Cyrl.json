@@ -805,6 +805,7 @@
       "warning": "Огоҳлантириш",
       "critical": "Жиддий"
     },
+    "severityUnknown": "Даражаси таржима қилинмаган",
     "alertKey": {
       "captureStopped": "Кадр олиш тўхтади",
       "captureMissed": "Кадрлар ўтказиб юборилди",

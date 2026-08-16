@@ -805,6 +805,7 @@
       "warning": "Ogohlantirish",
       "critical": "Jiddiy"
     },
+    "severityUnknown": "Darajasi tarjima qilinmagan",
     "alertKey": {
       "captureStopped": "Kadr olish to'xtadi",
       "captureMissed": "Kadrlar o'tkazib yuborildi",

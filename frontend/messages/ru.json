@@ -805,6 +805,7 @@
       "warning": "Предупреждение",
       "critical": "Критично"
     },
+    "severityUnknown": "Уровень не переведён",
     "alertKey": {
       "captureStopped": "Съёмка кадров остановилась",
       "captureMissed": "Кадры пропущены",

@@ -5,7 +5,8 @@ import { useFormatter, useNow, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import type { BadgeTone } from "@/components/ui/badge";
-import type { AlertEvent } from "@/lib/api-types";
+import { ALERT_SEVERITIES } from "@/lib/api-types";
+import type { AlertEvent, AlertSeverityValue } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
 
 /*
@@ -58,16 +59,55 @@ type SeverityView = {
   labelKey:
     | "snapshots.severity.info"
     | "snapshots.severity.warning"
-    | "snapshots.severity.critical";
+    | "snapshots.severity.critical"
+    | "snapshots.severityUnknown";
   tone: BadgeTone;
 };
 
-/** `alert_events.severity` -> tone + yorliq (§6.7, §9.4). */
-const SEVERITY_VIEW = {
+/**
+ * `alert_events.severity` -> tone + yorliq (§6.7, §9.4).
+ *
+ * ⛔ `Record<AlertSeverityValue, …>` ATAYIN (`case-status-badge.tsx`
+ *    naqshi): reyestrga to'rtinchi daraja qo'shilsa bu jadval `tsc` da
+ *    qizaradi, ya'ni yangi daraja yorliqsiz ekranga chiqib keta olmaydi.
+ */
+const SEVERITY_VIEW: Record<AlertSeverityValue, SeverityView> = {
   info: { labelKey: "snapshots.severity.info", tone: "neutral" },
   warning: { labelKey: "snapshots.severity.warning", tone: "warning" },
   critical: { labelKey: "snapshots.severity.critical", tone: "danger" },
-} as const satisfies Record<string, SeverityView>;
+};
+
+/**
+ * ⛔⛔ NOMA'LUM DARAJA — ZAXIRA YORLIQ, ⛔ ENG PAST DARAJA EMAS (WR-11).
+ *
+ * =============================================================================
+ * Eski shakl xaritadan topilmagan qiymatni `??` refleksi bilan
+ * ⛔ ENG ZARARSIZ darajaga tushirardi: backend `emergency`
+ * qo'shsa, admin uni ekranda ⛔ «Ma'lumot» ko'k nishoni bilan ko'rardi va
+ * eng shoshilinch signalni ⛔ E'TIBORSIZ qoldirardi. Bu ⛔ shu faylning
+ * O'Z qoidasiga zid (pastda: «XOM KALIT EKRANGA HECH QACHON CHIQMAYDI …
+ * noma'lum kalit NOMLANGAN zaxira oladi») — u yerda zaxira NOMLANADI, bu
+ * yerda esa qiymat JIMGINA pasaytirilardi.
+ *
+ * ⛔ `tone="neutral"` — ⛔ `danger` EMAS: qizil rang o'lchanmagan
+ *    qiymatni «jiddiy» deb E'LON QILARDI, ya'ni teskari tomondan AYNI
+ *    yolg'onni takrorlardi. Neytral nishon faqat bitta rost faktni
+ *    aytadi: darajaning yorlig'i hali tarjima qilinmagan.
+ *
+ * ⛔ MATN XOM KALITNI KO'RSATMAYDI: `emergency` degan satrni ko'rgan
+ *    admin uni nosozlik kodi deb o'qib, uni izlashga tushardi
+ *    (`ALERT_TITLE_KEYS` bilan aynan bir sabab).
+ * =============================================================================
+ */
+const SEVERITY_UNKNOWN: SeverityView = {
+  labelKey: "snapshots.severityUnknown",
+  tone: "neutral",
+};
+
+/** Qiymat reyestrdami — KO'RINISH qatlamining yagona shoxi. */
+function isAlertSeverity(value: string): value is AlertSeverityValue {
+  return (ALERT_SEVERITIES as readonly string[]).includes(value);
+}
 
 /**
  * `alert_events.alert_key` -> tarjima kaliti.
@@ -76,7 +116,18 @@ const SEVERITY_VIEW = {
  *    `errors.generic` ga tushadi: `capture_stopped` degan satrni ko'rgan
  *    admin uni nosozlik kodi deb o'qib, uni izlashga tushardi.
  *
- * Manba: `app/jobs/alerting.py::ALERT_META` — o'n bitta yozuv.
+ * Manba: reyestr — `app/jobs/alerting.py::ALERT_META`; a'zolar SONI esa
+ * `frontend/scripts/snapshot-copy.test.mjs` ning `ALERT_TITLE_KEY_COUNT`
+ * qulfida (IN-03).
+ * ⚠ SON BU IZOHDA ATAYIN YOZILMAYDI: oldingi shakl («o'n bitta») reyestr
+ *   o'sganda JIMGINA eskirdi va izoh koddan ajralib ketdi. Qulf esa
+ *   eskirmaydi — u a'zo qo'shilganda darvozani QIZARTIRADI.
+ *
+ * ⛔ REYESTR EKSPORT QILINADI va bu ⛔ QULAYLIK EMAS: `alert-list.test.tsx`
+ *    a'zolarni AYNAN shu yerdan ITERATSIYA qilib RENDER holida o'lchaydi
+ *    (07 `deferred-items.md` №1-qo'shimchasi). Testda qo'lda ro'yxat
+ *    yozilsa, o'n yettinchi a'zo qo'shilganda u JIMGINA eskirardi va
+ *    darvoza «hammasi chizildi» deb yolg'on gapirardi (05-13 darsi).
  * ⚠ `nvr_account_locked` UI-SPEC §11.9 jadvalida YO'Q edi va u shu
  *   rejada qo'shildi: u `critical` va HECH QACHON bo'g'ilmaydi, ya'ni
  *   matnsiz qolgan taqdirda admin eng shoshilinch xabarni «Kutilmagan
@@ -110,7 +161,7 @@ const SEVERITY_VIEW = {
  *   xulosaga olib borardi, holbuki tik har daqiqada yugurib turibdi va
  *   tuzatish yo'li BOSHQA (manzil/bog'lanish, jarayon emas).
  */
-const ALERT_TITLE_KEYS = {
+export const ALERT_TITLE_KEYS = {
   capture_stopped: "snapshots.alertKey.captureStopped",
   capture_missed: "snapshots.alertKey.captureMissed",
   camera_offline: "snapshots.alertKey.cameraOffline",
@@ -132,17 +183,50 @@ const ALERT_TITLE_KEYS = {
 type AlertTitleKey = (typeof ALERT_TITLE_KEYS)[keyof typeof ALERT_TITLE_KEYS];
 
 /**
+ * Yaroqli lahza yoki ⛔ `null` — «tizim buni O'LCHAY OLMADI».
+ *
+ * ⛔ ZAXIRA QIYMAT YO'Q (`Date.now()` ham, epoxa ham): to'qilgan lahza
+ *    ekranga O'LCHANGAN vaqt bo'lib chizilardi (05-14 darsi).
+ */
+function parseInstant(value: string): number | null {
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
  * Ikki lahza orasidagi davomiylik — daqiqa, uzoq bo'lsa soat.
  *
  * ⚠ MATN EMAS, SON + BIRLIK: `Intl` birlikni uchala tilda o'zi
  *   chizadi, ya'ni «2 s 15 daq» kabi tarjima qilinmaydigan qisqartma
  *   tug'ilmaydi (§11.11 ning atama qoidasi bilan bir xil sabab).
+ *
+ * =============================================================================
+ * ⛔⛔ YARAMAS SATRDA `null` — `0` HAM, «—» HAM EMAS (WR-12).
+ *
+ * `Date.parse` yaroqsiz satrda `NaN` beradi va JS semantikasi uni
+ * ⛔ JIMGINA olib o'tadi: `Math.max(0, NaN) === NaN`,
+ * `Math.max(1, NaN) === NaN`, `NaN < 120` esa `false` — ya'ni eski shakl
+ * `{ unit: "hour", value: NaN }` qaytarardi.
+ *
+ * ⛔ VA U EKRANDA `NaN` BO'LIB KO'RINMASDI: `Intl` `NaN` ni ⛔ LOCALE'GA
+ *    TARJIMA qiladi va uz-Latn da qator «son emas soat davom etdi» bo'lib
+ *    chizilardi (o'lchandi, 08-10 QIZIL bosqichi). Ya'ni faqat ASCII
+ *    `NaN` ni qidiradigan darvoza bu nosozlikni ⛔ UMUMAN ko'rmasdi.
+ *
+ * ⛔ `null` — CHAQIRUVCHI UCHUN BUYRUQ: davomiylik elementi ⛔ UMUMAN
+ *    chizilmaydi (D-10). `0` yozish «bir zumda hal bo'ldi» degan YOLG'ON
+ *    da'vo, «—» esa TO'QILGAN qiymat bo'lardi.
+ * =============================================================================
  */
 export function alertDurationParts(
   fromIso: string,
   toIso: string,
-): { unit: "hour" | "minute"; value: number } {
-  const ms = Math.max(0, Date.parse(toIso) - Date.parse(fromIso));
+): { unit: "hour" | "minute"; value: number } | null {
+  const from = parseInstant(fromIso);
+  const to = parseInstant(toIso);
+  if (from === null || to === null) return null;
+
+  const ms = Math.max(0, to - from);
   const minutes = Math.max(1, Math.round(ms / 60_000));
   if (minutes < 120) return { unit: "minute", value: minutes };
   return { unit: "hour", value: Math.round(minutes / 60) };
@@ -161,14 +245,21 @@ export function AlertRow({ alert }: { alert: AlertEvent }) {
   const format = useFormatter();
   const now = useNow();
 
-  const severity: SeverityView =
-    SEVERITY_VIEW[alert.severity as keyof typeof SEVERITY_VIEW] ??
-    SEVERITY_VIEW.info;
+  const severity: SeverityView = isAlertSeverity(alert.severity)
+    ? SEVERITY_VIEW[alert.severity]
+    : SEVERITY_UNKNOWN;
   const titleKey: AlertTitleKey | undefined =
     ALERT_TITLE_KEYS[alert.alert_key as keyof typeof ALERT_TITLE_KEYS];
 
   const resolvedAt = alert.resolved_at;
   const isClosed = resolvedAt !== null;
+  /*
+   * ⛔ IKKI QIYMAT, IKKI MUSTAQIL SHOX (WR-12): yopilish LAHZASI o'qilsa
+   *   ham DAVOMIYLIK o'lchanmasligi mumkin (`first_seen_at` yaroqsiz
+   *   bo'lsa). Ularni bitta shartga bog'lash o'qilgan faktni ham
+   *   ekrandan olib tashlardi.
+   */
+  const resolvedAtMs = resolvedAt === null ? null : parseInstant(resolvedAt);
 
   /*
    * ⚠ NOMLANGAN KALITLAR — sikl EMAS (fayl boshidagi izoh). Har biri
@@ -193,9 +284,10 @@ export function AlertRow({ alert }: { alert: AlertEvent }) {
     staleMinutes !== null ||
     pendingCount !== null;
 
-  const duration = isClosed
-    ? alertDurationParts(alert.first_seen_at, resolvedAt)
-    : null;
+  const duration =
+    resolvedAt === null
+      ? null
+      : alertDurationParts(alert.first_seen_at, resolvedAt);
 
   return (
     <li
@@ -295,25 +387,34 @@ export function AlertRow({ alert }: { alert: AlertEvent }) {
         </div>
       ) : null}
 
-      {duration === null || resolvedAt === null ? null : (
+      {/*
+       * ⛔ HAR ELEMENT O'Z SHOXI BILAN (WR-12): o'qilmagan lahza ham,
+       *   o'lchanmagan davomiylik ham ⛔ UMUMAN chizilmaydi. O'ram esa
+       *   ikkalasi ham yo'q bo'lganda ⛔ BO'SH QATOR qoldirmaydi.
+       */}
+      {resolvedAtMs === null && duration === null ? null : (
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
-          <span>
-            {t("snapshots.alertResolvedAt", {
-              time: format.dateTime(new Date(resolvedAt), {
-                dateStyle: "short",
-                timeStyle: "short",
-              }),
-            })}
-          </span>
-          <span>
-            {t("snapshots.alertDuration", {
-              duration: format.number(duration.value, {
-                style: "unit",
-                unit: duration.unit,
-                unitDisplay: "long",
-              }),
-            })}
-          </span>
+          {resolvedAtMs === null ? null : (
+            <span>
+              {t("snapshots.alertResolvedAt", {
+                time: format.dateTime(new Date(resolvedAtMs), {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                }),
+              })}
+            </span>
+          )}
+          {duration === null ? null : (
+            <span>
+              {t("snapshots.alertDuration", {
+                duration: format.number(duration.value, {
+                  style: "unit",
+                  unit: duration.unit,
+                  unitDisplay: "long",
+                }),
+              })}
+            </span>
+          )}
         </div>
       )}
     </li>
