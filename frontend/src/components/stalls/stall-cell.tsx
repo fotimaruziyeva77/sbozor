@@ -1,11 +1,15 @@
 "use client";
 
 import { memo } from "react";
-import { Ban, Wrench } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import type { StallCell as StallCellData } from "@/components/stalls/stall-map-types";
-import { TONE_STATUS, TONE_STYLES } from "@/components/stalls/stall-tone";
+import {
+  DAY_TONE_ICONS,
+  INVENTORY_TONE_ICONS,
+  TONE_STATUS,
+  TONE_STYLES,
+} from "@/components/stalls/stall-tone";
 import { cn } from "@/lib/cn";
 
 /*
@@ -80,8 +84,10 @@ export const StallCell = memo(function StallCell({
    * talqin qilinmaydi va React qiymatni ekranlaydi, ya'ni zona/sotuvchi
    * nomidagi belgilar razmetkaga aylanmaydi.
    */
-  const label = t("map.cellLabel", {
+  const baseLabel = t("map.cellLabel", {
     code: cell.code,
+    // ⛔ INVENTAR toni bilan, `dayTone` bilan EMAS: to'lov qatlami
+    //    rastaning REYESTR holatini almashtirmaydi (`TONE_STATUS` izohi).
     status: tStatus(TONE_STATUS[cell.tone]),
     category: categoryName ?? t("map.cellCategoryUnknown"),
     vendor:
@@ -90,6 +96,22 @@ export const StallCell = memo(function StallCell({
         ? t("map.cellVendorAssigned")
         : t("stalls.noVendor")),
   });
+
+  /*
+   * TO'LOV HOLATI — `aria-label` ning BESHINCHI, ALOHIDA bo'lagi.
+   *
+   * ⛔ Qatlam yo'q bo'lganda (huquq yo'q, qoralama bozor, hali
+   *   yuklanmadi) jumla HOZIRGIDEK to'rt bo'lakli qoladi: bo'sh bo'lak
+   *   qo'shish skrinriderga «... , , ...» deb o'qilardi va mavjud a11y
+   *   testining to'rt bo'lakli da'vosini jimgina o'zgartirardi.
+   */
+  const label =
+    cell.dayStateKey === null
+      ? baseLabel
+      : `${baseLabel}, ${t(cell.dayStateKey)}`;
+
+  const InventoryIcon = INVENTORY_TONE_ICONS[cell.tone];
+  const DayIcon = cell.dayTone === null ? null : DAY_TONE_ICONS[cell.dayTone];
 
   return (
     <button
@@ -107,7 +129,16 @@ export const StallCell = memo(function StallCell({
         // tomondan 2+2 = 4px halqalar tegib ketardi. Katak uchun `offset-1`
         // -> 3px, 2px zaxira. `z-10` halqa qo'shni katak ostida qolmasin.
         "focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent",
-        TONE_STYLES[cell.tone],
+        /*
+         * ⛔ TO'LOV TONI INVENTAR TONINING USTIGA QO'YILADI, uni
+         *   ALMASHTIRADI. `dayTone` `null` bo'lganda (qatlam yo'q yoki
+         *   holat `no_billing`) katak inventar tonida qoladi — bu ikkala
+         *   holatning ham YAGONA to'g'ri ko'rinishi.
+         *
+         * ⚠ `Record` TO'LIQ, ya'ni kalit tushib qolsa KOMPILYATSIYA
+         *   XATOSI (`stall-tone.ts` ning butun mexanizmi shu).
+         */
+        TONE_STYLES[cell.dayTone ?? cell.tone],
         // Sotuvchisiz rasta — UZUQ-UZUQ chegara. Bu rangdan MUSTAQIL
         // ikkinchi kanal (§4.4) va legendada tushuntiriladi.
         cell.hasVendor ? "border-solid" : "border-dashed",
@@ -125,13 +156,35 @@ export const StallCell = memo(function StallCell({
       title={cell.code.length > 6 ? `${cell.code} · ${zoneName}` : undefined}
       type="button"
     >
-      {/* Ikonka — rangdan mustaqil uchinchi kanal (§4.4). */}
-      {cell.tone === "muted" ? (
-        <Wrench aria-hidden="true" className="absolute top-1 right-1 size-3" />
-      ) : null}
-      {cell.tone === "off" ? (
-        <Ban aria-hidden="true" className="absolute top-1 right-1 size-3" />
-      ) : null}
+      {/* INVENTAR ikonkasi — yuqori-o'ng, rangdan mustaqil kanal (§4.4). */}
+      {InventoryIcon === null ? null : (
+        <InventoryIcon
+          aria-hidden="true"
+          className="absolute top-1 right-1 size-3"
+        />
+      )}
+
+      {/*
+       * TO'LOV ikonkasi — PASTKI-CHAP burchak.
+       *
+       * ⛔ INVENTAR IKONKASI BILAN BIR VAQTDA KO'RINISHI MUMKIN (ta'mirdagi
+       *   rasta ham patta to'laydi — `_market_projection()` qarori), ya'ni
+       *   ikkalasi BOSHQA burchakda turishi SHART. Bitta burchakda ular
+       *   ustma-ust tushib, ikkinchi kanal jimgina yo'qolardi.
+       *
+       * `data-day-tone` — o'lchov nuqtasi: ikonkaning MAVJUDLIGI ham,
+       * uning QAYSI holatga tegishliligi ham testda ko'rinadi
+       * (`data-stall-code` bilan bir xil naqsh).
+       */}
+      {DayIcon === null ? null : (
+        <span
+          aria-hidden="true"
+          className="absolute bottom-1 left-1 inline-flex"
+          data-day-tone={cell.dayTone}
+        >
+          <DayIcon className="size-3" />
+        </span>
+      )}
 
       {/*
        * KO'RINADIGAN matn kesilishi mumkin; `aria-label` esa to'liq.

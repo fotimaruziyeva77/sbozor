@@ -80,7 +80,10 @@ const { apiFetch } = apiClientMock;
 
 import { StallCardDialog } from "@/components/stalls/stall-card-dialog";
 import { StallMap } from "@/components/stalls/stall-map";
+import type { StallTone } from "@/components/stalls/stall-map-types";
+import { TONE_STYLES } from "@/components/stalls/stall-tone";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
+import { MAP_DAY_PATH } from "@/lib/map-day-queries";
 
 const MAP_PATH = "/stalls/map";
 const ZONE_ID = "11111111-1111-4111-8111-111111111111";
@@ -112,13 +115,79 @@ function cell(
   };
 }
 
+/*
+ * ===========================================================================
+ * TO'LOV QATLAMINING SOXTA JAVOBI (`GET /billing/map`, MARKET-06).
+ *
+ * ⚠ MAVJUD TESTLAR UCHUN STANDART — BO'SH `rows` BILAN FAOL BOZOR.
+ *   Ular inventar ranglarini o'lchaydi va to'lov qatlami ularga TEGMASLIGI
+ *   kerak. Standartni «so'rov rad etiladi» qilib qoldirish esa har testda
+ *   xato bannerini chizardi va o'lchov nima haqidaligi noaniq bo'lardi.
+ * ===========================================================================
+ */
+type MockDayState = "paid" | "due" | "mismatch" | "free" | "no_billing";
+
+type MockDayRow = {
+  stall_id: string;
+  state: MockDayState;
+  amount_soum: number | null;
+  unavailable_reason: "market_closed" | "tariff_missing" | null;
+  paid_soum: number;
+  open_case_id: string | null;
+  open_case_service_date: string | null;
+};
+
+type MockDayStatus = {
+  service_date: string;
+  market_active: boolean;
+  market_open: boolean | null;
+  rows: readonly MockDayRow[];
+};
+
+const DAY_AMOUNT = 15_000;
+
+function dayRow(
+  stallId: string,
+  state: MockDayState,
+  overrides: Partial<MockDayRow> = {},
+): MockDayRow {
+  const noBilling = state === "no_billing";
+  return {
+    stall_id: stallId,
+    state,
+    amount_soum: noBilling ? null : DAY_AMOUNT,
+    unavailable_reason: noBilling ? "tariff_missing" : null,
+    paid_soum: state === "paid" ? DAY_AMOUNT : 0,
+    open_case_id: null,
+    open_case_service_date: null,
+    ...overrides,
+  };
+}
+
+function dayStatus(overrides: Partial<MockDayStatus> = {}): MockDayStatus {
+  return {
+    service_date: "2026-08-16",
+    market_active: true,
+    market_open: true,
+    rows: [],
+    ...overrides,
+  };
+}
+
 /** Xarita javobi + (ixtiyoriy) bitta rasta batafsil javobi. */
-function mockMap(cells: readonly MockCell[], detail?: Record<string, unknown>) {
+function mockMap(
+  cells: readonly MockCell[],
+  detail?: Record<string, unknown>,
+  day: MockDayStatus = dayStatus(),
+) {
   apiFetch.mockImplementation((path: string) => {
     if (path === MAP_PATH) {
       return Promise.resolve({
         zones: [{ id: ZONE_ID, name: "A zonasi", cells }],
       });
+    }
+    if (path === MAP_DAY_PATH) {
+      return Promise.resolve(day);
     }
     if (path.startsWith("/stalls/") && detail) {
       return Promise.resolve(detail);
@@ -134,6 +203,9 @@ function mockZones(zones: readonly MockZone[]) {
   apiFetch.mockImplementation((path: string) => {
     if (path === MAP_PATH) {
       return Promise.resolve({ zones });
+    }
+    if (path === MAP_DAY_PATH) {
+      return Promise.resolve(dayStatus());
     }
     return Promise.reject(new Error(`kutilmagan yo'l: ${path}`));
   });
@@ -198,11 +270,59 @@ function seedMarketAdminSession(): void {
   });
 }
 
+/** Platforma admini — unda `billing_collect_view` ⛔ YO'Q (D-C4). */
+function seedPlatformAdminSession(): void {
+  setSession({
+    accessToken: "test-access-token",
+    principal: {
+      userId: "44444444-4444-4444-8444-444444444444",
+      phone: "+998900000001",
+      fullName: "Platforma admini",
+      roles: ["platform_admin"],
+      marketId: MARKET_ID,
+      marketName: "Karmana markaziy bozori",
+      isPlatformAdmin: true,
+      locale: "uz-Latn",
+      mustChangePassword: false,
+    },
+    markets: [],
+  });
+}
+
 /** Kataklar — DOM tartibida. Legendadagi namunalar tugma EMAS. */
 function cellButtons(): HTMLButtonElement[] {
   return Array.from(
     document.querySelectorAll<HTMLButtonElement>("[data-stall-code]"),
   );
+}
+
+/** Kod bo'yicha bitta katak. */
+function cellByCode(code: string): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>(
+    `[data-stall-code="${code}"]`,
+  );
+  if (button === null) throw new Error(`${code} katagi topilmadi`);
+  return button;
+}
+
+/**
+ * Katak SHU tone uslubini oldimi?
+ *
+ * ⚠ TOKENMA-TOKEN, `className` SATRIDA `toContain` BILAN EMAS: `cn()`
+ *   (tailwind-merge) ziddiyatli sinflarni olib tashlaydi va tartibni
+ *   o'zgartirishi mumkin, ya'ni satr taqqoslash JIMGINA yolg'on-qizil
+ *   bo'lardi. Kutilgan qiymat MAHSULOT konstantasidan olinadi, testda
+ *   ikkinchi marta YOZILMAYDI.
+ */
+function hasTone(button: HTMLElement, tone: StallTone): boolean {
+  return TONE_STYLES[tone]
+    .split(" ")
+    .every((token) => button.classList.contains(token));
+}
+
+/** Katakdagi TO'LOV ikonkasi (pastki-chap burchak). */
+function dayIcon(button: HTMLElement): Element | null {
+  return button.querySelector("[data-day-tone]");
 }
 
 beforeEach(() => {
@@ -408,6 +528,199 @@ describe("Rasta kartasi (§7.6)", () => {
     // Ogohlantirish uslubi MAJBURIY — neytral matn adminni anomaliyadan
     // bexabar qoldirardi.
     expect(noTariff.className).toContain("text-danger-text");
+  });
+});
+
+/*
+ * ===========================================================================
+ * TO'LOV RANG QATLAMI (MARKET-06 / TEST-REPORT Topilma №C).
+ *
+ * 2-faza `stall-tone.ts` da uchta BO'SH tone (`paid`/`debt`/`mismatch`)
+ * qoldirgan: «6–7 fazalar bu uchtasini TO'LDIRADI». Bu blok o'sha
+ * to'ldirishni qulflaydi va u UCH KANALNI birdan o'lchaydi (WCAG 1.4.1):
+ *
+ *   1. RANG      — `TONE_STYLES` tokenlari katakning `classList` ida;
+ *   2. IKONKA    — `[data-day-tone]` elementi va uning ichidagi `svg`;
+ *   3. MATN      — `aria-label` ning ALOHIDA bo'lagi va legenda satri.
+ *
+ * ⛔ RANG YOLG'IZ O'LCHANSA darvoza rangdan mustaqil kanallar olib
+ *    tashlanganda ham YASHIL qolardi — ya'ni u himoya qilishi kerak
+ *    bo'lgan aynan o'sha qoidani (§4.4) o'lchamasdi.
+ * ===========================================================================
+ */
+describe("StallMap — to'lov rang qatlami (MARKET-06)", () => {
+  test("NAZORAT: to'rt to'lov toni BIR-BIRIDAN farq qiladi", () => {
+    /*
+     * Usiz quyidagi «paid ko'k, due qizil» da'volari ikkala tone bir xil
+     * uslub bergan holatda ham yashil bo'lardi — aynan 2-fazadagi
+     * platsholder holati (uchalasi `neutral` bilan bir xil edi).
+     */
+    const styles = [
+      TONE_STYLES.paid,
+      TONE_STYLES.debt,
+      TONE_STYLES.mismatch,
+      TONE_STYLES.free,
+      TONE_STYLES.neutral,
+    ];
+
+    expect(new Set(styles).size).toBe(styles.length);
+  });
+
+  test("beshala holat RANG + IKONKA + `aria-label` bo'lagi bilan ajraladi", async () => {
+    mockMap(
+      [cell("1"), cell("2"), cell("3"), cell("4"), cell("5")],
+      undefined,
+      dayStatus({
+        rows: [
+          dayRow("cell-1", "paid"),
+          dayRow("cell-2", "due"),
+          dayRow("cell-3", "mismatch", {
+            open_case_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            open_case_service_date: "2026-08-14",
+          }),
+          dayRow("cell-4", "free"),
+          dayRow("cell-5", "no_billing"),
+        ],
+      }),
+    );
+    renderMap();
+
+    await waitFor(() => expect(cellButtons()).toHaveLength(5));
+    await waitFor(() => expect(hasTone(cellByCode("1"), "paid")).toBe(true));
+
+    const expected: ReadonlyArray<[string, StallTone, string]> = [
+      ["1", "paid", messages.map.dayStatePaid],
+      ["2", "debt", messages.map.dayStateDue],
+      ["3", "mismatch", messages.map.dayStateMismatch],
+      ["4", "free", messages.map.dayStateFree],
+    ];
+
+    for (const [code, tone, label] of expected) {
+      const button = cellByCode(code);
+      expect(hasTone(button, tone)).toBe(true);
+      // 2-kanal: ikonka — HAQIQIY `svg`, faqat atribut emas.
+      expect(dayIcon(button)?.getAttribute("data-day-tone")).toBe(tone);
+      expect(dayIcon(button)?.querySelector("svg")).not.toBeNull();
+      // 3-kanal: `aria-label` ning ALOHIDA bo'lagi.
+      expect(button.getAttribute("aria-label")).toContain(label);
+    }
+
+    /*
+     * ⛔ `no_billing` — RANG QO'YILMAYDIGAN YAGONA HOLAT: katak INVENTAR
+     *    tonida qoladi. Unga kulrang «to'lanmagan» rangi berish yopiq
+     *    kunni qarzdorlikdan ajratmasdi.
+     */
+    const noBilling = cellByCode("5");
+    expect(hasTone(noBilling, "neutral")).toBe(true);
+    expect(dayIcon(noBilling)).toBeNull();
+  });
+
+  test("qoralama bozorda banner ko'rinadi va BIRORTA katak to'lov rangini olmaydi", async () => {
+    mockMap(
+      [cell("1"), cell("2")],
+      undefined,
+      // ⛔ Server `market_active = false` deganda `rows` BO'SH keladi va
+      //    `market_open` `null` — «o'lchanmadi», «yopiq» EMAS.
+      dayStatus({ market_active: false, market_open: null, rows: [] }),
+    );
+    renderMap();
+
+    await waitFor(() => expect(cellButtons()).toHaveLength(2));
+    await screen.findByText(messages.map.marketDraftNotice);
+
+    for (const button of cellButtons()) {
+      expect(hasTone(button, "neutral")).toBe(true);
+      expect(dayIcon(button)).toBeNull();
+    }
+  });
+
+  test("bugun bozor yopiq bo'lsa banner ko'rinadi (yolg'on qizil YO'Q)", async () => {
+    mockMap(
+      [cell("1")],
+      undefined,
+      dayStatus({
+        market_open: false,
+        rows: [dayRow("cell-1", "no_billing", { unavailable_reason: "market_closed" })],
+      }),
+    );
+    renderMap();
+
+    await waitFor(() => expect(cellButtons()).toHaveLength(1));
+    await screen.findByText(messages.map.marketClosedNotice);
+
+    expect(hasTone(cellByCode("1"), "debt")).toBe(false);
+    expect(dayIcon(cellByCode("1"))).toBeNull();
+  });
+
+  test("legenda to'lov satrlarini FAQAT qatlam yuklanganda ko'rsatadi", async () => {
+    mockMap(
+      [cell("1")],
+      undefined,
+      dayStatus({ rows: [dayRow("cell-1", "paid")] }),
+    );
+    renderMap();
+
+    await waitFor(() => expect(cellButtons()).toHaveLength(1));
+
+    for (const line of [
+      messages.map.legendPaid,
+      messages.map.legendDue,
+      messages.map.legendMismatch,
+      messages.map.legendFree,
+      messages.map.legendNoBilling,
+    ]) {
+      expect(await screen.findByText(line)).toBeInTheDocument();
+    }
+
+    // Inventar satrlari TEGILMAYDI — ular HAR DOIM ko'rinadi.
+    expect(screen.getByText(messages.map.legendMaintenance)).toBeInTheDocument();
+  });
+
+  test("huquqsiz rolda `/billing/map` so'rovi UMUMAN yuborilmaydi", async () => {
+    /*
+     * ⛔ O'CHIRILGAN ELEMENT EMAS, PLATSHOLDER EMAS — YO'Q (D-C4).
+     *
+     * Platforma adminida `billing_collect_view` YO'Q va u SOZLASH roli.
+     * Unda xarita INVENTAR rejimida qoladi: yolg'on yashil chizishdan
+     * ko'ra qatlamni umuman ko'rsatmaslik halolroq.
+     */
+    clearSession();
+    seedPlatformAdminSession();
+    mockMap([cell("1")]);
+    renderMap();
+
+    await waitFor(() => expect(cellButtons()).toHaveLength(1));
+
+    const requested = apiFetch.mock.calls.map((call) => call[0] as string);
+    expect(requested).toContain(MAP_PATH);
+    expect(requested).not.toContain(MAP_DAY_PATH);
+
+    // Legendada to'lov satrlari ham, banner ham YO'Q.
+    expect(screen.queryByText(messages.map.legendPaid)).toBeNull();
+    expect(screen.queryByText(messages.map.marketDraftNotice)).toBeNull();
+    expect(dayIcon(cellByCode("1"))).toBeNull();
+  });
+
+  test("to'lov qatlami xato bersa xarita CHIZILADI, sabab esa aytiladi", async () => {
+    /*
+     * ⛔ XARITA BLOKLANMAYDI: inventar ma'lumoti KELGAN va uni to'lov
+     *    qatlamining nosozligi sababli yashirish adminni butun ekrandan
+     *    mahrum qilardi. Sabab BITTA `role="status"` qatorida aytiladi.
+     */
+    apiFetch.mockImplementation((path: string) => {
+      if (path === MAP_PATH) {
+        return Promise.resolve({
+          zones: [{ id: ZONE_ID, name: "A zonasi", cells: [cell("1")] }],
+        });
+      }
+      return Promise.reject(new Error("map-day so'rovi yiqildi"));
+    });
+    renderMap();
+
+    await waitFor(() => expect(cellButtons()).toHaveLength(1));
+    await screen.findByText(messages.map.dayLayerError);
+
+    expect(dayIcon(cellByCode("1"))).toBeNull();
   });
 });
 

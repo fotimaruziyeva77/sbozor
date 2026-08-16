@@ -1,9 +1,14 @@
 "use client";
 
-import { Ban, Wrench } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-import { TONE_STYLES } from "@/components/stalls/stall-tone";
+import type { StallTone } from "@/components/stalls/stall-map-types";
+import {
+  DAY_TONE_ICONS,
+  INVENTORY_TONE_ICONS,
+  TONE_STYLES,
+} from "@/components/stalls/stall-tone";
 import { cn } from "@/lib/cn";
 
 /*
@@ -18,16 +23,26 @@ import { cn } from "@/lib/cn";
  *
  * ⚠ Legenda MOBIL'DA HAM ko'rinadi va yig'ilmaydi: aynan telefonda
  * ishlaydigan bozor admini uchun u eng kerak.
+ *
+ * -----------------------------------------------------------------------
+ * ⛔ IKKI GURUH, IKKI SHART (quick 260816-75e).
+ *
+ *   INVENTAR satrlari — HAR DOIM ko'rinadi (rasta reestri hammaga ochiq);
+ *   TO'LOV satrlari   — FAQAT `showPaymentStates` bilan, ya'ni qatlam
+ *                       chindan chizilganda. Huquqsiz ko'ruvchida ular
+ *                       ⛔ UMUMAN chizilmaydi — o'chirilgan satr MAVJUD
+ *                       imkoniyatni e'lon qilardi va foydalanuvchi
+ *                       ko'rinmaydigan rangni izlab yurardi.
  * =============================================================================
  */
 
 /** Namuna katak — DEKORATIV: barmoq nishoni emas, shuning uchun 24px. */
 function LegendSwatch({
   className,
-  icon,
+  icon: Icon,
 }: {
   className: string;
-  icon?: "wrench" | "ban";
+  icon?: LucideIcon | null;
 }) {
   return (
     <span
@@ -37,13 +52,37 @@ function LegendSwatch({
         className,
       )}
     >
-      {icon === "wrench" ? <Wrench className="size-3" /> : null}
-      {icon === "ban" ? <Ban className="size-3" /> : null}
+      {Icon ? <Icon className="size-3" /> : null}
     </span>
   );
 }
 
-export function StallMapLegend() {
+/**
+ * To'lov satrlari — ⛔ TARTIB D-C2 USTUVORLIGINING TESKARISI EMAS, LEKIN
+ * O'QISH TARTIBI: eng ko'p uchraydigan holatdan (to'langan) eng kam
+ * uchraydiganigacha. Ustuvorlik SERVERDA hal bo'ladi va legenda uni
+ * ta'riflamaydi — u faqat «bu rang nima degani?» ga javob beradi.
+ */
+const PAYMENT_LEGEND: ReadonlyArray<{
+  tone: StallTone;
+  labelKey:
+    | "map.legendPaid"
+    | "map.legendDue"
+    | "map.legendMismatch"
+    | "map.legendFree";
+}> = [
+  { tone: "paid", labelKey: "map.legendPaid" },
+  { tone: "debt", labelKey: "map.legendDue" },
+  { tone: "mismatch", labelKey: "map.legendMismatch" },
+  { tone: "free", labelKey: "map.legendFree" },
+];
+
+export function StallMapLegend({
+  showPaymentStates = false,
+}: {
+  /** To'lov qatlami chizilyaptimi (huquq bor va javob keldi). */
+  showPaymentStates?: boolean;
+}) {
   const t = useTranslations();
 
   return (
@@ -64,7 +103,7 @@ export function StallMapLegend() {
         <li className="flex items-center gap-2">
           <LegendSwatch
             className={cn(TONE_STYLES.muted, "border-solid")}
-            icon="wrench"
+            icon={INVENTORY_TONE_ICONS.muted}
           />
           {t("map.legendMaintenance")}
         </li>
@@ -72,11 +111,36 @@ export function StallMapLegend() {
         <li className="flex items-center gap-2">
           <LegendSwatch
             className={cn(TONE_STYLES.off, "border-solid")}
-            icon="ban"
+            icon={INVENTORY_TONE_ICONS.off}
           />
           {t("map.legendClosed")}
         </li>
       </ul>
+
+      {showPaymentStates ? (
+        <ul className="flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-2 text-sm">
+          {PAYMENT_LEGEND.map(({ tone, labelKey }) => (
+            <li className="flex items-center gap-2" key={tone}>
+              <LegendSwatch
+                className={cn(TONE_STYLES[tone], "border-solid")}
+                icon={DAY_TONE_ICONS[tone]}
+              />
+              {t(labelKey)}
+            </li>
+          ))}
+
+          {/*
+           * ⛔ «RANG YO'Q» SATRI MAJBURIY: `no_billing` katagi inventar
+           *   tonida qoladi va legendasiz u «hali yuklanmadi» bilan
+           *   ADASHTIRILARDI. Namuna katagi ATAYIN inventar tonida —
+           *   u aynan shu ko'rinishni ko'rsatadi.
+           */}
+          <li className="flex items-center gap-2">
+            <LegendSwatch className={cn(TONE_STYLES.neutral, "border-solid")} />
+            {t("map.legendNoBilling")}
+          </li>
+        </ul>
+      ) : null}
     </div>
   );
 }

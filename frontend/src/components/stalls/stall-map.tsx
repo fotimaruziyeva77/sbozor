@@ -13,9 +13,10 @@ import { useTranslations } from "next-intl";
 import { StallCell } from "@/components/stalls/stall-cell";
 import { StallMapLegend } from "@/components/stalls/stall-map-legend";
 import type { ZoneBlock } from "@/components/stalls/stall-map-types";
-import { toneOf } from "@/components/stalls/stall-tone";
+import { DAY_STATE_KEYS, dayToneOf, toneOf } from "@/components/stalls/stall-tone";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMapDayStatusQuery } from "@/lib/map-day-queries";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import { useStallMapQuery } from "@/lib/market-queries";
 
@@ -77,6 +78,18 @@ export function StallMap({
 }) {
   const t = useTranslations();
   const mapQuery = useStallMapQuery();
+  /*
+   * ⛔ TO'LOV QATLAMI XARITANI KUTTIRMAYDI (MARKET-06).
+   *
+   * `dayLayer.isPending` bo'lganda grid INVENTAR ranglari bilan darhol
+   * chiziladi va rang KEYIN qo'shiladi. Ikkinchi so'rovni kutish 1000
+   * katakli ekranni ikki marta sekinlashtirardi va nosozlik holatida uni
+   * BUTUNLAY bloklardi — holbuki inventar ma'lumoti allaqachon kelgan.
+   *
+   * ⛔ HUQUQ TEKSHIRUVI HOOK ICHIDA (D-C4): bu komponent «kim ko'radi?»
+   *    degan savolga javob bermaydi va rollarni umuman o'qimaydi.
+   */
+  const dayLayer = useMapDayStatusQuery();
   const isDesktop = useIsDesktop();
 
   /** Zona -> shu zonadagi yagona `tabIndex={0}` katakning indeksi (§7.7). */
@@ -95,14 +108,31 @@ export function StallMap({
       (mapQuery.data?.zones ?? []).map((zone) => ({
         id: zone.id,
         name: zone.name,
-        cells: zone.cells.map((cell) => ({
-          id: cell.id,
-          code: cell.code,
-          tone: toneOf(cell),
-          hasVendor: cell.has_vendor,
-        })),
+        cells: zone.cells.map((cell) => {
+          /*
+           * ⛔ TO'LOV MAYDONLARI KATAK MA'LUMOTINING ICHIDA (Pitfall 8):
+           *   ular `StallCell` ga ALOHIDA prop bo'lib chiqmaydi va
+           *   `byStallId` BARQAROR havola (`useMapDayStatusQuery`
+           *   docstringi), ya'ni bu memo javob o'zgarganda AYNAN BIR
+           *   MARTA qayta hisoblanadi.
+           *
+           * ⛔ QATLAM YO'Q BO'LGANDA INDEKS BO'SH: `dayTone` va
+           *   `dayStateKey` `null` bo'lib qoladi va katak inventar
+           *   tonida chiziladi — platsholder ham, «kutilmoqda» rangi ham
+           *   qo'yilmaydi.
+           */
+          const day = dayLayer.byStallId.get(cell.id);
+          return {
+            id: cell.id,
+            code: cell.code,
+            tone: toneOf(cell),
+            hasVendor: cell.has_vendor,
+            dayTone: day === undefined ? null : dayToneOf(day.state),
+            dayStateKey: day === undefined ? null : DAY_STATE_KEYS[day.state],
+          };
+        }),
       })),
-    [mapQuery.data],
+    [mapQuery.data, dayLayer.byStallId],
   );
 
   // Barqaror havola — `StallCell` `memo` bilan o'ralgan va har renderda
@@ -256,7 +286,55 @@ export function StallMap({
         {t("map.skipLink")}
       </a>
 
-      <StallMapLegend />
+      {/*
+       * TO'LOV QATLAMINING HALOL HOLATLARI — legendadan YUQORIDA.
+       *
+       * ⛔ UCHALASI HAM BIR-BIRINI ISTISNO QILADI va faqat BITTASI
+       *   chiziladi. Ular `role="status"` bilan e'lon qilinadi (xato
+       *   emas — `role="alert"` fokusni tortib, inventar ma'lumoti
+       *   ko'rinib turgan ekranni «buzilgan» qilib ko'rsatardi).
+       *
+       * ⛔ HUQUQSIZ KO'RUVCHIDA BIRORTASI HAM YO'Q: `isEnabled` false
+       *   bo'lganda xarita INVENTAR rejimida qoladi va u haqda hech nima
+       *   AYTILMAYDI — mavjud bo'lmagan imkoniyatni e'lon qilish yolg'on
+       *   affordans bo'lardi (D-C4).
+       */}
+      {dayLayer.isEnabled && dayLayer.isError ? (
+        <p className="text-sm text-text-muted" role="status">
+          {t("map.dayLayerError")}
+        </p>
+      ) : null}
+
+      {dayLayer.status !== null && !dayLayer.status.market_active ? (
+        <p
+          className="rounded-sm bg-surface-muted px-3 py-2 text-sm text-text-muted"
+          role="status"
+        >
+          {t("map.marketDraftNotice")}
+        </p>
+      ) : null}
+
+      {dayLayer.status !== null &&
+      dayLayer.status.market_active &&
+      dayLayer.status.market_open === false ? (
+        <p
+          className="rounded-sm bg-surface-muted px-3 py-2 text-sm text-text-muted"
+          role="status"
+        >
+          {t("map.marketClosedNotice")}
+        </p>
+      ) : null}
+
+      {/*
+       * ⛔ TO'LOV SATRLARI FAQAT QATLAM CHINDAN CHIZILGANDA: javob kelgan
+       *   VA bozor qoralama emas. Qoralama bozorda birorta katak rang
+       *   olmaydi, ya'ni legenda tushuntiradigan hech nima yo'q.
+       */}
+      <StallMapLegend
+        showPaymentStates={
+          dayLayer.status !== null && dayLayer.status.market_active
+        }
+      />
 
       {focusCode !== "" && !hasFocusMatch ? (
         <p className="text-sm text-text-muted" role="status">

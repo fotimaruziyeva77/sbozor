@@ -509,7 +509,20 @@
     "zoneLabel": "{name} zonasi",
     "zoneStallCount": "{count} ta rasta",
     "notFound": "Bu raqamli rasta xaritada topilmadi",
-    "skipLink": "Xaritani o'tkazib yuborish"
+    "skipLink": "Xaritani o'tkazib yuborish",
+    "legendPaid": "Ko'k — bugungi patta to'liq to'langan",
+    "legendDue": "Qizil — bugungi patta kutilyapti",
+    "legendMismatch": "Sariq — ochiq nomuvofiqlik bor",
+    "legendFree": "Yashil — sotuvchi biriktirilmagan, bugun patta kutilmaydi",
+    "legendNoBilling": "Rangsiz — bugun bu rastaga hisob yozilmaydi",
+    "dayStatePaid": "bugungi patta to'langan",
+    "dayStateDue": "bugungi patta to'lanmagan",
+    "dayStateMismatch": "ochiq nomuvofiqlik",
+    "dayStateFree": "sotuvchi biriktirilmagan",
+    "dayStateNoBilling": "bugun hisob yozilmaydi",
+    "marketDraftNotice": "Bozor qoralama holatda — patta hisoblanmaydi va katak ranglari chizilmaydi.",
+    "marketClosedNotice": "Bugun bozor yopiq — patta hisoblanmaydi.",
+    "dayLayerError": "To'lov holatini yuklab bo'lmadi — xarita rasta reestri ko'rinishida qoldi."
   },
   "wizard": {
     "title": "Yangi bozor",
