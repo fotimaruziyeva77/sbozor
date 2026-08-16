@@ -1389,5 +1389,81 @@
     "countVendors": "Сотувчилар",
     "countCameras": "Камералар",
     "countUsers": "Фойдаланувчилар"
+  },
+  "reports": {
+    "title": "Ҳисоботлар",
+    "periodLabel": "Давр",
+    "periodFrom": "Бошланиш",
+    "periodTo": "Тугаш",
+    "periodShown": "{from} — {to}",
+    "preset": {
+      "last30": "Охирги 30 кун",
+      "yesterday": "Кеча",
+      "thisMonth": "Жорий ой",
+      "lastMonth": "Ўтган ой",
+      "custom": "Танланган оралиқ"
+    },
+    "maxDayHint": "Ҳисобот кечаги кунгача ёпилган маълумотдан чиқади.",
+    "export": "Excel бўлиб юклаб олиш",
+    "exporting": "Тайёрланмоқда",
+    "revenueTitle": "Тушум",
+    "revenueTotal": "Давр тушуми",
+    "revenueCharged": "Ҳисобланган",
+    "revenuePaid": "Тўланган",
+    "revenueDiff": "Фарқ",
+    "debtorsTitle": "Қарздорлик рўйхати",
+    "debtorsTotal": "Жами қарз",
+    "debtorsOldest": "Энг эски қарз",
+    "vendorUnknown": "Сотувчи кўрсатилмаган",
+    "anomaliesTitle": "Номувофиқлик архиви",
+    "anomaliesUnpaid": "Банд, лекин тўловсиз",
+    "anomaliesUnregistered": "Рўйхатга олинмаган савдо",
+    "accuracyTitle": "АИ аниқлик ҳисоботи",
+    "accuracyDisclaimer": "Бу улуш назоратчининг кўр жавобларидан ҳисобланади. Моделнинг ўзи автоматик синовда ўлчанмаган.",
+    "accuracyNotMeasured": "Бу даврда жавоблар сони ўлчов учун етарли эмас: {n} та, камида {min} керак.",
+    "rowsShown": "{shown} қатордан {total} таси кўрсатилмоқда",
+    "amountUnit": "сўм",
+    "compareLink": "Уч томонлама солиштирув",
+    "errorCause": {
+      "report_period_invalid": "Танланган давр яроқсиз.",
+      "report_period_future": "Ҳисобот кечаги кунгача ёпилган маълумотдан чиқади.",
+      "report_period_too_long": "Танланган давр жуда узун.",
+      "report_too_large": "Бу даврда қатор сони файлга сиғмайди.",
+      "report_export_failed": "Файл тайёрланмади.",
+      "report_forbidden": "Бу ҳисоботга рухсатингиз йўқ.",
+      "ledger_day_locked": "Бу кун учун дафтар ёпилган.",
+      "ledger_stall_unknown": "Файлда тизимда йўқ раста коди бор."
+    },
+    "errorFix": {
+      "report_period_invalid": "Бошланиш санаси тугаш санасидан кейин бўлмасин.",
+      "report_period_future": "Тугаш санасини кечаги кун ёки ундан олдин қилиб танланг.",
+      "report_period_too_long": "Даврни бир йилдан қисқа қилиб танланг.",
+      "report_too_large": "Даврни қисқартиринг ва қайта юклаб олинг.",
+      "report_export_failed": "Қайта уриниб кўринг — муаммо такрорланса, даврни қисқартиринг.",
+      "report_forbidden": "Директорга мурожаат қилинг.",
+      "ledger_day_locked": "Бозор маъмуриятига мурожаат қилинг.",
+      "ledger_stall_unknown": "Раста кодларини шаблондаги рўйхат билан солиштиринг."
+    }
+  },
+  "compare": {
+    "title": "Уч томонлама солиштирув",
+    "ledger": "Дафтар",
+    "system": "Тизим",
+    "aiExpected": "АИ-кутилган",
+    "diff": {
+      "ledgerOver": "Дафтар ортиқ",
+      "systemOver": "Тизим ортиқ",
+      "aiMismatch": "Бандлик фарқи"
+    },
+    "diffCounts": "Дафтар ортиқ: {ledgerOver} · Тизим ортиқ: {systemOver} · Бандлик фарқи: {aiMismatch}",
+    "matched": "{matched} раста учала манбада мос",
+    "ledgerUpload": "Дафтарни юклаш",
+    "ledgerTemplate": "Шаблонни юклаб олиш",
+    "ledgerMissing": "Бу кун учун дафтар юкланмаган",
+    "ledgerMissingHint": "Дафтар суммаларини Excel шаблони орқали юкланг — солиштирув шундан кейин чиқади.",
+    "ledgerReplaceTitle": "Дафтарни алмаштирасизми?",
+    "ledgerReplaceBody": "{day} куни учун дафтар аллақачон юкланган. Янги файл эскисининг ўрнини олади.",
+    "ledgerReplaceConfirm": "Алмаштириш",
+    "ledgerLoaded": "Дафтар юкланди: {rows} қатор"
   }
 }

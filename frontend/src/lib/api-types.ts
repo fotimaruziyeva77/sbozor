@@ -2257,3 +2257,282 @@ export type NotificationKindValue = (typeof NOTIFICATION_KINDS)[number];
  *    ham ataylab — «server kontraktining ko'zgusi» shu fayl.
  */
 export const RESOLUTION_NOTE_MAX = 2000;
+
+/* ---------------------------------------------------------------------------
+ * 08-03 — HISOBOT YUZASINING UCH YOPIQ REYESTRI (W0-F2)
+ *
+ * =========================================================================
+ * ⛔⛔ REYESTR IKKINCHI MARTA YOZILADI VA DARVOZA UNI MATN SIFATIDA
+ *     O'QIYDI (05-13 va 05-15 darsi).
+ *
+ * `scripts/report-copy.test.mjs` bu uch massivni IMPORT QILMAYDI — u
+ * shu faylning MANBA MATNIDAN parse qiladi va uchala locale bilan
+ * to'plam tengligi orqali solishtiradi. Darvoza o'zi tekshirayotgan
+ * qiymatni tekshirilayotgan moduldan olsa, ikkalasi BIRGA o'zgarganda
+ * JIMGINA yashil qolardi.
+ * =========================================================================
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Davr hisobotlarining YOPIQ turlari — ⛔ AYNAN TO'RT A'ZO (UI-SPEC §12.1).
+ *
+ * =========================================================================
+ * ⛔⛔ UCH TOMONLAMA SOLISHTIRUV BU REYESTRGA KIRMAYDI.
+ *
+ * `"three-way"` ham, `"compare"` ham a'zo EMAS va bu bo'shliq emas,
+ * QAROR. Solishtiruvning davri ⛔ KUN (`?day=`), bu to'rttaniki esa
+ * ORALIQ (`?from=&to=`); shakli esa ⛔ IMZOLI varaq, bu to'rttaniki —
+ * oddiy jadval.
+ *
+ * Uni reyestrga tiqish `REPORT_KINDS` ni «hisobot TURI» dan «yuklab
+ * olinadigan NARSA» ga aylantirardi va o'sha lahzada `from`/`to`
+ * parametrlari IXTIYORIY bo'lib qolardi — ya'ni davri yo'q eksport
+ * chaqiruvi tip tizimidan JIMGINA o'tib ketardi. Davrsiz fayl esa
+ * §1.2 qoida 2 ning bevosita buzilishi: chop etilgan varaqdan davr
+ * yo'qolsa, raqam hech nimaga bog'lanmagan bo'lib qoladi.
+ * =========================================================================
+ */
+export const REPORT_KINDS = [
+  "revenue",
+  "debtors",
+  "anomalies",
+  "accuracy",
+] as const;
+export type ReportKind = (typeof REPORT_KINDS)[number];
+
+/**
+ * Davr presetlari — ⛔ AYNAN BESH A'ZO: 4 preset + `custom` (UI-SPEC §4.4).
+ *
+ * ⚠ `custom` — PRESET EMAS, uning YO'QLIGINING nomi: URL'da faqat
+ *   `from`/`to` bor (§4.5) va preset ular QIYMATIDAN teskari hisoblanadi.
+ *   Hech qaysi presetga mos kelmasa natija `custom` bo'ladi. Uni
+ *   reyestrdan chiqarish tanlagichda NOMSIZ oltinchi holat qoldirardi.
+ *
+ * ⛔ `last30` STANDART va sabab MEXANIK, did emas: server aniqlik
+ *    hisoboti uchun `ACCURACY_WINDOW_DAYS = 30` ni standart qilgan
+ *    (`occupancy.py:174`). Standartlar mos kelganda `/reports` va
+ *    `/occupancy` dagi aniqlik raqami AYNAN TENG bo'ladi va «ikki xil
+ *    haqiqat» tug'ilmaydi.
+ */
+export const PERIOD_PRESETS = [
+  "last30",
+  "yesterday",
+  "thisMonth",
+  "lastMonth",
+  "custom",
+] as const;
+export type PeriodPreset = (typeof PERIOD_PRESETS)[number];
+
+/**
+ * Uch tomonlama solishtiruvning farq sinflari — ⛔ AYNAN UCH A'ZO (§10.5).
+ *
+ * =========================================================================
+ * ⛔⛔ `match` BU REYESTRDA YO'Q VA UNGA KALIT BERILMAYDI.
+ *
+ * «Mos» qatori jadvalda QOLADI (maxraj imzolanadigan hujjatda majburiy),
+ * lekin u ⛔ BEZAK OLMAYDI: na rang, na ikonka, na badge matni
+ * (§13.4). 287 ta yashil belgi 13 ta farqni KO'MIB yuborardi — ko'z
+ * imzolanadigan varaqda FARQNI qidiradi, mos qatorlarni emas.
+ *
+ * ⛔ Reyestrga `match` ni qo'shish uchala darvozani ham bir yo'la
+ *    bo'shatardi: `compare.diff.match` matni tug'ilardi, matn esa
+ *    komponentda ishlatilishni TALAB qilardi.
+ * =========================================================================
+ *
+ * ⛔ UCHALASI HECH QACHON QO'SHILMAYDI: ular uch TURLI harakat talab
+ *    qiladi («pulni qidiring» / «daftarni tuzating» / «detektorni
+ *    tekshiring»). Bitta «jami farq» soniga siqish solishtiruvni
+ *    foydasiz qilardi.
+ */
+export const DIFF_CLASSES = [
+  "ledger_over",
+  "system_over",
+  "ai_mismatch",
+] as const;
+export type DiffClassValue = (typeof DIFF_CLASSES)[number];
+
+/* ---------------------------------------------------------------------------
+ * 08-03 — HISOBOT JAVOBLARINING SXEMALARI
+ *
+ * =========================================================================
+ * ⛔⛔ JAVOB ENUMLARI `z.enum` BILAN QULFLANMAYDI (04-10 darsi).
+ *
+ * `kind`, `case_status`, `diff_class` — hammasi `z.string()`. Sabab
+ * o'lchangan: bitta yangi backend a'zosi butun sahifani PARSE
+ * CHEGARASIDA yiqitardi va direktor hisobot o'rniga bo'sh ekran
+ * ko'rardi. Noma'lum qiymat uchun klient ZAXIRA YORLIQ chizadi.
+ *
+ * ⛔ O'RAM (envelope) esa `z.strictObject`: o'lchanmagan yoki
+ *    kutilmagan maydon JIMGINA brauzerga yetib borib, keyingi ijrochi
+ *    tomonidan «ma'lumot bor ekan» deb chizilishi mumkin edi
+ *    (`accuracyReportSchema` bilan AYNI sabab, T-05-04).
+ * =========================================================================
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Tushum hisobotining qatori — biznes-kun kesimida (§8.2).
+ *
+ * ⛔ `diff_soum` SERVERDAN keladi va klientda `collected - charged`
+ *    QAYTA HISOBLANMAYDI (D-03). 05-14 darsi: klientdagi qayta hisob
+ *    xato bo'lib emas, IKKINCHI JAVOB bo'lib chiqadi.
+ */
+export const revenueReportRowSchema = z.strictObject({
+  business_date: z.string(),
+  charged_soum: z.number().int(),
+  collected_soum: z.number().int(),
+  /** ⛔ Manfiy — kam yig'ilgan; musbat — ortiqcha to'lov (u ham holat). */
+  diff_soum: z.number().int(),
+});
+export type RevenueReportRow = z.infer<typeof revenueReportRowSchema>;
+
+/**
+ * `GET /reports/revenue?from=…&to=…` — davr tushumi.
+ *
+ * ⛔ `from_date`/`to_date` — SERVERNIKI, `nuqs` holatiniki EMAS (§8.7).
+ *    Server so'ralgan davrni QISQARTIRISHI mumkin; so'ralganini chizish
+ *    «men oktyabrni so'radim, oktyabr keldi» degan YOLG'ON tasdiq
+ *    berardi va u faylga tushib TARQALARDI.
+ *
+ * ⛔ `row_count` — BUTUN DAVRNIKI, `shown_count` — ko'rinayotgan
+ *    sahifaniki. Ikkalasi ham majburiy: usiz direktor ekrandagi 50
+ *    qatorni butun davr deb o'qirdi (§8.6).
+ */
+export const revenueReportSchema = z.strictObject({
+  from_date: z.string(),
+  to_date: z.string(),
+  rows: z.array(revenueReportRowSchema),
+  total_collected_soum: z.number().int(),
+  total_charged_soum: z.number().int(),
+  row_count: z.number().int(),
+  shown_count: z.number().int(),
+});
+export type RevenueReport = z.infer<typeof revenueReportSchema>;
+
+/**
+ * Qarzdorlik ro'yxatining qatori — ⛔ SOTUVCHI kesimida (§8.3).
+ *
+ * ⛔ `vendor_name` `null` BO'LISHI MUMKIN va ekranda u BO'SH KATAK
+ *    bo'lib chiziladi (D-08): na «—», na «Noma'lum», na «Sotuvchi
+ *    #123». To'qilgan qiymat ma'lumot bordek ko'rinadi va EKSPORTGA
+ *    ham tushadi — chop etilgan varaqda «Noma'lum» qatori buxgalter
+ *    uchun HAQIQIY sotuvchi nomi bo'lib o'qilardi.
+ *
+ * ⚠ Ism SERVERDA joinlanadi (D-07) — bu yuzada `vendor_name`
+ *   QONUNIY va bu 7-fazadagi taqiqning TESKARISI (§5.5).
+ */
+export const receivablesReportRowSchema = z.strictObject({
+  vendor_id: z.string().nullable(),
+  vendor_name: z.string().nullable(),
+  stall_codes: z.array(z.string()),
+  outstanding_soum: z.number().int(),
+  oldest_debt_date: z.string().nullable(),
+});
+export type ReceivablesReportRow = z.infer<typeof receivablesReportRowSchema>;
+
+/** `GET /reports/debtors?from=…&to=…` — qarzdorlik ro'yxati. */
+export const receivablesReportSchema = z.strictObject({
+  from_date: z.string(),
+  to_date: z.string(),
+  rows: z.array(receivablesReportRowSchema),
+  total_outstanding_soum: z.number().int(),
+  row_count: z.number().int(),
+  shown_count: z.number().int(),
+});
+export type ReceivablesReport = z.infer<typeof receivablesReportSchema>;
+
+/**
+ * Nomuvofiqlik arxivining qatori (§8.5).
+ *
+ * ⛔ `kind` `z.enum` BILAN QULFLANMAYDI (yuqoridagi blok izohi) va u
+ *    `ANOMALY_KINDS` ning NUSXASI HAM EMAS: arxiv ikki SINFNI ajratadi
+ *    (`unpaid` / `unregistered`), `ANOMALY_KINDS` esa hodisaning uch
+ *    TURI. Ikkalasini tenglashtirish 07 Pattern 4 ning takrori bo'lardi.
+ *
+ * ⛔ DALIL — IDENTIFIKATOR, KADR EMAS (07 D-03): `snapshot_id` bor,
+ *    baytlar yo'q va eksportga ham faqat identifikator tushadi.
+ */
+export const anomalyArchiveRowSchema = z.strictObject({
+  business_date: z.string(),
+  kind: z.string(),
+  stall_code: z.string(),
+  snapshot_id: z.string().nullable(),
+  case_status: z.string().nullable(),
+});
+export type AnomalyArchiveRow = z.infer<typeof anomalyArchiveRowSchema>;
+
+/**
+ * `GET /reports/anomalies?from=…&to=…` — nomuvofiqlik arxivi.
+ *
+ * ⛔ IKKI HISOBLAGICH ALOHIDA va ular HECH QACHON qo'shilmaydi
+ *    (07 Pattern 4): `unpaid` — hosila (ertaga to'lov kelsa yo'qoladi),
+ *    `unregistered` — qator (qolaveradi).
+ */
+export const anomalyArchiveSchema = z.strictObject({
+  from_date: z.string(),
+  to_date: z.string(),
+  rows: z.array(anomalyArchiveRowSchema),
+  unpaid_count: z.number().int(),
+  unregistered_count: z.number().int(),
+  row_count: z.number().int(),
+  shown_count: z.number().int(),
+});
+export type AnomalyArchive = z.infer<typeof anomalyArchiveSchema>;
+
+/**
+ * Uch tomonlama solishtiruvning qatori — daftar · tizim · AI-kutilgan (D-18).
+ *
+ * =========================================================================
+ * ⛔⛔ `ai_expected_soum` DA `null` VA `0` IKKI XIL NARSA (§10.4).
+ *
+ *     `null` = «o'sha kun uchun bandlik ma'lumoti YO'Q» (O'LCHANMAGAN)
+ *     `0`    = «AI rastani BO'SH dedi»                  (O'LCHANGAN)
+ *
+ *     Ularni tenglashtirish D-10 ning bevosita buzilishi bo'lardi:
+ *     o'lchanmagan miqdor o'lchangan bo'lib chizilardi va imzolanadigan
+ *     varaqqa tushardi. Ekranda `null` — BO'SH katak, `0` — chizilgan
+ *     nol.
+ * =========================================================================
+ *
+ * ⛔ `diff_class` `null` — «uchala manba MOS». Mos qator badge OLMAYDI
+ *    (§13.4) va shuning uchun uning sinfi ham YO'Q, `"match"` EMAS.
+ */
+export const threeWayRowSchema = z.strictObject({
+  stall_code: z.string(),
+  ledger_soum: z.number().int(),
+  system_soum: z.number().int(),
+  ai_expected_soum: z.number().int().nullable(),
+  diff_class: z.string().nullable(),
+});
+export type ThreeWayRow = z.infer<typeof threeWayRowSchema>;
+
+/**
+ * `GET /reports/compare?day=…` — uch tomonlama solishtiruv.
+ *
+ * ⛔ `has_ledger === false` — jadval UMUMAN chizilmaydi (§10.6). Daftar
+ *    yuklanmagan kunda uch ustunli jadvalni «hamma farq 0» bilan chizish
+ *    MUVAFFAQIYATLI solishtiruv bo'lib ko'rinardi va IMZOLANARDI —
+ *    parallel rejimning butun maqsadi (SC#5) jimgina yo'qolardi.
+ *
+ * ⛔ `matched_count` — MAXRAJ va u majburiy: usiz 13 qatorli varaq
+ *    «bozorda 13 ta rasta bor» bo'lib o'qilardi (07 G-32 darsi).
+ *
+ * ⛔ «Jami farq» maydoni YO'Q va qo'shilmaydi — uch sanoq ALOHIDA.
+ */
+export const threeWayReportSchema = z.strictObject({
+  day: z.string(),
+  has_ledger: z.boolean(),
+  rows: z.array(threeWayRowSchema),
+  ledger_over_count: z.number().int(),
+  system_over_count: z.number().int(),
+  ai_mismatch_count: z.number().int(),
+  matched_count: z.number().int(),
+});
+export type ThreeWayReport = z.infer<typeof threeWayReportSchema>;
+
+/** Daftar importining natijasi — `POST /reports/compare/ledger` (D-17). */
+export const ledgerImportResultSchema = z.strictObject({
+  day: z.string(),
+  rows: z.number().int(),
+  replaced: z.boolean(),
+});
+export type LedgerImportResult = z.infer<typeof ledgerImportResultSchema>;

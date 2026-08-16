@@ -69,15 +69,19 @@ export const occupancyDayKey = (marketId: string, day: string) =>
 /**
  * Aniqlik hisobotining kaliti — davr KALITNING BIR QISMI.
  *
- * ⛔ DAVR TANLAGICHI EKRANDA YO'Q (§16.2 — 8-fazaning yuzasi) va standart
- *    davr SERVERDA hisoblanadi (`ACCURACY_WINDOW_DAYS = 30`). Shuning
- *    uchun normal oqimda ikkala argument ham `null` bo'ladi va so'rovga
+ * ⛔ `/occupancy` YUZASIDA DAVR TANLAGICHI YO'Q (5-fazaning qarori, o'z
+ *    yuzasida HAMON KUCHDA) va standart davr SERVERDA hisoblanadi
+ *    (`ACCURACY_WINDOW_DAYS = 30`). Shuning uchun o'sha sahifadan
+ *    kelgan chaqiruvda ikkala argument ham `null` bo'ladi va so'rovga
  *    birorta parametr qo'shilmaydi: davrni klientda hisoblash o'sha
  *    qoidaning IKKINCHI nusxasini tug'dirardi va ikkovi yarim tunda
  *    ajralib ketardi.
  *
- * ⚠ Argumentlar imzoda QOLADI: ular kalitni davr bo'yicha ajratadi, ya'ni
- *   8-fazada tanlagich qo'shilganda kesh yozuvi O'ZI to'g'ri bo'linadi.
+ * ⛔⛔ KALIT FABRIKASI O'ZGARMAYDI VA U ALLAQACHON TO'G'RI EDI (08-03,
+ *     W0-F6). `/reports` davrni BERGANDA yozuv o'zi bo'linadi, ya'ni
+ *     ikkala sahifa BIR XIL davrda AYNAN BIR kesh yozuvini ULASHADI va
+ *     «ikki xil haqiqat» tug'ilishi MEXANIK ravishda imkonsiz bo'ladi
+ *     (§5.4). Ikkinchi kalit YARATILMAYDI.
  */
 export const accuracyKey = (
   marketId: string,
@@ -153,6 +157,22 @@ export function useOccupancyDay(
 /* --- (B): aniqlik hisoboti ------------------------------------------------ */
 
 /**
+ * Aniqlik so'rovining davr qismi — ⛔ IKKALA chegara ham bo'lsagina yoziladi.
+ *
+ * ⛔ SOF FUNKSIYA va u DAVRNI HISOBLAMAYDI, faqat UZATADI. Yarim davr
+ *    (`from` bor, `to` yo'q) serverga yuborilsa, u qolgan chegarani
+ *    O'ZI to'ldirardi va natijada ekrandagi davr yorlig'i so'ralganidan
+ *    BOSHQA bo'lardi — §8.7 aynan shu «yolg'on tasdiq» ni taqiqlaydi.
+ *    Yarim davr shuning uchun UMUMAN yuborilmaydi: server standarti
+ *    (`ACCURACY_WINDOW_DAYS`) yagona zaxira qoladi.
+ */
+export function accuracyQuery(from: string | null, to: string | null): string {
+  if (from === null || to === null) return "";
+  const params = new URLSearchParams({ from, to });
+  return `?${params.toString()}`;
+}
+
+/**
  * `GET /occupancy/accuracy` — chalkashlik matritsasi va uch oraliq.
  *
  * =========================================================================
@@ -162,19 +182,44 @@ export function useOccupancyDay(
  *    o'zgarmaydi»). Uni kun bilan birga poll qilish har 60 soniyada
  *    30 kunlik agregatni qayta hisoblatardi va ekranda hech nima
  *    o'zgarmasdi.
+ * =========================================================================
  *
- * ⛔ DAVR PARAMETRLARI YUBORILMAYDI: standart davr serverning
- *    `ACCURACY_WINDOW_DAYS` konstantasidan keladi. Klient `from`/`to` ni
- *    hisoblasa, o'sha qoidaning ikkinchi nusxasi tug'ilardi.
+ * =========================================================================
+ * ⛔⛔ 08-03 (W0-F6): HOOK KENGAYTIRILDI, IKKINCHISI YOZILMADI [M-11].
+ *
+ *     `occupancy.py:174-186` topshiriqni ochiq bergan edi: «⛔ DAVR
+ *     TANLAGICHI YO'Q (§16.2 — 8-fazaning hisobot yuzasi), lekin
+ *     `from`/`to` parametrlari BOR: ular klientga emas, TESTGA va
+ *     KELAJAKDAGI EKSPORTGA kerak.» Ya'ni bu 5-faza bilan ZIDDIYAT
+ *     EMAS, REJALASHTIRILGAN topshiriq.
+ *
+ * ⛔ ARGUMENTSIZ CHAQIRUV BUGUNGI XULQINI AYNAN SAQLAYDI: `null, null`
+ *    ketadi, so'rovga birorta parametr qo'shilmaydi va `/occupancy`
+ *    sahifasi TEGILMAYDI. Ikkinchi hook (`useAccuracyReportForRange`)
+ *    yozilsa, ikki chaqiruvchi ikki KESH KALITINI to'ldirardi va bir
+ *    xil davrda IKKI XIL javob ko'rsatishi mumkin bo'lardi.
+ *
+ * ⛔ DAVR SERVERDA HAM QOLADI: `/reports` uni BERADI, `/occupancy`
+ *    esa BERMAYDI — standart oyna baribir serverniki
+ *    (`ACCURACY_WINDOW_DAYS = 30`). Klient `from`/`to` ni O'ZI
+ *    HISOBLAMAYDI; u faqat chaqiruvchidan olganini uzatadi.
  * =========================================================================
  */
-export function useAccuracyReport(options?: { enabled?: boolean }) {
+export function useAccuracyReport(options?: {
+  from?: string | null;
+  to?: string | null;
+  enabled?: boolean;
+}) {
   const marketId = useMarketId();
+  const from = options?.from ?? null;
+  const to = options?.to ?? null;
 
   return useQuery({
-    queryKey: accuracyKey(marketId ?? "", null, null),
+    queryKey: accuracyKey(marketId ?? "", from, to),
     queryFn: () =>
-      apiFetch(`${OCCUPANCY_PATH}/accuracy`, { schema: accuracyReportSchema }),
+      apiFetch(`${OCCUPANCY_PATH}/accuracy${accuracyQuery(from, to)}`, {
+        schema: accuracyReportSchema,
+      }),
     enabled: marketId !== null && (options?.enabled ?? true),
     refetchOnWindowFocus: false,
   });

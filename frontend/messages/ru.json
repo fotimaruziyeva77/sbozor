@@ -1389,5 +1389,81 @@
     "countVendors": "Продавцы",
     "countCameras": "Камеры",
     "countUsers": "Пользователи"
+  },
+  "reports": {
+    "title": "Отчёты",
+    "periodLabel": "Период",
+    "periodFrom": "Начало",
+    "periodTo": "Окончание",
+    "periodShown": "{from} — {to}",
+    "preset": {
+      "last30": "Последние 30 дней",
+      "yesterday": "Вчера",
+      "thisMonth": "Текущий месяц",
+      "lastMonth": "Прошлый месяц",
+      "custom": "Выбранный диапазон"
+    },
+    "maxDayHint": "Отчёт строится по закрытым данным до вчерашнего дня.",
+    "export": "Скачать в Excel",
+    "exporting": "Готовится",
+    "revenueTitle": "Выручка",
+    "revenueTotal": "Выручка за период",
+    "revenueCharged": "Начислено",
+    "revenuePaid": "Оплачено",
+    "revenueDiff": "Разница",
+    "debtorsTitle": "Реестр долгов",
+    "debtorsTotal": "Итого долг",
+    "debtorsOldest": "Самый старый долг",
+    "vendorUnknown": "Продавец не указан",
+    "anomaliesTitle": "Архив расхождений",
+    "anomaliesUnpaid": "Занято, но без оплаты",
+    "anomaliesUnregistered": "Незарегистрированная торговля",
+    "accuracyTitle": "Отчёт о точности ИИ",
+    "accuracyDisclaimer": "Эта доля считается по слепым ответам контролёра. Сама модель в автоматических тестах не измерялась.",
+    "accuracyNotMeasured": "За этот период ответов недостаточно для измерения: {n}, нужно минимум {min}.",
+    "rowsShown": "Показано {shown} строк из {total}",
+    "amountUnit": "сум",
+    "compareLink": "Трёхстороннее сравнение",
+    "errorCause": {
+      "report_period_invalid": "Выбранный период некорректен.",
+      "report_period_future": "Отчёт строится по закрытым данным до вчерашнего дня.",
+      "report_period_too_long": "Выбранный период слишком длинный.",
+      "report_too_large": "За этот период строки не помещаются в файл.",
+      "report_export_failed": "Файл не сформирован.",
+      "report_forbidden": "У вас нет прав на этот отчёт.",
+      "ledger_day_locked": "Тетрадь за этот день закрыта.",
+      "ledger_stall_unknown": "В файле есть код места, которого нет в системе."
+    },
+    "errorFix": {
+      "report_period_invalid": "Дата начала не должна быть позже даты окончания.",
+      "report_period_future": "Выберите датой окончания вчерашний день или более ранний.",
+      "report_period_too_long": "Выберите период короче одного года.",
+      "report_too_large": "Сократите период и скачайте заново.",
+      "report_export_failed": "Попробуйте ещё раз — если повторится, сократите период.",
+      "report_forbidden": "Обратитесь к директору.",
+      "ledger_day_locked": "Обратитесь к администрации рынка.",
+      "ledger_stall_unknown": "Сверьте коды мест со списком в шаблоне."
+    }
+  },
+  "compare": {
+    "title": "Трёхстороннее сравнение",
+    "ledger": "Тетрадь",
+    "system": "Система",
+    "aiExpected": "Ожидание ИИ",
+    "diff": {
+      "ledgerOver": "Тетрадь больше",
+      "systemOver": "Система больше",
+      "aiMismatch": "Разница по занятости"
+    },
+    "diffCounts": "Тетрадь больше: {ledgerOver} · Система больше: {systemOver} · Разница по занятости: {aiMismatch}",
+    "matched": "{matched} мест совпали во всех трёх источниках",
+    "ledgerUpload": "Загрузить тетрадь",
+    "ledgerTemplate": "Скачать шаблон",
+    "ledgerMissing": "За этот день тетрадь не загружена",
+    "ledgerMissingHint": "Загрузите суммы тетради через шаблон Excel — сравнение появится после этого.",
+    "ledgerReplaceTitle": "Заменить тетрадь?",
+    "ledgerReplaceBody": "За {day} тетрадь уже загружена. Новый файл заменит прежний.",
+    "ledgerReplaceConfirm": "Заменить",
+    "ledgerLoaded": "Тетрадь загружена: {rows} строк"
   }
 }
