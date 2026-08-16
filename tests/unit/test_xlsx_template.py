@@ -15,7 +15,9 @@ ochilganda ham yashil qolardi.
 from __future__ import annotations
 
 import io
+import time
 from datetime import date
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import openpyxl
@@ -33,6 +35,9 @@ from app.services.xlsx_template import (
     build_template,
     escape_formula,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 UZ = "uz-Latn"
 RU = "ru"
@@ -845,3 +850,42 @@ def test_template_kinds_are_exactly_three() -> None:
     from app.services.xlsx_template import TEMPLATE_KINDS
 
     assert TEMPLATE_KINDS == ("stalls", "vendors", "staff")
+
+
+# ===========================================================================
+# Bayt determinizmi (08-01) — IKKALA MAHSULOT EKSPORT YO'LI
+# ===========================================================================
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda: build_template("stalls", UZ, ZONE_NAMES, CATEGORY_NAMES),
+        lambda: build_error_report(
+            [ImportIssue(row=2, code="zone_not_found", message="2-qator: zona yo'q")],
+            UZ,
+        ),
+    ],
+    ids=["template", "error-report"],
+)
+def test_two_builds_are_byte_identical(build: Callable[[], bytes]) -> None:
+    """AYNI kirish -> AYNI baytlar (08-01, RECON-04).
+
+    ⛔ BU O'LCHOV 08-01 GACHA QIZIL EDI va bu ONGLI KENGAYTMA: ikkala
+    quruvchi ham `xlsxwriter.Workbook(...)` ni to'g'ridan-to'g'ri
+    chaqirar, `set_properties()` ni ham, ZIP muzlatishni ham
+    CHAQIRMASDI. Ya'ni determinizm faqat test fiksturasida
+    (`karmana_seed`) bor edi, MAHSULOT eksporti esa har chaqiruvda
+    boshqa baytlar berardi.
+
+    ⚠ `sleep(1.1)` MAJBURIY va u testni sekinlashtirish uchun emas.
+    `zipfile` a'zo sanasini SOAT'dan oladi va uning aniqligi 2 sekund.
+    Ikki chaqiruv ayni sekundda bo'lsa test MUZLATISHSIZ HAM yashil
+    bo'lardi — ya'ni aynan o'lchamoqchi bo'lgan nosozlikni (T-02-172)
+    ko'rmasdi.
+    """
+    first = build()
+    time.sleep(1.1)
+    second = build()
+
+    assert first == second

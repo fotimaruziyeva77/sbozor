@@ -48,7 +48,13 @@ from __future__ import annotations
 import io
 from typing import TYPE_CHECKING, Any, Final
 
-import xlsxwriter
+from app.services.xlsx_export import (
+    FORMULA_PREFIXES,
+    escape_formula,
+    finish,
+    new_workbook,
+    write_text,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -64,13 +70,20 @@ __all__ = [
     "escape_formula",
 ]
 
-FORMULA_PREFIXES: Final = ("=", "+", "-", "@", "\t", "\r")
-"""Excel formula sifatida talqin qiladigan boshlang'ich belgilar (OWASP).
-
-`\\t` va `\\r` ro'yxatda ATAYIN: ular ko'rinmaydi, lekin Excel ularni
-tashlab yuborib KEYINGI belgiga qaraydi — ya'ni `"\\t=cmd|..."` oddiy
-`=` tekshiruvidan o'tib ketardi.
-"""
+# ⚠ `FORMULA_PREFIXES` va `escape_formula` bu yerda QAYTA E'LON QILINADI,
+#   TA'RIFLANMAYDI — ta'rif `app.services.xlsx_export` da (08-01).
+#
+#   08-PATTERNS §4 ularni shu faylda qoldirishni qat'iylashtirgan edi, lekin
+#   bu modul endi `xlsx_export` dan `new_workbook`/`finish` ni oladi va
+#   teskari import HALQA hosil qilardi. Halqa O'LCHANDI (taxmin emas):
+#
+#       ImportError: cannot import name 'FORMULA_PREFIXES' from partially
+#       initialized module 'app.services.xlsx_template'
+#
+#   Yo'nalish shu sababdan BITTA: `xlsx_template` -> `xlsx_export`.
+#   Qayta e'lon mavjud chaqiruvchilarni (`test_xlsx_template.py`,
+#   `from app.services.xlsx_template import escape_formula`) SAQLAYDI,
+#   ya'ni ta'rif bitta joyda turgani holda import yuzasi o'zgarmaydi.
 
 TEMPLATE_KINDS: Final = ("stalls", "vendors", "staff")
 """`GET /imports/template?kind=` qabul qiladigan qiymatlar.
@@ -213,21 +226,6 @@ import qilinganda ham `role_not_allowed` bermaydi.
 """
 
 
-def escape_formula(value: str) -> str:
-    """Excel formulasiga aylanadigan matnni zararsizlantiradi (OWASP).
-
-    Xavfli prefiksdan oldin `'` qo'yiladi — Excel uni "bu matn" belgisi
-    deb o'qiydi va katakda KO'RSATMAYDI, ya'ni foydalanuvchi ko'radigan
-    qiymat o'zgarmaydi.
-
-    Bo'sh satr o'zgarishsiz qaytadi: unda boshlang'ich belgi umuman
-    yo'q.
-    """
-    if value.startswith(FORMULA_PREFIXES):
-        return "'" + value
-    return value
-
-
 def build_template(
     kind: str,
     locale: str,
@@ -257,7 +255,7 @@ def build_template(
 
     texts = _texts(locale)
     buffer = io.BytesIO()
-    workbook = xlsxwriter.Workbook(buffer, {"in_memory": True})
+    workbook = new_workbook(buffer)
     try:
         header_format = workbook.add_format({"bold": True, "bg_color": "#F2F2F2"})
         worksheet = workbook.add_worksheet(texts[_SHEET_KEYS[kind]])
@@ -274,9 +272,14 @@ def build_template(
         worksheet.freeze_panes(1, 0)
 
         _reference_sheet(workbook, worksheet, texts, kind, zones, categories, roles)
-    finally:
+    except BaseException:
+        # ⚠ `finally: close()` EMAS — muvaffaqiyatli yo'lda kitobni
+        #   `finish()` yopadi va ikki marta yopish `XlsxWriter` da
+        #   ikkinchi (yarim) faylni yozardi. Nosoz yo'lda esa resurs
+        #   baribir bo'shatiladi va istisno O'ZGARISHSIZ ko'tariladi.
         workbook.close()
-    return buffer.getvalue()
+        raise
+    return finish(workbook, buffer)
 
 
 def build_error_report(issues: Sequence[ImportIssue], locale: str) -> bytes:
@@ -288,7 +291,7 @@ def build_error_report(issues: Sequence[ImportIssue], locale: str) -> bytes:
     """
     texts = _texts(locale)
     buffer = io.BytesIO()
-    workbook = xlsxwriter.Workbook(buffer, {"in_memory": True})
+    workbook = new_workbook(buffer)
     try:
         header_format = workbook.add_format({"bold": True, "bg_color": "#F2F2F2"})
         worksheet = workbook.add_worksheet(texts["errors_sheet"])
@@ -310,9 +313,11 @@ def build_error_report(issues: Sequence[ImportIssue], locale: str) -> bytes:
 
         worksheet.freeze_panes(1, 0)
         worksheet.autofilter(0, 0, max(len(issues), 1), ERROR_REPORT_COLUMNS - 1)
-    finally:
+    except BaseException:
+        # `build_template()` dagi bilan AYNI sabab — o'sha izohga qarang.
         workbook.close()
-    return buffer.getvalue()
+        raise
+    return finish(workbook, buffer)
 
 
 def _texts(locale: str) -> dict[str, str]:
@@ -473,12 +478,17 @@ def _write_text(
     value: str,
     cell_format: Any = None,
 ) -> None:
-    """YAGONA matn yozish yo'li — `escape_formula()` shu yerda qo'llanadi.
+    """Shu moduldagi YAGONA matn yozish yo'li — `xlsx_export.write_text` ga o'tadi.
 
-    `worksheet.write()` boshqa hech qayerda CHAQIRILMAYDI: qochirishni
-    har chaqiruvda qo'lda yozish bitta kunda bitta joyda unutilardi va
-    himoya jimgina teshilardi. `write_string()` ATAYIN (`write()` emas):
-    `write()` `"123"` ni songa, `"=1+1"` ni esa FORMULAGA aylantirib
-    yuborardi — ya'ni qochirishdan keyin ham hujum tiklanardi.
+    ⚠ Bu yordamchi ENDI QOCHIRISHNI O'ZI BAJARMAYDI. 08-01 gacha u
+    `worksheet.write_string(..., escape_formula(value), ...)` ni o'zi
+    chaqirardi, ya'ni repoda IKKI qochirish yo'li bor edi: bu yerdagi va
+    eksport modulidagi. Ikki yo'l bir kun ajralib ketardi — masalan yangi
+    prefiks (`FORMULA_PREFIXES` ga qo'shilgan belgi) faqat bittasida
+    hisobga olinardi va himoya JIMGINA yarim ishlardi.
+
+    Yordamchining O'ZI saqlanadi (08-PATTERNS §4): u shu modulning 40 ga
+    yaqin chaqiruv joyini qisqartiradi va nomi bilan "matn shu yerdan
+    yoziladi" qoidasini o'qiladigan qiladi.
     """
-    worksheet.write_string(row, column, escape_formula(value), cell_format)
+    write_text(worksheet, row, column, value, cell_format)

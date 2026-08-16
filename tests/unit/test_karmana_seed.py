@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
+from app.services import xlsx_export
 from app.services.import_validator import (
     ImportIssue,
     StallImportRow,
@@ -162,17 +163,44 @@ def test_generator_does_not_import_the_template_module() -> None:
     Manba `ast` bilan o'qiladi: docstringda `xlsx_template` NOMI ATAYIN
     uchraydi (u yerda taqiqning SABABI yozilgan), ya'ni oddiy `grep`
     darvozani o'z-o'ziga qarshi qo'yardi.
+
+    =======================================================================
+    ⚠ DARVOZA 08-01 DA TORAYTIRILDI — «hech qanday `app.*`» O'RNIGA
+      «AYNAN IKKI SIMVOL». Sabab va chegara ochiq yozilgan:
+
+      `freeze_zip` naqshi SHU FAYLDA tug'ilgan edi, ya'ni determinizm
+      faqat test fiksturasida bor, MAHSULOT eksporti esa (`build_template`,
+      `build_error_report`) nodeterminik edi. 08-01 uni mahsulotga
+      ko'chirdi — va o'shanda fikstur uni MAHSULOTDAN olishi kerak bo'ldi.
+      Ikkinchi nusxa saqlash tanlovi bor edi va u RAD ETILDI: ikki nusxa
+      sana konstantalari bir kun ajralib ketardi.
+
+      Darvozaning MA'NOSI o'zgarmadi. U «yuk quvurning O'ZIDAN kelmasin»
+      deydi — ya'ni ustun tartibi, sarlavha matni va namunaviy qator
+      shablondan OLINMASIN. `freeze_zip`/`new_workbook` esa YUK EMAS:
+      ular ZIP metama'lumotini va hujjat sanasini muzlatadi, faylning
+      MAZMUNIGA bitta bayt ham qo'shmaydi.
+
+      Darvoza ikki tomondan KUCHAYTIRILDI ham:
+        1. Ruxsat SIMVOL darajasida (modul emas) — `build_template` ni
+           `xlsx_export` orqali olib kelishning yo'li yo'q.
+        2. YANGI, ilgari umuman bo'lmagan da'vo: `xlsx_export` ning O'ZI
+           `xlsx_template` ni import qilmasligi. Usiz ruxsat TRANZITIV
+           orqa eshik bo'lardi — fikstur shablon modulini bilvosita
+           yuklab olardi va `ast` skaneri buni KO'RMASDI.
+    =======================================================================
     """
     source = Path(karmana_seed.__file__).read_text(encoding="utf-8")
     tree = ast.parse(source)
 
-    imported: list[str] = []
+    plain: list[str] = []
+    from_imports: list[tuple[str, str]] = []
     documentation: set[int] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            imported.extend(alias.name for alias in node.names)
+            plain.extend(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            imported.append(node.module)
+            from_imports.extend((node.module, alias.name) for alias in node.names)
         elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
             # Yolg'iz satr-ifoda = docstring (modul, sinf, funksiya yoki
             # e'londan keyingi atribut izohi). Ular darvozadan CHIQARILADI:
@@ -180,13 +208,44 @@ def test_generator_does_not_import_the_template_module() -> None:
             # tekshirish darvozani o'z-o'ziga qarshi qo'yardi.
             documentation.add(id(node.value))
 
-    template_imports = [name for name in imported if "xlsx_template" in name]
+    modules = [*plain, *(module for module, _ in from_imports)]
+    template_imports = [name for name in modules if "xlsx_template" in name]
     assert template_imports == [], f"shablon moduli import qilingan: {template_imports}"
 
-    app_imports = [name for name in imported if name == "app" or name.startswith("app.")]
-    assert app_imports == [], (
-        f"generator ishlab chiqarish paketiga bog'landi: {app_imports} — "
+    # `import app.services.xlsx_template` shaklidagi YALANG'OCH import —
+    # TAQIQ. U butun paket yuzasini ochardi va simvol ro'yxati ma'nosiz
+    # bo'lardi (`app.services.xlsx_template.build_template` bir nuqta
+    # narigi tomonda turardi).
+    plain_app = [name for name in plain if name == "app" or name.startswith("app.")]
+    assert plain_app == [], f"yalang'och paket importi: {plain_app}"
+
+    app_symbols = sorted(
+        f"{module}.{name}"
+        for module, name in from_imports
+        if module == "app" or module.startswith("app.")
+    )
+    assert app_symbols == [
+        "app.services.xlsx_export.freeze_zip",
+        "app.services.xlsx_export.new_workbook",
+    ], (
+        f"generator ishlab chiqarish paketiga bog'landi: {app_symbols} — "
         "yuk quvurning O'ZIDAN kelsa miqyos o'lchovi hech nimani isbotlamaydi"
+    )
+
+    # TRANZITIV da'vo — yuqoridagi ruxsatning narxi shu tekshiruv bilan
+    # to'lanadi.
+    export_tree = ast.parse(Path(xlsx_export.__file__).read_text(encoding="utf-8"))
+    export_modules: list[str] = []
+    for node in ast.walk(export_tree):
+        if isinstance(node, ast.Import):
+            export_modules.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            export_modules.append(node.module)
+
+    leaked = [name for name in export_modules if "xlsx_template" in name]
+    assert leaked == [], (
+        f"`xlsx_export` shablon moduliga bog'landi: {leaked} — fikstur uni "
+        "TRANZITIV yuklab olardi va yuqoridagi ro'yxat buni ko'rmasdi"
     )
 
     # KOD ichidagi satr literallari — ya'ni haqiqatan chaqiriladigan URL.

@@ -99,6 +99,32 @@ class Settings(BaseSettings):
     #      chiqish imkonini berardi.
     import_max_staff_rows: int = 200
 
+    # --- Hisobot chegaralari (08-01, D-05/D-06) ---
+    #
+    # Chegara KODDA LITERAL BO'LMASLIGI kerak: 08-10 (eksport marshrutlari)
+    # va 08-16 (imzoli solishtiruv eksporti) ikkalasi ham shu qiymatga
+    # qaraydi va ikki joyda yozilgan son bir kun ajralib ketardi.
+    #
+    # ⚠ `report_max_rows` = 50 000 va bu 08-RESEARCH A4 dagi 5000 EMAS.
+    #   Sabab HISOB-KITOB, kelishuv emas: 1000 rasta × 30 kun ≈ 30 000
+    #   qator. Ya'ni 5000 chegara ODATDAGI OYLIK hisobotni rad etardi —
+    #   direktor eng ko'p so'raydigan hisobotni. 50 000 esa oylikni
+    #   o'tkazadi, yillik so'rov (≈365 000 qator) esa chegaraga urilib
+    #   ogohlantirish oladi (08-UI-SPEC O-04).
+    #
+    # ⚠ Bu qiymat `[ASSUMED]` va TETIGI YOZILGAN: birinchi oyda
+    #   `report_too_large` bir marta ham chiqmasa chegara to'g'ri; chiqsa
+    #   — o'lchov bor va qiymat dalil bilan qayta belgilanadi.
+    #
+    # NEGA IKKITA EMAS, BITTA QATOR CHEGARASI: reja `report_max_rows` va
+    # `report_export_max_rows` ni alohida taklif qilgan edi, lekin ular
+    # AYNI ma'noni anglatadi — `.xlsx` eksporti hisobotning O'ZI qaytargan
+    # qatorlarni yozadi (`in_memory` kitob, `constant_memory` emas). Ikki
+    # maydon ikki xil qiymat olganda "ekranda ko'rinadi, lekin yuklab
+    # bo'lmaydi" degan tushuntirib bo'lmas holat tug'ilardi.
+    report_max_period_days: int = 366
+    report_max_rows: int = 50_000
+
     # --- NVR rekvizitlari (03-04, SC#4) ---
     #
     # Shifr kaliti `JWT_SECRET` DAN ALOHIDA va bu ATAYIN — ikki xil xavf
