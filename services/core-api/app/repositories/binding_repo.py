@@ -34,20 +34,47 @@ BOZORLAR ARO yuz beradi va uni aniqlashning yagona yo'li — barcha faol
 bozorlarni ko'rib chiqish. Bitta tsikl IKKALA vazifani ham bajaradi.
 
 =============================================================================
-⛔ ERTA `break` YO'Q — VA BU XAVFSIZLIK QARORI, OPTIMIZATSIYA EMAS
-   (T-07-40).
+⛔ ERTA `break` YO'Q — TSIKL DOIMIY, LEKIN ⛔ JAVOB VAQTI BARIBIR FARQ
+   QILADI. ENUMERATSIYA HIMOYASI — RATE-LIMIT, TAYMING EMAS (T-07-40,
+   08-06/WR-04).
 
-D-26(a) javobi neytral, lekin JAVOB VAQTI bo'yicha ajratish mumkin
-bo'lardi: moslik topilganda tsikl erta tugasa, «raqam reyestrda bormi?»
-savoliga TAYMING javob berardi va cheksiz `contact` yuborish reyestrni
-tashqaridan sanash yo'lini ochardi. Shuning uchun tsikl HAR DOIM barcha
-faol bozorlarni oxirigacha aylanadi.
+Tsikl HAR DOIM barcha faol bozorlarni oxirigacha aylanadi va bu
+SAQLANADI: erta `break` tsiklning O'ZINI «raqam reyestrda bormi?»
+savolining o'lchagichiga aylantirardi va u eng arzon, eng barqaror
+signal bo'lardi.
 
-⚠ Ikkinchi qatlam — `POST /internal/bot/resolve` dagi rate-limit
-  (`telegram_user_id` kesimida). Bittasi ham yolg'iz yetarli emas: tayming
-  yopilmasa cheksiz urinish tayming farqini statistik ravishda ochardi,
-  rate-limit bo'lmasa esa tsiklning O'ZI (bozorlar soni o'sganda)
-  sekinlashib, farq yana ko'rinardi.
+⛔ LEKIN BU YOLG'IZ «DOIMIY VAQT» BERMAYDI — VA BU YERDA O'LCHANMAGAN
+   DA'VO YOZILMAYDI. Tsikldan KEYINGI ish uch shoxda uch xil narxga
+   ega va farq tsiklnikidan KATTA:
+
+     `NO_MATCH`          -> faqat `log.info` — I/O YO'Q
+     `BOUND`             -> yangi tenant tranzaksiyasi + `SELECT` +
+                            `UPDATE`/`INSERT` + `flush`
+     `MULTIPLE_MATCHES`  -> HAR mos bozor uchun tranzaksiya +
+                            `alert_events` upsert
+
+Ya'ni tayming bo'yicha «doimiy javob» DA'VOSI kodda BAJARILMAYDI va u
+shu sababdan bu fayldan OLIB TASHLANDI — kuchaytirilmadi, chunki
+o'lchanmagan da'vo mavjud bo'lmagan himoyaga ishonch berardi.
+
+⚠ SUN'IY DOIMIY KECHIKISH (minimal-kechikish konstantasi + uyqu bilan
+  tekislash) ONGLI RAD ETILDI: u botning javob vaqtini HAR chaqiruvda
+  oshirardi va test to'plamining yugurish vaqtiga ham tushardi — narx
+  REAL, foyda esa quyidagi ikki qatlam borligida NAZARIY.
+
+⛔ ENUMERATSIYANING HAQIQIY IKKI TO'SIG'I:
+
+  1. ⛔ D-24 — STRUKTURAVIY: odam Telegram'da FAQAT O'Z kontaktini
+     ulasha oladi, ya'ni «begona raqamni sinab ko'rish» yo'li umuman
+     ochilmaydi (`app/api/internal/bot.py` ning o'sha bandi).
+  2. ⛔ RATE-LIMIT — `POST /internal/bot/resolve`, `telegram_user_id`
+     kesimida (`BOT_RESOLVE_LIMIT = 5`). Statistik tayming hujumi
+     MINGLAB o'lchov talab qiladi; besh urinish uni imkonsiz qiladi.
+
+⚠ IKKALASI HAM O'LCHANADI, TAYMING ESA YO'Q — va bu ochiq yozilyapti:
+  o'lchanmagan xavfsizlik da'vosi kodda qolsa, keyingi ijrochi mavjud
+  bo'lmagan himoyaga tayanib chinakam to'siqni (rate-limit) «ortiqcha»
+  deb olib tashlashi mumkin edi.
 
 =============================================================================
 ⛔ MUVAFFAQIYATSIZ URINISH SAQLANMAYDI (Open Question 1 / A5, T-07-41).
@@ -411,6 +438,13 @@ async def resolve(
          docstringi, T-07-40);
       3. natijaga qarab uch shox.
 
+    ⚠ TSIKL DOIMIY, JAVOB VAQTI ESA EMAS: 3-bosqichning narxi uch shoxda
+      uch xil (`NO_MATCH` — I/O yo'q; `BOUND` — yozuv tranzaksiyasi;
+      `MULTIPLE_MATCHES` — har bozor uchun alert upserti). Enumeratsiya
+      himoyasi shuning uchun TAYMINGDA emas — D-24 (odam faqat O'Z
+      kontaktini ulashadi) va rate-limitda (`BOT_RESOLVE_LIMIT`). To'liq
+      sabab modul docstringining o'sha bandida (WR-04).
+
     Returns:
         `ResolveOutcome` — ⛔ telefon raqami YO'Q (modul docstringi).
     """
@@ -672,9 +706,13 @@ async def resolve_director(
       3. mos kelgan HAR BIR bozor uchun ALOHIDA tranzaksiyada `bind_director()`.
 
     ⛔ NORMALIZATSIYA YIQILGANDA HAM TSIKL TO'LIQ YUGURADI. Erta `return`
-       javob vaqtini «raqam shakli to'g'rimi?» oracle'iga aylantirardi —
-       `resolve()` ning aynan qoidasi (T-07-40). Moslik tekshiruvida
-       `None` hech qanday telefonga teng bo'lmaydi.
+       tsiklning O'ZINI «raqam shakli to'g'rimi?» o'lchagichiga
+       aylantirardi — `resolve()` ning aynan qoidasi (T-07-40). Moslik
+       tekshiruvida `None` hech qanday telefonga teng bo'lmaydi.
+       ⚠ BU «DOIMIY JAVOB VAQTI» DEGANI EMAS: mos bozor topilganda
+         tsikldan keyin HAR BIRI uchun yozuv tranzaksiyasi ochiladi va
+         narx shu yerda ajraladi. Enumeratsiya himoyasi D-24 va
+         rate-limitda (modul docstringi, WR-04).
 
     ⛔ ROL VA HOLAT TEKSHIRUVI HAQIQIY: moslik FAQAT `Role.DIRECTOR` roli
        BOR va `is_active` bo'lgan a'zoda. Kassir/nazoratchi telefoni va

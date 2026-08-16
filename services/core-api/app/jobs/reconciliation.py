@@ -61,6 +61,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Final
 
 import structlog
@@ -89,6 +90,7 @@ __all__ = [
     "DEFAULT_OVERDUE_DAYS",
     "RECON_OPEN_COMPONENT",
     "ReconOpenResult",
+    "overdue_cutoff",
     "reconciliation_open",
 ]
 
@@ -149,6 +151,51 @@ DEFAULT_OVERDUE_DAYS: Final[int] = _schema_default_overdue_days()
   qiymat bermasdi. Shuning uchun o'quvchi `COALESCE` bilan shu qiymatga
   tushadi.
 """
+
+def overdue_cutoff(business_date: date, overdue_days: int) -> date:
+    """Kechikish chegarasi — ⛔ QOIDANING YAGONA TA'RIFI (D-19, WR-06).
+
+    =========================================================================
+    ⛔⛔ IKKINCHI AYIRISH IFODASI KODDA YOZILMAYDI.
+
+    `recon.open` (case tug'ilishi) va BOT-03 (sotuvchi eslatmasi) —
+    ikki MUSTAQIL job, lekin ular BIR savolga javob beradi: «qaysi
+    kundan eskisi kechikkan hisoblanadi?». 07-fazada bu savolga ikki
+    joyda javob berilardi (`reconciliation_repo` va `digest_repo` ning
+    o'z ayirish ifodalari) va ikkalasi bir xil FORMULA bo'lsa ham,
+    ularga kelgan `business_date` MAHSULOTDA bir kunga farq qilardi
+    (WR-06). Formula bitta joyga yig'ilganda ham bu yetmasdi — shuning
+    uchun chegara endi JOB QATLAMIDA hisoblanadi va repo qatlamiga
+    TAYYOR `cutoff` bo'lib tushadi.
+
+    ⛔ REPO QATLAMI ENDI CHEGARANI HISOBLAMAYDI, QO'LLAYDI. Ya'ni
+       «qaysi kundan?» savolining javobi `_OVERDUE_CHARGES` va
+       `overdue_vendors()` ga ARGUMENT bo'lib boradi va ikkala
+       mexanizmning javobi STRUKTURAVIY ravishda bir xil bo'ladi.
+
+    ⚠ FUNKSIYA SHU MODULDA, `notification_meta` DA EMAS: `DEFAULT_
+      OVERDUE_DAYS` reyestrda (sxemadan hosila), chegara ARIFMETIKASI
+      esa `recon.open` ning o'z qoidasi va `notifications.py` uni SHU
+      YERDAN import qiladi. Yo'nalish ATAYIN shu tomonga — teskarisi
+      reyestr modulini job mantig'iga bog'lardi.
+    =========================================================================
+
+    Args:
+        business_date: qaysi kunning holati baholanyapti. ⛔ IKKALA job
+            ham QOBIQDAN bir xil kun oladi (`business_today() - 1`) —
+            tenglik `test_overdue_reminder_shares_the_knob_with_case_
+            opening` da, qobiqlardan yuritib o'lchanadi.
+        overdue_days: bozorning chegarasi —
+            `market_notification_settings.overdue_days`.
+
+    Returns:
+        Eng kech «kechikkan» sanaladigan kun. Taqqoslash chaqiruvchida
+        ⛔ `<=` bilan qilinadi (`_OVERDUE_CHARGES` va `overdue_vendors()`
+        ikkalasida ham): `<` yozilganda chegaradagi kun bir mexanizmda
+        case ochib, ikkinchisida eslatma BERMASDI.
+    """
+    return business_date - timedelta(days=overdue_days)
+
 
 _MARKET_OVERDUE_DAYS = text(
     """
@@ -315,7 +362,10 @@ async def _open_market(
             session,
             market_id=market_id,
             business_date=business_date,
-            overdue_days=overdue_days,
+            # ⛔ CHEGARA SHU YERDA HISOBLANADI, REPO ICHIDA EMAS (WR-06):
+            #   `overdue_cutoff()` — qoidaning YAGONA ta'rifi va BOT-03
+            #   ham AYNAN shu funksiyani chaqiradi.
+            cutoff=overdue_cutoff(business_date, overdue_days),
         )
 
     result.anomaly_cases += opened.anomaly_cases

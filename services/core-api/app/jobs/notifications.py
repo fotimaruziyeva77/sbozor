@@ -100,6 +100,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.jobs.notification_meta import DEFAULT_OVERDUE_DAYS, outbox_payload
+from app.jobs.reconciliation import overdue_cutoff
 from app.jobs.retention import active_market_ids
 from app.repositories import digest_repo, outbox_repo
 from app.repositories.billing_repo import pending_projection
@@ -218,17 +219,27 @@ _MARKET_OVERDUE_DAYS = text(
    SO'ZMA-SO'Z JUFTI VA IKKALASI AJRALSA D-19 BUZILADI.
 
 Ajralish TESTDA o'lchanadi, taxmin qilinmaydi:
-`test_overdue_reminder_shares_the_knob_with_case_opening` AYNI bozorda
-IKKALA mexanizmni ham yuritadi va ularning javobi BIR XIL bo'lishini
-talab qiladi (`test_outbox_repo.py` da o'rnatilgan «bir qoidaning ikki
-ifodasi solishtiriladi» naqshi).
+`test_overdue_reminder_shares_the_knob_with_case_opening` ikkala
+mexanizmni ham ⛔ MAHSULOT QOBIQLARIDAN yuritadi va ularning
+chegarasi BIR XIL bo'lishini talab qiladi (`test_outbox_repo.py` da
+o'rnatilgan «bir qoidaning ikki ifodasi solishtiriladi» naqshi).
 
-⚠ IMPORT EMAS, JUFT — sabab `_tenant_session` nikidan FARQLI va u ochiq
-  yozilishi kerak: `app.jobs.reconciliation` dan import qilish ikki
-  mustaqil jobni bir-biriga bog'lab qo'yardi, holbuki ularning YAGONA
-  umumiy narsasi — SOZLAMA USTUNI. Ustunning o'zi esa bitta va u
-  `market_notification_settings.overdue_days`; standart qiymat ham
-  ENDI bitta (`notification_meta.DEFAULT_OVERDUE_DAYS`, sxemadan hosila).
+=============================================================================
+⚠ SO'ROV — JUFT, LEKIN CHEGARA — IMPORT. VA BU FARQ 08-06 DA
+  O'LCHANGAN (WR-06).
+
+Bu BAYONOT (`_MARKET_OVERDUE_DAYS`) hamon JUFT: u SOZLAMA USTUNINI
+o'qiydi, ya'ni ikki mustaqil jobning yagona umumiy narsasi — ustunning
+o'zi (`market_notification_settings.overdue_days`), standart qiymat ham
+bitta (`notification_meta.DEFAULT_OVERDUE_DAYS`, sxemadan hosila).
+
+⛔ CHEGARANING ARIFMETIKASI ESA IMPORT QILINADI:
+   `app.jobs.reconciliation.overdue_cutoff()`. Eski qaror («import emas,
+   juft») aynan shu nuqtada YOLG'ON da'vo tug'dirgan edi — ikki
+   mexanizm bir formulani ikki joyda yozardi va ularga kelgan
+   `business_date` MAHSULOTDA bir kunga farq qilardi. Ya'ni «AYNI knob»
+   faqat testda rost edi. Bog'lanish endi ATAYIN: qoida bitta bo'lsa,
+   uning ta'rifi ham bitta bo'lishi SHART.
 =============================================================================
 
 ⛔ `COALESCE` BILAN, IKKI SO'ROV BILAN EMAS: «avval qator bormi deb qara,
@@ -648,8 +659,10 @@ async def _overdue_market(
         vendors = await digest_repo.overdue_vendors(
             session,
             market_id=market_id,
-            as_of=business_date,
-            overdue_days=overdue_days,
+            # ⛔ CHEGARA SHU YERDA HISOBLANADI, REPO ICHIDA EMAS (WR-06):
+            #   `overdue_cutoff()` — qoidaning YAGONA ta'rifi va
+            #   `recon.open` ham AYNAN shu funksiyani chaqiradi.
+            cutoff=overdue_cutoff(business_date, overdue_days),
         )
 
         written = 0

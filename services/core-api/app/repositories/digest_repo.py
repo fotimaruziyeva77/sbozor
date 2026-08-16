@@ -58,7 +58,6 @@ sinfi (D-32).
 
 from dataclasses import dataclass as _dataclass
 from datetime import date as _date
-from datetime import timedelta as _timedelta
 from typing import Final as _Final
 from uuid import UUID as _UUID
 
@@ -414,8 +413,7 @@ async def overdue_vendors(
     session: _AsyncSession,
     *,
     market_id: _UUID,
-    as_of: _date,
-    overdue_days: int,
+    cutoff: _date,
 ) -> list[OverdueVendor]:
     """BOT-03 eslatmasining manzillari — ⛔ `recon.open` BILAN AYNI PREDIKAT.
 
@@ -430,6 +428,11 @@ async def overdue_vendors(
          TAQSIMLASH YOZILMAYDI: `allocate_charge_credit()` ning
          docstringi bu vasvasani nomma-nom taqiqlaydi;
       3. kechikish chegarasi ENG OXIRIDA qo'llanadi.
+         ⛔ CHEGARA BU YERDA HISOBLANMAYDI: `cutoff` ARGUMENT bo'lib
+         keladi (`app.jobs.reconciliation.overdue_cutoff()`), ya'ni
+         `recon.open` bilan AYNAN bir qiymatdan yuradi (WR-06). 07-fazada
+         bu yerda o'z ayirish ifodasi bor edi va u `recon.open` nikidan
+         MAHSULOTDA bir kunga ajralib turardi.
 
     ⛔ QADAMLARNING TARTIBI MAJBURIY. Chegarani birinchi qadamga surish
        qoldiqni FAQAT eski hisoblardan hisoblardi va bugungi to'lovi
@@ -449,9 +452,10 @@ async def overdue_vendors(
       emas.
 
     Args:
-        as_of: kechikish chegarasi SHU kundan orqaga hisoblanadi.
-        overdue_days: bozorning chegarasi — `market_notification_settings.
-            overdue_days`, ⛔ `recon.open` bilan AYNI knob.
+        cutoff: eng kech «kechikkan» sanaladigan kun — ⛔ `recon.open`
+            ning `open_cases(cutoff=...)` iga uzatilgan qiymat bilan
+            AYNI. Ikkalasi ham `overdue_cutoff(business_date,
+            market_notification_settings.overdue_days)` dan chiqadi.
 
     Returns:
         `(oldest_service_date, vendor_id)` bo'yicha saralangan ro'yxat —
@@ -464,7 +468,6 @@ async def overdue_vendors(
     if not debtors:
         return []
 
-    cutoff = as_of - _timedelta(days=overdue_days)
     found: list[OverdueVendor] = []
     for vendor_id in debtors:
         allocation = await _vendor_charge_allocation(
