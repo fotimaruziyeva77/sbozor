@@ -1197,7 +1197,9 @@ def cyrillic_market(sync_owner_conn: Connection[TupleRow], reports: Env) -> Iter
         sync_owner_conn.execute(_RENAME_MARKET, (original[0], str(reports.market_id)))
 
 
-@pytest.mark.parametrize(("url", "kind"), zip(EXPORT_URLS, EXPORT_IDS, strict=True), ids=EXPORT_IDS)
+@pytest.mark.parametrize(
+    ("url", "kind"), list(zip(EXPORT_URLS, EXPORT_IDS, strict=True)), ids=EXPORT_IDS
+)
 async def test_every_export_returns_a_real_xlsx_document(
     api_client: httpx.AsyncClient,
     reports: Env,
@@ -1290,9 +1292,7 @@ async def test_the_export_filename_survives_a_cyrillic_market_name(
        barcha kirill nomli bozorlarga BIR XIL fayl nomini berardi.
     =======================================================================
     """
-    response = await api_client.get(
-        REVENUE_XLSX_URL, params=_period(), headers=director_headers
-    )
+    response = await api_client.get(REVENUE_XLSX_URL, params=_period(), headers=director_headers)
 
     assert response.status_code == 200, response.text
 
@@ -1305,16 +1305,12 @@ async def test_the_export_filename_survives_a_cyrillic_market_name(
 
 
 @pytest.mark.parametrize("url", EXPORT_URLS, ids=EXPORT_IDS)
-@pytest.mark.parametrize(
-    "headers_fixture",
-    ["cashier_headers", "inspector_headers", "platform_admin_headers"],
-    ids=["cashier", "inspector", "platform-admin"],
-)
 async def test_no_role_without_report_view_can_export(
     api_client: httpx.AsyncClient,
     reports: Env,
-    request: pytest.FixtureRequest,
-    headers_fixture: str,
+    cashier_headers: dict[str, str],
+    inspector_headers: dict[str, str],
+    platform_admin_headers: dict[str, str],
     url: str,
 ) -> None:
     """(c) `report_view` siz uchala rol ham 403 — ⛔ EKSPORTDA HAM.
@@ -1326,11 +1322,23 @@ async def test_no_role_without_report_view_can_export(
     ⛔ `platform_admin` HAM (Pitfall 11 varianti A, UI-SPEC O-07) va
        uning sessiyasida bozor TANLANGAN — ya'ni 403 aynan HUQUQDAN
        keladi, `market_not_selected` dan emas.
-    """
-    headers = request.getfixturevalue(headers_fixture)
-    response = await api_client.get(url, params=_period(), headers=headers)
 
-    assert response.status_code == 403, response.text
+    ⚠ UCH SESSIYA FIXTURE ARGUMENTI SIFATIDA OLINADI,
+      `request.getfixturevalue()` BILAN EMAS — o'lchandi: sessiya
+      fixture'lari ASYNC va `getfixturevalue()` ularni ishlab turgan
+      hodisa siklidan qayta yugurtirishga urinib
+      `RuntimeError: Runner.run() cannot be called from a running event
+      loop` beradi. Ya'ni «qaysi rol» ni parametrizatsiya qilish emas,
+      ARGUMENT qilish yagona ishlaydigan shakl.
+    """
+    for role, headers in (
+        ("cashier", cashier_headers),
+        ("inspector", inspector_headers),
+        ("platform-admin", platform_admin_headers),
+    ):
+        response = await api_client.get(url, params=_period(), headers=headers)
+
+        assert response.status_code == 403, f"{role} -> {url}: {response.text}"
 
 
 async def test_one_debtors_export_writes_exactly_one_audit_row(
