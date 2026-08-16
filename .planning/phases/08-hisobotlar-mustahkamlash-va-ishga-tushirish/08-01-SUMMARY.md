@@ -276,3 +276,14 @@ xato hisoboti, test fiksturasi) unga real ravishda bog'langan.
 - ⚠ O'sha darvoza hozircha FAQAT `xlsx_export.py` ni skanerlaydi. Yangi
   eksport moduli qo'shilganda skaner maydonini kengaytirish kerak — aks
   holda yangi modul xom `worksheet.write()` bilan yozsa darvoza jim qoladi.
+
+## Self-Check: PASSED
+
+Yaratilgan fayllar diskda mavjud:
+
+- `services/core-api/app/services/xlsx_export.py`
+- `tests/unit/test_xlsx_export.py`
+- `.planning/phases/08-hisobotlar-mustahkamlash-va-ishga-tushirish/08-01-SUMMARY.md`
+
+Commitlar `git log` da mavjud: `e2eb3e8`, `ef671ad`, `ece6a27`, `3ecd02c`,
+`77483c8`. Ish daraxti toza (`git status --short` bo'sh).
