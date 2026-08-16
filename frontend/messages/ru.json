@@ -1115,6 +1115,7 @@
     "recentEmpty": "В эту смену платежей не записано",
     "reverse": "Отменить",
     "reversed": "Отменён",
+    "reversalEntry": "Запись об отмене",
     "override": "Изменить сумму",
     "reasonLabel": "Причина изменения",
     "reasonPlaceholder": "Выберите причину",
@@ -1348,7 +1349,7 @@
   "headline": {
     "revenue_today": "Сегодняшняя выручка",
     "review_queue": "{count, plural, one {Зона ожидает проверки} few {Зоны ожидают проверки} many {Зон ожидает проверки} other {Зон ожидает проверки}}",
-    "receipts_written": "{count, plural, one {Сегодня выписана квитанция} few {Сегодня выписаны квитанции} many {Сегодня выписано квитанций} other {Сегодня выписано квитанций}}",
+    "receipts_written": "{count, plural, other {Выписанные сегодня квитанции (включая отменённые)}}",
     "unknown": "Показатель",
     "amountUnit": "сум"
   }

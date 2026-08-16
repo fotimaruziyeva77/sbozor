@@ -252,7 +252,18 @@ async def receipts_written_count(
             kassirning kunini so'ray olardi.
 
     Returns:
-        Bekor qilinmagan kvitansiyalar soni. Ishlamagan kun uchun **0**.
+        Bugun yozilgan (⛔ BEKOR QILINGANI HAM KIRADIGAN) kvitansiyalar
+        soni. Ishlamagan kun uchun **0**.
+
+        ⚠ IZOH TUZATILDI, SO'ROV EMAS (quick 260816-75c). Bu yerda ilgari
+          «bekor qilinmagan kvitansiyalar soni» deb yozilgandi va bu
+          YOLG'ON edi: `_RECEIPTS_WRITTEN` faqat `kind = 'payment'`
+          bo'yicha filtrlaydi va `reversed` holatini UMUMAN ko'rmaydi.
+          Yolg'on izoh yo'qligidan YOMONROQ — keyingi o'quvchi mavjud
+          bo'lmagan xulqqa ishonardi va sanoqni «nega kamaymadi?» deb
+          nosozlik hisoblardi. Sanoqning O'ZI to'g'ri va u
+          o'zgartirilmaydi (yuqoridagi ma'noviy sabab), ekrandagi YORLIQ
+          esa endi nimani sanayotganini AYTADI.
     """
     result = await session.execute(
         _RECEIPTS_WRITTEN,

@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PaymentMethodValue } from "@/lib/api-types";
+import { cn } from "@/lib/cn";
 import type { PaymentRecord } from "@/lib/payment-queries";
 
 /*
@@ -56,6 +57,24 @@ import type { PaymentRecord } from "@/lib/payment-queries";
  *
  * ⛔ SOTUVCHI ISMI VA ALOQA MA'LUMOTI YO'Q (C-10, §5.5): kassirda ularni
  *    o'qish huquqi umuman yo'q, ya'ni taqiq HUQUQ darajasida.
+ *
+ * -----------------------------------------------------------------------
+ * ⛔⛔ IKKI SHOX, BITTA BOOL EMAS (Topilma №M, quick 260816-75c)
+ * -----------------------------------------------------------------------
+ * Bu yerda ilgari bitta qator turardi:
+ *
+ *     const undone = record.reversed || record.kind === "reversal";
+ *
+ * `||` ikki BOSHQA hodisani bitta bool'ga siqardi va ma'lumot AYNAN
+ * o'sha qatorda yo'qolardi — bekordan keyin ro'yxatda ikkita bir xil
+ * ko'rinishli qator qolardi va «qaysi biri nima?» savoli javobsiz edi.
+ * Endi qaror UCH HOLATLI (`rowKind()`) va har holat O'Z MATNI bilan
+ * chiziladi: rang ham, chiziq ham YOLG'IZ signal emas (§12.4).
+ *
+ * ⛔ SABAB-KOD QATORDA KO'RSATILMAYDI VA BU UNUTILGAN EMAS:
+ *    `paymentResponseSchema` sakkiz kalitli va unda `reason_code` YO'Q.
+ *    Uni chizish `/payments` javob SHAKLINI o'zgartirishni talab
+ *    qilardi — bu vazifaning chegarasidan tashqarida.
  * =============================================================================
  */
 
@@ -67,6 +86,28 @@ const METHOD_LABEL: Record<
   terminal: "collect.methodTerminal",
 };
 
+/** Qatorning UCH holatidan biri — ⛔ ikkitasi bitta bool'ga siqilmaydi. */
+export type PaymentRowKind = "reversal" | "reversed-payment" | "payment";
+
+/**
+ * Qator qaysi HODISANI ifodalaydi.
+ *
+ * `"reversal"`          — bekor qilish YOZUVI (yangi qator, manfiy kredit);
+ * `"reversed-payment"`  — bekor qilingan ASL to'lov (eski qator, o'zgarmagan);
+ * `"payment"`           — oddiy to'lov.
+ *
+ * ⚠ Tartib ahamiyatli: bekor hodisasining o'zida `reversed` bayrog'i
+ *   ma'nosiz (uni bekor qilib bo'lmaydi), shuning uchun `kind` BIRINCHI
+ *   tekshiriladi.
+ */
+export function rowKind(
+  record: Pick<PaymentRecord, "kind" | "reversed">,
+): PaymentRowKind {
+  if (record.kind === "reversal") return "reversal";
+  if (record.reversed) return "reversed-payment";
+  return "payment";
+}
+
 export type PaymentRowProps = {
   record: PaymentRecord;
   /** ⛔ IXTIYORIY: berilmasa affordans UMUMAN chizilmaydi. */
@@ -77,9 +118,18 @@ export function PaymentRow({ record, onRequestReverse }: PaymentRowProps) {
   const t = useTranslations();
   const format = useFormatter();
 
-  const undone = record.reversed || record.kind === "reversal";
-  const canReverse =
-    onRequestReverse !== undefined && record.kind === "payment" && !undone;
+  const kind = rowKind(record);
+  /* ⚠ Shart MANTIQAN o'zgarmadi — endi u UCH HOLATLI qarordan o'qiladi. */
+  const canReverse = onRequestReverse !== undefined && kind === "payment";
+
+  /*
+   * ⛔ BELGI KO'RINISHDA TUG'ILADI, USTUNDA EMAS. Bu yangi qaror emas —
+   *    `billing_repo._SIGNED_PAYMENT_EXPR` ning UI yarmi: «ustun har
+   *    doim MUSBAT, belgi KO'RINISHDA» (C-5). `payments.amount_soum` da
+   *    `CHECK (> 0)` bor, ya'ni manfiy summa DB'da ifodalab bo'lmaydi.
+   */
+  const signedAmount =
+    kind === "reversal" ? -record.amount_soum : record.amount_soum;
 
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-4 py-3">
@@ -89,8 +139,21 @@ export function PaymentRow({ record, onRequestReverse }: PaymentRowProps) {
           <span className="text-sm font-semibold text-text">
             {record.stall_code}
           </span>
-          <span className="font-mono text-sm tabular-nums text-text">
-            {format.number(record.amount_soum)} {t("collect.amountUnit")}
+          {/*
+            * ⛔ Bekor qilingan ASL qatorda summa CHIZILADI va xiralashadi.
+            *    Chiziq/rang YOLG'IZ signal EMAS — yonidagi yorliq matni
+            *    («Bekor qilingan») allaqachon shu faktni aytadi (§12.4);
+            *    chiziq esa uni bir qarashda ko'rinadigan qiladi.
+            */}
+          <span
+            className={cn(
+              "font-mono text-sm tabular-nums",
+              kind === "reversed-payment"
+                ? "text-text-muted line-through"
+                : "text-text",
+            )}
+          >
+            {format.number(signedAmount)} {t("collect.amountUnit")}
           </span>
         </div>
 
@@ -112,8 +175,18 @@ export function PaymentRow({ record, onRequestReverse }: PaymentRowProps) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {/* ⛔ Rang YAGONA signal emas: badge doim MATN tashiydi (§12.4). */}
-        {undone ? (
+        {/*
+         * ⛔ Rang YAGONA signal emas: badge doim MATN tashiydi (§12.4).
+         *    Va endi UCH holat UCHTA BOSHQA matn beradi — «bekor
+         *    hodisasi» bilan «bekor qilingan to'lov» bir xil so'z bilan
+         *    yorliqlanmaydi.
+         */}
+        {kind === "reversal" ? (
+          <Badge className="gap-1" tone="muted">
+            <Undo2 aria-hidden="true" className="size-3" />
+            {t("collect.reversalEntry")}
+          </Badge>
+        ) : kind === "reversed-payment" ? (
           <Badge className="gap-1" tone="muted">
             <Undo2 aria-hidden="true" className="size-3" />
             {t("collect.reversed")}
