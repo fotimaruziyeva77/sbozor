@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 __all__ = [
     "TABLE_AUDIT_LOG",
     "TABLE_CAMERAS",
+    "TABLE_LEDGER_ENTRIES",
     "TABLE_MARKETS",
     "TABLE_MARKET_PROFILE",
     "TABLE_NVR_DEVICES",
@@ -199,6 +200,29 @@ tugagunicha audit yozuvisiz ishlardi (`04-UI-SPEC.md` §14.3).
 
 `snapshots` da DB triggeri YO'Q, ya'ni `SELECT` ni yozib qo'yadigan
 yagona qatlam — ilova.
+"""
+
+# ---------------------------------------------------------------------------
+# 8-faza — qog'oz daftar reyestri (D-17, RECON-04).
+#
+# ⚠ BU JADVALDA DB TRIGGERI BOR (`0024_ledger_entries` -> `LEDGER_AUDITED_
+# TABLES`), ya'ni HAR qator uchun `insert`/`update` yozuvi O'ZI tushadi va
+# uni ilova TAKRORLAMAYDI. Konstanta boshqa savol uchun kerak.
+# ---------------------------------------------------------------------------
+
+TABLE_LEDGER_ENTRIES = "ledger_entries"
+"""`POST /reports/compare/ledger` — ommaviy importning YIG'MA yozuvi (T-02-180).
+
+⛔ BU YOZUV TRIGGER YOZGANLARINING NUSXASI EMAS, ULARNI BOG'LAYDIGAN
+   FAKT. Trigger 300 qatorli import uchun 300 ta `insert`/`update` qatori
+   yozadi va ularning HAR BIRI to'g'ri; lekin jurnalni o'qiyotgan odam
+   ulardan «bular BITTA ommaviy amaldan» degan xulosani CHIQARA OLMAYDI —
+   nizoda esa aynan shu savol so'raladi.
+
+Shuning uchun ilova qatlami bitta QO'SHIMCHA qator yozadi:
+`{"import": "ledger", "day": ..., "rows": N, "replaced": M}`,
+`row_id=None` va `track_changes=False` bilan (`imports.py::import_staff`
+da o'rnatilgan naqshning aynan takrori).
 """
 
 _INSERT_AUDIT = text(

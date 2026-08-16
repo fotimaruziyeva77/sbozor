@@ -85,6 +85,7 @@ from typing import TYPE_CHECKING, Final
 
 import structlog
 from sbozor_core.enums import Role, StallStatus
+from sbozor_core.money import MAX_SAFE_SOUM
 from sbozor_core.phone import InvalidPhoneError, normalize_phone
 
 if TYPE_CHECKING:
@@ -94,14 +95,17 @@ if TYPE_CHECKING:
     from app.services.xlsx_reader import SheetRow
 
 __all__ = [
+    "LEDGER_COLUMNS",
     "STAFF_COLUMNS",
     "STALL_COLUMNS",
     "VENDOR_COLUMNS",
     "ImportIssue",
+    "LedgerImportRow",
     "StaffImportRow",
     "StallImportRow",
     "VendorImportRow",
     "phone_taken_issue",
+    "validate_ledger_rows",
     "validate_staff_rows",
     "validate_stall_rows",
     "validate_vendor_rows",
@@ -125,6 +129,14 @@ ikkinchi haqiqat manbaini tug'dirardi va admin "ruscha shablonda uzbekcha
 til yozib qo'ydim" degan holatga tushardi.
 """
 
+LEDGER_COLUMNS = 2
+"""Daftar shabloni ustunlari (UI-SPEC §10.3): `rasta kodi, daftar summasi`.
+
+⛔ AYNAN IKKITA VA UCHINCHISI QO'SHILMAYDI — sabab
+`xlsx_template._LEDGER_HEADER_KEYS` da literal yozilgan: daftar QOG'OZ va
+har qo'shimcha ustun kunlik ishni sekinlashtiradi.
+"""
+
 # Ustun POZITSIYALARI — sarlavha matni O'QILMAYDI (O-05). Shablon
 # foydalanuvchi tilida hosil bo'ladi, ya'ni ruscha shablonni yuklab
 # olgan admin uzbekcha interfeysda import qilsa ham fayl ishlaydi.
@@ -132,6 +144,7 @@ til yozib qo'ydim" degan holatga tushardi.
 _STALL_CODE, _STALL_ZONE, _STALL_CATEGORY, _STALL_STATUS, _STALL_NOTE = range(STALL_COLUMNS)
 _VENDOR_NAME, _VENDOR_PHONE, _VENDOR_STALL, _VENDOR_FROM = range(VENDOR_COLUMNS)
 _STAFF_NAME, _STAFF_PHONE, _STAFF_ROLES = range(STAFF_COLUMNS)
+_LEDGER_STALL, _LEDGER_AMOUNT = range(LEDGER_COLUMNS)
 
 _ROLE_SEPARATORS: Final = (",", ";")
 """Rol katagidagi ajratgichlar — IKKALASI ham qabul qilinadi.
@@ -140,6 +153,24 @@ Admin qaysi birini yozishini oldindan bilib bo'lmaydi: `,` — ingliz
 uslubi, `;` esa CIS lokalidagi Excel'ning ustun ajratgichi va odamlar
 uni ro'yxat ajratgichi deb ham ishlatadi. Bittasini tanlash qatorlarning
 yarmini `invalid_role` ga aylantirardi.
+"""
+
+_THOUSAND_SEPARATORS: Final = ("\u0020", "\u00a0", "\u202f")
+"""Daftar summasidagi RAZRYAD AJRATGICHLARI — uchalasi ham TASHLANADI.
+
+⛔ SABAB `_DATE_FORMATS` NIKI BILAN AYNI VA U MAHSULOT QARORI:
+all-or-nothing (D-14) tufayli `150 000` shaklidagi BITTA katak 300
+qatorli faylni butunlay qaytarib yuborardi — holbuki odam summani
+TO'G'RI yozgan, u shunchaki ajratgich qo'ygan.
+
+`\\u00a0` (uzilmaydigan bo'sh joy) ATAYIN ro'yxatda: Excel rus lokalida
+sonni MATN qilib nusxalaganda AYNAN shu belgini qo'yadi va u ekranda
+oddiy bo'sh joydan farq qilmaydi — ya'ni foydalanuvchi xatoni KO'RA
+OLMASDI.
+
+⛔ VERGUL VA NUQTA RO'YXATDA YO'Q: ular kasr ajratgichi ham bo'lishi
+   mumkin (`150000.5`), ya'ni ularni tashlash `150000.5` ni `1500005`
+   ga aylantirardi — jimgina, o'n barobar xato bilan.
 """
 
 _DATE_FORMATS = ("%d.%m.%Y", "%d/%m/%Y")
@@ -209,6 +240,26 @@ class StaffImportRow:
     full_name: str
     phone: str
     roles: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LedgerImportRow:
+    """Yozishga TAYYOR daftar qatori (D-17, 08-14).
+
+    `stall_id` — YECHILGAN havola, faylda esa rasta KODI turadi. Yechish
+    validatorda bajariladi (`validate_vendor_rows` bilan aynan bir xil
+    qaror): repozitoriy qatlami kod bo'yicha qidirsa, topilmagan kod
+    JIMGINA nol qator yozardi va import «muvaffaqiyatli» bo'lib
+    ko'rinardi.
+
+    ⛔ `amount_soum` — BUTUN so'm va `0` QONUNIY (`sbozor_core.models.
+       ledger` modul docstringining 1-bandi): daftar MOLIYAVIY jadval
+       emas, tashqi qog'oz manbaning nusxasi.
+    """
+
+    row: int
+    stall_id: UUID
+    amount_soum: int
 
 
 def validate_stall_rows(
@@ -652,6 +703,165 @@ def _staff_roles(
             roles.append(role)
 
     return None if failed else tuple(roles)
+
+
+def validate_ledger_rows(
+    rows: Sequence[SheetRow],
+    *,
+    stalls_by_code: Mapping[str, UUID],
+) -> tuple[list[LedgerImportRow], list[ImportIssue]]:
+    """Daftar qatorlarini tekshiradi; `(yoziladigan, xatolar)` juftini beradi.
+
+    =========================================================================
+    ⛔⛔ `0` SUMMA XATO EMAS — VA BU FUNKSIYANING ENG MUHIM QOIDASI (D-17).
+
+    `ledger_entries` MOLIYAVIY JADVAL EMAS va u `FINANCIAL_TABLES` da
+    ATAYIN YO'Q (`sbozor_core.models.ledger` modul docstringining
+    1-bandi): jadval tashqi QOG'OZ manbaning nusxasi, tizim hisobi emas.
+    `daily_charges` ning `CHECK (amount_soum > 0)` qoidasi shu sababdan bu
+    yerga TEGISHLI EMAS.
+
+    «Bu rastadan bugun hech nima yig'ilmadi» — SC#5 ning ENG MUHIM
+    holati («daftarda 0, tizimda band») va uni rad etadigan validator
+    o'sha qatorni solishtiruvdan JIMGINA olib tashlardi: fayl 422 bilan
+    qaytardi, admin esa nol yozilgan qatorlarni O'CHIRIB qayta yuklardi —
+    ya'ni nomuvofiqlikning dalili foydalanuvchining O'Z qo'li bilan yo'q
+    qilinardi.
+    =========================================================================
+
+    ⛔ BO'SH KATAK `0` EMAS: to'ldirilmagan summa `row_too_short` beradi.
+       «O'lchanmagan» bilan «nol» ni tenglashtirish 05-14 da nomlangan
+       taqiq — daftarni ko'chirayotgan odam bir qatorni tashlab
+       ketganida tizim buni MA'NOLI javob deb yozardi.
+
+    ⛔ PUL — `int` (C-6). Kasrli qiymat XATO beradi va JIMGINA
+       yaxlitlanmaydi: daftardagi son bilan tizimdagi son orasidagi farq
+       aynan solishtiruvning mazmuni, ya'ni uni validator «tuzatib»
+       qo'ysa hisobot o'z savoliga javob bermay qolardi.
+
+    Args:
+        rows: `xlsx_reader.read_rows(expected_columns=LEDGER_COLUMNS)` natijasi.
+        stalls_by_code: `{rasta kodi: id}` — JORIY BOZORDAN
+            (`ImportRepository.stall_ids_by_code()`). Tenant sessiyasi
+            ostida o'qilgani uchun begona bozorning kodi bu yerga
+            TUSHMAYDI va u `ledger_stall_unknown` oladi (T-08-60).
+
+    Returns:
+        `(accepted, issues)`. `issues` BO'SH BO'LMASA chaqiruvchi HECH
+        NARSA yozmaydi (D-14) — `accepted` o'shanda ham to'liq quriladi,
+        chunki xato ro'yxati BUTUN fayl bo'yicha yig'ilishi kerak.
+    """
+    issues: list[ImportIssue] = []
+    accepted: list[LedgerImportRow] = []
+    stall_first_seen: dict[UUID, int] = {}
+    """⚠ KALIT — YECHILGAN `stall_id`, FAYLDAGI XOM SATR EMAS (WR-05).
+
+    `_lookup()` avval aniq moslikni, so'ng `_fold_index` (registrsiz) ni
+    ko'radi, ya'ni `A1` va `a1` BITTA rastaga yechiladi. Xom satr
+    bo'yicha kalitlaganda ikkala qator ham validatsiyadan o'tardi va
+    `uq_ledger_entries_market_day_stall` `23505` bilan yiqilardi —
+    foydalanuvchi esa QATOR RAQAMISIZ 409 olardi. D-14 aynan shuni
+    taqiqlaydi va bu `validate_vendor_rows` da o'lchangan sinfning aynan
+    takrori.
+    """
+
+    stall_index = _fold_index(stalls_by_code)
+
+    for sheet_row in rows:
+        number = sheet_row.row
+        values = sheet_row.values
+
+        code = _at(values, _LEDGER_STALL)
+        raw_amount = _at(values, _LEDGER_AMOUNT)
+
+        row_issues: list[ImportIssue] = []
+
+        stall_id: UUID | None = None
+        if code is None:
+            row_issues.append(_too_short(number, "rasta kodi"))
+        else:
+            stall_id = _lookup(stalls_by_code, stall_index, code)
+            if stall_id is None:
+                row_issues.append(
+                    ImportIssue(
+                        number,
+                        "ledger_stall_unknown",
+                        f"{number}-qator: {code} raqamli rasta topilmadi",
+                    )
+                )
+            elif stall_id in stall_first_seen:
+                # ⛔ XABARDA IKKALA QATOR HAM NOMLANADI: admin faylda
+                #   qaysi ikki satrni solishtirishni bilishi kerak, aks
+                #   holda 300 qatorli faylda dublikatni qidirish qo'lda
+                #   ish bo'lardi (`duplicate_code_in_file` ning qoidasi).
+                row_issues.append(
+                    ImportIssue(
+                        number,
+                        "ledger_duplicate_stall",
+                        f"{number}-qator: {code} raqamli rasta "
+                        f"{stall_first_seen[stall_id]}-qatorda ham bor",
+                    )
+                )
+            else:
+                stall_first_seen[stall_id] = number
+
+        amount: int | None = None
+        if raw_amount is None:
+            row_issues.append(_too_short(number, "daftar summasi"))
+        else:
+            amount = _ledger_amount(raw_amount)
+            if amount is None:
+                row_issues.append(
+                    ImportIssue(
+                        number,
+                        "ledger_amount_invalid",
+                        f"{number}-qator: '{raw_amount}' summasi butun so'm emas "
+                        "(manfiy va kasr qiymat qabul qilinmaydi; 0 mumkin)",
+                    )
+                )
+
+        if row_issues:
+            # HAR QATOR UCHUN BARCHA TEKSHIRUVLAR BAJARILADI, birinchi
+            # xatoda to'xtamaydi (`validate_stall_rows` dagi bilan aynan
+            # bir xil sabab: admin faylni BIR MARTA tuzatsin).
+            issues.extend(row_issues)
+            continue
+
+        # mypy: yuqoridagi tarmoqlar `row_issues` ni to'ldirmagan bo'lsa
+        # ikkalasi ham `None` bo'la olmaydi.
+        assert stall_id is not None  # noqa: S101
+        assert amount is not None  # noqa: S101
+
+        accepted.append(LedgerImportRow(row=number, stall_id=stall_id, amount_soum=amount))
+
+    return accepted, issues
+
+
+def _ledger_amount(text: str) -> int | None:
+    """Daftar summasini butun so'mga keltiradi; o'qilmasa `None`.
+
+    ⛔ `isdecimal()`, `isdigit()` EMAS: `isdigit()` yuqori indeks belgilar
+       uchun ham `True` beradi (`"²".isdigit()` -> `True`), `int("²")` esa
+       `ValueError` ko'tarardi — ya'ni validator o'zi qabul qilgan qiymatda
+       yiqilardi va 422 o'rniga 500 kelardi.
+
+    ⛔ MANFIY QIYMAT SHU YERDA RAD ETILADI (`-` `isdecimal()` dan
+       o'tmaydi): qog'oz daftar YIG'ILGAN pulni yozadi va storno
+       tushunchasi u yerda YO'Q — manfiy son yozuv xatosi.
+
+    ⛔ YUQORI CHEGARA `MAX_SAFE_SOUM`: usiz 30 xonali son `BIGINT` ga
+       sig'masdi va DB `22003` bilan yiqilardi — u `_CONFLICT_STATES` da
+       yo'q, ya'ni foydalanuvchi qator raqamsiz **500** olardi. Chegara
+       JSON tomonida ham majburiy (Pitfall 7): undan katta qiymat javobda
+       jimgina yaxlitlanardi.
+    """
+    cleaned = text
+    for separator in _THOUSAND_SEPARATORS:
+        cleaned = cleaned.replace(separator, "")
+    if not cleaned.isdecimal():
+        return None
+    value = int(cleaned)
+    return value if value <= MAX_SAFE_SOUM else None
 
 
 def phone_taken_issue(number: int) -> ImportIssue:

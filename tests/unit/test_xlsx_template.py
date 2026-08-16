@@ -17,7 +17,7 @@ from __future__ import annotations
 import io
 import time
 from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_args
 from uuid import UUID, uuid4
 
 import openpyxl
@@ -845,11 +845,154 @@ def test_staff_template_without_roles_has_no_reference_sheet() -> None:
     assert book.sheetnames == ["Xodimlar"]
 
 
-def test_template_kinds_are_exactly_three() -> None:
-    """`TEMPLATE_KINDS` — `Literal` bilan sinxron qoladigan YAGONA ro'yxat."""
+# ===========================================================================
+# D-17 — daftar shabloni (TO'RTINCHI varaq turi, 08-14)
+# ===========================================================================
+
+_LEDGER_SHEETS = {"uz-Latn": "Daftar", "uz-Cyrl": "Дафтар", "ru": "Тетрадь"}
+
+LEDGER_COLUMN_COUNT = 2
+"""⛔ AYNAN IKKITA — UI-SPEC §10.3 ning literal bandi.
+
+Uchinchi ustun (sotuvchi ismi, izoh) QO'SHILMAYDI: daftar QOG'OZ va har
+qo'shimcha ustun kunlik ishni sekinlashtiradi. Son shu yerda NOMLANADI,
+chunki quyidagi to'rt test uni turli tomondan o'lchaydi va bitta joyda
+turgan konstanta ularni ajralib ketishdan saqlaydi.
+"""
+
+
+def ledger_template(locale: str = UZ) -> bytes:
+    """`ledger` shabloni — zona/toifa/rol lug'atlari bu turga UMUMAN tegmaydi."""
+    return build_template("ledger", locale, (), ())
+
+
+def test_ledger_template_has_exactly_two_columns() -> None:
+    """⛔ UCHINCHI USTUN YO'Q — VA U BO'SH KATAK BILAN O'LCHANADI.
+
+    Faqat ikkita sarlavhani tekshirish uchinchisi qo'shilgan holatda ham
+    YASHIL qolardi. Shuning uchun da'vo IKKI TOMONLAMA: birinchi ikkitasi
+    TO'LDIRILGAN, uchinchisi esa `None`.
+    """
+    sheet = open_book(ledger_template())[_LEDGER_SHEETS[UZ]]
+
+    header = [sheet.cell(row=1, column=index + 1).value for index in range(3)]
+
+    assert header[:LEDGER_COLUMN_COUNT] == ["rasta kodi", "daftar summasi"]
+    assert header[LEDGER_COLUMN_COUNT] is None, f"uchinchi ustun qo'shilgan: {header}"
+
+
+def test_ledger_template_headers_are_translated_in_every_locale() -> None:
+    """Uchala tilda sarlavha BOSHQA, ustun soni esa AYNAN bir xil (O-05)."""
+    headers = []
+    for locale, sheet_name in _LEDGER_SHEETS.items():
+        book = open_book(ledger_template(locale))
+        assert book.sheetnames[0] == sheet_name, locale
+        sheet = book[sheet_name]
+        headers.append(
+            tuple(sheet.cell(row=1, column=index + 1).value for index in range(LEDGER_COLUMN_COUNT))
+        )
+
+    assert headers[0] == ("rasta kodi", "daftar summasi")
+    assert headers[2] == ("номер прилавка", "сумма по тетради")
+    assert len(set(headers)) == 3, "tarjima umuman qo'llanmagan"
+
+
+def test_ledger_template_is_parsed_back_identically_in_every_locale() -> None:
+    """Shablon -> `read_rows(expected_columns=2)` uchala tilda AYNAN bir xil.
+
+    O-05 ning daftar shablonidagi shakli: sarlavha MATNI tilga qarab
+    o'zgaradi, ustun POZITSIYALARI esa o'zgarmaydi. Faqat sarlavhani
+    solishtirish "til o'zgardi" ni ko'rsatardi, "parser buzilmadi" ni EMAS.
+    """
+    from app.services.xlsx_reader import read_rows
+
+    parsed = []
+    for locale in _LEDGER_SHEETS:
+        rows = read_rows(ledger_template(locale), expected_columns=LEDGER_COLUMN_COUNT)
+        assert len(rows) == 1, locale
+        assert rows[0].row == 2, locale
+        parsed.append(rows[0].values)
+
+    assert parsed[0] == parsed[1] == parsed[2]
+    assert parsed[0] == ("1", "150000")
+
+
+def test_ledger_sample_row_carries_no_formula_prefix() -> None:
+    """⛔ NAMUNAVIY QATOR O'Z SHABLONIDAN QAYTIB O'QILGANDA TOZA BO'LADI.
+
+    `_SAMPLE_PHONE` da o'lchangan tuzoqning (02-24 deviatsiya #1) daftar
+    shaklidagi takrori: `+`, `=`, `-` bilan boshlangan qiymat
+    `escape_formula()` dan apostrof bilan chiqadi va o'sha qiymat O'Z
+    shablonining importida XATO berardi. Summa `-` bilan yozilsa
+    (`-150000`) aynan shu holat yuzaga kelardi.
+    """
+    from app.services.xlsx_reader import read_rows
+
+    values = read_rows(ledger_template(), expected_columns=LEDGER_COLUMN_COUNT)[0].values
+
+    for value in values:
+        assert value is not None
+        assert not value.startswith(FORMULA_PREFIXES), f"qochirilgan namuna: {value!r}"
+
+
+def test_ledger_template_has_no_reference_sheet() -> None:
+    """Daftar shablonida lug'at varag'i YO'Q — rasta kodlari minglab bo'lishi mumkin.
+
+    `vendors` dagi bilan AYNAN bir xil qaror va bir xil sabab: 1000
+    elementli ochiluvchi ro'yxat faylni foydasiz kattalashtirardi.
+    """
+    assert open_book(ledger_template()).sheetnames == [_LEDGER_SHEETS[UZ]]
+
+
+def test_template_kinds_are_exactly_four() -> None:
+    """`TEMPLATE_KINDS` — `Literal` bilan sinxron qoladigan YAGONA ro'yxat.
+
+    ⚠ SON TEST NOMIDA VA U ONGLI RAVISHDA UCHDAN TO'RTGA OSHIRILDI
+      (08-14, R-11): daftar shabloni QO'SHILDI. Nom sonni aytadi, ya'ni
+      to'plamning o'sishi diff'da KO'RINADI — nomni saqlab qiymatni
+      o'zgartirish o'sha o'sishni JIMGINA qilardi.
+    """
     from app.services.xlsx_template import TEMPLATE_KINDS
 
-    assert TEMPLATE_KINDS == ("stalls", "vendors", "staff")
+    assert TEMPLATE_KINDS == ("stalls", "vendors", "staff", "ledger")
+
+
+def test_the_three_template_registries_stay_in_sync() -> None:
+    """⛔ UCH REYESTR BIR VAQTDA YANGILANADI — VA BU MEXANIK O'LCHANADI.
+
+    `xlsx_template.TEMPLATE_KINDS` (ish vaqtidagi darvoza),
+    `imports.ImportKind` (FastAPI so'rov parametri) va
+    `imports._TEMPLATE_PERMISSIONS` (huquq xaritasi) QO'LDA sinxron
+    saqlanadi — uchalasi ham `TEMPLATE_KINDS` docstringida nomlangan.
+
+    ⛔ AJRALGAN HOLAT JIMGINA BO'LARDI: `Literal` ga qo'shilgan-u
+       xaritaga qo'shilmagan tur `KeyError` bilan **500** berardi (422
+       emas), teskarisi esa o'lik yozuv qoldirardi.
+    """
+    from app.api.v1.imports import _TEMPLATE_PERMISSIONS, ImportKind
+    from app.services.xlsx_template import TEMPLATE_KINDS
+
+    assert set(get_args(ImportKind)) == set(TEMPLATE_KINDS)
+    assert set(_TEMPLATE_PERMISSIONS) == set(TEMPLATE_KINDS)
+
+
+def test_the_ledger_template_sits_behind_stall_manage() -> None:
+    """⛔ `STALL_MANAGE` — `REPORT_VIEW` EMAS (D-20 + 08-RESEARCH OQ-5).
+
+    Daftarni yuklaydigan odam bajaruvchi: nazoratchi yoki admin, ⛔ KASSIR
+    EMAS. `REPORT_VIEW` bu yerda ISHLATILMAYDI — u O'QISH huquqi va uni
+    yozuv yuzasiga qo'yish direktorga (unda `report_view` bor) daftar
+    yuklash imkonini ochardi.
+
+    ⚠ «Nazoratchi» LAVOZIM sifatida o'qiladi va u amalda `market_admin`
+      hisobiga kiradi: `ROLE_PERMISSIONS[INSPECTOR]` bugun AYNAN
+      `{OCCUPANCY_REVIEW}` (T-05-58) va unga yozuv huquqi berish 5-faza
+      qarorini (ko'r audit) kengaytirardi.
+    """
+    from app.api.v1.imports import _TEMPLATE_PERMISSIONS
+    from app.security.rbac import Permission
+
+    assert _TEMPLATE_PERMISSIONS["ledger"] is Permission.STALL_MANAGE
 
 
 # ===========================================================================
@@ -865,8 +1008,9 @@ def test_template_kinds_are_exactly_three() -> None:
             [ImportIssue(row=2, code="zone_not_found", message="2-qator: zona yo'q")],
             UZ,
         ),
+        lambda: build_template("ledger", UZ, (), ()),
     ],
-    ids=["template", "error-report"],
+    ids=["template", "error-report", "ledger-template"],
 )
 def test_two_builds_are_byte_identical(build: Callable[[], bytes]) -> None:
     """AYNI kirish -> AYNI baytlar (08-01, RECON-04).

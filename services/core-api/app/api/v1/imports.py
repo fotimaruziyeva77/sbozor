@@ -125,11 +125,12 @@ StallManagerDep = Annotated[Principal, Depends(require_permission(Permission.STA
 VendorManagerDep = Annotated[Principal, Depends(require_permission(Permission.VENDOR_MANAGE))]
 UserManagerDep = Annotated[Principal, Depends(require_permission(Permission.USER_MANAGE))]
 
-ImportKind = Literal["stalls", "vendors", "staff"]
+ImportKind = Literal["stalls", "vendors", "staff", "ledger"]
 """`?kind=` va marshrut nomlari uchun YAGONA tip.
 
 `xlsx_template.TEMPLATE_KINDS` bilan qo'lda sinxron saqlanadi va ajralib
-qolgan holatni `test_template_kinds_are_exactly_three` hamda OpenAPI
+qolgan holatni `test_template_kinds_are_exactly_four`,
+`test_the_three_template_registries_stay_in_sync` hamda OpenAPI
 marshrutlar darvozasi birgalikda ushlaydi.
 """
 
@@ -137,12 +138,29 @@ _TEMPLATE_PERMISSIONS: dict[str, Permission] = {
     "stalls": Permission.STALL_MANAGE,
     "vendors": Permission.VENDOR_MANAGE,
     "staff": Permission.USER_MANAGE,
+    "ledger": Permission.STALL_MANAGE,
 }
 """Shablon turi -> uni olish uchun kerak bo'ladigan huquq (D-07).
 
 `staff` -> `USER_MANAGE`: shablon chaqiruvchi BERA OLADIGAN rollar
 ro'yxatini o'z ichiga oladi, ya'ni u hisob yaratish yuzasining bir
 qismi. Direktorda bu huquq YO'Q, ya'ni u shablonni ham ololmaydi.
+
+⛔ `ledger` -> `STALL_MANAGE`, VA U `REPORT_VIEW` EMAS (D-20 + 08-14).
+
+Daftar importi — YOZUV amali va uni bajaruvchi odam bajaruvchi lavozimda:
+nazoratchi yoki bozor admini, ⛔ KASSIR EMAS. `REPORT_VIEW` — O'QISH
+huquqi (`reports.py:136-142`) va uni shu yerga qo'yish direktorga (unda
+`report_view` bor) daftar yozish imkonini ochardi; kassirda esa
+`report_view` ham, `stall_manage` ham yo'q, ya'ni u ikkala tomondan ham
+rad etiladi.
+
+⚠ «Nazoratchi» bu yerda LAVOZIM sifatida o'qiladi va u amalda
+  `market_admin` hisobiga kiradi: `ROLE_PERMISSIONS[INSPECTOR]` bugun
+  AYNAN `{OCCUPANCY_REVIEW}` (T-05-58) va unga yozuv huquqi berish 5-faza
+  qarorining (ko'r audit) tor yuzasini kengaytirardi. Buyurtmachi
+  nazoratchining O'ZI yuklashini talab qilsa, bu RBAC o'zgarishi bo'ladi
+  va u ALOHIDA qaror sifatida qo'yiladi — bu yerda jimgina emas.
 """
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -190,7 +208,8 @@ async def require_template_access(
     """Shablon turi QAYSI huquqni talab qilishini hal qiladi.
 
     `?kind=stalls` -> `STALL_MANAGE`, `?kind=vendors` -> `VENDOR_MANAGE`,
-    `?kind=staff` -> `USER_MANAGE`. Bitta huquqni hammasiga qo'yish D-07
+    `?kind=staff` -> `USER_MANAGE`, `?kind=ledger` -> `STALL_MANAGE`
+    (`_TEMPLATE_PERMISSIONS` docstringi). Bitta huquqni hammasiga qo'yish D-07
     ning ajratishini buzardi: hozirgi matritsada uchala huquq HAM bir xil
     rollarda (bozor admini, platforma admini), lekin ular ATAYIN alohida
     tushunchalar va kelajakda ajralishi mumkin. Direktorda uchalasi ham

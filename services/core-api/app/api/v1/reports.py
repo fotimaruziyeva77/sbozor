@@ -85,26 +85,44 @@ from typing import TYPE_CHECKING, Annotated, Final
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
+from sbozor_core.enums import AuditAction
 from sbozor_core.timeutil import business_today
+from sqlalchemy.exc import IntegrityError
 
-from app.api.v1.imports import XLSX_SUFFIX, _locale_of, _xlsx_response
+from app.api.v1.imports import (
+    XLSX_SUFFIX,
+    _conflict,
+    _locale_of,
+    _read,
+    _read_bounded,
+    _reject_if_invalid,
+    _xlsx_response,
+)
 from app.deps import Principal, SettingsDep, TenantSessionDep, require_permission
 from app.repositories import report_repo
+from app.repositories.import_repo import ImportRepository
 from app.repositories.market_repo import MarketRepository
 from app.repositories.occupancy_repo import OccupancyRepository
 from app.schemas import (
     AnomalyArchiveResponse,
     AnomalyArchiveRowResponse,
+    LedgerImportResponse,
     ReceivablesReportResponse,
     ReceivablesReportRow,
     RevenueReportResponse,
     RevenueReportRow,
 )
-from app.security.audit import TABLE_VENDORS, AuditReadIntent, audit_read
+from app.security.audit import (
+    TABLE_LEDGER_ENTRIES,
+    TABLE_VENDORS,
+    AuditReadIntent,
+    audit_read,
+    write_app_audit,
+)
 from app.security.rbac import Permission
-from app.services import xlsx_export
+from app.services import import_validator, xlsx_export
 from app.services.accuracy_report import accuracy_report
 
 if TYPE_CHECKING:
@@ -139,6 +157,26 @@ ReportViewerDep = Annotated[Principal, Depends(require_permission(Permission.REP
 Kassirda `report_view` YO'Q va berilmaydi (UI-SPEC §5.6): u pul YIG'ADI,
 hisobot O'QIMAYDI. Nazoratchida ham yo'q — `ROLE_PERMISSIONS[INSPECTOR]`
 AYNAN `{OCCUPANCY_REVIEW}` (T-05-58).
+"""
+
+LedgerImporterDep = Annotated[Principal, Depends(require_permission(Permission.STALL_MANAGE))]
+"""⛔ DAFTAR IMPORTI — `STALL_MANAGE`, `REPORT_VIEW` EMAS (D-20, 08-14).
+
+`REPORT_VIEW` bu faylning qolgan hamma joyida O'QISH huquqi; daftar
+importi esa YOZUV amali va uni bajaruvchi odam bajaruvchi lavozimda
+turadi: nazoratchi yoki bozor admini, ⛔ KASSIR EMAS.
+
+⛔ IKKI HUQUQ IKKI TOMONDAN QULFLAYDI VA U BUGUNGI MATRITSADA
+   O'LCHANADI: kassirda `report_view` ham, `stall_manage` ham YO'Q;
+   direktorda `report_view` BOR, lekin `stall_manage` YO'Q — ya'ni u
+   hisobotni o'qiydi, daftarni esa YOZA OLMAYDI. Bu farq
+   `test_three_way.py` ning rol matritsasida nom bilan o'lchanadi.
+
+⚠ «Nazoratchi» LAVOZIM sifatida o'qiladi: `ROLE_PERMISSIONS[INSPECTOR]`
+  bugun AYNAN `{OCCUPANCY_REVIEW}` (T-05-58) va unga yozuv huquqi berish
+  5-fazaning ko'r audit qarorini kengaytirardi. Buyurtmachi
+  nazoratchining O'ZI yuklashini talab qilsa, bu RBAC o'zgarishi va u
+  ALOHIDA qaror bo'ladi.
 """
 
 VendorFieldGuardDep = Annotated[Principal, Depends(require_permission(Permission.VENDOR_VIEW))]
@@ -973,3 +1011,158 @@ async def accuracy_export(
 
     payload = xlsx_export.build_accuracy_workbook(report, locale, period)
     return _xlsx_response(payload, filename)
+
+
+# ===========================================================================
+# 5. QOG'OZ DAFTAR IMPORTI — `POST /compare/ledger?day=` (D-17, 08-14)
+#
+# =========================================================================
+# ⛔⛔ YO'L KLIENT KONTRAKTIDAN: `/compare/ledger`, reja aytgan
+#     `/three-way/ledger` EMAS.
+#
+# `report-queries.ts::uploadLedger()` AYNAN `${REPORTS_PATH}/compare/
+# ledger?day=` ga boradi va u 08-03 (TO'LQIN 1) da yozilib, allaqachon
+# jo'natilgan. Bu modul docstringining 2-bandidagi qarorning aynan
+# takrori: SERVER KLIENTNI KUZATADI. Boshqa nom tanlansa nosozlik
+# JIMGINA bo'lardi — komponent testlari mock bilan yashil qolardi va
+# 404 faqat jonli ekranda ko'rinardi.
+#
+# =========================================================================
+# ⛔⛔ BU PREFIKSDAGI YAGONA YOZUV MARSHRUTI — VA U HISOBOTNI
+#     «TUZATMAYDI».
+#
+# `main.py` ning 08-07 blokidagi «bu prefiksda POST YO'Q» qoidasining
+# sababi hisobotning HOSILA ekani edi (D-03): hisobotni tahrirlash uni
+# ikkinchi haqiqat manbaiga aylantirardi. Daftar esa hisobot EMAS —
+# u TIZIMDA UMUMAN YO'Q, tashqi qog'ozdan keladigan UCHINCHI manba, ya'ni
+# uning yozuv yo'li o'sha taqiqning ostiga tushmaydi. Marshrut baribir
+# yopiq to'plam testida NOM bilan ko'rinadi.
+#
+# =========================================================================
+# ⛔⛔ UCH DARVOZA `imports.py` DAN IMPORT QILINADI, KO'CHIRILMAYDI.
+#
+#   `_read_bounded()` -> bayt chegarasi (fayl xotiraga TO'LIQ olinmasdan)
+#   `_read()`         -> ZIP/XML bomba, qator/ustun/varaq chegaralari
+#   `validate_ledger_rows()` -> mazmun
+#
+# TARTIB MAJBURIY: birinchisi ikkinchisining O'RNINI BOSMAYDI —
+# `read_rows()` `len(raw)` ni tekshirganda baytlar ALLAQACHON xotirada
+# bo'lardi (T-02-89 / T-08-58). Ikkinchi nusxa yozilsa chegaralar ikki
+# joyda yashardi va biri sozlamadan, ikkinchisi modul standartidan
+# yurardi.
+# ===========================================================================
+
+DayDep = Annotated[date, Query(alias="day")]
+"""⛔ MAJBURIY — standart qiymat YO'Q (`FromDateDep`/`ToDateDep` qoidasi).
+
+Daftar qatori QAYSI kunga yozilishi `business_date` ustuniga tushadi va
+u DOMEN sanasi (`sbozor_core.models.ledger`): import kechikib, ertasi kuni
+bajarilishi MUMKIN. Standart qiymat («bugun») o'shanda faylni JIMGINA
+noto'g'ri kunga yozardi va xato faqat solishtiruvda, boshqa raqamlar
+bilan aralashib ko'rinardi.
+
+⚠ Klient uni HAR DOIM yuboradi (`uploadLedger(day, file)`), ya'ni
+  majburiylik hech kimni to'smaydi — u faqat parametrsiz so'rovni
+  ochiqchasiga rad etadi.
+"""
+
+
+@router.post("/compare/ledger", response_model=LedgerImportResponse)
+async def ledger_import(
+    principal: LedgerImporterDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    day: DayDep,
+    file: Annotated[UploadFile, File()],
+) -> LedgerImportResponse:
+    """Kunlik qog'oz daftarni `.xlsx` dan yozadi (`STALL_MANAGE`, D-17).
+
+    Ustunlar (UI-SPEC §10.3): `rasta kodi, daftar summasi` — AYNAN IKKITA
+    va POZITSIYA bo'yicha (O-05).
+
+    =======================================================================
+    ⛔⛔ ALL-OR-NOTHING TEKIN KELADI — VA SHU SABABDAN BU YERDA HECH
+        QANDAY QO'SHIMCHA BLOK OCHILMAYDI.
+
+    `TenantSessionDep` sessiyani ALLAQACHON tranzaksiya ichida beradi
+    (`app/api/v1/imports.py` modul docstringi, 1-band): endpointdan
+    chiqqan HAR QANDAY istisno butun importni orqaga qaytaradi. Ichki
+    blok ochish uni faqat BUZARDI — ichki qism muvaffaqiyat bilan
+    yopilgach, undan keyingi xato allaqachon yozilgan qatorlarni
+    qoldirib ketardi.
+
+    ⚠ Bu qoida MEXANIK darvoza bilan qulflangan: qabul mezoni faylni
+      tranzaksiya ochish atamalari bo'yicha grep qiladi va natija NOL
+      bo'lishi shart — shuning uchun o'sha atamalar bu izohda ham
+      LITERAL yozilmagan (02-08 deviatsiya #3 dagi bilan aynan bir xil
+      sabab).
+
+    =======================================================================
+    ⛔ IKKINCHI FAYL BIRINCHISINI ALMASHTIRADI, IKKINCHI QATOR
+       YARATMAYDI (Pattern 6). Kafolat DB da:
+       `UNIQUE (market_id, business_date, stall_id)` +
+       `ON CONFLICT DO UPDATE` (`report_repo._LEDGER_UPSERT`). Ilova
+       qatlamidagi «avval tekshir, keyin yoz» ikki parallel importda
+       IKKITA qator yozardi.
+
+    ⛔ BITTA IMPORT = BITTA YIG'MA AUDIT YOZUVI (T-02-180). Jadvalning
+       O'Z DB triggeri (`0024`) har qator uchun yozuv qoldiradi va
+       ularning hammasi to'g'ri — lekin ulardan «bular BITTA ommaviy
+       amaldan» degan faktni CHIQARIB BO'LMAYDI. Nizoda aynan shu
+       so'raladi, shuning uchun ilova bitta QO'SHIMCHA qator yozadi.
+
+    ⚠ `imported_by` SESSIYADAN keladi, fayldan EMAS; `market_id` ham
+      (T-02-54 / T-08-60) — shablonda bunday ustun umuman yo'q.
+    """
+    market_id = _market_id(principal)
+
+    rows = _read(await _read_bounded(file, settings), import_validator.LEDGER_COLUMNS, settings)
+
+    repo = ImportRepository(session, market_id)
+    accepted, issues = import_validator.validate_ledger_rows(
+        rows,
+        # Lug'at TENANT sessiyasi ostida o'qiladi, ya'ni begona bozorning
+        # rasta kodi bu yerga TUSHMAYDI va u `ledger_stall_unknown` oladi —
+        # javob esa o'sha kodning boshqa bozorda MAVJUDLIGINI oshkor
+        # qilmaydi (`ImportRepository.zone_ids_by_name()` ning qoidasi).
+        stalls_by_code=await repo.stall_ids_by_code(),
+    )
+    _reject_if_invalid(issues)
+
+    try:
+        replaced = await report_repo.ledger_upsert(
+            session,
+            market_id=market_id,
+            business_date=day,
+            rows=accepted,
+            imported_by=principal.user_id,
+        )
+    except IntegrityError as exc:
+        # Bu yerga faqat POYGA holati yetib keladi: mazmun xatolari
+        # validatorda, YOZISHDAN OLDIN ushlangan (`imports.py::_conflict`
+        # docstringi). 409 D-14 ni BUZMAYDI — istisno tranzaksiyani
+        # butunlay orqaga qaytaradi.
+        raise _conflict(exc) from exc
+
+    await write_app_audit(
+        session,
+        action=AuditAction.INSERT,
+        table_name=TABLE_LEDGER_ENTRIES,
+        row_id=None,
+        principal=principal,
+        # ⚠ `replaced` BU YERDA SON, javobda esa MANTIQIY qiymat va bu
+        #   FARQ ONGLI: jurnal «nima o'zgardi» ga javob beradi (nechta
+        #   qator ustiga yozildi), ekran esa «almashtirildimi?» degan
+        #   BITTA savolga (§14.8 tasdiq dialogining natijasi).
+        new={
+            "import": "ledger",
+            "day": day.isoformat(),
+            "rows": len(accepted),
+            "replaced": replaced,
+        },
+        track_changes=False,
+    )
+
+    log.info("ledger_import_done", day=day.isoformat(), rows=len(accepted), replaced=replaced)
+
+    return LedgerImportResponse(day=day, rows=len(accepted), replaced=replaced > 0)

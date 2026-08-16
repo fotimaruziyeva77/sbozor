@@ -646,7 +646,10 @@
       "row_too_short": "Qatorda ustunlar yetishmaydi",
       "invalid_role": "Rol nomi noto'g'ri yozilgan",
       "role_not_allowed": "Bu rolni berishga huquqingiz yo'q",
-      "phone_taken": "Telefon raqami platformada band"
+      "phone_taken": "Telefon raqami platformada band",
+      "ledger_stall_unknown": "Daftardagi rasta raqami tizimda yo'q",
+      "ledger_amount_invalid": "Daftar summasi butun so'm bo'lishi kerak",
+      "ledger_duplicate_stall": "Rasta daftarda ikki marta yozilgan"
     },
     "staffTitle": "Xodimlar ro'yxatini yuklash",
     "staffHint": "Faqat xlsx fayl · 5 MB gacha · 200 qatorgacha",
