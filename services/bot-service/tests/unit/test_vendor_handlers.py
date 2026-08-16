@@ -33,15 +33,23 @@ from fixtures.core_double import (
     failing_double,
     one_market_summary,
 )
-from fixtures.telegram import make_bot, make_message, sent_texts
+from fixtures.telegram import make_bot, make_contact, make_message, sent_texts
 
-from app.core_client import ChargeRow, PaymentsPage, VendorSummary
+from app.core_client import (
+    ChargeRow,
+    PaymentsPage,
+    ResolveResult,
+    VendorRef,
+    VendorSummary,
+)
 from app.handlers.vendor import PAGES_KEY, format_soum, on_debt, on_more, on_payments
 from app.i18n import get_i18n
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from aiogram import Bot
+    from aiogram.types import Message
     from aiogram.utils.i18n import I18n
 
 VENDOR_SOURCE: Final = (
@@ -300,3 +308,140 @@ def test_the_uzbek_header_uses_two_plural_forms() -> None:
     assert single == plural
     # Nazorat: matn chizildi, msgid QAYTMADI (bo'sh `msgstr` belgisi).
     assert not single.startswith("bot.payments")
+
+
+# ---------------------------------------------------------------------------
+# ⛔⛔ WR-04 — ZAXIRA HANDLER: FILTRGA TUSHMAGAN XABAR HAM JAVOB OLADI
+#
+# ⚠ BU YERDA HANDLER TO'G'RIDAN-TO'G'RI CHAQIRILMAYDI — ROUTER DARAXTI
+#   O'LCHANADI, VA BU FARQ BUTUN MAVZUNING O'ZI. `on_unknown` ni qo'lda
+#   chaqirish «u javob qaytaradimi?» degan SAVOLGA javob berardi, holbuki
+#   WR-04 ning savoli boshqa: «filtrga tushmagan xabar UNGACHA yetib
+#   boradimi, va u boshqa oqimlarni USHLAB QOLMAYDIMI?». Ikkinchi savol
+#   faqat haqiqiy `propagate_event` bilan o'lchanadi.
+#
+# ⚠ `build_router()` BU YERDA CHAQIRILMAYDI: `include_router` bolaga
+#   `parent_router` YOZADI va ikkinchi chaqiruv «Router is already
+#   attached» bilan yiqilardi. `app.main.dp` esa import paytida BIR
+#   MARTA quriladi — `test_binding.py` ham aynan shu nusxani o'qiydi.
+# ---------------------------------------------------------------------------
+
+
+async def _route(message: Message, bot: Bot, core: CoreDouble) -> None:
+    """Xabarni HAQIQIY router daraxti bo'ylab yuboradi (filtrlar bilan).
+
+    ⚠ `bot=` va `state=` QO'LDA uzatiladi: ularni odatda `Dispatcher`
+      ning `update` observeridagi outer middleware'lari qo'yadi, bu yerda
+      esa `message` observeri to'g'ridan-to'g'ri qo'zg'atiladi. `Command`
+      filtri `bot` ni TALAB qiladi va usiz `/start` darvozasi umuman
+      hal bo'lmasdi.
+    """
+    from app.main import dp
+
+    await dp.propagate_event("message", message, bot=bot, core=core, state=make_state())
+
+
+def test_the_fallback_router_is_the_last_one() -> None:
+    """⛔ TARTIB MAJBURIY — zaxira router ro'yxatning OXIRIDA.
+
+    Filtrsiz router boshda (yoki o'rtada) tursa u `CommandStart()`,
+    `F.contact` va uchala tugma matnini USHLAB QOLARDI: mavjud oqimlar
+    jimgina o'lardi va HECH NIMA qizarmasdi — chunki bot baribir javob
+    qaytarardi, faqat NOTO'G'RI javobni.
+    """
+    from app.main import dp
+
+    (bot_router,) = dp.sub_routers
+    names = [sub_router.name for sub_router in bot_router.sub_routers]
+
+    # ⛔ QUYI CHEGARA: ro'yxat qisqarib qolsa quyidagi tenglik ham
+    #    (bitta router qolganda) JIMGINA yashil bo'lardi.
+    assert len(names) >= 4, names
+    assert names[-1] == "fallback", (
+        f"zaxira router ro'yxatning OXIRIDA emas: {names}. Bu tartibda u "
+        "mavjud filtrlarni ushlab qolardi (WR-04 ning tuzatishi o'z "
+        "oqimlarini o'ldirardi)"
+    )
+
+
+async def test_an_unrecognised_text_still_gets_an_answer(locale: I18n) -> None:
+    """⛔ WR-04: sotuvchi yozgan HAR xabar javob oladi — mutlaq sukunat yo'q.
+
+    Bugungi holat `app/main.py:130-136` ning o'z asosiga zid edi:
+    «Botning butun qiymati — sotuvchi yozgan xabar javob oladi».
+    """
+    bot, session = make_bot()
+    core = CoreDouble()
+    message = make_message(text="qarzim qancha?").as_(bot)
+
+    await _route(message, bot, core)
+
+    (text,) = sent_texts(session)
+    assert text == get_i18n().gettext("bot.unknown", locale="uz_Latn")
+    # ⛔ D-24: javob foydalanuvchi TERGAN matnni O'QIMAYDI va uni
+    #    TAKRORLAMAYDI — u faqat mavjud tugmalarni eslatadi.
+    assert "qarzim qancha?" not in text.lower()
+    # ⛔ ZAXIRA `core-api` GA CHIQMAYDI: filtrga tushmagan har xabar
+    #    so'rov tug'dirsa, begona odam botga matn yozib turib HAQIQIY
+    #    sotuvchining rate-limit sanagichini yeb qo'ya olardi.
+    assert core.summary_calls == []
+    assert core.payments_calls == []
+
+
+async def test_the_start_command_still_reaches_its_own_handler(locale: I18n) -> None:
+    """⛔ Zaxira `/start` ni USHLAB QOLMAYDI (tartibning birinchi isboti)."""
+    bot, session = make_bot()
+    core = CoreDouble(summary=one_market_summary(0, as_of=AS_OF))
+    message = make_message(text="/start").as_(bot)
+
+    await _route(message, bot, core)
+
+    (text,) = sent_texts(session)
+    assert text == get_i18n().gettext("bot.start.bound", locale="uz_Latn")
+    assert text != get_i18n().gettext("bot.unknown", locale="uz_Latn")
+    # Ijobiy nazorat: `/start` HAQIQATAN o'z handleriga tushdi — u
+    # `core.vendor_summary` ni chaqiradi, zaxira esa chaqirmaydi.
+    assert core.summary_calls == [777]
+
+
+async def test_a_shared_contact_still_reaches_its_own_handler(locale: I18n) -> None:
+    """⛔ Zaxira `F.contact` ni USHLAB QOLMAYDI (tartibning ikkinchi isboti).
+
+    ⚠ Bu darvoza D-24 uchun ham muhim: kontakt oqimi zaxira ortida
+      qolsa bog'lanishning YAGONA qonuniy yo'li yopilardi.
+    """
+    bot, session = make_bot()
+    core = CoreDouble(
+        resolve_result=ResolveResult(
+            status="bound",
+            vendor=VendorRef(market_id=MARKET_ID, vendor_id=VENDOR_ID),
+        )
+    )
+    message = make_message(contact=make_contact(user_id=777)).as_(bot)
+
+    await _route(message, bot, core)
+
+    (text,) = sent_texts(session)
+    assert text == get_i18n().gettext("bot.binding.ok", locale="uz_Latn")
+    assert text != get_i18n().gettext("bot.unknown", locale="uz_Latn")
+    assert len(core.resolve_calls) == 1
+
+
+def test_the_fallback_text_exists_in_every_locale() -> None:
+    """⛔ D-31: `bot.unknown` UCHALA katalogda ham BOR va BO'SH EMAS.
+
+    ⚠ `test_locale_parity.py` to'plam TENGLIGINI o'lchaydi, ya'ni kalit
+      uchala katalogdan BIRDAN tushib qolganda u yashil qolardi. Bu test
+      esa kalitni NOMMA-NOM talab qiladi.
+    """
+    engine = get_i18n()
+    rendered = {
+        locale: engine.gettext("bot.unknown", locale=locale)
+        for locale in ("uz_Latn", "uz_Cyrl", "ru")
+    }
+
+    for locale, text in rendered.items():
+        assert text and text != "bot.unknown", f"{locale}: tarjima yo'q ({text!r})"
+    assert len(set(rendered.values())) == 3, (
+        f"kamida ikki locale bir xil matn berdi — tarjima nusxalangan: {rendered}"
+    )
