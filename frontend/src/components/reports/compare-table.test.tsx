@@ -317,10 +317,23 @@ describe("⛔ G-40 (08-UI-SPEC) (c): o'lchanmagan bandlik CHIZILMAYDI", () => {
 
 describe("⛔ G-40 (08-UI-SPEC) (d): daftar yo'q -> JADVAL YO'Q", () => {
   test("⛔ `<table>` 0 marta va NOMLANGAN holat bor", async () => {
+    /*
+     * ⛔⛔ QATORLAR ⛔ ATAYIN BO'SH EMAS — VA BU O'LCHANGAN QAROR.
+     *
+     * Dastlab bu da'vo `rows: []` bilan yozilgan edi va u ⛔ YOLG'ON-YASHIL
+     * edi: bo'sh massiv «daftar bor, qator yo'q» shoxiga tushib jadvalni
+     * baribir chizmasdi, ya'ni `has_ledger` ni butunlay E'TIBORSIZ
+     * qoldiradigan sabotaj ⛔ O'TIB KETARDI (o'lchandi).
+     *
+     * ⛔ HAQIQIY XAVF AYNAN SHU SHAKLDA: server daftarsiz kunda ham
+     *    tizim/AI qatorlarini qaytaradi (daftar ustuni 0 bo'lib) va
+     *    ularni chizish «hamma farq 0» varaqasini beradi — §10.6 ning
+     *    aynan nosozligi.
+     */
     const view = await renderTable(
       payload({
         has_ledger: false,
-        rows: [],
+        rows: ROWS,
         ledger_over_count: 0,
         system_over_count: 0,
         ai_mismatch_count: 0,

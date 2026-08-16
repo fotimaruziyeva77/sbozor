@@ -303,10 +303,26 @@ describe("⛔ mazmun MOCK'DAGI AYNAN QIYMATGA qadalgan", () => {
 
 describe("⛔ G-40 (08-UI-SPEC) (d): daftarsiz kun «muvaffaqiyat» BERMAYDI", () => {
   test("⛔ `<table>` DOM'da 0 marta va nomlangan holat BOR", async () => {
+    /*
+     * ⛔⛔ IKKI QATLAM HAM SABOTAJ BILAN TUZATILGAN (o'lchandi):
+     *
+     *   1. ⛔ `rows` ATAYIN BO'SH EMAS. Bo'sh massiv «daftar bor, qator
+     *      yo'q» shoxiga tushardi va `has_ledger` ni e'tiborsiz
+     *      qoldiradigan sabotaj JIMGINA o'tib ketardi. Haqiqiy xavf
+     *      aynan shu shaklda: server daftarsiz kunda ham tizim/AI
+     *      qatorlarini qaytaradi va ularni chizish «hamma farq 0»
+     *      varaqasini beradi.
+     *
+     *   2. ⛔ NOMLANGAN HOLAT DA'VOSI ⛔ `comparison` BLOKIGA DOIRALANGAN.
+     *      Sahifa bo'yicha yozilgan shakl ⛔ YOLG'ON-YASHIL edi: AYNI
+     *      matnni (`compare.ledgerMissing`) `ledger` bloki ham holat
+     *      qatori sifatida chizadi, ya'ni da'vo solishtiruv bloki
+     *      butunlay boshqa narsa ko'rsatayotganda ham yashil qolardi.
+     */
     const { container } = await renderPage(
       payload({
         has_ledger: false,
-        rows: [],
+        rows: ROWS,
         ledger_over_count: 0,
         system_over_count: 0,
         ai_mismatch_count: 0,
@@ -315,7 +331,12 @@ describe("⛔ G-40 (08-UI-SPEC) (d): daftarsiz kun «muvaffaqiyat» BERMAYDI", (
     );
 
     expect(container.querySelectorAll("table")).toHaveLength(0);
-    expect(container.textContent).toContain(messages.compare.ledgerMissing);
+
+    const block = container.querySelector('[data-compare-content="comparison"]');
+    expect(block?.textContent).toContain(messages.compare.ledgerMissing);
+
+    /* ⛔ Va qator ma'lumoti blokka UMUMAN sizib chiqmaydi. */
+    expect(block?.textContent).not.toContain(ROWS[0].stall_code);
   });
 
   test("⛔ NAZORAT: daftar BOR kunda jadval HAQIQATAN chiziladi", async () => {
