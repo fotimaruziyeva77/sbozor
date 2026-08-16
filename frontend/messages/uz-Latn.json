@@ -400,6 +400,7 @@
     "validFromLabel": "Qaysi sanadan",
     "validToLabel": "Qaysi sanagacha",
     "openEnded": "Hozircha amalda",
+    "startsOn": "{date} dan kuchga kiradi",
     "dateTaken": "Bu sanaga tarif allaqachon belgilangan. Boshqa sana tanlang yoki mavjud qatorni tahrirlang",
     "pastLocked": "O'tgan sanadagi tarif o'zgartirilmaydi. Yangi sanadan yangi tarif qo'shing",
     "mustBeFuture": "Sana kelajakda bo'lishi kerak",

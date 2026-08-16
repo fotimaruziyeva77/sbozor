@@ -248,7 +248,33 @@ function groupByCategory(items: readonly TariffItem[]): TariffGroup[] {
   return [...groups.values()];
 }
 
-function TariffRow({
+/**
+ * Qatorning yorlig'i — ⛔ SERVERNING `is_past` BAYROG'IDAN, sanadan EMAS.
+ *
+ * =============================================================================
+ * ⛔⛔ TARTIB AHAMIYATLI VA U TOPILMANING O'ZI (№E, quick 260816-75c).
+ *
+ * KELAJAK sharti BIRINCHI tekshiriladi, chunki kelajakdagi qator HAM
+ * `valid_to === null` bo'lishi mumkin (u oxirgi qator). Aynan shu
+ * ustma-uslik bugungi nuqsonni tug'dirgan: 2026-09-01 dan boshlanadigan
+ * tarif «Hozircha amalda» deb yorliqlangan edi, ya'ni ekran KELAJAKNI
+ * HOZIR deb ko'rsatardi.
+ *
+ * ⛔ `new Date()` BILAN SOLISHTIRISH YO'Q. Server `is_past` ni
+ *    `valid_from <= business_today()` (Asia/Tashkent) deb hisoblaydi;
+ *    brauzer mintaqasi undan farq qilsa yarim tunda ikki ekran ikki xil
+ *    yorliq ko'rsatardi — «ikki haqiqat manbai».
+ * =============================================================================
+ */
+export function tariffRowBadge(
+  tariff: Pick<TariffItem, "is_past" | "valid_to">,
+): "current" | "future" | null {
+  if (!tariff.is_past) return "future";
+  if (tariff.valid_to === null) return "current";
+  return null;
+}
+
+export function TariffRow({
   canManage,
   onDelete,
   onEdit,
@@ -269,6 +295,7 @@ function TariffRow({
     tariff.valid_to === null
       ? t("tariffs.openEnded")
       : format.dateTime(new Date(tariff.valid_to), { dateStyle: "medium" });
+  const badge = tariffRowBadge(tariff);
 
   return (
     <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -283,8 +310,20 @@ function TariffRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {tariff.valid_to === null ? (
+        {/*
+         * ⛔ Rang YOLG'IZ signal emas (§12.4): yorliq har ikkala shoxda
+         *    ham MATN tashiydi, shuning uchun ikonka qo'shilmaydi.
+         *
+         * ⚠ Sana `validFrom` DAN — qator davri bilan AYNI formatterdan.
+         *   Ikkinchi formatlash yozilsa yorliqdagi sana davrdagi sanadan
+         *   bir kun farq qila boshlardi.
+         */}
+        {badge === "current" ? (
           <Badge tone="success">{t("tariffs.openEnded")}</Badge>
+        ) : badge === "future" ? (
+          <Badge tone="warning">
+            {t("tariffs.startsOn", { date: validFrom })}
+          </Badge>
         ) : null}
 
         {/*
