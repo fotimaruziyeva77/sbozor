@@ -529,10 +529,14 @@ async def _open_unpaid_cases(
          KUNLARNI yopdi (`FIFO_OLDEST_SERVICE_DATE_FIRST`, D-24). Yopilgan
          kun case ochmaydi.
       3. `_OVERDUE_CHARGES` — taqsimlash natijasini `daily_charges.id` ga
-         qaytarib bog'laydi VA kechikish chegarasini QO'LLAYDI.
-         ⛔ CHEGARA BU YERDA HISOBLANMAYDI: `cutoff` ARGUMENT bo'lib
-         keladi (`app.jobs.reconciliation.overdue_cutoff()`), ya'ni
-         BOT-03 ning eslatmasi bilan AYNAN bir qiymatdan yuradi (WR-06).
+         qaytarib bog'laydi VA IKKI chegarani qo'llaydi:
+           * `<= cutoff` — «yetarlicha eskimi?» (Pattern 5). ⛔ BU YERDA
+             HISOBLANMAYDI: `cutoff` ARGUMENT bo'lib keladi
+             (`app.jobs.reconciliation.overdue_cutoff()`), ya'ni BOT-03
+             ning eslatmasi bilan AYNAN bir qiymatdan yuradi (WR-06);
+           * `>= floor` — «hali SHU yuzaga tegishlimi?»
+             (`CASE_LOOKBACK_DAYS`, WR-09). Oynadan eski to'lanmagan
+             hisob qarzdorlik reestriga (RECON-04) tegishli.
 
     ⚠ IKKINCHI QADAM SOTUVCHI KESIMIDA VA U N+1 SO'ROV BERADI. Narx ONGLI
       QABUL QILINGAN: yagona muqobil — taqsimlash qoidasini oyna funksiyasi
