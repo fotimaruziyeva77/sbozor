@@ -610,8 +610,8 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 1. Poydevor va tenant xavfsizligi | 0/10 | Planned | - |
 | 2. Bozor domeni va ustasi | 0/17 | Planned | - |
 | 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
-| 4. Snapshot pipeline | 14/14 | Bo'shliq yopildi — qayta tekshiruv kutilmoqda | - |
-| 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Ijro tugadi — qayta tekshiruv kutilmoqda | - |
+| 4. Snapshot pipeline | 14/14 | Tekshirildi (human_needed — 5/5 mezon, 7 HUMAN-UAT bandi ochiq) | 2026-08-16 |
+| 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Tekshirildi (human_needed — 4/5 to'liq, SC2 ONNX'ga bog'liq) | 2026-08-16 |
 | 6. Billing va kassir | 14/14 | Complete   | 2026-08-11 |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 23/23 | Complete   | 2026-08-13 |
 | 8. Hisobotlar, mustahkamlash va ishga tushirish | 0/20 | Planned (7 to'lqin) | - |

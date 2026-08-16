@@ -63,7 +63,15 @@
 | 🔒 Nazoratchi baholash oqimi testi | CV `.onnx` modeli eksporti (GPU ijara) |
 | 🔒 Telegram botlar testi (+№I ning to'liq E2E tekshiruvi) | Bot tokenlari `.env`ga |
 | 🔒 Jonli ko'rinish (MSE) uzilishi | Chip mavjud (alohida debug sessiya) |
-| 🔒 4/5-fazalar qayta tekshiruvi | `/gsd-verify-work` yoki tegishli tekshiruv oqimi |
+| ✅ 4/5-fazalar qayta tekshiruvi | Bajarildi 2026-08-16: ikkalasi `human_needed` (04: 5/5 mezon, 7 UAT bandi; 05: 4/5, SC2 ONNX'ga bog'liq) — VERIFICATION.md fayllari yangi |
+
+## 5b. QAYTA TEKSHIRUVDAN CHIQQAN YANGI MAYDA BANDLAR (2026-08-16)
+
+| # | Band | Manba |
+|---|---|---|
+| ⬜ V-1 | Ko'r audit urug' testi flaky (~0.6% yolg'on-qizil har yugurishda, C(12,4)=495 kombinatorikasi) — determinlashtirilsin yoki retry-annotatsiya | 05-VERIFICATION F-1 |
+| ⬜ V-2 | cv-tests dev bazasiga haqiqiy cv_detect yurak urishini yozadi — dev-monitor o'lik quvurni sog'lom ko'rsatadi (prod'ga tegmaydi) | 05-VERIFICATION F-3 |
+| ⬜ V-3 | cv-service yetim navbat vazifalari (model kelganda tozalash/qayta ishga tushirish tartibi runbook'ka) | 05-VERIFICATION F-2 |
 
 ## 6. DEV-MUHIT TOZALASH (kod emas)
 
