@@ -19,7 +19,7 @@
  *    marta serverga urardi (T-08-38).
  * =============================================================================
  */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -98,6 +98,68 @@ describe("⛔ yuklab olishning YAGONA yo'li", () => {
      *   testi «blok DOIM chizilgan» holatida ham yashil qolardi.
      */
     expect(view.container.querySelectorAll('[role="alert"]').length).toBe(0);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* (g) POYGA QULFI — UCH BOSISH, BITTA SO'ROV                                 */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ poyga qulfi — «bitta so'rov = bitta qaror» (05-13 darsi)", () => {
+  test("uch marta KETMA-KET bosilganda `downloadReport` AYNAN bir marta chaqiriladi", async () => {
+    let release!: () => void;
+    reportQueriesMock.downloadReport.mockReturnValue(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+
+    const { button } = renderButton();
+
+    /*
+     * ⛔⛔ UCHALA BOSISH BITTA `act` ICHIDA va bu ATAYIN — `fireEvent`
+     *    ni uch marta chaqirish HAQIQIY POYGANI QAYTA TIKLAMAYDI:
+     *    har `fireEvent` o'z `act` ini yopadi, ya'ni React bosishlar
+     *    ORASIDA qayta chizadi va ikkinchi bosish allaqachon yangi
+     *    holatni ko'radi. Brauzerda esa uch tez bosish BITTA vazifada
+     *    yetib keladi va holat hali yangilanmagan bo'ladi.
+     *
+     *    Ya'ni holatga (`useState`) tayangan qulf `fireEvent` ostida
+     *    JIMGINA yashil, brauzerda esa QIZIL bo'lardi — qulf shuning
+     *    uchun `useRef` da (T-08-38: takroriy og'ir eksport).
+     */
+    act(() => {
+      button.click();
+      button.click();
+      button.click();
+    });
+
+    expect(reportQueriesMock.downloadReport).toHaveBeenCalledTimes(1);
+
+    release();
+    await waitFor(() => expect(button.getAttribute("aria-busy")).toBe("false"));
+  });
+
+  test("qulf QAYTARILADI — tugagandan keyingi bosish yangi so'rov beradi", async () => {
+    reportQueriesMock.downloadReport.mockResolvedValue(undefined);
+
+    const { button } = renderButton();
+
+    /*
+     * ⛔ SALBIY NAZORAT: yuqoridagi da'vo «tugma umuman bir martalik»
+     *   holatida ham yashil qolardi. Qulf YON TA'SIR emas, DAVR bo'lishi
+     *   kerak — aks holda direktor ikkinchi davrni umuman yuklab
+     *   ololmasdi.
+     */
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(reportQueriesMock.downloadReport).toHaveBeenCalledTimes(1),
+    );
+
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(reportQueriesMock.downloadReport).toHaveBeenCalledTimes(2),
+    );
   });
 });
 

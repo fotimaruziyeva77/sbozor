@@ -108,6 +108,22 @@ function defaultRange(todayIso: string): { from: string; to: string } {
   return { from: shiftIsoDay(to, -29), to };
 }
 
+/**
+ * Tanlagich chizgan BARCHA matn paragraflari.
+ *
+ * ⛔ G-38(d) YO'QLIKNI shu to'plamning TENGLIGI bilan o'lchaydi, bitta
+ *    satrni izlaydigan inkor matcher bilan EMAS (D-31): inkor matcher
+ *    faqat O'SHA satrni ushlardi va yonida paydo bo'lgan ikkinchi,
+ *    boshqacha formatlangan davr jumlasini KO'RMASDI.
+ */
+function paragraphsIn(view: RenderResult): Set<string> {
+  return new Set(
+    [...view.container.querySelectorAll("p")].map(
+      (node) => node.textContent ?? "",
+    ),
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* (a) G-38(c) — MAKSIMUM ATRIBUTI KECHAGA TENG                               */
 /* -------------------------------------------------------------------------- */
@@ -182,6 +198,55 @@ describe("⛔ teskari oraliq JIMGINA standartga tushadi", () => {
 
     /* ⛔ ALMASHTIRISH YO'Q: `2026-09-01`/`2026-09-30` to'plamda ko'rinmaydi. */
     expect(isoDaysInDom(view)).toEqual(new Set([expected.from, expected.to]));
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* (d) G-38(d) — `thisMonth` OYNING 1-KUNIDA NOMLANGAN HOLAT BERADI           */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ G-38(d): `thisMonth` oyning 1-kunida", () => {
+  test("NAZORAT — oddiy kunda `thisMonth` DAVR JUMLASINI chizadi", () => {
+    /*
+     * ⛔ BU NAZORAT BUSIZ QUYIDAGI DA'VO KO'R BO'LARDI: tanlagich davr
+     *   jumlasini UMUMAN chizmasa ham, «jumla yo'q» asserti yashil
+     *   qolardi. Farq shu ikki testning O'LCHANGAN qarama-qarshiligidan
+     *   chiqadi.
+     */
+    const now = freezeClock("2026-08-16");
+    const { view } = renderPicker("", now);
+
+    fireEvent.change(screen.getByLabelText(messages.reports.presetLabel), {
+      target: { value: "thisMonth" },
+    });
+
+    expect(paragraphsIn(view)).toEqual(
+      new Set([messages.reports.maxDayHint, "2026-08-01 — 2026-08-15"]),
+    );
+  });
+
+  test("⛔ oyning 1-kunida DAVR JUMLASI yo'q, «hali yopilgan kun yo'q» BOR", () => {
+    /*
+     * ⛔ 1-KUNDA `thisMonth` = {bugun, kecha}, ya'ni oraliq BO'SH. Bu
+     *   holat `lastMonth` ga ⛔ TUSHIRILMAYDI va jimgina ham
+     *   o'zgarmaydi: jimgina boshqa oyni ko'rsatish direktorga
+     *   ⛔ NOTO'G'RI OYNING raqamini berardi va u buni sezmasdi.
+     */
+    const now = freezeClock("2026-09-01");
+    const { view } = renderPicker("", now);
+
+    fireEvent.change(screen.getByLabelText(messages.reports.presetLabel), {
+      target: { value: "thisMonth" },
+    });
+
+    /*
+     * ⛔ TO'PLAM TENGLIGI bir vaqtda IKKI da'voni bajaradi:
+     *   • `reports.periodShown` (`2026-09-01 — 2026-08-31`) DOM'da YO'Q;
+     *   • bo'sh holat 5 (§14.7) BOR va u chegara sababini takrorlaydi.
+     */
+    expect(paragraphsIn(view)).toEqual(
+      new Set([messages.reports.emptyMonth, messages.reports.maxDayHint]),
+    );
   });
 });
 
