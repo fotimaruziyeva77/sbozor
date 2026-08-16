@@ -40,6 +40,31 @@ import { useNvrAuthLock } from "@/lib/use-nvr-auth-lock";
  */
 
 export type NvrCardProps = {
+  /**
+   * `camera_manage` — usiz UCHALA AMAL HAM RENDER QILINMAYDI (Topilma №J).
+   *
+   * ⛔ STANDART QIYMAT ATAYIN YO'Q va prop IXTIYORIY EMAS. Aynan shu
+   *   narsa darvozaga aylanadi: propni unutgan chaqiruvchi
+   *   `npm run typecheck` da yiqiladi. `showErrorBlock` kabi standartli
+   *   prop esa JIMGINA o'tib ketardi — va Topilma №J aynan shunday
+   *   tug'ilgan edi: sahifada `canManage` allaqachon hisoblangan
+   *   (`cameras/page.tsx:128`) va to'rtta iste'molchidan UCHTASIGA
+   *   uzatilgan, `NvrCard` esa tushib qolgan. Naqsh qo'llanmagani emas,
+   *   BITTA chaqiruvda tushib qolgani.
+   *
+   * ⚠ BU XAVFSIZLIK CHEGARASI EMAS va bo'lmaydi ham (T-01-62,
+   *   `rbac.ts:1-17`). Uchala marshrut ham serverda
+   *   `require_permission(CAMERA_MANAGE)` ostida
+   *   (`services/core-api/app/api/v1/nvr.py:372,482,536`), ya'ni qo'lda
+   *   yuborilgan so'rov baribir 403 oladi. Bu yerdagi shart faqat
+   *   «ko'rinmasin» savoliga javob beradi: bosilganda 403 beradigan
+   *   tugma foydalanuvchiga va'da berib, keyin aldaydi.
+   *
+   * ⚠ PASPORT (manzil · proshivka · seriya · RTSP port · oxirgi skan)
+   *   YASHIRILMAYDI: u `camera_view` mazmuni va `GET /nvr-devices`
+   *   (`nvr.py:340`) uni direktorga allaqachon qaytaradi.
+   */
+  canManage: boolean;
   className?: string;
   device: NvrDevice;
   /**
@@ -73,6 +98,7 @@ export type NvrCardProps = {
 };
 
 export function NvrCard({
+  canManage,
   className,
   device,
   errorCode = null,
@@ -180,59 +206,85 @@ export function NvrCard({
          * budjeti): NVR va kameralar mavjud bo'lgan holatda sahifada
          * birlamchi tugma UMUMAN bo'lmaydi — kundalik ish bu yerda
          * emas, kameralar ro'yxatida.
+         *
+         * ⛔ UCHALASI HAM `camera_manage` OSTIDA (Topilma №J): direktor
+         *    ularni KO'RMAYDI, chunki backend uchalasini ham 403 bilan
+         *    rad etadi. Yashirish emas — UMUMAN RENDER QILINMASLIK:
+         *    `aria-disabled` tugma «hozir bo'lmaydi, keyin bo'ladi»
+         *    degan yolg'on va'da berardi.
          */}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            aria-disabled={authLocked ? true : undefined}
-            onClick={guarded(onRescan)}
-            size="lg"
-            variant="secondary"
-          >
-            <RefreshCw aria-hidden="true" />
-            {t("cameras.rescan")}
-          </Button>
+        {canManage ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              aria-disabled={authLocked ? true : undefined}
+              onClick={guarded(onRescan)}
+              size="lg"
+              variant="secondary"
+            >
+              <RefreshCw aria-hidden="true" />
+              {t("cameras.rescan")}
+            </Button>
 
-          {/*
-           * «Parolni yangilash» qulf ostida ham OCHIQ qoladi va bu
-           * qoidaning teskarisi emas, MAZMUNI: rekvizitni o'zgartirish —
-           * qulfdan chiqishning yagona yo'li.
-           */}
-          <Button
-            onClick={() => setPasswordOpen(true)}
-            size="lg"
-            variant="secondary"
-          >
-            <KeyRound aria-hidden="true" />
-            {t("cameras.updatePassword")}
-          </Button>
+            {/*
+             * «Parolni yangilash» qulf ostida ham OCHIQ qoladi va bu
+             * qoidaning teskarisi emas, MAZMUNI: rekvizitni o'zgartirish —
+             * qulfdan chiqishning yagona yo'li.
+             */}
+            <Button
+              onClick={() => setPasswordOpen(true)}
+              size="lg"
+              variant="secondary"
+            >
+              <KeyRound aria-hidden="true" />
+              {t("cameras.updatePassword")}
+            </Button>
 
-          <Button
-            aria-disabled={authLocked ? true : undefined}
-            onClick={guarded(onDiagnose)}
-            size="lg"
-            variant="secondary"
-          >
-            <Stethoscope aria-hidden="true" />
-            {t("cameras.diagnostics")}
-          </Button>
-        </div>
+            <Button
+              aria-disabled={authLocked ? true : undefined}
+              onClick={guarded(onDiagnose)}
+              size="lg"
+              variant="secondary"
+            >
+              <Stethoscope aria-hidden="true" />
+              {t("cameras.diagnostics")}
+            </Button>
+          </div>
+        ) : null}
 
-        {authLocked ? (
+        {/*
+         * ⛔ QULF IZOHI HAM `canManage` OSTIDA: u «Parolni yangilash»
+         *    tugmasiga yo'naltiradi (§4.4), ya'ni tugmasiz u boshi berk
+         *    maslahat bo'lardi — foydalanuvchi bajara olmaydigan
+         *    ko'rsatma.
+         */}
+        {canManage && authLocked ? (
           <p className="text-sm text-text-muted" role="status">
             {t("cameras.authLockHint")}
           </p>
         ) : null}
 
+        {/*
+         * ⚠ XATO BLOKI `canManage` DAN MUSTAQIL: u NVR ning HOLATI
+         *   (ma'lumot), amal emas — ya'ni `camera_view` mazmuni. Sahifa
+         *   unga baribir `showErrorBlock={false}` beradi (§5.2 S4).
+         */}
         {errorCode !== null && showErrorBlock ? (
           <NvrErrorBlock code={errorCode} detail={errorDetail} />
         ) : null}
 
-        <NvrPasswordDialog
-          nvrId={device.id}
-          onOpenChange={setPasswordOpen}
-          onUpdated={unlockOnCredentialChange}
-          open={passwordOpen}
-        />
+        {/*
+         * ⛔ DIALOG MOUNT HAM QILINMAYDI: aks holda `useUpdateNvrPassword`
+         *    mutatsiyasi huquqsiz sessiyada ham qurilardi va uni ochadigan
+         *    tugma yo'q bo'lgani uchun u faqat o'lik yuza bo'lib qolardi.
+         */}
+        {canManage ? (
+          <NvrPasswordDialog
+            nvrId={device.id}
+            onOpenChange={setPasswordOpen}
+            onUpdated={unlockOnCredentialChange}
+            open={passwordOpen}
+          />
+        ) : null}
       </CardContent>
     </Card>
   );

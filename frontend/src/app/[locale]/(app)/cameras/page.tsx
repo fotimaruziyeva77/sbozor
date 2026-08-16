@@ -229,6 +229,14 @@ function CamerasWorkspace() {
           />
         ) : (
           <NvrCard
+            /*
+             * ⛔ TO'RTINCHI ISTE'MOLCHI (Topilma №J). Yuqoridagi
+             *    `NvrZoneWithoutDevice`, quyidagi `CameraList` va
+             *    `CoverageCard` bu ko'zguni allaqachon olardi; karta
+             *    esa tushib qolgan edi va direktor uchala amalni ham
+             *    ko'rib, bosganda 403 olardi.
+             */
+            canManage={canManage}
             device={device}
             errorCode={failedRun?.error_code ?? null}
             errorDetail={failedRun?.error_detail ?? null}
