@@ -112,6 +112,22 @@ msgstr "To'lov yozuvi topilmadi."
 msgid "bot.payments.noMore"
 msgstr "Boshqa yozuv qolmadi."
 
+# --- Zaxira javob (WR-04) ----------------------------------------------
+#
+# ⛔ MATN FOYDALANUVCHI TERGAN NARSANI O'QIMAYDI VA TAKRORLAMAYDI (D-24).
+#    Taqiq O'QISHGA tegishli: bot terilgan raqamni hech qachon shaxs
+#    da'vosi sifatida qabul qilmaydi. Javob berish esa taqiqlanmagan —
+#    aksincha, `app/main.py:130-136` uni botning MAVJUD BO'LISH sababi
+#    deb ataydi.
+#
+# ⚠ Matn faqat MAVJUD tugmalarni eslatadi: «nima yozganingizni
+#   tushunmadim» dan boshqa hech qanday tashxis qo'yilmaydi.
+msgid "bot.unknown"
+msgstr ""
+"Tushunmadim. Quyidagi tugmalardan foydalaning: «Qarzim» yoki "
+"«To'lovlarim».\n"
+"Qaytadan boshlash — /start, atamalar izohi — /help."
+
 # --- /help — atamalar izohi --------------------------------------------
 #
 # ⚠ Bu matn G7-9(b) ning YAGONA joyi emas, lekin `smena` atamasi

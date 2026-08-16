@@ -98,6 +98,17 @@ msgstr "Тўлов ёзуви топилмади."
 msgid "bot.payments.noMore"
 msgstr "Бошқа ёзув қолмади."
 
+# --- Zaxira javob (WR-04) ----------------------------------------------
+#
+# ⛔ QO'LDA TEKSHIRILGAN O'ZLASHMA YO'Q: matndagi barcha so'zlar o'zbekcha
+#    o'zaklar (`тушун`, `тугма`, `атама`), ya'ni квитанция sinfidagi
+#    `ns`/`ts` klasteri bu yerda umuman tug'ilmaydi.
+msgid "bot.unknown"
+msgstr ""
+"Тушунмадим. Қуйидаги тугмалардан фойдаланинг: «Қарзим» ёки "
+"«Тўловларим».\n"
+"Қайтадан бошлаш — /start, атамалар изоҳи — /help."
+
 # --- /help — atamalar izohi --------------------------------------------
 msgid "bot.help.terms"
 msgstr ""

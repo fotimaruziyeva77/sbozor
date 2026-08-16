@@ -103,6 +103,15 @@ msgstr "Записей об оплате не найдено."
 msgid "bot.payments.noMore"
 msgstr "Больше записей нет."
 
+# --- Zaxira javob (WR-04) ----------------------------------------------
+#
+# ⛔ MUSTAQIL TARJIMA. Taqiqlangan tokenlar (`лавк`, `магазин`) bu matnda
+#    YO'Q va `сбор` ham ISHLATILMAYDI (reyestrdagi atama — `патта`).
+msgid "bot.unknown"
+msgstr ""
+"Не понял. Воспользуйтесь кнопками ниже: «Мой долг» или «Мои оплаты».\n"
+"Начать заново — /start, пояснение терминов — /help."
+
 # --- /help — atamalar izohi --------------------------------------------
 msgid "bot.help.terms"
 msgstr ""
