@@ -308,6 +308,17 @@ UI-SPEC dan qidirmaydi.
 | `fdaccd0` | fix | Buzuq FSM javob beradi, blokda bozor ko'rinadi (GREEN) |
 | `6b3ad15` | chore | IN-01, IN-07, WR-14 |
 
+## Self-Check: PASSED
+
+- Da'vo qilingan 11 fayl diskda mavjud va commitlarda ko'rinadi.
+- Oltala commit (`0ce3cc8`, `2e7a44b`, `1552001`, `fdaccd0`, `6b3ad15`,
+  `3fd76b7`) `git log` da topildi.
+- `git diff --diff-filter=D 6e3ac5f..HEAD` — **kutilmagan o'chirish yo'q**
+  (bo'sh natija).
+- Ishchi daraxt toza; kuzatilmagan fayl qolmadi (`.env` va
+  `ops/seaweedfs/s3.json` — faqat lokal tekshiruv nusxalari, ular
+  `.gitignore` da va commitga TUSHMADI).
+
 ## Keyingi ish uchun eslatma
 
 `deferred-items.md` dagi WR-14 bandi shu rejada **yopildi**. Uning
