@@ -230,7 +230,7 @@ async def billing_pending(
     =======================================================================
     ⛔ UCH SHAKL VA ULAR ARALASHMAYDI:
 
-      `?stall_code=` ANIQ moslik  -> `PendingStallResponse` (tekis, yetti kalit)
+      `?stall_code=` ANIQ moslik  -> `PendingStallResponse` (tekis, to'qqiz kalit)
       `?stall_code=` KO'P moslik  -> `PendingLookupResponse` (faqat kodlar)
       parametrsiz                 -> `PendingMarketResponse` (bozor kesimi)
 
@@ -286,6 +286,8 @@ async def billing_pending(
             amount_unavailable_reason=stall.amount_unavailable_reason,  # type: ignore[arg-type]
             outstanding_soum=stall.outstanding_soum,
             total_due_soum=stall.total_due_soum,
+            stall_status=stall.stall_status,  # type: ignore[arg-type]
+            vendor_assigned=stall.vendor_assigned,
         )
 
     if not projection.matches:

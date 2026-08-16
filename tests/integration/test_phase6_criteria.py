@@ -1221,13 +1221,20 @@ PENDING_STALL_KEYS = frozenset(
         "amount_unavailable_reason",
         "outstanding_soum",
         "total_due_soum",
+        "stall_status",
+        "vendor_assigned",
     }
 )
-"""UI-SPEC §9.2 ning AYNAN YETTI kaliti — ⛔ `charge_id` UMUMAN YO'Q (D-17).
+"""UI-SPEC §9.2 ning AYNAN TO'QQIZ kaliti — ⛔ `charge_id` UMUMAN YO'Q (D-17).
 
 ⛔ RO'YXAT QO'LDA YOZILGAN VA BU ATAYIN: u KUTILGAN NATIJA, o'lchov emas.
    Uni `PendingStallResponse.model_fields` dan hosila qilish testni «model
    o'ziga teng» degan tavtologiyaga aylantirardi.
+
+⚠ YETTIDAN TO'QQIZGA (quick 260816-75c): `stall_status` + `vendor_assigned`.
+  SC#4 ning `charge_id` YO'Q da'vosi O'ZGARMADI va u hamon TO'PLAM
+  TENGLIGI bilan o'lchanadi — ya'ni yangi maydonlar darvozani
+  bo'shatmadi, faqat kutilgan natijani AYNAN ikkitaga kengaytirdi.
 """
 
 

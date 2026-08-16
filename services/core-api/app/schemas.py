@@ -2966,7 +2966,7 @@ class PendingStallResponse(BaseModel):
     """`GET /billing/pending?stall_code=…` — BITTA rastaning proyeksiyasi (BILL-05).
 
     =======================================================================
-    ⛔⛔ KALITLAR TO'PLAMI AYNAN YETTITA (UI-SPEC §9.2) VA QUYIDAGILAR
+    ⛔⛔ KALITLAR TO'PLAMI AYNAN TO'QQIZTA (UI-SPEC §9.2) VA QUYIDAGILAR
         E'LON QILINMAGAN — YASHIRILGAN EMAS:
 
         charge_id                        — D-17;
@@ -3021,6 +3021,23 @@ class PendingStallResponse(BaseModel):
     """Eski qarz — HISOBLANADIGAN qoldiq (BILL-03), saqlangan ustun emas."""
     total_due_soum: int
     """⛔ SERVERDA hisoblangan yig'indi (§9.6) — klientda qo'shish YO'Q."""
+    stall_status: StallStatus
+    """`stalls.status` reyestr ustuni — ⛔ `str` EMAS, ENUM.
+
+    Enum bo'lgani uchun OpenAPI ham YOPIQ to'plamni e'lon qiladi va
+    klientdagi `z.enum(STALL_STATUSES)` ko'zgusi kontraktga langarlanadi.
+    `str` bo'lganda server bir kun to'rtinchi qiymatni jimgina yuborardi.
+
+    ⛔ BU MAYDON HISOB YOZILISHI HAQIDA DA'VO QILMAYDI (`is_billable`
+       EMAS): kunlik hisob `status` bo'yicha filtrlanMAYDI.
+    """
+    vendor_assigned: bool
+    """Bugungi kunda biriktirish BORMI — ⛔ BUL, identifikator EMAS.
+
+    Ma'lumot kassirga submit'da ALLAQACHON oshkor (409
+    `stall_not_assigned`); bu yerda faqat uning VAQTI oldinga suriladi.
+    `vendor_id`/`vendor_name`/`phone` esa yuqoridagi taqiqda QOLADI.
+    """
 
     @model_validator(mode="after")
     def _amount_and_reason_are_paired(self) -> Self:

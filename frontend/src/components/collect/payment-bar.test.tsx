@@ -71,6 +71,9 @@ const PENDING = {
   amount_unavailable_reason: null,
   outstanding_soum: 45_000,
   total_due_soum: 60_000,
+  /* ⚠ NORMAL rasta — G-21 ning da'vosi rasta holatiga bog'liq emas. */
+  stall_status: "active",
+  vendor_assigned: true,
 };
 
 const WRITTEN = {

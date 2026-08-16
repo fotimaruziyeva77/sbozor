@@ -1123,6 +1123,7 @@
     "retry": "Qayta yuborish",
     "retrySafe": "Qayta yuborish dublikat yaratmaydi",
     "marketClosed": "Bugun bozor yopiq — bugungi patta hisoblanmaydi",
+    "stallStatusNotice": "Bu rasta reyestrda «{status}» deb belgilangan — to'lovni yozishdan oldin tekshiring.",
     "amountUnit": "so'm",
     "shiftTitle": "Smena",
     "shiftOpen": "Smenani ochish",

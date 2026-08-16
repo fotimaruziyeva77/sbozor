@@ -5,7 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { apiFetch } from "@/lib/api-client";
-import { soumSchema } from "@/lib/api-types";
+import { soumSchema, stallStatusSchema } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import { domainKey } from "@/lib/market-queries";
 
@@ -105,10 +105,17 @@ export type AmountUnavailableReason =
  * `GET /billing/pending?stall_code=…` — BITTA rastaning proyeksiyasi.
  *
  * =========================================================================
- * ⛔ KALITLAR TO'PLAMI AYNAN YETTITA (§9.2) va `z.strictObject` buni
+ * ⛔ KALITLAR TO'PLAMI AYNAN TO'QQIZTA (§9.2) va `z.strictObject` buni
  *    DINAMIK ravishda qo'riqlaydi: server bir kun ortiqcha maydon
  *    qo'shsa, klient PARSE PAYTIDA yiqiladi va ekran xato blokini
  *    ko'rsatadi.
+ *
+ * ⚠ YETTIDAN TO'QQIZGA (quick 260816-75c): `stall_status` rastaning
+ *   REYESTR holatini, `vendor_assigned` esa biriktirish BORLIGINI
+ *   tashiydi — ikkalasi ham kassir kartasida SUBMIT'DAN OLDIN
+ *   ko'rinadigan kontekst uchun. Ikkalasi MAJBURIY: `.optional()` bilan
+ *   e'lon qilingan maydon eski serverda jimgina `undefined` bo'lib
+ *   kelardi va ogohlantirish HECH QACHON chizilmasdi.
  *
  *    Bu «buzilgan ekran» emas — bu PUL YIG'ISHNI HIMOYA QILISH:
  *    brauzerga yetgan maydon O'QILADI (DevTools, React DevTools,
@@ -134,6 +141,15 @@ export const pendingStallSchema = z.strictObject({
   outstanding_soum: soumSchema,
   /** ⛔ SERVERDA hisoblangan yig'indi (§9.6). */
   total_due_soum: soumSchema,
+  /**
+   * `stalls.status` — ⛔ ko'zgu `api-types.ts` DAN import qilinadi.
+   *
+   * Ikkinchi `z.enum([...])` yozish reyestrni ikki joyga bo'lardi va DB
+   * to'rtinchi holatni qabul qilgan kuni ular ajralib ketardi.
+   */
+  stall_status: stallStatusSchema,
+  /** Bugungi kunda biriktirish BORMI — BUL, identifikator EMAS (C-10). */
+  vendor_assigned: z.boolean(),
 })
   /*
    * ⛔ JUFTLANGAN INVARIANT — naqsh `NO_COVERAGE_IS_PAIRED_CHECK` dan

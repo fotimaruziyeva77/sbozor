@@ -194,6 +194,7 @@ _STALL_DAY_MONEY = text(
     )
     SELECT s.id            AS stall_id,
            s.code          AS stall_code,
+           s.status        AS stall_status,
            asg.vendor_id   AS vendor_id,
            tar.tariff_id   AS tariff_id,
            tar.amount_soum AS tariff_amount_soum,
@@ -309,6 +310,13 @@ class StallDayMoney:
 
     stall_id: UUID
     stall_code: str
+    status: str
+    """`stalls.status` — REYESTR ustunining nusxasi (`StallStatus`).
+
+    ⛔ HISOB QOIDASIGA KIRMAYDI va pastdagi `_money_from_row()` uni
+       UMUMAN o'qimaydi. U faqat KASSIRGA XABAR uchun tashiladi
+       (quick 260816-75c).
+    """
     vendor_id: UUID | None
     tariff_id: UUID | None
     amount_soum: int | None
@@ -320,6 +328,7 @@ def _money_from_row(
     *,
     stall_id: UUID,
     stall_code: str,
+    status: str,
     vendor_id: UUID | None,
     tariff_id: UUID | None,
     tariff_amount_soum: int | None,
@@ -332,6 +341,14 @@ def _money_from_row(
        deyish kerak, «tarif belgilanmagan» emas — ikkinchisi uni tarif
        sahifasiga yuborardi va u yerda tuzatadigan hech nima yo'q edi
        (UI-SPEC §9.4 ning ikki qatori aynan shu farqni chizadi).
+
+    ⛔⛔ `status` USTUNI BU TARTIBGA KIRMAYDI va uchala shox
+       (`market_closed` -> `tariff_missing` -> summa) BAYT-BA-BAYT o'sha
+       holicha qoladi. Sabab biznesniki va u ALLAQACHON yozilgan
+       (`_market_projection()` docstringi): `maintenance` deb belgilangan
+       rasta savdo qilsa patta TO'LAYDI. Holatni bu yerga ulash
+       `is_billable` ni orqa eshikdan qaytarib keltirardi — ya'ni
+       reyestrdagi belgi jimgina PUL QARORIGA aylanardi.
 
     ⚠ `assert` BAYONOTI ISHLATILMAYDI: ruff `S101` uni mahsulot kodida
       taqiqlaydi va `python -O` uni butunlay olib tashlardi — ya'ni
@@ -362,6 +379,7 @@ def _money_from_row(
     return StallDayMoney(
         stall_id=stall_id,
         stall_code=stall_code,
+        status=status,
         vendor_id=vendor_id,
         tariff_id=tariff_id,
         amount_soum=amount,
@@ -413,6 +431,7 @@ async def resolve_stall_day_money(
         _money_from_row(
             stall_id=row["stall_id"],
             stall_code=str(row["stall_code"]),
+            status=str(row["stall_status"]),
             vendor_id=row["vendor_id"],
             tariff_id=row["tariff_id"],
             tariff_amount_soum=row["tariff_amount_soum"],
@@ -1235,7 +1254,7 @@ o'zgarmaydi: kassir aniqroq kod teradi.
 
 @dataclass(frozen=True, slots=True)
 class PendingStall:
-    """⛔ UI-SPEC §9.2 NING AYNAN YETTI MAYDONI — na kam, na ko'p.
+    """⛔ UI-SPEC §9.2 NING AYNAN TO'QQIZ MAYDONI — na kam, na ko'p.
 
     =======================================================================
     ⛔ YO'Q VA YO'QLIGI O'LCHANADIGAN MAYDONLAR (G-22/G-23):
@@ -1252,6 +1271,30 @@ class PendingStall:
     ⚠ To'plam tengligi bilan o'lchanadi (`dataclasses.fields()`), inkor
       tasdiq bilan EMAS (D-31): `not.toContain("charge_id")` faqat AYNAN
       o'sha nomni ushlardi va `chargeId` jimgina o'tib ketardi.
+
+    =======================================================================
+    ⛔ NEGA `vendor_assigned` — VA NEGA U `vendor_id` EMAS (quick 260816-75c).
+
+    `vendor_assigned` — BUL. U identifikator ham, ism ham, telefon ham
+    emas: u faqat BIRIKTIRISH BORLIGINI aytadi. Va bu ma'lumot kassirga
+    ALLAQACHON oshkor — server uni submit'da 409 `stall_not_assigned`
+    bilan aytadi (`payments.py`). Ya'ni payloadga YANGI NARSA chiqmadi;
+    o'zgargani — VAQTI: kassir rad javobini [Tasdiqlash] dan KEYIN emas,
+    OLDIN oladi. Yuqoridagi `vendor_id` qatori esa O'Z KUCHIDA qoladi.
+
+    ⛔ NEGA `stall_status` — VA NEGA U `is_billable` EMAS.
+
+    `stall_status` — `stalls.status` reyestr ustunining NUSXASI va u
+    rastalar sahifasida shu tenant ichida ALLAQACHON ko'rinadi. U hisob
+    yozilishi haqida HECH QANDAY da'vo qilmaydi (kunlik hisob bu ustun
+    bo'yicha filtrlanmaydi — `jobs/billing_close.py` da `status` filtri
+    YO'Q) va UI matni ham bunday da'vo qilmaydi: u «reyestrda shunday
+    belgilangan, tekshiring» deydi, «hisob yozilmaydi» DEMAYDI.
+    Qiymatlar YOPIQ to'plam (`StallStatus`), erkin matn emas.
+
+    ⚠ IKKALASI HAM MUSTAQIL MAYDON: biri ikkinchisidan hosila QILINMAYDI.
+      Ta'mirdagi rastada sotuvchi bo'lishi ham, faol rastada sotuvchi
+      bo'lmasligi ham mumkin.
     """
 
     stall_code: str
@@ -1261,6 +1304,8 @@ class PendingStall:
     amount_unavailable_reason: str | None
     outstanding_soum: int
     total_due_soum: int
+    stall_status: str
+    vendor_assigned: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -1392,6 +1437,10 @@ async def pending_projection(
             amount_unavailable_reason=row.unavailable_reason,
             outstanding_soum=outstanding,
             total_due_soum=total_due_soum(row.amount_soum, outstanding),
+            stall_status=row.status,
+            # ⛔ `vendor_id` NING O'ZI CHIQMAYDI — u yuqoridagi
+            #    `outstanding` shoxida LOKAL qoladi (C-10).
+            vendor_assigned=row.vendor_id is not None,
         ),
         matches=(),
         market=None,

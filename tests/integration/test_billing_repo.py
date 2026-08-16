@@ -1509,16 +1509,24 @@ PENDING_STALL_FIELDS = {
     "amount_unavailable_reason",
     "outstanding_soum",
     "total_due_soum",
+    "stall_status",
+    "vendor_assigned",
 }
-"""UI-SPEC §9.2 ning AYNAN yetti kaliti — TESTDA literal, mahsulotdan EMAS.
+"""UI-SPEC §9.2 ning AYNAN to'qqiz kaliti — TESTDA literal, mahsulotdan EMAS.
 
 ⛔ Mahsulot konstantasidan import qilish darvozani o'zi tekshirayotgan
-   qiymatga bog'lardi va sakkizinchi maydon JIMGINA qo'shilardi (05-15 da
-   o'rnatilgan qoida).
+   qiymatga bog'lardi va o'ninchi maydon JIMGINA qo'shilardi (05-15 da
+   o'rnatilgan qoida). Shu sababdan ro'yxat `dataclasses.fields()` dan
+   ham hosila QILINMAYDI — u tavtologiya bo'lardi.
+
+⚠ YETTIDAN TO'QQIZGA (quick 260816-75c): `stall_status` (reyestr ustuni)
+  va `vendor_assigned` (BUL, identifikator emas). Sabab — kassir lookup
+  kartasi rastaning holatini ham, biriktirish yo'qligini ham SUBMIT'DAN
+  OLDIN aytishi kerak.
 """
 
 
-def test_pending_projection_exposes_exactly_seven_fields() -> None:
+def test_pending_projection_exposes_exactly_nine_fields() -> None:
     """D-31: TO'PLAM TENGLIGI, inkor tasdiq EMAS.
 
     `not.toContain("charge_id")` faqat AYNAN o'sha nomni ushlardi va

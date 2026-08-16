@@ -697,7 +697,8 @@ Kassir o'zi yozgan to'lovlarni ko'rishi **kerak** (bekor qilish uchun). Lekin ag
 ```
 { stall_code, service_date, market_open,
   amount_soum, amount_unavailable_reason,
-  outstanding_soum, total_due_soum }
+  outstanding_soum, total_due_soum,
+  stall_status, vendor_assigned }
 ```
 
 | Maydon | Tip | Ma'nosi |
@@ -709,6 +710,8 @@ Kassir o'zi yozgan to'lovlarni ko'rishi **kerak** (bekor qilish uchun). Lekin ag
 | `amount_unavailable_reason` | `"market_closed" \| "tariff_missing" \| null` | ⛔ **Yopiq enum**, serverdan |
 | `outstanding_soum` | `int` | Eski qarz (hisoblanadigan qoldiq — BILL-03) |
 | `total_due_soum` | `int` | ⛔ **Serverda** hisoblangan yig'indi (§9.6) |
+| `stall_status` | `"active" \| "maintenance" \| "closed"` | ⛔ **Yopiq enum** (`StallStatus`) — `stalls.status` reyestr ustunining nusxasi. Kartada ko'rinadigan ogohlantirishni yoqadi; **hisob yozilishi haqida da'vo qilmaydi** |
+| `vendor_assigned` | `boolean` | Bugungi kunda biriktirish **bormi**. ⛔ **BUL**, identifikator emas — submit'dagi 409 `stall_not_assigned` matni kartada **oldindan** turadi |
 
 ⛔ **YO'Q va yo'qligi o'lchanadigan maydonlar:**
 
@@ -719,6 +722,8 @@ Kassir o'zi yozgan to'lovlarni ko'rishi **kerak** (bekor qilish uchun). Lekin ag
 | `vendor_id`, `vendor_name`, `phone` | **C-10 + §5.5** | G-22 |
 | `occupied_slots`, `is_billable` | **§9.1** — bugun bilinmaydi | G-22 |
 | `balance`, `balance_soum` | **BILL-03** — saqlangan balans yo'q; nom ham yo'q | G-22 |
+
+⚠ **`vendor_assigned` va `stall_status` bu taqiqning ISTISNOSI EMAS** — ular boshqa **turdagi** ma'lumot. `vendor_assigned` **bul**, ya'ni na identifikator, na ism, na aloqa ma'lumoti; u aytadigan fakt kassirga submit'da **allaqachon** oshkor (409 `stall_not_assigned`) va o'zgargani faqat uning **vaqti**. `stall_status` esa `stalls.status` reyestr ustunining nusxasi — u rastalar sahifasida shu tenant ichida allaqachon ko'rinadi va **hisob yozilishi haqida hech qanday da'vo qilmaydi** (kunlik hisob bu ustun bo'yicha **filtrlanmaydi**). Yuqoridagi `vendor_id` va `is_billable` qatorlari **o'z kuchida qoladi**. To'liq asos — `billing_repo.PendingStall` dataclass docstringida. Manba: quick 260816-75c.
 
 ⛔ **Juftlangan invariant** (`z.refine` + G-23): `(amount_soum === null) === (amount_unavailable_reason !== null)`. Naqsh `NO_COVERAGE_IS_PAIRED_CHECK` dan [KOD: `models/occupancy.py:333-344`] — «sababsiz yo'q summa» ham, «summasi bor sabab» ham **ifodalab bo'lmaydi**.
 

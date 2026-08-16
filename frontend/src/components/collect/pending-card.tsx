@@ -1,12 +1,13 @@
 "use client";
 
-import { CalendarDays, Clock, PiggyBank } from "lucide-react";
+import { CalendarDays, Clock, PiggyBank, Wrench } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { StallStatusValue } from "@/lib/api-types";
 import { billingErrorView } from "@/lib/billing-errors";
 import type { PendingStall } from "@/lib/billing-pending-queries";
 
@@ -64,8 +65,47 @@ import type { PendingStall } from "@/lib/billing-pending-queries";
  *
  * ⛔ ISM VA ALOQA MA'LUMOTI YO'Q (C-10, §5.5) — kassirda sotuvchi
  *    ma'lumotini o'qish huquqi umuman yo'q, ya'ni taqiq HUQUQ darajasida.
+ *
+ * -----------------------------------------------------------------------
+ * ⛔⛔ RASTA KONTEKSTI KO'RINADI, LEKIN TO'LOVNI BLOKLAMAYDI
+ *     (quick 260816-75c, Topilma №L)
+ * -----------------------------------------------------------------------
+ * Kartada ikki mustaqil ogohlantirish bloki bor: reyestr holati
+ * (`stall_status !== "active"`) va biriktirish yo'qligi
+ * (`vendor_assigned === false`). ⛔ IKKALASI HAM SHUNCHAKI XABAR.
+ *
+ * ⛔⛔ TUGMANI O'CHIRISH TAQIQLANADI VA BU JUMLA ATAYIN AYNAN SHUNDAY
+ *     YOZILGAN, chunki keyingi ijrochi uchun «ogohlantirish bor ekan,
+ *     tasdiqni bloklaylik» qadami TABIIY ko'rinadi. `PaymentBar` ga
+ *     hech qanday `disabled` yoki yangi prop UZATILMAYDI va
+ *     `collect-session.tsx` ning render sharti TEGILMAYDI.
+ *
+ * Sabab BIZNESNIKI, uslubiy emas:
+ *   * ta'mirdagi rasta savdo qilsa patta TO'LAYDI — bu qaror
+ *     `billing_repo._market_projection()` docstringida yozilgan va
+ *     kunlik hisob `status` ustuni bo'yicha FILTRLANMAYDI;
+ *   * sotuvchisiz rastani server ALLAQACHON 409 `stall_not_assigned`
+ *     bilan to'sadi — UI ikkinchi to'siq qurmaydi, u faqat o'sha rad
+ *     javobini OLDINGA suradi.
+ *
+ * ⚠ C-10 CHEGARASI SAQLANADI: bu bloklarda sotuvchi ISMI ham, telefoni
+ *   ham YO'Q — faqat biriktirish YO'QLIGI aytiladi.
  * =============================================================================
  */
+
+/**
+ * Rasta holati -> i18n kaliti. ⛔ DINAMIK KALIT (`t(\`stalls.status.${x}\`)`)
+ * ISHLATILMAYDI — u typecheck'da yiqiladi va `next-intl` kalitni statik
+ * bilmay qoladi. Naqsh `payment-row.tsx::METHOD_LABEL` bilan AYNI.
+ */
+const STALL_STATUS_LABEL: Record<
+  StallStatusValue,
+  "stalls.status.active" | "stalls.status.maintenance" | "stalls.status.closed"
+> = {
+  active: "stalls.status.active",
+  maintenance: "stalls.status.maintenance",
+  closed: "stalls.status.closed",
+};
 
 export type PendingCardProps = {
   /** Kassir KIRITGAN kod — moslik sharti shunga qarshi tekshiriladi. */
@@ -204,6 +244,13 @@ function PendingBody({
     pending.amount_unavailable_reason === null
       ? null
       : billingErrorView(pending.amount_unavailable_reason);
+  /*
+   * ⛔ SUBMIT'DAGI 409 MATNINING AYNAN O'ZI — reyestrdan olinadi, qo'lda
+   *    yozilmaydi. `missingView` bilan bir naqsh, bir sabab.
+   */
+  const notAssignedView = pending.vendor_assigned
+    ? null
+    : billingErrorView("stall_not_assigned");
 
   return (
     <div className="flex flex-col gap-3">
@@ -253,6 +300,52 @@ function PendingBody({
           <p className="text-sm text-text">{t(missingView.fixKey)}</p>
         </div>
       ) : null}
+
+      {/*
+       * --- (a) REYESTR HOLATI ----------------------------------------
+       *
+       * ⛔ `role="alert"` YO'Q (§14.5): bir vaqtda ikkitadan ko'p `alert`
+       *    chizilmaydi va bu NORMAL reyestr holati, NOSOZLIK emas.
+       *    `market_closed` bloki bilan AYNI naqsh, faqat ikonka boshqa
+       *    (`CalendarDays` o'shaniki, takrorlanmaydi).
+       *
+       * ⛔ MATN «hisob yozilmaydi» DEMAYDI va ayta ham olmaydi: kunlik
+       *    hisob holat ustuni bo'yicha filtrlanmaydi. Bunday da'vo
+       *    `is_billable` ni SO'Z BILAN qaytarib keltirardi.
+       */}
+      {pending.stall_status !== "active" ? (
+        <div className="flex items-start gap-2 rounded-sm bg-warning/20 px-3 py-2 text-text">
+          <Wrench aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          <p className="text-sm">
+            {t("collect.stallStatusNotice", {
+              status: t(STALL_STATUS_LABEL[pending.stall_status]),
+            })}
+          </p>
+        </div>
+      ) : null}
+
+      {/*
+       * --- (b) BIRIKTIRISH YO'Q --------------------------------------
+       *
+       * ⛔ MANBA — `billingErrorView("stall_not_assigned")`, ya'ni
+       *    submit'dagi 409 matnining AYNAN O'ZI. Yangi copy kaliti
+       *    YOZILMAYDI: ikki xil so'z kassirga ikki xil nosozlik bo'lib
+       *    ko'rinardi va u «qaysi biri rost?» degan savolga qolardi.
+       *
+       * ⛔ Blok (a) DAN MUSTAQIL: ikkalasi birga chizilishi mumkin —
+       *    ular boshqa-boshqa savolga javob beradi.
+       */}
+      {notAssignedView === null ? null : (
+        <div
+          className="flex flex-col gap-1 rounded-sm bg-danger/10 px-3 py-2"
+          role="alert"
+        >
+          <p className="text-sm font-semibold text-danger-text">
+            {t(notAssignedView.causeKey)}
+          </p>
+          <p className="text-sm text-text">{t(notAssignedView.fixKey)}</p>
+        </div>
+      )}
 
       {/* --- Eski qarz va avans ---------------------------------------- */}
       {debt < 0 ? (

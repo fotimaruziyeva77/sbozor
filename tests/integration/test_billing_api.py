@@ -81,15 +81,26 @@ PENDING_STALL_KEYS = frozenset(
         "amount_unavailable_reason",
         "outstanding_soum",
         "total_due_soum",
+        "stall_status",
+        "vendor_assigned",
     }
 )
-"""UI-SPEC §9.2 ning AYNAN YETTI kaliti.
+"""UI-SPEC §9.2 ning AYNAN TO'QQIZ kaliti.
 
 ⛔ RO'YXAT SHU YERDA QO'LDA YOZILGAN VA BU ATAYIN: u KUTILGAN NATIJA,
    o'lchov emas. Uni `PendingStallResponse.model_fields` dan hosila
    qilish testni «model o'ziga teng» degan tavtologiyaga aylantirardi —
    maydon qo'shgan odam ikkala tomonni bir vaqtda o'zgartirardi va
    darvoza qizarmasdi (05-14 ning S7 sabotaji aynan shu sinf).
+
+⚠ YETTIDAN TO'QQIZGA (quick 260816-75c): `stall_status` va
+  `vendor_assigned` qo'shildi. Ikkalasi ham MUSTAQIL maydon va biri
+  ikkinchisidan hosila QILINMAYDI. Sabab TEST-REPORT topilmasi: kassir
+  ta'mirdagi rastani ham, sotuvchisiz rastani ham oddiy karta bilan
+  ko'rardi va rad javobini FAQAT [Tasdiqlash] dan keyin olardi — server
+  ikkala faktni ham BILARDI, lekin lookup javobida AYTMASDI.
+
+⛔ `vendor_id` HAMON YO'Q: yangi maydon BUL, identifikator emas (C-10).
 """
 
 PERSONAL_FIELDS = frozenset({"vendor_name", "phone", "full_name"})
@@ -209,6 +220,22 @@ def _stall_code(conn: Connection[TupleRow], stall_id: UUID) -> str:
     return code
 
 
+def _set_stall_status(conn: Connection[TupleRow], stall_id: UUID, status: str) -> None:
+    """Rastaning REYESTR holatini o'zgartiradi — seedni kengaytirmasdan.
+
+    ⚠ Yangi seed rastasi QO'SHILMAYDI va bu ataylab: `billing_domain`
+      ning oltala stsenariy rastasi BANDLIK holatlarini ifodalaydi,
+      reyestr holati esa ular bilan ORTOGONAL. Yettinchi rasta qo'shish
+      «qaysi o'lchov qaysi rastada?» savolini har testda qaytadan
+      tug'dirardi.
+
+    ⛔ Qiymat `sbozor_core.enums.StallStatus` dan bo'lishi SHART —
+       `STALL_STATUS_CHECK` konstrayti aks holda yozuvni rad etadi va
+       nosozlik testning O'ZIDA ko'rinadi, mahsulotda emas.
+    """
+    conn.execute("UPDATE stalls SET status = %s WHERE id = %s", (status, str(stall_id)))
+
+
 def _evidence_pair(conn: Connection[TupleRow], market_id: UUID) -> tuple[UUID, UUID]:
     """Bozorning HAQIQIY `(occupancy_event_id, snapshot_id)` jufti.
 
@@ -291,13 +318,13 @@ def _billing_response_fields() -> dict[str, set[str]]:
 # ===========================================================================
 
 
-async def test_the_pending_payload_has_exactly_the_seven_keys(
+async def test_the_pending_payload_has_exactly_the_nine_keys(
     api_client: httpx.AsyncClient,
     sync_owner_conn: Connection[TupleRow],
     env: Env,
     cashier_headers: dict[str, str],
 ) -> None:
-    """⛔ Kalitlar to'plami AYNAN yettita — `not in` bilan EMAS, `==` bilan.
+    """⛔ Kalitlar to'plami AYNAN to'qqizta — `not in` bilan EMAS, `==` bilan.
 
     =======================================================================
     D-31: inkor tasdiq (`assert "charge_id" not in body`) FAQAT o'sha
@@ -347,6 +374,108 @@ async def test_the_pending_payload_pairs_the_amount_with_its_reason(
         f"juftlangan invariant buzildi: amount_soum={body['amount_soum']!r}, "
         f"amount_unavailable_reason={body['amount_unavailable_reason']!r}"
     )
+
+
+async def test_a_normal_stall_reports_active_status_and_an_assigned_vendor(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+    cashier_headers: dict[str, str],
+) -> None:
+    """⛔ SALBIY NAZORAT: ogohlantirish maydonlari «har doim rost» EMAS.
+
+    Usiz quyidagi ikki test (`maintenance` va biriktirilmagan rasta)
+    HAR DOIM ROST qaytaradigan maydon ustida ham yashil bo'lardi:
+    `stall_status` konstanta `"maintenance"` bo'lsa ham, `vendor_assigned`
+    doim `False` bo'lsa ham darvoza sezmasdi. Normal rasta ikkalasining
+    ham TESKARI qiymatini talab qiladi.
+    """
+    code = _stall_code(sync_owner_conn, env.stall("stall_with_two_occupied_slots"))
+
+    body = (
+        await api_client.get(PENDING_URL, params={"stall_code": code}, headers=cashier_headers)
+    ).json()
+
+    assert body["stall_status"] == "active", (
+        f"seed rastasi reyestrda `active` emas: {body['stall_status']!r} — "
+        "salbiy nazorat o'z shartini bajarmadi"
+    )
+    assert body["vendor_assigned"] is True, (
+        "seed rastasiga bugungi kunda sotuvchi biriktirilgan bo'lishi SHART — "
+        "aks holda biriktirish da'vosi ikkala shoxda ham bir xil ko'rinardi"
+    )
+
+
+async def test_a_stall_in_maintenance_reports_its_status_without_erasing_the_amount(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+    cashier_headers: dict[str, str],
+) -> None:
+    """⛔ HOLAT XABAR BERADI, PULNI O'CHIRMAYDI.
+
+    =======================================================================
+    Reyestr holati (`stalls.status`) hisob qoidasiga KIRMAYDI: `maintenance`
+    deb belgilangan rasta savdo qilsa patta to'laydi va bu qaror
+    `billing_repo._market_projection()` docstringida ALLAQACHON yozilgan
+    («RASTA HOLATI BO'YICHA FILTR ATAYIN YO'Q»).
+
+    Shuning uchun da'vo IKKI TOMONLAMA: holat javobda KO'RINADI, lekin
+    `amount_soum` HAMON son va `amount_unavailable_reason` HAMON `None`.
+    Faqat birinchi yarmini o'lchash keyingi ijrochiga «holat summani
+    o'chirsin» degan yo'lni ochiq qoldirardi.
+    =======================================================================
+    """
+    stall_id = env.stall("stall_with_two_occupied_slots")
+    code = _stall_code(sync_owner_conn, stall_id)
+    _set_stall_status(sync_owner_conn, stall_id, "maintenance")
+
+    body = (
+        await api_client.get(PENDING_URL, params={"stall_code": code}, headers=cashier_headers)
+    ).json()
+
+    assert body["stall_status"] == "maintenance"
+    assert isinstance(body["amount_soum"], int), (
+        f"⛔ reyestr holati summani O'CHIRDI: amount_soum={body['amount_soum']!r}. "
+        "Ta'mirdagi rasta savdo qilsa patta to'laydi (_market_projection qarori)"
+    )
+    assert body["amount_unavailable_reason"] is None, (
+        f"⛔ holat yo'qlik sababiga aylandi: {body['amount_unavailable_reason']!r} — "
+        "`AMOUNT_UNAVAILABLE_REASONS` reyestri holat ustunini BILMAYDI (D-32)"
+    )
+
+
+async def test_a_stall_without_an_assignment_says_so_before_the_payment(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+    cashier_headers: dict[str, str],
+) -> None:
+    """Biriktirishsiz rasta -> `vendor_assigned is False` VA qarz NOL.
+
+    ⛔ MA'LUMOT YANGI EMAS, VAQTI YANGI: server bu faktni submit'da
+       ALLAQACHON aytadi (409 `stall_not_assigned`, `payments.py`). Bu
+       yerda u LOOKUP javobiga chiqadi, ya'ni kassir rad javobini
+       [Tasdiqlash] dan KEYIN emas, OLDIN oladi.
+
+    ⚠ `outstanding_soum == 0` ikkinchi da'vo emas, BIR da'voning ikkinchi
+      yarmi: qoldiq SOTUVCHI kesimida hisoblanadi (C-4) va sotuvchisiz
+      rastada uni hisoblab bo'lmaydi. Nol bu yerda «hisoblanmadi» ning
+      HALOL shakli.
+    """
+    stall_id = env.domain.market_a.unassigned_stall_id
+    assert stall_id is not None, "nazorat: `market_domain` da biriktirishsiz rasta yo'q"
+    code = _stall_code(sync_owner_conn, stall_id)
+
+    body = (
+        await api_client.get(PENDING_URL, params={"stall_code": code}, headers=cashier_headers)
+    ).json()
+
+    assert body["vendor_assigned"] is False, (
+        f"{code!r} rastasiga bugun sotuvchi biriktirilmagan, lekin javob "
+        "`vendor_assigned=True` dedi — kassir rad javobini submit'dan keyin olardi"
+    )
+    assert body["outstanding_soum"] == 0
 
 
 async def test_an_ambiguous_code_returns_only_codes(

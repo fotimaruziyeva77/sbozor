@@ -70,7 +70,14 @@ const OPEN_SHIFT = {
   opened_at: "2026-09-14T02:00:00Z",
 };
 
-/** ⛔ Server bergan proyeksiya — summa TESTDA hisoblanmaydi. */
+/**
+ * ⛔ Server bergan proyeksiya — summa TESTDA hisoblanmaydi.
+ *
+ * ⚠ `stall_status: "active"` + `vendor_assigned: true` — NORMAL rasta.
+ *   Bu faylning da'vosi oqim haqida (qidiruv -> usul -> tasdiq), rasta
+ *   konteksti haqida emas; ogohlantirish holatlari `pending-card.test.tsx`
+ *   da o'lchanadi.
+ */
 const PENDING = {
   stall_code: "14-C",
   service_date: "2026-09-14",
@@ -79,6 +86,8 @@ const PENDING = {
   amount_unavailable_reason: null,
   outstanding_soum: 0,
   total_due_soum: 15_000,
+  stall_status: "active",
+  vendor_assigned: true,
 };
 
 const SECOND_PENDING = { ...PENDING, stall_code: "15-A" };
