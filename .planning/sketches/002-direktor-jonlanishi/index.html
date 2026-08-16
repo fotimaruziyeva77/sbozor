@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sketch 002 — Direktor jonlanishi</title>
+<link rel="stylesheet" href="../themes/default.css" id="theme-link">
+<style>
+  body { padding-top: 52px; }
+  #variant-nav { position:fixed; top:0; left:0; right:0; z-index:9998;
+    background:var(--color-surface); border-bottom:1px solid var(--color-border);
+    padding:8px 16px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .variant-tab { border:1px solid var(--color-border); background:var(--color-surface);
+    color:var(--color-text-muted); padding:6px 14px; border-radius:var(--radius-md);
+    font:600 12px var(--font-sans); cursor:pointer; transition:all var(--motion-fast) var(--ease-out); }
+  .variant-tab.active { background:var(--color-accent); border-color:var(--color-accent); color:var(--color-accent-fg); }
+  .variant { display:none; } .variant.active { display:block; }
+  .replay { margin-left:auto; font:600 12px var(--font-sans); padding:6px 14px;
+    border-radius:var(--radius-md); border:1px solid var(--color-border-ui);
+    background:var(--color-surface); color:var(--color-text); cursor:pointer; }
+
+  .wrap { max-width:960px; margin:24px auto; padding:0 16px; }
+  .note { padding:12px 16px; font-size:12px; color:var(--color-text-muted);
+    background:var(--color-surface-muted); border-radius:var(--radius-md); margin-bottom:20px; }
+  .note b { color:var(--color-text); }
+  .page-h { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px; }
+  .page-h h1 { font-size:var(--text-h1); margin:0; }
+  .page-h .ctx { font-size:12px; color:var(--color-text-muted); }
+
+  .grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:16px; }
+  @media (max-width:720px){ .grid { grid-template-columns:1fr; } }
+  .card { background:var(--color-surface); border:1px solid var(--color-border);
+    border-radius:var(--radius-lg); padding:20px; box-shadow:var(--shadow-card);
+    transition:transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast); }
+  @media (hover:hover){ .card:hover { transform:translateY(-2px); box-shadow:var(--shadow-raised); } }
+  .card h3 { margin:0 0 4px; font-size:12px; text-transform:uppercase; letter-spacing:0.4px;
+    color:var(--color-text-muted); font-weight:600; }
+  .big { font-size:var(--text-display); font-weight:700; letter-spacing:-0.5px; }
+  .big small { font-size:16px; font-weight:600; color:var(--color-text-muted); }
+  .sub { font-size:12px; color:var(--color-text-muted); margin-top:4px; }
+  .hero-card { background:linear-gradient(135deg, oklch(0.56 0.19 255 / 0.04), transparent 60%),
+    var(--color-surface); }
+  .card.breath { animation:breath 800ms var(--ease-out); }
+  @keyframes breath { 0%{box-shadow:0 0 0 3px oklch(0.63 0.16 150 / 0.25);} 100%{box-shadow:var(--shadow-card);} }
+
+  /* Skeleton */
+  .sk { border-radius:6px; background:linear-gradient(90deg, var(--color-surface-muted) 25%,
+    var(--color-border) 50%, var(--color-surface-muted) 75%); background-size:200% 100%;
+    animation:shimmer 1.5s infinite; }
+  @keyframes shimmer { to { background-position:-200% 0; } }
+  .sk-line { height:14px; margin-top:8px; } .sk-big { height:40px; width:60%; margin-top:8px; }
+
+  /* Kirish xoreografiyasi */
+  .enter .card { opacity:0; transform:translateY(8px); }
+  .card.in { opacity:1; transform:none; transition:opacity var(--motion-base) var(--ease-out),
+    transform var(--motion-base) var(--ease-out); }
+
+  /* Sparkline / donut */
+  .spark path { fill:none; stroke:var(--color-accent); stroke-width:2; stroke-linecap:round; }
+  .spark .area { fill:oklch(0.56 0.19 255 / 0.08); stroke:none; }
+  .spark path.drawable { stroke-dasharray:220; stroke-dashoffset:220; }
+  .spark path.drawn { animation:sparkdraw 600ms var(--ease-out) forwards; }
+  @keyframes sparkdraw { to { stroke-dashoffset:0; } }
+  .donut { transform:rotate(-90deg); }
+  .donut .track { fill:none; stroke:var(--color-surface-muted); stroke-width:12; }
+  .donut .arc { fill:none; stroke:var(--color-success); stroke-width:12; stroke-linecap:round;
+    stroke-dasharray:226; stroke-dashoffset:226; }
+  .donut .arc.drawn { animation:arcdraw 600ms var(--ease-out) forwards; }
+  @keyframes arcdraw { to { stroke-dashoffset:var(--target); } }
+  .donut-wrap { display:flex; align-items:center; gap:16px; }
+  .legend { font-size:12px; color:var(--color-text-muted); }
+  .legend b { color:var(--color-text); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:99px; margin-right:6px; }
+
+  /* Qarzdorlar */
+  .debt-list { list-style:none; margin:8px 0 0; padding:0; font-size:13px; }
+  .debt-list li { display:flex; justify-content:space-between; padding:6px 0;
+    border-bottom:1px dashed var(--color-border); }
+  .debt-list li:last-child { border:none; }
+  .debt-list .amt { color:var(--color-danger-text); font-weight:600; }
+
+  /* Nomuvofiqlik lentasi */
+  .case { display:flex; gap:10px; align-items:center; padding:10px 12px;
+    border:1px solid var(--color-border); border-left:3px solid var(--color-warning);
+    border-radius:var(--radius-sm); margin-top:8px; font-size:13px; background:var(--color-surface); }
+  .case .when { margin-left:auto; font-size:11px; color:var(--color-text-muted); }
+  .case.slidein { animation:caseslide var(--motion-slow) var(--ease-out); }
+  @keyframes caseslide { 0%{opacity:0; transform:translateX(12px);
+    box-shadow:0 0 0 3px oklch(0.78 0.15 85 / 0.3);} 100%{opacity:1; transform:none;} }
+
+  .xlsx { display:inline-flex; align-items:center; gap:8px; margin-top:12px; font:600 12px var(--font-sans);
+    padding:8px 14px; border-radius:var(--radius-md); border:1px solid var(--color-border-ui);
+    background:var(--color-surface); color:var(--color-text); cursor:pointer; }
+  .xlsx .ic { display:inline-block; transition:transform var(--motion-base) var(--ease-spring); }
+  .xlsx:active .ic { transform:translateY(4px); }
+
+  /* Dark rejim (variant C) — token almashtirish */
+  .dark-scope { background:oklch(0.17 0.005 260); border-radius:var(--radius-lg); padding:20px;
+    --color-bg:oklch(0.17 0.005 260); --color-surface:oklch(0.22 0.006 260);
+    --color-surface-muted:oklch(0.26 0.006 260); --color-border:oklch(0.32 0.008 260);
+    --color-text:oklch(0.95 0 0); --color-text-muted:oklch(0.72 0 0);
+    --shadow-card:0 1px 3px oklch(0 0 0 / 0.5); --shadow-raised:0 8px 24px oklch(0 0 0 / 0.55);
+    color:var(--color-text); }
+
+  #sketch-tools { position:fixed; bottom:12px; right:12px; z-index:9999; font:12px system-ui;
+    background:rgba(0,0,0,0.72); color:#fff; padding:8px 12px; border-radius:8px;
+    opacity:0.4; transition:opacity 0.2s; display:flex; gap:8px; }
+  #sketch-tools:hover { opacity:1; }
+</style>
+</head>
+<body>
+
+<div id="variant-nav">
+  <strong style="font-size:12px;margin-right:4px;">002 · Direktor</strong>
+  <button class="variant-tab active" onclick="showVariant('a', this)">A: Sokin</button>
+  <button class="variant-tab" onclick="showVariant('b', this)">B: Jonli + iliq ★</button>
+  <button class="variant-tab" onclick="showVariant('c', this)">C: Tungi rejim</button>
+  <button class="replay" onclick="replay()">↻ Qayta yuklash (skeleton)</button>
+  <button class="replay" onclick="newPayment()">+ Yangi to'lov keldi</button>
+</div>
+
+<div id="variant-a" class="variant active"></div>
+<div id="variant-b" class="variant"></div>
+<div id="variant-c" class="variant"></div>
+
+<div id="sketch-tools">
+  <select onchange="document.getElementById('theme-link').href='../themes/'+this.value+'.css'">
+    <option value="default">Neytral (joriy)</option>
+    <option value="warm">Iliq (rang 2.0)</option>
+  </select>
+</div>
+
+<script>
+const NOTES = {
+  a: "<b>A — Sokin:</b> skeleton → kontent oddiy crossfade, stagger 30ms, raqamlar SANAMAYDI (shunchaki paydo). Eng kam harakat.",
+  b: "<b>B — Jonli (tavsiya ★):</b> skeleton → stagger kirish → tushum 0 dan sanab o'sadi (600ms) → sparkline chizilib chiqadi → bandlik halqasi aylanib to'ladi → nomuvofiqlik case amber chetdan sirg'aladi. «+ Yangi to'lov» tugmasi: raqam yumshoq yangilanadi, karta bir marta yashil nafas oladi. Iliq fonni toolbar'dan sinang.",
+  c: "<b>C — Tungi rejim:</b> B ning aynan o'zi, token almashtirish bilan dark'da (06:00 smena / kechki hisobot). Komponent kodi o'zgarmaydi — faqat CSS o'zgaruvchilar."
+};
+function dash(v){
+  const dark = v==='c' ? 'dark-scope' : '';
+  return `
+  <div class="wrap">
+    <div class="note">${NOTES[v]}</div>
+    <div class="${dark}">
+    <div class="page-h"><h1>Boshqaruv paneli</h1><span class="ctx">Karmana bozori · 16-avg, 2026</span></div>
+    <div class="grid enter" id="grid-${v}">
+      <div class="card hero-card" data-i="0">
+        <h3>Bugungi tushum</h3>
+        <div class="sk sk-big" data-sk></div>
+        <div data-real hidden>
+          <div class="big money"><span id="rev-${v}">0</span> <small>so'm</small></div>
+          <div class="sub">Kecha: 2 118 000 so'm · +9%</div>
+          <svg class="spark" width="100%" height="48" viewBox="0 0 220 48" preserveAspectRatio="none">
+            <path class="area" d="M0,38 C30,30 45,34 70,26 C95,18 115,24 140,16 C165,10 190,14 220,6 L220,48 L0,48 Z"/>
+            <path class="drawable" id="spark-${v}" d="M0,38 C30,30 45,34 70,26 C95,18 115,24 140,16 C165,10 190,14 220,6"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card" data-i="1">
+        <h3>Bandlik</h3>
+        <div class="sk sk-big" data-sk></div>
+        <div data-real hidden class="donut-wrap">
+          <svg class="donut" width="88" height="88" viewBox="0 0 88 88">
+            <circle class="track" cx="44" cy="44" r="36"/>
+            <circle class="arc" id="arc-${v}" cx="44" cy="44" r="36" style="--target:63.8"/>
+          </svg>
+          <div class="legend">
+            <div style="font-size:24px;font-weight:700;color:var(--color-text)" class="money">
+              <span id="occ-${v}">0</span>%</div>
+            <div><span class="dot" style="background:var(--color-success)"></span><b>215</b> band</div>
+            <div><span class="dot" style="background:var(--color-surface-muted);border:1px solid var(--color-border-ui)"></span><b>85</b> bo'sh</div>
+          </div>
+        </div>
+      </div>
+      <div class="card" data-i="2">
+        <h3>Qarzdorlik</h3>
+        <div class="sk sk-big" data-sk></div><div class="sk sk-line" data-sk></div><div class="sk sk-line" data-sk></div>
+        <div data-real hidden>
+          <div class="big money" style="color:var(--color-danger-text)"><span id="debt-${v}">0</span> <small>so'm</small></div>
+          <ul class="debt-list">
+            <li><span>C-14 · Rustam Xolmatov</span><span class="amt money">64 000</span></li>
+            <li><span>A-29 · Nodira Islomova</span><span class="amt money">40 000</span></li>
+            <li><span>B-02 · Karim Sattorov</span><span class="amt money">24 000</span></li>
+          </ul>
+          <button class="xlsx"><span class="ic">⬇</span> Qarzdorlik reyestri (.xlsx)</button>
+        </div>
+      </div>
+      <div class="card" data-i="3">
+        <h3>Nomuvofiqlik</h3>
+        <div class="sk sk-line" data-sk></div><div class="sk sk-line" data-sk></div>
+        <div data-real hidden id="cases-${v}">
+          <div class="case">⚠ <span><b>D-11</b> — band, lekin to'lovsiz</span><span class="when">14:05</span></div>
+          <div class="case">⚠ <span><b>A-33</b> — ro'yxatsiz savdo</span><span class="when">12:40</span></div>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>`;
+}
+['a','b','c'].forEach(v => document.getElementById('variant-'+v).innerHTML = dash(v));
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let current = 'a';
+
+function showVariant(id, tab){
+  document.querySelectorAll('.variant').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.variant-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('variant-'+id).classList.add('active'); tab.classList.add('active');
+  current = id; load(id);
+}
+function count(id, to, dur, tick){
+  const el = document.getElementById(id); if (!el) return;
+  if (reduced || dur===0) { el.textContent = to.toLocaleString('ru-RU').replace(/,/g,' '); return; }
+  const t0 = performance.now();
+  (function step(t){ const p=Math.min((t-t0)/dur,1), e=1-Math.pow(1-p,3);
+    el.textContent = Math.round(to*e).toLocaleString('ru-RU').replace(/,/g,' ');
+    if (p<1) requestAnimationFrame(step);
+    else if (tick && !reduced) { el.parentElement.animate(
+      [{transform:'scale(1)'},{transform:'scale(1.03)'},{transform:'scale(1)'}],
+      {duration:150, easing:'ease-out'}); } })(t0);
+}
+function load(v){
+  const grid = document.getElementById('grid-'+v);
+  grid.classList.add('enter');
+  grid.querySelectorAll('[data-sk]').forEach(s=>s.hidden=false);
+  grid.querySelectorAll('[data-real]').forEach(r=>r.hidden=true);
+  grid.querySelectorAll('.card').forEach(c=>c.classList.remove('in'));
+  const skTime = 900; // skeleton ko'rinish vaqti (simulyatsiya)
+  setTimeout(()=>{
+    grid.querySelectorAll('[data-sk]').forEach(s=>s.hidden=true);
+    grid.querySelectorAll('[data-real]').forEach(r=>r.hidden=false);
+    grid.querySelectorAll('.card').forEach((c,i)=>{
+      setTimeout(()=>c.classList.add('in'), (v==='a'?30:60)*i); // stagger
+    });
+    const anim = v!=='a';
+    count('rev-'+v, 2306000, anim?600:0, anim);
+    count('occ-'+v, 72, anim?600:0, false);
+    count('debt-'+v, 128000, anim?600:0, false);
+    if (anim && !reduced){
+      setTimeout(()=>{ const s=document.getElementById('spark-'+v); s&&s.classList.add('drawn'); }, 250);
+      setTimeout(()=>{ const a=document.getElementById('arc-'+v); a&&a.classList.add('drawn'); }, 250);
+      const cases = document.getElementById('cases-'+v);
+      cases && [...cases.children].forEach((c,i)=>{ c.style.opacity='0';
+        setTimeout(()=>{ c.style.opacity='1'; c.classList.add('slidein'); }, 400+i*150); });
+    } else {
+      const s=document.getElementById('spark-'+v); s&&s.classList.remove('drawable');
+      const a=document.getElementById('arc-'+v); a&&(a.style.strokeDashoffset='63.8');
+    }
+  }, skTime);
+}
+function replay(){
+  const html = dash(current);
+  document.getElementById('variant-'+current).innerHTML = html; load(current); }
+function newPayment(){
+  const el = document.getElementById('rev-'+current); if (!el) return;
+  const from = parseInt(el.textContent.replace(/\D/g,''))||0, to = from+8000, t0=performance.now();
+  (function step(t){ const p=Math.min((t-t0)/400,1), e=1-Math.pow(1-p,3);
+    el.textContent = Math.round(from+(to-from)*e).toLocaleString('ru-RU').replace(/,/g,' ');
+    if(p<1) requestAnimationFrame(step); })(t0);
+  const card = el.closest('.card');
+  card.classList.remove('breath'); void card.offsetWidth; card.classList.add('breath');
+}
+load('a');
+</script>
+</body>
+</html>
