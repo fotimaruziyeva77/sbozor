@@ -2239,6 +2239,7 @@ degan savolga javob beradi, aniq sonni qulflamaydi.
 QUERY_PARAM_ROUTES: frozenset[RouteSpec] = frozenset(
     {
         RouteSpec("PUT", "/api/v1/camera-zones"),
+        RouteSpec("POST", "/api/v1/reports/compare/ledger"),
     }
 )
 """MAJBURIY QUERY parametri bor va matritsa uni TO'LDIRMAYDIGAN marshrutlar.
@@ -2251,6 +2252,16 @@ KELMAYDI.
 (`main.py:213-218`: yo'l parametri bo'lsa u `cameras/coverage` shabloniga
 tushib qolardi). Matritsa esa faqat YO'L parametrlarini to'ldiradi, ya'ni
 so'rov tanadan qat'i nazar validatsiya darvozasida to'xtaydi.
+
+`POST /api/v1/reports/compare/ledger` (daftar importi, 08-14) IKKI narsani
+talab qiladi va matritsa IKKALASINI ham berolmaydi: MAJBURIY `?day=`
+(query parametri, `reports.py::DayDep`) va `multipart/form-data` FAYLI.
+⛔ `FILE_FILLERS` ga yozish YETMASDI va u ZARARLI bo'lardi:
+`test_file_routes_actually_execute` o'sha xaritadan ITERATSIYA qiladi va
+`day` siz chaqiruv baribir 422 berardi — ya'ni ro'yxatga qo'shilgan
+yozuv HECH NIMANI ushlab turmasdan darvozani QIZIL qilib qo'yardi.
+Marshrutning tenant chegarasi `tests/integration/test_three_way.py::
+test_the_other_markets_admin_cannot_write_into_market_a` da o'lchanadi.
 
 ⚠ ISTISNO RO'YXAT BO'LIB E'LON QILINADI, `try/except` yoki «422 ham
   mayli» degan yumshatish bilan EMAS: yumshatish butun darvozani

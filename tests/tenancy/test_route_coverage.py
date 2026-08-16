@@ -590,16 +590,31 @@ to'rtinchi hisobot marshrutiga ism qo'shish ONGLI qaror bo'lib qoladi.
 =============================================================================
 """
 
+LEDGER_IMPORT_ROUTE = "/api/v1/reports/compare/ledger"
+"""⛔ BU PREFIKSDAGI YAGONA YOZUV MARSHRUTI (D-17, 08-14).
+
+Nom KLIENT KONTRAKTIDAN: `report-queries.ts::uploadLedger()` AYNAN
+`${REPORTS_PATH}/compare/ledger?day=` ga boradi (08-03, TO'LQIN 1).
+Reja `/three-way/ledger` degan edi — sabab va tanlov `reports.py` ning
+5-bo'limida LITERAL yozilgan.
+
+⛔ U «hisobotni tuzatish» yo'li EMAS va shuning uchun D-03 taqig'i ostiga
+   tushmaydi: daftar TIZIMDA UMUMAN YO'Q — u tashqi qog'ozdan keladigan
+   UCHINCHI manba, ya'ni bu marshrut KIRISH yo'li, hosila hisobotning
+   tahriri emas.
+"""
+
 REPORTS_ROUTES = (
     "/api/v1/reports/accuracy.xlsx",
     "/api/v1/reports/anomalies",
     "/api/v1/reports/anomalies.xlsx",
+    LEDGER_IMPORT_ROUTE,
     "/api/v1/reports/debtors",
     "/api/v1/reports/debtors.xlsx",
     "/api/v1/reports/revenue",
     "/api/v1/reports/revenue.xlsx",
 )
-"""Yetti YO'L, yetti MARSHRUT — har birida FAQAT `GET`.
+"""Sakkiz YO'L, sakkiz MARSHRUT — yettitasi `GET`, BITTASI `POST`.
 
 ⛔ NOMLAR KLIENT KONTRAKTIDAN (`REPORT_KINDS`, 08-03; UI-SPEC §12.1,
    G-43a): `report-queries.ts::buildReportDataPath()` yo'lni AYNAN
@@ -621,6 +636,12 @@ qolmaydi» kafolati AYNAN eng xavfli marshrutda teshilardi.
    «tuzatish» mumkin bo'lsa u ikkinchi haqiqat manbaiga aylanardi.
    Quyidagi to'plam tengligi buni AYNAN o'lchaydi.
 
+⛔⛔ YAGONA `POST` — DAFTAR IMPORTI, VA UNING SABABI YUQORIDA
+    (`LEDGER_IMPORT_ROUTE`). Metodlar to'plami MARSHRUT BO'YICHA
+    qulflanadi, umumiy «hammasi GET» da'vosi bilan EMAS: aks holda
+    ikkinchi `POST` (masalan «hisobotni qayta hisoblash») JIMGINA
+    qo'shilib ketardi.
+
 ⚠ `/accuracy` JSON marshruti bu ro'yxatda YO'Q va bu KUTILGAN: aniqlik
   hisobining JSON yuzasi `GET /occupancy/accuracy` da yashaydi (05-12)
   va eksport AYNAN o'sha xizmatni chaqiradi. Ikkinchi JSON marshruti
@@ -628,8 +649,20 @@ qolmaydi» kafolati AYNAN eng xavfli marshrutda teshilardi.
 
 ⚠ SON TEST NOMIDA YOZILGAN va u har safar QO'LDA yangilanadi (R-11
   darsi: chetlash JIMGINA, ONGLI yangilash esa NOMDA ko'rinadi).
-  08-14/08-16 solishtiruvni qo'shadi — o'shanda bu test nomi ham,
-  ro'yxat ham yana o'zgaradi.
+  08-16 solishtiruvning O'QISH yuzasini qo'shadi — o'shanda bu test
+  nomi ham, ro'yxat ham yana o'zgaradi.
+"""
+
+REPORTS_ROUTE_METHODS: dict[str, str] = {path: "GET" for path in REPORTS_ROUTES} | {
+    LEDGER_IMPORT_ROUTE: "POST"
+}
+"""Yo'l -> UNING YAGONA metodi.
+
+⛔ XARITA, UMUMIY DA'VO EMAS: 08-12 gacha bu yerda «hammasi `GET`» degan
+   bitta jumla turardi va u to'g'ri edi. Endi bittasi `POST`, ya'ni o'sha
+   jumlani «`GET` yoki `POST`» ga yumshatish IKKINCHI yozuv marshrutini
+   ham jimgina o'tkazib yuborardi — xarita esa har marshrutning metodini
+   NOM bilan qulflaydi.
 """
 
 
@@ -640,17 +673,22 @@ def _reports_paths() -> list[str]:
     )
 
 
-def test_the_reports_surface_is_exactly_seven_routes() -> None:
+def test_the_reports_surface_is_exactly_eight_routes() -> None:
     """DARVOZANING NAZORATI — pastdagi testlar BO'SH to'plamda yashil bo'lmaydi.
 
-    ⛔ To'plam TENGLIGI bilan (D-31), «kamida yettitasi» bilan EMAS:
-       sakkizinchi marshrut qo'shilishi ONGLI qaror va u shu yerda
+    ⛔ To'plam TENGLIGI bilan (D-31), «kamida sakkiztasi» bilan EMAS:
+       to'qqizinchi marshrut qo'shilishi ONGLI qaror va u shu yerda
        ko'rinishi kerak — ayniqsa u YOZUV metodi bo'lsa.
 
-    ⚠ SON 3 DAN 7 GA ONGLI RAVISHDA OSHIRILDI (08-12): to'rt `.xlsx`
-      eksporti qo'shildi va ularning HAMMASI `GET`. Metodlar to'plami
-      ham shu yerda qulflanadi — `POST` bo'lgan eksport bayt-tasnif
-      darvozasidan jimgina chetlab o'tardi (ro'yxat docstringi).
+    ⚠ SON 3 -> 7 (08-12: to'rt `.xlsx` eksporti) -> 8 (08-14: daftar
+      importi) tarzida ONGLI ravishda oshirildi va HAR SAFAR TEST NOMI
+      bilan birga. Nom sonni aytadi, ya'ni o'sish diff'da ko'rinadi.
+
+    ⛔ METODLAR MARSHRUT BO'YICHA o'lchanadi (`REPORTS_ROUTE_METHODS`):
+       `POST` bo'lgan EKSPORT bayt-tasnif darvozasidan jimgina chetlab
+       o'tardi (`get_routes()` faqat `GET` ni yuradi), shuning uchun
+       «hammasi `GET`» qoidasi FAQAT daftar importi uchun, NOM bilan
+       yumshatilgan.
     """
     walked = {
         (route.method, route.path)
@@ -658,12 +696,18 @@ def test_the_reports_surface_is_exactly_seven_routes() -> None:
         if route.path.startswith(REPORTS_PREFIX)
     }
 
-    assert _reports_paths() == list(REPORTS_ROUTES)
-    assert walked == {("GET", path) for path in REPORTS_ROUTES}, sorted(walked)
+    assert _reports_paths() == sorted(REPORTS_ROUTES)
+    assert walked == {(method, path) for path, method in REPORTS_ROUTE_METHODS.items()}, sorted(
+        walked
+    )
+    assert sum(1 for method in REPORTS_ROUTE_METHODS.values() if method != "GET") == 1, (
+        "hisobot yuzasida BIRDAN ORTIQ yozuv marshruti paydo bo'ldi — "
+        "hisobot HOSILA (D-03) va uni «tuzatish» ikkinchi haqiqat manbaini tug'dirardi"
+    )
 
 
 def test_every_reports_route_is_documented_in_openapi() -> None:
-    """⛔ Yettalasi ham OpenAPI'da BOR — mijoz BRAUZER (`/reconciliation` naqshi).
+    """⛔ Sakkizalasi ham OpenAPI'da BOR — mijoz BRAUZER (`/reconciliation` naqshi).
 
     08-13/08-15 klient sxemasini shu kontraktdan oladi.
     `include_in_schema=False` bilan yozilgan marshrut frontend
@@ -673,6 +717,10 @@ def test_every_reports_route_is_documented_in_openapi() -> None:
     ⚠ `.xlsx` marshrutlarining `response_model` i YO'Q (javob — BAYT),
       lekin ular ham hujjatlanadi: klient ularning MAVJUDLIGINI va
       so'rov parametrlarini shu kontraktdan biladi.
+
+    ⚠ Daftar importi (`POST /compare/ledger`) ham shu yerda: uning
+      `multipart/form-data` shakli va MAJBURIY `day` parametri klientga
+      AYNAN shu kontraktdan ko'rinadi.
     """
     documented = {
         (method.upper(), path)
@@ -681,7 +729,7 @@ def test_every_reports_route_is_documented_in_openapi() -> None:
         if path.startswith(REPORTS_PREFIX)
     }
 
-    assert len(documented) == 7, sorted(documented)
+    assert len(documented) == 8, sorted(documented)
     assert {path for _, path in documented} == set(REPORTS_ROUTES)
 
 
@@ -731,32 +779,41 @@ def test_only_the_debtors_route_carries_personal_data() -> None:
     assert personal == ["/api/v1/reports/debtors"], personal
 
 
-def test_the_reports_surface_needs_no_query_param_exemption() -> None:
-    """⛔ `QUERY_PARAM_ROUTES` GA QO'SHILMAYDI — VA SABAB MEXANIK, KELISHUV EMAS.
+def test_only_the_ledger_import_needs_a_query_param_exemption() -> None:
+    """⛔ ISTISNO AYNAN BITTA — VA SABAB METODDA, KELISHUVDA EMAS.
 
     =======================================================================
-    ⛔⛔ MAJBURIY `from`/`to` MATRITSANI BUZMAYDI — O'LCHANGAN.
+    ⛔⛔ YETTI `GET` MARSHRUTI ISTISNOSIZ QOLADI — O'LCHANGAN.
 
-    Uchala marshrutda ham `from`/`to` MAJBURIY query parametrlari bor va
+    Ularning hammasida `from`/`to` MAJBURIY query parametrlari bor va
     cross-tenant matritsasi query parametrlarini TO'LDIRMAYDI
     (`call_route()` faqat YO'L parametrlarini va tanani beradi), ya'ni
     so'rov validatsiya darvozasida **422** bilan to'xtaydi.
 
-    ⛔ LEKIN 422 BU YERDA HECH NIMANI BUZMAYDI: `QUERY_PARAM_ROUTES` ning
-       YAGONA iste'molchisi — `test_no_matrix_route_returns_422`, u esa
-       `BODY_ROUTES` (`POST`/`PUT`/`PATCH`) ustidan yuradi. `GET`
+    ⛔ LEKIN 422 ULAR UCHUN HECH NIMANI BUZMAYDI: `QUERY_PARAM_ROUTES`
+       ning YAGONA iste'molchisi — `test_no_matrix_route_returns_422`, u
+       esa `BODY_ROUTES` (`POST`/`PUT`/`PATCH`) ustidan yuradi. `GET`
        marshruti o'sha to'plamga UMUMAN tushmaydi. Bu `GET /api/v1/
-       reconciliation/hit-rate` ning AYNAN holati — u ham majburiy
-       `from`/`to` oladi va u ham istisnoda YO'Q.
+       reconciliation/hit-rate` ning AYNAN holati.
 
-    ⛔ ISTISNO QO'SHISH ZARARLI BO'LARDI: `test_query_param_routes_point_
-       at_live_routes` uni tirik deb ko'rsatardi, `test_no_matrix_route_
-       returns_422` esa uni `BODY_ROUTES` dan chiqarishga urinardi —
-       ya'ni ro'yxatda HECH NIMANI ushlab turmaydigan uchta yozuv paydo
-       bo'lardi va keyingi o'quvchi «vaqtincha qo'shib qo'yaman»
-       refleksini oqlagan pretsedentni ko'rardi.
+    =======================================================================
+    ⛔⛔ DAFTAR IMPORTI (`POST`) ESA O'SHA TO'PLAMGA TUSHADI VA SHUNING
+        UCHUN ISTISNOGA YOZILADI (08-14).
 
-    ⚠ Uchala marshrutning TENANT CHEGARASI ALOHIDA o'lchanadi:
+    Marshrut IKKI narsani talab qiladi va matritsa ikkalasini ham
+    berolmaydi: MAJBURIY `?day=` (query parametri) va `multipart/form-
+    data` FAYLI. `BODY_FILLERS` JSON yuboradi, `FILE_FILLERS` esa query
+    parametrini qo'sha olmaydi, ya'ni javob HAR HOLDA 422 bo'lardi.
+
+    ⛔ «422 ham mayli» DEB YUMSHATISH TAQIQ (`QUERY_PARAM_ROUTES`
+       docstringi): yumshatish butun darvozani ma'nosiz qilardi. Istisno
+       RO'YXATDA turadi va uning TENANT CHEGARASI BOSHQA joyda
+       o'lchanadi — `tests/integration/test_three_way.py::
+       test_the_other_markets_admin_cannot_write_into_market_a` (B
+       bozorining admini A ning kuniga daftar yozolmaydi).
+
+    =======================================================================
+    ⚠ Yetti `GET` ning TENANT CHEGARASI ham ALOHIDA o'lchanadi:
       `tests/integration/test_reports_api.py::
       test_the_other_markets_director_never_sees_market_a_rows` —
       B bozorining direktori A ning davrini HAQIQIY parametrlar bilan
@@ -775,7 +832,9 @@ def test_the_reports_surface_needs_no_query_param_exemption() -> None:
         "buzilgan token da'volari va «javobda B ning izi yo'q» tekshiruvi ular "
         f"uchun BAJARILMAYDI: {sorted(set(REPORTS_ROUTES) - matrix)}"
     )
-    assert exempted == [], exempted
+    # ⛔ TO'PLAM TENGLIGI, «kamida bittasi» EMAS: ikkinchi istisno ONGLI
+    #    qaror bo'lishi va shu qatorda ko'rinishi kerak.
+    assert exempted == [f"POST_{LEDGER_IMPORT_ROUTE}"], exempted
 
 
 # ===========================================================================
