@@ -103,6 +103,55 @@ import { useVendorLabels } from "@/lib/vendor-labels";
  * =============================================================================
  */
 
+/*
+ * =============================================================================
+ * ⛔⛔ VAQT FORMATI — AYNIQ RAQAMLI MAYDONLARDAN, `dateStyle` DAN EMAS.
+ *
+ * `dateStyle: "short"` CLDR SKELETINI tanlaydi va locale yechilmaganda
+ * ILDIZ (root) namunasiga tushadi — o'shanda oy `M08` shaklidagi NOM bo'lib
+ * chiqadi va ekranda «2026 M08 15» paydo bo'ladi (Kamchilik №1 ning aynan
+ * mexanikasi).
+ *
+ * ⛔ Ayniq raqamli maydonlar bilan oy NOMI STRUKTURAVIY IMKONSIZ: chiqishda
+ *    faqat raqam va ajratgich bo'lishi mumkin; ajratgich va tartib esa
+ *    locale ixtiyorida QOLADI (ular tarjima qilinadigan qaror).
+ *
+ * ⛔ `hour12: false` MAJBURIY: usiz zaxira locale `AM`/`PM` HARFLARINI
+ *    qo'shib, harfsizlik darvozasini (`delivery-list.test.tsx`) buzardi.
+ *
+ * ⚠ BU VAQTINCHALIK YECHIM EMAS, TO'G'RI YECHIM: 8-fazaning umumiy sana
+ *   utili kelganda bu ikki obyekt o'sha utilga almashadi va DARVOZA
+ *   O'ZGARMAYDI — u formatning SHAKLINI emas, CHIQISHINI o'lchaydi.
+ * =============================================================================
+ */
+
+/** Bugungi sahifa: faqat soat:daqiqa. */
+const TIME_ONLY = {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+} as const;
+
+/** O'tgan kun sahifasi: kun.oy + soat:daqiqa. */
+const DATE_TIME = {
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+} as const;
+
+/**
+ * Sabab qatori chiziladigan YOPIQ to'plam.
+ *
+ * ⛔ `delivered` CHIQARILGAN: yetib borgan xabarning oldingi urinishdagi
+ *    xatosini ko'rsatish muvaffaqiyatni NOSOZLIKKA aylantirardi.
+ * ⛔ `blocked` CHIQARILGAN: sababi ALLAQACHON to'liq jumla bilan aytilgan
+ *    (yuqoridagi 5-band) va ikkinchi sabab uni texnik nosozlik kabi
+ *    ko'rsatardi.
+ */
+const REASON_STATES: ReadonlySet<string> = new Set(["pending", "sent", "failed"]);
+
 /** Xabar turi -> ikonka. ⛔ `Record<…>` — yangi a'zo `tsc` da qizaradi. */
 const KIND_ICON: Record<NotificationKindValue, LucideIcon> = {
   payment_receipt: Receipt,
@@ -241,6 +290,7 @@ export function DeliveryList({
             <tbody>
               {rows.map((row) => (
                 <DeliveryRowView
+                  isToday={isToday}
                   key={row.outbox_id}
                   row={row}
                   vendorLabel={vendors.labelOf(row.vendor_id)}
@@ -299,9 +349,11 @@ export function DeliveryList({
 }
 
 function DeliveryRowView({
+  isToday,
   row,
   vendorLabel,
 }: {
+  isToday: boolean;
   row: DeliveryRow;
   vendorLabel: string | null;
 }) {
@@ -313,22 +365,37 @@ function DeliveryRowView({
    *   xaritalanadi (§14.9). `RemoteProtocolError` direktorga hech nima
    *   aytmaydi; «Telegram javob bermadi» esa aytadi.
    *
-   * ⛔ FAQAT `failed` QATORIDA: `pending` da xato hali yo'q, `blocked`
-   *   da esa sabab ALLAQACHON to'liq jumla bilan aytilgan (blok ustuni
-   *   ostiga «Noma'lum xato» qo'shish uni NOSOZLIKKA aylantirardi).
+   * ⛔⛔ SHART YOPIQ TO'PLAM BILAN — VA «`pending` DA XATO HALI YO'Q»
+   *     DEGAN ESKI FARAZ O'LCHOV BILAN RAD ETILDI (Topilma №I).
+   *     Manzilsiz shox (`outbox_repo.defer_unresolved()`) `last_error_type`
+   *     ni YOZADI va holatni `pending` da QOLDIRADI (urinishlar sonini
+   *     ham oshirmaydi). Ya'ni eski `status === "failed"` sharti AYNAN
+   *     eng uzoq qotib qoladigan sababni ekrandan to'sardi: kvitansiya
+   *     18 soat «Navbatda · Urinishlar: 0» bo'lib turardi va nima uchun
+   *     turgani hech qayerda ko'rinmasdi.
    */
-  const errorCode =
-    row.status === "failed"
-      ? deliveryErrorCode(row.error_type, row.error_status_code)
-      : null;
+  const errorCode = REASON_STATES.has(row.status)
+    ? deliveryErrorCode(row.error_type, row.error_status_code)
+    : null;
 
   const KindIcon = isNotificationKind(row.kind) ? KIND_ICON[row.kind] : null;
 
   return (
     <tr className="border-b border-border last:border-b-0">
       <td className="p-3">
-        {/* ⛔ NISBIY VAQT YO'Q (§3.5): «5 daqiqa oldin» taymersiz eskiradi. */}
-        {format.dateTime(new Date(row.created_at), { timeStyle: "short" })}
+        {/*
+         * ⛔ NISBIY VAQT YO'Q (§3.5): «5 daqiqa oldin» taymersiz eskiradi.
+         *
+         * ⛔ SANA FAQAT O'TGAN KUNDA. Jadval `created_at` bo'yicha KUN
+         *   FILTRIDA (`outbox_repo._DELIVERY_ROWS`), ya'ni bugungi
+         *   sahifada har qator bugungi va sana ORTIQCHA SHOVQIN bo'lardi;
+         *   o'tgan kun sahifasida esa u YAGONA aniqlovchi — usiz qator
+         *   «12:36» deb turib, qaysi kun ekanini AYTMASDI.
+         */}
+        {format.dateTime(
+          new Date(row.created_at),
+          isToday ? TIME_ONLY : DATE_TIME,
+        )}
       </td>
       <td className="p-3">
         <span className="inline-flex items-center gap-1">

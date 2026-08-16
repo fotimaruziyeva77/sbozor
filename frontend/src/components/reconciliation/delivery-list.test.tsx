@@ -479,6 +479,55 @@ describe("⛔ G-34 (e): tashqi tizim identifikatori va xabar tanasi", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("⛔ xato TURI yopiq to'plamdan", () => {
+  test("⛔ `pending` qatori SABABINI ko'rsatadi (Topilma №I)", async () => {
+    /*
+     * ⛔⛔ MANZILSIZ SHOX `pending` VA `last_error_type` NI BIRGA
+     *     QOLDIRADI — VA ESKI SHART AYNAN SHUNI YASHIRARDI.
+     *
+     * `outbox_repo.defer_unresolved()` holatni `pending` da qoldiradi,
+     * sabab turini esa YOZADI va urinishlar sonini UMUMAN oshirmaydi.
+     * Ya'ni «Navbatda · Urinishlar: 0» qatori 18 soat turib, nima uchun
+     * turganini AYTMASDI — direktor uchun bu «tizim ishlayapti shekilli»
+     * degani edi.
+     */
+    routeFetch([
+      row("pending", {
+        error_type: "UnresolvedRecipient",
+        error_status_code: null,
+        attempt_count: 0,
+      }),
+    ]);
+
+    const { container } = await renderList();
+
+    expect(container.textContent).toContain(
+      messages.recon.deliveryError.chat_not_found,
+    );
+
+    /* ⛔ Va xom sinf nomi baribir EKRANGA CHIQMAYDI (D-04 kuchda). */
+    expect(container.textContent).not.toContain("UnresolvedRecipient");
+  });
+
+  test("⛔ `delivered` qatorida eski xato TIRILMAYDI", async () => {
+    /*
+     * ⛔ Xabar YETIB BORGAN; oldingi urinishdagi xato — TARIX. Uni
+     *   ko'rsatish muvaffaqiyatni NOSOZLIKKA aylantirardi va direktor
+     *   yetkazilgan kvitansiyani muammoli deb o'qirdi.
+     */
+    routeFetch([
+      row("delivered", {
+        error_type: "RemoteProtocolError",
+        error_status_code: 502,
+      }),
+    ]);
+
+    const { container } = await renderList();
+
+    for (const value of Object.values(messages.recon.deliveryError)) {
+      expect(container.textContent).not.toContain(value);
+    }
+  });
+
   test("⛔ xom istisno sinfining nomi DOM'da YO'Q", async () => {
     routeFetch([
       row("failed", { error_type: "RemoteProtocolError", error_status_code: 502 }),
@@ -497,7 +546,7 @@ describe("⛔ xato TURI yopiq to'plamdan", () => {
     );
   });
 
-  test("⛔ xato TURI FAQAT `failed` qatorida ko'rinadi", async () => {
+  test("⛔ sabab `blocked` qatorida CHIZILMAYDI (yopiq to'plamdan tashqarida)", async () => {
     routeFetch([
       row("blocked", { error_type: "Forbidden", error_status_code: 403 }),
     ]);
@@ -505,12 +554,83 @@ describe("⛔ xato TURI yopiq to'plamdan", () => {
     const { container } = await renderList();
 
     /*
-     * ⛔ `blocked` da sabab ALLAQACHON to'liq jumla bilan aytilgan;
-     *   uning ustiga xato turini qo'shish blokni NOSOZLIKKA
-     *   aylantirardi (D-22).
+     * ⛔ SABAB YUZASI — YOPIQ TO'PLAM: `pending` / `sent` / `failed`.
+     *   `blocked` undan ATAYIN tashqarida: sabab ALLAQACHON to'liq jumla
+     *   bilan aytilgan (blok sotuvchining HUQUQI) va ikkinchi sabab uni
+     *   texnik NOSOZLIK kabi ko'rsatardi (D-22).
      */
     for (const value of Object.values(messages.recon.deliveryError)) {
       expect(container.textContent).not.toContain(value);
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* VAQT KATAGI — HARFSIZLIK DARVOZASI VA KUN ANIQLIGI (Kamchilik №1, №I)      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⛔⛔ FAQAT RAQAM VA AJRATGICH — HARF YO'Q.
+ *
+ * Kamchilik №1 («2026 M08 15») ning mexanikasi shu edi: `dateStyle` CLDR
+ * SKELETINI tanlaydi va locale yechilmaganda ILDIZ (root) namunasiga
+ * tushadi — o'shanda oy `M08` shaklidagi NOM bo'lib chiqadi. Bu regex
+ * «M08», «avg», «сен» va `AM`/`PM` sinflarini BIRVARAKAYIGA bloklaydi.
+ */
+const DIGITS_ONLY = /^[\d\s.,:/-]+$/u;
+
+/** Birinchi qatorning BIRINCHI katagi — vaqt ustuni. */
+function firstTimeCell(container: HTMLElement): string {
+  const cell = container.querySelector("tbody tr td");
+  expect(cell).not.toBeNull();
+  return (cell as HTMLElement).textContent ?? "";
+}
+
+describe("⛔ vaqt katagi: harf yo'q, o'tgan kunda sana bor", () => {
+  test("⛔ NAZORAT: detektor sun'iy ijobiyni USHLAYDI", () => {
+    /*
+     * ⛔ NAZORATSIZ QUYIDAGI DA'VO HAR DOIM YASHIL BO'LISHI MUMKIN EDI:
+     *   regex xato yozilsa (masalan `u` bayrog'i bilan `[\s\S]+`) u har
+     *   qanday matnga mos kelardi va darvoza hech nimani o'lchamasdi.
+     */
+    expect(DIGITS_ONLY.test("2026 M08 15 12:36")).toBe(false);
+    expect(DIGITS_ONLY.test("12.08, 14:15")).toBe(true);
+  });
+
+  test("⛔ o'tgan kun katagida HARF YO'Q", async () => {
+    const { container } = await renderList(false);
+
+    const text = firstTimeCell(container);
+
+    expect(text.trim()).not.toBe("");
+    expect(DIGITS_ONLY.test(text)).toBe(true);
+  });
+
+  test("⛔ o'tgan kunda SANA bor, bugungi sahifada YO'Q", async () => {
+    /*
+     * ⛔ RAQAMLAR `DAY` DAN HISOBLANADI, literal to'qilmaydi: qo'lda
+     *   yozilgan «12» seed sanasi o'zgargan kuni JIMGINA yolg'on
+     *   gapirardi (05-14 ning «to'qilgan qiymat» darsi).
+     */
+    const [, month, dayOfMonth] = DAY.split("-");
+
+    const past = firstTimeCell((await renderList(false)).container);
+    const today = firstTimeCell((await renderList(true)).container);
+
+    /* ⛔ O'tgan kun sahifasida SANA — YAGONA aniqlovchi. */
+    expect(past).toContain(dayOfMonth);
+    expect(past).toContain(month);
+
+    /*
+     * ⛔ Bugungi sahifada sana ORTIQCHA SHOVQIN: jadval `created_at`
+     *   bo'yicha KUN FILTRIDA (`outbox_repo._DELIVERY_ROWS`), ya'ni har
+     *   qator bugungi va kun noaniqligi TUG'ILMAYDI.
+     */
+    expect(today).not.toContain(month);
+
+    /* ⛔ IKKALA variantda ham soat:daqiqa BOR — vaqt yo'qolmaydi. */
+    for (const text of [past, today]) {
+      expect(text).toMatch(/\d{1,2}:\d{2}/u);
     }
   });
 });
