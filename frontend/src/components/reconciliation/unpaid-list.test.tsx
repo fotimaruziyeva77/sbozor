@@ -56,6 +56,7 @@ const MARKET_ID = "11111111-1111-4111-8111-111111111111";
 const DAY = "2026-08-11";
 const CASE_A = "22222222-2222-4222-8222-222222222222";
 const CASE_B = "22222222-2222-4222-8222-222222222229";
+const CASE_C = "22222222-2222-4222-8222-222222222227";
 const VENDOR_ID = "33333333-3333-4333-8333-333333333333";
 const SNAPSHOT_ID = "44444444-4444-4444-8444-444444444444";
 
@@ -81,6 +82,26 @@ const UNREGISTERED_ROW = {
   expected_soum: null,
   paid_soum: null,
   evidence_snapshot_ids: [SNAPSHOT_ID],
+};
+
+/**
+ * ⛔ WR-13 — SERVER QO'SHGAN UCHINCHI SINF.
+ *
+ * Sxema `subject_kind` ni ⛔ ATAYIN qulflamaydi (`z.string()`,
+ * `reconciliation-queries.ts` ning «YUMSHOQ o'qilish» bandi), ya'ni
+ * bunday qator ⛔ HAQIQATAN klientgacha yetib keladi. Ikkala blokning
+ * ham `filter(... === SUBJECT)` shakli uni ⛔ JIMGINA yo'qotardi.
+ */
+const UNKNOWN_KIND_ROW = {
+  subject_kind: "future_class",
+  case_id: CASE_C,
+  status: "new",
+  service_date: DAY,
+  stall_code: "77-Z",
+  vendor_id: null,
+  expected_soum: null,
+  paid_soum: null,
+  evidence_snapshot_ids: [],
 };
 
 function routeFetch(roles: string[] = ["director"]) {
@@ -147,6 +168,28 @@ async function renderBothClasses() {
   });
 
   return view;
+}
+
+/** Hisobot javobining qatorlarini ALMASHTIRADI — sanoqlar server nikidek. */
+function routeRows(rows: Record<string, unknown>[]) {
+  apiClientMock.apiFetch.mockImplementation((path: string) => {
+    if (path.startsWith("/reconciliation/report")) {
+      return Promise.resolve({
+        day: DAY,
+        rows,
+        /* ⛔ SANOQ SERVERDAN: u ro'yxatdan HOSILA emas (WR-13 ning mohiyati). */
+        unpaid_count: rows.filter((r) => r.subject_kind === "occupied_unpaid")
+          .length,
+        unregistered_count: rows.filter((r) => r.subject_kind === "anomaly")
+          .length,
+        unpaid_expected_soum: 30_000,
+      });
+    }
+    if (path.startsWith("/vendors")) {
+      return Promise.resolve({ items: [], next_cursor: null });
+    }
+    return Promise.reject(new Error(`kutilmagan marshrut: ${path}`));
+  });
 }
 
 beforeEach(() => {
@@ -503,5 +546,185 @@ describe("⛔ G7-3 (07-RESEARCH): dalil DOM'da HAVOLA", () => {
     /* ⛔ Marshrut bermagan qator uchun platsholder ham qo'yilmaydi. */
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(container.textContent).toContain("14-C");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WR-13 — NOMA'LUM `subject_kind` JIMGINA YO'QOLMAYDI                        */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ WR-13: noma'lum sinf qatori HISOBGA OLINADI", () => {
+  test("⛔ IKKALA blok ham SANOQ FARQINI e'lon qiladi", async () => {
+    routeRows([UNPAID_ROW, UNREGISTERED_ROW, UNKNOWN_KIND_ROW]);
+
+    const { container } = await renderBothClasses();
+
+    /*
+     * ⛔ NEGA IKKALA BLOKDA HAM: har blok O'Z mazmunini O'ZI e'lon
+     *   qiladi (fayl izohining «HAR BLOK ... SAHIFA EMAS» bandi). Faqat
+     *   bittasida e'lon qilish blokni QO'SHNISIGA bog'lardi va qo'shni
+     *   blok chizilmaydigan kunda fakt YO'QOLARDI.
+     */
+    const notice = messages.recon.subjectUnknownNotice.replace("{count}", "1");
+
+    for (const key of ["unpaid", "unregistered"]) {
+      const block = container.querySelector(
+        `[data-recon-content="${key}"]`,
+      ) as HTMLElement;
+      expect(within(block).getByText(notice)).toBeInTheDocument();
+    }
+  });
+
+  test("⛔ noma'lum sinf qatori BIRORTA jadvalga QO'SHILMAYDI", async () => {
+    routeRows([UNPAID_ROW, UNREGISTERED_ROW, UNKNOWN_KIND_ROW]);
+
+    const { container } = await renderBothClasses();
+
+    /*
+     * ⛔ «Yo'qolmasin» degani «qo'shni sinfga tiqilsin» EMAS: uni
+     *   `anomaly` jadvaliga qo'shish sanoqni ro'yxatdan AJRATARDI va
+     *   B-6 ni teskari tomondan takrorlardi. Qator NOMLANGAN jumla
+     *   bilan e'lon qilinadi, jadvalga esa KIRMAYDI.
+     */
+    for (const key of ["unpaid", "unregistered"]) {
+      const block = container.querySelector(
+        `[data-recon-content="${key}"]`,
+      ) as HTMLElement;
+      expect(block.querySelector("tbody")?.textContent ?? "").not.toContain(
+        "77-Z",
+      );
+    }
+  });
+
+  test("noma'lum sinf YO'Q bo'lsa jumla ham YO'Q (nazorat)", async () => {
+    /*
+     * ⛔ NAZORAT MAJBURIY: jumlani SHARTSIZ chizadigan regressiya
+     *   yuqoridagi ikkala testni ham yashil qoldirardi va har kuni
+     *   ekranda «noma'lum qator bor» degan YOLG'ON turardi.
+     */
+    routeRows([UNPAID_ROW, UNREGISTERED_ROW]);
+
+    const { container } = await renderBothClasses();
+
+    const notice = messages.recon.subjectUnknownNotice.replace("{count}", "1");
+    expect(within(container).queryByText(notice)).toBeNull();
+    expect(container.textContent).toContain("31-A");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WR-07 — `service_date` BITTA YORDAMCHI ORQALI                              */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ WR-07: sana bitta yordamchi orqali chiziladi", () => {
+  test("⛔ MO'RT SHAKL KATALOGDA 0 MARTA (manba skani)", async () => {
+    /*
+     * ⛔⛔ NEGA MANBA SKANI, DOM DA'VOSI EMAS: ofsetsiz «kun + yarim tun»
+     *     shakli jarayon mintaqasi Toshkent bo'lganda ⛔ TASODIFAN
+     *     to'g'ri natija beradi, ya'ni DOM da'vosi bu mashinada HECH
+     *     NIMA o'lchamasdi. Nosozlik faqat Toshkentdan SHARQDAGI
+     *     brauzerda ko'rinadi va uni `format-day.test.tsx` mintaqa
+     *     argumenti bilan o'lchaydi.
+     *
+     * ⚠ `hit-rate-card.test.tsx` da o'rnatilgan naqsh: komponent
+     *   faylining O'ZIDA tug'iladigan vasvasa o'sha faylga eng yaqin
+     *   joyda o'lchanadi.
+     */
+    const { existsSync, readdirSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+
+    const dir = join(process.cwd(), "src", "components", "reconciliation");
+    if (!existsSync(dir)) throw new Error(`katalog topilmadi: ${dir}`);
+
+    const files = readdirSync(dir).filter(
+      (name) => name.endsWith(".tsx") && !name.endsWith(".test.tsx"),
+    );
+    /* ⛔ Bo'sh to'plam ustida skan jimgina yashil bo'lardi. */
+    expect(files.length).toBeGreaterThanOrEqual(6);
+
+    const hits = files.filter((name) =>
+      readFileSync(join(dir, name), "utf8").includes("T00:00:00"),
+    );
+    expect(hits).toEqual([]);
+  });
+
+  test("⛔ kun katagi MAHALLIYLASHTIRILGAN — xom ISO EMAS", async () => {
+    const { container } = await renderBothClasses();
+
+    const unregistered = container.querySelector(
+      '[data-recon-content="unregistered"]',
+    ) as HTMLElement;
+    const dayCell = [...unregistered.querySelectorAll("tbody td")][1];
+
+    expect(dayCell?.textContent).not.toBe(DAY);
+    /*
+     * ⛔ VA U AYNAN O'SHA KUN: mahalliylashtirish kunni SILJITMAGANI
+     *   ham o'lchanadi — aks holda «ISO emas» da'vosi bir kun oldingi
+     *   sanani ham qabul qilardi.
+     */
+    expect(dayCell?.textContent ?? "").toContain("2026");
+    expect(dayCell?.textContent ?? "").toMatch(/11/u);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* IN-08 — BOZORSIZ SESSIYADA CHEKSIZ SKELET YO'Q                             */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ IN-08: `marketId === null` NOMLANADI", () => {
+  test("⛔ ikkala blok ham skelet o'rniga NOMLANGAN holat chizadi", () => {
+    /*
+     * ⛔⛔ TanStack v5 da O'CHIRILGAN so'rov `isPending` HOLATIDA QOLADI,
+     *     ya'ni `enabled: marketId !== null` sharti blokni ⛔ ABADIY
+     *     yuklanish ko'rinishida qoldirardi: foydalanuvchi kutardi,
+     *     hech nima kelmasdi va sabab HECH QAYERDA yozilmasdi.
+     *     `HeadlineCard` bu holatni ochiq qo'riqlaydi — recon esa yo'q edi.
+     */
+    clearSession();
+    setSession({
+      accessToken: "t",
+      markets: [],
+      principal: {
+        userId: "33333333-3333-4333-8333-333333333333",
+        phone: "+998900000000",
+        fullName: "Platforma admini",
+        roles: ["director"],
+        marketId: null,
+        marketName: null,
+        isPlatformAdmin: true,
+        locale: "uz-Latn",
+        mustChangePassword: false,
+      },
+    });
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const { container } = render(
+      <NextIntlClientProvider
+        locale="uz-Latn"
+        messages={messages}
+        timeZone="Asia/Tashkent"
+      >
+        <QueryClientProvider client={client}>
+          <AuthProvider>
+            <UnpaidList day={DAY} />
+            <UnregisteredList day={DAY} />
+          </AuthProvider>
+        </QueryClientProvider>
+      </NextIntlClientProvider>,
+    );
+
+    /* ⛔ CHEKSIZ SKELET YO'Q — birorta yuklanish e'loni ham. */
+    expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(0);
+
+    /* ⛔ VA SABAB NOMLANGAN — bo'sh blok «tizim buzuq» deb o'qilardi. */
+    expect(
+      within(container).getAllByText(messages.recon.marketMissing),
+    ).toHaveLength(2);
+
+    /* ⛔ SO'ROV HAM KETMAYDI: bozorsiz so'rov serverda `409` olardi. */
+    expect(apiClientMock.apiFetch).not.toHaveBeenCalled();
   });
 });

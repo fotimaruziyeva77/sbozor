@@ -634,3 +634,100 @@ describe("⛔ vaqt katagi: harf yo'q, o'tgan kunda sana bor", () => {
     }
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* IN-04 — `[Yangilash]` FOKUSNI YO'QOTMAYDI                                  */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ IN-04: `aria-disabled`, `disabled` EMAS", () => {
+  test("⛔ tugma HECH QACHON `disabled` atributini olmaydi", async () => {
+    /*
+     * ⛔⛔ BIR FAZADA BIR SAVOLGA IKKI JAVOB EDI: `case-detail-dialog.tsx`
+     *     `disabled` ni ochiq TAQIQLAYDI («fokusni yo'qotadi va
+     *     skrinrider foydalanuvchisi sababni umuman eshitmasdi»), bu
+     *     blok esa uni ISHLATARDI. Yangilanish paytida brauzer fokusni
+     *     `<body>` ga qaytaradi va klaviatura foydalanuvchisi tugmadan
+     *     ⛔ TUSHIB QOLADI — u so'rov tugagach sahifa boshiga otiladi.
+     */
+    const { container } = await renderList(true);
+
+    const refresh = within(container).getByRole("button", {
+      name: messages.recon.deliveryRefresh,
+    });
+
+    expect(refresh.hasAttribute("disabled")).toBe(false);
+    /* ⛔ Va holat E'LON QILINADI — jim tugma ham yaramaydi. */
+    expect(refresh.hasAttribute("aria-disabled")).toBe(true);
+  });
+
+  test("⛔ MANBA SKANI: katalogda `disabled=` 0 marta", async () => {
+    /*
+     * ⛔ DOM da'vosi FAQAT chizilgan holatni ko'radi: `isFetching`
+     *   rost bo'lgan lahzada `disabled` qaytib kelsa, yuqoridagi test
+     *   uni ⛔ KO'RMASDI (u tinch holatda o'lchaydi). Manba skani esa
+     *   shartdan MUSTAQIL.
+     */
+    const { existsSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+
+    const file = join(
+      process.cwd(),
+      "src",
+      "components",
+      "reconciliation",
+      "delivery-list.tsx",
+    );
+    if (!existsSync(file)) throw new Error(`komponent topilmadi: ${file}`);
+
+    const source = readFileSync(file, "utf8");
+    expect(source).not.toContain(" disabled=");
+    expect(source).toContain("aria-disabled");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* IN-08 — BOZORSIZ SESSIYADA CHEKSIZ SKELET YO'Q                             */
+/* -------------------------------------------------------------------------- */
+
+test("⛔ IN-08: `marketId === null` da skelet EMAS, NOMLANGAN holat", () => {
+  clearSession();
+  setSession({
+    accessToken: "t",
+    markets: [],
+    principal: {
+      userId: "33333333-3333-4333-8333-333333333333",
+      phone: "+998900000000",
+      fullName: "Platforma admini",
+      roles: ["director"],
+      marketId: null,
+      marketName: null,
+      isPlatformAdmin: true,
+      locale: "uz-Latn",
+      mustChangePassword: false,
+    },
+  });
+
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  const { container } = render(
+    <NextIntlClientProvider
+      locale="uz-Latn"
+      messages={messages}
+      timeZone="Asia/Tashkent"
+    >
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <DeliveryList day={DAY} isToday />
+        </AuthProvider>
+      </QueryClientProvider>
+    </NextIntlClientProvider>,
+  );
+
+  expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(0);
+  expect(
+    within(container).getByText(messages.recon.marketMissing),
+  ).toBeInTheDocument();
+  expect(apiClientMock.apiFetch).not.toHaveBeenCalled();
+});

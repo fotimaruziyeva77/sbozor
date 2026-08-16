@@ -510,3 +510,83 @@ describe("⛔ WR-08: sanoq bloki `role` bilan ALMASHTIRILMAYDI", () => {
     expect(container.querySelectorAll("[aria-live]")).toHaveLength(0);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* WR-07 — BO'SH HOLAT MATNIDAGI KUN XOM ISO EMAS                             */
+/* -------------------------------------------------------------------------- */
+
+test("⛔ WR-07: bo'sh holat matnidagi kun MAHALLIYLASHTIRILGAN", async () => {
+  /*
+   * ⛔ AYNI MAYDON, UCHTA JOY, UCHTA SHAKL edi (WR-07): bu yerda u xom
+   *   ISO bo'lib chizilardi, qo'shni blokda mahalliylashtirilardi.
+   *   Foydalanuvchi uchun bu ⛔ IKKI XIL SANA formati — u qaysi biri
+   *   «haqiqiy» ekanini so'rashga majbur bo'lardi.
+   */
+  apiClientMock.apiFetch.mockImplementation(() =>
+    Promise.resolve({
+      day: DAY,
+      rows: [],
+      new_count: 0,
+      in_review_count: 0,
+      justified_count: 0,
+      unjustified_count: 0,
+      next_cursor: null,
+    }),
+  );
+
+  const { container } = await renderList();
+
+  const text = container.textContent ?? "";
+  expect(text).toContain(messages.recon.emptyCases);
+  /* ⛔ Xom `2026-08-11` ekranda YO'Q. */
+  expect(text).not.toContain(DAY);
+  /* NAZORAT: kun BUTUNLAY yo'qolmagan — u boshqa shaklda turibdi. */
+  expect(text).toContain("2026");
+});
+
+/* -------------------------------------------------------------------------- */
+/* IN-08 — BOZORSIZ SESSIYADA CHEKSIZ SKELET YO'Q                             */
+/* -------------------------------------------------------------------------- */
+
+test("⛔ IN-08: `marketId === null` da skelet EMAS, NOMLANGAN holat", () => {
+  clearSession();
+  setSession({
+    accessToken: "t",
+    markets: [],
+    principal: {
+      userId: "33333333-3333-4333-8333-333333333333",
+      phone: "+998900000000",
+      fullName: "Platforma admini",
+      roles: ["director"],
+      marketId: null,
+      marketName: null,
+      isPlatformAdmin: true,
+      locale: "uz-Latn",
+      mustChangePassword: false,
+    },
+  });
+
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  const { container } = render(
+    <NextIntlClientProvider
+      locale="uz-Latn"
+      messages={messages}
+      timeZone="Asia/Tashkent"
+    >
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <CaseList day={DAY} />
+        </AuthProvider>
+      </QueryClientProvider>
+    </NextIntlClientProvider>,
+  );
+
+  expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(0);
+  expect(
+    within(container).getByText(messages.recon.marketMissing),
+  ).toBeInTheDocument();
+  expect(apiClientMock.apiFetch).not.toHaveBeenCalled();
+});

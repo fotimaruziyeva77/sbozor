@@ -377,12 +377,127 @@ describe("⛔ §9.4: terminal holat YECHIMSIZ saqlanmaydi", () => {
       expect(patchCalls).toHaveLength(1);
     });
 
+    /*
+     * ⛔ BO'SH `<textarea>` -> ⛔ BO'SH SATR, `null` EMAS (WR-15). Server
+     *   `resolution_note = COALESCE(:note, resolution_note)` yozadi, ya'ni
+     *   `null` «tegmang» degani va eski matn QOLIB ketardi.
+     */
     expect(patchCalls[0]).toEqual({
       status: "in_review",
-      resolution_note: null,
+      resolution_note: "",
       assignee_user_id: null,
     });
   });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WR-15 — YECHIM MATNINI TOZALASH VA'DASI BAJARILADI                         */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ WR-15: bo'shatilgan yechim matni SAQLANADI", () => {
+  test("⛔ mavjud matn o'chirilib saqlanganda serverga BO'SH SATR ketadi", async () => {
+    /*
+     * ⛔⛔ NOSOZLIKNING MEXANIKASI: forma `null` yuborardi, server esa
+     *     `COALESCE(:note, resolution_note)` bilan uni «O'ZGARTIRMA» deb
+     *     o'qirdi. Foydalanuvchi matnni o'chirib saqlardi, forma bo'sh
+     *     turardi, bazada esa ESKI matn qolardi — va dialog qayta
+     *     ochilganda («useState(detail.resolution_note ?? "")») eski matn
+     *     ⛔ QAYTIB CHIQARDI. Bu «o'zgarishim yo'qoldi» taassuroti.
+     *
+     * ⛔ BO'SH SATR `COALESCE` DA `NULL` EMAS, ya'ni u YOZILADI. Server
+     *   sxemasi `str | None` va `StringConstraints` da faqat
+     *   `max_length` bor — ⛔ `min_length` YO'Q, ya'ni bo'sh satr
+     *   422 bermaydi (o'lchandi: `app/schemas.py::CaseUpdate`).
+     */
+    routeFetch(detail({ status: "in_review", resolution_note: "Eski matn" }));
+
+    await renderDialog();
+
+    const note = within(dialogNode()).getByLabelText(
+      messages.recon.resolutionLabel,
+    );
+    /* Boshlang'ich holat: eski matn maydonda. */
+    expect((note as HTMLTextAreaElement).value).toBe("Eski matn");
+
+    /* ⛔ Maydonni TOZALAYMIZ va holatni o'zgartiramiz (nol o'tish to'siladi). */
+    fireEvent.change(note, { target: { value: "   " } });
+    fireEvent.change(
+      within(dialogNode()).getByLabelText(messages.recon.caseStatusLabel),
+      { target: { value: "new" } },
+    );
+    fireEvent.click(within(dialogNode()).getByText(messages.recon.save));
+
+    await waitFor(() => {
+      expect(patchCalls).toHaveLength(1);
+    });
+
+    /* ⛔ `null` EMAS: aynan u eski matnni saqlab qolardi. */
+    expect(patchCalls[0]).toEqual({
+      status: "new",
+      resolution_note: "",
+      assignee_user_id: null,
+    });
+
+    /* ⛔ VA QAYTA OCHILGANDA MAYDON BO'SH — va'da BAJARILDI. */
+    await waitFor(() => {
+      expect(
+        (
+          within(dialogNode()).getByLabelText(
+            messages.recon.resolutionLabel,
+          ) as HTMLTextAreaElement
+        ).value,
+      ).toBe("");
+    });
+  });
+
+  test("⛔ bo'sh satr AUDIT IZIDA bo'sh tugun qoldirmaydi", async () => {
+    /*
+     * ⛔ Marshrut AYNI maydonni tarix qatorining izohi qilib ham yozadi
+     *   (`reconciliation.py` -> `transition(note=...)`), ya'ni bo'sh satr
+     *   audit izida BO'SH `<span>` bo'lib chizilardi. «Izoh yo'q» va
+     *   «izoh bo'sh» ekranda BIR XIL ko'rinishi kerak: ⛔ hech nima.
+     */
+    routeFetch(
+      detail({
+        events: [
+          {
+            from_status: "new",
+            to_status: "in_review",
+            actor_user_id: null,
+            note: "",
+            created_at: `${DAY}T05:00:00Z`,
+          },
+        ],
+      }),
+    );
+
+    await renderDialog();
+
+    const trail = within(dialogNode()).getByRole("list");
+    const spans = [...trail.querySelectorAll("span")];
+    expect(spans.filter((node) => (node.textContent ?? "") === "")).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WR-07 — DIALOGDAGI `service_date` XOM ISO EMAS                             */
+/* -------------------------------------------------------------------------- */
+
+test("⛔ WR-07: tafsilotdagi kun MAHALLIYLASHTIRILGAN, xom ISO EMAS", async () => {
+  /*
+   * ⛔ Xom `{detail.service_date}` uchala tilda ham `2026-08-11` bo'lib
+   *   chizilardi, qo'shni blok esa AYNI maydonni mahalliylashtirardi —
+   *   ya'ni bir fazada bir maydon IKKI XIL o'qilardi (WR-07).
+   */
+  await renderDialog();
+
+  const dialog = dialogNode();
+  const dayTerm = within(dialog).getByText(messages.recon.dayColumn);
+  const dayValue = dayTerm.nextElementSibling;
+
+  expect(dayValue?.textContent).not.toBe(DAY);
+  expect(dayValue?.textContent ?? "").toContain("2026");
+  expect(dayValue?.textContent ?? "").toMatch(/11/u);
 });
 
 /* -------------------------------------------------------------------------- */

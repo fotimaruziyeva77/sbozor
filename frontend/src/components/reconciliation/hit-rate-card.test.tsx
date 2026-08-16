@@ -273,3 +273,60 @@ test("⛔ G-32 (e): nisbat MAYDON NOMI sifatida kodda yo'q", async () => {
   expect(source).not.toContain("hit_rate");
   expect(source).not.toContain("hitRate");
 });
+
+/* -------------------------------------------------------------------------- */
+/* IN-08 — BOZORSIZ SESSIYADA CHEKSIZ SKELET YO'Q                             */
+/* -------------------------------------------------------------------------- */
+
+test("⛔ IN-08: `marketId === null` da skelet EMAS, NOMLANGAN holat", () => {
+  /*
+   * ⛔ TanStack v5 da O'CHIRILGAN so'rov `isPending` holatida QOLADI —
+   *   ya'ni bu karta bozorsiz sessiyada ABADIY skelet ko'rsatardi.
+   *   `HeadlineCard` bu holatni ochiq qo'riqlaydi (`marketId === null`
+   *   -> so'rov ham, karta ham yo'q); recon bloklari esa yo'q edi.
+   */
+  clearSession();
+  setSession({
+    accessToken: "t",
+    markets: [],
+    principal: {
+      userId: "33333333-3333-4333-8333-333333333333",
+      phone: "+998900000000",
+      fullName: "Platforma admini",
+      roles: ["director"],
+      marketId: null,
+      marketName: null,
+      isPlatformAdmin: true,
+      locale: "uz-Latn",
+      mustChangePassword: false,
+    },
+  });
+
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  const { container } = render(
+    <NextIntlClientProvider
+      locale="uz-Latn"
+      messages={messages}
+      timeZone="Asia/Tashkent"
+    >
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <HitRateCard day={DAY} />
+        </AuthProvider>
+      </QueryClientProvider>
+    </NextIntlClientProvider>,
+  );
+
+  expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(0);
+  expect(container.textContent).toContain(messages.recon.marketMissing);
+
+  /* ⛔ VA FOIZ BELGISI HAM YO'Q: o'lchov umuman boshlanmagan. */
+  expect((container.textContent ?? "").match(/%|％/gu) ?? []).toHaveLength(0);
+  expect(apiClientMock.apiFetch).not.toHaveBeenCalled();
+
+  /* ⛔ Mazmun atributi HAR holatda — sahifa darvozasi uni to'plamda kutadi. */
+  expect(container.querySelector('[data-recon-content="hitrate"]')).not.toBeNull();
+});
