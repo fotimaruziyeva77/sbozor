@@ -15,7 +15,7 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 - [ ] **FOUND-04**: Interfeys 3 tilda (o'zbek-lotin asosiy, o'zbek-kirill, rus); til bir bosishda almashadi
 - [ ] **FOUND-05**: Biznes-kun Asia/Tashkent bo'yicha hisoblanadi (`business_date`); pul qiymatlari butun so'mda (BIGINT)
 - [x] **FOUND-06**: Tizim o'zini kuzatadi: kamera offline, o'tkazib yuborilgan snapshot, backup xatosi — platforma adminiga Telegram-alert; xatolar Sentry'da
-- [ ] **FOUND-07**: Kunlik avtomatik backup (Postgres + obyekt-ombor) boshqa lokatsiyaga; tiklash mashqi kamida bir marta o'tkazilgan
+- [x] **FOUND-07**: Kunlik avtomatik backup (Postgres + obyekt-ombor) boshqa lokatsiyaga; tiklash mashqi kamida bir marta o'tkazilgan
 
 ### Bozor boshqaruvi (MARKET)
 

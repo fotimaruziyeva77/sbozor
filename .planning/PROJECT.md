@@ -12,26 +12,33 @@ Bozor ma'muriyati har bir band rastadan patta to'liq yig'ilayotganini raqamlar v
 
 ### Validated
 
-(Hali yo'q — pilot bilan tasdiqlanadi)
+*(Build-tasdiq: mexanik darvozalar + sabotaj o'lchovlari bilan. Pilot/dala tasdig'i alohida — `08-HUMAN-UAT.md` va faza HUMAN-UAT fayllarida egasi/tetigi bilan.)*
+
+- ✓ Rollar va auth: 5 rol, RBAC matritsasi, tenant sessiyasi — Phase 1
+- ✓ Audit jurnali: har harakat, DB-trigger, 4 qatlamli o'zgarmaslik — Phase 1
+- ✓ "Yangi bozor" ustasi: rekvizit → plan → rasta → tarif → kamera → zona → jadval — Phase 2
+- ✓ Rasta va tarif moduli: tarixiy tariflar, holatlar, biriktirish davri — Phase 2
+- ✓ Jonli kamera paneli (go2rtc, NVR avtokashfiyot, WireGuard-only) — Phase 3
+- ✓ Snapshot pipeline: NVR → kunlik kadrlar → SeaweedFS arxiv → retry/jurnal — Phase 4
+- ✓ CV tahlil mexanikasi: zona occupancy, noaniq-navbat (aniqlik o'lchovi — AI-02, Active da) — Phase 5
+- ✓ Nazoratchi HITL oqimi: ko'r audit, tasdiq/tuzatish, dataset yig'ish — Phase 5
+- ✓ Billing: kun yakuni hisobi, dalil-kadr bog'lanishi, qarzdorlik, charge_adjustments — Phase 6
+- ✓ Kassir moduli: qidiruv → avtosumma → ≤3 bosish to'lov — Phase 6
+- ✓ Nomuvofiqlik hisoboti: "band, to'lovsiz" + "ro'yxatsiz savdo", rasm-dalil — Phase 7
+- ✓ Telegram-botlar (sotuvchi + direktor): dayjest, qarz, alertlar — Phase 7 (jonli token bilan sinov — dala bandi)
+- ✓ Hisobotlar + Excel eksport: tushum/qarzdorlik/nomuvofiqlik/solishtiruv, imzoli `.xlsx`, davr chegaralari — Phase 8
+- ✓ Uch tomonlama solishtiruv: daftar importi (all-or-nothing) vs tizim vs AI-kutilgan — Phase 8
+- ✓ Zaxira mexanizmi: quvursiz backup, yurak urishi, tiklash mashqi CI qatlami — Phase 8 (offsite S3 — Active da)
+- ✓ 3 til: uz-Latn / uz-Cyrl / ru, parity darvozalari (tabiiylik ko'rigi — dala bandi) — Phase 1–8
+- ✓ Tizim monitoringi: kamera offline, snapshot o'tkazildi, backup_stale → Telegram-alert — Phase 4/7/8
 
 ### Active
 
-- [ ] "Yangi bozor" ustasi (wizard): rekvizitlar → plan-rasm → rastalar → toifalar/tariflar → kameralar → kamera zonalari (poligonlar) → snapshot jadvali
-- [ ] Rasta va tarif moduli: zonalar, mahsulot toifalari, tarixiy tariflar, rasta holatlari, sotuvchi biriktirish
-- [ ] Snapshot pipeline: NVR (RTSP/ffmpeg) → kuniga 7 kadr → MinIO arxiv → retry/xato jurnali
-- [ ] CV tahlil: kamera zonalarida band/bo'sh/noaniq aniqlash (Apache-2.0 litsenziyali detektor), occupancy events
-- [ ] Nazoratchi tasdiqlash oqimi (human-in-the-loop): noaniq natijalar navbati, tasdiq/tuzatish, fine-tuning dataseti
-- [ ] Billing: kun oxirida yakuniy hisob (birorta snapshotda band → to'liq kunlik patta), dalil-snapshot bog'lanishi, qarzdorlik (faqat biriktirilgan sotuvchiga), charge_adjustments
-- [ ] Kassir moduli (mobil rejim): rasta qidirish → tarifdan avtomatik summa → naqd/terminal → 3 bosishda to'lov
-- [ ] Nomuvofiqlik hisoboti: "band, lekin to'lovsiz" + "ro'yxatga olinmagan savdo" (biriktirilmagan rasta band), rasm-dalillar bilan
-- [ ] Telegram-bot (sotuvchi): ro'yxatdan o'tish, qoldiq/qarz, to'lov tarixi, qarz eslatmalari
-- [ ] Telegram-bot (direktor): ertalabki dayjest, kechki nomuvofiqlik hisoboti
-- [ ] Hisobotlar + Excel eksport: tushum, bandlik, qarzdorlik reestri, kassir kesimi, AI aniqlik hisoboti
-- [ ] Audit jurnali: har harakat (kim, qachon, nima, eski→yangi)
-- [ ] Jonli kamera ko'rish paneli (go2rtc RTSP→WebRTC/HLS)
-- [ ] 3 til: o'zbek-lotin (asosiy), o'zbek-kirill, rus
-- [ ] Rollar va auth: platforma admini, direktor, bozor admini, kassir, nazoratchi
-- [ ] Tizim monitoringi: kamera offline / snapshot o'tkazildi / backup xatosi → admin'ga Telegram-alert
+- [ ] AI aniqlik o'lchovi (AI-02): oltin to'plam + real ONNX artefakti ustida detektor aniqligi — mexanika yashilligi bilan YOPILMAYDI (D-01)
+- [ ] Offsite S3 konfiguratsiyasi (FOUND-07 ochiq yarmi): provayder + byudjet qarori buyurtmachidan; ungacha `backup_stale` halol chiqib turadi
+- [ ] UI-polish/motion qatlami: `UI-UX-MASTERPLAN.md` bo'yicha — redesign emas, mavjud tizim ustiga (sketch → UI-SPEC → mini-faza)
+- [ ] Landing sahifasi (sbozor.uz): `LANDING-BRIEF.md` bo'yicha — `(marketing)` route-guruhi, SSG, 3 til; go-live'dan oldin
+- [ ] Go-live dala darvozalari: `08-HUMAN-UAT.md` 6 band (tiklash mashqi real serverda, RESTIC parol tartibi, uch til ko'rigi, `npm run up`, meros bandlar)
 
 ### Out of Scope
 
@@ -86,7 +93,10 @@ Bozor ma'muriyati har bir band rastadan patta to'liq yig'ilayotganini raqamlar v
 | Hosting hozircha Contabo, keyin O'zbekistonga ko'chish | Tezlik; lokalizatsiya davlat bosqichidan oldin | — Pending |
 | CV: Apache-2.0 modellar (RT-DETR/D-FINE/YOLOX), Ultralytics AGPL emas | Tijoriy SaaS uchun litsenziya xavfi | — Pending |
 | "SBOZOR" nomi yakuniy | Buyurtmachi tasdiqladi | ✓ Good |
-| Obyekt-ombor: SeaweedFS (MinIO emas) | MinIO upstream arxivlangan (2026-04); S3 API boto3 orqali — almashish .env darajasida | — Pending |
+| Obyekt-ombor: SeaweedFS (MinIO emas) | MinIO upstream arxivlangan (2026-04); S3 API boto3 orqali — almashish .env darajasida | ✓ Good (4–8-fazalar davomida ishlab turdi) |
+| Klient kontrakti — marshrut nomlarining haqiqat manbai | `REPORT_KINDS` to'plam tengligi bilan qulflangan (08-03); reja matni bilan farqda kontrakt yutadi — aks holda 404 faqat jonli ekranda ko'rinardi (08-07/12/14/16 da to'rt marta tasdiqlandi) | ✓ Good |
+| `platform_admin` ga `REPORT_VIEW` berilmaydi | Bozorlararo rolga hisobot ochish bitta akkauntni butun platformaning shaxsiy-ma'lumot xaritasiga aylantirardi (Pitfall 11-A, UI-SPEC O-07) | ✓ Good |
+| Sabotaj o'lchovi majburiy — test yozish yetarli emas | 8-fazada TO'RT marta testning o'zidagi yolg'on-yashilni fosh qildi (jumladan: shaxsiy eksportdan `audit_read` olib tashlansa 854 test yashil qolardi) | ✓ Good |
 | Detektor: RF-DETR Nano→Large (ONNX Runtime CPU) | Yagona faol Apache-2.0 oila; XLarge/2XLarge PML 1.0 litsenziyada — ishlatilmaydi | — Pending |
 | Patta sharti: ≥2 kadr tasdiq (yoki 1 kadr + nazoratchi) | Bitta kadr nizo generatori (o'tkinchi odam xatosi) — buyurtmachi 2026-07-29 tasdiqladi | — Pending |
 | Aniqlik KPI: ko'r tasodifiy audit + xatolik turlari | noaniq-navbatdan o'lchash statistik xato (selection bias) | — Pending |
@@ -110,4 +120,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-28 after initialization*
+*Last updated: 2026-08-16 after Phase 8 (build milestone v1.0 yakunlandi; ochiq: AI-02, offsite S3, dala darvozalari, UI-polish + landing)*

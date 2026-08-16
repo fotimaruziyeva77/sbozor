@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: verifying
 stopped_at: 08-20 yakunlandi — 8-fazaning ijrosi tugadi (20/20)
-last_updated: "2026-08-16T18:29:40.446Z"
-last_activity: 2026-08-16 -- 08-20 faza darvozasi yakunlandi
+last_updated: "2026-08-16T18:40:32.775Z"
+last_activity: 2026-08-16
 progress:
   total_phases: 9
   completed_phases: 8
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 
 ## Current Position
 
-Phase: 08 (hisobotlar-mustahkamlash-va-ishga-tushirish) — IJRO TUGADI
-Plan: 20 of 20
+Phase: 08
+Plan: Not started
 Total Plans in Phase: 20
 Status: Qayta tekshiruv kutilmoqda (`/gsd-verify-work`)
-Last activity: 2026-08-16 -- 08-20 faza darvozasi yakunlandi
+Last activity: 2026-08-16
 
 Progress: [██████████] 100% (20/20 reja -- 08-01...08-20)
 
@@ -114,7 +114,7 @@ ekranida farqni ISM bilan ko'rishi kerakmi? -- ijrochi hal qilmaydi).
 
 **Velocity:**
 
-- Total plans completed: 88 (o'lchov yozilgani: 1 — quyidagi jadval faqat metrikasi qayd etilgan rejalarni sanaydi)
+- Total plans completed: 108 (o'lchov yozilgani: 1 — quyidagi jadval faqat metrikasi qayd etilgan rejalarni sanaydi)
 - Average duration: 95 min (n=1)
 - Total execution time: 1.6 hours (qayd etilgan qismi)
 
@@ -273,17 +273,13 @@ None yet.
 
 - **[Phase 0 → 3/4] NVR kirish** — login/parol va CGNAT holati bozor ma'muriyatidan; 12 haftalik jadvaldagi eng katta tashqi xavf. 1-haftada boshlanmasa 3–5 fazalar siljiydi.
 - **[Phase 0 → 8] Tushum bazasi** — faqat 1-haftada, yig'uvchilar bilishidan oldin o'lchanadi; o'tkazib yuborilsa ROI da'vosi isbotlanmaydi.
-- **[Phase 4] Kadr olish usuli hal qilinmagan** — ISAPI vs go2rtc frame vs ffmpeg; tadqiqot fayllari uch xil javob beradi, real NVR'da o'lchanadi.
-- **[Phase 4] Job orchestration** — DB-materialized `capture_runs` + `SKIP LOCKED` vs navbat kutubxonasi; bitta aniq qaror kerak. ⚠ `arq` variant sifatida O'CHDI (03-01 da qulflandi): u `redis[hiredis]<6` talab qiladi, core-api esa `8.0.1` ga qadalgan — `taskiq` + `taskiq-redis` o'rnatildi va `test_runtime_deps.py` `arq` ni bloklaydi.
-- **[Phase 5] CV samaradorligi o'lchanmagan** — RF-DETR ONNX kechikishi Contabo AMD EPYC'da tekshirilmagan; qorong'i/IR kadrlar noyabrdan boshlab ertalabki 5 slotga ta'sir qiladi.
+- **[Phase 5 → dala] AI-02: CV aniqligi o'lchanmagan** — real ONNX artefakti + oltin to'plam kerak; RF-DETR kechikishi Contabo AMD EPYC'da ham tekshirilmagan; qorong'i/IR kadrlar noyabrdan ertalabki slotlarga ta'sir qiladi. Mexanika yashilligi bilan YOPILMAYDI (D-01).
+- **[Phase 8 → dala] FOUND-07 ochiq yarmi: offsite S3** — provayder + byudjet qarori buyurtmachidan; ungacha `backup_stale` (CRITICAL) halol chiqib turadi va uni o'chirish TAQIQ. 08-HUMAN-UAT №2/№3.
 - **[Phase 1–2 parallel] Huquqiy ko'rik** — kvitansiya maydonlari, CCTV shaxsiy ma'lumot, KKM/UzQR talablari avtomatik xulosadan olingan; mahalliy yurist tasdig'i launch'gacha kerak.
-- **[Phase 0] 7 ochiq buyurtmachi savoli** — javoblar Phase 2 va Phase 6 batafsil rejasidan oldin kerak.
-- **Stek yangilanishi:** MinIO arxivlangan → SeaweedFS; detektor RF-DETR (Nano→Large, Apache-2.0). PROJECT.md Key Decisions yangilanishi kerak.
-- ~~03-11: npm run gate 950 s ga chiqdi (03-01 nomzod chegarasi 618 s)~~ — **YOPILDI 03-11 da:** uch martadan o'lchandi (1000/994/983 s), sovuq va issiq yugurish ajratildi, chegara 1200 s qilib asoslandi; qolgan band — quyidagi 31 % qayta bajarish
-- [Phase 4] npm run gate — 1000 s, shundan 316 s (31 %) qayta bajarish; taklif: sim:up ni zanjir boshiga, test:tenancy va test:sim ni gate'dan olib tashlash
-- [Phase 4] go2rtc-sim oqimini birorta test iste'mol qilmaydi — CAM-03 va CAM-09 aynan shu sababdan Blocked; yopilish yo'li: -m sim ostida go2rtc-sim'dan bitta kadr olish
-- CAM-02 Blocked: CI konteynerida wg0 yo'q — «server NVR'ga FAQAT tunnel orqali kiradi» o'lchanmaydi (Pitfall 10). Egasi Ops, tetigi VPS deploy'i, bandlari 03-HUMAN-UAT.md #1 va #2
-- 05-10: sof inspector roli dalil kadrini ko'ra olmaydi — GET /snapshots/{id}/image CAMERA_VIEW talab qiladi, ROLE_PERMISSIONS[INSPECTOR] esa aynan {OCCUPANCY_REVIEW}. RBAC bu fazada ATAYIN tegilmagan (M-8); qaror 05-13 yoki 05-15 da
+- **[Phase 0] Tushum bazasi** — yig'uvchilar bilishidan oldin o'lchanadi; o'tkazib yuborilsa ROI da'vosi isbotlanmaydi (yagona qaytarilmas band).
+- **Xavfsizlik ko'rigi (08)** — enforcement=true, lekin 08-SECURITY.md yo'q (7-faza presedenti bilan yopildi); shaxsiy-ma'lumot eksport yuzalari qo'shilgani uchun go-live'dan oldin `/gsd-secure-phase 08` tavsiya etiladi.
+- CAM-02 Blocked: CI konteynerida wg0 yo'q — «server NVR'ga FAQAT tunnel orqali» dala o'lchovi. Egasi Ops, tetigi VPS deploy'i, 03-HUMAN-UAT #1/#2.
+- Go-live dala darvozalari jamlangan: `08-HUMAN-UAT.md` (6 band, har biri egasi/tetigi bilan; 01–07 meros bandlari havola bilan).
 
 ### Quick Tasks Completed
 
@@ -312,6 +308,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-16T18:28:29.985Z
-Stopped at: 08-20 yakunlandi — 8-fazaning ijrosi tugadi (20/20)
-Resume file: .planning/phases/08-hisobotlar-mustahkamlash-va-ishga-tushirish/08-20-SUMMARY.md
+Last session: 2026-08-16T19:00:00Z
+Stopped at: Phase 8 verify yakunlandi (12 pass / 0 nuqson / 3 dala bandi) — faza COMPLETE; navbatda UI-polish sketch + landing (UI-UX-MASTERPLAN.md, LANDING-BRIEF.md, Fable 5)
+Resume file: None
