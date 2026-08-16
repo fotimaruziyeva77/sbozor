@@ -51,18 +51,22 @@ import {
  *   O'Z testi bilan kelardi.
  *
  * -----------------------------------------------------------------------
- * ⛔⛔ 2. DL-6 — `level: 1`, ⛔ `level: 2` ONGLI RAVISHDA RAD ETILGAN
+ * ⛔⛔ 2. DL-6 — BIRINCHI DARAJA; ⛔ IKKINCHISI ONGLI RAVISHDA RAD ETILGAN
  * -----------------------------------------------------------------------
  * Shu kun uchun daftar BOR bo'lsa, yangi fayl eskisining ⛔ O'RNINI
  * OLADI (D-17: import ALMASHTIRUVCHI amal, tahrirlovchi emas) — ya'ni
  * tasdiqsiz bu tugmani tasodifan bosish bilan sodir bo'lardi.
  *
- * ⛔ LEKIN MATN YOZIB TASDIQLASH (`level: 2`) ISHLATILMAYDI (§4.6):
- *    daftar importi ⛔ KUNLIK operatsion amal (parallel rejimda har
- *    kuni) va `level: 2` uni ⛔ HAR KUNI jazolardi. Yo'qotish ham
- *    cheklangan — o'sha kunning qatorlari va ular ⛔ QAYTA YUKLANADI.
- *    `level: 2` UI'dan QAYTARIB BO'LMAYDIGAN amallar uchun (kaskad
- *    o'chirish, rastani yopish).
+ * ⛔ LEKIN MATN YOZIB TASDIQLASH (⛔ IKKINCHI DARAJA, §4.6)
+ *    ISHLATILMAYDI: daftar importi ⛔ KUNLIK operatsion amal (parallel
+ *    rejimda har kuni) va matn yozdirish uni ⛔ HAR KUNI jazolardi.
+ *    Yo'qotish ham cheklangan — o'sha kunning qatorlari va ular
+ *    ⛔ QAYTA YUKLANADI. Ikkinchi daraja UI'dan QAYTARIB BO'LMAYDIGAN
+ *    amallar uchun (kaskad o'chirish, rastani yopish).
+ *
+ * ⚠ Rad etilgan darajaning KODDAGI nomi bu izohda LITERAL yozilmaydi —
+ *   darvoza xom `grep` bilan o'lchaydi (kodbaza konvensiyasi) va
+ *   izohdagi nusxa uni o'ziga qarshi qo'yardi.
  *
  * ⛔ Daftar YO'Q bo'lgan kunda dialog ⛔ UMUMAN OCHILMAYDI: yo'qotiladigan
  *    narsa yo'q va ortiqcha bosish kunlik ishni sekinlashtirardi.
