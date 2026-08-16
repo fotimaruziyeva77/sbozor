@@ -47,10 +47,33 @@ import type {
  *
  * ⛔ DIAGRAMMA YO'Q va `recharts` BOG'LIQLIK EMAS (§3.5, §16.1).
  *
- * ⛔ DAVR TANLAGICHI HAM, `eval`/`train` FILTRI HAM YO'Q. Hisobot FAQAT
- *    ko'r namunaning `eval` qismidan chiqadi (D-14) va aralashtiruvchi
- *    boshqaruv qurilsa, 70/30 bo'linishining butun ma'nosi yo'qolardi.
- *    Sarlavha buni matn bilan ham aytadi.
+ * ⛔⛔ BU KOMPONENT IKKI YUZADA ISHLAYDI VA DAVRNI O'ZI TANLAMAYDI
+ *     (08-03, W0-F7 — eskirgan izohning tuzatilishi).
+ *
+ *     `/occupancy`  — davr tanlagichi YO'Q; server standart oynani
+ *                     beradi (`ACCURACY_WINDOW_DAYS = 30`).
+ *     `/reports`    — davrni CHAQIRUVCHI beradi (8-fazaning hisobot
+ *                     yuzasi, `useAccuracyReport({from, to})`).
+ *
+ *     ⛔ IKKALA HOLATDA HAM KOMPONENT O'ZGARMAYDI va uning props'i
+ *        KENGAYMAYDI: u `from`/`to`/`period`/`label` nomli prop QABUL
+ *        QILMAYDI. Davr yorlig'ini u `report.from_date` /
+ *        `report.to_date` dan O'ZI chizadi — ya'ni ekranda SERVER
+ *        qaytargan davr turadi, so'ralgani emas (§8.7). So'ralganini
+ *        chizish «men oktyabrni so'radim, oktyabr keldi» degan YOLG'ON
+ *        tasdiq berardi, holbuki server davrni qisqartirgan bo'lishi
+ *        mumkin.
+ *
+ *     ⚠ ESKI IZOH («davr tanlagichi ham … YO'Q») 5-fazaning O'Z yuzasi
+ *       haqida edi va u o'sha yuzada HAMON rost. Uni shu holicha
+ *       qoldirish KODDA YOLG'ON HUJJAT bo'lib qolardi va keyingi
+ *       ijrochi ikkinchi aniqlik komponentini yozardi.
+ *
+ * ⛔ `eval`/`train` FILTRI ESA HECH QAYERDA QURILMAYDI — na bu yerda,
+ *    na hisobot yuzasida. Hisobot FAQAT ko'r namunaning `eval`
+ *    qismidan chiqadi (D-14) va aralashtiruvchi boshqaruv qurilsa,
+ *    70/30 bo'linishining butun ma'nosi yo'qolardi. Sarlavha buni matn
+ *    bilan ham aytadi.
  *
  * ⛔⛔ NAZORATCHINING ICHKI MOSLIGI (D-16) BU YERDA YO'Q — na qator, na
  *     «—», na nol. UI-SPEC §11.6 uni so'raydi va o'sha qator ESKIRGAN:
