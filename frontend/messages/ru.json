@@ -43,7 +43,8 @@
     "occupancy": "Занятость",
     "collect": "Сбор",
     "billing": "Начисление патты",
-    "reconciliation": "Расхождения"
+    "reconciliation": "Расхождения",
+    "reports": "Отчёты"
   },
   "auth": {
     "phoneLabel": "Номер телефона",
