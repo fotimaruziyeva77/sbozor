@@ -40,6 +40,7 @@ from sbozor_core.enums import (
     CameraStatus,
     DiscoveryRunStatus,
     Locale,
+    MapDayState,
     OccupancyVerdict,
     OutboxKind,
     OutboxRecipientKind,
@@ -119,6 +120,8 @@ __all__ = [
     "MARKET_ERROR_CODES",
     "MIN_PASSWORD_LENGTH",
     "MapCell",
+    "MapDayStatusResponse",
+    "MapDayStatusRow",
     "MapZone",
     "MarketCreateRequest",
     "MarketCreateResponse",
@@ -3138,6 +3141,115 @@ class PendingMarketResponse(BaseModel):
     outstanding_soum: int
     pending_stall_count: int
     fetched_at: datetime
+
+
+class MapDayStatusRow(BaseModel):
+    """`GET /billing/map` ning bitta KATAGI (MARKET-06, D-C1).
+
+    =======================================================================
+    ⛔ RANG SERVERDAN KELADI, KLIENTDA HISOBLANMAYDI.
+
+    `state` — YOPIQ enum (`MapDayState`) va ustuvorlik qoidasi
+    `billing_repo._map_day_state()` da BIR MARTA bajariladi. Klient uni
+    faqat CSS sinfiga MAPS qiladi. Qoidani ikki tilda yozish ularni bir
+    kun ajratardi va xaritadagi rang bilan hisobotdagi holat FARQ
+    qilardi — ikkalasi ham «to'g'ri» bo'lgan holda.
+
+    =======================================================================
+    ⛔ YO'Q VA YO'QLIGI O'LCHANADIGAN MAYDONLAR:
+
+        stall_code         — katak `id` bo'yicha bog'lanadi va kod
+                             `GET /stalls/map` da ALLAQACHON bor;
+        vendor_id · nom    — C-10: bu marshrut `VENDOR_VIEW` yuzasini
+                             KENGAYTIRMAYDI va `audit_read` yozmaydi;
+        charge_id          — D-17 + `test_billing_api.py` ning butun
+                             `/billing/*` yuzasi bo'ylab mexanik skani;
+        vendor_outstanding — D-C6: bu RASTA darajasidagi miqdor EMAS. Bir
+                             sotuvchining uch rastasida takrorlanib, ko'z
+                             bilan qo'shilganda UCH BAROBAR ko'rinardi.
+
+    =======================================================================
+    ⚠ `open_case_service_date` `open_case_id` BILAN JUFT: «ochiq
+      nomuvofiqlik» bugungi kunniki bo'lmasligi mumkin (D-C5 ning
+      istisnosi) va uni bugungi deb ko'rsatish YOLG'ON bo'lardi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stall_id: UUID
+    state: MapDayState
+    """⛔ `str` EMAS, ENUM — OpenAPI yopiq to'plamni e'lon qiladi va
+    klientdagi `z.enum(...)` ko'zgusi kontraktga langarlanadi."""
+    amount_soum: int | None
+    """Bugungi patta. `null` — FAQAT nomlangan sabab bilan."""
+    unavailable_reason: AmountUnavailableReason | None
+    paid_soum: int
+    """Bugun shu rastaga tushgan BELGILI to'lov — ⛔ nol ham NATIJA."""
+    open_case_id: UUID | None
+    open_case_service_date: date | None
+
+    @model_validator(mode="after")
+    def _amount_and_reason_are_paired(self) -> Self:
+        """⛔ `StallDayMoney` NING JUFTLANGAN INVARIANTI — HTTP chegarasida ham.
+
+            (amount_soum is None) == (unavailable_reason is not None)
+
+        `PendingStallResponse` dagi jufti bilan AYNAN bir xil shakl: ikki
+        yo'nalish ikki ALOHIDA xabar bilan, chunki ular ikki boshqa server
+        nosozligi.
+        """
+        if self.amount_soum is None and self.unavailable_reason is None:
+            raise ValueError(
+                "SABABSIZ YO'Q SUMMA: `amount_soum` null, lekin sabab berilmagan. "
+                "Katak rangsiz qolardi va legenda NIMA UCHUN rangsizligini "
+                "ayta olmasdi (D-C2 ning 2-qatori)."
+            )
+        if self.amount_soum is not None and self.unavailable_reason is not None:
+            raise ValueError(
+                "SUMMASI BOR SABAB: `amount_soum` bor, lekin yo'qlik sababi ham "
+                "kelgan. Ikkalasi bir vaqtda rost bo'la olmaydi va katak "
+                "«hisob yo'q, lekin 15 000 so'm» bo'lib chizilardi."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _the_case_pointer_is_paired(self) -> Self:
+        """⛔ `open_case_id` VA `open_case_service_date` BIRGA keladi.
+
+        Sanasiz case havolasi kartada «qaysi kunning nomuvofiqligi?»
+        savolini javobsiz qoldirardi; case'siz sana esa hech qayerga
+        ishora qilmaydigan yorliq bo'lardi.
+        """
+        if (self.open_case_id is None) != (self.open_case_service_date is None):
+            raise ValueError(
+                "CASE KO'RSATKICHI YARIM: `open_case_id` va "
+                "`open_case_service_date` faqat BIRGA to'ladi "
+                f"(open_case_id={self.open_case_id!r}, "
+                f"open_case_service_date={self.open_case_service_date!r})."
+            )
+        return self
+
+
+class MapDayStatusResponse(BaseModel):
+    """`GET /billing/map` — xarita qatlamining butun javobi.
+
+    ⛔ `market_open` — `bool | null`, VA `null` «O'LCHANMADI» DEGANI.
+
+    Qoralama bozorda (`market_active = false`) kalendar UMUMAN
+    so'ralmaydi, ya'ni server «yopiq» ham, «ochiq» ham DEYA OLMAYDI.
+    `false` yozish o'lchanmagan miqdorni o'lchangan qilib ko'rsatardi —
+    05-14 da qulflangan taqiq (nol/yolg'on o'rniga YO'QLIK).
+
+    ⛔ QORALAMA BOZORDA `rows` BO'SH: yolg'on qizil YO'Q. Sabab
+    `billing_repo._MARKET_IS_ACTIVE` docstringida.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    service_date: date
+    market_active: bool
+    market_open: bool | None
+    rows: list[MapDayStatusRow]
 
 
 class ChargeRowResponse(BaseModel):

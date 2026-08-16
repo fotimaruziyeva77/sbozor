@@ -26,6 +26,7 @@ __all__ = [
     "CaptureRunStatus",
     "DiscoveryRunStatus",
     "Locale",
+    "MapDayState",
     "OccupancyVerdict",
     "OutboxKind",
     "OutboxRecipientKind",
@@ -564,6 +565,54 @@ class AnomalyKind(StrEnum):
     UNASSIGNED_OCCUPIED = "unassigned_occupied"
     CLOSED_DAY_OCCUPIED = "closed_day_occupied"
     NO_COVERAGE_STALL = "no_coverage_stall"
+
+
+class MapDayState(StrEnum):
+    """Plan-xarita katagining BUGUNGI to'lov holati — YOPIQ enum (MARKET-06).
+
+    =========================================================================
+    ⛔⛔ A'ZOLARNING TARTIBI — MANTIQNING O'ZI, ALIFBO EMAS.
+
+    Ustuvorlik qoidasi (D-C2) AYNAN shu tartibda o'qiladi va u
+    `billing_repo._map_day_state()` da BIR MARTA bajariladi:
+
+        | # | Shart                          | Holat        | Rang       |
+        |---|--------------------------------|--------------|------------|
+        | 1 | rastada ochiq case bor         | `mismatch`   | sariq      |
+        | 2 | `amount_soum is None`          | `no_billing` | rang YO'Q  |
+        | 3 | `vendor_id is None`            | `free`       | yashil     |
+        | 4 | `amount_soum - paid_soum <= 0` | `paid`       | ko'k       |
+        | 5 | qolgan hamma holat             | `due`        | qizil      |
+
+    ⛔ QAROR SERVERDA, KLIENTDA EMAS. Ustuvorlikni ikki tilda (Python va
+       TypeScript) yozish ularni bir kun ajratardi va o'shanda xaritadagi
+       rang bilan hisobotdagi holat FARQ qilardi — ikkalasi ham «to'g'ri»
+       bo'lgan holda. Klient bu qiymatni faqat CSS sinfiga MAPS qiladi.
+
+    =========================================================================
+    ⛔ `free` NING MA'NOSI — «SOTUVCHI BIRIKTIRILMAGAN», BANDLIK EMAS (D-C3).
+
+    MARKET-06 matni «yashil bo'sh» ni CV bandligi ma'nosida yozgan. CV
+    modeli yo'q (AI-02 `Blocked`), ya'ni bandlik O'LCHANMAGAN va
+    o'lchanmagan miqdorni rang bilan da'vo qilish TAQIQLANADI (D-01).
+    Shuning uchun `free` = «bugun bu rastadan patta KUTILMAYDI, chunki
+    sotuvchi biriktirilmagan» va legenda AYNAN shu jumlani yozadi.
+    «Bo'sh» so'zi bu enum atrofida ISHLATILMAYDI.
+
+    =========================================================================
+    ⛔ `no_billing` — RANG QO'YILMAYDIGAN YAGONA A'ZO.
+
+    Yopiq kunda yoki tarifsiz rastada katak INVENTAR tonida qoladi va
+    sabab (`market_closed` / `tariff_missing`) ekranda SO'Z bilan
+    ko'rinadi. Kulrang «to'lanmagan» rangi bilan yonma-yon turganda
+    farqlanmasdi, «to'landi» deb chizish esa yolg'on bo'lardi.
+    """
+
+    MISMATCH = "mismatch"
+    NO_BILLING = "no_billing"
+    FREE = "free"
+    PAID = "paid"
+    DUE = "due"
 
 
 class ShiftStatus(StrEnum):

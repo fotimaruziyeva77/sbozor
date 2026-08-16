@@ -77,8 +77,10 @@ from sbozor_core.enums import (
     AdjustmentDirection,
     AdjustmentReason,
     AnomalyKind,
+    MapDayState,
     OccupancyVerdict,
     PaymentKind,
+    ReconciliationCaseStatus,
     ResolutionSource,
 )
 from sbozor_core.models import BillingAnomaly, ChargeAdjustment, ChargeEvidence, DailyCharge
@@ -111,6 +113,8 @@ __all__ = [
     "ChargeEvidenceItem",
     "ChargeRow",
     "ExistingCharge",
+    "MapDayStallStatus",
+    "MapDayStatus",
     "PendingMarket",
     "PendingProjection",
     "PendingStall",
@@ -122,6 +126,7 @@ __all__ = [
     "charge_detail",
     "charge_list",
     "event_snapshots",
+    "map_day_status",
     "market_day_charges",
     "pending_projection",
     "resolve_stall_day_money",
@@ -1931,4 +1936,316 @@ async def anomaly_list(
         unassigned=sum(1 for row in rows if row.kind == AnomalyKind.UNASSIGNED_OCCUPIED.value),
         closed_day=sum(1 for row in rows if row.kind == AnomalyKind.CLOSED_DAY_OCCUPIED.value),
         no_coverage=sum(1 for row in rows if row.kind == AnomalyKind.NO_COVERAGE_STALL.value),
+    )
+
+
+# ===========================================================================
+# 8. PLAN-XARITANING KUNLIK HOLATI — RASTA KESIMIDA (MARKET-06, D-C1…D-C6)
+#
+# ⛔⛔ BU BO'LIM UCH MANBANI QO'SHADI VA HECH BIRINI QAYTA HISOBLAMAYDI:
+#
+#     (a) bugungi pul   -> `resolve_stall_day_money()`  (D-16 — YAGONA yechim)
+#     (b) bugungi to'lov-> `_SIGNED_PAYMENT_EXPR`       (C-5 — YAGONA belgi)
+#     (c) ochiq case    -> `reconciliation_cases`       (DQ-5 — XOR nishon)
+#
+# Ikkinchi arifmetika yozilsa xaritadagi rang bilan kassir ekranidagi
+# summa BIR KUN ajralib ketardi va ikkalasi ham «to'g'ri» bo'lardi — bu
+# loyihada takroran topilgan «ikki haqiqat manbai» sinfi.
+# ===========================================================================
+
+_MARKET_IS_ACTIVE = text(
+    """
+    SELECT m.is_active AS is_active
+      FROM markets m
+     WHERE m.id = :market_id
+    """
+).bindparams(bindparam("market_id", type_=_UUID))
+"""Bozor QORALAMAMI — pul hisoblanishidan OLDIN so'raladi.
+
+⛔ QISQA TUTASHUV D-C2 JADVALIDAN OLDIN VA SABAB MAHSULOTNIKI: qoralama
+   bozorda `billing_close` hisob YOZMAYDI, ya'ni «bugun patta kutilyapti»
+   degan har qanday rang YOLG'ON bo'lardi. Ustaning 7 qadamini tugatmagan
+   admin xaritani ochib butun bozorni QIZIL ko'rardi va u yerda
+   tuzatadigan hech nima yo'q edi.
+"""
+
+_STALL_PAID_TODAY = text(
+    f"""
+    SELECT p.stall_id AS stall_id,
+           COALESCE(sum({_SIGNED_PAYMENT_EXPR}), 0)::bigint AS paid_soum
+      FROM payments p
+     WHERE p.market_id = :market_id
+       AND p.service_date = :as_of
+     GROUP BY p.stall_id
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("as_of", type_=Date()),
+    bindparam("reversal", type_=Text()),
+)
+"""Bugun shu rastaga tushgan BELGILI to'lov — rasta kesimida.
+
+=============================================================================
+⛔ BELGI `_SIGNED_PAYMENT_EXPR` DAN, IKKINCHI NUSXA YOZILMAYDI (C-5/G-14).
+
+`payments.amount_soum` da `CHECK (> 0)` bor, ya'ni storno manfiy summa
+bilan EMAS, `kind = 'reversal'` bilan yoziladi. Xom `sum(p.amount_soum)`
+bekor qilingan to'lovni ham QO'SHARDI va xarita to'lanmagan rastani
+MANGU ko'k ko'rsatardi.
+
+=============================================================================
+⚠ KESIM RASTA BO'YICHA, SOTUVCHI BO'YICHA EMAS — VA BU `vendor_outstanding()`
+  BILAN QARAMA-QARSHI EMAS, BOSHQA SAVOL (D-C6).
+
+`vendor_outstanding()` «bu sotuvchi qancha qarzdor?» ga javob beradi va
+sotuvchi kesimida bo'lishi SHART (C-4). Xarita esa «bu KATAK bugun
+to'landimi?» deb so'raydi va u rasta darajasidagi savol. Sotuvchi
+kesimidagi qoldiqni katakka yozish bir sotuvchining uch rastasida
+takrorlanib, ko'z bilan qo'shilganda UCH BAROBAR ko'rinardi.
+
+⚠ Indeks `ix_payments_market_stall_service_date` ALLAQACHON mavjud
+  (`models/billing.py::PAYMENT_STALL_INDEX`) — yangi indeks kerak emas.
+"""
+
+_OPEN_CASE_BY_STALL = text(
+    """
+    SELECT DISTINCT ON (t.stall_id)
+           t.stall_id     AS stall_id,
+           t.case_id      AS case_id,
+           t.service_date AS service_date
+      FROM (
+            SELECT rc.id           AS case_id,
+                   rc.service_date AS service_date,
+                   rc.created_at   AS created_at,
+                   a.stall_id      AS stall_id
+              FROM reconciliation_cases rc
+              JOIN billing_anomalies a
+                ON a.market_id = rc.market_id
+               AND a.id = rc.anomaly_id
+             WHERE rc.market_id = :market_id
+               AND rc.status = ANY(:open_statuses)
+            UNION ALL
+            SELECT rc.id,
+                   rc.service_date,
+                   rc.created_at,
+                   c.stall_id
+              FROM reconciliation_cases rc
+              JOIN daily_charges c
+                ON c.market_id = rc.market_id
+               AND c.id = rc.charge_id
+             WHERE rc.market_id = :market_id
+               AND rc.status = ANY(:open_statuses)
+      ) t
+     ORDER BY t.stall_id, t.service_date, t.created_at, t.case_id
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("open_statuses", type_=ARRAY(Text())),
+)
+"""Rasta boshiga ENG ESKI OCHIQ case — sanoq EMAS, BITTA ko'rsatkich.
+
+=============================================================================
+⛔ IKKI SHOX, CHUNKI NISHON XOR (DQ-5): case yo `billing_anomalies`
+   qatoriga, yo `daily_charges` qatoriga ishora qiladi va ikkalasi ham
+   KOMPOZIT FK (`market_id` bilan). Bitta shoxni yozish ikkinchisini
+   JIMGINA o'lik qoldirardi — `UNION ALL` ning yarmi hech qachon
+   bajarilmasdi va yarim nomuvofiqlik xaritada UMUMAN ko'rinmasdi.
+
+⛔ `DISTINCT ON` + `ORDER BY` JUFTLIGI MAJBURIY: `DISTINCT ON` qaysi
+   qatorni saqlashini AYNAN `ORDER BY` ning birinchi ustunlaridan keyingi
+   qismi hal qiladi. `created_at` va `case_id` tenglik UZGICHI sifatida
+   turadi — bir tranzaksiyada yozilgan ikki case AYNI `created_at` oladi
+   va usiz javob har chaqiruvda boshqa case'ni ko'rsatardi.
+
+⛔ SANOQ QAYTARILMAYDI: «3 ta nomuvofiqlik» soni katakka sig'maydi va
+   xaritaning vazifasi ham u emas — katak «bu yerda ochiq savol bor»
+   deydi, tafsilot esa KARTADA (dalil havolasi bilan) ochiladi.
+
+=============================================================================
+⛔ KUN BO'YICHA FILTR YO'Q VA BU ATAYIN (D-C5 ning istisnosi).
+
+«Ochiq nomuvofiqlik» — BUGUNGI holat, uning `service_date` i esa
+o'tmishda bo'lishi mumkin va u qatorda ALOHIDA qaytadi. Bugungi kunga
+filtrlash kechagi ochiq case'ni xaritadan yashirardi — ya'ni aynan
+e'tibor talab qiladigan rasta ko'rinmay qolardi.
+"""
+
+_OPEN_CASE_STATUSES: Final[tuple[str, ...]] = (
+    ReconciliationCaseStatus.NEW.value,
+    ReconciliationCaseStatus.IN_REVIEW.value,
+)
+"""«Ochiq» case holatlari — qiymatlar so'rov PARAMETRI, literal EMAS.
+
+⚠ `justified` / `unjustified` KIRMAYDI: yopilgan nomuvofiqlik xaritani
+  mangu sariq qoldirardi va rang «hal qilinishi kerak» ma'nosini
+  butunlay yo'qotardi (D-13 ning hit-rate maxraji bilan aynan bir xil
+  ajratish).
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class MapDayStallStatus:
+    """Bitta KATAKNING bugungi holati — rang SERVERDA yechilgan (D-C1).
+
+    ⛔ JUFTLANGAN INVARIANT `StallDayMoney` DAN MEROS:
+
+        (amount_soum is None) == (unavailable_reason is not None)
+
+    ⚠ `stall_code` YO'Q: katak `id` bo'yicha bog'lanadi va kod
+      `GET /stalls/map` da ALLAQACHON bor. Ikkinchi manba ikki ro'yxatni
+      bir kun ajratib yuborardi.
+
+    ⚠ `open_case_service_date` `open_case_id` BILAN JUFT: «ochiq
+      nomuvofiqlik» bugungi kunniki bo'lmasligi mumkin va uni bugungi
+      deb ko'rsatish YOLG'ON bo'lardi.
+    """
+
+    stall_id: UUID
+    state: MapDayState
+    amount_soum: int | None
+    unavailable_reason: str | None
+    paid_soum: int
+    open_case_id: UUID | None
+    open_case_service_date: date | None
+
+
+@dataclass(frozen=True, slots=True)
+class MapDayStatus:
+    """Xarita qatlamining butun javobi.
+
+    ⛔ `market_open` — `bool | None`, VA `None` «O'LCHANMADI» DEGANI.
+
+    Qoralama bozorda kalendar UMUMAN so'ralmaydi (pastdagi qisqa
+    tutashuv), ya'ni javob «yopiq» ham, «ochiq» ham DEYA OLMAYDI.
+    `False` yozish o'lchanmagan miqdorni o'lchangan qilib ko'rsatardi —
+    05-14 da qulflangan taqiq (nol/yolg'on o'rniga YO'QLIK).
+    """
+
+    service_date: date
+    market_active: bool
+    market_open: bool | None
+    rows: tuple[MapDayStallStatus, ...]
+
+
+def _map_day_state(
+    *,
+    has_open_case: bool,
+    amount_soum: int | None,
+    vendor_id: UUID | None,
+    paid_soum: int,
+) -> MapDayState:
+    """D-C2 JADVALI — ⛔ BITTA SOF FUNKSIYA, BITTA TARTIB.
+
+        | # | Shart                          | Holat        | Rang       |
+        |---|--------------------------------|--------------|------------|
+        | 1 | rastada ochiq case bor         | `mismatch`   | sariq      |
+        | 2 | `amount_soum is None`          | `no_billing` | rang YO'Q  |
+        | 3 | `vendor_id is None`            | `free`       | yashil     |
+        | 4 | `amount_soum - paid_soum <= 0` | `paid`       | ko'k       |
+        | 5 | qolgan hamma holat             | `due`        | qizil      |
+
+    ⛔ 1-QATOR ENG YUQORIDA VA BU MAHSULOT QARORI: to'liq to'langan rasta
+       ham ochiq case'i bo'lsa SARIQ qoladi. «Pul keldi» degan fakt «bu
+       pul to'g'rimi?» degan ochiq savolni YOPMAYDI — nomuvofiqlik
+       navbatining butun mavjudlik sababi shu.
+
+    ⛔ 4-QATORNING CHEGARASI `<= 0`, `paid_soum > 0` EMAS. Ikkinchisi
+       bo'lganda 1 so'm to'lagan rasta xaritada TO'LIQ to'langan
+       ko'rinardi — mahsulot aynan shu holatni fosh qilish uchun mavjud.
+       Ortiqcha to'lov (avans) ham `paid` beradi va bu to'g'ri: bugungi
+       patta yopilgan.
+    """
+    if has_open_case:
+        return MapDayState.MISMATCH
+    if amount_soum is None:
+        return MapDayState.NO_BILLING
+    if vendor_id is None:
+        return MapDayState.FREE
+    if amount_soum - paid_soum <= 0:
+        return MapDayState.PAID
+    return MapDayState.DUE
+
+
+async def map_day_status(session: AsyncSession, *, market_id: UUID, as_of: date) -> MapDayStatus:
+    """Plan-xaritaning kunlik to'lov qatlami (MARKET-06).
+
+    ⛔ CHAQIRUVCHI TENANT KONTEKSTINI O'RNATGAN BO'LISHI SHART (modul
+       docstringi): `market_is_open()` INVOKER va fail-closed.
+
+    Args:
+        market_id: tenant kaliti.
+        as_of: kun — marshrutda HAR DOIM `business_today()` (D-C5).
+
+    Returns:
+        `MapDayStatus`. Qoralama bozorda `rows` BO'SH va `market_open`
+        `None` — ⛔ bu XATO EMAS, HALOL javob.
+    """
+    active = await session.execute(_MARKET_IS_ACTIVE, {"market_id": market_id})
+    market_active = bool(active.scalar_one_or_none())
+    if not market_active:
+        return MapDayStatus(service_date=as_of, market_active=False, market_open=None, rows=())
+
+    # (a) PUL — fazaning YAGONA yechimi (D-16). Bu yerda qayta hisoblanmaydi.
+    money = await resolve_stall_day_money(session, market_id=market_id, as_of=as_of)
+
+    # (b) BUGUNGI BELGILI TO'LOV — rasta kesimida (C-5).
+    paid_result = await session.execute(
+        _STALL_PAID_TODAY,
+        {
+            "market_id": market_id,
+            "as_of": as_of,
+            "reversal": PaymentKind.REVERSAL.value,
+        },
+    )
+    paid_by_stall: dict[UUID, int] = {
+        row["stall_id"]: int(row["paid_soum"]) for row in paid_result.mappings()
+    }
+
+    # (c) OCHIQ CASE — rasta boshiga ENG ESKISI (DQ-5).
+    case_result = await session.execute(
+        _OPEN_CASE_BY_STALL,
+        {"market_id": market_id, "open_statuses": list(_OPEN_CASE_STATUSES)},
+    )
+    case_by_stall: dict[UUID, tuple[UUID, date]] = {
+        row["stall_id"]: (row["case_id"], row["service_date"]) for row in case_result.mappings()
+    }
+
+    # `market_open` RASTALAR RO'YXATIDAN HOSILA QILINMAYDI: rastasiz
+    # bozorda javob berilmasdi (`PendingMarket.market_open` bilan aynan
+    # bir xil sabab) — u AYNI `as_of` bilan alohida so'raladi.
+    open_row = await session.execute(_MARKET_OPEN, {"market_id": market_id, "as_of": as_of})
+
+    rows: list[MapDayStallStatus] = []
+    for item in money:
+        # ⚠ `paid_soum` NOL bo'lib QAYTADI, tushib QOLMAYDI: nol —
+        #   NATIJA («bugun hali to'lanmadi»), uning yo'qligi emas.
+        paid_soum = paid_by_stall.get(item.stall_id, 0)
+        open_case = case_by_stall.get(item.stall_id)
+        rows.append(
+            MapDayStallStatus(
+                stall_id=item.stall_id,
+                state=_map_day_state(
+                    has_open_case=open_case is not None,
+                    amount_soum=item.amount_soum,
+                    vendor_id=item.vendor_id,
+                    paid_soum=paid_soum,
+                ),
+                amount_soum=item.amount_soum,
+                unavailable_reason=item.unavailable_reason,
+                paid_soum=paid_soum,
+                open_case_id=None if open_case is None else open_case[0],
+                open_case_service_date=None if open_case is None else open_case[1],
+            )
+        )
+
+    return MapDayStatus(
+        service_date=as_of,
+        market_active=True,
+        market_open=bool(open_row.scalar_one()),
+        # ⚠ TARTIB `resolve_stall_day_money()` DAN MEROS (`code_sort`) va
+        #   bu yerda QAYTA SARALANMAYDI — xarita kataklarini `stall_id`
+        #   bo'yicha bog'laydi, ya'ni tartib ahamiyatsiz ko'rinadi; lekin
+        #   ikkinchi saralash qoidasi kiritish keyingi o'quvchiga «tartib
+        #   bu yerda hal qilinadi» degan yolg'on model berardi.
+        rows=tuple(rows),
     )

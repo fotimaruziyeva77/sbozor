@@ -70,6 +70,8 @@ from app.schemas import (
     ChargeEvidenceRow,
     ChargeListResponse,
     ChargeRowResponse,
+    MapDayStatusResponse,
+    MapDayStatusRow,
     PendingLookupResponse,
     PendingMarketResponse,
     PendingStallResponse,
@@ -296,6 +298,75 @@ async def billing_pending(
         raise _reject(STALL_NOT_FOUND, status.HTTP_404_NOT_FOUND)
 
     return PendingLookupResponse(matches=list(projection.matches), stall=None)
+
+
+@router.get("/map", response_model=MapDayStatusResponse)
+async def billing_map_day(
+    principal: CollectViewerDep,
+    session: TenantSessionDep,
+) -> MapDayStatusResponse:
+    """Plan-xaritaning BUGUNGI to'lov qatlami — rasta kesimida (MARKET-06).
+
+    =======================================================================
+    ⛔⛔ RANG SERVERDA YECHILADI (D-C1) — KLIENT UNI FAQAT CSS SINFIGA
+        MAPS QILADI.
+
+    Ustuvorlik qoidasi (`mismatch` > `no_billing` > `free` > `paid` >
+    `due`) `billing_repo._map_day_state()` da BITTA sof funksiyada
+    yashaydi. Uni klientda takrorlash ikki tilda ikki qoida yaratardi va
+    ular BIR KUN ajralib ketardi — o'shanda xaritadagi rang bilan
+    hisobotdagi holat farq qilardi, IKKALASI HAM «to'g'ri» bo'lgan holda.
+
+    =======================================================================
+    ⛔ HUQUQ — MAVJUD `BILLING_COLLECT_VIEW` (`CollectViewerDep`).
+
+    Egalari: `cashier`, `market_admin`, `director`. Platforma adminida
+    YO'Q va bu TO'G'RI: u sozlash roli va unda xarita INVENTAR rejimida
+    qoladi. Yolg'on yashil chizishdan ko'ra qatlamni umuman
+    ko'rsatmaslik halolroq. ⛔ `ROLE_PERMISSIONS` matritsasiga
+    TEGILMAYDI va `require_any_permission()` ISHLATILMAYDI (C-9).
+
+    =======================================================================
+    ⛔ `?day=` PARAMETRI YO'Q (D-C5) — VA SABAB `billing_pending` DA
+       ALLAQACHON O'LCHANGAN.
+
+    O'tmish kuni uchun YOZILGAN hisob bor (`GET /billing/charges?day=`),
+    ya'ni ikkinchi yo'l bir savolga ikki javob berardi. Kun —
+    `business_today()`.
+
+    ⚠ ISTISNO: ochiq case'lar KUN BO'YICHA filtrlanmaydi. «Ochiq
+      nomuvofiqlik» — BUGUNGI holat, uning `service_date` i esa qatorda
+      ALOHIDA qaytadi (`_OPEN_CASE_BY_STALL` docstringi).
+
+    =======================================================================
+    ⚠ `audit_read` YOZILMAYDI — `GET /stalls/map` uchun yozilgan
+      mulohazaning AYNAN o'zi: javobda shaxsiy ma'lumot yo'q (faqat
+      `stall_id` va summalar), har xarita ochilishida esa jurnal shovqin
+      bilan to'lardi.
+    """
+    market_id = _market_id(principal)
+
+    status_rows = await billing_repo.map_day_status(
+        session, market_id=market_id, as_of=business_today()
+    )
+
+    return MapDayStatusResponse(
+        service_date=status_rows.service_date,
+        market_active=status_rows.market_active,
+        market_open=status_rows.market_open,
+        rows=[
+            MapDayStatusRow(
+                stall_id=row.stall_id,
+                state=row.state,
+                amount_soum=row.amount_soum,
+                unavailable_reason=row.unavailable_reason,  # type: ignore[arg-type]
+                paid_soum=row.paid_soum,
+                open_case_id=row.open_case_id,
+                open_case_service_date=row.open_case_service_date,
+            )
+            for row in status_rows.rows
+        ],
+    )
 
 
 @router.get("/charges", response_model=ChargeListResponse)
