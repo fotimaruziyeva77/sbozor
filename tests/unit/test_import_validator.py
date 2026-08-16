@@ -309,6 +309,12 @@ def test_the_same_stall_twice_in_one_file_is_rejected() -> None:
     ⛔ USIZ HOLAT `UNIQUE (market_id, business_date, stall_id)` GA URILIB,
        QATOR RAQAMISIZ **409** BERARDI — D-14 aynan shuni taqiqlaydi
        (`validate_vendor_rows` dagi WR-05 ning aynan sinfi).
+
+    ⚠ BIRINCHI QATOR `accepted` DA QOLADI va bu `validate_vendor_rows`
+      da o'rnatilgan konvensiya: all-or-nothing qarorini ROUTER qabul
+      qiladi (`_reject_if_invalid`), validator esa yaroqli qatorni
+      JAZOLAMAYDI. Ikkinchi qator xato ro'yxatiga tushgani uchun bu
+      faylning birorta qatori baribir yozilmaydi.
     """
     rows = [
         _ledger_row(HEADER_ROW + 1, "A1", "150000"),
@@ -317,7 +323,7 @@ def test_the_same_stall_twice_in_one_file_is_rejected() -> None:
 
     accepted, issues = _validate_ledger(rows)
 
-    assert accepted == []
+    assert [row.row for row in accepted] == [HEADER_ROW + 1]
     assert [issue.code for issue in issues] == ["ledger_duplicate_stall"]
     assert issues[0].row == HEADER_ROW + 2
     assert str(HEADER_ROW + 1) in issues[0].message, issues[0].message
@@ -330,6 +336,10 @@ def test_a_case_folded_duplicate_is_caught_too() -> None:
     ikkala qator ham AYNI `stall_id` ga yechiladi. Dublikat qo'riqchisi
     XOM SATR bo'yicha kalitlanganda ikkalasi ham validatsiyadan o'tardi
     va konstrayt xatosi QATOR RAQAMISIZ qaytardi.
+
+    ⚠ XABARDA FOYDALANUVCHI YOZGAN kod (`a1`) ko'rsatiladi, reyestrdagi
+      `A1` emas: faylda aynan shu shakl turibdi va yechilgan `stall_id`
+      odamga hech nima demasdi.
     """
     rows = [
         _ledger_row(HEADER_ROW + 1, "A1", "150000"),
@@ -338,8 +348,9 @@ def test_a_case_folded_duplicate_is_caught_too() -> None:
 
     accepted, issues = _validate_ledger(rows)
 
-    assert accepted == []
+    assert [row.row for row in accepted] == [HEADER_ROW + 1]
     assert [issue.code for issue in issues] == ["ledger_duplicate_stall"]
+    assert "a1" in issues[0].message, issues[0].message
 
 
 def test_two_different_stalls_are_not_a_ledger_duplicate() -> None:

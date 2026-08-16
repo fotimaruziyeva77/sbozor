@@ -75,20 +75,27 @@ from app.repositories.billing_repo import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from datetime import date
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.services.import_validator import LedgerImportRow
 
 __all__ = [
     "ARCHIVE_KIND_UNPAID",
     "ARCHIVE_KIND_UNREGISTERED",
     "AnomalyArchive",
     "AnomalyArchiveRow",
+    "LedgerDay",
+    "LedgerDayRow",
     "ReceivableRow",
     "RevenuePeriod",
     "RevenueRow",
     "anomaly_archive",
+    "ledger_day",
+    "ledger_upsert",
     "receivables",
     "revenue_by_day",
 ]
@@ -830,3 +837,244 @@ async def anomaly_archive(
         unpaid_count=sum(1 for row in rows if row.kind == ARCHIVE_KIND_UNPAID),
         unregistered_count=sum(1 for row in rows if row.kind == ARCHIVE_KIND_UNREGISTERED),
     )
+
+
+# ===========================================================================
+# 4. QOG'OZ DAFTAR — YOZUV VA O'QISH YO'LI (D-17, Pattern 6, 08-14)
+#
+# ⛔⛔ BU BO'LIM MODUL DOCSTRINGINING 1-BANDIGA ZID EMAS.
+#
+# Yuqoridagi uch bo'lim HOSILA so'rov: ular mavjud qatorlardan hisoblaydi
+# va hech nima yozmaydi. Daftar esa TASHQI MANBA — u tizimda umuman yo'q
+# va uni hisoblab chiqarib bo'lmaydi, ya'ni «saqlangan agregat» taqig'i
+# (D-03) bu jadvalga TEGISHLI EMAS: bu agregat emas, KIRISH ma'lumoti.
+#
+# ⚠ Aynan shu farq `ledger_entries` ni `daily_charges` dan ajratadi va u
+#   `sbozor_core.models.ledger` modul docstringida uch band bilan
+#   yozilgan.
+# ===========================================================================
+
+_LEDGER_UPSERT = text(
+    """
+    INSERT INTO ledger_entries (market_id, business_date, stall_id, amount_soum, imported_by)
+    SELECT :market_id,
+           CAST(:business_date AS date),
+           u.stall_id,
+           u.amount_soum,
+           :imported_by
+      FROM unnest(CAST(:stall_ids AS uuid[]), CAST(:amounts AS bigint[]))
+             AS u(stall_id, amount_soum)
+        ON CONFLICT (market_id, business_date, stall_id) DO UPDATE
+       SET amount_soum = EXCLUDED.amount_soum,
+           imported_by = EXCLUDED.imported_by,
+           updated_at  = now()
+ RETURNING (xmax = 0) AS inserted
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("business_date", type_=Date()),
+    bindparam("stall_ids", type_=_UUID_ARRAY),
+    bindparam("amounts", type_=_BIGINT_ARRAY),
+    bindparam("imported_by", type_=_UUID),
+)
+"""Kunlik daftarni YOZADI — ⛔ `DO UPDATE`, `DO NOTHING` EMAS.
+
+=============================================================================
+⛔⛔ 1. IKKINCHI FAYL BIRINCHISINI ALMASHTIRADI (Pattern 6, D-17).
+
+Daftar KUN ICHIDA tuzatiladi: kassir xato yozdi, keyin to'g'riladi va
+ma'muriyat faylni QAYTA yuboradi. `DO NOTHING` birinchi (XATO) qiymatni
+MUZLATIB qo'yardi va tuzatilgan daftar tizimga UMUMAN yetib bormasdi —
+solishtiruv esa bilib turib noto'g'ri songa tayanardi.
+
+⛔ BU `daily_charges` NING O'ZGARMASLIK QOIDASINI BUZMAYDI va sabab
+   ikkalasining TABIATIDA: hisob — tizimning O'Z qarori (o'zgarmas,
+   tuzatish alohida `charge_adjustments` qatori bo'ladi), daftar esa
+   TASHQI QOG'OZNING NUSXASI. Nusxa manba o'zgarganda yangilanadi;
+   qaror esa yangilanmaydi. Farq `sbozor_core.models.ledger` modul
+   docstringining 2-bandida ham yozilgan.
+
+=============================================================================
+⛔ 2. IDEMPOTENTLIK DB KAFOLATI, ILOVA INTIZOMI EMAS.
+
+Konflikt nishoni — `uq_ledger_entries_market_day_stall`
+(`UNIQUE (market_id, business_date, stall_id)`, 0024). Ilova qatlamidagi
+«avval tekshir, keyin yoz» ikki parallel import yugurishida IKKITA qator
+yozardi (D-21 ning `notification_outbox` dagi bilan aynan bir sinf).
+
+=============================================================================
+⛔ 3. `xmax = 0` — «bu qator YANGI YARATILDIMI?» faktining yagona arzon
+   manbai (`binding_repo._BIND_DIRECTOR_CHAT` da o'rnatilgan naqsh).
+   `DO UPDATE` shoxida qator versiyasi yangilanadi va `xmax` noldan
+   farqli bo'ladi, ya'ni ALMASHTIRILGAN qatorlarni SANASH uchun ikkinchi
+   `SELECT` kerak emas — u yerda poyga oynasi ochilardi.
+
+=============================================================================
+⚠ `market_id` FAYLDAN OLINMAYDI (T-02-54 / T-08-60): u chaqiruvchining
+  sessiyasidan keladi va shablonda bunday ustun umuman yo'q. Begona
+  bozorning rastasi esa kompozit FK (`fk_ledger_entries_stall`) bilan
+  STRUKTURAVIY imkonsiz — RLS o'chib qolgan holatda ham.
+
+⚠ `unnest(...)` — qator boshiga bitta `INSERT` EMAS: 1000 rastali bozorda
+  u 1000 ta borish-kelish bo'lardi. Ikki massiv bitta so'rovda ketadi va
+  ikkalasi ham `bindparam(...)` bilan TIPLANGAN (T-08-14).
+"""
+
+_LEDGER_DAY = text(
+    """
+    SELECT le.stall_id   AS stall_id,
+           s.code        AS stall_code,
+           le.amount_soum AS amount_soum
+      FROM ledger_entries le
+      JOIN stalls s
+        ON s.market_id = le.market_id
+       AND s.id = le.stall_id
+     WHERE le.market_id = :market_id
+       AND le.business_date = CAST(:business_date AS date)
+     ORDER BY s.code_sort, s.code
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("business_date", type_=Date()),
+)
+"""Bir KUNNING daftar qatorlari — ⛔ TARTIB `code_sort` BO'YICHA.
+
+Oddiy `ORDER BY code` «1, 10, 100, 11, 2» berardi va imzolanadigan
+varaqdagi ro'yxat odam o'qiy olmaydigan tartibda chiqardi
+(`_RECEIVABLE_ROWS` da o'lchangan aynan o'sha sabab).
+
+⚠ `JOIN stalls` ICHKI va bu XAVFSIZ: `fk_ledger_entries_stall` kompozit
+  FK, ya'ni rastasi yo'q daftar qatori STRUKTURAVIY mavjud bo'la olmaydi.
+  `LEFT JOIN` bu yerda hech qachon yuzaga kelmaydigan holatni qamragan
+  bo'lardi va o'quvchini «demak kod `NULL` bo'lishi mumkin ekan» degan
+  noto'g'ri xulosaga olib borardi.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class LedgerDayRow:
+    """Daftarning bir kun × bir rasta qatori (08-16 uch tomonlama solishtiruvi).
+
+    `amount_soum` — ⛔ `0` QONUNIY qiymat va u «yozuv yo'q» DEGANI EMAS:
+        «bu rastadan bugun hech nima yig'ilmadi» SC#5 ning eng muhim
+        holati. «Yozuv yo'q» holati qatorning O'ZI bo'lmasligi bilan
+        ifodalanadi.
+    """
+
+    stall_id: UUID
+    stall_code: str
+    amount_soum: int
+
+
+@dataclass(frozen=True, slots=True)
+class LedgerDay:
+    """Kunning daftari — ⛔ QATORLAR **VA** «DAFTAR BORMI?» FAKTI.
+
+    =========================================================================
+    ⛔⛔ `has_ledger` YALANG'OCH RO'YXAT BILAN IFODALANMAYDI — VA BU
+        UI-SPEC §10.6 NING BUTUN MAZMUNI.
+
+    Daftar YUKLANMAGAN kunda uch ustunli jadvalni «hamma farq 0» bilan
+    chizish MUVAFFAQIYATLI solishtiruv bo'lib ko'rinardi va IMZOLANARDI —
+    ya'ni parallel rejimning butun maqsadi (SC#5) JIMGINA yo'qolardi.
+    Chaqiruvchi shu sababdan `if not rows` emas, `has_ledger` ni o'qiydi:
+    savol ikkita va ular BOSHQA javob talab qiladi —
+
+        `has_ledger is False` -> «bu kun uchun daftar yuklanmagan»
+        `has_ledger and not rows` -> «daftarda bu kun uchun qator yo'q»
+
+    ⚠ BUGUNGI KUNDA IKKINCHI HOLAT YUZAGA KELMAYDI va bu ONGLI: import
+      hodisasining O'Z jadvali YO'Q (08-02 ATAYIN faqat `ledger_entries`
+      ni tug'dirgan), ya'ni «daftar bor» fakti qatorlarning MAVJUDLIGIDAN
+      hosila. Maydon baribir ALOHIDA e'lon qilinadi, chunki chaqiruvchi
+      (08-16, 08-18) SAVOLGA javob berishi kerak, ro'yxat uzunligini
+      talqin qilishi emas — talqin ikki ekranda ikki xil yozilardi.
+    =========================================================================
+    """
+
+    rows: tuple[LedgerDayRow, ...]
+    has_ledger: bool
+
+
+async def ledger_upsert(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    business_date: date,
+    rows: Sequence[LedgerImportRow],
+    imported_by: UUID,
+) -> int:
+    """Kunlik daftarni yozadi (upsert); ALMASHTIRILGAN qatorlar sonini qaytaradi.
+
+    ⛔ CHAQIRUVCHI TENANT KONTEKSTINI O'RNATGAN BO'LISHI SHART
+       (`TenantSessionDep`): so'rovdagi `market_id` NIYAT, RLS esa
+       KAFOLAT (`revenue_by_day()` dagi bilan aynan bir qoida).
+
+    ⛔ TRANZAKSIYA BU YERDA OCHILMAYDI: sessiya allaqachon tranzaksiya
+       ichida keladi va all-or-nothing shundan TEKIN keladi
+       (`app/api/v1/imports.py` modul docstringi).
+
+    Args:
+        market_id: tenant kaliti.
+        business_date: daftar QAYSI KUNGA yozilgan (DOMEN sanasi, import
+            sanasi EMAS — model docstringi).
+        rows: `validate_ledger_rows()` qabul qilgan qatorlar.
+        imported_by: importni bajargan foydalanuvchi. ⚠ `users.id` ga FK
+            YO'Q (model docstringi) — bu qiymat SESSIYADAN keladi, fayldan
+            emas.
+
+    Returns:
+        ALMASHTIRILGAN (ya'ni allaqachon mavjud bo'lgan) qatorlar soni.
+        `0` — hammasi yangi. Chaqiruvchi shundan «bu kun uchun daftar
+        qayta yuklandimi?» degan javobni oladi va uni javobga ham,
+        auditga ham yozadi.
+    """
+    if not rows:
+        # Bo'sh ro'yxatda `unnest` baribir nol qator berardi, lekin so'rovni
+        # umuman yubormaslik ARZONROQ va u «bo'sh massiv» tipini
+        # aniqlashtirish savolini ham yo'q qiladi.
+        return 0
+
+    result = await session.execute(
+        _LEDGER_UPSERT,
+        {
+            "market_id": market_id,
+            "business_date": business_date,
+            "stall_ids": [row.stall_id for row in rows],
+            "amounts": [row.amount_soum for row in rows],
+            "imported_by": imported_by,
+        },
+    )
+    return sum(1 for row in result if not row.inserted)
+
+
+async def ledger_day(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    business_date: date,
+) -> LedgerDay:
+    """Kun uchun daftar qatorlari VA «daftar bormi?» fakti (UI-SPEC §10.6).
+
+    ⛔ CHAQIRUVCHI TENANT KONTEKSTINI O'RNATGAN BO'LISHI SHART.
+
+    Returns:
+        `LedgerDay` — qatorlar rasta kodining TABIIY tartibida
+        (`code_sort`). ⛔ Bo'sh natija HALOL javob: «bu kun uchun daftar
+        yuklanmagan» va u `has_ledger is False` bilan AYTILADI, ro'yxat
+        uzunligi bilan emas (klass docstringi).
+    """
+    result = await session.execute(
+        _LEDGER_DAY,
+        {"market_id": market_id, "business_date": business_date},
+    )
+
+    rows = tuple(
+        LedgerDayRow(
+            stall_id=row["stall_id"],
+            stall_code=str(row["stall_code"]),
+            amount_soum=int(row["amount_soum"]),
+        )
+        for row in result.mappings()
+    )
+    return LedgerDay(rows=rows, has_ledger=bool(rows))
