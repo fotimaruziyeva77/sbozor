@@ -471,8 +471,13 @@ app.include_router(reconciliation_router, prefix=f"{API_V1_PREFIX}/reconciliatio
 #      prefiksdan quradi: `/api/v1/reports/{kind}`.
 #
 # ⛔ YO'L NOMLARI KLIENT KONTRAKTIDAN: `/revenue`, `/debtors`,
-#    `/anomalies` — sabab `reports.py` modul docstringining 2-bandida
-#    LITERAL yozilgan.
+#    `/anomalies` va `/compare` — sabab `reports.py` modul
+#    docstringining 2-bandida LITERAL yozilgan.
+#
+# ⚠ SOLISHTIRUV (`/compare`, `/compare.xlsx`, 08-16) `REPORT_KINDS` GA
+#   KIRMAYDI va shuning uchun yuqoridagi 3-band unga TEGISHLI EMAS:
+#   uning davri KUN (`?day=`), qolgan to'rttaniki esa ORALIQ. Reyestrga
+#   tiqish `from`/`to` ni IXTIYORIY qilardi (UI-SPEC §12.1, G-43a).
 #
 # ⛔ HISOBOTNI «TUZATADIGAN» MARSHRUT YO'Q: bu prefiksda `PATCH` ham,
 #    `DELETE` ham UMUMAN yozilmagan. Hisobot HOSILA (D-03) — uni
@@ -483,13 +488,14 @@ app.include_router(reconciliation_router, prefix=f"{API_V1_PREFIX}/reconciliatio
 #     UMUMAN YO'Q — tashqi qog'ozdan keladigan UCHINCHI manba (D-17).
 #     Ya'ni bu marshrut KIRISH yo'li, hosilaning tahriri emas. Yopiq
 #     to'plam (yo'llar VA metodlar) `test_route_coverage.py::
-#     test_the_reports_surface_is_exactly_eight_routes` bilan qulflangan
+#     test_the_reports_surface_is_exactly_ten_routes` bilan qulflangan
 #     va son test NOMIDA turadi.
 #
 # ⚠ Yangi yo'l parametri YO'Q, ya'ni `PARAM_FILLERS` TEGILMAYDI va
-#   marshrutlar cross-tenant matritsasiga O'ZI tushadi. Yetti `GET` da
-#   `from`/`to` majburiy query parametrlari tufayli matritsa ularni 422
-#   bilan chaqiradi — bu `GET /reconciliation/hit-rate` ning AYNAN xulqi
+#   marshrutlar cross-tenant matritsasiga O'ZI tushadi. To'qqiz `GET` da
+#   majburiy query parametri (`from`/`to`, solishtiruvda `day`) tufayli
+#   matritsa ularni 422 bilan chaqiradi — bu `GET /reconciliation/
+#   hit-rate` ning AYNAN xulqi
 #   va ular `QUERY_PARAM_ROUTES` da YO'Q (sabab `test_reports_api.py`
 #   ning tenant testi docstringida). Daftar importi esa `POST`, ya'ni u
 #   `BODY_ROUTES` ga tushadi va SHU SABABDAN istisnoda — sabab
