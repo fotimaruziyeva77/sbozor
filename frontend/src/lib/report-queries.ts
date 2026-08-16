@@ -12,7 +12,7 @@ import {
   threeWayReportSchema,
 } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
-import { domainKey, saveBlob } from "@/lib/market-queries";
+import { domainKey, IMPORTS_PATH, saveBlob } from "@/lib/market-queries";
 
 /*
  * =============================================================================
@@ -394,6 +394,33 @@ export async function downloadCompareReport(day: string): Promise<void> {
 }
 
 /* --- (D) Daftar importi — ⛔ YAGONA mutatsiya (D-17) ----------------------- */
+
+/**
+ * Daftar shabloni — ⛔ AYNAN IKKI USTUN (D-17, 08-14).
+ *
+ * =========================================================================
+ * ⛔⛔ NEGA `ImportKind` GA BESHINCHI A'ZO QO'SHILMADI.
+ *
+ * `ImportKind` (`market-queries.ts`) reyestr EMAS, ⛔ OQIM tavsifi: har
+ * a'zosi `POST /imports/{kind}` marshrutiga, `import-panel.tsx` dagi
+ * matn uchligiga va tugagandan keyingi ⛔ REESTR MARSHRUTIGA
+ * (`LIST_PATHS`) bog'langan. Daftarda ularning BIRORTASI yo'q: u
+ * `POST /reports/compare/ledger` ga boradi, o'z paneliga ega va
+ * tugagandan keyin ⛔ HECH QAYERGA yo'naltirmaydi (natija shu ekranda).
+ *
+ * ⛔ Beshinchi a'zo qo'shilsa `Record<ImportKind, …>` jadvallari uchta
+ *    faylda to'ldirilishi kerak bo'lardi va ularning uchtasi ham
+ *    ⛔ TO'QILGAN qiymat olardi — «daftar reestri» degan marshrut
+ *    MAVJUD EMAS.
+ *
+ * ⚠ Shablon marshruti esa AYNAN o'sha (`/imports/template?kind=`), ya'ni
+ *   ikkinchi oqim ham qurilmaydi (§10.3).
+ * =========================================================================
+ */
+export async function downloadLedgerTemplate(): Promise<void> {
+  const response = await apiRequest(`${IMPORTS_PATH}/template?kind=ledger`);
+  saveBlob(await response.blob(), "sbozor-daftar-shablon.xlsx");
+}
 
 /**
  * `POST /reports/compare/ledger` — kunlik daftarning `.xlsx` importi.

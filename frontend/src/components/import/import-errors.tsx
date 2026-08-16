@@ -80,6 +80,20 @@ const ERROR_LABEL_KEYS = {
   invalid_role: "import.errors.invalid_role",
   role_not_allowed: "import.errors.role_not_allowed",
   phone_taken: "import.errors.phone_taken",
+  // --- kunlik daftar (08-14 -> 08-18) ---
+  //
+  // ⛔ UCHALASI HAM MAJBURIY: xarita bu komponentning YAGONA tarjima
+  // yo'li va kalitsiz kod ZAXIRA shoxga tushib serverning `message`
+  // maydonini chizardi. U esa FAQAT uz-Latn (`ImportIssue` docstringi
+  // buni literal aytadi), ya'ni rus tilidagi admin tarjimasiz matn
+  // ko'rardi va "3 til majburiy" cheklovi jimgina buzilardi.
+  //
+  // ⚠ Kalitlar `messages/*.json` da ALLAQACHON bor (08-14 ularni uch
+  // tilda qo'shgan va `error-codes.test.mjs` buni majburlagan) — bu
+  // yerda yetishmayotgani faqat KOMPONENT tomoni edi.
+  ledger_stall_unknown: "import.errors.ledger_stall_unknown",
+  ledger_amount_invalid: "import.errors.ledger_amount_invalid",
+  ledger_duplicate_stall: "import.errors.ledger_duplicate_stall",
 } as const;
 
 type KnownErrorCode = keyof typeof ERROR_LABEL_KEYS;
