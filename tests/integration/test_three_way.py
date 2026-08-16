@@ -54,6 +54,8 @@ from uuid import UUID, uuid4
 import pytest
 import xlsxwriter
 from app.repositories.report_repo import ThreeWayReport, three_way
+from app.services.xlsx_export import COMPARE_EXPORT_COLUMNS
+from app.services.xlsx_reader import read_rows
 from fixtures.admin_api import IMPORTS_TEMPLATE_URL, session_headers
 from fixtures.auth_api import audit_rows
 from fixtures.billing_domain import (
@@ -78,6 +80,8 @@ if TYPE_CHECKING:
     from datetime import date
 
     import httpx
+    from app.settings import Settings
+    from fastapi import FastAPI
     from fixtures import MarketScope, TenantSessionFactory
     from fixtures.billing_domain import BillingDomainSeed, MarketBillingRows
     from fixtures.market_domain import MarketDomainSeed
@@ -1464,3 +1468,383 @@ async def test_yesterdays_expectation_uses_yesterdays_tariff(
         "hisobsiz band rastaning kutilgani O'SHA KUNNING tarifidan olinishi kerak edi"
     )
     assert charged_row.ai_expected_soum != LATE_TARIFF_SOUM
+
+
+# ===========================================================================
+# (h) MARSHRUTLAR — `GET /reports/compare` va `/compare.xlsx` (08-16)
+#
+# =========================================================================
+# ⛔⛔ YO'L `/compare`, REJA AYTGAN `/three-way` EMAS.
+#
+# `report-queries.ts` (08-03, TO'LQIN 1) AYNAN shu ikki yo'lga boradi:
+# `${REPORTS_PATH}/compare?day=` (:253) va `${REPORTS_PATH}/compare.xlsx
+# ?day=` (:383). Bu 08-07 (`/debtors`), 08-12 (`/debtors.xlsx`) va 08-14
+# (`/compare/ledger`) da qabul qilingan qarorning TO'RTINCHI takrori:
+# SERVER KLIENTNI KUZATADI. Boshqa nom tanlansa nosozlik JIMGINA
+# bo'lardi — 08-18 ning komponent testlari mock bilan yashil qolardi va
+# 404 faqat jonli ekranda ko'rinardi.
+# ===========================================================================
+
+COMPARE_URL = "/api/v1/reports/compare"
+COMPARE_EXPORT_URL = "/api/v1/reports/compare.xlsx"
+
+COMPARE_RESPONSE_KEYS = {
+    "day",
+    "has_ledger",
+    "rows",
+    "ledger_over_count",
+    "system_over_count",
+    "ai_mismatch_count",
+    "matched_count",
+}
+"""⛔ JAVOB O'RAMI — `api-types.ts::threeWayReportSchema` NING JUFTI.
+
+Klient uni `z.strictObject` bilan o'qiydi, ya'ni ORTIQCHA maydon ham,
+yetishmayotgani ham PARSE CHEGARASIDA yiqiladi va direktor hisobot
+o'rniga bo'sh ekran ko'radi. Reyestr shu yerda IKKINCHI MARTA yozilgan
+(`test_reports_api.py::_keys` naqshi) — javob modelidan olingan to'plam
+o'zi bilan o'zini tekshirardi.
+"""
+
+COMPARE_ROW_KEYS = {"stall_code", "ledger_soum", "system_soum", "ai_expected_soum", "diff_class"}
+"""⛔ QATOR — `threeWayRowSchema` NING JUFTI VA UNDA `vendor_name` YO'Q.
+
+⛔⛔ ISM JSON YUZASIGA CHIQMAYDI, `.xlsx` HUJJATIGA ESA CHIQADI — va bu
+    ikki BOSHQA yuza, ikki BOSHQA qaror (D-07 ning aynan shakli):
+    ekrandagi jadval rasta kesimida ishlaydi va unga ism KERAK EMAS,
+    imzolanadigan hujjatda esa «kimdan so'raladi?» savoli qog'ozda
+    javob olishi kerak. Ismni JSON ga «qulaylik uchun» qo'shish klient
+    `strictObject` ini buzardi VA marshrutni `PERSONAL_ROUTES` ga
+    tortardi (`audit_read` har hisobot ochilishida yozilardi).
+"""
+
+
+def _compare_params(day: date) -> dict[str, str]:
+    """`?day=` — ⛔ MAJBURIY, standart YO'Q (`DayDep` qoidasi)."""
+    return {"day": day.isoformat()}
+
+
+@pytest.fixture
+def compare_row_limit(api_app: FastAPI, test_settings: Settings) -> Iterator[None]:
+    """`report_max_rows = 1` — ⛔ 50 000 QATOR SEED QILINMAYDI.
+
+    `test_reports_api.py::tiny_row_limit` ning aynan nusxasi va aynan
+    sababi: o'lchanayotgan narsa SON emas, SHOX — chegaradan oshgan
+    javob **422** bo'ladimi yoki JIMGINA kesiladimi. Shox chegaraning
+    istalgan qiymatida bir xil.
+
+    ⚠ NUSXA ONGLI: `tiny_row_limit` ni import qilish bu faylni qo'shni
+      integratsiya modulining fixture grafiga bog'lardi
+      (`test_reports_api.py:106-108` da o'rnatilgan qoida).
+    """
+    api_app.state.settings = test_settings.model_copy(update={"report_max_rows": 1})
+    try:
+        yield
+    finally:
+        api_app.state.settings = test_settings
+
+
+@pytest.fixture
+async def compare_director_headers(
+    api_client: httpx.AsyncClient, compare: CompareEnv
+) -> dict[str, str]:
+    """A bozori DIREKTORI — `report_view` VA `vendor_view` BOR."""
+    return await session_headers(api_client, compare.base.market_a.director_phone, SEED_PASSWORD)
+
+
+@pytest.fixture
+async def compare_cashier_headers(
+    api_client: httpx.AsyncClient, compare: CompareEnv
+) -> dict[str, str]:
+    """A bozori KASSIRI — unda `report_view` YO'Q (UI-SPEC §5.6)."""
+    return await session_headers(api_client, compare.base.market_a.cashier_phone, SEED_PASSWORD)
+
+
+@pytest.fixture
+async def compare_market_b_headers(
+    api_client: httpx.AsyncClient, compare: CompareEnv
+) -> dict[str, str]:
+    """B bozorining DIREKTORI — cross-tenant da'vosining sub'ekti."""
+    return await session_headers(api_client, compare.base.market_b.director_phone, SEED_PASSWORD)
+
+
+def seed_one_matching_stall(conn: Connection[TupleRow], env: CompareEnv) -> UUID:
+    """Uchala manba ham MOS bo'lgan bitta rasta — marshrut testlarining asosi.
+
+    ⚠ `match` holati ATAYIN: marshrut testlari YUZANI o'lchaydi (huquq,
+      chegara, bayt), farq sinflarini emas — ular quyida O'Z seedi bilan
+      o'lchanadi. Eng sodda holat javobning shaklini eng aniq ko'rsatadi.
+    """
+    stall_id = env.billed_stall(2)
+    occupy(conn, env, stall_id=stall_id, center=(0.29, 0.64))
+    charge_and_pay(conn, env, stall_id=stall_id, paid_soum=TARIFF_SOUM)
+    write_ledger_row(
+        conn,
+        market_id=env.market_id,
+        day=env.day,
+        stall_id=stall_id,
+        amount_soum=TARIFF_SOUM,
+        imported_by=env.live.cashier_id,
+    )
+    return stall_id
+
+
+async def test_the_compare_route_answers_with_the_client_contract_shape(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    compare_director_headers: dict[str, str],
+    compare: CompareEnv,
+) -> None:
+    """⛔ JSON JAVOBI KLIENT `strictObject` I BILAN AYNAN TENG.
+
+    =======================================================================
+    ⛔ TO'PLAM TENGLIGI, «kerakli maydonlar bor» EMAS: `z.strictObject`
+       ORTIQCHA maydonni ham RAD ETADI, ya'ni «qulaylik uchun» qo'shilgan
+       `total_diff` yoki `vendor_name` butun sahifani PARSE chegarasida
+       yiqitardi va nosozlik faqat jonli ekranda ko'rinardi.
+    """
+    stall_id = seed_one_matching_stall(sync_owner_conn, compare)
+
+    response = await api_client.get(
+        COMPARE_URL, params=_compare_params(compare.day), headers=compare_director_headers
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert set(payload) == COMPARE_RESPONSE_KEYS
+    assert payload["day"] == compare.day.isoformat()
+    assert payload["has_ledger"] is True
+
+    code = _code_of(sync_owner_conn, stall_id)
+    row = next(item for item in payload["rows"] if item["stall_code"] == code)
+    assert set(row) == COMPARE_ROW_KEYS
+    assert row["ledger_soum"] == TARIFF_SOUM
+    assert row["system_soum"] == TARIFF_SOUM
+    assert row["ai_expected_soum"] == TARIFF_SOUM
+
+
+async def test_a_matched_row_carries_no_diff_class_at_all(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    compare_director_headers: dict[str, str],
+    compare: CompareEnv,
+) -> None:
+    """⛔⛔ MOS QATORNING `diff_class` I `null` — `"match"` SATRI EMAS.
+
+    =======================================================================
+    ⛔ SABAB KLIENT REYESTRIDA: `api-types.ts::DIFF_CLASSES` AYNAN UCH
+       A'ZO (`ledger_over`, `system_over`, `ai_mismatch`) va `match` unda
+       ATAYIN YO'Q. Server `"match"` yuborsa klient uni NOMA'LUM qiymat
+       deb ZAXIRA YORLIQ chizardi — ya'ni 287 ta mos qator badge olardi
+       va 13 ta HAQIQIY farq ular ostida KO'MILIB ketardi (§13.4).
+
+    ⚠ Server tomonida sinf NOM bilan qoladi (`report_repo.DIFF_MATCH`) —
+      `matched_count` aynan shunga tayanadi. O'girish BIR joyda, javob
+      qurilayotganda bajariladi.
+    """
+    seed_one_matching_stall(sync_owner_conn, compare)
+
+    response = await api_client.get(
+        COMPARE_URL, params=_compare_params(compare.day), headers=compare_director_headers
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["matched_count"] == 1
+    classes = {row["diff_class"] for row in payload["rows"]}
+    assert "match" not in classes, (
+        "«match» satri sim ustiga chiqdi — klient uni noma'lum sinf deb ZAXIRA "
+        "yorliq bilan chizardi va mos qator badge olardi (§13.4)"
+    )
+    assert None in classes
+
+
+async def test_today_is_refused_because_the_system_day_is_not_closed_yet(
+    api_client: httpx.AsyncClient,
+    compare_director_headers: dict[str, str],
+    compare: CompareEnv,
+) -> None:
+    """⛔ `day = bugun` -> **422 `report_period_future`** (UI-SPEC §10.2).
+
+    Bugungi tizim summasi hali yopilmagan (D+1 04:10) va daftar ham kun
+    oxirida yig'iladi, ya'ni «bugun» ni solishtirish HAR DOIM farq
+    ko'rsatardi va uchala sinf ham SOXTA bo'lardi.
+    """
+    response = await api_client.get(
+        COMPARE_URL, params={"day": _day()}, headers=compare_director_headers
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "report_period_future"
+
+
+async def test_the_cashier_reaches_neither_compare_surface(
+    api_client: httpx.AsyncClient,
+    compare_cashier_headers: dict[str, str],
+    compare: CompareEnv,
+) -> None:
+    """⛔ KASSIR IKKALA MARSHRUTDAN HAM 403 (D-04, UI-SPEC §5.6).
+
+    ⚠ IKKALA YUZA BIRGA o'lchanadi: `.xlsx` ni unutish eng xavfli
+      teshikni ochardi — fayl tizimdan CHIQIB ketadi (08-12 darsi).
+    """
+    for url in (COMPARE_URL, COMPARE_EXPORT_URL):
+        response = await api_client.get(
+            url, params=_compare_params(compare.day), headers=compare_cashier_headers
+        )
+        assert response.status_code == 403, f"{url}: {response.text}"
+
+
+async def test_a_day_over_the_row_limit_is_refused_not_truncated(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    compare_director_headers: dict[str, str],
+    compare: CompareEnv,
+    compare_row_limit: None,
+) -> None:
+    """⛔⛔ CHEGARADAN OSHGAN KUN **422 `report_too_large`** (R-8, T-08-73).
+
+    =======================================================================
+    ⛔ SAHIFALASH ATAYIN YO'Q: solishtiruv KUNLIK va u chop etilib
+       IMZOLANADI — sahifalangan hujjatni imzolab bo'lmaydi. Jimgina
+       kesish esa undan ham yomon: imzo chekilgan varaqdan tushib qolgan
+       rastalarni hech kim SEZMASDI.
+
+    ⚠ IKKALA YUZA HAM: ekranda kesilgan ro'yxat tuzatiladi, faylga
+      tushgani esa IMZOLANADI va tarqaladi.
+    """
+    seed_one_matching_stall(sync_owner_conn, compare)
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.market_id,
+        day=compare.day,
+        stall_id=compare.billed_stall(0),
+        amount_soum=0,
+        imported_by=compare.live.cashier_id,
+    )
+
+    for url in (COMPARE_URL, COMPARE_EXPORT_URL):
+        response = await api_client.get(
+            url, params=_compare_params(compare.day), headers=compare_director_headers
+        )
+        assert response.status_code == 422, f"{url}: {response.text}"
+        assert response.json()["detail"] == "report_too_large"
+
+
+async def test_the_export_ends_with_two_blank_signature_lines(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    compare_director_headers: dict[str, str],
+    compare: CompareEnv,
+) -> None:
+    """⛔⛔ IMZO QATORLARI FAYLNING PASTIDA VA ISMLAR BO'SH (D-19, §12.6).
+
+    =======================================================================
+    ⛔ FAYL BAYTLARI QAYTA O'QILADI (`xlsx_reader.read_rows` — MAHSULOT
+       o'quvchisi): quruvchining o'z funksiyasini chaqirib tekshirish
+       o'zini o'zi bilan solishtirish bo'lardi va buzilgan ZIP ham
+       YASHIL qolardi (08-12 da o'rnatilgan qoida).
+
+    ⛔ ISM OLDINDAN TO'LDIRILMAYDI: tizim KIM imzolashini BILMAYDI va
+       bilmagan narsasini yozmaydi. Sessiyadagi odamning ismini qo'yish
+       «u imzoladi» degan YOLG'ON dalil bo'lardi — hujjat qog'ozda,
+       BOSHQA odam tomonidan imzolanishi mumkin (T-08-74).
+    """
+    seed_one_matching_stall(sync_owner_conn, compare)
+
+    response = await api_client.get(
+        COMPARE_EXPORT_URL, params=_compare_params(compare.day), headers=compare_director_headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith(XLSX_MEDIA_TYPE)
+
+    rows = read_rows(response.content, expected_columns=COMPARE_EXPORT_COLUMNS)
+    executor, approver = rows[-2], rows[-1]
+
+    for line in (executor, approver):
+        assert isinstance(line[0], str), f"imzo qatori faylda TOPILMADI: {line!r}"
+        assert "___" in line[0], f"imzo uchun bo'sh joy yo'q: {line[0]!r}"
+        assert all(cell is None for cell in line[1:]), (
+            f"imzo qatoridan keyin qiymat yozilgan: {line!r} — ism OLDINDAN "
+            "TO'LDIRILMAYDI (D-19)"
+        )
+
+
+async def test_an_unmeasured_expectation_is_a_blank_cell_in_the_file(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    compare_director_headers: dict[str, str],
+    compare: CompareEnv,
+) -> None:
+    """⛔⛔ O'LCHANMAGAN KUTILGAN — BO'SH KATAK, `0` EMAS (D-10, T-08-70).
+
+    Bo'sh katak IMZOLANADIGAN varaqda «bandlik o'lchanmagan» degan
+    HALOL javob beradi; `0` esa «AI rastani bo'sh dedi» degan
+    O'LCHANGAN da'vo bo'lib o'qilardi va u nizoda dalil bo'lib
+    ishlatilardi.
+
+    ⚠ NAZORAT: daftarning `0` i AYNI qatorda va u BO'SH EMAS — ya'ni
+      test «hamma katak bo'sh» degan buzilishda ham qizaradi.
+    """
+    unmeasured = compare.billed_stall(2)
+    write_ledger_row(
+        sync_owner_conn,
+        market_id=compare.market_id,
+        day=compare.day,
+        stall_id=unmeasured,
+        amount_soum=0,
+        imported_by=compare.live.cashier_id,
+    )
+
+    response = await api_client.get(
+        COMPARE_EXPORT_URL, params=_compare_params(compare.day), headers=compare_director_headers
+    )
+
+    assert response.status_code == 200, response.text
+    rows = read_rows(response.content, expected_columns=COMPARE_EXPORT_COLUMNS)
+    code = _code_of(sync_owner_conn, unmeasured)
+    data = next(row for row in rows if row[0] == code)
+
+    assert data[4] is None, (
+        f"AI-kutilgan katagi BO'SH bo'lishi kerak edi, qiymat: {data[4]!r} — "
+        "o'lchanmagan miqdor o'lchangan bo'lib chizilardi (D-10)"
+    )
+    assert data[2] == 0, "daftar summasi O'LCHANGAN nol va u bo'sh katak EMAS"
+
+
+async def test_the_export_names_the_vendor_and_the_json_never_does(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    compare_director_headers: dict[str, str],
+    compare: CompareEnv,
+) -> None:
+    """⛔⛔ ISM FAYLDA BOR, JSON DA YO'Q — IKKI YUZA, IKKI QAROR.
+
+    Bu test ikki da'voni BIRGA ushlaydi va aynan shu sababdan kuchli:
+    ismni JSON ga ko'chirgan o'zgarish (klient `strictObject` ini
+    buzardi) ham, uni fayldan olib tashlagan o'zgarish (hujjat «kimdan
+    so'raladi?» savoliga javob bermay qolardi) ham QIZARADI.
+    """
+    seed_one_matching_stall(sync_owner_conn, compare)
+
+    exported = await api_client.get(
+        COMPARE_EXPORT_URL, params=_compare_params(compare.day), headers=compare_director_headers
+    )
+    listed = await api_client.get(
+        COMPARE_URL, params=_compare_params(compare.day), headers=compare_director_headers
+    )
+
+    assert exported.status_code == 200, exported.text
+    assert listed.status_code == 200, listed.text
+
+    rows = read_rows(exported.content, expected_columns=COMPARE_EXPORT_COLUMNS)
+    names = {row[1] for row in rows if isinstance(row[1], str)}
+    assert any(name.startswith("Aliyev") for name in names), (
+        f"hujjatda sotuvchi ismi yo'q: {sorted(names)}"
+    )
+
+    assert "vendor_name" not in listed.text, (
+        "sotuvchi ismi JSON yuzasiga chiqdi — klient `strictObject` i uni RAD "
+        "ETARDI va butun sahifa parse chegarasida yiqilardi"
+    )
