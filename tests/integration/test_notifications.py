@@ -51,6 +51,7 @@ import inspect
 import json
 from dataclasses import dataclass, fields
 from datetime import datetime, time, timedelta
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -66,7 +67,7 @@ from app.jobs.notifications import (
     digest_morning,
     overdue_reminder,
 )
-from app.jobs.reconciliation import reconciliation_open
+from app.jobs.reconciliation import overdue_cutoff, reconciliation_open
 from app.repositories import digest_repo, outbox_repo
 from app.repositories.billing_repo import pending_projection
 from app.repositories.headline_repo import revenue_today_soum
@@ -97,7 +98,7 @@ from sbozor_core.enums import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from datetime import date
 
     from fixtures import TenantSessionFactory
@@ -795,10 +796,23 @@ async def test_overdue_reminder_respects_market_settings(
     assert strict[0]["vendor_id"] == notify.vendor_id
 
 
+def _shell_context(sessionmaker: async_sessionmaker[AsyncSession]) -> Any:
+    """`taskiq` `Context` ning ENG KICHIK o'rnini bosuvchisi.
+
+    Ikkala qobiq ham `context.state.sessionmaker` dan boshqa hech nimaga
+    tegmaydi (`worker.py` ning «yupqa qobiq» majburiyati), ya'ni bu
+    obyekt qobiqning BUTUN kirish yuzasini qamraydi. Haqiqiy
+    `TaskiqState` qurish `WORKER_STARTUP` ilmog'ini, u esa to'liq
+    `Settings` ni (ombor rekviziti bilan) talab qilardi.
+    """
+    return SimpleNamespace(state=SimpleNamespace(sessionmaker=sessionmaker))
+
+
 async def test_overdue_reminder_shares_the_knob_with_case_opening(
     sync_owner_conn: Connection[TupleRow],
     app_sessionmaker: async_sessionmaker[AsyncSession],
     notify: Env,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """⛔ PATTERN 5 — eslatma VA case AYNAN BIR chegaradan o'tadi (D-19).
 
@@ -806,17 +820,67 @@ async def test_overdue_reminder_shares_the_knob_with_case_opening(
     case turgan, sotuvchi esa eslatma OLMAGAN holat tug'ilardi — ya'ni
     sotuvchi OGOHLANTIRILMAGAN qarz uchun nazoratchi navbatiga tushardi.
 
+    =======================================================================
+    ⛔⛔ TEST MAHSULOT QOBIQLARIDAN YURITADI — VA AYNAN SHU BAND WR-06 NI
+        TUG'DIRGAN EDI.
+
+    Eski shakl ikkala jobga ham QO'LDA bir xil `business_date` uzatardi.
+    Mahsulotda esa qobiqlar boshqacha berardi (`recon.open` -> kecha,
+    `notify.overdue` -> bugun), ya'ni ikki chegara HAR DOIM bir kunga
+    farq qilardi va «AYNI knob, AYNI javob» da'vosi FAQAT testda rost
+    bo'lardi. Endi kunni qobiqning O'ZI hisoblaydi va test unga umuman
+    tegmaydi.
+
+    ⛔ QO'LDA `business_date` UZATISH BU TESTDA TAQIQLANADI: uzatilgan
+       kun ikkala mexanizmni sun'iy ravishda tenglashtiradi va o'lchov
+       o'zi tekshirayotgan nosozlikni KO'RMAY qoladi.
+    =======================================================================
+
+    ⚠ CHEGARA SPIONI IKKI MODULDA ALOHIDA: `overdue_cutoff` ikkala jobga
+      ham NOM bilan import qilingan, ya'ni bitta e'lonni yamash yetmaydi
+      — har modulning O'Z bog'lami almashtiriladi va shu bilan «ikkalasi
+      ham SHU funksiyani chaqiradimi?» savoli ham o'lchanadi.
+
     ⚠ TESKARI NAZORAT: `overdue_days = 10` bo'lgan bozorda IKKALASI HAM
       yo'q. Usiz test «ikkalasi ham bor» ni o'lchardi, «ikkalasi ham BIR
       XIL chegaradan o'tadi» ni emas.
     """
+    from app import worker
+
     _seed_overdue_vendor(sync_owner_conn, notify, days=5)
     seed_notification_settings(sync_owner_conn, market_id=notify.market_id, overdue_days=3)
     seed_notification_settings(sync_owner_conn, market_id=notify.market_b_id, overdue_days=10)
-    today = _today(sync_owner_conn)
 
-    await overdue_reminder(app_sessionmaker, business_date=today)
-    await reconciliation_open(app_sessionmaker, business_date=today)
+    seen: dict[str, list[date]] = {"reminder": [], "case": []}
+
+    def _spy(bucket: str) -> Callable[[date, int], date]:
+        def recorder(business_date: date, overdue_days: int) -> date:
+            value = overdue_cutoff(business_date, overdue_days)
+            seen[bucket].append(value)
+            return value
+
+        return recorder
+
+    monkeypatch.setattr(notifications, "overdue_cutoff", _spy("reminder"))
+    monkeypatch.setattr(reconciliation, "overdue_cutoff", _spy("case"))
+
+    context = _shell_context(app_sessionmaker)
+    await worker.overdue_reminder_task.original_func(context)
+    await worker.reconciliation_open_task.original_func(context)
+
+    assert seen["reminder"], (
+        "`notify.overdue` qobig'i chegarani UMUMAN hisoblamadi — eslatma "
+        "yo'li `overdue_cutoff()` dan o'tmayapti"
+    )
+    assert seen["case"], (
+        "`recon.open` qobig'i chegarani UMUMAN hisoblamadi — case yo'li "
+        "`overdue_cutoff()` dan o'tmayapti"
+    )
+    assert sorted(seen["reminder"]) == sorted(seen["case"]), (
+        f"MAHSULOT yo'lida ikki chegara AJRALDI: eslatma={sorted(seen['reminder'])}, "
+        f"case={sorted(seen['case'])}. D-19 ning «bir knob» da'vosi qobiqlar "
+        "bir xil `business_date` bermaguncha rost bo'la olmaydi (WR-06)."
+    )
 
     reminders_a = [
         row for row in _outbox(sync_owner_conn, notify.market_id) if row["kind"] == _REMINDER
