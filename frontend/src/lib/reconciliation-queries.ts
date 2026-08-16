@@ -475,8 +475,34 @@ export function deliveryCachePolicy(isToday: boolean): CachePolicy {
 
 /* --- So'rovlar ------------------------------------------------------------- */
 
-/** Joriy bozor — kalit qurish uchun YAGONA manba (eksport QILINMAYDI). */
-function useMarketId(): string | null {
+/**
+ * Joriy bozor — kalit qurish uchun YAGONA manba.
+ *
+ * =========================================================================
+ * ⛔⛔ ENDI EKSPORT QILINADI — VA BU «QULAYLIK» EMAS (IN-08).
+ *
+ * Barcha so'rovlar `enabled: marketId !== null` bilan boshqariladi, lekin
+ * ⛔ TanStack v5 da O'CHIRILGAN so'rov `isPending` HOLATIDA QOLADI. Ya'ni
+ * bozorsiz sessiyada to'rtala recon bloki ham ⛔ CHEKSIZ SKELET
+ * ko'rsatardi: foydalanuvchi kutardi, hech nima kelmasdi va sabab
+ * ⛔ HECH QAYERDA yozilmasdi.
+ *
+ * ⛔ `HeadlineCard` bu holatni ALLAQACHON ochiq qo'riqlaydi
+ *    (`marketId === null` -> so'rov ham, karta ham yo'q). Recon bloklari
+ *    esa yo'q edi — ya'ni bir kod bazasida bir savolga IKKI javob.
+ *
+ * ⛔ SHART BLOKDA, SAHIFADA EMAS: sahifada bir marta tekshirish blokning
+ *    O'Z mazmun atributini (`data-recon-content`) ham olib tashlardi va
+ *    sahifa darvozasi «blok chizilmadi» deb qizarardi — holbuki haqiqiy
+ *    sabab BOSHQA. Har blok o'z holatini O'ZI nomlaydi (`unpaid-list.tsx`
+ *    ning «HAR BLOK ... SAHIFA EMAS» bandi).
+ *
+ * ⚠ NOMI `useMarketId` EMAS: `market-queries.ts` da AYNI nomli MAHALLIY
+ *   funksiya bor va ikki modul bir nomni eksport qilsa, keyingi ijrochi
+ *   ularni bir narsa deb hisoblardi.
+ * =========================================================================
+ */
+export function useReconciliationMarketId(): string | null {
   const { principal } = useAuthStore();
   return principal?.marketId ?? null;
 }
@@ -493,7 +519,7 @@ export function useReconciliationReport(
   day: string,
   options?: { enabled?: boolean },
 ) {
-  const marketId = useMarketId();
+  const marketId = useReconciliationMarketId();
 
   return useQuery({
     queryKey: reportKey(marketId ?? "", day),
@@ -570,7 +596,7 @@ export function useReconciliationCases(
   day: string,
   options?: { enabled?: boolean },
 ): PagedQuery<CaseList, CaseRow> {
-  const marketId = useMarketId();
+  const marketId = useReconciliationMarketId();
 
   const query = useInfiniteQuery({
     queryKey: casesKey(marketId ?? "", day),
@@ -603,7 +629,7 @@ export function useCaseDetail(
   caseId: string | null,
   options?: { enabled?: boolean },
 ) {
-  const marketId = useMarketId();
+  const marketId = useReconciliationMarketId();
 
   return useQuery({
     queryKey: caseDetailKey(marketId ?? "", caseId ?? ""),
@@ -662,7 +688,7 @@ export function useDeliveries(
   isToday: boolean,
   options?: { enabled?: boolean },
 ): PagedQuery<DeliveryList, DeliveryRow> {
-  const marketId = useMarketId();
+  const marketId = useReconciliationMarketId();
   const policy = deliveryCachePolicy(isToday);
 
   const query = useInfiniteQuery({
@@ -723,13 +749,26 @@ export function useDeliveries(
  */
 export function useCaseUpdate() {
   const client = useQueryClient();
-  const marketId = useMarketId() ?? "";
+  const marketId = useReconciliationMarketId() ?? "";
 
   return useMutation({
+    /*
+     * ⛔⛔ `resolutionNote` — ⛔ `string`, `string | null` EMAS (WR-15).
+     *
+     * Server `resolution_note = COALESCE(:note, resolution_note)` yozadi,
+     * ya'ni `null` «O'ZGARTIRMA» degani. Foydalanuvchi matnni o'chirib
+     * saqlaganda eski matn ⛔ QOLIB KETARDI va dialog qayta ochilganda u
+     * ⛔ QAYTIB CHIQARDI — «o'zgarishim yo'qoldi» taassuroti.
+     *
+     * ⛔ TIP DARAJASIDA YOPILADI: `null` ni tasodifan qaytarish endi
+     *    ⛔ `tsc` da qizaradi, ya'ni nuqson izohga emas, TIP TIZIMIGA
+     *    bog'landi. Bo'sh SATR esa `COALESCE` uchun `NULL` EMAS —
+     *    u YOZILADI (server sxemasida `min_length` yo'q, o'lchandi).
+     */
     mutationFn: (input: {
       caseId: string;
       status: CaseStatusValue;
-      resolutionNote: string | null;
+      resolutionNote: string;
       assigneeUserId: string | null;
     }) =>
       apiFetch(

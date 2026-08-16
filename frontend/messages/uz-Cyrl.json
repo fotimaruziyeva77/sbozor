@@ -805,6 +805,7 @@
       "warning": "Огоҳлантириш",
       "critical": "Жиддий"
     },
+    "severityUnknown": "Даражаси таржима қилинмаган",
     "alertKey": {
       "captureStopped": "Кадр олиш тўхтади",
       "captureMissed": "Кадрлар ўтказиб юборилди",
@@ -1286,6 +1287,9 @@
     "evidenceColumn": "Далил",
     "statusColumn": "Ҳолат",
     "dayColumn": "Сана",
+    "subjectUnknownNotice": "Сервердан {count} та қатор тизимга номаълум турда келди — улар қуйидаги рўйхатларга кирмади.",
+    "marketMissing": "Бозор танланмаган",
+    "marketMissingHint": "Бозорни танлаганингиздан кейин бу блок маълумот кўрсатади.",
     "subjectColumn": "Синф",
     "assigneeColumn": "Масъул",
     "openedColumn": "Очилган",

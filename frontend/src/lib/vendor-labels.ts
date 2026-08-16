@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 import { EMPTY_VENDOR_FILTERS, useVendorsQuery } from "@/lib/market-queries";
 import { useAuthStore } from "@/lib/auth-store";
 import { useUsersQuery } from "@/lib/queries";
@@ -39,15 +41,53 @@ import { hasPermission } from "@/lib/rbac";
  * yozilgan: ko'rinmaydigan ekran uchun fon so'rovi audit jurnalini
  * ma'nosiz «ko'rildi» yozuvlari bilan to'ldirardi.
  *
- * ⚠ OCHIQ NARX (§5.5): sahifa QO'SHIMCHA so'rov qiladi va u reestrning
- *   birinchi sahifasi bilan cheklanadi. To'g'ri tuzatish — MAVJUD
- *   marshrutni sahifalash, nomuvofiqlik marshrutiga ism maydoni
- *   QO'SHISH EMAS. Egasi — 8-faza.
+ * -----------------------------------------------------------------------
+ * ⛔⛔ LUG'AT REESTRNI ⛔ TO'LIQ SAHIFALAB O'QIYDI (07 №2, D-08)
+ * -----------------------------------------------------------------------
+ * Ilgari u ⛔ BIRINCHI SAHIFA bilan cheklangan edi (`fetchNextPage()`
+ * HECH QACHON chaqirilmasdi), ya'ni 50 dan ortiq sotuvchili bozorda
+ * ro'yxatning quyi qismidagi HAR qator «Ko'rsatilmagan» yorlig'ini
+ * olardi — Karmana konvertida (300–1000 rasta) bu ⛔ ODATIY hol edi.
+ *
+ * ⛔ D-08 IKKI MEXANIKADAN BIRINI ruxsat beradi va tanlangani —
+ *    ⛔ MAVJUD, AUDIT QILINGAN marshrutni ⛔ SAHIFALASH. Nomuvofiqlik
+ *    marshrutiga `vendor_name` maydoni ⛔ QO'SHILMAYDI: 07-10 buni
+ *    SABOTAJ bilan o'lchagan — ism qo'shilganda TO'RT tenancy testi
+ *    qizaradi.
  * =============================================================================
  */
 
+/**
+ * ⛔⛔ YORLIQ LUG'ATI UCHUN O'QILADIGAN SAHIFALARNING ENG KO'P SONI.
+ *
+ * =========================================================================
+ * ⛔ BU QO'RIQCHI MUZOKARASIZ VA SABAB IKKITA:
+ *
+ *   1. ⛔ AUDIT SHOVQINI — `GET /vendors` HAR chaqiruvda `audit_read`
+ *      yozadi (D-09). Chegarasiz halqa katta reestrda jurnalni ma'nosiz
+ *      «ko'rildi» yozuvlari bilan to'ldirardi va nizo tekshiruvida
+ *      HAQIQIY o'qishlar ular orasida ko'rinmay qolardi.
+ *
+ *   2. ⛔ CHEKSIZ HALQA — server kursori buzilgan (yoki hech qachon
+ *      tugamaydigan) holatda so'rovlar ⛔ TO'XTAMASDI va bunda
+ *      ⛔ BIRORTA XATO ham chiqmasdi: har javob `200`.
+ *
+ * ⛔ CHEGARAGA YETILGANDA QOLGAN ISMLAR ⛔ BO'SH KATAK BO'LIB QOLADI —
+ *    `labelOf()` `null` qaytaradi va bu ⛔ KUTILGAN XULQ (kod izohida,
+ *    konsolda EMAS: ogohlantirish har render takrorlanardi va hech kim
+ *    o'qimasdi). Yorliqni TO'QISH («—», «Noma'lum», identifikator
+ *    bo'lagi) nizo hujjatiga (D-02) YOLG'ON ism kiritardi — 05-14 darsi.
+ *
+ * ⚠ SIG'IM: 20 × `PAGE_SIZE` (50) = 1000 sotuvchi. Karmana pilotining
+ *   yuqori chegarasi ~1000 RASTA, ya'ni sotuvchi soni undan KAM — chegara
+ *   amaliyotda urilmaydi. O'lchov (`vendor-labels.test.tsx`): 120
+ *   sotuvchili bozor AYNAN 3 so'rov, bitta sahifali bozor AYNAN 1 so'rov.
+ * =========================================================================
+ */
+export const MAX_LABEL_PAGES = 20;
+
 export type VendorLabels = {
-  /** `null` — huquq yo'q, hali yuklanmadi yoki reestrda topilmadi. */
+  /** `null` — huquq yo'q, hali yuklanmadi, chegaradan keyin yoki topilmadi. */
   labelOf: (vendorId: string | null) => string | null;
   isPending: boolean;
 };
@@ -59,6 +99,29 @@ export function useVendorLabels(options?: { enabled?: boolean }): VendorLabels {
 
   const vendors = useVendorsQuery(EMPTY_VENDOR_FILTERS, { enabled });
 
+  const pageCount = vendors.data?.pages.length ?? 0;
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = vendors;
+
+  /*
+   * ⛔⛔ KEYINGI SAHIFA `useEffect` DA, ⛔ RENDER PAYTIDA EMAS.
+   *
+   * Render paytidagi yon ta'sir React'ning `StrictMode` ikki chaqirig'ida
+   * so'rovni ⛔ IKKILANTIRARDI va u AUDIT jurnaliga ham ikki qator
+   * yozardi — ya'ni tuzatishning O'ZI 1-qo'riqchining sababini buzardi.
+   *
+   * ⛔ `staleTime` / kesh siyosati ⛔ TEGILMAYDI: sahifalar `useVendorsQuery`
+   *    ning MAVJUD kalitiga (`vendorsKey(marketId, filtrlar)`) qo'shiladi,
+   *    ya'ni reestr sahifasi bilan AYNI kesh yozuvi ishlatiladi va
+   *    ikkinchi manba TUG'ILMAYDI.
+   */
+  useEffect(() => {
+    if (!enabled) return;
+    if (!hasNextPage) return;
+    if (isFetchingNextPage) return;
+    if (pageCount >= MAX_LABEL_PAGES) return;
+    void fetchNextPage();
+  }, [enabled, hasNextPage, isFetchingNextPage, pageCount, fetchNextPage]);
+
   const byId = new Map(
     (vendors.data?.pages ?? []).flatMap((page) =>
       page.items.map((vendor) => [vendor.id, vendor.full_name] as const),
@@ -66,8 +129,18 @@ export function useVendorLabels(options?: { enabled?: boolean }): VendorLabels {
   );
 
   return {
+    /*
+     * ⛔ ZAXIRA YO'Q: topilmagan identifikator `null` bo'lib qaytadi va
+     *   chaqiruvchi o'z NOMLANGAN holatini chizadi. Bu modul HECH NIMA
+     *   to'qimaydi (yuqoridagi 2-qo'riqcha).
+     */
     labelOf: (vendorId) =>
       vendorId === null ? null : (byId.get(vendorId) ?? null),
+    /*
+     * ⛔ «Yuklanmoqda» — BIRINCHI sahifa kelgunicha. Keyingi sahifalar
+     *   FONDA yig'iladi va ular yorliqlarni ⛔ BLOKLAMAYDI: 50-chi
+     *   qatorgacha bo'lgan ismlar darhol ko'rinadi.
+     */
     isPending: enabled && vendors.isPending,
   };
 }

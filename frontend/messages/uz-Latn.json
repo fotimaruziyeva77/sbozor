@@ -805,6 +805,7 @@
       "warning": "Ogohlantirish",
       "critical": "Jiddiy"
     },
+    "severityUnknown": "Darajasi tarjima qilinmagan",
     "alertKey": {
       "captureStopped": "Kadr olish to'xtadi",
       "captureMissed": "Kadrlar o'tkazib yuborildi",
@@ -1286,6 +1287,9 @@
     "evidenceColumn": "Dalil",
     "statusColumn": "Holat",
     "dayColumn": "Sana",
+    "subjectUnknownNotice": "Serverdan {count} ta qator tizimga noma'lum turda keldi — ular quyidagi ro'yxatlarga kirmadi.",
+    "marketMissing": "Bozor tanlanmagan",
+    "marketMissingHint": "Bozorni tanlaganingizdan keyin bu blok ma'lumot ko'rsatadi.",
     "subjectColumn": "Sinf",
     "assigneeColumn": "Mas'ul",
     "openedColumn": "Ochilgan",

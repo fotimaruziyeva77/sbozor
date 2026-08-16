@@ -15,7 +15,12 @@ import type {
   DeliveryList as DeliveryListResponse,
   DeliveryRow,
 } from "@/lib/reconciliation-queries";
-import { isNotificationKind, useDeliveries } from "@/lib/reconciliation-queries";
+import { formatBusinessDay } from "@/lib/format-day";
+import {
+  isNotificationKind,
+  useDeliveries,
+  useReconciliationMarketId,
+} from "@/lib/reconciliation-queries";
 import { useVendorLabels } from "@/lib/vendor-labels";
 
 /*
@@ -184,8 +189,11 @@ export function DeliveryList({
   isToday: boolean;
 }) {
   const t = useTranslations();
-  const deliveries = useDeliveries(day, isToday);
-  const vendors = useVendorLabels();
+  const format = useFormatter();
+  const marketId = useReconciliationMarketId();
+  const hasMarket = marketId !== null;
+  const deliveries = useDeliveries(day, isToday, { enabled: hasMarket });
+  const vendors = useVendorLabels({ enabled: hasMarket });
 
   /* ⛔ Qatorlar BARCHA sahifalardan; sanoqlar esa BIRINCHISIDAN (4-band). */
   const rows = deliveries.rows;
@@ -205,9 +213,26 @@ export function DeliveryList({
          */}
         {isToday ? (
           <Button
+            /*
+             * ⛔⛔ `aria-disabled`, ⛔ `disabled` EMAS (IN-04).
+             *
+             * `disabled` element FOKUSNI YO'QOTADI: yangilanish
+             * boshlanishi bilan brauzer fokusni `<body>` ga qaytaradi
+             * va klaviatura foydalanuvchisi so'rov tugagan lahzada
+             * sahifa BOSHIGA otilib ketardi. `case-detail-dialog.tsx`
+             * bu qoidani ALLAQACHON o'rnatgan — bu blok esa unga zid
+             * javob berardi, ya'ni bir fazada bir savolga IKKI javob.
+             *
+             * ⛔ `aria-disabled` bosishni TO'XTATMAYDI (u faqat E'LON
+             *    qiladi), shuning uchun to'siq `onClick` ichida ERTA
+             *    `return` bilan qo'yiladi (`case-list.tsx` naqshi).
+             */
+            aria-disabled={deliveries.isFetching}
             className="gap-2"
-            disabled={deliveries.isFetching}
-            onClick={() => void deliveries.refetch()}
+            onClick={() => {
+              if (deliveries.isFetching) return;
+              void deliveries.refetch();
+            }}
             size="sm"
             variant="secondary"
           >
@@ -217,7 +242,17 @@ export function DeliveryList({
         ) : null}
       </div>
 
-      {deliveries.isPending ? (
+      {/* ⛔ BOZORSIZ SESSIYA — NOMLANGAN HOLAT (IN-08, `unpaid-list.tsx` naqshi). */}
+      {hasMarket ? null : (
+        <div className="flex flex-col gap-1">
+          <p className="text-sm">{t("recon.marketMissing")}</p>
+          <p className="text-xs text-text-muted">
+            {t("recon.marketMissingHint")}
+          </p>
+        </div>
+      )}
+
+      {hasMarket && deliveries.isPending ? (
         <div aria-busy="true" role="status">
           <span className="sr-only">{t("common.loading")}</span>
           <Skeleton className="h-24" />
@@ -256,8 +291,9 @@ export function DeliveryList({
                 <dt className="order-2 text-xs text-text-muted">
                   {t(`recon.deliveryState.${state}`)}
                 </dt>
+                {/* ⛔ `as` assertsiyasi YO'Q (IN-02) — `counts` allaqachon toraytirilgan. */}
                 <dd className="order-1 m-0 font-mono tabular-nums">
-                  {STATE_COUNT[state](counts as DeliveryListResponse)}
+                  {STATE_COUNT[state](counts)}
                 </dd>
               </div>
             ))}
@@ -267,7 +303,14 @@ export function DeliveryList({
 
       {counts !== undefined && rows.length === 0 ? (
         <EmptyState
-          description={t("recon.emptyDeliveryHint", { date: day })}
+          /*
+           * ⛔ KUN BITTA YORDAMCHI ORQALI (WR-07): qo'shni uch blok ham
+           *   AYNI shakldan o'qiydi, ya'ni bir fazada bir maydonning
+           *   ikki xil ko'rinishi TUG'ILMAYDI.
+           */
+          description={t("recon.emptyDeliveryHint", {
+            date: formatBusinessDay(format, day),
+          })}
           title={t("recon.emptyDelivery")}
         />
       ) : null}

@@ -15,6 +15,7 @@ import { CASE_STATUSES, RESOLUTION_NOTE_MAX } from "@/lib/api-types";
 import type { CaseStatusValue } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api-client";
+import { formatBusinessDay } from "@/lib/format-day";
 import { hasPermission } from "@/lib/rbac";
 import { reconErrorView } from "@/lib/reconciliation-errors";
 import type { CaseDetail } from "@/lib/reconciliation-queries";
@@ -254,7 +255,16 @@ function CaseDetailContent({ detail }: { detail: CaseDetail }) {
         <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
           <div className="flex gap-2">
             <dt className="text-text-muted">{t("recon.dayColumn")}</dt>
-            <dd className="m-0">{detail.service_date}</dd>
+            {/*
+             * ⛔ XOM ISO EMAS (WR-07): `{detail.service_date}` uchala
+             *   tilda ham `2026-08-11` bo'lib chizilardi, qo'shni blok
+             *   esa AYNI maydonni mahalliylashtirardi — bir fazada bir
+             *   maydonning IKKI XIL o'qilishi. Yordamchi bitta:
+             *   `lib/format-day.ts`.
+             */}
+            <dd className="m-0">
+              {formatBusinessDay(format, detail.service_date)}
+            </dd>
           </div>
           <div className="flex gap-2">
             <dt className="text-text-muted">{t("recon.statusColumn")}</dt>
@@ -316,7 +326,15 @@ function CaseDetailContent({ detail }: { detail: CaseDetail }) {
               <span>
                 <StatusPath from={event.from_status} to={event.to_status} />
               </span>
-              {event.note === null ? null : (
+              {/*
+               * ⛔ `null` HAM, BO'SH SATR HAM CHIZILMAYDI (WR-15 ning
+               *   yon ta'siri): marshrut yechim matnini AYNI maydon
+               *   bilan tarix qatoriga ham yozadi, ya'ni «tozalash»
+               *   amali audit izida BO'SH `<span>` qoldirardi. «Izoh
+               *   yo'q» va «izoh bo'sh» ekranda BIR XIL ko'rinadi:
+               *   ⛔ hech nima.
+               */}
+              {event.note === null || event.note.trim() === "" ? null : (
                 <span className="w-full text-text-muted">{event.note}</span>
               )}
             </li>
@@ -393,7 +411,24 @@ function DecisionForm({ detail }: { detail: CaseDetail }) {
       {
         caseId: detail.case_id,
         status: status as CaseStatusValue,
-        resolutionNote: note.trim() === "" ? null : note.trim(),
+        /*
+         * ⛔⛔ BO'SH MATN -> ⛔ BO'SH SATR, `null` EMAS (WR-15).
+         *
+         * Server `resolution_note = COALESCE(:note, resolution_note)`
+         * yozadi: `null` «tegmang» degani va eski matn ⛔ QOLIB
+         * KETARDI. Foydalanuvchi maydonni bo'shatib saqlardi, forma
+         * bo'sh turardi, keyingi ochilishda esa (`useState(detail.
+         * resolution_note ?? "")`) eski matn ⛔ QAYTIB CHIQARDI —
+         * ya'ni forma bajarilmaydigan va'da berardi.
+         *
+         * ⛔ SERVER TOMONI TEKSHIRILDI VA U TEGILMADI: `CaseUpdate.
+         *    resolution_note` — `str | None` va uning
+         *    `StringConstraints` ida faqat `max_length` bor, ⛔
+         *    `min_length` YO'Q, ya'ni bo'sh satr `422` bermaydi.
+         *    `COALESCE('', …)` esa `''` beradi — matn HAQIQATAN
+         *    o'chadi.
+         */
+        resolutionNote: note.trim(),
         assigneeUserId: assignee === "" ? null : assignee,
       },
       {

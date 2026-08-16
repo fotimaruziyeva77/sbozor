@@ -241,6 +241,107 @@ describe("⛔ G-32 (b)/(c): `0/0` — ANIQLANMAGAN, «nol foiz» EMAS", () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* WR-05 — YIQILGAN SO'ROV O'LCHANGAN FAKTNI DA'VO QILMAYDI                   */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ WR-05: so'rov YIQILGANDA blok ROST gapiradi", () => {
+  /**
+   * So'rovni yiqitadi va blokni chizadi.
+   *
+   * ⛔ `retry: false` MAJBURIY: qayta urinish testni sekinlashtirardi va
+   *    `isError` shoxiga yetib borish LAHZASINI noaniq qilardi.
+   */
+  async function renderFailed() {
+    apiClientMock.apiFetch.mockRejectedValue(new Error("tarmoq"));
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const view = render(
+      <NextIntlClientProvider
+        locale="uz-Latn"
+        messages={messages}
+        timeZone="Asia/Tashkent"
+      >
+        <QueryClientProvider client={client}>
+          <AuthProvider>
+            <HitRateCard day={DAY} />
+          </AuthProvider>
+        </QueryClientProvider>
+      </NextIntlClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(view.container.querySelector('[aria-busy="true"]')).toBeNull();
+    });
+
+    return view;
+  }
+
+  test("⛔ (c) FOIZ BELGISI DOM'da 0 marta va xato `role=\"alert\"` ICHIDA", async () => {
+    /*
+     * ⛔⛔ NOSOZLIK: yiqilgan so'rovda blok `recon.accuracyNone` ni
+     *     chizardi — matni «Hali hal qilingan nomuvofiqlik yo'q».
+     *     Bu ⛔ O'LCHANGAN QIYMAT DA'VOSI, holbuki haqiqat «o'lchov
+     *     UMUMAN kelmadi». Ikkalasi ⛔ QARAMA-QARSHI xulosa beradi:
+     *     birinchisi «navbat toza» deb xotirjam qilardi.
+     *
+     * ⛔ `null ?? 0` refleksi ham TAQIQ — u aynan shu yolg'onning
+     *    arifmetik shakli (05-14: «o'lchanmagan sonning o'rniga NOL
+     *    yozilmaydi»).
+     */
+    const { container } = await renderFailed();
+
+    /* ⛔ FOIZ BELGISI UMUMAN YO'Q — «0 ni yashirish» YETARLI EMAS. */
+    expect(((container.textContent ?? "").match(/%|％/gu) ?? []).length).toBe(0);
+
+    /* ⛔ XATO HOLATI KO'RINADI va u E'LON QILINADI. */
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert?.textContent).toContain(messages.errors.loadFailedBody);
+
+    /* ⛔ VA O'LCHANGAN FAKT DA'VOSI YO'Q. */
+    expect(container.textContent).not.toContain(messages.recon.accuracyNone);
+
+    /* ⛔ `0`, `NaN`, `Infinity` — hech biri chizilmaydi. */
+    expect(numbersIn(container)).toEqual([]);
+    expect(container.textContent).not.toContain("NaN");
+    expect(container.textContent).not.toContain("Infinity");
+  });
+
+  test("⛔ mazmun atributi YIQILGAN holatda ham TURADI", async () => {
+    /*
+     * ⛔ Sahifa darvozasi blok to'plamini TENGLIK bilan o'lchaydi:
+     *   xatoda atributning yo'qolishi «blok chizilmadi» degan BOSHQA
+     *   nosozlik bo'lib ko'rinardi.
+     */
+    const { container } = await renderFailed();
+
+    expect(
+      container.querySelector('[data-recon-content="hitrate"]'),
+    ).not.toBeNull();
+  });
+
+  test("MUVAFFAQIYATLI so'rovda `accuracyNone` HAMON chiziladi (nazorat)", async () => {
+    /*
+     * ⛔ NAZORAT MAJBURIY: `accuracyNone` ni BUTUNLAY olib tashlagan
+     *   regressiya yuqoridagi testni yashil qoldirardi — holbuki
+     *   «maxraj nol» shoxida u AYNAN to'g'ri matn.
+     */
+    const { container } = await renderCard({
+      justified: 0,
+      unjustified: 0,
+      new: 4,
+      in_review: 2,
+    });
+
+    expect(container.textContent).toContain(messages.recon.accuracyNone);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* (e) NISBAT SAQLANMAYDI                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -272,4 +373,61 @@ test("⛔ G-32 (e): nisbat MAYDON NOMI sifatida kodda yo'q", async () => {
 
   expect(source).not.toContain("hit_rate");
   expect(source).not.toContain("hitRate");
+});
+
+/* -------------------------------------------------------------------------- */
+/* IN-08 — BOZORSIZ SESSIYADA CHEKSIZ SKELET YO'Q                             */
+/* -------------------------------------------------------------------------- */
+
+test("⛔ IN-08: `marketId === null` da skelet EMAS, NOMLANGAN holat", () => {
+  /*
+   * ⛔ TanStack v5 da O'CHIRILGAN so'rov `isPending` holatida QOLADI —
+   *   ya'ni bu karta bozorsiz sessiyada ABADIY skelet ko'rsatardi.
+   *   `HeadlineCard` bu holatni ochiq qo'riqlaydi (`marketId === null`
+   *   -> so'rov ham, karta ham yo'q); recon bloklari esa yo'q edi.
+   */
+  clearSession();
+  setSession({
+    accessToken: "t",
+    markets: [],
+    principal: {
+      userId: "33333333-3333-4333-8333-333333333333",
+      phone: "+998900000000",
+      fullName: "Platforma admini",
+      roles: ["director"],
+      marketId: null,
+      marketName: null,
+      isPlatformAdmin: true,
+      locale: "uz-Latn",
+      mustChangePassword: false,
+    },
+  });
+
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  const { container } = render(
+    <NextIntlClientProvider
+      locale="uz-Latn"
+      messages={messages}
+      timeZone="Asia/Tashkent"
+    >
+      <QueryClientProvider client={client}>
+        <AuthProvider>
+          <HitRateCard day={DAY} />
+        </AuthProvider>
+      </QueryClientProvider>
+    </NextIntlClientProvider>,
+  );
+
+  expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(0);
+  expect(container.textContent).toContain(messages.recon.marketMissing);
+
+  /* ⛔ VA FOIZ BELGISI HAM YO'Q: o'lchov umuman boshlanmagan. */
+  expect((container.textContent ?? "").match(/%|％/gu) ?? []).toHaveLength(0);
+  expect(apiClientMock.apiFetch).not.toHaveBeenCalled();
+
+  /* ⛔ Mazmun atributi HAR holatda — sahifa darvozasi uni to'plamda kutadi. */
+  expect(container.querySelector('[data-recon-content="hitrate"]')).not.toBeNull();
 });
