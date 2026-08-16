@@ -1250,11 +1250,29 @@ async def digest_evening_task(context: Annotated[Context, TaskiqDepends()]) -> N
 async def overdue_reminder_task(context: Annotated[Context, TaskiqDepends()]) -> None:
     """YUPQA QOBIQ — kechikkan qarz eslatmasi (07-13, BOT-03).
 
-    ⛔ KUN BUGUNGI: kechikish chegarasi BUGUNDAN orqaga sanaladi
-       (`business_date - overdue_days`), ya'ni «bugun kimning qarzi
-       kechikkan?» savoli aynan bugungi kunni talab qiladi. Kechagi kun
-       berilsa chegara bir kunga orqaga surilardi va eng yangi kechikkan
-       qator eslatmani BIR KUN KECH olardi.
+    =========================================================================
+    ⛔⛔ KECHAGI KUN — `reconciliation_open_task` BILAN AYNAN BIR XIL, VA
+        BU 08-06 DA TUZATILGAN (WR-06).
+
+    Bu qobiq 07-fazada `business_today()` berardi, `recon.open` esa
+    `business_today() - 1`. Ikkala mexanizm ham AYNI knobdan
+    (`market_notification_settings.overdue_days`) yuradi deb e'lon
+    qilingan edi (D-19), lekin chegaralari HAR DOIM bir kunga farq
+    qilardi — ya'ni da'vo mahsulotda YOLG'ON edi va uni qo'riqlaydigan
+    test ikkalasiga ham QO'LDA bir xil kun uzatgani uchun buni
+    ko'rmasdi.
+
+    ⛔ SABAB MEXANIK: IKKALA MEXANIZM HAM **YOZILGAN** HISOB USTIDA
+       ISHLAYDI. Kunlik hisob D + 1 ning 04:10 da tug'iladi
+       (`BILLING_CLOSE_CRON`), ya'ni BUGUNGI kun bilan ishlash chegarani
+       hali MA'LUMOTI YO'Q kunga qadardi. Kechagi kun esa `billing_close`
+       ALLAQACHON yopgan kun.
+
+    ⚠ ESLATMA BIR KUN «KECHIKMAYDI»: chegara `overdue_days` kunlik va u
+      o'zgarmadi — faqat ikkala mexanizm ham endi BIR XIL kundan
+      sanaydi. Tenglik `test_overdue_reminder_shares_the_knob_with_case_
+      opening` da, ⛔ AYNAN SHU QOBIQLARDAN yuritib o'lchanadi.
+    =========================================================================
 
     ⚠ BIZNES-KUN QOBIQDA HISOBLANADI, jobda EMAS.
 
@@ -1265,7 +1283,7 @@ async def overdue_reminder_task(context: Annotated[Context, TaskiqDepends()]) ->
       bandi).
     """
     state = context.state
-    await overdue_reminder(state.sessionmaker, business_date=business_today())
+    await overdue_reminder(state.sessionmaker, business_date=business_today() - timedelta(days=1))
 
 
 async def enqueue_discovery(

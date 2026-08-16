@@ -85,7 +85,6 @@ ITERATSIYA bilan quriladi (pastdagi docstring).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import TYPE_CHECKING, Final
 
 from sbozor_core.enums import AnomalyKind, ReconciliationCaseStatus, ReconciliationSubjectKind
@@ -377,7 +376,7 @@ async def open_cases(
     *,
     market_id: UUID,
     business_date: date,
-    overdue_days: int,
+    cutoff: date,
 ) -> OpenCasesResult:
     """Ikkala sinf uchun ham case ochadi — IDEMPOTENT, bitta tranzaksiyada.
 
@@ -386,29 +385,32 @@ async def open_cases(
             shart (RLS beshala jadvalda `FORCE` bilan yoqilgan).
         business_date: qaysi kun tekshiriladi. ⛔ ARGUMENT, funksiya
             ichida hisoblanmaydi (`billing_close` / `day_close` qoidasi).
-        overdue_days: SINF A ning kechikish chegarasi —
-            `market_notification_settings.overdue_days`. ⛔ MAJBURIY va
-            standart qiymati YO'Q: chaqiruvchi uni bozor sozlamasidan
-            o'qishi SHART (modul docstringining 2-bandi). Standart
-            argument bu yerda «chegara unutilgan» holatini «chegara
-            qo'yilgan» dan ajratib bo'lmas qilardi.
+        cutoff: SINF A ning kechikish chegarasi — eng kech «kechikkan»
+            sanaladigan kun. ⛔ REPO UNI HISOBLAMAYDI, QO'LLAYDI:
+            qiymat `app.jobs.reconciliation.overdue_cutoff()` dan keladi
+            va BOT-03 (sotuvchi eslatmasi) ham AYNAN o'sha funksiyadan
+            oziqlanadi (D-19, WR-06). Bu yerda `business_date -
+            overdue_days` ni QAYTA yozish qoidaning ikkinchi ifodasini
+            tug'dirardi — 07-fazada aynan shu ajralish topilgan edi.
 
     Returns:
         `OpenCasesResult` — ikki sinfning sanog'i va o'tkazib yuborilgan
         (allaqachon mavjud) case'lar.
 
     Raises:
-        ValueError: `overdue_days` musbat bo'lmaganda. Sxema uni
+        ValueError: `cutoff` `business_date` dan oldin bo'lmaganda, ya'ni
+            `overdue_days < 1` ga TENG holat. Sxema uni
             `ck_market_notification_settings_overdue_days_positive` bilan
             allaqachon qulflagan, lekin funksiya `COALESCE` orqali kelgan
             kod standartini ham SHU YERDA rad etadi — aks holda noldagi
             chegara butun navbatni shovqinga aylantirardi va sabab
             sozlamada emas, KODDA bo'lardi.
     """
-    if overdue_days < 1:
+    if cutoff >= business_date:
         raise ValueError(
-            f"`overdue_days` musbat bo'lishi shart (berilgani: {overdue_days}). "
-            "Nol yoki manfiy chegara HAR hisob uchun case ochardi — to'lov kun "
+            f"`cutoff` ({cutoff}) `business_date` ({business_date}) dan OLDIN "
+            "bo'lishi shart, ya'ni `overdue_days` musbat bo'lishi shart. Nol "
+            "yoki manfiy chegara HAR hisob uchun case ochardi — to'lov kun "
             "davomida keladi, ya'ni ertalabki holat hamma sotuvchini qarzdor "
             "deb ko'rsatardi va navbat birinchi haftada shovqinga aylanardi "
             "(Pattern 5 / D-22)."
@@ -418,7 +420,7 @@ async def open_cases(
         session, market_id=market_id, business_date=business_date
     )
     unpaid_written, unpaid_skipped = await _open_unpaid_cases(
-        session, market_id=market_id, business_date=business_date, overdue_days=overdue_days
+        session, market_id=market_id, business_date=business_date, cutoff=cutoff
     )
     return OpenCasesResult(
         anomaly_cases=anomaly_written,
@@ -456,7 +458,7 @@ async def _open_anomaly_cases(
 
 
 async def _open_unpaid_cases(
-    session: AsyncSession, *, market_id: UUID, business_date: date, overdue_days: int
+    session: AsyncSession, *, market_id: UUID, business_date: date, cutoff: date
 ) -> tuple[int, int]:
     """SINF A — «to'lanmagan» ning ta'rifi MAHSULOT FUNKSIYALARIDAN chiqadi.
 
@@ -470,7 +472,10 @@ async def _open_unpaid_cases(
          KUNLARNI yopdi (`FIFO_OLDEST_SERVICE_DATE_FIRST`, D-24). Yopilgan
          kun case ochmaydi.
       3. `_OVERDUE_CHARGES` — taqsimlash natijasini `daily_charges.id` ga
-         qaytarib bog'laydi VA kechikish chegarasini qo'llaydi.
+         qaytarib bog'laydi VA kechikish chegarasini QO'LLAYDI.
+         ⛔ CHEGARA BU YERDA HISOBLANMAYDI: `cutoff` ARGUMENT bo'lib
+         keladi (`app.jobs.reconciliation.overdue_cutoff()`), ya'ni
+         BOT-03 ning eslatmasi bilan AYNAN bir qiymatdan yuradi (WR-06).
 
     ⚠ IKKINCHI QADAM SOTUVCHI KESIMIDA VA U N+1 SO'ROV BERADI. Narx ONGLI
       QABUL QILINGAN: yagona muqobil — taqsimlash qoidasini oyna funksiyasi
@@ -495,7 +500,6 @@ async def _open_unpaid_cases(
     if not debtors:
         return 0, 0
 
-    cutoff = business_date - timedelta(days=overdue_days)
     rows = (
         await session.execute(
             _OVERDUE_CHARGES,

@@ -67,7 +67,7 @@ from app.jobs.notifications import (
     digest_morning,
     overdue_reminder,
 )
-from app.jobs.reconciliation import overdue_cutoff, reconciliation_open
+from app.jobs.reconciliation import overdue_cutoff
 from app.repositories import digest_repo, outbox_repo
 from app.repositories.billing_repo import pending_projection
 from app.repositories.headline_repo import revenue_today_soum
@@ -1299,10 +1299,10 @@ async def test_overdue_vendors_uses_the_same_cutoff_as_case_opening(
 
     async with tenant_session(notify.market_id) as session:
         at_boundary = await digest_repo.overdue_vendors(
-            session, market_id=notify.market_id, as_of=today, overdue_days=3
+            session, market_id=notify.market_id, cutoff=overdue_cutoff(today, 3)
         )
         inside = await digest_repo.overdue_vendors(
-            session, market_id=notify.market_id, as_of=today, overdue_days=4
+            session, market_id=notify.market_id, cutoff=overdue_cutoff(today, 4)
         )
 
     assert [item.vendor_id for item in at_boundary] == [notify.vendor_id], (

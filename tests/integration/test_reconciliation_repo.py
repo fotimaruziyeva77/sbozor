@@ -46,6 +46,7 @@ import pytest
 from app.jobs.reconciliation import (
     DEFAULT_OVERDUE_DAYS,
     RECON_OPEN_COMPONENT,
+    overdue_cutoff,
     reconciliation_open,
 )
 from app.repositories.reconciliation_repo import (
@@ -411,7 +412,7 @@ async def test_open_cases_opens_one_case_per_case_worthy_anomaly(
             session,
             market_id=recon.market_id,
             business_date=day,
-            overdue_days=_OVERDUE_DAYS,
+            cutoff=overdue_cutoff(day, _OVERDUE_DAYS),
         )
 
     assert result.anomaly_cases == 2, f"ikkala sinf ham case ochishi kerak edi: {result}"
@@ -451,7 +452,7 @@ async def test_no_coverage_anomaly_never_opens_a_case(
             session,
             market_id=recon.market_id,
             business_date=day,
-            overdue_days=_OVERDUE_DAYS,
+            cutoff=overdue_cutoff(day, _OVERDUE_DAYS),
         )
 
     assert result.anomaly_cases == 0, (
@@ -489,7 +490,10 @@ async def test_open_cases_is_idempotent_across_two_runs(
 
     async with tenant_session(recon.market_id) as session:
         first = await open_cases(
-            session, market_id=recon.market_id, business_date=day, overdue_days=_OVERDUE_DAYS
+            session,
+            market_id=recon.market_id,
+            business_date=day,
+            cutoff=overdue_cutoff(day, _OVERDUE_DAYS),
         )
     after_first = _case_count(sync_owner_conn, recon.market_id)
     assert first.anomaly_cases == 1
@@ -497,7 +501,10 @@ async def test_open_cases_is_idempotent_across_two_runs(
 
     async with tenant_session(recon.market_id) as session:
         second = await open_cases(
-            session, market_id=recon.market_id, business_date=day, overdue_days=_OVERDUE_DAYS
+            session,
+            market_id=recon.market_id,
+            business_date=day,
+            cutoff=overdue_cutoff(day, _OVERDUE_DAYS),
         )
 
     assert _case_count(sync_owner_conn, recon.market_id) == after_first, (
@@ -539,7 +546,10 @@ async def test_a_fresh_unpaid_charge_stays_out_of_the_queue(
 
     async with tenant_session(recon.market_id) as session:
         result = await open_cases(
-            session, market_id=recon.market_id, business_date=today, overdue_days=_OVERDUE_DAYS
+            session,
+            market_id=recon.market_id,
+            business_date=today,
+            cutoff=overdue_cutoff(today, _OVERDUE_DAYS),
         )
 
     assert result.unpaid_cases == 0, (
@@ -571,7 +581,10 @@ async def test_a_charge_older_than_the_window_opens_a_case(
 
     async with tenant_session(recon.market_id) as session:
         result = await open_cases(
-            session, market_id=recon.market_id, business_date=today, overdue_days=_OVERDUE_DAYS
+            session,
+            market_id=recon.market_id,
+            business_date=today,
+            cutoff=overdue_cutoff(today, _OVERDUE_DAYS),
         )
 
     assert result.unpaid_cases == 1, f"kechikkan hisob navbatga tushmadi: {result}"
@@ -624,7 +637,10 @@ async def test_a_settled_vendor_gets_no_unpaid_case(
 
     async with tenant_session(recon.market_id) as session:
         result = await open_cases(
-            session, market_id=recon.market_id, business_date=today, overdue_days=_OVERDUE_DAYS
+            session,
+            market_id=recon.market_id,
+            business_date=today,
+            cutoff=overdue_cutoff(today, _OVERDUE_DAYS),
         )
 
     assert result.unpaid_cases == 0, (
@@ -645,12 +661,20 @@ async def test_open_cases_refuses_a_non_positive_threshold(
     Nol chegara HAR hisob uchun case ochardi. Sxema uni allaqachon
     to'sadi, lekin `COALESCE` orqali kelgan KOD standarti sxemani
     chetlab o'tardi.
+
+    ⚠ `overdue_days = 0` ENDI `cutoff == business_date` SHAKLIDA
+      beriladi (08-06): chegarani repo emas, JOB hisoblaydi
+      (`overdue_cutoff()`), ya'ni rad etish sharti ham shu qiymat
+      ustida yoziladi. O'lchanadigan xulq O'ZGARMADI.
     """
     today = _days_ago(sync_owner_conn, 0)
     async with tenant_session(recon.market_id) as session:
         with pytest.raises(ValueError, match="overdue_days"):
             await open_cases(
-                session, market_id=recon.market_id, business_date=today, overdue_days=0
+                session,
+                market_id=recon.market_id,
+                business_date=today,
+                cutoff=overdue_cutoff(today, 0),
             )
 
 
@@ -993,7 +1017,10 @@ async def test_case_evidence_returns_identifiers_only(
     )
     async with tenant_session(recon.market_id) as session:
         await open_cases(
-            session, market_id=recon.market_id, business_date=day, overdue_days=_OVERDUE_DAYS
+            session,
+            market_id=recon.market_id,
+            business_date=day,
+            cutoff=overdue_cutoff(day, _OVERDUE_DAYS),
         )
 
     row = sync_owner_conn.execute(
