@@ -164,7 +164,12 @@ describe("⛔ xato INLINE ko'rsatiladi (toast EMAS)", () => {
 
 describe("yuklanish holati", () => {
   test("⛔ `aria-busy=\"true\"` qo'yiladi va tugma MATNI o'zgarmaydi", async () => {
-    let release: (() => void) | null = null;
+    /*
+     * ⚠ `let release!: …` — ANIQ TAYINLASH e'loni. TS `Promise`
+     *   konstruktori ichidagi tayinlashni KUZATMAYDI va o'zgaruvchini
+     *   `null` deb toraytirib, chaqiruvni `never` ga aylantirardi.
+     */
+    let release!: () => void;
     reportQueriesMock.downloadReport.mockReturnValue(
       new Promise<void>((resolve) => {
         release = resolve;
@@ -185,7 +190,7 @@ describe("yuklanish holati", () => {
      */
     expect(button.textContent).toContain(messages.reports.export);
 
-    release?.();
+    release();
 
     await waitFor(() => expect(button.getAttribute("aria-busy")).toBe("false"));
   });
