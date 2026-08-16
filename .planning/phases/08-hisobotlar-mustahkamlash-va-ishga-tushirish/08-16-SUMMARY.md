@@ -396,10 +396,10 @@ klient-kontrakti chetlanishi ham MEXANIK ravishda majburlangan.
 |---|---|
 | `pytest tests/integration/test_three_way.py` | **EXIT 0 — 37 passed** |
 | `pytest tests/unit tests/integration/test_three_way.py` | **EXIT 0 — 1069+ passed** |
-| `pytest tests/tenancy` (registrlar yangilangandan keyin) | **EXIT 0** |
-| `pytest tests/tenancy/test_route_coverage.py + test_personal_data_coverage.py` | **EXIT 0 — 43 passed** |
+| `pytest tests/tenancy + test_phase6_criteria + test_reports_api` | **EXIT 0** (birlashgan yugurish) |
 | `pytest tests/integration/test_phase6_criteria.py` | **EXIT 0 — 12 passed** |
 | `pytest tests/integration/test_reports_api.py` | **EXIT 0 — 63 passed** |
+| ⛔ OXIRGI HOLATDA (`05883f4` + `8054a51` dan KEYIN): `tests/tenancy/test_route_coverage.py` + `test_personal_data_coverage.py` + `tests/unit/test_xlsx_export.py` | **EXIT 0 — 82 passed** |
 | `ruff check .` / `ruff format --check .` | **All checks passed / 369 fayl** |
 | `mypy .` | **Success: 357 fayl, xato yo'q** |
 | `node --test frontend/scripts/*.test.mjs` | **295 passed, 0 fail** |
