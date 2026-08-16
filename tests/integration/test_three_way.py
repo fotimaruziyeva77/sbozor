@@ -943,6 +943,20 @@ class CompareEnv:
         """A bozorining `index`-rastasi — seed RO'YXATIDAN, so'rovsiz."""
         return self.domain.market_a.stall_ids[index]
 
+    def billed_stall(self, index: int) -> UUID:
+        """⛔ BILLING TOIFASI BERILGAN rasta — tarif izlash yo'li uchun.
+
+        `billing_domain._seed_market_a()` toifa davrini FAQAT to'rtta
+        rastaga beradi (`billed_stalls`); qolgan ikkitasida esa
+        `market_domain` ning O'Z toifasi qoladi va uning tarifi BOSHQA
+        son (`A_TARIFF_AMOUNTS`). Bu O'LCHANDI: hisobsiz band rasta
+        12 000 qaytardi, 15 000 emas. Ya'ni tarif izlash yo'lini
+        o'lchaydigan test AYNAN shu ro'yxatdan rasta olishi kerak — aks
+        holda u `market_domain` ning tarifini o'lchab, «noto'g'ri tarif»
+        degan YOLG'ON xulosa berardi.
+        """
+        return (self.stall(3), self.stall(4), self.stall(0), self.stall(5))[index]
+
 
 @pytest.fixture
 def compare(
@@ -981,6 +995,22 @@ def compare(
             )
             sync_owner_conn.execute(
                 "DELETE FROM stall_slot_occupancy WHERE market_id = ANY(%s::uuid[])", (market_ids,)
+            )
+            # ⛔ BOZOR AVVAL QORALAMAGA TUSHIRILADI — `add_late_tariff()`
+            #    qatorining `valid_from` i BUGUN va `0008` faol bozorda
+            #    bunday qatorni O'CHIRISHNI `23514` bilan rad etadi
+            #    (`cleanup_billing_domain()` ning aynan birinchi qadami va
+            #    aynan sababi). Bayroq bir necha satr keyin baribir
+            #    tushiriladi, ya'ni bu semantik jihatdan HALOL.
+            sync_owner_conn.execute(
+                "UPDATE markets SET is_active = false WHERE id = ANY(%s::uuid[])", (market_ids,)
+            )
+            # ⚠ SUMMA BO'YICHA: `LATE_TARIFF_SOUM` boshqa birorta seedda
+            #   uchramaydi (5 000 / 8 000 / 12 000 / 15 000 / 20 000), ya'ni
+            #   bu shart faqat SHU testlar yozgan qatorlarni tanlaydi.
+            sync_owner_conn.execute(
+                "DELETE FROM tariffs WHERE market_id = ANY(%s::uuid[]) AND amount_soum = %s",
+                (market_ids, LATE_TARIFF_SOUM),
             )
 
 
@@ -1120,6 +1150,14 @@ def charge_and_pay(
     ⛔ `paid_soum is None` — «hisob bor, to'lov YO'Q» va u O'LCHANGAN
        nol: tizim ustunidagi `0` haqiqiy nol (UI-SPEC §10.4), ya'ni u
        AI-kutilgan ustunining bo'sh katagi bilan ARALASHTIRILMAYDI.
+
+    ⚠ `quote_soum = paid_soum` — ⛔ `TARIFF_SOUM` EMAS va bu SXEMA
+      talabidan: `ck_payments_override_is_paired` server summasidan
+      chetlangan to'lovdan `override_reason` ni MAJBURIY qiladi
+      (o'lchandi: `CheckViolation`). Sababni to'qib yozish testga
+      solishtiruvga umuman aloqasi yo'q ikkinchi holat (chetlanish
+      sababi) kiritardi; teng qo'yish esa «server shu summani so'radi»
+      degan halol, sodda holatni beradi.
     """
     add_daily_charge(
         conn,
@@ -1140,7 +1178,7 @@ def charge_and_pay(
         shift_id=env.live.open_shift_id,
         service_date=env.day,
         amount_soum=paid_soum,
-        quote_soum=TARIFF_SOUM,
+        quote_soum=paid_soum,
     )
 
 
@@ -1162,6 +1200,19 @@ def add_late_tariff(conn: Connection[TupleRow], env: CompareEnv) -> None:
             env.day + timedelta(days=1),
         ),
     )
+
+
+def _code_of(conn: Connection[TupleRow], stall_id: UUID) -> str:
+    """Rasta kodi — ⛔ BAZADAN, seed ro'yxatining TARTIBIDAN emas.
+
+    `test_report_repo.py::_STALL_CODE` da o'rnatilgan qoida: qo'shni
+    faylning ro'yxat tartibiga tayangan test u qayta tartiblangan kuni
+    BOSHQA obyektni o'lchardi va buni SEZMASDI ham.
+    """
+    row = conn.execute("SELECT code FROM stalls WHERE id = %s", (str(stall_id),)).fetchone()
+    assert row is not None, f"nazorat: {stall_id} rastasi yo'q"
+    code: str = row[0]
+    return code
 
 
 def by_code(report: ThreeWayReport) -> dict[str, Any]:
@@ -1206,9 +1257,7 @@ async def test_the_three_columns_come_from_three_independent_sources(
     )
 
     async with tenant_session(compare.market_id) as session:
-        report = await three_way(
-            session, market_id=compare.market_id, business_date=compare.day
-        )
+        report = await three_way(session, market_id=compare.market_id, business_date=compare.day)
 
     assert report.day == compare.day
     assert report.has_ledger is True
@@ -1277,9 +1326,7 @@ async def test_an_unmeasured_ai_column_is_never_the_same_as_a_measured_zero(
         )
 
     async with tenant_session(compare.market_id) as session:
-        report = await three_way(
-            session, market_id=compare.market_id, business_date=compare.day
-        )
+        report = await three_way(session, market_id=compare.market_id, business_date=compare.day)
 
     rows = by_code(report)
     assert rows[A_STALL_CODES[0]].ai_expected_soum == 0, (
@@ -1309,9 +1356,7 @@ async def test_the_report_carries_four_counters_and_no_total_field(
        ONGLI bo'lishi va shu qatorda ko'rinishi kerak (D-18).
     """
     async with tenant_session(compare.market_id) as session:
-        report = await three_way(
-            session, market_id=compare.market_id, business_date=compare.day
-        )
+        report = await three_way(session, market_id=compare.market_id, business_date=compare.day)
 
     assert {field.name for field in fields(report)} == {
         "day",
@@ -1348,9 +1393,7 @@ async def test_a_day_without_a_ledger_returns_no_rows_at_all(
     charge_and_pay(sync_owner_conn, compare, stall_id=stall_id, paid_soum=TARIFF_SOUM)
 
     async with tenant_session(compare.market_id) as session:
-        report = await three_way(
-            session, market_id=compare.market_id, business_date=compare.day
-        )
+        report = await three_way(session, market_id=compare.market_id, business_date=compare.day)
 
     assert report.has_ledger is False
     assert report.rows == ()
@@ -1384,7 +1427,7 @@ async def test_yesterdays_expectation_uses_yesterdays_tariff(
        25 000 qaytarardi va uch ustundan ikkitasi bir savolga IKKI XIL
        javob berardi.
     """
-    charged_stall, uncharged_stall = compare.stall(0), compare.stall(1)
+    charged_stall, uncharged_stall = compare.billed_stall(2), compare.billed_stall(3)
 
     occupy(sync_owner_conn, compare, stall_id=charged_stall, center=(0.28, 0.68))
     occupy(
@@ -1408,15 +1451,16 @@ async def test_yesterdays_expectation_uses_yesterdays_tariff(
         )
 
     async with tenant_session(compare.market_id) as session:
-        report = await three_way(
-            session, market_id=compare.market_id, business_date=compare.day
-        )
+        report = await three_way(session, market_id=compare.market_id, business_date=compare.day)
 
     rows = by_code(report)
-    assert rows[A_STALL_CODES[0]].ai_expected_soum == TARIFF_SOUM, (
+    charged_row = rows[_code_of(sync_owner_conn, charged_stall)]
+    uncharged_row = rows[_code_of(sync_owner_conn, uncharged_stall)]
+
+    assert charged_row.ai_expected_soum == TARIFF_SOUM, (
         "hisobi bor rastaning kutilgani MUZLATILGAN tarifdan olinishi kerak edi"
     )
-    assert rows[A_STALL_CODES[1]].ai_expected_soum == TARIFF_SOUM, (
+    assert uncharged_row.ai_expected_soum == TARIFF_SOUM, (
         "hisobsiz band rastaning kutilgani O'SHA KUNNING tarifidan olinishi kerak edi"
     )
-    assert rows[A_STALL_CODES[0]].ai_expected_soum != LATE_TARIFF_SOUM
+    assert charged_row.ai_expected_soum != LATE_TARIFF_SOUM
