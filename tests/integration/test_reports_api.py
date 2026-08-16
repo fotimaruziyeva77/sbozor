@@ -67,7 +67,7 @@ from sbozor_core.enums import AuditAction
 from sbozor_core.timeutil import business_today
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from datetime import date
 
     import httpx
@@ -77,6 +77,8 @@ if TYPE_CHECKING:
     from fixtures.auth_users import AuthSeed
     from psycopg import Connection
     from psycopg.rows import TupleRow
+
+    DebtorFactory = Callable[[int], list[UUID]]
 
 REVENUE_URL = "/api/v1/reports/revenue"
 DEBTORS_URL = "/api/v1/reports/debtors"
@@ -128,6 +130,10 @@ yo'lining aynan oqibati). Ikki hajm birga o'lchanganda da'vo
 _INSERT_VENDOR = (
     "INSERT INTO vendors (id, market_id, full_name, phone_e164) VALUES (%s, %s, %s, %s)"
 )
+_DRAFT_MARKET = "UPDATE markets SET is_active = false WHERE id = %s"
+_DELETE_THEIR_CHARGES = (
+    "DELETE FROM daily_charges WHERE market_id = %s AND vendor_id = ANY(%s::uuid[])"
+)
 _DELETE_VENDORS = "DELETE FROM vendors WHERE id = ANY(%s::uuid[])"
 """Ommaviy sotuvchi qatorlari — ⛔ XOM SQL SHU MODULDA, `fixtures/` DA EMAS.
 
@@ -135,10 +141,28 @@ _DELETE_VENDORS = "DELETE FROM vendors WHERE id = ANY(%s::uuid[])"
 rejaning `files_modified` ini cheklaydi va umumiy seed'ga ko'chirish
 boshqa fayllarning darvozalarini bu faylning ehtiyojiga bog'lardi.
 
-⚠ TOZALASH MAJBURIY VA U `cleanup_billing_domain()` DAN CHIQMAYDI: u
-  `vendors` ni `market_id` bo'yicha emas, seed'ning O'Z ro'yxati bo'yicha
-  o'chiradi (`cleanup_market_domain()`), ya'ni bu qatorlar keyingi
-  testlarga sizib o'tardi va qarzdorlik sanoqlari jimgina o'sardi.
+=============================================================================
+⛔⛔ TOZALASH UCH QADAMLI VA UCHALASI HAM MAJBURIY — O'LCHANGAN.
+
+  1. `UPDATE markets SET is_active = false` — `0020` `daily_charges` ga
+     SHARTSIZ (`P0001`) o'zgarmaslik qo'riqchisini qo'ygan va `DELETE`
+     uchun YAGONA istisno QORALAMA bozor. Usiz birinchi `DELETE` darhol
+     yiqilardi (`cleanup_billing_domain()` ning aynan birinchi qadami);
+  2. `daily_charges` ⛔ SOTUVCHIDAN OLDIN: `fk_daily_charges_market_id_
+     vendor_id_vendors` da `ondelete` YO'Q va teskari tartib
+     `ForeignKeyViolation` beradi (bu ijroda BIR MARTA o'lchandi —
+     beshta test AYNAN shu bilan qizardi);
+  3. `vendors` — ⛔ VA U `cleanup_billing_domain()` DAN CHIQMAYDI: u
+     `vendors` ni `market_id` bo'yicha emas, seed'ning O'Z ro'yxati
+     bo'yicha o'chiradi (`cleanup_market_domain()`), ya'ni bu qatorlar
+     keyingi testlarga sizib o'tardi va `cleanup_two_markets()` ning
+     `DELETE FROM markets` i FK bilan yiqilardi.
+
+⚠ `is_active` QAYTA YOQILMAYDI: `env` teardowni (`cleanup_billing_domain`)
+  baribir o'sha bayroqni tushiradi va bozor bir necha satr keyin butunlay
+  o'chiriladi (o'sha funksiyaning docstringidagi «semantik jihatdan
+  HALOL» qadamining aynan takrori).
+=============================================================================
 """
 
 
@@ -392,6 +416,33 @@ def _seed_many_debtors(conn: Connection[TupleRow], env: Env, count: int) -> list
     return vendor_ids
 
 
+@pytest.fixture
+def debtors(sync_owner_conn: Connection[TupleRow], reports: Env) -> Iterator[DebtorFactory]:
+    """Qarzdor sotuvchilarni yaratadi va ⛔ UCH QADAMDA tozalaydi.
+
+    ⛔ TOZALASH FIXTURE'DA, TESTNING `finally` IDA EMAS — va bu farq
+       o'lchangan: `finally` bloki har testda TAKRORLANARDI va bittasida
+       unutilgan tartib (sotuvchi hisobdan OLDIN) butun to'plamni
+       `ForeignKeyViolation` bilan yiqitardi. Fixture tartibni BIR JOYDA
+       saqlaydi (`_DELETE_VENDORS` docstringidagi uch qadam).
+    """
+    created: list[UUID] = []
+
+    def _make(count: int) -> list[UUID]:
+        vendor_ids = _seed_many_debtors(sync_owner_conn, reports, count)
+        created.extend(vendor_ids)
+        return vendor_ids
+
+    try:
+        yield _make
+    finally:
+        if created:
+            ids = [str(vendor_id) for vendor_id in created]
+            sync_owner_conn.execute(_DRAFT_MARKET, (str(reports.market_id),))
+            sync_owner_conn.execute(_DELETE_THEIR_CHARGES, (str(reports.market_id), ids))
+            sync_owner_conn.execute(_DELETE_VENDORS, (ids,))
+
+
 async def _vendor_read_count(
     tenant_session: TenantSessionFactory, market_id: UUID, *, reason: str
 ) -> int:
@@ -585,10 +636,10 @@ async def test_the_other_markets_director_never_sees_market_a_rows(
 @pytest.mark.parametrize("vendor_count", [3, MANY_VENDORS], ids=["uch", "ikki-yuz"])
 async def test_one_debtors_request_writes_exactly_one_audit_row(
     api_client: httpx.AsyncClient,
-    sync_owner_conn: Connection[TupleRow],
     tenant_session: TenantSessionFactory,
     reports: Env,
     director_headers: dict[str, str],
+    debtors: DebtorFactory,
     vendor_count: int,
 ) -> None:
     """⛔⛔ SANOQ NATIJAGA BOG'LIQ EMAS — 3 QARZDORDA HAM, 200 DA HAM AYNAN 1.
@@ -607,31 +658,26 @@ async def test_one_debtors_request_writes_exactly_one_audit_row(
     ⚠ FON VAZIFASI KUTILMAYDI: `httpx.ASGITransport` `BackgroundTasks` ni
       javob qaytarilishidan OLDIN bajaradi (modul docstringi).
     """
-    vendor_ids = _seed_many_debtors(sync_owner_conn, reports, vendor_count)
-    try:
-        before = await _vendor_read_count(
-            tenant_session, reports.market_id, reason="report_receivables"
-        )
+    debtors(vendor_count)
+    before = await _vendor_read_count(
+        tenant_session, reports.market_id, reason="report_receivables"
+    )
 
-        response = await api_client.get(
-            DEBTORS_URL, params=_period(days=vendor_count + 1), headers=director_headers
-        )
+    response = await api_client.get(
+        DEBTORS_URL, params=_period(days=vendor_count + 1), headers=director_headers
+    )
 
-        assert response.status_code == 200, response.text
-        assert len(response.json()["rows"]) == vendor_count, (
-            "nazorat: qarzdorlar ro'yxati kutilgan hajmda emas — sanoq BO'SH-ROST bo'lardi"
-        )
+    assert response.status_code == 200, response.text
+    assert len(response.json()["rows"]) == vendor_count, (
+        "nazorat: qarzdorlar ro'yxati kutilgan hajmda emas — sanoq BO'SH-ROST bo'lardi"
+    )
 
-        after = await _vendor_read_count(
-            tenant_session, reports.market_id, reason="report_receivables"
-        )
+    after = await _vendor_read_count(tenant_session, reports.market_id, reason="report_receivables")
 
-        assert after - before == 1, (
-            f"{vendor_count} qarzdorli so'rov {after - before} ta audit qatori yozdi — "
-            "kutilgan AYNAN 1 (bitta so'rov = bitta o'qish hodisasi, D-09)"
-        )
-    finally:
-        sync_owner_conn.execute(_DELETE_VENDORS, ([str(vid) for vid in vendor_ids],))
+    assert after - before == 1, (
+        f"{vendor_count} qarzdorli so'rov {after - before} ta audit qatori yozdi — "
+        "kutilgan AYNAN 1 (bitta so'rov = bitta o'qish hodisasi, D-09)"
+    )
 
 
 @pytest.mark.parametrize("url", [REVENUE_URL, ANOMALIES_URL], ids=["revenue", "anomalies"])
@@ -807,9 +853,9 @@ async def test_a_period_over_the_row_limit_is_refused_not_truncated(
 
 async def test_the_row_limit_counts_the_whole_period_not_the_page(
     api_client: httpx.AsyncClient,
-    sync_owner_conn: Connection[TupleRow],
     reports: Env,
     director_headers: dict[str, str],
+    debtors: DebtorFactory,
     tiny_row_limit: None,
 ) -> None:
     """⛔ CHEGARA `row_count` GA QARAYDI — `limit` BILAN AYLANIB O'TILMAYDI.
@@ -820,22 +866,20 @@ async def test_the_row_limit_counts_the_whole_period_not_the_page(
     (T-08-30) mexanik ravishda bo'shab qolardi.
     """
     latest = _last_closed_day()
-    vendor_ids = _seed_many_debtors(sync_owner_conn, reports, 2)
-    try:
-        response = await api_client.get(
-            DEBTORS_URL,
-            params={
-                "from": (latest - timedelta(days=3)).isoformat(),
-                "to": latest.isoformat(),
-                "limit": "1",
-            },
-            headers=director_headers,
-        )
+    debtors(2)
 
-        assert response.status_code == 422, response.text
-        assert response.json()["detail"] == "report_too_large", response.text
-    finally:
-        sync_owner_conn.execute(_DELETE_VENDORS, ([str(vid) for vid in vendor_ids],))
+    response = await api_client.get(
+        DEBTORS_URL,
+        params={
+            "from": (latest - timedelta(days=3)).isoformat(),
+            "to": latest.isoformat(),
+            "limit": "1",
+        },
+        headers=director_headers,
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "report_too_large", response.text
 
 
 # ===========================================================================
@@ -958,9 +1002,9 @@ async def test_the_revenue_row_carries_the_server_computed_difference(
 
 async def test_the_page_shrinks_but_the_period_totals_do_not(
     api_client: httpx.AsyncClient,
-    sync_owner_conn: Connection[TupleRow],
     reports: Env,
     director_headers: dict[str, str],
+    debtors: DebtorFactory,
 ) -> None:
     """⛔⛔ `row_count` BUTUN DAVRNIKI, `shown_count` — SAHIFANIKI.
 
@@ -975,34 +1019,32 @@ async def test_the_page_shrinks_but_the_period_totals_do_not(
     =======================================================================
     """
     latest = _last_closed_day()
-    vendor_ids = _seed_many_debtors(sync_owner_conn, reports, 2)
-    try:
-        response = await api_client.get(
-            DEBTORS_URL,
-            params={
-                "from": (latest - timedelta(days=3)).isoformat(),
-                "to": latest.isoformat(),
-                "limit": "1",
-            },
-            headers=director_headers,
-        )
+    debtors(2)
 
-        assert response.status_code == 200, response.text
-        payload = response.json()
+    response = await api_client.get(
+        DEBTORS_URL,
+        params={
+            "from": (latest - timedelta(days=3)).isoformat(),
+            "to": latest.isoformat(),
+            "limit": "1",
+        },
+        headers=director_headers,
+    )
 
-        assert len(payload["rows"]) == 1, payload
-        assert payload["shown_count"] == 1, payload
-        assert payload["row_count"] == 2, payload
-        assert payload["total_outstanding_soum"] == 2 * TARIFF_SOUM, payload
-    finally:
-        sync_owner_conn.execute(_DELETE_VENDORS, ([str(vid) for vid in vendor_ids],))
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert len(payload["rows"]) == 1, payload
+    assert payload["shown_count"] == 1, payload
+    assert payload["row_count"] == 2, payload
+    assert payload["total_outstanding_soum"] == 2 * TARIFF_SOUM, payload
 
 
 async def test_the_offset_walks_the_period_without_moving_the_totals(
     api_client: httpx.AsyncClient,
-    sync_owner_conn: Connection[TupleRow],
     reports: Env,
     director_headers: dict[str, str],
+    debtors: DebtorFactory,
 ) -> None:
     """`offset` ikkinchi qatorni beradi va yig'indi O'ZGARMAYDI.
 
@@ -1011,22 +1053,20 @@ async def test_the_offset_walks_the_period_without_moving_the_totals(
       va test baribir yashil qolardi.
     """
     latest = _last_closed_day()
-    vendor_ids = _seed_many_debtors(sync_owner_conn, reports, 2)
-    try:
-        params = {
-            "from": (latest - timedelta(days=3)).isoformat(),
-            "to": latest.isoformat(),
-            "limit": "1",
-        }
-        first = await api_client.get(DEBTORS_URL, params=params, headers=director_headers)
-        second = await api_client.get(
-            DEBTORS_URL, params={**params, "offset": "1"}, headers=director_headers
-        )
+    debtors(2)
 
-        assert first.status_code == 200, first.text
-        assert second.status_code == 200, second.text
-        assert first.json()["rows"][0]["vendor_id"] != second.json()["rows"][0]["vendor_id"]
-        assert second.json()["row_count"] == 2
-        assert second.json()["total_outstanding_soum"] == 2 * TARIFF_SOUM
-    finally:
-        sync_owner_conn.execute(_DELETE_VENDORS, ([str(vid) for vid in vendor_ids],))
+    params = {
+        "from": (latest - timedelta(days=3)).isoformat(),
+        "to": latest.isoformat(),
+        "limit": "1",
+    }
+    first = await api_client.get(DEBTORS_URL, params=params, headers=director_headers)
+    second = await api_client.get(
+        DEBTORS_URL, params={**params, "offset": "1"}, headers=director_headers
+    )
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["rows"][0]["vendor_id"] != second.json()["rows"][0]["vendor_id"]
+    assert second.json()["row_count"] == 2
+    assert second.json()["total_outstanding_soum"] == 2 * TARIFF_SOUM
