@@ -78,6 +78,14 @@ WORKDIR /app/services/bot-service
 
 RUN pybabel compile --directory app/locales --domain bot --statistics
 
+# ⛔ STANDART BUYRUQ — YUQORIDAGI VA'DANING BAJARILADIGAN QISMI (IN-01).
+#    `compose.yaml` dagi `bot-tests` bu qatorni AYNI qiymat bilan
+#    qoplaydi, ya'ni bu yerdagi `CMD` compose yo'liga TEGMAYDI. U faqat
+#    «mount'siz `docker run` ham ishlasin» jumlasini ROST qiladi: usiz
+#    konteyner buyruqsiz ishga tushmasdi va va'da o'lchanmagan bo'lib
+#    qolardi.
+CMD ["pytest", "-q"]
+
 
 # ---------- runtime: dev bog'liqliklarisiz, non-root ----------
 FROM base AS runtime
@@ -99,3 +107,11 @@ USER appuser
 
 # `python -m app.main` aynan shu katalogdan hal bo'ladi.
 WORKDIR /app/services/bot-service
+
+# ⛔ `python -m` — VA `modul:atribut` SHAKLI EMAS: aiogram uvicorn/taskiq
+#    kabi obyektni argument sifatida QABUL QILMAYDI (`compose.yaml` ning
+#    `bot-service` bloki va `app/main.py` ning `main` atributi ustidagi
+#    docstring). `compose.yaml` shu buyruqni AYNI qiymat bilan qoplaydi —
+#    bu qator image'ni O'ZI TO'LIQ qiladi, ya'ni buyruqsiz `docker run`
+#    ham botni ishga tushiradi (IN-01).
+CMD ["python", "-m", "app.main"]

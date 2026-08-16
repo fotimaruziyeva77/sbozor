@@ -182,7 +182,24 @@ async def _main() -> None:
         #   ilmoq qo'shish darvozaning predikatini kengaytirishni talab
         #   qilardi. Klientni yopish esa ilmoq semantikasiga muhtoj
         #   emas: u aynan shu korutina tugaganda kerak.
+        #
+        # =================================================================
+        # ⛔ UCHALA RESURS HAM SHU YERDA YOPILADI (IN-07).
+        #
+        # `start_polling` odatda `storage` va `bot.session` ni o'zi
+        # yopadi, LEKIN yuqoridagi `TelegramConflictError` yo'lida bu
+        # KAFOLATLANMAGAN: istisno `start_polling` ning ichki
+        # tozalashidan o'tib ketishi mumkin va o'shanda jarayon ochiq
+        # Valkey ulanish puli va ochiq HTTP sessiya bilan yiqilardi.
+        # `restart: unless-stopped` ostida bu har qayta urinishda
+        # takrorlanardi.
+        #
+        # ⚠ UCHALASI HAM IDEMPOTENT: `start_polling` ularni allaqachon
+        #   yopgan bo'lsa bu chaqiruvlar shunchaki no-op bo'ladi.
+        # =================================================================
         await core.aclose()
+        await storage.close()
+        await bot.session.close()
 
 
 main = _main
