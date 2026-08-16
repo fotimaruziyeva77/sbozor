@@ -199,15 +199,24 @@ describe("⛔ topilmagan ism — BO'SH KATAK, LEKIN NOMLANGAN", () => {
     expect(namedCell.textContent).toContain("Alisher Qodirov");
 
     /*
-     * ⛔ BIRINCHI YARIM — VIZUAL BO'SHLIK: katakning BEVOSITA matn
-     *   tugunlari yo'q. To'qilgan qiymat (tire, «noma'lum», raqamli
-     *   yorliq) shu darvozada QIZARADI.
+     * ⛔ BIRINCHI YARIM — VIZUAL BO'SHLIK: katakda skrinriderga
+     *   YASHIRILMAGAN biror matn ⛔ YO'Q.
+     *
+     * ⚠⚠ BU ASSERT SABOTAJ BILAN QAYTA YOZILDI (o'lchov, 08-13 Task 3).
+     *   Dastlabki shakli katakning BEVOSITA matn tugunlarini sanardi va
+     *   u ⛔ YOLG'ON-YASHIL edi: `<span>` ichiga o'ralgan to'qilgan
+     *   qiymat bevosita tugun EMAS, ya'ni «tire qo'shildi» sabotaji bu
+     *   yarmini UMUMAN qizartirmasdi (o'lchandi). Haqiqiy da'vo esa
+     *   ⛔ KO'RINADIGAN matn haqida, razmetka chuqurligi haqida emas —
+     *   shuning uchun `sr-only` shajaralari AYIRILADI.
      */
-    const directText = [...unknownCell.childNodes]
-      .filter((node) => node.nodeType === node.TEXT_NODE)
-      .map((node) => node.textContent?.trim() ?? "")
-      .filter((text) => text !== "");
-    expect(directText).toEqual([]);
+    const hiddenText = [...unknownCell.querySelectorAll(".sr-only")]
+      .map((node) => node.textContent ?? "")
+      .join("");
+    const visibleText = (unknownCell.textContent ?? "")
+      .replace(hiddenText, "")
+      .trim();
+    expect(visibleText).toBe("");
 
     /*
      * ⛔ IKKINCHI YARIM — SEMANTIK NOM: bo'sh `<td>` skrinriderda
