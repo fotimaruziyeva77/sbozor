@@ -535,23 +535,23 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 08-12-PLAN.md — `.xlsx` eksport marshrutlari va bayt-tasnif darvozasining KENGAYTIRILISHI (W3)
-- [ ] 08-13-PLAN.md — Frontend Y-1a: tushum va qarzdorlik ko'rinishlari (G-39) (W3)
+- [x] 08-12-PLAN.md — `.xlsx` eksport marshrutlari va bayt-tasnif darvozasining KENGAYTIRILISHI (W3)
+- [x] 08-13-PLAN.md — Frontend Y-1a: tushum va qarzdorlik ko'rinishlari (G-39) (W3)
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 08-14-PLAN.md — Daftar importi: to'rtinchi shablon turi, validator, all-or-nothing marshrut (W4)
-- [ ] 08-15-PLAN.md — Frontend Y-1b: nomuvofiqlik arxivi va aniqlik bloki (G-40 a/b) (W4)
+- [x] 08-14-PLAN.md — Daftar importi: to'rtinchi shablon turi, validator, all-or-nothing marshrut (W4)
+- [x] 08-15-PLAN.md — Frontend Y-1b: nomuvofiqlik arxivi va aniqlik bloki (G-40 a/b) (W4)
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 08-16-PLAN.md — Uch tomonlama solishtiruv: hosila so'rov, marshrutlar, imzoli eksport (W5)
-- [ ] 08-17-PLAN.md — Frontend: `/reports` sahifasi, blok darvozasi (G-37), navigatsiya, manba skani (W5)
+- [x] 08-16-PLAN.md — Uch tomonlama solishtiruv: hosila so'rov, marshrutlar, imzoli eksport (W5)
+- [x] 08-17-PLAN.md — Frontend: `/reports` sahifasi, blok darvozasi (G-37), navigatsiya, manba skani (W5)
 
 **Wave 6** *(blocked on Wave 5)*
 
-- [ ] 08-18-PLAN.md — Frontend Y-3: solishtiruv sahifasi, daftar importi, uch farq sinfi (W6)
-- [ ] 08-19-PLAN.md — Go-live runbook, `08-HUMAN-UAT.md` va runbook shakli darvozasi (W6)
+- [x] 08-18-PLAN.md — Frontend Y-3: solishtiruv sahifasi, daftar importi, uch farq sinfi (W6)
+- [x] 08-19-PLAN.md — Go-live runbook, `08-HUMAN-UAT.md` va runbook shakli darvozasi (W6)
 
 **Wave 7** *(blocked on Wave 6)*
 
@@ -614,7 +614,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Tekshirildi (human_needed — 4/5 to'liq, SC2 ONNX'ga bog'liq) | 2026-08-16 |
 | 6. Billing va kassir | 14/14 | Complete   | 2026-08-11 |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 23/23 | Complete   | 2026-08-13 |
-| 8. Hisobotlar, mustahkamlash va ishga tushirish | 11/20 | In Progress|  |
+| 8. Hisobotlar, mustahkamlash va ishga tushirish | 19/20 | In Progress|  |
 
 ---
 *Roadmap yaratildi: 2026-07-29*
