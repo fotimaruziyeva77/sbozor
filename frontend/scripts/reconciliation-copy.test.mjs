@@ -1269,7 +1269,21 @@ test("⛔ G-34 (07-UI-SPEC) (b): NAZORAT — detektor sun'iy da'voni USHLAYDI", 
 /* NAVIGATSIYA — M-5 NING MEXANIK SHAKLI                                      */
 /* -------------------------------------------------------------------------- */
 
-test("⛔ NAV: reyestr AYNAN 16 yozuv va yangi huquq QO'SHILMAGAN", () => {
+test("⛔ NAV: reyestr AYNAN 17 yozuv va yangi huquq QO'SHILMAGAN", () => {
+  /*
+   * ⛔⛔ 16 -> 17: BU BO'SHATISH EMAS, ⛔ HUJJATLASHGAN O'SISH.
+   *
+   * 08-UI-SPEC §4.7 [M-5] raqamni NOMMA-NOM yozgan: «`NAV_ITEMS`
+   * 16→17», va o'sish AYNAN bitta yozuv — «Hisobotlar» (`/reports`).
+   * ⛔ Sanoq bilan BIRGA yangi yozuvning JOYI ham qulflandi, ya'ni
+   * darvoza avvalgisidan KUCHLIROQ: yalang'och sanoqni oshirish
+   * «bittasi qo'shildi, lekin qayerga?» degan savolni ochiq
+   * qoldirardi va navigatsiya tartibi (mobil panelning birinchi
+   * to'rttasi shundan chiqadi) o'lchanmay qolardi.
+   *
+   * ⚠ Kassir/nazoratchi paneli esa QUYIDAGI testda alohida o'lchanadi
+   *   va u O'ZGARMAYDI: `report_view` ikkalasida ham YO'Q.
+   */
   const shell = stripComments(read(APP_SHELL));
   const block = shell.slice(
     shell.indexOf("const NAV_ITEMS"),
@@ -1278,13 +1292,23 @@ test("⛔ NAV: reyestr AYNAN 16 yozuv va yangi huquq QO'SHILMAGAN", () => {
 
   const entries = [...block.matchAll(/labelKey:\s*"([a-zA-Z]+)"/gu)].map((m) => m[1]);
 
-  assert.equal(entries.length, 16, `NAV_ITEMS da ${entries.length} yozuv (kutilgan 16)`);
+  assert.equal(entries.length, 17, `NAV_ITEMS da ${entries.length} yozuv (kutilgan 17)`);
   assert.ok(entries.includes("reconciliation"), "«Nomuvofiqliklar» yozuvi yo'q");
+  assert.ok(entries.includes("reports"), "«Hisobotlar» yozuvi yo'q (08-UI-SPEC §4.7)");
 
   /* ⛔ `/billing` DAN KEYIN: nomuvofiqlik — patta hisobining NATIJASI. */
   assert.ok(
     entries.indexOf("reconciliation") === entries.indexOf("billing") + 1,
     "«Nomuvofiqliklar» `/billing` dan bevosita keyin turishi SHART",
+  );
+
+  /*
+   * ⛔ `/reconciliation` DAN KEYIN: hisobot — hamma kunlik yuzaning
+   *   DAVR KESIMIDAGI hosilasi, ya'ni u zanjirning OXIRIDA turadi.
+   */
+  assert.ok(
+    entries.indexOf("reports") === entries.indexOf("reconciliation") + 1,
+    "«Hisobotlar» `/reconciliation` dan bevosita keyin turishi SHART",
   );
 });
 
