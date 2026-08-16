@@ -33,7 +33,7 @@
 |---|---|---|---|
 | ✅ №J | Direktorga kameralar sahifasida admin tugmalari ko'rinadi (Parolni yangilash/Qayta skanerlash/Diagnostika) → bosganda "ruxsat yo'q" | Ildiz: huquq ko'zgusi sahifada ALLAQACHON bor edi (`page.tsx:128`) va to'rtta iste'molchidan uchtasiga uzatilgan — `NvrCard` tushib qolgan. Prop endi MAJBURIY (standart qiymatsiz), ya'ni unutish `tsc` da yiqiladi | ✅ Direktor uchala tugmani ham ko'rmaydi, pasport va kameralar ro'yxati QOLADI; ✅ ikki qatlamli o'lchov (komponent + haqiqiy rol bilan sahifa); ✅ sabotaj (`canManage={true}`) faqat sahifa testini qizartiradi — WIRING o'lchanayotganining dalili |
 | ✅ №I | Xabar navbati jim qotadi: kvitansiya 18+ soat "Navbatda", 0 urinish, sabab/sana yo'q | Ikki mustaqil ko'rlik yopildi. (1) `notification_stale` alerti (`1ea9c5d`): manba navbat YOSHI (`created_at`), `next_attempt_at` EMAS — `defer_unresolved()` uni har 15 daqiqada oldinga surib, "muddati o'tgan" shartini mangu yolg'on qilardi; mavjud `outbox_stale` esa jobning TIRIKLIGIGA qaraydi va bu holatni strukturaviy ravishda ko'rmasdi. (2) Jadval qatori (`55535f0`): sabab yopiq to'plamdan (`pending`/`sent`/`failed`) va vaqt katagi ayniq raqamli maydonlardan | ✅ 30 daq'dan oshgan `pending` `warning` alert ko'taradi (urinishlar = 0 va kelajakdagi `next_attempt_at` bilan ham — alohida test); ✅ uchala locale'da matn; ✅ o'tgan kun sahifasida SANA, harfsizlik darvozasi + sun'iy ijobiy nazorati; ✅ `pending` sababni ko'rsatadi, `delivered`/`blocked` KO'RSATMAYDI |
-| ⬜ №L | Kassir qidiruv kartasida rasta holati/sotuvchi konteksti yo'q: ta'mirdagi rasta ogohlantirishsiz to'lov kartasi; sotuvchisiz rasta faqat submit'da rad | Lookup javobiga holat/sotuvchi qo'shish; ta'mir/yopiq rasta uchun ogohlantirish banner; sotuvchisiz — kartadayoq bildirish | A-02 (ta'mirda) qidirilganda banner ko'rinadi; B-01 (sotuvchisiz) kartada belgi + submit oldi ogohlantirish |
+| ✅ №L | *(yopildi 2026-08-16 — `f2b1830`)* Kassir qidiruv kartasida rasta holati/sotuvchi konteksti yo'q: ta'mirdagi rasta ogohlantirishsiz to'lov kartasi; sotuvchisiz rasta faqat submit'da rad | Lookup javobiga holat/sotuvchi qo'shish; ta'mir/yopiq rasta uchun ogohlantirish banner; sotuvchisiz — kartadayoq bildirish | A-02 (ta'mirda) qidirilganda banner ko'rinadi; B-01 (sotuvchisiz) kartada belgi + submit oldi ogohlantirish |
 | ✅ №D | ~~Istisno kun dialogi jim no-op~~ — **TEST ARTEFAKTI deb tasdiqlandi** (№8 precedenti): Saqlash IKKINCHI tasdiq dialogini ochadi ("Yopiq kun belgilash — patta hisoblanmaydi"), avvalgi test faqat birinchi dialogni o'qigan. 2026-08-16 jonli tekshiruvda istisno kun saqlandi va ro'yxatda ko'rindi. Kod sog'lom, tuzatish KERAK EMAS | — (qayta tasnif; sana formati "M09" — №1 tizimiy bandiga tegishli) |
 | ⬜ №C | MARKET-06 bo'shlig'i: plan-xaritada to'lov ranglari yo'q, rasta bosilganda karta ochilmaydi | Rang qatlami (yashil bo'sh/ko'k to'langan/qizil qarzdor/sariq nomuvofiq) + bosilganda karta (dalil-rasm) | Bugun to'lagan rasta ko'k; bosilganda karta ochiladi; legenda yangilanadi |
 
@@ -41,9 +41,9 @@
 
 | № | Kamchilik | Yechim |
 |---|---|---|
-| ⬜ №E | Kelajak tarif davri "Hozircha amalda" deb yorliqlanadi | Kelajak davr uchun "…dan kuchga kiradi" yorlig'i |
+| ✅ №E | *(yopildi 2026-08-16 — `aed8391`)* Kelajak tarif davri "Hozircha amalda" deb yorliqlanadi | Kelajak davr uchun "…dan kuchga kiradi" yorlig'i |
 | ✅ №K | "Ruxsat yo'q" sahifasi yalang'och — qaytish havolasi yo'q | Nazoratchi 7 ta URL'da ko'rgan, o'lchov esa 20 ta sahifa ko'rsatdi. Yalang'och blok BITTA `ForbiddenNotice` komponentiga yig'ildi: tushuntirish + `/dashboard` havolasi (u `permission: null`). `localeHref` ning 7 nusxasi 1 modulga (`src/lib/locale-href.ts`). Darvoza: `scripts/forbidden-notice.test.mjs` |
-| ⬜ №M | Bekor qilingan to'lov ro'yxatda ikkita bir xil qator; hisoblagich bekordan keyin ham "1" | Bekor hodisasini vizual ajratish (kim/qachon/sabab); hisoblagich semantikasini aniqlashtirish |
+| ✅ №M | *(yopildi 2026-08-16 — `93c0a78`)* Bekor qilingan to'lov ro'yxatda ikkita bir xil qator; hisoblagich bekordan keyin ham "1" | Bekor hodisasini vizual ajratish (kim/qachon/sabab); hisoblagich semantikasini aniqlashtirish |
 | ⬜ №F | "Diagnostika" tugmasi ulanish-tahrirlash formasini ochadi | Yorliq-mazmun mosligini tekshirish: alohida diagnostika paneli yoki tugma nomini to'g'rilash |
 | ⬜ №G | Foydalanuvchi rollarini keyin tahrirlash yo'li yo'q | Amallar menyusiga "Rollarni tahrirlash" (dizayn qarori bilan) |
 | ⬜ №H | Admin dashboardi bo'sh (bozor holati, hisoblagichlar yo'q) | Holat kartasi ("Qoralama — ishga tushirish uchun ...") + asosiy hisoblagichlar |
@@ -74,7 +74,7 @@
 ## 7. IJRO TARTIBI (limit tiklangach, ketma-ket)
 
 1. ✅ `/gsd:quick` — №B + №A (bloker juftlik, bitta vazifa) — bajarildi 2026-08-16, `b90bb09` · `9e52fd5` · `96171c1`
-2. `/gsd:quick` — ✅ №J (+ 3-bo'limdan №K, bitta vazifada — bajarildi 2026-08-16) · ✅ №I (bajarildi 2026-08-16, `1ea9c5d` · `55535f0`) · ⬜ №L · ✅ №D (test artefakti — kod sog'lom) · ⬜ №C
+2. `/gsd:quick` — ✅ №J (+ 3-bo'limdan №K, bitta vazifada — bajarildi 2026-08-16) · ✅ №I (bajarildi 2026-08-16, `1ea9c5d` · `55535f0`) · ✅ №L (bajarildi 2026-08-16, `f2b1830`) · ✅ №D (test artefakti — kod sog'lom) · ⬜ №C
 3. `/gsd:quick` — 3-bo'lim mayda to'plami
 4. `/clear` → `/gsd-execute-phase 8` (№1/№3/№5 shu yerda)
 5. 4/5-faza qayta tekshiruvi + MSE chip + dev tozalash
