@@ -217,9 +217,40 @@ async function renderBlock(outcome: {
  *   ichiga o'ralgan qiymatni ko'rmaydi va assert yarim ishlaydi.
  */
 function visibleText(view: RenderResult): string {
+  return visibleRoot(view).textContent ?? "";
+}
+
+function visibleRoot(view: RenderResult): HTMLElement {
   const clone = view.container.cloneNode(true) as HTMLElement;
   for (const hidden of clone.querySelectorAll(".sr-only")) hidden.remove();
-  return clone.textContent ?? "";
+  return clone;
+}
+
+/**
+ * ⛔⛔ YAKKA NOL — HAR MATN TUGUNIDA ALOHIDA IZLANADI, BIRLASHTIRILGAN
+ *     SATRDA EMAS. VA BU O'LCHANGAN TUZATISH, DID EMAS.
+ *
+ * Dastlabki shakl butun `textContent` ustidan yurardi. Sabotaj (1c) uni
+ * rad etdi: nol AYRIM elementga chizilganda undan oldingi jumla NUQTA
+ * bilan tugaydi va `(?<![\d.,])` nuqtani ko'rib mosligni RAD ETADI —
+ * ya'ni assert «nol yo'q» deb YASHIL qolardi, holbuki ekranda «0»
+ * turardi.
+ *
+ * ⚠ Tugun bo'yicha yurish qo'shni matnning ta'sirini butunlay yo'q
+ *   qiladi; `20` ichidagi nol esa hamon qonuniy, chunki lookbehind
+ *   TUGUN ICHIDA ishlaydi.
+ */
+function hasLoneZero(view: RenderResult): boolean {
+  const walker = document.createTreeWalker(
+    visibleRoot(view),
+    NodeFilter.SHOW_TEXT,
+  );
+
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (/(?<![\d.,])0(?![\d.,])/u.test(node.textContent ?? "")) return true;
+  }
+
+  return false;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -249,7 +280,7 @@ describe("⛔ G-40 (08-UI-SPEC) (a): o'lchanmagan son chizilmaydi", () => {
      * ⚠ `0` YAKKA holda izlanadi: `20` ichidagi nol qonuniy — u
      *   SERVERNING chegarasi.
      */
-    expect(text).not.toMatch(/(?<![\d.,])0(?![\d.,])/u);
+    expect(hasLoneZero(view)).toBe(false);
     expect(text).not.toContain("NaN");
     expect(text).not.toContain("Infinity");
     expect(text).not.toContain("—%");

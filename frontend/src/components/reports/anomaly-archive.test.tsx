@@ -294,11 +294,31 @@ describe("⛔ G-40 (08-UI-SPEC) (f): ikki sanoq hech qachon qo'shilmaydi", () =>
     ).toBe("2");
 
     /*
-     * ⛔ TO'PLAM TENGLIGI: uchinchi son (masalan yig'indi 5) paydo
-     *   bo'lishi bilanoq darvoza qizaradi. Inkor matcher esa faqat
-     *   o'sha bitta shaklni ushlardi.
+     * ⛔ QATLAM 1 — TO'PLAM TENGLIGI: uchinchi SOF SONLI tugun (masalan
+     *   yig'indi 5) paydo bo'lishi bilanoq darvoza qizaradi. Bu shakl
+     *   qiymatdan MUSTAQIL, ya'ni har qanday yangi sanoqni ko'radi.
      */
     expect(numericTextNodes(view)).toEqual(["2", "3"]);
+
+    /*
+     * ⛔⛔ QATLAM 2 — YIG'INDI JUMLA ICHIDA HAM YO'Q, VA BU QATLAM
+     *     O'LCHOV NATIJASIDA QO'SHILDI (sabotaj 3c).
+     *
+     * Yig'indi BITTA interpolyatsiyalangan tugunga («Jami 5 ta»)
+     * yozilganda 1-qatlam uni ⛔ KO'RMAYDI: tugun sof sonli emas. Ya'ni
+     * to'plam tengligi shaklga ko'ra kuchli, JOYLASHUVGA ko'ra ko'r.
+     *
+     * ⚠ Bu qatlam ATAYIN qiymatga bog'liq (`5`) va u yolg'iz turganda
+     *   zaif bo'lardi — shuning uchun u 1-qatlamning O'RNIGA emas,
+     *   USTIGA qo'yiladi. Fixture sanoqlari shunday tanlanganki,
+     *   yig'indi DOM'dagi birorta qonuniy son bilan USTMA-UST TUSHMAYDI.
+     */
+    const merged = String(
+      ARCHIVE_RESPONSE.unpaid_count + ARCHIVE_RESPONSE.unregistered_count,
+    );
+    expect(view.container.textContent ?? "").not.toMatch(
+      new RegExp(`(?<!\\d)${merged}(?!\\d)`, "u"),
+    );
 
     /* ⛔ Manba yarmi: qo'shish shakli KODDA ham yozilmaydi. */
     for (const token of MERGE_TOKENS) {
