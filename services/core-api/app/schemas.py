@@ -4361,3 +4361,197 @@ class DeliveryListResponse(BaseModel):
     """⛔ `failed_count` GA QO'SHILMAYDI — klass docstringi (D-22)."""
     next_cursor: str | None
     """Keyingi sahifa kaliti; `None` — sahifa to'lmadi, ya'ni oxiri."""
+
+
+# ---------------------------------------------------------------------------
+# 08-07: DAVR HISOBOTLARINING JAVOB O'RAMLARI (RECON-04)
+#
+# =============================================================================
+# ⛔⛔ MAYDON NOMLARI FRONTEND KONTRAKTIDAN, «tabiiy» tanlovdan EMAS.
+#
+# `frontend/src/lib/api-types.ts` (08-03, TO'LQIN 1) uchala o'ramni ham
+# ⛔ `z.strictObject` bilan e'lon qilgan, ya'ni javobda KUTILMAGAN maydon
+# bo'lsa klient PARSE CHEGARASIDA yiqiladi va direktor hisobot o'rniga
+# BO'SH EKRAN ko'radi. Shuning uchun bu yerdagi har maydon o'sha
+# sxemaning AYNAN jufti — ortiqchasi ham, kamchisi ham nosozlik.
+#
+# ⚠ Ya'ni `report_repo` BERADIGAN, lekin kontraktda YO'Q maydonlar
+#   (`payment_count`, `charge_count`, arxivning `amount_soum` i) bu
+#   yuzada ATAYIN E'LON QILINMAYDI. Ular repo qatlamida qoladi va
+#   `.xlsx` eksporti (08-12) ularni bu DTO'dan emas, repodan oladi.
+#
+# =============================================================================
+# ⛔ `from_date` / `to_date` UCHALA O'RAMDA HAM MAJBURIY (UI-SPEC §8.7, G-39).
+#
+# Ekran davr jumlasini SERVERNING javobidan chizadi, `nuqs` holatidan
+# EMAS: server so'ralgan davrni qisqartirgan bo'lsa, so'ralganini chizish
+# «men oktyabrni so'radim, oktyabr ko'rsatildi» degan YOLG'ON tasdiq
+# berardi — va u ekranda tuzatiladigan, FAYLDA esa tarqaladigan xato.
+#
+# ⛔ `row_count` — BUTUN DAVRNIKI, `shown_count` — ko'rinayotgan sahifaniki
+#    (§8.6). Ikkalasi ham MAJBURIY: usiz direktor ekrandagi qatorlarni
+#    butun davr deb o'qirdi. Yig'indi maydonlari ham SERVERDAN — klient
+#    `reduce` QILMAYDI (D-03).
+# ---------------------------------------------------------------------------
+
+
+class RevenueReportRow(BaseModel):
+    """Tushum hisobotining bir KUNI (§8.2).
+
+    ⛔ `diff_soum` SERVERDAN keladi va klientda `collected − charged`
+       QAYTA HISOBLANMAYDI (D-03). Klientdagi qayta hisob xato bo'lib
+       emas, IKKINCHI JAVOB bo'lib chiqadi — va nizoda «qaysi son
+       to'g'ri?» savoli javobsiz qolardi.
+
+    ⚠ BELGI KONVENSIYASI: manfiy — KAM yig'ilgan (patta yozilgan, pul
+      kelmagan); musbat — ortiqcha to'lov (u ham HOLAT, xato emas:
+      sotuvchi eski qarzini yopgan bo'lishi mumkin).
+
+    ⛔ `payment_count` / `charge_count` bu yerda E'LON QILINMAGAN garchi
+       `report_repo.RevenueRow` ularni BERSA ham — blok boshidagi
+       birinchi bandning sababi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    business_date: date
+    collected_soum: int
+    charged_soum: int
+    diff_soum: int
+
+
+class RevenueReportResponse(BaseModel):
+    """`GET /reports/revenue?from=&to=` — davr tushumi.
+
+    ⛔ IKKI YIG'INDI ALOHIDA va UCHINCHI, «yagona tushum» maydoni YO'Q
+       (`report_repo.RevenueRow` docstringi, T-08-15): `collected` —
+       KASSA kuni, `charged` — PATTA kuni. Farqning O'ZI RECON-04 ning
+       qiymati.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    from_date: date
+    to_date: date
+    rows: list[RevenueReportRow]
+    total_collected_soum: int
+    total_charged_soum: int
+    row_count: int
+    shown_count: int
+
+
+class ReceivablesReportRow(BaseModel):
+    """Qarzdorlik reestrining bir qatori — ⛔ SOTUVCHI kesimida (§8.3).
+
+    =======================================================================
+    ⛔⛔ `vendor_name` BOR VA U BU YUZADA QONUNIY — 7-FAZADAGI TAQIQNING
+        TESKARISI (§5.5 ↔ D-07).
+
+    `/billing/charges` va `/reconciliation/cases` — OPERATIV moliyaviy
+    javoblar va ularga ism QO'SHILMAYDI (C-10). Bu esa HUJJAT: uning
+    butun mavjud bo'lish sababi «kimdan undirish kerak?» savoliga
+    qog'ozda javob berish. Shuning uchun ism SERVERDA joinlanadi va
+    marshrut `VENDOR_VIEW` + `audit_read` talab qiladi.
+
+    ⛔ `phone` YO'Q va qo'shilmaydi (UI-SPEC O-03): telefon — ALOQA
+       ma'lumoti, u hujjatga tushib fayl bo'lib tarqalardi. Qarz
+       undirish oqimi ALLAQACHON bot eslatmasi (BOT-03).
+    =======================================================================
+
+    ⛔ `vendor_name` `None` bo'lishi MUMKIN va u ekranda BO'SH KATAK
+       bo'lib chiziladi (D-08): na «—», na «Noma'lum», na «Sotuvchi
+       #123». To'qilgan qiymat ma'lumot bordek ko'rinadi va EKSPORTGA
+       ham tushadi — chop etilgan varaqda «Noma'lum» qatori buxgalter
+       uchun HAQIQIY nom bo'lib o'qilardi (05-14 darsi).
+
+    ⚠ `stall_codes` — ⛔ RO'YXAT, vergul bilan yopishtirilgan SATR EMAS.
+      `report_repo` uni `string_agg` bilan bitta satr qilib beradi
+      (`code_sort` tartibida), klient esa har kodni ALOHIDA element
+      sifatida chizadi — satrni klientda `split` qilish tartibni ham,
+      bo'sh holatni ham klient qaroriga qoldirardi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    vendor_id: UUID | None
+    vendor_name: str | None
+    stall_codes: list[str]
+    outstanding_soum: int
+    oldest_debt_date: date | None
+    """Eng eski TO'LANMAGAN `service_date` — `None` = to'lanmagan hisob yo'q.
+
+    ⚠ Davr bilan CHEKLANMAYDI (`report_repo.receivables()` docstringi):
+      eng eski to'lanmagan kun davrdan OLDIN bo'lishi mumkin va uni
+      kesish QARZNING YOSHINI yashirardi.
+    """
+
+
+class ReceivablesReportResponse(BaseModel):
+    """`GET /reports/debtors?from=&to=` — qarzdorlik reestri.
+
+    ⛔ Qarzi NOLDAN FARQLI sotuvchilar, qarz bo'yicha KAMAYISH
+       tartibida (tartib SERVERDA — `.xlsx` eksporti shu ro'yxatni
+       bayt-bayt yozadi va ikkinchi saralash ekrandagi tartib bilan
+       fayldagi tartibni ajratardi).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    from_date: date
+    to_date: date
+    rows: list[ReceivablesReportRow]
+    total_outstanding_soum: int
+    row_count: int
+    shown_count: int
+
+
+class AnomalyArchiveRowResponse(BaseModel):
+    """Nomuvofiqlik arxivining bir qatori (§8.5).
+
+    ⛔ DALIL — IDENTIFIKATOR, KADR EMAS (07 D-03, T-06-81):
+       `snapshot_id` bor, baytlar YO'Q; ombor kaliti ham, imzolangan
+       havola ham yo'q. Sabab huquqiy va u muzokara qilinmaydi: kadrda
+       tashrifchilar yuzi bor (O'zR shaxsiy ma'lumotlar qonuni).
+
+    ⚠ `kind` — `report_repo.ARCHIVE_KIND_UNPAID` yoki
+      `ARCHIVE_KIND_UNREGISTERED`; qiymat ENUMDAN keladi, bu yerda
+      yangi lug'at IXTIRO QILINMAYDI.
+
+    ⚠ `case_status` `None` = case hali OCHILMAGAN («noma'lum» emas).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    business_date: date
+    """⛔ Manbada u `service_date` — PATTA kuni, kassa kuni EMAS.
+
+    Nom klient kontraktidan (`anomalyArchiveRowSchema`); ma'no esa
+    `report_repo` niki va u aralashtirilmaydi (Pitfall 14).
+    """
+    kind: str
+    stall_code: str
+    snapshot_id: UUID | None
+    case_status: str | None
+
+
+class AnomalyArchiveResponse(BaseModel):
+    """`GET /reports/anomalies?from=&to=` — nomuvofiqlik arxivi.
+
+    ⛔⛔ IKKI SANOQ ALOHIDA va ularning YIG'INDISI maydon sifatida
+        MAVJUD EMAS (6-faza D-05, `AnomalyCounts` naqshi). «Band, lekin
+        to'lovsiz» UNDIRISHNI, «ro'yxatga olinmagan savdo» esa
+        RO'YXATGA OLISHNI talab qiladi — bitta songa siqilgan hisobot
+        qaysi sinf o'sganini YASHIRARDI.
+
+    ⛔ NOL SANOQ HAM NATIJA: ikkala hisoblagich ham har doim qaytadi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    from_date: date
+    to_date: date
+    rows: list[AnomalyArchiveRowResponse]
+    unpaid_count: int
+    unregistered_count: int
+    row_count: int
+    shown_count: int

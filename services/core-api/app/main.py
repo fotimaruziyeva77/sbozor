@@ -57,6 +57,7 @@ from app.api.v1.nvr import router as nvr_router
 from app.api.v1.occupancy import router as occupancy_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.reconciliation import router as reconciliation_router
+from app.api.v1.reports import router as reports_router
 from app.api.v1.reviews import router as reviews_router
 from app.api.v1.schedules import router as schedules_router
 from app.api.v1.shifts import router as shifts_router
@@ -451,6 +452,41 @@ app.include_router(bot_internal_router)
 # `PARAM_FILLERS` iga B bozorining HAQIQIY case'i bilan, `PATCH` esa
 # `BODY_FILLERS` VA `DIRECTOR_ROUTES` ga qo'shildi.
 app.include_router(reconciliation_router, prefix=f"{API_V1_PREFIX}/reconciliation")
+# --- 08-07: davr hisobotlarining JSON yuzasi (RECON-04) ---
+#
+# ⛔ ALOHIDA PREFIKS, `/billing` yoki `/reconciliation` OSTIDA EMAS — VA
+#    SABAB O'SHA IKKISINING BIR-BIRIDAN AJRALISHI BILAN AYNI SINFDA:
+#
+#   1. `/billing/*` — BIR KUNNING yozilgan yozuvi; `/reconciliation/*` —
+#      BIR KUNNING yo'qliklari. Ikkalasi ham OPERATIV yuza: direktor
+#      ularni ertalab ochadi va bugungi qarorni qabul qiladi.
+#      `/reports/*` esa HUJJAT: u DAVR kesimida, imzolanadigan varaqqa
+#      chiqadi va uning qatorlari `.xlsx` bo'lib tarqaladi;
+#   2. Davr parametrlari MAJBURIY (`from`/`to`) — `/billing` va
+#      `/reconciliation` da esa kun IXTIYORIY va standarti serverdan.
+#      Ikkalasini bitta prefiksga yig'ish «kun» va «davr» ni bitta
+#      resurs daraxtiga bog'lardi va standart qiymat qoidasi
+#      marshrutdan marshrutga farq qilib ketardi;
+#   3. Klient reyestri (`REPORT_KINDS`, 08-03) yo'lni AYNAN shu
+#      prefiksdan quradi: `/api/v1/reports/{kind}`.
+#
+# ⛔ YO'L NOMLARI KLIENT KONTRAKTIDAN: `/revenue`, `/debtors`,
+#    `/anomalies` — sabab `reports.py` modul docstringining 2-bandida
+#    LITERAL yozilgan.
+#
+# ⛔ YOZUV MARSHRUTI YO'Q: bu prefiksda `POST`/`PATCH`/`DELETE` UMUMAN
+#    yozilmagan. Hisobot HOSILA (D-03) — uni «tuzatish» mumkin bo'lsa
+#    u ikkinchi haqiqat manbaiga aylanardi. Yopiq to'plam
+#    `test_route_coverage.py::test_the_reports_surface_is_exactly_three_routes`
+#    bilan qulflangan.
+#
+# ⚠ Yangi yo'l parametri YO'Q, ya'ni `PARAM_FILLERS` TEGILMAYDI va
+#   marshrutlar cross-tenant matritsasiga O'ZI tushadi. `from`/`to`
+#   majburiy query parametrlari tufayli matritsa ularni 422 bilan
+#   chaqiradi — bu `GET /reconciliation/hit-rate` ning AYNAN xulqi va u
+#   ham `QUERY_PARAM_ROUTES` da YO'Q (sabab `test_reports_api.py` ning
+#   tenant testi docstringida).
+app.include_router(reports_router, prefix=f"{API_V1_PREFIX}/reports")
 
 
 @app.exception_handler(DBAPIError)
