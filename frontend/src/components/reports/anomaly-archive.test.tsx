@@ -32,6 +32,7 @@
  * =============================================================================
  */
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -70,8 +71,14 @@ const REQUESTED_FROM = "2026-08-01";
 const SERVED_FROM = "2026-09-01";
 const SERVED_TO = "2026-09-30";
 
+/*
+ * ⚠ MANBA `process.cwd()` DAN O'QILADI, `import.meta.url` DAN EMAS:
+ *   `jsdom` muhitida modul manzili `file:` sxemasida EMAS va
+ *   `readFileSync` uni rad etadi. Vitest esa `frontend/` katalogidan
+ *   yuguradi, ya'ni nisbiy yo'l BARQAROR.
+ */
 const SOURCE = readFileSync(
-  new URL("./anomaly-archive.tsx", import.meta.url),
+  resolve(process.cwd(), "src/components/reports/anomaly-archive.tsx"),
   "utf8",
 );
 
