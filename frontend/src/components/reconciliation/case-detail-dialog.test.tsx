@@ -411,7 +411,7 @@ describe("⛔ WR-15: bo'shatilgan yechim matni SAQLANADI", () => {
      */
     routeFetch(detail({ status: "in_review", resolution_note: "Eski matn" }));
 
-    await renderDialog();
+    const first = await renderDialog();
 
     const note = within(dialogNode()).getByLabelText(
       messages.recon.resolutionLabel,
@@ -438,16 +438,29 @@ describe("⛔ WR-15: bo'shatilgan yechim matni SAQLANADI", () => {
       assignee_user_id: null,
     });
 
-    /* ⛔ VA QAYTA OCHILGANDA MAYDON BO'SH — va'da BAJARILDI. */
-    await waitFor(() => {
-      expect(
-        (
-          within(dialogNode()).getByLabelText(
-            messages.recon.resolutionLabel,
-          ) as HTMLTextAreaElement
-        ).value,
-      ).toBe("");
-    });
+    /*
+     * ⛔⛔ VA'DANING IKKINCHI YARMI — ⛔ QAYTA OCHILGANDA MAYDON BO'SH.
+     *
+     * ⛔ DIALOG HAQIQATAN YOPILIB QAYTA OCHILADI (`unmount` + qayta
+     *    render), chunki forma holati `useState(detail.resolution_note
+     *    ?? "")` bilan ⛔ FAQAT MOUNT paytida o'qiladi. Ochiq dialogda
+     *    tekshirish foydalanuvchi terganini o'lchardi, ⛔ SERVER
+     *    YOZGANINI emas — ya'ni aynan nosozlik yashiringan joyga
+     *    qaramasdi.
+     *
+     * ⚠ Mock `served` ni HAQIQATAN yangilaydi, ya'ni ikkinchi mount
+     *   serverdagi YANGI holatni oladi.
+     */
+    first.unmount();
+    await renderDialog();
+
+    expect(
+      (
+        within(dialogNode()).getByLabelText(
+          messages.recon.resolutionLabel,
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("");
   });
 
   test("⛔ bo'sh satr AUDIT IZIDA bo'sh tugun qoldirmaydi", async () => {

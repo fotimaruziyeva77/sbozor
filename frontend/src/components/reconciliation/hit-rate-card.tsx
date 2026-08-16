@@ -6,7 +6,10 @@ import { useFormatter, useTranslations } from "next-intl";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useReconciliationCases } from "@/lib/reconciliation-queries";
+import {
+  useReconciliationCases,
+  useReconciliationMarketId,
+} from "@/lib/reconciliation-queries";
 
 /*
  * =============================================================================
@@ -81,7 +84,35 @@ export function HitRateCard({ day }: { day: string }) {
    *    ⛔ IKKILANTIRARDI va foiz o'zi o'lchayotgan narsani emas, nechta
    *    sahifa ochilganini ko'rsatardi.
    */
-  const cases = useReconciliationCases(day);
+  const marketId = useReconciliationMarketId();
+  const cases = useReconciliationCases(day, { enabled: marketId !== null });
+
+  /*
+   * ⛔⛔ BOZORSIZ SESSIYA — ⛔ CHEKSIZ SKELET EMAS (IN-08).
+   *
+   * TanStack v5 da O'CHIRILGAN so'rov `isPending` HOLATIDA QOLADI, ya'ni
+   * quyidagi shox bozorsiz sessiyada ⛔ ABADIY yugurardi. `HeadlineCard`
+   * aynan shu holatni ochiq qo'riqlaydi — bu karta esa yo'q edi.
+   *
+   * ⛔ FOIZ BU SHOXDA UMUMAN HISOBLANMAYDI: o'lchov hali BOSHLANMAGAN,
+   *    ya'ni `0 %` ham, `—%` ham YOLG'ON bo'lardi (fayl izohining
+   *    2-bandi bilan AYNI sinf).
+   */
+  if (marketId === null) {
+    return (
+      <Card data-recon-content="hitrate">
+        <CardHeader>
+          <h2 className="text-lg font-semibold">{t("recon.accuracyTitle")}</h2>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-1">
+          <p className="text-sm">{t("recon.marketMissing")}</p>
+          <p className="text-xs text-text-muted">
+            {t("recon.marketMissingHint")}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (cases.isPending) {
     return (

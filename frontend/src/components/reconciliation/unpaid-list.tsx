@@ -8,8 +8,13 @@ import { EvidenceLink } from "@/components/reconciliation/evidence-link";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatBusinessDay } from "@/lib/format-day";
 import type { ReportRow } from "@/lib/reconciliation-queries";
-import { useReconciliationReport } from "@/lib/reconciliation-queries";
+import {
+  isSubjectKind,
+  useReconciliationMarketId,
+  useReconciliationReport,
+} from "@/lib/reconciliation-queries";
 import { useVendorLabels } from "@/lib/vendor-labels";
 
 /*
@@ -98,12 +103,35 @@ const SUBJECT = "occupied_unpaid";
 export function UnpaidList({ day }: { day: string }) {
   const t = useTranslations();
   const format = useFormatter();
-  const report = useReconciliationReport(day);
-  const vendors = useVendorLabels();
+  const marketId = useReconciliationMarketId();
+  const hasMarket = marketId !== null;
+  const report = useReconciliationReport(day, { enabled: hasMarket });
+  const vendors = useVendorLabels({ enabled: hasMarket });
 
-  const rows = (report.data?.rows ?? []).filter(
-    (row) => row.subject_kind === SUBJECT,
-  );
+  const allRows = report.data?.rows ?? [];
+  const rows = allRows.filter((row) => row.subject_kind === SUBJECT);
+  /*
+   * ⛔⛔ UCHINCHI SHOX — NOMA'LUM SINF (WR-13).
+   *
+   * Sxema `subject_kind` ni ⛔ ATAYIN qulflamaydi (`z.string()`), ya'ni
+   * server uchinchi sinf qo'shsa u BU YERGA yetib keladi. Ikki sinfli
+   * filtr uni ⛔ IKKALA blokdan ham JIMGINA yo'qotardi, `unpaid_count` /
+   * `unregistered_count` esa SERVERDA hisoblanadi — ya'ni ekranda
+   * ⛔ SANOQ BILAN RO'YXAT AJRALARDI va bu `case-status-badge.tsx` da
+   * o'rnatilgan «NOMA'LUM QIYMAT YASHIRILMAYDI» qoidasining aynan
+   * teskarisi bo'lardi.
+   *
+   * ⛔ QATOR QO'SHNI JADVALGA TIQILMAYDI: uni `anomaly` ro'yxatiga
+   *    qo'shish sinf ta'rifini buzardi va sanoqni ro'yxatdan yana
+   *    ajratardi. Fakt NOMLANGAN JUMLA bilan e'lon qilinadi.
+   *
+   * ⛔ `isSubjectKind()` AYNAN SHU EHTIYOJ UCHUN yozilgan edi va bir
+   *    muddat ⛔ 0 iste'molchisi bor edi — ya'ni qoida kodda bor, kuchi
+   *    yo'q edi.
+   */
+  const unknownKindCount = allRows.filter(
+    (row) => !isSubjectKind(row.subject_kind),
+  ).length;
 
   return (
     /* ⛔ Atribut ENG TASHQI elementda va HAR holatda — yuklanishda ham. */
@@ -117,7 +145,22 @@ export function UnpaidList({ day }: { day: string }) {
       </div>
       <p className="text-sm text-text-muted">{t("recon.unpaidHint")}</p>
 
-      {report.isPending ? (
+      {/*
+       * ⛔ BOZORSIZ SESSIYA — NOMLANGAN HOLAT, ⛔ CHEKSIZ SKELET EMAS
+       *   (IN-08). O'chirilgan so'rov TanStack v5 da `isPending` da
+       *   QOLADI, ya'ni skelet abadiy turardi va sabab hech qayerda
+       *   yozilmasdi (`HeadlineCard` bu shoxni allaqachon qo'riqlaydi).
+       */}
+      {hasMarket ? null : (
+        <div className="flex flex-col gap-1">
+          <p className="text-sm">{t("recon.marketMissing")}</p>
+          <p className="text-xs text-text-muted">
+            {t("recon.marketMissingHint")}
+          </p>
+        </div>
+      )}
+
+      {hasMarket && report.isPending ? (
         <div aria-busy="true" role="status">
           <span className="sr-only">{t("common.loading")}</span>
           <Skeleton className="h-24" />
@@ -162,10 +205,23 @@ export function UnpaidList({ day }: { day: string }) {
         </dl>
       ) : null}
 
+      {/*
+       * ⛔ NOMA'LUM SINFNING SANOQ FARQI — JIMGINA YO'QOLISH O'RNIGA
+       *   NOMLANGAN JUMLA (WR-13). Nol bo'lganda jumla ⛔ CHIZILMAYDI:
+       *   har kuni turadigan «noma'lum qator bor» yozuvi shovqin bo'lardi.
+       */}
+      {unknownKindCount > 0 ? (
+        <p className="rounded-sm bg-surface-muted px-3 py-2 text-sm text-text">
+          {t("recon.subjectUnknownNotice", { count: unknownKindCount })}
+        </p>
+      ) : null}
+
       {report.data !== undefined && rows.length === 0 ? (
         /* ⛔ Bo'sh holatda AMAL yo'q — kutish qadam emas. */
         <EmptyState
-          description={t("recon.emptyUnpaidHint", { date: day })}
+          description={t("recon.emptyUnpaidHint", {
+            date: formatBusinessDay(format, day),
+          })}
           title={t("recon.emptyUnpaid")}
         />
       ) : null}

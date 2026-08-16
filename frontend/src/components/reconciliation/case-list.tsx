@@ -10,11 +10,15 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CASE_STATUSES } from "@/lib/api-types";
 import type { CaseStatusValue } from "@/lib/api-types";
+import { formatBusinessDay } from "@/lib/format-day";
 import type {
   CaseList as CaseListResponse,
   CaseRow,
 } from "@/lib/reconciliation-queries";
-import { useReconciliationCases } from "@/lib/reconciliation-queries";
+import {
+  useReconciliationCases,
+  useReconciliationMarketId,
+} from "@/lib/reconciliation-queries";
 
 /*
  * =============================================================================
@@ -118,7 +122,10 @@ const STATUS_COUNT: Record<
 
 export function CaseList({ day }: { day: string }) {
   const t = useTranslations();
-  const cases = useReconciliationCases(day);
+  const format = useFormatter();
+  const marketId = useReconciliationMarketId();
+  const hasMarket = marketId !== null;
+  const cases = useReconciliationCases(day, { enabled: hasMarket });
 
   /* ⛔ Dialog holati SHU YERDA, URL'da EMAS (modul izohining 2-bandi). */
   const [openCaseId, setOpenCaseId] = useState<string | null>(null);
@@ -132,7 +139,17 @@ export function CaseList({ day }: { day: string }) {
     <div className="flex flex-col gap-3" data-recon-content="cases">
       <h2 className="text-lg font-semibold">{t("recon.casesTitle")}</h2>
 
-      {cases.isPending ? (
+      {/* ⛔ BOZORSIZ SESSIYA — NOMLANGAN HOLAT (IN-08, `unpaid-list.tsx` naqshi). */}
+      {hasMarket ? null : (
+        <div className="flex flex-col gap-1">
+          <p className="text-sm">{t("recon.marketMissing")}</p>
+          <p className="text-xs text-text-muted">
+            {t("recon.marketMissingHint")}
+          </p>
+        </div>
+      )}
+
+      {hasMarket && cases.isPending ? (
         <div aria-busy="true" role="status">
           <span className="sr-only">{t("common.loading")}</span>
           <Skeleton className="h-24" />
@@ -172,8 +189,14 @@ export function CaseList({ day }: { day: string }) {
               <dt className="order-2 text-xs text-text-muted">
                 {t(`recon.caseStatus.${status}`)}
               </dt>
+              {/*
+               * ⛔ `as` ASSERTSIYASI YO'Q (IN-02): `counts` yuqoridagi
+               *   `!== undefined` shoxi bilan ALLAQACHON toraytirilgan va
+               *   assertsiya `strict` rejimda kelajakdagi HAQIQIY tur
+               *   xatosini ⛔ YASHIRARDI.
+               */}
               <dd className="order-1 m-0 font-mono tabular-nums">
-                {STATUS_COUNT[status](counts as CaseListResponse)}
+                {STATUS_COUNT[status](counts)}
               </dd>
             </div>
           ))}
@@ -182,7 +205,9 @@ export function CaseList({ day }: { day: string }) {
 
       {counts !== undefined && rows.length === 0 ? (
         <EmptyState
-          description={t("recon.emptyCasesHint", { date: day })}
+          description={t("recon.emptyCasesHint", {
+            date: formatBusinessDay(format, day),
+          })}
           title={t("recon.emptyCases")}
         />
       ) : null}

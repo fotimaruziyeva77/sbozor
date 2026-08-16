@@ -8,8 +8,13 @@ import { EvidenceLink } from "@/components/reconciliation/evidence-link";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatBusinessDay } from "@/lib/format-day";
 import type { ReportRow } from "@/lib/reconciliation-queries";
-import { useReconciliationReport } from "@/lib/reconciliation-queries";
+import {
+  isSubjectKind,
+  useReconciliationMarketId,
+  useReconciliationReport,
+} from "@/lib/reconciliation-queries";
 
 /*
  * =============================================================================
@@ -60,11 +65,26 @@ const SUBJECT = "anomaly";
 export function UnregisteredList({ day }: { day: string }) {
   const t = useTranslations();
   const format = useFormatter();
-  const report = useReconciliationReport(day);
+  const marketId = useReconciliationMarketId();
+  const hasMarket = marketId !== null;
+  const report = useReconciliationReport(day, { enabled: hasMarket });
 
-  const rows = (report.data?.rows ?? []).filter(
-    (row) => row.subject_kind === SUBJECT,
-  );
+  const allRows = report.data?.rows ?? [];
+  const rows = allRows.filter((row) => row.subject_kind === SUBJECT);
+  /*
+   * ⛔ UCHINCHI SHOX — NOMA'LUM SINF (WR-13). Sabab `unpaid-list.tsx`
+   *   dagi bilan AYNAN bir xil va u yerda to'liq yozilgan: ikki sinfli
+   *   filtr serverning uchinchi sinfini IKKALA blokdan ham jimgina
+   *   yo'qotardi, sanoq esa SERVERDA hisoblanadi.
+   *
+   * ⛔ E'LON HAR BLOKDA TAKRORLANADI va bu ATAYIN: blok o'z mazmunini
+   *    O'ZI e'lon qiladi (`unpaid-list.tsx` ning «HAR BLOK ... SAHIFA
+   *    EMAS» bandi). Faqat qo'shni blokda e'lon qilish, o'sha blok
+   *    chizilmaydigan kunda faktni YO'QOTARDI.
+   */
+  const unknownKindCount = allRows.filter(
+    (row) => !isSubjectKind(row.subject_kind),
+  ).length;
 
   return (
     /* ⛔ Atribut ENG TASHQI elementda va HAR holatda — yuklanishda ham. */
@@ -81,7 +101,17 @@ export function UnregisteredList({ day }: { day: string }) {
       </div>
       <p className="text-sm text-text-muted">{t("recon.unregisteredHint")}</p>
 
-      {report.isPending ? (
+      {/* ⛔ BOZORSIZ SESSIYA — NOMLANGAN HOLAT (IN-08, `unpaid-list.tsx` naqshi). */}
+      {hasMarket ? null : (
+        <div className="flex flex-col gap-1">
+          <p className="text-sm">{t("recon.marketMissing")}</p>
+          <p className="text-xs text-text-muted">
+            {t("recon.marketMissingHint")}
+          </p>
+        </div>
+      )}
+
+      {hasMarket && report.isPending ? (
         <div aria-busy="true" role="status">
           <span className="sr-only">{t("common.loading")}</span>
           <Skeleton className="h-24" />
@@ -119,9 +149,18 @@ export function UnregisteredList({ day }: { day: string }) {
         </dl>
       ) : null}
 
+      {/* ⛔ NOMA'LUM SINFNING SANOQ FARQI — NOMLANGAN JUMLA (WR-13). */}
+      {unknownKindCount > 0 ? (
+        <p className="rounded-sm bg-surface-muted px-3 py-2 text-sm text-text">
+          {t("recon.subjectUnknownNotice", { count: unknownKindCount })}
+        </p>
+      ) : null}
+
       {report.data !== undefined && rows.length === 0 ? (
         <EmptyState
-          description={t("recon.emptyUnregisteredHint", { date: day })}
+          description={t("recon.emptyUnregisteredHint", {
+            date: formatBusinessDay(format, day),
+          })}
           title={t("recon.emptyUnregistered")}
         />
       ) : null}
@@ -169,12 +208,14 @@ function UnregisteredRow({
       {/*
        * ⛔ ABSOLUT SANA, NISBIY VAQT EMAS: nizoda «2 kun oldin» ni
        *   o'qib aytib bo'lmaydi va u har ochilishda boshqacha o'qilardi.
+       *
+       * ⛔ VA U ⛔ YAGONA YORDAMCHI ORQALI (WR-07): ofsetsiz «kun + yarim
+       *   tun» shakli brauzerning MAHALLIY mintaqasida talqin qilinardi
+       *   va Toshkentdan SHARQDAGI mijozda sana BIR KUN siljirdi —
+       *   ustiga SSR/CSR gidratatsiya nomuvofiqligini ham berardi.
+       *   Sabab to'liq `lib/format-day.ts` modul izohida.
        */}
-      <td className="p-3">
-        {format.dateTime(new Date(`${row.service_date}T00:00:00`), {
-          dateStyle: "medium",
-        })}
-      </td>
+      <td className="p-3">{formatBusinessDay(format, row.service_date)}</td>
       <td className="p-3">
         <EvidenceLink
           serviceDate={row.service_date}
