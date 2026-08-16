@@ -1760,14 +1760,13 @@ async def test_the_export_ends_with_two_blank_signature_lines(
     assert response.headers["content-type"].startswith(XLSX_MEDIA_TYPE)
 
     rows = read_rows(response.content, expected_columns=COMPARE_EXPORT_COLUMNS)
-    executor, approver = rows[-2], rows[-1]
+    executor, approver = rows[-2].values, rows[-1].values
 
     for line in (executor, approver):
         assert isinstance(line[0], str), f"imzo qatori faylda TOPILMADI: {line!r}"
         assert "___" in line[0], f"imzo uchun bo'sh joy yo'q: {line[0]!r}"
         assert all(cell is None for cell in line[1:]), (
-            f"imzo qatoridan keyin qiymat yozilgan: {line!r} — ism OLDINDAN "
-            "TO'LDIRILMAYDI (D-19)"
+            f"imzo qatoridan keyin qiymat yozilgan: {line!r} — ism OLDINDAN TO'LDIRILMAYDI (D-19)"
         )
 
 
@@ -1804,13 +1803,17 @@ async def test_an_unmeasured_expectation_is_a_blank_cell_in_the_file(
     assert response.status_code == 200, response.text
     rows = read_rows(response.content, expected_columns=COMPARE_EXPORT_COLUMNS)
     code = _code_of(sync_owner_conn, unmeasured)
-    data = next(row for row in rows if row[0] == code)
+    data = next(row.values for row in rows if row.values[0] == code)
 
     assert data[4] is None, (
         f"AI-kutilgan katagi BO'SH bo'lishi kerak edi, qiymat: {data[4]!r} — "
         "o'lchanmagan miqdor o'lchangan bo'lib chizilardi (D-10)"
     )
-    assert data[2] == 0, "daftar summasi O'LCHANGAN nol va u bo'sh katak EMAS"
+    # ⚠ `"0"` SATR: `xlsx_reader._cell_text()` HAR katakni matnga
+    #   keltiradi (`float` -> butun -> `str`), ya'ni bu yerda taqqoslash
+    #   MATN bo'yicha bo'ladi. Muhim bo'lgan farq shu: `"0"` — KATAKDA
+    #   BOR, `None` — katak BO'SH.
+    assert data[2] == "0", "daftar summasi O'LCHANGAN nol va u bo'sh katak EMAS"
 
 
 async def test_the_export_names_the_vendor_and_the_json_never_does(
@@ -1839,7 +1842,7 @@ async def test_the_export_names_the_vendor_and_the_json_never_does(
     assert listed.status_code == 200, listed.text
 
     rows = read_rows(exported.content, expected_columns=COMPARE_EXPORT_COLUMNS)
-    names = {row[1] for row in rows if isinstance(row[1], str)}
+    names = {row.values[1] for row in rows if isinstance(row.values[1], str)}
     assert any(name.startswith("Aliyev") for name in names), (
         f"hujjatda sotuvchi ismi yo'q: {sorted(names)}"
     )

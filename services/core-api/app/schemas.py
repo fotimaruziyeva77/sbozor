@@ -4557,6 +4557,88 @@ class AnomalyArchiveResponse(BaseModel):
     shown_count: int
 
 
+class ThreeWayReportRow(BaseModel):
+    """Uch tomonlama solishtiruvning bir qatori (§10.4, D-18).
+
+    =========================================================================
+    ⛔⛔ MAYDONLAR TO'PLAMI KLIENT KONTRAKTIDAN: `api-types.ts::
+        threeWayRowSchema` — `z.strictObject`. Unda `vendor_name` ham,
+        `stall_id` ham YO'Q va ikkalasi ham bu yerga QO'SHILMAYDI:
+        `strictObject` ortiqcha maydonni RAD ETADI, ya'ni «qulaylik
+        uchun» qo'shilgan ustun butun sahifani PARSE chegarasida
+        yiqitardi (nosozlik faqat jonli ekranda ko'rinardi).
+
+    ⛔ SOTUVCHI ISMI FAQAT `.xlsx` HUJJATIGA CHIQADI va bu ONGLI qaror
+       (D-07 ning aynan shakli): ekrandagi jadval rasta kesimida
+       ishlaydi, imzolanadigan hujjatda esa «kimdan so'raladi?» savoli
+       qog'ozda javob olishi kerak. Ismni bu modelga qo'shish marshrutni
+       `PERSONAL_ROUTES` ga ham tortardi — ya'ni har hisobot ochilishida
+       `audit_read` yozilardi va HAQIQIY o'qish hodisasi (`/debtors`)
+       shovqin ichida ko'milardi.
+    =========================================================================
+
+    `ai_expected_soum` — ⛔ `None` va `0` IKKI XIL NARSA (§10.4):
+        `0` = «AI rastani BO'SH dedi» (O'LCHANGAN);
+        `None` = «o'sha kun uchun bandlik ma'lumoti yo'q» (O'LCHANMAGAN).
+        Ekranda birinchisi chizilgan nol, ikkinchisi BO'SH KATAK.
+
+    `diff_class` — ⛔ `None` = BADGE YO'Q. Klient reyestri
+        (`DIFF_CLASSES`) AYNAN UCH a'zoli va `match` unda ATAYIN yo'q:
+        mos qator bezak OLMAYDI (§13.4). Serverdagi to'rtinchi sinf
+        (`report_repo.DIFF_MATCH`) shu sababdan `None` ga o'giriladi va
+        o'girish `api/v1/reports.py` da, BIR joyda bajariladi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stall_code: str
+    ledger_soum: int
+    system_soum: int
+    ai_expected_soum: int | None
+    diff_class: str | None
+
+
+class ThreeWayReportResponse(BaseModel):
+    """`GET /reports/compare?day=` — kunning uch tomonlama solishtiruvi (SC#5).
+
+    =========================================================================
+    ⛔⛔ «JAMI FARQ» MAYDONI YO'Q VA QO'SHILMAYDI (D-18, UI-SPEC §10.5).
+
+    Uch farq sinfi uch BOSHQA harakatni talab qiladi — «pulni qidiring»
+    (`ledger_over`), «daftarni tuzating» (`system_over`), «detektorni
+    tekshiring» (`ai_mismatch`). Bitta songa siqilgan hisobot qaysi sinf
+    o'sganini YASHIRARDI va solishtiruvni foydasiz qilardi (6-faza D-05
+    va 07 Pattern 4 ning aynan sinfi).
+
+    ⚠ TO'RT SANOQNING YIG'INDISI `len(rows)` GA TENG EMAS va bu
+      NOSOZLIK EMAS: AI-kutilgani o'lchanmagan, daftar va tizimi mos
+      qator BIRORTA sanoqqa tushmaydi (`report_repo._THREE_WAY`).
+    =========================================================================
+
+    ⛔ `has_ledger is False` — jadval UMUMAN chizilmaydi (§10.6) va
+       `rows` BO'SH keladi. Daftar yuklanmagan kunda uch ustunli
+       jadvalni «hamma farq 0» bilan chizish MUVAFFAQIYATLI solishtiruv
+       bo'lib ko'rinardi va IMZOLANARDI — SC#5 ning butun maqsadi
+       jimgina yo'qolardi.
+
+    ⛔ SAHIFALASH YO'Q (R-8): `limit`/`offset` parametrlari ATAYIN
+       mavjud emas va shuning uchun `row_count`/`shown_count` juftligi
+       ham yo'q (davr hisobotlaridan FARQLI). Kun bitta javobda keladi,
+       sig'masa `422 report_too_large` bilan RAD ETILADI —
+       sahifalangan hujjatni IMZOLAB bo'lmaydi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    has_ledger: bool
+    rows: list[ThreeWayReportRow]
+    ledger_over_count: int
+    system_over_count: int
+    ai_mismatch_count: int
+    matched_count: int
+
+
 class LedgerImportResponse(BaseModel):
     """`POST /reports/compare/ledger?day=` — kunlik daftar importining natijasi (D-17).
 

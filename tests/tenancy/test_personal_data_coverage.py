@@ -129,6 +129,18 @@ BINARY_PERSONAL_ROUTES: dict[str, str] = {
         "`VENDOR_VIEW` siz qolardi va bu JSON dan ham xavfliroq: fayl "
         "tizimdan CHIQIB ketadi."
     ),
+    "/api/v1/reports/compare.xlsx": (
+        "uch tomonlama solishtiruvning IMZOLANADIGAN hujjati — unda RASTA "
+        "va SOTUVCHI yonma-yon turadi (D-19, §12.6), ya'ni javob rasta <-> "
+        "shaxs bog'lanishini ochadi. ⛔ JSON jufti (`/reports/compare`) esa "
+        "bu ro'yxatga KIRMAYDI va bu ONGLI: uning javob modelida "
+        "(`schemas.ThreeWayReportRow`) ism UMUMAN yo'q — klient kontrakti "
+        "(`threeWayRowSchema`, `strictObject`) uni qabul qilmaydi. Ikki yuza, "
+        "ikki qaror: ekrandagi jadval rasta kesimida ishlaydi, imzolangan "
+        "varaq esa «kimdan so'raladi?» savoliga QOG'OZDA javob beradi. Fayl "
+        "tizimdan CHIQIB ketadi va u boshqa odamning stolida yashashda "
+        "davom etadi — shuning uchun `audit_read` majburiy."
+    ),
 }
 """Javobi MODEL EMAS, BAYT bo'lgan va o'sha baytlarning O'ZI shaxsiy ma'lumot.
 
@@ -553,6 +565,7 @@ EVIDENCE_FRAME_ALLOWED = frozenset({Permission.CAMERA_VIEW, Permission.OCCUPANCY
 BINARY_PERSONAL_ALLOWED: dict[str, frozenset[Permission]] = {
     "/api/v1/snapshots/{snapshot_id}/image": EVIDENCE_FRAME_ALLOWED,
     "/api/v1/reports/debtors.xlsx": frozenset({Permission.REPORT_VIEW, Permission.VENDOR_VIEW}),
+    "/api/v1/reports/compare.xlsx": frozenset({Permission.REPORT_VIEW, Permission.VENDOR_VIEW}),
 }
 """HAR bayt-shaxsiy marshrutning O'Z ruxsat etilgan huquqlar to'plami.
 
