@@ -57,7 +57,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Final
 
-from sbozor_core.enums import AdjustmentDirection, PaymentKind
+from sbozor_core.enums import (
+    AdjustmentDirection,
+    AnomalyKind,
+    PaymentKind,
+    ReconciliationSubjectKind,
+)
 from sqlalchemy import BigInteger, Date, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
@@ -76,9 +81,14 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
+    "ARCHIVE_KIND_UNPAID",
+    "ARCHIVE_KIND_UNREGISTERED",
+    "AnomalyArchive",
+    "AnomalyArchiveRow",
     "ReceivableRow",
     "RevenuePeriod",
     "RevenueRow",
+    "anomaly_archive",
     "receivables",
     "revenue_by_day",
 ]
@@ -555,3 +565,268 @@ async def receivables(
             )
         )
     return rows
+
+
+# ===========================================================================
+# 3. NOMUVOFIQLIK ARXIVI — IKKI SINF, IKKI SANOQ (D-05, 08-RESEARCH OQ-4)
+# ===========================================================================
+
+ARCHIVE_KIND_UNPAID: Final[str] = ReconciliationSubjectKind.OCCUPIED_UNPAID.value
+"""«Band, lekin to'lovsiz» sinfi — ⛔ QIYMAT ENUMDAN, YANGI LITERAL EMAS.
+
+Arxiv sinf nomini O'YLAB TOPMAYDI: u `reconciliation_cases.subject_kind`
+ning AYNAN o'sha qiymatini qaytaradi. Yangi lug'at (`"unpaid"`) kiritilsa
+javobdagi nom bilan bazadagi qiymat ajralib ketardi va nizoda «bu qaysi
+sinf edi?» savoli ikki lug'at o'rtasida qolardi.
+"""
+
+ARCHIVE_KIND_UNREGISTERED: Final[str] = AnomalyKind.UNASSIGNED_OCCUPIED.value
+"""«Ro'yxatga olinmagan savdo» sinfi — `billing_anomalies.kind` DAN.
+
+`ARCHIVE_KIND_UNPAID` bilan aynan bir xil qaror va bir xil sabab.
+"""
+
+_ANOMALY_ARCHIVE = text(
+    f"""
+    WITH unpaid AS (
+        SELECT rc.service_date                                     AS service_date,
+               CAST(:kind_unpaid AS text)                          AS kind,
+               s.code                                              AS stall_code,
+               s.code_sort                                         AS code_sort,
+               rc.status                                           AS case_status,
+               (c.amount_soum + COALESCE(adj.total, 0))::bigint     AS amount_soum,
+               ev.snapshot_id                                       AS evidence_snapshot_id
+          FROM reconciliation_cases rc
+          JOIN daily_charges c
+            ON c.market_id = rc.market_id
+           AND c.id = rc.charge_id
+          JOIN stalls s
+            ON s.market_id = c.market_id
+           AND s.id = c.stall_id
+          LEFT JOIN LATERAL (
+            SELECT sum({_SIGNED_ADJUSTMENT_EXPR}) AS total
+              FROM charge_adjustments a
+             WHERE a.market_id = c.market_id
+               AND a.charge_id = c.id
+          ) adj ON true
+          LEFT JOIN LATERAL (
+            SELECT ce.snapshot_id AS snapshot_id
+              FROM charge_evidence ce
+             WHERE ce.market_id = c.market_id
+               AND ce.charge_id = c.id
+             ORDER BY ce.slot_time, ce.snapshot_id
+             LIMIT 1
+          ) ev ON true
+         WHERE rc.market_id = :market_id
+           AND rc.subject_kind = :subject_unpaid
+           AND rc.service_date BETWEEN :from_date AND :to_date
+    ),
+    unregistered AS (
+        SELECT ba.service_date  AS service_date,
+               CAST(:kind_unregistered AS text) AS kind,
+               s.code           AS stall_code,
+               s.code_sort      AS code_sort,
+               opened.status    AS case_status,
+               CAST(NULL AS bigint) AS amount_soum,
+               ba.snapshot_id   AS evidence_snapshot_id
+          FROM billing_anomalies ba
+          JOIN stalls s
+            ON s.market_id = ba.market_id
+           AND s.id = ba.stall_id
+          LEFT JOIN LATERAL (
+            SELECT rc2.status AS status
+              FROM reconciliation_cases rc2
+             WHERE rc2.market_id = ba.market_id
+               AND rc2.anomaly_id = ba.id
+             ORDER BY rc2.created_at DESC, rc2.id DESC
+             LIMIT 1
+          ) opened ON true
+         WHERE ba.market_id = :market_id
+           AND ba.kind = :anomaly_unregistered
+           AND ba.service_date BETWEEN :from_date AND :to_date
+    ),
+    archive AS (
+        SELECT * FROM unpaid
+        UNION ALL
+        SELECT * FROM unregistered
+    )
+    SELECT service_date,
+           kind,
+           stall_code,
+           case_status,
+           amount_soum,
+           evidence_snapshot_id
+      FROM archive
+     ORDER BY service_date, kind, code_sort, stall_code
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("from_date", type_=Date()),
+    bindparam("to_date", type_=Date()),
+    bindparam("kind_unpaid", type_=Text()),
+    bindparam("kind_unregistered", type_=Text()),
+    bindparam("subject_unpaid", type_=Text()),
+    bindparam("anomaly_unregistered", type_=Text()),
+    bindparam("increase", type_=Text()),
+)
+"""Davr xronologiyasi — IKKI MANBA, BITTA RO'YXAT, IKKI SANOQ.
+
+=============================================================================
+⛔⛔ 1. IKKI SINF HECH QACHON QO'SHILMAYDI (6-faza D-05, `AnomalyCounts` naqshi).
+
+`unpaid_count` va `unregistered_count` ALOHIDA qaytadi va ularning
+yig'indisi javobda MAYDON sifatida MAVJUD EMAS. «Band, lekin to'lovsiz»
+(hisob yozilgan, pul kelmagan) bilan «ro'yxatga olinmagan savdo» (rasta
+band, sotuvchi biriktirilmagan) IKKI BOSHQA qarordan chiqadi va ikki
+BOSHQA harakatni talab qiladi: birinchisi undirishni, ikkinchisi
+RO'YXATGA OLISHNI. Bitta songa siqilgan hisobot qaysi sinf o'sganini
+YASHIRARDI.
+
+=============================================================================
+⛔⛔ 2. XRONOLOGIYA BITTA RO'YXATDA, `kind` USTUNI BILAN (UI-SPEC §8.5).
+
+Ikki alohida jadval bir hodisani IKKI JOYDA qidirtirardi: «shu rasta bilan
+o'sha kuni nima bo'ldi?» degan savolga javob ikki ro'yxatdan qo'lda
+yig'ilardi. Sinf USTUN bo'lganda esa u ham ko'rinadi, ham filtrlanadi.
+
+=============================================================================
+⛔⛔ 3. DALIL — FAQAT IDENTIFIKATOR (07 D-03, T-06-81).
+
+`evidence_snapshot_id` — `UUID`. Kadr baytlari na javobda, na eksportda;
+ombor kaliti ham, imzolangan havola ham YO'Q. Sabab huquqiy va u
+muzokara qilinmaydi: kadrda tashrifchilar yuzi bor (O'zR shaxsiy
+ma'lumotlar qonuni). Klient identifikatorni MAVJUD, autentifikatsiya
+ostidagi kadr marshrutiga beradi.
+
+=============================================================================
+⛔ «TO'LANMAGAN» TA'RIFI BU YERDA IXTIRO QILINMAYDI.
+
+`unpaid` shoxining manbai — `reconciliation_cases` (`subject_kind =
+'occupied_unpaid'`), ya'ni `recon.open` ALLAQACHON qo'llagan predikat.
+`daily_charges` − `payments` ni bu yerda qayta hisoblash UCHINCHI ta'rif
+bo'lardi va u `reconciliation_repo` modul docstringining 3-bandi bilan
+TAQIQLANGAN: bot bir sonni, hisobot boshqa sonni ko'rsatardi.
+
+⚠ OQIBATI OCHIQ YOZILADI: `recon.open` yugurmagan kun uchun `unpaid`
+  qatori BO'LMAYDI. Bu HALOL — arxiv ANIQLANGAN nomuvofiqliklarning
+  hujjati, hisob-kitobning qayta bajarilishi emas.
+
+=============================================================================
+⚠ ARXIVDA UCHINCHI VA TO'RTINCHI SINF YO'Q VA BU NOMLANGAN QAROR:
+
+    `closed_day_occupied` — yopiq kunda savdo (D-10);
+    `no_coverage_stall`   — qamrovsiz rasta (D-05).
+
+Ular kunlik ekranda `anomaly_list()` ning O'Z hisoblagichlari bilan
+ko'rinadi. Davr arxivi RECON-04 ning IKKI nomlangan savoliga javob beradi
+va uchinchi sinfni qo'shish uchinchi hisoblagichni ham talab qilardi —
+ya'ni javobning shakli o'zgarardi. Band `deferred-items.md` da.
+
+=============================================================================
+⛔ `S608` — sabab `_REVENUE_BY_DAY` dagi bilan AYNAN bir xil: f-string ga
+   faqat `billing_repo` dan import qilingan SOBIT `_SIGNED_ADJUSTMENT_EXPR`
+   tushadi, har tashqi qiymat esa `bindparam(...)` bilan TIPLANGAN (T-08-14).
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class AnomalyArchiveRow:
+    """Arxivning bitta qatori — ⛔ MAYDONLAR TO'PLAMI SHARTNOMA.
+
+    `kind` — `ARCHIVE_KIND_UNPAID` yoki `ARCHIVE_KIND_UNREGISTERED`.
+    `case_status` — `ReconciliationCaseStatus` ning YOPIQ to'rt a'zosidan
+        biri, yoki `None` = case hali OCHILMAGAN («noma'lum» emas).
+    `amount_soum` — `None` = HISOB YOZILMAGAN (D-28: biriktirilmagan
+        rastaga hisob yozilmaydi). ⛔ Nol YOZILMAYDI: «summa yo'q» bilan
+        «summa nol» ikki boshqa javob (UI-SPEC §9.4 ning aynan farqi).
+    `evidence_snapshot_id` — kadrga KO'RSATKICH, `None` = dalil qatori yo'q.
+
+    ⛔ KADR BAYTI, OMBOR KALITI VA IMZOLANGAN HAVOLA UCHUN MAYDON YO'Q va
+       qo'shilmaydi (`_ANOMALY_ARCHIVE` docstringining 3-bandi). Yuzaning
+       kengayishi aynan shu yerdan, bitta «qulaylik uchun» maydondan
+       boshlanardi.
+    """
+
+    service_date: date
+    kind: str
+    stall_code: str
+    case_status: str | None
+    amount_soum: int | None
+    evidence_snapshot_id: UUID | None
+
+
+@dataclass(frozen=True, slots=True)
+class AnomalyArchive:
+    """Davr arxivi — ⛔ AYNAN UCH MAYDON: qatorlar VA IKKI ALOHIDA SANOQ.
+
+    ⛔ TO'RTINCHI, «yig'indi» MAYDONI YO'Q va qo'shilmaydi (D-05). U mavjud
+       bo'lsa ekran uni ko'rsatardi va ikki sinfning farqi matn darajasida
+       yo'qolardi — `AnomalyCounts` da o'rnatilgan aynan o'sha qaror.
+
+    ⚠ NOL SANOQ HAM NATIJA: uchala maydon ham har doim qaytadi. «Bu davrda
+      nomuvofiqlik yo'q» bilan «hisoblagich ishlamayapti» bir xil
+      ko'rinmasligi kerak (`occupancy.py:122-124` qoidasi).
+    """
+
+    rows: tuple[AnomalyArchiveRow, ...]
+    unpaid_count: int
+    unregistered_count: int
+
+
+async def anomaly_archive(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    from_date: date,
+    to_date: date,
+) -> AnomalyArchive:
+    """Davr kesimidagi nomuvofiqlik arxivi — HOSILA so'rov, ikki manbadan.
+
+    ⛔ CHAQIRUVCHI TENANT KONTEKSTINI O'RNATGAN BO'LISHI SHART: so'rovdagi
+       `market_id` sharti NIYAT, RLS esa KAFOLAT (T-08-13).
+
+    Args:
+        market_id: tenant kaliti.
+        from_date: davrning BIRINCHI kuni (kiradi).
+        to_date: davrning OXIRGI kuni (kiradi).
+
+    Returns:
+        `AnomalyArchive` — qatorlar `service_date`, so'ng sinf, so'ng rasta
+        kodining TABIIY tartibida (`code_sort`). Sanoqlar QATORLARDAN
+        hosila.
+    """
+    result = await session.execute(
+        _ANOMALY_ARCHIVE,
+        {
+            "market_id": market_id,
+            "from_date": from_date,
+            "to_date": to_date,
+            "kind_unpaid": ARCHIVE_KIND_UNPAID,
+            "kind_unregistered": ARCHIVE_KIND_UNREGISTERED,
+            "subject_unpaid": ARCHIVE_KIND_UNPAID,
+            "anomaly_unregistered": ARCHIVE_KIND_UNREGISTERED,
+            "increase": _INCREASE,
+        },
+    )
+
+    rows = tuple(
+        AnomalyArchiveRow(
+            service_date=row["service_date"],
+            kind=str(row["kind"]),
+            stall_code=str(row["stall_code"]),
+            case_status=None if row["case_status"] is None else str(row["case_status"]),
+            amount_soum=None if row["amount_soum"] is None else int(row["amount_soum"]),
+            evidence_snapshot_id=row["evidence_snapshot_id"],
+        )
+        for row in result.mappings()
+    )
+
+    # ⛔ SANOQ QATORLARDAN HOSILA, IKKINCHI `count(*)` SO'ROVI BILAN EMAS
+    #    (`anomaly_list()` da o'rnatilgan qoida): ikki so'rov orasida yangi
+    #    qator yozilsa ro'yxat bilan sanoq ajralib ketardi va ekranda «3 ta»
+    #    yozuvi ostida 2 qator turardi.
+    return AnomalyArchive(
+        rows=rows,
+        unpaid_count=sum(1 for row in rows if row.kind == ARCHIVE_KIND_UNPAID),
+        unregistered_count=sum(1 for row in rows if row.kind == ARCHIVE_KIND_UNREGISTERED),
+    )
