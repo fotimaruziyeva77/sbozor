@@ -32,9 +32,9 @@
 | № | Kamchilik | Yechim yo'nalishi | Qabul mezoni |
 |---|---|---|---|
 | ✅ №J | Direktorga kameralar sahifasida admin tugmalari ko'rinadi (Parolni yangilash/Qayta skanerlash/Diagnostika) → bosganda "ruxsat yo'q" | Ildiz: huquq ko'zgusi sahifada ALLAQACHON bor edi (`page.tsx:128`) va to'rtta iste'molchidan uchtasiga uzatilgan — `NvrCard` tushib qolgan. Prop endi MAJBURIY (standart qiymatsiz), ya'ni unutish `tsc` da yiqiladi | ✅ Direktor uchala tugmani ham ko'rmaydi, pasport va kameralar ro'yxati QOLADI; ✅ ikki qatlamli o'lchov (komponent + haqiqiy rol bilan sahifa); ✅ sabotaj (`canManage={true}`) faqat sahifa testini qizartiradi — WIRING o'lchanayotganining dalili |
-| ⬜ №I | Xabar navbati jim qotadi: kvitansiya 18+ soat "Navbatda", 0 urinish, sabab/sana yo'q | `backup_stale` naqshida `notification_stale` alerti + qatorda to'liq sana + holat sababi | Navbatda N daqiqadan oshgan xabar alert ko'taradi; jadvalda sana ko'rinadi |
+| ✅ №I | Xabar navbati jim qotadi: kvitansiya 18+ soat "Navbatda", 0 urinish, sabab/sana yo'q | Ikki mustaqil ko'rlik yopildi. (1) `notification_stale` alerti (`1ea9c5d`): manba navbat YOSHI (`created_at`), `next_attempt_at` EMAS — `defer_unresolved()` uni har 15 daqiqada oldinga surib, "muddati o'tgan" shartini mangu yolg'on qilardi; mavjud `outbox_stale` esa jobning TIRIKLIGIGA qaraydi va bu holatni strukturaviy ravishda ko'rmasdi. (2) Jadval qatori (`55535f0`): sabab yopiq to'plamdan (`pending`/`sent`/`failed`) va vaqt katagi ayniq raqamli maydonlardan | ✅ 30 daq'dan oshgan `pending` `warning` alert ko'taradi (urinishlar = 0 va kelajakdagi `next_attempt_at` bilan ham — alohida test); ✅ uchala locale'da matn; ✅ o'tgan kun sahifasida SANA, harfsizlik darvozasi + sun'iy ijobiy nazorati; ✅ `pending` sababni ko'rsatadi, `delivered`/`blocked` KO'RSATMAYDI |
 | ⬜ №L | Kassir qidiruv kartasida rasta holati/sotuvchi konteksti yo'q: ta'mirdagi rasta ogohlantirishsiz to'lov kartasi; sotuvchisiz rasta faqat submit'da rad | Lookup javobiga holat/sotuvchi qo'shish; ta'mir/yopiq rasta uchun ogohlantirish banner; sotuvchisiz — kartadayoq bildirish | A-02 (ta'mirda) qidirilganda banner ko'rinadi; B-01 (sotuvchisiz) kartada belgi + submit oldi ogohlantirish |
-| ⬜ №D | "Istisno kun qo'shish" dialogi — Saqlash jim no-op (so'rov yo'q, xato yo'q) | №4 naqshi: validatsiya xabari ko'rinadigan qilish, submit zanjirini tuzatish | Istisno kun saqlanadi va ro'yxatda ko'rinadi; validatsiya xatosi ekranda |
+| ✅ №D | ~~Istisno kun dialogi jim no-op~~ — **TEST ARTEFAKTI deb tasdiqlandi** (№8 precedenti): Saqlash IKKINCHI tasdiq dialogini ochadi ("Yopiq kun belgilash — patta hisoblanmaydi"), avvalgi test faqat birinchi dialogni o'qigan. 2026-08-16 jonli tekshiruvda istisno kun saqlandi va ro'yxatda ko'rindi. Kod sog'lom, tuzatish KERAK EMAS | — (qayta tasnif; sana formati "M09" — №1 tizimiy bandiga tegishli) |
 | ⬜ №C | MARKET-06 bo'shlig'i: plan-xaritada to'lov ranglari yo'q, rasta bosilganda karta ochilmaydi | Rang qatlami (yashil bo'sh/ko'k to'langan/qizil qarzdor/sariq nomuvofiq) + bosilganda karta (dalil-rasm) | Bugun to'lagan rasta ko'k; bosilganda karta ochiladi; legenda yangilanadi |
 
 ## 3. MAYDA (bitta umumiy `/gsd:quick` to'plami)
@@ -67,14 +67,14 @@
 
 ## 6. DEV-MUHIT TOZALASH (kod emas)
 
-- ⬜ "23" nomli test-rasta o'chirilsin/arxivlansin
-- ⬜ 2 ta "Jonli sinov admini" (+998908483437, +998952748781) bloklash yoki o'chirish
+- ✅ "23" nomli test-rasta — "Yopiq" holatga o'tkazildi (2026-08-16)
+- ✅ 2 ta "Jonli sinov admini" — bloklandi (is_active=false, 2026-08-16)
 - ⬜ Dev eslatma: core-api qayta yaratilsa nginx restart kerak (compose'da `depends_on`/resolver yaxshilash mumkin)
 
 ## 7. IJRO TARTIBI (limit tiklangach, ketma-ket)
 
 1. ✅ `/gsd:quick` — №B + №A (bloker juftlik, bitta vazifa) — bajarildi 2026-08-16, `b90bb09` · `9e52fd5` · `96171c1`
-2. `/gsd:quick` — ✅ №J (+ 3-bo'limdan №K, bitta vazifada — bajarildi 2026-08-16) · ⬜ №I · ⬜ №L · ⬜ №D · ⬜ №C
+2. `/gsd:quick` — ✅ №J (+ 3-bo'limdan №K, bitta vazifada — bajarildi 2026-08-16) · ✅ №I (bajarildi 2026-08-16, `1ea9c5d` · `55535f0`) · ⬜ №L · ✅ №D (test artefakti — kod sog'lom) · ⬜ №C
 3. `/gsd:quick` — 3-bo'lim mayda to'plami
 4. `/clear` → `/gsd-execute-phase 8` (№1/№3/№5 shu yerda)
 5. 4/5-faza qayta tekshiruvi + MSE chip + dev tozalash
