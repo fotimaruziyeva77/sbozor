@@ -2,7 +2,8 @@
 # Xost mashinasida `make` YO'Q (Windows) — barcha yorliqlar root `package.json` da.
 #
 # Profillar:
-#   (yo'q)   -> db, cache, storage, core-api, worker, scheduler, cv-service, go2rtc : `npm run up`
+#   (yo'q)   -> db, cache, storage, core-api, worker, scheduler, cv-service,
+#               bot-service, go2rtc, backup : `npm run up`
 #   migrate  -> Alembic one-shot job   : `npm run migrate`
 #   web      -> frontend (01-02 rejasi Dockerfile'ni yaratadi)
 #   proxy    -> nginx
@@ -803,6 +804,77 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
+
+  backup:
+    # KUNLIK ZAXIRA — POSTGRES + DALIL ARXIVI, OFFSITE (FOUND-07, D-12/D-13/D-15).
+    #
+    # ⚠⚠ PROFILSIZ — VA BU BLOKDAGI ENG MUHIM QATOR. `worker`/`scheduler`
+    # bilan bir xil sabab, lekin oqibati ULARNIKIDAN HAM UZOQROQ: profil
+    # ortida qolgan zaxira HECH QACHON olinmasdi va HECH QANDAY xato
+    # chiqmasdi — `docker compose ps` toza, jurnal bo'sh, offsite repo
+    # bo'sh. Nosozlik faqat FALOKAT KUNI, tiklash kerak bo'lganda
+    # bilinardi.
+    #
+    # ⚠ FARQI SHUNDAKI BU HOLATNI TIZIM O'ZI KO'RADI: zaxira olinmasa
+    # `system_heartbeats['backup']` yangilanmaydi va `alert_sweep` 26
+    # soatdan keyin `backup_stale` (CRITICAL, `never_suppressed`) ni
+    # ko'taradi. Ya'ni profilsizlik + yurak urishi BIRGA ishlaydi:
+    # birinchisi zaxirani ishga tushiradi, ikkinchisi uning yo'qligini
+    # fosh qiladi.
+    #
+    # SAKKIZINCHI KONTEYNER, TO'RTINCHI SERVIS EMAS: bu tayyor image
+    # (`postgres:18.4-trixie`) ustidagi ops skripti — `db`, `cache`,
+    # `storage`, `go2rtc`, `nginx` bilan bir toifa, biz yozgan servis
+    # EMAS. CLAUDE.md ning «aynan 3 ta servis» cheklovi BIZNING
+    # servislarimizga (`core-api`, `cv-service`, `bot-service`) tegishli
+    # va u buzilmaydi.
+    build:
+      context: .
+      dockerfile: ops/backup/Dockerfile
+    environment:
+      # ⛔ `DATABASE_URL` ISHLATILMAYDI — VA U `sed` BILAN HAM
+      #    KONVERTATSIYA QILINMAYDI.
+      #
+      #    `.env` dagi `DATABASE_URL` — `postgresql+asyncpg://…`, ya'ni
+      #    SQLAlchemy DIALEKTI. `psql` va `pg_dump` uni `invalid URI
+      #    scheme` bilan RAD ETADI. Konvertatsiya esa bir joyda IKKI
+      #    HAQIQAT MANBAI tug'dirardi: parol o'zgarganda biri jimgina
+      #    eskirardi va nosozlik «zaxira ishlamayapti» bo'lib, sababi
+      #    esa `.env` da ko'rinmasdi.
+      BACKUP_DATABASE_URL: ${BACKUP_DATABASE_URL}
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY}
+      # ⛔ SIR COMPOSE FAYLIDA LITERAL EMAS — `${...}` orqali (T-08-18).
+      #    Yo'qolsa zaxira BUTUNLAY tiklanmaydi; saqlash tartibi
+      #    `ops/backup/README.md` §3 da MAJBURIY band sifatida.
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD}
+      # ⛔ OFFSITE REKVIZITLAR — LOKAL SeaweedFS NIKI EMAS (D-14).
+      #    `S3_ACCESS_KEY`/`S3_SECRET_KEY` shu VPS'ning shu diskiga
+      #    ishora qiladi; ularni bu yerga qo'yish zaxirani baza bilan
+      #    BIR XIL failure domain'da qoldirardi, ya'ni bitta diskning
+      #    o'limi uchalasini birdan olib ketardi va FOUND-07 ning
+      #    «boshqa lokatsiya» talabi qog'ozda qolardi.
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY}
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      # ⚠ `:ro` MAJBURIY va sabab `storage` blokidan MEROS: jarayon
+      #   o'zi o'qiyotgan manbani QAYTA YOZA OLMASLIGI kerak. Bu yerda u
+      #   yana bir qadam qattiqroq (T-08-19): zaxira jarayoni butun dalil
+      #   arxiviga kiradi, ya'ni yozish huquqi bilan u bitta xato buyruq
+      #   ostida aynan himoya qilishi kerak bo'lgan narsani yo'q qila
+      #   olardi. `forget --prune` esa faqat restic repo'siga tegadi.
+      - seaweed:/seaweed:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    # ⚠ `healthcheck` ATAYIN YOZILMAGAN — `scheduler`/`cv-service`/
+    #   `bot-service` bloklaridagi qaror so'zma-so'z shu yerga tegishli:
+    #   tsikl HTTP yuzasi bermaydi va jarayon tirikligi «zaxira
+    #   olindimi?» savoliga JAVOB BERMAYDI (sozlanmagan konteyner ham
+    #   MANGU `Up` bo'lib turadi). Yagona ishonchli signal — BAZADAGI
+    #   yurak urishi va uni o'qiydigan `alert_sweep` / `/internal/self-check`.
+    # DIQQAT: xost portiga publish QILINMAYDI — tsikl tarmoq yuzasi bermaydi.
     restart: unless-stopped
 
   frontend:
