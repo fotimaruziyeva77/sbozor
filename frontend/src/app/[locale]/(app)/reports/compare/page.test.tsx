@@ -43,7 +43,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
 
 vi.mock("sonner", () => ({ toast: toastMock }));
 
-import messages from "../../../../../messages/uz-Latn.json";
+import messages from "../../../../../../messages/uz-Latn.json";
 import ComparePage from "./page";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 
