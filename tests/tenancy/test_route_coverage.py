@@ -558,6 +558,194 @@ def test_no_reconciliation_route_enters_the_personal_data_gate() -> None:
 
 
 # ===========================================================================
+# `/reports/*` — UCH MARSHRUT, IKKI HUQUQ, BITTA SHAXSIY YUZA
+# (08-07: RECON-04 ning JSON yarmi)
+# ===========================================================================
+
+REPORTS_PREFIX = "/api/v1/reports"
+"""⛔ Davr hisobotlarining yuzasi — REYESTRDA QAYD ETILADI.
+
+=============================================================================
+⛔⛔ NEGA BU YERDA VA NEGA `/reconciliation/*` DAN FARQLI DA'VO BILAN.
+
+Nomuvofiqlik yuzasi haqidagi uchinchi da'vo — «oltalasi ham
+`PERSONAL_ROUTES` GA TUSHMAYDI» (G7-6). Bu yuzada esa u ⛔ **TESKARI**:
+`/debtors` javobida sotuvchi F.I.Sh. BOR va u to'plamga ⛔ **TUSHISHI
+SHART**.
+
+⛔ FARQ «yumshatish» EMAS, IKKI BOSHQA SINF (D-07 ↔ Pitfall 1):
+
+    `/billing/charges`, `/reconciliation/cases` — OPERATIV moliyaviy
+        JSON. Ekranda ishlatiladi, ism `GET /vendors` dan KLIENTDA
+        joinlanadi (C-10, §5.5). Ularga ism qo'shish TAQIQ.
+
+    `/reports/debtors` — HUJJAT. «Kimdan undirish kerak?» savoliga
+        qog'ozda javob beradi, ism SERVERDA joinlanadi va marshrut
+        BITTA `audit_read` yozadi (sotuvchi boshiga emas).
+
+Ya'ni `PERSONAL_ROUTES` ning bu yerda O'SISHI KUTILGAN va u
+`MINIMUM_PERSONAL_ROUTES` (QUYI chegara, `>=`) ni buzmaydi. Pastdagi
+uchinchi test o'sishni AYNAN BITTA marshrut bilan cheklaydi — ya'ni
+to'rtinchi hisobot marshrutiga ism qo'shish ONGLI qaror bo'lib qoladi.
+=============================================================================
+"""
+
+REPORTS_ROUTES = (
+    "/api/v1/reports/anomalies",
+    "/api/v1/reports/debtors",
+    "/api/v1/reports/revenue",
+)
+"""Uch YO'L, uch MARSHRUT — har birida FAQAT `GET`.
+
+⛔ NOMLAR KLIENT KONTRAKTIDAN (`REPORT_KINDS`, 08-03; UI-SPEC §12.1,
+   G-43a): `report-queries.ts::buildReportDataPath()` yo'lni AYNAN
+   reyestr a'zosidan quradi. 08-07 rejasi `/receivables` va
+   `/discrepancies` degan edi — sabab va tanlov
+   `app/api/v1/reports.py` modul docstringining 2-bandida.
+
+⛔ `POST`/`PATCH`/`DELETE` UMUMAN YO'Q: hisobot HOSILA (D-03) va uni
+   «tuzatish» mumkin bo'lsa u ikkinchi haqiqat manbaiga aylanardi.
+   Quyidagi to'plam tengligi buni AYNAN o'lchaydi.
+
+⚠ SON TEST NOMIDA YOZILGAN va u har safar QO'LDA yangilanadi (R-11
+  darsi: chetlash JIMGINA, ONGLI yangilash esa NOMDA ko'rinadi).
+  08-12 to'rtta `.xlsx` marshrutini, 08-14/08-16 esa solishtiruvni
+  qo'shadi — o'shanda bu test nomi ham, ro'yxat ham o'zgaradi.
+"""
+
+
+def _reports_paths() -> list[str]:
+    """`/api/v1/reports` bilan boshlanadigan yo'llar — YURISHDAN olinadi."""
+    return sorted(
+        {route.path for route in all_routes(fastapi_app) if route.path.startswith(REPORTS_PREFIX)}
+    )
+
+
+def test_the_reports_surface_is_exactly_three_routes() -> None:
+    """DARVOZANING NAZORATI — pastdagi testlar BO'SH to'plamda yashil bo'lmaydi.
+
+    ⛔ To'plam TENGLIGI bilan (D-31), «kamida uchtasi» bilan EMAS:
+       to'rtinchi marshrut qo'shilishi ONGLI qaror va u shu yerda
+       ko'rinishi kerak — ayniqsa u YOZUV metodi bo'lsa.
+    """
+    walked = {
+        (route.method, route.path)
+        for route in all_routes(fastapi_app)
+        if route.path.startswith(REPORTS_PREFIX)
+    }
+
+    assert _reports_paths() == list(REPORTS_ROUTES)
+    assert walked == {
+        ("GET", "/api/v1/reports/revenue"),
+        ("GET", "/api/v1/reports/debtors"),
+        ("GET", "/api/v1/reports/anomalies"),
+    }, sorted(walked)
+
+
+def test_every_reports_route_is_documented_in_openapi() -> None:
+    """⛔ Uchalasi ham OpenAPI'da BOR — mijoz BRAUZER (`/reconciliation` naqshi).
+
+    08-13/08-15 klient sxemasini shu kontraktdan oladi.
+    `include_in_schema=False` bilan yozilgan marshrut frontend
+    darvozalariga UMUMAN ko'rinmasdi va ikki tomon jimgina ajralib
+    ketardi.
+    """
+    documented = {
+        (method.upper(), path)
+        for path, operations in fastapi_app.openapi()["paths"].items()
+        for method in operations
+        if path.startswith(REPORTS_PREFIX)
+    }
+
+    assert len(documented) == 3, sorted(documented)
+    assert {path for _, path in documented} == set(REPORTS_ROUTES)
+
+
+def test_only_the_debtors_route_carries_personal_data() -> None:
+    """⛔⛔ SHAXSIY YUZA AYNAN BITTA — `/debtors`, VA U TO'PLAMDA BO'LISHI SHART.
+
+    =======================================================================
+    ⛔ IKKI TOMONLAMA DA'VO VA IKKALASI HAM MAJBURIY.
+
+    (a) `/debtors` `PERSONAL_ROUTES` DA BOR. Bu «sizib chiqish» emas,
+        D-07 ning O'ZI: reestr HUJJAT va ism unda QONUNIY. Marshrut
+        to'plamga tushgani uchun undan `audit_read` VA `VENDOR_VIEW`
+        AVTOMATIK talab qilinadi — ya'ni himoya reja intizomiga emas,
+        MEXANIKAGA tayanadi. Agar u to'plamdan CHIQIB KETSA (masalan
+        kimdir `vendor_name` ni `merchant` deb qayta nomlasa), o'sha
+        ikki talab ham JIMGINA yo'qolardi va bu test buni aytadi.
+
+    (b) QOLGAN IKKITASI TO'PLAMDA YO'Q. Tushum kun × summa, arxiv esa
+        rasta kodi × sinf — ikkalasida ham odamni aniqlaydigan maydon
+        YO'Q. `/revenue` yoki `/anomalies` ga «qulaylik uchun» ism
+        qo'shilishi ularni ham audit talabiga tortardi va jurnal har
+        tushum so'rovida qator olardi (`audit.py` da ATAYIN rad etilgan
+        «blanket» holatining aynan sinfi).
+    =======================================================================
+
+    ⚠ Da'vo `test_personal_data_coverage.py::
+      test_personal_data_routes_declare_read_audit` va
+      `..._require_vendor_view` da IKKINCHI, MUSTAQIL shaklda
+      o'lchanadi (ular javob MODELIDAN yuradi). Bu yerdagisi MARSHRUT
+      REYESTRIDAN yuradi — ikki yo'nalish ATAYIN
+      (`test_no_reconciliation_route_enters_the_personal_data_gate`
+      bilan bir xil juftlik).
+    """
+    from tenancy.test_personal_data_coverage import PERSONAL_ROUTES
+
+    personal = sorted(path for path in PERSONAL_ROUTES if path.startswith(REPORTS_PREFIX))
+
+    assert personal == ["/api/v1/reports/debtors"], personal
+
+
+def test_the_reports_surface_needs_no_query_param_exemption() -> None:
+    """⛔ `QUERY_PARAM_ROUTES` GA QO'SHILMAYDI — VA SABAB MEXANIK, KELISHUV EMAS.
+
+    =======================================================================
+    ⛔⛔ MAJBURIY `from`/`to` MATRITSANI BUZMAYDI — O'LCHANGAN.
+
+    Uchala marshrutda ham `from`/`to` MAJBURIY query parametrlari bor va
+    cross-tenant matritsasi query parametrlarini TO'LDIRMAYDI
+    (`call_route()` faqat YO'L parametrlarini va tanani beradi), ya'ni
+    so'rov validatsiya darvozasida **422** bilan to'xtaydi.
+
+    ⛔ LEKIN 422 BU YERDA HECH NIMANI BUZMAYDI: `QUERY_PARAM_ROUTES` ning
+       YAGONA iste'molchisi — `test_no_matrix_route_returns_422`, u esa
+       `BODY_ROUTES` (`POST`/`PUT`/`PATCH`) ustidan yuradi. `GET`
+       marshruti o'sha to'plamga UMUMAN tushmaydi. Bu `GET /api/v1/
+       reconciliation/hit-rate` ning AYNAN holati — u ham majburiy
+       `from`/`to` oladi va u ham istisnoda YO'Q.
+
+    ⛔ ISTISNO QO'SHISH ZARARLI BO'LARDI: `test_query_param_routes_point_
+       at_live_routes` uni tirik deb ko'rsatardi, `test_no_matrix_route_
+       returns_422` esa uni `BODY_ROUTES` dan chiqarishga urinardi —
+       ya'ni ro'yxatda HECH NIMANI ushlab turmaydigan uchta yozuv paydo
+       bo'lardi va keyingi o'quvchi «vaqtincha qo'shib qo'yaman»
+       refleksini oqlagan pretsedentni ko'rardi.
+
+    ⚠ Uchala marshrutning TENANT CHEGARASI ALOHIDA o'lchanadi:
+      `tests/integration/test_reports_api.py::
+      test_the_other_markets_director_never_sees_market_a_rows` —
+      B bozorining direktori A ning davrini HAQIQIY parametrlar bilan
+      so'raydi va javobda A ning izi YO'Q (nazorat holati bilan).
+    =======================================================================
+    """
+    from tenancy.test_cross_tenant import QUERY_PARAM_ROUTES
+
+    matrix = {route.path for route in tenant_resource_routes(fastapi_app)}
+    exempted = sorted(
+        route.test_id for route in QUERY_PARAM_ROUTES if route.path.startswith(REPORTS_PREFIX)
+    )
+
+    assert set(REPORTS_ROUTES) <= matrix, (
+        "hisobot marshrutlari cross-tenant matritsasidan tushib qolgan — tokensiz/"
+        "buzilgan token da'volari va «javobda B ning izi yo'q» tekshiruvi ular "
+        f"uchun BAJARILMAYDI: {sorted(set(REPORTS_ROUTES) - matrix)}"
+    )
+    assert exempted == [], exempted
+
+
+# ===========================================================================
 # BILLING DOMENINING `detail` KONVENSIYASI (CR-04 / WR-06)
 # ===========================================================================
 
