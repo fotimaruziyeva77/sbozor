@@ -85,14 +85,21 @@ __all__ = [
 #   `from app.services.xlsx_template import escape_formula`) SAQLAYDI,
 #   ya'ni ta'rif bitta joyda turgani holda import yuzasi o'zgarmaydi.
 
-TEMPLATE_KINDS: Final = ("stalls", "vendors", "staff")
+TEMPLATE_KINDS: Final = ("stalls", "vendors", "staff", "ledger")
 """`GET /imports/template?kind=` qabul qiladigan qiymatlar.
 
-⚠ `imports.py` dagi `Literal[...]` bilan QO'LDA sinxron saqlanadi
-(FastAPI so'rov parametrini `Literal` bilan tekshiradi, bu ro'yxat esa
-ish vaqtidagi darvoza). Ajralib qolgan holatni
-`test_template_kinds_are_exactly_three` va `imports` marshrutlarining
-OpenAPI darvozasi birgalikda ushlaydi.
+⚠ `imports.py` dagi `Literal[...]` VA `_TEMPLATE_PERMISSIONS` bilan
+QO'LDA sinxron saqlanadi (FastAPI so'rov parametrini `Literal` bilan
+tekshiradi, bu ro'yxat esa ish vaqtidagi darvoza, xarita esa huquq).
+Ajralib qolgan holatni `test_template_kinds_are_exactly_four`,
+`test_the_three_template_registries_stay_in_sync` va `imports`
+marshrutlarining OpenAPI darvozasi birgalikda ushlaydi.
+
+⛔ TO'RTINCHI A'ZO (`ledger`, 08-14) DARVOZANI CHETLAB O'TMASDAN
+   QO'SHILDI: `test_template_kinds_are_exactly_three` testi NOMI BILAN
+   BIRGA `..._four` ga o'zgartirildi. Nom sonni aytadi, ya'ni to'plamning
+   o'sishi diff'da KO'RINADI — testni o'chirish yoki nomni saqlab
+   qiymatini almashtirish o'sha o'sishni JIMGINA qilardi (R-11).
 """
 
 ERROR_REPORT_COLUMNS: Final = 3
@@ -123,6 +130,8 @@ _TEXTS: Final[dict[str, dict[str, str]]] = {
         "stall_code": "rasta kodi",
         "from_date": "boshlanish sanasi",
         "staff_sheet": "Xodimlar",
+        "ledger_sheet": "Daftar",
+        "ledger_amount": "daftar summasi",
         "role": "rol",
         "zones_header": "Zonalar",
         "categories_header": "Toifalar",
@@ -146,6 +155,8 @@ _TEXTS: Final[dict[str, dict[str, str]]] = {
         "stall_code": "раста коди",
         "from_date": "бошланиш санаси",
         "staff_sheet": "Ходимлар",
+        "ledger_sheet": "Дафтар",
+        "ledger_amount": "дафтар суммаси",
         "role": "рол",
         "zones_header": "Зоналар",
         "categories_header": "Тоифалар",
@@ -169,6 +180,8 @@ _TEXTS: Final[dict[str, dict[str, str]]] = {
         "stall_code": "номер прилавка",
         "from_date": "дата начала",
         "staff_sheet": "Сотрудники",
+        "ledger_sheet": "Тетрадь",
+        "ledger_amount": "сумма по тетради",
         "role": "роль",
         "zones_header": "Зоны",
         "categories_header": "Категории",
@@ -183,15 +196,32 @@ _STALL_HEADER_KEYS: Final = ("code", "zone", "category", "status", "note")
 _VENDOR_HEADER_KEYS: Final = ("full_name", "phone", "stall_code", "from_date")
 _STAFF_HEADER_KEYS: Final = ("full_name", "phone", "role")
 
+_LEDGER_HEADER_KEYS: Final = ("stall_code", "ledger_amount")
+"""⛔ DAFTAR SHABLONINING USTUNLARI — AYNAN IKKITA (UI-SPEC §10.3, D-17).
+
+Uchinchi ustun (sotuvchi ismi, izoh, kassir F.I.Sh.) ⛔ QO'SHILMAYDI va
+sabab mahsulotniki, uslubiy emas: daftar QOG'OZ va uni ko'chirayotgan
+odam har ustunni QO'LDA yozadi — har qo'shimcha ustun 300–1000 qatorli
+kunlik ishni sekinlashtiradi va oxir-oqibat importni butunlay tashlab
+yuborishga olib boradi.
+
+⚠ Sotuvchi ismi ayniqsa vasvasali ko'rinadi («kim to'ladi?»), lekin u
+  daftarda ALLAQACHON yo'q ma'lumot emas — u TIZIMDA bor
+  (`stall_assignments`), ya'ni uni faylga ko'chirish shaxsiy ma'lumotni
+  ikkinchi marta, qo'lda yozib chiqishdan boshqa hech nima bermasdi.
+"""
+
 _SHEET_KEYS: Final[dict[str, str]] = {
     "stalls": "stalls_sheet",
     "vendors": "vendors_sheet",
     "staff": "staff_sheet",
+    "ledger": "ledger_sheet",
 }
 _HEADER_KEYS: Final[dict[str, tuple[str, ...]]] = {
     "stalls": _STALL_HEADER_KEYS,
     "vendors": _VENDOR_HEADER_KEYS,
     "staff": _STAFF_HEADER_KEYS,
+    "ledger": _LEDGER_HEADER_KEYS,
 }
 
 _STAFF_ROLE_COLUMN: Final = 2
@@ -217,6 +247,20 @@ shablonga ham (`vendors`, `staff`) tegishli va u yerda ham AYNAN shu
 qiymat ishlatiladi — ikki xil namunaviy shakl adminni chalg'itardi.
 """
 
+_LEDGER_SAMPLE_AMOUNT: Final = "150000"
+"""Namunaviy daftar summasi — BUTUN so'm, MINUSSIZ va bo'sh joysiz.
+
+⛔ `-150000` YOKI `+150000` YOZILMAYDI: `-` va `+` ikkalasi ham
+`FORMULA_PREFIXES` a'zosi, ya'ni `escape_formula()` ularni apostrof bilan
+qochirardi va katakdagi qiymat `'-150000` bo'lib qolardi. O'sha qiymat O'Z
+shablonining importida `ledger_amount_invalid` berardi — `_SAMPLE_PHONE`
+da o'lchangan tuzoqning (02-24 deviatsiya #1) aynan takrori.
+
+⚠ Ajratgich ham YO'Q (`150 000`, `150,000`): daftar summasi `int` bo'lib
+  o'qiladi (C-6) va namunaga qo'yilgan ajratgich adminni "shunday yozish
+  kerak ekan" degan xulosaga olib borardi.
+"""
+
 _STAFF_SAMPLE_ROLE: Final = "cashier"
 """Namunaviy rol — `Role.CASHIER` qiymati, TARJIMASIZ (D-16).
 
@@ -234,7 +278,7 @@ def build_template(
     *,
     roles: Sequence[str] = (),
 ) -> bytes:
-    """Import shablonini hosil qiladi (`stalls` / `vendors` / `staff`).
+    """Import shablonini hosil qiladi (`stalls` / `vendors` / `staff` / `ledger`).
 
     Fayl HAR SAFAR yangidan quriladi va repoda nusxa saqlanmaydi
     (Open Question 5): zona nomi tahrirlanganda keyingi yuklab olishda
@@ -356,6 +400,13 @@ def _sample_row(
     category = categories[0] if categories else ""
     if kind == "stalls":
         return ("1", zone, category, _STALL_SAMPLE_STATUS, "")
+    if kind == "ledger":
+        # ⚠ SUMMA MATN SIFATIDA YOZILADI (butun fayl `_write_text()` dan
+        #   o'tadi) va `validate_ledger_rows()` uni `int` ga keltiradi:
+        #   o'quvchi qatlam (`xlsx_reader`) baribir HAR katakni satr qilib
+        #   beradi, ya'ni bu yerda son yozish parser uchun hech nima
+        #   o'zgartirmasdi, qochirish yo'lini esa ikkiga bo'lardi.
+        return ("1", _LEDGER_SAMPLE_AMOUNT)
     if kind == "staff":
         # ⚠ `cashier` TARJIMA QILINMAYDI — u DB KONTENTI (`Role`, 1-faza
         # D-16), aynan `_STALL_SAMPLE_STATUS` dagi `active` bilan bir xil
@@ -386,12 +437,14 @@ def _reference_sheet(
     `invalid_role` xatolarining eng ko'p uchraydigan sababini — qo'lda
     yozishdagi xatoni — yo'q qiladi.
 
-    UCH TURDAN IKKITASIDA VARAQ QURILADI:
+    TO'RT TURDAN IKKITASIDA VARAQ QURILADI:
       `stalls` — zona va toifa nomlari;
       `staff`  — chaqiruvchi bera oladigan ROL qiymatlari (D-04);
       `vendors` — HECH NARSA, va bu ATAYIN: rasta kodi ro'yxati minglab
         element bo'lishi mumkin va uni ochiluvchi ro'yxatga aylantirish
-        faylni foydasiz kattalashtirardi.
+        faylni foydasiz kattalashtirardi;
+      `ledger` — HECH NARSA, `vendors` bilan AYNAN bir xil sabab: uning
+        birinchi ustuni ham rasta KODI (08-14).
     """
     if kind == "staff":
         _staff_reference_sheet(workbook, target, texts, roles)

@@ -969,7 +969,7 @@ def test_the_three_template_registries_stay_in_sync() -> None:
        xaritaga qo'shilmagan tur `KeyError` bilan **500** berardi (422
        emas), teskarisi esa o'lik yozuv qoldirardi.
     """
-    from app.api.v1.imports import ImportKind, _TEMPLATE_PERMISSIONS
+    from app.api.v1.imports import _TEMPLATE_PERMISSIONS, ImportKind
     from app.services.xlsx_template import TEMPLATE_KINDS
 
     assert set(get_args(ImportKind)) == set(TEMPLATE_KINDS)
