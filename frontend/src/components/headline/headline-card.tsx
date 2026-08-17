@@ -1,14 +1,17 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
+import { useState } from "react";
 
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/cn";
 import {
   headlineLabelKey,
   headlineUnitOf,
   useHeadline,
 } from "@/lib/headline-queries";
+import { useCountUp } from "@/lib/use-count-up";
 
 /*
  * =============================================================================
@@ -94,6 +97,23 @@ export function HeadlineCard({ marketId }: HeadlineCardProps) {
   const format = useFormatter();
   const headline = useHeadline(marketId);
 
+  /*
+   * Count-up (09-UI-SPEC §10.3, L-5): 600ms, kubik ease. ⛔ `undefined`
+   * `null` ga tushadi va halqa UMUMAN boshlanmaydi — nol sanalmaydi
+   * (T-05-04). Oxirgi kadr — qiymatning O'ZI, ya'ni pastdagi
+   * `format.number()` AYNAN server songa qo'llanadi.
+   */
+  const shown = useCountUp(headline.value ?? null);
+
+  /*
+   * Tick — count tugagach BIR marta `scale(1.03)` (L-5). `settledFor`
+   * `transitionEnd` da QAYSI qiymat uchun tick tugaganini eslab qoladi:
+   * yuqoriga 150ms + pastga 150ms, ⛔ cheksiz pulsatsiya YO'Q. Yangi
+   * qiymatda `settledFor !== value` bo'lib tick o'zi qayta qurollanadi —
+   * effektda sinxron setState YO'Q (hodisa-asosli).
+   */
+  const [settledFor, setSettledFor] = useState<number | null>(null);
+
   /* Bozor tanlanmagan — so'rov ham yuborilmaydi, karta ham chizilmaydi. */
   if (marketId === null) return null;
 
@@ -106,8 +126,15 @@ export function HeadlineCard({ marketId }: HeadlineCardProps) {
         role="status"
       >
         <span className="sr-only">{t("common.loading")}</span>
-        {/* ⛔ `0` EMAS: soxta javob bo'lardi (§10.2). */}
-        <Skeleton className="h-8 w-28" />
+        {/*
+         * ⛔ `0` EMAS: soxta javob bo'lardi (§10.2).
+         * ⛔ G-motion-7(c): balandlik `h-11` — `isPending` da `unit` HALI
+         *    MA'LUM EMAS, shuning uchun ENG KATTA shox (Display-XL, 44px
+         *    qator qutisi) olinadi. `h-8` -> `h-11` sakrashi CLS berardi;
+         *    `count` shoxida `h-11` -> `h-8` qisqarishi esa layout
+         *    siljishi emas, shunchaki bo'shliq (09-RESEARCH ochiq savol 5).
+         */}
+        <Skeleton className="h-11 w-28" />
         <Skeleton className="h-5 w-48" />
       </Card>
     );
@@ -128,15 +155,47 @@ export function HeadlineCard({ marketId }: HeadlineCardProps) {
   const value = headline.value;
   const unit = headlineUnitOf(headline.metric);
 
+  /* Count tugadi — tick kadri (`scale(1.03)`), `transitionEnd` qaytaradi. */
+  const arrived = shown === value;
+
   return (
     <Card className="flex flex-col gap-1 p-4" data-headline>
       {/*
        * Display roli (§7.1) + ⛔ `font-mono` (§7.3): summa HAM, sanoq HAM
        * bir xil uslubda. Ikki uslub «bu boshqa turdagi son» degan YOLG'ON
        * KANAL bo'lardi — ekran qaysi son ekanini BILMAYDI.
+       *
+       * ⛔ G-motion-7(b): `text-display` SHARTLI — FAQAT `unit === "soum"`.
+       *    Metrikani SERVER tanlaydi va u rasta/kvitansiya SONI ham
+       *    bo'lishi mumkin; 40px li «34» direktorga «34 million» bo'lib
+       *    o'qilardi (§7.1). Sanoq `text-2xl` da QOLADI.
        */}
-      <p className="text-2xl leading-tight font-semibold tracking-tight">
-        <span className="font-mono tabular-nums">{format.number(value)}</span>
+      <p
+        className={cn(
+          "font-semibold tracking-tight",
+          unit === "soum" ? "text-display" : "text-2xl leading-tight",
+        )}
+      >
+        {/*
+         * ⛔ A11Y (§10.3): yakuniy qiymat `sr-only` MATN TUGUNI bo'lib
+         *    DARHOL to'liq turadi — skrinrider count'ni kutmaydi va
+         *    `aria-live` UMUMAN yo'q (600ms da 20 marta gapirardi).
+         *    Sanayotgan span esa `aria-hidden` — u bezak, ma'lumot emas.
+         *    G-33(a) skaneri ham aynan shu `sr-only` tugunni o'qiydi.
+         */}
+        <span className="sr-only">{format.number(value)}</span>
+        <span
+          aria-hidden="true"
+          className={cn(
+            "inline-block font-mono tabular-nums",
+            /* Tick — 150ms (`--motion-fast` token, sehrli son YO'Q). */
+            "transition-transform duration-(--motion-fast)",
+            arrived && settledFor !== value ? "scale-[1.03]" : "scale-100",
+          )}
+          onTransitionEnd={() => setSettledFor(value)}
+        >
+          {format.number(shown ?? value)}
+        </span>
         {/*
          * ⛔ Birlik FAQAT `"soum"` da. `pending-summary.tsx:177` naqshi:
          *    «Rasta SONI — pul emas, shuning uchun `amountUnit` YO'Q».

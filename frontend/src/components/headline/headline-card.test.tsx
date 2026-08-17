@@ -32,7 +32,14 @@
  * =============================================================================
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { NextIntlClientProvider } from "next-intl";
@@ -49,6 +56,7 @@ import messages from "../../../messages/uz-Latn.json";
 import { HeadlineCard } from "@/components/headline/headline-card";
 import { ApiError } from "@/lib/api-client";
 import { HEADLINE_UNIT, headlineResponseSchema } from "@/lib/headline-queries";
+import { useCountUp } from "@/lib/use-count-up";
 
 const MARKET_ID = "11111111-1111-4111-8111-111111111111";
 const LOCALE = "uz-Latn";
@@ -536,5 +544,215 @@ describe("noma'lum metrika ZAXIRA yorliq bilan ko'rsatiladi", () => {
     expect(unitOccurrences(view.root)).toBe(0);
     /* Son hamon AYNAN BITTA: zaxira yo'l (a) bandini buzmaydi. */
     expect(numericTextNodes(view.root)).toHaveLength(1);
+  });
+});
+
+/* ========================================================================== */
+/* 09-05 T1 — COUNT-UP VA DISPLAY-XL (G-motion-7(b,c), 09-UI-SPEC §10.3)      */
+/*                                                                            */
+/* ⛔ G-33 BILAN KELISHUV: sanayotgan raqam `aria-hidden` span, yakuniy       */
+/*   qiymat esa `sr-only` MATN TUGUNI — shunda `numericTextNodes` (a)         */
+/*   bandidagi «AYNAN 1 raqamli tugun» da'vosi count-up bilan ham AYNI        */
+/*   qoladi: skrinrider va (a) skaneri yakuniy qiymatni DARHOL ko'radi,       */
+/*   ko'z esa animatsiyani.                                                   */
+/*                                                                            */
+/* ⚠ jsdom (09-RESEARCH Tuzoq 1): Tailwind CSS yuklanmaydi — tasdiqlar        */
+/*   `className` SATRI ustida. `requestAnimationFrame` MAVJUD va             */
+/*   `vi.useFakeTimers()` uni patch qiladi [O'LCHANDI] — count-up             */
+/*   deterministik.                                                           */
+/* ========================================================================== */
+
+describe("useCountUp — son kontrakti (09-05 T1)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  test("⛔ `value === null` — halqa UMUMAN boshlanmaydi, nol sanalmaydi", () => {
+    const { result } = renderHook(() => useCountUp(null));
+
+    expect(result.current).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(1200);
+    });
+
+    /* Vaqt o'tdi — hech nima sanalmadi: `null` «o'lchanmagan» (T-05-04). */
+    expect(result.current).toBeNull();
+  });
+
+  test("oraliq kadrlar BUTUN son va chegaralar ichida", () => {
+    const { result } = renderHook(() => useCountUp(1_000_000));
+
+    /* Boshlang'ich kadr — 0: animatsiyaning dizayn bo'yicha starti. */
+    expect(result.current).toBe(0);
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    const mid = result.current;
+    expect(mid).not.toBeNull();
+    expect(Number.isInteger(mid)).toBe(true);
+    expect(mid as number).toBeGreaterThan(0);
+    expect(mid as number).toBeLessThan(1_000_000);
+  });
+
+  test("⛔ oxirgi kadr — qiymatning O'ZI (ease natijasi emas)", () => {
+    /* 999_999 ataylab: yaxlitlangan ease bu songa «tasodifan» tushmaydi. */
+    const { result } = renderHook(() => useCountUp(999_999));
+
+    act(() => {
+      vi.advanceTimersByTime(700);
+    });
+
+    expect(result.current).toBe(999_999);
+  });
+
+  test("reduced-motion: halqa o'rniga DARHOL oxirgi kadr", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("reduce"),
+      media: query,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      onchange: null,
+      dispatchEvent: () => false,
+    }));
+
+    const { result } = renderHook(() => useCountUp(777));
+
+    /* Hech qanday taymer surilmasdan — natija darhol yakuniy. */
+    expect(result.current).toBe(777);
+  });
+
+  test("manba skani: rAF + yaxlitlash BOR, kasr formatlagichlari YO'Q", () => {
+    /*
+     * ⚠ Taqiqlangan nomlar SHU TESTDA literal — modul manbasida esa YO'Q
+     *   (aks holda skan o'z izohidan qizarardi, `headline-queries.ts` darsi).
+     */
+    const sourcePath = path.join(
+      path.dirname(HEADLINE_COMPONENTS),
+      "..",
+      "lib",
+      "use-count-up.ts",
+    );
+    const source = readFileSync(sourcePath, "utf8");
+
+    expect(source).toContain("requestAnimationFrame");
+    expect(source).toContain("cancelAnimationFrame");
+    expect(source).toContain("Math.round");
+    /* Pul BUTUN so'm (CLAUDE.md) — kasr yo'llari modulda umuman yo'q. */
+    expect(source).not.toContain("toFixed");
+    expect(source).not.toContain("parseFloat");
+  });
+});
+
+describe("HeadlineCard — Display-XL shartli va CLS juftligi (09-05 T1)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  test("⛔ G-motion-7(b): `text-display` FAQAT `soum` shoxida — ikkala shox BITTA testda", async () => {
+    /* --- `soum` shoxi ----------------------------------------------------- */
+    const soum = await renderLoaded("headline.revenue_today", 1_250_000);
+    const soumParagraph = soum.root.querySelector("p");
+
+    expect(soumParagraph).not.toBeNull();
+    expect(soumParagraph?.className).toContain("text-display");
+    expect(soumParagraph?.className).not.toContain("text-2xl");
+    soum.unmount();
+
+    /* --- `count` shoxi ---------------------------------------------------- */
+    const counted = await renderLoaded("headline.receipts_written", 34);
+    const countParagraph = counted.root.querySelector("p");
+
+    expect(countParagraph).not.toBeNull();
+    /* Sanoq 40px da «34 million» bo'lib o'qilardi — `text-2xl` QOLADI. */
+    expect(countParagraph?.className).toContain("text-2xl");
+    expect(countParagraph?.className).not.toContain("text-display");
+  });
+
+  test("⛔ G-motion-7(c): qiymat skeletoni `h-11` (eng katta shox), yorliq `h-5` TEGILMAGAN", () => {
+    /* Javob hech qachon kelmaydi — `isPending` shoxi qotib turadi. */
+    apiClientMock.apiFetch.mockImplementation(() => new Promise(() => {}));
+    const view = renderCard();
+
+    const card = view.container.querySelector('[aria-busy="true"]');
+    expect(card).not.toBeNull();
+
+    const skeletons = [
+      ...(card as HTMLElement).querySelectorAll('div[aria-hidden="true"]'),
+    ];
+    expect(skeletons.length).toBeGreaterThanOrEqual(2);
+
+    /*
+     * Qiymat skeletoni `h-11 w-28`: `isPending` da `unit` HALI NOMA'LUM,
+     * shuning uchun ENG KATTA shox (Display-XL, 44px qutisi) olinadi —
+     * `h-8` -> `h-11` sakrashi CLS berardi, `h-11` -> `h-8` qisqarishi
+     * esa layout siljishi emas, bo'shliq (09-RESEARCH ochiq savol 5).
+     */
+    expect(
+      skeletons.some(
+        (el) => el.className.includes("h-11") && el.className.includes("w-28"),
+      ),
+    ).toBe(true);
+    /* Eski `h-8` qiymat skeletoni QOLMAGAN. */
+    expect(skeletons.some((el) => /\bh-8\b/u.test(el.className))).toBe(false);
+    /* Yorliq skeletoni TEGILMAGAN. */
+    expect(
+      skeletons.some(
+        (el) => el.className.includes("h-5") && el.className.includes("w-48"),
+      ),
+    ).toBe(true);
+  });
+
+  test("⛔ sanayotgan raqam `aria-live` da EMAS; yakuniy qiymat DARHOL to'liq", async () => {
+    const view = await renderLoaded("headline.revenue_today", 987_654);
+
+    /* `aria-live` UMUMAN yo'q: skrinrider 600ms da 20 marta gapirardi. */
+    expect(view.root.querySelector("[aria-live]")).toBeNull();
+
+    /*
+     * Yakuniy qiymat count tugashini KUTMASDAN to'liq turadi — `sr-only`
+     * matn tuguni (G-33(a) skaneri ham AYNAN shuni o'qiydi).
+     */
+    expect(numericTextNodes(view.root)[0]).toBe(
+      new Intl.NumberFormat(LOCALE).format(987_654),
+    );
+
+    /* Sanayotgan span — bezak: `aria-hidden`, skrinriderga ko'rinmaydi. */
+    const counting = view.root.querySelector('p span[aria-hidden="true"]');
+    expect(counting).not.toBeNull();
+  });
+
+  test("tick BIR marta: count tugagach `scale(1.03)`, transitionEnd'da qaytadi", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const view = await renderLoaded("headline.revenue_today", 42_000);
+    const counting = view.root.querySelector(
+      'p span[aria-hidden="true"]',
+    ) as HTMLElement;
+    expect(counting).not.toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+
+    /* Count tugadi — tick kadri: `scale(1.03)`, 150ms (`--motion-fast`). */
+    expect(counting.className).toContain("scale-[1.03]");
+    /* ⛔ Cheksiz pulsatsiya YO'Q: `animate-*` emas, bir martalik transition. */
+    expect(counting.className).not.toContain("animate-");
+
+    fireEvent.transitionEnd(counting);
+
+    expect(counting.className).toContain("scale-100");
+    expect(counting.className).not.toContain("scale-[1.03]");
   });
 });
