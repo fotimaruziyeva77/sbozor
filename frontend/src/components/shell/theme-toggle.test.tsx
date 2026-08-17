@@ -23,8 +23,14 @@
  * bir qismi: `ThemeToggle` `apiFetch` import qilsa, jsdom'da fetch yo'qligi
  * uni shu yerda fosh qilardi.
  */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+/* DIQQAT: bosish `fireEvent` bilan — loyihada `user-event` ishlatilmaydi. */
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -136,10 +142,9 @@ describe("ThemeToggle — LocaleSwitcher naqshidagi uch tugmali guruh", () => {
   });
 
   test("Tungi bosilganda data-theme='dark' bo'ladi va indikator KO'CHADI", async () => {
-    const user = userEvent.setup();
     renderToggle();
 
-    await user.click(screen.getByRole("button", { name: LABEL_DARK }));
+    fireEvent.click(screen.getByRole("button", { name: LABEL_DARK }));
 
     expect(document.documentElement.dataset.theme).toBe("dark");
     // Hook DOM'dan o'qiydi (MutationObserver mikrotaskda) — kutish shart.
@@ -149,10 +154,9 @@ describe("ThemeToggle — LocaleSwitcher naqshidagi uch tugmali guruh", () => {
   });
 
   test("tanlov localStorage['sbozor-theme'] ga yoziladi", async () => {
-    const user = userEvent.setup();
     renderToggle();
 
-    await user.click(screen.getByRole("button", { name: LABEL_SUN }));
+    fireEvent.click(screen.getByRole("button", { name: LABEL_SUN }));
 
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("sun");
   });
@@ -170,10 +174,9 @@ describe("ThemeToggle — LocaleSwitcher naqshidagi uch tugmali guruh", () => {
   });
 
   test("tema o'zgarishida toast CHIQMAYDI", async () => {
-    const user = userEvent.setup();
     renderToggle();
 
-    await user.click(screen.getByRole("button", { name: LABEL_DARK }));
+    fireEvent.click(screen.getByRole("button", { name: LABEL_DARK }));
     await waitFor(() => {
       expect(activeButtonName()).toBe(LABEL_DARK);
     });
