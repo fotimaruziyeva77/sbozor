@@ -1396,7 +1396,14 @@
     "countStalls": "Rastalar",
     "countVendors": "Sotuvchilar",
     "countCameras": "Kameralar",
-    "countUsers": "Foydalanuvchilar"
+    "countUsers": "Foydalanuvchilar",
+    "revenueTrendTitle": "Tushum trendi",
+    "revenueTrendPeriod": "So'nggi 7 kun",
+    "revenueTrendEmpty": "Trend uchun ma'lumot yetarli emas",
+    "revenueTrendEmptyHint": "Kamida 7 yopilgan kun kerak — hisobotlar bo'limida to'liq davrni ko'rish mumkin.",
+    "occupancyTitle": "Bandlik",
+    "occupancySummary": "{occupied} band · {empty} bo'sh",
+    "occupancyEmpty": "Bandlik hali o'lchanmagan"
   },
   "reports": {
     "title": "Hisobotlar",
@@ -1502,5 +1509,11 @@
     "ledgerReplaceBody": "{day} kuni uchun daftar allaqachon yuklangan. Yangi fayl eskisining o'rnini oladi.",
     "ledgerReplaceConfirm": "Almashtirish",
     "ledgerLoaded": "Daftar yuklandi: {rows} qator"
+  },
+  "theme": {
+    "label": "Ko'rinish",
+    "light": "Yorug'",
+    "dark": "Tungi",
+    "sun": "Quyosh ostida"
   }
 }

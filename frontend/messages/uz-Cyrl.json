@@ -1396,7 +1396,14 @@
     "countStalls": "Расталар",
     "countVendors": "Сотувчилар",
     "countCameras": "Камералар",
-    "countUsers": "Фойдаланувчилар"
+    "countUsers": "Фойдаланувчилар",
+    "revenueTrendTitle": "Тушум тренди",
+    "revenueTrendPeriod": "Сўнгги 7 кун",
+    "revenueTrendEmpty": "Тренд учун маълумот етарли эмас",
+    "revenueTrendEmptyHint": "Камида 7 ёпилган кун керак — ҳисоботлар бўлимида тўлиқ даврни кўриш мумкин.",
+    "occupancyTitle": "Бандлик",
+    "occupancySummary": "{occupied} банд · {empty} бўш",
+    "occupancyEmpty": "Бандлик ҳали ўлчанмаган"
   },
   "reports": {
     "title": "Ҳисоботлар",
@@ -1502,5 +1509,11 @@
     "ledgerReplaceBody": "{day} куни учун дафтар аллақачон юкланган. Янги файл эскисининг ўрнини олади.",
     "ledgerReplaceConfirm": "Алмаштириш",
     "ledgerLoaded": "Дафтар юкланди: {rows} қатор"
+  },
+  "theme": {
+    "label": "Кўриниш",
+    "light": "Ёруғ",
+    "dark": "Тунги",
+    "sun": "Қуёш остида"
   }
 }
