@@ -694,7 +694,7 @@ qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-faz
   5. Lighthouse ≥95, LCP <1.5s (statik sahifada), SEO meta/OG/structured data to'liq
 
 **Chegaralar:** mavjud Next.js ichida `(marketing)` route-guruhi — alohida sayt EMAS; copy brief matnidan (yakuniy tahrir shu fazada, 3 tilda); maxfiylik siyosati sahifasi majburiy (CCTV shaxsiy ma'lumot)
-**Plans:** 8 plans in 5 waves
+**Plans:** 8/8 plans complete
 
 Plans:
 **Wave 1** *(parallel — fayl kesishuvi YO'Q)*
@@ -718,7 +718,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 10-08-PLAN.md — Faza darvozasi: `phase10-criteria.test.mjs`, `DEMO_ERROR_CODES` ko'zgusi, `gate` byudjetlarining W0-13 qayta o'lchovi, LAND-01…05, VALIDATION va HUMAN-UAT (W5)
+- [x] 10-08-PLAN.md — Faza darvozasi: `phase10-criteria.test.mjs`, `DEMO_ERROR_CODES` ko'zgusi, `gate` byudjetlarining W0-13 qayta o'lchovi, LAND-01…05, VALIDATION va HUMAN-UAT (W5)
 
 **UI hint**: yes
 **Research flag**: bajarildi — `10-RESEARCH.md` besh bloklovchi ziddiyatni (B-1…B-5) yechim bilan yopdi va `gate` byudjetini o'lchadi (O-01).
