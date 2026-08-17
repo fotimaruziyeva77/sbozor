@@ -694,7 +694,7 @@ qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-faz
   5. Lighthouse ≥95, LCP <1.5s (statik sahifada), SEO meta/OG/structured data to'liq
 
 **Chegaralar:** mavjud Next.js ichida `(marketing)` route-guruhi — alohida sayt EMAS; copy brief matnidan (yakuniy tahrir shu fazada, 3 tilda); maxfiylik siyosati sahifasi majburiy (CCTV shaxsiy ma'lumot)
-**Plans:** 3/8 plans executed
+**Plans:** 6/8 plans executed
 
 Plans:
 **Wave 1** *(parallel — fayl kesishuvi YO'Q)*
@@ -708,9 +708,9 @@ Plans:
 
 **Wave 3** *(parallel — blocked on Wave 2)*
 
-- [ ] 10-04-PLAN.md — Demo-forma (zod grafisiz), `demo-errors.ts` ko'zgusi, maxfiylik siyosati sahifasi va SEO fayllari (LAND-03, LAND-05) (W3)
-- [ ] 10-05-PLAN.md — Hero: server yakuniy kadr (LCP) + 12s klient sikli + `hero-scene.test.tsx` (G-land-2) (LAND-02) (W3)
-- [ ] 10-06-PLAN.md — Scroll-reveal primitivi, og'riq/dalil/rol kartalari, ishonch bloki, pilot, FAQ va 3-qadam chizig'i (LAND-04) (W3)
+- [x] 10-04-PLAN.md — Demo-forma (zod grafisiz), `demo-errors.ts` ko'zgusi, maxfiylik siyosati sahifasi va SEO fayllari (LAND-03, LAND-05) (W3)
+- [x] 10-05-PLAN.md — Hero: server yakuniy kadr (LCP) + 12s klient sikli + `hero-scene.test.tsx` (G-land-2) (LAND-02) (W3)
+- [x] 10-06-PLAN.md — Scroll-reveal primitivi, og'riq/dalil/rol kartalari, ishonch bloki, pilot, FAQ va 3-qadam chizig'i (LAND-04) (W3)
 
 **Wave 4** *(blocked on Wave 3)*
 
