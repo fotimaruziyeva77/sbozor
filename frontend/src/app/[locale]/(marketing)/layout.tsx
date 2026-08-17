@@ -1,8 +1,20 @@
+import { Instrument_Sans } from "next/font/google";
 import { notFound } from "next/navigation";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getMessages, setRequestLocale } from "next-intl/server";
 
 import { routing } from "@/i18n/routing";
+
+/*
+ * Landing v2 dizayni (claude.ai/design, foydalanuvchi buyurtmasi) shrifti.
+ * next/font build paytida o'zi yuklab keladi — runtime'da tashqi so'rov 0
+ * (CSP/LCP buzilmaydi). Kirill subset'i shriftda YO'Q — ru/uz-Cyrl matni
+ * fallback stack'ka (system-ui) tushadi, bu ongli savdolashuv.
+ */
+const instrumentSans = Instrument_Sans({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "600", "700"],
+});
 
 /*
  * `(marketing)` guruhining layout'i — anonim yuzaning provayder chegarasi
@@ -48,7 +60,7 @@ export default async function MarketingLayout({
     <NextIntlClientProvider
       messages={{ common: messages.common, landing: messages.landing }}
     >
-      {children}
+      <div className={instrumentSans.className}>{children}</div>
     </NextIntlClientProvider>
   );
 }

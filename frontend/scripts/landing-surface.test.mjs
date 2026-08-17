@@ -87,19 +87,22 @@ const TEST_FILE = /\.test\.[a-z]+$/u;
 /**
  * G-land-1(a) — klient orollari, NOMMA-NOM (§4.4 + B-1/C yechimi).
  *
- * ⛔ BESH fayl: 10-04 formasi, 10-05 sahnasi, 10-06 reveal/step-line va
- *    header'ning til almashtirgichi (B-1/C reyestrni 4 dan 5 ga chiqardi
- *    va bu ONGLI). Oltinchi fayl paydo bo'lsa bu deepEqual QIZARADI —
- *    yangi orol UI-SPEC'ga qaytariladi, jimgina qo'shilmaydi.
+ * ⛔ OLTI fayl: 10-04 formasi, 10-05 sahnasi, 10-06 reveal/step-line,
+ *    header'ning til almashtirgichi (B-1/C: 4 → 5) va Landing v2
+ *    buyurtmasining yo'qotish kalkulyatori (claude.ai/design, 2026-08-18:
+ *    5 → 6 — ONGLI, sof klient arifmetikasi, fetch 0). Yettinchi fayl
+ *    paydo bo'lsa bu deepEqual QIZARADI — yangi orol dizayn/SPEC qaroriga
+ *    qaytariladi, jimgina qo'shilmaydi.
  */
 const CLIENT_ISLANDS = [
   "components/marketing/demo-form.tsx",
   "components/marketing/hero-scene.tsx",
   "components/marketing/locale-switcher.tsx",
+  "components/marketing/loss-calc.tsx",
   "components/marketing/reveal.tsx",
   "components/marketing/step-line.tsx",
 ];
-const CLIENT_ISLANDS_COUNT = 5;
+const CLIENT_ISLANDS_COUNT = 6;
 
 /**
  * G-land-1(c) — `(marketing)/layout.tsx` provayderiga uzatiladigan fazoviy

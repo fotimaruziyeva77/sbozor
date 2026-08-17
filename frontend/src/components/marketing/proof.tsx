@@ -1,7 +1,6 @@
 import { getTranslations } from "next-intl/server";
 
 import { Reveal } from "@/components/marketing/reveal";
-import { Card, CardContent } from "@/components/ui/card";
 
 /*
  * Bosh dalil bloki (10-UI-SPEC §9.1 blok 4) — `surface` kartada.
@@ -25,19 +24,21 @@ export async function Proof() {
 
   return (
     <Reveal>
-      <Card className="landing-glow mx-auto w-full max-w-2xl">
-        <CardContent className="flex flex-col gap-3 pt-5">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {t("proof.title")}
-          </h2>
-          <p className="max-w-[66ch] text-sm leading-relaxed text-text-muted">
-            {t("proof.body")}
-          </p>
-          <p className="max-w-[66ch] text-sm leading-relaxed">
-            {t("proof.note")}
-          </p>
-        </CardContent>
-      </Card>
+      {/* v2: och ko'k gradient banner, markazda — ⭐ dalil bayonot sifatida. */}
+      <div className="landing-proof rounded-2xl px-8 py-12 text-center">
+        <p aria-hidden="true" className="text-lg text-warning-text">
+          ★
+        </p>
+        <h2 className="mx-auto mt-3 max-w-[32ch] text-2xl font-semibold tracking-tight text-balance">
+          {t("proof.title")}
+        </h2>
+        <p className="mx-auto mt-3 max-w-[52ch] text-lg leading-relaxed text-text-muted">
+          {t("proof.body")}
+        </p>
+        <p className="mx-auto mt-2 max-w-[52ch] text-sm leading-relaxed text-text-muted">
+          {t("proof.note")}
+        </p>
+      </div>
     </Reveal>
   );
 }

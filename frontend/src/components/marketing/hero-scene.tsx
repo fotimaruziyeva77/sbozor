@@ -140,6 +140,67 @@ const FINAL_FRAME: SceneState = {
   unpaidRevealed: true,
 };
 
+/** 1–2-fazalarning namunaviy tushumi (v2 dizayn qiymati). */
+const DRAW_REVENUE_SOUM = 2_240_000;
+
+/**
+ * Fazaning STATIK kadri — v2 faza-nuqtalari uchun («Fazalarni o'zingiz
+ * boshqaring»). Reduced-motion'da nuqta bosilganda sikl-taymersiz aynan
+ * shu kadr chiziladi; autoplay rejimida esa jumpRef sikl mashinasiga
+ * ulanadi. enterPhase holatlarining ko'zgusi — farqi faqat 1-fazada
+ * kataklar YONIQ (statik kadrda o'chiq xarita ma'nosiz).
+ */
+function phaseFrame(phase: Phase): SceneState {
+  switch (phase) {
+    case 1:
+      return {
+        phase: 1,
+        paidWave: false,
+        reportVisible: false,
+        revenueDurationMs: RESET_COUNT_MS,
+        revenueTarget: DRAW_REVENUE_SOUM,
+        stallsOn: true,
+        unpaidResolved: false,
+        unpaidRevealed: false,
+      };
+    case 2:
+      return {
+        phase: 2,
+        paidWave: true,
+        reportVisible: false,
+        revenueDurationMs: RESET_COUNT_MS,
+        revenueTarget: DRAW_REVENUE_SOUM,
+        stallsOn: true,
+        unpaidResolved: false,
+        unpaidRevealed: false,
+      };
+    case 3:
+      return {
+        phase: 3,
+        paidWave: true,
+        reportVisible: false,
+        revenueDurationMs: RESET_COUNT_MS,
+        revenueTarget: DISCREPANCY_REVENUE_SOUM,
+        stallsOn: true,
+        unpaidResolved: false,
+        unpaidRevealed: true,
+      };
+    case 4:
+      return {
+        phase: 4,
+        paidWave: true,
+        reportVisible: false,
+        revenueDurationMs: RESET_COUNT_MS,
+        revenueTarget: FINAL_REVENUE_SOUM,
+        stallsOn: true,
+        unpaidResolved: true,
+        unpaidRevealed: true,
+      };
+    case 5:
+      return FINAL_FRAME;
+  }
+}
+
 /**
  * Namunaviy son formati — 2306000 → «2 306 000» (oddiy bo'shliq).
  *
@@ -161,6 +222,18 @@ export function HeroScene() {
   /** Joriy faza — pauzadan keyin SHU fazadan davom (rewind yo'q). */
   const phaseRef = useRef<Phase>(5);
   const sceneNodeRef = useRef<HTMLDivElement | null>(null);
+  /** v2 faza-nuqtalari: autoplay faol bo'lsa sikl mashinasiga ulanadi. */
+  const jumpRef = useRef<((phase: Phase) => void) | null>(null);
+
+  /** Nuqta bosilishi: mashina bo'lsa unga, bo'lmasa statik kadrga. */
+  const jumpToPhase = (phase: Phase): void => {
+    if (jumpRef.current !== null) {
+      jumpRef.current(phase);
+      return;
+    }
+    phaseRef.current = phase;
+    setScene(phaseFrame(phase));
+  };
 
   const counted = useCountUp(scene.revenueTarget, scene.revenueDurationMs);
   const shownRevenue =
@@ -317,6 +390,13 @@ export function HeroScene() {
       clearScheduled();
     };
 
+    /* v2 nuqtalari sikl mashinasini boshqaradi: tozalab, tanlangan
+     * fazadan davom — avtoplay uzilmaydi, faqat nuqtaga ko'chadi. */
+    jumpRef.current = (phase: Phase): void => {
+      clearScheduled();
+      enterPhase(phase);
+    };
+
     const observer = new IntersectionObserver((entries) => {
       const lastEntry = entries[entries.length - 1];
       visible = lastEntry === undefined ? false : lastEntry.isIntersecting;
@@ -335,6 +415,7 @@ export function HeroScene() {
       observer.disconnect();
       document.removeEventListener("visibilitychange", onVisibilityChange);
       clearScheduled();
+      jumpRef.current = null;
     };
   }, []);
 
@@ -362,17 +443,19 @@ export function HeroScene() {
   return (
     <div
       aria-label={t("scene.a11yDescription")}
-      className="landing-glow rounded-lg border border-border bg-surface p-5 shadow-raised"
+      className="landing-glow rounded-2xl border border-border bg-surface p-5 shadow-raised"
       data-phase={scene.phase}
       ref={sceneNodeRef}
-      role="img"
+      role="group"
     >
       {/* ⛔ Namunaviy belgi — HAR fazada, shartli render YO'Q (G-land-4(a)). */}
       <p aria-hidden="true" className="text-xs text-text-muted">
         <span>ⓘ </span>
         {t("scene.sampleBadge")}
       </p>
-      <div aria-hidden="true" className="mt-2 flex flex-col gap-3">
+      {/* role="group" + faqat vizual qismlar aria-hidden (v2: nuqtalar
+          HAQIQIY tugmalar bo'lgani uchun img-naqsh yaroqsiz bo'lib qoldi). */}
+      <div className="mt-2 flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs text-text-muted">
           <span>{t("scene.marketLabel")}</span>
           <span>
@@ -395,7 +478,7 @@ export function HeroScene() {
         >
           {t(`scene.phase${scene.phase}`)}
         </p>
-        <div className="landing-sweep-frame relative">
+        <div aria-hidden="true" className="landing-sweep-frame relative">
           <div
             className="grid grid-cols-6 gap-2 max-[840px]:grid-cols-5"
             data-testid="hero-scene-map"
@@ -422,34 +505,60 @@ export function HeroScene() {
               );
             })}
           </div>
-          {/* Kamera nuri — sweep-frame FARZANDI (cqw shu konteynerga). */}
+          {/* Kamera nuri — v2: 15% kenglikdagi gradient panel (cqw shu
+              konteynerga — sweep-frame FARZANDI). */}
           <span
             className={cn(
-              "pointer-events-none absolute inset-0 w-[3px] rounded-full",
-              "bg-linear-to-b from-transparent via-accent to-transparent",
+              "pointer-events-none absolute inset-y-0 left-0 w-[15%]",
+              "bg-linear-to-r from-transparent via-accent/40 to-transparent",
               scene.phase === 2 ? "landing-sweep opacity-100" : "opacity-0",
             )}
           />
         </div>
-        {/* Yorliq — xarita ostida markazda (§5.8: o'lchovsiz joylashuv);
-            amber rasta MATN bilan juft (§15.12). DOM'da doim — layout
-            sakramaydi, faqat opacity/transform almashadi. */}
-        <p
-          className={cn(
-            "self-center rounded-full border px-3 py-1 text-xs font-semibold text-text",
-            "transition duration-(--motion-base) ease-(--ease-out)",
-            tagVariant === "hidden"
-              ? "translate-y-1 opacity-0"
-              : "translate-y-0 opacity-100",
-            tagVariant === "paid"
-              ? "border-success bg-success/20"
-              : "border-warning bg-warning/20",
-          )}
-          data-tag={tagVariant}
-          data-testid="hero-scene-tag"
-        >
-          {tagVariant === "paid" ? t("scene.tagPaid") : t("scene.tagUnpaid")}
-        </p>
+        {/* v2 qatori: yorliq chapda, faza-nuqtalari o'ngda. Yorliq DOM'da
+            doim — layout sakramaydi, faqat opacity/transform almashadi;
+            amber rasta MATN bilan juft (§15.12). */}
+        <div className="flex min-h-8 items-center justify-between gap-3">
+          <p
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs font-semibold text-text",
+              "transition duration-(--motion-base) ease-(--ease-out)",
+              tagVariant === "hidden"
+                ? "translate-y-1 opacity-0"
+                : "translate-y-0 opacity-100",
+              tagVariant === "paid"
+                ? "border-success bg-success/20"
+                : "border-warning bg-warning/20",
+            )}
+            data-tag={tagVariant}
+            data-testid="hero-scene-tag"
+          >
+            {tagVariant === "paid" ? t("scene.tagPaid") : t("scene.tagUnpaid")}
+          </p>
+          {/* v2 faza-nuqtalari — «bu mahsulotning o'zi» boshqaruvi.
+              aria-hidden konteyner ICHIDA emas: bu haqiqiy tugmalar. */}
+          <div className="flex items-center gap-2">
+            {([1, 2, 3, 4, 5] as const).map((phase) => (
+              <button
+                aria-label={t(`scene.phase${phase}`)}
+                className={cn(
+                  "size-2.5 cursor-pointer rounded-full border-0 p-0",
+                  "transition duration-(--motion-base) ease-(--ease-out)",
+                  scene.phase === phase
+                    ? "bg-accent shadow-[0_0_8px_var(--color-accent)]"
+                    : "bg-border-ui/40",
+                )}
+                data-testid={`hero-scene-dot-${phase}`}
+                key={phase}
+                onClick={() => {
+                  jumpToPhase(phase);
+                }}
+                title={t(`scene.phase${phase}`)}
+                type="button"
+              />
+            ))}
+          </div>
+        </div>
         {/* Kunlik hisobot — pastdan ko'tariladi (translate/opacity). */}
         <div
           className={cn(
@@ -472,14 +581,22 @@ export function HeroScene() {
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <dt>{t("scene.reportPaid")}</dt>
-              <dd data-numeric>214</dd>
+              <dd className="text-success-text" data-numeric>
+                215
+              </dd>
             </div>
             <div className="flex items-baseline justify-between gap-3 font-semibold text-text">
               <dt>{t("scene.reportUnpaid")}</dt>
-              <dd data-numeric>1 → 0</dd>
+              <dd className="text-warning-text" data-numeric>
+                1 → 0
+              </dd>
             </div>
           </dl>
         </div>
+        {/* v2: boshqaruv taklifi — «bu mahsulotning o'zi». */}
+        <p className="text-center text-xs text-text-muted">
+          {t("scene.dotsHint")}
+        </p>
       </div>
     </div>
   );

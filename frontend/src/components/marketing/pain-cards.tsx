@@ -27,14 +27,15 @@ export async function PainCards() {
   return (
     <div className="flex flex-col gap-6">
       <Reveal>
-        <h2 className="text-2xl font-semibold tracking-tight">
+        <p className="landing-kicker">{t("pain.kicker")}</p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
           {t("pain.title")}
         </h2>
       </Reveal>
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-3">
         {PAIN_CARDS.map((key, index) => (
           <Reveal className="h-full" delayIndex={index} key={key}>
-            <Card className="h-full">
+            <Card className="landing-card h-full">
               <CardHeader>
                 <h3 className="text-lg font-semibold">
                   {t(`pain.${key}.title`)}

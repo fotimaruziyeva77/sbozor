@@ -66,7 +66,8 @@ export function StepLine() {
   return (
     <div className="flex flex-col gap-6" data-step={step}>
       <Reveal>
-        <h2 className="text-2xl font-semibold tracking-tight">
+        <p className="landing-kicker">{t("steps.kicker")}</p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
           {t("steps.title")}
         </h2>
       </Reveal>

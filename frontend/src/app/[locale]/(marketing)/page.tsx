@@ -8,6 +8,7 @@ import { Faq } from "@/components/marketing/faq";
 import { Footer } from "@/components/marketing/footer";
 import { Header } from "@/components/marketing/header";
 import { Hero } from "@/components/marketing/hero";
+import { LossCalc } from "@/components/marketing/loss-calc";
 import { PainCards } from "@/components/marketing/pain-cards";
 import { Pilot } from "@/components/marketing/pilot";
 import { Proof } from "@/components/marketing/proof";
@@ -210,27 +211,32 @@ export default async function MarketingRootPage({
         <Section className="landing-night" data-theme="dark">
           <Hero />
         </Section>
-        {/* 2 · Og'riq — 3 karta */}
+        {/* 2 · Og'riq — 3 karta (v2: MUAMMO kicker) */}
         <Section className="bg-surface-muted">
           <PainCards />
         </Section>
-        {/* 3 · Qanday ishlaydi — 3 qadam [K-3] */}
+        {/* 2.5 · v2 YANGI: yo'qotish kalkulyatori (HISOB-KITOB) —
+            foydalanuvchining O'Z taxmini, ikki disclaimer bilan */}
         <Section>
+          <LossCalc />
+        </Section>
+        {/* 3 · Qanday ishlaydi — 3 qadam [K-3] */}
+        <Section className="bg-surface-muted">
           <StepLine />
         </Section>
-        {/* 4 · ⭐ Bosh dalil — chuqur tunda yonuvchi bayonot */}
-        <Section className="landing-deep" data-theme="dark">
+        {/* 4 · ⭐ Bosh dalil — v2: och ko'k gradient banner */}
+        <Section>
           <Proof />
         </Section>
         {/* 5 · Rol-kartalar — skrinshotsiz (§9.3) */}
         <Section className="bg-surface-muted">
           <RoleCards />
         </Section>
-        {/* 6 · Ishonch bloki — davlat-jiddiy tun (10-06 shartnomasi) */}
-        <Section className="landing-night" data-theme="dark">
+        {/* 6 · Ishonch bloki — v2: yorug' 4 ustun (10-06 shartnomasi) */}
+        <Section>
           <TrustBlock />
         </Section>
-        {/* 7 · Pilot holati — raqamsiz [K-7] */}
+        {/* 7 · Pilot holati — raqamsiz [K-7]; v2: halollik kartasi bilan */}
         <Section className="bg-surface-muted">
           <Pilot />
         </Section>
@@ -238,10 +244,14 @@ export default async function MarketingRootPage({
         <Section>
           <Faq />
         </Section>
-        {/* 9 · CTA takrori + demo-forma — hero CTA'sining nishoni (#demo) */}
-        <Section className="landing-demo" id="demo">
+        {/* 9 · CTA takrori + demo-forma — v2: indigo tunda oq karta */}
+        <Section className="landing-night" data-theme="dark" id="demo">
           <Reveal>
-            <Card className="landing-demo-card mx-auto w-full max-w-2xl">
+            {/* v2: indigo tun ichida YORUG' karta — ichki light-qamrov. */}
+            <Card
+              className="landing-demo-card mx-auto w-full max-w-2xl"
+              data-theme="light"
+            >
               <CardContent className="flex flex-col gap-6 pt-5">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-2xl font-semibold tracking-tight">

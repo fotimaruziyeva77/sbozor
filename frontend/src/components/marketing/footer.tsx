@@ -21,7 +21,7 @@ export async function Footer() {
   const phone = process.env.NEXT_PUBLIC_CONTACT_PHONE;
 
   return (
-    <footer className="border-t border-border">
+    <footer className="landing-night" data-theme="dark">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-8 text-sm text-text-muted sm:flex-row sm:items-center sm:justify-between">
         <p>
           {t("footer.copyright", {

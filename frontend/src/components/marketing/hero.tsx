@@ -42,25 +42,24 @@ import { cn } from "@/lib/cn";
  */
 export async function Hero() {
   const t = await getTranslations("landing");
-  const tCommon = await getTranslations("common");
 
   return (
     <div className="grid items-center gap-8 min-[841px]:grid-cols-[1.05fr_1fr]">
       <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           <p
-            className="motion-enter text-sm font-semibold tracking-wide text-accent"
+            className="landing-kicker motion-enter"
             style={{ "--i": 0 } as CSSProperties}
           >
-            {tCommon("appName")}
+            {t("hero.kicker")}
           </p>
           {/* LCP nomzodi — `.motion-enter`siz (sabab modul sarlavhasida). */}
-          <h1 className="text-hero font-semibold text-balance text-text">
+          <h1 className="text-hero font-bold text-balance text-text">
             {t("hero.headline")}
           </h1>
         </div>
         <p
-          className="motion-enter max-w-[66ch] text-lg leading-relaxed text-text-muted"
+          className="motion-enter max-w-[50ch] text-lg leading-relaxed text-text-muted"
           style={{ "--i": 1 } as CSSProperties}
         >
           {t("hero.sub")}
@@ -92,7 +91,13 @@ export async function Hero() {
           </Link>
         </div>
         <p
-          className="motion-enter max-w-[52ch] text-sm text-text-muted"
+          className="motion-enter text-xs text-text-muted"
+          style={{ "--i": 2 } as CSSProperties}
+        >
+          {t("hero.microline")}
+        </p>
+        <p
+          className="motion-enter max-w-[54ch] text-sm leading-relaxed text-text-muted"
           style={{ "--i": 3 } as CSSProperties}
         >
           <span aria-hidden="true">⭐ </span>
@@ -138,38 +143,6 @@ export async function Hero() {
             {t("trust.languages")}
           </li>
         </ul>
-        {/* Halol raqamlar lentasi — da'vo emas, mahsulot faktlari (K-7). */}
-        <dl
-          className="landing-stats motion-enter grid grid-cols-2 gap-x-6 gap-y-4 pt-5 sm:grid-cols-4"
-          style={{ "--i": 5 } as CSSProperties}
-        >
-          <div>
-            <dt className="text-xs text-text-muted">{t("stats.tapsLabel")}</dt>
-            <dd className="text-lg font-semibold text-text" data-numeric>
-              {t("stats.tapsValue")}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-text-muted">
-              {t("stats.archiveLabel")}
-            </dt>
-            <dd className="text-lg font-semibold text-text" data-numeric>
-              {t("stats.archiveValue")}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-text-muted">{t("stats.langsLabel")}</dt>
-            <dd className="text-lg font-semibold text-text" data-numeric>
-              {t("stats.langsValue")}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-text-muted">{t("stats.replyLabel")}</dt>
-            <dd className="text-lg font-semibold text-text" data-numeric>
-              {t("stats.replyValue")}
-            </dd>
-          </div>
-        </dl>
       </div>
       <HeroScene />
     </div>

@@ -1,42 +1,32 @@
-import type { LucideIcon } from "lucide-react";
-import { Banknote, Camera, FileSpreadsheet } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 import { Reveal } from "@/components/marketing/reveal";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 /*
- * Rol-kartalar — 3 ta (10-UI-SPEC §9.1 blok 5, §9.3). Server Component.
+ * Rol-kartalar — 3 ta (Landing v2 dizayni, claude.ai/design buyurtmasi).
+ * Server Component.
  *
  * ⛔⛔ SKRINSHOT QO'YILMAYDI (§9.3, brief §2.5 dan ONGLI chekinish; T-10-10):
  *    (1) app ekranlarida sotuvchi F.I.Sh. va telefoni bor — ommaviy sahifaga
- *        qo'yish K-8 bilan bir sinfdagi huquqiy xavf, tozalash ro'yxati esa
- *        hali yozilmagan;
- *    (2) skrinshotdagi matn rasmga qotgan — 3 rol × 3 til = 9 rasm va ular
- *        app har o'zgarganda eskiradi;
- *    (3) 9 ekran rasmi Lighthouse ≥95 / LCP <1,5s byudjetiga o'lchanadigan yuk.
- *    ⛔ Soxta mockup ham QO'YILMAYDI (brief §3 taqig'i) — vizual isbot yukini
- *    hero sahnasi ko'taradi. Har karta o'rniga BITTA aniq, tekshiriladigan
- *    da'vo beradi (`text-xs text-accent-text`).
+ *        qo'yish K-8 bilan bir sinfdagi huquqiy xavf;
+ *    (2) skrinshotdagi matn rasmga qotgan — 3 rol × 3 til = 9 rasm eskiradi;
+ *    (3) rasm yuki Lighthouse/LCP byudjetiga o'lchanadigan zarba.
+ *    ⛔ Soxta mockup ham QO'YILMAYDI (brief §3) — vizual isbot yukini hero
+ *    sahnasi ko'taradi. Har karta BITTA tekshiriladigan da'vo beradi.
  *
- * ⛔ Hover mini-animatsiyasi QO'SHILMAYDI (§17.2) — `Card` ning meros hover
- *    ko'tarilishi dizayn tizimining o'z xulqi, yangi mexanizm emas.
+ * v2 qarori: lucide ikonkalar o'rniga HARF-CHIP avatarlar (D/K/N) —
+ * dizayn aynan shu; chip `aria-hidden`, ma'no sarlavha matnida (§15.12).
  *
- * Ikonkalar — `lucide-react` MEROS (yangi paket YO'Q): `Banknote` va
- * `Camera` app'ning kassir/wizard oqimlarida allaqachon ishlatiladi —
- * «reklamadagi bilan bir xil» oilaviy ko'rinish. Ikonka YOLG'IZ signal emas
- * (§15.12): har biri sarlavha matni bilan juft, o'zi `aria-hidden`.
- *
- * ⛔ Sarlavha ierarxiyasi: blok o'z `<h2>` sini chizadi (10-07 `<Section>`
- *    ni `title` prop'siz o'raydi); rol sarlavhalari — `<h3>`.
+ * ⛔ Sarlavha ierarxiyasi: blok o'z `<h2>` sini chizadi; rollar — `<h3>`.
  */
 const ROLE_CARDS: ReadonlyArray<{
   key: "director" | "cashier" | "inspector";
-  Icon: LucideIcon;
+  letter: string;
 }> = [
-  { key: "director", Icon: FileSpreadsheet },
-  { key: "cashier", Icon: Banknote },
-  { key: "inspector", Icon: Camera },
+  { key: "director", letter: "D" },
+  { key: "cashier", letter: "K" },
+  { key: "inspector", letter: "N" },
 ];
 
 export async function RoleCards() {
@@ -45,21 +35,25 @@ export async function RoleCards() {
   return (
     <div className="flex flex-col gap-6">
       <Reveal>
-        <h2 className="text-2xl font-semibold tracking-tight">
+        <p className="landing-kicker">{t("roles.kicker")}</p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
           {t("roles.title")}
         </h2>
       </Reveal>
-      <div className="grid gap-4 md:grid-cols-3">
-        {ROLE_CARDS.map(({ key, Icon }, index) => (
+      <div className="grid gap-5 md:grid-cols-3">
+        {ROLE_CARDS.map(({ key, letter }, index) => (
           <Reveal className="h-full" delayIndex={index} key={key}>
-            <Card className="h-full">
+            <Card className="landing-card h-full">
               <CardHeader>
-                <div className="flex items-center gap-3">
-                  <Icon aria-hidden="true" className="size-5 text-text-muted" />
-                  <h3 className="text-lg font-semibold">
-                    {t(`roles.${key}.title`)}
-                  </h3>
-                </div>
+                <span
+                  aria-hidden="true"
+                  className="flex size-10 items-center justify-center rounded-md bg-accent/10 text-sm font-bold text-accent-text"
+                >
+                  {letter}
+                </span>
+                <h3 className="mt-3 text-lg font-semibold">
+                  {t(`roles.${key}.title`)}
+                </h3>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
                 <p className="max-w-[66ch] text-sm leading-relaxed text-text-muted">

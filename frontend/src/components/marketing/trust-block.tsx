@@ -34,11 +34,13 @@ export async function TrustBlock() {
   return (
     <div className="flex flex-col gap-6" id="ishonch">
       <Reveal>
-        <h2 className="text-2xl font-semibold tracking-tight">
+        <p className="landing-kicker">{t("trustBlock.kicker")}</p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
           {t("trustBlock.title")}
         </h2>
       </Reveal>
-      <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
+      {/* v2: to'rt ustun (yorug' fon) — davlat/yurist savollariga to'g'ridan. */}
+      <div className="grid gap-x-6 gap-y-6 sm:grid-cols-2 min-[1100px]:grid-cols-4">
         {TRUST_BANDS.map((key, index) => (
           <Reveal delayIndex={index} key={key}>
             <div className="flex flex-col gap-1">

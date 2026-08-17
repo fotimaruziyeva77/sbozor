@@ -24,18 +24,29 @@ export async function Pilot() {
   const t = await getTranslations("landing");
 
   return (
-    <Reveal>
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
+    <div className="grid items-center gap-8 min-[841px]:grid-cols-2">
+      <Reveal>
+        <div className="flex flex-col gap-3">
+          <div>
+            <Badge tone="warning">{t("pilot.status")}</Badge>
+          </div>
           <h2 className="text-2xl font-semibold tracking-tight">
             {t("pilot.title")}
           </h2>
-          <Badge tone="warning">{t("pilot.status")}</Badge>
+          <p className="max-w-[56ch] text-sm leading-relaxed text-text-muted">
+            {t("pilot.body")}
+          </p>
         </div>
-        <p className="max-w-[66ch] text-sm leading-relaxed text-text-muted">
-          {t("pilot.body")}
-        </p>
-      </div>
-    </Reveal>
+      </Reveal>
+      {/* v2: halollik — marketing kuchi sifatida alohida karta. */}
+      <Reveal delayIndex={1}>
+        <div className="landing-card rounded-lg border border-border bg-surface p-6 shadow-card">
+          <h3 className="text-lg font-semibold">{t("pilot.whyTitle")}</h3>
+          <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-text-muted">
+            {t("pilot.whyBody")}
+          </p>
+        </div>
+      </Reveal>
+    </div>
   );
 }

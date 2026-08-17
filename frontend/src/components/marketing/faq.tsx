@@ -28,9 +28,10 @@ export async function Faq() {
   const t = await getTranslations("landing");
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <Reveal>
-        <h2 className="text-2xl font-semibold tracking-tight">
+        <p className="landing-kicker">{t("faq.kicker")}</p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
           {t("faq.title")}
         </h2>
       </Reveal>
