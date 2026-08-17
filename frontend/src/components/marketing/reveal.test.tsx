@@ -154,7 +154,7 @@ describe("Reveal — scroll-reveal primitivi (10-06)", () => {
 
     const { container } = render(
       <Reveal>
-        <p>Darhol ko'rinadigan kontent</p>
+        <p>{"Darhol ko'rinadigan kontent"}</p>
       </Reveal>,
     );
 
