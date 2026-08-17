@@ -1393,6 +1393,17 @@ async def test_sc5_idempotent_payment_reversal_and_blind_variance(
     code = env.code(stall_id)
     amount = env.tariff_amount()
 
+    # ⛔ PREKONDITSIYA: bugun A bozori uchun OCHIQ kun bo'lishi SHART.
+    #   Seed'da A dushanba yopiq (`A_OPEN_WEEKDAYS = 2..7`) va bu test
+    #   2026-08-17 (dushanba) kuni POST /payments -> 422 `market_closed`
+    #   bilan yiqildi [O'LCHANDI: 09-07 gate o'lchovi]. SC#5 ning da'vosi
+    #   idempotentlik/storno/variance — kun jadvali emas; yopiq kun rad
+    #   etish xulqining o'z testlari bor (`test_market_calendar.py`).
+    sync_owner_conn.execute(
+        "UPDATE market_profile SET open_weekdays = %s WHERE market_id = %s",
+        ([1, 2, 3, 4, 5, 6, 7], str(env.market_id)),
+    )
+
     # ---- (a) BIR XIL KALIT IKKI MARTA -> 1 QATOR, 200, O'SHA `id`.
     payload = {
         "idempotency_key": f"sc5-takror-{uuid4()}",

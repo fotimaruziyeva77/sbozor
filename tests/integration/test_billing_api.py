@@ -430,6 +430,18 @@ async def test_a_stall_in_maintenance_reports_its_status_without_erasing_the_amo
     code = _stall_code(sync_owner_conn, stall_id)
     _set_stall_status(sync_owner_conn, stall_id, "maintenance")
 
+    # ⛔ PREKONDITSIYA: bugun A bozori uchun OCHIQ kun bo'lishi SHART.
+    #   Seed'da A dushanba yopiq (`A_OPEN_WEEKDAYS = 2..7`) va bu test
+    #   2026-08-17 (dushanba) kuni `market_closed` bilan yiqildi
+    #   [O'LCHANDI: 09-07 gate o'lchovi] — da'vo «reyestr holati summani
+    #   o'chirmaydi» va u faqat OCHIQ kunda ma'noli. Yopiq kun xulqining
+    #   o'z testlari bor (`test_market_calendar.py`); bu yerda kun jadvali
+    #   testning o'lchov predmeti EMAS, prekonditsiya.
+    sync_owner_conn.execute(
+        "UPDATE market_profile SET open_weekdays = %s WHERE market_id = %s",
+        ([1, 2, 3, 4, 5, 6, 7], str(env.market_id)),
+    )
+
     body = (
         await api_client.get(PENDING_URL, params={"stall_code": code}, headers=cashier_headers)
     ).json()
