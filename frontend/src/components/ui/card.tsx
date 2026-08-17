@@ -13,6 +13,18 @@ export function Card({ className, ...props }: CardProps) {
     <div
       className={cn(
         "rounded-lg border border-border bg-surface shadow-card",
+        /*
+         * Hover ko'tarilishi (09-UI-SPEC §12.3). Yumshoqlik `@theme` dagi
+         * `--default-transition-*` juftligidan keladi (bare `transition`
+         * utilitasi) — `transition-[...]` TAQIQ (G-motion-3(b)).
+         *
+         * ⛔ Sticky-hover yo'q [O'LCHANDI, 09-02 T1]: Tailwind 4.3.3 `hover:`
+         * variantini `@media (hover: hover)` ichida kompilyatsiya qiladi
+         * (postcss probe: `.hover\:-translate-y-0\.5` qoidasi media bloki
+         * ichida chiqdi) — telefonda bu qoida umuman qo'llanmaydi, shuning
+         * uchun `globals.css` fallback'i KERAK EMAS.
+         */
+        "transition hover:-translate-y-0.5 hover:shadow-raised",
         className,
       )}
       {...props}

@@ -151,7 +151,10 @@ export function ShiftOpenCard({ onRequestClose }: ShiftOpenCardProps) {
               variant="secondary"
             >
               {busy ? (
-                <Loader2 aria-hidden="true" className="animate-spin" />
+                <Loader2
+                  aria-hidden="true"
+                  className="animate-spin motion-reduce:animate-none"
+                />
               ) : (
                 <DoorOpen aria-hidden="true" />
               )}

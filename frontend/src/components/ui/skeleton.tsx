@@ -18,8 +18,12 @@ import { cn } from "@/lib/cn";
  *     <Skeleton className="h-24" />
  *   </div>
  *
- * `motion-reduce:animate-none` — `prefers-reduced-motion` hurmat qilinadi
- * (WCAG 2.3.3): pulsatsiya vestibulyar sezgir foydalanuvchi uchun bezovta.
+ * `motion-shimmer` (09-UI-SPEC §12.5) — pulsatsiya emas, shimmer:
+ * `globals.css` dagi statik gradient + `background-position` animatsiyasi
+ * (1.5s, kompozitor-do'st). `motion-reduce:animate-none` QOLADI — u
+ * ikkinchi qatlam va global `@media (prefers-reduced-motion)` bloki bilan
+ * birga ishlaydi (WCAG 2.3.3): harakat vestibulyar sezgir foydalanuvchi
+ * uchun bezovta.
  */
 export type SkeletonProps = ComponentPropsWithRef<"div">;
 
@@ -28,7 +32,7 @@ export function Skeleton({ className, ...props }: SkeletonProps) {
     <div
       aria-hidden="true"
       className={cn(
-        "animate-pulse rounded-sm bg-surface-muted motion-reduce:animate-none",
+        "motion-shimmer rounded-sm bg-surface-muted motion-reduce:animate-none",
         className,
       )}
       {...props}

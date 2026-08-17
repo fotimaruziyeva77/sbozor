@@ -42,9 +42,25 @@ const SIZE_SHEET: Record<DialogSize, string> = {
   lg: "sm:w-[min(30rem,calc(100vw-2rem))]",
 };
 
-/** Har ikkala variantda bir xil qoladigan qism. */
-const CONTENT_BASE =
-  "z-50 flex flex-col gap-4 overflow-y-auto border border-border bg-surface p-6 shadow-raised";
+/**
+ * Har ikkala variantda bir xil qoladigan qism.
+ *
+ * Holat animatsiyasi (09-UI-SPEC §12.4): Radix `data-state="open"|"closed"`
+ * atributini O'ZI qo'yadi — yangi prop yo'q. Kirish `--motion-base`,
+ * chiqish `--motion-fast` (§4.4 qoida 2: chiqish 2× tez). `starting:`
+ * (`@starting-style`) kirish tranzitsiyasining boshlang'ich holatini beradi —
+ * usiz element to'g'ridan-to'g'ri `open` holatda mount bo'lib, tranzitsiya
+ * umuman o'ynamasdi [O'LCHANDI, 09-02 T1: Tailwind 4.3.3 `starting:` ni
+ * `@starting-style` blokiga kompilyatsiya qiladi]. Reduced-motion'da global
+ * blok `transition-duration` ni 0.01ms ga tushiradi — natija ayni, harakatsiz.
+ */
+const CONTENT_BASE = [
+  "z-50 flex flex-col gap-4 overflow-y-auto border border-border bg-surface p-6 shadow-raised",
+  "transition data-[state=closed]:duration-(--motion-fast) data-[state=open]:duration-(--motion-base)",
+  "data-[state=open]:scale-100 data-[state=open]:opacity-100",
+  "data-[state=closed]:scale-[0.96] data-[state=closed]:opacity-0",
+  "starting:data-[state=open]:scale-[0.96] starting:data-[state=open]:opacity-0",
+].join(" ");
 
 /** Markazlashtirilgan modal — standart. */
 const CONTENT_CENTERED =
@@ -89,7 +105,11 @@ function DialogContent({
 }: DialogContentProps) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40" />
+      {/*
+       * Fon 8% qorayadi + blur(4px) [L-3 xoreografiya oilasi, §4.4 qoida 3]:
+       * ajratishni qorong'ilik emas, xiralik beradi — Apple-uslub.
+       */}
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/8 backdrop-blur-[4px]" />
       <DialogPrimitive.Content
         className={cn(
           CONTENT_BASE,
