@@ -634,24 +634,26 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 **Chegaralar:** redesign EMAS — mavjud dizayn-tizim ustiga; konfetti FAQAT kunlik plan bajarilganda; masterplan §7 mikro-UX tuzatishlaridan 8-fazada yopilmagani shu fazaga kiradi
 
 ⚠ **Chegaralarning rejalashtirishdagi holati (2026-08-17):**
+
 1. **Konfetti** — 09-UI-SPEC §9 da shartnoma sifatida **to'liq yozilgan, LEKIN bu fazada QURILMAYDI**.
    Sabab mexanik: tetikning haqiqat manbai (`daily_plan`/`target`) kodbazada UMUMAN yo'q va
    `paymentResponseSchema` — `z.strictObject`, ya'ni `market_day_cleared` maydoni **ikki tomonlama,
    kelishilgan** o'zgarish (backend fazasining ishi). Klientdagi har qanday hosila esa ko'r deklaratsiya
    darvozasini buzadi. Band `deferred-items.md` da sabab va kelajakdagi ijro yo'li bilan yozilgan.
+
 2. **Masterplan §7 mikro-UX** — 09-UI-SPEC §13 oltala bandning holatini O'LCHADI: uchtasi allaqachon
    YOPILGAN (sana utili, pul utili, bozor konteksti), ikkitasi ataylab KENGAYTIRILMAYDI (nisbiy vaqt,
    2-ustunli grid — §10.1 ikki karta bilan qisman), bittasi qamrovdan tashqarida (copy auditi).
    ⛔ Ya'ni 9-fazaga tushadigan **yangi mikro-UX bandi YO'Q** — bu topilma va u bo'sh to'lqin ochilishining
    oldini oladi.
 
-**Plans:** 7 plans in 5 waves
+**Plans:** 1/7 plans executed
 
 Plans:
 
 **Wave 1** *(langar — uchala CSS darvozasi bitta faylni o'qiydi)*
 
-- [ ] 09-01-PLAN.md — SPEC nomuvofiqliklarini rostlash, kontrast kalkulyatori (G-motion-5) va `globals.css` ning to'liq token/motion/tema qatlami (W1)
+- [x] 09-01-PLAN.md — SPEC nomuvofiqliklarini rostlash, kontrast kalkulyatori (G-motion-5) va `globals.css` ning to'liq token/motion/tema qatlami (W1)
 
 **Wave 2** *(parallel — fayl to'plamlari kesishmaydi)*
 
