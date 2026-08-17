@@ -42,6 +42,11 @@ const buttonVariants = cva(
         // balandlik (WCAG 2.5.5). O'lcham EMAS, nishon kattalashadi:
         // shkalada 16px yo'q, chunki 14px bilan ierarxiya bermaydi.
         lg: "min-h-11 px-6 py-3 text-sm",
+        // `hero` — landing birlamchi CTA, AYNAN 2 joy: hero va yakuniy
+        // demo-forma (10-UI-SPEC §7.4). 56px balandlik — 09-UI-SPEC §6
+        // dagi MAVJUD bo'shliq istisnosi (mobil panel/tasdiq tugmasi),
+        // yangi istisno emas; `text-lg` (18px) — chegarasiz rol (L-3).
+        hero: "min-h-14 px-8 text-lg",
       },
     },
     defaultVariants: {
