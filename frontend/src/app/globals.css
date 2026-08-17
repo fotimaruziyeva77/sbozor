@@ -7,7 +7,15 @@
  * YARATILMAYDI (CLAUDE.md cheklovi). Barcha tokenlar shu `@theme` blokida.
  *
  * Nomlash: `--color-*` → `bg-*` / `text-*` / `border-*` utilitalari,
- *          `--radius-*` → `rounded-*`, `--shadow-*` → `shadow-*`.
+ *          `--radius-*` → `rounded-*`, `--shadow-*` → `shadow-*`,
+ *          `--motion-*` → `duration-(--motion-*)`, `--ease-*` → `ease-(--ease-*)`.
+ *
+ * ⛔ KONTRAST IZOHLARI — MASHINA O'QIYDIGAN DA'VO (G-motion-5(c)).
+ *    Har «juftlik: N.NN:1» qatori `node scripts/contrast.test.mjs --print`
+ *    chiqishidan GENERATSIYA qilingan (gamut siyosati: gamma fazoda [0,1]
+ *    ga kesish; tint kompozitsiyasi gamma fazoda, ostki qatlam — tema
+ *    surface'i). Qo'lda yozilgan son ±0.01 solishtiruvda darvozani
+ *    qizartiradi — sonni O'ZGARTIRISHDAN OLDIN --print yugurtiring.
  */
 @theme {
   /* ---- Tipografika ---------------------------------------------------- */
@@ -17,45 +25,86 @@
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  /* ---- Neytral kulrang shkala -----------------------------------------
+  /* ---- Harakat davomiyligi — YOPIQ REYESTR (3 qiymat) [L-2] ------------
+   *   fast — bosish javoblari, hover, chiqish animatsiyalari
+   *   base — kirish (8px pastdan + fade), dialog, check-draw
+   *   slow — sahna almashinuvi, bayram, summa uchishi
+   * ⛔ Reyestrdan tashqari davomiylik UTILITA sifatida yozilmaydi
+   *    (`duration-<raqam>` — 0 marta, G-motion-3(b)). Kompozit qiymatlar
+   *    (800ms · 600ms · 300ms · 1.5s · 200ms) FAQAT quyidagi `@keyframes`
+   *    ta'riflari ichida yashaydi (09-UI-SPEC §4.3).
+   */
+  --motion-fast: 150ms;
+  --motion-base: 250ms;
+  --motion-slow: 400ms;
+
+  /* ---- Ease egri chiziqlari [L-2] --------------------------------------
+   * ⛔ `--ease-out` Tailwind standartini (0, 0, 0.2, 1) ATAYLAB qayta
+   *    ta'riflaydi va bu XAVFSIZ: kodbazada `ease-*` utilitasi 0 marta
+   *    [M-3]. Bitta nom, bitta ma'no (09-UI-SPEC §4.2).
+   * ⛔ `--ease-spring` — AYNAN 2 joy: toast kirishi, rasta yon paneli.
+   */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ⛔⛔ USIZ 30 TA MAVJUD `transition-colors` ESKI EGRIDA QOLARDI:
+   * Tailwind 4 bare `transition-*` utilitalarini `--ease-out` dan EMAS,
+   * `--default-transition-*` juftligidan oziqlantiradi [09-RESEARCH
+   * Naqsh 2, kompilyatsiya bilan o'lchangan]. Shu ikki bog'lash «yumshoq
+   * tormoz bitta joydan boshqariladi» da'vosini ROST qiladi. */
+  --default-transition-timing-function: var(--ease-out);
+  --default-transition-duration: var(--motion-fast);
+
+  /* ---- Pul roli — Display-XL (40px / 1.1) [L-9] ------------------------
+   * ⛔ AYNAN 2 mahsulot faylida: collect/pending-card, headline/headline-card
+   *    (faqat `unit === "soum"` shoxida) — G-motion-7(a,b). */
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.1;
+
+  /* ---- Neytral shkala — ILIQ BAZA [L-1, sketch 002-B] ------------------
+   * Iliqlik YUZALARDAN keladi, matndan emas: `bg`/`surface-muted`/`border`
+   * stone-ohangga o'tdi (#FAFAF9 / #F5F5F4 / #E7E5E4), matn va `border-ui`
+   * tokenlari TEGILMADI — M-17: hammasi AA dan o'tadi.
+   *
    * IKKI XIL CHEGARA, ikki xil mas'uliyat:
    *
    *   `--color-border`    — FAQAT DEKORATIV: karta konturi, ajratkich
-   *                         chiziq, panel va dialog chegarasi. Surface
-   *                         fonida 1.28:1; WCAG 2.2 SC 1.4.11 dekorativ
-   *                         chegaraga QO'LLANMAYDI, shuning uchun bu
-   *                         qiymat ataylab o'zgarmaydi.
+   *                         chiziq, panel va dialog chegarasi. WCAG 2.2
+   *                         SC 1.4.11 dekorativ chegaraga QO'LLANMAYDI,
+   *                         shuning uchun past nisbat ataylab saqlanadi.
+   *                         WCAG 1.4.3. border/surface: 1.26:1
+   *                         (dekorativ — chegara talabi qo'llanmaydi).
    *   `--color-border-ui` — MAJBURIY: chegarasi elementni "boshqaruv
    *                         elementi" sifatida tanitadigan har narsa —
    *                         input, select, textarea, checkbox, xarita
    *                         katagi.
    */
-  --color-bg: oklch(0.985 0 0);
+  --color-bg: oklch(0.985 0.001 106);
   --color-surface: oklch(1 0 0);
-  --color-surface-muted: oklch(0.968 0 0);
-  --color-border: oklch(0.916 0 0);
-  /* WCAG 2.2 SC 1.4.11 (Non-text Contrast, ≥3:1). O'lchandi:
-   * 3.64:1 (surface), 3.49:1 (bg), 3.32:1 (surface-muted). */
+  --color-surface-muted: oklch(0.97 0.001 106);
+  --color-border: oklch(0.923 0.003 49);
+  /* WCAG 1.4.11. border-ui/surface: 3.64:1 · border-ui/bg: 3.49:1 ·
+   * border-ui/surface-muted: 3.34:1 */
   --color-border-ui: oklch(0.62 0 0);
   --color-border-strong: oklch(0.85 0 0);
   --color-text: oklch(0.205 0 0);
-  /* WCAG 1.4.3 (AA 4.5:1). 0.556 -> 0.53: surface-muted fonida
-   * o'lchangan 4.31:1 (buzilish) -> 4.81:1. */
+  /* WCAG 1.4.3. text-muted/surface-muted: 4.84:1 · text-muted/bg: 5.06:1
+   * (0.556 dan 0.53 ga tushirilgan — avvalgi qiymat buzilish edi: 4.31). */
   --color-text-muted: oklch(0.53 0 0);
 
   /* ---- Bitta aksent rang ---------------------------------------------- */
-  /* WCAG 1.4.3. 0.58 -> 0.56: birlamchi tugmadagi oq matn
-   * (`--color-accent-fg`) bu fonda o'lchangan 4.36:1 (buzilish) -> 4.72:1. */
+  /* WCAG 1.4.3. accent-fg/accent: 4.72:1 (0.58 dan 0.56 ga tushirilgan —
+   * oq matn avvalgi fonda 4.36 edi, buzilish). */
   --color-accent: oklch(0.56 0.19 255);
   --color-accent-hover: oklch(0.53 0.19 255);
   --color-accent-fg: oklch(1 0 0);
-  /* WCAG 1.4.3. Aksent MATNI tint fonida (`bg-accent/10`):
-   * o'lchangan 3.82:1 (buzilish) -> 5.31:1. */
-  --color-accent-text: oklch(0.50 0.18 255);
+  /* WCAG 1.4.3. accent-text/accent@10: 5.28:1 — aksent MATNI tint fonida
+   * (`bg-accent/10`, ostki qatlam surface). ⛔ To'yingan `bg-accent` ustida
+   * ISHLATILMAYDI (o'lchandi: 1.28 — G-motion-5(d) regressiya qulfi). */
+  --color-accent-text: oklch(0.5 0.18 255);
 
   /* ---- Semantik holat ranglari ----------------------------------------
-   * Keyingi fazalarda rasta holatlari uchun ishlatiladi:
-   * band (success) / noaniq (warning) / qarzdor (danger).
+   * Rasta holatlari: band (success) / noaniq (warning) / qarzdor (danger).
    *
    * Uch xil rol, aralashtirilmaydi (DIQQAT: bu izohda `bg-` naqshini
    * yulduzcha bilan yozib bo'lmaydi — `yulduzcha + qiya chiziq` ketma-ketligi
@@ -66,23 +115,31 @@
    *                            ustidagi MATN. Asosiy token matn sifatida
    *                            AA dan O'TMAYDI.
    *
-   * TAQIQ: `--color-warning` (oq fonda o'lchangan 2.02:1) HECH QACHON
-   * matn rangi bo'lmaydi — u faqat fon. Sariq tintdagi matn uchun
-   * `bg-warning/20 text-text` (15.63:1) yoki `--color-warning-text`.
+   * TAQIQ: `--color-warning` HECH QACHON matn rangi bo'lmaydi — u faqat
+   * fon. WCAG 1.4.3. warning/surface: 2.02:1 (TAQIQ dalili — matn
+   * sifatida o'tmaydi). Sariq tintdagi matn uchun `bg-warning/20` ustida
+   * `text-text` — WCAG 1.4.3. text/warning@20: 15.63:1 — yoki
+   * `--color-warning-text`.
    */
   --color-success: oklch(0.63 0.16 150);
-  --color-success-fg: oklch(1 0 0);
-  /* WCAG 1.4.3. `bg-success/12` fonida: 2.87:1 (buzilish) -> 5.34:1. */
+  /* WCAG 1.4.3. success-fg/success: 5.48:1 (O-06: oq varianti 3.27 edi —
+   * M-20 latent tuzoq; juftlik kodda hali ishlatilmaydi, lekin reyestr
+   * istisnosiz to'liq bo'lishi uchun quyuq qiymatga o'tkazildi —
+   * hech qanday piksel o'zgarmadi). */
+  --color-success-fg: oklch(0.205 0 0);
+  /* WCAG 1.4.3. success-text/success@12: 5.34:1 (avvalgi qiymat 2.87 —
+   * buzilish edi). */
   --color-success-text: oklch(0.48 0.14 150);
   --color-warning: oklch(0.78 0.15 85);
   --color-warning-fg: oklch(0.205 0 0);
-  /* WCAG 1.4.3. `bg-warning/20` fonida 5.28:1. */
-  --color-warning-text: oklch(0.50 0.11 85);
+  /* WCAG 1.4.3. warning-text/warning@20: 5.28:1 */
+  --color-warning-text: oklch(0.5 0.11 85);
   --color-danger: oklch(0.58 0.21 27);
   --color-danger-hover: oklch(0.53 0.21 27);
   --color-danger-fg: oklch(1 0 0);
-  /* WCAG 1.4.3. `bg-danger/12` fonida: 3.97:1 (buzilish) -> 5.52:1. */
-  --color-danger-text: oklch(0.50 0.19 27);
+  /* WCAG 1.4.3. danger-text/danger@12: 5.52:1 (avvalgi qiymat 3.97 —
+   * buzilish edi). */
+  --color-danger-text: oklch(0.5 0.19 27);
 
   /* ---- Radiuslar (kartalar 12–16px) ----------------------------------- */
   --radius-sm: 0.5rem; /* 8px  — inputlar */
@@ -114,25 +171,35 @@
   }
 
   /*
-   * iOS Safari 16px'dan KICHIK forma elementiga fokuslanganda sahifani
-   * avtomatik kattalashtiradi. `Input` va `<select>` — `text-sm` (14px),
-   * ilova esa telefon-birinchi (bozor admini va kassir telefonda ishlaydi).
+   * ⛔⛔ G-motion-1(a) — REDUCED-MOTION NING BIRINCHI QATLAMI.
    *
-   * Keng tarqalgan "yechim" — viewport meta orqali kattalashtirishni
-   * cheklash — RAD ETILDI: u pinch-zoom'ni o'ldiradi va WCAG 1.4.4
-   * (Resize Text) ni buzadi. Loyihada `viewport` eksporti yo'q va
-   * bo'lmaydi ham; bu taqiq grep darvozasi bilan qulflangani uchun
-   * taqiqlangan atribut nomi bu yerda literal sifatida yozilmaydi.
-   *
-   * O'rniga faqat BARMOQ bilan boshqariladigan qurilmalarda shrift 16px
-   * qilinadi — desktopdagi 14px zichligi saqlanadi.
+   * `motion-reduce:animate-none` utilitasi FAQAT `animation` ga tegadi —
+   * `transition-duration` ga TEGMAYDI [O'LCHANDI: 09-RESEARCH Tuzoq 9].
+   * Shuning uchun bu blok ikkinchi emas, BIRINCHI qatlam: `!important`
+   * deklaratsiyalari qatlam tartibidan QAT'I NAZAR oddiy deklaratsiyalardan
+   * ustun, ya'ni blok `@layer base` ichida bo'lsa ham kafolatli ishlaydi
+   * va React yuklanishidan OLDIN kuchga kiradi. Vestibulyar buzilishi
+   * bo'lgan foydalanuvchi uchun bu a11y talabi, sozlama emas (T-09-06).
    */
-  @media (pointer: coarse) {
-    input,
-    select,
-    textarea {
-      font-size: 1rem;
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
+  }
+
+  /*
+   * Raqam ustunlari «sakramasin» [L-9, masterplan §2]. ⛔ Mavjud 94 ta
+   * qo'lda yozilgan `tabular-nums` sinfi OLIB TASHLANMAYDI (ular zararsiz;
+   * supurish 40+ faylga tegardi). Yangi kod sinfni qo'lda yozmaydi —
+   * jadval, `.money` va `[data-numeric]` avtomatik oladi.
+   */
+  :where(table, .money, [data-numeric]) {
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -154,4 +221,249 @@
     content-visibility: auto;
     contain-intrinsic-size: auto 400px;
   }
+
+  /*
+   * =========================================================================
+   * @KEYFRAMES REYESTRI — YOPIQ, 8 NOM (G-motion-3(a,c), 09-UI-SPEC §4.3).
+   *
+   * ⛔ RUXSAT ETILGAN XOSSALAR TO'PLAMI: transform · opacity · background ·
+   *    background-color · background-position · box-shadow ·
+   *    stroke-dashoffset · stroke-dasharray. `width`/`height`/`top`/`left`/
+   *    `right`/`bottom`/`margin`/`padding` — BIRORTASI HAM YOZILMAYDI:
+   *    arzon Androidda har kadrda layout hisobi 60fps ni o'ldiradi.
+   * ⛔ `@keyframes` FAQAT shu faylda ta'riflanadi — komponent faylida 0.
+   * ⛔ Kompozit davomiyliklar (800ms · 300ms · 1.5s · 200ms) FAQAT shu
+   *    ta'riflar ichida yashaydi — komponentda takrorlanmaydi.
+   * ⛔ Sinf prefiksi `motion-`, `animate-` EMAS: `animate-*` prefiksi
+   *    G-motion-1(b) ning `motion-reduce:` juftlik skaniga tushadi va u
+   *    faqat `Loader2` uchun mo'ljallangan.
+   * =========================================================================
+   */
+
+  /* 2-qadam: check-mark chizilishi — 250ms (--motion-base), SVG shtrix.
+   * `stroke-dasharray: 30` statik tayyorgarlik, harakat FAQAT offset'da. */
+  @keyframes draw {
+    from {
+      stroke-dashoffset: 30;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  .motion-check-draw {
+    stroke-dasharray: 30;
+    animation: draw var(--motion-base) var(--ease-out) both;
+  }
+
+  /* 3-qadam: karta yashil halqa pulsi — 300ms KOMPOZIT (bir urish uchun
+   * base'dan sal uzun, slow'dan qisqa — sketch 001-B timingi). */
+  @keyframes ringpulse {
+    from {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+    to {
+      transform: scale(1.06);
+      opacity: 0;
+    }
+  }
+  .motion-ring-pulse {
+    animation: ringpulse 300ms var(--ease-out) both;
+  }
+
+  /* 5-qadam: yangi qator qo'nishi — 800ms KOMPOZIT (fon so'nishi sekin
+   * bo'lishi kerak, aks holda kassir qatorni ilg'amaydi). Fon success
+   * tinti (0.18) dan shaffofga, siljish -4px dan 0 ga. */
+  @keyframes landin {
+    from {
+      background-color: oklch(0.63 0.16 150 / 0.18);
+      transform: translateY(-4px);
+    }
+    to {
+      background-color: transparent;
+      transform: translateY(0);
+    }
+  }
+  .motion-row-land {
+    animation: landin 800ms var(--ease-out) both;
+  }
+
+  /* Kirish — 8px pastdan + fade, --motion-base (§4.4 qoida 1). Stagger
+   * ro'yxatlarda: elementga inline `--i` indeksi beriladi, kechikish
+   * 60ms qadam bilan hisoblanadi. */
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .motion-enter {
+    animation: enter var(--motion-base) var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 60ms);
+  }
+
+  /* Skeleton shimmer — 1.5s KOMPOZIT [L-5; spinner TAQIQ]. Sinf STATIK
+   * gradient va 200% o'lcham beradi; `@keyframes` FAQAT
+   * `background-position` ni siljitadi (kompozitor-do'st, layout yo'q). */
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+  .motion-shimmer {
+    background-image: linear-gradient(
+      90deg,
+      var(--color-surface-muted),
+      var(--color-border),
+      var(--color-surface-muted)
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s linear infinite;
+  }
+
+  /* Real-vaqt yangilanish: BIR marta yashil «nafas» — 800ms KOMPOZIT
+   * [L-6, §10.6]. Halqa success/0.25 dan odatiy karta soyasiga qaytadi. */
+  @keyframes breath {
+    from {
+      box-shadow: 0 0 0 6px oklch(0.63 0.16 150 / 0.25);
+    }
+    to {
+      box-shadow: var(--shadow-card);
+    }
+  }
+  .motion-breath {
+    animation: breath 800ms var(--ease-out) both;
+  }
+
+  /* Nomuvofiqlik case'i: amber diqqat-halqasi — BIR marta, --motion-slow
+   * [L-5, §10.5]. ⛔ Qayta pulsatsiya YO'Q — ogohlantirish charchatmasin. */
+  @keyframes attention {
+    from {
+      box-shadow: 0 0 0 0 oklch(0.78 0.15 85 / 0.55);
+    }
+    to {
+      box-shadow: 0 0 0 10px oklch(0.78 0.15 85 / 0);
+    }
+  }
+  .motion-attention {
+    animation: attention var(--motion-slow) var(--ease-out) both;
+    animation-iteration-count: 1;
+  }
+
+  /* Forma xatosi: 2px shake — 200ms KOMPOZIT (§12.7). ⛔ Login kartasi
+   * shake QILMAYDI [masterplan §6.1 — «ayblov» hissi]. Reduced-motion'da
+   * global blok buni 0.01ms ga tushiradi — faqat matn qoladi. */
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-2px);
+    }
+    75% {
+      transform: translateX(2px);
+    }
+  }
+  .motion-shake {
+    animation: shake 200ms var(--ease-out);
+  }
+}
+
+/*
+ * ===========================================================================
+ * TEMA SCOPE'LARI — ⛔⛔ ATAYLAB QATLAMSIZ (G-motion-4, 09-RESEARCH Naqsh 1).
+ *
+ * `@theme` `@layer theme` ga kompilyatsiya bo'ladi; QATLAMSIZ CSS esa
+ * qatlamli CSS'dan HAR DOIM ustun [O'LCHANDI: @tailwindcss/postcss@4.3.3
+ * kompilyatsiyasi]. Bu bloklar `@layer` ichiga o'ralsa, override JIMGINA
+ * o'lardi. `@theme inline` ham TAQIQ — u utilitani var() o'rniga qiymatga
+ * kompilyatsiya qiladi va scope umuman ishlamay qolardi (G-motion-4(b)).
+ *
+ * ⛔ `--color-*-text` oilasining HAMMASI (4 ta) IKKALA scope'da HAM bor —
+ *    M-18 darsining mexanik shakli: sketch tokenlari beshta AA buzilishi
+ *    olib kelgan edi.
+ * ===========================================================================
+ */
+
+/* Tungi rejim [09-UI-SPEC §5.3] — 06:00 smenalar, kechki hisobot.
+ * Har `*-text` qiymati ENG YORUG' fonda (surface-muted, 0.26) HAM tint
+ * fonida HAM >=4.5 bo'lishi uchun yechilgan — eng yomon holat o'lchangan. */
+[data-theme="dark"] {
+  --color-bg: oklch(0.17 0.005 260);
+  --color-surface: oklch(0.22 0.006 260);
+  --color-surface-muted: oklch(0.26 0.006 260);
+  --color-border: oklch(0.32 0.008 260);
+  /* WCAG 1.4.11. [dark] border-ui/surface: 3.57:1 ·
+   * [dark] border-ui/surface-muted: 3.20:1 */
+  --color-border-ui: oklch(0.55 0.008 260);
+  /* WCAG 1.4.3. [dark] text/surface: 14.96:1 */
+  --color-text: oklch(0.95 0 0);
+  /* WCAG 1.4.3. [dark] text-muted/surface-muted: 6.26:1 */
+  --color-text-muted: oklch(0.72 0 0);
+  --color-accent: oklch(0.64 0.15 255);
+  /* ⛔ 09-01 T3 sozlashi (G-motion-5(b) o'lchovi): dark'da accent 0.64 ga
+   * YORISHDI, oq matn esa uning ustida 3.38 beradi — buzilish. Tugma
+   * matni quyuqqa o'tadi (dark rejimlarda odatiy naqsh).
+   * WCAG 1.4.3. [dark] accent-fg/accent: 5.30:1 */
+  --color-accent-fg: oklch(0.205 0 0);
+  /* WCAG 1.4.3. [dark] accent-text/accent@10: 4.52:1 */
+  --color-accent-text: oklch(0.64 0.14 255);
+  /* ⛔ 09-01 T3 sozlashi: SPEC qiymati 0.62 tint fonida 4.33 berdi
+   * (buzilish — tint kompozit surface-muted'dan YORUG'ROQ). 0.64 ga
+   * ko'tarildi. WCAG 1.4.3. [dark] success-text/success@12: 4.68:1 */
+  --color-success-text: oklch(0.64 0.14 150);
+  /* ⛔ 09-01 T3 sozlashi: SPEC qiymati 0.64 tint fonida 3.41 berdi
+   * (buzilish — warning/20 tinti kompozitlarning eng yorug'i). 0.72 ga
+   * ko'tarildi. WCAG 1.4.3. [dark] warning-text/warning@20: 4.63:1 */
+  --color-warning-text: oklch(0.72 0.1 85);
+  /* WCAG 1.4.3. [dark] danger-text/danger@12: 4.64:1 */
+  --color-danger-text: oklch(0.65 0.13 27);
+  /* Qorong'i fonda oq soya ishlamaydi — quyuqroq (09-UI-SPEC §5.3). */
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.5), 0 1px 3px oklch(0 0 0 / 0.5);
+  --shadow-raised: 0 2px 4px oklch(0 0 0 / 0.5), 0 8px 24px oklch(0 0 0 / 0.5);
+}
+
+/* Quyosh ostida rejimi [09-UI-SPEC §11.4] — kassir ochiq havoda.
+ * Maksimal kontrast: sof oq/qora, soyalar YO'Q (quyoshda soya shovqin),
+ * og'irlik TOKEN orqali ko'tariladi — komponent kodi o'zgarmaydi.
+ * ⛔ Iliq baza bu rejimda YO'Q — iliqlik ko'z qulayligi uchun, quyosh
+ * rejimi esa maksimal kontrast uchun; ikkalasi qarama-qarshi maqsad. */
+[data-theme="sun"] {
+  /* WCAG 1.4.3. [sun] text/bg: 21.00:1 */
+  --color-bg: oklch(1 0 0);
+  --color-surface: oklch(1 0 0);
+  /* [ASSUMED] SPEC surface-muted bermaydi; sof oq yuzada ikkinchi daraja
+   * kerak — 0.96 tanlandi va u kontrast reyestridan o'tadi. */
+  --color-surface-muted: oklch(0.96 0 0);
+  --color-border: oklch(0.62 0 0);
+  /* WCAG 1.4.11. [sun] border-ui/surface: 7.44:1 */
+  --color-border-ui: oklch(0.45 0 0);
+  --color-text: oklch(0 0 0);
+  /* WCAG 1.4.3. [sun] text-muted/bg: 11.31:1 */
+  --color-text-muted: oklch(0.35 0 0);
+  /* To'rtala `*-text` L 0.40–0.42 oralig'ida — tint fonlarida ham
+   * to'yingan quyosh yorug'ida ham o'qiladi.
+   * WCAG 1.4.3. [sun] accent-text/accent@10: 8.05:1 */
+  --color-accent-text: oklch(0.4 0.18 255);
+  /* WCAG 1.4.3. [sun] success-text/success@12: 7.10:1 */
+  --color-success-text: oklch(0.41 0.14 150);
+  /* WCAG 1.4.3. [sun] warning-text/warning@20: 7.42:1 */
+  --color-warning-text: oklch(0.42 0.11 85);
+  /* WCAG 1.4.3. [sun] danger-text/danger@12: 7.55:1 */
+  --color-danger-text: oklch(0.41 0.19 27);
+  /* Quyoshda soya — shovqin (09-UI-SPEC §11.4). */
+  --shadow-card: none;
+  --shadow-raised: none;
+  /* Og'irlik ko'tarilishi token orqali: `font-normal` 500 ga, `semibold`
+   * 700 ga — komponentga tegilmaydi [O'LCHANDI: scope'da ishlaydi]. */
+  --font-weight-normal: 500;
+  --font-weight-semibold: 700;
 }
