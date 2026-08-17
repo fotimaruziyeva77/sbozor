@@ -292,6 +292,23 @@ EXEMPT_ROUTES: dict[str, str] = {
         "javob natijasida tug'iladi), ya'ni unda 'boshqa bozorning obyekti' tushunchasining "
         "o'zi yo'q"
     ),
+    "/api/v1/public/demo-requests": (
+        "global — anonim marketing (demo) so'rovi, kodbazadagi YAGONA "
+        "autentifikatsiyasiz yozuv marshruti (10-UI-SPEC §12.5): tenant konteksti "
+        "PRINSIPIAL ravishda yo'q (so'rov yuborayotgan bozor hali MIJOZ EMAS, "
+        "tizimda uning qatori mavjud emas), so'rov ma'lumoti DB'ga YOZILMAYDI va "
+        "javob yagona `delivered` bayrog'i. `phone` SO'ROV tanasida yashaydi, "
+        "JAVOB modelida emas — shuning uchun `test_personal_data_coverage.py` "
+        "(javob maydonlarini skanerlaydi) uni ko'rmaydi va bu istisno o'sha "
+        "darvozani bo'shatmaydi. QAMROVI TO'LIQ QAYTA TIKLANGAN: "
+        "`tests/integration/test_demo_request.py` matritsa bu yerda tekshira "
+        "olmaydigan hamma narsani alohida o'lchaydi — sessiyasiz POST -> 200, "
+        "javobda `Set-Cookie` YO'Q, javob kalitlari AYNAN {'delivered'}, bir "
+        "IP'dan 6-so'rov -> 429, buzuq telefon -> 422, honeypot -> Telegram'ga "
+        "0 chaqiruv va Telegram yiqilganda 502 + DB'da 0 yangi qator; ya'ni "
+        "uchala token da'vosining o'rnini anonim kontraktning o'z darvozalari "
+        "egallaydi"
+    ),
     "/internal/live-authz": (
         "global — nginx `auth_request` nishoni: uni FOYDALANUVCHI emas, proxy "
         "chaqiradi va unda `Authorization` sarlavhasi UMUMAN bo'lmaydi. Kontrakti "
