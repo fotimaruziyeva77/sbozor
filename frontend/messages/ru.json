@@ -1396,7 +1396,14 @@
     "countStalls": "Торговые места",
     "countVendors": "Продавцы",
     "countCameras": "Камеры",
-    "countUsers": "Пользователи"
+    "countUsers": "Пользователи",
+    "revenueTrendTitle": "Динамика выручки",
+    "revenueTrendPeriod": "Последние 7 дней",
+    "revenueTrendEmpty": "Недостаточно данных для графика",
+    "revenueTrendEmptyHint": "Нужно минимум 7 закрытых дней — полный период доступен в отчётах.",
+    "occupancyTitle": "Занятость",
+    "occupancySummary": "{occupied} занято · {empty} свободно",
+    "occupancyEmpty": "Занятость ещё не измерена"
   },
   "reports": {
     "title": "Отчёты",
@@ -1502,5 +1509,11 @@
     "ledgerReplaceBody": "За {day} тетрадь уже загружена. Новый файл заменит прежний.",
     "ledgerReplaceConfirm": "Заменить",
     "ledgerLoaded": "Тетрадь загружена: {rows} строк"
+  },
+  "theme": {
+    "label": "Оформление",
+    "light": "Светлое",
+    "dark": "Тёмное",
+    "sun": "На солнце"
   }
 }

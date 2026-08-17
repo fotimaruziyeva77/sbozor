@@ -63,7 +63,42 @@ export default async function LocaleLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className="h-full">
+    /*
+     * `data-theme="light"` — server HTML'ining standart temasi;
+     * `suppressHydrationWarning` — pastdagi inline skript atributni React
+     * gidratatsiyasidan OLDIN o'zgartirgani uchun MAJBURIY (aks holda React
+     * nomuvofiqlikni «tuzatib», temani qayta light'ga qaytarardi).
+     * Naqsh: next/dist/docs/01-app/02-guides/preventing-flash-before-hydration.md
+     */
+    <html
+      lang={locale}
+      className="h-full"
+      data-theme="light"
+      suppressHydrationWarning
+    >
+      <head>
+        {/*
+          ⛔ FOUC'ga qarshi BLOKLOVCHI skript (09-UI-SPEC §11.2): saqlangan
+          tema birinchi bo'yashdan OLDIN qo'llanadi. `useEffect` YARAMASDI —
+          u bo'yashdan keyin ishlaydi va oq miltillash ko'rinardi.
+
+          ⛔ Satr STATIK va build paytida qotirilgan — foydalanuvchi
+          ma'lumoti interpolatsiya QILINMAYDI (T-09-02: XSS yuzasi yo'q).
+          ⛔ Reyestr validatsiyasi skript ICHIDA: `localStorage` dagi
+          ixtiyoriy satr `data-theme` ga o'ta OLMAYDI (T-09-01) — faqat
+          aynan "light" / "dark" / "sun".
+          ⛔ `try/catch` — `localStorage` bloklangan brauzerlar uchun.
+          Skript locale'ga ham, sessiyaga ham bog'liq emas — SSG buzilmaydi.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              `(function(){try{var t=localStorage.getItem("sbozor-theme");` +
+              `if(t==="light"||t==="dark"||t==="sun")` +
+              `document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body className="flex min-h-full flex-col">
         {/*
           Provayder tartibi: i18n -> URL holati -> server holati keshi -> sessiya.

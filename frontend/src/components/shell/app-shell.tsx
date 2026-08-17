@@ -25,6 +25,7 @@ import { useTranslations } from "next-intl";
 import { LocaleSwitcher } from "@/components/shell/locale-switcher";
 import { NavMoreSheet } from "@/components/shell/nav-more-sheet";
 import type { NavSheetItem } from "@/components/shell/nav-more-sheet";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { UserMenu } from "@/components/shell/user-menu";
 import { Link, usePathname } from "@/i18n/navigation";
 import { useAuthStore } from "@/lib/auth-store";
@@ -477,6 +478,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {/* 09-UI-SPEC §11.2: tema almashtirgich LocaleSwitcher YONIDA. */}
+            <ThemeToggle />
             <LocaleSwitcher />
             <UserMenu />
           </div>
