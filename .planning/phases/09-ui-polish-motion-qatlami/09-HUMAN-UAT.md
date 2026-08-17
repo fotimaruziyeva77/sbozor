@@ -6,6 +6,12 @@ started: 2026-08-17
 updated: 2026-08-17
 ---
 
+> ⛔ **Mexanik qatlam 2026-08-17 da ikki to'liq `gate` bilan tasdiqlangan
+> (2259/2102 s, ikkalasi exit 0); bu bandlar INSON o'lchovini kutadi.**
+> Birortasiga raqam YOZILMAGAN va birortasi «bajarildi» deb
+> BELGILANMAGAN — o'lchovlar real qurilma/inson idrokini talab qiladi
+> va ular hali olinmagan (09-07 orkestrator qarori).
+
 ## Bu ro'yxat nima va nima EMAS
 
 Bu — 9-fazaning **inson o'lchovi bandlari** (08-HUMAN-UAT naqshi): CI'da
@@ -30,8 +36,14 @@ yopish TAQIQLANADI** [MEROS: D-01, FOUND-07 va AI-02 darsi]. Har band
 
 ## Current Test
 
-[inson tekshiruvini kutmoqda — bandlar Wave 3 yakuni va pilot
-tayyorgarligi haftasida bajariladi; ijro oqimini bloklamaydi]
+[inson tekshiruvini kutmoqda — №1/№2/№5 birinchi deploy yoki
+`/gsd-verify-work` bosqichida, №3/№4 pilot tayyorgarligi haftasida;
+ijro oqimini bloklamaydi]
+
+⚠ Sinov muhiti (2026-08-17 holati): `http://localhost:8081/uz` —
+frontend JORIY kod bilan qayta qurilgan (prod build, nginx orqali);
+telefon uchun ayni tarmoqda `http://<xost-LAN-IP>:8081/uz`. Lighthouse
+o'lchovi dev-serverda EMAS, aynan shu prod-build ustida olinsin.
 
 ## Tests
 
@@ -39,7 +51,7 @@ tayyorgarligi haftasida bajariladi; ijro oqimini bloklamaydi]
 
 | Egasi | Tetigi | Imzo |
 |-------|--------|------|
-| **Ijrochi** (dala qurilmasi bilan) | **Wave 3 yakuni** | [ ] `____________` sana: `______` |
+| **Ijrochi** (dala qurilmasi bilan) | **Birinchi deploy yoki `/gsd-verify-work` bosqichi** | [ ] `____________` sana: `______` |
 
 jsdom layout ham, kompozitsiya ham qilmaydi — `getBoundingClientRect()`
 nol, `Element.animate`/`getAnimations()` yo'q [O'LCHANDI: jsdom 30.0.1].
@@ -62,7 +74,7 @@ result: [pending]
 
 | Egasi | Tetigi | Imzo |
 |-------|--------|------|
-| **Ijrochi** | **Wave 3 yakuni** | [ ] `____________` sana: `______` |
+| **Ijrochi** | **Birinchi deploy yoki `/gsd-verify-work` bosqichi** | [ ] `____________` sana: `______` |
 
 Lighthouse CI'da YO'Q va bu fazada QO'SHILMAYDI (09-UI-SPEC §16.6) — u
 headless Chrome + yangi dev bog'liqlik talab qiladi va `gate` byudjetiga
