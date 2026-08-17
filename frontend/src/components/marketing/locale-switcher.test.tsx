@@ -15,7 +15,7 @@
  * o'sha modullarni nomlamaydi — bu ataylab.
  */
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -107,8 +107,16 @@ describe("MarketingLocaleSwitcher — anonim til almashtirgich (B-1/B-2)", () =>
   });
 
   test("B-2 QULFI: manbada zod grafini tortadigan importlar YO'Q, navigatsiya faqat @/i18n/navigation dan", () => {
+    // Vitest `frontend/` ildizidan yuguradi (vitest.config include: src/**);
+    // jsdom ostida `import.meta.url` file-sxema emas — cwd'dan qurish barqaror.
     const source = readFileSync(
-      fileURLToPath(new URL("./locale-switcher.tsx", import.meta.url)),
+      path.join(
+        process.cwd(),
+        "src",
+        "components",
+        "marketing",
+        "locale-switcher.tsx",
+      ),
       "utf8",
     );
 
