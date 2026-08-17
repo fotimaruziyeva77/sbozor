@@ -13,12 +13,31 @@
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { ReactNode } from "react";
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import messages from "../../../messages/uz-Latn.json";
+
+/*
+ * `@/i18n/navigation` jsdom'da Next router kontekstisiz ishlamaydi —
+ * `locale-switcher.test.tsx:32-40` bilan AYNI naqsh. Bu yerda faqat `Link`
+ * kerak (rozilik yorlig'i ichidagi maxfiylik havolasi) — oddiy <a> yetadi.
+ */
+vi.mock("@/i18n/navigation", () => ({
+  Link: ({
+    children,
+    href,
+    ...rest
+  }: { children: ReactNode; href: string } & Record<string, unknown>) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 import { DemoForm } from "./demo-form";
 
 const L = messages.landing.form;

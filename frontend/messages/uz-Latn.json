@@ -1654,7 +1654,7 @@
       "phone": "Telefon raqamingiz",
       "market": "Bozor nomi",
       "stallCount": "Rastalar soni (taxminan)",
-      "consent": "Maxfiylik siyosati bilan tanishdim va ma'lumotlarim shu so'rov uchun ishlatilishiga roziman.",
+      "consent": "<privacy>Maxfiylik siyosati</privacy> bilan tanishdim va ma'lumotlarim shu so'rov uchun ishlatilishiga roziman.",
       "submit": "Demo so'rang",
       "submitting": "Yuborilmoqda…",
       "success": {
