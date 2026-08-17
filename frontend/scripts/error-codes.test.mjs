@@ -1588,3 +1588,125 @@ test("G-17: HAR HISOBOT kodi uchun sabab va tuzatish UCHALA tilda bor", () => {
       problems.join("\n  "),
   );
 });
+
+/* ---------------------------------------------------------------------------
+ * 10-FAZA: OLTINCHI BACKEND-LANGARLI JUFTLIK — ANONIM DEMO SO'ROVI (LAND-03).
+ *
+ * Zanjir yana uch bo'g'inli va har bo'g'in boshqa tilda:
+ *
+ *   schemas.py::DEMO_ERROR_CODES              (Python — LANGAR, frozenset)
+ *     -> lib/demo-errors.ts::DEMO_ERROR_CODES (TypeScript — ko'zgu)
+ *     -> demoErrorMessageKey -> landing.form.* (JSON — uch tildagi matn)
+ *
+ * ⛔⛔ NEGA LANGAR BACKENDDA (RESEARCH ochiq savol №3, «Variant A»
+ *     tavsiyasi qabul qilindi): mahalliy `switch` (variant B) darvozada
+ *     KO'R NUQTA qoldirardi — backend beshinchi kodni qo'shsa yoki
+ *     mavjudini qayta nomlasa, forma jim «Xatolik» ga tushib D-02 ning
+ *     «sabab VA tuzatish yo'li» kontrakti buzilardi va HECH BIR darvoza
+ *     qizarmasdi. Bu 04-09 da HAQIQATAN ro'y bergan sinf (olti yangi
+ *     `MARKET_ERROR_CODES` kodi, unutilgan `ERROR_CODES` ko'zgusi).
+ *
+ * ⚠ FARQI: `demoErrorMessageKey` NISBIY kalit qaytaradi (`form.error.*`),
+ *   chunki chaqiruvchi `useTranslations("landing")` bilan bog'laydi —
+ *   katalog qidiruvida `landing.` prefiksi shu yerda qo'shiladi.
+ *
+ * ⚠ Xarita in'ektiv EMAS va bu ATAYIN: `delivery_failed` ham, noma'lum
+ *   kod ham `form.error.body` ga tushadi (xom `detail` foydalanuvchiga
+ *   HECH QACHON ko'rsatilmaydi — T-02-99 merosi). Shuning uchun bu yerda
+ *   «har kod alohida kalit» talab qilinmaydi — talab «har kod XARITADA
+ *   bor va har natija kalit uchala tilda mavjud».
+ * ------------------------------------------------------------------------ */
+
+const DEMO_ERRORS = path.join(FRONTEND_ROOT, "src", "lib", "demo-errors.ts");
+
+/** `landing` — anonim yuzaning YAGONA matn namespace'i (10-UI-SPEC). */
+const DEMO_NAMESPACE = "landing";
+
+/**
+ * §12.5 — anonim endpoint kodlari soni.
+ *
+ * ⛔ BU SON — O'LCHAM QULFI, «yangilanadigan raqam» EMAS. Parser sinsa
+ *    (masalan frozenset `tuple` ga aylantirilsa) quyidagi darvozalar
+ *    BO'SH to'plam bo'yicha aylanib JIMGINA yashil qolardi — shu faylda
+ *    bir necha marta o'lchangan nosozlik sinfi (G-36 darsi).
+ */
+const DEMO_ERROR_CODE_COUNT = 4;
+
+const demoBackendCodes = readPythonFrozenset(
+  read(BACKEND_SCHEMAS),
+  "DEMO_ERROR_CODES",
+);
+const demoMirrorSource = read(DEMO_ERRORS);
+const demoMirrorCodes = readTsStringArray(demoMirrorSource, "DEMO_ERROR_CODES");
+const demoKeyMap = readSwitchMap(demoMirrorSource);
+
+test("LAND-03: demo reyestri o'qildi va AYNAN to'rt kod (nazorat)", () => {
+  assert.equal(
+    demoBackendCodes.length,
+    DEMO_ERROR_CODE_COUNT,
+    `DEMO_ERROR_CODES dan ${demoBackendCodes.length} kod o'qildi, kutilgan ` +
+      `${DEMO_ERROR_CODE_COUNT} (schemas.py §12.5 reyestri)`,
+  );
+  assert.equal(
+    new Set(demoBackendCodes).size,
+    demoBackendCodes.length,
+    `takrorlangan kod: ${demoBackendCodes}`,
+  );
+});
+
+test("LAND-03: `lib/demo-errors.ts` backend reyestrining TO'LIQ ko'zgusi (IKKI yo'nalish)", () => {
+  const problems = [];
+
+  // OLDINGA: backendда bor, ko'zguda yo'q — forma jim «Xatolik» ga tushardi.
+  for (const code of demoBackendCodes) {
+    if (!demoMirrorCodes.includes(code)) {
+      problems.push(
+        `demo-errors.ts: ${code} YO'Q — kod backendда bor, frontendда esa u ` +
+          "zaxira matnga tushadi va admin NIMA bo'lganini bilmaydi (D-02)",
+      );
+    }
+  }
+  // TESKARI: ko'zguda ORTIQCHA kod — hech qachon kelmaydigan xato uchun
+  // matn va qoida saqlab yurish (NVR_ERROR_CODES bloki naqshi).
+  for (const code of demoMirrorCodes) {
+    if (!demoBackendCodes.includes(code)) {
+      problems.push(`demo-errors.ts: ${code} backend reyestrida YO'Q`);
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "demo xato reyestri ikki tomonda AJRALIB KETGAN:\n  " + problems.join("\n  "),
+  );
+});
+
+test("LAND-03: har backend kodi `demoErrorMessageKey` da xaritalangan va kaliti UCHALA tilda bor", () => {
+  const problems = [];
+
+  // Har backend kodi switch xaritasida bor (default'ga suyanib qolmaydi).
+  const unmapped = demoBackendCodes.filter((code) => !demoKeyMap.has(code));
+  assert.deepEqual(
+    unmapped,
+    [],
+    `demo-errors.ts::demoErrorMessageKey da \`case\` yo'q: ${unmapped.join(", ")}`,
+  );
+
+  // Har natija kaliti `landing.` prefiksi bilan uchala tilda mavjud.
+  for (const locale of LOCALES) {
+    const messages = loadMessages(locale);
+    for (const [code, relativeKey] of demoKeyMap) {
+      const fullKey = `${DEMO_NAMESPACE}.${relativeKey}`;
+      if (typeof lookup(messages, fullKey) !== "string") {
+        problems.push(`${locale}.json da "${fullKey}" yo'q (kod: ${code})`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "D-02 buzilgan — demo xato matni uchala tilda bo'lishi SHART:\n  " +
+      problems.join("\n  "),
+  );
+});
