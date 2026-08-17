@@ -52,7 +52,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Nomuvofiqlik, bildirishnoma va botlar** - "Band, lekin to'lovsiz" case oqimi, sotuvchi va direktor botlari (23/23 reja: 17 asosiy + 6 bo'shliq yopish. **BIRINCHI TEKSHIRUV `2/5` — `gaps_found`** (2026-08-12): #3 NOT MET edi — `market_notification_settings` ga butun repo bo'ylab yozuv yo'li yo'q edi, ya'ni direktor produksiyada dayjest hech qachon olmasdi; `test_sc3` esa yashil turardi, chunki sozlama qatorini fixture orqali to'g'ridan-to'g'ri SQL bilan yozardi. Kod ko'rigi (`07-REVIEW.md`) 9 blocker qayd etdi. **07-18…07-23 shu 3 bo'shliq + 9 blocker + 10 warning'ni yopdi**, orkestrator esa `bot:lint` ni tikladi (`e32e40a`, u butun `gate` zanjirini to'xtatib turardi). **QAYTA TEKSHIRUV `5/5` — barcha mezon VERIFIED** (2026-08-13, `07-VERIFICATION.md`), `npm run gate` to'liq zanjiri **EXIT 0**. Status `human_needed`: 7 band faqat inson tomonidan tekshiriladi (jonli Telegram yetkazish, real `request_contact`, buyurtmachi bilan quiet-hours/overdue_days tasdig'i) — bular **bo'shliq emas, UAT**, `07-HUMAN-UAT.md` da kuzatiladi va `/gsd-progress` da ko'rinadi) (completed 2026-08-13)
 - [x] **Phase 8: Hisobotlar, mustahkamlash va ishga tushirish** - Excel eksport, AI aniqlik hisoboti, backup mashqi, go-live (completed 2026-08-16)
 - [x] **Phase 9: UI-polish — motion qatlami** - Apple Pay xoreografiyasi, dashboard jonlanishi, 3 tema, G-motion darvozalari (completed 2026-08-17)
-- [ ] **Phase 10: Landing — sbozor.uz** - 12s jonli hero, 3-qadam, davlat-ishonch bloki, demo-forma → bot
+- [x] **Phase 10: Landing — sbozor.uz** - 12s jonli hero, 3-qadam, davlat-ishonch bloki, demo-forma → bot (completed 2026-08-17)
 
 ## Phase Details
 

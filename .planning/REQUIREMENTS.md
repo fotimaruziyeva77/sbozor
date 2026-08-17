@@ -92,7 +92,7 @@ haqiqatni ikki tildan aytadi.*
 - [x] **LAND-02**: Hero 12s "jonli bozor" siklini o'ynaydi (xarita → kamera nuri → amber «Band, lekin to'lovsiz» → to'lov → hisobot); video EMAS, `prefers-reduced-motion`da statik final-kadr
 - [x] **LAND-03**: Demo-forma yuborilganda so'rov admin Telegram-botga yetadi (mavjud bot-service infratuzilmasi orqali) — alohida CRM yo'q
 - [x] **LAND-04**: Ishonch bloki (ma'lumotlar O'zbekistonda · NVR faqat VPN · har amal auditda · 3 til) va pilot holati halol («Karmana sinovda», yolg'on raqam YO'Q)
-- [ ] **LAND-05**: Lighthouse ≥95, LCP <1,5 s (statik sahifada), SEO meta/OG/structured data to'liq
+- [x] **LAND-05**: Lighthouse ≥95, LCP <1,5 s (statik sahifada), SEO meta/OG/structured data to'liq
 
 ## v2 Requirements
 
