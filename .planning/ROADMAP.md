@@ -694,7 +694,7 @@ qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-faz
   5. Lighthouse ≥95, LCP <1.5s (statik sahifada), SEO meta/OG/structured data to'liq
 
 **Chegaralar:** mavjud Next.js ichida `(marketing)` route-guruhi — alohida sayt EMAS; copy brief matnidan (yakuniy tahrir shu fazada, 3 tilda); maxfiylik siyosati sahifasi majburiy (CCTV shaxsiy ma'lumot)
-**Plans:** 6/8 plans executed
+**Plans:** 7/8 plans executed
 
 Plans:
 **Wave 1** *(parallel — fayl kesishuvi YO'Q)*
@@ -714,7 +714,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 10-07-PLAN.md — Sahifa yakuniy kompozitsiyasi + metadata/JSON-LD va `landing-surface.test.mjs` (G-land-1/3/4/5, 6 sabotaj) (W4)
+- [x] 10-07-PLAN.md — Sahifa yakuniy kompozitsiyasi + metadata/JSON-LD va `landing-surface.test.mjs` (G-land-1/3/4/5, 6 sabotaj) (W4)
 
 **Wave 5** *(blocked on Wave 4)*
 
