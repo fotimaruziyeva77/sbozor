@@ -683,7 +683,7 @@ qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-faz
 ### Phase 10: Landing — sbozor.uz
 
 **Goal:** Anonim tashrif buyuruvchi sbozor.uz'da 30 soniyada mahsulotni tushunadi va demo so'raydi: hero 12s "jonli bozor" sikli, 3-qadam "qanday ishlaydi" seksiyasi, davlat-ishonch bloki, demo-forma → admin Telegram-bot
-**Requirements**: TBD (plan bosqichida — manba: `LANDING-BRIEF.md`, `sketch-findings-bozor` landing-sehri reference)
+**Requirements**: LAND-01, LAND-02, LAND-03, LAND-04, LAND-05 *(shu fazada tug'iladi — `10-08` `REQUIREMENTS.md` ga yozadi; ROADMAP SC#1…SC#5 bilan bir-birga xaritalangan)*
 **Depends on:** Phase 9
 **Success Criteria** (what must be TRUE):
 
@@ -694,11 +694,36 @@ qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-faz
   5. Lighthouse ≥95, LCP <1.5s (statik sahifada), SEO meta/OG/structured data to'liq
 
 **Chegaralar:** mavjud Next.js ichida `(marketing)` route-guruhi — alohida sayt EMAS; copy brief matnidan (yakuniy tahrir shu fazada, 3 tilda); maxfiylik siyosati sahifasi majburiy (CCTV shaxsiy ma'lumot)
-**Plans:** 0 plans
+**Plans:** 8 plans in 5 waves
 
 Plans:
+**Wave 1** *(parallel — fayl kesishuvi YO'Q)*
 
-- [ ] TBD (run /gsd-plan-phase 10 to break down)
+- [ ] 10-01-PLAN.md — Backend: anonim `POST /api/v1/public/demo-requests`, `AlertSender` lifespan'ga, `EXEMPT_ROUTES` va uning qamrovini tiklovchi 7 bandli test (LAND-03) (W1)
+- [ ] 10-02-PLAN.md — `--text-hero`/`sweep`/`.landing-step-fill` tokenlari, `Button size="hero"` va `landing` fazoviy nomining ~119 kaliti 3 tilda (LAND-04, LAND-05) (W1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 10-03-PLAN.md — Anonim `LocaleSwitcher` (B-1/B-2), `AppProviders`/`AppGuard` ajratish, `[locale]/page.tsx` o'chirilishi va `(marketing)` qobig'i (LAND-01) (W2)
+
+**Wave 3** *(parallel — blocked on Wave 2)*
+
+- [ ] 10-04-PLAN.md — Demo-forma (zod grafisiz), `demo-errors.ts` ko'zgusi, maxfiylik siyosati sahifasi va SEO fayllari (LAND-03, LAND-05) (W3)
+- [ ] 10-05-PLAN.md — Hero: server yakuniy kadr (LCP) + 12s klient sikli + `hero-scene.test.tsx` (G-land-2) (LAND-02) (W3)
+- [ ] 10-06-PLAN.md — Scroll-reveal primitivi, og'riq/dalil/rol kartalari, ishonch bloki, pilot, FAQ va 3-qadam chizig'i (LAND-04) (W3)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 10-07-PLAN.md — Sahifa yakuniy kompozitsiyasi + metadata/JSON-LD va `landing-surface.test.mjs` (G-land-1/3/4/5, 6 sabotaj) (W4)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 10-08-PLAN.md — Faza darvozasi: `phase10-criteria.test.mjs`, `DEMO_ERROR_CODES` ko'zgusi, `gate` byudjetlarining W0-13 qayta o'lchovi, LAND-01…05, VALIDATION va HUMAN-UAT (W5)
+
+**UI hint**: yes
+**Research flag**: bajarildi — `10-RESEARCH.md` besh bloklovchi ziddiyatni (B-1…B-5) yechim bilan yopdi va `gate` byudjetini o'lchadi (O-01).
+
+⚠ **FAZA BELGISI (`- [ ] **Phase 10: …**`) ATAYIN `- [ ]` HOLIDA QOLADI.** Fazani yopish qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas — 4-, 5-, 6-, 7-, 8- va 9-fazalarda AYNAN shunday saqlangan. «Bajarildi» bilan «tasdiqlandi» ikki BOSHQA da'vo.
 
 ---
 *Roadmap yaratildi: 2026-07-29*
