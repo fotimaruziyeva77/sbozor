@@ -15,7 +15,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
  *    kompozitsiyasi `<Section>` ni `title` PROP'SIZ o'raydi (aks holda h2
  *    ikkilanadi). Karta sarlavhalari — `<h3>` (`text-lg`).
  *
- * ⛔ Avtomatik harakat YO'Q — `setTimeout`/`setInterval` 0 (G-land-3(c)).
+ * ⛔ Avtomatik harakat YO'Q — taymer chaqiruvlari bu faylda 0 marta
+ *    (G-land-3(c); taqiqlangan chaqiruv nomlari izohda ham literal
+ *    yozilmaydi — badge.tsx dagi kodbaza konvensiyasi).
  */
 const PAIN_CARDS = ["a", "b", "c"] as const;
 

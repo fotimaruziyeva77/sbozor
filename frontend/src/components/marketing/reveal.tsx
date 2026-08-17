@@ -27,8 +27,9 @@ import { prefersReducedMotion } from "@/lib/motion";
  *    yo'q — T-10-12 mitigatsiyasi) va `unmount` tozalashida ham `disconnect()`
  *    (ochilmagan holatda ham).
  *
- * ⛔ `setTimeout`/`setInterval` bu faylda 0 marta (G-land-3(c): sahifadagi
- *    yagona avtomatik harakat hero-scene'da).
+ * ⛔ Taymer chaqiruvlari bu faylda 0 marta (G-land-3(c): sahifadagi yagona
+ *    avtomatik harakat hero-scene'da; taqiqlangan chaqiruv nomlari izohda
+ *    ham literal yozilmaydi — badge.tsx dagi kodbaza konvensiyasi).
  *
  * `onReveal` — step-line iste'moli uchun: 3-qadam seksiyasi har qadam
  * ko'ringanda `data-step` ni oshirishi kerak va bu qo'shimcha observer
