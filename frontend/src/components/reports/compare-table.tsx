@@ -268,7 +268,11 @@ function CompareRow({ row }: { row: ThreeWayRow }) {
   const format = useFormatter();
 
   return (
-    <tr className="border-b border-border last:border-b-0">
+    /*
+     * Qator hover foni (§12.8). `DiffCell` badge'i inline element — o'z
+     * fonini hover USTIDA saqlaydi, farq signali bosilmaydi.
+     */
+    <tr className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted">
       <td className="p-3 font-mono tabular-nums">{row.stall_code}</td>
       <td className="p-3 font-mono tabular-nums">
         {format.number(row.ledger_soum)}
