@@ -630,3 +630,262 @@ test("§15.4: `components/collect/**` da ommaviy amal yuzasi YO'Q", () => {
       "  Kassir HAR rastaga ALOHIDA to'lov yozadi (D-18 ning pul shakli).",
   );
 });
+
+/* ========================================================================== */
+/* G-motion-6 (09-UI-SPEC §16.4) — KO'R DEKLARATSIYA MOTION QATLAMIDA HAM     */
+/*                                                                            */
+/* ⛔ (a) MAVJUD QISM O'ZGARMAYDI: `FORBIDDEN_NAMES`/`BLIND_DECLARATION_*`    */
+/*    reyestrlari va ularning quyi chegaralari yuqorida QANDAY bo'lsa,        */
+/*    SHUNDAY qoladi — bu bo'lim ularga TEGMAYDI, faqat qulflaydi.            */
+/* ⛔ (c) `/dashboard` ning ikki yangi kartasi (09-05) uchun huquq sharti      */
+/*    SAHIFADA — komponent «o'zini o'zi himoya qiladi» degan yolg'on          */
+/*    xotirjamlik tug'ilmasligi uchun komponent manbasida `hasPermission(`    */
+/*    0 marta bo'lishi mexanik o'lchanadi.                                    */
+/* ⛔ (d) Bayram copy'si kassir yuzasiga KIRMAYDI: mavjud `collect.written`   */
+/*    toasti FAKTNI aytadi va u yetarli — bayram matni ma'noni suyultirardi.  */
+/* ⛔ (e) Konfetti bu fazada QURILMAYDI (09-UI-SPEC §9): tetigining haqiqat   */
+/*    manbai (`market_day_cleared`) mavjud emas, klientdagi har qanday        */
+/*    hosila ko'rlikni buzadi. «Ijro yo'q» — o'lchanadigan da'vo.             */
+/* ========================================================================== */
+
+/* --- (a) Chegara qulflari ------------------------------------------------- */
+
+/**
+ * ⛔ 2026-08-17 dagi qiymatlar — KAMAYTIRISH TAQIQ (09-UI-SPEC §16.5).
+ *
+ * Yuqoridagi «uzunlik quyi chegaradan kam EMAS» testi reyestrni MIN_* ga
+ * solishtiradi, LEKIN MIN_* ning O'ZI pasaytirilsa jim qolardi. Bu ikki
+ * konstanta o'sha teshikni yopadi: chegara konstantasi bugungi qiymatdan
+ * PASAYSA — darvoza qizaradi.
+ */
+const LOCKED_MIN_FORBIDDEN_NAMES = 14;
+const LOCKED_MIN_BLIND_DECLARATION_TOKENS = 7;
+
+test("G-motion-6(a): mavjud chegara konstantalari PASAYTIRILMAGAN", () => {
+  assert.ok(
+    MIN_FORBIDDEN_NAMES >= LOCKED_MIN_FORBIDDEN_NAMES,
+    `MIN_FORBIDDEN_NAMES = ${MIN_FORBIDDEN_NAMES} < ${LOCKED_MIN_FORBIDDEN_NAMES} — ` +
+      "mavjud chegarani kamaytirish TAQIQ (09-UI-SPEC §16.5)",
+  );
+  assert.ok(
+    MIN_BLIND_DECLARATION_TOKENS >= LOCKED_MIN_BLIND_DECLARATION_TOKENS,
+    `MIN_BLIND_DECLARATION_TOKENS = ${MIN_BLIND_DECLARATION_TOKENS} < ` +
+      `${LOCKED_MIN_BLIND_DECLARATION_TOKENS} — kamaytirish TAQIQ`,
+  );
+});
+
+/* --- (c) Dashboard komponentlarida huquq sharti YO'Q ---------------------- */
+
+/** `/dashboard` kartalari — huquq sharti SAHIFADA turadigan yuza. */
+const DASHBOARD_COMPONENTS = path.join(SRC, "components", "dashboard");
+
+/** Chaqiruv shakli — import nomi emas: `hasPermission(` AYNAN chaqiruv. */
+const PERMISSION_CALL_TOKENS = ["hasPermission("];
+
+/**
+ * ⛔ Bo'sh skanda «topilmadi» jimgina rost bo'lardi: 09-05 dan keyin
+ *    katalogda kamida 3 mahsulot fayli bor (market-status-card,
+ *    revenue-card, occupancy-donut).
+ */
+const MIN_DASHBOARD_FILES = 3;
+
+test("G-motion-6(c): `components/dashboard/**` da `hasPermission(` — 0 marta", () => {
+  assert.ok(
+    existsSync(DASHBOARD_COMPONENTS),
+    "`components/dashboard/` TOPILMADI — (c) skan yuzasi yo'qolgan " +
+      "(katalog ko'chirilgan yoki qayta nomlangan)",
+  );
+
+  const files = listProductFiles(DASHBOARD_COMPONENTS);
+  assert.ok(
+    files.length >= MIN_DASHBOARD_FILES,
+    `\`components/dashboard/\` da atigi ${files.length} ta mahsulot fayli bor ` +
+      `(kutilgan: kamida ${MIN_DASHBOARD_FILES}) — skan jimgina toraygan`,
+  );
+
+  const problems = [];
+  for (const file of files) {
+    for (const token of hitsOf(readCode(file), PERMISSION_CALL_TOKENS)) {
+      problems.push(`${path.relative(SRC, file)} -> \`${token}\``);
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-motion-6(c) BUZILDI — huquq sharti komponent ICHIGA kirdi:\n  " +
+      problems.join("\n  ") +
+      "\n  Shart BITTA joyda — `dashboard/page.tsx` da — qoladi: komponent ichidagi\n" +
+      "  shart «o'zini o'zi himoya qiladi» degan yolg'on xotirjamlik tug'dirardi\n" +
+      "  va sahifadagi darvoza olib tashlanganda so'rov BARIBIR ketardi.",
+  );
+});
+
+/* --- (d) Bayram copy'si — 3 locale'da 0 ----------------------------------- */
+
+/**
+ * Bayram matnining izlari — lotin, kirill va rus shakllari JUFT.
+ *
+ * ⚠ Apostrofning IKKI varianti ataylab (U+2019 va U+0027): kodbaza
+ *   `’` ishlatadi, lekin qo'lda kiritilgan matn oddiy `'` bilan kelishi
+ *   mumkin — bittasini qoldirish taqiqni bitta belgi bilan chetlab
+ *   o'tiladigan qilardi.
+ */
+const CELEBRATION_TOKENS = [
+  "Ajoyib",
+  "Zo'r",
+  "Zo’r",
+  "Tabrik",
+  "Ажойиб",
+  "Зўр",
+  "Табрик",
+  "Отлично",
+  "Поздравля",
+];
+
+/** 09-UI-SPEC §16.4 (d): reyestr quyi chegarasi. */
+const MIN_CELEBRATION_TOKENS = 5;
+
+/** Uchala locale — qamrov HOSILA emas, YOPIQ reyestr (i18n:check bilan teng). */
+const LOCALE_FILES = ["uz-Latn.json", "uz-Cyrl.json", "ru.json"];
+
+/** JSON qiymat daraxtidagi barcha satrlar (kalit yo'li bilan). */
+function collectStringValues(node, prefix, out) {
+  if (typeof node === "string") {
+    out.push([prefix, node]);
+    return out;
+  }
+  if (node !== null && typeof node === "object") {
+    for (const [key, value] of Object.entries(node)) {
+      collectStringValues(value, `${prefix}.${key}`, out);
+    }
+  }
+  return out;
+}
+
+test("G-motion-6(d): `collect.*` qiymatlarida bayram copy'si — 0 (3 locale)", () => {
+  assert.ok(
+    CELEBRATION_TOKENS.length >= MIN_CELEBRATION_TOKENS,
+    `bayram reyestri atigi ${CELEBRATION_TOKENS.length} token ` +
+      `(kutilgan: kamida ${MIN_CELEBRATION_TOKENS})`,
+  );
+  assert.equal(
+    new Set(CELEBRATION_TOKENS).size,
+    CELEBRATION_TOKENS.length,
+    "bayram reyestrida takrorlangan token bor",
+  );
+
+  const problems = [];
+  for (const localeFile of LOCALE_FILES) {
+    const fullPath = path.join(FRONTEND_ROOT, "messages", localeFile);
+    assert.ok(
+      existsSync(fullPath),
+      `\`messages/${localeFile}\` TOPILMADI — (d) skan yuzasi toraygan`,
+    );
+
+    const parsed = JSON.parse(readFileSync(fullPath, "utf8"));
+    /* `collect` bo'limi yo'q bo'lsa — skan bo'sh to'plamda «yashil» qolardi. */
+    assert.ok(
+      parsed.collect !== undefined && typeof parsed.collect === "object",
+      `\`messages/${localeFile}\` da \`collect\` bo'limi YO'Q — skan bo'shab qoldi`,
+    );
+
+    const values = collectStringValues(parsed.collect, "collect", []);
+    assert.ok(
+      values.length > 0,
+      `\`messages/${localeFile}\` ning \`collect\` bo'limi BO'SH — skan bo'shab qoldi`,
+    );
+
+    for (const [keyPath, value] of values) {
+      for (const token of hitsOf(value, CELEBRATION_TOKENS)) {
+        problems.push(`${localeFile}: ${keyPath} -> \`${token}\``);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-motion-6(d) BUZILDI — kassir yuzasiga bayram matni kirdi:\n  " +
+      problems.join("\n  ") +
+      "\n  Mavjud `collect.written` toasti FAKTNI aytadi va u yetarli (09-UI-SPEC\n" +
+      "  §14.1): bayram matni ma'noni suyultirardi va C variantining («har\n" +
+      "  to'lovda bayram») niqoblangan shakliga eshik ochardi.",
+  );
+});
+
+/* --- (e) Konfetti ijrosi YO'Q --------------------------------------------- */
+
+/**
+ * Konfetti identifikatorlari (09-UI-SPEC §16.4 G-motion-1(d)/6(e)).
+ *
+ * Sabab `deferred-items.md` da: tetikning haqiqat manbai
+ * (`market_day_cleared`) hali mavjud emas — shartnoma §9 da to'liq turadi,
+ * ijro esa YO'Q va bu yo'qlik shu yerda o'lchanadi.
+ */
+const CONFETTI_TOKENS = ["confetti", "burst", "particle"];
+
+const MIN_CONFETTI_TOKENS = 3;
+
+test("G-motion-6(e): `components/collect/**` da konfetti identifikatori — 0", () => {
+  assert.ok(
+    CONFETTI_TOKENS.length >= MIN_CONFETTI_TOKENS,
+    `konfetti reyestri atigi ${CONFETTI_TOKENS.length} token ` +
+      `(kutilgan: kamida ${MIN_CONFETTI_TOKENS})`,
+  );
+  assert.equal(
+    new Set(CONFETTI_TOKENS).size,
+    CONFETTI_TOKENS.length,
+    "konfetti reyestrida takrorlangan token bor",
+  );
+
+  const files = collectFilesOrNull();
+  if (files === null) {
+    collectMissingIsRecorded();
+    return;
+  }
+
+  const problems = [];
+  for (const file of files) {
+    for (const token of hitsOf(readCode(file), CONFETTI_TOKENS)) {
+      problems.push(`${path.relative(SRC, file)} -> \`${token}\``);
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-motion-6(e) BUZILDI — kassir yuzasida konfetti izi tug'ildi:\n  " +
+      problems.join("\n  ") +
+      "\n  Konfetti bu fazada QURILMAYDI (09-UI-SPEC §9): yagona halol tetigi —\n" +
+      "  server beradigan mantiqiy bayroq — hali mavjud emas; klientdagi har\n" +
+      "  qanday hosila ko'r deklaratsiyani buzadi. Soxta tetik («har 50-to'lov»)\n" +
+      "  foydalanuvchi rad etgan variantning niqoblangan shakli bo'lardi.",
+  );
+});
+
+/* --- G-motion-6 sun'iy-ijobiy nazorati ------------------------------------ */
+
+test("detektor sun'iy IJOBIY manbani USHLAYDI (G-motion-6 yangi reyestrlari)", () => {
+  /*
+   * Usiz (c)/(d)/(e) ning «topilmadi» xulosalari BO'SH detektor ustida
+   * ham rost bo'lardi (mavjud fayldagi 451-467 naqshining davomi).
+   */
+  assert.deepEqual(
+    hitsOf('const ok = hasPermission(r, "x");', PERMISSION_CALL_TOKENS),
+    ["hasPermission("],
+  );
+  assert.deepEqual(hitsOf('{"cheer":"Ajoyib!"}', CELEBRATION_TOKENS), [
+    "Ajoyib",
+  ]);
+  /* Kirill va rus shakllari ham ushlanadi (registrga sezgir EMAS). */
+  assert.deepEqual(hitsOf("отлично!", CELEBRATION_TOKENS), ["Отлично"]);
+  assert.deepEqual(hitsOf("зўр иш", CELEBRATION_TOKENS), ["Зўр"]);
+  assert.deepEqual(hitsOf("burstConfetti(particleCount)", CONFETTI_TOKENS), [
+    "confetti",
+    "burst",
+    "particle",
+  ]);
+  assert.deepEqual(hitsOf("const ok = 1;", CELEBRATION_TOKENS), []);
+  assert.deepEqual(hitsOf("const ok = 1;", CONFETTI_TOKENS), []);
+});

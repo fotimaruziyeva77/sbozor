@@ -67,6 +67,34 @@ const SETUP_STATUS = {
   blocking: [],
 };
 
+/** 7 qatorli tushum javobi — `RevenueCard` sxemasi uchun to'liq shakl. */
+const REVENUE_REPORT = {
+  from_date: "2026-08-09",
+  to_date: "2026-08-15",
+  rows: Array.from({ length: 7 }, (_, index) => ({
+    business_date: `2026-08-${String(9 + index).padStart(2, "0")}`,
+    charged_soum: 700_000,
+    collected_soum: 600_000 + index * 10_000,
+    diff_soum: -100_000 + index * 10_000,
+  })),
+  total_collected_soum: 4_550_000,
+  total_charged_soum: 5_000_000,
+  row_count: 7,
+  shown_count: 7,
+};
+
+/** KECHAgi yopilgan kun — `OccupancyDonut` sxemasi uchun to'liq shakl. */
+const OCCUPANCY_DAY = {
+  day: "2026-08-16",
+  stalls: 100,
+  occupied: 68,
+  empty: 24,
+  default_empty: 5,
+  no_coverage: 3,
+  human_confirmed: 12,
+  items: [],
+};
+
 function routeFetch(): void {
   apiClientMock.apiFetch.mockImplementation((path: string) => {
     if (path.includes("/setup-status")) return Promise.resolve(SETUP_STATUS);
@@ -74,6 +102,10 @@ function routeFetch(): void {
     if (path === "/me/headline") {
       return Promise.resolve({ metric: "revenue_today", value: 1250000 });
     }
+    if (path.startsWith("/reports/revenue")) {
+      return Promise.resolve(REVENUE_REPORT);
+    }
+    if (path.startsWith("/occupancy")) return Promise.resolve(OCCUPANCY_DAY);
     return Promise.reject(new Error(`kutilmagan so'rov: ${path}`));
   });
 }
@@ -191,5 +223,86 @@ describe("bozor admini", () => {
     expect(document.body.textContent).not.toContain(
       messages.dashboard.marketStatus,
     );
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * G-motion-6(b) — IKKI YANGI KARTA VA KO'R DEKLARATSIYA (09-05 T3)
+ *
+ * ⛔ IKKI QATLAM MAJBURIY (09-UI-SPEC §16.4): `hidden` sinfi bilan
+ *   yashirilgan karta so'rovni BARIBIR yuborardi va summa tarmoq panelida
+ *   ko'rinardi. Shuning uchun kassir shoxi IKKITA ALOHIDA test: DOM
+ *   qatlami va SO'ROV qatlami — sabotaj (darvozani olib tashlash)
+ *   IKKALASINI ham alohida qizartadi.
+ *
+ * ⛔ Darvoza AYNAN `report_view` (O-03): `director` + `market_admin` da
+ *   bor, kassirda YO'Q [VERIFIED: rbac.ts]. `market_manage` bilan
+ *   adashtirish DIREKTORNI ham yopardi — buni quyidagi «direktor» testi
+ *   ushlaydi.
+ * ------------------------------------------------------------------------ */
+
+describe("G-motion-6(b) — kassir tushum va bandlikni KO'RMAYDI", () => {
+  test("⛔ DOM qatlami: ikkala karta ham kassir sessiyasida UMUMAN chizilmaydi", async () => {
+    routeFetch();
+    renderPage(["cashier"]);
+
+    /* Sahifaning qolgani ishlaydi — bo'sh ekran EMAS. */
+    expect(screen.getByText(messages.nav.dashboard)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(requestedPaths().length).toBeGreaterThan(0);
+    });
+
+    expect(document.body.textContent).not.toContain(
+      messages.dashboard.revenueTrendTitle,
+    );
+    expect(document.body.textContent).not.toContain(
+      messages.dashboard.occupancyTitle,
+    );
+  });
+
+  test("⛔ SO'ROV qatlami: `/reports/revenue` va `/occupancy` ga chaqiruv soni 0", async () => {
+    routeFetch();
+    renderPage(["cashier"]);
+
+    await waitFor(() => {
+      expect(requestedPaths().length).toBeGreaterThan(0);
+    });
+
+    /*
+     * ⛔ Shart komponentdan TASHQARIDA bo'lgani uchun so'rov HAM ketmaydi:
+     *    huquqsiz sessiyada summa tarmoq panelida ham ko'rinmaydi.
+     */
+    expect(
+      requestedPaths().filter((path) => path.startsWith("/reports/revenue")),
+    ).toEqual([]);
+    expect(
+      requestedPaths().filter((path) => path.startsWith("/occupancy")),
+    ).toEqual([]);
+  });
+});
+
+describe("G-motion-6(b) — direktor ikkala kartani KO'RADI", () => {
+  test("tushum trendi ham, bandlik halqasi ham BOR va so'rovlar ketgan", async () => {
+    routeFetch();
+    renderPage(["director"], { marketIsActive: true });
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(
+        messages.dashboard.revenueTrendTitle,
+      );
+      expect(document.body.textContent).toContain(
+        messages.dashboard.occupancyTitle,
+      );
+    });
+
+    /* Teskari nazorat: so'rovlar HAQIQATAN ketgan — 0-so'rov holatida
+     * yuqoridagi kassir testi bo'sh detektor ustida yashil qolardi. */
+    expect(
+      requestedPaths().some((path) => path.startsWith("/reports/revenue")),
+    ).toBe(true);
+    expect(
+      requestedPaths().some((path) => path.startsWith("/occupancy")),
+    ).toBe(true);
   });
 });
