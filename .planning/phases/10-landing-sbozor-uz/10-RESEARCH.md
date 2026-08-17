@@ -1159,27 +1159,27 @@ human_only_verifications:
 
 ## Ochiq savollar
 
-1. **Chat manzili — sotuv va ops bir kanaldami?**
+1. **Chat manzili — sotuv va ops bir kanaldami?** *(RESOLVED — 10-01 da: demo_request_chat_id)*
    - **Bilamiz:** `telegram_chat_id` bugun ops/alert kanali; `alerts_enabled` ikkalasiga bog'liq.
    - **Noaniq:** buyurtmachi sotuv so'rovlarini alohida kanalda ko'rishni xohlaydimi.
    - ⛔ **Tavsiya:** ixtiyoriy `demo_request_chat_id` (bo'sh → `telegram_chat_id`). Bir qatorlik xarajat, keyin **konfiguratsiya** qarori bo'lib qoladi.
 
-2. **`D-11` kirillda `Д-11` — tuzatiladimi?**
+2. **`D-11` kirillda `Д-11` — tuzatiladimi?** *(RESOLVED — 10-02 da: kod yorliqdan olib tashlandi)*
    - **Bilamiz:** sahna «namunaviy», ya'ni mos kelmaslik yolg'on emas.
    - **Noaniq:** fazaning *«reklamadagi bilan bir xil»* maqsadiga ta'siri.
    - ⛔ **Tavsiya:** rasta kodini yorliqdan **olib tashlash** (`landing.scene.tagUnpaid` = «Band, lekin to'lovsiz»). Sahna raqami **№16** allaqachon vizual — matnda takrorlash **qiymat qo'shmaydi**.
 
-3. **Xato kodlari zanjiri — registr yoki mahalliy `switch`?**
+3. **Xato kodlari zanjiri — registr yoki mahalliy `switch`?** *(RESOLVED — 10-04/10-08 da)*
    - **Bilamiz:** `error-codes.test.mjs` reyestrni **avtomatik kashf qilmaydi**; to'rt yangi kod bor.
    - **Noaniq:** darvoza tahririning narxi vs ko'r nuqta narxi.
    - ⛔ **Tavsiya:** **registr (A varianti)** — D-02 (*«sabab VA tuzatish yo'li»*) bu fazada **G-SUBMIT ostida** ham, forma copy'sida ham talab qilingan; ko'r nuqta uni birinchi backend o'zgarishida yo'q qilardi.
 
-4. **`(marketing)` da `data-theme` ni `light` ga majburlash kerakmi?**
+4. **`(marketing)` da `data-theme` ni `light` ga majburlash kerakmi?** *(RESOLVED — 10-03 da: meros, majburlanmaydi)*
    - **Bilamiz:** SPEC O-03 — **yo'q**, meros olinadi; anonim `localStorage` bo'sh → `light`.
    - **Noaniq:** app'dan `dark` bilan kelgan foydalanuvchi landing'ni qanday o'qiydi.
    - ⛔ **Tavsiya:** SPEC'ning qarori **saqlanadi**. Tetigi HUMAN-UAT; tuzatish **bir qator** (`(marketing)/layout.tsx`), **uchinchi tema scope'i emas**.
 
-5. **G-land-1(c) ning ikkinchi yarmi (fazoviy nom qamrovi) qo'shiladimi?**
+5. **G-land-1(c) ning ikkinchi yarmi (fazoviy nom qamrovi) qo'shiladimi?** *(RESOLVED — 10-07 T2 da: ikki tomonlama)*
    - **Bilamiz:** Tuzoq 1 — reyestr tengligi yolg'iz **yetarli emas**; `MISSING_MESSAGE` faqat brauzerda chiqadi.
    - **Noaniq:** darvozaning narxi (bu — matn skani, ~0,1 s).
    - ⛔ **Tavsiya:** **qo'shiladi.** Narxi nolga yaqin, ushlaydigan xatosi esa ⛔ **build'dan o'tib ketadigan** sinfdan.
