@@ -623,11 +623,13 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 **Depends on:** Phase 8
 **Success Criteria** (what must be TRUE):
 
-  1. Kassir to'lovni tasdiqlaganda 6-qadam xoreografiya (check-draw → halqa pulsi → summa uchishi → qator qo'nishi → count-up → avtofokus) ishlaydi va input ~150ms ichida keyingi mijozga tayyor — bayram bloklamaydi
+  1. Kassir to'lovni tasdiqlaganda 6-qadam xoreografiya (bosish masshtabi → check-draw → halqa pulsi → summa uchishi → qator qo'nishi → qidiruv tozalanadi va avtofokus) ishlaydi va input ~150ms ichida keyingi mijozga tayyor — bayram bloklamaydi
   2. Direktor paneli skeleton (shimmer, spinner YO'Q) bilan ochiladi, kartalar stagger bilan kiradi, tushum count-up bilan sanaydi, sparkline/donut chizilib chiqadi
   3. Iliq fon (rang 2.0) va dark rejim token-almashtirish bilan ishlaydi — komponent kodi o'zgarmaydi; kassir "quyosh rejimi" tugmasi kontrast maksimal qiladi
   4. `prefers-reduced-motion` da barcha harakat o'chadi (G-motion-1 darvozasi), kassir interaktiv javoblari ≤150ms (G-motion-2 darvozasi) — ikkalasi testda o'lchanadi
   5. Motion faqat `transform`/`opacity` bilan (60fps arzon Androidda), `motion` kutubxonasi +35KB gzip byudjetida, mavjud G-* darvozalar yashil qoladi
+
+⚠ **SC#1 qavsining tuzatilishi (2026-08-17, rejalashtirish):** qavsda ilgari `count-up` yozilgan edi. 09-UI-SPEC §0.2 uni **rad etdi va sabab mexanik**: kassir yuzasidagi har qanday sanaydigan yig'indi 6-fazaning **ko'r deklaratsiya** darvozasini buzadi (`collect-surface.test.mjs`, `MIN_BLIND_DECLARATION_TOKENS = 7`) — kassir o'z smenasining tizim summasini deklaratsiyadan OLDIN bilsa, nomuvofiqlik topish mexanizmi jimgina qadrsizlanadi. Qavs endi UI-SPEC §8.1 ning HAQIQIY olti qadamiga mos. Count-up **direktor** yuzasida qoladi (SC#2) va u yerda hech qanday ko'rlik chegarasi yo'q.
 
 **Chegaralar:** redesign EMAS — mavjud dizayn-tizim ustiga; konfetti FAQAT kunlik plan bajarilganda; masterplan §7 mikro-UX tuzatishlaridan 8-fazada yopilmagani shu fazaga kiradi
 
