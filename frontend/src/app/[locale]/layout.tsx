@@ -1,17 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { hasLocale, NextIntlClientProvider } from "next-intl";
-import {
-  getMessages,
-  getTranslations,
-  setRequestLocale,
-} from "next-intl/server";
-import { NuqsAdapter } from "nuqs/adapters/next/app";
-import { Toaster } from "sonner";
+import { hasLocale } from "next-intl";
+import { getTranslations, setRequestLocale } from "next-intl/server";
 
 import { routing } from "@/i18n/routing";
-import { AuthProvider } from "@/lib/auth-store";
-import { QueryProvider } from "@/lib/query-provider";
 
 import "../globals.css";
 
@@ -21,6 +13,12 @@ type LocaleParams = { locale: string };
  * Bu — ilovaning ILDIZ layout'i (`app/layout.tsx` mavjud emas): next-intl
  * strukturasida `<html>` locale segmentida render bo'ladi, chunki `lang`
  * atributi locale'ga bog'liq.
+ *
+ * ⛔ PROVAYDER YO'Q (10-03, UI-SPEC §4.3): beshala provayder guruh
+ * layoutlariga tushdi — `(app)`/`(auth)` `AppProviders` ni, `(marketing)`
+ * esa faqat toraytirilgan `NextIntlClientProvider` ni oladi. Ildiz
+ * provayder saqlansa anonim landing butun 1373 kalitli katalog + rq/nuqs/
+ * sonner/sessiya grafini yuklab yurardi (o'lchangan: 10-RESEARCH B-2).
  */
 
 export function generateStaticParams() {
@@ -59,8 +57,6 @@ export default async function LocaleLayout({
 
   // Statik renderni yoqadi — busiz har sahifa dinamik bo'lib qoladi.
   setRequestLocale(locale);
-
-  const messages = await getMessages();
 
   return (
     /*
@@ -101,24 +97,11 @@ export default async function LocaleLayout({
       </head>
       <body className="flex min-h-full flex-col">
         {/*
-          Provayder tartibi: i18n -> URL holati -> server holati keshi -> sessiya.
-          `AuthProvider` eng ichkarida, chunki sessiya tiklash `apiFetch` ga
-          tayanadi va u `QueryProvider` bilan bir xil daraxtda bo'lishi kerak.
-
-          `NuqsAdapter` — URL qidiruv parametrlarini holat sifatida o'qiydigan
-          komponentlar uchun (audit filtrlari). U marshrutlashga bog'liq,
-          shuning uchun keshdan ham, sessiyadan ham TASHQARIDA turadi.
+          `{children}` to'g'ridan-to'g'ri: provayder daraxti (tartibi va
+          `Toaster` joyi bilan) `components/shell/app-providers.tsx` da —
+          guruh layoutlari uni o'zi o'raydi (10-03).
         */}
-        <NextIntlClientProvider messages={messages}>
-          <NuqsAdapter>
-            <QueryProvider>
-              <AuthProvider>
-                {children}
-                <Toaster position="top-center" richColors />
-              </AuthProvider>
-            </QueryProvider>
-          </NuqsAdapter>
-        </NextIntlClientProvider>
+        {children}
       </body>
     </html>
   );

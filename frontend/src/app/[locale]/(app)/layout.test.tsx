@@ -1,5 +1,14 @@
 /**
- * `(app)/layout.tsx` marshrut darvozasi — CR-03 ning BIRINCHI to'sig'i (02-18).
+ * `(app)` marshrut darvozasi — CR-03 ning BIRINCHI to'sig'i (02-18).
+ *
+ * 10-03 KO'CHIRISHI: darvoza tanasi `(app)/layout.tsx` dan
+ * `@/components/shell/app-guard.tsx` ga AYNAN ko'chdi (layout endi yupqa
+ * async server qobiq: `AppProviders` + `AppGuard`; server komponent jsdom'da
+ * render bo'lmaydi). Bu fayl AVVAL nimani o'lchagan bo'lsa SHUNI o'lchaydi —
+ * sessiya tiklash, redirect shoxlari, skeleton, usta istisnosi — chunki o'sha
+ * mantiqning yangi uyi `AppGuard`. Layout qobig'ining o'zi (provayder
+ * tartibi) `next build` SSG prerender'da o'lchanadi: guard provayderdan
+ * tashqarida qolsa `useAuthStore` throw qilib build qizaradi (Tuzoq 3).
  *
  * NEGA AYNAN SHU FAYL: 02-VERIFICATION.md ning 1-bo'shlig'i bo'yicha
  * `principal.marketId === null` bo'lgan platforma admini SO'ZSIZ
@@ -29,7 +38,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import messages from "../../../../messages/uz-Latn.json";
-import AppLayout from "./layout";
+import { AppGuard } from "@/components/shell/app-guard";
 import type { Principal } from "@/lib/auth-store";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 
@@ -106,9 +115,9 @@ function renderLayout(pathname: string): void {
   render(
     <NextIntlClientProvider locale="uz-Latn" messages={messages}>
       <AuthProvider>
-        <AppLayout>
+        <AppGuard>
           <p>{CHILD_MARKER}</p>
-        </AppLayout>
+        </AppGuard>
       </AuthProvider>
     </NextIntlClientProvider>,
   );
@@ -133,7 +142,7 @@ afterEach(() => {
   clearSession();
 });
 
-describe("(app)/layout — usta marshruti istisnosi (CR-03)", () => {
+describe("AppGuard ((app) darvozasi) — usta marshruti istisnosi (CR-03)", () => {
   test("`/markets/new`: bozori YO'Q admin ushlab qolinmaydi va sahifa ochiladi", () => {
     seedSession();
     renderLayout("/markets/new");
