@@ -214,7 +214,7 @@ function QueueCard({
           className={
             done
               ? "inline-flex w-fit items-center rounded-md bg-surface-muted px-4 py-2 text-sm font-medium text-text-muted"
-              : "inline-flex w-fit items-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-text"
+              : "inline-flex w-fit items-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg"
           }
           href={done ? undefined : actionHref}
         >
