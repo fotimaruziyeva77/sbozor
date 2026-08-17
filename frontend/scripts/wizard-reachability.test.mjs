@@ -35,7 +35,14 @@ import { test } from "node:test";
 const FRONTEND_ROOT = path.join(import.meta.dirname, "..");
 const SRC = path.join(FRONTEND_ROOT, "src");
 
-const APP_LAYOUT = path.join(SRC, "app", "[locale]", "(app)", "layout.tsx");
+/*
+ * 10-03: `(app)/layout.tsx` ning darvoza tanasi AYNAN ko'chirilgan holda
+ * `components/shell/app-guard.tsx` da yashaydi (layout endi yupqa server
+ * qobiq: provayderlar + guard). Bu darvoza MEXANIZMNI qulflaydi — mexanizm
+ * qayerga ko'chsa, manba yo'li ham o'sha yerga ergashadi; assertlarning
+ * birortasi o'zgarmagan.
+ */
+const APP_LAYOUT = path.join(SRC, "components", "shell", "app-guard.tsx");
 const APP_SHELL = path.join(SRC, "components", "shell", "app-shell.tsx");
 const MARKET_PICKER = path.join(SRC, "components", "auth", "market-picker.tsx");
 const MESSAGES = path.join(FRONTEND_ROOT, "messages", "uz-Latn.json");
@@ -63,12 +70,12 @@ function readCode(file) {
 /* 1-TO'SIQ — marshrut istisnosi                                              */
 /* -------------------------------------------------------------------------- */
 
-test("1-to'siq: `(app)/layout.tsx` `/markets/new` ni marketId talabidan ozod qiladi", () => {
+test("1-to'siq: `(app)` darvozasi (`app-guard.tsx`) `/markets/new` ni marketId talabidan ozod qiladi", () => {
   const code = readCode(APP_LAYOUT);
 
   assert.ok(
     code.includes(WIZARD_ROUTE),
-    `1-TO'SIQ QAYTDI: ${WIZARD_ROUTE} marshruti layout.tsx KODIDA yo'q (izohlar hisobga olinmaydi) — bozorsiz admin yana /select-market da qamalib qoladi`,
+    `1-TO'SIQ QAYTDI: ${WIZARD_ROUTE} marshruti app-guard.tsx KODIDA yo'q (izohlar hisobga olinmaydi) — bozorsiz admin yana /select-market da qamalib qoladi`,
   );
 
   assert.ok(
