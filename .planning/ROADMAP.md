@@ -647,7 +647,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
    ⛔ Ya'ni 9-fazaga tushadigan **yangi mikro-UX bandi YO'Q** — bu topilma va u bo'sh to'lqin ochilishining
    oldini oladi.
 
-**Plans:** 5/7 plans executed
+**Plans:** 6/7 plans executed
 
 Plans:
 
@@ -667,7 +667,7 @@ Plans:
 
 **Wave 4**
 
-- [ ] 09-06-PLAN.md — Qolgan jilo (til almashtirgich, jadval hover) va G-motion-7 (CLS + Display-XL) (W4)
+- [x] 09-06-PLAN.md — Qolgan jilo (til almashtirgich, jadval hover) va G-motion-7 (CLS + Display-XL) (W4)
 
 **Wave 5**
 
