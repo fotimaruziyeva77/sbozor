@@ -362,7 +362,7 @@ export function HeroScene() {
   return (
     <div
       aria-label={t("scene.a11yDescription")}
-      className="rounded-lg border border-border bg-surface p-5 shadow-raised"
+      className="landing-glow rounded-lg border border-border bg-surface p-5 shadow-raised"
       data-phase={scene.phase}
       ref={sceneNodeRef}
       role="img"

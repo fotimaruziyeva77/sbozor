@@ -205,8 +205,9 @@ export default async function MarketingRootPage({
       <JsonLd data={faqJsonLd} />
       <Header />
       <main className="flex-1" id="kontent">
-        {/* 1 · Hero — 12s sahna server final-kadr bilan (§5) */}
-        <Section>
+        {/* 1 · Hero — tungi bozor atmosferasi: dark token-qamrov + nur
+            (yangi rang reyestri OCHILMAYDI — mavjud dark scope ishlatiladi) */}
+        <Section className="landing-night" data-theme="dark">
           <Hero />
         </Section>
         {/* 2 · Og'riq — 3 karta */}
@@ -217,16 +218,16 @@ export default async function MarketingRootPage({
         <Section>
           <StepLine />
         </Section>
-        {/* 4 · ⭐ Bosh dalil — kengaytirilgan shakl (O-07) */}
-        <Section>
+        {/* 4 · ⭐ Bosh dalil — chuqur tunda yonuvchi bayonot */}
+        <Section className="landing-deep" data-theme="dark">
           <Proof />
         </Section>
         {/* 5 · Rol-kartalar — skrinshotsiz (§9.3) */}
         <Section className="bg-surface-muted">
           <RoleCards />
         </Section>
-        {/* 6 · Ishonch bloki — anchor blokning o'zida (10-06 shartnomasi) */}
-        <Section>
+        {/* 6 · Ishonch bloki — davlat-jiddiy tun (10-06 shartnomasi) */}
+        <Section className="landing-night" data-theme="dark">
           <TrustBlock />
         </Section>
         {/* 7 · Pilot holati — raqamsiz [K-7] */}
@@ -238,9 +239,9 @@ export default async function MarketingRootPage({
           <Faq />
         </Section>
         {/* 9 · CTA takrori + demo-forma — hero CTA'sining nishoni (#demo) */}
-        <Section id="demo">
+        <Section className="landing-demo" id="demo">
           <Reveal>
-            <Card className="mx-auto w-full max-w-2xl">
+            <Card className="landing-demo-card mx-auto w-full max-w-2xl">
               <CardContent className="flex flex-col gap-6 pt-5">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-2xl font-semibold tracking-tight">

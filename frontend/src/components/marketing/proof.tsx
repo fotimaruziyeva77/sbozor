@@ -25,7 +25,7 @@ export async function Proof() {
 
   return (
     <Reveal>
-      <Card className="mx-auto w-full max-w-2xl">
+      <Card className="landing-glow mx-auto w-full max-w-2xl">
         <CardContent className="flex flex-col gap-3 pt-5">
           <h2 className="text-2xl font-semibold tracking-tight">
             {t("proof.title")}

@@ -55,7 +55,7 @@ export async function Hero() {
             {tCommon("appName")}
           </p>
           {/* LCP nomzodi — `.motion-enter`siz (sabab modul sarlavhasida). */}
-          <h1 className="text-hero font-semibold text-text">
+          <h1 className="text-hero font-semibold text-balance text-text">
             {t("hero.headline")}
           </h1>
         </div>
@@ -76,7 +76,10 @@ export async function Hero() {
            * «yagona CTA» qoidasini [K-2] buzardi (§7.4).
            */}
           <a
-            className={cn(buttonVariants({ size: "hero", variant: "default" }))}
+            className={cn(
+              buttonVariants({ size: "hero", variant: "default" }),
+              "landing-cta-glow",
+            )}
             href="#demo"
           >
             {t("hero.ctaPrimary")}
@@ -135,6 +138,38 @@ export async function Hero() {
             {t("trust.languages")}
           </li>
         </ul>
+        {/* Halol raqamlar lentasi — da'vo emas, mahsulot faktlari (K-7). */}
+        <dl
+          className="landing-stats motion-enter grid grid-cols-2 gap-x-6 gap-y-4 pt-5 sm:grid-cols-4"
+          style={{ "--i": 5 } as CSSProperties}
+        >
+          <div>
+            <dt className="text-xs text-text-muted">{t("stats.tapsLabel")}</dt>
+            <dd className="text-lg font-semibold text-text" data-numeric>
+              {t("stats.tapsValue")}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-text-muted">
+              {t("stats.archiveLabel")}
+            </dt>
+            <dd className="text-lg font-semibold text-text" data-numeric>
+              {t("stats.archiveValue")}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-text-muted">{t("stats.langsLabel")}</dt>
+            <dd className="text-lg font-semibold text-text" data-numeric>
+              {t("stats.langsValue")}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-text-muted">{t("stats.replyLabel")}</dt>
+            <dd className="text-lg font-semibold text-text" data-numeric>
+              {t("stats.replyValue")}
+            </dd>
+          </div>
+        </dl>
       </div>
       <HeroScene />
     </div>

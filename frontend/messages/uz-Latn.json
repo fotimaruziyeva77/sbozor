@@ -1540,6 +1540,16 @@
       "audit": "Har amal auditda",
       "languages": "3 til"
     },
+    "stats": {
+      "tapsValue": "≤3 bosish",
+      "tapsLabel": "kassirda bitta to'lov",
+      "archiveValue": "90 kun",
+      "archiveLabel": "rasm-dalil arxivi",
+      "langsValue": "3 til",
+      "langsLabel": "interfeys va hisobotlar",
+      "replyValue": "24 soat",
+      "replyLabel": "demo so'roviga javob"
+    },
     "scene": {
       "sampleBadge": "Namunaviy ma'lumot",
       "marketLabel": "Namuna bozori · namoyish",

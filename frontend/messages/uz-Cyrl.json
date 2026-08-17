@@ -1540,6 +1540,16 @@
       "audit": "Ҳар амал аудитда",
       "languages": "3 тил"
     },
+    "stats": {
+      "tapsValue": "≤3 босиш",
+      "tapsLabel": "кассирда битта тўлов",
+      "archiveValue": "90 кун",
+      "archiveLabel": "расм-далил архиви",
+      "langsValue": "3 тил",
+      "langsLabel": "интерфейс ва ҳисоботлар",
+      "replyValue": "24 соат",
+      "replyLabel": "демо сўровига жавоб"
+    },
     "scene": {
       "sampleBadge": "Намунавий маълумот",
       "marketLabel": "Намуна бозори · намойиш",

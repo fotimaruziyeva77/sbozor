@@ -1540,6 +1540,16 @@
       "audit": "Каждое действие в аудите",
       "languages": "3 языка"
     },
+    "stats": {
+      "tapsValue": "≤3 нажатия",
+      "tapsLabel": "один платёж у кассира",
+      "archiveValue": "90 дней",
+      "archiveLabel": "архив фото-доказательств",
+      "langsValue": "3 языка",
+      "langsLabel": "интерфейс и отчёты",
+      "replyValue": "24 часа",
+      "replyLabel": "ответ на демо-запрос"
+    },
     "scene": {
       "sampleBadge": "Демонстрационные данные",
       "marketLabel": "Образцовый рынок · демонстрация",

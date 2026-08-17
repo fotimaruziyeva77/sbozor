@@ -418,6 +418,106 @@
     transform: scaleY(1);
   }
 
+  /* ---- Landing «tungi bozor» atmosferasi (marketing yuza) --------------
+   * Vizual qatlam FAQAT statik fon/soya: yangi @keyframes YO'Q (reyestr
+   * yopiq), geometriya tranzitsiyasi YO'Q (G-land-3). Rang qiymatlari
+   * dark-qamrov tokenlari oilasidan — kontrast juftliklari o'sha isbotlangan
+   * to'plamda qoladi. */
+  /* Qamrov ichida meros rang qayta hal bo'lsin — aks holda rang utilitasisiz
+   * elementlar (h3 va h.k.) BODY'ning yorug' qiymatini olib ko'rinmay qoladi. */
+  .landing-night,
+  .landing-deep {
+    color: var(--color-text);
+  }
+  .landing-night {
+    position: relative;
+    background:
+      radial-gradient(
+        52% 44% at 74% 16%,
+        oklch(0.56 0.19 255 / 0.18),
+        transparent 65%
+      ),
+      radial-gradient(
+        38% 34% at 16% 86%,
+        oklch(0.63 0.16 150 / 0.07),
+        transparent 60%
+      ),
+      linear-gradient(180deg, oklch(0.15 0.015 260), oklch(0.19 0.02 260));
+  }
+  .landing-night::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(
+      oklch(1 0 0 / 0.05) 1px,
+      transparent 1px
+    );
+    background-size: 26px 26px;
+    mask-image: linear-gradient(180deg, black, transparent 78%);
+  }
+  .landing-night > * {
+    position: relative;
+  }
+
+  /* Chuqur «dalil» seksiyasi — aksentga botirilgan tun. */
+  .landing-deep {
+    background:
+      radial-gradient(
+        62% 72% at 50% 0%,
+        oklch(0.56 0.19 255 / 0.22),
+        transparent 70%
+      ),
+      linear-gradient(180deg, oklch(0.17 0.03 258), oklch(0.14 0.02 260));
+  }
+
+  /* Sahna/dalil kartasi nuri — tungi fonda mahsulot «yonadi». */
+  .landing-glow {
+    box-shadow:
+      0 0 0 1px oklch(1 0 0 / 0.08),
+      0 24px 80px oklch(0 0 0 / 0.5),
+      0 0 90px oklch(0.56 0.19 255 / 0.2);
+  }
+
+  /* Tungi qamrovda holat kataklari yonadi (CCTV-tun estetikasi). */
+  [data-theme="dark"] [data-state="paid"] {
+    box-shadow:
+      0 0 14px oklch(0.63 0.16 150 / 0.3),
+      inset 0 0 8px oklch(0.63 0.16 150 / 0.18);
+  }
+  [data-theme="dark"] [data-state="unpaid"] {
+    box-shadow:
+      0 0 20px oklch(0.78 0.15 85 / 0.45),
+      inset 0 0 10px oklch(0.78 0.15 85 / 0.28);
+  }
+
+  /* Birlamchi CTA nuri — sahifadagi YAGONA yonuvchi tugma (K-2 fokus). */
+  .landing-cta-glow {
+    box-shadow: 0 10px 34px oklch(0.56 0.19 255 / 0.45);
+  }
+  .landing-cta-glow:hover {
+    box-shadow: 0 12px 46px oklch(0.56 0.19 255 / 0.6);
+  }
+
+  /* Hero ostidagi halol raqamlar lentasi. */
+  .landing-stats {
+    border-top: 1px solid oklch(1 0 0 / 0.12);
+  }
+
+  /* Demo seksiyasi — iliqdan oqishga o'tish + kartaga yumshoq aksent nur. */
+  .landing-demo {
+    background: linear-gradient(
+      180deg,
+      var(--color-surface-muted),
+      var(--color-bg)
+    );
+  }
+  .landing-demo-card {
+    box-shadow:
+      0 18px 60px oklch(0.56 0.19 255 / 0.14),
+      var(--shadow-raised);
+  }
+
   /* Forma xatosi: 2px shake — 200ms KOMPOZIT (§12.7). ⛔ Login kartasi
    * shake QILMAYDI [masterplan §6.1 — «ayblov» hissi]. Reduced-motion'da
    * global blok buni 0.01ms ga tushiradi — faqat matn qoladi. */

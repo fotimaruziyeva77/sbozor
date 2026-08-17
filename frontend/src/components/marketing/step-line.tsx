@@ -74,27 +74,30 @@ export function StepLine() {
         {/* Fon chizig'i — `border` rangida 2px (§10.1), dekorativ. */}
         <div
           aria-hidden="true"
-          className="absolute top-2 bottom-2 left-[5px] w-0.5 rounded-full bg-border"
+          className="absolute top-2 bottom-2 left-[13px] w-0.5 rounded-full bg-border"
         />
         {/* To'lgan qism — daraja globals.css'dagi [data-step] selektorlaridan. */}
         <div
           aria-hidden="true"
-          className="landing-step-fill absolute top-2 bottom-2 left-[5px] w-0.5 rounded-full bg-accent"
+          className="landing-step-fill absolute top-2 bottom-2 left-[13px] w-0.5 rounded-full bg-accent"
         />
         <ol className="flex flex-col gap-10">
           {STEPS.map((key, index) => (
-            <li className="relative pl-8" key={key}>
-              {/* Qadam nuqtasi: border-ui -> accent (bare `transition` —
+            <li className="relative pl-11" key={key}>
+              {/* Qadam raqami: border-ui -> accent (bare `transition` —
                   yumshoqlik @theme default juftligidan, §10.1). */}
               <span
                 aria-hidden="true"
                 className={cn(
-                  "absolute top-1 left-0 size-3 rounded-full border-2 transition",
+                  "absolute top-0 left-0 flex size-7 items-center justify-center",
+                  "rounded-full border-2 text-xs font-semibold transition",
                   step > index
-                    ? "border-accent bg-accent"
-                    : "border-border-ui bg-surface",
+                    ? "border-accent bg-accent text-accent-fg"
+                    : "border-border-ui bg-surface text-text-muted",
                 )}
-              />
+              >
+                {index + 1}
+              </span>
               <Reveal
                 onReveal={() =>
                   setRevealedStep((current) => Math.max(current, index + 1))
