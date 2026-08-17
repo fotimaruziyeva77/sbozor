@@ -15,7 +15,7 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 - [ ] **FOUND-04**: Interfeys 3 tilda (o'zbek-lotin asosiy, o'zbek-kirill, rus); til bir bosishda almashadi
 - [ ] **FOUND-05**: Biznes-kun Asia/Tashkent bo'yicha hisoblanadi (`business_date`); pul qiymatlari butun so'mda (BIGINT)
 - [x] **FOUND-06**: Tizim o'zini kuzatadi: kamera offline, o'tkazib yuborilgan snapshot, backup xatosi — platforma adminiga Telegram-alert; xatolar Sentry'da
-- [x] **FOUND-07**: Kunlik avtomatik backup (Postgres + obyekt-ombor) boshqa lokatsiyaga; tiklash mashqi kamida bir marta o'tkazilgan
+- [ ] **FOUND-07**: Kunlik avtomatik backup (Postgres + obyekt-ombor) boshqa lokatsiyaga; tiklash mashqi kamida bir marta o'tkazilgan
 
 ### Bozor boshqaruvi (MARKET)
 
@@ -79,6 +79,20 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 - [x] **BOT-02**: Sotuvchi botda qoldiq/qarz va to'lov tarixini ko'radi
 - [x] **BOT-03**: Qarz N kundan oshsa sotuvchiga avtomatik eslatma (N sozlanadigan; quiet hours hurmat qilinadi)
 - [x] **BOT-04**: Barcha xabarlar outbox orqali throttling bilan yuboriladi; yetkazilganlik holati saqlanadi; botni bloklagan foydalanuvchi belgilanadi
+
+### Landing (LAND)
+
+*10-fazada tug'ilgan (2026-08-17, `10-08`) — ROADMAP Phase 10 SC#1…SC#5
+bilan ⛔ **bir-birga** xaritalangan (10-RESEARCH A6 tavsiyasi qabul
+qilindi): LAND-0N = SC#N. Bu atayin — mezon moduli
+(`frontend/scripts/phase10-criteria.test.mjs`) va bu ro'yxat bitta
+haqiqatni ikki tildan aytadi.*
+
+- [x] **LAND-01**: `sbozor.uz/` (anonim root) landing ko'rsatadi, uchala tilda SSG; «Kirish» app loginiga olib boradi
+- [x] **LAND-02**: Hero 12s "jonli bozor" siklini o'ynaydi (xarita → kamera nuri → amber «Band, lekin to'lovsiz» → to'lov → hisobot); video EMAS, `prefers-reduced-motion`da statik final-kadr
+- [x] **LAND-03**: Demo-forma yuborilganda so'rov admin Telegram-botga yetadi (mavjud bot-service infratuzilmasi orqali) — alohida CRM yo'q
+- [x] **LAND-04**: Ishonch bloki (ma'lumotlar O'zbekistonda · NVR faqat VPN · har amal auditda · 3 til) va pilot holati halol («Karmana sinovda», yolg'on raqam YO'Q)
+- [ ] **LAND-05**: Lighthouse ≥95, LCP <1,5 s (statik sahifada), SEO meta/OG/structured data to'liq
 
 ## v2 Requirements
 
@@ -184,6 +198,11 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 | BOT-02 | Phase 7 | Done |
 | BOT-03 | Phase 7 | Done |
 | BOT-04 | Phase 7 | Done |
+| LAND-01 | Phase 10 | Done |
+| LAND-02 | Phase 10 | Done |
+| LAND-03 | Phase 10 | Done |
+| LAND-04 | Phase 10 | Done |
+| LAND-05 | Phase 10 | Blocked (mexanik yarim TO'LIQ o'lchangan: SEO fayl-konventsiyalari `sitemap.ts`/`robots.ts`, metadata OG/hreflang/canonical, JSON-LD rasmiy escape bilan, `--text-hero` tipografiya tokeni — `landing-surface.test.mjs` G-land-1/3/5 va `phase10-criteria.test.mjs` SC#5; payload farqi ham O'LCHANGAN (10-03: ildiz 287,8→208,4 KB gz, `10-HUMAN-UAT.md` #2 SON bilan yopiq). LEKIN talab matnining ikki RAQAMI — Lighthouse ≥95 va LCP <1,5 s — CI'da UMUMAN o'lchanmaydi (Lighthouse qo'shilmagan, 10-UI-SPEC §16.5 [QAROR]; headless Chrome `gate` byudjetiga daqiqalar qo'shardi) va 60fps ham real qurilmasiz o'lchovsiz. Mexanika qatlamining yashilligi bilan o'lchov qatlamining yo'qligini yopish TAQIQ (D-01, FOUND-07, AI-02 darslari). Egasi: ijrochi. Tetigi: birinchi deploy. Bandlari: `10-HUMAN-UAT.md` #1 va #3) |
 
 **Belgilash qoidasi va uning chegarasi** (2026-08-02, 2-faza yopish to'lqini —
 `02-22`). Bu jadvaldagi belgi **talab MATNI** bo'yicha qo'yiladi: band `Done`
@@ -442,14 +461,48 @@ ortida to'rtta haqiqiy bo'shliq) va u **falokat kunida**, eng yomon
 paytda ko'rinardi. ⚠ `Blocked` bu yerda ham «ish to'xtadi» degani EMAS —
 u «dalil to'liq emas va yetishmayotgan dalil NOMLANGAN» degani.
 
+### Qoidaning 10-fazadagi qo'llanishi (2026-08-17, `10-08`) — DALIL BILAN
+
+Beshala LAND bandi shu fazada TUG'ILDI va shu fazada belgilandi:
+**to'rttasi** `Done`, **bittasi** (`LAND-05`) `Blocked`. Bu nisbat 3-,
+5- va 8-fazalarning shaklini takrorlaydi va ATAYIN: LAND-05 ning mexanik
+yarmi to'liq o'lchangan, lekin talab MATNIDAGI ikki raqam (Lighthouse
+≥95, LCP <1,5 s) CI'da bajarilmaydi.
+
+⚠ **`Done` NIMANI ANGLATMAYDI.** Birorta qator «real sbozor.uz domenida,
+real tashrif buyuruvchi bilan ishlaydi» degan da'voni bermaydi: frontend
+da'volari jsdom + fayl-skan darvozalarida, backend da'vosi `respx` tutgan
+tarmoq chegarasigacha o'lchangan. Oxirgi ustun har qatorda nima
+o'lchanMAGANini ochiq aytadi va uning egasi `10-HUMAN-UAT.md` da turadi.
+
+| Talab | Yangi holat | Nima o'lchandi va QAYSI test bilan | Nima o'lchanMAGAN |
+|---|---|---|---|
+| **LAND-01** | **`Done`** (tug'ilishida) | `phase10-criteria.test.mjs::SC#1` — eski himoyalangan `[locale]/page.tsx` YO'Q, `(marketing)/page.tsx`+`layout.tsx` BOR, `prerender-manifest.json` da `/uz-Latn`·`/uz-Cyrl`·`/ru` uchalasi (build artefakti bilan), header'da `/login`; `landing-surface.test.mjs` G-land-1(a–d): klient orollari reyestrga `deepEqual`, LCP faylida `"use client"` 0, provayder nomlari ikki tomonlama; SSG ning o'zi — `npm run gate` ning `next build` qadami (86 marshrut) | Haqiqiy **sbozor.uz** domenida servis (DNS, TLS, birinchi deploy) — Ops tetigi. Anonim tashrifchining REAL brauzer/qurilmadagi idroki (`10-HUMAN-UAT.md` #1/#3) |
+| **LAND-02** | **`Done`** (tug'ilishida) | `hero-scene.test.tsx` (G-land-2 a–e): reduced-motion'da `setTimeout` 0 va DOM to'liq final-kadr; 0 ms da final-kadr, 13 500 ms da 1-fazaga qaytish; beshala faza yorlig'i ketma-ket; `unmount()` da `clearTimeout` = yaratilgan taymerlar; IO `isIntersecting:false` → yangi taymer 0; `landing-surface.test.mjs` G-land-3: transition xossalari ruxsat to'plami ⊂, `setInterval` 0, `@keyframes` 9 nom; `phase10-criteria::SC#2` — `<video>` 0 | **60fps real arzon Androidda** — jsdom kadr tushishini o'lchay olmaydi; `container-type`/`100cqw` xulqi [A2]. Bandlari: `10-HUMAN-UAT.md` #3 (KADR/SONIYA bilan) |
+| **LAND-03** | **`Done`** (tug'ilishida) | `tests/integration/test_demo_request.py` (7 band): anonim POST autentifikatsiyasiz muvaffaqiyat + `Set-Cookie` YO'Q + javobda tenant izi YO'Q; 429 `rate_limited`; 422 `invalid_phone` (`normalize_phone`); honeypot → jim muvaffaqiyat, Telegram'ga 0 chaqiruv; yetkazish yiqilsa `delivery_failed` VA DB'da 0 yangi qator; `tests/tenancy/test_route_coverage.py` — `EXEMPT_ROUTES` qamrovi tiklangan (sabab `global` bilan); `demo-form.test.tsx` — holatlar + a11y; `error-codes.test.mjs` oltinchi juftlik — `DEMO_ERROR_CODES` ko'zgu + `landing.form.*` uchala tilda | **Haqiqiy Telegram chatiga tushishi** — `respx` tarmoq chegarasini tutadi; token/chat_id konfiguratsiyasi, chat huquqi va xabarning admin uchun o'qilishi. Bandi: `10-HUMAN-UAT.md` #4 («N dan M tasi chatga tushdi», SOXTA PII bilan — T-10-25) |
+| **LAND-04** | **`Done`** (tug'ilishida) | `landing-surface.test.mjs` G-land-4(a–g): `sampleBadge` shartli render TASHQARISIDA, «namunаviy» o'zagi uchala locale'da, `trustBlock.residency.body` uchala tilda + hero anchor, FAQ JSON-LD matni katalogdan, taqiq da'vo tokenlari 0, `landing.pilot.*` da raqam 0, kirill override'lar; `phase10-criteria::SC#4` — pilot rozetkasi + residency + raqam-skan MUSTAQIL ikkinchi qatlam; `glossary.test.mjs` + `i18n:check` parity | Matnning **davlat auditoriyasida o'qilishi** (semantik siljish — `АИ`/`демонстратсия` sinfi darvoza ko'rmaydi) va **residency bandining yurist tasdig'i**. Bandlari: `10-HUMAN-UAT.md` #5 («N ta tuzatish») va #6 (go-live, STATE «Huquqiy ko'rik» tuguni) |
+| **LAND-05** | ⛔ **`Blocked`** (tug'ilishida) | **Mexanik yarim TO'LIQ:** `sitemap.ts`/`robots.ts` mavjud, `openGraph` + `application/ld+json` sahifada (rasmiy escape), `--text-hero` `@theme` da — `phase10-criteria::SC#5` + `landing-surface` G-land-5; **payload farqi O'LCHANGAN** (10-03: ildiz JS 287,8→208,4 KB gz, HTML(ru) 32,3→8,0; `10-HUMAN-UAT.md` #2 SON bilan YOPIQ) | ⛔ **Talab matnining ikki RAQAMI CI'da UMUMAN o'lchanmaydi:** Lighthouse ≥95 va LCP <1,5 s — Lighthouse qo'shilmagan (10-UI-SPEC §16.5 [QAROR]: headless Chrome `gate` byudjetiga daqiqalar qo'shardi); 60fps ham real qurilmasiz. Mexanika yashilligi bilan o'lchov yo'qligini yopish TAQIQ (D-01, FOUND-07, AI-02). **Egasi: ijrochi. Tetigi: birinchi deploy. Bandlari: `10-HUMAN-UAT.md` #1 va #3** |
+
+⚠ **`Blocked` bu yerda ham «ish to'xtadi» degani EMAS** — u «dalil to'liq
+emas va yetishmayotgan dalil NOMLANGAN» degani. LAND-05 ning yopilish
+yo'li o'z qatorida: birinchi deploy'da Lighthouse mobile profili bilan
+uchala locale o'lchanadi va `10-HUMAN-UAT.md` #1 SON bilan imzolanadi.
+
+⚠ **Faza mezonlari (SC#1…SC#5) bundan MUSTAQIL** va beshalasi ham yashil
+(`frontend/scripts/phase10-criteria.test.mjs`, bitta buyruq). Mezonlar
+fazaning yetkazib berish mahsulotini o'lchaydi — SC#5 ning mezon testi
+SEO MEXANIKASINI tasdiqlaydi va o'z xato matnida Lighthouse/LCP bu yerda
+o'lchanmasligini LITERAL aytadi; LAND-05 esa talab JUMLASINI belgilaydi
+va aynan o'sha ikki raqam uchun `Blocked` turadi.
+
 Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 `node scripts/check-requirements-sync.mjs` — qo'lda, har faza yopilishida
 (doimiy CI darvozasi emas; sabab skript boshida yozilgan).
 
 **Coverage:**
 
-- v1 requirements: 49 total
-- Mapped to phases: 49 ✓
+- v1 requirements: 54 total
+- Mapped to phases: 54 ✓
 - Unmapped: 0
 
 **Faza kesimida:**
@@ -464,20 +517,33 @@ Yuqoridagi ro'yxat va bu jadvalning bir-biriga mosligi mexanik tekshiriladi:
 | 6 | Billing va kassir | 9 |
 | 7 | Nomuvofiqlik, bildirishnoma va botlar | 9 |
 | 8 | Hisobotlar, mustahkamlash va ishga tushirish | 3 |
+| 10 | Landing — sbozor.uz | 5 |
 
-✅ **Sanoqlar 2026-08-02 da (`02-24`) faylning O'Z mazmunidan qayta
-hisoblangan** — qo'lda taxmin qilinmagan: checkbox ro'yxati 49 ta band,
-Traceability jadvali 49 ta qator beradi va ular faza bo'yicha
-5/7/5/5/6/9/9/3 ga taqsimlanadi. Ilgari bu bloklar `46` va Phase 2 uchun
-`6`, Phase 3 uchun `3` deb turgan edi: 2026-08-01 da qo'shilgan uchta
-talab (MARKET-07, CAM-08, CAM-09) sanoqlarga kiritilmagan edi.
-`node scripts/check-requirements-sync.mjs` bu farqni har ishga tushganda
-ogohlantirish sifatida ko'rsatib turgan — ya'ni eskirgan son jimgina
-yashab qolmadi.
+*(9-faza qatori YO'Q va bu atayin: u yangi REQ-ID yaratmagan — ROADMAP
+«Yangi REQ-ID YARATILMAYDI» bandi, 09-RESEARCH A7.)*
+
+✅ **Sanoqlar 2026-08-17 da (`10-08`) faylning O'Z mazmunidan qayta
+hisoblangan:** checkbox ro'yxati 54 ta band, Traceability jadvali 54 ta
+qator beradi va ular faza bo'yicha 5/7/5/5/6/9/9/3/5 ga taqsimlanadi
+(49 + 10-fazaning beshta LAND bandi). Oldingi qayta hisoblash 2026-08-02
+(`02-24`, 46→49) — o'shanda ham eskirgan son jimgina yashab qolmagan:
+`node scripts/check-requirements-sync.mjs` farqni har ishga tushganda
+ogohlantirish sifatida ko'rsatib turadi.
 
 ---
 *Requirements defined: 2026-07-29*
-*Last updated: 2026-08-05 — `04-14`: FOUND-06 ning dalili SANOQDAN
+*Last updated: 2026-08-17 — `10-08`: beshta LAND talabi tug'ildi (ROADMAP
+Phase 10 SC#1…SC#5 bilan bir-birga xaritalangan). LAND-01…04 o'lchangan
+dalil bilan `Done` (dalillar jadvalda nomma-nom); LAND-05 `Blocked` —
+Lighthouse ≥95 va LCP <1,5 s CI'da umuman o'lchanmaydi (egasi ijrochi,
+tetigi birinchi deploy, bandlari `10-HUMAN-UAT.md` #1 va #3; payload
+farqi esa 10-03 da O'LCHANGAN va #2 SON bilan yopiq). `**Coverage:**`
+va `Faza kesimida` sanoqlari fayl mazmunidan qayta hisoblandi (49 → 54).
+Yo'l-yo'lakay meros nomuvofiqlik tuzatildi: FOUND-07 ro'yxatda `[x]`
+qolib ketgan edi (08-20 uni jadvalda `Blocked` qilgan) — belgi jadvalga
+moslandi (`- [ ]`), 03-14 dagi CAM-02 presedenti bilan bir xil sinf.
+Sanoq: Done 45 · Pending 5 · Blocked 4.*
+*Oldingi: 2026-08-05 — `04-14`: FOUND-06 ning dalili SANOQDAN
 HOSILAGA o'tkazildi. Holat O'ZGARMADI (`Done` bo'lib qoladi) — o'zgargani
 DALILNING SHAKLI: «`init_sentry` shu ikki/uch kirish nuqtasida
 chaqiriladi» ro'yxati o'rniga «`compose.yaml` da `SENTRY_DSN` oladigan HAR

@@ -683,7 +683,7 @@ qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-faz
 ### Phase 10: Landing — sbozor.uz
 
 **Goal:** Anonim tashrif buyuruvchi sbozor.uz'da 30 soniyada mahsulotni tushunadi va demo so'raydi: hero 12s "jonli bozor" sikli, 3-qadam "qanday ishlaydi" seksiyasi, davlat-ishonch bloki, demo-forma → admin Telegram-bot
-**Requirements**: LAND-01, LAND-02, LAND-03, LAND-04, LAND-05 *(shu fazada tug'iladi — `10-08` `REQUIREMENTS.md` ga yozadi; ROADMAP SC#1…SC#5 bilan bir-birga xaritalangan)*
+**Requirements**: LAND-01, LAND-02, LAND-03, LAND-04, LAND-05 *(10-08 da tug'ildi — `REQUIREMENTS.md` da LAND-01…04 `Done` o'lchangan dalil bilan, LAND-05 `Blocked`: Lighthouse ≥95 va LCP <1,5 s CI'da o'lchanmaydi, egasi/tetigi/bandlari `10-HUMAN-UAT.md` #1 va #3 da; SC#1…SC#5 bilan bir-birga xaritalangan — LAND-0N = SC#N)*
 **Depends on:** Phase 9
 **Success Criteria** (what must be TRUE):
 
@@ -694,7 +694,7 @@ qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-faz
   5. Lighthouse ≥95, LCP <1.5s (statik sahifada), SEO meta/OG/structured data to'liq
 
 **Chegaralar:** mavjud Next.js ichida `(marketing)` route-guruhi — alohida sayt EMAS; copy brief matnidan (yakuniy tahrir shu fazada, 3 tilda); maxfiylik siyosati sahifasi majburiy (CCTV shaxsiy ma'lumot)
-**Plans:** 7/8 plans executed
+**Plans:** 8 plans in 5 waves
 
 Plans:
 **Wave 1** *(parallel — fayl kesishuvi YO'Q)*
