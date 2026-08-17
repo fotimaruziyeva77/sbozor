@@ -1,6 +1,7 @@
 ---
 phase: 10-landing-sbozor-uz
-status: draft
+status: approved
+reviewed_at: 2026-08-17
 shadcn_initialized: false
 preset: none
 design_system: shadcn-pattern (manual, CVA + Radix — 1/2-faza tokenlari, 9-faza motion/tema qatlami)
