@@ -647,7 +647,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
    ⛔ Ya'ni 9-fazaga tushadigan **yangi mikro-UX bandi YO'Q** — bu topilma va u bo'sh to'lqin ochilishining
    oldini oladi.
 
-**Plans:** 3/7 plans executed
+**Plans:** 5/7 plans executed
 
 Plans:
 
@@ -662,8 +662,8 @@ Plans:
 
 **Wave 3** *(parallel — Y-1 va Y-2 mustaqil)*
 
-- [ ] 09-04-PLAN.md — Y-1 kassir vau-oqimi: 1–5-qadam, bloklamaydigan ulanish va G-motion-2 (W3)
-- [ ] 09-05-PLAN.md — Y-2 direktor jonlanishi: count-up, sparkline, donut va G-motion-6 ning ikki qatlamli huquq darvozasi (W3)
+- [x] 09-04-PLAN.md — Y-1 kassir vau-oqimi: 1–5-qadam, bloklamaydigan ulanish va G-motion-2 (W3)
+- [x] 09-05-PLAN.md — Y-2 direktor jonlanishi: count-up, sparkline, donut va G-motion-6 ning ikki qatlamli huquq darvozasi (W3)
 
 **Wave 4**
 
