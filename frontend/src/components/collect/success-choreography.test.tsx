@@ -34,7 +34,7 @@
  * =============================================================================
  */
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 import ts from "typescript";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -190,8 +190,19 @@ describe("G-motion-2(c): klon xossalari — INLINE uslubdan o'qiladi", () => {
 /* G-motion-2(d) — AST: `setTimeout` ICHIDA HOLAT O'ZGARTIRISH YO'Q           */
 /* -------------------------------------------------------------------------- */
 
+/*
+ * ⚠ `import.meta.url` vitest transformida `file:` sxemasida EMAS —
+ *   manba yo'li ish katalogidan quriladi (vitest har doim `frontend/`
+ *   ildizidan yuguradi: `vitest.config.ts` shu yerda).
+ */
 const CHOREOGRAPHY_SOURCE = readFileSync(
-  fileURLToPath(new URL("./success-choreography.tsx", import.meta.url)),
+  path.join(
+    process.cwd(),
+    "src",
+    "components",
+    "collect",
+    "success-choreography.tsx",
+  ),
   "utf8",
 );
 
