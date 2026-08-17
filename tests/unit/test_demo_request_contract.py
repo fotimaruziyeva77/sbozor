@@ -134,9 +134,8 @@ def test_response_model_carries_exactly_one_field() -> None:
 
 
 def test_error_code_registry_is_exactly_four_codes() -> None:
-    assert DEMO_ERROR_CODES == frozenset(
-        {"rate_limited", "invalid_phone", "validation_error", "delivery_failed"}
-    )
+    expected = frozenset({"rate_limited", "invalid_phone", "validation_error", "delivery_failed"})
+    assert expected == DEMO_ERROR_CODES
 
 
 # ---------------------------------------------------------------------------
