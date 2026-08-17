@@ -67,6 +67,8 @@ if TYPE_CHECKING:
 __all__ = [
     "BOT_RESOLVE_LIMIT",
     "BOT_RESOLVE_WINDOW_SECONDS",
+    "DEMO_REQUEST_LIMIT",
+    "DEMO_REQUEST_WINDOW_SECONDS",
     "IP_LIMIT",
     "NVR_TEST_LIMIT",
     "NVR_TEST_WINDOW_SECONDS",
@@ -74,6 +76,7 @@ __all__ = [
     "WINDOW_SECONDS",
     "TooManyAttempts",
     "check_bot_resolve_rate",
+    "check_demo_request_rate",
     "check_login_rate",
     "check_nvr_test_rate",
     "reset_login_rate",
@@ -265,6 +268,53 @@ async def check_bot_resolve_rate(cache: Redis, *, telegram_user_id: int) -> None
         return
     if not allowed:
         raise TooManyAttempts("bot_resolve")
+
+
+DEMO_REQUEST_LIMIT = 5
+"""`POST /api/v1/public/demo-requests` uchun oynadagi so'rovlar soni.
+
+⚠ HAQIQIY BOZOR RAHBARI demo'ni BIR marta so'raydi; ikki-uch urinish
+  (xato raqam, boshqa til) ham normal. Beshdan ko'pi — endi odam xulqi
+  emas, skript (T-10-01). Bu `BOT_RESOLVE_LIMIT` bilan bir xil mulohaza.
+"""
+
+DEMO_REQUEST_WINDOW_SECONDS = 15 * 60
+"""Oyna — login sanagichi bilan bir xil, 15 daqiqa."""
+
+_DEMO_REQUEST_KEY = "rl:demo_request:"
+"""Kalit shakli — `rl:demo_request:<ip>`.
+
+⛔ KESIM FAQAT IP BO'YICHA, TELEFON BO'YICHA EMAS — va bu T-07-41
+   qoidasining ayni o'zi (`_BOT_RESOLVE_KEY` bilan bir xil): telefon
+   raqamini kalitga qo'yish uni Valkey'ga (va u yerdan xotira dumpiga)
+   YOZARDI, holbuki anonim so'rovning telefoni HECH QAYERGA saqlanmasligi
+   marshrutning e'lon qilingan kafolati (DB'ga ham yozilmaydi, T-10-06).
+"""
+
+
+async def check_demo_request_rate(cache: Redis, *, ip: str) -> None:
+    """Anonim demo so'rovini sanaydi va IP chegarasini tekshiradi (T-10-01).
+
+    Kodbazadagi BIRINCHI autentifikatsiyasiz yozuv marshruti uchun yagona
+    hajm to'sig'i — shakli `check_bot_resolve_rate` bilan AYNAN bir xil.
+
+    ⚠ VALKEY YO'Q BO'LSA SO'ROV O'TKAZILADI (fail-open, mavjud uchala
+      chaqiruv bilan bir xil qaror): kesh o'chgani uchun demo formani
+      BUTUNLAY o'ldirish mavjud marketing yuzasini yo'q qiladi. Qoldiq
+      xavf CHEKLANGAN — marshrut DB'ga yozmaydi va faqat bitta Telegram
+      xabari yuboradi (honeypot esa mustaqil qatlam).
+
+    Raises:
+        TooManyAttempts: shu IP kesimida chegara oshsa.
+    """
+    key = f"{_DEMO_REQUEST_KEY}{ip}"
+    try:
+        allowed = await _bump(cache, key, DEMO_REQUEST_LIMIT, DEMO_REQUEST_WINDOW_SECONDS)
+    except RedisError as exc:
+        log.warning("demo_request_rate_limit_unavailable", error=str(exc))
+        return
+    if not allowed:
+        raise TooManyAttempts("demo_request")
 
 
 async def reset_login_rate(cache: Redis, *, phone: str, ip: str | None) -> None:

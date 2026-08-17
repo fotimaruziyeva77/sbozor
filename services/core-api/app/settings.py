@@ -435,6 +435,20 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_chat_id: str = ""
 
+    # --- 10-01: demo-so'rov kanali (LAND-03, RESEARCH A7) ---
+    #
+    # ⚠ BO'SH QIYMAT — QONUNIY STANDART: bo'sh bo'lsa demo so'rovi mavjud
+    #   `telegram_chat_id` (ops kanali) ga tushadi, ya'ni sotuv va ops
+    #   kanalini ajratish KOD qarori emas, KONFIGURATSIYA qarori bo'lib
+    #   qoladi — kanal ajratilgan kuni birorta qator o'zgarmaydi.
+    #
+    # ⛔ IKKINCHI BAYROQ (`DEMO_REQUESTS_ENABLED` kabi) QO'SHILMAYDI —
+    #   `worker.py::_alert_sender` docstringi bu sinfdagi bayroqning nima
+    #   uchun rad etilganini allaqachon yozgan («yoqilgan, lekin manzilsiz»
+    #   uchinchi holati). Token bo'sh bo'lsa `send_message` `False` beradi
+    #   va marshrut halol `delivery_failed` qaytaradi.
+    demo_request_chat_id: str = ""
+
     # --- Servis-servis tokeni (07-08, D-10) ---
     #
     # `bot-service` -> `core-api` `/internal/bot/*` yo'lining YAGONA

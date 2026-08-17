@@ -85,6 +85,7 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from app.services.alerts import AlertSender
     from app.settings import Settings
 
 __all__ = [
@@ -93,6 +94,7 @@ __all__ = [
     "CurrentPasswordDep",
     "Principal",
     "PrincipalDep",
+    "SenderDep",
     "SettingsDep",
     "TenantSessionDep",
     "USER_STATE_TTL_SECONDS",
@@ -100,6 +102,7 @@ __all__ = [
     "get_auth_session",
     "get_cache",
     "get_current_principal",
+    "get_sender",
     "get_settings_dep",
     "get_tenant_session",
     "invalidate_user_state",
@@ -223,8 +226,20 @@ def get_cache(request: Request) -> Redis:
     return request.app.state.cache  # type: ignore[no-any-return]
 
 
+def get_sender(request: Request) -> AlertSender:
+    """Telegram jo'natuvchisi (`app.state.sender`) — `get_cache` bilan bir naqsh.
+
+    `lifespan` (prod) yoki test fixture'i uni to'ldiradi; iste'molchi —
+    `api/v1/public.py` (demo so'rovi, LAND-03). Jo'natuvchini har so'rovda
+    qurish `AlertSender` docstringidagi TLS qo'l siqish narxini har
+    chaqiruvga qo'shardi.
+    """
+    return request.app.state.sender  # type: ignore[no-any-return]
+
+
 SettingsDep = Annotated["Settings", Depends(get_settings_dep)]
 CacheDep = Annotated["Redis", Depends(get_cache)]
+SenderDep = Annotated["AlertSender", Depends(get_sender)]
 
 
 async def get_auth_session(request: Request) -> AsyncIterator[AsyncSession]:

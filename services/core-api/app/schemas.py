@@ -213,6 +213,10 @@ __all__ = [
     # --- 07-16: xabar yetkazilishi — direktor ko'radigan yozuv (BOT-04) ---
     "DeliveryListResponse",
     "DeliveryRow",
+    # --- 10-01: anonim demo so'rovi (LAND-03) ---
+    "DEMO_ERROR_CODES",
+    "DemoRequestPayload",
+    "DemoRequestResponse",
     "validate_password_strength",
 ]
 
@@ -267,6 +271,71 @@ class MarketRef(BaseModel):
     id: UUID
     name: str
     is_active: bool
+
+
+# ===========================================================================
+# 10-FAZA: ANONIM DEMO SO'ROVI (LAND-03) — birinchi autentifikatsiyasiz yozuv
+# ===========================================================================
+
+DEMO_ERROR_CODES: Final[frozenset[str]] = frozenset(
+    {
+        # IP kesimi 15 daqiqada 5 so'rovdan oshdi (T-10-01).
+        "rate_limited",
+        # `normalize_phone` (phonenumbers) raqamni o'qiy olmadi — YAGONA
+        # haqiqat manbai serverda (T-10-11), klient regeks yozmaydi.
+        "invalid_phone",
+        # Pydantic chegaralaridan o'tmadi (name/market_name/locale/...).
+        "validation_error",
+        # Telegram xabarni QABUL QILMADI — «yubordik» deb yolg'on
+        # aytilmaydi (SPEC §12.5, RESEARCH B-5).
+        "delivery_failed",
+    }
+)
+"""`POST /api/v1/public/demo-requests` xato kodlari — YOPIQ reyestr.
+
+`MARKET_ERROR_CODES` bilan bir xil shakl: frontend'ning ko'zgu darvozasi
+(`error-codes.test.mjs`, 10-08 da ulanadi) shu to'plamni literal nusxa
+bilan solishtiradi — kod qo'shilsa/ayrilsa ikkala tomon birga o'zgaradi.
+"""
+
+
+class DemoRequestPayload(BaseModel):
+    """`POST /api/v1/public/demo-requests` — anonim demo so'rovi (LAND-03).
+
+    ⛔ `phone` uchun `field_validator` YO'Q va bu ATAYIN: `LoginRequest`
+    naqshi FastAPI'ning standart 422 shakli (`{"detail":[{...}]}`) bilan
+    yiqiladi, LAND-03 esa BITTA `"invalid_phone"` satrini talab qiladi.
+    `validate_password_strength` (yuqorida) aynan shu sababdan
+    `field_validator` dan qochadi — normalizatsiya marshrutda,
+    `HTTPException(422, detail="invalid_phone")` bilan.
+
+    ⛔ Har satr maydonda `max_length` BOR (T-10-03): chegarasiz maydon
+    anonim yuzada payload-hajm DoS'iga aylanardi.
+
+    `website` — HONEYPOT: ko'rinmas maydon; to'ldirilgan bo'lsa bot deb
+    qaraladi va so'rov JIMGINA muvaffaqiyat bilan tashlab yuboriladi
+    (Telegram'ga chaqiruv ketmaydi, xato kodi ham qaytmaydi — aks holda
+    honeypot mavjudligi javob kodidan o'qilardi).
+    """
+
+    name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=1, max_length=32)
+    market_name: str = Field(min_length=2, max_length=160)
+    stall_count: int | None = Field(default=None, ge=1, le=100_000)
+    locale: Literal["uz-Latn", "uz-Cyrl", "ru"]
+    website: str = Field(default="", max_length=200)
+
+
+class DemoRequestResponse(BaseModel):
+    """Demo so'rovi javobi — YAGONA maydon va boshqa HECH NIMA (T-10-02).
+
+    ⛔ Bozor identifikatori, nomi yoki topologiyasi bu javobga HECH QACHON
+    qo'shilmaydi: marshrut anonim va tenant kontekstiga umuman kirmaydi.
+    Kalitlar to'plami `tests/integration/test_demo_request.py` da AYNAN
+    `{"delivered"}` deb o'lchanadi.
+    """
+
+    delivered: bool
 
 
 class LoginRequest(BaseModel):
