@@ -168,6 +168,50 @@ const KEYFRAMES_COUNT = 9;
  */
 const TIMER_FILES = ["components/marketing/hero-scene.tsx"];
 
+/** Skan qilinadigan uchala locale (routing.ts bilan ayni ro'yxat). */
+const LOCALES = ["uz-Latn", "uz-Cyrl", "ru"];
+
+/**
+ * G-land-4(e) — TAQIQLANGAN DA'VO TOKENLARI (K-7, brief §7.5). Marketing
+ * matnini «kuchaytirish» refleksi eng oson buziladigan shartnoma: bitta
+ * commit brendning yagona ustunligini (halollikni) yo'q qiladi. Foiz
+ * belgisi ham shu yerda — «X foiz o'sish» sinfidagi har qanday da'vo pilot
+ * o'lchovi yakunlanmagunicha yolg'on (K-7).
+ */
+const FORBIDDEN_CLAIM_TOKENS = [
+  "jonli",
+  "%",
+  "martaga",
+  "в разы",
+  "гарантир",
+  "kafolatlaymiz",
+  "eng yaxshi",
+  "лучший",
+  "№1",
+];
+const MIN_FORBIDDEN_CLAIM_TOKENS = 8;
+
+/**
+ * G-land-4(b) — namuna-belgi O'ZAKLARI: sahna kontenti namunaviy ekani
+ * skrinriderga ham yetishi shart (T-10-20). Har locale qiymatida shu
+ * o'zaklardan kamida bittasi bo'ladi.
+ */
+const SAMPLE_ROOTS = ["namunaviy", "намунавий", "демонстрацион"];
+
+/**
+ * G-land-5(a) — hero-o'lcham utilitasining YAGONA uyi (§7.1.1). Qulf ikki
+ * qatlamli: fayl-reyestr (deepEqual) + o'sha fayldagi uchrashuv sanog'i
+ * (aynan 1) — faqat fayl qulfi bo'lsa hero ichida ikkinchi hero-o'lchamli
+ * sarlavha jimgina paydo bo'lardi.
+ */
+const TEXT_HERO_FILES = ["components/marketing/hero.tsx"];
+
+/**
+ * G-land-5(c) — seksiya bo'shliq qiymatlarining YAGONA uyi (§8.2):
+ * vertikal ritm faqat `<Section>` orqali.
+ */
+const SECTION_SPACING_FILES = ["components/marketing/section.tsx"];
+
 /** Qamrov chegaralari — skanerlanadigan fayl soni kamaysa darvoza qizaradi. */
 const MIN_MARKETING_COMPONENT_FILES = 12; // bugun 15
 const MIN_MARKETING_APP_FILES = 3; // bugun 3 (layout, page, maxfiylik/page)
@@ -175,6 +219,10 @@ const MIN_SRC_FILES = 150; // bugun 200+ (motion-tokens bilan bir xil chegara)
 const MIN_NAMESPACE_CALLS = 10; // bugun 17+ chaqiruv
 const MIN_CLASS_BLOCKS = 10; // bugun 14 selektor-blok
 const MIN_STYLE_BLOCKS = 2; // bugun 6+ (`--i` va transitionDelay)
+const MIN_LANDING_KEYS = 100; // bugun ~130 landing.* kaliti har locale'da
+const MIN_FAQ_TEXTS = 30; // 5 savol + 5 javob x 3 locale
+const MIN_OVERRIDE_WORDS = 5; // uz-Cyrl.overrides.json words lug'ati
+const MIN_RENDERABLE_PARTS = 20; // bugun 100+ JSX matn bo'lagi
 
 /* -------------------------------------------------------------------------- */
 /* IZOHLARNI OLIB TASHLASH — motion-tokens.test.mjs dan AYNAN NUSXA           */
@@ -554,6 +602,71 @@ function inlineStyleBlocks(code) {
     idx = end + 1;
   }
   return blocks;
+}
+
+/** Locale katalogi (JSON) — xom obyekt. */
+function loadCatalog(locale) {
+  return JSON.parse(
+    readFileSync(path.join(MESSAGES_DIR, `${locale}.json`), "utf8"),
+  );
+}
+
+/** Obyekt daraxtining SATR bargi yozuvlari: [["a.b.c", qiymat], ...]. */
+function flatEntries(node, prefix) {
+  const entries = [];
+  for (const [key, value] of Object.entries(node)) {
+    const full = prefix === "" ? key : `${prefix}.${key}`;
+    if (typeof value === "string") entries.push([full, value]);
+    else if (value !== null && typeof value === "object") {
+      entries.push(...flatEntries(value, full));
+    }
+  }
+  return entries;
+}
+
+/** `landing.*` yozuvlari + quyi chegara nazorati (katalog qisqarmasin). */
+function landingEntries(locale) {
+  const catalog = loadCatalog(locale);
+  assert.ok(
+    catalog.landing !== undefined,
+    `${locale}.json da \`landing\` fazoviy nomi yo'q — katalog buzilgan`,
+  );
+  const entries = flatEntries(catalog.landing, "landing");
+  assert.ok(
+    entries.length >= MIN_LANDING_KEYS,
+    `${locale}.json \`landing.*\` da atigi ${entries.length} ta satr kaliti bor ` +
+      `(kutilgan: kamida ${MIN_LANDING_KEYS}) — skan yuzasi jimgina toraygan`,
+  );
+  return entries;
+}
+
+/**
+ * ⛔ KOMPONENT-MATN KANALI (10-06 sabotaj darsi): katalog skani komponent
+ * JSX'iga literal yozilgan da'voni KO'RMASDI — o'sha sinov o'lchagan bo'shliq.
+ * Bu ekstraktor RENDER BO'LADIGAN matnni oladi: (1) JSX matn tugunlari
+ * (`>matn<` — qavs va teg ichidagi kod chiqariladi), (2) JSX ifodasidagi
+ * yalang'och satr literallari (`{"matn"}` shakli). `className` ichidagi
+ * raqamlar (gap-3, text-2xl) teg ICHIDA — ular bu kanalga tushmaydi.
+ */
+function renderableTextParts(code) {
+  const parts = [];
+  for (const m of code.matchAll(/>([^<>{}]+)</gu)) {
+    parts.push({ kind: "jsx-matn", text: m[1] });
+  }
+  for (const m of code.matchAll(/\{\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1\s*\}/gu)) {
+    parts.push({ kind: "satr-literal", text: m[2] });
+  }
+  return parts;
+}
+
+/**
+ * G-land-4(g) — lotin so'z tokenlari (o'zbek apostroflari bilan).
+ * `ts[iy]` naqshiga mos token kirill overrides lug'atida bo'lishi shart:
+ * `demonstratsiya` -> «демонстратсия» defekti sof kirill chiqish bergani
+ * uchun transliterator darvozalarining birortasi uni ko'rmaydi (B-3).
+ */
+function latinWordTokens(value) {
+  return value.match(/[A-Za-z][A-Za-z'ʼ’]*/gu) ?? [];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1003,4 +1116,530 @@ test("G-land-3(d): @keyframes reyestri 9 nom va yangisi AYNAN sweep (L-9)", () =
       `  10-fazaning yagona yangi nomi — \`${NEW_KEYFRAME}\` (§5.4); boshqa\n` +
       "  har qanday qo'shimcha avval 10-UI-SPEC ga qaytariladi.",
   );
+});
+
+/* -------------------------------------------------------------------------- */
+/* G-land-4 — HALOLLIK: YOLG'ON RAQAM VA YOLG'ON DA'VO YO'Q (SC#4, K-7)       */
+/* -------------------------------------------------------------------------- */
+
+test("G-land-4/5 detektorlari sun'iy IJOBIY manbani USHLAYDI (o'z-o'zini tekshiruv)", () => {
+  // Renderable-matn: braced literal ham, JSX matn tuguni ham topiladi...
+  const sabotageSample =
+    '<p className="gap-3 text-2xl">{"30% o\'sish"}</p><span>30% foyda</span>';
+  const parts = renderableTextParts(sabotageSample);
+  assert.ok(
+    parts.some((p) => p.kind === "satr-literal" && p.text.includes("30%")),
+    "braced satr literali ({\"...\"} shakli — 10-06 sabotaj shakli) topilmadi",
+  );
+  assert.ok(
+    parts.some((p) => p.kind === "jsx-matn" && p.text.includes("30% foyda")),
+    "JSX matn tuguni topilmadi",
+  );
+  // ...className ichidagi raqam esa render matni EMAS (teg ichida qoladi).
+  const classOnly = renderableTextParts('<div className="gap-3">{t("x")}</div>');
+  assert.equal(
+    classOnly.some((p) => /\d/u.test(p.text)),
+    false,
+    "className ichidagi raqam render matni deb sanaldi (soxta ijobiy)",
+  );
+
+  // ts[iy] tokenizatori: defekt sinfini topadi, oddiy so'zni tinch qo'yadi.
+  const tokens = latinWordTokens("SBOZOR demonstratsiya sahnasi to'liq");
+  assert.ok(tokens.includes("demonstratsiya"));
+  assert.equal(/[a-z]+ts[iy]/iu.test("demonstratsiya"), true);
+  assert.equal(/[a-z]+ts[iy]/iu.test("sahnasi"), false);
+
+  // Shartli-render detektori: shartsiz shakl o'tadi, `&&` shakli ushlanadi.
+  const unconditional = '{t("scene.sampleBadge")}';
+  const conditional = '{isDemo && t("scene.sampleBadge")}';
+  assert.equal(
+    /\{\s*t\(\s*["']scene\.sampleBadge["']\s*\)\s*\}/u.test(unconditional),
+    true,
+  );
+  assert.equal(
+    /\{\s*t\(\s*["']scene\.sampleBadge["']\s*\)\s*\}/u.test(conditional),
+    false,
+    "shartli shakl shartsiz deb sanaldi",
+  );
+  assert.equal(
+    /(?:&&|\?\?|\?)[^{}<>]*t\(\s*["']scene\.sampleBadge["']/u.test(conditional),
+    true,
+    "`cond && ` naqshi detektordan o'tib ketdi",
+  );
+});
+
+test("G-land-4(a): sampleBadge chaqirig'i bor VA shartli render ichida EMAS", () => {
+  const code = readCode(HERO_SCENE_FILE);
+
+  assert.ok(
+    /\bt\(\s*["']scene\.sampleBadge["']\s*\)/u.test(code),
+    "⛔ G-land-4(a) BUZILDI — `hero-scene.tsx` da `scene.sampleBadge` " +
+      "chaqirig'i YO'Q: namuna-belgisi sahnaning HAR fazasida ko'rinishi " +
+      "shart (K-7) — belgisiz sahna real bozor ma'lumoti deb o'qiladi.",
+  );
+
+  assert.ok(
+    /\{\s*t\(\s*["']scene\.sampleBadge["']\s*\)\s*\}/u.test(code),
+    "⛔ G-land-4(a) BUZILDI — `hero-scene.tsx` dagi `scene.sampleBadge` " +
+      "chaqirig'i SHARTSIZ `{t(...)}` shaklida emas: belgi oraliq ifoda " +
+      "ichiga olingan — har fazada ko'rinish kafolati yo'qoldi (K-7).",
+  );
+
+  assert.equal(
+    /(?:&&|\?\?|\?)[^{}<>]*t\(\s*["']scene\.sampleBadge["']/u.test(code),
+    false,
+    "⛔ G-land-4(a) BUZILDI — `scene.sampleBadge` SHARTLI render ichida " +
+      "(`cond && ` / ternar naqshi): belgi ba'zi holatlarda yo'qoladi va " +
+      "sahna o'sha paytda real ma'lumot taassurotini beradi (T-10-10).",
+  );
+});
+
+test("G-land-4(b): a11yDescription'da namuna o'zagi uchala locale'da bor", () => {
+  for (const locale of LOCALES) {
+    const catalog = loadCatalog(locale);
+    const value = catalog.landing?.scene?.a11yDescription;
+    assert.ok(
+      typeof value === "string" && value.length > 0,
+      `⛔ G-land-4(b) BUZILDI — ${locale}.json da ` +
+        "`landing.scene.a11yDescription` yo'q: skrinrider foydalanuvchisi " +
+        "sahna tavsifisiz qoladi (§15.2).",
+    );
+    const lower = value.toLowerCase();
+    assert.ok(
+      SAMPLE_ROOTS.some((root) => lower.includes(root)),
+      `⛔ G-land-4(b) BUZILDI — ${locale}.json \`a11yDescription\` da namuna ` +
+        `o'zagi yo'q (kutilgan: ${SAMPLE_ROOTS.join(" / ")}). Sahna kontenti ` +
+        "namunaviy ekani skrinriderga ham yetishi shart (T-10-20) — vizual " +
+        "belgi ko'rinmaydigan foydalanuvchiga yolg'on bo'lib qolardi.",
+    );
+  }
+});
+
+test("G-land-4(c): residency.body uchala locale'da VA hero anchor bilan bog'langan", () => {
+  for (const locale of LOCALES) {
+    const catalog = loadCatalog(locale);
+    const value = catalog.landing?.trustBlock?.residency?.body;
+    assert.ok(
+      typeof value === "string" && value.length > 0,
+      `⛔ G-land-4(c) BUZILDI — ${locale}.json da ` +
+        "`landing.trustBlock.residency.body` yo'q: rezidentlik bandi bu " +
+        "fazaning huquqiy tuguni (§11.2, T-10-13) — qisqa hero yorlig'i " +
+        "to'liq halol izohsiz qolardi.",
+    );
+  }
+
+  const heroCode = readCode(HERO_FILE);
+  assert.ok(
+    /href="#ishonch"[\s\S]{0,500}?trust\.residency/u.test(heroCode),
+    "⛔ G-land-4(c) BUZILDI — `hero.tsx` da `trust.residency` `#ishonch` " +
+      "ankeriga BOG'LANMAGAN (§13.5): hero'dagi qisqa da'vo ishonch " +
+      "blokidagi to'liq izohga olib borishi shart — havolasiz qisqa shakl " +
+      "o'zi mustaqil (va to'liq bo'lmagan) da'voga aylanadi.",
+  );
+  const trustCode = readCode(TRUST_BLOCK_FILE);
+  assert.ok(
+    /id="ishonch"/u.test(trustCode),
+    "⛔ G-land-4(c) BUZILDI — `trust-block.tsx` da `id=\"ishonch\"` yo'q: " +
+      "hero havolasi o'lik ankerga aylanadi (10-06 shartnomasi: anchor " +
+      "blokning O'ZIDA, Section'da emas).",
+  );
+});
+
+test("G-land-4(d): FAQ matni FAQAT katalogdan — komponentda literal 0", () => {
+  // (i) JSON-LD kanali: FAQPage page.tsx da va matn kalitlardan keladi.
+  const pageCode = readCode(MARKETING_PAGE);
+  assert.ok(
+    pageCode.includes("application/ld+json"),
+    "⛔ G-land-4(d) BUZILDI — `(marketing)/page.tsx` da JSON-LD skript " +
+      "bloki yo'q: FAQPage qidiruv natijasida ko'rinmaydi (SC#5, §14.3).",
+  );
+  assert.ok(
+    /FAQPage/u.test(pageCode) &&
+      /faq\.q/u.test(pageCode) &&
+      /faq\.a/u.test(pageCode),
+    "⛔ G-land-4(d) BUZILDI — page.tsx JSON-LD'si `FAQPage` turini " +
+      "`landing.faq.q*/a*` kalitlaridan qurmayapti: matn katalogdan " +
+      "kelmasa ikkinchi manba tug'iladi (T-10-14).",
+  );
+
+  // (ii) Ikki manba mexanik imkonsiz: katalogdagi savol/javob matni birorta
+  // marketing faylida LITERAL yozilmagan (uchala locale bo'ylab).
+  const faqTexts = [];
+  for (const locale of LOCALES) {
+    const catalog = loadCatalog(locale);
+    for (const n of [1, 2, 3, 4, 5]) {
+      for (const kind of ["q", "a"]) {
+        const value = catalog.landing?.faq?.[`${kind}${n}`];
+        assert.ok(
+          typeof value === "string" && value.length > 0,
+          `G-land-4(d): ${locale}.json da \`landing.faq.${kind}${n}\` yo'q — ` +
+            "FAQ reyestri qisqargan (§13.7: aynan 5 savol).",
+        );
+        faqTexts.push({ locale, key: `faq.${kind}${n}`, value });
+      }
+    }
+  }
+  assert.ok(
+    faqTexts.length >= MIN_FAQ_TEXTS,
+    `G-land-4(d): atigi ${faqTexts.length} ta FAQ matni yig'ildi (kutilgan: ` +
+      `${MIN_FAQ_TEXTS}) — detektor buzilgan`,
+  );
+
+  const { all } = marketingSurfaceFiles();
+  const problems = [];
+  for (const file of all) {
+    const code = readCode(file);
+    for (const { locale, key, value } of faqTexts) {
+      if (code.includes(value)) {
+        problems.push(`${relSrc(file)} -> ${locale} ${key} matni LITERAL`);
+      }
+    }
+  }
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-land-4(d) BUZILDI — FAQ matni komponentga literal ko'chirilgan:\n  " +
+      problems.join("\n  ") +
+      "\n  Bitta manba, ikkita chiqish (§14.3): komponent ham, JSON-LD ham\n" +
+      "  faqat `landing.faq.*` dan o'qiydi — literal nusxa katalog\n" +
+      "  yangilanganda jimgina eskirib qolardi (T-10-14).",
+  );
+});
+
+test("G-land-4(e): taqiqlangan da'vo tokenlari katalogda VA render matnida 0", () => {
+  const problems = [];
+
+  // (i) KATALOG kanali: `landing.*` qiymatlari, uchala locale.
+  for (const locale of LOCALES) {
+    for (const [key, value] of landingEntries(locale)) {
+      const lower = value.toLowerCase();
+      for (const token of FORBIDDEN_CLAIM_TOKENS) {
+        if (lower.includes(token.toLowerCase())) {
+          problems.push(`${locale}: ${key} -> «${token}»`);
+        }
+      }
+    }
+  }
+
+  // (ii) KOMPONENT-MATN kanali (10-06 sabotaj darsi): JSX'ga literal
+  // yozilgan da'vo katalog skanidan o'tib ketardi — render matni ham
+  // skanerlanadi (jsx-matn tugunlari + braced satr literallari).
+  const { all } = marketingSurfaceFiles();
+  let partCount = 0;
+  for (const file of all) {
+    for (const { kind, text } of renderableTextParts(readCode(file))) {
+      partCount += 1;
+      const lower = text.toLowerCase();
+      for (const token of FORBIDDEN_CLAIM_TOKENS) {
+        if (lower.includes(token.toLowerCase())) {
+          problems.push(
+            `${relSrc(file)} (${kind}) -> «${token}»: ${JSON.stringify(text.trim().slice(0, 50))}`,
+          );
+        }
+      }
+    }
+  }
+  assert.ok(
+    partCount >= MIN_RENDERABLE_PARTS,
+    `G-land-4(e): render-matn ekstraktori atigi ${partCount} bo'lak topdi ` +
+      `(kutilgan: kamida ${MIN_RENDERABLE_PARTS}) — detektor buzilgan`,
+  );
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-land-4(e) BUZILDI — taqiqlangan da'vo tokeni:\n  " +
+      problems.join("\n  ") +
+      "\n  Reyestr (K-7, brief §7.5): " +
+      FORBIDDEN_CLAIM_TOKENS.join(" · ") +
+      "\n  Bu brendning yagona ustunligi — halollik: raqib «ishlab\n" +
+      "  chiqilmoqda» deb do'kon badge'larini qo'yadi, biz kamroq va'da\n" +
+      "  qilib ko'proq ishonch olamiz. O'lchov yakunlanmagunicha o'sish\n" +
+      "  foizi ham, kafolat so'zi ham yozilmaydi.",
+  );
+});
+
+test("G-land-4(f): landing.pilot.* da raqam 0 — katalogda VA komponentda", () => {
+  const problems = [];
+
+  // (i) KATALOG kanali: pilot kalitlari, uchala locale — ATAYLAB QATTIQ:
+  // «taxminan 200 rasta» ham yozilmaydi (K-7).
+  for (const locale of LOCALES) {
+    for (const [key, value] of landingEntries(locale)) {
+      if (!key.startsWith("landing.pilot.")) continue;
+      if (/\d/u.test(value)) {
+        problems.push(`${locale}: ${key} -> «${value.slice(0, 60)}»`);
+      }
+    }
+  }
+
+  // (ii) KOMPONENT kanali: pilot.tsx render matnida ham raqam 0 —
+  // katalog toza turib komponentga literal raqam yozilishi mumkin edi
+  // (10-06 sabotaji aynan shu shaklda hech narsani qizartirmagan).
+  for (const { kind, text } of renderableTextParts(readCode(PILOT_FILE))) {
+    if (/\d/u.test(text)) {
+      problems.push(
+        `pilot.tsx (${kind}) -> ${JSON.stringify(text.trim().slice(0, 50))}`,
+      );
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-land-4(f) BUZILDI — pilot matnida raqam:\n  " +
+      problems.join("\n  ") +
+      "\n  Pilot bloki FAQAT HOLAT aytadi (K-7): «X% o'sish», «Y so'm\n" +
+      "  topildi», «taxminan 200 rasta» — birortasi ham Karmana o'lchovi\n" +
+      "  yakunlanmagunicha yozilmaydi. Raqam paydo bo'lishining yagona\n" +
+      "  halol yo'li — o'lchov natijasi bilan birga UI-SPEC'ni yangilash.",
+  );
+});
+
+test("G-land-4(g): landing.* dagi ts[iy] tokenlari kirill lug'atida (B-3)", () => {
+  const overrides = JSON.parse(readFileSync(OVERRIDES_FILE, "utf8"));
+  const words = overrides.words ?? {};
+  assert.ok(
+    Object.keys(words).length >= MIN_OVERRIDE_WORDS,
+    `G-land-4(g): overrides \`words\` lug'atida atigi ` +
+      `${Object.keys(words).length} ta yozuv (kutilgan: kamida ` +
+      `${MIN_OVERRIDE_WORDS}) — fayl yoki parser buzilgan`,
+  );
+
+  const problems = [];
+  for (const [key, value] of landingEntries("uz-Latn")) {
+    for (const token of latinWordTokens(value)) {
+      if (!/[a-z]+ts[iy]/iu.test(token)) continue;
+      const candidates = [
+        token,
+        token.toLowerCase(),
+        token[0].toUpperCase() + token.slice(1).toLowerCase(),
+      ];
+      if (!candidates.some((candidate) => candidate in words)) {
+        problems.push(`${key} -> «${token}»`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-land-4(g) BUZILDI — `ts[iy]` naqshli token kirill lug'atida yo'q:\n  " +
+      problems.join("\n  ") +
+      "\n  Sabab o'lchangan (B-3): «demonstratsiya» -> «демонстратсия»\n" +
+      "  semantik defekti SOF KIRILL chiqish beradi — transliterator\n" +
+      "  darvozalarining birortasi uni ko'rmaydi. Har bunday so'z\n" +
+      "  `uz-Cyrl.overrides.json` `words` lug'atiga to'g'ri kirill shakli\n" +
+      "  bilan qo'shilishi shart. ⛔ Qamrov `landing.*` bilan CHEGARALANGAN\n" +
+      "  — meros defektlar (10-02 deferred-items) bu fazani bloklamasin.",
+  );
+});
+
+/* -------------------------------------------------------------------------- */
+/* G-land-5 — TIPOGRAFIYA VA BO'SHLIQ KENGAYTMASI (§0.2, §7, §8.2)            */
+/* -------------------------------------------------------------------------- */
+
+test("G-land-5(a): text-hero fayl-reyestrga TENG va faylda AYNAN 1 marta", () => {
+  const srcFiles = listProductFiles(SRC, CODE_EXTENSIONS);
+  assert.ok(
+    srcFiles.length >= MIN_SRC_FILES,
+    `\`src/**\` da atigi ${srcFiles.length} ta mahsulot fayli bor ` +
+      `(kutilgan: kamida ${MIN_SRC_FILES}) — skan yuzasi jimgina toraygan`,
+  );
+
+  const hits = new Map();
+  for (const file of srcFiles) {
+    const count = [...readCode(file).matchAll(/(?<![-\w])text-hero\b/gu)]
+      .length;
+    if (count > 0) hits.set(relSrc(file), count);
+  }
+
+  // 1-qatlam: FAYL reyestri (deepEqual).
+  assert.deepEqual(
+    [...hits.keys()].sort(),
+    [...TEXT_HERO_FILES].sort(),
+    "⛔ G-land-5(a) BUZILDI — hero-o'lcham utilitasi fayl-reyestrdan " +
+      `chetlandi.\n  Topildi:  ${[...hits.keys()].sort().join(", ") || "(bo'sh)"}\n` +
+      `  Reyestr:  ${[...TEXT_HERO_FILES].sort().join(", ")}\n` +
+      "  `text-hero` — bir martalik display registri (§7.1.1), matn\n" +
+      "  shkalasining a'zosi EMAS: ikkinchi uy ikkinchi vizual ovoz demak.",
+  );
+
+  // 2-qatlam: ELEMENT sanog'i — faqat fayl qulfi bo'lsa hero faylining
+  // ichida ikkinchi hero-o'lchamli sarlavha JIMGINA paydo bo'lardi.
+  for (const registered of TEXT_HERO_FILES) {
+    assert.equal(
+      hits.get(registered),
+      1,
+      `⛔ G-land-5(a) BUZILDI — \`${registered}\` da hero-o'lcham utilitasi ` +
+        `${hits.get(registered) ?? 0} marta (kutilgan: AYNAN 1). Sahifada ` +
+        "bitta h1, bitta hero ovozi (§15.11/§7.1.1) — ikkinchi uchrashuv " +
+        "ikkinchi sarlavha demak va u fayl qulfidan o'tib ketardi.",
+    );
+  }
+});
+
+test("G-land-5(b): --text-hero @theme'da bor va qiymati clamp( bilan", () => {
+  const css = readGlobalsCss();
+  const theme = extractBlock(css, "@theme");
+  assert.ok(
+    theme !== null,
+    "G-land-5(b): `globals.css` da `@theme` bloki topilmadi — token " +
+      "reyestri butunlay yo'qolgan",
+  );
+  assert.ok(
+    /--text-hero\s*:\s*clamp\(/u.test(theme),
+    "⛔ G-land-5(b) BUZILDI — `--text-hero` `@theme` blokida yo'q yoki " +
+      "qiymati `clamp(` bilan boshlanmaydi. Suyuq o'lcham (§7.1.1: telefonda " +
+      "28px, proyektorda 44px) qotib qolgan qiymatga almashsa mobil hero " +
+      "ekranni yeydi yoki desktop hero mayda qoladi.",
+  );
+});
+
+test("G-land-5(c): seksiya bo'shliq qiymatlari FAQAT section.tsx da", () => {
+  const { all } = marketingSurfaceFiles();
+
+  const spacingFiles = [];
+  for (const file of all) {
+    if (/\bpy-16\b|\bpy-24\b/u.test(readCode(file))) {
+      spacingFiles.push(relSrc(file));
+    }
+  }
+
+  assert.deepEqual(
+    [...spacingFiles].sort(),
+    [...SECTION_SPACING_FILES].sort(),
+    "⛔ G-land-5(c) BUZILDI — seksiya bo'shlig'i reyestrdan chetlandi.\n" +
+      `  Topildi:  ${[...spacingFiles].sort().join(", ") || "(bo'sh)"}\n` +
+      `  Reyestr:  ${[...SECTION_SPACING_FILES].sort().join(", ")}\n` +
+      "  Vertikal ritm FAQAT `<Section>` orqali (§8.2): qiymat ikkinchi\n" +
+      "  faylda takrorlansa ritm ikki manbadan boshqarilib siljiydi.",
+  );
+});
+
+test("G-land-5(d): marketing yuzasida text-base/3xl/ixtiyoriy/font-medium 0", () => {
+  const { all } = marketingSurfaceFiles();
+
+  const tokens = [
+    ["text-base", /\btext-base\b/gu],
+    ["text-3xl", /\btext-3xl\b/gu],
+    ["font-medium", /\bfont-medium\b/gu],
+  ];
+
+  const problems = [];
+  for (const file of all) {
+    const code = readCode(file);
+    for (const [name, pattern] of tokens) {
+      for (const m of code.matchAll(pattern)) {
+        problems.push(`${relSrc(file)} -> \`${m[0] ?? name}\``);
+      }
+    }
+    if (code.includes("text-[")) {
+      problems.push(`${relSrc(file)} -> \`text-[\` (ixtiyoriy o'lcham)`);
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-land-5(d) BUZILDI — taqiqlangan tipografiya tokeni:\n  " +
+      problems.join("\n  ") +
+      "\n  SABAB (bu darvozaning butun qiymati): mavjud chegaralar TO'LGAN\n" +
+      "  [L-2] — `text-base` 7/7, `font-medium` 21/21 butun src bo'ylab.\n" +
+      "  Landing'ning birinchi 16px matni `typography.test.mjs` zanjirini\n" +
+      "  qizartiradi va u faqat «7 dan oshdi» derdi. Yechim: matn rollari\n" +
+      "  `text-sm`/`text-xs`/`text-lg`/`text-2xl`, og'irlik `font-semibold`/" +
+      "\n  `font-normal` (§7.1).",
+  );
+});
+
+test("G-land-5(e): text-display components/marketing/** da 0 (L-4)", () => {
+  const { componentFiles } = marketingSurfaceFiles();
+
+  const problems = [];
+  for (const file of componentFiles) {
+    for (const m of readCode(file).matchAll(/(?<![-\w])text-display\b/gu)) {
+      problems.push(`${relSrc(file)} -> \`${m[0]}\``);
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-land-5(e) BUZILDI — displey-pul utilitasi marketing faylida:\n  " +
+      problems.join("\n  ") +
+      "\n  `text-display` — PUL ROLI va reyestri `typography.test.mjs` ning\n" +
+      "  `TEXT_DISPLAY_FILES` bilan IKKI app fayliga deepEqual qulflangan\n" +
+      "  [L-4]: uchinchi fayl o'sha darvozani ham qizartiradi. Hero o'lchami\n" +
+      "  uchun alohida `--text-hero` roli bor (G-land-5(a,b)).",
+  );
+});
+
+/* -------------------------------------------------------------------------- */
+/* REYESTR NAZORATI — darvoza o'zini o'zi o'lchaydi                           */
+/* -------------------------------------------------------------------------- */
+
+test("REYESTR NAZORATI: child_process yo'q, reyestrlar jimgina qisqarmagan", () => {
+  /*
+   * (1) Bu modul MAVJUD darvozalarni qayta yugurtirmaydi (`gate:fast`
+   * byudjeti, §16.4): subprocess kanallarining har uchalasi ham manbada
+   * yo'qligi tekshiriladi. Regekslar o'z-o'ziga mos kelmaydi — ular
+   * qidiradigan matn shakli regeks literalining o'zida uchramaydi.
+   */
+  const own = readFileSync(import.meta.filename, "utf8");
+  assert.equal(
+    /require\(\s*["'](?:node:)?child_process["']\s*\)/u.test(own),
+    false,
+    "REYESTR NAZORATI: modul `child_process` ni require qilyapti — mavjud " +
+      "darvozalarni qayta yugurtirish gate:fast byudjetini (200 s) yeydi",
+  );
+  assert.equal(
+    /from\s+["'](?:node:)?child_process["']/u.test(own),
+    false,
+    "REYESTR NAZORATI: modul `child_process` dan import qilyapti — " +
+      "subprocess kanali bu faylda taqiq (§16.4 byudjet qarori)",
+  );
+  assert.equal(
+    /\bexecSync\s*\(/u.test(own),
+    false,
+    "REYESTR NAZORATI: modul `execSync` chaqiryapti — sof matn/CSS parse " +
+      "sharti buzilgan",
+  );
+
+  /*
+   * (2) Reyestrlar jimgina qisqarsa darvoza BO'SH HALQA bo'lib yashil
+   * qolardi — quyi chegaralar shu holatni qizartiradi (§16.3 ruhi).
+   */
+  assert.ok(
+    FORBIDDEN_CLAIM_TOKENS.length >= MIN_FORBIDDEN_CLAIM_TOKENS,
+    `taqiqlangan da'vo tokenlari reyestri ${FORBIDDEN_CLAIM_TOKENS.length} ta ` +
+      `(kutilgan: kamida ${MIN_FORBIDDEN_CLAIM_TOKENS}) — G-land-4(e) qamrovi ` +
+      "jimgina qisqargan",
+  );
+  assert.equal(
+    KEYFRAMES_REGISTRY.length,
+    KEYFRAMES_COUNT,
+    `@keyframes reyestri ${KEYFRAMES_REGISTRY.length} ta nom (kutilgan: AYNAN ` +
+      `${KEYFRAMES_COUNT}) — G-land-3(d) qamrovi o'zgargan`,
+  );
+  assert.equal(
+    CLIENT_ISLANDS.length,
+    CLIENT_ISLANDS_COUNT,
+    `klient orollari reyestri ${CLIENT_ISLANDS.length} ta (kutilgan: AYNAN ` +
+      `${CLIENT_ISLANDS_COUNT}) — G-land-1(a) qamrovi o'zgargan`,
+  );
+
+  for (const [name, list] of [
+    ["FORBIDDEN_CLAIM_TOKENS", FORBIDDEN_CLAIM_TOKENS],
+    ["SAMPLE_ROOTS", SAMPLE_ROOTS],
+    ["TEXT_HERO_FILES", TEXT_HERO_FILES],
+    ["SECTION_SPACING_FILES", SECTION_SPACING_FILES],
+    ["LOCALES", LOCALES],
+  ]) {
+    assert.equal(
+      new Set(list).size,
+      list.length,
+      `${name} reyestrida takrorlangan a'zo bor — chegara aldangan bo'lardi`,
+    );
+  }
 });
