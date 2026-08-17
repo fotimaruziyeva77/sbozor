@@ -647,7 +647,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
    ⛔ Ya'ni 9-fazaga tushadigan **yangi mikro-UX bandi YO'Q** — bu topilma va u bo'sh to'lqin ochilishining
    oldini oladi.
 
-**Plans:** 1/7 plans executed
+**Plans:** 3/7 plans executed
 
 Plans:
 
@@ -657,8 +657,8 @@ Plans:
 
 **Wave 2** *(parallel — fayl to'plamlari kesishmaydi)*
 
-- [ ] 09-02-PLAN.md — `ui/` primitivlari jilosi, beshala `Loader2` ning reduced-motion juftligi va G-motion-1/G-motion-3 (W2)
-- [ ] 09-03-PLAN.md — Tema qatlami: `lib/theme.ts`, FOUC'siz `<head>` skripti, `ThemeToggle`, 11 copy kaliti va G-motion-4 (W2)
+- [x] 09-02-PLAN.md — `ui/` primitivlari jilosi, beshala `Loader2` ning reduced-motion juftligi va G-motion-1/G-motion-3 (W2)
+- [x] 09-03-PLAN.md — Tema qatlami: `lib/theme.ts`, FOUC'siz `<head>` skripti, `ThemeToggle`, 11 copy kaliti va G-motion-4 (W2)
 
 **Wave 3** *(parallel — Y-1 va Y-2 mustaqil)*
 
