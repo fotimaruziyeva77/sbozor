@@ -1051,27 +1051,29 @@ automated_replacements:
 
 ## Ochiq savollar
 
-1. **G-motion-5(c) izohlari qanday tug'iladi?**
+> ⛔ **HOLAT (2026-08-17, rejalashtirishdan keyin): beshalasi ham YOPILDI.** Har savolning **Tavsiya** bandi tegishli rejaga so'zma-so'z singdirildi va qaysi rejaga tushgani sarlavhada `(RESOLVED — 09-0N da)` bilan belgilandi. Savollarning matni **o'chirilmaydi**: tanlovning muqobillari va sabablari shu yerda qoladi, aks holda keyingi o'quvchi qarorni «shunchaki shunday qilingan» deb o'qirdi.
+
+1. **G-motion-5(c) izohlari qanday tug'iladi?** ⛔ **(RESOLVED — 09-01 da)**
    - Bilamiz: `globals.css` da bugun **6 ta** nisbat izohda va ularni hech nima tekshirmaydi [M-15]. Kalkulyator ishlaydi va 13/15 da'voni takrorladi.
    - Noaniq: ijrochi izohlarni **qo'lda** yozadimi yoki **generatsiya** qiladimi.
    - **Tavsiya:** `contrast.test.mjs` ga `--print` rejimi qo'shilsin (`node scripts/contrast.test.mjs --print`), chiqishi izohlarga ko'chirilsin. ⛔ Aks holda Tuzoq 2 birinchi kuni yuz beradi.
 
-2. **`success-choreography.tsx` — komponentmi yoki sof funksiyami?**
+2. **`success-choreography.tsx` — komponentmi yoki sof funksiyami?** ⛔ **(RESOLVED — 09-04 da)**
    - Bilamiz: G-motion-2(d) uning **manbasida** `setTimeout` ichida `setState` yo'qligini **AST bilan** o'lchaydi. Ya'ni fayl **parse qilinadigan** bo'lishi shart.
    - Noaniq: React komponenti (`.tsx`, DOM'ni React boshqaradi) yoki imperativ funksiya (`.ts`, `document.body.appendChild`).
    - **Tavsiya:** ⛔ **Imperativ funksiya** (`.ts`). Sabab: (a) `setState` **umuman bo'lmaydi** → G-motion-2(d) tavtologiya emas, mexanik; (b) klon React daraxtidan tashqarida bo'lsa, u `cleanup()` bilan yo'qolmaydi va test uni `document.body` da **sanay oladi** — G-motion-1(c) ning aynan o'lchovi. ⚠ SPEC §3.4 uni `collect/success-choreography.tsx` deb nomlaydi — ⛔ **nom saqlansin**, ichi imperativ bo'lsin (`.ts` kengaytmasi bilan; agar SPEC nomi qat'iy o'qilsa, `.tsx` da ham eksport sof funksiya bo'lishi mumkin).
 
-3. **`dashboard/page.tsx` bugun `"use client"` — test uni qanday render qiladi?**
+3. **`dashboard/page.tsx` bugun `"use client"` — test uni qanday render qiladi?** ⛔ **(RESOLVED — 09-05 da)**
    - Bilamiz: sahifa `"use client"` [KOD: `dashboard/page.tsx:1`], `useAuthStore` dan rollarni oladi. `market-status-card.test.tsx` da mavjud naqsh bor.
    - Noaniq: `AuthProvider` + `QueryProvider` + `NextIntlClientProvider` o'ramining aniq shakli.
    - **Tavsiya:** `payment-bar.test.tsx:30-60` naqshini ko'chirish (`setSession()` / `clearSession()` + uchala provayder). ⛔ Yangi test infratuzilmasi **qurilmaydi**.
 
-4. **`@keyframes` soni ≥6 chegarasi bugungi 0 dan qanday to'ladi?**
+4. **`@keyframes` soni ≥6 chegarasi bugungi 0 dan qanday to'ladi?** ⛔ **(RESOLVED — 09-01 da)**
    - Bilamiz: `globals.css` da bugun `@keyframes` — **0** [O'LCHANDI].
    - Kerakli minimal ro'yxat (6): `draw` (check), `ringpulse`, `landin` (qator), `shimmer`, `breath` (yashil nafas), `attention` (amber halqa). ⛔ Yettinchisi — `shake` (forma xatosi).
    - **Tavsiya:** Reja bu ro'yxatni **nomma-nom** yozsin — G-motion-3(c) nomlarni reyestrdan hosila qiladi.
 
-5. **`text-display` ning ikkinchi joyi `headline-card` da shartli — skeleton ham shartlimi?**
+5. **`text-display` ning ikkinchi joyi `headline-card` da shartli — skeleton ham shartlimi?** ⛔ **(RESOLVED — 09-05 da; reyestr darvozasi 09-06 da)**
    - Bilamiz: G-motion-7(c) skeleton `h-N` ni kontent qator qutisi bilan **teng** talab qiladi; `headline-card` da `text-display` faqat `unit === "soum"` da.
    - Noaniq: `isPending` shoxida `unit` **hali ma'lum emas** (javob kelmagan).
    - **Tavsiya:** ⛔ Skeleton **`h-11`** bo'lsin (eng katta shox). Sabab: `h-8` dan `h-11` ga sakrash CLS beradi; `h-11` dan `h-8` ga qisqarish esa **layout siljishi emas, bo'shliq** — va u ko'zga sezilmaydi. ⛔ G-motion-7(c) reyestri buni **jadvaldan** o'qisin, testda qayta yozmasin.
