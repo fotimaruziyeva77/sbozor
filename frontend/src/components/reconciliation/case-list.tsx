@@ -309,16 +309,55 @@ function CaseRowView({
   const format = useFormatter();
 
   return (
-    <tr className="border-b border-border last:border-b-0">
-      <td className="p-3">
+    /*
+     * §10.5 [L-5] — CASE QATORI CHETDAN SIRG'ALIB KIRADI: `starting:`
+     * (`@starting-style`) + `transition-transform` + `--motion-slow`
+     * (400ms) — `ui/dialog.tsx` ning O'LCHANGAN presedenti (09-02 T1:
+     * Tailwind 4.3.3 `starting:` ni `@starting-style` ga kompilyatsiya
+     * qiladi). `@keyframes` reyestri YOPIQ (8 nom, `globals.css` 09-01
+     * egaligida) — yangi keyframe ochilmaydi, kirish TRANZITSIYA bilan
+     * (09-05 sparkline qarori bilan ayni sinf).
+     *
+     * ⛔ Tranzitsiya transform OILASI bilan chegaralangan
+     *    (`transition-transform`) — hover fon rangi bu 400ms ga TUSHMAYDI:
+     *    hover `group-hover` orqali kataklarda o'z `transition-colors`
+     *    (150ms standart token) bilan yashaydi. Qator darajasida
+     *    `hover:bg-*` yozilsa fon ham 400ms sirg'alardi — ikki savolga
+     *    bitta davomiylik bo'lardi.
+     *
+     * ⚠ Reduced-motion: global blok (09-01) tranzitsiyani 0.01ms ga
+     *   tushiradi — qator darhol joyida, natija ayni.
+     * ⛔ FLIP / saralash animatsiyasi YO'Q (§12.8): sahifalash va tartib
+     *   serverniki, qatorlar qayta terilganda ular sirg'alib O'YNAMAYDI —
+     *   `@starting-style` faqat elementning BIRINCHI renderida ishlaydi.
+     */
+    <tr className="group border-b border-border transition-transform duration-(--motion-slow) last:border-b-0 starting:-translate-x-2">
+      <td className="relative p-3 transition-colors group-hover:bg-surface-muted">
+        {/*
+          * §10.5 — AMBER DIQQAT-HALQA, BIR MARTA: faqat `new` (amber)
+          * holatdagi case. `.motion-attention` (09-01 reyestri):
+          * box-shadow 0 -> 10px shaffof, `--motion-slow`,
+          * `animation-iteration-count: 1` — ⛔ qayta pulsatsiya YO'Q.
+          * ⛔ Halqa `aria-hidden` BEZAK: holatni `CaseStatusBadge` MATN
+          *   bilan aytadi — rang yolg'iz signal emas (WCAG 1.4.1).
+          * ⚠ `<tr>` ustida emas, katak ICHIDAGI absolut span ustida:
+          *   `border-collapse` jadvalda qator box-shadow'i brauzerlarda
+          *   ishonchsiz chiziladi; katak esa `relative` bo'la oladi.
+          */}
+        {row.status === "new" ? (
+          <span
+            aria-hidden="true"
+            className="motion-attention pointer-events-none absolute inset-1 rounded-sm"
+          />
+        ) : null}
         {row.subject_kind === "occupied_unpaid"
           ? t("recon.unpaidTitle")
           : t("recon.unregisteredTitle")}
       </td>
-      <td className="p-3">
+      <td className="p-3 transition-colors group-hover:bg-surface-muted">
         <CaseStatusBadge status={row.status} />
       </td>
-      <td className="p-3">
+      <td className="p-3 transition-colors group-hover:bg-surface-muted">
         {/*
          * ⛔ MAS'UL — IDENTIFIKATOR, ISM EMAS. Ismni qo'shish uchun
          *   foydalanuvchilar reestrini ham tortish kerak bo'lardi; u
@@ -333,10 +372,10 @@ function CaseRowView({
           </span>
         )}
       </td>
-      <td className="p-3">
+      <td className="p-3 transition-colors group-hover:bg-surface-muted">
         {format.dateTime(new Date(row.created_at), { dateStyle: "medium" })}
       </td>
-      <td className="p-3">
+      <td className="p-3 transition-colors group-hover:bg-surface-muted">
         {/* ⛔ `ghost` — har qatorda takrorlanadigan amal AKSENT olmaydi. */}
         <Button onClick={onReview} size="sm" variant="ghost">
           {t("recon.caseReview")}

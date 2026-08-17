@@ -206,7 +206,8 @@ function DebtorRow({ row }: { row: ReceivablesReportRow }) {
   const format = useFormatter();
 
   return (
-    <tr className="border-b border-border last:border-b-0">
+    /* Qator hover foni (§12.8) — davomiylik `--default-transition-*` dan. */
+    <tr className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted">
       <td className="p-3">
         {row.vendor_name === null ? (
           /*

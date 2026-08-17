@@ -295,7 +295,12 @@ function RevenueRow({ row }: { row: RevenueReportRow }) {
   const diffClass = row.diff_soum < 0 ? "text-danger-text" : "text-text";
 
   return (
-    <tr className="border-b border-border last:border-b-0">
+    /*
+     * Qator hover foni (§12.8). `text-danger-text` MATN rangi — fon emas,
+     * hover bg u bilan to'qnashmaydi (kontrast juftligi G-motion-5
+     * reyestrida `*-text`/tint sifatida o'lchangan).
+     */
+    <tr className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted">
       <td className="p-3">{formatBusinessDay(format, row.business_date)}</td>
       <td className="p-3 font-mono tabular-nums">
         {format.number(row.charged_soum)}

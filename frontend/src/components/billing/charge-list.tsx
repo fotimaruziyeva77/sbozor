@@ -181,8 +181,15 @@ export function ChargeList({
             </thead>
             <tbody>
               {/* ⛔ Tartib SERVERDAN — bu yerda `sort()` YO'Q. */}
+              {/*
+                * Qator hover foni (09-UI-SPEC §12.8): davomiylik/ease
+                * `--default-transition-*` tokenlaridan — sehrli son yo'q.
+                */}
               {rows.map((row) => (
-                <tr className="border-b border-border" key={row.charge_id}>
+                <tr
+                  className="border-b border-border transition-colors hover:bg-surface-muted"
+                  key={row.charge_id}
+                >
                   <td className="py-2 pr-3 font-semibold">{row.stall_code}</td>
                   <td className="py-2 pr-3 text-text-muted">
                     {vendorNames.get(row.vendor_id) ?? ""}
