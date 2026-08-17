@@ -1654,7 +1654,7 @@
       "phone": "Telefon raqamingiz",
       "market": "Bozor nomi",
       "stallCount": "Rastalar soni (taxminan)",
-      "consent": "Maxfiylik siyosati bilan tanishdim va ma'lumotlarim shu so'rov uchun ishlatilishiga roziman.",
+      "consent": "<privacy>Maxfiylik siyosati</privacy> bilan tanishdim va ma'lumotlarim shu so'rov uchun ishlatilishiga roziman.",
       "submit": "Demo so'rang",
       "submitting": "Yuborilmoqda…",
       "success": {
@@ -1695,7 +1695,7 @@
       },
       "s3": {
         "title": "Demo-so'rov ma'lumotlari",
-        "body": "Formada kiritilgan ism, telefon va bozor nomi ma'lumotlar bazasida saqlanmaydi: so'rov ma'muriyatning Telegram kanaliga yetkaziladi va tizimdan o'chiriladi."
+        "body": "Formada kiritilgan ism, telefon va bozor nomi ma'lumotlar bazasida saqlanmaydi: so'rov ma'muriyatning Telegram kanaliga yetkaziladi va tizimdan o'chiriladi. Telegram serverlari O'zbekiston hududidan tashqarida joylashgan — shu sababdan u yerga faqat so'rov matni boradi; rasm yoki fayl hech qachon yuborilmaydi."
       },
       "s4": {
         "title": "Sotuvchi ma'lumotlari",
