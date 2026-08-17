@@ -694,13 +694,13 @@ qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-faz
   5. Lighthouse ≥95, LCP <1.5s (statik sahifada), SEO meta/OG/structured data to'liq
 
 **Chegaralar:** mavjud Next.js ichida `(marketing)` route-guruhi — alohida sayt EMAS; copy brief matnidan (yakuniy tahrir shu fazada, 3 tilda); maxfiylik siyosati sahifasi majburiy (CCTV shaxsiy ma'lumot)
-**Plans:** 8 plans in 5 waves
+**Plans:** 2/8 plans executed
 
 Plans:
 **Wave 1** *(parallel — fayl kesishuvi YO'Q)*
 
-- [ ] 10-01-PLAN.md — Backend: anonim `POST /api/v1/public/demo-requests`, `AlertSender` lifespan'ga, `EXEMPT_ROUTES` va uning qamrovini tiklovchi 7 bandli test (LAND-03) (W1)
-- [ ] 10-02-PLAN.md — `--text-hero`/`sweep`/`.landing-step-fill` tokenlari, `Button size="hero"` va `landing` fazoviy nomining ~119 kaliti 3 tilda (LAND-04, LAND-05) (W1)
+- [x] 10-01-PLAN.md — Backend: anonim `POST /api/v1/public/demo-requests`, `AlertSender` lifespan'ga, `EXEMPT_ROUTES` va uning qamrovini tiklovchi 7 bandli test (LAND-03) (W1)
+- [x] 10-02-PLAN.md — `--text-hero`/`sweep`/`.landing-step-fill` tokenlari, `Button size="hero"` va `landing` fazoviy nomining ~119 kaliti 3 tilda (LAND-04, LAND-05) (W1)
 
 **Wave 2** *(blocked on Wave 1)*
 
