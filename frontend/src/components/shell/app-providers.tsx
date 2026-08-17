@@ -34,6 +34,16 @@ import { QueryProvider } from "@/lib/query-provider";
  * o'qiy olmaydi — `locale`siz u shartnoma bo'yicha throw qiladi
  * (shared/NextIntlClientProvider.js:9-10, next-intl 4.13.4 da o'lchandi).
  * Ya'ni ikkala qiymat ham server-layout chaqiruvchidan keladi.
+ *
+ * ⛔ `timeZone` HAM OSHKORA uzatiladi (10-07 tashxisi): request-config'dagi
+ * `Asia/Tashkent` klient modulida render bo'lgan provayderga O'ZI yetib
+ * bormaydi (avtomatik meros faqat Server Component kontekstida ishlaydi).
+ * Usiz use-intl SSG prerender'da har worker'da bir marta
+ * `ENVIRONMENT_FALLBACK` ogohlantirishini loglar edi (build'da 4×) va —
+ * muhimrog'i — sana/vaqt formatlash serverda build-mashina mintaqasida,
+ * klientda brauzer mintaqasida ketib, gidratatsiya nomuvofiqlik sinfini
+ * ochiq qoldirardi. Qiymat manbai BITTA (i18n/request.ts, FOUND-05) —
+ * server-layout uni `getTimeZone()` bilan o'qib uzatadi.
  */
 
 type Messages = ComponentProps<typeof NextIntlClientProvider>["messages"];
@@ -41,14 +51,20 @@ type Messages = ComponentProps<typeof NextIntlClientProvider>["messages"];
 export function AppProviders({
   locale,
   messages,
+  timeZone,
   children,
 }: {
   locale: Locale;
   messages: Messages;
+  timeZone: string;
   children: React.ReactNode;
 }) {
   return (
-    <NextIntlClientProvider locale={locale} messages={messages}>
+    <NextIntlClientProvider
+      locale={locale}
+      messages={messages}
+      timeZone={timeZone}
+    >
       <NuqsAdapter>
         <QueryProvider>
           <AuthProvider>
