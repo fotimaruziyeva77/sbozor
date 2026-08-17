@@ -295,6 +295,46 @@ export function PaymentBar({
             aria-hidden="true"
             className="animate-spin motion-reduce:animate-none"
           />
+        ) : pay.isSuccess ? (
+          /*
+           * --- 2-QADAM (09-UI-SPEC §8.1): CHECK-MARK CHIZILADI — 250ms ----
+           *
+           * ⛔ `Loader2` O'RNIDA, lekin `busy` shoxi O'CHIRILMAGAN: `busy` —
+           *    bosilgandan javobgacha, check esa javobdan KEYIN. Ikki BOSHQA
+           *    holat; manba — `busy` ni hosil qiluvchi mutatsiya obyektining
+           *    MAVJUD muvaffaqiyat bayrog'i (`pay.isSuccess`), yangi prop
+           *    ham, yangi holat ham YO'Q.
+           *
+           * ⛔ `aria-hidden="true"` — bu BEZAK; faktni mavjud
+           *    `collect.written` toasti va sr-only status aytadi.
+           *
+           * ⚠ HALOLLIK IZOHI: jonli oqimda 6-qadam (M-9) javob kelgan
+           *   flush'da `stall` ni nolga tushiradi va bu tugma o'sha zahoti
+           *   unmount bo'ladi — check to'liq 250ms ni faqat tugma mounted
+           *   qolgan holatlarda o'ynaydi. Ulanish nuqtasi shartnoma
+           *   bo'yicha shu yerda (§8.1 jadvali) va 6-qadam TEGILMAYDI.
+           *
+           * Chizish mexanikasi `globals.css::.motion-check-draw` da
+           * (stroke-dasharray 30, offset 30→0, var(--motion-base)) —
+           * davomiylik komponentda TAKRORLANMAYDI (G-motion-3(b,c)).
+           * Reduced-motion'da global blok chizishni 0.01ms ga tushiradi —
+           * check DARHOL to'liq ko'rinadi (§8.4).
+           */
+          <svg
+            aria-hidden="true"
+            className="size-4"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <path
+              className="motion-check-draw"
+              d="M4.5 12.5 9.5 17.5 19.5 6.5"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2.5"
+            />
+          </svg>
         ) : null}
         {t("collect.confirm")}
       </Button>

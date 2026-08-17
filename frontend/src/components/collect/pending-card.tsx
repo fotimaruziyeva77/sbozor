@@ -1,5 +1,6 @@
 "use client";
 
+import type { Ref } from "react";
 import { CalendarDays, Clock, PiggyBank, Wrench } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 
@@ -121,6 +122,15 @@ export type PendingCardProps = {
   onCollectDebt: (amount: number) => void;
   /** ⛔ IXTIYORIY: berilmasa `[Summani o'zgartirish]` UMUMAN chizilmaydi. */
   onRequestOverride?: () => void;
+  /**
+   * 4-qadam FLIP MANBAI (09-04): «Kutilayotgan patta» summa elementi.
+   *
+   * ⚠ Prop kontrakti shu bitta ixtiyoriy ref bilan KENGAYDI (sabab
+   *   SUMMARY'da): uchish manbai shu komponent ICHIDA yashaydi, sessiya
+   *   esa unga DOM so'rovisiz yetishi kerak. Berilmasa hech nima
+   *   o'zgarmaydi — xulqqa tegmaydigan sof ilgak.
+   */
+  amountRef?: Ref<HTMLParagraphElement>;
 };
 
 export function PendingCard({
@@ -132,6 +142,7 @@ export function PendingCard({
   chosenAmount,
   onCollectDebt,
   onRequestOverride,
+  amountRef,
 }: PendingCardProps) {
   const t = useTranslations();
   const format = useFormatter();
@@ -143,7 +154,29 @@ export function PendingCard({
     `${format.number(value)} ${t("collect.amountUnit")}`;
 
   return (
-    <Card className="border-l-4 border-l-warning">
+    <Card className="relative border-l-4 border-l-warning">
+      {/*
+        * --- 3-QADAM (09-UI-SPEC §8.1): YASHIL HALQA PULSI — 300ms --------
+        *
+        * ⛔ BIR MARTA: `.motion-ring-pulse` CSS animatsiyasi element DOM'ga
+        *    QO'SHILGANDA o'ynaydi (`both` — oxirida opacity 0) va qayta
+        *    render uni qayta boshlamaydi. Cheksiz pulsatsiya YO'Q (§4.4).
+        *
+        * ⚠ «Muvaffaqiyat lahzasi» BU KOMPONENT UCHUN — server proyeksiyani
+        *   tasdiqlagan payt (`matched` false→true, ya'ni shu mount).
+        *   To'lov muvaffaqiyati lahzasida esa 6-qadam (M-9) kartani AYNAN
+        *   o'sha flush'da unmount qiladi — u lahzani bu daraxt hech qachon
+        *   chizmaydi; sabab SUMMARY'da, mavjud kontrakt (M-9) yutdi.
+        *
+        * ⛔ `aria-hidden` + `pointer-events-none` — halqa bezak, bosishni
+        *    yutmaydi (T-09-05 bilan bir sinf).
+        */}
+      {matched ? (
+        <span
+          aria-hidden="true"
+          className="motion-ring-pulse pointer-events-none absolute -inset-0.5 rounded-lg border-2 border-success"
+        />
+      ) : null}
       {/* --- 1 va 2-kanal: lenta + ikonka ------------------------------- */}
       <div className="flex items-center gap-2 rounded-t-md bg-warning/20 px-5 py-3">
         <Clock aria-hidden="true" className="size-4 shrink-0 text-text" />
@@ -180,10 +213,17 @@ export function PendingCard({
            */
           <div aria-busy="true" role="status">
             <span className="sr-only">{t("common.loading")}</span>
-            <Skeleton className="h-9 w-40" />
+            {/*
+              * ⛔ G-motion-7(c) GEOMETRIYA JUFTLIGI: `h-11` (44px) —
+              *    `text-display` ning qator qutisi (40px × 1.1). `h-9`
+              *    qolganda skeleton kontentga almashganda karta 8px
+              *    sakrardi — CLS ning aynan sababi (09-RESEARCH Tuzoq 10).
+              */}
+            <Skeleton className="h-11 w-40" />
           </div>
         ) : (
           <PendingBody
+            amountRef={amountRef}
             chosenAmount={chosenAmount}
             money={money}
             onCollectDebt={onCollectDebt}
@@ -226,11 +266,13 @@ export function PendingCard({
 /* --- Summa bloki ----------------------------------------------------------- */
 
 function PendingBody({
+  amountRef,
   chosenAmount,
   money,
   onCollectDebt,
   pending,
 }: {
+  amountRef?: Ref<HTMLParagraphElement>;
   chosenAmount: number | null;
   money: (value: number) => string;
   onCollectDebt: (amount: number) => void;
@@ -265,12 +307,23 @@ function PendingBody({
 
       {payable === null ? null : (
         /*
-         * ⛔ DISPLAY ROLI — 24px + 600 + `font-mono` (§7.1, §7.2).
-         *    Beshinchi tipografiya roli QO'SHILMAYDI: 32px panjarada
-         *    bo'lsa ham yangi rol bo'lardi va keyingi fazada «katta
-         *    raqam» uslubiga aylanib ketardi.
+         * ⛔ DISPLAY-XL ROLI — 40px / 1.1 + 600 + `font-mono` (09-UI-SPEC
+         *    §7.1, L-9). Beshinchi tipografiya roli 09-fazada RASMAN
+         *    OCHILDI va u YOPIQ REYESTR bilan qulflangan — AYNAN IKKI joy:
+         *    (1) shu summa, (2) `headline-card` faqat `unit === "soum"`
+         *    shoxida. G-motion-7(b) buni ≤2 mahsulot fayli deb o'lchaydi.
+         *
+         * ⚠ IZOH 09-04 DA YANGILANDI: eski matn («24px…, beshinchi rol
+         *   QO'SHILMAYDI») 6-faza qarorini aytardi va 09-UI-SPEC §7.1
+         *   ostida ESKIRGAN edi — eskirgan izoh keyingi ijrochiga yolg'on
+         *   gapiradi. Satr balandligi `text-display` tokenining o'zidan
+         *   (`--text-display--line-height: 1.1`) — `leading-*` utilitasi
+         *   ORTIQCHA va yozilmaydi.
          */
-        <p className="font-mono text-2xl leading-tight font-semibold tracking-tight tabular-nums">
+        <p
+          className="font-mono text-display font-semibold tracking-tight tabular-nums"
+          ref={amountRef}
+        >
           <span className="sr-only">{t("collect.todayAmount")}: </span>
           {money(payable)}
         </p>
