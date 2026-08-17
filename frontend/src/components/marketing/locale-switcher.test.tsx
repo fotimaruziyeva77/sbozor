@@ -45,7 +45,7 @@ const NARROWED_MESSAGES = {
   landing: messages.landing,
 };
 
-function renderSwitcher(locale = "uz-Latn"): void {
+function renderSwitcher(locale: "uz-Latn" | "uz-Cyrl" | "ru" = "uz-Latn"): void {
   render(
     <NextIntlClientProvider locale={locale} messages={NARROWED_MESSAGES}>
       <MarketingLocaleSwitcher />
