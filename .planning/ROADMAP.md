@@ -674,7 +674,7 @@ Plans:
 - [x] 09-07-PLAN.md — Faza darvozasi: `phase9-criteria.test.mjs`, byudjet qayta o'lchovi va HUMAN-UAT (W5)
 
 **UI hint**: yes
-**Note**: Faza belgisi (`- [ ] **Phase 9: ...**`) ijro tugagach ham O'ZGARTIRILMAYDI — fazani yopish
+**Note**: Faza belgisi (`- [x] **Phase 9: ...**`) ijro tugagach ham O'ZGARTIRILMAYDI — fazani yopish (completed 2026-08-17)
 qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-fazalarda aynan shunday saqlangan.
 
 ### Phase 10: Landing — sbozor.uz
