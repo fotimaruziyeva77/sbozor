@@ -61,9 +61,19 @@ export function Field({
        * `text-danger-text` — `--color-danger` matn sifatida tint fonda
        * o'lchangan 3.97:1 beradi (WCAG 1.4.3 buzilishi). Rang YAGONA
        * signal emas: yonida `aria-invalid` va matnning o'zi turadi.
+       *
+       * `.motion-shake` (09-UI-SPEC §12.7) — xato PARAGRAFI 2px shake
+       * (200ms, bir marta, `globals.css` reyestridan). Karta emas, paragraf:
+       * login kartasi shake QILMAYDI (§17.2 — «ayblov» hissi). Xato paydo
+       * bo'lganda `<p>` yangidan mount bo'ladi — animatsiya shu lahzada bir
+       * marta o'ynaydi. Reduced-motion'da global blok 0.01ms ga tushiradi —
+       * faqat matn qoladi. `FieldProps` kontrakti O'ZGARMAGAN.
        */}
       {error ? (
-        <p className="text-sm text-danger-text" id={`${id}-error`}>
+        <p
+          className={cn("text-sm text-danger-text", "motion-shake")}
+          id={`${id}-error`}
+        >
           {error}
         </p>
       ) : null}

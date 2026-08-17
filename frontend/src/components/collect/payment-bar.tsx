@@ -290,7 +290,12 @@ export function PaymentBar({
         onClick={submit}
         onKeyDown={onConfirmKeyDown}
       >
-        {busy ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+        {busy ? (
+          <Loader2
+            aria-hidden="true"
+            className="animate-spin motion-reduce:animate-none"
+          />
+        ) : null}
         {t("collect.confirm")}
       </Button>
 

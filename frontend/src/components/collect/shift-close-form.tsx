@@ -277,7 +277,12 @@ export function ShiftCloseForm({ shiftId, onReopen }: ShiftCloseFormProps) {
         className="min-h-14 w-full"
         onClick={requestConfirm}
       >
-        {busy ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+        {busy ? (
+          <Loader2
+            aria-hidden="true"
+            className="animate-spin motion-reduce:animate-none"
+          />
+        ) : null}
         {t("common.close")}
       </Button>
 

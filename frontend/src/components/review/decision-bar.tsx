@@ -147,7 +147,10 @@ export function DecisionBar({
             variant="secondary"
           >
             {pendingAnswer === answer ? (
-              <Loader2 aria-hidden="true" className="animate-spin" />
+              <Loader2
+                aria-hidden="true"
+                className="animate-spin motion-reduce:animate-none"
+              />
             ) : locked ? (
               <Lock aria-hidden="true" />
             ) : (
