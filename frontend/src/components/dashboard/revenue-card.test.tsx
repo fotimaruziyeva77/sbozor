@@ -187,9 +187,16 @@ describe("RevenueCard — sof SVG sparkline", () => {
     routeRevenue(revenuePayload(4_550_000));
     const { container } = renderCard();
 
-    /* Matnli yig'indi — `total_collected_soum` + birlik (rang yolg'iz emas). */
-    await screen.findByText(fmt(4_550_000));
-    expect(screen.getByText(messages.reports.amountUnit)).toBeInTheDocument();
+    /*
+     * Matnli yig'indi — `total_collected_soum` + birlik (rang yolg'iz emas).
+     * ⚠ `findByText(formatlangan son)` ISHLAMAYDI: `Intl` ming ajratgichi
+     *   UZILMAS BO'SHLIQ, TL normalizatori esa uni oddiy bo'shliqqa
+     *   aylantiradi (headline testida O'LCHANGAN) — xom `textContent`.
+     */
+    await waitFor(() => {
+      expect(container.textContent).toContain(fmt(4_550_000));
+    });
+    expect(container.textContent).toContain(messages.reports.amountUnit);
 
     const svg = container.querySelector('svg[role="img"]');
     expect(svg).not.toBeNull();
@@ -223,7 +230,9 @@ describe("RevenueCard — sof SVG sparkline", () => {
     routeRevenue(revenuePayload(4_550_000));
     const { container } = renderCard();
 
-    await screen.findByText(fmt(4_550_000));
+    await waitFor(() => {
+      expect(container.textContent).toContain(fmt(4_550_000));
+    });
 
     const entering = container.querySelector(".motion-enter");
     expect(entering).not.toBeNull();
@@ -239,7 +248,9 @@ describe("RevenueCard — real-vaqt yangilanishi [L-6]", () => {
     routeRevenue(revenuePayload(4_550_000));
     const { container } = renderCard();
 
-    await screen.findByText(fmt(4_550_000));
+    await waitFor(() => {
+      expect(container.textContent).toContain(fmt(4_550_000));
+    });
 
     /* Birinchi yuklanish — nafas YO'Q. */
     expect(container.querySelector(".motion-breath")).toBeNull();
@@ -255,7 +266,9 @@ describe("RevenueCard — real-vaqt yangilanishi [L-6]", () => {
     });
 
     /* Yakuniy qiymat sr-only tugunda darhol to'liq. */
-    await screen.findByText(fmt(4_600_000));
+    await waitFor(() => {
+      expect(container.textContent).toContain(fmt(4_600_000));
+    });
 
     /* Nafas BIR martalik: animatsiya tugashi bilan sinf olib tashlanadi. */
     const breathing = container.querySelector(".motion-breath") as HTMLElement;
