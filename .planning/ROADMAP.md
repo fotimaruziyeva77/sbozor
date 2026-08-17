@@ -619,7 +619,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
 ### Phase 9: UI-polish — motion qatlami
 
 **Goal:** Foydalanuvchi ilovada Apple-darajadagi jilo his qiladi: to'lov muvaffaqiyati Apple Pay xoreografiyasi bilan yakunlanadi, direktor paneli skeleton→count-up bilan jonlanadi, iliq fon (rang 2.0) va dark rejim token-almashtirish orqali ishlaydi, barcha harakat `prefers-reduced-motion`ni hurmat qiladi
-**Requirements**: TBD (plan bosqichida — manba: `sketch-findings-bozor` skill, `UI-UX-MASTERPLAN.md`)
+**Requirements**: ⛔ **Yangi REQ-ID YARATILMAYDI** (09-RESEARCH A7) — `.planning/REQUIREMENTS.md` ning ro'yxati ham, Traceability jadvali ham **TEGILMAYDI**. Bu faza mavjud talablarning **sifat qatlamini** yopadi va uning o'lchov birligi — quyidagi **SC#1…SC#5**. Rejalarning frontmatter'ida ular `SC-1`…`SC-5` deb yuritiladi. Sifat qatlamining meros egalari: **CASH-01** (SC#1 — kassir oqimining takrorlanuvchanligi), **RECON-06** (SC#2 — bosh ekran ko'rsatkichi), **FOUND-04** (SC#3 — uchala tildagi yangi copy). Sabab: `UX-01` kabi yangi ID ochish to'qqizta fazaning traceability tarixiga retroaktiv savol qo'shardi.
 **Depends on:** Phase 8
 **Success Criteria** (what must be TRUE):
 
@@ -630,11 +630,48 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
   5. Motion faqat `transform`/`opacity` bilan (60fps arzon Androidda), `motion` kutubxonasi +35KB gzip byudjetida, mavjud G-* darvozalar yashil qoladi
 
 **Chegaralar:** redesign EMAS — mavjud dizayn-tizim ustiga; konfetti FAQAT kunlik plan bajarilganda; masterplan §7 mikro-UX tuzatishlaridan 8-fazada yopilmagani shu fazaga kiradi
-**Plans:** 0 plans
+
+⚠ **Chegaralarning rejalashtirishdagi holati (2026-08-17):**
+1. **Konfetti** — 09-UI-SPEC §9 da shartnoma sifatida **to'liq yozilgan, LEKIN bu fazada QURILMAYDI**.
+   Sabab mexanik: tetikning haqiqat manbai (`daily_plan`/`target`) kodbazada UMUMAN yo'q va
+   `paymentResponseSchema` — `z.strictObject`, ya'ni `market_day_cleared` maydoni **ikki tomonlama,
+   kelishilgan** o'zgarish (backend fazasining ishi). Klientdagi har qanday hosila esa ko'r deklaratsiya
+   darvozasini buzadi. Band `deferred-items.md` da sabab va kelajakdagi ijro yo'li bilan yozilgan.
+2. **Masterplan §7 mikro-UX** — 09-UI-SPEC §13 oltala bandning holatini O'LCHADI: uchtasi allaqachon
+   YOPILGAN (sana utili, pul utili, bozor konteksti), ikkitasi ataylab KENGAYTIRILMAYDI (nisbiy vaqt,
+   2-ustunli grid — §10.1 ikki karta bilan qisman), bittasi qamrovdan tashqarida (copy auditi).
+   ⛔ Ya'ni 9-fazaga tushadigan **yangi mikro-UX bandi YO'Q** — bu topilma va u bo'sh to'lqin ochilishining
+   oldini oladi.
+
+**Plans:** 7 plans in 5 waves
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 9 to break down)
+**Wave 1** *(langar — uchala CSS darvozasi bitta faylni o'qiydi)*
+
+- [ ] 09-01-PLAN.md — SPEC nomuvofiqliklarini rostlash, kontrast kalkulyatori (G-motion-5) va `globals.css` ning to'liq token/motion/tema qatlami (W1)
+
+**Wave 2** *(parallel — fayl to'plamlari kesishmaydi)*
+
+- [ ] 09-02-PLAN.md — `ui/` primitivlari jilosi, beshala `Loader2` ning reduced-motion juftligi va G-motion-1/G-motion-3 (W2)
+- [ ] 09-03-PLAN.md — Tema qatlami: `lib/theme.ts`, FOUC'siz `<head>` skripti, `ThemeToggle`, 11 copy kaliti va G-motion-4 (W2)
+
+**Wave 3** *(parallel — Y-1 va Y-2 mustaqil)*
+
+- [ ] 09-04-PLAN.md — Y-1 kassir vau-oqimi: 1–5-qadam, bloklamaydigan ulanish va G-motion-2 (W3)
+- [ ] 09-05-PLAN.md — Y-2 direktor jonlanishi: count-up, sparkline, donut va G-motion-6 ning ikki qatlamli huquq darvozasi (W3)
+
+**Wave 4**
+
+- [ ] 09-06-PLAN.md — Qolgan jilo (til almashtirgich, jadval hover) va G-motion-7 (CLS + Display-XL) (W4)
+
+**Wave 5**
+
+- [ ] 09-07-PLAN.md — Faza darvozasi: `phase9-criteria.test.mjs`, byudjet qayta o'lchovi va HUMAN-UAT (W5)
+
+**UI hint**: yes
+**Note**: Faza belgisi (`- [ ] **Phase 9: ...**`) ijro tugagach ham O'ZGARTIRILMAYDI — fazani yopish
+qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-fazalarda aynan shunday saqlangan.
 
 ### Phase 10: Landing — sbozor.uz
 
