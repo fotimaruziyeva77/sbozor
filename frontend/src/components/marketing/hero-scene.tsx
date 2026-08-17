@@ -74,6 +74,13 @@ const GRID_COLUMNS = 6;
  * oldin 5 katak yashirinib ko'rinadigan o'rni 11 bo'ladi — §5.8 jadvali).
  */
 const UNPAID_STALL_INDEX = 16;
+/** Katak yorlig'i: 16 → «C-5» (qator harfi + ustun raqami, dizayn v2). */
+const ROW_LETTERS = ["A", "B", "C", "D", "E"] as const;
+function stallLabel(index: number): string {
+  return `${ROW_LETTERS[Math.floor(index / GRID_COLUMNS)]}-${(index % GRID_COLUMNS) + 1}`;
+}
+/** Hikoyaning qahramoni — matnda ham, kartada ham AYNI katak nomi. */
+const UNPAID_STALL_LABEL = stallLabel(UNPAID_STALL_INDEX);
 
 /** Yakuniy kadr tushumi — sketch 003-B raqami, namunaviy belgi ostida. */
 const FINAL_REVENUE_SOUM = 2_306_000;
@@ -448,17 +455,33 @@ export function HeroScene() {
       ref={sceneNodeRef}
       role="group"
     >
-      {/* ⛔ Namunaviy belgi — HAR fazada, shartli render YO'Q (G-land-4(a)). */}
-      <p aria-hidden="true" className="text-xs text-text-muted">
-        <span>ⓘ </span>
-        {t("scene.sampleBadge")}
-      </p>
+      {/* ⛔ Namunaviy belgi — HAR fazada, shartli render YO'Q (G-land-4(a)).
+          Dizayn v2: chapda tanacha-belgi, o'ngda bozor yorlig'i — bitta qator. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p
+          aria-hidden="true"
+          className="rounded-full border border-border bg-surface-muted px-2.5 py-1 text-xs font-semibold text-text-muted"
+        >
+          <span>ⓘ </span>
+          {t("scene.sampleBadge")}
+        </p>
+        <p aria-hidden="true" className="text-xs text-text-muted">
+          {t("scene.marketLabel")}
+        </p>
+      </div>
       {/* role="group" + faqat vizual qismlar aria-hidden (v2: nuqtalar
           HAQIQIY tugmalar bo'lgani uchun img-naqsh yaroqsiz bo'lib qoldi). */}
       <div className="mt-2 flex flex-col gap-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs text-text-muted">
-          <span>{t("scene.marketLabel")}</span>
-          <span>
+        {/* Faza yorlig'i chapda, tushum o'ngda — dizayn v2 ning bir qatori.
+            ⛔ aria-live YO'Q (§15.2). min-h yorliq almashganda sakratmaydi. */}
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <p
+            className="min-h-5 text-sm font-semibold text-accent-text"
+            data-testid="hero-scene-phase"
+          >
+            {t(`scene.phase${scene.phase}`)}
+          </p>
+          <span className="text-xs text-text-muted">
             {t("scene.revenueLabel")}
             {" · "}
             <span
@@ -470,13 +493,10 @@ export function HeroScene() {
             </span>
           </span>
         </div>
-        {/* Faza yorlig'i — sahnaning MATNLI hikoyasi, har tilda almashadi.
-            ⛔ aria-live YO'Q (§15.2). min-h yorliq almashganda sakratmaydi. */}
-        <p
-          className="min-h-5 text-sm font-semibold text-text"
-          data-testid="hero-scene-phase"
-        >
-          {t(`scene.phase${scene.phase}`)}
+        {/* Faza IZOHI — sahnaning nima ko'rsatayotganini SO'Z bilan aytadi
+            (dizayn v2 `stageHint`). min-h yorliq almashganda sakratmaydi. */}
+        <p className="min-h-9 text-xs leading-relaxed text-text-muted">
+          {t(`scene.hint${scene.phase}`, { stall: UNPAID_STALL_LABEL })}
         </p>
         <div aria-hidden="true" className="landing-sweep-frame relative">
           <div
@@ -488,7 +508,8 @@ export function HeroScene() {
               return (
                 <span
                   className={cn(
-                    "aspect-square rounded-md border border-border bg-surface-muted",
+                    "relative flex aspect-square items-center justify-center",
+                    "rounded-md border border-border bg-surface-muted",
                     "transition duration-(--motion-base) ease-(--ease-out)",
                     scene.stallsOn ? "scale-100 opacity-100" : "scale-85 opacity-0",
                     state === "paid" && "border-success bg-success/20",
@@ -501,7 +522,39 @@ export function HeroScene() {
                   data-state={state}
                   key={index}
                   style={{ transitionDelay: `${stallTransitionDelayMs(index)}ms` }}
-                />
+                >
+                  {/* Katak nomi — xarita «rasta ro'yxati» ekanini KO'RSATADI;
+                      shusiz sahna abstrakt kataklar to'plamiga o'xshaydi. */}
+                  <span
+                    className={cn(
+                      "landing-cell-id absolute top-1 left-1.5 font-semibold",
+                      "transition-colors duration-(--motion-base)",
+                      state === "unpaid"
+                        ? "text-warning-text"
+                        : state === "paid"
+                          ? "text-success-text"
+                          : "text-text-muted",
+                    )}
+                    data-numeric
+                  >
+                    {stallLabel(index)}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-xs font-bold transition duration-(--motion-base)",
+                      state === "unpaid"
+                        ? "scale-100 text-warning-text opacity-100"
+                        : state === "paid"
+                          ? "scale-100 text-success-text opacity-100"
+                          : "scale-50 opacity-0",
+                    )}
+                    style={{
+                      transitionDelay: `${stallTransitionDelayMs(index)}ms`,
+                    }}
+                  >
+                    {state === "unpaid" ? "!" : state === "paid" ? "✓" : ""}
+                  </span>
+                </span>
               );
             })}
           </div>
@@ -515,6 +568,35 @@ export function HeroScene() {
             )}
           />
         </div>
+        {/* Rang izohi — «yashil/sariq nimani bildiradi» savolini oldindan
+            yopadi; rang YAKKA signal bo'lib qolmaydi (§15.12). */}
+        <ul
+          aria-hidden="true"
+          className="flex flex-wrap gap-x-3.5 gap-y-1.5 text-xs text-text-muted"
+        >
+          {(
+            [
+              ["empty", "legendEmpty"],
+              ["paid", "legendPaid"],
+              ["unpaid", "legendUnpaid"],
+            ] as const
+          ).map(([state, key]) => (
+            <li className="inline-flex items-center gap-1.5" key={state}>
+              <span
+                className={cn(
+                  "size-3 rounded-[0.25rem] border",
+                  state === "paid"
+                    ? "border-success bg-success/20"
+                    : state === "unpaid"
+                      ? "border-warning bg-warning/20"
+                      : "border-border bg-surface-muted",
+                )}
+                data-state={state}
+              />
+              {t(`scene.${key}`)}
+            </li>
+          ))}
+        </ul>
         {/* v2 qatori: yorliq chapda, faza-nuqtalari o'ngda. Yorliq DOM'da
             doim — layout sakramaydi, faqat opacity/transform almashadi;
             amber rasta MATN bilan juft (§15.12). */}
@@ -533,7 +615,9 @@ export function HeroScene() {
             data-tag={tagVariant}
             data-testid="hero-scene-tag"
           >
-            {tagVariant === "paid" ? t("scene.tagPaid") : t("scene.tagUnpaid")}
+            {tagVariant === "paid"
+              ? t("scene.tagPaid")
+              : t("scene.tagUnpaid", { stall: UNPAID_STALL_LABEL })}
           </p>
           {/* v2 faza-nuqtalari — «bu mahsulotning o'zi» boshqaruvi.
               aria-hidden konteyner ICHIDA emas: bu haqiqiy tugmalar. */}

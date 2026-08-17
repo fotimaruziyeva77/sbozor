@@ -41,11 +41,13 @@ export async function Header() {
       >
         {t("nav.skipToContent")}
       </a>
+      {/* So'zbelgi — dizayn v2: bosh harf oq, qolgani aksent (S·BOZOR). */}
       <Link
-        className="inline-flex min-h-11 items-center text-lg font-semibold tracking-tight text-accent"
+        className="inline-flex min-h-11 items-center text-lg font-bold tracking-[0.08em] text-text"
         href="/"
       >
-        {tCommon("appName")}
+        {tCommon("appName").slice(0, 1)}
+        <span className="text-accent-text">{tCommon("appName").slice(1)}</span>
       </Link>
       <div className="flex items-center gap-3">
         <MarketingLocaleSwitcher />

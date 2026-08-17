@@ -440,6 +440,26 @@
   .landing-night > * {
     position: relative;
   }
+  /* Xarita katagining nomi (A-1…E-6) — shkaladan KICHIK, chunki u
+   * katak ichidagi belgi, matn emas. Utilita EMAS: ixtiyoriy o'lcham
+   * komponentda taqiqlangan (G-land-5(d)), qiymat shu yerda yashaydi. */
+  .landing-cell-id {
+    font-size: 0.5625rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* Audit natijasi — kartaning eng katta soni (dizayn v2 qiymati).
+   * ⛔ `--text-hero` EMAS: u hero sarlavhasiga qulflangan (G-land-5(a)). */
+  .landing-loss-total {
+    font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+    line-height: 1.1;
+  }
+
+  /* Header tasmasi — gradientning BOSHLANISH rangi (chok ko'rinmasin). */
+  .landing-night-top {
+    background: oklch(0.21 0.03 262);
+    color: var(--color-text);
+  }
 
   /* Kicker — seksiya ustidagi harf-oralig'li aksent yorliq (v2). */
   .landing-kicker {

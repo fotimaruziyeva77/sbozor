@@ -19,6 +19,7 @@ import { StepLine } from "@/components/marketing/step-line";
 import { TrustBlock } from "@/components/marketing/trust-block";
 import { Card, CardContent } from "@/components/ui/card";
 import { routing } from "@/i18n/routing";
+import { cn } from "@/lib/cn";
 
 /*
  * Landing yakuniy kompozitsiyasi (10-07, ROADMAP SC#1/#2/#4/#5) — sobiq
@@ -170,6 +171,7 @@ export default async function MarketingRootPage({
   const tCommon = await getTranslations("common");
   // O-06: aloqa kanali faqat env berilganda — yolg'on kanal ochilmaydi.
   const contactPhone = process.env.NEXT_PUBLIC_CONTACT_PHONE;
+  const contactTelegram = process.env.NEXT_PUBLIC_CONTACT_TELEGRAM;
 
   const organizationJsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
@@ -204,11 +206,17 @@ export default async function MarketingRootPage({
     <>
       <JsonLd data={organizationJsonLd} />
       <JsonLd data={faqJsonLd} />
-      <Header />
+      {/* ⛔ Header hero bilan BIR XIL tungi qamrovda (dizayn v2): oq tasma
+          indigo ustida qolsa birinchi ekran ikkiga bo'linib ko'rinardi.
+          `.landing-night-top` — gradientning BOSHLANISH rangi, shuning
+          uchun header/hero chegarasida chok ko'rinmaydi. */}
+      <div className="landing-night-top" data-theme="dark">
+        <Header />
+      </div>
       <main className="flex-1" id="kontent">
         {/* 1 · Hero — tungi bozor atmosferasi: dark token-qamrov + nur
             (yangi rang reyestri OCHILMAYDI — mavjud dark scope ishlatiladi) */}
-        <Section className="landing-night" data-theme="dark">
+        <Section className="landing-night pt-6" data-theme="dark">
           <Hero />
         </Section>
         {/* 2 · Og'riq — 3 karta (v2: MUAMMO kicker) */}
@@ -265,6 +273,52 @@ export default async function MarketingRootPage({
               </CardContent>
             </Card>
           </Reveal>
+          {/* v2: forma ostida TIRIK odam kanali — forma to'ldirishni
+              istamagan mijoz uchun. Telefon/Telegram `.env` dan; berilmasa
+              karta UMUMAN chizilmaydi (yolg'on kanal ochilmaydi — O-06). */}
+          {contactPhone || contactTelegram ? (
+            <Reveal delayIndex={1}>
+              <div className="mx-auto mt-7 flex w-full max-w-2xl flex-wrap items-center gap-5 rounded-2xl border border-border bg-surface-muted px-7 py-6">
+                <span
+                  aria-hidden="true"
+                  className="flex size-14 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-lg font-bold text-accent-text"
+                >
+                  {tCommon("appName").slice(0, 2)}
+                </span>
+                <div className="min-w-[12.5rem] flex-1">
+                  <p className="text-xs text-text-muted">
+                    {t("contact.label")}
+                  </p>
+                  {contactPhone ? (
+                    <a
+                      className="mt-1 inline-flex text-sm font-semibold text-text hover:text-accent-text"
+                      data-numeric
+                      href={`tel:${contactPhone}`}
+                    >
+                      {contactPhone}
+                    </a>
+                  ) : null}
+                  <p className="mt-0.5 text-xs text-text-muted">
+                    {t("contact.hours")}
+                  </p>
+                </div>
+                {contactTelegram ? (
+                  <a
+                    className={cn(
+                      "inline-flex min-h-11 items-center justify-center rounded-lg",
+                      "border border-border px-5 text-sm font-semibold text-text",
+                      "hover:border-accent hover:text-accent-text",
+                    )}
+                    href={contactTelegram}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {t("contact.telegram")}
+                  </a>
+                ) : null}
+              </div>
+            </Reveal>
+          ) : null}
         </Section>
       </main>
       <Footer />

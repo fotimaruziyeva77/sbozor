@@ -1551,14 +1551,22 @@
       "phase3": "Nomuvofiqlik topildi",
       "phase4": "Kassir to'lovni qayd etdi",
       "phase5": "Kunlik hisobot",
-      "tagUnpaid": "Band, lekin to'lovsiz",
+      "tagUnpaid": "Band, lekin to‘lovsiz — {stall}",
       "tagPaid": "To'landi — 8 000 so'm",
       "reportTitle": "Kunlik hisobot",
       "reportOccupied": "Band rastalar",
       "reportPaid": "To'langan",
       "reportUnpaid": "Band, lekin to'lovsiz",
       "a11yDescription": "Namunaviy bozor xaritasi: 30 rastadan 29 tasi to'langan, bittasi band bo'lib to'lovsiz qolgan; kunlik hisobotda u fosh bo'ladi.",
-      "dotsHint": "Fazalarni nuqtalar orqali o'zingiz boshqaring — bu mahsulotning o'zi"
+      "dotsHint": "Fazalarni nuqtalar orqali o'zingiz boshqaring — bu mahsulotning o'zi",
+      "legendEmpty": "Rasta (hali tekshirilmagan)",
+      "legendPaid": "✓ Patta to‘langan",
+      "legendUnpaid": "! Band, lekin to‘lovsiz",
+      "hint1": "Bozoringizning rasta xaritasi tuzilmoqda — har katak bitta rasta.",
+      "hint2": "Mavjud kameralar kadr oladi va har rasta band yoki bo‘shligini tekshiradi.",
+      "hint3": "{stall} rastasi band, lekin bugun patta to‘lanmagan — tizim uni sariq bilan belgiladi.",
+      "hint4": "Kassir {stall} uchun to‘lovni qayd etdi — rasta yashilga o‘tdi, tushum oshdi.",
+      "hint5": "Kun oxirida hisobot: nechta rasta band, nechtasi to‘langan, nechtasi to‘lovsiz."
     },
     "pain": {
       "title": "Bozorda pul qayerda yo'qoladi?",
@@ -1725,15 +1733,63 @@
       }
     },
     "calc": {
-      "kicker": "Hisob-kitob",
-      "title": "Sizning bozoringizda bu qancha turadi?",
-      "intro": "Rastalar sonini kiriting — kuniga har yigirma rastadan atigi bittasi to'lovsiz qolsa, oyiga qancha yo'qotilishini ko'ring. Bu sizning taxminingiz asosidagi hisob, bizning va'damiz emas.",
-      "sliderLabel": "Bozoringizdagi rastalar soni:",
-      "dailyLabel": "Kuniga to'lovsiz qolishi mumkin",
+      "kicker": "60 soniyalik audit",
+      "title": "Bozoringizda nazoratsiz qolayotgan pulni hisoblab ko‘ring",
+      "intro": "4 savol — 60 soniya. Natija: bozoringiz uchun taxminiy yo‘qotish va nimadan boshlash kerakligi. Bu sizning javoblaringiz asosidagi hisob, bizning va‘damiz emas.",
+      "counter": "{step}-savol / 4",
+      "counterDone": "Natija tayyor",
+      "next": "Keyingi savol →",
+      "back": "← Orqaga",
+      "q1": {
+        "title": "Bozoringizda nechta rasta bor?",
+        "unit": "rasta"
+      },
+      "q2": {
+        "title": "Bir kunlik patta narxi qancha?",
+        "fee5000": "5 000 so‘m",
+        "fee8000": "8 000 so‘m",
+        "fee12000": "12 000 so‘m",
+        "fee20000": "20 000 so‘m yoki ko‘proq"
+      },
+      "q3": {
+        "title": "Bozorda kameralar bormi?",
+        "nvr": "Ha — NVR bilan ishlaydi",
+        "old": "Ha, lekin eski kameralar",
+        "none": "Yo‘q, hozircha kamera yo‘q"
+      },
+      "q4": {
+        "title": "Patta hisobi hozir qanday yuritiladi?",
+        "paper": "Qog‘oz daftarda",
+        "excel": "Excel jadvalida",
+        "system": "Boshqa tizim orqali"
+      },
+      "done": {
+        "title": "Audit tugadi",
+        "body": "Natija o‘ngda. Xohlasangiz shu hisobni bozoringiz nomi bilan rasmiy xat sifatida yuboramiz — direktor yoki hokimlikka ko‘rsatish uchun.",
+        "restart": "Javoblarni o‘zgartirish",
+        "cta": "Shu hisobni rasmiy xat sifatida olish"
+      },
+      "dailyLabel": "Kuniga to‘lovsiz qolishi mumkin",
       "dailyUnit": "rasta",
-      "monthlyLabel": "Oyiga taxminiy yo'qotish",
-      "currency": "so'm",
-      "assumptions": "Taxmin: patta 8 000 so'm · 26 ish kuni · har 20 rastadan biri to'lovsiz. SBOZOR aynan shu yo'qotishni rasm-dalil bilan ko'rsatadi."
+      "yearLabel": "Yiliga taxminiy yo‘qotish",
+      "monthlyInline": "Oyiga ~{amount} so‘m",
+      "currency": "so‘m",
+      "method": "Hisob usuli: rastalar × har 20 rastadan biri to‘lovsiz × patta narxi × 26 ish kuni. Real ko‘rsatkich pilotda o‘lchanadi.",
+      "findings": {
+        "paper": "Qog‘oz daftar nomuvofiqlikka dalil qoldirmaydi — raqamlashtirish shu yerdan boshlanadi.",
+        "excel": "Excel to‘lovni yozadi, lekin rasta band bo‘lganini ko‘rsatmaydi — solishtiruv uchun kamera kerak.",
+        "system": "Tizimingiz bor — SBOZOR unga kamera dalilini qo‘shadi, almashtirmaydi.",
+        "camNvr": "NVR bor — yangi uskuna kerak emas, ulanish login-parol bilan.",
+        "camOld": "Eski kameralar ham ko‘p hollarda yetarli — demo paytida modelni tekshiramiz.",
+        "camNone": "Kamera yo‘q — birinchi qadam asosiy rasta zonalariga kamera o‘rnatish rejasi.",
+        "large": "{stalls} rasta — nazoratchi ko‘zi bilan qamrab bo‘lmaydigan hajm.",
+        "small": "Bu hajm pilot uchun qulay — sozlash bir necha soat."
+      }
+    },
+    "contact": {
+      "label": "Loyiha rahbari — to‘g‘ridan-to‘g‘ri bog‘lanish",
+      "hours": "Ish kunlari 9:00–18:00",
+      "telegram": "Telegram orqali yozish"
     }
   }
 }

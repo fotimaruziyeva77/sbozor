@@ -18,11 +18,19 @@ import { Link } from "@/i18n/navigation";
  */
 export async function Footer() {
   const t = await getTranslations("landing");
+  const tCommon = await getTranslations("common");
   const phone = process.env.NEXT_PUBLIC_CONTACT_PHONE;
 
   return (
     <footer className="landing-night" data-theme="dark">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-8 text-sm text-text-muted sm:flex-row sm:items-center sm:justify-between">
+        {/* So'zbelgi — header bilan bir xil shakl (dizayn v2 footer). */}
+        <p className="text-sm font-bold tracking-[0.08em] text-text">
+          {tCommon("appName").slice(0, 1)}
+          <span className="text-accent-text">
+            {tCommon("appName").slice(1)}
+          </span>
+        </p>
         <p>
           {t("footer.copyright", {
             year: String(new Date().getFullYear()),

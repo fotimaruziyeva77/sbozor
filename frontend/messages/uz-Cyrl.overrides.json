@@ -29,7 +29,6 @@
     "filtrni": "фильтрни",
     "filtrdan": "фильтрдан",
     "filtrini": "фильтрини",
-
     "NVR": "NVR",
     "NTP": "NTP",
     "RTSP": "RTSP",
@@ -51,12 +50,11 @@
     "Web": "Веб",
     "autentifikatsiya": "аутентификация",
     "autentifikatsiyasini": "аутентификациясини",
-
     "IR": "IR",
     "AI": "AI",
     "Telegram": "Telegram",
-
     "kvitansiyalar": "квитанциялар",
-    "kvitansiya": "квитанция"
+    "kvitansiya": "квитанция",
+    "nazoratsiz": "назоратсиз"
   }
 }

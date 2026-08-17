@@ -1,6 +1,5 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import { useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
@@ -44,22 +43,30 @@ const LOCALES = ["uz-Latn", "uz-Cyrl", "ru"] as const;
 
 type MarketingLocale = (typeof LOCALES)[number];
 
-/** Endonimlar: til nomi har doim O'Z tilida (01-08 qarori, meros). */
+/** Endonimlar: til nomi har doim O'Z tilida (01-08 qarori, meros).
+ *  ⛔ Bu — ko'rinadigan matn EMAS, KIRISH NOMI (aria-label): dizayn v2
+ *  boshda ixcham kod ko'rsatadi, ekran o'quvchi esa to'liq nomni eshitadi. */
 const LOCALE_LABELS: Readonly<Record<MarketingLocale, string>> = {
   "uz-Latn": "O'zbekcha",
   "uz-Cyrl": "Ўзбекча",
   ru: "Русский",
 };
 
+/** Ko'rinadigan ixcham kod — har biri O'Z yozuvida (dizayn v2). */
+const LOCALE_CODES: Readonly<Record<MarketingLocale, string>> = {
+  "uz-Latn": "UZ",
+  "uz-Cyrl": "ЎЗ",
+  ru: "RU",
+};
+
 /*
- * Sirg'anuvchi faol indikator — `shell/` variantidan AYNAN ko'chirilgan naqsh
- * (09-UI-SPEC §12.9): uchala tugma bir xil `w-20`, indikator `translateX`
- * bilan siljiydi, o'lchov (`getBoundingClientRect`) ISHLATILMAYDI.
- * `width`/`left` animatsiya qilinmaydi (G-motion-3(a) ruhi).
+ * ⛔ Sirg'anuvchi indikator OLIB TASHLANDI (dizayn v2): dizaynda chip
+ * shunchaki rang oladi (background-color o'tishi), tanacha siljimaydi —
+ * uchta tor kodda siljish harakati shovqin bo'lardi.
  */
 
-/** Tugma VA indikatorning umumiy kenglik sinfi — bitta haqiqat manbai. */
-const BUTTON_WIDTH_CLASS = "w-20";
+/** Uchala tugmaning umumiy kengligi — bitta haqiqat manbai. */
+const BUTTON_WIDTH_CLASS = "w-11";
 
 export function MarketingLocaleSwitcher() {
   const t = useTranslations("common");
@@ -78,59 +85,37 @@ export function MarketingLocaleSwitcher() {
     });
   }
 
-  /* Faol indeks — indikatorning yagona kirishi (`--idx`). */
-  const activeIndex = LOCALES.findIndex((code) => code === active);
-
   return (
     <div
       aria-label={t("languageLabel")}
       className="relative inline-flex items-center gap-1 rounded-md border border-border bg-surface p-1"
       role="group"
     >
-      {/*
-        * Indikator tugmalardan OLDIN chiziladi: absolut element bir xil
-        * stacking kontekstda keyingi `relative` tugmalar OSTIDA qoladi —
-        * matn kontrasti (`text-accent-fg` faol tugmada) buzilmaydi.
-        * `aria-hidden` + `pointer-events-none` — bu bezak, bosishni yutmaydi.
-        */}
-      {activeIndex >= 0 ? (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute inset-y-1 left-1 rounded-sm bg-accent",
-            "transition-transform",
-            BUTTON_WIDTH_CLASS,
-          )}
-          data-active-index={activeIndex}
-          style={
-            {
-              "--idx": String(activeIndex),
-              transform: "translateX(calc(var(--idx) * (100% + 0.25rem)))",
-            } as CSSProperties
-          }
-        />
-      ) : null}
       {LOCALES.map((code) => {
         const isActive = code === active;
         return (
           <button
             aria-current={isActive ? "true" : undefined}
+            aria-label={LOCALE_LABELS[code]}
             className={cn(
               "relative rounded-sm px-2 py-1 text-xs font-semibold transition-colors",
               "disabled:pointer-events-none disabled:opacity-50",
               BUTTON_WIDTH_CLASS,
-              /* Faol fon INDIKATORDA — tugma faqat matn rangini oladi. */
+              /* Faol chip — dizayn v2: OQ tanacha, quyuq matn. Ichki
+                 `data-theme="light"` tokenlarni buradi, shuning uchun tungi
+                 qamrovda ham matn quyuq qoladi (yangi rang qo'shilmaydi). */
               isActive
-                ? "text-accent-fg"
-                : "text-text-muted hover:bg-surface-muted hover:text-text",
+                ? "bg-surface text-text"
+                : "text-text-muted hover:bg-surface/10 hover:text-text",
             )}
+            data-theme={isActive ? "light" : undefined}
             disabled={isPending}
             key={code}
             lang={code}
             onClick={() => change(code)}
             type="button"
           >
-            {LOCALE_LABELS[code]}
+            {LOCALE_CODES[code]}
           </button>
         );
       })}
