@@ -303,12 +303,14 @@ if (process.argv.includes("--print")) {
  * `--print` chiqishidan QAYTA generatsiya qilinadi (Tuzoq 2).
  */
 const SELF_CHECK = [
-  ["accent-text", "accent", 1.28, "M-19 NUQSON — bugun renderda turgan juftlik"],
+  ["accent-text", "accent", 1.28, "M-19 NUQSON — (d) qulflagan juftlik; tokenlar o'zgarmagan"],
   ["accent-fg", "accent", 4.72, "M-19 tuzatishi — to'g'ri token"],
-  ["text-muted", "surface-muted", 4.81, "M-16"],
-  ["border-ui", "surface", 3.64, "M-16"],
-  ["border-ui", "bg", 3.49, "M-16"],
-  ["border-ui", "surface-muted", 3.32, "M-16"],
+  /* ⚠ Quyidagi ikkitasi 09-01 T3 da ILIQ BAZA uchun qayta generatsiya
+   * qilindi (M-17): sovuq bazada 4.81 va 3.32 edi. Manba — `--print`. */
+  ["text-muted", "surface-muted", 4.84, "M-16 -> M-17 (iliq surface-muted)"],
+  ["border-ui", "surface", 3.64, "M-16 (surface o'zgarmagan)"],
+  ["border-ui", "bg", 3.49, "M-16 -> M-17 (iliq bg — nisbat aynan saqlanadi)"],
+  ["border-ui", "surface-muted", 3.34, "M-16 -> M-17 (iliq surface-muted)"],
 ];
 
 const TOLERANCE = 0.01 + 1e-9;
@@ -506,5 +508,157 @@ test("G-motion-5(d): `bg-accent` + `text-accent-text` bitta satr literalida — 
       "\n  Bu juftlik O'LCHANGAN: 1.28:1 — matn deyarli ko'rinmaydi (M-19).\n" +
       "  To'g'ri token — `text-accent-fg` (oq, 4.72:1). `text-accent-text` FAQAT\n" +
       "  tint (`bg-accent/10`) ustida yashaydi.",
+  );
+});
+
+/* -------------------------------------------------------------------------- */
+/* (b) E'LON QILINGAN JUFTLIKLAR — UCHALA TEMADA CHEGARADAN O'TADI            */
+/* -------------------------------------------------------------------------- */
+
+test("G-motion-5(b): tema reyestri TO'LIQ — light · dark · sun", () => {
+  const { themes } = readThemes();
+  assert.deepEqual(
+    Object.keys(themes).sort(),
+    ["dark", "light", "sun"],
+    "`globals.css` da uchala tema scope'i bo'lishi shart — yo'q scope'ning " +
+      "tokenlari standartga tushib, jimgina noto'g'ri rang berardi (G-motion-4(c) sinfi)",
+  );
+});
+
+test("G-motion-5(b): >=12 juftlik × 3 tema — matn >=4.5:1, chegara >=3:1", () => {
+  const { themes } = readThemes();
+  const problems = [];
+  let measured = 0;
+
+  for (const [themeName, tokens] of Object.entries(themes)) {
+    for (const pair of PAIR_REGISTRY) {
+      const ratio = computePair(tokens, pair);
+      measured += 1;
+      if (ratio < pair.min) {
+        problems.push(`[${themeName}] ${pairId(pair)}: ${ratio.toFixed(2)} < ${pair.min}`);
+      }
+    }
+  }
+
+  assert.ok(
+    measured >= MIN_PAIRS * 3,
+    `atigi ${measured} ta o'lchov bajarildi (kutilgan: >=${MIN_PAIRS * 3} — ` +
+      ">=12 juftlik × 3 tema) — reyestr yoki tema to'plami toraygan",
+  );
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-motion-5(b) BUZILDI — juftlik(lar) chegaradan tushdi:\n  " +
+      problems.join("\n  ") +
+      "\n  ⛔ Chegara PASAYTIRILMAYDI va juftlik reyestrdan CHIQARILMAYDI —\n" +
+      "  TOKEN sozlanadi va sabab `globals.css` izohida yoziladi (09-01 T3\n" +
+      "  presedenti: dark accent-fg/success-text/warning-text).",
+  );
+});
+
+/* -------------------------------------------------------------------------- */
+/* (c) IZOHLAR — MASHINA O'QIYDIGAN DA'VO (±0.01)                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Kanonik da'vo grammatikasi (izoh ichida):
+ *   `[dark] fg/bg: N.NN:1` · `fg/bg@AA: N.NN:1`
+ * `[tema]` yo'q bo'lsa — light. `@AA` — bg tokenining 0.AA alfali tinti,
+ * ostki qatlam HAR DOIM o'sha temaning surface'i.
+ */
+const CLAIM_RE =
+  /(?:\[(dark|sun)\]\s+)?([a-z][a-z-]*)\/([a-z][a-z-]*)(?:@(\d+))?:\s*(\d+\.\d{2}):1/gu;
+const BARE_RATIO_RE = /\d+\.\d{2}:1/gu;
+
+/**
+ * Izohlardagi da'volar QUYI chegarasi. ⚠ Usiz barcha izoh o'chirilsa (c)
+ * bo'sh to'plam ustida abadiy yashil qolardi — izohlar bu loyihada
+ * hujjat emas, DA'VO (T-09-09).
+ */
+const MIN_CLAIMS = 4;
+
+function commentClaims(raw) {
+  const comments = [...raw.matchAll(/\/\*[\s\S]*?\*\//gu)].map((m) => m[0]);
+  const claims = [];
+  let bareCount = 0;
+  for (const comment of comments) {
+    bareCount += [...comment.matchAll(BARE_RATIO_RE)].length;
+    for (const m of comment.matchAll(CLAIM_RE)) {
+      claims.push({
+        theme: m[1] ?? "light",
+        fg: m[2],
+        bg: m[3],
+        alpha: m[4] === undefined ? undefined : Number(m[4]) / 100,
+        claimed: Number(m[5]),
+        text: m[0],
+      });
+    }
+  }
+  return { claims, bareCount };
+}
+
+test("(c) da'vo detektori sun'iy IJOBIY nazoratdan o'tadi", () => {
+  const probe = commentClaims(
+    "/* WCAG 1.4.3. accent-fg/accent: 4.72:1 */\n" +
+      "/* WCAG 1.4.3. [dark] warning-text/warning@20: 4.63:1 */",
+  );
+  assert.equal(probe.claims.length, 2);
+  assert.equal(probe.bareCount, 2);
+  assert.deepEqual(probe.claims[1], {
+    theme: "dark",
+    fg: "warning-text",
+    bg: "warning",
+    alpha: 0.2,
+    claimed: 4.63,
+    text: "[dark] warning-text/warning@20: 4.63:1",
+  });
+
+  /* Kanonik bo'lmagan da'vo — bareCount > claims: (c) buni qizartiradi. */
+  const loose = commentClaims("/* shunchaki 9.99:1 raqam */");
+  assert.equal(loose.claims.length, 0);
+  assert.equal(loose.bareCount, 1);
+});
+
+test("G-motion-5(c): izohlardagi HAR `N.NN:1` da'vosi hisoblangan qiymat bilan ±0.01 da teng", () => {
+  const { raw, themes } = readThemes();
+  const { claims, bareCount } = commentClaims(raw);
+
+  assert.ok(
+    claims.length >= MIN_CLAIMS,
+    `izohlarda atigi ${claims.length} ta kanonik da'vo bor (kutilgan: >=${MIN_CLAIMS}) — ` +
+      "izohlar o'chirilgan yoki kanonik shakldan chiqqan",
+  );
+
+  assert.equal(
+    bareCount,
+    claims.length,
+    `izohlarda ${bareCount - claims.length} ta KANONIK BO'LMAGAN \`N.NN:1\` soni bor — ` +
+      "mashina o'qiy olmaydigan da'vo tekshirilmaydigan da'vo; shakl: " +
+      "`[tema] fg/bg@AA: N.NN:1` (`--print` chiqishi)",
+  );
+
+  const problems = [];
+  for (const claim of claims) {
+    const tokens = themes[claim.theme];
+    if (tokens === undefined) {
+      problems.push(`«${claim.text}» — \`${claim.theme}\` temasi topilmadi`);
+      continue;
+    }
+    const actual = computePair(tokens, claim);
+    if (Math.abs(actual - claim.claimed) > TOLERANCE) {
+      problems.push(
+        `«${claim.text}» — da'vo ${claim.claimed}, hisob ${actual.toFixed(2)} (farq >0.01)`,
+      );
+    }
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    "⛔ G-motion-5(c) BUZILDI — izoh yolg'on gapiryapti:\n  " +
+      problems.join("\n  ") +
+      "\n  Izohdagi son KALKULYATORNING CHIQISHI bo'lishi shart: " +
+      "`node scripts/contrast.test.mjs --print` yugurtiring va qiymatni ko'chiring.",
   );
 });
