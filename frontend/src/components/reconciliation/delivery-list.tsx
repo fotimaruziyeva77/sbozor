@@ -424,7 +424,8 @@ function DeliveryRowView({
   const KindIcon = isNotificationKind(row.kind) ? KIND_ICON[row.kind] : null;
 
   return (
-    <tr className="border-b border-border last:border-b-0">
+    /* Qator hover foni (§12.8) — davomiylik `--default-transition-*` dan. */
+    <tr className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted">
       <td className="p-3">
         {/*
          * ⛔ NISBIY VAQT YO'Q (§3.5): «5 daqiqa oldin» taymersiz eskiradi.

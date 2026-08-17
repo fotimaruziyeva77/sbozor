@@ -203,7 +203,8 @@ function UnregisteredRow({
   row: ReportRow;
 }) {
   return (
-    <tr className="border-b border-border last:border-b-0">
+    /* Qator hover foni (§12.8) — davomiylik `--default-transition-*` dan. */
+    <tr className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted">
       <td className="p-3">{row.stall_code}</td>
       {/*
        * ⛔ ABSOLUT SANA, NISBIY VAQT EMAS: nizoda «2 kun oldin» ni

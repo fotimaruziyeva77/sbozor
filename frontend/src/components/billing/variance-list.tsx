@@ -121,8 +121,16 @@ export function VarianceList({ day }: { day: string }) {
               </tr>
             </thead>
             <tbody>
+              {/*
+                * Qator hover foni (§12.8). `VarianceCell` pilli o'z fonini
+                * USTIDA saqlaydi — hover bg uni bosib qolmaydi (u qator
+                * emas, inline element).
+                */}
               {rows.map((row) => (
-                <tr className="border-b border-border" key={row.id}>
+                <tr
+                  className="border-b border-border transition-colors hover:bg-surface-muted"
+                  key={row.id}
+                >
                   <td className="py-2 pr-3 font-mono text-xs tabular-nums">
                     {format.dateTime(new Date(row.opened_at), {
                       timeStyle: "short",
