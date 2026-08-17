@@ -694,7 +694,7 @@ qarori ⛔ **qayta tekshiruvniki** (`/gsd-verify-work`), ijrochi emas. 4–8-faz
   5. Lighthouse ≥95, LCP <1.5s (statik sahifada), SEO meta/OG/structured data to'liq
 
 **Chegaralar:** mavjud Next.js ichida `(marketing)` route-guruhi — alohida sayt EMAS; copy brief matnidan (yakuniy tahrir shu fazada, 3 tilda); maxfiylik siyosati sahifasi majburiy (CCTV shaxsiy ma'lumot)
-**Plans:** 2/8 plans executed
+**Plans:** 3/8 plans executed
 
 Plans:
 **Wave 1** *(parallel — fayl kesishuvi YO'Q)*
@@ -704,7 +704,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 10-03-PLAN.md — Anonim `LocaleSwitcher` (B-1/B-2), `AppProviders`/`AppGuard` ajratish, `[locale]/page.tsx` o'chirilishi va `(marketing)` qobig'i (LAND-01) (W2)
+- [x] 10-03-PLAN.md — Anonim `LocaleSwitcher` (B-1/B-2), `AppProviders`/`AppGuard` ajratish, `[locale]/page.tsx` o'chirilishi va `(marketing)` qobig'i (LAND-01) (W2)
 
 **Wave 3** *(parallel — blocked on Wave 2)*
 
