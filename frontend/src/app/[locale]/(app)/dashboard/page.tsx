@@ -4,6 +4,8 @@ import { ScrollText, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { MarketStatusCard } from "@/components/dashboard/market-status-card";
+import { OccupancyDonut } from "@/components/dashboard/occupancy-donut";
+import { RevenueCard } from "@/components/dashboard/revenue-card";
 import { HeadlineCard } from "@/components/headline/headline-card";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Link } from "@/i18n/navigation";
@@ -80,6 +82,32 @@ export default function DashboardPage() {
        *    klient buni takrorlay olmasligi kerak.
        */}
       <HeadlineCard marketId={principal?.marketId ?? null} />
+
+      {/*
+       * Y-2 IKKI KARTASI — `HeadlineCard` dan KEYIN, `MarketStatusCard`
+       * shartidan OLDIN (09-05; bosh ekranning mavjud tartibi o'zgarmaydi).
+       *
+       * ⛔⛔ HUQUQ AYNAN `report_view`, `market_manage` EMAS (O-03):
+       *    birinchisi `director` + `market_admin` da bor va kassirda YO'Q;
+       *    `market_manage` esa FAQAT `platform_admin` da. Ikkalasini
+       *    adashtirish yo kassirga tushumni sizdirardi, yo direktorni
+       *    yopardi — G-motion-6 ning butun maqsadi shuni oldini olish.
+       *    Yangi huquq QO'SHILMAYDI: ikkala endpoint ham serverda
+       *    `REPORT_VIEW` ostida [VERIFIED: occupancy.py:83,114,
+       *    reports.py:156].
+       *
+       * ⛔ SHART KOMPONENTDAN TASHQARIDA (G-motion-6(b,c)): huquqsiz
+       *    sessiyada SO'ROV HAM ketmaydi. Anti-naqsh — `hidden` sinfi
+       *    bilan yashirish: karta so'rovni BARIBIR yuborardi va bozorning
+       *    kunlik tushumi kassirning tarmoq panelida ko'rinardi — 6-faza
+       *    ko'r deklaratsiyasi bitta commitda qulardi (§0.2).
+       */}
+      {hasPermission(roles, "report_view") && principal?.marketId ? (
+        <>
+          <RevenueCard />
+          <OccupancyDonut />
+        </>
+      ) : null}
 
       {/*
        * BOZOR HOLATI KARTASI — `HeadlineCard` dan KEYIN, `SECTIONS` dan
