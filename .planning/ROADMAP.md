@@ -647,7 +647,7 @@ Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 �
    ⛔ Ya'ni 9-fazaga tushadigan **yangi mikro-UX bandi YO'Q** — bu topilma va u bo'sh to'lqin ochilishining
    oldini oladi.
 
-**Plans:** 6/7 plans executed
+**Plans:** 7/7 plans complete
 
 Plans:
 
@@ -671,7 +671,7 @@ Plans:
 
 **Wave 5**
 
-- [ ] 09-07-PLAN.md — Faza darvozasi: `phase9-criteria.test.mjs`, byudjet qayta o'lchovi va HUMAN-UAT (W5)
+- [x] 09-07-PLAN.md — Faza darvozasi: `phase9-criteria.test.mjs`, byudjet qayta o'lchovi va HUMAN-UAT (W5)
 
 **UI hint**: yes
 **Note**: Faza belgisi (`- [ ] **Phase 9: ...**`) ijro tugagach ham O'ZGARTIRILMAYDI — fazani yopish

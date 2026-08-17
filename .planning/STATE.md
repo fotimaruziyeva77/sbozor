@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 9 UI-SPEC approved
-last_updated: "2026-08-17T01:00:33.849Z"
-last_activity: 2026-08-17 -- Phase 09 execution started
+stopped_at: 09-07 bajarildi — faza ijrosi 7/7; HUMAN-UAT 5 band ochiq, verify kutilmoqda
+last_updated: "2026-08-17T08:01:23.912Z"
+last_activity: 2026-08-17
 progress:
   total_phases: 11
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 146
-  completed_plans: 139
-  percent: 73
+  completed_plans: 146
+  percent: 82
 ---
 
 # Project State
@@ -25,13 +25,51 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 
 ## Current Position
 
-Phase: 09 (ui-polish-motion-qatlami) — EXECUTING
-Plan: 1 of 7
+Phase: 09 (ui-polish-motion-qatlami) — IJRO TUGADI (7/7), verify kutilmoqda
+Plan: 7 of 7 (hammasi bajarildi)
 Total Plans in Phase: 7
-Status: Executing Phase 09
-Last activity: 2026-08-17 -- Phase 09 execution started
+Status: Awaiting verification (`/gsd-verify-work`)
+Last activity: 2026-08-17
 
-Progress: [██████████] 100% (20/20 reja -- 08-01...08-20)
+Progress: [██████████] 100% (7/7 reja — 09-01…09-07)
+
+✅ **9-FAZANING IJROSI TUGADI (7/7 reja).** `09-07` faza darvozasini yopdi:
+beshala ROADMAP mezoni `frontend/scripts/phase9-criteria.test.mjs` da
+**BITTA buyruqda** o'lchanadi (8 test: 5 mezon + META ROADMAP-parse +
+soxtalashtirish darvozasi + reyestr nazorati; uch sabotaj ikki natija
+bilan). To'liq `npm run gate` bu fazada BIRINCHI marta backend yarmi
+bilan ikki marta exit 0.
+
+⛔ **HUMAN-UAT BESHALA BANDI RAQAMSIZ OCHIQ (orkestrator chegarasi).**
+Mexanik qatlam tasdiqlangan, LEKIN birortasiga son yozilmagan — o'lchovlar
+real qurilma/inson idrokini talab qiladi: №1 60fps, №2 Lighthouse/CLS
+(ikkalasi — birinchi deploy yoki verify bosqichi), №3 uch tema idroki,
+№4 20 ketma-ket to'lov (ikkalasi — pilot haftasi), №5 OS reduced-motion.
+`nyquist_compliant: true` bunga ZID EMAS — bayroq «har xulq darvozaga
+yoki egali-tetikli bandga biriktirilgan» hisob-kitobi va signoff exit 0.
+
+✅ **`gate` BYUDJETI QAYTA O'LCHANDI VA O'ZGARMADI — LEKIN ZAXIRA KRITIK
+TOR.** Tinch xostda IKKI yaroqli o'lchov: **2259 / 2102 s** (chegara
+2300) — zaxira **41 s (1,8 %)**; `gate:fast` **189 / 171 s** (chegara
+200) — zaxira 11 s. Egasi: 10-faza rejalashtiruvchisi (deferred №2).
+⚠ HALOLLIK: uch emas, IKKI o'lchov; yana IKKI YAROQSIZ urinish bo'ldi
+(jurnal `package.json //gate-budget` da): dushanba-ko'rlik va flake №12.
+
+⛔ **DUSHANBA-KO'RLIK SINFI OCHILDI (birinchi dushanba gate yugurishi).**
+Seed A bozori dushanba yopiq (`A_OPEN_WEEKDAYS=2..7`); ikki billing testi
+«bugun ochiq» prekonditsiyasini o'rnatmagan va deterministik qizardi —
+`11a4f3a` tuzatdi (arrange'da `open_weekdays=1..7`, mahsulotga nol
+ta'sir). Sinf sifatida ochiq: 09-faza `deferred-items.md` №3.
+
+⚠ **Verify muhiti:** frontend `:8081` da JORIY kod bilan qayta qurilgan
+(prod build); core-api vaqtincha `127.0.0.1:8010` (xost `:8000` ni
+`parnikkpi-backend-1` band qilgan, `.env` tegilmagan); `bot-service`
+restart halqasi — o'lchovdan oldingi holat, tiklangan.
+
+---
+
+*Quyidagi 8-faza bloklari 08-20 yakunidan MEROS — ochiq bandlari
+(FOUND-07, backup_stale, flake №12) hamon kuchda:*
 
 ✅ **8-FAZANING IJROSI TUGADI (20/20 reja).** `08-20` faza darvozasini
 yopdi: beshala ROADMAP mezoni `tests/integration/test_phase8_criteria.py`
@@ -154,6 +192,7 @@ ekranida farqni ISM bilan ko'rishi kerakmi? -- ijrochi hal qilmaydi).
 | Phase 05 P14 | 150 | 3 tasks | 17 files |
 | Phase 05 P15 | 235min | 3 tasks | 12 files |
 | Phase 08 P20 | 385 | 3 tasks | 6 files |
+| Phase 09 P07 | 180 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -313,6 +352,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-16T23:19:13.486Z
-Stopped at: Phase 9 UI-SPEC approved
-Resume file: .planning/phases/09-ui-polish-motion-qatlami/09-UI-SPEC.md
+Last session: 2026-08-17T08:01:23.895Z
+Stopped at: 09-07 bajarildi — faza ijrosi 7/7; HUMAN-UAT 5 band ochiq, verify kutilmoqda
+Resume file: None
