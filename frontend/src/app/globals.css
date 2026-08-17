@@ -61,6 +61,18 @@
   --text-display: 2.5rem;
   --text-display--line-height: 1.1;
 
+  /* ---- Landing hero sarlavhasi — AYNAN 1 faylda (G-land-5(a), 10-UI-SPEC
+   * §7.1.1) ------------------------------------------------------------
+   * Suyuq: telefonda 28px, hokimlik proyektorida 44px. `text-display`
+   * (40px) ISHLATILMAYDI — u pul roli va reyestri `typography.test.mjs`
+   * ning `TEXT_DISPLAY_FILES` bilan IKKI app fayliga `deepEqual`
+   * qulflangan; uchinchi fayl o'sha darvozani qizartiradi. Bu token matn
+   * shkalasining a'zosi emas — bir martalik display registri
+   * (`components/marketing/hero.tsx` ning yagona `h1` i). */
+  --text-hero: clamp(1.75rem, 4.4vw, 2.75rem);
+  --text-hero--line-height: 1.15;
+  --text-hero--letter-spacing: -0.02em;
+
   /* ---- Neytral shkala — ILIQ BAZA [L-1, sketch 002-B] ------------------
    * Iliqlik YUZALARDAN keladi, matndan emas: `bg`/`surface-muted`/`border`
    * stone-ohangga o'tdi (#FAFAF9 / #F5F5F4 / #E7E5E4), matn va `border-ui`
@@ -224,7 +236,8 @@
 
   /*
    * =========================================================================
-   * @KEYFRAMES REYESTRI — YOPIQ, 8 NOM (G-motion-3(a,c), 09-UI-SPEC §4.3).
+   * @KEYFRAMES REYESTRI — YOPIQ, 9 NOM (G-motion-3(a,c), 09-UI-SPEC §4.3;
+   * ⛔ 9-nom `sweep` — 10-UI-SPEC §5.4 ning ONGLI kengaytmasi, L-9/L-10).
    *
    * ⛔ RUXSAT ETILGAN XOSSALAR TO'PLAMI: transform · opacity · background ·
    *    background-color · background-position · box-shadow ·
@@ -355,6 +368,54 @@
   .motion-attention {
     animation: attention var(--motion-slow) var(--ease-out) both;
     animation-iteration-count: 1;
+  }
+
+  /* Landing hero sahnasi: kamera nuri — 2s KOMPOZIT, linear (10-UI-SPEC
+   * §5.4). ⛔ Sketch manbasining `@keyframes sweepgo { left: 0 → 100% }`
+   * shakli ATAYIN TAKRORLANMADI: `left` — quyuqroq BANNED_KEYFRAME_PROPS
+   * ro'yxatida nomma-nom (motion-tokens.test.mjs, L-8) va har kadrda
+   * layout hisobini qo'zg'atib arzon Androidda 60fps ni o'ldiradi.
+   * `translateX(100cqw)` — sof kompozitor xossasi; masofa CSS'dan keladi,
+   * JS geometriya o'qimaydi. */
+  @keyframes sweep {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(100cqw);
+    }
+  }
+  .landing-sweep {
+    animation: sweep 2s linear;
+  }
+
+  /* `cqw` eng yaqin KONTEYNER ajdodga nisbatan hal bo'ladi — nur chizig'i
+   * shu sinf berilgan xarita konteynerining FARZANDI bo'lishi SHART
+   * (10-RESEARCH eslatmasi), aks holda 100cqw viewport'ga tushib nur
+   * ekran kengligicha uchardi. */
+  .landing-sweep-frame {
+    container-type: inline-size;
+  }
+
+  /* 3-qadam chizig'ining to'lishi (10-UI-SPEC §10.2). ⛔ `height` bilan
+   * EMAS (L-8 ning ikkinchi buzilishi — sketch'ning `.prog { height... }`
+   * shakli): `transform: scaleY()` kompozitorda qoladi. 900ms — KOMPOZIT
+   * qiymat va u FAQAT shu faylda yashaydi, komponentda takrorlanmaydi.
+   * Daraja deklarativ `data-step` atributi orqali — komponent faylida
+   * geometriya (inline `style`) UMUMAN yozilmaydi (G-land-3(b) skanerlaydi). */
+  .landing-step-fill {
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform 900ms var(--ease-out);
+  }
+  [data-step="1"] .landing-step-fill {
+    transform: scaleY(0.3333);
+  }
+  [data-step="2"] .landing-step-fill {
+    transform: scaleY(0.6667);
+  }
+  [data-step="3"] .landing-step-fill {
+    transform: scaleY(1);
   }
 
   /* Forma xatosi: 2px shake — 200ms KOMPOZIT (§12.7). ⛔ Login kartasi

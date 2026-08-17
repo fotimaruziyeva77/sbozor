@@ -1515,5 +1515,204 @@
     "light": "Yorug'",
     "dark": "Tungi",
     "sun": "Quyosh ostida"
+  },
+  "landing": {
+    "meta": {
+      "title": "SBOZOR — bozor pattasi nazorati: har band rastadan to'lov yig'ilyaptimi?",
+      "description": "Har band rastadan patta yig'ilyaptimi? SBOZOR NVR kameralari kadrlarini AI bilan tahlil qilib, «band, lekin to'lovsiz» rastalarni kunlik hisobotda fosh qiladi.",
+      "ogAlt": "SBOZOR belgisi va bozor plan-xaritasi — bitta rasta «band, lekin to'lovsiz» holatda ajralib turadi."
+    },
+    "nav": {
+      "skipToContent": "Asosiy kontentga o'tish",
+      "login": "Tizimga kirish"
+    },
+    "hero": {
+      "headline": "Har bir band rastadan patta to'liq yig'ilyaptimi?",
+      "sub": "SBOZOR buni raqamlar va rasm-dalil bilan ko'rsatadi — «band, lekin to'lovsiz» rastalar kunlik hisobotda avtomatik fosh bo'ladi.",
+      "claimStrong": "Yangi uskuna shart emas",
+      "claim": "— mavjud NVR kameralaringiz bilan ishlaydi. Ulanish — login-parol kiritish, xolos.",
+      "ctaPrimary": "Demo so'rang",
+      "ctaSecondary": "Tizimga kirish"
+    },
+    "trust": {
+      "residency": "Ma'lumotlar O'zbekistonda",
+      "vpn": "NVR faqat VPN orqali",
+      "audit": "Har amal auditda",
+      "languages": "3 til"
+    },
+    "scene": {
+      "sampleBadge": "Namunaviy ma'lumot",
+      "marketLabel": "Namuna bozori · namoyish",
+      "revenueLabel": "Bugungi tushum",
+      "phase1": "Bozor xaritasi chizilmoqda…",
+      "phase2": "Kamera tekshiryapti…",
+      "phase3": "Nomuvofiqlik topildi",
+      "phase4": "Kassir to'lovni qayd etdi",
+      "phase5": "Kunlik hisobot",
+      "tagUnpaid": "Band, lekin to'lovsiz",
+      "tagPaid": "To'landi — 8 000 so'm",
+      "reportTitle": "Kunlik hisobot",
+      "reportOccupied": "Band rastalar",
+      "reportPaid": "To'langan",
+      "reportUnpaid": "Band, lekin to'lovsiz",
+      "a11yDescription": "Namunaviy bozor xaritasi: 30 rastadan 29 tasi to'langan, bittasi band bo'lib to'lovsiz qolgan; kunlik hisobotda u fosh bo'ladi."
+    },
+    "pain": {
+      "title": "Nega patta to'liq yig'ilmaydi?",
+      "a": {
+        "title": "Daftar-hisob adashadi",
+        "body": "Patta — kunlik savdo to'lovi — qo'lda daftarga yoziladi. Varaqlar yo'qoladi, raqamlar adashadi va oy oxirida hisobni tiklab bo'lmaydi."
+      },
+      "b": {
+        "title": "Kim to'lamaganini bilib bo'lmaydi",
+        "body": "Rasta band bo'lgani bilan to'lov kelmagan bo'lishi mumkin. Buni isbotlash uchun bugun na raqam bor, na rasm-dalil."
+      },
+      "c": {
+        "title": "Nazoratchi hammasini ko'rolmaydi",
+        "body": "Yuzlab rastani piyoda aylanib chiqish soatlab vaqt oladi. Nazoratchi ketgach, manzara o'sha zahoti eskiradi."
+      }
+    },
+    "steps": {
+      "title": "Qanday ishlaydi — 3 qadam",
+      "s1": {
+        "title": "Mavjud kameralar kadr oladi",
+        "body": "Yangi uskuna o'rnatilmaydi: tizim NVR orqali kun davomida belgilangan vaqtlarda rasta zonalaridan kadr oladi."
+      },
+      "s2": {
+        "title": "AI band rastani aniqlaydi",
+        "body": "Har kadr rasta zonalari bo'yicha tahlil qilinadi: qaysi rasta band, qaysi biri bo'sh — natija xaritada ko'rinadi."
+      },
+      "s3": {
+        "title": "«Band, lekin to'lovsiz» fosh bo'ladi",
+        "body": "Kun oxirida hisobot tayyor: qaysi rasta band bo'lib to'lov qilmagani raqam va rasm-dalil bilan ko'rsatiladi."
+      }
+    },
+    "proof": {
+      "title": "Yangi uskuna shart emas",
+      "body": "Mavjud NVR kameralaringiz yetarli — SBOZOR ularga login-parol bilan ulanadi va kameralarni avtomatik topadi.",
+      "note": "Yangi kamera, alohida server yoki muhandis tashrifi talab qilinmaydi."
+    },
+    "roles": {
+      "title": "Har rol o'z ekranini ko'radi",
+      "director": {
+        "title": "Direktor",
+        "body": "Kunlik tushum va nomuvofiqlik manzarasi bitta ekranda. Hisobot har kuni avtomatik shakllanadi.",
+        "claim": "Kunlik hisobot + xlsx"
+      },
+      "cashier": {
+        "title": "Kassir",
+        "body": "To'lovni qabul qilish uchun uzun ro'yxat kerak emas. Rastani tanlab to'lovni qayd etish — bir necha bosish.",
+        "claim": "≤3 bosishda to'lov"
+      },
+      "inspector": {
+        "title": "Nazoratchi",
+        "body": "Har nomuvofiqlik yonida kadr bor: rasta band yoki bo'shligini rasmga qarab tasdiqlaydi. Taxmin o'rnini dalil egallaydi.",
+        "claim": "Rasm-dalil bilan tasdiqlash"
+      }
+    },
+    "trustBlock": {
+      "title": "Ma'lumotlar qanday himoyalanadi",
+      "residency": {
+        "title": "Ma'lumotlar va O'zR qonunchiligi",
+        "body": "Kamera tasvirlari bozor tarmog'idan tashqariga faqat shifrlangan tunnel orqali chiqadi. Shaxsiy ma'lumotlar O'zR qonunchiligiga muvofiq boshqariladi. Joylashuv talabi bo'lsa — hosting O'zbekistonga ko'chiriladi va bu shartnomada qayd etiladi."
+      },
+      "vpn": {
+        "title": "NVR faqat VPN orqali",
+        "body": "Bozor kameralari internetga ochilmaydi: ulanish faqat shifrlangan VPN tunneli orqali. Kirish parollari shifrlangan holda saqlanadi."
+      },
+      "audit": {
+        "title": "Har amal audit jurnalida",
+        "body": "Kim, qachon va nimani o'zgartirgani jurnalga yoziladi — har to'lov yozuvining izi qoladi."
+      },
+      "languages": {
+        "title": "3 til",
+        "body": "Interfeys o'zbek lotin, o'zbek kirill va rus tillarida ishlaydi. Tilni shu sahifaning o'zida almashtirib ko'rishingiz mumkin."
+      }
+    },
+    "pilot": {
+      "title": "Pilot holati",
+      "status": "Karmana bozorida sinovda",
+      "body": "Tizim Navoiy viloyati Karmana tumani bozorida sinovdan o'tmoqda. Natijalar o'lchanib bo'lgach, aniq raqamlar shu yerda e'lon qilinadi — oldindan raqam yozmaymiz."
+    },
+    "faq": {
+      "title": "Ko'p so'raladigan savollar",
+      "q1": "Kameramiz eski — ishlaydimi?",
+      "a1": "Ko'p hollarda ha: kamera RTSP oqim bersa yoki NVR kadr qaytara olsa, shu yetarli. Aniq javobni demo paytida NVR modelini ko'rib beramiz.",
+      "q2": "Internetimiz sekin — muammo bo'ladimi?",
+      "a2": "Yo'q: video uzatilmaydi. Kuniga bir necha marta bittadan kadr olinadi — sekin ulanish ham yetarli.",
+      "q3": "Nechta rastani ko'taradi?",
+      "a3": "Bugungi maqsad — 300–1000 rastali bozor. Tizim ko'p bozorli: har bozor alohida ma'lumot chegarasida ishlaydi.",
+      "q4": "Narx qanday shakllanadi?",
+      "a4": "Bozor hajmi va kameralar soniga bog'liq. Aniq taklifni demo suhbatida beramiz — bu yerda umumiy raqam yozish adashtirar edi.",
+      "q5": "O'rnatish qancha vaqt oladi?",
+      "a5": "Ulanish — NVR login-parolini kiritish, daqiqalar ichida; kameralar avtomatik topiladi. To'liq sozlash (rastalar, tariflar, zonalar) bozor hajmiga qarab bir necha soat oladi."
+    },
+    "form": {
+      "title": "Demo so'rang",
+      "subtitle": "24 soat ichida bog'lanamiz va bozoringiz uchun aniq javob beramiz.",
+      "name": "Ismingiz",
+      "phone": "Telefon raqamingiz",
+      "market": "Bozor nomi",
+      "stallCount": "Rastalar soni (taxminan)",
+      "consent": "Maxfiylik siyosati bilan tanishdim va ma'lumotlarim shu so'rov uchun ishlatilishiga roziman.",
+      "submit": "Demo so'rang",
+      "submitting": "Yuborilmoqda…",
+      "success": {
+        "title": "So'rovingiz yuborildi",
+        "body": "24 soat ichida ko'rsatgan raqamingizga bog'lanamiz."
+      },
+      "error": {
+        "title": "So'rov yuborilmadi",
+        "body": "Ulanishda muammo bo'ldi. Qayta urinib ko'ring yoki bevosita qo'ng'iroq qiling: {phone}",
+        "bodyNoPhone": "Ulanishda muammo bo'ldi. Bir necha daqiqadan so'ng qayta urinib ko'ring.",
+        "rateLimited": "Juda ko'p so'rov yuborildi. Bir necha daqiqadan so'ng qayta urinib ko'ring.",
+        "validation": "Ba'zi maydonlar to'ldirilmagan yoki xato to'ldirilgan. Belgilangan maydonlarni tekshirib, qayta yuboring."
+      },
+      "validation": {
+        "nameRequired": "Ismingizni kiriting.",
+        "phoneRequired": "Telefon raqamingizni kiriting.",
+        "phoneInvalid": "Raqamni +998 bilan, 9 raqamda kiriting. Masalan: +998 90 123 45 67",
+        "marketRequired": "Bozor nomini kiriting.",
+        "consentRequired": "Davom etish uchun maxfiylik siyosatiga rozilik kerak."
+      }
+    },
+    "footer": {
+      "privacy": "Maxfiylik siyosati",
+      "contact": "Aloqa",
+      "login": "Tizimga kirish",
+      "copyright": "© {year} SBOZOR. Barcha huquqlar himoyalangan."
+    },
+    "privacy": {
+      "title": "Maxfiylik siyosati",
+      "intro": "Bu sahifa SBOZOR sayti va tizimi qanday ma'lumot bilan ishlashini tushuntiradi.",
+      "s1": {
+        "title": "Kim ma'lumot yig'adi",
+        "body": "Ma'lumotlarga SBOZOR platformasi operatori mas'ul. Aloqa uchun sahifa oxiridagi kanaldan foydalaning."
+      },
+      "s2": {
+        "title": "Kamera tasvirlari",
+        "body": "Tizim rasta zonalaridan kunduzi bir necha marta kadr oladi — video oqim uzatilmaydi va saqlanmaydi. Kadrlar 90 kun to'liq holda, so'ng siqilgan holda 1 yilgacha saqlanadi va faqat patta nazorati uchun ishlatiladi."
+      },
+      "s3": {
+        "title": "Demo-so'rov ma'lumotlari",
+        "body": "Formada kiritilgan ism, telefon va bozor nomi ma'lumotlar bazasida saqlanmaydi: so'rov ma'muriyatning Telegram kanaliga yetkaziladi va tizimdan o'chiriladi."
+      },
+      "s4": {
+        "title": "Sotuvchi ma'lumotlari",
+        "body": "Sotuvchilarning ism-familiyasi va telefonini bozor ma'muriyati tizim ichida kiritadi. Bu sahifa bunday ma'lumotni yig'maydi va ko'rsatmaydi."
+      },
+      "s5": {
+        "title": "Kimga uzatiladi",
+        "body": "Ma'lumotlar uchinchi tomonga uzatilmaydi. Saytda tashqi analitika skripti yo'q."
+      },
+      "s6": {
+        "title": "Huquqlaringiz",
+        "body": "Ma'lumotingizni o'chirish yoki tuzatishni so'rashingiz mumkin — sahifa oxiridagi aloqa kanali orqali murojaat qiling."
+      },
+      "s7": {
+        "title": "Brauzer xotirasi",
+        "body": "Saytda marketing kuzatuv fayli yo'q. Tanlangan mavzu sozlamasi faqat qurilmangizning o'z xotirasida saqlanadi."
+      }
+    }
   }
 }

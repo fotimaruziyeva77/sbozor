@@ -499,8 +499,16 @@ describe("uz-Cyrl.json — yetkazilayotgan fayl toza", () => {
     //   ⚠ `MB`/`GB` ham QO'SHILMAYDI va bu BOSHQA sabab bilan: ular
     //      kirillda TO'G'RI o'giriladi (`МБ`/`ГБ`) — bu akronim emas,
     //      o'lchov birligi (Qoida 3). Pastdagi ijobiy nazoratga qarang.
+    //
+    // ⚠ 10-FAZA: `AI` qo'shildi (10-UI-SPEC §13.4, L-11). O'lchandi:
+    //   `transliterate("AI band rastani aniqlaydi")` -> `АИ банд...` —
+    //   `АИ` hech qayerda uchramaydigan yangi atama tug'dirardi. `AI`
+    //   `sun'iy intellekt` ga ALMASHTIRILMAYDI: brief §6 da «AI aniqligi»
+    //   raqobat ustunligining nomi va `NVR`/`VPN` bilan bir xil muomala
+    //   izchillikni saqlaydi (rus tilida ham `AI`). Yozuv
+    //   `uz-Cyrl.overrides.json` -> `words` bilan JUFT.
     const allowed =
-      /SBOZOR|Excel|xlsx|CSV|csv|https?:\/\/\S+|[\w.%+-]+@[\w.-]+|\b(?:Hikvision|WireGuard|WebRTC|ISAPI|RTSP|HLS|MSE|NVR|NTP|VPN|GMT|IP|IR|Telegram)\b|\b(?:firmware|digest|basic|https|http)\b/gu;
+      /SBOZOR|Excel|xlsx|CSV|csv|https?:\/\/\S+|[\w.%+-]+@[\w.-]+|\b(?:Hikvision|WireGuard|WebRTC|ISAPI|RTSP|HLS|MSE|NVR|NTP|VPN|GMT|IP|IR|AI|Telegram)\b|\b(?:firmware|digest|basic|https|http)\b/gu;
 
     const walk = (node, prefix) => {
       for (const [key, value] of Object.entries(node)) {
@@ -554,6 +562,27 @@ describe("transliterate — G-6: 4-fazaning o'lchangan holatlari", () => {
     assert.equal(out, "Telegram хабари");
     assert.ok(out.includes("Telegram"), "`Telegram` lotin holida qolishi kerak");
     assert.ok(!out.includes("Телеграм"), "buzuq `Телеграм` qaytib kelgan");
+  });
+
+  test("Qoida 2 / L-11 (10-faza): `AI` akronimi lotin holida qoladi", () => {
+    /*
+     * ⚠ 10-UI-SPEC §13.4: o'lchangan defekt — override'siz
+     *   `transliterate("AI band...")` -> `АИ банд...` va `АИ` hech
+     *   qayerda uchramaydigan yangi atama tug'dirardi. `AI` `sun'iy
+     *   intellekt` ga ALMASHTIRILMAYDI (brief §6 — «AI aniqligi»
+     *   raqobat ustunligining nomi; `NVR`/`VPN` bilan izchil).
+     *
+     * ⛔ Bu test JUFT qulfning overrides tomonini QIZARTIRADI: `AI`
+     *   yozuvi `uz-Cyrl.overrides.json` dan tushib qolsa — aynan shu
+     *   test qizaradi (10-02 sabotaj o'lchovi: `allowed` regeksi va
+     *   drift tekshiruvi bu yo'nalishni ushlamaydi, chunki chiqish
+     *   sof kirill bo'lib qoladi).
+     */
+    const out = transliterate("AI band rastani aniqlaydi", OVERRIDE_WORDS);
+
+    assert.equal(out, "AI банд растани аниқлайди");
+    assert.ok(out.includes("AI"), "`AI` lotin holida qolishi kerak");
+    assert.ok(!out.includes("АИ"), "buzuq `АИ` qaytib kelgan — override tushib qolgan");
   });
 
   test("Qoida 3 / T-12: kirill BIRLIGI to'g'ri chiqadi (IJOBIY NAZORAT)", () => {
