@@ -112,10 +112,9 @@ export function RevenueCard() {
 
   /*
    * [L-6] «nafas» faqat MAVJUD qiymat o'zgarganda; birinchi yuklanishda
-   * YO'Q. `hadValueRef` count davomiyligini ham tanlaydi: birinchi
-   * ko'rinish 600ms, yangilanish 400ms.
+   * YO'Q. `prevTotalRef` FAQAT effektda o'qiladi/yoziladi (renderda ref
+   * o'qish TAQIQ — react-hooks/refs).
    */
-  const hadValueRef = useRef(false);
   const prevTotalRef = useRef<number | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [breathing, setBreathing] = useState(false);
@@ -126,7 +125,6 @@ export function RevenueCard() {
     prevTotalRef.current = total;
     if (total === null) return;
     if (prev !== null && prev !== total) setBreathing(true);
-    hadValueRef.current = true;
   }, [total]);
 
   /*
@@ -145,7 +143,12 @@ export function RevenueCard() {
     return () => card.removeEventListener("animationend", settle);
   }, [breathing]);
 
-  const shownTotal = useCountUp(total, hadValueRef.current ? 400 : 600);
+  /*
+   * Birinchi ko'rinish 600ms [L-5], yangilanish 400ms [L-6] — tanlovni
+   * hook'ning o'zi qiladi (birinchi animatsiya bazaviy, keyingilari
+   * `updateDurationMs`).
+   */
+  const shownTotal = useCountUp(total, 600, 400);
 
   const rows = report.data?.rows;
   const enough = rows !== undefined && rows.length >= MIN_POINTS;

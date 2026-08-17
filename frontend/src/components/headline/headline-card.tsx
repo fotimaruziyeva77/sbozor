@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -106,15 +106,13 @@ export function HeadlineCard({ marketId }: HeadlineCardProps) {
   const shown = useCountUp(headline.value ?? null);
 
   /*
-   * Tick — count tugagach BIR marta `scale(1.03)` (L-5). `settled`
-   * `transitionEnd` da yoqiladi va spanni `scale-100` ga qaytaradi:
-   * yuqoriga 150ms + pastga 150ms, ⛔ cheksiz pulsatsiya YO'Q. Qiymat
-   * o'zgarsa tick qayta qurollantiriladi.
+   * Tick — count tugagach BIR marta `scale(1.03)` (L-5). `settledFor`
+   * `transitionEnd` da QAYSI qiymat uchun tick tugaganini eslab qoladi:
+   * yuqoriga 150ms + pastga 150ms, ⛔ cheksiz pulsatsiya YO'Q. Yangi
+   * qiymatda `settledFor !== value` bo'lib tick o'zi qayta qurollanadi —
+   * effektda sinxron setState YO'Q (hodisa-asosli).
    */
-  const [settled, setSettled] = useState(false);
-  useEffect(() => {
-    setSettled(false);
-  }, [headline.value]);
+  const [settledFor, setSettledFor] = useState<number | null>(null);
 
   /* Bozor tanlanmagan — so'rov ham yuborilmaydi, karta ham chizilmaydi. */
   if (marketId === null) return null;
@@ -192,9 +190,9 @@ export function HeadlineCard({ marketId }: HeadlineCardProps) {
             "inline-block font-mono tabular-nums",
             /* Tick — 150ms (`--motion-fast` token, sehrli son YO'Q). */
             "transition-transform duration-(--motion-fast)",
-            arrived && !settled ? "scale-[1.03]" : "scale-100",
+            arrived && settledFor !== value ? "scale-[1.03]" : "scale-100",
           )}
-          onTransitionEnd={() => setSettled(true)}
+          onTransitionEnd={() => setSettledFor(value)}
         >
           {format.number(shown ?? value)}
         </span>

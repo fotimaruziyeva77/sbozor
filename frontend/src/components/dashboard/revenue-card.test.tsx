@@ -299,6 +299,6 @@ describe("RevenueCard — manba kontrakti", () => {
     /* ⛔ G-motion-6(c): huquq sharti SAHIFADA, komponentda EMAS. */
     expect(source).not.toContain("hasPermission(");
     /* [L-5]/[L-6]: birinchi ko'rinish 600ms, yangilanish 400ms. */
-    expect(source).toMatch(/useCountUp\([^)]*\?\s*400\s*:\s*600\s*\)/u);
+    expect(source).toMatch(/useCountUp\(\s*total,\s*600,\s*400\s*\)/u);
   });
 });

@@ -68,44 +68,55 @@ function prefersReducedMotion(): boolean {
  *
  * ⛔ Hook FAQAT SONNI qaytaradi — formatlash chaqiruvchida
  *    (`useFormatter().number()`): shunda oxirgi kadr formatterniki bo'ladi.
- * ⛔ `durationMs` KEYINGI animatsiyaga qo'llanadi — yugurayotgan halqa
- *    o'z boshlang'ich davomiyligida tugaydi (revenue kartasi birinchi
- *    ko'rinishda 600ms, yangilanishda 400ms beradi).
+ * ⛔ Davomiylik tanlovi HOOK ICHIDA: BIRINCHI animatsiya (hali son
+ *    ko'rsatilmagan, 0 dan start) `durationMs` bilan; KEYINGI qiymat
+ *    o'zgarishlari `updateDurationMs` bilan (berilmasa — bazaviy).
+ *    Revenue kartasi `(total, 600, 400)` beradi [L-5, L-6]. Yugurayotgan
+ *    halqa o'z boshlang'ich davomiyligida tugaydi.
  */
 export function useCountUp(
   value: number | null,
   durationMs: number = DEFAULT_DURATION_MS,
+  updateDurationMs?: number,
 ): number | null {
-  const [shown, setShown] = useState<number | null>(() =>
-    value !== null && prefersReducedMotion() ? value : null,
-  );
-  const shownRef = useRef<number | null>(shown);
+  const [shown, setShown] = useState<number | null>(null);
+  const shownRef = useRef<number | null>(null);
   const durationRef = useRef(durationMs);
+  const updateDurationRef = useRef(updateDurationMs);
 
   /* Davomiylik sinxroni ANIMATSIYADAN OLDIN turadi (e'lon tartibi ma'noli). */
   useEffect(() => {
     durationRef.current = durationMs;
-  }, [durationMs]);
+    updateDurationRef.current = updateDurationMs;
+  }, [durationMs, updateDurationMs]);
 
   useEffect(() => {
     if (value === null) return;
 
     if (prefersReducedMotion()) {
-      /* Halqa o'rniga darhol oxirgi holat — §4.4 qoida 5. */
+      /*
+       * Halqa YO'Q — render `value` ni to'g'ridan-to'g'ri qaytaradi
+       * (pastdagi hosila shox); bu yerda faqat ref sinxronlanadi, shunda
+       * keyingi animatsiya (rejim o'chirilsa) yakuniy sondan boshlanadi.
+       * ⛔ Effektda sinxron setState YO'Q — kaskadli render bo'lmasin.
+       */
       shownRef.current = value;
-      setShown(value);
       return;
     }
 
+    /* Birinchi ko'rinish — 0 dan bazaviy davomiylikda; yangilanish — tezroq. */
+    const firstReveal = shownRef.current === null;
     const from = shownRef.current ?? 0;
     const to = value;
     if (from === to) {
+      /* Ko'rsatilayotgan son allaqachon nishonda — chizadigan kadr yo'q. */
       shownRef.current = to;
-      setShown(to);
       return;
     }
 
-    const duration = durationRef.current;
+    const duration = firstReveal
+      ? durationRef.current
+      : (updateDurationRef.current ?? durationRef.current);
     let start: number | null = null;
     let frame: number | null = null;
 
@@ -135,5 +146,7 @@ export function useCountUp(
   }, [value]);
 
   if (value === null) return null;
+  /* Reduced-motion — halqasiz OXIRGI HOLAT, hosila shaklda (§4.4 qoida 5). */
+  if (prefersReducedMotion()) return value;
   return shown ?? 0;
 }
