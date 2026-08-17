@@ -56,6 +56,7 @@ from app.api.v1.me import router as me_router
 from app.api.v1.nvr import router as nvr_router
 from app.api.v1.occupancy import router as occupancy_router
 from app.api.v1.payments import router as payments_router
+from app.api.v1.public import router as public_router
 from app.api.v1.reconciliation import router as reconciliation_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.reviews import router as reviews_router
@@ -70,7 +71,14 @@ from app.api.v1.vendors import router as vendors_router
 from app.api.v1.zones import router as zones_router
 from app.observability import init_sentry
 from app.settings import Settings, get_settings
-from app.worker import broker, enqueue_discovery
+
+# ⚠ `_alert_sender` MODUL-XUSUSIY NOM VA U ATAYIN IMPORT QILINADI, NUSXA
+#   OLINMAYDI (RESEARCH B-4 «A» yo'li): `Settings` -> `AlertSender`
+#   tarjimasi BITTA joyda yashashi kerak — nusxa `enabled=bool(token)`
+#   qarorini ikki joyga yoyardi va biri ertaga eskirardi. Presedent bor:
+#   `app/repositories/report_repo.py` xuddi shunday `_PER_STALL_CTE` ni
+#   boshqa moduldan import qiladi.
+from app.worker import _alert_sender, broker, enqueue_discovery
 
 log = structlog.get_logger(__name__)
 
@@ -100,6 +108,15 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     engine: AsyncEngine = make_engine(settings.database_url)
     cache: Redis = Redis.from_url(settings.valkey_url)
 
+    # 10-01: Telegram jo'natuvchisi — demo so'rovi (LAND-03) API jarayonida
+    # SINXRON yuboradi (RESEARCH B-5: 202 + delivered o'z-o'ziga zid edi),
+    # ya'ni jo'natuvchi endi worker'niki EMAS, ikkala jarayonniki.
+    #
+    # ⚠ EGALIK SHAKLI `engine`/`cache` BILAN AYNAN BIR XIL: bir marta
+    #   ochiladi, `finally` da yopiladi. Har so'rovda qurish TLS qo'l
+    #   siqishini har demo so'rovga qo'shardi (`AlertSender` docstringi).
+    sender = _alert_sender(settings)
+
     # 3-faza: navbatning KLIENT tomoni (`app/worker.py`). API job'ni
     # bajarmaydi — u faqat navbatga qo'yadi, ya'ni bu yerda `startup()`
     # ulanish pulini ochadi va boshqa hech nima qilmaydi.
@@ -113,6 +130,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.engine = engine
     application.state.sessionmaker = make_sessionmaker(engine)
     application.state.cache = cache
+    # Marshrut qatlami jo'natuvchiga SHU maydon orqali boradi
+    # (`deps.get_sender` -> `SenderDep`) — `cache` bilan bir xil
+    # almashtirish nuqtasi: integratsiya testi aynan shu maydonni
+    # to'ldiradi va PROD KODINI ishga tushiradi.
+    application.state.sender = sender
     # Marshrut qatlami navbatga SHU maydon orqali boradi, moduldan
     # to'g'ridan-to'g'ri emas — sabab `api/v1/nvr.py::_enqueue` da
     # (`sessionmaker`/`cache` bilan bir xil almashtirish nuqtasi).
@@ -121,6 +143,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await broker.shutdown()
+        await sender.aclose()
         await cache.aclose()
         await engine.dispose()
 
@@ -502,6 +525,18 @@ app.include_router(reconciliation_router, prefix=f"{API_V1_PREFIX}/reconciliatio
 #   `test_route_coverage.py::
 #   test_only_the_ledger_import_needs_a_query_param_exemption` da.
 app.include_router(reports_router, prefix=f"{API_V1_PREFIX}/reports")
+# --- 10-01: anonim demo so'rovi (LAND-03) ---
+#
+# ⛔ BU KODBAZADAGI BIRINCHI VA YAGONA ANONIM YOZUV MARSHRUTI: `POST
+#    /api/v1/public/demo-requests` sessiyasiz, tokensiz va bozorsiz
+#    ishlaydi — landing sahifasining demo formasi shu yerga keladi.
+#
+# Cross-tenant matritsasidan chiqarilishi `tests/tenancy/
+# test_cross_tenant.py::EXEMPT_ROUTES` da SABAB bilan yozilgan va istisno
+# ochgan qamrov `tests/integration/test_demo_request.py` da TO'LIQ qayta
+# tiklangan (autsiz 200, Set-Cookie yo'q, javob kalitlari, 429, 422,
+# honeypot, delivery_failed + DB'da 0 yangi qator).
+app.include_router(public_router, prefix=f"{API_V1_PREFIX}/public")
 
 
 @app.exception_handler(DBAPIError)
