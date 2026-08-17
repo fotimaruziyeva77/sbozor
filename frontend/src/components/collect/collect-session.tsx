@@ -11,6 +11,7 @@ import { PaymentRow } from "@/components/collect/payment-row";
 import { PendingCard } from "@/components/collect/pending-card";
 import { ReasonDialog } from "@/components/collect/reason-dialog";
 import { StallLookup } from "@/components/collect/stall-lookup";
+import { flyAmountToList } from "@/components/collect/success-choreography";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ApiError } from "@/lib/api-client";
@@ -148,6 +149,15 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
   const fieldId = useId();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  /*
+   * 4-QADAM FLIP UCHLARI (09-UI-SPEC §8.1, 09-04) — REF, HOLAT EMAS:
+   * `amountRef` «Kutilayotgan patta» summasiga (`PendingCard` ichida),
+   * `listRef` to'lovlar ro'yxati seksiyasiga. ⛔ Xoreografiya uchun YANGI
+   * `useState` QO'SHILMAYDI — u renderga umuman tegmaydi (G-motion-2(d)).
+   */
+  const amountRef = useRef<HTMLParagraphElement | null>(null);
+  const listRef = useRef<HTMLElement | null>(null);
 
   /* ⛔ Rasta kodi SAHIFA HOLATIDA — URL'da EMAS (§4.5). */
   const [draft, setDraft] = useState("");
@@ -290,6 +300,28 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
       toast.success(
         `${t("collect.written")} · ${record.stall_code} · ${money(record.amount_soum)}`,
       );
+
+      /*
+       * ⛔⛔ 1–5-QADAM XOREOGRAFIYASI — AYNAN SHU YERDA, `focus()` VA
+       *     `toast.success` DAN KEYIN (09-UI-SPEC §8.3, 09-04).
+       *
+       * Sabab MEXANIK, uslub emas: `position: fixed` klon `focus()` dan
+       * OLDIN DOM'ga qo'shilsa, brauzer scroll-anchoring hisobini qayta
+       * qiladi va telefonda fokuslangan input ekrandan chiqib ketishi
+       * mumkin. Tartib — SHARTNOMA.
+       *
+       * ⛔ `await` YO'Q: bayram oqimni KUTDIRMAYDI (G-motion-2(a,b)).
+       * ⛔ `try/catch` MAJBURIY: bayram yiqilsa ham to'lov qatori va fokus
+       *    JOYIDA qoladi (G-motion-2(e)) — himoya qatlami FAQAT shu yerda,
+       *    funksiyaning o'zi istisnoni yutmaydi.
+       * ⛔ Klon React daraxtidan tashqarida — keyingi flush `PendingCard`
+       *    ni unmount qilganda ham uchish tugaydi.
+       */
+      try {
+        flyAmountToList({ from: amountRef.current, to: listRef.current });
+      } catch {
+        /* bayram — bezak; oqimni to'xtatmaydi */
+      }
     },
     [client, marketId, money, t],
   );
@@ -341,6 +373,7 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
 
       {submittedCode !== "" && !notFound && matches.length === 0 ? (
         <PendingCard
+          amountRef={amountRef}
           chosenAmount={chosenAmount}
           enteredCode={submittedCode}
           isError={pending.isError && !notFound}
@@ -402,6 +435,8 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
       <section
         aria-label={t("collect.recentTitle")}
         className="flex flex-col gap-2"
+        /* 4-qadam NISHONI: klon shu konteyner tomon uchadi (09-04). */
+        ref={listRef}
       >
         <h2 className="text-lg leading-snug font-semibold">
           {t("collect.recentTitle")}

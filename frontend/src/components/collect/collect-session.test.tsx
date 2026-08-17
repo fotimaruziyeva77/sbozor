@@ -55,6 +55,42 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
   };
 });
 
+/*
+ * ⛔ XOREOGRAFIYA MODULI — NAZORATLI O'RAM (G-motion-2 uchun, 09-04).
+ *
+ *   Standart holatda HAQIQIY `flyAmountToList` ishlaydi (import qilingan
+ *   asl modul) — (a)/(b) o'lchovlari haqiqiy xulq ustida. `impl`
+ *   o'rnatilganda esa (e) istisno stsenariysi modellashtiriladi.
+ *
+ *   `fly` josus HAR chaqiruvni yozadi; `activeAtCall` — chaqiruv
+ *   LAHZASIDAGI fokus egasi: «xoreografiya `focus()` dan KEYIN» tartibi
+ *   shu bilan MEXANIK o'lchanadi (§8.3 shartnomasi).
+ */
+type FlyOptions = { from: HTMLElement | null; to: HTMLElement | null };
+
+const choreographyMock = vi.hoisted(() => ({
+  activeAtCall: null as Element | null,
+  fly: vi.fn<(opts: { from: HTMLElement | null; to: HTMLElement | null }) => void>(),
+  impl: null as
+    | null
+    | ((opts: { from: HTMLElement | null; to: HTMLElement | null }) => void),
+}));
+
+vi.mock("@/components/collect/success-choreography", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("@/components/collect/success-choreography")
+  >();
+  return {
+    ...actual,
+    flyAmountToList: (opts: FlyOptions) => {
+      choreographyMock.activeAtCall = document.activeElement;
+      choreographyMock.fly(opts);
+      if (choreographyMock.impl !== null) return choreographyMock.impl(opts);
+      return actual.flyAmountToList(opts);
+    },
+  };
+});
+
 import messages from "../../../messages/uz-Latn.json";
 import { CollectSession } from "@/components/collect/collect-session";
 import { ApiError } from "@/lib/api-client";
@@ -444,5 +480,191 @@ describe("G-20 (06-UI-SPEC §8.2): qadam sanog'i", () => {
       container.querySelectorAll<HTMLElement>('[role="alert"]'),
     ).map((el) => el.textContent ?? "");
     expect(alerts).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* G-motion-2 (09-UI-SPEC §8.2, 09-04) — BAYRAM BLOKLAMAYDI                   */
+/*                                                                            */
+/* ⛔ Bu blok `runFlow` ISHLATMAYDI va bu ATAYIN: `runFlow` sikli qadam       */
+/*   «stall» ga QAYTGUNCHA kutadi, ya'ni tozalash allaqachon bo'lib o'tgan    */
+/*   nuqtada qaytadi — kechiktirilgan tozalash (anti-naqsh) u yerdan          */
+/*   KO'RINMAS edi. `driveToPost` esa POST JAVOBI lahzasida to'xtaydi va     */
+/*   150ms o'lchov aynan o'sha nuqtadan olinadi.                              */
+/*                                                                            */
+/* ⚠ `vi.useFakeTimers({ shouldAdvanceTime: true })` MAJBURIY —              */
+/*   `discovery-panel.test.tsx:245` naqshi: aks holda `waitFor` osiladi.      */
+/*                                                                            */
+/* ⚠ `@testing-library/user-event` LOYIHADA YO'Q (lockfile'da 0 natija) va   */
+/*   yangi paket TAQIQ (G-motion-3(d), L-8 0 KB) — (b) terish o'lchovi        */
+/*   `fireEvent` + `document.activeElement` tasdig'i bilan yoziladi:          */
+/*   fokus egasi AVVAL tasdiqlanadi, keyin teriladi, so'ng bayram oynasi      */
+/*   o'tib ketganda qiymat TO'LIQ turgani o'lchanadi.                         */
+/* -------------------------------------------------------------------------- */
+
+describe("G-motion-2 (09-UI-SPEC §8.2): bayram bloklamaydi", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    choreographyMock.impl = null;
+    choreographyMock.activeAtCall = null;
+    clearSession();
+    seedSession();
+    client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    choreographyMock.impl = null;
+    client.clear();
+    clearSession();
+  });
+
+  /** Uch qadamni bosib, POST JAVOBI lahzasida to'xtaydi. */
+  async function driveToPost(
+    container: HTMLElement,
+    code: string,
+  ): Promise<void> {
+    const input = await waitFor(() => {
+      const el = container.querySelector<HTMLInputElement>(
+        'input[data-collect-step="stall"]',
+      );
+      expect(el).not.toBeNull();
+      return el as HTMLInputElement;
+    });
+    fireEvent.change(input, { target: { value: code } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const option = await waitFor(() => {
+      const el = container.querySelector<HTMLElement>(
+        '[data-collect-option="method"]',
+      );
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    fireEvent.click(option);
+
+    const confirm = await waitFor(() => {
+      const el = container.querySelector<HTMLElement>(
+        '[data-collect-step="confirm"]',
+      );
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    fireEvent.click(confirm);
+
+    /* POST JAVOBI lahzasi: so'rov yozildi va mutatsiya tinchidi. */
+    await waitFor(() => {
+      expect(paymentCalls().length).toBe(1);
+      expect(client.isMutating()).toBe(0);
+    });
+  }
+
+  function stallInput(container: HTMLElement): HTMLInputElement {
+    const el = container.querySelector<HTMLInputElement>(
+      'input[data-collect-step="stall"]',
+    );
+    expect(el).not.toBeNull();
+    return el as HTMLInputElement;
+  }
+
+  test("⛔ (a) POST javobidan 150ms keyin: fokus + bo'sh + `disabled`/`readOnly` EMAS — TO'RT SHART BIRGA", async () => {
+    routeFetch({ "14-C": PENDING });
+    const { container } = renderSession();
+
+    await driveToPost(container, "14-C");
+    await vi.advanceTimersByTimeAsync(150);
+
+    const input = stallInput(container);
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("");
+    expect(input.disabled).toBe(false);
+    expect(input.readOnly).toBe(false);
+  });
+
+  test("⛔ (b) 150ms nuqtasida terilgan belgilar TO'LIQ turadi — «bloklamaydi»ning halol o'lchovi", async () => {
+    routeFetch({ "14-C": PENDING });
+    const { container } = renderSession();
+
+    await driveToPost(container, "14-C");
+    await vi.advanceTimersByTimeAsync(150);
+
+    const input = stallInput(container);
+    /* Kassir terishni FOKUSDAGI maydonda boshlaydi — fokus qaytgan. */
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "15" } });
+
+    /*
+     * Bayram oynasi (400ms) + tozalash (450ms) TO'LIQ o'tib ketadi:
+     * kechikkan biror holat yozuvi (`setTimeout` ichidagi `setDraft` kabi
+     * anti-naqsh) terilgan belgini yutsa — bu tasdiq QIZARADI.
+     */
+    await vi.advanceTimersByTimeAsync(700);
+    expect(input.value).toBe("15");
+  });
+
+  test("⛔ xoreografiya `focus()` dan KEYIN, haqiqiy DOM uchlari bilan chaqiriladi", async () => {
+    routeFetch({ "14-C": PENDING });
+    const { container } = renderSession();
+
+    await driveToPost(container, "14-C");
+
+    expect(choreographyMock.fly).toHaveBeenCalledTimes(1);
+    const opts = choreographyMock.fly.mock.calls[0][0];
+    /* `from` — summa elementi, `to` — ro'yxat konteyneri: `null` EMAS. */
+    expect(opts.from).toBeInstanceOf(HTMLElement);
+    expect(opts.to).toBeInstanceOf(HTMLElement);
+    /*
+     * ⛔ TARTIB MEXANIK O'LCHANADI (§8.3): chaqiruv LAHZASIDA fokus
+     *    allaqachon qidiruv maydonida — ya'ni 6-qadam BIRINCHI bajarilgan.
+     */
+    expect(choreographyMock.activeAtCall).toBe(stallInput(container));
+  });
+
+  test("⛔ (e) xoreografiya istisno otsa ham: to'lov qatori DOM'da, fokus inputda (try/catch)", async () => {
+    /* Ro'yxat POST'dan KEYIN yozilgan to'lovni qaytaradi — qator ko'rinadi. */
+    let posted = false;
+    apiClientMock.apiFetch.mockImplementation(
+      (path: string, options?: { method?: string }) => {
+        if (path === "/shifts/open") return Promise.resolve(OPEN_SHIFT);
+        if (path === "/payments/recent") {
+          return Promise.resolve({ items: posted ? [WRITTEN] : [] });
+        }
+        if (path === "/payments" && options?.method === "POST") {
+          posted = true;
+          return Promise.resolve(WRITTEN);
+        }
+        if (path.startsWith("/billing/pending?stall_code=")) {
+          return Promise.resolve(PENDING);
+        }
+        return Promise.reject(new Error(`mock'lanmagan yo'l: ${path}`));
+      },
+    );
+    choreographyMock.impl = () => {
+      throw new Error("sinov: bayram yiqildi");
+    };
+
+    const { container } = renderSession();
+    await driveToPost(container, "14-C");
+
+    /* Istisno OTILDI — himoya (try/catch) esa oqimni saqladi. */
+    expect(choreographyMock.fly).toHaveBeenCalledTimes(1);
+
+    /* To'lov qatori ro'yxatda... */
+    await waitFor(() => {
+      const row = container.querySelector("li");
+      expect(row).not.toBeNull();
+      expect(row?.textContent).toContain(WRITTEN.stall_code);
+    });
+
+    /* ...va fokus qidiruv maydonida, maydon keyingi mijozga tayyor. */
+    const input = stallInput(container);
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("");
   });
 });

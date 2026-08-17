@@ -132,7 +132,22 @@ export function PaymentRow({ record, onRequestReverse }: PaymentRowProps) {
     kind === "reversal" ? -record.amount_soum : record.amount_soum;
 
   return (
-    <li className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-4 py-3">
+    /*
+     * --- 5-QADAM (09-UI-SPEC §8.1): YANGI QATOR QO'NADI — 800ms ----------
+     *
+     * ⛔ `.motion-row-land` SHARTSIZ va bu MEXANIK jihatdan to'g'ri: CSS
+     *    animatsiyasi element DOM'ga QO'SHILGANDA BIR marta o'ynaydi,
+     *    qayta render'da EMAS — ya'ni `useEffect`, taymer yoki holat
+     *    KERAK EMAS (G-motion-2(d) ruhi). Yangi to'lov ro'yxatga
+     *    kirganda qatori «qo'nadi»; sahifa ochilishida mavjud qatorlar
+     *    ham bir marta kirish sifatida qo'nadi — reja buni qabul qilgan.
+     *    Reduced-motion'da global blok (G-motion-1(a)) 0.01ms ga
+     *    tushiradi: qator fon rangisiz, DARHOL joyida (§8.4).
+     *
+     * ⛔ Davomiylik (800ms) va ranglar `globals.css::landin` da —
+     *    komponentda TAKRORLANMAYDI (G-motion-3(b,c)).
+     */
+    <li className="motion-row-land flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-4 py-3">
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex items-center gap-2">
           {/* ⛔ Rasta raqami `font-mono` EMAS (§7.2) — u odam yorlig'i. */}
