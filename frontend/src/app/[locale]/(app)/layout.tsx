@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
-import { getMessages, setRequestLocale } from "next-intl/server";
+import { getMessages, getTimeZone, setRequestLocale } from "next-intl/server";
 
 import { AppGuard } from "@/components/shell/app-guard";
 import { AppProviders } from "@/components/shell/app-providers";
@@ -42,9 +42,12 @@ export default async function AppLayout({
   setRequestLocale(locale);
 
   const messages = await getMessages();
+  // Request-config'dagi Asia/Tashkent (FOUND-05) — klient provayder uni
+  // o'zi meros olmaydi, oshkora uzatiladi (app-providers.tsx sarlavhasi).
+  const timeZone = await getTimeZone();
 
   return (
-    <AppProviders locale={locale} messages={messages}>
+    <AppProviders locale={locale} messages={messages} timeZone={timeZone}>
       <AppGuard>{children}</AppGuard>
     </AppProviders>
   );
