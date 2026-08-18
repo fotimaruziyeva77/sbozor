@@ -1356,3 +1356,27 @@
     box-shadow: none !important;
   }
 }
+
+/* ==========================================================================
+ * ⛔⛔ TEGISH NISHONI 44px — FAQAT TEGISH QURILMASIDA (260819).
+ * ==========================================================================
+ * Brauzerda o'lchandi (Pixel 8 emulyatsiyasi, `pointer: coarse`):
+ * ikkinchi darajali tugmalar 36px edi — «Summani o'zgartirish»,
+ * «Sotuvchiga ko'rsatish», «Bekor qilish» va trend oralig'i tugmalari.
+ * Uchalasi ham kassir bosim ostida bosadigan tugmalar.
+ *
+ * ⛔ `@media (pointer: coarse)` — sichqonchali ekranda TEGILMAYDI:
+ *    u yerda 36px yetarli va tugmalarni kattalashtirish zich
+ *    joylashuvni buzardi. Chegara faqat barmoq ishlatilganda qo'yiladi.
+ *
+ * ⚠ Dizaynning o'zi bu tugmalarga 40px beradi — bu ONGLI chetlanish:
+ *   40px ham 44px chegarasidan past va u yerda dizayn desktop
+ *   ko'rinishini mo'ljallagan.
+ * ========================================================================== */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  a[href] {
+    min-height: 2.75rem;
+  }
+}

@@ -129,3 +129,23 @@ export function deltaView(
     text: `${up ? "↑ +" : `↓ ${MINUS}`}${Math.abs(percent).toFixed(1)}%`,
   };
 }
+
+/**
+ * PUL + BIRLIK bitta satrda: `12 480 000 so'm`.
+ *
+ * ⛔⛔ NEGA ALOHIDA FUNKSIYA — JSX BO'SHLIQNI YUTADI.
+ *
+ * `{amount} so'm` shaklida yozilganda JSX ifoda bilan matn orasidagi
+ * YANGI QATORNI olib tashlaydi va ekranda `24 000so'm` chiqadi. Bu
+ * uch marta takrorlandi (260818–19, brauzerda ko'rildi) va har safar
+ * `{" "}` bilan yamaldi.
+ *
+ * ⛔ Endi birlik SATR ICHIDA qo'shiladi — JSX u yerga umuman tegmaydi.
+ */
+export function formatSoum(
+  format: ReturnType<typeof useFormatter>,
+  value: number,
+  locale: string,
+): string {
+  return `${formatAmount(format, value, locale)} so'm`;
+}

@@ -8,7 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBusinessDay } from "@/lib/format-day";
-import { deltaView, formatAmount, formatPercent } from "@/lib/format-number";
+import {
+  deltaView,
+  formatAmount,
+  formatPercent,
+  formatSoum,
+} from "@/lib/format-number";
 import { useAccuracyReport, useOccupancyDay } from "@/lib/occupancy-queries";
 import { useReconciliationReport } from "@/lib/reconciliation-queries";
 import { useReceivablesReport, useRevenueReport } from "@/lib/report-queries";
@@ -161,7 +166,7 @@ export function SixTiles() {
         <p className="dir-tile-value">
           {revNow === null
             ? "—"
-            : `${formatAmount(format, revNow, locale)} so'm`}
+            : formatSoum(format, revNow, locale)}
         </p>
         {dRev === null ? null : (
           <div className="flex flex-wrap items-center gap-2">
@@ -190,7 +195,7 @@ export function SixTiles() {
           <span className="dir-tile-unit">rasta</span>
           {leakSum === null ? null : (
             <p className="dir-tile-value-aside">
-              {formatAmount(format, leakSum, locale)}{" "}so&apos;m
+              {formatSoum(format, leakSum, locale)}
             </p>
           )}
         </div>
@@ -230,7 +235,7 @@ export function SixTiles() {
         >
           {debtSum === null
             ? "—"
-            : `${formatAmount(format, debtSum, locale)} so'm`}
+            : formatSoum(format, debtSum, locale)}
         </p>
         <span className="dir-tile-note">
           {debtSum !== null && debtSum < 0
@@ -365,7 +370,7 @@ export function SixTiles() {
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="warning">Deklaratsiya farqi</Badge>
             <span className="dir-tile-value-aside dir-tile-diff">
-              {formatAmount(format, shiftDiff, locale)}{" "}so&apos;m
+              {formatSoum(format, shiftDiff, locale)}
             </span>
             <span className="dir-tile-note">
               {shiftDiff > 0 ? "tizim ortiq" : "deklaratsiya ortiq"}

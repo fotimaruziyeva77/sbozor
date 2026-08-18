@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { sumByAge } from "@/lib/debt-aging";
 import { formatBusinessDay } from "@/lib/format-day";
-import { formatAmount, formatPercent } from "@/lib/format-number";
+import { formatAmount, formatPercent, formatSoum } from "@/lib/format-number";
 import { useAccuracyReport } from "@/lib/occupancy-queries";
 import { useReconciliationReport } from "@/lib/reconciliation-queries";
 import {
@@ -73,8 +73,7 @@ export function AuditSheet() {
       ? ""
       : `${formatBusinessDay(format, revenue.data.from_date, locale)} — ${formatBusinessDay(format, revenue.data.to_date, locale)}`;
 
-  const money = (value: number): string =>
-    `${formatAmount(format, value, locale)} so'm`;
+  const money = (value: number): string => formatSoum(format, value, locale);
 
   /* --- Uchlik: hisoblangan / yig'ilgan / farq ---------------------------- */
   const charged = revenue.data?.total_charged_soum ?? 0;
@@ -176,10 +175,27 @@ export function AuditSheet() {
 
         <Card>
           <CardContent>
+            {/*
+             * ⛔⛔ BELGI MA'NOLI — dizayn namunasida qarz DOIM musbat va
+             *     shuning uchun farq qizil chiziladi. Real ma'lumotda
+             *     yig'ilgan hisoblangandan KO'P bo'lishi mumkin (avans)
+             *     va o'shanda qizil rang «yo'qotish» degan yolg'on
+             *     xabar berardi.
+             */}
             <p className="audit-label">Farq</p>
-            <p className="audit-value audit-value-diff">{money(diff)}</p>
+            <p
+              className={
+                diff > 0 ? "audit-value audit-value-diff" : "audit-value"
+              }
+            >
+              {money(diff)}
+            </p>
             <p className="dir-tile-note">
-              Tarkibi: qarzga yozilgan + band, to&apos;lovsiz
+              {diff > 0
+                ? "Tarkibi: qarzga yozilgan + band, to'lovsiz"
+                : diff < 0
+                  ? "Yig'ilgan hisoblangandan ko'p — avans"
+                  : "Farq yo'q"}
             </p>
           </CardContent>
         </Card>

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { bucketOf } from "@/lib/debt-aging";
 import { daysBetweenIsoDays, formatBusinessDay } from "@/lib/format-day";
-import { formatAmount } from "@/lib/format-number";
+import { formatAmount, formatSoum } from "@/lib/format-number";
 import { useReceivablesReport } from "@/lib/report-queries";
 
 /*
@@ -149,8 +149,7 @@ export function VendorAccount() {
                           : "dir-tile-value"
                       }
                     >
-                      {formatAmount(format, row.outstanding_soum, locale)} so
-                      &apos;m
+{formatSoum(format, row.outstanding_soum, locale)}
                     </p>
                     {row.outstanding_soum < 0 ? (
                       <span className="dir-tile-note">
