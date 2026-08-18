@@ -1037,7 +1037,7 @@
     "answerEmpty": "Свободно",
     "answerUnclear": "Не могу сказать точно",
     "stallLine": "Место {stall} · {zone}",
-    "frameLine": "{date} · {time} · Канал {channel}",
+    "frameLine": "{date} · {time} · {camera} (канал {channel})",
     "vendorAttached": "К этому месту привязан продавец",
     "zoomFrame": "Увеличить кадр",
     "frameAlt": "Кадр-доказательство",

@@ -1037,7 +1037,7 @@
     "answerEmpty": "Bo'sh",
     "answerUnclear": "Aniq ayta olmayman",
     "stallLine": "Rasta {stall} · {zone}",
-    "frameLine": "{date} · {time} · Kanal {channel}",
+    "frameLine": "{date} · {time} · {camera} (kanal {channel})",
     "vendorAttached": "Bu rastada sotuvchi biriktirilgan",
     "zoomFrame": "Kadrni kattalashtirish",
     "frameAlt": "Dalil kadri",

@@ -240,6 +240,15 @@ export function ReviewSession({ exitHref }: ReviewSessionProps) {
    *    ko'rinib turganda) — ikkinchi bosish `409` bo'lardi.
    */
   const blocked = frame !== "ready" || answer.isPending || reveal !== null;
+  /*
+   * N-5: kadr allaqachon javob berilgan bo'lsa. Kod ham, uchala tildagi
+   * matn ham ALLAQACHON bor edi — faqat hech qayerda chizilmasdi, ya'ni
+   * nazoratchi javobi o'tmaganini bilmay qolardi (o'lchandi 2026-08-18).
+   * Blind navbatidagi bilan bir xil shakl — ikkala navbat bir xil
+   * tushuntirish beradi.
+   */
+  const alreadyAnswered =
+    errorCodeOf(answer.error) === "review_already_answered";
 
   const counters = budget.data?.uncertain ?? null;
 
@@ -351,7 +360,14 @@ export function ReviewSession({ exitHref }: ReviewSessionProps) {
               })}
             </p>
             <p className="text-xs text-text-muted">
+              {/*
+               * N-3: kamera NOMI asosiy, kanal raqami yordamchi. «Kanal 11»
+               * nazoratchiga jismonan hech nima demaydi — u kamerani nomi
+               * bilan taniydi. Nom ma'lumotda ALLAQACHON bor edi, lekin
+               * ekranga chiqarilmasdi (o'lchandi 2026-08-18).
+               */}
               {t("review.frameLine", {
+                camera: item.camera_name,
                 channel: item.channel_no,
                 date: item.business_date,
                 time: item.slot_time.slice(0, 5),
@@ -386,6 +402,20 @@ export function ReviewSession({ exitHref }: ReviewSessionProps) {
             <p className="text-sm text-danger-text">
               {t("review.imageRequired")}
             </p>
+          ) : null}
+
+          {alreadyAnswered ? (
+            <div
+              className="flex flex-col items-start gap-3 rounded-md bg-warning/20 p-4 text-text"
+              role="alert"
+            >
+              <p className="text-sm font-semibold">
+                {t("review.errorCause.review_already_answered")}
+              </p>
+              <p className="text-sm">
+                {t("review.errorFix.review_already_answered")}
+              </p>
+            </div>
           ) : null}
         </div>
       )}

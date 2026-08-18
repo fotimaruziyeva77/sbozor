@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { ZoomLayer } from "@/components/review/zoom-layer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEvidenceImageHref } from "@/lib/review-queries";
 
@@ -260,22 +261,28 @@ export function EvidenceFrame({
         </div>
       ) : null}
 
-      <Dialog.Root onOpenChange={setZoomOpen} open={zoomOpen}>
-        <Dialog.Content
-          description={t("review.frameAlt")}
-          size="lg"
+      {/*
+       * N-1 — HAQIQIY KO'RISH REJIMI (o'lchangan 2026-08-18).
+       *
+       * ⛔ Avvalgi holat: dialog 480px ga qulflangan bo'lib, ICHIDA AYNI
+       *    rasm turardi — ya'ni «kattalashtirish» hech nimani kattalashtir-
+       *    masdi. Nazoratchining butun ishi rasmga qarab qaror qilish, va
+       *    «band» bilan «bo'sh» farqi ko'pincha mayda detalda bo'ladi.
+       *
+       * Endi: to'liq ekranli qatlam, masshtab ×1…×6 va surish. Zona konturi
+       * rasm bilan BIRGA masshtablanadi — u rasmning qismi, alohida qatlam
+       * emas, shuning uchun bir xil transformda qoladi.
+       */}
+      {zoomOpen && image.href !== null ? (
+        <ZoomLayer
+          alt={t("review.frameAlt")}
+          closeLabel={t("common.close")}
+          onClose={() => setZoomOpen(false)}
+          polygon={polygon}
+          src={image.href}
           title={t("review.zoomFrame")}
-        >
-          {image.href === null ? null : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              alt={t("review.frameAlt")}
-              className="w-full rounded-md"
-              src={image.href}
-            />
-          )}
-        </Dialog.Content>
-      </Dialog.Root>
+        />
+      ) : null}
     </div>
   );
 }

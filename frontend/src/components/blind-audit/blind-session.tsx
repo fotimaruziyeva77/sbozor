@@ -282,7 +282,14 @@ export function BlindSession({ exitHref }: BlindSessionProps) {
               })}
             </p>
             <p className="text-xs text-text-muted">
+              {/*
+               * N-3: kamera NOMI asosiy, kanal raqami yordamchi. «Kanal 11»
+               * nazoratchiga jismonan hech nima demaydi — u kamerani nomi
+               * bilan taniydi. Nom ma'lumotda ALLAQACHON bor edi, lekin
+               * ekranga chiqarilmasdi (o'lchandi 2026-08-18).
+               */}
               {t("review.frameLine", {
+                camera: item.camera_name,
                 channel: item.channel_no,
                 date: item.business_date,
                 time: item.slot_time.slice(0, 5),

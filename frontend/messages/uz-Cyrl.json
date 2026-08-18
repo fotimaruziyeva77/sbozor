@@ -1037,7 +1037,7 @@
     "answerEmpty": "Бўш",
     "answerUnclear": "Аниқ айта олмайман",
     "stallLine": "Раста {stall} · {zone}",
-    "frameLine": "{date} · {time} · Канал {channel}",
+    "frameLine": "{date} · {time} · {camera} (канал {channel})",
     "vendorAttached": "Бу растада сотувчи бириктирилган",
     "zoomFrame": "Кадрни катталаштириш",
     "frameAlt": "Далил кадри",
