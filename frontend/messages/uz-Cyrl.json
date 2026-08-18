@@ -1428,7 +1428,8 @@
     "revenueTrendEmptyHint": "Камида 7 ёпилган кун керак — ҳисоботлар бўлимида тўлиқ даврни кўриш мумкин.",
     "occupancyTitle": "Бандлик",
     "occupancySummary": "{occupied} банд · {empty} бўш",
-    "occupancyEmpty": "Бандлик ҳали ўлчанмаган"
+    "occupancyEmpty": "Бандлик ҳали ўлчанмаган",
+    "updatedAt": "Янгиланди: {time}"
   },
   "reports": {
     "title": "Ҳисоботлар",

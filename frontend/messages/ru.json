@@ -1428,7 +1428,8 @@
     "revenueTrendEmptyHint": "Нужно минимум 7 закрытых дней — полный период доступен в отчётах.",
     "occupancyTitle": "Занятость",
     "occupancySummary": "{occupied} занято · {empty} свободно",
-    "occupancyEmpty": "Занятость ещё не измерена"
+    "occupancyEmpty": "Занятость ещё не измерена",
+    "updatedAt": "Обновлено: {time}"
   },
   "reports": {
     "title": "Отчёты",

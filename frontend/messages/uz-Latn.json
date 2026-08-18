@@ -1428,7 +1428,8 @@
     "revenueTrendEmptyHint": "Kamida 7 yopilgan kun kerak — hisobotlar bo'limida to'liq davrni ko'rish mumkin.",
     "occupancyTitle": "Bandlik",
     "occupancySummary": "{occupied} band · {empty} bo'sh",
-    "occupancyEmpty": "Bandlik hali o'lchanmagan"
+    "occupancyEmpty": "Bandlik hali o'lchanmagan",
+    "updatedAt": "Yangilandi: {time}"
   },
   "reports": {
     "title": "Hisobotlar",

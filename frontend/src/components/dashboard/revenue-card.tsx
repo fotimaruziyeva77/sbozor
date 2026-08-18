@@ -5,6 +5,8 @@ import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
+import { CardError } from "@/components/dashboard/card-error";
+import { CardFreshness } from "@/components/dashboard/card-freshness";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -161,8 +163,12 @@ export function RevenueCard() {
     return () => cancelAnimationFrame(frame);
   }, [enough]);
 
-  /* Xato — karta UMUMAN chizilmaydi (modul izohi 3-band). */
-  if (report.isError) return null;
+  /*
+   * ⛔ QAROR O'ZGARDI (2026-08-18, «Sbozor Direktor» dizayni §4):
+   *    ilgari xatoda karta UMUMAN chizilmasdi va direktor «ruxsat yo'q»,
+   *    «ma'lumot yo'q» va «server javob bermadi» ni ajrata olmasdi.
+   *    Endi karta O'RNIDA qoladi, ichida sabab va qayta urinish.
+   */
 
   const lineD = enough
     ? sparklinePath(rows.map((row) => row.collected_soum))
@@ -176,16 +182,32 @@ export function RevenueCard() {
         className={cn(breathing ? "motion-breath" : null)}
         ref={cardRef}
       >
-        <CardHeader className="pb-2">
-          <h2 className="text-lg font-semibold">
-            {t("dashboard.revenueTrendTitle")}
-          </h2>
-          <p className="text-sm text-text-muted">
-            {t("dashboard.revenueTrendPeriod")}
-          </p>
+        <CardHeader className="flex flex-wrap items-start justify-between gap-2 pb-2">
+          <div>
+            <h2 className="text-lg font-semibold">
+              {t("dashboard.revenueTrendTitle")}
+            </h2>
+            <p className="text-sm text-text-muted">
+              {t("dashboard.revenueTrendPeriod")}
+            </p>
+          </div>
+          <CardFreshness
+            isRefreshing={report.isFetching}
+            onRefresh={() => {
+              void report.refetch();
+            }}
+            updatedAt={report.dataUpdatedAt}
+          />
         </CardHeader>
 
         <CardContent className="flex flex-col gap-3">
+          {report.isError ? (
+            <CardError
+              onRetry={() => {
+                void report.refetch();
+              }}
+            />
+          ) : null}
           {report.isPending ? (
             <>
               <span className="sr-only" role="status">
@@ -195,7 +217,7 @@ export function RevenueCard() {
               <Skeleton className="h-8 w-40" />
               <Skeleton className="h-14 w-full" />
             </>
-          ) : !enough ? (
+          ) : !enough || report.data === undefined ? (
             /* ⛔ 7 kundan kam nuqta — chiziq CHIZILMAYDI (08 D-10). */
             <EmptyState
               className="py-6"

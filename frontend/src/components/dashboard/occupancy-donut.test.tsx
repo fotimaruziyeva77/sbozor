@@ -169,7 +169,14 @@ describe("OccupancyDonut — o'lchanmagan son chizilmaydi (T-05-04)", () => {
     ).toBeInTheDocument();
 
     /* ⛔ Nol bilan halqa chizish TAQIQ — SVG umuman yo'q. */
-    expect(container.querySelector("svg")).toBeNull();
+    /*
+     * ⛔ TEKSHIRUV DIAGRAMMAGA ANIQLASHTIRILDI: «hech qanday `svg` yo'q»
+     *    shakli juda keng edi — kartadagi HAR QANDAY ikonka (masalan
+     *    yangilash tugmasi) uni qizartirardi, vaholanki test o'lchamoqchi
+     *    bo'lgan narsa — O'LCHANMAGAN SON CHIZILMASLIGI. Diagramma
+     *    `role="img"` bilan belgilangan, ikonkalar esa `aria-hidden`.
+     */
+    expect(container.querySelector('svg[role="img"]')).toBeNull();
   });
 });
 

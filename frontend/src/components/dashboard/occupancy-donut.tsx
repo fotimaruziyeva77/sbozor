@@ -5,6 +5,8 @@ import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
+import { CardError } from "@/components/dashboard/card-error";
+import { CardFreshness } from "@/components/dashboard/card-freshness";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBusinessDay } from "@/lib/format-day";
@@ -92,8 +94,7 @@ export function OccupancyDonut() {
     return () => cancelAnimationFrame(frame);
   }, [measured]);
 
-  /* Xato — karta UMUMAN chizilmaydi (modul izohi 3-band). */
-  if (occupancy.isError) return null;
+  /* ⛔ Sabab `revenue-card.tsx` dagi bilan bir xil: karta o'rnida qoladi. */
 
   /* Yoy nishoni — vizualizatsiya geometriyasi (butun son, `Math.round`). */
   const target = measured
@@ -106,19 +107,35 @@ export function OccupancyDonut() {
     /* `.motion-enter` + `--i: 1` — tushum kartasidan 60ms keyin kiradi. */
     <div className="motion-enter" style={{ "--i": 1 } as CSSProperties}>
       <Card aria-busy={occupancy.isPending ? true : undefined}>
-        <CardHeader className="pb-2">
-          <h2 className="text-lg font-semibold">
+        <CardHeader className="flex flex-wrap items-start justify-between gap-2 pb-2">
+          <div>
+            <h2 className="text-lg font-semibold">
             {t("dashboard.occupancyTitle")}
           </h2>
-          {summary !== undefined ? (
-            /* Qaysi KUN — javobning `day` maydonidan, yagona sana yo'li. */
-            <p className="text-sm text-text-muted">
-              {formatBusinessDay(format, summary.day, locale)}
-            </p>
-          ) : null}
+            {summary !== undefined ? (
+              /* Qaysi KUN — javobning `day` maydonidan, yagona sana yo'li. */
+              <p className="text-sm text-text-muted">
+                {formatBusinessDay(format, summary.day, locale)}
+              </p>
+            ) : null}
+          </div>
+          <CardFreshness
+            isRefreshing={occupancy.isFetching}
+            onRefresh={() => {
+              void occupancy.refetch();
+            }}
+            updatedAt={occupancy.dataUpdatedAt}
+          />
         </CardHeader>
 
         <CardContent className="flex flex-col gap-3">
+          {occupancy.isError ? (
+            <CardError
+              onRetry={() => {
+                void occupancy.refetch();
+              }}
+            />
+          ) : null}
           {occupancy.isPending ? (
             <>
               <span className="sr-only" role="status">
@@ -173,7 +190,19 @@ export function OccupancyDonut() {
                 />
               </svg>
 
-              {/* Matnli yig'indi — xom server sonlari, foiz YO'Q. */}
+              {/*
+               * Bandlik ulushi — «Sbozor Direktor» dizayni §4.
+               * ⛔ Bu KLIENT ARIFMETIKASI EMAS degan qoidaning istisnosi
+               *    emas: bo'linma PUL emas, ikkita SANOQ ustidagi
+               *    vizualizatsiya nisbati va u allaqachon halqa yoyini
+               *    chizish uchun hisoblanadi. Pul raqamlari baribir
+               *    serverdan keladi.
+               * ⛔ Nol bo'luvchidan himoya: `stalls === 0` shoxida bu blok
+               *    umuman chizilmaydi (yuqoridagi shart).
+               */}
+              <p className="text-lg font-semibold" data-numeric>
+                {Math.round((summary.occupied / summary.stalls) * 100)}%
+              </p>
               <p className="text-sm text-text" data-numeric>
                 {t("dashboard.occupancySummary", {
                   empty: summary.empty,
