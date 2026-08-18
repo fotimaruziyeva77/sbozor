@@ -120,6 +120,30 @@ Shundan keyin: kirish → parolni almashtirish → bozor sozlash sehrgari.
 
 ## 6. Tekshirish
 
+```bash
+sh ops/scripts/smoke.sh demo.sbozor.uz
+```
+
+Skript deploy NATIJASINI tashqaridan o'lchaydi — `preflight` konfiguratsiyani
+(niyatni) o'qigan bo'lsa, bu brauzer ko'radigan tomonni tekshiradi:
+
+| Band | Nima o'lchanadi |
+|------|-----------------|
+| 1 | HTTP → HTTPS yo'naltirish (301/307) |
+| 2 | HTTPS landing 200 |
+| 3 | Uchala til `/login` — SSG marshrutlari alohida |
+| 4 | API tirikmi (200/401 — ikkalasi ham sog'lom) |
+| 5 | ⛔ **go2rtc API taqiqi** — 403 (CVSS 9.1 zaifligi) |
+| 6 | ⛔ **8080 porti tashqaridan yopiqmi** |
+| 7 | Sertifikat muddati |
+
+⛔ 5 va 6-bandlar konfiguratsiyada yozilganiga ISHONMAYDI — ular natijani
+tashqaridan o'lchaydi. `docker compose ps` «yashil» deyishi mumkin, lekin
+nginx noto'g'ri `server_name` bilan ko'tarilgan bo'lsa buni faqat shu yerdan
+bilib olasiz.
+
+Qo'lda ham ko'rish mumkin:
+
 - `https://demo.sbozor.uz` — landing ochilishi kerak
 - `https://demo.sbozor.uz/uz/login` — kirish sahifasi
 - `http://demo.sbozor.uz` — HTTPS ga yo'naltirishi kerak
