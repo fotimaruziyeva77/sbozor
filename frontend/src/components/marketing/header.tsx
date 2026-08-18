@@ -29,7 +29,7 @@ export async function Header() {
   const tCommon = await getTranslations("common");
 
   return (
-    <header className="relative mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-4">
+    <header className="relative mx-auto flex w-full landing-shell items-center justify-between gap-4 px-6 py-4">
       <a
         className={cn(
           "sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-6 focus:z-50",

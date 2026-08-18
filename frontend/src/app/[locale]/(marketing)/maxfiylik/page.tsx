@@ -98,7 +98,7 @@ export default async function PrivacyPage({
       <main className="flex-1" id="kontent">
         <Section>
           {/* Sahifada AYNAN bitta <h1> (§15.11); bo'limlar <h2>. */}
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="landing-h2 tracking-tight">
             {t("privacy.title")}
           </h1>
           <div className="flex max-w-[66ch] flex-col gap-8">
@@ -107,7 +107,7 @@ export default async function PrivacyPage({
             </p>
             {PRIVACY_SECTIONS.map((key) => (
               <section className="flex flex-col gap-2" key={key}>
-                <h2 className="text-2xl font-semibold tracking-tight">
+                <h2 className="landing-h2 tracking-tight">
                   {t(`privacy.${key}.title`)}
                 </h2>
                 <p className="text-sm leading-relaxed text-text-muted">

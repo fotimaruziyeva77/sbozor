@@ -29,7 +29,7 @@ export async function Proof() {
         <p aria-hidden="true" className="text-lg text-warning-text">
           ★
         </p>
-        <h2 className="mx-auto mt-3 max-w-[32ch] text-2xl font-semibold tracking-tight text-balance">
+        <h2 className="mx-auto mt-3 max-w-[32ch] landing-h2 tracking-tight text-balance">
           {t("proof.title")}
         </h2>
         <p className="mx-auto mt-3 max-w-[52ch] text-lg leading-relaxed text-text-muted">

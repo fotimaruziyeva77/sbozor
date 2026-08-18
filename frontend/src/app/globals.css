@@ -440,6 +440,27 @@
   .landing-night > * {
     position: relative;
   }
+  /* ---- Landing tipografiyasi: DIZAYN v2 ning AYNAN qiymatlari --------
+   * Shkalamiz 24px/18px-700 beradi, dizaynda esa 26px/18px-600. Farq
+   * o'lchangan (h2: 24 vs 26, og'irlik 700 vs 600) va u ko'rinadi, shuning
+   * uchun marketing yuzasi shu ikki sinfni ishlatadi. Utilita EMAS:
+   * ixtiyoriy o'lcham komponentda taqiqlangan (G-land-5(d)) va bu
+   * qiymatlar ilova shkalasiga a'zo bo'lishi ham kerak emas —
+   * ular FAQAT landing uchun. */
+  .landing-h2 {
+    font-size: 1.625rem;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  .landing-h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+  /* Konteyner kengligi — dizaynda 1160px (bizning 6xl 1152px edi). */
+  .landing-shell {
+    max-width: 72.5rem;
+  }
+
   /* Xarita katagining nomi (A-1…E-6) — shkaladan KICHIK, chunki u
    * katak ichidagi belgi, matn emas. Utilita EMAS: ixtiyoriy o'lcham
    * komponentda taqiqlangan (G-land-5(d)), qiymat shu yerda yashaydi. */

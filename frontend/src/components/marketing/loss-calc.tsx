@@ -112,7 +112,7 @@ export function LossCalc() {
   return (
     <div className="grid items-start gap-12 min-[841px]:grid-cols-2">
       <Reveal>
-        <h2 className="text-2xl font-semibold tracking-tight">
+        <h2 className="landing-h2 tracking-tight">
           {t("calc.title")}
         </h2>
         <p className="mt-3.5 max-w-[52ch] text-sm leading-relaxed text-text-muted">
@@ -142,7 +142,7 @@ export function LossCalc() {
         <div className="mt-4">
           {step === 1 ? (
             <div>
-              <h3 className="text-lg font-semibold">{t("calc.q1.title")}</h3>
+              <h3 className="landing-h3">{t("calc.q1.title")}</h3>
               <p
                 className="mt-4 text-xl font-bold text-accent-text"
                 data-numeric
@@ -185,7 +185,7 @@ export function LossCalc() {
 
           {step === 2 ? (
             <div>
-              <h3 className="text-lg font-semibold">{t("calc.q2.title")}</h3>
+              <h3 className="landing-h3">{t("calc.q2.title")}</h3>
               <div className="mt-4 flex flex-col gap-2.5">
                 {FEE_OPTIONS.map((value) => (
                   <OptionButton
@@ -205,7 +205,7 @@ export function LossCalc() {
 
           {step === 3 ? (
             <div>
-              <h3 className="text-lg font-semibold">{t("calc.q3.title")}</h3>
+              <h3 className="landing-h3">{t("calc.q3.title")}</h3>
               <div className="mt-4 flex flex-col gap-2.5">
                 {CAMERA_OPTIONS.map((value) => (
                   <OptionButton
@@ -225,7 +225,7 @@ export function LossCalc() {
 
           {step === 4 ? (
             <div>
-              <h3 className="text-lg font-semibold">{t("calc.q4.title")}</h3>
+              <h3 className="landing-h3">{t("calc.q4.title")}</h3>
               <div className="mt-4 flex flex-col gap-2.5">
                 {LEDGER_OPTIONS.map((value) => (
                   <OptionButton
@@ -245,7 +245,7 @@ export function LossCalc() {
 
           {done ? (
             <div>
-              <h3 className="text-lg font-semibold">{t("calc.done.title")}</h3>
+              <h3 className="landing-h3">{t("calc.done.title")}</h3>
               <p className="mt-2.5 max-w-[50ch] text-sm leading-relaxed text-text-muted">
                 {t("calc.done.body")}
               </p>

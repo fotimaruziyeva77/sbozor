@@ -262,7 +262,7 @@ export default async function MarketingRootPage({
             <Card className="landing-demo-card mx-auto w-full max-w-2xl">
               <CardContent className="flex flex-col gap-6 pt-5">
                 <div className="flex flex-col gap-2">
-                  <h2 className="text-2xl font-semibold tracking-tight">
+                  <h2 className="landing-h2 tracking-tight">
                     {t("form.title")}
                   </h2>
                   <p className="max-w-[66ch] text-sm leading-relaxed text-text-muted">

@@ -23,7 +23,7 @@ export async function Footer() {
 
   return (
     <footer className="landing-night" data-theme="dark">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-8 text-sm text-text-muted sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto flex w-full landing-shell flex-col gap-3 px-6 py-8 text-sm text-text-muted sm:flex-row sm:items-center sm:justify-between">
         {/* So'zbelgi — header bilan bir xil shakl (dizayn v2 footer). */}
         <p className="text-sm font-bold tracking-[0.08em] text-text">
           {tCommon("appName").slice(0, 1)}

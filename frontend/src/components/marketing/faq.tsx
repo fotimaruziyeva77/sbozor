@@ -31,7 +31,7 @@ export async function Faq() {
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <Reveal>
         <p className="landing-kicker">{t("faq.kicker")}</p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+        <h2 className="mt-3 landing-h2 tracking-tight">
           {t("faq.title")}
         </h2>
       </Reveal>
@@ -45,7 +45,7 @@ export async function Faq() {
               {/* Native marker saqlanadi (display o'zgartirilmaydi — JS'siz
                   affordans); ≥44px nishon (§15.10) `py-4` bilan: 28px satr +
                   32px padding = 60px qator. */}
-              <summary className="cursor-pointer py-4 text-lg font-semibold">
+              <summary className="cursor-pointer py-4 landing-h3">
                 {t(`faq.q${n}`)}
               </summary>
               <p className="max-w-[66ch] pb-4 text-sm leading-relaxed text-text-muted">

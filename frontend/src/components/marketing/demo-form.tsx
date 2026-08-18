@@ -242,7 +242,7 @@ export function DemoForm() {
         role="status"
       >
         <Check aria-hidden="true" className="size-8 text-success-text" />
-        <p className="text-lg font-semibold tracking-tight">
+        <p className="landing-h3 tracking-tight">
           {t("form.success.title")}
         </p>
         <p className="text-sm text-text-muted">{t("form.success.body")}</p>

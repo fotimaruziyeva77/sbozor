@@ -28,7 +28,7 @@ export async function PainCards() {
     <div className="flex flex-col gap-6">
       <Reveal>
         <p className="landing-kicker">{t("pain.kicker")}</p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+        <h2 className="mt-3 landing-h2 tracking-tight">
           {t("pain.title")}
         </h2>
       </Reveal>
@@ -37,7 +37,7 @@ export async function PainCards() {
           <Reveal className="h-full" delayIndex={index} key={key}>
             <Card className="landing-card h-full">
               <CardHeader>
-                <h3 className="text-lg font-semibold">
+                <h3 className="landing-h3">
                   {t(`pain.${key}.title`)}
                 </h3>
               </CardHeader>

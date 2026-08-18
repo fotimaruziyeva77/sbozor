@@ -67,7 +67,7 @@ export function StepLine() {
     <div className="flex flex-col gap-6" data-step={step}>
       <Reveal>
         <p className="landing-kicker">{t("steps.kicker")}</p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+        <h2 className="mt-3 landing-h2 tracking-tight">
           {t("steps.title")}
         </h2>
       </Reveal>
@@ -105,7 +105,7 @@ export function StepLine() {
                 }
                 threshold={0.4}
               >
-                <h3 className="text-lg font-semibold">
+                <h3 className="landing-h3">
                   {t(`steps.${key}.title`)}
                 </h3>
                 <p className="mt-1 max-w-[66ch] text-sm leading-relaxed text-text-muted">

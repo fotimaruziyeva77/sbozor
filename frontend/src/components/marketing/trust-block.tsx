@@ -35,7 +35,7 @@ export async function TrustBlock() {
     <div className="flex flex-col gap-6" id="ishonch">
       <Reveal>
         <p className="landing-kicker">{t("trustBlock.kicker")}</p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+        <h2 className="mt-3 landing-h2 tracking-tight">
           {t("trustBlock.title")}
         </h2>
       </Reveal>
@@ -44,7 +44,7 @@ export async function TrustBlock() {
         {TRUST_BANDS.map((key, index) => (
           <Reveal delayIndex={index} key={key}>
             <div className="flex flex-col gap-1">
-              <h3 className="text-lg font-semibold">
+              <h3 className="landing-h3">
                 {t(`trustBlock.${key}.title`)}
               </h3>
               <p className="max-w-[66ch] text-sm leading-relaxed text-text-muted">

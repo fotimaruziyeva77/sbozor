@@ -36,7 +36,7 @@ export async function RoleCards() {
     <div className="flex flex-col gap-6">
       <Reveal>
         <p className="landing-kicker">{t("roles.kicker")}</p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+        <h2 className="mt-3 landing-h2 tracking-tight">
           {t("roles.title")}
         </h2>
       </Reveal>
@@ -51,7 +51,7 @@ export async function RoleCards() {
                 >
                   {letter}
                 </span>
-                <h3 className="mt-3 text-lg font-semibold">
+                <h3 className="mt-3 landing-h3">
                   {t(`roles.${key}.title`)}
                 </h3>
               </CardHeader>

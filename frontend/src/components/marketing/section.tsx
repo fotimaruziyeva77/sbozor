@@ -30,9 +30,9 @@ export type SectionProps = ComponentPropsWithRef<"section"> & {
 export function Section({ className, title, children, ...props }: SectionProps) {
   return (
     <section className={cn("py-16 md:py-24", className)} {...props}>
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6">
+      <div className="mx-auto flex w-full landing-shell flex-col gap-6 px-6">
         {title ? (
-          <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
+          <h2 className="landing-h2 tracking-tight">{title}</h2>
         ) : null}
         {children}
       </div>

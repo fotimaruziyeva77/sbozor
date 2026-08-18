@@ -30,7 +30,7 @@ export async function Pilot() {
           <div>
             <Badge tone="warning">{t("pilot.status")}</Badge>
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">
+          <h2 className="landing-h2 tracking-tight">
             {t("pilot.title")}
           </h2>
           <p className="max-w-[56ch] text-sm leading-relaxed text-text-muted">
@@ -41,7 +41,7 @@ export async function Pilot() {
       {/* v2: halollik — marketing kuchi sifatida alohida karta. */}
       <Reveal delayIndex={1}>
         <div className="landing-card rounded-lg border border-border bg-surface p-6 shadow-card">
-          <h3 className="text-lg font-semibold">{t("pilot.whyTitle")}</h3>
+          <h3 className="landing-h3">{t("pilot.whyTitle")}</h3>
           <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-text-muted">
             {t("pilot.whyBody")}
           </p>
