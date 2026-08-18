@@ -101,14 +101,14 @@ export function MarketingLocaleSwitcher() {
               "relative rounded-sm px-2 py-1 text-xs font-semibold transition-colors",
               "disabled:pointer-events-none disabled:opacity-50",
               BUTTON_WIDTH_CLASS,
-              /* Faol chip — dizayn v2: OQ tanacha, quyuq matn. Ichki
-                 `data-theme="light"` tokenlarni buradi, shuning uchun tungi
-                 qamrovda ham matn quyuq qoladi (yangi rang qo'shilmaydi). */
+              /* Faol chip — dizayn v2: OQ tanacha, quyuq matn. Tungi
+                 qamrovda `text` ~oq va `bg` ~qora, shuning uchun ularni
+                 ALMASHTIRIB aynan shu juftlik olinadi — yangi token ham,
+                 ishlamaydigan `data-theme="light"` ham kerak emas. */
               isActive
-                ? "bg-surface text-text"
-                : "text-text-muted hover:bg-surface/10 hover:text-text",
+                ? "bg-text text-bg"
+                : "text-text-muted hover:bg-text/10 hover:text-text",
             )}
-            data-theme={isActive ? "light" : undefined}
             disabled={isPending}
             key={code}
             lang={code}

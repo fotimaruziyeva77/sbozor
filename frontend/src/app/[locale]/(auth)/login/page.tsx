@@ -30,7 +30,9 @@ export default async function LoginPage({
   const t = await getTranslations("common");
 
   return (
-    <Card>
+    /* Karta qorong'i qamrovdan TASHQARIDA (qobiq fonni alohida qatlamda
+       chizadi) — shuning uchun bazaviy yorug' tokenlarni oladi. */
+    <Card className="landing-demo-card px-2 py-3">
       <CardHeader>
         <h1 className="text-2xl font-semibold tracking-tight">{t("appName")}</h1>
         <p className="text-sm text-text-muted">{t("appTagline")}</p>

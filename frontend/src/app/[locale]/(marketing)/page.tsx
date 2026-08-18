@@ -253,13 +253,13 @@ export default async function MarketingRootPage({
           <Faq />
         </Section>
         {/* 9 · CTA takrori + demo-forma — v2: indigo tunda oq karta */}
-        <Section className="landing-night" data-theme="dark" id="demo">
+        <Section className="landing-night" id="demo">
+          {/* ⛔ Qorong'i qamrov SEKSIYAGA qo'yilmaydi: ichidagi oq karta
+              qorayardi va `data-theme="light"` uni qaytara olmaydi (yorug'
+              tema — bazaviy holat, uning bloki yo'q). Fon sinfning o'zida. */}
           <Reveal>
             {/* v2: indigo tun ichida YORUG' karta — ichki light-qamrov. */}
-            <Card
-              className="landing-demo-card mx-auto w-full max-w-2xl"
-              data-theme="light"
-            >
+            <Card className="landing-demo-card mx-auto w-full max-w-2xl">
               <CardContent className="flex flex-col gap-6 pt-5">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-2xl font-semibold tracking-tight">
@@ -278,7 +278,10 @@ export default async function MarketingRootPage({
               karta UMUMAN chizilmaydi (yolg'on kanal ochilmaydi — O-06). */}
           {contactPhone || contactTelegram ? (
             <Reveal delayIndex={1}>
-              <div className="mx-auto mt-7 flex w-full max-w-2xl flex-wrap items-center gap-5 rounded-2xl border border-border bg-surface-muted px-7 py-6">
+              <div
+                className="mx-auto mt-7 flex w-full max-w-2xl flex-wrap items-center gap-5 rounded-2xl border border-border bg-surface-muted px-7 py-6"
+                data-theme="dark"
+              >
                 <span
                   aria-hidden="true"
                   className="flex size-14 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-lg font-bold text-accent-text"
