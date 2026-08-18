@@ -1,0 +1,59 @@
+# =============================================================================
+# PRODUCTION — SUBDOMEN + TLS.
+#
+# BU FAYL SHABLON. nginx konteyneri ishga tushganda o'z entrypoint'i
+# `/etc/nginx/templates/*.template` fayllarini `envsubst` bilan qayta
+# yozadi, ya'ni `${PUBLIC_DOMAIN}` o'rniga muhitdagi haqiqiy domen qo'yiladi.
+# Domen imijda QOTIRILMAYDI — bitta imij har qanday bozor/subdomen uchun.
+#
+# Ilova marshrutlari bu yerda TAKRORLANMAYDI: ular `app.inc` dan include
+# qilinadi (dev konfiguratsiyasi ham o'shani ishlatadi). Sabab: o'sha faylda
+# go2rtc API'sining taqiqi va X-Forwarded-For ning overwrite qoidasi bor —
+# nusxa qilinsa, birida tuzatilgan xavfsizlik xatosi ikkinchisida qolardi.
+#
+# BIRINCHI ISHGA TUSHIRISH: sertifikat hali yo'q bo'lsa nginx ko'tarilmaydi
+# (ssl_certificate mavjud bo'lmagan faylga ishora qiladi). Shuning uchun
+# `ops/scripts/first-cert.sh` avval faqat ACME uchun vaqtinchalik server
+# ko'taradi, sertifikat oladi, so'ng to'liq stack ishga tushadi.
+# =============================================================================
+
+# --- HTTP: ACME tekshiruvi + qolganini HTTPS ga yo'naltirish ---
+server {
+    listen 80;
+    server_name ${PUBLIC_DOMAIN};
+
+    # ⛔ ACME yo'li yo'naltirishdan OLDIN turadi: aks holda sertifikat
+    #    yangilanishi o'z-o'zini bloklardi (redirect ACME so'roviga ham
+    #    tegib, certbot faylni o'qiy olmasdi).
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# --- HTTPS ---
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${PUBLIC_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${PUBLIC_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${PUBLIC_DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    # ⛔ HSTS subdomenlarga TARQATILMAYDI (`includeSubDomains` yo'q):
+    #    bir xil ildiz domendagi boshqa subdomen hali TLS'siz bo'lishi
+    #    mumkin va uni brauzer darajasida o'chirib qo'yish xato bo'lardi.
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # ⛔ Marshrutlar YAGONA manbadan.
+    include /etc/nginx/app.inc;
+}
