@@ -11,6 +11,33 @@
 # birida tuzatilgan xavfsizlik xatosi ikkinchisida jimgina qolardi.
 # =============================================================================
 
+# =============================================================================
+# ⛔⛔ UPSTREAM NOMLARI HAR SO'ROVDA QAYTA YECHILADI (260818, jonli 502).
+# =============================================================================
+# nginx `proxy_pass http://core-api:8000;` deb yozilganda nomni FAQAT ISHGA
+# TUSHGANDA yechadi va IP'ni umrbod keshda saqlaydi. Docker'da konteyner
+# qayta yaratilganda IP O'ZGARADI — natijada nginx o'lik manzilga urinadi.
+#
+# O'LCHANGAN: `docker compose up -d` core-api'ni qayta yaratdi
+# (172.19.0.8 -> 172.19.0.9); nginx eski IP'ga urinib BUTUN saytga 502
+# berdi, `docker compose ps` esa hammasini «healthy» ko'rsatdi va
+# core-api ichkaridan `/healthz` ga 200 qaytarardi. Ya'ni production'da
+# har deploydan keyin sayt jimgina o'lardi va sabab hech qayerda
+# ko'rinmasdi (brauzerda 502, jurnalda esa eski IP).
+#
+# ⛔ YECHIM: Docker'ning ichki DNS'i (127.0.0.11) + `proxy_pass` da
+#    O'ZGARUVCHI. O'zgaruvchi bo'lgani uchun nginx nomni HAR SO'ROVDA
+#    yechadi, `valid=10s` esa keshni 10 sekundda chegaralaydi.
+#
+# ⚠ `ipv6=off` MAJBURIY: Docker DNS AAAA yozuvini bermaydi va usiz har
+#   yechish 5 s kutib turardi.
+#
+# ⚠ `proxy_pass` da URI QISMI YO'Q — shuning uchun o'zgaruvchi shaklda ham
+#   asl (yoki `rewrite` dan keyingi) URI uzatiladi, xulq O'ZGARMAYDI.
+resolver 127.0.0.11 valid=10s ipv6=off;
+set $up_core     core-api;
+set $up_frontend frontend;
+set $up_go2rtc   go2rtc;
 
     client_max_body_size 20m;
 
@@ -39,7 +66,7 @@
         auth_request /internal/live-authz;
 
         rewrite ^/live/(.*)$ /$1 break;
-        proxy_pass http://go2rtc:1984;
+        proxy_pass http://$up_go2rtc:1984;
         proxy_http_version 1.1;
 
         # WebSocket signalling (WebRTC va MSE ikkalasi ham `/api/ws` dan).
@@ -65,14 +92,14 @@
     # tekshiradi. Tana uzatilmaydi (`GET` subso'rovida u baribir yo'q).
     location = /internal/live-authz {
         internal;
-        proxy_pass http://core-api:8000/internal/live-authz;
+        proxy_pass http://$up_core:8000/internal/live-authz;
         proxy_pass_request_body off;
         proxy_set_header Content-Length "";
         proxy_set_header X-Original-URI $request_uri;
     }
 
     location /api/ {
-        proxy_pass http://core-api:8000;
+        proxy_pass http://$up_core:8000;
         proxy_http_version 1.1;
 
         proxy_set_header Host              $host;
@@ -84,7 +111,7 @@
     }
 
     location / {
-        proxy_pass http://frontend:3000;
+        proxy_pass http://$up_frontend:3000;
         proxy_http_version 1.1;
 
         # Next.js dev/HMR va kelajakdagi WebSocket oqimlari uchun.
