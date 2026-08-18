@@ -266,10 +266,46 @@ def _strip_comments(text: str) -> str:
     return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
 
 
+def _nginx_effective_conf() -> str:
+    """`nginx.conf` + u `include` qilgan fayllar — IZOHSIZ, BITTA matn.
+
+    =======================================================================
+    ⛔⛔ NEGA `include` KUZATILADI (260818, uchta test qizardi).
+
+    Marshrutlar `ops/nginx/app.inc` ga chiqarildi (dev va prod bitta
+    manbadan o'qisin degan sabab bilan). Shundan keyin bu darvoza
+    `nginx.conf` ni o'qib `X-Forwarded-For` ni TOPMAY qoldi.
+
+    ⛔ Bu darvozaning eng xavfli buzilish shakli — YASHIL qolib ko'r
+       bo'lish edi: qoida boshqa faylga ko'chsa, `finditer` bo'sh
+       ro'yxat qaytarardi va `assert sources` bo'lmaganida testlar
+       hech nimani o'lchamay yashil turaverardi. Shuning uchun
+       `assert sources` O'Z KUCHIDA qoladi VA endi include ham
+       kuzatiladi: qoida qayerga ko'chsa ham, darvoza uni ko'radi.
+
+    ⚠ Faqat REPO ICHIDAGI nisbiy include'lar o'qiladi. Konteyner
+      yo'llari (`/etc/nginx/app.inc`) repo yo'liga o'giriladi —
+      compose ularni shu fayllardan mount qiladi.
+    =======================================================================
+    """
+    parts = [_strip_comments(NGINX_CONF.read_text(encoding="utf-8"))]
+
+    for match in re.finditer(r"^\s*include\s+(?P<path>\S+);", parts[0], re.MULTILINE):
+        raw = match.group("path")
+        name = Path(raw).name
+        candidate = NGINX_CONF.parent / name
+        if candidate.is_file():
+            parts.append(_strip_comments(candidate.read_text(encoding="utf-8")))
+
+    return "\n".join(parts)
+
+
 def _nginx_xff_sources() -> list[str]:
-    """`ops/nginx/nginx.conf` dagi har bir `X-Forwarded-For` manba o'zgaruvchisi."""
-    conf = _strip_comments(NGINX_CONF.read_text(encoding="utf-8"))
-    return [str(match.group("source")) for match in _XFF_DIRECTIVE.finditer(conf)]
+    """Shipped konfiguratsiyadagi har bir `X-Forwarded-For` manba o'zgaruvchisi."""
+    return [
+        str(match.group("source"))
+        for match in _XFF_DIRECTIVE.finditer(_nginx_effective_conf())
+    ]
 
 
 def _nginx_forwards(client_supplied: str | None, *, remote_addr: str) -> str:
