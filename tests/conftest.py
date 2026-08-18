@@ -559,6 +559,24 @@ def test_settings(app_url: str, valkey_url: str) -> Settings:
         #   aks holda `test_settings` ni ishlatadigan BARCHA API testlari
         #   "Field required" bilan yiqilardi.
         nvr_credential_key=SecretStr(Fernet.generate_key().decode()),
+        # ===================================================================
+        # ⛔⛔ OSHKORA BO'SH — MUHITDAN O'QILMASIN (260818).
+        # ===================================================================
+        # `bot_service_token` berilmasa, `pydantic-settings` uni MUHITDAN
+        # oladi, ya'ni ishlab chiquvchining `.env` idagi qiymat testga
+        # sizib kirardi. Oqibat o'lchangan: `.env` ga haqiqiy
+        # `BOT_SERVICE_TOKEN` yozilgan zahoti
+        # `test_an_unconfigured_token_closes_the_surface_completely` va
+        # `test_the_director_route_is_fail_closed_without_a_token_setting`
+        # QIZARDI — ya'ni fail-closed himoyasini o'lchaydigan ikki test
+        # ishlab chiquvchi mashinasining holatiga bog'liq edi.
+        #
+        # ⛔ Bu «testni yashil qilish» EMAS, teskarisi: standart holat endi
+        #    testning O'ZIDA qat'iy. Sabotaj bilan o'lchandi — bu qatorga
+        #    bo'sh bo'lmagan qiymat qo'yilsa, o'sha ikki test QIZARADI.
+        #    Tokenni TALAB qiladigan testlar uni `bot_token` fixture'i
+        #    orqali oladi (u `model_copy` bilan qo'yadi va QAYTARADI).
+        bot_service_token=SecretStr(""),
         cookie_secure=False,
     )
 
