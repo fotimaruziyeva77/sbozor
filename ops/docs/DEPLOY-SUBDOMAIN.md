@@ -61,10 +61,31 @@ ataylab nomlamaydi.
 ## 5. Migratsiya va birinchi admin
 
 ```
-docker compose -f compose.yaml -f compose.prod.yml run --rm migrate
+docker compose -f compose.yaml -f compose.prod.yml --profile migrate run --rm migrate
 ```
 
-Platforma adminini yaratish va bozor sozlash sehrgari — ilovadan.
+### 5.1. Birinchi platforma admini
+
+⛔⛔ **Bu qadam MAJBURIY va uni ILOVADAN bajarib bo'lmaydi.** Sabab
+mexanik: `POST /api/v1/users` `USER_MANAGE` talab qiladi (ya'ni
+allaqachon kirgan odam kerak), `UserRepository.create_user()` esa
+`is_platform_admin=False` ni qotirib yozadi. Ya'ni API orqali birinchi
+hisob **umuman tug'ilmaydi**. Bu qadam o'tkazib yuborilsa, deploy
+tugaydi va tizimga **hech kim kira olmaydi**.
+
+```
+docker compose -f compose.yaml -f compose.prod.yml --profile migrate run --rm   -e BOOTSTRAP_PHONE=+998901234567   -e BOOTSTRAP_NAME="Ism Familiya"   -e BOOTSTRAP_PASSWORD='bir-martalik-parol'   migrate python ops/scripts/bootstrap_admin.py
+```
+
+- Parol **bir martalik**: birinchi kirishda ilova majburan almashtirishga
+  yo'naltiradi (`must_change_password`). Doimiy parolni buyruqqa yozmang —
+  u shell tarixida qoladi.
+- Skript **idempotent**: telefon band bo'lsa hech nima o'zgartirmaydi va
+  mavjud hisobning parolini **almashtirmaydi**.
+- Keyingi hisoblar (bozor admini, direktor, kassir, nazoratchi) shu
+  admin ostida **ilovadan** yaratiladi — bu yo'l qurilgan va ishlaydi.
+
+Shundan keyin: kirish → parolni almashtirish → bozor sozlash sehrgari.
 
 ## 6. Tekshirish
 
@@ -73,19 +94,38 @@ Platforma adminini yaratish va bozor sozlash sehrgari — ilovadan.
 - `http://demo.sbozor.uz` — HTTPS ga yo'naltirishi kerak
 - Sertifikat: `docker compose ... exec nginx nginx -T | grep ssl_certificate`
 
-## Sertifikat yangilanishi
+## Sertifikat yangilanishi — avtomatik
 
-`certbot` xizmati stack bilan birga ko'tariladi va har 12 soatda urinadi;
-Let's Encrypt 30 kun qolganda haqiqatan yangilaydi. Yangilangach nginx
-**qayta yuklanishi** kerak — hozircha bu qo'lda:
+`certbot` xizmati har 12 soatda urinadi; Let's Encrypt 30 kun qolganda
+haqiqatan yangilaydi. **nginx har 6 soatda o'zini `reload` qiladi**
+(`compose.prod.yml` dagi `command`), ya'ni yangilangan sertifikat
+o'z-o'zidan kuchga kiradi — qo'lda hech narsa qilinmaydi.
+
+⛔ Nega certbot'ning `--deploy-hook` i emas: hook nginx'ni qayta yuklashi
+uchun certbot konteynerida docker CLI va **docker soketi** kerak bo'lardi
+— bitta signal uchun ildizga teng huquq. `reload` graceful: eski ishchilar
+joriy so'rovlarni tugatadi, uzilish bo'lmaydi.
+
+Tekshirish (sertifikat muddati):
 
 ```
-docker compose -f compose.yaml -f compose.prod.yml exec nginx nginx -s reload
+docker compose -f compose.yaml -f compose.prod.yml --profile proxy exec nginx   sh -c 'openssl x509 -enddate -noout -in /etc/letsencrypt/live/$PUBLIC_DOMAIN/fullchain.pem'
 ```
 
-⚠ Bu ochiq band: avtomatik reload qo'shilmagan. 60 kunda bir marta qo'lda
-bajarish yetarli, lekin uni unutish mumkin — kelajakda certbot `--deploy-hook`
-bilan bog'lash kerak.
+## Portlar
+
+Production'da **faqat 80 va 443** ochiladi. `compose.yaml` dev uchun
+`${PROXY_HOST_PORT:-8080}:80` ni e'lon qiladi va Compose `ports`
+ro'yxatlarini **birlashtiradi** — shuning uchun `compose.prod.yml` da
+`ports: !override` ishlatilgan. Usiz ilova serverda 8080-portda ham
+ochilardi: TLS'ni, HSTS'ni va HTTPS yo'naltirishni chetlab o'tadigan
+ikkinchi eshik, uni skaner birinchi kuni topadi.
+
+Tekshirish:
+
+```
+docker compose -f compose.yaml -f compose.prod.yml --profile proxy config | grep -A3 published
+```
 
 ## Nima production'da KO'TARILMAYDI
 
