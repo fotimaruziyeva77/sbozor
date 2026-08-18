@@ -1,0 +1,38 @@
+{
+  "pkg": "sbozor-frontend",
+  "globalName": "SbozorUI",
+  "projectId": "557d55c4-7a9e-4ced-aa17-6c9ad8551308",
+  "shape": "package",
+  "srcDir": "src",
+  "tsconfig": "tsconfig.json",
+  "entry": "./.design-sync/ds-entry.ts",
+  "componentSrcMap": {
+    "Badge": "src/components/ui/badge.tsx",
+    "Button": "src/components/ui/button.tsx",
+    "Card": "src/components/ui/card.tsx",
+    "CardHeader": "src/components/ui/card.tsx",
+    "CardContent": "src/components/ui/card.tsx",
+    "ConfirmDialog": "src/components/ui/confirm-dialog.tsx",
+    "Dialog": "src/components/ui/dialog.tsx",
+    "EmptyState": "src/components/ui/empty-state.tsx",
+    "Field": "src/components/ui/field.tsx",
+    "Input": "src/components/ui/input.tsx",
+    "Select": "src/components/ui/select.tsx",
+    "Skeleton": "src/components/ui/skeleton.tsx"
+  },
+  "cssEntry": ".design-sync/ds-styles.css",
+  "runtimeFontPrefixes": [
+    "Inter"
+  ],
+  "overrides": {
+    "Dialog": {
+      "cardMode": "single",
+      "viewport": "520x460"
+    },
+    "ConfirmDialog": {
+      "cardMode": "single",
+      "viewport": "520x360"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}
