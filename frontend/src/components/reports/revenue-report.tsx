@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { RevenueReportRow } from "@/lib/api-types";
 import { formatBusinessDay } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
 import { useRevenueReport } from "@/lib/report-queries";
 
 /*
@@ -158,7 +159,7 @@ export function RevenueReport() {
                   aria-describedby={`${periodId} ${rowsShownId}`}
                   className="m-0 font-mono text-2xl font-semibold tabular-nums"
                 >
-                  {format.number(data.total_collected_soum)}{" "}
+                  {formatAmount(format, data.total_collected_soum, locale)}{" "}
                   <span className="font-sans text-sm font-normal text-text-muted">
                     {t("reports.amountUnit")}
                   </span>
@@ -175,7 +176,7 @@ export function RevenueReport() {
                   {t("reports.revenueCharged")}
                 </dt>
                 <dd className="m-0 font-mono text-sm font-semibold tabular-nums">
-                  {format.number(data.total_charged_soum)}{" "}
+                  {formatAmount(format, data.total_charged_soum, locale)}{" "}
                   <span className="font-sans font-normal text-text-muted">
                     {t("reports.amountUnit")}
                   </span>
@@ -308,13 +309,13 @@ function RevenueRow({ row }: { row: RevenueReportRow }) {
     <tr className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted">
       <td className="p-3">{formatBusinessDay(format, row.business_date, locale)}</td>
       <td className="p-3 font-mono tabular-nums">
-        {format.number(row.charged_soum)}
+        {formatAmount(format, row.charged_soum, locale)}
       </td>
       <td className="p-3 font-mono tabular-nums">
-        {format.number(row.collected_soum)}
+        {formatAmount(format, row.collected_soum, locale)}
       </td>
       <td className={`p-3 font-mono tabular-nums ${diffClass}`}>
-        {format.number(row.diff_soum)}
+        {formatAmount(format, row.diff_soum, locale)}
       </td>
     </tr>
   );

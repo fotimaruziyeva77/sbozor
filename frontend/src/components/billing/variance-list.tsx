@@ -1,10 +1,11 @@
 "use client";
 
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { VarianceCell } from "@/components/billing/variance-cell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatAmount } from "@/lib/format-number";
 import { useUsersQuery } from "@/lib/queries";
 import { useShiftReport } from "@/lib/shift-queries";
 
@@ -55,6 +56,7 @@ import { useShiftReport } from "@/lib/shift-queries";
 export function VarianceList({ day }: { day: string }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const report = useShiftReport(day);
   const users = useUsersQuery();
 
@@ -153,10 +155,10 @@ export function VarianceList({ day }: { day: string }) {
                     {/* Ochiq smenada deklaratsiya hali YO'Q — to'qilmaydi. */}
                     {row.declared_soum === null
                       ? "—"
-                      : format.number(row.declared_soum)}
+                      : formatAmount(format, row.declared_soum, locale)}
                   </td>
                   <td className="py-2 pr-3 font-mono tabular-nums">
-                    {format.number(row.system_soum)}
+                    {formatAmount(format, row.system_soum, locale)}
                   </td>
                   <td className="py-2">
                     {/* ⛔ Uch kanal — `variance-cell.tsx` da. */}
@@ -178,11 +180,11 @@ export function VarianceList({ day }: { day: string }) {
         <p className="text-xs text-text-muted">
           {t("billing.shiftlessPayments")}:{" "}
           <span className="font-mono tabular-nums">
-            {format.number(report.data.shiftless_payment_count)}
+            {formatAmount(format, report.data.shiftless_payment_count, locale)}
           </span>{" "}
           ·{" "}
           <span className="font-mono tabular-nums">
-            {format.number(report.data.shiftless_payment_soum)}
+            {formatAmount(format, report.data.shiftless_payment_soum, locale)}
           </span>{" "}
           {t("billing.amountUnit")}
         </p>

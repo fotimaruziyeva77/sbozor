@@ -248,11 +248,18 @@ describe("⛔ ishora MA'NO TASHIYDI (Pitfall 7)", () => {
 
     /*
      * ⛔ FORMATLANGAN QIYMAT — literal yozilmaydi: kutilma AYNAN
-     *   komponent ishlatadigan formatlagichdan hosila qilinadi, ya'ni
-     *   locale ajratgichi o'zgarsa test qizarmaydi, LEKIN minus
-     *   yo'qolsa qizaradi.
+     *   komponent ishlatadigan qoidadan hosila qilinadi, ya'ni ajratgich
+     *   o'zgarsa test qizarmaydi, LEKIN minus yo'qolsa qizaradi.
+     *
+     * ⛔⛔ MANBA `Intl` DAN O'ZGARDI (260819): o'zbek lotin soni endi
+     *     `formatAmount` dan o'tadi — brauzer `Intl` i bu yozuvda
+     *     VERGUL beradi («-35,000») va u pul uchun xato. Yangi qoida
+     *     dizayndan: uzilmas bo'shliq + `U+2212` MINUS belgisi.
+     *
+     * ⚠ Kutilma yordamchidan MUSTAQIL quriladi: `formatAmount` ga
+     *   bog'lansa, ikkalasi birga siljib test jimgina yashil qolardi.
      */
-    const expected = new Intl.NumberFormat("uz-Latn").format(-35_000);
+    const expected = "−35 000";
     const text = block().textContent ?? "";
     expect(text.includes(expected)).toBe(true);
   });

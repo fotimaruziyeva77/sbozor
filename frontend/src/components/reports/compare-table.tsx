@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { DiffClassValue, ThreeWayReport, ThreeWayRow } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import { formatBusinessDay } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
 import { hasPermission } from "@/lib/rbac";
 import { useThreeWayReport } from "@/lib/report-queries";
 
@@ -304,10 +305,10 @@ function CompareRow({ row }: { row: ThreeWayRow }) {
     <tr className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted">
       <td className="p-3 font-mono tabular-nums">{row.stall_code}</td>
       <td className="p-3 font-mono tabular-nums">
-        {format.number(row.ledger_soum)}
+        {formatAmount(format, row.ledger_soum, locale)}
       </td>
       <td className="p-3 font-mono tabular-nums">
-        {format.number(row.system_soum)}
+        {formatAmount(format, row.system_soum, locale)}
       </td>
       <td className="p-3 font-mono tabular-nums">
         {row.ai_expected_soum === null ? (
@@ -318,7 +319,7 @@ function CompareRow({ row }: { row: ThreeWayRow }) {
            */
           <span className="sr-only">{t("compare.aiNotMeasured")}</span>
         ) : (
-          format.number(row.ai_expected_soum)
+          formatAmount(format, row.ai_expected_soum, locale)
         )}
       </td>
       <td className="p-3">

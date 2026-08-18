@@ -15,6 +15,7 @@ import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { daysBetweenIsoDays, formatBusinessDay } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
 import { useReceivablesReport } from "@/lib/report-queries";
 
 /*
@@ -124,7 +125,7 @@ export function DebtorsCard() {
             <>
               <p className="text-2xl font-semibold tabular-nums">
                 {t("dashboard.debtorsTotal", {
-                  amount: format.number(data.total_outstanding_soum),
+                  amount: formatAmount(format, data.total_outstanding_soum, locale),
                 })}
               </p>
 
@@ -154,7 +155,7 @@ export function DebtorsCard() {
                        */}
                       <span className="text-sm">{row.vendor_name}</span>
                       <span className="text-sm tabular-nums">
-                        {format.number(row.outstanding_soum)}
+                        {formatAmount(format, row.outstanding_soum, locale)}
                       </span>
                       {/*
                        * ⛔⛔ BELGI MA'NOLI — MANFIY QOLDIQ QARZ EMAS.

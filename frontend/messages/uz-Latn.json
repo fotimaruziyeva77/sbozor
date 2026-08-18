@@ -1491,6 +1491,7 @@
     "compareDiff": "Farq",
     "compareChange": "O'zgarish",
     "compareTitle": "Solishtirish rejimi",
+    "compareZeroBase": "Solishtirilgan davr nol — foiz ma'nosiz",
     "compareIncomplete": "Davr tugamagan — foiz hisoblanmaydi",
     "debtorsOldest": "Eng eski qarz",
     "debtColumn": "Qarz",

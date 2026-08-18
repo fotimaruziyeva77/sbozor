@@ -1,9 +1,10 @@
 "use client";
 
 import { Equal, TrendingDown, TrendingUp } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
+import { formatAmount } from "@/lib/format-number";
 
 /*
  * =============================================================================
@@ -61,6 +62,7 @@ export function varianceDirection(soum: number): VarianceDirection {
 export function VarianceCell({ soum }: { soum: number }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const direction = varianceDirection(soum);
 
   const view = {
@@ -86,7 +88,7 @@ export function VarianceCell({ soum }: { soum: number }) {
     <>
       <view.Icon aria-hidden="true" className="size-3" />
       {/* ⛔ ISHORA SAQLANADI: `-35 000` ekranda MINUS bilan chiziladi. */}
-      <span className="font-mono tabular-nums">{format.number(soum)}</span>
+      <span className="font-mono tabular-nums">{formatAmount(format, soum, locale)}</span>
       <span>{t("billing.amountUnit")}</span>
       {/* ⛔ UCHINCHI KANAL — MATN. Rang va ikonka yolg'iz yetmaydi. */}
       <span className="font-semibold">{view.label}</span>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Dialog } from "@/components/ui/dialog";
+import { formatAmount } from "@/lib/format-number";
 import type { PaymentRecord } from "@/lib/payment-queries";
 
 /*
@@ -35,6 +36,7 @@ export function VendorReceiptDialog({
 }: VendorReceiptDialogProps) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   return (
     <Dialog.Root onOpenChange={onOpenChange} open={open}>
@@ -52,7 +54,7 @@ export function VendorReceiptDialog({
             className="collect-vendor-amount font-mono font-semibold tracking-tight tabular-nums"
             data-numeric
           >
-            {format.number(record.amount_soum)} {t("collect.amountUnit")}
+            {formatAmount(format, record.amount_soum, locale)} {t("collect.amountUnit")}
           </p>
           <p className="text-sm text-text-muted">
             {record.method === "cash"

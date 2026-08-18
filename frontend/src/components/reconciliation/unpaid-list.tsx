@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBusinessDay } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
 import type { ReportRow } from "@/lib/reconciliation-queries";
 import {
   isSubjectKind,
@@ -199,7 +200,7 @@ export function UnpaidList({ day }: { day: string }) {
             <dt className="text-text-muted">{t("recon.unpaidSoumLabel")}</dt>
             {/* ⛔ Birlik O'Z namespace'idan (IN-05): `headline.*` — BOSHQA yuza. */}
             <dd className="m-0 font-mono tabular-nums">
-              {format.number(report.data.unpaid_expected_soum)}{" "}
+              {formatAmount(format, report.data.unpaid_expected_soum, locale)}{" "}
               {t("recon.amountUnit")}
             </dd>
           </div>
@@ -298,7 +299,7 @@ function UnpaidRow({
             {t("recon.amountUnknown")}
           </span>
         ) : (
-          format.number(expected)
+          formatAmount(format, expected, locale)
         )}
       </td>
       <td className="p-3 font-mono tabular-nums">
@@ -307,7 +308,7 @@ function UnpaidRow({
             {t("recon.amountUnknown")}
           </span>
         ) : (
-          format.number(paid)
+          formatAmount(format, paid, locale)
         )}
       </td>
       <td className="p-3">

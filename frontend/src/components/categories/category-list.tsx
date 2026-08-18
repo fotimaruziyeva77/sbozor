@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Ellipsis, Pencil, Trash2 } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CategoryItem } from "@/lib/api-types";
+import { formatAmount } from "@/lib/format-number";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import {
   useCategoriesQuery,
@@ -249,6 +250,7 @@ function CategoryRow({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-sm px-2 py-1.5 hover:bg-surface-muted">
@@ -268,7 +270,7 @@ function CategoryRow({
           </span>
         ) : (
           <span className="text-xs text-text-muted tabular-nums">
-            {format.number(category.current_tariff_soum)}{" "}
+            {formatAmount(format, category.current_tariff_soum, locale)}{" "}
             {t("tariffs.amountUnit")}
           </span>
         )}

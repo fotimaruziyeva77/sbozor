@@ -1,7 +1,7 @@
 "use client";
 
 import { RotateCcw } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useNow, useTranslations } from "next-intl";
 
 import { cn } from "@/lib/cn";
 
@@ -40,10 +40,19 @@ export function CardFreshness({
 }: CardFreshnessProps) {
   const t = useTranslations();
   const format = useFormatter();
+  /*
+   * ⛔ `Date.now()` RENDERDA CHAQIRILMAYDI (react-hooks/purity).
+   *
+   * U har renderda boshqa qiymat qaytaradi, ya'ni render SOF EMAS va
+   * React uni qayta o'ynatganda natija o'zgarardi. `useNow()` esa
+   * `next-intl` provayderidan keladi va testda qotirilishi mumkin —
+   * shu sababdan «eskirgan» chegarasi ham SINALADIGAN bo'ladi.
+   */
+  const now = useNow();
 
   if (updatedAt === 0) return null;
 
-  const stale = Date.now() - updatedAt > STALE_AFTER_MS;
+  const stale = now.getTime() - updatedAt > STALE_AFTER_MS;
 
   return (
     <div className="flex items-center gap-2">

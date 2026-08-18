@@ -1,6 +1,6 @@
 "use client";
 
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Card } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import {
   headlineUnitOf,
   useHeadline,
 } from "@/lib/headline-queries";
+import { formatAmount } from "@/lib/format-number";
 import { useCountUp } from "@/lib/use-count-up";
 
 /*
@@ -95,6 +96,7 @@ export type HeadlineCardProps = {
 export function HeadlineCard({ marketId }: HeadlineCardProps) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const headline = useHeadline(marketId);
 
   /*
@@ -183,7 +185,7 @@ export function HeadlineCard({ marketId }: HeadlineCardProps) {
          *    Sanayotgan span esa `aria-hidden` — u bezak, ma'lumot emas.
          *    G-33(a) skaneri ham aynan shu `sr-only` tugunni o'qiydi.
          */}
-        <span className="sr-only">{format.number(value)}</span>
+        <span className="sr-only">{formatAmount(format, value, locale)}</span>
         <span
           aria-hidden="true"
           className={cn(
@@ -194,7 +196,7 @@ export function HeadlineCard({ marketId }: HeadlineCardProps) {
           )}
           onTransitionEnd={() => setSettledFor(value)}
         >
-          {format.number(shown ?? value)}
+          {formatAmount(format, shown ?? value, locale)}
         </span>
         {/*
          * ⛔ Birlik FAQAT `"soum"` da. `pending-summary.tsx:177` naqshi:

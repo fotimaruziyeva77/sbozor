@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { formatBusinessDay } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
 import { useReconciliationReport } from "@/lib/reconciliation-queries";
 
 /*
@@ -132,7 +133,7 @@ export function LeakCard() {
                */}
               <p className="text-sm text-text-muted">
                 {t("dashboard.leakAmount", {
-                  amount: format.number(data.unpaid_expected_soum),
+                  amount: formatAmount(format, data.unpaid_expected_soum, locale),
                 })}
               </p>
 

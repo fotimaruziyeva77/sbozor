@@ -181,3 +181,46 @@ test("G-date(d): xom `weekday` faqat sana yordamchisida", () => {
       "INGLIZCHA chiqadi. `formatBusinessWeekday` ni ishlating.",
   );
 });
+
+/*
+ * =============================================================================
+ * G-num: XOM `format.number` — PUL SONI UCHUN TAQIQ (260819).
+ * =============================================================================
+ * `new Intl.NumberFormat("uz-Latn").format(12480000)` brauzerda
+ * «12,480,000» beradi — VERGUL bilan, CLDR ildiz shabloni. Node'ning
+ * to'liq ICU'si «12 480 000» beradi. `uz-Cyrl` va `ru` da brauzer
+ * to'g'ri ishlaydi, ya'ni nosozlik FAQAT asosiy tilimizda.
+ *
+ * ⛔ Bu sanadan qimmatroq: vergul ba'zi konvensiyalarda KASR belgisi.
+ *
+ * ⛔ RUXSAT ETILGAN ISHLATISH: opsiyali chaqiruvlar (foiz, kasr, birlik)
+ *    — ular guruhlash mantig'iga tegmaydi va `formatAmount` dan
+ *    o'tmaydi. Shuning uchun darvoza FAQAT opsiyasiz shaklni ushlaydi:
+ *    `format.number(x)`.
+ */
+test("G-num: opsiyasiz `format.number(x)` faqat yordamchida", () => {
+  const walk = (dir, acc = []) => {
+    for (const entry of readdirSync(dir)) {
+      const full = `${dir}/${entry}`;
+      if (statSync(full).isDirectory()) walk(full, acc);
+      else if (/\.tsx?$/u.test(entry) && !/\.test\./u.test(entry)) acc.push(full);
+    }
+    return acc;
+  };
+  const stripComments = (code) =>
+    code.replaceAll(/\/\*[\s\S]*?\*\//gu, "").replaceAll(/\/\/.*$/gmu, "");
+
+  /* ⛔ `format.number(` + qavs ichida `{` YO'Q -> opsiyasiz shakl. */
+  const bare = /format\.number\([^(){}]+\)/u;
+
+  const hits = walk("src")
+    .filter((file) => bare.test(stripComments(readFileSync(file, "utf8"))))
+    .sort();
+
+  assert.deepEqual(
+    hits,
+    ["src/lib/format-number.ts"],
+    "⛔ Xom `format.number(x)` — o'sha ekranda pul o'zbek lotin tilida " +
+      "VERGUL bilan chiqadi. `formatAmount(format, x, locale)` ishlating.",
+  );
+});

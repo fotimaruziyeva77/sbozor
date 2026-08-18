@@ -17,6 +17,7 @@ import { businessDayIn } from "@/components/snapshots/day-picker";
 import { Badge } from "@/components/ui/badge";
 import { type AgeBucket, bucketOf } from "@/lib/debt-aging";
 import { formatBusinessDay } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
 import { useReceivablesReport } from "@/lib/report-queries";
 
 /*
@@ -161,7 +162,7 @@ export function DebtorsReport() {
                     : "m-0 font-mono text-lg font-semibold tabular-nums"
                 }
               >
-                {format.number(data.total_outstanding_soum)}{" "}
+                {formatAmount(format, data.total_outstanding_soum, locale)}{" "}
                 <span className="font-sans text-sm font-normal text-text-muted">
                   {t("reports.amountUnit")}
                 </span>
@@ -301,7 +302,7 @@ function DebtorRow({ row }: { row: ReceivablesReportRow }) {
             : "p-3 font-mono tabular-nums"
         }
       >
-        {format.number(row.outstanding_soum)}
+        {formatAmount(format, row.outstanding_soum, locale)}
         {/* ⛔ Rang yolg'iz signal EMAS (§13.4) — belgi MATN bilan ham. */}
         {row.outstanding_soum < 0 ? (
           <span className="sr-only"> {t("reports.overpaid")}</span>

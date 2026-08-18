@@ -1491,6 +1491,7 @@
     "compareDiff": "Разница",
     "compareChange": "Изменение",
     "compareTitle": "Режим сравнения",
+    "compareZeroBase": "Сравниваемый период — ноль, процент не имеет смысла",
     "compareIncomplete": "Период не завершён — процент не считается",
     "debtorsOldest": "Самый старый долг",
     "debtColumn": "Долг",

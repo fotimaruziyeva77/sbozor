@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { DoorOpen } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { PaymentBar } from "@/components/collect/payment-bar";
@@ -23,6 +23,7 @@ import {
   usePendingStall,
 } from "@/lib/billing-pending-queries";
 import type { PendingStall } from "@/lib/billing-pending-queries";
+import { formatAmount } from "@/lib/format-number";
 import { useRecentPayments, useReversePayment } from "@/lib/payment-queries";
 import type { PaymentRecord } from "@/lib/payment-queries";
 import { useOpenShift } from "@/lib/shift-queries";
@@ -144,6 +145,7 @@ export type CollectSessionProps = {
 export function CollectSession({ shiftHref }: CollectSessionProps) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const client = useQueryClient();
   const { principal } = useAuthStore();
   const marketId = principal?.marketId ?? "";
@@ -220,9 +222,22 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
    *   o'zgargani uchun bitta qo'shimcha so'rov ketadi va bu TO'G'RI —
    *   kesh kaliti endi haqiqiy rasta kodi bo'ladi.
    */
+  /*
+   * ⛔ `react-hooks/set-state-in-effect` ONGLI RAVISHDA o'chirilgan.
+   *
+   * Qoida kaskadli renderdan ogohlantiradi va u odatda to'g'ri. Bu
+   * yerda kaskad CHEGARALANGAN: tenglashtirilgandan keyin shart yolg'on
+   * bo'ladi, ya'ni AYNAN BITTA qo'shimcha render.
+   *
+   * Muqobil (`enteredCode` ni to'g'ridan-to'g'ri `stall.stall_code` dan
+   * olish) `matched` himoyasini TAVTOLOGIYAGA aylantirardi — o'sha
+   * himoya boshqa rastaning summasini shu kod ostida chizishdan
+   * saqlaydi va u PUL xatosining oldini oladi.
+   */
   useEffect(() => {
     if (stall === null) return;
     if (stall.stall_code === submittedCode) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSubmittedCode(stall.stall_code);
   }, [stall, submittedCode]);
 
@@ -277,7 +292,7 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
   }
 
   const money = useCallback(
-    (value: number) => `${format.number(value)} ${t("collect.amountUnit")}`,
+    (value: number) => `${formatAmount(format, value, locale)} ${t("collect.amountUnit")}`,
     [format, t],
   );
 

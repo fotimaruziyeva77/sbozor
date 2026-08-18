@@ -2,7 +2,7 @@
 
 import type { Ref } from "react";
 import { CalendarDays, Clock, PiggyBank, Wrench } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { StallStatusValue } from "@/lib/api-types";
 import { billingErrorView } from "@/lib/billing-errors";
 import type { PendingStall } from "@/lib/billing-pending-queries";
+import { formatAmount } from "@/lib/format-number";
 
 /*
  * =============================================================================
@@ -153,12 +154,13 @@ export function PendingCard({
 }: PendingCardProps) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   /* ⛔ §9.4, 2-QATLAM — javobning O'ZI kiritilgan kodni tasdiqlaydi. */
   const matched = pending !== null && pending.stall_code === enteredCode;
 
   const money = (value: number) =>
-    `${format.number(value)} ${t("collect.amountUnit")}`;
+    `${formatAmount(format, value, locale)} ${t("collect.amountUnit")}`;
 
   return (
     <Card className="relative border-l-4 border-l-warning">

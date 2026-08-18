@@ -178,8 +178,23 @@ function CompareRow({
       <td className="p-3 font-mono tabular-nums">
         {formatAmount(format, diff, locale)}
       </td>
+      {/*
+       * ⛔⛔ IKKI SABAB ARALASHTIRILMAYDI (260819, Chromeda ko'rildi).
+       *
+       * `deltaView` `null` ni IKKI holatda qaytaradi va ular boshqa
+       * narsa: (a) davr tugamagan; (b) solishtirilgan davr NOL —
+       * o'shanda foiz matematik jihatdan ma'nosiz (har qanday son
+       * cheksiz foizga o'sadi).
+       *
+       * Ilgari ikkalasi ham «Davr tugamagan» deb yozilardi va bu
+       * YOLG'ON SABAB edi: davr yopilgan, muammo bazada.
+       */}
       <td className="p-3">
-        {delta === null ? t("reports.compareIncomplete") : delta.text}
+        {delta !== null
+          ? delta.text
+          : otherValue === 0
+            ? t("reports.compareZeroBase")
+            : t("reports.compareIncomplete")}
       </td>
     </tr>
   );

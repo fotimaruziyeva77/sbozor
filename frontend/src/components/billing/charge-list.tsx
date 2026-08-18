@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { ChargeDetailDialog } from "@/components/billing/charge-detail-dialog";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ChargeRow } from "@/lib/billing-charge-queries";
 import { useCharges } from "@/lib/billing-charge-queries";
+import { formatAmount } from "@/lib/format-number";
 import { EMPTY_VENDOR_FILTERS, useVendorsQuery } from "@/lib/market-queries";
 
 /*
@@ -93,6 +94,7 @@ export function ChargeList({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const charges = useCharges(day);
   const vendors = useVendorsQuery(EMPTY_VENDOR_FILTERS);
 
@@ -196,14 +198,14 @@ export function ChargeList({
                   </td>
                   {showTariffColumn ? (
                     <td className="py-2 pr-3 font-mono tabular-nums">
-                      {format.number(row.tariff_amount_soum)}
+                      {formatAmount(format, row.tariff_amount_soum, locale)}
                     </td>
                   ) : null}
                   <td className="py-2 pr-3 font-mono tabular-nums">
-                    {format.number(row.amount_soum)}
+                    {formatAmount(format, row.amount_soum, locale)}
                   </td>
                   <td className="py-2 pr-3 font-mono tabular-nums">
-                    {format.number(row.outstanding_soum)}
+                    {formatAmount(format, row.outstanding_soum, locale)}
                   </td>
                   <td className="py-2">
                     <Button

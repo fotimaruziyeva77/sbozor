@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TariffDialog } from "@/components/tariffs/tariff-dialog";
 import type { TariffItem } from "@/lib/api-types";
 import { formatBusinessDay } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import {
   useCategoriesQuery,
@@ -301,7 +302,7 @@ export function TariffRow({
     <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <div className="flex min-w-0 flex-col gap-0.5">
         <p className="text-base font-semibold tabular-nums">
-          {format.number(tariff.amount_soum)} {t("tariffs.amountUnit")}
+          {formatAmount(format, tariff.amount_soum, locale)} {t("tariffs.amountUnit")}
         </p>
         <p className="text-xs text-text-muted tabular-nums">
           <span className="sr-only">{t("tariffs.periodLabel")}: </span>

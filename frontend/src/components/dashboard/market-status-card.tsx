@@ -1,11 +1,12 @@
 "use client";
 
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { ACTIVATION_STEP } from "@/components/wizard/wizard-steps";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Link } from "@/i18n/navigation";
+import { formatAmount } from "@/lib/format-number";
 import { useSetupStatusQuery } from "@/lib/market-queries";
 import { useUsersQuery } from "@/lib/queries";
 
@@ -77,6 +78,7 @@ export type MarketStatusCardProps = {
 export function MarketStatusCard({ isActive, marketId }: MarketStatusCardProps) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   const setupStatus = useSetupStatusQuery(marketId);
   const users = useUsersQuery();
@@ -88,7 +90,7 @@ export function MarketStatusCard({ isActive, marketId }: MarketStatusCardProps) 
 
   /** Son yoki `—` — ⛔ nol HECH QACHON o'rnini bosmaydi. */
   const count = (value: number | undefined): string =>
-    value === undefined ? UNKNOWN : format.number(value);
+    value === undefined ? UNKNOWN : formatAmount(format, value, locale);
 
   const status = setupStatus.data;
 

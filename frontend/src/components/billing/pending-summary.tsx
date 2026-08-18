@@ -2,11 +2,12 @@
 
 import type { ReactNode } from "react";
 import { Clock } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarketPending } from "@/lib/billing-pending-queries";
+import { formatAmount } from "@/lib/format-number";
 
 /*
  * =============================================================================
@@ -69,6 +70,7 @@ import { useMarketPending } from "@/lib/billing-pending-queries";
 export function PendingSummary() {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const pending = useMarketPending();
 
   return (
@@ -150,7 +152,7 @@ export function PendingSummary() {
               value={
                 <>
                   <span className="font-mono tabular-nums">
-                    {format.number(pending.data.pending_amount_soum)}
+                    {formatAmount(format, pending.data.pending_amount_soum, locale)}
                   </span>{" "}
                   {t("billing.amountUnit")}
                 </>
@@ -164,7 +166,7 @@ export function PendingSummary() {
               value={
                 <>
                   <span className="font-mono tabular-nums">
-                    {format.number(pending.data.outstanding_soum)}
+                    {formatAmount(format, pending.data.outstanding_soum, locale)}
                   </span>{" "}
                   {t("billing.amountUnit")}
                 </>
@@ -177,7 +179,7 @@ export function PendingSummary() {
               /* ⛔ Rasta SONI — pul emas, shuning uchun `amountUnit` YO'Q. */
               value={
                 <span className="tabular-nums">
-                  {format.number(pending.data.pending_stall_count)}
+                  {formatAmount(format, pending.data.pending_stall_count, locale)}
                 </span>
               }
               valueClassName="text-base font-semibold"

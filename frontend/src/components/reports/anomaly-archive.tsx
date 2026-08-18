@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AnomalyArchiveRow } from "@/lib/api-types";
 import { formatBusinessDay } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
 import { useAnomalyArchive } from "@/lib/report-queries";
 
 /*
@@ -171,7 +172,7 @@ export function AnomalyArchive() {
                   aria-describedby={`${periodId} ${rowsShownId}`}
                   className="m-0 font-mono text-sm font-semibold tabular-nums"
                 >
-                  {format.number(data.unpaid_count)}
+                  {formatAmount(format, data.unpaid_count, locale)}
                 </dd>
               </div>
 
@@ -183,7 +184,7 @@ export function AnomalyArchive() {
                   aria-describedby={`${periodId} ${rowsShownId}`}
                   className="m-0 font-mono text-sm font-semibold tabular-nums"
                 >
-                  {format.number(data.unregistered_count)}
+                  {formatAmount(format, data.unregistered_count, locale)}
                 </dd>
               </div>
             </div>

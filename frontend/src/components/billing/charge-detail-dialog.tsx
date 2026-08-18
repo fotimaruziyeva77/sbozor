@@ -13,6 +13,7 @@ import type {
 } from "@/lib/billing-charge-queries";
 import { useChargeDetail } from "@/lib/billing-charge-queries";
 import { formatBusinessDay, formatInstant } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
 import { useUsersQuery } from "@/lib/queries";
 import { useEvidenceImageHref } from "@/lib/review-queries";
 
@@ -192,18 +193,18 @@ function ChargeDetailBody({ charge }: { charge: ChargeRow }) {
           <Amount
             label={t("billing.tariffAmount")}
             unit={t("billing.amountUnit")}
-            value={format.number(data.tariff_amount_soum)}
+            value={formatAmount(format, data.tariff_amount_soum, locale)}
           />
         ) : null}
         <Amount
           label={adjusted ? t("billing.chargeAmount") : t("billing.amount")}
           unit={t("billing.amountUnit")}
-          value={format.number(data.amount_soum)}
+          value={formatAmount(format, data.amount_soum, locale)}
         />
         <Amount
           label={t("billing.outstanding")}
           unit={t("billing.amountUnit")}
-          value={format.number(charge.outstanding_soum)}
+          value={formatAmount(format, charge.outstanding_soum, locale)}
         />
       </section>
 
@@ -289,7 +290,7 @@ function AdjustmentRow({ adjustment }: { adjustment: ChargeAdjustment }) {
       </Badge>
 
       <span className="font-mono text-sm tabular-nums">
-        {format.number(adjustment.amount_soum)}
+        {formatAmount(format, adjustment.amount_soum, locale)}
       </span>
       <span className="text-sm">{t("billing.amountUnit")}</span>
 

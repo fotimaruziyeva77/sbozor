@@ -61,11 +61,28 @@ const REVERSE_BUTTON = messages.collect.reverse;
  *   o'tadi; ikkalasini bir shaklga keltirmasa da'vo mahsulot to'g'ri
  *   bo'lganda ham qizarardi (yolg'on qizil).
  */
+/*
+ * ⛔⛔ MANBA `Intl` DAN O'ZGARDI (260819): o'zbek lotin pul soni endi
+ *     `formatAmount` qoidasidan o'tadi — brauzer `Intl` i bu yozuvda
+ *     VERGUL beradi va u pul uchun xato (vergul ba'zi konvensiyalarda
+ *     KASR belgisi). Yangi qoida dizayndan: uch xonalab uzilmas
+ *     bo'shliq + manfiyda `U+2212` MINUS belgisi.
+ *
+ * ⚠ Kutilma `formatAmount` dan MUSTAQIL quriladi — bog'lansa ikkalasi
+ *   birga siljib, test jimgina yashil qolardi.
+ */
+const group = (value: number): string => {
+  const digits = Math.round(Math.abs(value)).toString();
+  let out = "";
+  for (let i = 0; i < digits.length; i += 1) {
+    if (i > 0 && (digits.length - i) % 3 === 0) out += " ";
+    out += digits[i];
+  }
+  return value < 0 ? `−${out}` : out;
+};
+
 const money = (value: number) =>
-  `${new Intl.NumberFormat(LOCALE).format(value)} ${messages.collect.amountUnit}`.replace(
-    /\s+/gu,
-    " ",
-  );
+  `${group(value)} ${messages.collect.amountUnit}`.replace(/\s+/gu, " ");
 
 const PAYMENT: PaymentRecord = {
   payment_id: "33333333-3333-4333-8333-333333333333",

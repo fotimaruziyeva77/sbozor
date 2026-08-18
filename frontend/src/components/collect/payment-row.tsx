@@ -1,12 +1,13 @@
 "use client";
 
 import { Banknote, CircleCheckBig, CreditCard, Undo2 } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PaymentMethodValue } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
+import { formatAmount } from "@/lib/format-number";
 import type { PaymentRecord } from "@/lib/payment-queries";
 
 /*
@@ -127,6 +128,7 @@ export function PaymentRow({
 }: PaymentRowProps) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   const kind = rowKind(record);
   /* ⚠ Shart MANTIQAN o'zgarmadi — endi u UCH HOLATLI qarordan o'qiladi. */
@@ -178,7 +180,7 @@ export function PaymentRow({
                 : "text-text",
             )}
           >
-            {format.number(signedAmount)} {t("collect.amountUnit")}
+            {formatAmount(format, signedAmount, locale)} {t("collect.amountUnit")}
           </span>
         </div>
 

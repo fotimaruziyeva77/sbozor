@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
 import { formatBusinessDay } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
 import { useRevenueReport } from "@/lib/report-queries";
 import { useCountUp } from "@/lib/use-count-up";
 
@@ -264,11 +265,13 @@ export function RevenueCard() {
                  * to'liq; sanayotgan span `aria-hidden` — `aria-live` YO'Q.
                  */}
                 <span className="sr-only">
-                  {format.number(report.data.total_collected_soum)}
+                  {formatAmount(format, report.data.total_collected_soum, locale)}
                 </span>
                 <span aria-hidden="true" className="font-mono" data-numeric>
-                  {format.number(
+                  {formatAmount(
+                    format,
                     shownTotal ?? report.data.total_collected_soum,
+                    locale,
                   )}
                 </span>{" "}
                 <span className="text-sm font-normal text-text-muted">

@@ -2,7 +2,7 @@
 
 import { useCallback, useId, useState } from "react";
 import { CircleCheckBig, Loader2 } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { parseSoumInput } from "@/lib/api-types";
+import { formatAmount } from "@/lib/format-number";
 import { useCloseShift } from "@/lib/shift-queries";
 import type { ShiftCloseResult } from "@/lib/shift-queries";
 
@@ -129,6 +130,7 @@ export type ShiftCloseFormProps = {
 export function ShiftCloseForm({ shiftId, onReopen }: ShiftCloseFormProps) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const close = useCloseShift();
 
   const fieldId = useId();
@@ -180,7 +182,7 @@ export function ShiftCloseForm({ shiftId, onReopen }: ShiftCloseFormProps) {
   /* ------------------------------------------------------------------ */
 
   if (result !== null) {
-    const written = `${format.number(result.declared_soum)} ${t("collect.amountUnit")}`;
+    const written = `${formatAmount(format, result.declared_soum, locale)} ${t("collect.amountUnit")}`;
 
     return (
       <div className="flex flex-col gap-4">
@@ -316,7 +318,7 @@ export function ShiftCloseForm({ shiftId, onReopen }: ShiftCloseFormProps) {
             <span className="font-mono font-semibold tabular-nums">
               {declared === null
                 ? ""
-                : `${format.number(declared)} ${t("collect.amountUnit")}`}
+                : `${formatAmount(format, declared, locale)} ${t("collect.amountUnit")}`}
             </span>
           </>
         }
