@@ -220,8 +220,11 @@ export function AnomalyArchive() {
              */
             <EmptyState
               description={t("reports.emptyAnomaliesHint", {
-                from: data.from_date,
-                to: data.to_date,
+                /* ⛔ XOM ISO EMAS — bu qator ekranda «2026-07-19 — 2026-08-17»
+                 *    bo'lib chiqardi, holbuki yonidagi jadval sanalari
+                 *    «19-iyul, 2026» edi. Bir sahifada ikki xil sana yo'li. */
+                from: formatBusinessDay(format, data.from_date, locale),
+                to: formatBusinessDay(format, data.to_date, locale),
               })}
               title={t("reports.emptyAnomalies")}
             />

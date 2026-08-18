@@ -376,9 +376,37 @@ describe("⛔ G-40 (08-UI-SPEC) (d): `ConfusionMatrix` qayta ishlatiladi", () =>
      * ⛔ DAVR MATRITSANING O'ZIDA, PROPDAN EMAS (§8.7, G-39(c)): o'ram
      *   unga `from`/`to`/`period`/`label` UZATMAYDI.
      */
+    /*
+     * ⛔ 260818: matritsa davrni endi `formatBusinessDay` bilan chizadi
+     *    (xom ISO sahifadagi qolgan sanalardan ajralib turardi). Da'vo
+     *    O'ZGARMADI — davr MATRITSANING O'ZIDA, propdan emas; faqat
+     *    qidiriladigan shakl mahalliylashtirilgan.
+     *
+     * ⚠ Kutilgan matn `uzLatnDate` dan MUSTAQIL quriladi: yordamchiga
+     *   bog'lansa, ikkalasi birga siljib test jimgina yashil qolardi.
+     */
+    const uzDay = (iso: string): string => {
+      const months = [
+        "yanvar",
+        "fevral",
+        "mart",
+        "aprel",
+        "may",
+        "iyun",
+        "iyul",
+        "avgust",
+        "sentabr",
+        "oktabr",
+        "noyabr",
+        "dekabr",
+      ];
+      const [year, month, day] = iso.split("-").map(Number);
+      return `${day}-${months[month - 1]}, ${year}`;
+    };
+
     expect(
       within(view.container).getByText(
-        new RegExp(`${SERVED_FROM}.*${SERVED_TO}`, "u"),
+        new RegExp(`${uzDay(SERVED_FROM)}.*${uzDay(SERVED_TO)}`, "u"),
       ),
     ).toBeInTheDocument();
 

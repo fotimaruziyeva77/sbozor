@@ -229,8 +229,17 @@ describe("⛔ G-38(d): `thisMonth` oyning 1-kunida", () => {
       target: { value: "thisMonth" },
     });
 
+    /*
+     * ⛔ Kutilgan matn 260818 da MAHALLIYLASHTIRILDI: tanlagich ham
+     *    `formatBusinessDay` ga o'tdi (u yerda xom ISO qolgan yagona
+     *    joy edi va u sahifadagi jadval sanalaridan AJRALIB turardi).
+     *    Da'vo o'zgarmadi — jumla BOR va u AYNAN shu davrni ko'rsatadi.
+     */
     expect(paragraphsIn(view)).toEqual(
-      new Set([messages.reports.maxDayHint, "2026-08-01 — 2026-08-15"]),
+      new Set([
+        messages.reports.maxDayHint,
+        "1-avgust, 2026 — 15-avgust, 2026",
+      ]),
     );
   });
 

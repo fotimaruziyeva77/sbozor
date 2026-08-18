@@ -179,9 +179,46 @@ async function renderRevenue(
 }
 
 /** DOM matnida uchragan BARCHA ISO kunlari — to'plam sifatida (D-31). */
-function isoDaysInDom(view: RenderResult): string[] {
-  const text = view.container.textContent ?? "";
-  return [...new Set(text.match(/\d{4}-\d{2}-\d{2}/gu) ?? [])].sort();
+/**
+ * Ekranda ko'ringan BIZNES-KUNLAR — ⛔ mahalliylashtirilgan shaklda.
+ *
+ * =============================================================================
+ * ⛔⛔ NEGA NAQSH O'ZGARDI (260818): oldin bu yordamchi `YYYY-MM-DD` ni
+ *     qidirardi va shu bilan XOM ISO ni ekranda QULFLAB qo'ygan edi —
+ *     ya'ni test G-39(a) ni («davr serverdan») isbotlarkan, yo'l-yo'lakay
+ *     mahalliylashtirishning YO'Qligini ham talab qilardi.
+ *
+ * ⛔ DA'VO O'ZGARMADI: hamon TO'PLAM TENGLIGI tekshiriladi, ya'ni
+ *    so'ralgan (URL'dagi) sana ekranda BO'LMASLIGI shart. O'zgargani —
+ *    qidiriladigan SHAKL.
+ *
+ * ⛔ Kutilgan qiymat `uzLatnDate` dan MUSTAQIL qayta quriladi: yordamchi
+ *    bilan bog'lansa, ikkalasi birga siljib, test jimgina yashil
+ *    qolardi (`reports/page.test.tsx` da o'rnatilgan qoida).
+ * =============================================================================
+ */
+const UZ_MONTHS = [
+  "yanvar",
+  "fevral",
+  "mart",
+  "aprel",
+  "may",
+  "iyun",
+  "iyul",
+  "avgust",
+  "sentabr",
+  "oktabr",
+  "noyabr",
+  "dekabr",
+];
+
+function uzDay(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return `${day}-${UZ_MONTHS[month - 1]}, ${year}`;
+}
+
+function domText(view: RenderResult): string {
+  return view.container.textContent ?? "";
 }
 
 /* -------------------------------------------------------------------------- */
@@ -192,12 +229,30 @@ describe("⛔ G-39 (08-UI-SPEC) (a): davr SERVERNIKI", () => {
   test("javobdagi `from_date` chiziladi, URL'dagi so'ralgan `from` ⛔ CHIZILMAYDI", async () => {
     const view = await renderRevenue(REVENUE_RESPONSE);
 
+    const text = domText(view);
+
     /*
-     * ⛔ TO'PLAM TENGLIGI: «so'ralgan sana yo'q» da'vosini inkor matcher
-     *   bilan yozish YONIDAGI ikkinchi sanani ko'rmasdi. Bu shakl esa
-     *   kutilgan JUFTLIKDAN har qanday chetlanishda qizaradi.
+     * =====================================================================
+     * ⛔ DA'VO: davr JAVOBDAN keladi, `nuqs` holatidan EMAS.
+     *
+     * Oldin bu to'plam tengligi bilan yozilgan edi va u ishlardi, chunki
+     * ekrandagi YAGONA sana shakli xom ISO edi. 260818 da jadval ham,
+     * davr jumlasi ham mahalliylashtirildi — endi butun DOM bo'ylab
+     * to'plam tengligi jadvalning 30 ta qator sanasini ham ushlaydi,
+     * ya'ni vosita da'voni O'LCHAMAY qo'ydi.
+     *
+     * ⛔ Shuning uchun da'vo TO'G'RIDAN-TO'G'RI yoziladi: so'ralgan sana
+     *    ekranda YO'Q (ikkala shaklda ham), javobdagilar esa BOR.
+     * =====================================================================
      */
-    expect(isoDaysInDom(view)).toEqual([SERVED_FROM, SERVED_TO]);
+    expect(text).not.toContain(REQUESTED_FROM);
+    expect(text).not.toContain(uzDay(REQUESTED_FROM));
+
+    expect(text).toContain(uzDay(SERVED_FROM));
+    expect(text).toContain(uzDay(SERVED_TO));
+
+    /* ⛔ Xom ISO qaytib kelsa ham test qizaradi. */
+    expect(text).not.toContain(SERVED_FROM);
   });
 
   test("davr jumlasi javobning IKKALA chegarasini ham chizadi", async () => {
@@ -209,7 +264,7 @@ describe("⛔ G-39 (08-UI-SPEC) (a): davr SERVERNIKI", () => {
      *   uchun davr jumlasining HAQIQATAN chizilgani alohida o'lchanadi.
      */
     expect(
-      screen.getByText(`${SERVED_FROM} — ${SERVED_TO}`),
+      screen.getByText(`${uzDay(SERVED_FROM)} — ${uzDay(SERVED_TO)}`),
     ).toBeInTheDocument();
   });
 });
@@ -244,7 +299,7 @@ describe("⛔ G-39 (08-UI-SPEC) (b): yig'indi yolg'iz kelmaydi", () => {
 
     expect(described).toEqual(
       new Set([
-        `${SERVED_FROM} — ${SERVED_TO}`,
+        `${uzDay(SERVED_FROM)} — ${uzDay(SERVED_TO)}`,
         `${REVENUE_RESPONSE.shown_count} qatordan ${REVENUE_RESPONSE.row_count} tasi ko'rsatilmoqda`,
       ]),
     );

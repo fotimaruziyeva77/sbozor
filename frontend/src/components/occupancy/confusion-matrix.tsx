@@ -1,9 +1,10 @@
 "use client";
 
 import { TriangleAlert } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { formatBusinessDay } from "@/lib/format-day";
 import type {
   AccuracyReport,
   ProportionIntervalPayload,
@@ -114,6 +115,7 @@ export function percentView(
 export function ConfusionMatrix({ report }: { report: AccuracyReport }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   /** Foiz — BIR XIL aniqlikda, uchala qatorda ham (§9.4). */
   const percent = (value: number): string =>
@@ -144,8 +146,13 @@ export function ConfusionMatrix({ report }: { report: AccuracyReport }) {
          */}
         <p className="text-xs text-text-muted">
           {t("occupancy.accuracyFrom", {
-            from: report.from_date,
-            to: report.to_date,
+            /*
+             * ⛔ XOM ISO EMAS — bu qator ekranda «2026-07-19 – 2026-08-17»
+             *    bo'lib chiqardi, holbuki sahifadagi qolgan sanalar
+             *    «19-iyul, 2026» edi. Bir sahifada ikki xil sana yo'li.
+             */
+            from: formatBusinessDay(format, report.from_date, locale),
+            to: formatBusinessDay(format, report.to_date, locale),
             n: report.n,
           })}
         </p>

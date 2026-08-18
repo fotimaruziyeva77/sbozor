@@ -1,7 +1,13 @@
 "use client";
 
 import { useId } from "react";
-import { useNow, useTimeZone, useTranslations } from "next-intl";
+import {
+  useFormatter,
+  useLocale,
+  useNow,
+  useTimeZone,
+  useTranslations,
+} from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 
 import {
@@ -12,6 +18,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import { PERIOD_PRESETS, type PeriodPreset } from "@/lib/api-types";
+import { formatBusinessDay } from "@/lib/format-day";
 
 /*
  * =============================================================================
@@ -283,6 +290,8 @@ export function useReportPeriod(): ReportPeriodSelection {
  */
 export function PeriodPicker() {
   const t = useTranslations();
+  const format = useFormatter();
+  const locale = useLocale();
   const selection = useReportPeriod();
   const presetId = useId();
   const fromId = useId();
@@ -388,8 +397,11 @@ export function PeriodPicker() {
 
           <p className="text-sm text-text-muted">
             {t("reports.periodShown", {
-              from: selection.from,
-              to: selection.to,
+              /* ⛔ XOM ISO EMAS — bu qator ekranda «2026-07-19 — 2026-08-17»
+                 *    bo'lib chiqardi, holbuki yonidagi jadval sanalari
+                 *    «19-iyul, 2026» edi. Bir sahifada ikki xil sana yo'li. */
+              from: formatBusinessDay(format, selection.from, locale),
+              to: formatBusinessDay(format, selection.to, locale),
             })}
           </p>
         </>
