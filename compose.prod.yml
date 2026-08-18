@@ -29,10 +29,49 @@ services:
       # bo'shatib yuborilardi.
       NGINX_ENVSUBST_FILTER: "PUBLIC_DOMAIN"
       PUBLIC_DOMAIN: "${PUBLIC_DOMAIN:?PUBLIC_DOMAIN kerak — masalan demo.sbozor.uz}"
-    ports:
+    # =========================================================================
+    # ⛔⛔ `!override` — RO'YXAT QO'SHILMAYDI, ALMASHTIRILADI (260818).
+    # =========================================================================
+    # Compose `ports` ro'yxatlarini BIRLASHTIRADI. Oddiy yozilsa,
+    # `compose.yaml` dagi `${PROXY_HOST_PORT:-8080}:80` SAQLANARDI va
+    # serverda ilova 8080-portda ham ochilardi — ya'ni TLS'ni, HSTS'ni va
+    # HTTPS yo'naltirishni chetlab o'tadigan ikkinchi eshik. Skaner uni
+    # birinchi kuni topadi.
+    #
+    # ⚠ `!override` Compose 2.24+ da bor; bu yerda 5.1.3 (yuqorida
+    #   `docker compose version` bilan tekshirilgan).
+    ports: !override
       - "80:80"
       - "443:443"
     restart: unless-stopped
+    # =========================================================================
+    # ⛔⛔ HAR 6 SOATDA `nginx -s reload` — YANGILANGAN SERTIFIKATNI OLISH
+    #     UCHUN (260818, deploy ochiq bandi).
+    # =========================================================================
+    # certbot sertifikatni DISKDA yangilaydi, nginx esa eskisini XOTIRADA
+    # ushlab turadi. Qayta yuklashsiz 90-kundan keyin brauzer «sertifikat
+    # muddati tugagan» deb saytni BUTUNLAY to'sardi — va jurnalda hech
+    # qanday xato ko'rinmasdi, chunki yangilashning O'ZI muvaffaqiyatli
+    # bo'lgan. Nosozlik uch oydan keyin, hech kim kutmagan kuni chiqadi.
+    #
+    # ⛔ NEGA certbot'ning `--deploy-hook` I EMAS: hook nginx'ni qayta
+    #    yuklashi uchun certbot konteynerida docker CLI va docker soketi
+    #    kerak bo'lardi — ya'ni ildizga teng huquq, faqat bitta signal
+    #    uchun. Bu yerda esa nginx O'ZINI qayta yuklaydi va yangi huquq
+    #    UMUMAN so'ralmaydi.
+    #
+    # ⚠ `reload` — GRACEFUL: eski ishchilar joriy so'rovlarni tugatadi,
+    #   yangi ulanishlar yangi konfiguratsiyaga tushadi. Uzilish YO'Q.
+    #
+    # ⚠ Imijning `docker-entrypoint.sh` i `exec "$@"` bilan tugaydi, ya'ni
+    #   `${PUBLIC_DOMAIN}` ni almashtiruvchi envsubst bosqichi bu buyruq
+    #   berilganda ham ISHLAYDI — u entrypoint'da, command'da emas.
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        while :; do sleep 6h & wait $${!}; nginx -s reload; done &
+        nginx -g "daemon off;"
 
   # --- Sertifikatni YANGILAB turuvchi yon xizmat ---
   #

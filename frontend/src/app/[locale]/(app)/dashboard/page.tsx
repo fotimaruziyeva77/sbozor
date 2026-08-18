@@ -4,6 +4,8 @@ import { ScrollText, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { MarketStatusCard } from "@/components/dashboard/market-status-card";
+import { DebtorsCard } from "@/components/dashboard/debtors-card";
+import { LeakCard } from "@/components/dashboard/leak-card";
 import { OccupancyDonut } from "@/components/dashboard/occupancy-donut";
 import { RevenueCard } from "@/components/dashboard/revenue-card";
 import { HeadlineCard } from "@/components/headline/headline-card";
@@ -106,6 +108,20 @@ export default function DashboardPage() {
         <>
           <RevenueCard />
           <OccupancyDonut />
+          {/*
+           * ⛔ TARTIB TASODIFIY EMAS (260818 auditi, Topilma №5).
+           *
+           * `LeakCard` — mahsulotning ASOSIY qiymati («band, lekin
+           * to'lovsiz»), `DebtorsCard` — «kim, qancha, qachondan beri».
+           * Ikkalasi ham `report_view` ostida va SHU SHART ICHIDA turadi:
+           * huquqsiz sessiyada so'rov HAM ketmaydi (yuqoridagi izoh).
+           *
+           * ⚠ Ular tushum va bandlikdan KEYIN: birinchi ikkitasi «bozor
+           *   qanday ishlayapti», keyingi ikkitasi «qayerda yo'qotish
+           *   bor» degan savolga javob beradi va bu o'qish tartibi.
+           */}
+          <LeakCard />
+          <DebtorsCard />
         </>
       ) : null}
 

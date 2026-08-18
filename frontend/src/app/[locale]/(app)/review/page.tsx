@@ -4,6 +4,7 @@ import { LockKeyhole } from "lucide-react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 
+import { formatBusinessDay, formatBusinessWeekday } from "@/lib/format-day";
 import { localeHref } from "@/lib/locale-href";
 import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { Badge } from "@/components/ui/badge";
@@ -91,11 +92,14 @@ function ReviewHome() {
           {t("review.title")}
         </h1>
         <p className="text-sm text-text-muted">
-          {todayIso} ·{" "}
-          {format.dateTime(new Date(`${todayIso}T12:00:00Z`), {
-            timeZone: "UTC",
-            weekday: "long",
-          })}
+          {/*
+           * ⛔ XOM ISO EMAS VA XOM `weekday` EMAS (260818 jonli o'lchov):
+           *    bu qator ekranda «2026-08-18 · Tue» bo'lib chiqardi —
+           *    sana mahalliylashtirilmagan, hafta kuni esa INGLIZCHA.
+           *    Ikkalasi ham `format-day.ts` ning yagona yo'lidan o'tadi.
+           */}
+          {formatBusinessDay(format, todayIso, locale)} ·{" "}
+          {formatBusinessWeekday(format, todayIso, locale)}
         </p>
       </header>
 

@@ -143,3 +143,41 @@ test("G-date(c): migratsiya qarzi FAQAT qisqaradi", () => {
       "sanasi o'rniga `formatBusinessDay`/`formatInstant` ishlating.",
   );
 });
+
+/*
+ * =============================================================================
+ * G-date(d): XOM `weekday` — SANA BILAN BIR XIL NOSOZLIK (260818).
+ * =============================================================================
+ * `format.dateTime(d, { weekday: "long" })` o'zbek lotin yozuvida
+ * brauzerda «Tue» beradi — ildiz shablonining INGLIZCHA qisqartmasi.
+ * Nosozlik `review/page.tsx` da jonli topildi: nazoratchining birinchi
+ * ekranida sana «2026-08-18 · Tue» bo'lib turgan.
+ *
+ * ⛔ Darvoza (b) BILAN BIR XIL SHAKLDA yozilgan (izohlar tashlanadi,
+ *    faqat migratsiya ro'yxati o'tadi) — ikki xil naqsh bo'lsa, biri
+ *    keyingi ijrochida e'tibordan qolardi.
+ */
+test("G-date(d): xom `weekday` faqat sana yordamchisida", () => {
+  const walk = (dir, acc = []) => {
+    for (const entry of readdirSync(dir)) {
+      const full = `${dir}/${entry}`;
+      if (statSync(full).isDirectory()) walk(full, acc);
+      else if (/\.tsx?$/u.test(entry) && !/\.test\./u.test(entry)) acc.push(full);
+    }
+    return acc;
+  };
+  const stripComments = (code) =>
+    code.replaceAll(/\/\*[\s\S]*?\*\//gu, "").replaceAll(/\/\/.*$/gmu, "");
+
+  /* ⛔ `weekday:` — obyekt maydoni; `open_weekdays` kabi nomlar tushmasin. */
+  const hits = walk("src")
+    .filter((file) => /(?<![\w_])weekday:/u.test(stripComments(readFileSync(file, "utf8"))))
+    .sort();
+
+  assert.deepEqual(
+    hits,
+    ["src/lib/format-day.ts"],
+    "⛔ Xom `weekday` — o'sha ekranda hafta kuni o'zbek lotin tilida " +
+      "INGLIZCHA chiqadi. `formatBusinessWeekday` ni ishlating.",
+  );
+});

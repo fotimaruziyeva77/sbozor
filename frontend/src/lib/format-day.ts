@@ -54,6 +54,7 @@ import {
   joinUzLatnDateTime,
   uzLatnDate,
   uzLatnDateInZone,
+  uzLatnWeekday,
 } from "@/lib/uz-latn-date";
 
 /** `YYYY-MM-DD` — shakl darvozasi (`day-picker.tsx` bilan AYNI naqsh). */
@@ -180,4 +181,44 @@ export function formatInstant(
     );
   }
   return format.dateTime(value, { dateStyle, timeStyle });
+}
+
+/**
+ * Biznes-kunning HAFTA KUNI: `2026-08-18` -> «seshanba».
+ *
+ * ⛔ `format.dateTime(d, { weekday: "long" })` o'zbek lotin yozuvida
+ *    brauzerda «Tue» beradi — ildiz shablonining inglizcha qisqartmasi.
+ *    Jonli o'lchandi 2026-08-18, `review/page.tsx` da.
+ *
+ * ⚠ Mintaqa argument sifatida OLINMAYDI: kirish `YYYY-MM-DD` biznes-kun
+ *   satri va u `isoDayToDate()` da tushga langarlanadi, ya'ni hafta kuni
+ *   mintaqadan qat'i nazar bir xil.
+ */
+export function formatBusinessWeekday(
+  format: ReturnType<typeof useFormatter>,
+  day: string,
+  locale: string,
+): string {
+  const parsed = isoDayToDate(day);
+  if (parsed === null) return "";
+  if (isUzLatn(locale)) return uzLatnWeekday(parsed);
+  return format.dateTime(parsed, { weekday: "long", timeZone: "UTC" });
+}
+
+/**
+ * Ikki biznes-kun ORASIDAGI kunlar soni (`to` − `from`).
+ *
+ * ⛔ Ikkala kun ham `isoDayToDate()` orqali TUSHGA langarlanadi, ya'ni
+ *    yoz/qish vaqti yoki mintaqa siljishi natijani ±1 kunga surib
+ *    yubormaydi — bo'linma har doim butun songa tushadi.
+ *
+ * ⚠ Yaroqsiz kirishda `null` — NOL EMAS. Nol «bugun boshlandi» degan
+ *   o'lchanmagan da'vo bo'lardi (`debtors-card.tsx` shunga tayanadi).
+ */
+export function daysBetweenIsoDays(from: string, to: string): number | null {
+  const a = isoDayToDate(from);
+  const b = isoDayToDate(to);
+  if (a === null || b === null) return null;
+  const MS_PER_DAY = 86_400_000;
+  return Math.round((b.getTime() - a.getTime()) / MS_PER_DAY);
 }

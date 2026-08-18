@@ -114,6 +114,38 @@ export function RevenueCard() {
   const total = report.data?.total_collected_soum ?? null;
 
   /*
+   * =========================================================================
+   * ⛔⛔ OLDINGI DAVR — «O'SISHNI SOLISHTIRISH» (260818 auditi, Topilma №5).
+   * =========================================================================
+   * Topshiriqda so'zma-so'z: «narxlarni va o'sishni solishtirish». Server
+   * o'sish maydonini BERMAYDI (`RevenueReportResponse` da `previous_*`
+   * yoki `growth_*` yo'q) — shuning uchun oldingi davr AYNAN o'sha
+   * endpointdan, IKKINCHI so'rov bilan olinadi.
+   *
+   * ⛔ Oyna UZUNLIGI bir xil (`MIN_POINTS` kun) va u BEVOSITA joriy
+   *    davrning boshidan orqaga suriladi: aks holda 7 kunni 5 kun bilan
+   *    solishtirib, pasayishni «o'sish» deb ko'rsatish mumkin bo'lardi.
+   *
+   * ⚠ Ikkinchi so'rov QO'SHIMCHA yuk, lekin u `useRevenueReport` ning
+   *   o'z keshiga tushadi (kalit `from`/`to` bo'yicha) va kun almashmasa
+   *   qayta ketmaydi.
+   */
+  const prevTo = shiftIsoDay(from, -1);
+  const prevFrom = shiftIsoDay(prevTo, -(MIN_POINTS - 1));
+  const previous = useRevenueReport({ from: prevFrom, to: prevTo });
+
+  /*
+   * ⛔ NOLGA BO'LISH VA «CHEKSIZ O'SISH» TO'SILADI: oldingi davr nol
+   *    bo'lsa foiz MA'NOSIZ (har qanday son cheksiz foizga o'sadi) va
+   *    ekranga chiqmaydi. `null` — «solishtirib bo'lmadi», nol emas.
+   */
+  const prevTotal = previous.data?.total_collected_soum ?? null;
+  const growthPercent =
+    total === null || prevTotal === null || prevTotal === 0
+      ? null
+      : Math.round(((total - prevTotal) / prevTotal) * 100);
+
+  /*
    * [L-6] «nafas» faqat MAVJUD qiymat o'zgarganda; birinchi yuklanishda
    * YO'Q. `prevTotalRef` FAQAT effektda o'qiladi/yoziladi (renderda ref
    * o'qish TAQIQ — react-hooks/refs).
@@ -243,6 +275,27 @@ export function RevenueCard() {
                   {t("reports.amountUnit")}
                 </span>
               </p>
+
+              {/*
+               * ⛔ O'SISH — FAQAT o'lchangan bo'lsa. Yo'qligi «o'zgarish
+               *    yo'q» degani EMAS va shuning uchun nol chizilmaydi.
+               */}
+              {growthPercent === null ? null : (
+                <p
+                  className={
+                    growthPercent >= 0
+                      ? "text-sm text-success-text"
+                      : "text-sm text-danger-text"
+                  }
+                >
+                  {t(
+                    growthPercent >= 0
+                      ? "dashboard.growthUp"
+                      : "dashboard.growthDown",
+                    { percent: Math.abs(growthPercent) },
+                  )}
+                </p>
+              )}
 
               {/* ⛔ Davr — javobning `from_date`/`to_date` si (server haqiqati). */}
               <p className="text-sm text-text-muted">

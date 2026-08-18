@@ -61,6 +61,29 @@ export function uzLatnDate(date: Date): string {
 }
 
 /**
+ * Hafta kunlari — `Date#getUTCDay()` indeksi bilan: 0 = yakshanba.
+ *
+ * ⛔ Sabab oy jadvali bilan BIR XIL: brauzer ICU'sida o'zbek LOTIN
+ *    yozuvi uchun hafta kunlari YO'Q va `{ weekday: "long" }` ildiz
+ *    shabloniga tushib INGLIZCHA qisqartma («Tue») beradi. Bu jonli
+ *    o'lchandi (2026-08-18, nazoratchi ekranida).
+ */
+const WEEKDAYS = [
+  "yakshanba",
+  "dushanba",
+  "seshanba",
+  "chorshanba",
+  "payshanba",
+  "juma",
+  "shanba",
+] as const;
+
+/** `2026-08-18` -> «seshanba». Chaqiruvchi kunni TUSHGA langarlaydi. */
+export function uzLatnWeekday(date: Date): string {
+  return WEEKDAYS[date.getUTCDay()] ?? "";
+}
+
+/**
  * Sana va vaqt matnlarini birlashtiradi.
  *
  * ⛔ Ajratgich SHU YERDA, BIR MARTA: `uzLatnDateTime()` ham,

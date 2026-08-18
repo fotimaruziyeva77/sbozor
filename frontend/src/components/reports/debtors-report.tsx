@@ -127,9 +127,22 @@ export function DebtorsReport() {
                *   signal emas: ikkinchi kanal — «Qarz» ustun sarlavhasi
                *   (§13.4).
                */}
+              {/*
+               * ⛔⛔ BELGI MA'NOLI — MANFIY QOLDIQ QARZ EMAS (260818).
+               *
+               * `report_repo` `outstanding_soum <> 0` filtri bilan
+               * ishlaydi, ya'ni ORTIQCHA TO'LOV ham qaytadi. Har qanday
+               * qiymatni qizil chizish direktorga avansni qarz deb
+               * o'qitardi va «jami qarz» sof qoldiq bo'lgani holda
+               * qarz deb nomlanardi.
+               */}
               <dd
                 aria-describedby={`${periodId} ${rowsShownId}`}
-                className="m-0 font-mono text-lg font-semibold text-danger-text tabular-nums"
+                className={
+                  data.total_outstanding_soum > 0
+                    ? "m-0 font-mono text-lg font-semibold text-danger-text tabular-nums"
+                    : "m-0 font-mono text-lg font-semibold tabular-nums"
+                }
               >
                 {format.number(data.total_outstanding_soum)}{" "}
                 <span className="font-sans text-sm font-normal text-text-muted">
@@ -141,8 +154,9 @@ export function DebtorsReport() {
             {/* ⛔ Davr JAVOBDAN (§8.7) — so'ralgan oraliqdan EMAS. */}
             <p className="text-xs text-text-muted" id={periodId}>
               {t("reports.periodShown", {
-                from: data.from_date,
-                to: data.to_date,
+                /* ⛔ Xom ISO EMAS — `anomaly-archive.tsx` bilan bir qoida. */
+                from: formatBusinessDay(format, data.from_date, locale),
+                to: formatBusinessDay(format, data.to_date, locale),
               })}
             </p>
 
@@ -231,8 +245,18 @@ function DebtorRow({ row }: { row: ReceivablesReportRow }) {
       <td className="p-3 font-mono tabular-nums">
         {row.stall_codes.join(", ")}
       </td>
-      <td className="p-3 font-mono tabular-nums text-danger-text">
+      <td
+        className={
+          row.outstanding_soum > 0
+            ? "p-3 font-mono tabular-nums text-danger-text"
+            : "p-3 font-mono tabular-nums"
+        }
+      >
         {format.number(row.outstanding_soum)}
+        {/* ⛔ Rang yolg'iz signal EMAS (§13.4) — belgi MATN bilan ham. */}
+        {row.outstanding_soum < 0 ? (
+          <span className="sr-only"> {t("reports.overpaid")}</span>
+        ) : null}
       </td>
       <td className="p-3 font-mono tabular-nums">
         {row.oldest_debt_date === null ? (

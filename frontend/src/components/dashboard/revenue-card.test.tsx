@@ -150,11 +150,27 @@ describe("RevenueCard — so'rov davri", () => {
       expect(requestedPaths().length).toBeGreaterThan(0);
     });
 
+    /*
+     * ⛔⛔ IKKI SO'ROV — VA IKKINCHISI TASODIFIY EMAS (260818, Topilma №5).
+     *
+     * Karta «o'tgan davrga nisbatan» foizini ko'rsatadi. Server o'sish
+     * maydonini BERMAYDI, shuning uchun oldingi davr AYNAN o'sha
+     * endpointdan ikkinchi so'rov bilan olinadi.
+     *
+     * ⛔ Bu yerda tekshiriladigan INVARIANT — TUTASHLIK va TENG UZUNLIK:
+     *    oldingi oyna joriy oynaning boshidan BEVOSITA oldin tugaydi
+     *    (08-09 -> 08-10) va u ham 7 kun (08-03…08-09). Aks holda
+     *    7 kun 5 kun bilan solishtirilib, pasayish «o'sish» bo'lib
+     *    ko'rinishi mumkin edi.
+     */
     expect(
       requestedPaths().filter((p) =>
         p.startsWith("/reports/revenue"),
       ),
-    ).toEqual(["/reports/revenue?from=2026-08-10&to=2026-08-16"]);
+    ).toEqual([
+      "/reports/revenue?from=2026-08-10&to=2026-08-16",
+      "/reports/revenue?from=2026-08-03&to=2026-08-09",
+    ]);
   });
 });
 
