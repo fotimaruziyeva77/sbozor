@@ -2,7 +2,7 @@
 
 import { Fragment } from "react";
 import { CalendarDays, TriangleAlert } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { CoverageWarning } from "@/components/snapshots/coverage-warning";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import type {
   SnapshotScheduleDay,
   SnapshotScheduleProfile,
 } from "@/lib/api-types";
+import { formatBusinessDay } from "@/lib/format-day";
 import { useScheduleToday } from "@/lib/snapshot-queries";
 
 /*
@@ -312,17 +313,16 @@ function DayRow({
 function ProfilePeriod({ profile }: { profile: SnapshotScheduleProfile }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   const from = t("snapshots.scheduleFrom", {
-    date: format.dateTime(new Date(profile.starts_on), { dateStyle: "medium" }),
+    date: formatBusinessDay(format, profile.starts_on, locale),
   });
   const until =
     profile.ends_on === null
       ? null
       : t("snapshots.scheduleUntil", {
-          date: format.dateTime(new Date(profile.ends_on), {
-            dateStyle: "medium",
-          }),
+          date: formatBusinessDay(format, profile.ends_on, locale),
         });
 
   return (

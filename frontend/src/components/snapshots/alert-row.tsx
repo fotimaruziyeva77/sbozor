@@ -1,13 +1,14 @@
 "use client";
 
 import { BellOff, TriangleAlert } from "lucide-react";
-import { useFormatter, useNow, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useNow, useTimeZone, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import type { BadgeTone } from "@/components/ui/badge";
 import { ALERT_SEVERITIES } from "@/lib/api-types";
 import type { AlertEvent, AlertSeverityValue } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
+import { formatInstant } from "@/lib/format-day";
 
 /*
  * =============================================================================
@@ -243,6 +244,8 @@ function asText(value: unknown): string | null {
 export function AlertRow({ alert }: { alert: AlertEvent }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
   const now = useNow();
 
   const severity: SeverityView = isAlertSeverity(alert.severity)
@@ -317,10 +320,13 @@ export function AlertRow({ alert }: { alert: AlertEvent }) {
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
         <span>
           {t("snapshots.alertFirstSeen", {
-            time: format.dateTime(new Date(alert.first_seen_at), {
-              dateStyle: "short",
-              timeStyle: "short",
-            }),
+            time: formatInstant(
+              format,
+              new Date(alert.first_seen_at),
+              locale,
+              timeZone,
+              "short",
+            ),
           })}
         </span>
         <span>
@@ -397,10 +403,13 @@ export function AlertRow({ alert }: { alert: AlertEvent }) {
           {resolvedAtMs === null ? null : (
             <span>
               {t("snapshots.alertResolvedAt", {
-                time: format.dateTime(new Date(resolvedAtMs), {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                }),
+                time: formatInstant(
+                  format,
+                  new Date(resolvedAtMs),
+                  locale,
+                  timeZone,
+                  "short",
+                ),
               })}
             </span>
           )}

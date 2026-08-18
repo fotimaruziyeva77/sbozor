@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -9,6 +9,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { formatBusinessDay } from "@/lib/format-day";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import { useCreateException } from "@/lib/market-queries";
 
@@ -42,6 +43,7 @@ export function ExceptionDialog({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const createException = useCreateException();
 
   const [date, setDate] = useState("");
@@ -104,7 +106,7 @@ export function ExceptionDialog({
   const formattedDate =
     date === ""
       ? ""
-      : format.dateTime(new Date(date), { dateStyle: "long" });
+      : formatBusinessDay(format, date, locale);
 
   return (
     <>

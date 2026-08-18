@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { History } from "lucide-react";
-import { useFormatter, useLocale, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTimeZone, useTranslations } from "next-intl";
 
 import { CaseStatusBadge } from "@/components/reconciliation/case-status-badge";
 import { EvidenceLink } from "@/components/reconciliation/evidence-link";
@@ -15,7 +15,7 @@ import { CASE_STATUSES, RESOLUTION_NOTE_MAX } from "@/lib/api-types";
 import type { CaseStatusValue } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api-client";
-import { formatBusinessDay } from "@/lib/format-day";
+import { formatBusinessDay, formatInstant } from "@/lib/format-day";
 import { hasPermission } from "@/lib/rbac";
 import { reconErrorView } from "@/lib/reconciliation-errors";
 import type { CaseDetail } from "@/lib/reconciliation-queries";
@@ -239,6 +239,7 @@ function CaseDetailBody({ caseId }: { caseId: string }) {
 function CaseDetailContent({ detail }: { detail: CaseDetail }) {
   const t = useTranslations();
   const format = useFormatter();
+  const timeZone = useTimeZone();
   const locale = useLocale();
   const { principal } = useAuthStore();
 
@@ -307,10 +308,13 @@ function CaseDetailContent({ detail }: { detail: CaseDetail }) {
               key={`${event.created_at}-${event.to_status}`}
             >
               <span className="text-text-muted">
-                {format.dateTime(new Date(event.created_at), {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                })}
+                {formatInstant(
+                  format,
+                  new Date(event.created_at),
+                  locale,
+                  timeZone,
+                  "short",
+                )}
               </span>
               <span>
                 {/*

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTimeZone, useTranslations } from "next-intl";
 
 import { AuditDiff } from "@/components/audit/audit-diff";
 import { useAuditFilters } from "@/components/audit/audit-filters";
@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { AuditEntry } from "@/lib/api-types";
 import { isAuditAction, isAuditTable } from "@/lib/api-types";
+import { formatInstant } from "@/lib/format-day";
 import { adminErrorMessageKey, useAuditQuery, useUsersQuery } from "@/lib/queries";
 
 /*
@@ -131,6 +132,8 @@ function AuditCard({
   const tActions = useTranslations("audit.actions");
   const tTables = useTranslations("audit.tables");
   const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
 
   /*
    * Vaqt `next-intl` ning formatlagichi bilan chiqadi — mintaqa
@@ -140,10 +143,14 @@ function AuditCard({
    * kimdir UTC'ni ko'rsatib qo'yardi — bu esa yozuvni noto'g'ri
    * biznes-kunga bog'lardi (FOUND-05).
    */
-  const at = format.dateTime(new Date(entry.at), {
-    dateStyle: "medium",
-    timeStyle: "medium",
-  });
+  const at = formatInstant(
+    format,
+    new Date(entry.at),
+    locale,
+    timeZone,
+    "medium",
+    "medium",
+  );
 
   // Noma'lum qiymat XOM holda ko'rinadi: u DB dagi texnik identifikator
   // (keyingi fazalarning yangi hodisasi yoki jadvali) va uni yashirish

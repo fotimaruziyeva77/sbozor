@@ -75,35 +75,17 @@ const DATESTYLE_MIGRATED = [
 ];
 
 /*
- * ⛔ MIGRATSIYA QARZI — RO'YXAT FAQAT QISQARADI.
+ * ⛔ MIGRATSIYA QARZI — 2026-08-18 da NOLGA TUSHDI (Topilma №3).
  *
- * Bu fayllar sanani hali ham xom `Intl` bilan chizadi, ya'ni o'zbek lotin
- * tilida ular «2026 M08 15» ko'rsatadi. Qarz YASHIRILMAYDI: u shu yerda
- * sanab turadi va darvoza uzunligini yuqoridan qulflaydi — yangi fayl
- * qo'shilsa test QIZARADI, migratsiya qilingani o'chirilsa YASHIL qoladi.
+ * Ro'yxat 17 ta fayldan iborat edi; ularning hammasi `formatBusinessDay`,
+ * `formatInstant` yoki `formatInstantDay` ga o'tkazildi. Ro'yxat SAQLANADI
+ * (o'chirilmaydi), chunki uning uzunligi pastdagi (c) darvozasida
+ * QULFLANGAN: nol qolgani — endi xom `Intl` sanasi bilan yashil bo'lish
+ * yo'li YO'Qligini bildiradi.
  *
- * ⛔ Ro'yxatga YANGI nom qo'shish TAQIQLANADI. Yangi kod `formatBusinessDay`
- *    ni ishlatadi.
+ * ⛔ Ro'yxatga YANGI nom qo'shish TAQIQLANADI: bu qarzni qaytarish demak.
  */
-const DATESTYLE_PENDING = [
-  "src/components/audit/audit-list.tsx",
-  "src/components/billing/charge-detail-dialog.tsx",
-  "src/components/calendar/exception-dialog.tsx",
-  "src/components/calendar/exception-list.tsx",
-  "src/components/cameras/discovery-result.tsx",
-  "src/components/cameras/nvr-card.tsx",
-  "src/components/reconciliation/case-detail-dialog.tsx",
-  "src/components/reconciliation/case-list.tsx",
-  "src/components/reconciliation/delivery-list.tsx",
-  "src/components/snapshots/alert-row.tsx",
-  "src/components/snapshots/day-summary.tsx",
-  "src/components/snapshots/schedule-card.tsx",
-  "src/components/snapshots/schedule-dialog.tsx",
-  "src/components/tariffs/tariff-dialog.tsx",
-  "src/components/tariffs/tariff-list.tsx",
-  "src/components/users/user-list.tsx",
-  "src/components/vendors/assignment-dialog.tsx",
-];
+const DATESTYLE_PENDING = [];
 
 test("G-date(b): `dateStyle` faqat migratsiya qilingan yoki qarz ro'yxatida", () => {
   const walk = (dir, acc = []) => {
@@ -114,8 +96,17 @@ test("G-date(b): `dateStyle` faqat migratsiya qilingan yoki qarz ro'yxatida", ()
     }
     return acc;
   };
+  /*
+   * ⛔ IZOHLAR TASHLANADI (G-date(a) bilan bir naqsh). Aks holda
+   *    `dateStyle` NI NEGA ISHLATMASLIK kerakligini tushuntirgan izoh
+   *    faylni ayblanuvchiga aylantirardi — aynan shu sabab
+   *    `delivery-list.tsx` qarz ro'yxatida yotgan edi, holbuki unda
+   *    bitta ham xom chaqiruv yo'q.
+   */
+  const stripComments = (code) =>
+    code.replaceAll(/\/\*[\s\S]*?\*\//gu, "").replaceAll(/\/\/.*$/gmu, "");
   const hits = walk("src")
-    .filter((file) => readFileSync(file, "utf8").includes("dateStyle"))
+    .filter((file) => stripComments(readFileSync(file, "utf8")).includes("dateStyle"))
     .sort();
   const known = [...DATESTYLE_MIGRATED, ...DATESTYLE_PENDING].sort();
   const unknown = hits.filter((file) => !known.includes(file));
@@ -147,8 +138,8 @@ test("G-date(c): migratsiya qarzi FAQAT qisqaradi", () => {
   );
   assert.equal(
     DATESTYLE_PENDING.length,
-    17,
-    "⛔ Qarz ro'yxati uzaydi. Yangi nom qo'shish TAQIQ; migratsiya " +
-      "qilinganda nomni O'CHIRING va bu sonni kamaytiring.",
+    0,
+    "⛔ Qarz ro'yxati uzaydi. Yangi nom qo'shish TAQIQ — xom `Intl` " +
+      "sanasi o'rniga `formatBusinessDay`/`formatInstant` ishlating.",
   );
 });

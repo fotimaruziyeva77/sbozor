@@ -191,8 +191,15 @@ export function AnomalyArchive() {
             {/* ⛔ Davr JAVOBDAN (§8.7) — so'ralgan oraliqdan EMAS. */}
             <p className="text-xs text-text-muted" id={periodId}>
               {t("reports.periodShown", {
-                from: data.from_date,
-                to: data.to_date,
+                /*
+                 * ⛔ XOM ISO EMAS (Topilma №2): `from_date`/`to_date`
+                 *    javobda `YYYY-MM-DD` bo'lib keladi va to'g'ridan-
+                 *    to'g'ri xabarga uzatilsa ekranda shundayligicha
+                 *    chiqardi — o'sha bir sahifadagi jadval sanalari
+                 *    esa «19-iyul, 2026» ko'rinishida edi.
+                 */
+                from: formatBusinessDay(format, data.from_date, locale),
+                to: formatBusinessDay(format, data.to_date, locale),
               })}
             </p>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, KeyRound, RefreshCw, Stethoscope } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTimeZone, useTranslations } from "next-intl";
 
 import { NvrErrorBlock } from "@/components/cameras/nvr-error-block";
 import { NvrPasswordDialog } from "@/components/cameras/nvr-password-dialog";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { NvrDevice } from "@/lib/api-types";
+import { formatInstant } from "@/lib/format-day";
 import { useNvrAuthLock } from "@/lib/use-nvr-auth-lock";
 
 /*
@@ -109,6 +110,8 @@ export function NvrCard({
 }: NvrCardProps) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
   const [passwordOpen, setPasswordOpen] = useState(false);
 
   const { authLocked, lock, unlockOnCredentialChange } = useNvrAuthLock();
@@ -127,10 +130,13 @@ export function NvrCard({
   const lastScan =
     device.last_discovery_at === null
       ? "—"
-      : format.dateTime(new Date(device.last_discovery_at), {
-          dateStyle: "short",
-          timeStyle: "short",
-        });
+      : formatInstant(
+          format,
+          new Date(device.last_discovery_at),
+          locale,
+          timeZone,
+          "short",
+        );
 
   function guarded(action: () => void): () => void {
     return () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatter, useLocale, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTimeZone, useTranslations } from "next-intl";
 
 import { CaseDetailDialog } from "@/components/reconciliation/case-detail-dialog";
 import { CaseStatusBadge } from "@/components/reconciliation/case-status-badge";
@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CASE_STATUSES } from "@/lib/api-types";
 import type { CaseStatusValue } from "@/lib/api-types";
-import { formatBusinessDay } from "@/lib/format-day";
+import { formatBusinessDay, formatInstantDay } from "@/lib/format-day";
 import type {
   CaseList as CaseListResponse,
   CaseRow,
@@ -308,6 +308,7 @@ function CaseRowView({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const timeZone = useTimeZone();
   const locale = useLocale();
 
   return (
@@ -375,7 +376,7 @@ function CaseRowView({
         )}
       </td>
       <td className="p-3 transition-colors group-hover:bg-surface-muted">
-        {format.dateTime(new Date(row.created_at), { dateStyle: "medium" })}
+        {formatInstantDay(format, new Date(row.created_at), locale, timeZone)}
       </td>
       <td className="p-3 transition-colors group-hover:bg-surface-muted">
         {/* ⛔ `ghost` — har qatorda takrorlanadigan amal AKSENT olmaydi. */}

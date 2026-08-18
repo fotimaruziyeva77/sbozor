@@ -3,13 +3,14 @@
 import { useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Ellipsis, Trash2 } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { CalendarException } from "@/lib/api-types";
+import { formatBusinessDay } from "@/lib/format-day";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import { useDeleteException } from "@/lib/market-queries";
 
@@ -136,14 +137,13 @@ function ExceptionRow({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   return (
     <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="text-sm font-semibold tabular-nums">
-          {format.dateTime(new Date(exception.exception_date), {
-            dateStyle: "long",
-          })}
+          {formatBusinessDay(format, exception.exception_date, locale)}
         </span>
 
         {/* D-16: izoh DB kontenti — tarjima qilinmaydi. */}

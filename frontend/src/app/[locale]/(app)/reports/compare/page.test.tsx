@@ -117,7 +117,13 @@ beforeEach(() => {
   openSession();
 });
 
-async function renderPage(response: unknown = payload()) {
+async function renderPage(
+  response: unknown = payload(),
+  roles: string[] = ["director"],
+) {
+  /* ⛔ `beforeEach` dagi standart sessiyaning USTIGA yoziladi. */
+  openSession(roles);
+
   const now = new Date("2026-10-15T12:00:00+05:00");
 
   apiClientMock.apiFetch.mockImplementation((path: string) => {
@@ -430,5 +436,39 @@ describe("⛔ huquq ko'zgusi — `report_view`", () => {
       0,
     );
     expect(apiClientMock.apiFetch).not.toHaveBeenCalled();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* DAFTAR YUKLASH — HUQUQ KO'ZGUSI (Topilma №6, 260818)                       */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ daftar yuklash — `stall_manage` ko'zgusi", () => {
+  /*
+   * ⛔⛔ NEGA BU TEST BOR.
+   *
+   * `reports.py:164` importni `STALL_MANAGE` ga bog'laydi; `rbac.py` da
+   * DIRECTOR da u YO'Q. Ya'ni direktor faylni tanlab [Yuklash] ni bossa
+   * 403 oladi. Bu yuza brauzerda O'LCHANDI va tugma HAQIQATAN
+   * ko'rinardi — test o'sha holatni qaytib kelishidan saqlaydi.
+   *
+   * ⚠ HAQIQIY NAZORAT SERVERDA. Bu ko'zgu bajarib bo'lmaydigan amalni
+   *   ko'rsatmaslik uchun, xavfsizlik chegarasi EMAS.
+   */
+  test("⛔ direktorda yuklash boshqaruvi UMUMAN yo'q", async () => {
+    const { container } = await renderPage(payload(), ["director"]);
+
+    const ledger = container.querySelector('[data-compare-content="ledger"]');
+    expect(ledger).not.toBeNull();
+    /* ⛔ Blok O'ZI qoladi — mazmun juftligi (G-37(b)) buzilmasin. */
+    expect(ledger?.querySelector('input[type="file"]')).toBeNull();
+    expect(ledger?.querySelector("button")).toBeNull();
+  });
+
+  test("⛔ NAZORAT — bozor adminida yuklash boshqaruvi BOR", async () => {
+    const { container } = await renderPage(payload(), ["market_admin"]);
+
+    const ledger = container.querySelector('[data-compare-content="ledger"]');
+    expect(ledger?.querySelector('input[type="file"]')).not.toBeNull();
   });
 });

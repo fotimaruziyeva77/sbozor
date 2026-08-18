@@ -49,7 +49,12 @@
 
 import type { useFormatter } from "next-intl";
 
-import { isUzLatn, uzLatnDate } from "@/lib/uz-latn-date";
+import {
+  isUzLatn,
+  joinUzLatnDateTime,
+  uzLatnDate,
+  uzLatnDateInZone,
+} from "@/lib/uz-latn-date";
 
 /** `YYYY-MM-DD` — shakl darvozasi (`day-picker.tsx` bilan AYNI naqsh). */
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/u;
@@ -118,4 +123,61 @@ export function formatBusinessDay(
    */
   if (isUzLatn(locale)) return uzLatnDate(parsed);
   return format.dateTime(parsed, { dateStyle: "medium" });
+}
+
+/**
+ * LAHZANI (timestamp) sana matniga aylantiradi — ⛔ `dateStyle` NING O'RNI.
+ *
+ * =========================================================================
+ * ⛔⛔ NEGA BU FUNKSIYA BOR (Topilma №3, 260818).
+ *
+ * `format.dateTime(d, { dateStyle })` o'zbek LOTIN yozuvida BRAUZERDA
+ * «2026 M08 15» beradi (sabab `uz-latn-date.ts` boshida o'lchangan).
+ * Nosozlik 17 ta faylda takrorlangan edi va har birida qo'lda `isUzLatn`
+ * sharti yozilsa, ular bir kun ajralib ketardi.
+ *
+ * ⛔ Mintaqa MAJBURIY va chaqiruvchidan keladi (`useTimeZone()`):
+ *    lahzaning KUNI mintaqaga bog'liq va uni bu yerda taxmin qilish
+ *    kechqurungi yozuvlarni bir kun oldinga surardi.
+ *
+ * ⚠ `dateStyle` argumenti FAQAT qolgan tillarga o'tadi — o'zbek lotin
+ *   shoxida uslub tanlovi YO'Q, chunki bizda bitta shakl bor va uni
+ *   uchga bo'lish jadvalni uchga ko'paytirardi.
+ * =========================================================================
+ */
+export function formatInstantDay(
+  format: ReturnType<typeof useFormatter>,
+  value: Date,
+  locale: string,
+  timeZone: string | undefined,
+  dateStyle: "short" | "medium" | "long" | "full" = "medium",
+): string {
+  if (isUzLatn(locale)) return uzLatnDateInZone(value, timeZone);
+  return format.dateTime(value, { dateStyle });
+}
+
+/**
+ * LAHZA -> «sana · vaqt». `dateStyle`+`timeStyle` juftligining O'RNI.
+ *
+ * ⛔ O'zbek lotin shoxida ajratgich `·` — `Intl` ning vergulli shakli
+ *    EMAS, chunki u shaklni ham CLDR ildizidan olardi. Vaqtning O'ZI
+ *    esa `Intl` dan qoladi: soat-daqiqa hamma yozuvda RAQAM, ya'ni
+ *    u yerda tuzatiladigan narsa yo'q.
+ */
+export function formatInstant(
+  format: ReturnType<typeof useFormatter>,
+  value: Date,
+  locale: string,
+  timeZone: string | undefined,
+  dateStyle: "short" | "medium" | "long" | "full" = "medium",
+  timeStyle: "short" | "medium" = "short",
+): string {
+  if (isUzLatn(locale)) {
+    return joinUzLatnDateTime(
+      uzLatnDateInZone(value, timeZone),
+      /* Soat-daqiqa `Intl` dan: u hamma yozuvda raqam. */
+      format.dateTime(value, { timeStyle }),
+    );
+  }
+  return format.dateTime(value, { dateStyle, timeStyle });
 }

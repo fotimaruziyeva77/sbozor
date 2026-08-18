@@ -14,8 +14,10 @@ import {
 } from "@/components/snapshots/day-picker";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useAuthStore } from "@/lib/auth-store";
 import { formatBusinessDay } from "@/lib/format-day";
 import { importErrorsOf } from "@/lib/market-queries";
+import { hasPermission } from "@/lib/rbac";
 import { reportErrorView } from "@/lib/report-errors";
 import {
   downloadLedgerTemplate,
@@ -236,6 +238,7 @@ export function LedgerImport() {
   const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
+  const { principal } = useAuthStore();
 
   const { day } = useCompareDay();
   const report = useThreeWayReport(day);
@@ -287,6 +290,46 @@ export function LedgerImport() {
     } catch {
       setTemplateError(t("errors.generic"));
     }
+  }
+
+  /*
+   * =========================================================================
+   * ⛔⛔ HUQUQ DARVOZASI — DIREKTORGA BU BLOK UMUMAN CHIZILMAYDI
+   *     (Topilma №6, 260818).
+   * =========================================================================
+   * `reports.py:164` daftar importini `STALL_MANAGE` ga bog'laydi,
+   * `REPORT_VIEW` ga EMAS. `rbac.py` matritsasida esa DIRECTOR da
+   * `report_view` BOR, `stall_manage` YO'Q — ya'ni direktor bu yuzani
+   * ko'radi, faylni tanlaydi, [Yuklash] ni bosadi va 403 oladi.
+   *
+   * ⛔ HAMMA HOOK BU QATORDAN YUQORIDA CHAQIRILADI va shart shundan
+   *    KEYIN tekshiriladi: erta `return` hooklardan oldin qo'yilsa,
+   *    rol almashganda hooklar soni o'zgarib React yiqilardi.
+   *
+   * ⚠ Bu SERVER TEKSHIRUVINING O'RNINI BOSMAYDI — `STALL_MANAGE`
+   *   darvozasi o'z joyida qoladi; bu faqat bajarib bo'lmaydigan amalni
+   *   ko'rsatmaslik.
+   *
+   * ⛔⛔ VA BLOK O'ZI YO'QOLMAYDI — `null` QAYTARILMAYDI.
+   *
+   * `page.test.tsx` ning G-37(b) juftligi shuni qulflaydi: har bir
+   * blokning MAZMUNI bo'lishi shart. Mazmunsiz «Daftar» sarlavhasi
+   * ekranda BUZILGAN bo'lib o'qilardi. Direktorga esa bu yerda
+   * aytadigan ROST gap bor va u aynan uning savoli: «bugungi qog'oz
+   * daftar kiritilganmi?» — yuklash boshqaruvisiz, faqat holat.
+   */
+  const mayImport = hasPermission(principal?.roles ?? [], "stall_manage");
+
+  if (!mayImport) {
+    return (
+      <div className="flex flex-col gap-3" data-compare-content="ledger">
+        <h2 className="text-lg font-semibold">{t("compare.ledger")}</h2>
+        <p className="text-sm">
+          {hasLedger ? t("compare.ledgerPresent") : t("compare.ledgerMissing")}
+        </p>
+        <p className="text-sm text-text-muted">{t("compare.ledgerReadOnly")}</p>
+      </div>
+    );
   }
 
   return (

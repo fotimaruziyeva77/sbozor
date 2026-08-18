@@ -1529,6 +1529,8 @@
     "ledgerPresent": "Bu kun uchun daftar yuklangan",
     "ledgerMissing": "Bu kun uchun daftar yuklanmagan",
     "ledgerMissingHint": "Daftar summalarini Excel shabloni orqali yuklang — solishtiruv shundan keyin chiqadi.",
+    "ledgerReadOnly": "Daftarni bozor ma'muriyati kiritadi",
+    "ledgerPresent": "Daftar bu kun uchun kiritilgan",
     "ledgerEmpty": "Daftarda bu kun uchun qator yo'q",
     "ledgerEmptyHint": "{day} kuni uchun yuklangan daftarda birorta rasta qatori yo'q.",
     "ledgerReplaceTitle": "Daftarni almashtirasizmi?",

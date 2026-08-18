@@ -73,21 +73,28 @@ import type { PendingStall } from "@/lib/billing-pending-queries";
  * -----------------------------------------------------------------------
  * Kartada ikki mustaqil ogohlantirish bloki bor: reyestr holati
  * (`stall_status !== "active"`) va biriktirish yo'qligi
- * (`vendor_assigned === false`). ⛔ IKKALASI HAM SHUNCHAKI XABAR.
+ * (`vendor_assigned === false`). ⛔ ULAR BIR XIL EMAS — SERVER ULARGA
+ *    BOSHQACHA JAVOB BERADI, VA UI SHU FARQNI TAKRORLAYDI.
  *
- * ⛔⛔ TUGMANI O'CHIRISH TAQIQLANADI VA BU JUMLA ATAYIN AYNAN SHUNDAY
- *     YOZILGAN, chunki keyingi ijrochi uchun «ogohlantirish bor ekan,
- *     tasdiqni bloklaylik» qadami TABIIY ko'rinadi. `PaymentBar` ga
- *     hech qanday `disabled` yoki yangi prop UZATILMAYDI va
- *     `collect-session.tsx` ning render sharti TEGILMAYDI.
+ * ⛔⛔ `stall_status` — SHUNCHAKI XABAR, TUGMANI O'CHIRISH TAQIQLANADI.
+ *     Bu jumla atayin aynan shunday yozilgan, chunki keyingi ijrochi
+ *     uchun «ogohlantirish bor ekan, tasdiqni bloklaylik» qadami TABIIY
+ *     ko'rinadi. Sabab BIZNESNIKI: ta'mirdagi rasta savdo qilsa patta
+ *     TO'LAYDI — bu qaror `billing_repo._market_projection()`
+ *     docstringida yozilgan va kunlik hisob `status` ustuni bo'yicha
+ *     FILTRLANMAYDI. Server bunday to'lovni O'TKAZADI.
  *
- * Sabab BIZNESNIKI, uslubiy emas:
- *   * ta'mirdagi rasta savdo qilsa patta TO'LAYDI — bu qaror
- *     `billing_repo._market_projection()` docstringida yozilgan va
- *     kunlik hisob `status` ustuni bo'yicha FILTRLANMAYDI;
- *   * sotuvchisiz rastani server ALLAQACHON 409 `stall_not_assigned`
- *     bilan to'sadi — UI ikkinchi to'siq qurmaydi, u faqat o'sha rad
- *     javobini OLDINGA suradi.
+ * ⛔⛔ `vendor_assigned === false` — TASDIQ TO'SILADI (Topilma №1,
+ *     260818). Server bu holatni 409 `stall_not_assigned` bilan RAD
+ *     ETADI, ya'ni to'siq UI niki emas, SERVERNIKI va UI uni faqat
+ *     ko'zguda ko'rsatadi. To'siqning o'zi `payment-bar.tsx` da
+ *     (`vendorAssigned` propi) — bu karta ogohlantirish MATNINI beradi.
+ *
+ * ⚠ NEGA OLDIN XABAR EDI VA NEGA O'ZGARDI: `billing_repo` docstringi
+ *   maydon «kassir rad javobini [Tasdiqlash] dan KEYIN emas, OLDIN
+ *   olsin» deb chiqarilganini aytadi. Brauzerda o'lchandi — passiv
+ *   xabar buni BAJARMAYDI: kassir baribir bosadi va rad javobini
+ *   bosgandan KEYIN oladi. Maqsad o'zgargani yo'q, vositasi o'zgardi.
  *
  * ⚠ C-10 CHEGARASI SAQLANADI: bu bloklarda sotuvchi ISMI ham, telefoni
  *   ham YO'Q — faqat biriktirish YO'QLIGI aytiladi.

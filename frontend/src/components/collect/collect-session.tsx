@@ -401,6 +401,7 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
           onWritten={onWritten}
           reasonCode={override?.reasonCode}
           stallCode={stall.stall_code}
+          vendorAssigned={stall.vendor_assigned}
         />
       ) : null}
 

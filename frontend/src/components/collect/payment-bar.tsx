@@ -141,6 +141,17 @@ export type PaymentBarProps = {
   method: PaymentMethodValue | null;
   onMethodChange: (method: PaymentMethodValue) => void;
   onWritten: (record: PaymentRecord) => void;
+  /**
+   * Rastaga sotuvchi biriktirilganmi (serverdagi `vendor_assigned`).
+   *
+   * ⛔ `false` — TASDIQ TO'SILADI: server bu holatni 409
+   *    `stall_not_assigned` bilan rad etadi, ya'ni bu UI qoidasi emas,
+   *    server qoidasining ko'zgusi (pastdagi `submit` izohi).
+   *
+   * ⚠ Ixtiyoriy va `undefined` — O'TKAZADI: maydon yo'q bo'lgan eski
+   *   javob to'lovni jimgina bloklab qo'ymasin.
+   */
+  vendorAssigned?: boolean;
 };
 
 export function PaymentBar({
@@ -151,6 +162,7 @@ export function PaymentBar({
   method,
   onMethodChange,
   onWritten,
+  vendorAssigned,
 }: PaymentBarProps) {
   const t = useTranslations();
   const pay = usePayment();
@@ -160,11 +172,37 @@ export function PaymentBar({
 
   const [busy, setBusy] = useState(false);
   const [failureCode, setFailureCode] = useState<string | null>(null);
-  const [notice, setNotice] = useState<"method" | "amount" | null>(null);
+  const [notice, setNotice] = useState<"method" | "amount" | "assigned" | null>(
+    null,
+  );
 
-  const blocked = method === null || amountSoum === null || idempotencyKey === null;
+  const blocked =
+    method === null ||
+    amountSoum === null ||
+    idempotencyKey === null ||
+    vendorAssigned === false;
 
   const submit = useCallback(() => {
+    /*
+     * ⛔ SERVER QOIDASINING KO'ZGUSI — YANGI TO'SIQ EMAS (Topilma №1).
+     *
+     * `payments.py` 3-qadami sotuvchisiz rastani 409 `stall_not_assigned`
+     * bilan RAD ETADI. `billing_repo` docstringi esa `vendor_assigned`
+     * maydoni aynan shuning uchun payloadga chiqarilganini aytadi:
+     * «kassir rad javobini [Tasdiqlash] dan KEYIN emas, OLDIN oladi».
+     *
+     * Passiv ogohlantirish bu maqsadni BAJARMAYDI — o'lchov shuni
+     * ko'rsatdi: kassir baribir bosadi va rad javobini bosgandan keyin
+     * oladi. Shuning uchun bu yerda yuborish to'xtatiladi.
+     *
+     * ⛔ `stall_status` ga BU QOIDA TEGMAYDI: ta'mirdagi rasta savdo
+     *    qilsa patta TO'LAYDI va server uni o'tkazadi — u ogohlantirish
+     *    bo'lib QOLADI (`pending-card.tsx`).
+     */
+    if (vendorAssigned === false) {
+      setNotice("assigned");
+      return;
+    }
     if (amountSoum === null || idempotencyKey === null) {
       setNotice("amount");
       return;
@@ -210,6 +248,7 @@ export function PaymentBar({
     pay,
     reasonCode,
     stallCode,
+    vendorAssigned,
   ]);
 
   const onConfirmKeyDown = useCallback(
@@ -346,6 +385,12 @@ export function PaymentBar({
       {notice === "method" ? (
         <p className="text-sm text-text-muted" role="status">
           {t("collect.methodLegend")}
+        </p>
+      ) : null}
+
+      {notice === "assigned" ? (
+        <p className="text-sm text-danger-text" role="alert">
+          {t("collect.errorCause.stall_not_assigned")}
         </p>
       ) : null}
 

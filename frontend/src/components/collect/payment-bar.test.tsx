@@ -412,3 +412,65 @@ describe("G-21: idempotentlik kalitining hayot davri (§8.7)", () => {
     expect(typeof first[1].body.idempotency_key).toBe("string");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* SOTUVCHISIZ RASTA — SERVER QOIDASINING KO'ZGUSI (Topilma №1, 260818)      */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ `vendorAssigned === false` — tasdiq TO'SILADI", () => {
+  /*
+   * ⛔⛔ NEGA BU TEST BOR.
+   *
+   * `payments.py` 3-qadami sotuvchisiz rastani 409 `stall_not_assigned`
+   * bilan rad etadi. `billing_repo` docstringi maydon aynan «kassir rad
+   * javobini [Tasdiqlash] dan KEYIN emas, OLDIN olsin» deb chiqarilganini
+   * aytadi. Brauzerda o'lchandi: passiv ogohlantirish buni BAJARMAGAN —
+   * kassir bosgan va rad javobini bosgandan KEYIN olgan.
+   *
+   * ⛔ Bu UI ning YANGI qoidasi EMAS: server baribir to'sadi. Test faqat
+   *    to'siqning VAQTINI qulflaydi — bekorga sanalgan naqd qaytarib
+   *    olinmaydi.
+   */
+  test("⛔ bosilganda `/payments` ga so'rov UMUMAN ketmaydi", async () => {
+    apiClientMock.apiFetch.mockResolvedValue(WRITTEN);
+    renderTree(
+      <PaymentBar
+        amountSoum={PENDING.amount_soum}
+        idempotencyKey={KEY}
+        method="cash"
+        onMethodChange={vi.fn()}
+        onWritten={vi.fn()}
+        stallCode={PENDING.stall_code}
+        vendorAssigned={false}
+      />,
+    );
+
+    fireEvent.click(confirmButton());
+
+    /* Sabab AYTILADI — jim to'siq oqimni to'xtatardi (§14.3). */
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent ?? "").not.toBe(""),
+    );
+    expect(paymentCalls()).toHaveLength(0);
+    expect(confirmButton().getAttribute("aria-disabled")).toBe("true");
+  });
+
+  test("⛔ NAZORAT — biriktirilgan rastada so'rov KETADI", async () => {
+    apiClientMock.apiFetch.mockResolvedValue(WRITTEN);
+    renderTree(
+      <PaymentBar
+        amountSoum={PENDING.amount_soum}
+        idempotencyKey={KEY}
+        method="cash"
+        onMethodChange={vi.fn()}
+        onWritten={vi.fn()}
+        stallCode={PENDING.stall_code}
+        vendorAssigned
+      />,
+    );
+
+    fireEvent.click(confirmButton());
+
+    await waitFor(() => expect(paymentCalls()).toHaveLength(1));
+  });
+});

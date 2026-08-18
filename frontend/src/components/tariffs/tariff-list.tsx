@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Ellipsis, Pencil, Plus, Trash2 } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TariffDialog } from "@/components/tariffs/tariff-dialog";
 import type { TariffItem } from "@/lib/api-types";
+import { formatBusinessDay } from "@/lib/format-day";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import {
   useCategoriesQuery,
@@ -287,14 +288,13 @@ export function TariffRow({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
-  const validFrom = format.dateTime(new Date(tariff.valid_from), {
-    dateStyle: "medium",
-  });
+  const validFrom = formatBusinessDay(format, tariff.valid_from, locale);
   const validTo =
     tariff.valid_to === null
       ? t("tariffs.openEnded")
-      : format.dateTime(new Date(tariff.valid_to), { dateStyle: "medium" });
+      : formatBusinessDay(format, tariff.valid_to, locale);
   const badge = tariffRowBadge(tariff);
 
   return (

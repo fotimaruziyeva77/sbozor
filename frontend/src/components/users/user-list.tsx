@@ -3,7 +3,7 @@
 import { useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { KeyRound, Lock, MoreHorizontal, Unlock, UserCog } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTimeZone, useTranslations } from "next-intl";
 
 import { EditRolesDialog } from "@/components/users/edit-roles-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import {
   useUnblockUser,
   useUsersQuery,
 } from "@/lib/queries";
+import { formatInstant } from "@/lib/format-day";
 import type { RoleLabelKey } from "@/lib/rbac";
 import { hasPermission, roleLabelKey } from "@/lib/rbac";
 
@@ -266,6 +267,8 @@ function UserCard({
   const t = useTranslations();
   const tRoles = useTranslations("roles");
   const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
 
   const roleLabels = user.roles
     .map((role) => roleLabelKey(role))
@@ -314,10 +317,7 @@ function UserCard({
 
         <p className="text-xs text-text-muted">
           {t("users.createdAt")}:{" "}
-          {format.dateTime(new Date(user.created_at), {
-            dateStyle: "medium",
-            timeStyle: "short",
-          })}
+          {formatInstant(format, new Date(user.created_at), locale, timeZone)}
         </p>
       </CardContent>
     </Card>

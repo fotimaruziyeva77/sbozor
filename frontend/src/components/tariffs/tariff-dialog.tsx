@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useFormatter, useNow, useTimeZone, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useNow, useTimeZone, useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -12,6 +12,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { CategoryItem, TariffItem } from "@/lib/api-types";
+import { formatBusinessDay } from "@/lib/format-day";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import { useCreateTariff, useUpdateTariff } from "@/lib/market-queries";
 
@@ -108,6 +109,7 @@ export function TariffDialog({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const now = useNow();
   const timeZone = useTimeZone();
 
@@ -297,9 +299,7 @@ export function TariffDialog({
             hint={
               isInitialTariff
                 ? t("tariffs.initialHint", {
-                    date: format.dateTime(new Date(minValidFrom), {
-                      dateStyle: "long",
-                    }),
+                    date: formatBusinessDay(format, minValidFrom, locale),
                   })
                 : undefined
             }

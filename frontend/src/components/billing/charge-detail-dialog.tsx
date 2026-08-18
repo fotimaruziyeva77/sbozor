@@ -1,6 +1,6 @@
 "use client";
 
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTimeZone, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import type {
   ChargeRow,
 } from "@/lib/billing-charge-queries";
 import { useChargeDetail } from "@/lib/billing-charge-queries";
+import { formatBusinessDay, formatInstant } from "@/lib/format-day";
 import { useUsersQuery } from "@/lib/queries";
 import { useEvidenceImageHref } from "@/lib/review-queries";
 
@@ -136,6 +137,7 @@ export function ChargeDetailDialog({
 function ChargeDetailBody({ charge }: { charge: ChargeRow }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const detail = useChargeDetail(charge.charge_id);
 
   if (detail.isPending) {
@@ -168,7 +170,7 @@ function ChargeDetailBody({ charge }: { charge: ChargeRow }) {
       <section className="flex flex-col gap-1">
         <p className="text-base font-semibold">
           {charge.stall_code} ·{" "}
-          {format.dateTime(new Date(data.service_date), { dateStyle: "medium" })}
+          {formatBusinessDay(format, data.service_date, locale)}
         </p>
         {/*
          * ⛔ KO'RINADIGAN YAGONA IDENTIFIKATOR (D-02). Tarif
@@ -270,6 +272,8 @@ function Amount({
 function AdjustmentRow({ adjustment }: { adjustment: ChargeAdjustment }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
   const users = useUsersQuery();
 
   const actor =
@@ -304,10 +308,13 @@ function AdjustmentRow({ adjustment }: { adjustment: ChargeAdjustment }) {
       )}
 
       <span className="text-xs text-text-muted">
-        {format.dateTime(new Date(adjustment.created_at), {
-          dateStyle: "short",
-          timeStyle: "short",
-        })}
+        {formatInstant(
+          format,
+          new Date(adjustment.created_at),
+          locale,
+          timeZone,
+          "short",
+        )}
       </span>
     </li>
   );

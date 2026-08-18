@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, TriangleAlert } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { VendorListItem } from "@/lib/api-types";
+import { formatBusinessDay } from "@/lib/format-day";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import {
   EMPTY_STALL_FILTERS,
@@ -90,6 +91,7 @@ export function AssignmentDialog({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   const [search, setSearch] = useState("");
   const [stall, setStall] = useState<SelectedStall | null>(null);
@@ -322,7 +324,7 @@ export function AssignmentDialog({
         {isClosing && date !== "" ? (
           <p className="rounded-sm bg-surface-muted px-3 py-2 text-sm">
             {t("vendors.closeAssignmentConfirm", {
-              date: format.dateTime(new Date(date), { dateStyle: "long" }),
+              date: formatBusinessDay(format, date, locale),
               vendor: vendor.full_name,
             })}
           </p>

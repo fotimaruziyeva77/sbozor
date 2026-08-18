@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Info } from "lucide-react";
-import { useFormatter, useNow, useTimeZone, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useNow, useTimeZone, useTranslations } from "next-intl";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { ScheduleModeValue, SnapshotSchedule } from "@/lib/api-types";
+import { formatBusinessDay } from "@/lib/format-day";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import {
   useCreateSeasonalSchedule,
@@ -89,6 +90,7 @@ export function ScheduleDialog({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   const schedules = useSchedules({ enabled: request !== null });
   const items = schedules.data?.items ?? [];
@@ -101,13 +103,11 @@ export function ScheduleDialog({
 
   function periodText(profile: SnapshotSchedule): string {
     const from = t("snapshots.scheduleFrom", {
-      date: format.dateTime(new Date(profile.starts_on), {
-        dateStyle: "medium",
-      }),
+      date: formatBusinessDay(format, profile.starts_on, locale),
     });
     if (profile.ends_on === null) return from;
     return `${from} ${t("snapshots.scheduleUntil", {
-      date: format.dateTime(new Date(profile.ends_on), { dateStyle: "medium" }),
+      date: formatBusinessDay(format, profile.ends_on, locale),
     })}`;
   }
 
@@ -480,6 +480,7 @@ function CreateForm({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const now = useNow();
   const timeZone = useTimeZone();
   const create = useCreateSeasonalSchedule();
@@ -651,17 +652,13 @@ function CreateForm({
           : endsOn !== "" && nextProfileName !== null
             ? t("snapshots.previewBounded", {
                 count: times.length,
-                from: format.dateTime(new Date(startsOn), {
-                  dateStyle: "medium",
-                }),
+                from: formatBusinessDay(format, startsOn, locale),
                 next: nextProfileName,
-                to: format.dateTime(new Date(endsOn), { dateStyle: "medium" }),
+                to: formatBusinessDay(format, endsOn, locale),
               })
             : t("snapshots.previewOpen", {
                 count: times.length,
-                from: format.dateTime(new Date(startsOn), {
-                  dateStyle: "medium",
-                }),
+                from: formatBusinessDay(format, startsOn, locale),
               })}
       </p>
 

@@ -60,7 +60,66 @@ export function uzLatnDate(date: Date): string {
   return `${date.getUTCDate()}-${month}, ${date.getUTCFullYear()}`;
 }
 
+/**
+ * Sana va vaqt matnlarini birlashtiradi.
+ *
+ * ⛔ Ajratgich SHU YERDA, BIR MARTA: `uzLatnDateTime()` ham,
+ *    `format-day.ts` dagi `formatInstant()` ham shu funksiyaga keladi,
+ *    aks holda bir ekranda `·`, boshqasida `,` paydo bo'lardi.
+ */
+export function joinUzLatnDateTime(dateText: string, timeText: string): string {
+  return `${dateText} · ${timeText}`;
+}
+
 /** `2026-08-18 09:41` -> «18-avgust, 2026 · 09:41» (vaqt chaqiruvchidan). */
 export function uzLatnDateTime(date: Date, timeText: string): string {
-  return `${uzLatnDate(date)} · ${timeText}`;
+  return joinUzLatnDateTime(uzLatnDate(date), timeText);
+}
+
+/**
+ * LAHZA (timestamp) -> «18-avgust, 2026», ⛔ BERILGAN MINTAQADA.
+ *
+ * =============================================================================
+ * ⛔⛔ NEGA `uzLatnDate()` BU YERDA YARAMAYDI.
+ *
+ * `uzLatnDate()` UTC qismlarini o'qiydi va bu KUN satri uchun to'g'ri
+ * (`2026-08-18` -> UTC tush). Lekin `created_at` kabi LAHZA uchun u
+ * xato: Toshkent UTC+5, ya'ni `2026-08-18T20:30:00Z` mahalliy vaqtda
+ * ALLAQACHON 19-avgust. UTC o'qilsa ekranda «18-avgust» chiqib,
+ * yonidagi `Intl` chizgan vaqt «01:30» bo'lardi — bir qatorda ikki
+ * xil kun.
+ *
+ * ⛔ Oy raqami `Intl` dan `en-US` va RAQAMLI qismlar bilan olinadi:
+ *    raqamlar hamma locale'da bir xil, ya'ni bu yerda CLDR'ning
+ *    o'zbekcha jadvalidan HECH NARSA so'ralmaydi — oy NOMI baribir
+ *    yuqoridagi o'z jadvalimizdan qo'yiladi.
+ * =============================================================================
+ */
+export function uzLatnDateInZone(
+  date: Date,
+  /*
+   * ⛔ `undefined` — RUXSAT ETILGAN va u `Intl` ga SHUNDAYLIGICHA
+   *    uzatiladi: o'shanda tizim mintaqasi olinadi, ya'ni xulq
+   *    `format.dateTime()` niki bilan BIR XIL. Bu yerda o'zimizcha
+   *    "Asia/Tashkent" qo'yilsa, ilova sozlamasi o'zgargan kuni
+   *    sana yonidagi vaqtdan AJRALIB ketardi.
+   */
+  timeZone: string | undefined,
+): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(date);
+
+  const pick = (type: "year" | "month" | "day"): string =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  const monthIndex = Number(pick("month")) - 1;
+  const month = MONTHS[monthIndex];
+  /* Mintaqa noma'lum bo'lsa `Intl` otadi; oy topilmasa xom qiymatga qaytmaymiz. */
+  if (month === undefined) return uzLatnDate(date);
+
+  return `${Number(pick("day"))}-${month}, ${pick("year")}`;
 }

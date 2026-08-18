@@ -9,7 +9,7 @@ import {
   MoonStar,
   XCircle,
 } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import type { BadgeTone } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CaptureDaySummary } from "@/lib/api-types";
+import { formatBusinessDay } from "@/lib/format-day";
 import { useCaptureDay } from "@/lib/snapshot-queries";
 
 /*
@@ -132,6 +133,7 @@ export function DaySummary({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const query = useCaptureDay(day, todayIso);
 
   /* Z-5 — birinchi yuklash: bitta `Skeleton` qator (§6.2). */
@@ -196,9 +198,7 @@ export function DaySummary({
     );
   }
 
-  const dayLabel = format.dateTime(new Date(`${day}T12:00:00Z`), {
-    dateStyle: "full",
-  });
+  const dayLabel = formatBusinessDay(format, day, locale);
 
   return (
     <Card>

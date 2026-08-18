@@ -1,13 +1,14 @@
 "use client";
 
 import { CheckCircle2, Minus, Plus, WifiOff } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTimeZone, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { BadgeTone } from "@/components/ui/badge";
 import type { DiscoveryRun } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
+import { formatInstant } from "@/lib/format-day";
 
 /*
  * =============================================================================
@@ -109,6 +110,8 @@ export function DiscoveryResult({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
 
   const counts = discoveryCounts(run);
   const noChanges = runNoChanges(counts);
@@ -141,10 +144,7 @@ export function DiscoveryResult({
         </Badge>
         {Number.isFinite(stamp) ? (
           <span className="text-xs text-text-muted">
-            {format.dateTime(new Date(stamp), {
-              dateStyle: "medium",
-              timeStyle: "short",
-            })}
+            {formatInstant(format, new Date(stamp), locale, timeZone)}
           </span>
         ) : null}
       </div>
