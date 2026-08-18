@@ -840,3 +840,363 @@
   --font-weight-normal: 500;
   --font-weight-semibold: 700;
 }
+
+/* ==========================================================================
+ * DIREKTOR PANELI — dizayn spetsifikatsiyasining AYNAN o'lchamlari.
+ *
+ * Manba: claude.ai/design `7bb95baa…` / `Sbozor Direktor.dc.html`, MCP
+ * orqali o'qildi 2026-08-18. Dizayn inline `style` ishlatadi; bu yerda
+ * o'sha qiymatlar NOMLANGAN sinflarga ko'chirildi.
+ *
+ * ⛔ NEGA SINFGA: G-land-5(d) va G-motion-7(d,e) darvozalari arbitrar
+ *    Tailwind o'lchamlarini (`text-[34px]`, `h-[208px]`) RAD ETADI.
+ *    Qiymatni sinfga ko'chirish darvozani chetlab o'tish EMAS — u
+ *    qiymatni BIR joyda saqlaydi va u yerda nima uchun aynan shunday
+ *    ekani yozilishi mumkin.
+ * ========================================================================== */
+
+/* --- Kirish animatsiyalari (dizayndagi nomlar SAQLANDI) ---------------- */
+@keyframes dirIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- Katak ------------------------------------------------------------- */
+
+/* Havola qobig'i: kirish animatsiyasi va kechikish `--i` dan. */
+.dir-tile-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  /* 250ms + 60ms qadam — dizayndagi 0/60/120/180/240/300ms ketma-ketligi. */
+  animation: dirIn 250ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+.dir-tile-link:hover {
+  text-decoration: none;
+}
+
+/* ⛔ Balandlik QAT'IY 13rem (208px): oltita katak bir qatorda turganda
+ *    ularning pastki chizig'i BIR SATHDA bo'lishi kerak, aks holda
+ *    «Yangilandi» qatorlari zinapoyaga aylanardi. */
+.dir-tile {
+  height: 13rem;
+}
+
+.dir-tile-head {
+  min-height: 3.5rem;
+  padding-bottom: 0;
+}
+
+.dir-tile-body {
+  min-height: 8.25rem;
+}
+
+/* Sarlavha: 13px / 600 / 0.06em / uppercase. */
+.dir-tile-label {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.dir-tile-sub {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* ⛔ ASOSIY SON: 34px, mono, tabular. Dizayn shu o'lchamni tanlagan,
+ *    chunki olti katakda son BIRINCHI o'qiladigan narsa bo'lishi kerak. */
+.dir-tile-value {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 2.125rem;
+  line-height: 1.1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Qarz kataki — qiymat qizil (dizayn 3-kataki). */
+.dir-tile-value-danger {
+  color: var(--color-danger-text);
+}
+
+/* Bandlik katagidagi foiz — 30px (donut yonida turadi). */
+.dir-tile-value-sm {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 1.875rem;
+  line-height: 1.1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sonning yonidagi qo'shimcha summa — 17px mono. */
+.dir-tile-value-aside {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* «rasta», «smena yopildi · 7 dan» kabi birlik matni — 15px. */
+.dir-tile-unit {
+  font-size: 0.9375rem;
+  color: var(--color-text-muted);
+}
+
+.dir-tile-note {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Katakning pastki qatori ------------------------------------------ */
+.dir-tile-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.625rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.625rem;
+}
+
+.dir-tile-updated {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ⛔ ESKIRGAN MA'LUMOT OGOHLANTIRISH RANGIDA — dizaynning 5-kataki
+ *    («15 daqiqadan eski»). Rang yolg'iz signal EMAS: matnning O'ZI
+ *    ham eskiligini aytadi. */
+.dir-tile-stale {
+  font-size: 0.75rem;
+  color: var(--color-warning-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dir-tile-action {
+  font-size: 0.8125rem;
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+/* --- Olti katakli to'r ------------------------------------------------- */
+
+/* ⛔ 3 -> 2 -> 1 ustun. Chegaralar dizayndan: 1180px va 760px. */
+.dir-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 1180px) {
+  .dir-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .dir-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Katak balandligi mobilda QAT'IY EMAS: bir ustunda tekislash kerak
+   * emas, matn esa o'ralib balandroq bo'lishi mumkin. */
+  .dir-tile {
+    height: auto;
+  }
+}
+
+/* --- Sarlavha qatori va tablar ---------------------------------------- */
+.dir-shell {
+  max-width: 80rem;
+  margin: 0 auto;
+}
+
+.dir-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.dir-title {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* «Yangi ma'lumot bor» yorlig'i — dizayndagi kombinatsiya rangi. */
+.dir-fresh-pill {
+  border: 1px solid var(--color-warning);
+  background: color-mix(in oklch, var(--color-warning) 20%, transparent);
+  color: var(--color-warning-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius-md);
+  min-height: 2.25rem;
+  cursor: pointer;
+}
+
+.dir-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dir-tab {
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid transparent;
+}
+
+.dir-tab-active {
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-accent-text);
+  border-bottom: 2px solid var(--color-accent);
+}
+
+@media (max-width: 760px) {
+  .dir-tabs {
+    overflow-x: auto;
+  }
+}
+
+/* Bandlik donuti — 76px (dizayn qiymati), arbitrar Tailwind emas. */
+.dir-donut {
+  width: 4.75rem;
+  height: 4.75rem;
+  flex-shrink: 0;
+}
+
+/* Smena farqi — ogohlantirish rangida (dizayn 6-kataki). */
+.dir-tile-diff {
+  color: var(--color-warning-text);
+}
+
+/* Panelning yopilish matni — 76ch dizayn qiymati. */
+.dir-closing {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  max-width: 76ch;
+}
+
+/* Grafik chizig'ining chizilishi — dizayn `dirDraw`. */
+@keyframes dirDraw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Grafik nuqtalarining paydo bo'lishi — dizayn `dirFade`. */
+@keyframes dirFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dir-trend-line {
+  animation: dirDraw 600ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.dir-trend-tail {
+  animation: dirFade 250ms 600ms both;
+}
+
+.dir-trend-dot {
+  animation: dirFade 250ms both;
+}
+
+.dir-trend-axis {
+  font-size: 0.75rem;
+  fill: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tugamagan davr belgisi — ogohlantirish rangida (dizayn qoidasi). */
+.dir-trend-axis-partial {
+  font-size: 0.75rem;
+  fill: var(--color-warning-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dir-trend-grid-label {
+  font-size: 0.75rem;
+  fill: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* --- Tushum trendi kartasi -------------------------------------------- */
+.dir-trend-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.dir-trend-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.dir-trend-skeleton {
+  height: 14.375rem;
+  width: 100%;
+}
+
+/* Xato va bo'sh holatlar grafik balandligini SAQLAYDI — aks holda
+ * karta sakrab, pastdagi matn siljib ketardi. */
+.dir-trend-state {
+  min-height: 14.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  justify-content: center;
+}
+
+.dir-trend-state-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.dir-trend-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--color-border);
+  margin-top: 0.875rem;
+  padding-top: 0.75rem;
+}

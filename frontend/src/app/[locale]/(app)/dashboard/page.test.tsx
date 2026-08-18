@@ -194,8 +194,15 @@ describe("direktor", () => {
     routeFetch();
     renderPage(["director"], { marketIsActive: false });
 
-    // Sahifaning qolgani ishlaydi — bo'sh ekran EMAS.
-    expect(screen.getByText(messages.nav.dashboard)).toBeInTheDocument();
+    /*
+     * Sahifaning qolgani ishlaydi — bo'sh ekran EMAS.
+     *
+     * ⛔ 260818: nishon `nav.dashboard` dan «Bugun paneli» ga ko'chdi.
+     *    Direktorda umumiy sarlavha ATAYIN chizilmaydi — `DirectorPanel`
+     *    o'z sarlavhasini beradi va ikkalasi birga ikki marta yozilardi.
+     *    DA'VO O'ZGARMADI: sahifa bo'sh emas.
+     */
+    expect(screen.getByText("Bugun paneli")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(requestedPaths().length).toBeGreaterThan(0);
@@ -219,7 +226,8 @@ describe("bozor admini", () => {
     routeFetch();
     renderPage(["market_admin"], { marketIsActive: false });
 
-    expect(screen.getByText(messages.nav.dashboard)).toBeInTheDocument();
+    /* ⛔ 260818: bozor adminida ham `report_view` bor -> dizayn paneli. */
+    expect(screen.getByText("Bugun paneli")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(
       messages.dashboard.marketStatus,
     );
@@ -282,18 +290,31 @@ describe("G-motion-6(b) — kassir tushum va bandlikni KO'RMAYDI", () => {
   });
 });
 
-describe("G-motion-6(b) — direktor ikkala kartani KO'RADI", () => {
-  test("tushum trendi ham, bandlik halqasi ham BOR va so'rovlar ketgan", async () => {
+describe("G-motion-6(b) — direktor OLTI KATAKNI va trendni KO'RADI", () => {
+  /*
+   * ⛔⛔ DA'VO O'ZGARMADI, YUZA O'ZGARDI (260818, dizayn importi).
+   *
+   * Ilgari bu test ikkita kartaning SARLAVHASINI qidirardi
+   * (`dashboard.revenueTrendTitle`, `dashboard.occupancyTitle`). Panel
+   * `Sbozor Direktor.dc.html` bo'yicha qayta qurildi: endi u olti katak
+   * va trend kartasidan iborat, sarlavhalar esa dizayndan keladi
+   * (katalogda emas — dizayn matni o'zbek lotin tilida qat'iy).
+   *
+   * ⛔ Tekshiriladigan narsa BIR XIL qoladi va u eng muhimi: direktorda
+   *    tushum va bandlik SO'ROVLARI HAQIQATAN ketadi (pastdagi teskari
+   *    nazorat) — ya'ni bu test bo'sh detektor ustida yashil qolmaydi.
+   */
+  test("olti katak, trend va so'rovlar — hammasi BOR", async () => {
     routeFetch();
     renderPage(["director"], { marketIsActive: true });
 
     await waitFor(() => {
-      expect(document.body.textContent).toContain(
-        messages.dashboard.revenueTrendTitle,
-      );
-      expect(document.body.textContent).toContain(
-        messages.dashboard.occupancyTitle,
-      );
+      /* Dizaynning olti katagidan uchtasi — ular birga chiziladi. */
+      expect(document.body.textContent).toContain("Kechagi tushum");
+      expect(document.body.textContent).toContain("Band, lekin to'lovsiz");
+      expect(document.body.textContent).toContain("Qarz jami");
+      /* Trend kartasi. */
+      expect(document.body.textContent).toContain("Tushum trendi");
     });
 
     /* Teskari nazorat: so'rovlar HAQIQATAN ketgan — 0-so'rov holatida

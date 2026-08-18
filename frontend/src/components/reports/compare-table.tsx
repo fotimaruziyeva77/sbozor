@@ -12,7 +12,9 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DiffClassValue, ThreeWayReport, ThreeWayRow } from "@/lib/api-types";
+import { useAuthStore } from "@/lib/auth-store";
 import { formatBusinessDay } from "@/lib/format-day";
+import { hasPermission } from "@/lib/rbac";
 import { useThreeWayReport } from "@/lib/report-queries";
 
 /*
@@ -124,6 +126,25 @@ function focusLedgerUpload(): void {
 
 export function CompareTable() {
   const t = useTranslations();
+  const { principal } = useAuthStore();
+
+  /*
+   * =========================================================================
+   * ⛔⛔ YUKLASH TAKLIFI HUQUQ BILAN BOG'LANADI (Topilma №6 ning DAVOMI,
+   *     260818 — Chromeda jonli topildi).
+   * =========================================================================
+   * `ledger-import.tsx` da yuklash yuzasi `STALL_MANAGE` ostiga olindi,
+   * LEKIN bu bo'sh holatning `action` i tashqarida qolgan edi: direktor
+   * o'sha sahifada «Daftarni yuklash» tugmasini KO'RARDI.
+   *
+   * ⛔ Va u shunchaki 403 bermasdi — u UMUMAN HECH NIMA qilmasdi:
+   *    `focusLedgerUpload()` id bo'yicha fayl maydonini fokuslaydi, o'sha
+   *    maydon esa direktor uchun render QILINMAYDI. Ya'ni o'lik tugma.
+   *
+   * ⚠ Matn ham o'zgaradi: «Excel shabloni orqali yuklang» direktorga
+   *   bajarib bo'lmaydigan ko'rsatma edi.
+   */
+  const mayImport = hasPermission(principal?.roles ?? [], "stall_manage");
 
   const { day } = useCompareDay();
   const report = useThreeWayReport(day);
@@ -162,11 +183,17 @@ export function CompareTable() {
          */
         <EmptyState
           action={
-            <Button onClick={focusLedgerUpload} variant="secondary">
-              {t("compare.ledgerUpload")}
-            </Button>
+            mayImport ? (
+              <Button onClick={focusLedgerUpload} variant="secondary">
+                {t("compare.ledgerUpload")}
+              </Button>
+            ) : undefined
           }
-          description={t("compare.ledgerMissingHint")}
+          description={
+            mayImport
+              ? t("compare.ledgerMissingHint")
+              : t("compare.ledgerReadOnly")
+          }
           title={t("compare.ledgerMissing")}
         />
       )}

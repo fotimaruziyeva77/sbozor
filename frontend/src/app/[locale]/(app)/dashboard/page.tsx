@@ -4,10 +4,7 @@ import { ScrollText, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { MarketStatusCard } from "@/components/dashboard/market-status-card";
-import { DebtorsCard } from "@/components/dashboard/debtors-card";
-import { LeakCard } from "@/components/dashboard/leak-card";
-import { OccupancyDonut } from "@/components/dashboard/occupancy-donut";
-import { RevenueCard } from "@/components/dashboard/revenue-card";
+import { DirectorPanel } from "@/components/director/panel";
 import { HeadlineCard } from "@/components/headline/headline-card";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Link } from "@/i18n/navigation";
@@ -63,27 +60,54 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {t("nav.dashboard")}
-        </h1>
-        {/* D-16: bozor nomi tarjima qilinmaydi — qanday kiritilgan bo'lsa shunday. */}
-        <p className="text-sm text-text-muted">
-          {t("shell.marketLabel")}: {principal?.marketName ?? "—"}
-        </p>
-        {roleLabels.length > 0 ? (
+      {/*
+       * ⛔⛔ DIREKTORDA UMUMIY SARLAVHA CHIZILMAYDI (260818, dizayn importi).
+       *
+       * `DirectorPanel` ning O'ZI sarlavha beradi: bozor nomi + rol
+       * («KARMANA TEST BOZORI · DIREKTOR»), «Bugun paneli» va sana
+       * qatori. Ikkalasi birga chizilganda ekranda IKKITA sarlavha
+       * ustma-ust turardi va bozor nomi ham ikki marta yozilardi —
+       * jonli o'lchandi.
+       *
+       * ⚠ Kassir va nazoratchida QOLADI: ularda dizayn paneli yo'q va
+       *   bu blok yagona kontekst (qaysi bozor, qaysi rol).
+       */}
+      {hasPermission(roles, "report_view") ? null : (
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {t("nav.dashboard")}
+          </h1>
+          {/* D-16: bozor nomi tarjima qilinmaydi — qanday kiritilgan bo'lsa shunday. */}
           <p className="text-sm text-text-muted">
-            {t("users.rolesLabel")}: {roleLabels.join(" · ")}
+            {t("shell.marketLabel")}: {principal?.marketName ?? "—"}
           </p>
-        ) : null}
-      </div>
+          {roleLabels.length > 0 ? (
+            <p className="text-sm text-text-muted">
+              {t("users.rolesLabel")}: {roleLabels.join(" · ")}
+            </p>
+          ) : null}
+        </div>
+      )}
 
       {/*
        * ⛔ Komponentga FAQAT `marketId` uzatiladi (§10.2). Rol ham, huquq
        *    ham BERILMAYDI: qaysi son ko'rinishini server hal qiladi va
        *    klient buni takrorlay olmasligi kerak.
+       *
+       * ⛔⛔ DIREKTORDA CHIZILMAYDI (260818, dizayn importi).
+       *
+       * `Sbozor Direktor.dc.html` da sarlavha kartasi YO'Q — olti
+       * katakning O'ZI panel. Ikkalasi birga chizilganda ekranda ikkita
+       * «tushum» soni turardi va ular BOSHQA kunga tegishli edi
+       * (sarlavha — bugun, 1-katak — kecha). Jonli o'lchandi: sarlavha
+       * `16,000`, katak `0 so'm` — direktor uchun bu ziddiyat.
+       *
+       * ⚠ Kassir va nazoratchida QOLADI: ularda olti katak yo'q va
+       *   sarlavha kartasi yagona ko'rsatkich.
        */}
-      <HeadlineCard marketId={principal?.marketId ?? null} />
+      {hasPermission(roles, "report_view") ? null : (
+        <HeadlineCard marketId={principal?.marketId ?? null} />
+      )}
 
       {/*
        * Y-2 IKKI KARTASI — `HeadlineCard` dan KEYIN, `MarketStatusCard`
@@ -104,25 +128,26 @@ export default function DashboardPage() {
        *    kunlik tushumi kassirning tarmoq panelida ko'rinardi — 6-faza
        *    ko'r deklaratsiyasi bitta commitda qulardi (§0.2).
        */}
+      {/*
+       * =====================================================================
+       * ⛔⛔ DIREKTOR PANELI — FOYDALANUVCHI DIZAYNI (260818).
+       * =====================================================================
+       * Ilgari bu yerda beshta alohida karta turardi (`RevenueCard`,
+       * `OccupancyDonut`, `LeakCard`, `DebtorsCard`). Ular MENING
+       * tanlovim edi, dizaynning EMAS — va bu farq foydalanuvchi
+       * tomonidan aniqlandi.
+       *
+       * Endi `Sbozor Direktor.dc.html` (claude.ai/design, MCP orqali
+       * o'qilgan) ning olti katagi chiziladi: tartib, o'lchamlar, raqam
+       * formati, kirish animatsiyasi va havolalar — dizayndan.
+       *
+       * ⛔ SHART KOMPONENTDAN TASHQARIDA (G-motion-6(b,c)): huquqsiz
+       *    sessiyada SO'ROV HAM ketmaydi — kassirning tarmoq panelida
+       *    bozorning kunlik tushumi ko'rinmasligi kerak.
+       * =====================================================================
+       */}
       {hasPermission(roles, "report_view") && principal?.marketId ? (
-        <>
-          <RevenueCard />
-          <OccupancyDonut />
-          {/*
-           * ⛔ TARTIB TASODIFIY EMAS (260818 auditi, Topilma №5).
-           *
-           * `LeakCard` — mahsulotning ASOSIY qiymati («band, lekin
-           * to'lovsiz»), `DebtorsCard` — «kim, qancha, qachondan beri».
-           * Ikkalasi ham `report_view` ostida va SHU SHART ICHIDA turadi:
-           * huquqsiz sessiyada so'rov HAM ketmaydi (yuqoridagi izoh).
-           *
-           * ⚠ Ular tushum va bandlikdan KEYIN: birinchi ikkitasi «bozor
-           *   qanday ishlayapti», keyingi ikkitasi «qayerda yo'qotish
-           *   bor» degan savolga javob beradi va bu o'qish tartibi.
-           */}
-          <LeakCard />
-          <DebtorsCard />
-        </>
+        <DirectorPanel marketName={principal.marketName ?? "Bozor"} />
       ) : null}
 
       {/*

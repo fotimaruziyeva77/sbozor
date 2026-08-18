@@ -139,7 +139,7 @@ function freezeClock(dayIso: string): Date {
   return new Date();
 }
 
-function openSession() {
+function openSession(roles: string[] = ["director"]) {
   clearSession();
   setSession({
     accessToken: "t",
@@ -148,7 +148,7 @@ function openSession() {
       userId: "33333333-3333-4333-8333-333333333333",
       phone: "+998900000000",
       fullName: "Test Direktor",
-      roles: ["director"],
+      roles,
       marketId: MARKET_ID,
       marketName: "Karmana markaziy bozori",
       isPlatformAdmin: false,
@@ -167,7 +167,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-async function renderTable(response: unknown): Promise<RenderResult> {
+async function renderTable(
+  response: unknown,
+  roles?: string[],
+): Promise<RenderResult> {
+  /* ⛔ `beforeEach` dagi standart sessiyaning USTIGA yoziladi. */
+  if (roles !== undefined) openSession(roles);
+
   const now = freezeClock("2026-10-15");
 
   apiClientMock.apiFetch.mockImplementation((path: string) => {
@@ -347,11 +353,24 @@ describe("⛔ G-40 (08-UI-SPEC) (d): daftar yo'q -> JADVAL YO'Q", () => {
     );
 
     /*
-     * ⛔ BO'SH HOLAT 6 — YAGONA `action` li bo'sh holat (§14.7): keyingi
-     *   qadam «daftarni yuklash» va u tugma bo'lib TURADI.
+     * ⛔⛔ DIREKTORDA «Daftarni yuklash» TUGMASI YO'Q (260818, Chromeda
+     *     jonli topildi).
+     *
+     * Yuklash yuzasi `STALL_MANAGE` ostida (`reports.py:164`), direktorda
+     * u YO'Q. Ilgari bu tugma ko'rinardi va u shunchaki 403 bermasdi —
+     * `focusLedgerUpload()` render QILINMAGAN fayl maydonini fokuslardi,
+     * ya'ni tugma UMUMAN HECH NIMA qilmasdi.
+     *
+     * ⛔ Bo'sh holat `action` SIZ ham qonuniy: §14.7 «yagona action li
+     *    bo'sh holat» qoidasi HUQUQI BOR foydalanuvchiga tegishli —
+     *    keyingi qadami yo'q odamga tugma ko'rsatish yo'l ko'rsatish
+     *    emas, yolg'on.
      */
-    expect(view.container.textContent).toContain(
+    expect(view.container.textContent).not.toContain(
       messages.compare.ledgerUpload,
+    );
+    expect(view.container.textContent).toContain(
+      messages.compare.ledgerReadOnly,
     );
 
     /*
@@ -483,5 +502,27 @@ describe("⛔ G-41 (08-UI-SPEC) (d): «mos» qatori BEZAKSIZ", () => {
       "unknown",
     );
     expect(unknownRow.textContent).toContain(messages.compare.diffUnknown);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* NAZORAT — HUQUQI BOR FOYDALANUVCHIDA TUGMA BOR                             */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ daftar yuklash taklifi — `stall_manage` ko'zgusi", () => {
+  test("⛔ NAZORAT: bozor adminida «Daftarni yuklash» BOR", async () => {
+    const view = await renderTable(
+      payload({
+        has_ledger: false,
+        rows: [],
+        ledger_over_count: 0,
+        system_over_count: 0,
+        ai_mismatch_count: 0,
+        matched_count: 0,
+      }),
+      ["market_admin"],
+    );
+
+    expect(view.container.textContent).toContain(messages.compare.ledgerUpload);
   });
 });

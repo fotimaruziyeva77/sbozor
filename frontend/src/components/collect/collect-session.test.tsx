@@ -732,8 +732,8 @@ describe("⛔ server prefiksni yechganda karta OCHILADI", () => {
     });
 
     /* ⛔ Yechilgan kod bilan qayta so'ralgan (kesh kaliti to'g'ri). */
-    const paths = apiClientMock.apiFetch.mock.calls.map(
-      ([path]: [string]) => path,
+    const paths: string[] = apiClientMock.apiFetch.mock.calls.map(
+      (call: unknown[]) => String(call[0]),
     );
     expect(paths.some((path) => path.includes("stall_code=B-01"))).toBe(true);
   });

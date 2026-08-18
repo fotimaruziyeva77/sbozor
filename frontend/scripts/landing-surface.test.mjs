@@ -172,12 +172,30 @@ const NEW_KEYFRAME = "sweep";
  * BESHINCHISI qo'shilsa yana qizaradi.
  */
 const AUTH_KEYFRAMES = ["cellglow", "scanbeam", "floatup", "cardin"];
+/**
+ * ⛔ ONGLI KENGAYISH (2026-08-18, ikkinchi marta): direktor paneli
+ * foydalanuvchining `Sbozor Direktor` dizayni bo'yicha qurildi.
+ *
+ * Dizayn MCP orqali o'qildi (claude.ai/design `7bb95baa…`) va u to'rtta
+ * kadr nomini e'lon qiladi: `dirIn` (katakning kirishi), `dirFade`
+ * (grafik nuqtalari), `dirDraw` (chiziqning chizilishi), `dirBreath`.
+ *
+ * ⛔ BU RO'YXATGA FAQAT ISHLATILAYOTGANI QO'SHILADI. `G-motion-3(c)`
+ *    har bir kadr kamida bitta sinfda ishlatilishini talab qiladi, ya'ni
+ *    «kelajak uchun» kadr qo'shib qo'yish darvozani qizartiradi — va bu
+ *    to'g'ri: ishlatilmagan kadr o'lik CSS.
+ *
+ * ⚠ `dirBreath` dizaynda e'lon qilingan, lekin HECH QAYERDA
+ *   ishlatilmagan (dizayn manbasida ham) — shuning uchun u KO'CHIRILMADI.
+ */
+const DIRECTOR_KEYFRAMES = ["dirIn", "dirDraw", "dirFade"];
 const KEYFRAMES_REGISTRY = [
   ...LEGACY_KEYFRAMES,
   NEW_KEYFRAME,
   ...AUTH_KEYFRAMES,
+  ...DIRECTOR_KEYFRAMES,
 ];
-const KEYFRAMES_COUNT = 13;
+const KEYFRAMES_COUNT = 16;
 
 /**
  * G-land-3(c) — avtomatik harakat manbai bo'lishga RUXSAT ETILGAN yagona
