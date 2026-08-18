@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { AccuracyBlock } from "@/components/reports/accuracy-block";
 import { AnomalyArchive } from "@/components/reports/anomaly-archive";
+import { CompareMode } from "@/components/reports/compare-mode";
 import { DebtorsReport } from "@/components/reports/debtors-report";
 import { ExportButton } from "@/components/reports/export-button";
 import {
@@ -192,6 +193,22 @@ function ReportsWorkspace() {
        *   amali va sahifa darajasidagi yagona tugma «qaysi hisobot
        *   yuklanadi?» degan javobsiz savolni tug'dirardi (§12.1).
        */}
+      {/*
+       * ⛔⛔ SOLISHTIRISH REJIMI — dizayn talabi (Hisobot ekrani, 260819).
+       *
+       * Tushum blokidan OLDIN turadi: direktor avval «qanday o'zgardi»
+       * ni ko'radi, keyin kunlar kesimiga tushadi. Dizaynda ham shu
+       * tartib.
+       *
+       * ⚠ `data-report-block` BERILMAYDI: o'sha atribut hisobot
+       *   bloklarining YOPIQ to'plamini o'lchaydi (G-37 naqshi) va yangi
+       *   a'zo qo'shilishi o'sha darvozani qizartirardi. Solishtirish —
+       *   hisobot EMAS, hisobotlar USTIDAGI qatlam.
+       */}
+      <section className="flex flex-col gap-3">
+        <CompareMode />
+      </section>
+
       <section className="flex flex-col gap-3" data-report-block="revenue">
         <RevenueReport />
         <div>

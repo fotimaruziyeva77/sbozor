@@ -20,10 +20,9 @@ import { formatBusinessDay } from "@/lib/format-day";
  *     tegishli ekanini aytadi. Olib tashlanса, direktor raqamlarni
  *     bugungi deb o'qirdi va «tushum kam» degan xulosa chiqarardi.
  *
- * ⛔ TABLAR MAVJUD MARSHRUTLARGA BORADI. Dizaynda to'rtta sahifa bor;
- *    «Sotuvchi» hozircha KODDA YO'Q va u shu sababdan bu ro'yxatda
- *    ham YO'Q — mavjud bo'lmagan sahifaga havola qo'yish buzilgan
- *    yo'l bo'lardi. Sahifa qurilganda tab shu yerga qo'shiladi.
+ * ⛔ TO'RTALA TAB HAM MAVJUD MARSHRUTGA BORADI (260819):
+ *    Bugun -> /dashboard · Hisobot -> /reports ·
+ *    Sotuvchi -> /reports/vendor · Tekshiruv uchun -> /reports/audit.
  *
  * ⛔ «Yangi ma'lumot bor — yangilash» yorlig'i BU FAZADA QURILMADI:
  *    u serverdan «yangi ma'lumot bor» signalini talab qiladi, bizda esa
@@ -36,7 +35,8 @@ import { formatBusinessDay } from "@/lib/format-day";
 const TABS = [
   { href: "/dashboard", label: "Bugun", active: true },
   { href: "/reports", label: "Hisobot", active: false },
-  { href: "/reports/compare", label: "Tekshiruv uchun", active: false },
+  { href: "/reports/vendor", label: "Sotuvchi", active: false },
+  { href: "/reports/audit", label: "Tekshiruv uchun", active: false },
 ] as const;
 
 export function DirectorPanel({ marketName }: { marketName: string }) {

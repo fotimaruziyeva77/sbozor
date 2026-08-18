@@ -1200,3 +1200,159 @@
   margin-top: 0.875rem;
   padding-top: 0.75rem;
 }
+
+.dir-compare-skeleton {
+  height: 8rem;
+  width: 100%;
+}
+
+.dir-compare-foot {
+  margin-top: 0.75rem;
+}
+
+/* ==========================================================================
+ * TEKSHIRUV VARAG'I — chop etishga tayyor (dizayn: `Tekshiruv.dc.html`).
+ * ========================================================================== */
+
+.audit-head {
+  border-bottom: 2px solid var(--color-text);
+  padding-bottom: 1rem;
+}
+
+.audit-title {
+  margin: 0;
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.audit-source {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.875rem;
+  background: var(--color-surface-muted);
+}
+
+.audit-warn {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  border: 1px solid var(--color-warning);
+  background: color-mix(in oklch, var(--color-warning) 20%, transparent);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.875rem;
+}
+
+.audit-warn-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--color-warning-text);
+}
+
+.audit-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.audit-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.875rem;
+}
+
+.audit-cols2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.125rem;
+}
+
+.audit-label {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.audit-value {
+  margin: 0.625rem 0 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 1.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.audit-value-ok {
+  color: var(--color-success-text);
+}
+
+.audit-value-diff {
+  color: var(--color-danger-text);
+}
+
+.audit-value-sm {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1000px) {
+  .audit-cols2,
+  .audit-trio {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .audit-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ⛔⛔ CHOP ETISH — dizayn `@page` va `noprint` qoidalari.
+ *
+ * Varaq tekshiruvchiga QOG'OZDA beriladi: boshqaruv elementlari,
+ * navigatsiya va tugmalar bosilmaydi, kartalar esa sahifa chegarasida
+ * BO'LINMAYDI (`break-inside: avoid`). Soya olib tashlanadi — printerda
+ * u kulrang dog' bo'lib chiqadi. */
+@page {
+  margin: 14mm;
+}
+
+@media print {
+  [data-noprint] {
+    display: none !important;
+  }
+
+  .audit-sheet {
+    max-width: none;
+    padding: 0;
+  }
+
+  .audit-break {
+    break-inside: avoid;
+  }
+
+  /*
+   * ⛔ `animation: none` YOZILMAYDI: G-motion-3(c) darvozasi
+   *    `animation:` qiymatini KEYFRAME NOMI deb o'qiydi va «none» nomli
+   *    ta'rif yo'qligi uchun qizaradi. Mavjud `prefers-reduced-motion`
+   *    bloki bilan BIR XIL naqsh ishlatiladi — davomiylikni nolga
+   *    tushirish, nomga tegmaslik.
+   */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    box-shadow: none !important;
+  }
+}

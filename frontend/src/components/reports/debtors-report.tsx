@@ -1,12 +1,21 @@
 "use client";
 
 import { useId } from "react";
-import { useFormatter, useLocale, useTranslations } from "next-intl";
+import {
+  useFormatter,
+  useLocale,
+  useNow,
+  useTimeZone,
+  useTranslations,
+} from "next-intl";
 
 import { useReportPeriod } from "@/components/reports/period-picker";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ReceivablesReportRow } from "@/lib/api-types";
+import { businessDayIn } from "@/components/snapshots/day-picker";
+import { Badge } from "@/components/ui/badge";
+import { type AgeBucket, bucketOf } from "@/lib/debt-aging";
 import { formatBusinessDay } from "@/lib/format-day";
 import { useReceivablesReport } from "@/lib/report-queries";
 
@@ -76,6 +85,14 @@ import { useReceivablesReport } from "@/lib/report-queries";
  * ko'rsatardi (§8.6).
  * =============================================================================
  */
+
+/** Guruh -> matn kaliti. ⛔ YOPIQ to'plam: beshinchi guruh yo'q. */
+const AGE_LABEL = {
+  b0: "reports.ageBucket0",
+  b31: "reports.ageBucket31",
+  b61: "reports.ageBucket61",
+  b90: "reports.ageBucket90",
+} as const satisfies Record<AgeBucket, string>;
 
 export function DebtorsReport() {
   const t = useTranslations();
@@ -193,6 +210,18 @@ export function DebtorsReport() {
                     <th className="p-3 font-normal" scope="col">
                       {t("reports.stallsColumn")}
                     </th>
+                    {/*
+                     * ⛔⛔ YOSH USTUNI — DIZAYN TALABI (Hisobot ekrani).
+                     *
+                     * Server yosh guruhlarini BERMAYDI; guruh qatorning
+                     * `oldest_debt_date` idan chiqadi (`debt-aging.ts`).
+                     * Ustun «shu yoshdagi qarzdorning JAMI qarzi» ni
+                     * bildiradi — qarzni sanalar bo'yicha taqsimlash
+                     * ma'lumoti bizda YO'Q va uni to'qish mumkin emas.
+                     */}
+                    <th className="p-3 font-normal" scope="col">
+                      {t("reports.debtAge")}
+                    </th>
                     <th className="p-3 font-normal" scope="col">
                       {t("reports.debtColumn")}
                     </th>
@@ -224,6 +253,10 @@ function DebtorRow({ row }: { row: ReceivablesReportRow }) {
   const format = useFormatter();
   const locale = useLocale();
 
+  const timeZone = useTimeZone() ?? "Asia/Tashkent";
+  const todayIso = businessDayIn(timeZone, useNow());
+  const bucket = bucketOf(row, todayIso);
+
   return (
     /* Qator hover foni (§12.8) — davomiylik `--default-transition-*` dan. */
     <tr className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted">
@@ -247,6 +280,19 @@ function DebtorRow({ row }: { row: ReceivablesReportRow }) {
        */}
       <td className="p-3 font-mono tabular-nums">
         {row.stall_codes.join(", ")}
+      </td>
+      <td className="p-3">
+        {/*
+         * ⛔ O'LCHANMAGAN YOSH — BO'SH KATAK, «0–30 kun» EMAS: eng yosh
+         *    guruhga qo'yish o'lchanmagan qarzni yangi deb ko'rsatardi.
+         */}
+        {bucket === null ? (
+          <span className="sr-only">{t("reports.dateUnknown")}</span>
+        ) : (
+          <Badge tone={bucket === "b90" ? "danger" : bucket === "b61" ? "warning" : "muted"}>
+            {t(AGE_LABEL[bucket])}
+          </Badge>
+        )}
       </td>
       <td
         className={
