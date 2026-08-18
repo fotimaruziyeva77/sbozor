@@ -112,9 +112,19 @@ export type PaymentRowProps = {
   record: PaymentRecord;
   /** ⛔ IXTIYORIY: berilmasa affordans UMUMAN chizilmaydi. */
   onRequestReverse?: () => void;
+  /**
+   * Sotuvchiga ko'rsatiladigan tasdiqni ochadi (K-3). Naqd pul beradigan
+   * sotuvchida hech qanday dalil qolmaydi — bu tasdiq telefonni burib
+   * ko'rsatish uchun, uzoqdan o'qiladigan qilib chiziladi.
+   */
+  onShowVendor?: () => void;
 };
 
-export function PaymentRow({ record, onRequestReverse }: PaymentRowProps) {
+export function PaymentRow({
+  record,
+  onRequestReverse,
+  onShowVendor,
+}: PaymentRowProps) {
   const t = useTranslations();
   const format = useFormatter();
 
@@ -212,6 +222,12 @@ export function PaymentRow({ record, onRequestReverse }: PaymentRowProps) {
             {t("collect.written")}
           </Badge>
         )}
+
+        {canReverse && onShowVendor !== undefined ? (
+          <Button onClick={onShowVendor} size="sm" variant="secondary">
+            {t("collect.showVendor")}
+          </Button>
+        ) : null}
 
         {canReverse ? (
           <Button onClick={onRequestReverse} size="sm" variant="ghost">

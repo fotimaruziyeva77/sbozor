@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { billingErrorView } from "@/lib/billing-errors";
+import { cn } from "@/lib/cn";
 
 /*
  * =============================================================================
@@ -56,6 +57,15 @@ import { billingErrorView } from "@/lib/billing-errors";
  * =============================================================================
  */
 
+/*
+ * Qator harflari — «Sbozor Kassir» dizaynining K-1 yechimi (3.4-bo'lim).
+ * Bosilganda harf qidiruvga yoziladi va SERVERNING MAVJUD prefiks qidiruvi
+ * o'sha qatordagi rastalar ro'yxatini qaytaradi — yangi so'rov ochilmaydi.
+ * ⛔ Shusiz kassir rasta raqamini FAQAT yoddan bilishi kerak edi: ro'yxat
+ *   ham, xarita ham unga yopiq (o'lchandi, 2026-08-18).
+ */
+const ROW_LETTERS = ["A", "B", "C", "D"] as const;
+
 export type StallLookupProps = {
   /** Qidiruv maydonining joriy qiymati (sahifa holatida, ⛔ URL'da EMAS). */
   value: string;
@@ -93,7 +103,35 @@ export function StallLookup({
 
   return (
     <div className="flex flex-col gap-3">
-      <Field hint={t("collect.stallHint")} id={fieldId} label={t("collect.stallLabel")}>
+      {/* Qator tugmalari — qidiruvga harf yozadi, ro'yxatni server ochadi.
+          ⛔ `data-collect-option` YO'Q: bu rastani TANLAMAYDI, ro'yxatni
+          ochadi — ya'ni ≤3 ta'sir shartnomasining sanog'iga kirmaydi. */}
+      <div className="flex flex-wrap gap-2">
+        {ROW_LETTERS.map((letter) => (
+          <button
+            className={cn(
+              "min-h-11 min-w-11 cursor-pointer rounded-md border px-3",
+              "text-sm font-semibold transition-colors",
+              value.trim().toUpperCase().startsWith(letter)
+                ? "border-accent bg-accent/10 text-accent-text"
+                : "border-border text-text hover:bg-surface-muted",
+            )}
+            key={letter}
+            onClick={() => {
+              onValueChange(letter);
+              onSubmit(letter);
+            }}
+            type="button"
+          >
+            {letter}
+          </button>
+        ))}
+      </div>
+      <Field
+        hint={hasMatches ? t("collect.rowHint") : t("collect.stallHint")}
+        id={fieldId}
+        label={t("collect.stallLabel")}
+      >
         <div className="relative">
           <Search
             aria-hidden="true"

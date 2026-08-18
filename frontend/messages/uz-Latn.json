@@ -1234,7 +1234,11 @@
       "shift_already_open": "Avvalgi smenani yoping",
       "shift_already_closed": "Yangi smena ochish",
       "network_unreachable": "Qayta yuboring — dublikat yaratilmaydi"
-    }
+    },
+    "rowHint": "Ro‘yxatdan rastani tanlang yoki raqamni to‘liq kiriting",
+    "reverseFailed": "Bekor qilinmadi — server javob bermadi. Qayta urinib ko‘ring.",
+    "showVendor": "Sotuvchiga ko‘rsatish",
+    "showVendorBody": "Telefonni sotuvchiga burib ko‘rsating. Bu chek emas — yozilgan to‘lovning ko‘rinishi."
   },
   "billing": {
     "title": "Patta hisobi",

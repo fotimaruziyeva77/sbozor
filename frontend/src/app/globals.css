@@ -572,6 +572,16 @@
     max-width: 72.5rem;
   }
 
+  /* Sotuvchiga ko'rsatiladigan summa (K-3). ⛔ `text-display` EMAS: u pul
+   * roli reyestri bo'lib AYNAN ikki mahsulot fayliga qulflangan va har
+   * a'zosidan skeleton balandligi juftligi talab qilinadi — bu dialogda esa
+   * yuklanish holati umuman yo'q (yozuv allaqachon qo'lda). Shuning uchun
+   * o'lcham shu yerda yashaydi, reyestr tegilmaydi. */
+  .collect-vendor-amount {
+    font-size: 2.5rem;
+    line-height: 1.1;
+  }
+
   /* Xarita katagining nomi (A-1…E-6) — shkaladan KICHIK, chunki u
    * katak ichidagi belgi, matn emas. Utilita EMAS: ixtiyoriy o'lcham
    * komponentda taqiqlangan (G-land-5(d)), qiymat shu yerda yashaydi. */

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { PaymentBar } from "@/components/collect/payment-bar";
 import { PaymentRow } from "@/components/collect/payment-row";
+import { VendorReceiptDialog } from "@/components/collect/vendor-receipt-dialog";
 import { PendingCard } from "@/components/collect/pending-card";
 import { ReasonDialog } from "@/components/collect/reason-dialog";
 import { StallLookup } from "@/components/collect/stall-lookup";
@@ -182,6 +183,8 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
   const shift = useOpenShift();
   const recent = useRecentPayments();
   const reverse = useReversePayment();
+  /* K-3: sotuvchiga ko'rsatiladigan tasdiq — sof ko'rinish holati. */
+  const [vendorRecord, setVendorRecord] = useState<PaymentRecord | null>(null);
   const hasOpenShift =
     shift.data === undefined ? null : shift.data !== null;
 
@@ -449,6 +452,9 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
                 onRequestReverse={() =>
                   setDialog({ mode: "reversal", paymentId: record.payment_id })
                 }
+                onShowVendor={() => {
+                  setVendorRecord(record);
+                }}
                 record={record}
               />
             ))}
@@ -463,6 +469,16 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
        *    Ikkisi qurilib hech kim chizmasa, CASH-02 va CASH-03 ekranda
        *    UMUMAN mavjud bo'lmasdi va uchala task ham yashil qaytardi.
        */}
+      {vendorRecord !== null ? (
+        <VendorReceiptDialog
+          onOpenChange={(next) => {
+            if (!next) setVendorRecord(null);
+          }}
+          open
+          record={vendorRecord}
+        />
+      ) : null}
+
       {dialog !== null ? (
         <ReasonDialog
           mode={dialog.mode}
@@ -473,10 +489,28 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
                 reasonCode: result.reasonCode,
               });
             } else if (dialog.mode === "reversal") {
-              reverse.mutate({
-                payment_id: dialog.paymentId,
-                reason_code: result.reasonCode,
-              });
+              /*
+               * ⛔ JAVOB MAJBURIY (K-5, 2026-08-18 da o'lchangan nuqson):
+               *   ilgari bu chaqiruv `onSuccess`/`onError` SIZ edi va bekor
+               *   qilish o'tdimi-yo'qmi ekranda HECH NIMA o'zgarmasdi —
+               *   kassir pul masalasida ko'r qolardi.
+               */
+              reverse.mutate(
+                {
+                  payment_id: dialog.paymentId,
+                  reason_code: result.reasonCode,
+                },
+                {
+                  onError: () => {
+                    toast.error(t("collect.reverseFailed"));
+                  },
+                  onSuccess: (record) => {
+                    toast.success(
+                      `${t("collect.reversalEntry")} · ${record.stall_code} · ${money(record.amount_soum)}`,
+                    );
+                  },
+                },
+              );
             }
             setDialog(null);
           }}
