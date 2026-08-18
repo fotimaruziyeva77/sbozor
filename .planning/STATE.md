@@ -349,7 +349,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none)* | | | |
+| Test infra | **Flake №13 — `test_cross_tenant_object_returns_404[POST .../unblock]`: `ExpiredSignatureError`.** Uzun (75 daq) va yuklangan yugurishda bitta tenant testi `401 invalid_token` oldi. Sabab MAHSULOTDA EMAS: header fixture'lari FUNKSIYA doirasida (`@pytest.fixture` scope'siz) va tokenni har testda qaytadan oladi — ya'ni token so'rovdan bir necha SEKUND oldin yasalgan va 15 daqiqalik token qonuniy ravishda eskirgan bo'lishi MUMKIN EMAS. Yagona izoh — konteyner soatining siljishi (Docker Desktop/WSL2 host uyquga ketganda ma'lum hodisa). ⛔ ISBOTLANMAGAN: o'lchov paytida siljish 5 s edi, ya'ni gipotezani retroaktiv tasdiqlay olmadim. ⛔ TUZATILMADI VA BU ONGLI: `test_settings` da TTL ni uzaytirish urinildi va u `test_auth_login::test_login_returns_access_token_and_roles` ni buzdi (`assert 28800 == 900`) — o'sha test 15 daqiqalik token MAHSULOT KAFOLATINI o'lchaydi, ya'ni uni testga moslash shartnomani buzardi; o'zgarish QAYTARILDI. ⚠ MUHIM YON TOPILMA: o'sha testning birinchi asserti (`status_code != 403`) 401 BILAN O'TIB KETDI — kuchsizroq yozilgan darvoza yashil qolib «begona bozor obyekti 404» da'vosini hech nima bilan isbotlamasdi. Ikki assert naqshi (T-01-76) aynan shuni qutqardi va u boshqa xavfsizlik darvozalarida ham saqlanishi kerak. Alohida yugurtirilganda fayl 0 yiqilish beradi (o'lchandi). | Open — kuzatilsin | 2026-08-18 |
 
 ## Session Continuity
 
