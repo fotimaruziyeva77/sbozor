@@ -161,8 +161,23 @@ const LEGACY_KEYFRAMES = [
   "shake",
 ];
 const NEW_KEYFRAME = "sweep";
-const KEYFRAMES_REGISTRY = [...LEGACY_KEYFRAMES, NEW_KEYFRAME];
-const KEYFRAMES_COUNT = 9;
+/**
+ * ⛔ ONGLI KENGAYISH (2026-08-18): kirish sahifasi foydalanuvchining
+ * «Sbozor Login» dizayni bo'yicha qayta qurildi va u to'rtta yangi kadr
+ * talab qiladi — orqa fondagi xarita nafasi (`cellglow`), kamera nuri
+ * (`scanbeam`), ko'tarilib yo'qoladigan yorliqlar (`floatup`) va kartaning
+ * kirishi (`cardin`). To'rttasi ham GPU-toza (opacity/transform) va faqat
+ * `(auth)` yuzasida ishlatiladi; landing reyestri (9 nom) TEGILMADI —
+ * shuning uchun ular alohida ro'yxatda turadi va bu darvoza yangi
+ * BESHINCHISI qo'shilsa yana qizaradi.
+ */
+const AUTH_KEYFRAMES = ["cellglow", "scanbeam", "floatup", "cardin"];
+const KEYFRAMES_REGISTRY = [
+  ...LEGACY_KEYFRAMES,
+  NEW_KEYFRAME,
+  ...AUTH_KEYFRAMES,
+];
+const KEYFRAMES_COUNT = 13;
 
 /**
  * G-land-3(c) — avtomatik harakat manbai bo'lishga RUXSAT ETILGAN yagona

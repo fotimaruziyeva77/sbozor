@@ -69,7 +69,28 @@
     "selectMarketTitle": "Bozorni tanlang",
     "noMarkets": "Sizga hech qanday bozor biriktirilmagan",
     "marketDraft": "Qoralama",
-    "passwordChangeRequired": "Parolingiz almashtirilishi kerak. Parol almashtirish sahifasiga o'ting."
+    "passwordChangeRequired": "Parolingiz almashtirilishi kerak. Parol almashtirish sahifasiga o'ting.",
+    "showPassword": "Ko‘rsatish",
+    "hidePassword": "Yashirish",
+    "scene": {
+      "chipPaid": "Patta to‘landi",
+      "chipUnpaid": "Band, lekin to‘lovsiz"
+    },
+    "login": {
+      "kicker": "Bozor ish o‘rni",
+      "title": "Smenani boshlaymiz",
+      "sub": "Kassir, nazoratchi va direktor — bir xil kirish. Rolingizga mos ish oynasi o‘zi ochiladi.",
+      "role": {
+        "cashier": "Kassir: rasta tanlash va to‘lovni qayd etish — 3 bosishda",
+        "inspector": "Nazoratchi: «band, lekin to‘lovsiz» ro‘yxati kamera kadri bilan",
+        "director": "Direktor: kunlik hisobot va nomuvofiqliklar"
+      },
+      "cardTitle": "Tizimga kirish",
+      "cardSub": "Bozor administratori bergan login bilan kiring.",
+      "forgot": "Parolni unutdingizmi?",
+      "helpNote": "Login yo‘qmi yoki parol esdan chiqdimi? Bozor administratoriga murojaat qiling — parol qayta beriladi.",
+      "backToSite": "← Saytga qaytish"
+    }
   },
   "users": {
     "title": "Foydalanuvchilar",

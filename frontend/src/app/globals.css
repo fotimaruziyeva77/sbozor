@@ -440,6 +440,117 @@
   .landing-night > * {
     position: relative;
   }
+  /* ==== KIRISH SAHNASI — «Sbozor Login» dizayni ========================
+   * Dizayn qiymatlari AYNAN: sahna radial gradienti, ustidagi parda,
+   * shishasimon karta va orqa fondagi «tirik bozor xaritasi». Barchasi
+   * SHU YERDA yashaydi — komponentlarda ixtiyoriy o'lcham/rang yozilmaydi.
+   * ⛔ Harakat GPU-toza: faqat opacity va transform (G-land-3 ruhida).
+   * Reduced-motion global blok bilan o'chadi — alohida shox kerak emas. */
+  .login-scene {
+    /* ⛔ Meros rang QAYTA hal bo'lsin: `color` body'da BIR MARTA hisoblanadi
+       va aniq qiymat bo'lib pastga meros bo'ladi — qamrov tokenni
+       o'zgartirsa ham sarlavhalar quyuq qolardi (`.landing-night` dagi
+       ayni sabab). */
+    color: var(--color-text);
+    background: radial-gradient(
+      1200px 700px at 12% 18%,
+      oklch(0.28 0.05 258),
+      oklch(0.19 0.028 262) 62%
+    );
+  }
+  /* Parda — pastga qarab quyuqlashadi, karta ostidagi xarita susayadi. */
+  /* Kirish sarlavhasi — dizayn: clamp(28px, 3.6vw, 42px). */
+  .login-title {
+    font-size: clamp(1.75rem, 3.6vw, 2.625rem);
+    line-height: 1.15;
+    font-weight: 700;
+  }
+  .login-veil {
+    background: linear-gradient(
+      180deg,
+      oklch(0.19 0.028 262 / 0.1),
+      oklch(0.17 0.026 262 / 0.78)
+    );
+  }
+  /* Kirish kartasi — shishasimon panel (dizayn: 20px radius, blur 10px). */
+  .login-card {
+    background: oklch(0.24 0.03 260 / 0.92);
+    border: 1px solid oklch(0.38 0.03 260);
+    border-radius: 20px;
+    box-shadow: 0 28px 70px oklch(0.1 0.02 260 / 0.55);
+    backdrop-filter: blur(10px);
+    animation: cardin 700ms var(--ease-out) both;
+  }
+  /* Yon ustun matni — dizayn: 17px/1.6 (shkalamizdagi 18px emas). */
+  .login-lead {
+    font-size: 1.0625rem;
+    line-height: 1.6;
+  }
+  .login-sub {
+    font-size: 0.8125rem;
+  }
+  /* Karta ichidagi boshqaruvlar dizayn o'lchamiga keltiriladi. ⛔ Qamrov
+     `.login-card` bilan CHEGARALANGAN: ilovaning Input/Button standartlari
+     (admin oqimlari) TEGILMAYDI. */
+  .login-card input:not([type="checkbox"]) {
+    height: 46px;
+    border-radius: 10px;
+  }
+  .login-card button[type="submit"] {
+    min-height: 56px;
+    font-size: 1.0625rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 26px oklch(0.62 0.18 255 / 0.4);
+  }
+
+  /* Orqa fon xaritasi: 14 ustun, chetlaridan chiqib turadi. */
+  .login-map {
+    position: absolute;
+    inset: -6% -4%;
+    display: grid;
+    grid-template-columns: repeat(14, 1fr);
+    gap: 10px;
+    opacity: 0.55;
+  }
+  .login-map > span {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    border: 1px solid oklch(0.42 0.03 260 / 0.5);
+    background: oklch(0.3 0.025 260 / 0.3);
+    animation: cellglow 14s ease-in-out infinite;
+  }
+  .login-map > span[data-cell="paid"] {
+    border-color: oklch(0.5 0.09 155 / 0.35);
+    background: oklch(0.4 0.07 155 / 0.16);
+  }
+  .login-map > span[data-cell="flag"] {
+    border-color: oklch(0.62 0.12 80 / 0.5);
+    background: oklch(0.45 0.09 80 / 0.22);
+  }
+  /* Kamera nuri — sahna bo'ylab sekin pastga suriladi. */
+  .login-beam {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 28%;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      oklch(0.72 0.14 255 / 0.13),
+      transparent
+    );
+    animation: scanbeam 18s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+  /* Ko'tarilib yo'qoladigan holat yorliqlari. */
+  .login-chip {
+    position: absolute;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0.6;
+    animation: floatup 16s ease-in-out infinite;
+  }
+
   /* ---- Landing tipografiyasi: DIZAYN v2 ning AYNAN qiymatlari --------
    * Shkalamiz 24px/18px-700 beradi, dizaynda esa 26px/18px-600. Farq
    * o'lchangan (h2: 24 vs 26, og'irlik 700 vs 600) va u ko'rinadi, shuning
@@ -562,6 +673,51 @@
     box-shadow:
       0 18px 60px oklch(0.56 0.19 255 / 0.14),
       var(--shadow-raised);
+  }
+
+  /* ---- Kirish sahnasi kadrlari (dizayn «Sbozor Login») ----------------
+   * ⛔ To'rttasi ham GPU-toza: cellglow — opacity; scanbeam — transform;
+   * floatup — transform + opacity; cardin — transform + opacity. */
+  @keyframes cellglow {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 0.78;
+    }
+  }
+  @keyframes scanbeam {
+    0% {
+      transform: translateY(-30%);
+    }
+    100% {
+      transform: translateY(130%);
+    }
+  }
+  @keyframes floatup {
+    0% {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+    20%,
+    80% {
+      opacity: 0.55;
+    }
+    100% {
+      transform: translateY(-22px);
+      opacity: 0;
+    }
+  }
+  @keyframes cardin {
+    from {
+      opacity: 0;
+      transform: translateY(18px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 
   /* Forma xatosi: 2px shake — 200ms KOMPOZIT (§12.7). ⛔ Login kartasi

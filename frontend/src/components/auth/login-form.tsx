@@ -59,6 +59,9 @@ export function LoginForm() {
   const router = useRouter();
   const { setSession } = useAuthStore();
   const [formError, setFormError] = useState<string | null>(null);
+  /* «Sbozor Login» dizayni: parolni ko'rsatish tugmasi. Faqat KO'RINISH —
+     qiymat baribir shu inputda qoladi, hech qayerga yozilmaydi. */
+  const [passwordShown, setPasswordShown] = useState(false);
 
   const schema = useMemo(
     () =>
@@ -168,15 +171,35 @@ export function LoginForm() {
         id="password"
         label={t("auth.passwordLabel")}
       >
-        <Input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          aria-invalid={errors.password ? true : undefined}
-          aria-describedby={errors.password ? "password-error" : undefined}
-          {...register("password")}
-        />
+        <span className="relative flex">
+          <Input
+            id="password"
+            type={passwordShown ? "text" : "password"}
+            autoComplete="current-password"
+            className="pr-24"
+            aria-invalid={errors.password ? true : undefined}
+            aria-describedby={errors.password ? "password-error" : undefined}
+            {...register("password")}
+          />
+          <button
+            className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer px-2 py-1.5 text-xs font-semibold text-text-muted hover:text-text"
+            onClick={() => {
+              setPasswordShown((shown) => !shown);
+            }}
+            type="button"
+          >
+            {passwordShown ? t("auth.hidePassword") : t("auth.showPassword")}
+          </button>
+        </span>
       </Field>
+
+      {/* Parolni tiklash — sahifa ostidagi izohga (soxta oqim yaratilmaydi). */}
+      <a
+        className="self-end text-xs font-semibold text-accent-text hover:underline"
+        href="#tiklash"
+      >
+        {t("auth.login.forgot")}
+      </a>
 
       {formError ? (
         <p

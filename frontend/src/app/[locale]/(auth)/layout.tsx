@@ -8,25 +8,15 @@ import {
   setRequestLocale,
 } from "next-intl/server";
 
+import { LoginBackdrop } from "@/components/auth/login-backdrop";
+import { MarketingLocaleSwitcher } from "@/components/marketing/locale-switcher";
 import { AppProviders } from "@/components/shell/app-providers";
+import { Link } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
 import { cn } from "@/lib/cn";
 
 /*
- * Landing bilan BIR XIL shrift (dizayn v2): kirish — landing'dan keladigan
- * eshik, boshqa garnitura ko'rsatilsa ikki xil mahsulot taassuroti tug'ilardi.
- * ⛔ `latin` + `latin-ext` quyi to'plamlari: kirill YO'Q (Google bu
- * garniturada kirill bermaydi) — kirill matn tizim shriftiga tushadi va bu
- * ONGLI: yolg'on «qo'llab-quvvatlanadi» taassuroti berilmaydi.
- */
-const instrumentSans = Instrument_Sans({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "600", "700"],
-});
-
-/*
- * Kirish oqimining qobig'i: markazlashtirilgan tor ustun, bitta karta.
- * Apple-uslub (topshiriq §7) — bitta aniq harakat, ortiqcha bezaksiz.
+ * Kirish oqimining qobig'i — «Sbozor Login» dizayni bo'yicha tungi sahna.
  *
  * 10-03: provayderlar ildizdan shu yerga tushdi — Server Component bo'lib
  * qoladi va `AppProviders` (klient) ni render qiladi (qonuniy: RESEARCH
@@ -34,9 +24,18 @@ const instrumentSans = Instrument_Sans({
  * klient provayder throw qiladi, server varianti esa TO'LIQ katalogni
  * jimgina meros olardi — ikkala holat ham kontraktni buzadi.
  *
- * DIQQAT: bu yerda hech qanday matn yo'q — barchasi sahifalarda
- * `next-intl` orqali keladi.
+ * ⛔⛔ QORONG'I QAMROV FAQAT FON QATLAMIDA emas — bu yerda BUTUN sahna
+ * qorong'i (dizayn: karta ham shishasimon quyuq panel), shuning uchun
+ * `data-theme="dark"` tashqi konteynerda turadi. Yorug' orol kerak bo'lsa
+ * (masalan boshqa auth sahifasining oq kartasi) — u fon qatlami naqshiga
+ * o'tkaziladi: `data-theme="light"` HECH NIMA qilmaydi (yorug' tema —
+ * bazaviy holat, uning CSS bloki yo'q; o'lchandi).
  */
+const instrumentSans = Instrument_Sans({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "600", "700"],
+});
+
 export default async function AuthLayout({
   children,
   params,
@@ -55,37 +54,45 @@ export default async function AuthLayout({
   // Request-config'dagi Asia/Tashkent (FOUND-05) — klient provayder uni
   // o'zi meros olmaydi, oshkora uzatiladi (app-providers.tsx sarlavhasi).
   const timeZone = await getTimeZone();
+  const t = await getTranslations("auth");
   const tCommon = await getTranslations("common");
 
   return (
     <AppProviders locale={locale} messages={messages} timeZone={timeZone}>
-      {/* Tungi indigo sahna — landing bilan bir xil (dizayn v2): kirish
-          landing'ning davomi bo'lib ko'rinadi, yangi rang reyestri ochilmaydi.
-          ⛔⛔ Qorong'i qamrov FAQAT fon qatlamida va so'zbelgida: kontent
-          ustiga qo'yilsa karta ham qorayardi — `data-theme="light"` uni
-          qaytara OLMAYDI, chunki yorug' tema bazaviy holat va uning
-          `[data-theme]` bloki umuman yo'q (o'lchandi). */}
       <div
         className={cn(
           instrumentSans.className,
-          "relative flex flex-1 flex-col items-center justify-center gap-6 p-6",
+          "login-scene relative flex min-h-svh flex-col overflow-hidden",
         )}
+        data-theme="dark"
       >
-        <div
-          aria-hidden="true"
-          className="landing-night absolute inset-0"
-          data-theme="dark"
-        />
-        {/* So'zbelgi — header/footer bilan bir xil shakl (S + aksent). */}
-        <div className="relative" data-theme="dark">
-          <p className="text-lg font-bold tracking-[0.08em] text-text">
-            {tCommon("appName").slice(0, 1)}
-            <span className="text-accent-text">
-              {tCommon("appName").slice(1)}
-            </span>
-          </p>
+        <LoginBackdrop />
+        <div aria-hidden="true" className="login-veil absolute inset-0" />
+
+        <div className="landing-shell relative z-[2] mx-auto flex w-full flex-1 flex-col px-6 pt-7 pb-16">
+          <header className="mb-14 flex items-center justify-between gap-4">
+            {/* So'zbelgi landing bilan bir xil shakl (S + aksent). */}
+            <Link
+              className="inline-flex min-h-11 items-center text-lg font-bold tracking-[0.08em] text-text"
+              href="/"
+            >
+              {tCommon("appName").slice(0, 1)}
+              <span className="text-accent-text">
+                {tCommon("appName").slice(1)}
+              </span>
+            </Link>
+            <div className="flex items-center gap-4.5">
+              <MarketingLocaleSwitcher />
+              <Link
+                className="inline-flex min-h-11 items-center text-sm font-semibold text-text-muted hover:text-text"
+                href="/"
+              >
+                {t("login.backToSite")}
+              </Link>
+            </div>
+          </header>
+          <main className="flex flex-1 items-center">{children}</main>
         </div>
-        <main className="relative w-full max-w-md">{children}</main>
       </div>
     </AppProviders>
   );
