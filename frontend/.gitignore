@@ -47,3 +47,6 @@ ds-bundle/
 .design-sync/learnings/
 .design-sync/node_modules
 types/
+.design-sync/ds-styles.css
+.design-sync/upload-batch.json
+.design-sync/upload-list.txt
