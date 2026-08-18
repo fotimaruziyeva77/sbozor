@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { DoorOpen } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
@@ -196,6 +196,35 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
   const matches = lookup?.matches ?? [];
   const stall = lookup === undefined ? null : lookup.stall;
   const notFound = lookupErrorCodeOf(pending.error) === "stall_not_found";
+
+  /*
+   * =========================================================================
+   * ⛔⛔ SERVER YECHGAN KODNI QABUL QILISH (260818, brauzerda o'lchandi).
+   * =========================================================================
+   * Kassir «B» deb yozsa (yoki qator tugmasini bossa), server uni YECHADI
+   * va `stall_code: "B-01"` qaytaradi. `PendingCard` esa javobning kodini
+   * KIRITILGAN kod bilan solishtiradi (`matched`) — va u ATAYIN shunday:
+   * boshqa rastaning summasini shu rasta kodi ostida chizish PUL
+   * XATOSI bo'lardi.
+   *
+   * Natijada karta MANGU skeletonda qolardi: javob kelgan, summa bor,
+   * lekin kod mos emas. Jonli o'lchandi — «B» -> 200 javob -> karta
+   * «Yuklanmoqda» da qotdi va kassir nima bo'layotganini bilmasdi.
+   *
+   * ⛔ HIMOYA ZAIFLASHTIRILMAYDI: `matched` sharti TEGILMAYDI. Buning
+   *    o'rniga YUBORILGAN kod serverning javobiga tenglashtiriladi —
+   *    ya'ni ekranda ko'rinadigan kod ham, summa ham BIR javobdan.
+   *    Eski (boshqa rastaga tegishli) javob baribir mos kelmaydi.
+   *
+   * ⚠ Sikl YO'Q: tenglashtirilgandan keyin shart yolg'on bo'ladi. Kalit
+   *   o'zgargani uchun bitta qo'shimcha so'rov ketadi va bu TO'G'RI —
+   *   kesh kaliti endi haqiqiy rasta kodi bo'ladi.
+   */
+  useEffect(() => {
+    if (stall === null) return;
+    if (stall.stall_code === submittedCode) return;
+    setSubmittedCode(stall.stall_code);
+  }, [stall, submittedCode]);
 
   const state = collectState({
     hasOpenShift,

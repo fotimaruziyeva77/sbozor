@@ -668,3 +668,73 @@ describe("G-motion-2 (09-UI-SPEC §8.2): bayram bloklamaydi", () => {
     expect(input.value).toBe("");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* SERVER YECHGAN KOD — MANGU SKELETON TO'SILADI (260818)                     */
+/* -------------------------------------------------------------------------- */
+
+describe("⛔ server prefiksni yechganda karta OCHILADI", () => {
+  /* ⛔ Sozlash yuqoridagi bloklar bilan BIR XIL — sessiyasiz so'rov ketmaydi. */
+  beforeEach(() => {
+    vi.resetAllMocks();
+    clearSession();
+    seedSession();
+    client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+  });
+
+  afterEach(() => {
+    client.clear();
+    clearSession();
+  });
+
+  /*
+   * ⛔⛔ NEGA BU TEST BOR — BRAUZERDA O'LCHANGAN NUQSON.
+   *
+   * Kassir «B» yozadi (yoki qator tugmasini bosadi), server uni yechib
+   * `stall_code: "B-01"` qaytaradi. `PendingCard` esa javobning kodini
+   * KIRITILGAN kod bilan solishtiradi — bu ATAYIN qo'yilgan pul
+   * himoyasi (boshqa rastaning summasi shu kod ostida chizilmasin).
+   *
+   * Natijada karta MANGU skeletonda qolardi: 200 javob bor, summa bor,
+   * lekin ekranda «Yuklanmoqda» va sabab yo'q.
+   *
+   * ⛔ Himoya ZAIFLASHTIRILMADI: yuborilgan kod serverning javobiga
+   *    TENGLASHTIRILADI. Shuning uchun bu test ikki narsani birga
+   *    o'lchaydi: (1) summa CHIZILADI; (2) so'rov yechilgan kod bilan
+   *    QAYTA ketadi, ya'ni kesh kaliti haqiqiy rasta kodi bo'ladi.
+   */
+  test("⛔ «B» yuborilsa, «B-01» ning summasi chiziladi", async () => {
+    const resolved = { ...PENDING, stall_code: "B-01" };
+    routeFetch({ B: resolved, "B-01": resolved });
+    const renderView = renderSession();
+
+    const view = renderView;
+
+    await waitFor(() => expect(stepElements()).toHaveLength(1));
+    const input = stepElements()[0];
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    actOn(input, "B");
+
+    /*
+     * ⛔ Karta SKELETONDAN CHIQDI: `aria-busy` yo'q va rasta kodi
+     *    ekranda. Ilgari ikkalasi ham TESKARI bo'lardi.
+     */
+    /*
+     * ⛔ Karta SKELETONDAN CHIQDI: `aria-busy` yo'q va rasta kodi
+     *    ekranda. Nuqson paytida IKKALASI ham teskari edi.
+     */
+    await waitFor(() => {
+      expect(client.isFetching()).toBe(0);
+      expect(view.container.textContent ?? "").toContain("B-01");
+      expect(view.container.querySelector('[aria-busy="true"]')).toBeNull();
+    });
+
+    /* ⛔ Yechilgan kod bilan qayta so'ralgan (kesh kaliti to'g'ri). */
+    const paths = apiClientMock.apiFetch.mock.calls.map(
+      ([path]: [string]) => path,
+    );
+    expect(paths.some((path) => path.includes("stall_code=B-01"))).toBe(true);
+  });
+});
