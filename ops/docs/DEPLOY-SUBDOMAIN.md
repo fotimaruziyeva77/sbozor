@@ -37,6 +37,37 @@ NEXT_PUBLIC_CONTACT_PHONE=+998...
 ⛔ `NEXT_PUBLIC_*` build vaqtida qotadi — ularni o'zgartirsangiz frontend
 **qayta qurilishi** shart.
 
+## 2.1. ⛔ DEPLOY OLDI TEKSHIRUVI — o'tkazib yubormang
+
+```bash
+sh ops/scripts/preflight.sh
+```
+
+Skript hech nimani o'zgartirmaydi — faqat o'qiydi va **GO / NO-GO** aytadi.
+U qaysi qiymat bo'sh ekanini va **oqibati nima bo'lishini** yozadi.
+
+Nega kerak: deploy'ning nosozlik shakli o'lchangan va u har doim bir xil —
+stack ko'tariladi, `docker compose ps` **yashil** ko'rinadi, lekin bitta
+konteyner jimgina restart halqasida aylanadi. `cv-service` ONNX artefaktisiz
+aynan shunday qiladi: har ~1 s da qayta ishga tushadi va **~80 % CPU** yeydi
+(shu xostda o'lchangan). Sabab faqat `docker compose logs` da qoladi.
+
+**CV artefaktisiz ONGLI ravishda chiqish:**
+
+```bash
+ALLOW_NO_CV=1 sh ops/scripts/preflight.sh
+```
+
+va stack'ni cv-service'siz ko'taring:
+
+```bash
+docker compose -f compose.yaml -f compose.prod.yml --profile proxy up -d --scale cv-service=0
+```
+
+⚠ Bunda **bandlik o'lchanmaydi**: «band, lekin to'lovsiz» hisoboti doim nol
+ko'rsatadi va mahsulotning asosiy va'dasi ishlamaydi. Bu vaqtinchalik holat
+bo'lishi kerak, doimiy emas.
+
 ## 3. Birinchi sertifikat
 
 ```
