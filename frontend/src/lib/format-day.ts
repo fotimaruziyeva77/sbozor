@@ -49,6 +49,8 @@
 
 import type { useFormatter } from "next-intl";
 
+import { isUzLatn, uzLatnDate } from "@/lib/uz-latn-date";
+
 /** `YYYY-MM-DD` — shakl darvozasi (`day-picker.tsx` bilan AYNI naqsh). */
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/u;
 
@@ -104,8 +106,16 @@ export function isoDayToDate(day: string): Date | null {
 export function formatBusinessDay(
   format: ReturnType<typeof useFormatter>,
   day: string,
+  locale: string,
 ): string {
   const parsed = isoDayToDate(day);
   if (parsed === null) return day;
+  /*
+   * ⛔ O'zbek LOTIN yozuvi uchun `Intl` ildiz shablonini beradi («2026 M08
+   *    15») — brauzer ICU'sida bu yozuvning oy nomlari yo'q (o'lchandi
+   *    2026-08-18). Shuning uchun faqat SHU til uchun jadval bilan
+   *    yoziladi; qolgan tillar `Intl` da to'g'ri va tegilmaydi.
+   */
+  if (isUzLatn(locale)) return uzLatnDate(parsed);
   return format.dateTime(parsed, { dateStyle: "medium" });
 }

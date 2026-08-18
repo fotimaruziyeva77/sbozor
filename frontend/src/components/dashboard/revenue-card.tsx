@@ -1,6 +1,6 @@
 "use client";
 
-import { useFormatter, useNow, useTimeZone, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useNow, useTimeZone, useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 
@@ -99,6 +99,7 @@ function sparklinePath(values: readonly number[]): string {
 export function RevenueCard() {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const timeZone = useTimeZone() ?? "Asia/Tashkent";
   const now = useNow();
 
@@ -224,8 +225,8 @@ export function RevenueCard() {
               {/* ⛔ Davr — javobning `from_date`/`to_date` si (server haqiqati). */}
               <p className="text-sm text-text-muted">
                 {t("reports.periodShown", {
-                  from: formatBusinessDay(format, report.data.from_date),
-                  to: formatBusinessDay(format, report.data.to_date),
+                  from: formatBusinessDay(format, report.data.from_date, locale),
+                  to: formatBusinessDay(format, report.data.to_date, locale),
                 })}
               </p>
 

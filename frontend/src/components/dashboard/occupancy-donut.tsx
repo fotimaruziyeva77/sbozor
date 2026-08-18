@@ -1,6 +1,6 @@
 "use client";
 
-import { useFormatter, useNow, useTimeZone, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useNow, useTimeZone, useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 
@@ -72,6 +72,7 @@ const RING_CIRCUMFERENCE = 226;
 export function OccupancyDonut() {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const timeZone = useTimeZone() ?? "Asia/Tashkent";
   const now = useNow();
 
@@ -112,7 +113,7 @@ export function OccupancyDonut() {
           {summary !== undefined ? (
             /* Qaysi KUN — javobning `day` maydonidan, yagona sana yo'li. */
             <p className="text-sm text-text-muted">
-              {formatBusinessDay(format, summary.day)}
+              {formatBusinessDay(format, summary.day, locale)}
             </p>
           ) : null}
         </CardHeader>

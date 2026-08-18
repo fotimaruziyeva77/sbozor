@@ -1,7 +1,7 @@
 "use client";
 
 import { Receipt } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { CaseStatusBadge } from "@/components/reconciliation/case-status-badge";
 import { EvidenceLink } from "@/components/reconciliation/evidence-link";
@@ -103,6 +103,7 @@ const SUBJECT = "occupied_unpaid";
 export function UnpaidList({ day }: { day: string }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const marketId = useReconciliationMarketId();
   const hasMarket = marketId !== null;
   const report = useReconciliationReport(day, { enabled: hasMarket });
@@ -220,7 +221,7 @@ export function UnpaidList({ day }: { day: string }) {
         /* ⛔ Bo'sh holatda AMAL yo'q — kutish qadam emas. */
         <EmptyState
           description={t("recon.emptyUnpaidHint", {
-            date: formatBusinessDay(format, day),
+            date: formatBusinessDay(format, day, locale),
           })}
           title={t("recon.emptyUnpaid")}
         />
@@ -269,6 +270,7 @@ function UnpaidRow({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   /*
    * ⛔⛔ IKKI SON — SERVERDAN KELGANICHA. Klient ularni ⛔ QO'SHMAYDI,

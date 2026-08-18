@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { DIFF_ORDER, DIFF_VIEW, DiffCell } from "@/components/reports/diff-cell";
 import {
@@ -178,6 +178,7 @@ export function CompareTable() {
 function LedgerDay({ data }: { data: ThreeWayReport }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   if (data.rows.length === 0) {
     /*
@@ -190,7 +191,7 @@ function LedgerDay({ data }: { data: ThreeWayReport }) {
     return (
       <EmptyState
         description={t("compare.ledgerEmptyHint", {
-          day: formatBusinessDay(format, data.day),
+          day: formatBusinessDay(format, data.day, locale),
         })}
         title={t("compare.ledgerEmpty")}
       />
@@ -266,6 +267,7 @@ function LedgerDay({ data }: { data: ThreeWayReport }) {
 function CompareRow({ row }: { row: ThreeWayRow }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   return (
     /*

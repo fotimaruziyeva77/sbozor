@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { useReportPeriod } from "@/components/reports/period-picker";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -81,6 +81,7 @@ import { useRevenueReport } from "@/lib/report-queries";
 export function RevenueReport() {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   /*
    * ⚠ DAVR TANLOVI HOOKDAN, PROPDAN EMAS (08-09 kontrakti): tanlagichning
@@ -279,6 +280,7 @@ export function RevenueReport() {
  */
 function RevenueRow({ row }: { row: RevenueReportRow }) {
   const format = useFormatter();
+  const locale = useLocale();
 
   /*
    * ⛔ MANFIY — QIZIL, MUSBAT — ODDIY MATN RANGI, ⛔ YASHIL EMAS (§8.2).
@@ -301,7 +303,7 @@ function RevenueRow({ row }: { row: RevenueReportRow }) {
      * reyestrida `*-text`/tint sifatida o'lchangan).
      */
     <tr className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted">
-      <td className="p-3">{formatBusinessDay(format, row.business_date)}</td>
+      <td className="p-3">{formatBusinessDay(format, row.business_date, locale)}</td>
       <td className="p-3 font-mono tabular-nums">
         {format.number(row.charged_soum)}
       </td>

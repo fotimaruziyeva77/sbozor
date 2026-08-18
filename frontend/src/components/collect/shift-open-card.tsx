@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { DoorOpen, Loader2 } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { ApiError } from "@/lib/api-client";
 import { billingErrorView } from "@/lib/billing-errors";
 import type { BillingErrorCode } from "@/lib/billing-errors";
 import { useOpenShift, useOpenShiftMutation } from "@/lib/shift-queries";
+import { isUzLatn, uzLatnDateTime } from "@/lib/uz-latn-date";
 
 /*
  * =============================================================================
@@ -83,6 +84,7 @@ export type ShiftOpenCardProps = {
 export function ShiftOpenCard({ onRequestClose }: ShiftOpenCardProps) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   const { data, isLoading, refetch } = useOpenShift();
   const openShift = useOpenShiftMutation();
@@ -171,10 +173,23 @@ export function ShiftOpenCard({ onRequestClose }: ShiftOpenCardProps) {
               {t("collect.shiftOpenedAt")}
             </p>
             <p className="text-lg font-semibold tabular-nums">
-              {format.dateTime(new Date(shift.opened_at), {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+              {/*
+               * ⛔ O'zbek lotin yozuvida `Intl` ildiz shablonini beradi
+               *    («2026 M08 15 06:45») — sabab `lib/uz-latn-date.ts` da.
+               *    Vaqtning o'zi raqamli, ya'ni u har tilda to'g'ri chiqadi
+               *    va `Intl` dan olinaveradi.
+               */}
+              {isUzLatn(locale)
+                ? uzLatnDateTime(
+                    new Date(shift.opened_at),
+                    format.dateTime(new Date(shift.opened_at), {
+                      timeStyle: "short",
+                    }),
+                  )
+                : format.dateTime(new Date(shift.opened_at), {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
             </p>
           </CardHeader>
 

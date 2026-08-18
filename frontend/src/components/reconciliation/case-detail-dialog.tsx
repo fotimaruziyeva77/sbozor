@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { History } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { CaseStatusBadge } from "@/components/reconciliation/case-status-badge";
 import { EvidenceLink } from "@/components/reconciliation/evidence-link";
@@ -239,6 +239,7 @@ function CaseDetailBody({ caseId }: { caseId: string }) {
 function CaseDetailContent({ detail }: { detail: CaseDetail }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const { principal } = useAuthStore();
 
   const mayDecide = hasPermission(principal?.roles ?? [], "dispute_decide");
@@ -263,7 +264,7 @@ function CaseDetailContent({ detail }: { detail: CaseDetail }) {
              *   `lib/format-day.ts`.
              */}
             <dd className="m-0">
-              {formatBusinessDay(format, detail.service_date)}
+              {formatBusinessDay(format, detail.service_date, locale)}
             </dd>
           </div>
           <div className="flex gap-2">

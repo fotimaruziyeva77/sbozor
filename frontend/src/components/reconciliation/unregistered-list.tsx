@@ -1,7 +1,7 @@
 "use client";
 
 import { UserX } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { CaseStatusBadge } from "@/components/reconciliation/case-status-badge";
 import { EvidenceLink } from "@/components/reconciliation/evidence-link";
@@ -65,6 +65,7 @@ const SUBJECT = "anomaly";
 export function UnregisteredList({ day }: { day: string }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const marketId = useReconciliationMarketId();
   const hasMarket = marketId !== null;
   const report = useReconciliationReport(day, { enabled: hasMarket });
@@ -159,7 +160,7 @@ export function UnregisteredList({ day }: { day: string }) {
       {report.data !== undefined && rows.length === 0 ? (
         <EmptyState
           description={t("recon.emptyUnregisteredHint", {
-            date: formatBusinessDay(format, day),
+            date: formatBusinessDay(format, day, locale),
           })}
           title={t("recon.emptyUnregistered")}
         />
@@ -183,6 +184,7 @@ export function UnregisteredList({ day }: { day: string }) {
               {rows.map((row, index) => (
                 <UnregisteredRow
                   format={format}
+                  locale={locale}
                   key={row.case_id ?? `${row.stall_code}-${index}`}
                   row={row}
                 />
@@ -197,9 +199,12 @@ export function UnregisteredList({ day }: { day: string }) {
 
 function UnregisteredRow({
   format,
+  locale,
   row,
 }: {
   format: ReturnType<typeof useFormatter>;
+  /** Til — sana yordamchisi o'zbek lotin uchun o'z jadvalini ishlatadi. */
+  locale: string;
   row: ReportRow;
 }) {
   return (
@@ -216,7 +221,7 @@ function UnregisteredRow({
        *   ustiga SSR/CSR gidratatsiya nomuvofiqligini ham berardi.
        *   Sabab to'liq `lib/format-day.ts` modul izohida.
        */}
-      <td className="p-3">{formatBusinessDay(format, row.service_date)}</td>
+      <td className="p-3">{formatBusinessDay(format, row.service_date, locale)}</td>
       <td className="p-3">
         <EvidenceLink
           serviceDate={row.service_date}

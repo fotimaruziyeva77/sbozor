@@ -2,7 +2,7 @@
 
 import { BellRing, Receipt, RotateCcw, Sunrise, Sunset } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { DeliveryBadge } from "@/components/reconciliation/delivery-badge";
 import { Button } from "@/components/ui/button";
@@ -190,6 +190,7 @@ export function DeliveryList({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const marketId = useReconciliationMarketId();
   const hasMarket = marketId !== null;
   const deliveries = useDeliveries(day, isToday, { enabled: hasMarket });
@@ -309,7 +310,7 @@ export function DeliveryList({
            *   ikki xil ko'rinishi TUG'ILMAYDI.
            */
           description={t("recon.emptyDeliveryHint", {
-            date: formatBusinessDay(format, day),
+            date: formatBusinessDay(format, day, locale),
           })}
           title={t("recon.emptyDelivery")}
         />
@@ -402,6 +403,7 @@ function DeliveryRowView({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   /*
    * ⛔ XOM ISTISNO SINFI EKRANGA CHIQMAYDI — u yopiq to'plamga

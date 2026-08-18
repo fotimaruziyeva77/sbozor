@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { CaseDetailDialog } from "@/components/reconciliation/case-detail-dialog";
 import { CaseStatusBadge } from "@/components/reconciliation/case-status-badge";
@@ -123,6 +123,7 @@ const STATUS_COUNT: Record<
 export function CaseList({ day }: { day: string }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const marketId = useReconciliationMarketId();
   const hasMarket = marketId !== null;
   const cases = useReconciliationCases(day, { enabled: hasMarket });
@@ -206,7 +207,7 @@ export function CaseList({ day }: { day: string }) {
       {counts !== undefined && rows.length === 0 ? (
         <EmptyState
           description={t("recon.emptyCasesHint", {
-            date: formatBusinessDay(format, day),
+            date: formatBusinessDay(format, day, locale),
           })}
           title={t("recon.emptyCases")}
         />
@@ -307,6 +308,7 @@ function CaseRowView({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   return (
     /*

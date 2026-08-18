@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { useReportPeriod } from "@/components/reports/period-picker";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -80,6 +80,7 @@ import { useReceivablesReport } from "@/lib/report-queries";
 export function DebtorsReport() {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   const period = useReportPeriod();
   const report = useReceivablesReport(
@@ -204,6 +205,7 @@ export function DebtorsReport() {
 function DebtorRow({ row }: { row: ReceivablesReportRow }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   return (
     /* Qator hover foni (§12.8) — davomiylik `--default-transition-*` dan. */
@@ -241,7 +243,7 @@ function DebtorRow({ row }: { row: ReceivablesReportRow }) {
            */
           <span className="sr-only">{t("reports.dateUnknown")}</span>
         ) : (
-          formatBusinessDay(format, row.oldest_debt_date)
+          formatBusinessDay(format, row.oldest_debt_date, locale)
         )}
       </td>
     </tr>

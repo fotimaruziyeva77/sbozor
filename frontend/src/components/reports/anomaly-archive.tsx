@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { CaseStatusBadge } from "@/components/reconciliation/case-status-badge";
 import { EvidenceLink } from "@/components/reconciliation/evidence-link";
@@ -110,6 +110,7 @@ function isArchiveKind(value: string): value is ArchiveKind {
 export function AnomalyArchive() {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   /* ⚠ Davr HOOKDAN, propdan emas (08-13 naqshi): sahifa bilan blok
    *   orasida uchinchi haqiqat manbai tug'ilmaydi. */
@@ -263,11 +264,12 @@ export function AnomalyArchive() {
 function ArchiveRow({ row }: { row: AnomalyArchiveRow }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   return (
     /* Qator hover foni (§12.8) — davomiylik `--default-transition-*` dan. */
     <tr className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted">
-      <td className="p-3">{formatBusinessDay(format, row.business_date)}</td>
+      <td className="p-3">{formatBusinessDay(format, row.business_date, locale)}</td>
 
       {/*
        * ⛔ NOMA'LUM SINF QATORNI YO'QOTMAYDI: yorliq topilmasa XOM kod

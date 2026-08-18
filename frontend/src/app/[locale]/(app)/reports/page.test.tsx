@@ -296,12 +296,31 @@ function attrValues(container: HTMLElement, attribute: string): Set<string> {
  *    yozilgan kontraktidan QAYTA quriladi: kun ⛔ 12:00 UTC ga
  *    langarlanadi va `dateStyle: "medium"` bilan chiziladi.
  */
+/*
+ * ⛔ MUSTAQIL QAYTA QURISH SAQLANADI — bu jadval `lib/uz-latn-date.ts` dan
+ *    IMPORT QILINMAYDI. Import qilinsa, u yerdagi xato bu yerda ham
+ *    takrorlanib, test jimgina yashil qolardi.
+ * Shakl: «D-oy, YYYY», kun 12:00 UTC ga langarlangan.
+ */
+const UZ_MONTHS = [
+  "yanvar",
+  "fevral",
+  "mart",
+  "aprel",
+  "may",
+  "iyun",
+  "iyul",
+  "avgust",
+  "sentabr",
+  "oktabr",
+  "noyabr",
+  "dekabr",
+];
+
 function shownDay(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number);
-  return new Intl.DateTimeFormat("uz-Latn", {
-    dateStyle: "medium",
-    timeZone: TIME_ZONE,
-  }).format(new Date(Date.UTC(year, month - 1, day, 12)));
+  const at = new Date(Date.UTC(year, month - 1, day, 12));
+  return `${at.getUTCDate()}-${UZ_MONTHS[at.getUTCMonth()]}, ${at.getUTCFullYear()}`;
 }
 
 beforeEach(() => {

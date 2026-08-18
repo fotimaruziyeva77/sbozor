@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import { FileUp, Upload } from "lucide-react";
-import { useFormatter, useNow, useTimeZone, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useNow, useTimeZone, useTranslations } from "next-intl";
 import { parseAsString, useQueryState } from "nuqs";
 import { toast } from "sonner";
 
@@ -235,6 +235,7 @@ function useUploadFeedback(error: unknown) {
 export function LedgerImport() {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   const { day } = useCompareDay();
   const report = useThreeWayReport(day);
@@ -400,7 +401,7 @@ export function LedgerImport() {
         confirmLabel={t("compare.ledgerReplaceConfirm")}
         confirmVariant="destructive"
         description={t("compare.ledgerReplaceBody", {
-          day: formatBusinessDay(format, day),
+          day: formatBusinessDay(format, day, locale),
         })}
         isBusy={upload.isPending}
         level={1}

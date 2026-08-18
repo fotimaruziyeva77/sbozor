@@ -39,6 +39,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
 import messages from "../../../messages/uz-Latn.json";
 import { RevenueCard } from "@/components/dashboard/revenue-card";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
+import { uzLatnDate } from "@/lib/uz-latn-date";
 
 const MARKET_ID = "11111111-1111-4111-8111-111111111111";
 const LOCALE = "uz-Latn";
@@ -50,10 +51,7 @@ const fmt = (value: number): string =>
 /** `formatBusinessDay` bilan AYNI natija (12:00 UTC langar, medium). */
 const fmtDay = (iso: string): string => {
   const [y, m, d] = iso.split("-").map(Number);
-  return new Intl.DateTimeFormat(LOCALE, {
-    dateStyle: "medium",
-    timeZone: "Asia/Tashkent",
-  }).format(new Date(Date.UTC(y, m - 1, d, 12)));
+  return uzLatnDate(new Date(Date.UTC(y, m - 1, d, 12)));
 };
 
 /** 7 qatorli javob — `from_date` ATAYIN so'ralganidan BOSHQA (server haqiqati). */
