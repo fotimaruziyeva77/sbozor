@@ -43,11 +43,16 @@ from app.services.go2rtc import (
 from pydantic import SecretStr
 from structlog.testing import capture_logs
 
+from tests.fixtures.nginx_conf import effective_nginx_conf
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NGINX_CONF = REPO_ROOT / "ops" / "nginx" / "nginx.conf"
+"""⚠ Yo'lning O'ZI kerak bo'lgan joyda qoladi; MAZMUN esa
+`effective_nginx_conf()` dan o'qiladi — u `include` ni ham kuzatadi
+(`tests/fixtures/nginx_conf.py` moduli boshidagi izoh)."""
 COMPOSE = REPO_ROOT / "compose.yaml"
 GO2RTC_CONF = REPO_ROOT / "ops" / "go2rtc" / "go2rtc.yaml"
 
@@ -521,7 +526,7 @@ def test_live_view_path_is_under_the_authorized_prefix() -> None:
     uzilishning oldini oladi.
     """
     assert LIVE_VIEW_PATH.startswith("/live/")
-    assert "/live/" in NGINX_CONF.read_text(encoding="utf-8")
+    assert "/live/" in effective_nginx_conf()
 
 
 # ---------------------------------------------------------------------------
@@ -565,9 +570,9 @@ def test_nginx_blocks_the_go2rtc_api_path(blocked: str) -> None:
     lekin `proxy_pass` bo'lgan blokda ishlamasdi va «bloklandi» degan
     yolg'on ishonch qolardi.
     """
-    text = NGINX_CONF.read_text(encoding="utf-8")
+    text = effective_nginx_conf()
 
-    assert blocked in text, f"`{blocked}` `nginx.conf` da umuman uchramaydi"
+    assert blocked in text, f"`{blocked}` shipped nginx konfiguratsiyasida umuman uchramaydi"
     blocks = [
         chunk for chunk in text.split("location") if blocked in chunk and "return 403" in chunk
     ]
@@ -582,7 +587,7 @@ def test_nginx_blocks_the_api_path_through_the_live_prefix() -> None:
       go2rtc'ning `/api/streams` iga yetib borardi va birinchi blok
       (`^/api/...` ga langar tashlagan) uni UMUMAN ko'rmasdi.
     """
-    text = NGINX_CONF.read_text(encoding="utf-8")
+    text = effective_nginx_conf()
     blocks = [
         chunk for chunk in text.split("location") if "/live/api/" in chunk and "return 403" in chunk
     ]
@@ -595,7 +600,7 @@ def test_nginx_blocks_the_api_path_through_the_live_prefix() -> None:
 
 def test_nginx_declares_the_auth_request_target() -> None:
     """`/live/` bloki `auth_request` bilan darvozalangan (SC#6)."""
-    text = NGINX_CONF.read_text(encoding="utf-8")
+    text = effective_nginx_conf()
 
     assert "auth_request /internal/live-authz;" in text, (
         "`/live/` bloki `auth_request` e'lon qilmaydi — jonli oqim avtorizatsiyasiz ochiq qolardi"

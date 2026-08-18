@@ -61,7 +61,9 @@ from typing import TYPE_CHECKING, Any, cast
 import httpx
 import pytest
 from app.security.ratelimit import IP_LIMIT, TooManyAttempts, check_login_rate
+
 from fixtures.auth_api import LOGIN_URL
+from tests.fixtures.nginx_conf import effective_nginx_conf
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 if TYPE_CHECKING:
