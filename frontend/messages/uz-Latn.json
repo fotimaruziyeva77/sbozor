@@ -128,7 +128,8 @@
     "cannotBlockSelf": "O'zingizni bloklay olmaysiz",
     "cannotChangeOwnRoles": "O'z rollaringizni o'zgartirib bo'lmaydi",
     "createdAt": "Yaratildi",
-    "createdBy": "{name} tomonidan yaratildi"
+    "createdBy": "{name} tomonidan yaratildi",
+    "rolesScopeNote": "Direktor va bozor admini rollarini platforma admini beradi — bozor admini o'ziga teng yoki undan yuqori rolni bera olmaydi."
   },
   "audit": {
     "title": "Audit jurnali",
@@ -178,7 +179,31 @@
       "user_market_roles": "Bozor a'zoliklari",
       "markets": "Bozorlar",
       "refresh_tokens": "Sessiya kalitlari",
-      "audit_log": "Audit jurnali"
+      "audit_log": "Audit jurnali",
+      "stalls": "Rastalar",
+      "zones": "Zonalar",
+      "stall_categories": "Toifalar",
+      "stall_category_periods": "Rasta toifasi",
+      "tariffs": "Tariflar",
+      "vendors": "Sotuvchilar",
+      "stall_assignments": "Rasta biriktirish",
+      "market_calendar_exceptions": "Istisno kunlar",
+      "market_profile": "Bozor sozlamalari",
+      "cameras": "Kameralar",
+      "camera_zones": "Kamera zonalari",
+      "nvr_devices": "NVR qurilmalari",
+      "nvr_credentials": "NVR hisoblari",
+      "snapshot_schedule_slots": "Kadr jadvali",
+      "capture_runs": "Kadr olish",
+      "cashier_shifts": "Kassir smenalari",
+      "payments": "To'lovlar",
+      "daily_charges": "Kunlik patta",
+      "charge_adjustments": "Patta tuzatishlari",
+      "occupancy_events": "Bandlik o'lchovlari",
+      "review_assignments": "Ko'rib chiqish",
+      "audit_rounds": "Ko'r sanoq",
+      "reconciliation_cases": "Nomuvofiqliklar",
+      "billing_anomalies": "Anomaliyalar"
     }
   },
   "zones": {

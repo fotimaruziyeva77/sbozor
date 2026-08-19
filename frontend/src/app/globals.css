@@ -1527,6 +1527,29 @@
   grid-column: 1 / -1;
 }
 
+/*
+ * TO'RT USTUNLI SETKA — reestr uchun (260819).
+ *
+ * ⛔ Reestr AYNAN to'rtta bir jinsli katak: sotuvchi · rasta · tarif ·
+ *    ish kuni. Uch ustunli umumiy setkada ular 3 + 1 bo'lib tushib,
+ *    to'rtinchisi yolg'iz qatorda qolardi [jonli ko'rildi].
+ */
+.dir-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1180px) {
+  .dir-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .dir-grid-4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Bosh katak — endi qolganlari bilan bir xil mexanizmda (flex);
    alohida balandlik bekor qilish KERAK EMAS. */
 

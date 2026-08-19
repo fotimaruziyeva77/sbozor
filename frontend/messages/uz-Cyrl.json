@@ -128,7 +128,8 @@
     "cannotBlockSelf": "Ўзингизни блоклай олмайсиз",
     "cannotChangeOwnRoles": "Ўз ролларингизни ўзгартириб бўлмайди",
     "createdAt": "Яратилди",
-    "createdBy": "{name} томонидан яратилди"
+    "createdBy": "{name} томонидан яратилди",
+    "rolesScopeNote": "Директор ва бозор админи ролларини платформа админи беради — бозор админи ўзига тенг ёки ундан юқори ролни бера олмайди."
   },
   "audit": {
     "title": "Аудит журнали",
@@ -178,7 +179,31 @@
       "user_market_roles": "Бозор аъзоликлари",
       "markets": "Бозорлар",
       "refresh_tokens": "Сессия калитлари",
-      "audit_log": "Аудит журнали"
+      "audit_log": "Аудит журнали",
+      "stalls": "Расталар",
+      "zones": "Зоналар",
+      "stall_categories": "Тоифалар",
+      "stall_category_periods": "Раста тоифаси",
+      "tariffs": "Тарифлар",
+      "vendors": "Сотувчилар",
+      "stall_assignments": "Раста бириктириш",
+      "market_calendar_exceptions": "Истисно кунлар",
+      "market_profile": "Бозор созламалари",
+      "cameras": "Камералар",
+      "camera_zones": "Камера зоналари",
+      "nvr_devices": "NVR қурилмалари",
+      "nvr_credentials": "NVR ҳисоблари",
+      "snapshot_schedule_slots": "Кадр жадвали",
+      "capture_runs": "Кадр олиш",
+      "cashier_shifts": "Кассир сменалари",
+      "payments": "Тўловлар",
+      "daily_charges": "Кунлик патта",
+      "charge_adjustments": "Патта тузатишлари",
+      "occupancy_events": "Бандлик ўлчовлари",
+      "review_assignments": "Кўриб чиқиш",
+      "audit_rounds": "Кўр саноқ",
+      "reconciliation_cases": "Номувофиқликлар",
+      "billing_anomalies": "Аномалиялар"
     }
   },
   "zones": {

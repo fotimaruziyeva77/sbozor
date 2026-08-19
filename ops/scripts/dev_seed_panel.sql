@@ -124,9 +124,15 @@ BEGIN
     --    to'lovsiz» holatini ko'rsata olishi kerak.
     CONTINUE WHEN i % 6 = 0;
 
+    /* ⛔ `ORDER BY created_at` EMAS: 24 sotuvchi BIR tranzaksiyada
+       yaratiladi va `now()` ularning hammasida BIR XIL — tartib
+       aniqlanmagan bo'lib qolardi va `OFFSET` tasodifiy qator
+       qaytarardi. Natijada bitta sotuvchiga 18 ta rasta biriktirilib,
+       qolganlari bo'sh qolgan edi [ekranda ko'rildi]. Telefon raqami
+       esa qat'iy va ketma-ket. */
     SELECT id INTO v_vendor FROM vendors
     WHERE market_id = v_market
-    ORDER BY created_at
+    ORDER BY phone_e164
     OFFSET ((i - 1) % 24) LIMIT 1;
 
     INSERT INTO stall_assignments (market_id, stall_id, vendor_id, period)
@@ -205,7 +211,12 @@ BEGIN
     SET status = 'closed',
         closed_at = (v_today - i)::timestamptz + interval '15 hours',
         system_soum = v_paid,
-        declared_soum = v_paid - CASE WHEN i = 0 THEN 12000 ELSE 0 END
+        /* ⛔ `GREATEST(0, …)`: deklaratsiya MANFIY bo'lolmaydi
+           (`ck_cashier_shifts_declared_soum_non_negative`). To'lovsiz
+           smenada 0 − 12 000 konstraytni buzardi. */
+        declared_soum = GREATEST(
+          0, v_paid - CASE WHEN i = 0 THEN 12000 ELSE 0 END
+        )
     WHERE id = v_shift;
   END LOOP;
 

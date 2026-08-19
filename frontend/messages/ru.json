@@ -128,7 +128,8 @@
     "cannotBlockSelf": "Нельзя заблокировать самого себя",
     "cannotChangeOwnRoles": "Нельзя изменить свои собственные роли",
     "createdAt": "Создан",
-    "createdBy": "Создан пользователем {name}"
+    "createdBy": "Создан пользователем {name}",
+    "rolesScopeNote": "Роли директора и администратора рынка назначает администратор платформы — администратор рынка не может выдать роль, равную своей или выше."
   },
   "audit": {
     "title": "Журнал аудита",
@@ -178,7 +179,31 @@
       "user_market_roles": "Членства на рынке",
       "markets": "Рынки",
       "refresh_tokens": "Ключи сессий",
-      "audit_log": "Журнал аудита"
+      "audit_log": "Журнал аудита",
+      "stalls": "Торговые места",
+      "zones": "Зоны",
+      "stall_categories": "Категории",
+      "stall_category_periods": "Категория торгового места",
+      "tariffs": "Тарифы",
+      "vendors": "Продавцы",
+      "stall_assignments": "Закрепление торгового места",
+      "market_calendar_exceptions": "Дни-исключения",
+      "market_profile": "Настройки рынка",
+      "cameras": "Камеры",
+      "camera_zones": "Зоны камер",
+      "nvr_devices": "Устройства NVR",
+      "nvr_credentials": "Учётные данные NVR",
+      "snapshot_schedule_slots": "Расписание кадров",
+      "capture_runs": "Съёмка кадров",
+      "cashier_shifts": "Смены кассиров",
+      "payments": "Платежи",
+      "daily_charges": "Ежедневная патта",
+      "charge_adjustments": "Корректировки патты",
+      "occupancy_events": "Замеры занятости",
+      "review_assignments": "Проверки",
+      "audit_rounds": "Слепой подсчёт",
+      "reconciliation_cases": "Расхождения",
+      "billing_anomalies": "Аномалии"
     }
   },
   "zones": {

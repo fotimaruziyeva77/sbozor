@@ -250,11 +250,19 @@ export function AdminPanel({
           </>
         ) : null}
 
-        {/* ---------------------------------------------------------------
-         * 3. REESTR — to'rtta joyga eshik.
-         * ------------------------------------------------------------ */}
-        <p className="dir-group-span dir-group-label">Reestr</p>
+      </div>
 
+      {/*
+       * ⛔ REESTR TO'RT KATAK VA U ALOHIDA SETKADA (260819).
+       *
+       *    Umumiy setka uch ustunli; to'rt katak u yerda 3 + 1 bo'lib
+       *    tushib, to'rtinchisi yolg'iz qatorda qolardi [jonli
+       *    ko'rildi]. Reestr — bir jinsli TO'RTLIK (sotuvchi · rasta ·
+       *    tarif · ish kuni), shuning uchun u o'z setkasida to'rt
+       *    ustun oladi.
+       */}
+      <p className="dir-group-label">Reestr</p>
+      <div className="dir-grid dir-grid-4">
         <RegistryTile
           action="Ro'yxatni ochish"
           count={status?.vendors ?? null}
@@ -453,7 +461,13 @@ function AttentionCard({ item, step }: { item: Attention; step: number }) {
         <CardContent className="dir-tile-body">
           <div className="flex flex-col gap-3">
             {item.count === null ? (
-              <Badge tone={danger ? "danger" : "warning"}>Sozlanmagan</Badge>
+              /* ⛔ O'RAMA MAJBURIY: `dir-tile-body` ustun-flex va uning
+                 bolalari `align-items: stretch` bilan BUTUN kenglikka
+                 cho'ziladi. Yorliq o'ramasiz butun kartani egallab
+                 yotardi [jonli ko'rildi]. */
+              <div>
+                <Badge tone={danger ? "danger" : "warning"}>Sozlanmagan</Badge>
+              </div>
             ) : (
               <p className="dir-tile-value">
                 {formatAmount(format, item.count, locale)}

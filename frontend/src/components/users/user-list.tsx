@@ -275,30 +275,39 @@ function UserCard({
     .filter((key): key is RoleLabelKey => key !== null)
     .map((key) => tRoles(key));
 
+  /*
+   * ⛔⛔ QATOR — USTUN EMAS (260819, jonli o'lchandi).
+   *
+   *     Avval har foydalanuvchi ~190px karta egallardi: sarlavhada ism
+   *     va telefon, tanada yorliqlar, alohida qatorda rollar, yana
+   *     alohida qatorda «Yaratildi». Olti xodim 1100px scroll berardi
+   *     va ro'yxatni bir qarashda o'qib bo'lmasdi.
+   *
+   *     Stitch «Xodimlar» maketi buni JADVAL qiladi: ism · telefon ·
+   *     rol · holat bir qatorda. Biz haqiqiy `<table>` qurmadik —
+   *     u telefonda qayta joylashtirishni talab qiladi va bu ekran
+   *     asosan desktopda ochiladi, lekin telefonda ham ochilishi
+   *     mumkin. Shuning uchun: `sm:` dan yuqorida BIR QATOR,
+   *     telefonda esa ustun bo'lib qoladi.
+   */
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 pb-2">
-        <div className="min-w-0">
+    <Card className="px-4 py-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+        <div className="min-w-0 sm:flex-1">
           {/* D-16: ism va telefon DB kontenti — tarjima qilinmaydi. */}
-          <p className="truncate text-lg font-semibold">
+          <p className="truncate font-semibold">
             {user.full_name ?? user.phone}
           </p>
           <p className="truncate text-sm text-text-muted">{user.phone}</p>
         </div>
 
-        {canManage ? (
-          <UserActions
-            canEditRoles={canEditRoles}
-            isActive={user.is_active}
-            onAction={onAction}
-            onEditRoles={onEditRoles}
-            userLabel={user.full_name ?? user.phone}
-          />
+        {roleLabels.length > 0 ? (
+          <p className="shrink-0 text-sm text-text-muted">
+            {roleLabels.join(" · ")}
+          </p>
         ) : null}
-      </CardHeader>
 
-      <CardContent className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {user.is_active ? (
             <Badge tone="success">{t("users.statusActive")}</Badge>
           ) : (
@@ -309,17 +318,26 @@ function UserCard({
           ) : null}
         </div>
 
-        {roleLabels.length > 0 ? (
-          <p className="text-sm text-text-muted">
-            {t("users.rolesLabel")}: {roleLabels.join(" · ")}
-          </p>
-        ) : null}
-
-        <p className="text-xs text-text-muted">
-          {t("users.createdAt")}:{" "}
+        {/*
+         * ⛔ «Yaratildi» QOLADI, lekin u endi qatorning oxirida va
+         *    kichik: sana ro'yxatni saralashda emas, nizoda kerak
+         *    bo'ladi. Uni butunlay olib tashlash «qachon qo'shilgan?»
+         *    savolini javobsiz qoldirardi.
+         */}
+        <p className="shrink-0 text-xs text-text-muted tabular-nums">
           {formatInstant(format, new Date(user.created_at), locale, timeZone)}
         </p>
-      </CardContent>
+
+        {canManage ? (
+          <UserActions
+            canEditRoles={canEditRoles}
+            isActive={user.is_active}
+            onAction={onAction}
+            onEditRoles={onEditRoles}
+            userLabel={user.full_name ?? user.phone}
+          />
+        ) : null}
+      </div>
     </Card>
   );
 }

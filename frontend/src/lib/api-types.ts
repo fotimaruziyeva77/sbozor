@@ -339,12 +339,49 @@ export function isAuditAction(value: string): value is AuditActionValue {
  * u tarjimasiz, xom nomi bilan ko'rinadi — bu jadval nomi texnik
  * identifikator bo'lgani uchun to'g'ri xulq (D-16 ruhida).
  */
+/*
+ * ⛔⛔ REYESTR KENGAYTIRILDI (260819, bazadan O'LCHANDI).
+ *
+ *     Bu yerda faqat BESHTA jadval bor edi, audit jurnalida esa
+ *     O'N TO'RTTASI uchraydi. Ya'ni yozuvlarning 91% i ekranda XOM
+ *     inglizcha nom bilan chiqardi: `stall_category_periods`,
+ *     `cashier_shifts`, `camera_zones`… Audit jurnali — nizoda
+ *     tayaniladigan hujjat va uni bozor direktori O'QIY OLISHI kerak.
+ *
+ * ⛔ Ro'yxat YOPIQ: yangi jadval qo'shilganda tarjima ham QO'SHILISHI
+ *    shart, aks holda `isAuditTable()` uni tanimaydi va xom nom yana
+ *    chiqadi. Bu «jimgina yomonlashish» emas — u ko'rinadi.
+ */
 export const AUDIT_TABLES = [
   "users",
   "user_market_roles",
   "markets",
   "refresh_tokens",
   "audit_log",
+  "stalls",
+  "zones",
+  "stall_categories",
+  "stall_category_periods",
+  "tariffs",
+  "vendors",
+  "stall_assignments",
+  "market_calendar_exceptions",
+  "market_profile",
+  "cameras",
+  "camera_zones",
+  "nvr_devices",
+  "nvr_credentials",
+  "snapshot_schedule_slots",
+  "capture_runs",
+  "cashier_shifts",
+  "payments",
+  "daily_charges",
+  "charge_adjustments",
+  "occupancy_events",
+  "review_assignments",
+  "audit_rounds",
+  "reconciliation_cases",
+  "billing_anomalies",
 ] as const;
 export type AuditTableValue = (typeof AUDIT_TABLES)[number];
 

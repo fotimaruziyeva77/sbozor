@@ -111,9 +111,18 @@ export function WeekdayPicker({
   return (
     <div className="flex flex-col gap-3">
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-sm font-semibold">
-          {t("calendar.weekdaysLabel")}
-        </legend>
+        {/*
+         * ⛔ `sr-only` — VA U OLIB TASHLANMAYDI (260819).
+         *
+         *    Kartaning `<h2>` si ayni matnni chizadi va ekranda
+         *    «Haftalik jadval» IKKI marta yozilardi [jonli ko'rildi].
+         *    Lekin `<legend>` ni O'CHIRISH mumkin emas: u yetti
+         *    katakchani BIR GURUH qilib nomlaydi va usiz skrinrider
+         *    «Dushanba, katakcha» deb o'qib, nimaning dushanbasi
+         *    ekanini aytmasdi. Shuning uchun u KO'RINMAS bo'ladi,
+         *    yo'q bo'lmaydi.
+         */}
+        <legend className="sr-only">{t("calendar.weekdaysLabel")}</legend>
         <p className="mb-1 text-xs text-text-muted">
           {t("calendar.weekdaysHint")}
         </p>

@@ -90,7 +90,8 @@ export function CreateUserDialog({
   const createUser = useCreateUser();
   const [formError, setFormError] = useState<string | null>(null);
 
-  const roleOptions = assignableRoles(principal?.isPlatformAdmin ?? false);
+  const isPlatformAdmin = principal?.isPlatformAdmin ?? false;
+  const roleOptions = assignableRoles(isPlatformAdmin);
 
   const schema = useMemo(
     () =>
@@ -224,6 +225,31 @@ export function CreateUserDialog({
             <legend className="mb-1 text-sm font-semibold">
               {t("users.rolesLabel")}
             </legend>
+            {/*
+             * ⛔⛔ NEGA BU QATOR BOR (260819, jonli ko'rildi).
+             *
+             *     Bozor admini dialogni ochganda FAQAT «Kassir» va
+             *     «Nazoratchi» ni ko'radi va «Direktor qani?» degan
+             *     savol javobsiz qolardi. Yo'q variant — xabar emas:
+             *     odam uni «ruxsat yo'q» deb ham, «tizim buzuq» deb
+             *     ham o'qiydi.
+             *
+             *     Cheklovning O'ZI to'g'ri va u xavfsizlik qarori
+             *     (`staff_accounts.py::MARKET_ADMIN_ASSIGNABLE_ROLES`,
+             *     T-01-50 / ASVS V8): bozor admini o'ziga TENG yoki
+             *     undan YUQORI rol berolmasa, u bir so'rov bilan
+             *     o'zining nazoratchisini yoki cheksiz sonli teng
+             *     huquqli adminni tug'dira olmaydi.
+             *
+             * ⚠ Platforma adminida to'rttala rol bor, ya'ni unga bu
+             *   qator chizilmaydi — u yerda tushuntiriladigan yo'qlik
+             *   YO'Q.
+             */}
+            {isPlatformAdmin ? null : (
+              <p className="mb-1 text-xs text-text-muted">
+                {t("users.rolesScopeNote")}
+              </p>
+            )}
             {roleOptions.map((role) => {
               const labelKey = roleLabelKey(role);
               if (labelKey === null) return null;

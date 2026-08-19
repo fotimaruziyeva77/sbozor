@@ -56,9 +56,27 @@ export default function DashboardPage() {
     .filter((key): key is RoleLabelKey => key !== null)
     .map((key) => tRoles(key));
 
-  const sections = SECTIONS.filter((section) =>
-    hasPermission(roles, section.permission),
-  );
+  /*
+   * ⛔⛔ ADMIN PANELI CHIZILGANDA `SECTIONS` CHIZILMAYDI (260819).
+   *
+   *     `SECTIONS` — «Foydalanuvchilar» va «Audit jurnali» ga ikkita
+   *     katta karta. Admin panelining O'ZIDA esa «Xodimlar → Barchasi»
+   *     va «Oxirgi o'zgarishlar → To'liq jurnal» bloklari bor —
+   *     ya'ni ayni ikki manzilga ayni ekranda IKKI marta eshik
+   *     ochilardi va pastdagi ikkitasi bo'm-bo'sh turardi
+   *     [jonli ko'rildi].
+   *
+   *     Panelsiz rollarda (kassir, nazoratchi, platforma admini)
+   *     `SECTIONS` O'Z O'RNIDA QOLADI — ular uchun bu yagona eshik.
+   */
+  const adminPanelShown =
+    principal?.marketId !== undefined &&
+    principal?.marketId !== null &&
+    hasPermission(roles, "tariff_manage");
+
+  const sections = adminPanelShown
+    ? []
+    : SECTIONS.filter((section) => hasPermission(roles, section.permission));
 
   return (
     <div className="flex flex-col gap-6">
