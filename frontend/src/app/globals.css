@@ -1142,6 +1142,26 @@
  *    «Yangilandi» qatorlari zinapoyaga aylanardi. */
 .dir-tile {
   height: 13rem;
+  /*
+   * ⛔⛔ STITCH DIZAYNIDAN (260819): radius 14px, chegara HAIRLINE.
+   *
+   *   Stitch eksportida karta AYNAN shunday: `#212228` fon, 1px
+   *   `rgba(255,255,255,0.08)` chegara, radius 14px va quyuq temada
+   *   SOYA YO'Q. Sabab uning `DESIGN.md` sida yozilgan: quyuq temada
+   *   chuqurlik SOYA bilan emas, TONAL QATLAM bilan beriladi — fon
+   *   (#191A1F) va karta (#212228) orasidagi farq yetarli.
+   *
+   * ⛔ Rang tokenlari OLINMADI (foydalanuvchi qarori): Stitch yashil
+   *    aksent tanlagan, bizniki ko'k bo'lib qoladi. Sabab: yashil bizda
+   *    HOLAT rangi («to'liq yig'ildi») va brend rangi ham yashil bo'lsa,
+   *    hokim ekranga qaraganda «yashil chunki yaxshi» bilan «yashil
+   *    chunki brend» ni farqlay olmasdi.
+   */
+  border-radius: 14px;
+}
+
+[data-theme="dark"] .dir-tile {
+  box-shadow: none;
 }
 
 .dir-tile-head {
@@ -1153,12 +1173,17 @@
   min-height: 8.25rem;
 }
 
-/* Sarlavha: 13px / 600 / 0.06em / uppercase. */
+/*
+ * Sarlavha: 13px / 600 / uppercase.
+ * ⛔ Harf oralig'i 0.06em -> 0.08em (Stitch shkalasi, 260819): yorliq
+ *    qiymatdan ANIQ ajralib turishi kerak va u faqat kattalik bilan
+ *    emas, HARF ORALIG'I bilan ham ajratiladi.
+ */
 .dir-tile-label {
   margin: 0;
   font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
@@ -1174,8 +1199,10 @@
 .dir-tile-value {
   margin: 0;
   font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 2.125rem;
-  line-height: 1.1;
+  /* ⛔ 34px -> 30px/36px, −0.01em (Stitch `card-value` shkalasi). */
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+  letter-spacing: -0.01em;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
@@ -1184,6 +1211,107 @@
 /* Qarz kataki — qiymat qizil (dizayn 3-kataki). */
 .dir-tile-value-danger {
   color: var(--color-danger-text);
+}
+
+/*
+ * ============================================================================
+ * BOSH KO'RSATKICH — Stitch `hero-stat` shkalasi (260819).
+ *
+ * 56px / 1.1 / −0.02em / 700. Bu panel ekranidagi ENG KATTA son va u
+ * shunday bo'lishi kerak: kelgan tekshiruvchi birinchi shuni ko'radi.
+ * ⛔ `text-hero` utilitasi EMAS — u landing h1 ga qulflangan (G-land-5(a)).
+ * ============================================================================
+ */
+.dir-hero-stat {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 3.5rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+  .dir-hero-stat {
+    font-size: 2.75rem;
+  }
+}
+
+/*
+ * ============================================================================
+ * SARLAVHA OSTIDAGI ERISH QATLAMI — Stitch'dan (260819).
+ *
+ * ⛔⛔ NEGA KO'CHIRILDI: `stitch.withgoogle.com` ning butun sahifasida
+ *     BITTA ma'noli gradient bor va u aynan shu — sarlavha ostida
+ *     kontent silliq eriydigan qatlam. Bizda sarlavha `sticky` va
+ *     kontent uning ostiga QATTIQ kesilib kirardi.
+ *
+ * ⛔ TO'XTASH NUQTALARI NOTEKIS — VA BU BUTUN SIRI. Ikki nuqtali
+ *    («to'liq → shaffof») gradient ko'zga CHIZIQ bo'lib tashlanadi
+ *    (Mach chizig'i). Stitch quyuqda 9, yorug'da 15 nuqta ishlatgan va
+ *    ularni boshida tez, oxirida sekin taqsimlagan — shuning uchun
+ *    erish KO'RINMAYDI.
+ *
+ * ⛔ `pointer-events: none` — qatlam kontent ustida turadi va bosishni
+ *    yutib qo'ymasligi kerak.
+ * ============================================================================
+ */
+.app-fade {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 5rem;
+  pointer-events: none;
+  z-index: 30;
+  background: linear-gradient(
+    var(--color-surface) 0%,
+    color-mix(in oklch, var(--color-surface) 94%, transparent) 6%,
+    color-mix(in oklch, var(--color-surface) 85%, transparent) 12%,
+    color-mix(in oklch, var(--color-surface) 72%, transparent) 18%,
+    color-mix(in oklch, var(--color-surface) 58%, transparent) 24%,
+    color-mix(in oklch, var(--color-surface) 45%, transparent) 30%,
+    color-mix(in oklch, var(--color-surface) 34%, transparent) 35%,
+    color-mix(in oklch, var(--color-surface) 24%, transparent) 40%,
+    color-mix(in oklch, var(--color-surface) 16%, transparent) 45%,
+    color-mix(in oklch, var(--color-surface) 10%, transparent) 50%,
+    color-mix(in oklch, var(--color-surface) 6%, transparent) 55%,
+    color-mix(in oklch, var(--color-surface) 3%, transparent) 60%,
+    color-mix(in oklch, var(--color-surface) 1%, transparent) 65%,
+    transparent 70%
+  );
+}
+
+/*
+ * ⛔ Quyuq temada egri chiziq BOSHQACHA — Stitch ham shunday qilgan:
+ *    9 nuqta va tezroq so'nadi. Sabab optik: quyuq fonda ko'z
+ *    o'tishni yorug' fondagidan ERTAROQ sezadi.
+ */
+[data-theme="dark"] .app-fade {
+  background: linear-gradient(
+    var(--color-surface) 0%,
+    color-mix(in oklch, var(--color-surface) 82%, transparent) 10%,
+    color-mix(in oklch, var(--color-surface) 58%, transparent) 24%,
+    color-mix(in oklch, var(--color-surface) 25%, transparent) 36%,
+    color-mix(in oklch, var(--color-surface) 12%, transparent) 45%,
+    color-mix(in oklch, var(--color-surface) 6%, transparent) 52%,
+    color-mix(in oklch, var(--color-surface) 2%, transparent) 60%,
+    transparent 70%
+  );
+}
+
+/*
+ * GURUH SARLAVHASI — «GURUH: PUL» / «NAZORAT» / «TREND» (Stitch tuzilmasi).
+ * Kataklar endi ma'no bo'yicha guruhlanadi: pul · nazorat · trend.
+ */
+.dir-group-label {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 /* Bandlik katagidagi foiz — 30px (donut yonida turadi). */
@@ -1266,6 +1394,12 @@
  */
 .dir-tile-hero {
   grid-column: 1 / -1;
+}
+
+/* Guruh yorlig'i — katak emas, setka bo'ylab cho'ziladigan ajratgich. */
+.dir-group-span {
+  grid-column: 1 / -1;
+  margin-top: 0.5rem;
 }
 
 @media (max-width: 1180px) {

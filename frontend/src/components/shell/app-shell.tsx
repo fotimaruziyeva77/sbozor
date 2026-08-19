@@ -490,7 +490,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
        *    doimiy yeb turardi. Kassirga doimiy kerak bo'lgan narsa —
        *    pastki panel (u `fixed`) va to'lov paneli, sarlavha emas.
        */}
-      <header className="app-surface z-40 border-b border-border md:sticky md:top-0">
+      {/*
+       * ⛔ `relative` — ichidagi `.app-fade` qatlami sarlavhaga nisbatan
+       *    joylashadi (`top: 100%`), ya'ni u sarlavhaning OSTIDAN
+       *    boshlanadi va scroll qilinayotgan kontentni yumshoq yutadi.
+       */}
+      <header className="app-surface relative z-40 border-b border-border md:sticky md:top-0">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:flex-nowrap md:justify-between">
           <div className="mr-auto min-w-0">
             <p className="text-xs text-text-muted">{t("shell.marketLabel")}</p>
@@ -510,6 +515,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <LocaleSwitcher />
           </div>
         </div>
+
+        {/*
+         * ⛔⛔ ERISH QATLAMI — Stitch'dan ko'chirilgan yagona gradient
+         *    (globals.css `.app-fade`). Sarlavha `sticky` bo'lgani uchun
+         *    kontent uning ostiga QATTIQ kesilib kirardi; bu qatlam
+         *    o'sha chekkani yo'q qiladi.
+         *
+         * ⛔ FAQAT `md` dan yuqorida: telefonda sarlavha `sticky` emas
+         *    (yuqoridagi izoh), ya'ni yutiladigan chekka ham yo'q.
+         */}
+        <div aria-hidden="true" className="app-fade hidden md:block" />
       </header>
 
       <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4 py-6">

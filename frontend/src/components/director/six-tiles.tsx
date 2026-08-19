@@ -220,7 +220,7 @@ export function SixTiles({ period }: { period: Period }) {
       >
         {rate === null ? (
           <>
-            <p className="dir-tile-value text-text-muted">—</p>
+            <p className="dir-hero-stat text-text-muted">—</p>
             <p className="dir-tile-note">
               {partial
                 ? "Bugungi patta hisobi hali yakunlanmagan — daraja kun yopilgach aniq bo'ladi."
@@ -229,8 +229,52 @@ export function SixTiles({ period }: { period: Period }) {
           </>
         ) : (
           <>
-            <div className="flex flex-wrap items-baseline gap-3">
-              <p className="dir-tile-value">{formatPercent(rate)}</p>
+            <div className="flex flex-wrap items-center gap-5">
+              {/*
+               * ⛔⛔ HALQA — Stitch dizaynidan, MATEMATIKASI AYNAN.
+               *
+               *   r = 16, aylana uzunligi 2πr = 100.53. To'lgan ulush
+               *   `dashoffset = uzunlik × (1 − ulush)` bilan beriladi.
+               *   Stitch r=44/stroke=12 ishlatgan; bizda katak kichikroq,
+               *   shuning uchun r=16/stroke=4 — NISBAT saqlangan.
+               *
+               * ⛔ Halqa BEZAK EMAS: foizni ko'rish uchun raqamni o'qish
+               *    kerak, holatni ko'rish uchun esa bir qarash yetadi.
+               *    Shuning uchun u ohang rangini oladi.
+               */}
+              <svg
+                aria-hidden="true"
+                className="size-24 shrink-0 -rotate-90"
+                viewBox="0 0 40 40"
+              >
+                <circle
+                  cx="20"
+                  cy="20"
+                  fill="none"
+                  r="16"
+                  stroke="var(--color-border)"
+                  strokeWidth="4"
+                />
+                <circle
+                  cx="20"
+                  cy="20"
+                  fill="none"
+                  r="16"
+                  stroke="currentColor"
+                  strokeDasharray={RING}
+                  strokeDashoffset={RING * (1 - Math.min(1, rate / 100))}
+                  strokeLinecap="round"
+                  strokeWidth="4"
+                  className={
+                    rateTone === "success"
+                      ? "text-success"
+                      : rateTone === "warning"
+                        ? "text-warning"
+                        : "text-danger"
+                  }
+                />
+              </svg>
+              <p className="dir-hero-stat">{formatPercent(rate)}</p>
               <Badge tone={rateTone}>
                 {rate >= 95
                   ? "To'liq yig'ilmoqda"
@@ -251,6 +295,15 @@ export function SixTiles({ period }: { period: Period }) {
           </>
         )}
       </DirectorTile>
+
+      {/*
+        ⛔⛔ KATAKLAR ENDI MA'NO BO'YICHA GURUHLANGAN (Stitch tuzilmasi,
+            260819): PUL -> NAZORAT. Oltita teng katakda ko'z qayerdan
+            boshlashni bilmasdi; guruh sarlavhasi esa savolni oldindan
+            aytadi. Guruh yorlig'i setka bo'ylab cho'ziladi
+            (`dir-group-span`) — u katak EMAS, ajratgich.
+      */}
+      <p className="dir-group-span dir-group-label">Guruh: pul</p>
 
       {/* --- 1 ------------------------------------------------------------ */}
       <DirectorTile
@@ -274,6 +327,8 @@ export function SixTiles({ period }: { period: Period }) {
           </div>
         )}
       </DirectorTile>
+
+      <p className="dir-group-span dir-group-label">Guruh: nazorat</p>
 
       {/* --- 2 ------------------------------------------------------------ */}
       <DirectorTile
