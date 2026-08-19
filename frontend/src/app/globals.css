@@ -1257,6 +1257,17 @@
   gap: 1rem;
 }
 
+/*
+ * ⛔ BOSH KATAK BUTUN QATORNI EGALLAYDI (260819) — «patta yig'ilish
+ *    darajasi». Sabab ierarxiyada: bu son panelning BOSH JAVOBI va
+ *    qolgan beshtasi uning izohi. Teng o'lchamdagi oltita katakda
+ *    ko'z qayerdan boshlashni bilmaydi — kelgan tekshiruvchi esa
+ *    javobni SEKUNDLARDA topishi kerak.
+ */
+.dir-tile-hero {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 1180px) {
   .dir-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -1,8 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useFormatter, useLocale, useNow, useTimeZone } from "next-intl";
 
+import type { Period } from "@/components/director/period";
+import { includesToday, periodRange } from "@/components/director/period";
+import { PeriodPicker } from "@/components/director/period-picker";
 import { RevenueTrend } from "@/components/director/revenue-trend";
 import { SixTiles } from "@/components/director/six-tiles";
 import { businessDayIn } from "@/components/snapshots/day-picker";
@@ -14,11 +18,20 @@ import { formatBusinessDay } from "@/lib/format-day";
  *
  * Manba MCP orqali o'qildi (claude.ai/design `7bb95baa…`, 2026-08-18).
  *
- * ⛔⛔ SARLAVHA MATNI DIZAYNDAN AYNAN OLINGAN VA U DA'VO QILADI:
- *     «kechagi kun bo'yicha yopilgan raqamlar». Bu jumla PANELNING
- *     SHARTNOMASI — u kataklardagi hamma son nima uchun kechagi kunga
- *     tegishli ekanini aytadi. Olib tashlanса, direktor raqamlarni
- *     bugungi deb o'qirdi va «tushum kam» degan xulosa chiqarardi.
+ * ⛔⛔ 260819: PANEL KECHAGI KUNGA QOTIRILGAN EDI — ENDI DAVR TANLANADI.
+ *
+ *     Dizayn sarlavhasi «kechagi kun bo'yicha yopilgan raqamlar» deb
+ *     yozardi va bu rost edi: butun panel `today - 1` ni ko'rsatardi.
+ *     Foydalanuvchi buni nuqson deb baholadi — direktor ekranga «hozir
+ *     qanday ketyapti» degan savol bilan qaraydi.
+ *
+ *     Tekshirildi: bugungi tushumni ko'rsatish MUMKIN — tushum so'rovi
+ *     to'lovlarni `payments.business_date` bo'yicha o'qiydi va «kun
+ *     yopilgan bo'lsin» degan shart u yerda yo'q (`period.ts` izohi).
+ *
+ *     Endi sarlavha TANLANGAN davrni aytadi va davr bugunni o'z ichiga
+ *     olsa «kun tugamagan» ogohlantirishi qo'shiladi — raqam kun
+ *     davomida o'sib boradi va buni aytmaslik yolg'on bo'lardi.
  *
  * ⛔ TO'RTALA TAB HAM MAVJUD MARSHRUTGA BORADI (260819):
  *    Bugun -> /dashboard · Hisobot -> /reports ·
@@ -46,18 +59,42 @@ export function DirectorPanel({ marketName }: { marketName: string }) {
   const now = useNow();
 
   const todayIso = businessDayIn(timeZone, now);
+  /*
+   * ⛔ Boshlang'ich davr — BUGUN. Foydalanuvchi talabi va u mantiqan
+   *    ham to'g'ri: panel ochilganda birinchi javob berishi kerak
+   *    bo'lgan savol «hozir qanday ketyapti».
+   *
+   * ⛔ URL ga yozilmaydi (`nuqs` ISHLATILMAYDI): bu bosh ekran va u
+   *    HAR DOIM bugundan boshlanishi kerak. URL da qolib ketgan eski
+   *    oraliq ertasiga direktorni eski raqam bilan kutib olardi.
+   */
+  const [period, setPeriod] = useState<Period>(() =>
+    periodRange("today", todayIso),
+  );
+  const partial = includesToday(period, todayIso);
 
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <div className="dir-eyebrow">{marketName} · Direktor</div>
-          <h1 className="dir-title">Bugun paneli</h1>
+          <h1 className="dir-title">Bozor paneli</h1>
           <p className="dir-tile-sub">
             {formatBusinessDay(format, todayIso, locale)}
-            {" · Toshkent vaqti · kechagi kun bo'yicha yopilgan raqamlar"}
+            {" · Toshkent vaqti"}
+            {partial
+              ? " · kun tugamagan, raqamlar oshib boradi"
+              : " · davr yopilgan"}
           </p>
         </div>
+
+        {/* ⛔ Filtr sarlavha bilan BIR QATORDA: u panelning boshqaruvi,
+            kataklarning ustidagi qo'shimcha emas. */}
+        <PeriodPicker
+          onChange={setPeriod}
+          period={period}
+          todayIso={todayIso}
+        />
       </header>
 
       <nav className="dir-tabs">
@@ -74,7 +111,7 @@ export function DirectorPanel({ marketName }: { marketName: string }) {
         )}
       </nav>
 
-      <SixTiles />
+      <SixTiles period={period} />
 
       {/*
        * ⛔ TREND KATAKLARDAN KEYIN — dizayn tartibi. Kataklar «bugun

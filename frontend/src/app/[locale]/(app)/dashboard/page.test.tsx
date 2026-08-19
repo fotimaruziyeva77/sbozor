@@ -197,12 +197,15 @@ describe("direktor", () => {
     /*
      * Sahifaning qolgani ishlaydi — bo'sh ekran EMAS.
      *
-     * ⛔ 260818: nishon `nav.dashboard` dan «Bugun paneli» ga ko'chdi.
+     * ⛔ 260818: nishon `nav.dashboard` dan panel sarlavhasiga ko'chdi.
+     * ⛔ 260819: sarlavha «Bugun paneli» -> «Bozor paneli». Sabab: panel
+     *    endi FAQAT bugunni ko'rsatmaydi — davr tanlanadi (bugun · kecha ·
+     *    7/30 kun · kalendardan oraliq), ya'ni eski nom yolg'on bo'lardi.
      *    Direktorda umumiy sarlavha ATAYIN chizilmaydi — `DirectorPanel`
      *    o'z sarlavhasini beradi va ikkalasi birga ikki marta yozilardi.
      *    DA'VO O'ZGARMADI: sahifa bo'sh emas.
      */
-    expect(screen.getByText("Bugun paneli")).toBeInTheDocument();
+    expect(screen.getByText("Bozor paneli")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(requestedPaths().length).toBeGreaterThan(0);
@@ -227,7 +230,7 @@ describe("bozor admini", () => {
     renderPage(["market_admin"], { marketIsActive: false });
 
     /* ⛔ 260818: bozor adminida ham `report_view` bor -> dizayn paneli. */
-    expect(screen.getByText("Bugun paneli")).toBeInTheDocument();
+    expect(screen.getByText("Bozor paneli")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(
       messages.dashboard.marketStatus,
     );

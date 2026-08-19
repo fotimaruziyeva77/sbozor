@@ -4,6 +4,8 @@ import { useFormatter, useLocale, useNow, useTimeZone } from "next-intl";
 
 import { DirectorTile } from "@/components/director/tile";
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
+import type { Period } from "@/components/director/period";
+import { compareNote, comparePeriod, includesToday } from "@/components/director/period";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -62,22 +64,33 @@ const RING = 2 * Math.PI * 16;
 /** Qarzdorlik va aniqlik oynasi — oxirgi 30 kun. */
 const WINDOW_DAYS = 30;
 
-export function SixTiles() {
+export function SixTiles({ period }: { period: Period }) {
   const format = useFormatter();
   const locale = useLocale();
   const timeZone = useTimeZone() ?? "Asia/Tashkent";
   const now = useNow();
 
   const todayIso = businessDayIn(timeZone, now);
-  const day = shiftIsoDay(todayIso, -1);
-  /* Oldingi hafta SHU kuni — dizayndagi «o'tgan hafta shu kuniga nisbatan». */
-  const prevWeekday = shiftIsoDay(day, -7);
+  /*
+   * ⛔⛔ DAVR ENDI TASHQARIDAN KELADI (260819). Avval bu yerda
+   *     `day = today - 1` qotirilgan edi va butun panel kechagi kunni
+   *     ko'rsatardi. Endi filtr direktorda: bugun · kecha · 7 kun ·
+   *     30 kun · kalendardan oraliq (`period.ts`, `period-picker.tsx`).
+   *
+   * ⛔ Kun kesimidagi manbalar (nomuvofiqlik, bandlik, smenalar) BITTA
+   *    kun bilan ishlaydi — ular uchun davrning OXIRGI kuni olinadi.
+   *    Ko'p kunlik davrda ular «{sana} kesimida» deb belgilanadi, ya'ni
+   *    ekranda qaysi kunniki ekani YASHIRILMAYDI.
+   */
+  const day = period.to;
+  const prev = comparePeriod(period);
+  const partial = includesToday(period, todayIso);
   const windowFrom = shiftIsoDay(day, -(WINDOW_DAYS - 1));
 
-  const revenue = useRevenueReport({ from: day, to: day });
-  const revenuePrev = useRevenueReport({ from: prevWeekday, to: prevWeekday });
+  const revenue = useRevenueReport({ from: period.from, to: period.to });
+  const revenuePrev = useRevenueReport({ from: prev.from, to: prev.to });
   const leak = useReconciliationReport(day);
-  const leakPrev = useReconciliationReport(prevWeekday);
+  const leakPrev = useReconciliationReport(shiftIsoDay(day, -7));
   const debtors = useReceivablesReport({ from: windowFrom, to: day });
   const occupancy = useOccupancyDay(day, todayIso);
   const accuracy = useAccuracyReport({ from: windowFrom, to: day });
@@ -86,13 +99,43 @@ export function SixTiles() {
   const time = format.dateTime(now, { timeStyle: "short" });
   const updated = `Yangilandi: ${time}`;
 
-  /* --- 1: kechagi tushum ------------------------------------------------- */
+  /* --- 1: tushum --------------------------------------------------------- */
   const revNow = revenue.data?.total_collected_soum ?? null;
   const revPrev = revenuePrev.data?.total_collected_soum ?? null;
   const dRev =
     revNow === null || revPrev === null
       ? null
       : deltaView(revNow, revPrev, { goodIsUp: true, bothClosed: true });
+
+  /* --- 0: YIG'ILISH DARAJASI — panelning bosh savoli ---------------------- */
+  /*
+   * ⛔⛔ BU KO'RSATKICH MAHSULOTNING O'ZI: «har band rastadan patta
+   *     TO'LIQ yig'ilyaptimi?». Yig'ilgan / hisoblangan.
+   *
+   * ⛔ HISOBLANGAN NOL BO'LSA FOIZ CHIZILMAYDI. Bugungi kun uchun
+   *    `daily_charges` hali yaratilmagan bo'lishi mumkin va u holda
+   *    `collected/0` cheksizlikka ketardi — ekranda esa u 0% yoki
+   *    100% bo'lib ko'rinardi. Hokimga ko'rsatiladigan panelda soxta
+   *    foizdan qimmatroq xato yo'q, shuning uchun bu holat OCHIQ
+   *    aytiladi: «hali hisoblanmagan».
+   */
+  const chargedNow = revenue.data?.total_charged_soum ?? null;
+  const rate =
+    revNow === null || chargedNow === null || chargedNow <= 0
+      ? null
+      : (revNow / chargedNow) * 100;
+  const gapSoum =
+    revNow === null || chargedNow === null || chargedNow <= 0
+      ? null
+      : Math.max(0, chargedNow - revNow);
+  /*
+   * ⛔ Ohang chegaralari: ≥95% yashil, ≥85% sariq, undan past qizil.
+   *    Raqamlar TAXMIN emas — ular pilot maqsadidan olingan («to'liq
+   *    yig'ilish» = 95% dan yuqori) va ular O'ZGARSA shu yerda,
+   *    bitta joyda o'zgaradi.
+   */
+  const rateTone =
+    rate === null ? "muted" : rate >= 95 ? "success" : rate >= 85 ? "warning" : "danger";
 
   /* --- 2: band, lekin to'lovsiz ------------------------------------------ */
   const leakCount = leak.data?.unpaid_count ?? null;
@@ -151,16 +194,72 @@ export function SixTiles() {
 
   if (loading) return <TilesSkeleton />;
 
+  const periodLabel =
+    period.from === period.to
+      ? formatBusinessDay(format, period.to, locale)
+      : `${formatBusinessDay(format, period.from, locale)} — ${formatBusinessDay(format, period.to, locale)}`;
+
   return (
     <div className="dir-grid">
+      {/* --- 0: YIG'ILISH DARAJASI — panelning bosh javobi ---------------- */}
+      {/*
+        ⛔ BIRINCHI O'RINDA VA BUTUN QATORNI EGALLAYDI (`dir-tile-hero`):
+           kelgan tekshiruvchi yoki hokimlik vakili ekranga qaraganda
+           BIRINCHI shu sonni ko'rishi kerak — «bozorda patta qanchalik
+           to'liq yig'ilyapti». Qolgan beshta katak shu sonning IZOHI.
+      */}
+      <DirectorTile
+        action="Kunlar kesimi"
+        className="dir-tile-hero"
+        href="/reports"
+        index={0}
+        label="Patta yig'ilish darajasi"
+        step={0}
+        sub={periodLabel}
+        updatedAt={updated}
+      >
+        {rate === null ? (
+          <>
+            <p className="dir-tile-value text-text-muted">—</p>
+            <p className="dir-tile-note">
+              {partial
+                ? "Bugungi patta hisobi hali yakunlanmagan — daraja kun yopilgach aniq bo'ladi."
+                : "Bu davr uchun hisoblangan patta topilmadi."}
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-baseline gap-3">
+              <p className="dir-tile-value">{formatPercent(rate)}</p>
+              <Badge tone={rateTone}>
+                {rate >= 95
+                  ? "To'liq yig'ilmoqda"
+                  : rate >= 85
+                    ? "Bo'shliq bor"
+                    : "Jiddiy bo'shliq"}
+              </Badge>
+            </div>
+            {/* Ikki son — foizning ORTIDAGI haqiqat: qancha kutilgan,
+                qancha tushgan va oradagi farq. */}
+            <p className="dir-tile-note">
+              {formatSoum(format, revNow ?? 0, locale)} /{" "}
+              {formatSoum(format, chargedNow ?? 0, locale)}
+              {gapSoum === null || gapSoum === 0
+                ? ""
+                : ` · yig'ilmagan: ${formatSoum(format, gapSoum, locale)}`}
+            </p>
+          </>
+        )}
+      </DirectorTile>
+
       {/* --- 1 ------------------------------------------------------------ */}
       <DirectorTile
         action="Kunlar kesimi"
         href="/reports"
         index={1}
-        label="Kechagi tushum"
+        label="Tushum"
         step={0}
-        sub={formatBusinessDay(format, day, locale)}
+        sub={periodLabel}
         updatedAt={updated}
       >
         <p className="dir-tile-value">
@@ -171,9 +270,7 @@ export function SixTiles() {
         {dRev === null ? null : (
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={dRev.tone}>{dRev.text}</Badge>
-            <span className="dir-tile-note">
-              o&apos;tgan hafta shu kuniga nisbatan
-            </span>
+            <span className="dir-tile-note">{compareNote(period)}</span>
           </div>
         )}
       </DirectorTile>

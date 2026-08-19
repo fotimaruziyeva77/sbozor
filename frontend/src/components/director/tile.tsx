@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { cn } from "@/lib/cn";
 
 /*
  * =============================================================================
@@ -45,10 +46,19 @@ export type DirectorTileProps = {
   stale?: boolean;
   /** Kirish animatsiyasining kechikish indeksi (0–5). */
   step: number;
+  /*
+   * ⛔ Qo'shimcha sinf — FAQAT setkadagi joyni o'zgartirish uchun
+   *    (`dir-tile-hero` butun qatorni egallaydi). Kartaning ICHKI
+   *    ko'rinishi bu prop bilan o'zgartirilmaydi: aks holda har
+   *    chaqiruvchi o'z katagini «biroz boshqacha» qilib, dizayn
+   *    birligi yo'qolardi.
+   */
+  className?: string;
   children: ReactNode;
 };
 
 export function DirectorTile({
+  className,
   index,
   label,
   sub,
@@ -60,7 +70,11 @@ export function DirectorTile({
   children,
 }: DirectorTileProps) {
   return (
-    <Link className="dir-tile-link" href={href} style={{ "--i": step } as never}>
+    <Link
+      className={cn("dir-tile-link", className)}
+      href={href}
+      style={{ "--i": step } as never}
+    >
       <Card className="dir-tile">
         <CardHeader className="dir-tile-head">
           <div className="flex items-start justify-between gap-3">
