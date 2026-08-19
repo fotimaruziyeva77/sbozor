@@ -128,24 +128,24 @@
    *                            AA dan O'TMAYDI.
    *
    * TAQIQ: `--color-warning` HECH QACHON matn rangi bo'lmaydi — u faqat
-   * fon. WCAG 1.4.3. warning/surface: 2.02:1 (TAQIQ dalili — matn
+   * fon. WCAG 1.4.3. warning/surface: 2.06:1 (TAQIQ dalili — matn
    * sifatida o'tmaydi). Sariq tintdagi matn uchun `bg-warning/20` ustida
-   * `text-text` — WCAG 1.4.3. text/warning@20: 15.63:1 — yoki
+   * `text-text` — WCAG 1.4.3. text/warning@20: 15.56:1 — yoki
    * `--color-warning-text`.
    */
-  --color-success: oklch(0.63 0.16 150);
-  /* WCAG 1.4.3. success-fg/success: 5.48:1 (O-06: oq varianti 3.27 edi —
+  --color-success: oklch(0.63 0.16 162);
+  /* WCAG 1.4.3. success-fg/success: 5.66:1 (O-06: oq varianti 3.27 edi —
    * M-20 latent tuzoq; juftlik kodda hali ishlatilmaydi, lekin reyestr
    * istisnosiz to'liq bo'lishi uchun quyuq qiymatga o'tkazildi —
    * hech qanday piksel o'zgarmadi). */
   --color-success-fg: oklch(0.205 0 0);
-  /* WCAG 1.4.3. success-text/success@12: 5.34:1 (avvalgi qiymat 2.87 —
+  /* WCAG 1.4.3. success-text/success@12: 5.11:1 (avvalgi qiymat 2.87 —
    * buzilish edi). */
-  --color-success-text: oklch(0.48 0.14 150);
-  --color-warning: oklch(0.78 0.15 85);
+  --color-success-text: oklch(0.48 0.14 162);
+  --color-warning: oklch(0.78 0.15 70);
   --color-warning-fg: oklch(0.205 0 0);
-  /* WCAG 1.4.3. warning-text/warning@20: 5.28:1 */
-  --color-warning-text: oklch(0.5 0.11 85);
+  /* WCAG 1.4.3. warning-text/warning@20: 5.34:1 */
+  --color-warning-text: oklch(0.5 0.11 70);
   --color-danger: oklch(0.58 0.21 27);
   --color-danger-hover: oklch(0.53 0.21 27);
   --color-danger-fg: oklch(1 0 0);
@@ -1045,12 +1045,12 @@
   --color-accent-text: oklch(0.64 0.14 255);
   /* ⛔ 09-01 T3 sozlashi: SPEC qiymati 0.62 tint fonida 4.33 berdi
    * (buzilish — tint kompozit surface-muted'dan YORUG'ROQ). 0.64 ga
-   * ko'tarildi. WCAG 1.4.3. [dark] success-text/success@12: 4.68:1 */
-  --color-success-text: oklch(0.64 0.14 150);
+   * ko'tarildi. WCAG 1.4.3. [dark] success-text/success@12: 4.72:1 */
+  --color-success-text: oklch(0.64 0.14 162);
   /* ⛔ 09-01 T3 sozlashi: SPEC qiymati 0.64 tint fonida 3.41 berdi
    * (buzilish — warning/20 tinti kompozitlarning eng yorug'i). 0.72 ga
-   * ko'tarildi. WCAG 1.4.3. [dark] warning-text/warning@20: 4.63:1 */
-  --color-warning-text: oklch(0.72 0.1 85);
+   * ko'tarildi. WCAG 1.4.3. [dark] warning-text/warning@20: 4.61:1 */
+  --color-warning-text: oklch(0.72 0.1 70);
   /* WCAG 1.4.3. [dark] danger-text/danger@12: 4.64:1 */
   --color-danger-text: oklch(0.65 0.13 27);
   /* Qorong'i fonda oq soya ishlamaydi — quyuqroq (09-UI-SPEC §5.3). */
@@ -1080,10 +1080,10 @@
    * to'yingan quyosh yorug'ida ham o'qiladi.
    * WCAG 1.4.3. [sun] accent-text/accent@10: 8.05:1 */
   --color-accent-text: oklch(0.4 0.18 255);
-  /* WCAG 1.4.3. [sun] success-text/success@12: 7.10:1 */
-  --color-success-text: oklch(0.41 0.14 150);
-  /* WCAG 1.4.3. [sun] warning-text/warning@20: 7.42:1 */
-  --color-warning-text: oklch(0.42 0.11 85);
+  /* WCAG 1.4.3. [sun] success-text/success@12: 6.80:1 */
+  --color-success-text: oklch(0.41 0.14 162);
+  /* WCAG 1.4.3. [sun] warning-text/warning@20: 7.51:1 */
+  --color-warning-text: oklch(0.42 0.11 70);
   /* WCAG 1.4.3. [sun] danger-text/danger@12: 7.55:1 */
   --color-danger-text: oklch(0.41 0.19 27);
   /* Quyoshda soya — shovqin (09-UI-SPEC §11.4). */

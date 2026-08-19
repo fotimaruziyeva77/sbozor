@@ -40,17 +40,17 @@ import assert from "node:assert/strict";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TILES = join(HERE, "..", "src", "components", "director", "six-tiles.tsx");
-const TILE = join(HERE, "..", "src", "components", "director", "tile.tsx");
+const TILE = join(HERE, "..", "src", "components", "panel", "tile.tsx");
 
 const source = readFileSync(TILES, "utf8");
 
 /**
- * `<DirectorTile … />` ochilish teglarini FAYL TARTIBIDA qaytaradi.
+ * `<PanelTile … />` ochilish teglarini FAYL TARTIBIDA qaytaradi.
  * Har biri uchun `index` (bo'lmasa `null`) va `step` olinadi.
  */
 function tiles() {
   const found = [];
-  const re = /<DirectorTile\b([\s\S]*?)>/g;
+  const re = /<PanelTile\b([\s\S]*?)>/g;
   let match;
   while ((match = re.exec(source)) !== null) {
     const props = match[1];
@@ -129,11 +129,11 @@ test("G-dir-1(d) — `index` IXTIYORIY bo'lib qoladi va berilmasa belgi chizilma
   assert.match(
     tile,
     /index\?:\s*number/,
-    "`tile.tsx` da `index` ixtiyoriy (`index?: number`) bo'lishi kerak",
+    "`panel/tile.tsx` da `index` ixtiyoriy (`index?: number`) bo'lishi kerak",
   );
   assert.match(
     tile,
     /index === undefined \? null :/,
-    "`tile.tsx` `index` berilmaganda belgini UMUMAN chizmasligi kerak",
+    "`panel/tile.tsx` `index` berilmaganda belgini UMUMAN chizmasligi kerak",
   );
 });

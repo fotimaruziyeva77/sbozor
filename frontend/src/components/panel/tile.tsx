@@ -26,6 +26,13 @@ import { cn } from "@/lib/cn";
  *   o'qilardi. Pastdagi «… →» matni havola EMAS, u tashqi havolaning
  *   affordansi.
  *
+ * ⛔ NOMI `PanelTile`, `DirectorTile` EMAS (260819): bu karta Stitch
+ *    dizaynining ANATOMIYASI — yorliq, kichik qator, tartib raqami,
+ *    qiymat, ajratgich, «yangilandi» va amal havolasi. Uni direktor
+ *    paneli ham, bozor admini paneli ham AYNAN bir xil ishlatadi.
+ *    `director/` katalogida qolgan bo'lsa, admin paneli «direktor»
+ *    komponentini import qilib turgandek ko'rinardi.
+ *
  * ⛔ Tartib raqami (1–6) `Badge tone="muted"` da — dizayn shunday
  *    qiladi va u tasodifiy emas: direktor telefonda «uchinchi katakka
  *    qara» deb aytishi mumkin bo'lishi kerak.
@@ -40,7 +47,7 @@ import { cn } from "@/lib/cn";
  * =============================================================================
  */
 
-export type DirectorTileProps = {
+export type PanelTileProps = {
   /**
    * Katakning tartib raqami — dizaynda o'ng yuqoridagi belgi.
    * Berilmasa belgi chizilmaydi (bosh katak shunday).
@@ -68,7 +75,7 @@ export type DirectorTileProps = {
   children: ReactNode;
 };
 
-export function DirectorTile({
+export function PanelTile({
   className,
   index,
   label,
@@ -79,7 +86,7 @@ export function DirectorTile({
   stale = false,
   step,
   children,
-}: DirectorTileProps) {
+}: PanelTileProps) {
   return (
     <Link
       className={cn("dir-tile-link", className)}

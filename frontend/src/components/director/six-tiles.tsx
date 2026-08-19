@@ -2,7 +2,7 @@
 
 import { useFormatter, useLocale, useNow, useTimeZone } from "next-intl";
 
-import { DirectorTile } from "@/components/director/tile";
+import { PanelTile } from "@/components/panel/tile";
 import { cn } from "@/lib/cn";
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
 import type { Period } from "@/components/director/period";
@@ -209,7 +209,7 @@ export function SixTiles({ period }: { period: Period }) {
            BIRINCHI shu sonni ko'rishi kerak — «bozorda patta qanchalik
            to'liq yig'ilyapti». Qolgan beshta katak shu sonning IZOHI.
       */}
-      <DirectorTile
+      <PanelTile
         action="Kunlar kesimi"
         className="dir-tile-hero"
         href="/reports"
@@ -332,7 +332,7 @@ export function SixTiles({ period }: { period: Period }) {
             </div>
           </>
         )}
-      </DirectorTile>
+      </PanelTile>
 
       {/*
         ⛔⛔ KATAKLAR ENDI MA'NO BO'YICHA GURUHLANGAN (Stitch tuzilmasi,
@@ -357,7 +357,7 @@ export function SixTiles({ period }: { period: Period }) {
       <p className="dir-group-span dir-group-label">Guruh: pul</p>
 
       {/* --- 1 ------------------------------------------------------------ */}
-      <DirectorTile
+      <PanelTile
         action="Kunlar kesimi"
         href="/reports"
         index={1}
@@ -377,10 +377,10 @@ export function SixTiles({ period }: { period: Period }) {
             <span className="dir-tile-note">{compareNote(period)}</span>
           </div>
         )}
-      </DirectorTile>
+      </PanelTile>
 
       {/* --- 3 ------------------------------------------------------------ */}
-      <DirectorTile
+      <PanelTile
         action="Qarzdorlar reestri"
         href="/reports"
         index={2}
@@ -418,10 +418,10 @@ export function SixTiles({ period }: { period: Period }) {
                   : ` · eng eski qarz ${formatBusinessDay(format, oldestDebt, locale)}`
               }`}
         </span>
-      </DirectorTile>
+      </PanelTile>
 
       {/* --- 6 ------------------------------------------------------------ */}
-      <DirectorTile
+      <PanelTile
         action="Smena yozuvlari"
         href="/reports"
         index={3}
@@ -449,12 +449,12 @@ export function SixTiles({ period }: { period: Period }) {
             </span>
           </div>
         )}
-      </DirectorTile>
+      </PanelTile>
 
       <p className="dir-group-span dir-group-label">Guruh: nazorat</p>
 
       {/* --- 2 ------------------------------------------------------------ */}
-      <DirectorTile
+      <PanelTile
         action="Kamera kadrlari"
         href="/reports/compare"
         index={4}
@@ -480,10 +480,10 @@ export function SixTiles({ period }: { period: Period }) {
           ) : null}
           {dLeak === null ? null : <Badge tone={dLeak.tone}>{dLeak.text}</Badge>}
         </div>
-      </DirectorTile>
+      </PanelTile>
 
       {/* --- 4 ------------------------------------------------------------ */}
-      <DirectorTile
+      <PanelTile
         action="Rastalar ro'yxati"
         href="/stalls"
         index={5}
@@ -535,10 +535,10 @@ export function SixTiles({ period }: { period: Period }) {
             </p>
           </div>
         </div>
-      </DirectorTile>
+      </PanelTile>
 
       {/* --- 5 ------------------------------------------------------------ */}
-      <DirectorTile
+      <PanelTile
         action="O'lchov usuli"
         href="/reports"
         index={6}
@@ -580,7 +580,7 @@ export function SixTiles({ period }: { period: Period }) {
             </span>
           )}
         </div>
-      </DirectorTile>
+      </PanelTile>
 
     </div>
   );

@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 
 import { CashierBrief } from "@/components/dashboard/cashier-brief";
 import { MarketStatusCard } from "@/components/dashboard/market-status-card";
+import { AdminPanel } from "@/components/admin/panel";
 import { DirectorPanel } from "@/components/director/panel";
 import { HeadlineCard } from "@/components/headline/headline-card";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -173,7 +174,34 @@ export default function DashboardPage() {
        *    bozorning kunlik tushumi ko'rinmasligi kerak.
        * =====================================================================
        */}
-      {hasPermission(roles, "report_view") && principal?.marketId ? (
+      {/*
+       * =====================================================================
+       * ⛔⛔ BOSH EKRAN ROLGA QARAB IKKI XIL PANEL BERADI (260819).
+       * =====================================================================
+       * Bugungacha bozor admini ham DIREKTOR panelini ko'rardi — ikkalasida
+       * ham `report_view` bor. Lekin ular boshqa ikki savolga javob beradi:
+       *
+       *   direktor     -> «pul to'liq yig'ilyaptimi?»   (hisobdorlik)
+       *   bozor admini -> «bozorim ishlashga tayyormi?» (sozlash)
+       *
+       * ⛔ DARVOZA AYNAN `tariff_manage` VA TANLOV ASOSLANGAN: bozorni
+       *    KIM boshqarsa, admin panelini o'sha ko'radi. Bu huquq
+       *    `market_admin` va `platform_admin` da bor, direktorda YO'Q
+       *    (D-07) — ya'ni ajratish rol nomiga emas, HUQUQQA tayanadi va
+       *    yangi rol qo'shilganda o'z-o'zidan to'g'ri ishlaydi.
+       *
+       * ⚠ Bozor admini pulni YO'QOTMAYDI: `report_view` unda qoladi va
+       *   «Hisobotlar» menyuda turadi. Yo'qolgani — bosh ekrandagi
+       *   takroriy panel, ma'lumot emas.
+       * =====================================================================
+       */}
+      {principal?.marketId && hasPermission(roles, "tariff_manage") ? (
+        <AdminPanel
+          marketId={principal.marketId}
+          marketName={principal.marketName ?? "Bozor"}
+          roleLabel={roleLabels.join(" · ")}
+        />
+      ) : hasPermission(roles, "report_view") && principal?.marketId ? (
         <DirectorPanel
           marketName={principal.marketName ?? "Bozor"}
           /* Rollar TO'PLAM (D-05): bir odam ham direktor, ham admin
