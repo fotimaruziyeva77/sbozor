@@ -1442,7 +1442,11 @@
     "leakAmount": "Yig'ilmagan summa: {amount} so'm",
     "leakUnregistered": "Ro'yxatdan o'tmagan savdo: {count} ta",
     "occupancyEmpty": "Bandlik hali o'lchanmagan",
-    "updatedAt": "Yangilandi: {time}"
+    "updatedAt": "Yangilandi: {time}",
+    "shiftOpenSince": "Ochiq — {time} dan beri",
+    "shiftNone": "Smena ochilmagan",
+    "shiftNoneHint": "Patta yozish uchun avval smenani oching — «Patta yig‘ish» sahifasidan.",
+    "blindHint": "Naqdni smena yopilganda o‘zingiz sanaysiz. Tizim o‘z summasini ko‘rsatmaydi — shuning uchun bu yerda yig‘indi yo‘q."
   },
   "reports": {
     "title": "Hisobotlar",

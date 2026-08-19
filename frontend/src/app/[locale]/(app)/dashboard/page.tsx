@@ -3,6 +3,7 @@
 import { ScrollText, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { CashierBrief } from "@/components/dashboard/cashier-brief";
 import { MarketStatusCard } from "@/components/dashboard/market-status-card";
 import { DirectorPanel } from "@/components/director/panel";
 import { HeadlineCard } from "@/components/headline/headline-card";
@@ -108,6 +109,32 @@ export default function DashboardPage() {
       {hasPermission(roles, "report_view") ? null : (
         <HeadlineCard marketId={principal?.marketId ?? null} />
       )}
+
+      {/*
+       * =====================================================================
+       * ⛔⛔ KASSIR BRIFI — `HeadlineCard` DAN BEVOSITA KEYIN (260819).
+       * =====================================================================
+       * Kassirning bosh ekranida bitta son turardi va boshqa hech nima:
+       * u yerdan ish boshlab ham, boshliqqa javob berib ham bo'lmasdi.
+       * Endi tepada KVITANSIYA SONI (`HeadlineCard`), ostida esa SMENA
+       * HOLATI + kunlik ishga kirish tugmasi turadi — ikkalasi birga
+       * «nechta yozdim» va «qachondan beri ishdaman» savollariga javob
+       * beradi.
+       *
+       * ⛔ SHART KOMPONENTDAN TASHQARIDA: huquqsiz sessiyada
+       *    `GET /shifts/open` ga so'rov HAM ketmasin (kodbazadagi
+       *    `MarketStatusCard` / `DirectorPanel` naqshi).
+       *
+       * ⛔ DARVOZA AYNAN `payment_create`: u kassirda bor, direktorda
+       *    esa YO'Q — ya'ni direktorning dizayn paneli tegilmaydi va
+       *    ikkita boshqa-boshqa «bosh ekran» paydo bo'lmaydi.
+       *
+       * ⛔ SUMMA CHIQARILMAYDI (komponent sarlavhasidagi izoh): kassir
+       *    smenani KO'R sanaydi va yig'indini ko'rsatish o'sha
+       *    mexanizmni bir qatorda bekor qilardi.
+       * =====================================================================
+       */}
+      {hasPermission(roles, "payment_create") ? <CashierBrief /> : null}
 
       {/*
        * Y-2 IKKI KARTASI — `HeadlineCard` dan KEYIN, `MarketStatusCard`
