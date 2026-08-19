@@ -1,4 +1,4 @@
-import type { MarketingLocale } from "@/components/marketing/locale-switcher";
+import type { ApiLocale } from "@/lib/api-types";
 
 /*
  * =============================================================================
@@ -23,6 +23,12 @@ import type { MarketingLocale } from "@/components/marketing/locale-switcher";
  *    chiziqni beradi (12 → 8.1 → 7.9 → 3.9 → 3.8). Tartib buzilsa
  *    bayroq ham buziladi.
  *
+ * ⛔ 260819: `components/ui/` GA KO'CHIRILDI. Avval u faqat landing
+ *    uchun edi; endi ish qobig'ining sarlavhasi ham shu bayroqni
+ *    ishlatadi (foydalanuvchi: «tillar landing pagedagidek bo'lsin»).
+ *    Ikki nusxa saqlash ikkita bayroq chizish demakdir va ular
+ *    jimgina ajralib ketardi.
+ *
  * ⛔ 12 ta yulduz ATAYIN yo'q: 24px kenglikda ular yarim pikseldan
  *    kichik bo'lib, faqat loyqalik qo'shardi. Yarim oy qoladi — u shu
  *    o'lchamda ham taniladi.
@@ -35,7 +41,7 @@ export function LocaleFlag({
   locale,
 }: {
   className?: string;
-  locale: MarketingLocale;
+  locale: ApiLocale;
 }) {
   const shared = {
     "aria-hidden": "true",

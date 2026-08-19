@@ -63,11 +63,18 @@ function renderToggle(): void {
   );
 }
 
-/** Faol (aria-current="true") tugmaning matni. */
+/*
+ * Faol (aria-current="true") tugmaning QULAY NOMI.
+ *
+ * ⛔ `textContent` EMAS (260819): tugmalar endi IKONKALI va matnsiz —
+ *    yorliq `aria-label` da yashaydi (o'lchov: uchta so'z guruhni 208px
+ *    qilib, 375px ekranda sarlavhani yorib chiqargan edi). `textContent`
+ *    bo'sh satr qaytarardi va test yashil-yolg'on bo'lib qolardi.
+ */
 function activeButtonName(): string | null {
   const group = screen.getByRole("group", { name: LABEL_GROUP });
   const active = group.querySelector('[aria-current="true"]');
-  return active?.textContent ?? null;
+  return active?.getAttribute("aria-label") ?? null;
 }
 
 beforeEach(() => {

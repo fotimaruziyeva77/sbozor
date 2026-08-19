@@ -468,20 +468,44 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
+      {/*
+       * ⛔⛔ SARLAVHA TELEFONDA IKKI QATOR (260819) — VA BU O'LCHOVDAN
+       *     KELIB CHIQQAN QAROR, DID EMAS.
+       *
+       *     Kassir hisobi bilan 375px ekranda o'lchandi: sarlavhaning
+       *     ichki kengligi 625px edi, ya'ni ekrandan 250px KENG.
+       *     Aybdorlar: tema guruhi 208px (uchta so'z) va til guruhi
+       *     258px (uchta endonim × 80px). Kassir esa PROJECT.md
+       *     cheklovi bo'yicha aynan telefonda ishlaydi.
+       *
+       *     Ikonka va ixcham kod ~200px tejadi, lekin 375px da hammasi
+       *     BIR QATORGA baribir sig'maydi (brend nomi ham kerak).
+       *     Shuning uchun: 1-qator — bozor nomi + foydalanuvchi menyusi,
+       *     2-qator — tema + til. Landing sarlavhasi bilan AYNI yechim.
+       *
+       * ⛔ `sticky` FAQAT `md` dan yuqorida: ikki qatorli sarlavha ~108px
+       *    va uni telefonda yopishtirib qo'yish ekranning 13% ini
+       *    doimiy yeb turardi. Kassirga doimiy kerak bo'lgan narsa —
+       *    pastki panel (u `fixed`) va to'lov paneli, sarlavha emas.
+       */}
+      <header className="z-40 border-b border-border bg-surface/90 backdrop-blur md:sticky md:top-0">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:flex-nowrap md:justify-between">
+          <div className="mr-auto min-w-0">
             <p className="text-xs text-text-muted">{t("shell.marketLabel")}</p>
             {/* D-16: bozor nomi DB kontenti — tarjima qilinmaydi. */}
             <p className="truncate text-sm font-semibold">
               {principal?.marketName ?? t("common.appName")}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          {/* Foydalanuvchi menyusi — mobil 1-qatorning o'ng chekkasida. */}
+          <div className="order-2 shrink-0 md:order-3">
+            <UserMenu />
+          </div>
+          {/* Tema + til — mobilda O'Z qatorida, `md` dan bir qatorda. */}
+          <div className="order-3 flex w-full shrink-0 items-center justify-end gap-2 md:order-2 md:w-auto">
             {/* 09-UI-SPEC §11.2: tema almashtirgich LocaleSwitcher YONIDA. */}
             <ThemeToggle />
             <LocaleSwitcher />
-            <UserMenu />
           </div>
         </div>
       </header>

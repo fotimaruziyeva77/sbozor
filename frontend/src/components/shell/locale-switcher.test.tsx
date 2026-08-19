@@ -196,7 +196,16 @@ describe("LocaleSwitcher — sirg'aluvchi indikator (§12.9)", () => {
       .getAllByRole("button")
       .filter((button) => button.getAttribute("aria-current") === "true");
     expect(current).toHaveLength(1);
-    expect(current[0]?.textContent).toBe(LOCALE_LABELS["uz-Latn"]);
+    /*
+     * ⛔ `textContent` EMAS, QULAY NOM (260819): tugma ichida endi ikki
+     *    yozuv bor — ixcham kod (`xl` dan past) va endonim (`xl` dan
+     *    boshlab). jsdom Tailwind sinfini ko'rmaydi, ya'ni `textContent`
+     *    ikkalasini birga qaytaradi («UZO'zbekcha»). Barqaror kontrakt —
+     *    `aria-label`, u har doim endonim.
+     */
+    expect(current[0]?.getAttribute("aria-label")).toBe(
+      LOCALE_LABELS["uz-Latn"],
+    );
   });
 
   test("til almashtirish oqimi O'ZGARMAGAN: replace + sessiyada PATCH /me", () => {

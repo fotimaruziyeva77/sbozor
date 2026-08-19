@@ -1506,10 +1506,30 @@
  *   40px ham 44px chegarasidan past va u yerda dizayn desktop
  *   ko'rinishini mo'ljallagan.
  * ========================================================================== */
-@media (pointer: coarse) {
-  button,
-  [role="button"],
-  a[href] {
-    min-height: 2.75rem;
+/*
+ * ⛔⛔ `@layer base` ICHIDA — VA BU MAJBURIY, BEZAK EMAS (260819 tuzatma).
+ *
+ *     Avval bu blok QATLAMSIZ turardi. CSS kaskadida qatlamsiz qoida
+ *     HAR QANDAY qatlamli qoidadan kuchli, ya'ni u Tailwind
+ *     utilitalarini ham yengardi. Natijada qoida «kamida 44px» emas,
+ *     «AYNAN 44px» bo'lib ishlardi va o'zidan KATTA nishonlarni
+ *     KICHRAYTIRARDI:
+ *
+ *       · landing birlamchi CTA (`min-h-14`, 56px) -> 44px  [o'lchandi]
+ *       · mobil pastki panel havolalari (`min-h-14`) -> 44px [o'lchandi]
+ *
+ *     `@layer base` ichida esa utilities (keyingi qatlam) yutadi:
+ *     `min-h-14` o'z 56px ini qaytaradi, `min-h`i YO'Q tugmalar esa
+ *     44px polini oladi. Qoidaning asl maqsadi — `h-9`/`h-10` bilan
+ *     yozilgan tugmalar (ular BALANDLIK beradi, minimal balandlik
+ *     emas) — buzilmaydi: `min-height` `height` dan ustun turadi.
+ */
+@layer base {
+  @media (pointer: coarse) {
+    button,
+    [role="button"],
+    a[href] {
+      min-height: 2.75rem;
+    }
   }
 }

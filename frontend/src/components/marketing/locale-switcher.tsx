@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { usePathname, useRouter } from "@/i18n/navigation";
-import { LocaleFlag } from "@/components/marketing/locale-flag";
+import { LocaleFlag } from "@/components/ui/locale-flag";
 import { cn } from "@/lib/cn";
 
 /*

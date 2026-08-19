@@ -8,10 +8,12 @@ import { usePathname, useRouter } from "@/i18n/navigation";
 import { apiFetch } from "@/lib/api-client";
 import type { ApiLocale } from "@/lib/api-types";
 import {
+  LOCALE_CODES,
   LOCALE_LABELS,
   LOCALES,
   meLocaleResponseSchema,
 } from "@/lib/api-types";
+import { LocaleFlag } from "@/components/ui/locale-flag";
 import { cn } from "@/lib/cn";
 import { useAuthStore } from "@/lib/auth-store";
 
@@ -66,8 +68,27 @@ const ME_PATH = "/me";
  *
  * ⚠ Yorliqlar ENDONIM bo'lib QOLADI (yuqoridagi 01-08 qarori) — 09-06
  *   rejasi «UZ/ЎЗ/RU» deb taxmin qilgan edi, mavjud kontrakt yutdi.
- *   `w-20` (80px) eng uzun endonim («O'zbekcha», ~55px @ text-xs) uchun
- *   yetarli; kenglik ENDONIM O'ZGARSA qayta ko'riladi.
+ *
+ * ⛔⛔ 260819 — IKKI O'LCHAM, VA INDIKATOR MEXANIZMI SAQLANDI.
+ *
+ *     Uchta endonim × 80px = 240px va 375px ekranda sarlavha ekrandan
+ *     yorib chiqardi (Xromda o'lchandi: sarlavha ichki kengligi 625px,
+ *     ekran 375px). Kassir esa aynan telefonda ishlaydi.
+ *
+ *     Shuning uchun kenglik RESPONSIV bo'ldi: `w-11` (44px, ixcham kod
+ *     UZ/ЎЗ/RU va ayni paytda to'g'ri barmoq nishoni) va `xl:w-24`
+ *     (1280px dan boshlab to'liq endonim). Ikkala yozuv ham DOM'da
+ *     turadi, CSS bittasini yashiradi — JS o'lchovi ham, hidratatsiya
+ *     farqi ham yo'q.
+ *
+ *     ⛔ §12.9 SIRG'ALUVCHI INDIKATORI BUZILMADI va bu tasodif emas:
+ *       indikator o'z kengligining `100%` iga siljiydi, ya'ni tugma
+ *       bilan BIR XIL responsiv sinfni olsa matematika o'zgarmaydi.
+ *       Shuning uchun `BUTTON_WIDTH_CLASS` ikkalasiga ham beriladi.
+ *
+ * ⛔ BAYROQ — landing bilan bir xil (foydalanuvchi: «tillar landing
+ *    pagedagidek bo'lsin»): u TANLANGAN tilnikini ko'rsatadi va guruhda
+ *    BITTA turadi (har tugmada takrorlansa ola-bula bo'lardi).
  *
  * ⚠ Reduced-motion: global `@media (prefers-reduced-motion: reduce)` bloki
  *   (09-01) `transition-duration` ni 0.01ms ga tushiradi — indikator
@@ -81,7 +102,7 @@ const ME_PATH = "/me";
  */
 
 /** Tugma VA indikatorning umumiy kenglik sinfi — bitta haqiqat manbai. */
-const BUTTON_WIDTH_CLASS = "w-20";
+const BUTTON_WIDTH_CLASS = "w-11 xl:w-24";
 
 export function LocaleSwitcher() {
   const t = useTranslations("common");
@@ -120,9 +141,13 @@ export function LocaleSwitcher() {
   return (
     <div
       aria-label={t("languageLabel")}
-      className="relative inline-flex items-center gap-1 rounded-md border border-border bg-surface p-1"
+      className="relative inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-surface p-1 pl-2"
       role="group"
     >
+      <LocaleFlag
+        className="h-3 w-5 shrink-0 rounded-[1px] ring-1 ring-black/20"
+        locale={active as ApiLocale}
+      />
       {/*
         * Indikator tugmalardan OLDIN chiziladi: absolut element bir xil
         * stacking kontekstda keyingi `relative` tugmalar OSTIDA qoladi —
@@ -134,7 +159,20 @@ export function LocaleSwitcher() {
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute inset-y-1 left-1 rounded-sm bg-accent",
+            /*
+             * ⛔ `left-8` = 32px — VA BU RAQAM XROMDA O'LCHANDI, TAXMIN
+             *    EMAS. Absolyut element `left` ni konteynerning PADDING
+             *    QUTISIDAN (ya'ni chegaradan ichkaridan) sanaydi, demak:
+             *    `pl-2` (8) + bayroq `w-5` (20) + `gap-1` (4) = 32px.
+             *
+             *    Birinchi urinishda `left-9` (36px) yozilgan edi va
+             *    indikator faol tugmadan AYNAN 4px o'ngda turardi
+             *    (o'lchandi: tugma x=439, indikator x=443). jsdom
+             *    `getBoundingClientRect()` uchun 0 qaytaradi, ya'ni bu
+             *    siljishni test USHLAY OLMAYDI — yagona tekshiruv
+             *    brauzerdagi o'lchov.
+             */
+            "pointer-events-none absolute inset-y-1 left-8 rounded-sm bg-accent",
             "transition-transform",
             BUTTON_WIDTH_CLASS,
           )}
@@ -152,6 +190,13 @@ export function LocaleSwitcher() {
         return (
           <button
             aria-current={isActive ? "true" : undefined}
+            /*
+             * ⛔ OSHKORA `aria-label` (260819): tugma ichida endi IKKI
+             *    yozuv bor (kod + endonim) va biri CSS bilan yashiringan.
+             *    Ularsiz qulay nom «UZO'zbekcha» bo'lib chiqardi —
+             *    skrinrider aynan shuni o'qirdi. Nom har doim ENDONIM.
+             */
+            aria-label={LOCALE_LABELS[code]}
             className={cn(
               "relative rounded-sm px-2 py-1 text-xs font-semibold transition-colors",
               "disabled:pointer-events-none disabled:opacity-50",
@@ -167,7 +212,8 @@ export function LocaleSwitcher() {
             onClick={() => change(code)}
             type="button"
           >
-            {LOCALE_LABELS[code]}
+            <span className="xl:hidden">{LOCALE_CODES[code]}</span>
+            <span className="hidden xl:inline">{LOCALE_LABELS[code]}</span>
           </button>
         );
       })}

@@ -1,5 +1,7 @@
 "use client";
 
+import { Contrast, Moon, Sun } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { cn } from "@/lib/cn";
@@ -21,7 +23,30 @@ import { setTheme, THEMES, useTheme } from "@/lib/theme";
  *
  * ⛔ Tema o'zgarishida toast CHIQMAYDI (§15) — natija ekranning o'zida
  *    ko'rinadi; qo'shimcha signal ma'noni suyultirardi.
+ *
+ * ⛔⛔ 260819: YORLIQ -> IKONKA (foydalanuvchi talabi + o'lchov).
+ *
+ *     Uchta so'z («Yorug'» · «Tungi» · «Quyosh ostida») guruhni 208px
+ *     qilardi va 375px ekranda sarlavha ekrandan yorib chiqardi
+ *     (Xromda o'lchandi: sarlavha ichki kengligi 625px). Ikonkali
+ *     guruh 132px — 76px tejaldi va tanlov UZOQDAN taniladi.
+ *
+ * ⛔ MATN YO'QOLMAYDI: har tugmada `aria-label` VA `title` — skrinrider
+ *    ham, sichqoncha ostidagi maslahat ham o'sha tarjimani beradi.
+ *    Ikonka yolg'iz signal EMAS (§15.12).
+ *
+ * ⛔ IKONKA TANLOVI MA'NOLI: quyosh — yorug', oy — tungi, KONTRAST
+ *    doirasi — «quyosh ostida». Uchinchisiga yana quyosh qo'yish
+ *    («SunMedium») birinchisi bilan bir xil o'qilardi; kontrast belgisi
+ *    esa rejimning MAZMUNINI aytadi — maksimal kontrast.
  */
+
+/** Tema -> ikonka. Reyestr `THEMES` bilan bir xil tartibda o'qiladi. */
+const THEME_ICONS: Readonly<Record<(typeof THEMES)[number], LucideIcon>> = {
+  light: Sun,
+  dark: Moon,
+  sun: Contrast,
+};
 
 export function ThemeToggle() {
   const t = useTranslations("theme");
@@ -30,25 +55,28 @@ export function ThemeToggle() {
   return (
     <div
       aria-label={t("label")}
-      className="inline-flex items-center gap-1 rounded-md border border-border bg-surface p-1"
+      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-surface p-1"
       role="group"
     >
       {THEMES.map((theme) => {
         const isActive = theme === active;
+        const Icon = THEME_ICONS[theme];
         return (
           <button
             aria-current={isActive ? "true" : undefined}
+            aria-label={t(theme)}
             className={cn(
-              "min-h-11 rounded-sm px-2 text-xs font-semibold transition-colors",
+              "inline-flex size-11 items-center justify-center rounded-sm transition-colors",
               isActive
                 ? "bg-accent text-accent-fg"
                 : "text-text-muted hover:bg-surface-muted hover:text-text",
             )}
             key={theme}
             onClick={() => setTheme(theme)}
+            title={t(theme)}
             type="button"
           >
-            {t(theme)}
+            <Icon aria-hidden="true" className="size-4.5" strokeWidth={2} />
           </button>
         );
       })}

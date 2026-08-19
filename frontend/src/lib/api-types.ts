@@ -33,6 +33,23 @@ export const LOCALE_LABELS: Readonly<Record<ApiLocale, string>> = {
   ru: "Русский",
 };
 
+/*
+ * IXCHAM KOD — tor ekranlar uchun (260819), har biri O'Z yozuvida.
+ *
+ * ⛔ Endonim (`LOCALE_LABELS`) O'RNIGA emas, YONIDA: 1280px dan keng
+ *    ekranda to'liq nom qoladi (01-08 qarori kuchda), undan torda esa
+ *    kod chiqadi. Uchta endonim 240px yeydi va telefonda sarlavhani
+ *    yorib chiqadi — bu XROMDA o'lchandi (375px da sarlavha 625px edi).
+ *
+ * ⛔ Landing bilan BIR XIL ko'rinish (foydalanuvchi talabi): u yerda ham
+ *    bayroq + kod, keng ekranda to'liq nom.
+ */
+export const LOCALE_CODES: Readonly<Record<ApiLocale, string>> = {
+  "uz-Latn": "UZ",
+  "uz-Cyrl": "ЎЗ",
+  ru: "RU",
+};
+
 /**
  * Pul yordamchisi (Pitfall 7).
  *

@@ -201,7 +201,21 @@ export function PaymentRow({
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      {/*
+       * ⛔⛔ `flex-wrap` VA `shrink-0` YO'Q (260819) — TELEFONDA
+       *     O'LCHANGAN NUQSONNING TUZATMASI.
+       *
+       *     Bu guruh badge + «Sotuvchiga ko'rsatish» + «Bekor qilish»
+       *     ni tutadi va ularning yig'indisi 376px. `shrink-0` bilan u
+       *     hech qachon siqilmasdi va 375px ekranda BUTUN SAHIFANI
+       *     409px ga cho'zib yuborardi — kassir gorizontal scroll
+       *     qilishga majbur bo'lardi. Xromda o'lchandi.
+       *
+       *     `flex-wrap` bilan guruh tor ekranda ikki satrga bo'linadi;
+       *     keng ekranda esa bir qatorda qolaveradi, ya'ni desktop
+       *     ko'rinishi O'ZGARMAYDI.
+       */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
         {/*
          * ⛔ Rang YAGONA signal emas: badge doim MATN tashiydi (§12.4).
          *    Va endi UCH holat UCHTA BOSHQA matn beradi — «bekor
