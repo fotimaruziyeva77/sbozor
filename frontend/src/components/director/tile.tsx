@@ -29,12 +29,23 @@ import { cn } from "@/lib/cn";
  * ⛔ Tartib raqami (1–6) `Badge tone="muted"` da — dizayn shunday
  *    qiladi va u tasodifiy emas: direktor telefonda «uchinchi katakka
  *    qara» deb aytishi mumkin bo'lishi kerak.
+ *
+ * ⛔⛔ VA AYNAN SHU SABAB RAQAM O'QISH TARTIBIGA BOG'LIQ. Kataklar
+ *     qayta tartiblanganda raqamlar eski joyida qolib, ekranda
+ *     «1 · 3 · 6 · 2 · 4 · 5» bo'lib o'qildi [O'LCHANDI 260819,
+ *     brauzerda]. Raqam o'z va'dasini bajarmasa u shovqin — shuning
+ *     uchun `index` endi IXTIYORIY va u BERILMASA belgi umuman
+ *     chizilmaydi. Bosh katak («yig'ilish darajasi») raqamsiz: u
+ *     ro'yxatning a'zosi emas, u ro'yxat javob beradigan SAVOL.
  * =============================================================================
  */
 
 export type DirectorTileProps = {
-  /** Katakning tartib raqami — dizaynda o'ng yuqoridagi belgi. */
-  index: number;
+  /**
+   * Katakning tartib raqami — dizaynda o'ng yuqoridagi belgi.
+   * Berilmasa belgi chizilmaydi (bosh katak shunday).
+   */
+  index?: number;
   label: string;
   /** Sarlavha ostidagi kichik qator: sana yoki manba. */
   sub: string;
@@ -82,7 +93,7 @@ export function DirectorTile({
               <p className="dir-tile-label">{label}</p>
               <p className="dir-tile-sub">{sub}</p>
             </div>
-            <Badge tone="muted">{index}</Badge>
+            {index === undefined ? null : <Badge tone="muted">{index}</Badge>}
           </div>
         </CardHeader>
 

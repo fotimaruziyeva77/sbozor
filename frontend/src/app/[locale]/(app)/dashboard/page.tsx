@@ -174,7 +174,12 @@ export default function DashboardPage() {
        * =====================================================================
        */}
       {hasPermission(roles, "report_view") && principal?.marketId ? (
-        <DirectorPanel marketName={principal.marketName ?? "Bozor"} />
+        <DirectorPanel
+          marketName={principal.marketName ?? "Bozor"}
+          /* Rollar TO'PLAM (D-05): bir odam ham direktor, ham admin
+             bo'lishi mumkin — ikkalasi ham yoziladi. */
+          roleLabel={roleLabels.join(" · ")}
+        />
       ) : null}
 
       {/*

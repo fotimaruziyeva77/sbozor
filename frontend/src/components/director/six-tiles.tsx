@@ -213,7 +213,6 @@ export function SixTiles({ period }: { period: Period }) {
         action="Kunlar kesimi"
         className="dir-tile-hero"
         href="/reports"
-        index={0}
         label="Patta yig'ilish darajasi"
         step={0}
         sub={periodLabel}
@@ -363,7 +362,7 @@ export function SixTiles({ period }: { period: Period }) {
         href="/reports"
         index={1}
         label="Tushum"
-        step={0}
+        step={1}
         sub={periodLabel}
         updatedAt={updated}
       >
@@ -384,7 +383,7 @@ export function SixTiles({ period }: { period: Period }) {
       <DirectorTile
         action="Qarzdorlar reestri"
         href="/reports"
-        index={3}
+        index={2}
         label="Qarz jami"
         step={2}
         sub={`Reestr holati · ${formatBusinessDay(format, todayIso, locale)}`}
@@ -425,9 +424,9 @@ export function SixTiles({ period }: { period: Period }) {
       <DirectorTile
         action="Smena yozuvlari"
         href="/reports"
-        index={6}
+        index={3}
         label="Kassirlar"
-        step={5}
+        step={3}
         sub={`${formatBusinessDay(format, day, locale)} · smenalar`}
         updatedAt={updated}
       >
@@ -458,9 +457,9 @@ export function SixTiles({ period }: { period: Period }) {
       <DirectorTile
         action="Kamera kadrlari"
         href="/reports/compare"
-        index={2}
+        index={4}
         label="Band, lekin to'lovsiz"
-        step={1}
+        step={4}
         sub={`${formatBusinessDay(format, day, locale)} · nazoratchi ko'rgan rastalar`}
         updatedAt={updated}
       >
@@ -487,9 +486,9 @@ export function SixTiles({ period }: { period: Period }) {
       <DirectorTile
         action="Rastalar ro'yxati"
         href="/stalls"
-        index={4}
+        index={5}
         label="Bandlik"
-        step={3}
+        step={5}
         sub={formatBusinessDay(format, day, locale)}
         updatedAt={updated}
       >
@@ -542,10 +541,10 @@ export function SixTiles({ period }: { period: Period }) {
       <DirectorTile
         action="O'lchov usuli"
         href="/reports"
-        index={5}
+        index={6}
         label="AI aniqligi"
         stale={accStale}
-        step={4}
+        step={6}
         sub={
           acc === undefined
             ? "O'lchov yo'q"

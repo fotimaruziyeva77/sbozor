@@ -52,7 +52,23 @@ const TABS = [
   { href: "/reports/audit", label: "Tekshiruv uchun", active: false },
 ] as const;
 
-export function DirectorPanel({ marketName }: { marketName: string }) {
+export function DirectorPanel({
+  marketName,
+  roleLabel,
+}: {
+  marketName: string;
+  /*
+   * ⛔⛔ ROL YORLIG'I TASHQARIDAN — VA U «Direktor» DEB QOTIRILMAYDI
+   *     (260819, jonli o'lchandi).
+   *
+   *     Panel `report_view` bilan darvozalangan, u esa direktorda HAM,
+   *     BOZOR ADMINIDA HAM bor. Ya'ni bozor admini kirganda sarlavha
+   *     unga «… · Direktor» deb turardi — ekran uni BOSHQA ODAM deb
+   *     atagan bo'lardi. Hokimga ko'rsatiladigan panelda kim qarab
+   *     turgani noto'g'ri yozilishi — eng arzon, lekin eng uyatli xato.
+   */
+  roleLabel: string;
+}) {
   const format = useFormatter();
   const locale = useLocale();
   const timeZone = useTimeZone() ?? "Asia/Tashkent";
@@ -77,7 +93,9 @@ export function DirectorPanel({ marketName }: { marketName: string }) {
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <div className="dir-eyebrow">{marketName} · Direktor</div>
+          <div className="dir-eyebrow">
+            {marketName} · {roleLabel}
+          </div>
           <h1 className="dir-title">Bozor paneli</h1>
           <p className="dir-tile-sub">
             {formatBusinessDay(format, todayIso, locale)}
