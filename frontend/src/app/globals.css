@@ -1802,7 +1802,28 @@
   @media (pointer: coarse) {
     button,
     [role="button"],
-    a[href] {
+    a[href],
+    /*
+     * ⛔⛔ FORMA BOSHQARUVLARI HAM (260819 tuzatma, jonli o'lchandi).
+     *
+     *     Avval bu ro'yxatda faqat tugma va havola bor edi. Direktor
+     *     panelidagi davr oralig'i esa `<input type="date">` va u
+     *     telefonda 36px bo'lib chiqdi — qobig'i 44px (`min-h-11`)
+     *     bo'lsa ham, chunki chekkaga tegish maydonni FOKUSLAMAYDI.
+     *     Ya'ni ko'zga 44px, barmoqqa 36px.
+     *
+     *     `<input type="date">` telefonda tegilganda tizim kalendarini
+     *     ochadi — u tugmadan farq qilmaydigan nishon, faqat boshqacha
+     *     ataladi. `Input`/`Select` komponentlari ham `h-10` (40px),
+     *     ya'ni ular ham chegaradan past edi.
+     *
+     * ⛔ `checkbox` va `radio` CHIQARILDI: ular ATAYIN kichik va
+     *    ularning tegish maydoni — o'ralgan `<label>`, katakning o'zi
+     *    emas. Ularni 44px qilish belgini cho'zib, ro'yxatni buzardi.
+     */
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
       min-height: 2.75rem;
     }
   }

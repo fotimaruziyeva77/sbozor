@@ -69,7 +69,7 @@ export function CardFreshness({
       </span>
       <button
         aria-disabled={isRefreshing ? true : undefined}
-        className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-sm px-2 text-xs font-semibold text-accent-text hover:bg-surface-muted"
+        className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-sm px-2 text-xs font-semibold text-accent-text hover:bg-surface-muted pointer-coarse:min-h-11"
         onClick={() => {
           if (isRefreshing) return;
           onRefresh();

@@ -481,6 +481,9 @@ function BackButton({
     <button
       className={cn(
         "mt-5 min-h-10 cursor-pointer rounded-lg border border-border px-4.5",
+        /* Barmoqda 44px: `min-h-*` utilitasi `@layer base` dagi
+           tegish qoidasini yengadi, shuning uchun chegara SHU YERDA. */
+        "pointer-coarse:min-h-11",
         "text-xs font-semibold text-text-muted hover:text-text",
       )}
       onClick={onClick}

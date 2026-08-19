@@ -99,7 +99,7 @@ export function PeriodPicker({
         />
         <input
           aria-label="Boshlanish sanasi"
-          className="min-h-9 bg-transparent text-sm text-text outline-none"
+          className="min-h-11 bg-transparent text-sm text-text outline-none"
           max={period.to}
           onChange={(event) => {
             const from = event.target.value;
@@ -114,7 +114,7 @@ export function PeriodPicker({
         </span>
         <input
           aria-label="Tugash sanasi"
-          className="min-h-9 bg-transparent text-sm text-text outline-none"
+          className="min-h-11 bg-transparent text-sm text-text outline-none"
           max={todayIso}
           min={period.from}
           onChange={(event) => {
