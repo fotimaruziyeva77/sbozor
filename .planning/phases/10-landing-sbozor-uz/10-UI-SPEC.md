@@ -276,8 +276,11 @@ Landing komponentlari `src/components/marketing/**` da yashaydi va ⛔ **`ui/` g
 | 2 | `marketing/step-line.tsx` | `IntersectionObserver` (qadam ochilishi) |
 | 3 | `marketing/reveal.tsx` | `IntersectionObserver` o'ramasi (scroll-reveal) — ⛔ **bitta** umumiy ta'rif |
 | 4 | `marketing/demo-form.tsx` | `react-hook-form` + `fetch` |
+| 5 | `marketing/theme-toggle.tsx` | ⛔ **260819 da QO'SHILDI** (foydalanuvchi, raqobatchi bilan solishtiruvdan): `useSyncExternalStore` orqali DOM temasiga obuna + `onClick`. Holat brauzerda yashaydi, serverda emas — orolsiz imkonsiz |
 
-⛔ Qolgan hammasi — **Server Component**. ⛔ `LocaleSwitcher` **beshinchi emas**: u allaqachon klient komponenti va landing uni **import qiladi**, yangi orol ochmaydi (**G-land-1(c)**).
+⛔ Qolgan hammasi — **Server Component**. ⛔ `LocaleSwitcher` **oltinchi emas**: u allaqachon klient komponenti va landing uni **import qiladi**, yangi orol ochmaydi (**G-land-1(c)**). ⛔ `marketing/nav-menu.tsx` ham orol EMAS — beshta anker havolada holat yo'q, u **Server Component** bo'lib qoladi.
+
+⛔⛔ **5-qatorning bahosi ochiq aytiladi**: tema tugmasi LCP yo'lida EMAS (u sarlavhaning o'ng chekkasida, `h1` dan mustaqil), shuning uchun SC#5 xavfi yuzaga kelmaydi — orol qo'shilishining sababi ham, chegarasi ham shu.
 
 ---
 

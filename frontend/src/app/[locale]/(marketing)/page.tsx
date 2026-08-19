@@ -220,16 +220,16 @@ export default async function MarketingRootPage({
           <Hero />
         </Section>
         {/* 2 · Og'riq — 3 karta (v2: MUAMMO kicker) */}
-        <Section className="bg-surface-muted">
+        <Section className="bg-surface-muted" id="muammo">
           <PainCards />
         </Section>
         {/* 2.5 · v2 YANGI: yo'qotish kalkulyatori (HISOB-KITOB) —
             foydalanuvchining O'Z taxmini, ikki disclaimer bilan */}
-        <Section>
+        <Section id="hisob">
           <LossCalc />
         </Section>
         {/* 3 · Qanday ishlaydi — 3 qadam [K-3] */}
-        <Section className="bg-surface-muted">
+        <Section className="bg-surface-muted" id="qanday">
           <StepLine />
         </Section>
         {/* 4 · ⭐ Bosh dalil — v2: och ko'k gradient banner */}
@@ -237,11 +237,11 @@ export default async function MarketingRootPage({
           <Proof />
         </Section>
         {/* 5 · Rol-kartalar — skrinshotsiz (§9.3) */}
-        <Section className="bg-surface-muted">
+        <Section className="bg-surface-muted" id="rollar">
           <RoleCards />
         </Section>
         {/* 6 · Ishonch bloki — v2: yorug' 4 ustun (10-06 shartnomasi) */}
-        <Section>
+        <Section id="ishonch">
           <TrustBlock />
         </Section>
         {/* 7 · Pilot holati — raqamsiz [K-7]; v2: halollik kartasi bilan */}

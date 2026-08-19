@@ -25,6 +25,21 @@ const eslintConfig = defineConfig([
      * YAXLITLIK darvozasidan past turadi.
      */
     "public/vendor/**",
+    /*
+     * DESIGN-SYNC CHIQIMI — `ds-bundle/` va `.design-sync/previews/`
+     * `design-sync` ko'nikmasi tomonidan GENERATSIYA qilinadi (ikkalasi
+     * ham `.gitignore` da). Ichida React'ning o'zining bundle'i yotibdi,
+     * va u `react-hooks/rules-of-hooks` ni 33 marta buzadi — chunki
+     * qoida `useFiber`/`useThenable` kabi ichki funksiyalarni komponent
+     * hooki deb o'ylaydi.
+     *
+     * ⛔ Buni e'tiborsiz qoldirish uslubdan chekinish EMAS: lint hech
+     *   qachon yashil bo'lmasa, u DARVOZA bo'lishdan to'xtaydi — bizning
+     *   `src/` dagi haqiqiy ogohlantirish 33 ta soxta xato orasida
+     *   ko'rinmay ketadi (aynan shu bo'ldi 260819 da).
+     */
+    "ds-bundle/**",
+    ".design-sync/**",
   ]),
 ]);
 

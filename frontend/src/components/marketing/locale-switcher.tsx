@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { usePathname, useRouter } from "@/i18n/navigation";
+import { UzFlag } from "@/components/marketing/uz-flag";
 import { cn } from "@/lib/cn";
 
 /*
@@ -60,13 +61,32 @@ const LOCALE_CODES: Readonly<Record<MarketingLocale, string>> = {
 };
 
 /*
+ * ⛔⛔ SO'Z BILAN — FAQAT `lg` DAN BOSHLAB (260819, foydalanuvchi:
+ *     «til tanlash bayroq qo'yilgan VA SO'Z BILAN yozilgan»).
+ *
+ *     Nega hamma joyda emas: uchta to'liq nom ~90px QO'SHIMCHA yeydi va
+ *     sarlavhada u beshta menyu havolasi bilan bir qatorda turadi. 1280px
+ *     dan pastda bu «Tizimga kirish» tugmasini — sahifadagi YAGONA amalni
+ *     — siqib chiqarardi (1024px da o'lchangan: 1142 > 1024), ya'ni raqobatchidan ustunlik o'rniga zarar bo'lardi.
+ *
+ *     Shuning uchun kelishuv MEXANIK: `xl:` (1280px) da to'liq nom,
+ *     undan pastda kod. Ikkalasi ham DOM'da turadi va CSS bittasini yashiradi —
+ *     JS o'lchovi ham, hidratatsiya farqi ham yo'q.
+ */
+const LOCALE_WORDS: Readonly<Record<MarketingLocale, string>> = {
+  "uz-Latn": "O'zbekcha",
+  "uz-Cyrl": "Ўзбекча",
+  ru: "Русский",
+};
+
+/*
  * ⛔ Sirg'anuvchi indikator OLIB TASHLANDI (dizayn v2): dizaynda chip
  * shunchaki rang oladi (background-color o'tishi), tanacha siljimaydi —
  * uchta tor kodda siljish harakati shovqin bo'lardi.
  */
 
 /** Uchala tugmaning umumiy kengligi — bitta haqiqat manbai. */
-const BUTTON_WIDTH_CLASS = "w-11";
+const BUTTON_WIDTH_CLASS = "w-11 xl:w-auto xl:px-3";
 
 export function MarketingLocaleSwitcher() {
   const t = useTranslations("common");
@@ -88,9 +108,27 @@ export function MarketingLocaleSwitcher() {
   return (
     <div
       aria-label={t("languageLabel")}
-      className="relative inline-flex items-center gap-1 rounded-md border border-border bg-surface p-1"
+      className="relative inline-flex items-center gap-1 rounded-md border border-border bg-surface p-1 pl-2"
       role="group"
     >
+      {/*
+       * ⛔⛔ BAYROQ QO'SHILDI (260819, raqobatchi bilan solishtiruvdan).
+       *
+       * Raqobatchining sarlavhasida til tanlovi bayroq + so'z bilan
+       * berilgan va u UZOQDAN TANILADI: foydalanuvchi «UZ/RU» matnini
+       * o'qimasdan ham nima ekanini biladi.
+       *
+       * ⛔ Bayroq — DAVLAT belgisi, TIL belgisi emas. Shuning uchun u
+       *    bitta, guruhning O'ZIDA turadi va har tugmada TAKRORLANMAYDI:
+       *    ruscha yozuv ham O'zbekistonda ishlatiladi va yonига rus
+       *    bayrog'ini qo'yish xato bo'lardi.
+       *
+       * ⛔ EMOJI EMAS, INLINE SVG (`uz-flag.tsx`): Windows'da `🇺🇿`
+       *    bayroq bo'lib chizilmaydi — o'sha yerdagi izohga qarang.
+       *    Bu Xromdagi tekshiruvda topildi, kod ko'rinishida emas.
+       */}
+      <UzFlag className="h-3 w-6 shrink-0 rounded-[1px] ring-1 ring-black/20" />
+
       {LOCALES.map((code) => {
         const isActive = code === active;
         return (
@@ -115,7 +153,8 @@ export function MarketingLocaleSwitcher() {
             onClick={() => change(code)}
             type="button"
           >
-            {LOCALE_CODES[code]}
+            <span className="xl:hidden">{LOCALE_CODES[code]}</span>
+            <span className="hidden xl:inline">{LOCALE_WORDS[code]}</span>
           </button>
         );
       })}

@@ -1584,6 +1584,13 @@
       "ogAlt": "SBOZOR belgisi va bozor plan-xaritasi — bitta rasta «band, lekin to'lovsiz» holatda ajralib turadi."
     },
     "nav": {
+      "sections": "Bo'limlar",
+      "problem": "Muammo",
+      "how": "Qanday ishlaydi",
+      "who": "Kimlar uchun",
+      "trust": "Ishonch",
+      "demo": "Demo olish",
+      "theme": "Ko'rinish",
       "skipToContent": "Asosiy kontentga o'tish",
       "login": "Tizimga kirish"
     },

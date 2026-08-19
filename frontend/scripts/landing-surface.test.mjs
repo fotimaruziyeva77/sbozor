@@ -101,8 +101,12 @@ const CLIENT_ISLANDS = [
   "components/marketing/loss-calc.tsx",
   "components/marketing/reveal.tsx",
   "components/marketing/step-line.tsx",
+  // 260819 — beshinchi ORIGINAL orol (§4.4 5-qator). Tema tugmasi DOM
+  // temasiga `useSyncExternalStore` bilan obuna bo'ladi; `nav-menu.tsx`
+  // esa ATAYIN Server Component (anker havolalarda holat yo'q).
+  "components/marketing/theme-toggle.tsx",
 ];
-const CLIENT_ISLANDS_COUNT = 6;
+const CLIENT_ISLANDS_COUNT = 7;
 
 /**
  * G-land-1(c) — `(marketing)/layout.tsx` provayderiga uzatiladigan fazoviy
@@ -981,6 +985,54 @@ test("G-land-1(d): [locale]/page.tsx YO'Q va (marketing)/page.tsx BOR (L-7)", ()
     existsSync(MARKETING_PAGE),
     "⛔ G-land-1(d) BUZILDI — `(marketing)/page.tsx` YO'Q: ildiz URL 404 — " +
       "anonim tashrifchi landing o'rniga hech nima ko'radi (SC#1).",
+  );
+});
+
+test("G-land-1(e): sarlavha nishonlari O'LCHANGAN breakpointlarda qoladi", () => {
+  /*
+   * ⛔⛔ BU DARVOZA — XROMDA O'LCHANGAN RAQAMNING QULFI, uslub qoidasi
+   *     EMAS. 260819 da sarlavhaga menyu + tema + kirish tugmasi
+   *     qo'shilgach, u planshetlarda gorizontal scroll berdi:
+   *
+   *       768px → 1051px   820px → 1051px
+   *       900px → 1051px   1024px → 1142px   (scrollWidth > clientWidth)
+   *
+   *     Sabab: beshta menyu havolasi ~490px yeydi va `md:` (768px)
+   *     chegarasida u til+tema+kirish bilan bir qatorga sig'maydi.
+   *     Overflow sahifaning ENG PASTIDA sezilardi — skrinshotda ham,
+   *     `next build` da ham ko'rinmaydi, faqat o'lchov ushlaydi.
+   *
+   *     Shuning uchun chegaralar qayta hisoblandi va SHU YERDA qulflandi:
+   *       · menyu   — `lg:` (1024px)  [o'lchov: 1024 da 1003px talab]
+   *       · to'liq til nomlari — `xl:` (1280px)  [1024 da +90px = 1142]
+   *       · bitta qator — `sm:` (640px) dan; undan past — ikki qator
+   *
+   *     Kim bularni `md:` ga qaytarsa, o'sha uchta ekran o'lchamida
+   *     scroll QAYTADI. Qaytarish kerak bo'lsa — avval o'lchov.
+   */
+  const nav = readCode(path.join(SRC, "components/marketing/nav-menu.tsx"));
+  assert.ok(
+    /className=\{cn\("hidden shrink-0 items-center gap-1 lg:flex/u.test(nav),
+    "⛔ G-land-1(e) BUZILDI — menyu `lg:flex` EMAS. `md:flex` da u " +
+      "768/820/900/1024px ekranlarning hammasida gorizontal scroll beradi " +
+      "(o'lchangan: 1051px talab).",
+  );
+
+  const switcher = readCode(
+    path.join(SRC, "components/marketing/locale-switcher.tsx"),
+  );
+  assert.ok(
+    switcher.includes('"w-11 xl:w-auto xl:px-3"') &&
+      switcher.includes('className="hidden xl:inline"'),
+    "⛔ G-land-1(e) BUZILDI — to'liq til nomlari `xl:` dan past ochilyapti. " +
+      "Ular +90px yeydi va 1024px da sarlavha 1142px ga chiqadi.",
+  );
+
+  const header = readCode(path.join(SRC, "components/marketing/header.tsx"));
+  assert.ok(
+    header.includes("flex-wrap") && header.includes("sm:flex-nowrap"),
+    "⛔ G-land-1(e) BUZILDI — sarlavhaning ikki qatorli mobil rejimi " +
+      "yo'qoldi: 375px da brend+til+tema+kirish 496px joy talab qiladi.",
   );
 });
 

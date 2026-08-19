@@ -291,9 +291,17 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
     setIdempotencyKey(keySeed === null ? null : crypto.randomUUID());
   }
 
+  /*
+   * ⛔ `locale` BOG'LIQLIKLAR ICHIDA (260819, lint darvozasi ochilgach
+   *    ko'rindi): `formatAmount` uz-Latn'da brauzer ICU'siga ISHONMAY
+   *    o'zi guruhlaydi (`format-number.ts` — root-CLDR nuqsoni), ya'ni
+   *    natija `locale` ga BEVOSITA bog'liq. Uni ro'yxatdan tashqarida
+   *    qoldirish til almashganda eski guruhlashni muzlatib qo'yardi.
+   */
   const money = useCallback(
-    (value: number) => `${formatAmount(format, value, locale)} ${t("collect.amountUnit")}`,
-    [format, t],
+    (value: number) =>
+      `${formatAmount(format, value, locale)} ${t("collect.amountUnit")}`,
+    [format, locale, t],
   );
 
   /*
