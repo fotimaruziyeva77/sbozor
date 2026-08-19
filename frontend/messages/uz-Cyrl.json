@@ -1173,6 +1173,7 @@
     "reasonLabel": "Ўзгартириш сабаби",
     "reasonPlaceholder": "Сабаб танланг",
     "reverseTitle": "Тўловни бекор қилиш",
+    "reverseConsequence": "Бекор қилиш ёзуви қўшилади — асл тўлов ўчирилмайди.",
     "reverseReasonLabel": "Бекор қилиш сабаби",
     "newAmountLabel": "Янги сумма",
     "retry": "Қайта юбориш",

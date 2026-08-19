@@ -199,7 +199,14 @@ export function ReasonDialog({
       <ConfirmDialog
         cancelLabel={t("common.close")}
         confirmLabel={t("collect.reverse")}
-        description={t("collect.errorFix.reason_required")}
+        /*
+         * ⛔ TAVSIF VA OGOHLANTIRISH BIR XIL MATN EMAS (260819, Chromeda
+         *    ko'rildi): ilgari ikkalasi ham «Ro'yxatdan sabab tanlang»
+         *    edi va kichik oynada bitta jumla IKKI MARTA turardi.
+         *    Tavsif — amalning OQIBATI, ogohlantirish esa NIMA
+         *    yetishmayotgani.
+         */
+        description={t("collect.reverseConsequence")}
         isBusy={blocked}
         onConfirm={handleConfirm}
         onOpenChange={handleOpenChange}

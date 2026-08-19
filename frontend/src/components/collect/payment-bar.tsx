@@ -289,7 +289,19 @@ export function PaymentBar({
         <div className="flex gap-2">
           {PAYMENT_METHODS.map((value) => (
             <label
-              className="flex min-h-12 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border border-border-ui bg-surface px-4 text-sm font-semibold text-text has-[:checked]:border-text has-[:checked]:bg-surface-muted has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/25"
+              /*
+               * ⛔⛔ TANLANGAN HOLAT KUCHAYTIRILDI (260819, o'lchandi).
+               *
+               * Ilgari signal FAQAT 0.8px chegara rangi edi: fon farqi
+               * 3.5 L birlik (96.5 vs 100) — quyosh ostidagi telefonda
+               * bu ko'rinmaydi. Endi uch kanal: qalinroq chegara,
+               * aksent foni va matn rangi.
+               *
+               * ⛔ Rang YOLG'IZ signal emas (§15): chegara QALINLIGI
+               *    ham o'zgaradi, ya'ni rang ko'rmaydigan odam ham
+               *    farqni ko'radi.
+               */
+              className="flex min-h-12 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border border-border-ui bg-surface px-4 text-sm font-semibold text-text has-[:checked]:border-2 has-[:checked]:border-accent has-[:checked]:bg-accent/10 has-[:checked]:text-accent-text has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/25"
               key={value}
             >
               <input

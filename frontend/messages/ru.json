@@ -1173,6 +1173,7 @@
     "reasonLabel": "Причина изменения",
     "reasonPlaceholder": "Выберите причину",
     "reverseTitle": "Отмена платежа",
+    "reverseConsequence": "Добавится запись отмены — исходный платёж не удаляется.",
     "reverseReasonLabel": "Причина отмены",
     "newAmountLabel": "Новая сумма",
     "retry": "Отправить ещё раз",

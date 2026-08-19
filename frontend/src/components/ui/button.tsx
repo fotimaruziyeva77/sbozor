@@ -18,6 +18,20 @@ const buttonVariants = cva(
     // reduced-motion bilan JUFT (G-motion-1, 09-UI-SPEC §12.1 / M-8).
     "active:scale-[0.97] motion-reduce:scale-100",
     "disabled:pointer-events-none disabled:opacity-50",
+    // ⛔⛔ `aria-disabled` HAM KO'RINADI (260819, Chromeda o'lchandi).
+    //
+    // §14.3 ataylab `disabled` o'rniga `aria-disabled` ishlatadi: o'chirilgan
+    // tugma fokus olmaydi va skrinrider uni o'qimaydi, ya'ni «nega
+    // bosilmayapti?» savoliga javob beradigan joy qolmaydi.
+    //
+    // LEKIN o'lchov shuni ko'rsatdi: `aria-disabled="true"` da `opacity: 1`,
+    // fon esa FAOL tugmaniki bilan bir xil edi — ya'ni holat skrinriderga
+    // aytilardi, KO'ZGA esa umuman aytilmasdi. Kassir to'liq «tirik»
+    // ko'rinadigan pul tugmasini bosaverardi.
+    //
+    // ⛔ `pointer-events` OLIB TASHLANMAYDI: bosish HODISASI kerak —
+    //    aynan o'shanda sabab matni chiqadi (`payment-bar.tsx`).
+    "aria-disabled:opacity-60 aria-disabled:cursor-not-allowed",
     "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   ],
   {
