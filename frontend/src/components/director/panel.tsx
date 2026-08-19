@@ -40,7 +40,9 @@ import { formatBusinessDay } from "@/lib/format-day";
  * ⛔ «Yangi ma'lumot bor — yangilash» yorlig'i BU FAZADA QURILMADI:
  *    u serverdan «yangi ma'lumot bor» signalini talab qiladi, bizda esa
  *    bunday kanal yo'q. Soxta yorliq chizish — o'lchanmagan da'vo.
- *    Buning o'rniga har katak o'z yangilanish vaqtini ko'rsatadi.
+ *    Buning o'rniga panel sarlavhasida bitta «yangilandi HH:MM»
+ *    turadi (260819: u har katakda takrorlanardi va oltala katakda
+ *    AYNAN bir xil raqam edi).
  * =============================================================================
  */
 
@@ -97,9 +99,18 @@ export function DirectorPanel({
             {marketName} · {roleLabel}
           </div>
           <h1 className="dir-title">Bozor paneli</h1>
+          {/*
+           * ⛔⛔ «YANGILANDI» SHU YERDA, BIR MARTA (260819).
+           *
+           *     Avval u HAR KATAKNING pastida turardi — oltala katakda
+           *     AYNAN bir xil raqam bilan, chunki u ma'lumot yoshi
+           *     emas, shunchaki soat edi. Olti marta yozilgan bir xil
+           *     fakt ekranni ham to'ldirardi, ham hech narsa aytmasdi.
+           */}
           <p className="dir-tile-sub">
             {formatBusinessDay(format, todayIso, locale)}
-            {" · Toshkent vaqti"}
+            {" · Toshkent vaqti · yangilandi "}
+            {format.dateTime(now, { timeStyle: "short" })}
             {partial
               ? " · kun tugamagan, raqamlar oshib boradi"
               : " · davr yopilgan"}

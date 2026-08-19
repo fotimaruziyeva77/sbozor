@@ -68,7 +68,7 @@ export function CompareMode() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-wrap items-end justify-between gap-4">
+      <CardHeader className="flex flex-row flex-wrap items-end justify-between gap-4">
         <h2 className="dir-trend-title">{t("reports.compareTitle")}</h2>
 
         <div className="flex flex-wrap gap-1.5">

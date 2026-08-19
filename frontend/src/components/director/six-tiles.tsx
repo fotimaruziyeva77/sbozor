@@ -2,6 +2,16 @@
 
 import { useFormatter, useLocale, useNow, useTimeZone } from "next-intl";
 
+import {
+  Banknote,
+  ReceiptText,
+  ScanLine,
+  Store,
+  Target,
+  TriangleAlert,
+  Wallet,
+} from "lucide-react";
+
 import { PanelTile } from "@/components/panel/tile";
 import { cn } from "@/lib/cn";
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
@@ -97,8 +107,6 @@ export function SixTiles({ period }: { period: Period }) {
   const accuracy = useAccuracyReport({ from: windowFrom, to: day });
   const shifts = useShiftReport(day);
 
-  const time = format.dateTime(now, { timeStyle: "short" });
-  const updated = `Yangilandi: ${time}`;
 
   /* --- 1: tushum --------------------------------------------------------- */
   const revNow = revenue.data?.total_collected_soum ?? null;
@@ -215,123 +223,134 @@ export function SixTiles({ period }: { period: Period }) {
         href="/reports"
         label="Patta yig'ilish darajasi"
         step={0}
-        sub={periodLabel}
-        updatedAt={updated}
       >
-        {rate === null ? (
-          <>
-            <p className="dir-hero-stat text-text-muted">—</p>
-            <p className="dir-tile-note">
-              {partial
-                ? "Bugungi patta hisobi hali yakunlanmagan — daraja kun yopilgach aniq bo'ladi."
-                : "Bu davr uchun hisoblangan patta topilmadi."}
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-5">
-              {/*
-               * ⛔⛔ HALQA — Stitch dizaynidan, MATEMATIKASI AYNAN.
-               *
-               *   r = 16, aylana uzunligi 2πr = 100.53. To'lgan ulush
-               *   `dashoffset = uzunlik × (1 − ulush)` bilan beriladi.
-               *   Stitch r=44/stroke=12 ishlatgan; bizda katak kichikroq,
-               *   shuning uchun r=16/stroke=4 — NISBAT saqlangan.
-               *
-               * ⛔ Halqa BEZAK EMAS: foizni ko'rish uchun raqamni o'qish
-               *    kerak, holatni ko'rish uchun esa bir qarash yetadi.
-               *    Shuning uchun u ohang rangini oladi.
-               */}
-              <svg
-                aria-hidden="true"
-                className="size-24 shrink-0 -rotate-90"
-                viewBox="0 0 40 40"
-              >
-                <circle
-                  cx="20"
-                  cy="20"
-                  fill="none"
-                  r="16"
-                  stroke="var(--color-border)"
-                  strokeWidth="4"
-                />
-                <circle
-                  cx="20"
-                  cy="20"
-                  fill="none"
-                  r="16"
-                  stroke="currentColor"
-                  strokeDasharray={RING}
-                  strokeDashoffset={RING * (1 - Math.min(1, rate / 100))}
-                  strokeLinecap="round"
-                  strokeWidth="4"
-                  className={
-                    rateTone === "success"
-                      ? "text-success"
-                      : rateTone === "warning"
-                        ? "text-warning"
-                        : "text-danger"
-                  }
-                />
-              </svg>
-              <p className="dir-hero-stat">{formatPercent(rate)}</p>
+        {/*
+         * ⛔⛔ BITTA KOMPOZITSIYA, IKKI HOLAT EMAS (260819, ekranga qarab).
+         *
+         *     Avval bu yerda ikki SHOX bor edi: ma'lumot bo'lsa —
+         *     halqa + yorliq + uchta son; bo'lmasa — yolg'iz «—» va
+         *     bitta gap. Natijada bo'sh holatda 1288px kenglikdagi
+         *     katak deyarli bo'm-bo'sh turardi va u ekrandagi eng
+         *     yomon element edi.
+         *
+         *     Endi kompozitsiya BIR XIL, faqat qiymatlar «—» bo'ladi.
+         *     Buning ikki foydasi bor: (a) bo'sh katak ham o'z shaklini
+         *     saqlaydi, (b) ma'lumot kelganda panel SAKRAMAYDI — odam
+         *     ko'zi o'rgangan joyda o'sha son paydo bo'ladi.
+         */}
+        <div className="flex flex-wrap items-center gap-6">
+          {/*
+           * ⛔⛔ HALQA — Stitch dizaynidan, MATEMATIKASI AYNAN.
+           *
+           *   r = 16, aylana uzunligi 2πr = 100.53. To'lgan ulush
+           *   `dashoffset = uzunlik × (1 − ulush)` bilan beriladi.
+           *   Stitch r=44/stroke=12 ishlatgan; bizda katak kichikroq,
+           *   shuning uchun r=16/stroke=4 — NISBAT saqlangan.
+           *
+           * ⛔ Daraja NOMA'LUM bo'lsa yoy UMUMAN chizilmaydi — bo'sh
+           *    halqa «0%» degan yolg'on da'vo bo'lardi.
+           */}
+          <svg
+            aria-hidden="true"
+            className="size-24 shrink-0 -rotate-90"
+            viewBox="0 0 40 40"
+          >
+            <circle
+              cx="20"
+              cy="20"
+              fill="none"
+              r="16"
+              stroke="var(--color-border)"
+              strokeWidth="4"
+            />
+            {rate === null ? null : (
+              <circle
+                className={
+                  rateTone === "success"
+                    ? "text-success"
+                    : rateTone === "warning"
+                      ? "text-warning"
+                      : "text-danger"
+                }
+                cx="20"
+                cy="20"
+                fill="none"
+                r="16"
+                stroke="currentColor"
+                strokeDasharray={RING}
+                strokeDashoffset={RING * (1 - Math.min(1, rate / 100))}
+                strokeLinecap="round"
+                strokeWidth="4"
+              />
+            )}
+          </svg>
+          <p className={cn("dir-hero-stat", rate === null && "text-text-muted")}>
+            {rate === null ? "—" : formatPercent(rate)}
+          </p>
 
-              {/*
-               * ⛔⛔ STITCH KOMPOZITSIYASI (260819 tuzatma): halqa CHAPDA,
-               *     o'ngda esa YORLIQ + UCHTA SON bir qatorda.
-               *
-               *     Birinchi ko'chirishda men faqat tokenlarni olgandim
-               *     (radius, shrift, erish qatlami) — kompozitsiyani
-               *     emas. Ekranda farq darhol ko'rindi: foiz ostida
-               *     bitta siqilgan qator turardi, Stitch'da esa uchta
-               *     son ustun bo'lib, har biri o'z yorlig'i bilan.
-               *
-               * ⛔ UCHINCHI SON — «Yig'ilmagan» — ATAYIN alohida ustun:
-               *    u foizning MA'NOSI. 96.4% ni odam «yaxshi» deb
-               *    o'qiydi; «yig'ilmagan 900 000 so'm» esa harakatga
-               *    chaqiradi. Ikkalasi birga turishi kerak.
-               */}
-              <div className="flex min-w-0 flex-1 flex-col gap-3">
-                <div>
-                  <Badge tone={rateTone}>
-                    {rate >= 95
-                      ? "To'liq yig'ilmoqda"
-                      : rate >= 85
-                        ? "Bo'shliq bor"
-                        : "Jiddiy bo'shliq"}
-                  </Badge>
-                </div>
-                <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
-                  <div>
-                    <dt className="dir-tile-label">Yig&apos;ilgan</dt>
-                    <dd className="dir-tile-value-sm mt-1">
-                      {formatSoum(format, revNow ?? 0, locale)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="dir-tile-label">Hisoblangan</dt>
-                    <dd className="dir-tile-value-sm mt-1 text-text-muted">
-                      {formatSoum(format, chargedNow ?? 0, locale)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="dir-tile-label">Yig&apos;ilmagan</dt>
-                    <dd
-                      className={cn(
-                        "dir-tile-value-sm mt-1",
-                        gapSoum !== null && gapSoum > 0
-                          ? "text-danger-text"
-                          : "text-text-muted",
-                      )}
-                    >
-                      {formatSoum(format, gapSoum ?? 0, locale)}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
+          {/*
+           * ⛔⛔ STITCH KOMPOZITSIYASI: halqa CHAPDA, o'ngda esa
+           *     YORLIQ + UCHTA SON bir qatorda.
+           *
+           * ⛔ UCHINCHI SON — «Yig'ilmagan» — ATAYIN alohida ustun:
+           *    u foizning MA'NOSI. 96.4% ni odam «yaxshi» deb o'qiydi;
+           *    «yig'ilmagan 900 000 so'm» esa harakatga chaqiradi.
+           */}
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div>
+              <Badge tone={rateTone}>
+                {rate === null
+                  ? partial
+                    ? "Kun yopilmagan"
+                    : "Hisoblanmagan"
+                  : rate >= 95
+                    ? "To'liq yig'ilmoqda"
+                    : rate >= 85
+                      ? "Bo'shliq bor"
+                      : "Jiddiy bo'shliq"}
+              </Badge>
             </div>
-          </>
-        )}
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
+              <div>
+                <dt className="dir-tile-label">Yig&apos;ilgan</dt>
+                <dd className="dir-tile-value-sm mt-1">
+                  {revNow === null ? "—" : formatSoum(format, revNow, locale)}
+                </dd>
+              </div>
+              <div>
+                <dt className="dir-tile-label">Hisoblangan</dt>
+                <dd className="dir-tile-value-sm mt-1 text-text-muted">
+                  {chargedNow === null || chargedNow <= 0
+                    ? "—"
+                    : formatSoum(format, chargedNow, locale)}
+                </dd>
+              </div>
+              <div>
+                <dt className="dir-tile-label">Yig&apos;ilmagan</dt>
+                <dd
+                  className={cn(
+                    "dir-tile-value-sm mt-1",
+                    gapSoum !== null && gapSoum > 0
+                      ? "text-danger-text"
+                      : "text-text-muted",
+                  )}
+                >
+                  {gapSoum === null ? "—" : formatSoum(format, gapSoum, locale)}
+                </dd>
+              </div>
+            </dl>
+
+            {/* ⛔ Sabab FAQAT noma'lum holatda — aks holda u har kuni
+                   o'qilmaydigan qatorga aylanardi. */}
+            {rate === null ? (
+              <p className="dir-tile-note">
+                {partial
+                  ? "Bugungi patta hisobi hali yakunlanmagan — daraja kun yopilgach aniq bo'ladi."
+                  : "Bu davr uchun hisoblangan patta topilmadi."}
+              </p>
+            ) : null}
+          </div>
+        </div>
       </PanelTile>
 
       {/*
@@ -361,10 +380,9 @@ export function SixTiles({ period }: { period: Period }) {
         action="Kunlar kesimi"
         href="/reports"
         index={1}
+        icon={Banknote}
         label="Tushum"
         step={1}
-        sub={periodLabel}
-        updatedAt={updated}
       >
         <p className="dir-tile-value">
           {revNow === null
@@ -384,10 +402,10 @@ export function SixTiles({ period }: { period: Period }) {
         action="Qarzdorlar reestri"
         href="/reports"
         index={2}
+        icon={ReceiptText}
         label="Qarz jami"
         step={2}
         sub={`Reestr holati · ${formatBusinessDay(format, todayIso, locale)}`}
-        updatedAt={updated}
       >
         {/*
          * ⛔⛔ BELGI MA'NOLI — MANFIY QOLDIQ QARZ EMAS, AVANS.
@@ -425,10 +443,10 @@ export function SixTiles({ period }: { period: Period }) {
         action="Smena yozuvlari"
         href="/reports"
         index={3}
+        icon={Wallet}
         label="Kassirlar"
         step={3}
         sub={`${formatBusinessDay(format, day, locale)} · smenalar`}
-        updatedAt={updated}
       >
         <div className="flex items-baseline gap-2.5">
           <p className="dir-tile-value">
@@ -458,10 +476,10 @@ export function SixTiles({ period }: { period: Period }) {
         action="Kamera kadrlari"
         href="/reports/compare"
         index={4}
+        icon={TriangleAlert}
         label="Band, lekin to'lovsiz"
         step={4}
         sub={`${formatBusinessDay(format, day, locale)} · nazoratchi ko'rgan rastalar`}
-        updatedAt={updated}
       >
         <div className="flex flex-wrap items-baseline gap-2.5">
           <p className="dir-tile-value">
@@ -487,10 +505,9 @@ export function SixTiles({ period }: { period: Period }) {
         action="Rastalar ro'yxati"
         href="/stalls"
         index={5}
+        icon={Store}
         label="Bandlik"
         step={5}
-        sub={formatBusinessDay(format, day, locale)}
-        updatedAt={updated}
       >
         <div className="flex items-center gap-4">
           <svg
@@ -542,15 +559,14 @@ export function SixTiles({ period }: { period: Period }) {
         action="O'lchov usuli"
         href="/reports"
         index={6}
+        icon={ScanLine}
         label="AI aniqligi"
-        stale={accStale}
         step={6}
         sub={
           acc === undefined
             ? "O'lchov yo'q"
             : `Oxirgi o'lchov · ${formatBusinessDay(format, acc.to_date, locale)}`
         }
-        updatedAt={accStale ? `${updated} · 15 daqiqadan eski` : updated}
       >
         <p className="dir-tile-value">
           {accPoint === null ? "—" : formatPercent(accPoint * 100)}

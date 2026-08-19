@@ -52,6 +52,47 @@ const PAD_R = 14;
 /** To'r chiziqlari soni (dizayn: k = 0..3). */
 const GRID_LINES = 3;
 
+/**
+ * Shiftni «chiroyli qadam» ga keltiradi: `max / lines` BUTUN bo'ladi.
+ *
+ * ⛔ Qadam faqat 1 · 2 · 2.5 · 5 · 10 ×10ⁿ dan tanlanadi — odam
+ *    o'qiydigan qadamlar shular. 3.7 yoki 6 400 lik qadam texnik
+ *    jihatdan to'g'ri, lekin o'qda hech kim uni o'qiy olmaydi.
+ *
+ * ⛔ Bo'sh ma'lumotda (`peak <= 0`) shift `lines` ga teng bo'ladi,
+ *    ya'ni o'q 0 · 1 · 2 · 3 bo'lib chiqadi va nolga bo'linish yo'q.
+ */
+export function niceMax(peak: number, lines: number): number {
+  if (!Number.isFinite(peak) || peak <= 0) return lines;
+
+  const rough = peak / lines;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const normalized = rough / magnitude;
+
+  /*
+   * ⛔ ZINAPOYA {1,2,3,4,5,6,8,10} — {1,2,5,10} DAN QAYTA TANLANDI.
+   *
+   *    Dag'al zinapoyada 16 000 lik ustun uchun qadam 10 000 chiqib,
+   *    shift 30 000 bo'lardi — diagrammaning YARMI bo'sh qolardi.
+   *    3 va 6 qo'shilgach, o'sha ustun 18 000 shiftni oladi va
+   *    balandlikning 89% i ishlatiladi.
+   *
+   *    Zinapoyada 2.5 va 7.5 YO'Q: kichik oraliqda (magnitude = 1)
+   *    ular butun bo'lmagan qadam berardi va o'qda «2.5 so'm» degan
+   *    ma'nosiz yorliq paydo bo'lardi. Pul BUTUN so'mda o'lchanadi.
+   */
+  const ladder = [1, 2, 3, 4, 5, 6, 8, 10];
+  const chosen = ladder.find((value) => normalized <= value) ?? 10;
+
+  /*
+   * ⛔ Qadam kamida 1: juda kichik ustunda (`peak` 1–3) magnitude 0.1
+   *    bo'lib, qadam 0.4 chiqardi va o'qda kasr son yozilardi.
+   */
+  const step = Math.max(1, Math.round(chosen * magnitude));
+
+  return step * lines;
+}
+
 type RangeId = "7" | "30" | "12h" | "12o";
 
 const RANGES: { id: RangeId; label: string; days: number }[] = [
@@ -89,7 +130,7 @@ export function RevenueTrend() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-wrap items-end justify-between gap-4">
+      <CardHeader className="flex flex-row flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="dir-trend-title">Tushum trendi</h2>
           <p className="dir-tile-sub">
@@ -241,7 +282,30 @@ function TrendChart({
   format: ReturnType<typeof useFormatter>;
   locale: string;
 }) {
-  const max = Math.max(...points.map((point) => point.value)) * 1.1 || 1;
+  /*
+   * ⛔⛔ O'Q YOLG'ON GAPIRMASLIGI KERAK (260819, ekranga qarab).
+   *
+   *     Avval `max` xom qiymatning 1.1 baravari edi, yorliq esa
+   *     `Math.round(value / 10_000) * 10_000` bilan yozilardi — ya'ni
+   *     HAR CHIZIQ 10 000 ga yaxlitlanardi. Natijada 16 000 lik
+   *     ustunda o'q shunday chiqdi:
+   *
+   *         20 000 · 10 000 · 10 000 · 0
+   *
+   *     Ikki xil BALANDLIKDAGI chiziq bir xil son bilan belgilangan.
+   *     Bu bezak nuqsoni emas — diagramma o'qi soxta bo'lib qoldi,
+   *     va u hokimga ko'rsatiladigan ekranda.
+   *
+   * ⛔ TO'G'RI YECHIM — «CHIROYLI QADAM». Chiziq soniga bo'linganda
+   *    BUTUN chiqadigan qadam tanlanadi (1 · 2 · 2.5 · 5 · 10 ×10ⁿ)
+   *    va shift shu qadamdan hosil qilinadi. Shunda har yorliq o'z
+   *    chizig'ining HAQIQIY qiymati bo'ladi va yaxlitlash umuman
+   *    kerak bo'lmaydi.
+   */
+  const max = niceMax(
+    Math.max(0, ...points.map((point) => point.value)),
+    GRID_LINES,
+  );
   const count = points.length;
 
   const x = (index: number): number =>
@@ -289,7 +353,7 @@ function TrendChart({
                 x={PAD_L - 12}
                 y={gy + 4}
               >
-                {groupDigits(Math.round(value / 10_000) * 10_000)}
+                {groupDigits(value)}
               </text>
             </g>
           );

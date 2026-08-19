@@ -215,7 +215,7 @@ export function RevenueCard() {
         className={cn(breathing ? "motion-breath" : null)}
         ref={cardRef}
       >
-        <CardHeader className="flex flex-wrap items-start justify-between gap-2 pb-2">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 pb-2">
           <div>
             <h2 className="text-lg font-semibold">
               {t("dashboard.revenueTrendTitle")}

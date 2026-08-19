@@ -1125,7 +1125,22 @@
 
 /* Havola qobig'i: kirish animatsiyasi va kechikish `--i` dan. */
 .dir-tile-link {
-  display: block;
+  /*
+   * ⛔⛔ `block` EMAS, `flex` — VA BU YARIM TUZATISHDAN KEYINGI QADAM
+   *     (260819).
+   *
+   *     Setka CHO'ZADIGAN element — shu HAVOLA (`align-items: stretch`),
+   *     karta esa uning ICHIDA. Havola `block` bo'lganda karta o'z
+   *     kontentining balandligida qolib, cho'zilgan qobiq ichida
+   *     osilib turardi. Natijada bir qatordagi uch katak 163 · 194 ·
+   *     163 px bo'lib, «Yangilandi» chizig'i yana zinapoya bo'lardi —
+   *     ya'ni qat'iy balandlikni olib tashlash O'ZI yetmadi.
+   *
+   *     `flex` + karta `flex: 1` = karta qobiqni to'ldiradi, `foot`
+   *     dagi `margin-top: auto` esa qatorni haqiqatan tekislaydi.
+   */
+  display: flex;
+  flex-direction: column;
   color: inherit;
   text-decoration: none;
   /* 250ms + 60ms qadam — dizayndagi 0/60/120/180/240/300ms ketma-ketligi. */
@@ -1137,11 +1152,33 @@
   text-decoration: none;
 }
 
-/* ⛔ Balandlik QAT'IY 13rem (208px): oltita katak bir qatorda turganda
- *    ularning pastki chizig'i BIR SATHDA bo'lishi kerak, aks holda
- *    «Yangilandi» qatorlari zinapoyaga aylanardi. */
+/*
+ * ⛔⛔ QAT'IY BALANDLIK OLIB TASHLANDI (260819, jonli o'lchandi).
+ *
+ *     Bu yerda `height: 13rem` turardi va izohda «pastki chizig'i BIR
+ *     SATHDA bo'lishi kerak, aks holda «Yangilandi» qatorlari
+ *     zinapoyaga aylanardi» deb YOZILGAN edi. Balandlik qotirilgan,
+ *     lekin QATOR PASTGA MAHKAMLANMAGAN — ya'ni va'da hech qachon
+ *     bajarilmagan. 1863px ekranda o'lchandi:
+ *
+ *       Tushum   142px   Qarz jami 174px   Kassirlar 142px
+ *       Band…    174px   Bandlik   182px   AI        197px
+ *
+ *     Olti katakda olti xil balandlik va har birining ostida 11–66px
+ *     TESHIK. Foydalanuvchi buni «ortiqcha joy» deb ko'rsatdi va u
+ *     haq: qat'iy balandlik bo'shliqni YARATGAN, tekislamagan.
+ *
+ * ⛔ TO'G'RI MEXANIZM — FLEX, BALANDLIK EMAS. Setka qatoridagi
+ *    kataklar `align-items: stretch` bilan ALLAQACHON teng balandlikda
+ *    (eng balandi qatorni belgilaydi). Karta ustun-flex bo'lsa, tana
+ *    `flex: 1` oladi va «Yangilandi» qatori `margin-top: auto` bilan
+ *    PASTGA yopishadi. Natijada: balandlik kontentdan kelib chiqadi,
+ *    pastki chiziq esa haqiqatan bir sathda.
+ */
 .dir-tile {
-  height: 13rem;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   /*
    * ⛔⛔ STITCH DIZAYNIDAN (260819): radius 14px, chegara HAIRLINE.
    *
@@ -1170,7 +1207,20 @@
 }
 
 .dir-tile-body {
-  min-height: 8.25rem;
+  /* ⛔ `flex: 1` — tana qolgan bo'shliqni oladi, ya'ni ichidagi
+   *    `margin-top: auto` ishlaydigan joy paydo bo'ladi. */
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Tana ichidagi ustun ham cho'ziladi — aks holda `auto` chekka
+   yopishadigan narsa bo'lmasdi. */
+.dir-tile-body > * {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /*
@@ -1347,6 +1397,9 @@
 
 /* --- Katakning pastki qatori ------------------------------------------ */
 .dir-tile-foot {
+  /* ⛔ PASTGA YOPISHADI: shu bitta qator butun qatordagi kataklarning
+   *    «Yangilandi» chizig'ini bir sathga keltiradi. */
+  margin-top: auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1396,13 +1449,8 @@
   grid-column: 1 / -1;
 }
 
-/* ⛔ Bosh katak balandligi QAT'IY EMAS: ichida halqa + uchta son ustuni
-   bor va ular 13rem ga sig'maydi (Stitch kompozitsiyasi). */
-.dir-tile-hero .dir-tile,
-.dir-tile-hero .dir-tile-body {
-  height: auto;
-  min-height: 0;
-}
+/* Bosh katak — endi qolganlari bilan bir xil mexanizmda (flex);
+   alohida balandlik bekor qilish KERAK EMAS. */
 
 /* Guruh yorlig'i — katak emas, setka bo'ylab cho'ziladigan ajratgich. */
 .dir-group-span {

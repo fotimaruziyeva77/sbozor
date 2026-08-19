@@ -165,7 +165,6 @@ export function AdminPanel({
   const percent = status === null ? null : setupPercent(steps);
   const attention = status === null ? [] : attentionItems(status);
 
-  const updated = `Yangilandi: ${format.dateTime(now, { timeStyle: "short" })}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -184,7 +183,8 @@ export function AdminPanel({
            */}
           <p className="dir-tile-sub">
             {formatBusinessDay(format, todayIso, locale)}
-            {" · Toshkent vaqti"}
+            {" · Toshkent vaqti · yangilandi "}
+            {format.dateTime(now, { timeStyle: "short" })}
           </p>
         </div>
       </header>
@@ -200,7 +200,6 @@ export function AdminPanel({
           label="Bozor sozlanishi"
           step={0}
           sub="Yetti qadam — bozor ishlashga tayyor bo'lishi uchun"
-          updatedAt={updated}
         >
           {setup.isPending ? (
             <Skeleton className="h-32 rounded-lg" />
@@ -265,7 +264,6 @@ export function AdminPanel({
           step={1}
           sub="Bozorda ro'yxatdan o'tgan"
           unit="nafar"
-          updatedAt={updated}
         />
         <RegistryTile
           action="Rastalarni ochish"
@@ -280,7 +278,6 @@ export function AdminPanel({
               : `${formatAmount(format, status.zones, locale)} zonada`
           }
           unit="ta"
-          updatedAt={updated}
         />
         <RegistryTile
           action="Tariflarni ochish"
@@ -295,7 +292,6 @@ export function AdminPanel({
               : `${formatAmount(format, status.tariffs_covered, locale)} toifada narx bor`
           }
           unit="toifa"
-          updatedAt={updated}
         />
         <RegistryTile
           action="Kalendarni ochish"
@@ -313,7 +309,6 @@ export function AdminPanel({
           }
           sub="Patta qaysi kunlarda hisoblanadi"
           unit=""
-          updatedAt={updated}
         />
       </div>
 
@@ -493,7 +488,6 @@ function RegistryTile({
   stateText = null,
   sub,
   unit,
-  updatedAt,
 }: {
   action: string;
   count: number | null;
@@ -504,7 +498,6 @@ function RegistryTile({
   stateText?: string | null;
   sub: string;
   unit: string;
-  updatedAt: string;
 }) {
   const format = useFormatter();
   const locale = useLocale();
@@ -514,13 +507,12 @@ function RegistryTile({
     <PanelTile
       action={action}
       href={href}
+      icon={Icon}
       label={label}
       step={step}
       sub={sub}
-      updatedAt={updatedAt}
     >
       <div className="flex items-center gap-3">
-        <Icon aria-hidden="true" className="size-5 shrink-0 text-text-muted" />
         {/*
          * ⛔ O'LCHANMAGAN QIYMAT O'RNIGA NOL YOZILMAYDI (T-05-04):
          *    «bozorda 0 ta sotuvchi bor» va «sotuvchilar sonini

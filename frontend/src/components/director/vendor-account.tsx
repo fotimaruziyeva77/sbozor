@@ -116,7 +116,7 @@ export function VendorAccount() {
 
             return (
               <Card key={row.vendor_id ?? row.stall_codes.join("-")}>
-                <CardHeader className="flex flex-wrap items-start justify-between gap-3">
+                <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="dir-trend-title">
                       {row.vendor_name ?? "Ism ko'rsatilmagan"}

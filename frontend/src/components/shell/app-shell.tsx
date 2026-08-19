@@ -496,7 +496,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
        *    boshlanadi va scroll qilinayotgan kontentni yumshoq yutadi.
        */}
       <header className="app-surface relative z-40 border-b border-border md:sticky md:top-0">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:flex-nowrap md:justify-between">
+        <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:flex-nowrap md:justify-between">
           <div className="mr-auto min-w-0">
             <p className="text-xs text-text-muted">{t("shell.marketLabel")}</p>
             {/* D-16: bozor nomi DB kontenti — tarjima qilinmaydi. */}
@@ -528,7 +528,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div aria-hidden="true" className="app-fade hidden md:block" />
       </header>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-4 py-6">
+      {/*
+       * =====================================================================
+       * ⛔⛔ KENGLIK 1152px -> 1600px (260819, jonli o'lchandi).
+       * =====================================================================
+       * Bu yerda `max-w-6xl` (1152px) turardi. 1863px ekranda o'lchandi:
+       *
+       *     chapda bo'sh 356px · yon panel 208px · KONTENT 888px ·
+       *     o'ngda bo'sh 371px
+       *
+       * Ya'ni ekranning 48% i ishlatilardi, 39% i esa bo'm-bo'sh edi.
+       * Direktor paneli uchta katakni 285px ga siqib, sarlavhada 358px
+       * teshik qoldirardi. Foydalanuvchi buni birinchi ko'rgan narsasi
+       * qilib ko'rsatdi — va u haq.
+       *
+       * ⛔ NEGA `max-w-6xl` NOTO'G'RI EDI: 1152px — MAQOLA o'lchovi
+       *    (65–75 belgi qatorda). Bu mahsulotda esa uzun matn YO'Q:
+       *    har ekran ro'yxat, jadval, karta setkasi yoki xarita. Ular
+       *    kengaygan sari YAXSHILANADI — jadvalda ustun kesilmaydi,
+       *    setkada karta nafas oladi, xaritada rasta ko'rinadi.
+       *
+       * ⛔ NEGA CHEKSIZ EMAS: 1600px dan keyin sarlavha bilan o'ng
+       *    chekkadagi boshqaruvlar orasi ko'z bir sakrashda o'ta
+       *    olmaydigan masofaga chiqadi (24" monitorda ~50sm). Chegara
+       *    ekranni ishlatadi, lekin ko'zni yugurtirmaydi.
+       * =====================================================================
+       */}
+      <div className="mx-auto flex w-full max-w-[100rem] flex-1 gap-6 px-4 py-6">
         {/* Yon panel — faqat `md` dan kattaroq ekranlarda. */}
         <nav
           aria-label={t("shell.sections")}

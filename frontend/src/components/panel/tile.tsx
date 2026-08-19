@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,29 @@ import { cn } from "@/lib/cn";
  * =============================================================================
  */
 
+/*
+ * ⛔⛔ «YANGILANDI» QATORI OLIB TASHLANDI (260819, ekranga qarab).
+ *
+ *     Har katakning pastida `Yangilandi: 20:57` turardi va u
+ *     MA'LUMOTNING YOSHI deb tanishtirilgan edi. Aslida u shunchaki
+ *     SOAT: qiymat bir marta `now` dan hisoblanib, oltala katakka
+ *     BIR XIL uzatilardi. Ekranda bir xil raqam OLTI MARTA yozilib,
+ *     har katakka ajratgich chiziq + qator qo'shardi (~40px × 6) —
+ *     va aynan shu kartalarni baland va bo'sh qilgan.
+ *
+ *     Endi u panel SARLAVHASIDA, bir marta. Ma'lumot yo'qolmadi,
+ *     TAKROR yo'qoldi.
+ *
+ * ⛔⛔ IKONKA QO'SHILDI — VA U BEZAK EMAS. Stitch maketida har kartada
+ *     bitta ingichka chiziqli ikonka bor. U ikki ish qiladi:
+ *     (a) katakni bir qarashda tanitadi (pul · qarz · odam · kamera),
+ *     (b) kartaning bo'sh chap-yuqori burchagini kompozitsiyaga
+ *         kiritadi. Bizda u YO'Q edi va keng kartalar shuning uchun
+ *         bo'm-bo'sh ko'rinardi.
+ *
+ *     Rang BERILMAYDI (`text-text-muted`): ikonka holat emas, NOM.
+ *     Rangli ikonka «bu yerda muammo bor» deb yolg'on signal berardi.
+ */
 export type PanelTileProps = {
   /**
    * Katakning tartib raqami — dizaynda o'ng yuqoridagi belgi.
@@ -54,15 +78,21 @@ export type PanelTileProps = {
    */
   index?: number;
   label: string;
-  /** Sarlavha ostidagi kichik qator: sana yoki manba. */
-  sub: string;
+  /**
+   * Sarlavha ostidagi kichik qator: MANBA yoki kesim.
+   *
+   * ⛔ IXTIYORIY va u SANANI TAKRORLASH uchun EMAS — davr sarlavhada
+   *    bir marta yozilgan. Bu qator faqat katak BOSHQA kesimga
+   *    tegishli bo'lganda beriladi («Reestr holati · …»,
+   *    «nazoratchi ko'rgan rastalar»).
+   */
+  sub?: string;
+  /** Katakni tanitadigan ingichka chiziqli ikonka (lucide). */
+  icon?: LucideIcon;
   href: string;
   /** Pastdagi affordans matni — «→» belgisi bu yerda QO'SHILADI. */
   action: string;
-  /** Yangilanish vaqti. `stale` bo'lsa ogohlantirish rangida. */
-  updatedAt: string;
-  stale?: boolean;
-  /** Kirish animatsiyasining kechikish indeksi (0–5). */
+  /** Kirish animatsiyasining kechikish indeksi (0–6). */
   step: number;
   /*
    * ⛔ Qo'shimcha sinf — FAQAT setkadagi joyni o'zgartirish uchun
@@ -80,10 +110,9 @@ export function PanelTile({
   index,
   label,
   sub,
+  icon: Icon,
   href,
   action,
-  updatedAt,
-  stale = false,
   step,
   children,
 }: PanelTileProps) {
@@ -96,9 +125,19 @@ export function PanelTile({
       <Card className="dir-tile">
         <CardHeader className="dir-tile-head">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="dir-tile-label">{label}</p>
-              <p className="dir-tile-sub">{sub}</p>
+            <div className="flex min-w-0 items-start gap-2.5">
+              {Icon === undefined ? null : (
+                <Icon
+                  aria-hidden="true"
+                  className="mt-px size-4 shrink-0 text-text-muted"
+                />
+              )}
+              <div className="min-w-0">
+                <p className="dir-tile-label">{label}</p>
+                {sub === undefined ? null : (
+                  <p className="dir-tile-sub">{sub}</p>
+                )}
+              </div>
             </div>
             {index === undefined ? null : <Badge tone="muted">{index}</Badge>}
           </div>
@@ -109,14 +148,13 @@ export function PanelTile({
             {children}
 
             {/*
-             * ⛔ AJRATGICH CHIZIQ MAJBURIY: usiz «Yangilandi» qatori
-             *    ko'rsatkichning bir qismi bo'lib ko'rinardi, holbuki u
-             *    MA'LUMOTNING YOSHI — boshqa turdagi fakt.
+             * ⛔ AJRATGICH CHIZIQ QOLDI, LEKIN ENDI FAQAT AMAL QATORINI
+             *    ajratadi: «Yangilandi» ketgach, chiziq qiymat bilan
+             *    «keyingi qadam» ni ajratadigan yagona vazifani oladi.
+             *    Usiz «Kunlar kesimi →» ko'rsatkichning bir qismi
+             *    bo'lib o'qilardi.
              */}
             <div className="dir-tile-foot">
-              <span className={stale ? "dir-tile-stale" : "dir-tile-updated"}>
-                {updatedAt}
-              </span>
               <span className="dir-tile-action">{action} →</span>
             </div>
           </div>
