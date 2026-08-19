@@ -9,7 +9,8 @@
     "search": "Поиск",
     "back": "Назад",
     "close": "Закрыть",
-    "languageLabel": "Язык"
+    "languageLabel": "Язык",
+    "readOnlyNote": "Только просмотр — добавление и изменение доступны администратору рынка."
   },
   "shell": {
     "marketLabel": "Рынок",

@@ -5,6 +5,7 @@ import { UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
+import { ReadOnlyNote } from "@/components/auth/read-only-note";
 import { ImportPanel } from "@/components/import/import-panel";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { TempPasswordDialog } from "@/components/users/temp-password-dialog";
@@ -70,6 +71,8 @@ export default function UsersPage() {
           </Button>
         ) : null}
       </div>
+
+      {canManage ? null : <ReadOnlyNote />}
 
       <UserList onTemporaryPassword={setTemporaryPassword} />
 

@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 
 import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
+import { ReadOnlyNote } from "@/components/auth/read-only-note";
 import { CategoryList } from "@/components/categories/category-list";
 import { TariffList } from "@/components/tariffs/tariff-list";
 import { Button } from "@/components/ui/button";
@@ -49,9 +50,13 @@ export default function TariffsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {t("tariffs.title")}
-      </h1>
+      <div className="flex flex-col gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {t("tariffs.title")}
+        </h1>
+
+        {canManage ? null : <ReadOnlyNote />}
+      </div>
 
       <Suspense
         fallback={

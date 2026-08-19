@@ -9,7 +9,8 @@
     "search": "Қидириш",
     "back": "Орқага",
     "close": "Ёпиш",
-    "languageLabel": "Тил"
+    "languageLabel": "Тил",
+    "readOnlyNote": "Фақат кўриш — қўшиш ва ўзгартириш бозор админи ҳуқуқида."
   },
   "shell": {
     "marketLabel": "Бозор",

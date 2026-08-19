@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
+import { ReadOnlyNote } from "@/components/auth/read-only-note";
 import { ExceptionDialog } from "@/components/calendar/exception-dialog";
 import { ExceptionList } from "@/components/calendar/exception-list";
 import { WeekdayPicker } from "@/components/calendar/weekday-picker";
@@ -49,9 +50,13 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {t("calendar.title")}
-      </h1>
+      <div className="flex flex-col gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {t("calendar.title")}
+        </h1>
+
+        {canManage ? null : <ReadOnlyNote />}
+      </div>
 
       <Suspense
         fallback={

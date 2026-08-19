@@ -5,6 +5,7 @@ import { Info, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
+import { ReadOnlyNote } from "@/components/auth/read-only-note";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VendorList } from "@/components/vendors/vendor-list";
@@ -85,6 +86,8 @@ export default function VendorsPage() {
           <Info aria-hidden="true" className="size-3.5 shrink-0" />
           {t("vendors.auditNotice")}
         </p>
+
+        {canManage ? null : <ReadOnlyNote />}
       </div>
 
       <Suspense

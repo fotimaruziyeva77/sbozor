@@ -9,7 +9,8 @@
     "search": "Qidirish",
     "back": "Orqaga",
     "close": "Yopish",
-    "languageLabel": "Til"
+    "languageLabel": "Til",
+    "readOnlyNote": "Faqat ko'rish — qo'shish va o'zgartirish bozor admini huquqida."
   },
   "shell": {
     "marketLabel": "Bozor",
