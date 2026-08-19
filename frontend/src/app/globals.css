@@ -1396,6 +1396,14 @@
   grid-column: 1 / -1;
 }
 
+/* ⛔ Bosh katak balandligi QAT'IY EMAS: ichida halqa + uchta son ustuni
+   bor va ular 13rem ga sig'maydi (Stitch kompozitsiyasi). */
+.dir-tile-hero .dir-tile,
+.dir-tile-hero .dir-tile-body {
+  height: auto;
+  min-height: 0;
+}
+
 /* Guruh yorlig'i — katak emas, setka bo'ylab cho'ziladigan ajratgich. */
 .dir-group-span {
   grid-column: 1 / -1;

@@ -3,6 +3,7 @@
 import { useFormatter, useLocale, useNow, useTimeZone } from "next-intl";
 
 import { DirectorTile } from "@/components/director/tile";
+import { cn } from "@/lib/cn";
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
 import type { Period } from "@/components/director/period";
 import { compareNote, comparePeriod, includesToday } from "@/components/director/period";
@@ -275,23 +276,61 @@ export function SixTiles({ period }: { period: Period }) {
                 />
               </svg>
               <p className="dir-hero-stat">{formatPercent(rate)}</p>
-              <Badge tone={rateTone}>
-                {rate >= 95
-                  ? "To'liq yig'ilmoqda"
-                  : rate >= 85
-                    ? "Bo'shliq bor"
-                    : "Jiddiy bo'shliq"}
-              </Badge>
+
+              {/*
+               * ⛔⛔ STITCH KOMPOZITSIYASI (260819 tuzatma): halqa CHAPDA,
+               *     o'ngda esa YORLIQ + UCHTA SON bir qatorda.
+               *
+               *     Birinchi ko'chirishda men faqat tokenlarni olgandim
+               *     (radius, shrift, erish qatlami) — kompozitsiyani
+               *     emas. Ekranda farq darhol ko'rindi: foiz ostida
+               *     bitta siqilgan qator turardi, Stitch'da esa uchta
+               *     son ustun bo'lib, har biri o'z yorlig'i bilan.
+               *
+               * ⛔ UCHINCHI SON — «Yig'ilmagan» — ATAYIN alohida ustun:
+               *    u foizning MA'NOSI. 96.4% ni odam «yaxshi» deb
+               *    o'qiydi; «yig'ilmagan 900 000 so'm» esa harakatga
+               *    chaqiradi. Ikkalasi birga turishi kerak.
+               */}
+              <div className="flex min-w-0 flex-1 flex-col gap-3">
+                <div>
+                  <Badge tone={rateTone}>
+                    {rate >= 95
+                      ? "To'liq yig'ilmoqda"
+                      : rate >= 85
+                        ? "Bo'shliq bor"
+                        : "Jiddiy bo'shliq"}
+                  </Badge>
+                </div>
+                <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
+                  <div>
+                    <dt className="dir-tile-label">Yig&apos;ilgan</dt>
+                    <dd className="dir-tile-value-sm mt-1">
+                      {formatSoum(format, revNow ?? 0, locale)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="dir-tile-label">Hisoblangan</dt>
+                    <dd className="dir-tile-value-sm mt-1 text-text-muted">
+                      {formatSoum(format, chargedNow ?? 0, locale)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="dir-tile-label">Yig&apos;ilmagan</dt>
+                    <dd
+                      className={cn(
+                        "dir-tile-value-sm mt-1",
+                        gapSoum !== null && gapSoum > 0
+                          ? "text-danger-text"
+                          : "text-text-muted",
+                      )}
+                    >
+                      {formatSoum(format, gapSoum ?? 0, locale)}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
             </div>
-            {/* Ikki son — foizning ORTIDAGI haqiqat: qancha kutilgan,
-                qancha tushgan va oradagi farq. */}
-            <p className="dir-tile-note">
-              {formatSoum(format, revNow ?? 0, locale)} /{" "}
-              {formatSoum(format, chargedNow ?? 0, locale)}
-              {gapSoum === null || gapSoum === 0
-                ? ""
-                : ` · yig'ilmagan: ${formatSoum(format, gapSoum, locale)}`}
-            </p>
           </>
         )}
       </DirectorTile>
@@ -302,6 +341,19 @@ export function SixTiles({ period }: { period: Period }) {
             boshlashni bilmasdi; guruh sarlavhasi esa savolni oldindan
             aytadi. Guruh yorlig'i setka bo'ylab cho'ziladi
             (`dir-group-span`) — u katak EMAS, ajratgich.
+      */}
+      {/*
+        ⛔⛔ TARTIB STITCH DIZAYNIDAN VA U MA'NOLI (260819 tuzatma).
+
+            Birinchi ko'chirishda men faqat guruh YORLIG'INI qo'ygandim,
+            kataklarni QAYTA TARTIBLAMAGANDIM — natijada «Qarz jami»
+            NAZORAT guruhiga tushib qolgan, PULda esa bitta katak
+            qolgan edi. Foydalanuvchi buni ekranda ko'rdi.
+
+        ⛔ Guruh a'zolari SAVOL bo'yicha ajratiladi:
+            PUL     — «qancha pul harakatlandi» (tushum · qarz · kassa)
+            NAZORAT — «nima nazoratdan chetda» (to'lovsiz · bandlik · AI)
+           Kataklarni ko'chirish IKKALA guruhni ham buzadi.
       */}
       <p className="dir-group-span dir-group-label">Guruh: pul</p>
 
@@ -326,37 +378,6 @@ export function SixTiles({ period }: { period: Period }) {
             <span className="dir-tile-note">{compareNote(period)}</span>
           </div>
         )}
-      </DirectorTile>
-
-      <p className="dir-group-span dir-group-label">Guruh: nazorat</p>
-
-      {/* --- 2 ------------------------------------------------------------ */}
-      <DirectorTile
-        action="Kamera kadrlari"
-        href="/reports/compare"
-        index={2}
-        label="Band, lekin to'lovsiz"
-        step={1}
-        sub={`${formatBusinessDay(format, day, locale)} · nazoratchi ko'rgan rastalar`}
-        updatedAt={updated}
-      >
-        <div className="flex flex-wrap items-baseline gap-2.5">
-          <p className="dir-tile-value">
-            {leakCount === null ? "—" : formatAmount(format, leakCount, locale)}
-          </p>
-          <span className="dir-tile-unit">rasta</span>
-          {leakSum === null ? null : (
-            <p className="dir-tile-value-aside">
-              {formatSoum(format, leakSum, locale)}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {leakCount !== null && leakCount > 0 ? (
-            <Badge tone="warning">Hisob yozilmagan</Badge>
-          ) : null}
-          {dLeak === null ? null : <Badge tone={dLeak.tone}>{dLeak.text}</Badge>}
-        </div>
       </DirectorTile>
 
       {/* --- 3 ------------------------------------------------------------ */}
@@ -398,6 +419,68 @@ export function SixTiles({ period }: { period: Period }) {
                   : ` · eng eski qarz ${formatBusinessDay(format, oldestDebt, locale)}`
               }`}
         </span>
+      </DirectorTile>
+
+      {/* --- 6 ------------------------------------------------------------ */}
+      <DirectorTile
+        action="Smena yozuvlari"
+        href="/reports"
+        index={6}
+        label="Kassirlar"
+        step={5}
+        sub={`${formatBusinessDay(format, day, locale)} · smenalar`}
+        updatedAt={updated}
+      >
+        <div className="flex items-baseline gap-2.5">
+          <p className="dir-tile-value">
+            {formatAmount(format, closedShifts, locale)}
+          </p>
+          <span className="dir-tile-unit">
+            smena yopildi · {shiftRows.length} dan
+          </span>
+        </div>
+        {shiftDiff === 0 ? null : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="warning">Deklaratsiya farqi</Badge>
+            <span className="dir-tile-value-aside dir-tile-diff">
+              {formatSoum(format, shiftDiff, locale)}
+            </span>
+            <span className="dir-tile-note">
+              {shiftDiff > 0 ? "tizim ortiq" : "deklaratsiya ortiq"}
+            </span>
+          </div>
+        )}
+      </DirectorTile>
+
+      <p className="dir-group-span dir-group-label">Guruh: nazorat</p>
+
+      {/* --- 2 ------------------------------------------------------------ */}
+      <DirectorTile
+        action="Kamera kadrlari"
+        href="/reports/compare"
+        index={2}
+        label="Band, lekin to'lovsiz"
+        step={1}
+        sub={`${formatBusinessDay(format, day, locale)} · nazoratchi ko'rgan rastalar`}
+        updatedAt={updated}
+      >
+        <div className="flex flex-wrap items-baseline gap-2.5">
+          <p className="dir-tile-value">
+            {leakCount === null ? "—" : formatAmount(format, leakCount, locale)}
+          </p>
+          <span className="dir-tile-unit">rasta</span>
+          {leakSum === null ? null : (
+            <p className="dir-tile-value-aside">
+              {formatSoum(format, leakSum, locale)}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {leakCount !== null && leakCount > 0 ? (
+            <Badge tone="warning">Hisob yozilmagan</Badge>
+          ) : null}
+          {dLeak === null ? null : <Badge tone={dLeak.tone}>{dLeak.text}</Badge>}
+        </div>
       </DirectorTile>
 
       {/* --- 4 ------------------------------------------------------------ */}
@@ -500,36 +583,6 @@ export function SixTiles({ period }: { period: Period }) {
         </div>
       </DirectorTile>
 
-      {/* --- 6 ------------------------------------------------------------ */}
-      <DirectorTile
-        action="Smena yozuvlari"
-        href="/reports"
-        index={6}
-        label="Kassirlar"
-        step={5}
-        sub={`${formatBusinessDay(format, day, locale)} · smenalar`}
-        updatedAt={updated}
-      >
-        <div className="flex items-baseline gap-2.5">
-          <p className="dir-tile-value">
-            {formatAmount(format, closedShifts, locale)}
-          </p>
-          <span className="dir-tile-unit">
-            smena yopildi · {shiftRows.length} dan
-          </span>
-        </div>
-        {shiftDiff === 0 ? null : (
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="warning">Deklaratsiya farqi</Badge>
-            <span className="dir-tile-value-aside dir-tile-diff">
-              {formatSoum(format, shiftDiff, locale)}
-            </span>
-            <span className="dir-tile-note">
-              {shiftDiff > 0 ? "tizim ortiq" : "deklaratsiya ortiq"}
-            </span>
-          </div>
-        )}
-      </DirectorTile>
     </div>
   );
 }
