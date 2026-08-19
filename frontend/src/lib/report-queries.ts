@@ -8,6 +8,7 @@ import {
   anomalyArchiveSchema,
   ledgerImportResultSchema,
   receivablesReportSchema,
+  liveRevenueSchema,
   revenueReportSchema,
   threeWayReportSchema,
 } from "@/lib/api-types";
@@ -122,6 +123,24 @@ export const reportKey = (
   to: string | null,
 ) => domainKey(marketId, "report", kind, from, to);
 
+/**
+ * Panel tushumining kaliti — ⛔ `reportKey` DAN AYRIM VA BU ATAYIN.
+ *
+ * `REPORT_KINDS` — EKSPORT QILINADIGAN hisobotlar reyestri (uning
+ * docstringiga qarang). `live` marshrutining `.xlsx` jufti YO'Q, ya'ni
+ * uni o'sha reyestrga qo'shish «bu ham yuklab olinadi» degan yolg'on
+ * da'vo bo'lardi va `buildReportExportPath()` unga mavjud bo'lmagan
+ * fayl yo'lini qurib berardi.
+ *
+ * Naqsh `compareKey` bilan bir xil — u ham xuddi shu sababdan
+ * reyestrdan tashqarida.
+ */
+export const liveRevenueKey = (
+  marketId: string,
+  from: string,
+  to: string,
+) => domainKey(marketId, "live-revenue", from, to);
+
 /** Uch tomonlama solishtiruvning kaliti — davri KUN, oraliq EMAS (§4.3). */
 export const compareKey = (marketId: string, day: string) =>
   domainKey(marketId, "compare", day);
@@ -187,6 +206,32 @@ export function useRevenueReport(
     queryFn: () =>
       apiFetch(buildReportDataPath("revenue", period), {
         schema: revenueReportSchema,
+      }),
+    enabled: marketId !== null && (options?.enabled ?? true),
+    staleTime: REPORT_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * `GET /reports/live?from=…&to=…` — PANEL tushumi, BUGUN ham qamraladi.
+ *
+ * ⛔ `useRevenueReport` DAN AYRIM va u O'RNINI BOSMAYDI: hisobot
+ *    sahifasi hamon `/reports/revenue` dan o'qiydi, chunki o'sha javob
+ *    `.xlsx` ga aylanadi va imzolanadi. Bu marshrutning `.xlsx` jufti
+ *    YO'Q — sabab `reports.py::live_revenue` docstringida.
+ */
+export function useLiveRevenue(
+  period: ReportPeriod,
+  options?: { enabled?: boolean },
+) {
+  const marketId = useMarketId();
+
+  return useQuery({
+    queryKey: liveRevenueKey(marketId ?? "", period.from, period.to),
+    queryFn: () =>
+      apiFetch(`/reports/live?from=${period.from}&to=${period.to}`, {
+        schema: liveRevenueSchema,
       }),
     enabled: marketId !== null && (options?.enabled ?? true),
     staleTime: REPORT_STALE_TIME_MS,

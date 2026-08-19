@@ -29,7 +29,10 @@ import {
 } from "@/lib/format-number";
 import { useAccuracyReport, useOccupancyDay } from "@/lib/occupancy-queries";
 import { useReconciliationReport } from "@/lib/reconciliation-queries";
-import { useReceivablesReport, useRevenueReport } from "@/lib/report-queries";
+import {
+  useLiveRevenue,
+  useReceivablesReport,
+} from "@/lib/report-queries";
 import { useShiftReport } from "@/lib/shift-queries";
 
 /*
@@ -98,8 +101,21 @@ export function SixTiles({ period }: { period: Period }) {
   const partial = includesToday(period, todayIso);
   const windowFrom = shiftIsoDay(day, -(WINDOW_DAYS - 1));
 
-  const revenue = useRevenueReport({ from: period.from, to: period.to });
-  const revenuePrev = useRevenueReport({ from: prev.from, to: prev.to });
+  /*
+   * ⛔⛔ `/reports/live`, `/reports/revenue` EMAS (260819).
+   *
+   *     Hisobot marshruti bugungi kunni **422** bilan rad etadi
+   *     (`daily_charges` D+1 04:10 da tug'iladi va o'sha javob
+   *     imzolanadigan `.xlsx` ga tushadi). Panelning to'rt filtridan
+   *     UCHTASI bugun bilan tugaydi — «Bugun», «7 kun», «30 kun» —
+   *     ya'ni panel hech qachon pul ko'rsata olmasdi va buzuq bo'lib
+   *     ko'rinardi [jonli o'lchandi].
+   *
+   *     `live` marshrutining `.xlsx` jufti YO'Q va u qo'shilmaydi;
+   *     imzolanadigan hujjat hamon faqat yopilgan kunlardan quriladi.
+   */
+  const revenue = useLiveRevenue({ from: period.from, to: period.to });
+  const revenuePrev = useLiveRevenue({ from: prev.from, to: prev.to });
   const leak = useReconciliationReport(day);
   const leakPrev = useReconciliationReport(shiftIsoDay(day, -7));
   const debtors = useReceivablesReport({ from: windowFrom, to: day });
@@ -128,7 +144,22 @@ export function SixTiles({ period }: { period: Period }) {
    *    foizdan qimmatroq xato yo'q, shuning uchun bu holat OCHIQ
    *    aytiladi: «hali hisoblanmagan».
    */
-  const chargedNow = revenue.data?.total_charged_soum ?? null;
+  /*
+   * ⛔⛔ DAVR BUGUNNI QAMRASA DARAJA CHIZILMAYDI — `charged_complete`.
+   *
+   *     Server javobning O'ZIDA maxraj to'liqligini aytadi. Bugungi
+   *     patta hisobi ertaga 04:10 da tug'ilgani uchun bugungi
+   *     `charged` KAM bo'ladi va undan chiqqan foiz 100% dan ham
+   *     yuqori chiqishi mumkin — hokimga ko'rsatiladigan ekranda
+   *     bundan qimmat yolg'on yo'q.
+   *
+   *     Yig'ilgan pul esa to'lovlardan real vaqtda o'qiladi va u
+   *     HALOL — shuning uchun u BARIBIR ko'rsatiladi.
+   */
+  const chargedComplete = revenue.data?.charged_complete ?? false;
+  const chargedNow = chargedComplete
+    ? (revenue.data?.total_charged_soum ?? null)
+    : null;
   const rate =
     revNow === null || chargedNow === null || chargedNow <= 0
       ? null

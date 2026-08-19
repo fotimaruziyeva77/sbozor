@@ -111,6 +111,7 @@ from app.schemas import (
     LedgerImportResponse,
     ReceivablesReportResponse,
     ReceivablesReportRow,
+    LiveRevenueResponse,
     RevenueReportResponse,
     RevenueReportRow,
     ThreeWayReportResponse,
@@ -579,6 +580,65 @@ async def revenue_report(
 # hal qilishda aynan shu yozuvga tayanadigan odam chalg'itilardi va bu
 # jurnalning BO'SH qolishidan ham yomonroq (T-02-71).
 # ===========================================================================
+
+
+@router.get("/live", response_model=LiveRevenueResponse)
+async def live_revenue(
+    principal: ReportViewerDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    from_date: FromDateDep,
+    to_date: ToDateDep,
+) -> LiveRevenueResponse:
+    """Panel uchun tushum — ⛔ BUGUN QAMRALADI, HUJJAT QURILMAYDI.
+
+    =======================================================================
+    ⛔⛔ NEGA BU MARSHRUT BOR (260819, jonli o'lchandi).
+
+    `GET /revenue` bugunni **422** bilan rad etadi (`_report_period`
+    docstringi — sabab to'g'ri va u TEGILMADI). Lekin direktor
+    panelining to'rt filtridan UCHTASI bugun bilan tugaydi
+    («Bugun», «7 kun», «30 kun»), ya'ni panel hech qachon pul
+    ko'rsata olmasdi va buzuq bo'lib ko'rinardi.
+
+    ⛔ BU MARSHRUTNING `.xlsx` JUFTI YO'Q VA QO'SHILMAYDI. Imzolanadigan
+       hujjat hamon faqat `/revenue` dan, ya'ni faqat YOPILGAN
+       kunlardan quriladi. «Ekranda tuzatilgan xato faylda tarqaydi»
+       xavfi bu yerda strukturaviy ravishda mavjud emas.
+
+    ⛔ KELAJAK KUNI BARIBIR RAD ETILADI: ertangi kunning tushumi
+       haqidagi savol MA'NOSIZ va bo'sh javob uni «nol tushum» bilan
+       aralashtirib yuborardi.
+
+    ⛔ QATORLAR BERILMAYDI, FAQAT IKKI YIG'INDI: panel kunlik kesimni
+       chizmaydi (u `/revenue` sahifasining ishi), shuning uchun
+       `row_count`/sahifalash ham YO'Q — javob kichik va tez.
+
+    `charged_complete` davr bugunni qamrasa `false` bo'ladi; klient
+    o'shanda yig'ilish darajasini CHIZMAYDI (`six-tiles.tsx`).
+    =======================================================================
+    """
+    market_id = _market_id(principal)
+
+    today = business_today()
+    if to_date > today:
+        raise _reject(_PERIOD_FUTURE, status.HTTP_422_UNPROCESSABLE_CONTENT)
+    if from_date > to_date:
+        raise _reject(_PERIOD_INVALID, status.HTTP_422_UNPROCESSABLE_CONTENT)
+    if (to_date - from_date).days + 1 > settings.report_max_period_days:
+        raise _reject(_PERIOD_TOO_LONG, status.HTTP_422_UNPROCESSABLE_CONTENT)
+
+    period = await report_repo.revenue_by_day(
+        session, market_id=market_id, from_date=from_date, to_date=to_date
+    )
+
+    return LiveRevenueResponse(
+        from_date=from_date,
+        to_date=to_date,
+        total_collected_soum=period.total_collected_soum,
+        total_charged_soum=period.total_charged_soum,
+        charged_complete=to_date < today,
+    )
 
 
 @router.get("/debtors", response_model=ReceivablesReportResponse)

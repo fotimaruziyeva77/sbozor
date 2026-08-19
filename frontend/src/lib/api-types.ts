@@ -724,6 +724,28 @@ export type BlockingItem = z.infer<typeof blockingItemSchema>;
  * Bozor tanlash ekrani shu javobdan FAQAT `blocking[].step` ni oladi
  * (§6.4) — qolgan maydonlar ustaning o'zi uchun.
  */
+/**
+ * `GET /reports/live?from=&to=` — PANEL uchun tushum (hujjat uchun EMAS).
+ *
+ * ⛔⛔ NEGA `revenueReportSchema` DAN AYRIM: `/reports/revenue` bugungi
+ *     kunni **422** bilan rad etadi (`daily_charges` D+1 04:10 da
+ *     tug'iladi va o'sha javob imzolanadigan `.xlsx` ga tushadi).
+ *     Panelning to'rt filtridan UCHTASI bugun bilan tugaydi, ya'ni
+ *     panel hech qachon pul ko'rsata olmasdi.
+ *
+ * ⛔ `charged_complete` — javobning O'ZI rostgo'yligini aytadi. `false`
+ *    bo'lsa patta yig'ilish DARAJASI chizilmaydi: nomukammal maxrajdan
+ *    chiqqan foiz hokimga ko'rsatiladigan ekrandagi eng qimmat yolg'on.
+ */
+export const liveRevenueSchema = z.object({
+  from_date: z.string(),
+  to_date: z.string(),
+  total_collected_soum: soumSchema,
+  total_charged_soum: soumSchema,
+  charged_complete: z.boolean(),
+});
+export type LiveRevenue = z.infer<typeof liveRevenueSchema>;
+
 export const setupStatusResponseSchema = z.object({
   zones: z.number().int(),
   categories: z.number().int(),

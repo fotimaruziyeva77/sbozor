@@ -4509,6 +4509,49 @@ class RevenueReportResponse(BaseModel):
     shown_count: int
 
 
+class LiveRevenueResponse(BaseModel):
+    """`GET /reports/live?from=&to=` — ⛔ PANEL uchun, HUJJAT uchun EMAS.
+
+    =======================================================================
+    ⛔⛔ NEGA `GET /reports/revenue` DAN AYRIM MARSHRUT.
+
+    `/reports/revenue` BUGUNGI kunni **422 `report_period_future`** bilan
+    rad etadi va bu TO'G'RI: `daily_charges` D+1 04:10 da tug'iladi
+    (`BILLING_CLOSE_CRON`, C-3), ya'ni bugunni qamragan hisobot bugungi
+    TO'LOVNI ko'rsatib, bugungi PATTANI ko'rsatmasdi — natija kam
+    ko'rsatilgan `charged_soum` va sun'iy musbat farq bo'lardi. Va u
+    ekranda qolmasdi: aynan o'sha javob imzolanadigan `.xlsx` ga tushadi.
+
+    Lekin DIREKTOR PANELI boshqa savolga javob beradi — «hozir qanday
+    ketyapti». Panelning «Bugun / 7 kun / 30 kun» filtrlari BUGUN bilan
+    tugaydi, ya'ni to'rttadan uchtasi hech qachon pul ko'rsata olmasdi
+    va panel buzuq bo'lib ko'rinardi [jonli o'lchandi 260819].
+
+    ⛔ SHUNING UCHUN AJRATILDI, CHEGARA YUMSHATILMADI:
+       · `/reports/revenue` VA uning `.xlsx` juftlari TEGILMAGAN —
+         imzolanadigan hujjat hamon faqat YOPILGAN kunlardan quriladi;
+       · bu marshrutning `.xlsx` JUFTI YO'Q va u QO'SHILMAYDI. Shu
+         sabab «ekranda tuzatilgan xato faylda tarqaydi» xavfi bu
+         yerda strukturaviy ravishda mavjud emas.
+
+    ⛔ `charged_complete` — JAVOBNING O'ZI ROSTGO'YLIGINI AYTADI.
+       Davr bugunni qamrasa u `false` bo'ladi va klient patta
+       yig'ilish DARAJASINI (yig'ilgan / hisoblangan) CHIZMASLIGI
+       kerak: nomukammal maxrajdan chiqqan foiz hokimga ko'rsatiladigan
+       ekrandagi eng qimmat yolg'on bo'lardi. Yig'ilgan pul esa
+       to'lovlardan real vaqtda o'qiladi va u HALOL.
+    =======================================================================
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    from_date: date
+    to_date: date
+    total_collected_soum: int
+    total_charged_soum: int
+    charged_complete: bool
+
+
 class ReceivablesReportRow(BaseModel):
     """Qarzdorlik reestrining bir qatori — ⛔ SOTUVCHI kesimida (§8.3).
 
