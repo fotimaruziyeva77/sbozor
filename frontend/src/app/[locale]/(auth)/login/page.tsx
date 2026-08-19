@@ -1,3 +1,4 @@
+import { KeyRound } from "lucide-react";
 import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -64,14 +65,39 @@ export default async function LoginPage({
         <div className="mt-6.5">
           <LoginForm />
         </div>
-        {/* Parol tiklash yo'li — «unutdingizmi?» havolasining MANZILI.
-            ⛔ Soxta oqim yo'q: parolni bozor administratori qayta beradi. */}
-        <p
-          className="mt-6.5 border-t border-border pt-5 text-xs leading-relaxed text-text-muted"
-          id="tiklash"
-        >
-          {t("login.helpNote")}
-        </p>
+        {/*
+          ⛔⛔ PAROL TIKLASHNING YAGONA JAVOBI — 260819 da KUCHAYTIRILDI.
+
+          Avval bu yerda 12px xira izoh turardi va uning ustida
+          «Parolni unutdingizmi?» havolasi bor edi. Havola aynan SHU
+          paragrafga (`#tiklash`) olib borardi — ya'ni allaqachon
+          ko'rinib turgan joyga: bosilganda ekranda hech nima
+          o'zgarmasdi. Havola olib tashlandi, izoh esa endi yagona
+          javob bo'lgani uchun KO'RINADIGAN blokka aylandi.
+
+          ⛔ Bu yerda «tiklash tugmasi» YO'Q va bo'lmaydi ham: parolni
+            o'zi tiklash oqimi mahsulotda umuman yo'q
+            (`users.py::reset_password` — «SMS/email/bot-kod oqimi
+            YO'Q»). Administrator vaqtinchalik parol beradi, tizim
+            `must_change_password` qo'yadi va barcha eski sessiyalarni
+            bekor qiladi. Bu yerga soxta forma qo'yish foydalanuvchini
+            mavjud bo'lmagan oqimni kutishga majburlardi.
+        */}
+        <div className="mt-6.5 flex gap-3 rounded-xl border border-border bg-surface-muted px-4 py-3.5">
+          <KeyRound
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0 text-text-muted"
+            strokeWidth={1.75}
+          />
+          <div>
+            <p className="text-sm font-semibold text-text">
+              {t("login.helpTitle")}
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-text-muted">
+              {t("login.helpNote")}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

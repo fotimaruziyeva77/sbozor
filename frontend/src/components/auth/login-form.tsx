@@ -193,13 +193,25 @@ export function LoginForm() {
         </span>
       </Field>
 
-      {/* Parolni tiklash — sahifa ostidagi izohga (soxta oqim yaratilmaydi). */}
-      <a
-        className="self-end text-xs font-semibold text-accent-text hover:underline"
-        href="#tiklash"
-      >
-        {t("auth.login.forgot")}
-      </a>
+      {/*
+       * ⛔⛔ «PAROLNI UNUTDINGIZMI?» HAVOLASI OLIB TASHLANDI (260819).
+       *
+       *     U `#tiklash` ankeriga — SHU KARTANING pastidagi izohga —
+       *     olib borardi. Izoh esa allaqachon ekranda, 200px pastda
+       *     ko'rinib turardi: bosilganda EKRANDA HECH NIMA
+       *     O'ZGARMASDI. Foydalanuvchi buni «tugma ishlamayapti» deb
+       *     o'qidi va u haq edi.
+       *
+       *     Mahsulot mantig'i ham havolani oqlamaydi: parolni O'ZI
+       *     tiklash oqimi YO'Q va bo'lmaydi ham
+       *     (`users.py::reset_password` — «SMS/email/bot-kod oqimi
+       *     YO'Q»). Parolni bozor administratori tiklaydi: server
+       *     vaqtinchalik parol beradi, `must_change_password` qo'yadi
+       *     va foydalanuvchining BARCHA sessiyalarini bekor qiladi.
+       *
+       *     Ya'ni havola qiladigan yagona ish — pastdagi izohni
+       *     TAKRORLASH edi. Endi izohning o'zi javob beradi.
+       */}
 
       {formError ? (
         <p

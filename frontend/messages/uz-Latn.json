@@ -87,9 +87,9 @@
       },
       "cardTitle": "Tizimga kirish",
       "cardSub": "Bozor administratori bergan login bilan kiring.",
-      "forgot": "Parolni unutdingizmi?",
-      "helpNote": "Login yo‘qmi yoki parol esdan chiqdimi? Bozor administratoriga murojaat qiling — parol qayta beriladi.",
-      "backToSite": "← Saytga qaytish"
+      "helpNote": "Bozor administratoriga ayting — u sizga yangi parol beradi. Birinchi kirishda tizim uni o‘zingiz tanlagan parolga almashtirishni so‘raydi.",
+      "backToSite": "← Saytga qaytish",
+      "helpTitle": "Parol esdan chiqdimi?"
     }
   },
   "users": {
