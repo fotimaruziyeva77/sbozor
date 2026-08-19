@@ -1401,7 +1401,14 @@
    *    «Yangilandi» chizig'ini bir sathga keltiradi. */
   margin-top: auto;
   display: flex;
-  justify-content: space-between;
+  /*
+   * ⛔ `space-between` EMAS, `flex-end`: «Yangilandi» qatori ketgach
+   *    bu yerda BITTA element qoldi va `space-between` uni chap
+   *    chekkaga tashlardi. Stitch kompozitsiyasida amal havolasi
+   *    kartaning O'NG pastida — ko'z qiymatni o'qib, tabiiy ravishda
+   *    o'ngga va pastga «keyingi qadam» ga tushadi.
+   */
+  justify-content: flex-end;
   align-items: center;
   gap: 0.625rem;
   border-top: 1px solid var(--color-border);

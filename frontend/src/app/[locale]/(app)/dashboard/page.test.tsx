@@ -229,11 +229,39 @@ describe("bozor admini", () => {
     routeFetch();
     renderPage(["market_admin"], { marketIsActive: false });
 
-    /* ⛔ 260818: bozor adminida ham `report_view` bor -> dizayn paneli. */
-    expect(screen.getByText("Bozor paneli")).toBeInTheDocument();
+    /*
+     * ⛔⛔ 260819: BOZOR ADMINI ENDI O'Z PANELINI OLADI.
+     *
+     *     Avval bu yerda «Bozor paneli» kutilardi — bozor adminida ham
+     *     `report_view` bor va u DIREKTOR panelini ko'rardi. Ikkalasi
+     *     boshqa savolga javob beradi:
+     *
+     *       direktor     -> «pul to'liq yig'ilyaptimi?»
+     *       bozor admini -> «bozorim ishlashga tayyormi?»
+     *
+     *     Darvoza `tariff_manage` (bozorni KIM boshqarsa, o'sha admin
+     *     panelini ko'radi) — `AdminPanel`.
+     *
+     *     DA'VO O'ZGARMADI: sahifa bo'sh emas VA bozor holati kartasi
+     *     (`market_manage`, unda YO'Q) chizilmaydi.
+     */
+    expect(screen.getByText("Admin paneli")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(
       messages.dashboard.marketStatus,
     );
+  });
+
+  /*
+   * ⛔ IKKI PANEL BIR VAQTDA CHIZILMAYDI — bu darvozaning ikkinchi
+   *    yarmi. Shartsiz `AdminPanel` qo'shilsa direktor paneli ham
+   *    qolib, bozor admini ikkita sarlavha ko'rardi.
+   */
+  test("direktor paneli ham chizilmaydi — bitta panel, bitta sarlavha", async () => {
+    routeFetch();
+    renderPage(["market_admin"], { marketIsActive: false });
+
+    expect(screen.getByText("Admin paneli")).toBeInTheDocument();
+    expect(screen.queryByText("Bozor paneli")).not.toBeInTheDocument();
   });
 });
 

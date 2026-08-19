@@ -310,7 +310,15 @@ export function SixTiles({ period }: { period: Period }) {
                       : "Jiddiy bo'shliq"}
               </Badge>
             </div>
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
+            {/*
+             * ⛔ `grid-cols-3` EMAS, `flex` — VA BU EKRANDAN KELDI.
+             *    Setka uchta ustunni butun kenglikka TENG bo'lib
+             *    berardi: 1336px kartada yorliqlar 455 · 813 · 1174
+             *    da turib, uch son bir-biridan uzilib qolardi. Ular
+             *    BIR gapning uch bo'lagi — «yig'ilgan, hisoblangan,
+             *    farqi» — va yonma-yon o'qilishi kerak.
+             */}
+            <dl className="flex flex-wrap gap-x-12 gap-y-3">
               <div>
                 <dt className="dir-tile-label">Yig&apos;ilgan</dt>
                 <dd className="dir-tile-value-sm mt-1">
