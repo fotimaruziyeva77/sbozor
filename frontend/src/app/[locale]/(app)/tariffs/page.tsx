@@ -81,11 +81,26 @@ function TariffsBody({ canManage }: { canManage: boolean }) {
 
   return (
     /*
-     * `<768px` da ustunlar KETMA-KET: telefon ekranida yon panel ham,
-     * tarix ham yarim kenglikda o'qib bo'lmas edi. Reestrlar TEPADA
-     * turadi, chunki tarif ular ustiga quriladi (avval toifa, keyin narx).
+     * Ustunlar KETMA-KET: tor ekranda yon panel ham, tarix ham yarim
+     * kenglikda o'qib bo'lmas edi. Reestrlar TEPADA turadi, chunki tarif
+     * ular ustiga quriladi (avval toifa, keyin narx).
+     *
+     * ⛔⛔ CHEGARA `md` EMAS, `lg` — VA BU O'LCHOVDAN KELIB CHIQQAN
+     *     TUZATMA (260819).
+     *
+     *     `md` (768px) da ilova QOBIG'INING yon paneli ham ochiladi
+     *     (`w-52` = 208px). Ya'ni 768px ekranda: qobiq to'ldirmasi 32 +
+     *     yon panel 208 + oraliq 24 = 264px yo'qoladi, asosiy ustunga
+     *     504px qoladi. Bu sahifa esa o'sha 504px ni yana ikkiga
+     *     bo'lardi: 320 + 24 = 344, o'ng ustunga 160px. Filtr maydoni
+     *     `min-w-48` (192px) unga SIG'MAYDI va sahifa 784px ga
+     *     cho'zilardi (Xromda o'lchandi: 784 > 768).
+     *
+     *     `lg` (1024px) da esa asosiy ustun 760px — ikkiga bo'linishi
+     *     bemalol. 768–1023px oralig'ida sahifa bir ustunli bo'ladi va
+     *     bu o'qish uchun ham yaxshiroq.
      */
-    <div className="grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
       <div className="flex flex-col gap-4">
         <ZoneList canManage={canManage} />
         <CategoryList canManage={canManage} />

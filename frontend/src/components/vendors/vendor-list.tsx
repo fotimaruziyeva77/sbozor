@@ -291,7 +291,15 @@ function VendorCard({
           </a>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        {/*
+       * ⛔ `flex-wrap`, `shrink-0` YO'Q (260819): bu guruh badge va amal
+       *    tugmalarini tutadi va ularning yig'indisi telefonda 375px dan
+       *    OSHADI. `shrink-0` bilan u hech qachon siqilmasdi va BUTUN
+       *    SAHIFANI cho'zib yuborardi — `/tariffs` da o'lchandi: sahifa
+       *    413px, ekran 375px. Endi tor ekranda guruh ikki satrga
+       *    bo'linadi; keng ekranda ko'rinish o'zgarmaydi.
+       */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge tone="muted">
             {t("vendors.stallCount", { count: vendor.stall_count })}
           </Badge>

@@ -467,7 +467,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }));
 
   return (
-    <div className="flex min-h-full flex-1 flex-col">
+    // `app-scene` — statik fon qatlamlari (globals.css). Harakat YO'Q:
+    // kassir bu ekranni smena bo'yi ko'radi.
+    <div className="app-scene flex min-h-full flex-1 flex-col">
       {/*
        * ⛔⛔ SARLAVHA TELEFONDA IKKI QATOR (260819) — VA BU O'LCHOVDAN
        *     KELIB CHIQQAN QAROR, DID EMAS.
@@ -488,7 +490,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
        *    doimiy yeb turardi. Kassirga doimiy kerak bo'lgan narsa —
        *    pastki panel (u `fixed`) va to'lov paneli, sarlavha emas.
        */}
-      <header className="z-40 border-b border-border bg-surface/90 backdrop-blur md:sticky md:top-0">
+      <header className="app-surface z-40 border-b border-border md:sticky md:top-0">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:flex-nowrap md:justify-between">
           <div className="mr-auto min-w-0">
             <p className="text-xs text-text-muted">{t("shell.marketLabel")}</p>
@@ -550,7 +552,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Mobil pastki panel — barmoq nishoni uchun kamida 44px balandlik. */}
       <nav
         aria-label={t("shell.sections")}
-        className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface md:hidden"
+        className="app-surface fixed inset-x-0 bottom-0 z-40 flex border-t border-border md:hidden"
       >
         {primary.map((item) => {
           const Icon = item.icon;

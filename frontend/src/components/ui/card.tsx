@@ -12,6 +12,22 @@ export function Card({ className, ...props }: CardProps) {
   return (
     <div
       className={cn(
+        /*
+         * ⛔⛔ KARTA SHAFFOF EMAS — VA BU O'LCHOVDAN KEYINGI QAROR (260819).
+         *
+         *   Avval bu yerda `app-surface` sinfi ham bor edi (ish yuzasi
+         *   fonining ustida «suzsin» degan niyat bilan). Brauzerda
+         *   o'lchanganda ma'lum bo'ldiki, u UMUMAN ISHLAMAYAPTI:
+         *   `.app-scene .app-surface` qoidasi `@layer components` da,
+         *   `bg-surface` esa utilita — kaskadda utilita yutadi va karta
+         *   to'liq shaffofmas bo'lib qolardi. Ustiga `backdrop-filter:
+         *   blur(8px)` HAMON hisoblanardi: sof narx, nol samara.
+         *
+         *   Bu ayniqsa telefonda muhim — kassirning ro'yxatlarida
+         *   o'nlab karta bor va har biriga blur berish scroll'ni
+         *   arzon Androidda sekinlashtiradi. Shuning uchun shaffoflik
+         *   FAQAT sarlavha va pastki panelda qoldi (ular bittadan).
+         */
         "rounded-lg border border-border bg-surface shadow-card",
         /*
          * Hover ko'tarilishi (09-UI-SPEC §12.3). Yumshoqlik `@theme` dagi

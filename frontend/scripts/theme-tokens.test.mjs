@@ -375,10 +375,27 @@ function themeBlock() {
 /** `[data-theme="X"]` scope bloki va uning fayldagi boshlanish indeksi. */
 function scopeBlock(theme) {
   const selector = `[data-theme="${theme}"]`;
-  const at = css.indexOf(selector);
-  assert.ok(at >= 0, `globals.css: ${selector} scope bloki topilmadi`);
-  const open = css.indexOf("{", at);
-  assert.ok(open > at, `globals.css: ${selector} dan keyin '{' topilmadi`);
+  /*
+   * ⛔ SELEKTORDAN KEYIN DARHOL `{` — 260819 tuzatmasi.
+   *
+   *   Avval bu yerda `css.indexOf(selector)` turardi, ya'ni BIRINCHI
+   *   uchrashuv olinardi. Bu «birinchi uchrashuv — token bloki» degan
+   *   AYTILMAGAN taxmin edi va u faylga `[data-theme="dark"] .sinf {…}`
+   *   ko'rinishidagi BEZAK qoidasi qo'shilishi bilan yiqildi: darvoza
+   *   bezak blokini token bloki deb o'qib, mavjud bo'lmagan nuqson
+   *   haqida qizil berdi (ish yuzasi foni qo'shilganda aynan shunday
+   *   bo'ldi).
+   *
+   *   Endi qidiruv ANIQ: token bloki — selektordan keyin bo'shliqdan
+   *   boshqa hech nima kelmaydigan blok. Darvoza kuchsizlanmadi.
+   */
+  const match = new RegExp(
+    `\\[data-theme="${theme}"\\]\\s*\\{`,
+    "u",
+  ).exec(css);
+  assert.ok(match !== null, `globals.css: ${selector} scope bloki topilmadi`);
+  const at = match.index;
+  const open = at + match[0].length - 1;
   return { start: at, body: extractCssBlock(css, open) };
 }
 

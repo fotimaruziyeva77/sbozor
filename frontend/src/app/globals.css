@@ -427,6 +427,127 @@
     transform: scaleY(1);
   }
 
+  /* ==== ISH YUZASI FONI — «KIRISH SAHIFASIDAGIDEK» (260819) ===========
+   *
+   * ⛔⛔ NEGA QO'SHILDI: foydalanuvchi «hozirgi ko'rinish juda ham sodda
+   *     va oddiy» dedi va kirish sahifasining sahnasini ko'rsatdi. Ish
+   *     yuzalari haqiqatan yassi `--color-bg` ustida turardi — kontent
+   *     bilan fon orasida hech qanday chuqurlik yo'q edi.
+   *
+   * ⛔⛔ LEKIN KIRISH SAHNASI AYNAN KO'CHIRILMAYDI — VA BU QAT'IY.
+   *
+   *     Kirishda 14 ustunli «jonli xarita» bor va u CHEKSIZ animatsiya
+   *     qiladi (`cellglow` 14s, `scanbeam` 18s). Kirish sahifasi 10
+   *     soniya ko'riladi; ish yuzasini esa kassir SMENA BO'YI ko'radi.
+   *     Cheksiz takrorlanuvchi harakat u yerda charchatadi — bu
+   *     loyihaning yozib qo'yilgan qoidasi (motion: «takrorlanuvchi
+   *     harakat ish yuzasida TAQIQ»).
+   *
+   *     Shuning uchun bu yerda HARAKAT YO'Q: faqat statik qatlamlar —
+   *     ikkita yumshoq radial nur va juda nozik to'r. Chuqurlik bor,
+   *     tinchlik ham.
+   *
+   * ⛔ `position: fixed` — fon SCROLL BILAN SURILMAYDI. `absolute`
+   *    bo'lsa uzun sahifada (audit jurnali, hisobotlar) nur pastda
+   *    yo'qolib, sahifaning yarmi yana yassi bo'lib qolardi.
+   *
+   * ⛔ `z-index: -1` + `isolation: isolate` — qatlamlar KONTENT OSTIDA
+   *    qoladi va ilovaning boshqa `z-index` larini (sticky sarlavha 40,
+   *    modal 50) qo'zg'atmaydi.
+   *
+   * ⛔⛔ «QUYOSH OSTIDA» TEMASIDA FON UMUMAN CHIZILMAYDI. U rejim
+   *     kassirning DALA sharoiti uchun: ochiq havoda, quyosh tushib
+   *     turgan ekranda maksimal kontrast kerak. Har qanday tint yoki
+   *     to'r u yerda o'qishni QIYINLASHTIRADI, chiroyli qilmaydi.
+   */
+  .app-scene {
+    position: relative;
+    isolation: isolate;
+  }
+  .app-scene::before,
+  .app-scene::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+  /* 1-qatlam — ikki yumshoq nur (yuqori chap: aksent, yuqori o'ng: yashil). */
+  .app-scene::before {
+    background:
+      radial-gradient(
+        980px 520px at 6% -8%,
+        oklch(0.62 0.17 255 / 0.16),
+        transparent 64%
+      ),
+      radial-gradient(
+        840px 460px at 104% -4%,
+        oklch(0.62 0.14 165 / 0.11),
+        transparent 62%
+      );
+  }
+  /* 2-qatlam — «qog'oz to'ri». Maska bilan pastga qarab yo'qoladi:
+     butun sahifa bo'ylab to'r shovqin bo'lardi. */
+  .app-scene::after {
+    background-image:
+      linear-gradient(to right, oklch(0.45 0 0 / 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(0.45 0 0 / 0.045) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(
+      1100px 620px at 50% -12%,
+      rgb(0 0 0 / 100%),
+      transparent 72%
+    );
+  }
+  /* Tungi qamrov — kirish sahnasining ohangi (indigo), lekin tinchroq. */
+  [data-theme="dark"] .app-scene::before {
+    background:
+      radial-gradient(
+        1000px 560px at 8% -10%,
+        oklch(0.4 0.07 258 / 0.55),
+        transparent 64%
+      ),
+      radial-gradient(
+        820px 460px at 104% -6%,
+        oklch(0.34 0.06 195 / 0.4),
+        transparent 62%
+      );
+  }
+  [data-theme="dark"] .app-scene::after {
+    background-image:
+      linear-gradient(to right, oklch(0.8 0 0 / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(0.8 0 0 / 0.05) 1px, transparent 1px);
+  }
+  /* ⛔ Dala rejimi — TOZA OQ, bezaksiz (yuqoridagi izoh). */
+  [data-theme="sun"] .app-scene::before,
+  [data-theme="sun"] .app-scene::after {
+    display: none;
+  }
+
+  /* ---- Sarlavha va kartalar — fon ustida «suzadi» --------------------
+   * Fon endi tekstura tashiydi, ya'ni yassi `bg-surface` uning ustida
+   * kesilgan qog'oz bo'lib ko'rinardi. Yengil shaffoflik + blur ikkalasini
+   * bir muhitga qo'shadi.
+   * ⛔ «Quyosh ostida» da shaffoflik YO'Q: dala rejimida matn ostidagi
+   *   har qanday tiniqlik kontrastni yeydi.
+   */
+  /*
+   * ⛔ FAQAT SARLAVHA VA PASTKI PANEL uchun (260819). Kartalar bu
+   *    sinfni OLMAYDI: (a) ularda `bg-surface` utilitasi bor va u
+   *    kaskadda bu qoidani yengadi — ya'ni samara nol bo'lardi;
+   *    (b) ro'yxatda o'nlab karta bo'ladi va har biriga blur berish
+   *    arzon Androidda scroll'ni sekinlashtiradi. Sarlavha bilan
+   *    pastki panel esa sahifada BITTADAN.
+   */
+  .app-scene .app-surface {
+    background: color-mix(in oklch, var(--color-surface) 82%, transparent);
+    backdrop-filter: blur(8px);
+  }
+  [data-theme="sun"] .app-scene .app-surface {
+    background: var(--color-surface);
+    backdrop-filter: none;
+  }
+
   /* ---- Landing «tungi bozor» atmosferasi (marketing yuza) --------------
    * Vizual qatlam FAQAT statik fon/soya: yangi @keyframes YO'Q (reyestr
    * yopiq), geometriya tranzitsiyasi YO'Q (G-land-3). Rang qiymatlari

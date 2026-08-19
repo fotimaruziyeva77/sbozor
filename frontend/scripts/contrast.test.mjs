@@ -141,12 +141,20 @@ function stripCssComments(source) {
   return source.replace(/\/\*[\s\S]*?\*\//gu, "");
 }
 
-/** `marker { ... }` blokining ICHKI matni — qavs sanog'i bilan. */
+/**
+ * `marker { ... }` blokining ICHKI matni — qavs sanog'i bilan.
+ *
+ * ⛔ `marker` dan keyin FAQAT bo'shliq va `{` kelishi shart (260819):
+ *    aks holda `[data-theme="dark"] .sinf { … }` ko'rinishidagi BEZAK
+ *    qoidasi token bloki o'rniga topilib, darvoza yolg'on qizil
+ *    berardi (o'lchandi: ish yuzasi foni qo'shilganda).
+ */
 function extractBlock(source, marker) {
-  const start = source.indexOf(marker);
-  if (start === -1) return null;
-  const open = source.indexOf("{", start);
-  if (open === -1) return null;
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const match = new RegExp(`${escaped}\\s*\\{`, "u").exec(source);
+  if (match === null) return null;
+  const start = match.index;
+  const open = start + match[0].length - 1;
   let depth = 0;
   for (let i = open; i < source.length; i += 1) {
     if (source[i] === "{") depth += 1;
