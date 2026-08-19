@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/cn";
 
@@ -34,17 +33,18 @@ import { cn } from "@/lib/cn";
  *    `director/` katalogida qolgan bo'lsa, admin paneli «direktor»
  *    komponentini import qilib turgandek ko'rinardi.
  *
- * ⛔ Tartib raqami (1–6) `Badge tone="muted"` da — dizayn shunday
- *    qiladi va u tasodifiy emas: direktor telefonda «uchinchi katakka
- *    qara» deb aytishi mumkin bo'lishi kerak.
+ * ⛔⛔ TARTIB RAQAMI (1–6) OLIB TASHLANDI (260819).
  *
- * ⛔⛔ VA AYNAN SHU SABAB RAQAM O'QISH TARTIBIGA BOG'LIQ. Kataklar
- *     qayta tartiblanganda raqamlar eski joyida qolib, ekranda
- *     «1 · 3 · 6 · 2 · 4 · 5» bo'lib o'qildi [O'LCHANDI 260819,
- *     brauzerda]. Raqam o'z va'dasini bajarmasa u shovqin — shuning
- *     uchun `index` endi IXTIYORIY va u BERILMASA belgi umuman
- *     chizilmaydi. Bosh katak («yig'ilish darajasi») raqamsiz: u
- *     ro'yxatning a'zosi emas, u ro'yxat javob beradigan SAVOL.
+ *     Karta burchagida `Badge` ichida raqam turardi. Stitch maketida
+ *     u YO'Q — va Stitch haq: raqam hech qanday savolga javob
+ *     bermaydi, u faqat «uchinchi katakka qara» deyish uchun edi.
+ *     Bir marta u allaqachon shovqinga aylangan ham edi (kataklar
+ *     qayta tartiblanganda ekranda «1 · 3 · 6 · 2 · 4 · 5» bo'lib
+ *     o'qildi). Kartani kim nomlaydi — YORLIQ va IKONKA.
+ *
+ *     Kirish animatsiyasining navbati (`step`) esa QOLADI va u hamon
+ *     o'qish tartibida bo'lishi kerak — buni `director-order`
+ *     darvozasi tekshiradi.
  * =============================================================================
  */
 
@@ -72,48 +72,58 @@ import { cn } from "@/lib/cn";
  *     Rangli ikonka «bu yerda muammo bor» deb yolg'on signal berardi.
  */
 export type PanelTileProps = {
-  /**
-   * Katakning tartib raqami — dizaynda o'ng yuqoridagi belgi.
-   * Berilmasa belgi chizilmaydi (bosh katak shunday).
-   */
-  index?: number;
   label: string;
   /**
-   * Sarlavha ostidagi kichik qator: MANBA yoki kesim.
-   *
-   * ⛔ IXTIYORIY va u SANANI TAKRORLASH uchun EMAS — davr sarlavhada
-   *    bir marta yozilgan. Bu qator faqat katak BOSHQA kesimga
-   *    tegishli bo'lganda beriladi («Reestr holati · …»,
-   *    «nazoratchi ko'rgan rastalar»).
+   * Sarlavha ostidagi kichik qator — FAQAT katak boshqa kesimga
+   * tegishli bo'lganda («Reestr holati · …»). Davr sarlavhada bir
+   * marta yozilgan va bu yerda TAKRORLANMAYDI.
    */
   sub?: string;
-  /** Katakni tanitadigan ingichka chiziqli ikonka (lucide). */
+  /** O'ng yuqoridagi ingichka chiziqli ikonka (lucide). */
   icon?: LucideIcon;
+  /** Yorliq oldidagi holat nuqtasi — Stitch «Band, lekin to'lovsiz» kartasi. */
+  dot?: "success" | "warning" | "danger";
   href: string;
-  /** Pastdagi affordans matni — «→» belgisi bu yerda QO'SHILADI. */
-  action: string;
   /** Kirish animatsiyasining kechikish indeksi (0–6). */
   step: number;
+  /**
+   * Kartaning PASTKI qatori — izoh, yorliq yoki chap/o'ng juftlik.
+   * `margin-top: auto` bilan pastga yopishadi.
+   */
+  note?: ReactNode;
+  /**
+   * Ajratgich + amal havolasi.
+   *
+   * ⛔ FAQAT BOSH KATAKDA. Stitch maketida kichik kartalarda amal
+   *    qatori YO'Q — karta butunlay bosiladigan va ortiqcha qator
+   *    olti marta takrorlanib, har kartaga ~40px qo'shardi.
+   */
+  action?: string;
   /*
    * ⛔ Qo'shimcha sinf — FAQAT setkadagi joyni o'zgartirish uchun
    *    (`dir-tile-hero` butun qatorni egallaydi). Kartaning ICHKI
-   *    ko'rinishi bu prop bilan o'zgartirilmaydi: aks holda har
-   *    chaqiruvchi o'z katagini «biroz boshqacha» qilib, dizayn
-   *    birligi yo'qolardi.
+   *    ko'rinishi bu prop bilan o'zgartirilmaydi.
    */
   className?: string;
   children: ReactNode;
 };
 
+const DOT_CLASS = {
+  success: "bg-success",
+  warning: "bg-warning",
+  danger: "bg-danger",
+} as const;
+
 export function PanelTile({
   className,
-  index,
   label,
   sub,
   icon: Icon,
+  dot,
   href,
-  action,
   step,
+  note,
+  action,
   children,
 }: PanelTileProps) {
   return (
@@ -124,39 +134,36 @@ export function PanelTile({
     >
       <Card className="dir-tile">
         <CardHeader className="dir-tile-head">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-2.5">
-              {Icon === undefined ? null : (
-                <Icon
+          <div className="flex flex-row items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              {dot === undefined ? null : (
+                <span
                   aria-hidden="true"
-                  className="mt-px size-4 shrink-0 text-text-muted"
+                  className={cn("dir-tile-dot", DOT_CLASS[dot])}
                 />
               )}
-              <div className="min-w-0">
-                <p className="dir-tile-label">{label}</p>
-                {sub === undefined ? null : (
-                  <p className="dir-tile-sub">{sub}</p>
-                )}
-              </div>
+              <p className="dir-tile-label">{label}</p>
             </div>
-            {index === undefined ? null : <Badge tone="muted">{index}</Badge>}
+            {Icon === undefined ? null : (
+              <Icon aria-hidden="true" className="dir-tile-icon" />
+            )}
           </div>
+          {sub === undefined ? null : <p className="dir-tile-sub">{sub}</p>}
         </CardHeader>
 
         <CardContent className="dir-tile-body">
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             {children}
 
-            {/*
-             * ⛔ AJRATGICH CHIZIQ QOLDI, LEKIN ENDI FAQAT AMAL QATORINI
-             *    ajratadi: «Yangilandi» ketgach, chiziq qiymat bilan
-             *    «keyingi qadam» ni ajratadigan yagona vazifani oladi.
-             *    Usiz «Kunlar kesimi →» ko'rsatkichning bir qismi
-             *    bo'lib o'qilardi.
-             */}
-            <div className="dir-tile-foot">
-              <span className="dir-tile-action">{action} →</span>
-            </div>
+            {note === undefined ? null : (
+              <div className="dir-tile-note">{note}</div>
+            )}
+
+            {action === undefined ? null : (
+              <div className="dir-tile-foot">
+                <span className="dir-tile-action">{action} →</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

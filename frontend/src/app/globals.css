@@ -1229,13 +1229,50 @@
  *    qiymatdan ANIQ ajralib turishi kerak va u faqat kattalik bilan
  *    emas, HARF ORALIG'I bilan ham ajratiladi.
  */
+/*
+ * ⛔⛔ YORLIQ ODDIY HARFDA — KATTA HARF EMAS (260819, Stitch maketiga
+ *     solishtirilgandi).
+ *
+ *     Bizda `TUSHUM`, `QARZ JAMI`, `BAND, LEKIN TO'LOVSIZ` deb
+ *     yozilardi. Stitch maketida esa `Tushum`, `Qarz jami`, `Band,
+ *     lekin to'lovsiz` — oddiy harfda.
+ *
+ *     Farq bezak emas: KATTA HARF o'zbekcha uzun yorliqlarda ikki
+ *     qatorga chiqib, harf oralig'i (0.08em) bilan birga katakning
+ *     yuqorisini egallab olardi. Oddiy harf bir qatorga sig'adi va
+ *     ko'zning yuki QIYMATGA tushadi — kartaning maqsadi shu.
+ *
+ * ⚠ GURUH sarlavhasi (`PUL` / `NAZORAT`) KATTA HARFDA QOLADI: Stitch
+ *   ham shunday. U yorliq emas, BO'LIM ajratgichi.
+ */
 .dir-tile-label {
   margin: 0;
   font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 500;
   color: var(--color-text-muted);
+}
+
+/*
+ * Katak ikonkasi — O'NG yuqorida (Stitch joylashuvi).
+ *
+ * ⛔ Chapda, yorliq yonida EMAS: u yerda ikonka yorliq bilan bir
+ *    guruh bo'lib, sarlavhani uzaytirardi. O'ngda turganda u
+ *    kartaning bo'sh burchagini to'ldiradi va yorliqni siqmaydi.
+ */
+.dir-tile-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  opacity: 0.75;
+}
+
+/* Holat nuqtasi — yorliq oldida (Stitch «Band, lekin to'lovsiz» kartasi). */
+.dir-tile-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
 }
 
 .dir-tile-sub {
@@ -1275,7 +1312,21 @@
 .dir-hero-stat {
   margin: 0;
   font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 3.5rem;
+  /*
+   * ⛔⛔ 56px -> 48px, VA BU O'LCHOVDAN KELDI (260819).
+   *
+   *     Stitch maketida foiz halqaning ICHIDA va uning kengligi
+   *     halqaning TASHQI diametriga teng — raqam halqa chizig'ini
+   *     ikki chetdan bosib turadi va shakl yaxlit ko'rinadi.
+   *
+   *     Bizda 56px mono edi: «95.7%» = 5 belgi × 33.6px = 168px,
+   *     halqa esa 144px. Raqam halqadan 12px chiqib ketardi. 100%
+   *     bo'lganda («100.0%», 6 belgi) farq 58px ga chiqardi.
+   *
+   *     48px + 176px halqa: «95.7%» 144px, «100.0%» 173px — ikkalasi
+   *     ham halqa ichida qoladi.
+   */
+  font-size: 3rem;
   line-height: 1.1;
   letter-spacing: -0.02em;
   font-weight: 700;
@@ -1283,8 +1334,10 @@
 }
 
 @media (max-width: 760px) {
+  /* Telefonda halqa o'lchami o'zgarmaydi (176px), shuning uchun
+     raqam ham 36px gacha tushadi — «100.0%» 130px bo'lib sig'adi. */
   .dir-hero-stat {
-    font-size: 2.75rem;
+    font-size: 2.25rem;
   }
 }
 
@@ -1389,10 +1442,28 @@
   color: var(--color-text-muted);
 }
 
+/*
+ * Izoh qatori — kartaning PASTIDA (Stitch joylashuvi).
+ *
+ * ⛔ `margin-top: auto` bilan pastga yopishadi, ya'ni bir qatordagi
+ *    kartalarning izoh chizig'i BIR SATHDA bo'ladi. Qiymat yuqorida,
+ *    izoh pastda — ko'z ikkalasini alohida o'qiydi.
+ */
 .dir-tile-note {
+  margin-top: auto;
+  padding-top: 0.75rem;
   font-size: 0.8125rem;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Izoh qatorining ichida chap/o'ng juftlik («14 sotuvchi» · «eng eski …»). */
+.dir-tile-note-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 /* --- Katakning pastki qatori ------------------------------------------ */

@@ -222,81 +222,80 @@ export function SixTiles({ period }: { period: Period }) {
         className="dir-tile-hero"
         href="/reports"
         label="Patta yig'ilish darajasi"
+        note={
+          gapSoum === null ? undefined : (
+            /* ⛔ «Yig'ilmagan» pastki qatorda, ajratgich ustida —
+                 Stitch joylashuvi. U foizning MA'NOSI: 96.4% ni odam
+                 «yaxshi» deb o'qiydi, «yig'ilmagan 900 000 so'm» esa
+                 harakatga chaqiradi. */
+            <span
+              className={
+                gapSoum > 0 ? "text-danger-text" : "text-text-muted"
+              }
+            >
+              Yig&apos;ilmagan: {formatSoum(format, gapSoum, locale)}
+            </span>
+          )
+        }
         step={0}
       >
         {/*
-         * ⛔⛔ BITTA KOMPOZITSIYA, IKKI HOLAT EMAS (260819, ekranga qarab).
+         * ⛔⛔ STITCH BOSH KATAGI — FOIZ HALQA ICHIDA (260819).
          *
-         *     Avval bu yerda ikki SHOX bor edi: ma'lumot bo'lsa —
-         *     halqa + yorliq + uchta son; bo'lmasa — yolg'iz «—» va
-         *     bitta gap. Natijada bo'sh holatda 1288px kenglikdagi
-         *     katak deyarli bo'm-bo'sh turardi va u ekrandagi eng
-         *     yomon element edi.
+         *     Avval halqa va foiz YONMA-YON turardi. Stitch maketida
+         *     foiz halqaning MARKAZIDA va halqa yo'g'on — ekrandagi
+         *     eng katta, eng birinchi o'qiladigan shakl. Yonma-yon
+         *     turgan variantda ikkalasi ham kuchini yo'qotadi:
+         *     halqa bezakka, foiz esa oddiy songa aylanadi.
          *
-         *     Endi kompozitsiya BIR XIL, faqat qiymatlar «—» bo'ladi.
-         *     Buning ikki foydasi bor: (a) bo'sh katak ham o'z shaklini
-         *     saqlaydi, (b) ma'lumot kelganda panel SAKRAMAYDI — odam
-         *     ko'zi o'rgangan joyda o'sha son paydo bo'ladi.
+         * ⛔ Kompozitsiya IKKALA holatda ham BIR XIL, faqat qiymatlar
+         *    «—» bo'ladi — panel ma'lumot kelganda sakramaydi.
          */}
-        <div className="flex flex-wrap items-center gap-6">
-          {/*
-           * ⛔⛔ HALQA — Stitch dizaynidan, MATEMATIKASI AYNAN.
-           *
-           *   r = 16, aylana uzunligi 2πr = 100.53. To'lgan ulush
-           *   `dashoffset = uzunlik × (1 − ulush)` bilan beriladi.
-           *   Stitch r=44/stroke=12 ishlatgan; bizda katak kichikroq,
-           *   shuning uchun r=16/stroke=4 — NISBAT saqlangan.
-           *
-           * ⛔ Daraja NOMA'LUM bo'lsa yoy UMUMAN chizilmaydi — bo'sh
-           *    halqa «0%» degan yolg'on da'vo bo'lardi.
-           */}
-          <svg
-            aria-hidden="true"
-            className="size-24 shrink-0 -rotate-90"
-            viewBox="0 0 40 40"
-          >
-            <circle
-              cx="20"
-              cy="20"
-              fill="none"
-              r="16"
-              stroke="var(--color-border)"
-              strokeWidth="4"
-            />
-            {rate === null ? null : (
+        <div className="flex flex-wrap items-center gap-7">
+          <div className="relative size-44 shrink-0">
+            <svg aria-hidden="true" className="size-full -rotate-90" viewBox="0 0 40 40">
               <circle
-                className={
-                  rateTone === "success"
-                    ? "text-success"
-                    : rateTone === "warning"
-                      ? "text-warning"
-                      : "text-danger"
-                }
                 cx="20"
                 cy="20"
                 fill="none"
                 r="16"
-                stroke="currentColor"
-                strokeDasharray={RING}
-                strokeDashoffset={RING * (1 - Math.min(1, rate / 100))}
-                strokeLinecap="round"
-                strokeWidth="4"
+                stroke="var(--color-border)"
+                strokeWidth="5"
               />
-            )}
-          </svg>
-          <p className={cn("dir-hero-stat", rate === null && "text-text-muted")}>
-            {rate === null ? "—" : formatPercent(rate)}
-          </p>
+              {rate === null ? null : (
+                <circle
+                  className={
+                    rateTone === "success"
+                      ? "text-success"
+                      : rateTone === "warning"
+                        ? "text-warning"
+                        : "text-danger"
+                  }
+                  cx="20"
+                  cy="20"
+                  fill="none"
+                  r="16"
+                  stroke="currentColor"
+                  strokeDasharray={RING}
+                  strokeDashoffset={RING * (1 - Math.min(1, rate / 100))}
+                  strokeLinecap="round"
+                  strokeWidth="5"
+                />
+              )}
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <p
+                className={cn(
+                  "dir-hero-stat",
+                  rate === null && "text-text-muted",
+                )}
+              >
+                {rate === null ? "—" : formatPercent(rate)}
+              </p>
+            </div>
+          </div>
 
-          {/*
-           * ⛔⛔ STITCH KOMPOZITSIYASI: halqa CHAPDA, o'ngda esa
-           *     YORLIQ + UCHTA SON bir qatorda.
-           *
-           * ⛔ UCHINCHI SON — «Yig'ilmagan» — ATAYIN alohida ustun:
-           *    u foizning MA'NOSI. 96.4% ni odam «yaxshi» deb o'qiydi;
-           *    «yig'ilmagan 900 000 so'm» esa harakatga chaqiradi.
-           */}
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
             <div>
               <Badge tone={rateTone}>
                 {rate === null
@@ -310,46 +309,31 @@ export function SixTiles({ period }: { period: Period }) {
                       : "Jiddiy bo'shliq"}
               </Badge>
             </div>
+
             {/*
-             * ⛔ `grid-cols-3` EMAS, `flex` — VA BU EKRANDAN KELDI.
-             *    Setka uchta ustunni butun kenglikka TENG bo'lib
-             *    berardi: 1336px kartada yorliqlar 455 · 813 · 1174
-             *    da turib, uch son bir-biridan uzilib qolardi. Ular
-             *    BIR gapning uch bo'lagi — «yig'ilgan, hisoblangan,
-             *    farqi» — va yonma-yon o'qilishi kerak.
+             * ⛔ IKKI USTUN, UCHTA EMAS (Stitch): «Yig'ilgan» va
+             *    «Hisoblangan» — o'lchov juftligi va ular yonma-yon
+             *    solishtiriladi. «Yig'ilmagan» esa ularning FARQI va
+             *    u pastki qatorda, qizil rangda turadi — chunki u
+             *    o'lchov emas, XULOSA.
              */}
-            <dl className="flex flex-wrap gap-x-12 gap-y-3">
+            <dl className="flex flex-wrap gap-x-14 gap-y-3">
               <div>
                 <dt className="dir-tile-label">Yig&apos;ilgan</dt>
-                <dd className="dir-tile-value-sm mt-1">
+                <dd className="dir-tile-value mt-1">
                   {revNow === null ? "—" : formatSoum(format, revNow, locale)}
                 </dd>
               </div>
               <div>
                 <dt className="dir-tile-label">Hisoblangan</dt>
-                <dd className="dir-tile-value-sm mt-1 text-text-muted">
+                <dd className="dir-tile-value mt-1 text-text-muted">
                   {chargedNow === null || chargedNow <= 0
                     ? "—"
                     : formatSoum(format, chargedNow, locale)}
                 </dd>
               </div>
-              <div>
-                <dt className="dir-tile-label">Yig&apos;ilmagan</dt>
-                <dd
-                  className={cn(
-                    "dir-tile-value-sm mt-1",
-                    gapSoum !== null && gapSoum > 0
-                      ? "text-danger-text"
-                      : "text-text-muted",
-                  )}
-                >
-                  {gapSoum === null ? "—" : formatSoum(format, gapSoum, locale)}
-                </dd>
-              </div>
             </dl>
 
-            {/* ⛔ Sabab FAQAT noma'lum holatda — aks holda u har kuni
-                   o'qilmaydigan qatorga aylanardi. */}
             {rate === null ? (
               <p className="dir-tile-note">
                 {partial
@@ -381,37 +365,54 @@ export function SixTiles({ period }: { period: Period }) {
             NAZORAT — «nima nazoratdan chetda» (to'lovsiz · bandlik · AI)
            Kataklarni ko'chirish IKKALA guruhni ham buzadi.
       */}
-      <p className="dir-group-span dir-group-label">Guruh: pul</p>
+      <p className="dir-group-span dir-group-label">Pul</p>
 
       {/* --- 1 ------------------------------------------------------------ */}
       <PanelTile
-        action="Kunlar kesimi"
         href="/reports"
-        index={1}
         icon={Banknote}
         label="Tushum"
+        note={dRev === null ? undefined : compareNote(period)}
         step={1}
       >
-        <p className="dir-tile-value">
-          {revNow === null
-            ? "—"
-            : formatSoum(format, revNow, locale)}
-        </p>
-        {dRev === null ? null : (
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={dRev.tone}>{dRev.text}</Badge>
-            <span className="dir-tile-note">{compareNote(period)}</span>
-          </div>
-        )}
+        {/*
+         * ⛔ O'SISH YORLIG'I QIYMAT YONIDA (Stitch): «24 180 000 so'm
+         *    +12.4%» bir qatorda o'qiladi. Alohida qatorda turganda u
+         *    mustaqil fakt bo'lib ko'rinardi, holbuki u sonning
+         *    IZOHI. Izoh matni esa kartaning pastiga tushdi.
+         */}
+        <div className="flex flex-wrap items-baseline gap-2.5">
+          <p className="dir-tile-value">
+            {revNow === null ? "—" : formatSoum(format, revNow, locale)}
+          </p>
+          {dRev === null ? null : <Badge tone={dRev.tone}>{dRev.text}</Badge>}
+        </div>
       </PanelTile>
 
       {/* --- 3 ------------------------------------------------------------ */}
       <PanelTile
-        action="Qarzdorlar reestri"
         href="/reports"
-        index={2}
         icon={ReceiptText}
         label="Qarz jami"
+        note={
+          debtSum !== null && debtSum < 0 ? (
+            "Ortiqcha to'lov — avans"
+          ) : (
+            /* ⛔ Chap/o'ng juftlik — Stitch «14 sotuvchi … eng eski:
+                 12-avgust» qatori. Ikki fakt bir qatorda, lekin
+                 ALOHIDA o'qiladi. */
+            <span className="dir-tile-note-row">
+              <span>
+                {debtVendors === null ? "—" : debtVendors} sotuvchida
+              </span>
+              {oldestDebt === null ? null : (
+                <span>
+                  eng eski: {formatBusinessDay(format, oldestDebt, locale)}
+                </span>
+              )}
+            </span>
+          )
+        }
         step={2}
         sub={`Reestr holati · ${formatBusinessDay(format, todayIso, locale)}`}
       >
@@ -435,24 +436,24 @@ export function SixTiles({ period }: { period: Period }) {
             ? "—"
             : formatSoum(format, debtSum, locale)}
         </p>
-        <span className="dir-tile-note">
-          {debtSum !== null && debtSum < 0
-            ? "Ortiqcha to'lov — avans"
-            : `${debtVendors === null ? "—" : debtVendors} sotuvchida${
-                oldestDebt === null
-                  ? ""
-                  : ` · eng eski qarz ${formatBusinessDay(format, oldestDebt, locale)}`
-              }`}
-        </span>
       </PanelTile>
 
       {/* --- 6 ------------------------------------------------------------ */}
       <PanelTile
-        action="Smena yozuvlari"
         href="/reports"
-        index={3}
         icon={Wallet}
         label="Kassirlar"
+        note={
+          shiftDiff === 0 ? undefined : (
+            /* ⛔ Belgi MA'NOLI va `abs()` QILINMAYDI: kamomad bilan
+                 ortiqcha bir xil ko'rsatilsa, ortiqcha naqdni jimgina
+                 yutish kamomadni yashirish bilan teng bo'lardi. */
+            <Badge tone="danger">
+              {formatSoum(format, shiftDiff, locale)}{" "}
+              {shiftDiff > 0 ? "tizim ortiq" : "kamomad"}
+            </Badge>
+          )
+        }
         step={3}
         sub={`${formatBusinessDay(format, day, locale)} · smenalar`}
       >
@@ -464,55 +465,54 @@ export function SixTiles({ period }: { period: Period }) {
             smena yopildi · {shiftRows.length} dan
           </span>
         </div>
-        {shiftDiff === 0 ? null : (
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="warning">Deklaratsiya farqi</Badge>
-            <span className="dir-tile-value-aside dir-tile-diff">
-              {formatSoum(format, shiftDiff, locale)}
-            </span>
-            <span className="dir-tile-note">
-              {shiftDiff > 0 ? "tizim ortiq" : "deklaratsiya ortiq"}
-            </span>
-          </div>
-        )}
       </PanelTile>
 
-      <p className="dir-group-span dir-group-label">Guruh: nazorat</p>
+      <p className="dir-group-span dir-group-label">Nazorat</p>
 
       {/* --- 2 ------------------------------------------------------------ */}
       <PanelTile
-        action="Kamera kadrlari"
+        dot="warning"
         href="/reports/compare"
-        index={4}
         icon={TriangleAlert}
         label="Band, lekin to'lovsiz"
+        note={
+          leakCount === null || leakCount === 0 ? undefined : (
+            <span className="dir-tile-note-row">
+              <span>
+                {leakSum === null
+                  ? "Yo'qotish o'lchanmagan"
+                  : `Yo'qotish: ${formatSoum(format, leakSum, locale)}`}
+              </span>
+              <Badge tone="warning">Diqqat talab</Badge>
+            </span>
+          )
+        }
         step={4}
         sub={`${formatBusinessDay(format, day, locale)} · nazoratchi ko'rgan rastalar`}
       >
+        {/*
+         * ⛔ QIYMAT SARIQ — bu mahsulotning bosh nuqsoni va Stitch uni
+         *    ataylab ajratadi. Rang YOLG'IZ signal emas: yorliq oldida
+         *    nuqta, o'ngda ogohlantirish ikonkasi va pastda «Diqqat
+         *    talab» yorlig'i bor.
+         */}
         <div className="flex flex-wrap items-baseline gap-2.5">
-          <p className="dir-tile-value">
+          <p
+            className={cn(
+              "dir-tile-value",
+              leakCount !== null && leakCount > 0 && "text-warning-text",
+            )}
+          >
             {leakCount === null ? "—" : formatAmount(format, leakCount, locale)}
           </p>
           <span className="dir-tile-unit">rasta</span>
-          {leakSum === null ? null : (
-            <p className="dir-tile-value-aside">
-              {formatSoum(format, leakSum, locale)}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {leakCount !== null && leakCount > 0 ? (
-            <Badge tone="warning">Hisob yozilmagan</Badge>
-          ) : null}
           {dLeak === null ? null : <Badge tone={dLeak.tone}>{dLeak.text}</Badge>}
         </div>
       </PanelTile>
 
       {/* --- 4 ------------------------------------------------------------ */}
       <PanelTile
-        action="Rastalar ro'yxati"
         href="/stalls"
-        index={5}
         icon={Store}
         label="Bandlik"
         step={5}
@@ -564,9 +564,7 @@ export function SixTiles({ period }: { period: Period }) {
 
       {/* --- 5 ------------------------------------------------------------ */}
       <PanelTile
-        action="O'lchov usuli"
         href="/reports"
-        index={6}
         icon={ScanLine}
         label="AI aniqligi"
         step={6}
@@ -576,7 +574,14 @@ export function SixTiles({ period }: { period: Period }) {
             : `Oxirgi o'lchov · ${formatBusinessDay(format, acc.to_date, locale)}`
         }
       >
-        <p className="dir-tile-value">
+        {/* ⛔ Yashil FAQAT o'lchangan va yuqori bo'lganda — «yashil
+               chunki yaxshi», «yashil chunki brend» emas. */}
+        <p
+          className={cn(
+            "dir-tile-value",
+            accPoint !== null && accPoint >= 0.95 && "text-success-text",
+          )}
+        >
           {accPoint === null ? "—" : formatPercent(accPoint * 100)}
         </p>
         <div className="flex flex-col gap-1">

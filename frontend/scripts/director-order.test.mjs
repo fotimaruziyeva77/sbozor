@@ -1,36 +1,34 @@
 #!/usr/bin/env node
 /**
- * G-dir-1 — DIREKTOR PANELIDAGI KATAK TARTIBI RAQAMLARGA MOS.
+ * G-dir-1 — KATAKLARNING KIRISH NAVBATI O'QISH TARTIBIDA.
  *
  * =============================================================================
  * NEGA BU DARVOZA BOR — U JONLI NUQSONDAN TUG'ILGAN (260819).
  *
- * `tile.tsx` o'ng yuqorida tartib raqamini chizadi va uning izohida
- * VA'DA yozilgan: «direktor telefonda `uchinchi katakka qara` deb
- * aytishi mumkin bo'lishi kerak».
+ * `step` — kirish animatsiyasining kechikishi (`--i` × 60ms). Kataklar
+ * ma'no bo'yicha guruhlanganda (PUL / NAZORAT) ular ko'chirildi, `step`
+ * esa eski joyida qoldi. Natijada kataklar setka bo'ylab SAKRAB paydo
+ * bo'lardi: Tushum -> Band -> Qarz -> Bandlik -> AI -> Kassirlar.
  *
- * Kataklar ma'no bo'yicha guruhlanganda (GURUH: PUL / NAZORAT) ular
- * ko'chirildi, raqamlar esa eski joyida qoldi. Ekranda ular
- * «1 · 3 · 6 · 2 · 4 · 5» bo'lib o'qildi — ya'ni belgi o'z va'dasini
- * BAJARMAY, shovqinga aylandi. Bu brauzerda o'lchandi, kodni o'qib
- * emas: `six-tiles.tsx` diff'i mukammal ko'rinardi.
+ * Foydalanuvchi qo'ygan doimiy qoida esa aniq: «animatsiya insonni
+ * charchatmasin». Ko'z bo'ylab OQADIGAN navbat tinchlantiradi,
+ * sakraydigani qitiqlaydi. Bu brauzerda o'lchandi, kodni o'qib emas:
+ * `six-tiles.tsx` diff'i mukammal ko'rinardi.
  *
- * IKKINCHI, KO'ZGA KAM TASHLANADIGAN TOMONI — `step`. U kirish
- * animatsiyasining kechikishi (`--i` × 60ms). U ham eski joyida
- * qolgani uchun kataklar setka bo'ylab SAKRAB paydo bo'lardi:
- * Tushum -> Band -> Qarz -> Bandlik -> AI -> Kassirlar. Foydalanuvchi
- * qo'ygan doimiy qoida esa aniq: «animatsiya insonni charchatmasin».
- * Ko'z bo'ylab OQADIGAN navbat tinchlantiradi, sakraydigani qitiqlaydi.
+ * ⛔⛔ TARTIB RAQAMI (`index`) ENDI O'LCHANMAYDI — U UMUMAN YO'Q.
  *
- * ⛔ SHUNING UCHUN DARVOZA IKKALASINI HAM O'LCHAYDI va ular BIR XIL
- *    bo'lishini talab qiladi: raqam nima desa, harakat ham shuni deydi.
+ *     Darvozaning birinchi shakli katak burchagidagi 1–6 raqamini ham
+ *     tekshirardi. Stitch maketiga solishtirilganda ma'lum bo'ldiki,
+ *     u yerda raqam UMUMAN yo'q — va Stitch haq: raqam hech qanday
+ *     savolga javob bermaydi, kartani YORLIQ va IKONKA nomlaydi.
+ *     Raqam olib tashlandi; darvoza esa kuchini saqlagan ikki da'voga
+ *     qisqartirildi — navbat to'g'ri, va raqam QAYTMAYDI.
  * =============================================================================
  *
  * ⚠ NEGA MANBA MATNI, DOM EMAS: bu faylda JSX tartibi = setka tartibi
  *   (tekis grid, `order` xossasi ishlatilmaydi, bosh katak esa butun
  *   qatorni egallaydi). Ya'ni manbadagi ketma-ketlik ko'rinadigan
- *   ketma-ketlikning O'ZI. Darvoza arzon, aniq va `npm run test:unit`
- *   ichida sekundning ulushida ishlaydi.
+ *   ketma-ketlikning O'ZI.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -45,20 +43,32 @@ const TILE = join(HERE, "..", "src", "components", "panel", "tile.tsx");
 const source = readFileSync(TILES, "utf8");
 
 /**
- * `<PanelTile … />` ochilish teglarini FAYL TARTIBIDA qaytaradi.
- * Har biri uchun `index` (bo'lmasa `null`) va `step` olinadi.
+ * `<PanelTile … >` ochilish teglarining PROPS MATNINI fayl tartibida
+ * qaytaradi.
+ *
+ * ⛔ Qavs sanagichi bilan, lazy regex bilan EMAS: props ichida `{…}`
+ *    va ichma-ich JSX bor, lazy shakl esa birinchi `>` da to'xtab,
+ *    kataklarni o'tkazib yuborardi (aynan shu xato `uz-latn-date`
+ *    darvozasida sabotaj sinovida topilgan).
  */
 function tiles() {
   const found = [];
-  const re = /<PanelTile\b([\s\S]*?)>/g;
+  const opener = /<PanelTile\b/g;
   let match;
-  while ((match = re.exec(source)) !== null) {
-    const props = match[1];
-    const index = /\bindex=\{(\d+)\}/.exec(props);
+  while ((match = opener.exec(source)) !== null) {
+    let depth = 0;
+    let i = opener.lastIndex;
+    while (i < source.length) {
+      const ch = source[i];
+      if (ch === "{") depth += 1;
+      else if (ch === "}") depth -= 1;
+      else if (ch === ">" && depth === 0) break;
+      i += 1;
+    }
+    const props = source.slice(opener.lastIndex, i);
     const step = /\bstep=\{(\d+)\}/.exec(props);
     const label = /\blabel="([^"]+)"/.exec(props);
     found.push({
-      index: index === null ? null : Number(index[1]),
       step: step === null ? null : Number(step[1]),
       label: label === null ? null : label[1],
     });
@@ -66,74 +76,40 @@ function tiles() {
   return found;
 }
 
-test("G-dir-1(a) — panelda bosh katak + aynan olti raqamli katak bor", () => {
+test("G-dir-1(a) — panelda bosh katak + oltita katak bor", () => {
   const list = tiles();
   assert.equal(list.length, 7, `kutilgan 7 ta katak, topildi ${list.length}`);
-
-  const hero = list[0];
-  assert.equal(
-    hero.index,
-    null,
-    "bosh katakda tartib raqami BO'LMASLIGI kerak — u ro'yxatning " +
-      "a'zosi emas, ro'yxat javob beradigan savol",
-  );
-
-  const numbered = list.slice(1);
-  assert.equal(numbered.length, 6, "raqamli kataklar soni 6 bo'lishi kerak");
-  for (const tile of numbered) {
-    assert.notEqual(
-      tile.index,
-      null,
-      `«${tile.label}» katagida tartib raqami yo'q`,
-    );
+  for (const tile of list) {
+    assert.notEqual(tile.step, null, `«${tile.label}» katagida \`step\` yo'q`);
   }
 });
 
-test("G-dir-1(b) — raqamlar O'QISH TARTIBIDA 1..6", () => {
-  const numbered = tiles().slice(1);
-  const actual = numbered.map((tile) => tile.index);
-  const expected = [1, 2, 3, 4, 5, 6];
+test("G-dir-1(b) — kirish navbati O'QISH TARTIBIDA 0..6", () => {
+  const list = tiles();
+  const actual = list.map((tile) => tile.step);
+  const expected = [0, 1, 2, 3, 4, 5, 6];
 
   assert.deepEqual(
     actual,
     expected,
     "kataklar ekranda yuqoridan pastga, chapdan o'ngga o'qiladi — " +
-      `raqamlar shu tartibda bo'lishi kerak. Topildi: ${actual.join(" · ")} ` +
-      `(${numbered.map((tile) => tile.label).join(" · ")})`,
+      "kirish animatsiyasi ham AYNAN shu navbatda bo'lishi kerak, aks " +
+      "holda ular setka bo'ylab sakrab chiqadi. Topildi: " +
+      `${actual.join(" · ")} (${list.map((tile) => tile.label).join(" · ")})`,
   );
 });
 
-test("G-dir-1(c) — animatsiya navbati raqam bilan BIR XIL", () => {
-  const list = tiles();
-
-  assert.equal(list[0].step, 0, "bosh katak birinchi paydo bo'ladi (step 0)");
-
-  for (const tile of list.slice(1)) {
-    assert.equal(
-      tile.step,
-      tile.index,
-      `«${tile.label}»: raqam ${tile.index}, harakat navbati ${tile.step} — ` +
-        "ular ajralsa kataklar setka bo'ylab sakrab chiqadi",
-    );
-  }
-});
-
-test("G-dir-1(d) — `index` IXTIYORIY bo'lib qoladi va berilmasa belgi chizilmaydi", () => {
-  /*
-   * ⛔ Bu shart `tile.tsx` da: `index` majburiy qilib qaytarilsa, bosh
-   *    katak yana raqam olishga majbur bo'lardi va u ekranda «0» bo'lib
-   *    ko'rinardi — aynan foydalanuvchi ko'rgan holat.
-   */
-  const tile = readFileSync(TILE, "utf8");
-
-  assert.match(
-    tile,
-    /index\?:\s*number/,
-    "`panel/tile.tsx` da `index` ixtiyoriy (`index?: number`) bo'lishi kerak",
+test("G-dir-1(c) — katak burchagidagi tartib raqami QAYTMAYDI", () => {
+  assert.doesNotMatch(
+    source,
+    /\bindex=\{/,
+    "`six-tiles.tsx` da `index` propi qaytdi — Stitch maketida katak " +
+      "burchagida raqam YO'Q",
   );
-  assert.match(
-    tile,
-    /index === undefined \? null :/,
-    "`panel/tile.tsx` `index` berilmaganda belgini UMUMAN chizmasligi kerak",
+
+  assert.doesNotMatch(
+    readFileSync(TILE, "utf8"),
+    /\bindex\??:\s*number/,
+    "`panel/tile.tsx` da `index` propi qaytdi",
   );
 });
