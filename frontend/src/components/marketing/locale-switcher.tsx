@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { usePathname, useRouter } from "@/i18n/navigation";
-import { UzFlag } from "@/components/marketing/uz-flag";
+import { LocaleFlag } from "@/components/marketing/locale-flag";
 import { cn } from "@/lib/cn";
 
 /*
@@ -42,7 +42,7 @@ import { cn } from "@/lib/cn";
  */
 const LOCALES = ["uz-Latn", "uz-Cyrl", "ru"] as const;
 
-type MarketingLocale = (typeof LOCALES)[number];
+export type MarketingLocale = (typeof LOCALES)[number];
 
 /** Endonimlar: til nomi har doim O'Z tilida (01-08 qarori, meros).
  *  ⛔ Bu — ko'rinadigan matn EMAS, KIRISH NOMI (aria-label): dizayn v2
@@ -112,22 +112,23 @@ export function MarketingLocaleSwitcher() {
       role="group"
     >
       {/*
-       * ⛔⛔ BAYROQ QO'SHILDI (260819, raqobatchi bilan solishtiruvdan).
+       * ⛔⛔ BAYROQ TANLANGAN TILNIKI (260819, ikkinchi tahrir).
        *
-       * Raqobatchining sarlavhasida til tanlovi bayroq + so'z bilan
-       * berilgan va u UZOQDAN TANILADI: foydalanuvchi «UZ/RU» matnini
-       * o'qimasdan ham nima ekanini biladi.
+       * Birinchi tahrirda bayroq bitta — O'zbekistonniki — edi va u
+       * guruhning o'zida turardi. Foydalanuvchi buni RAD ETDI: «rus
+       * tanlansa bayroq o'zgarmayapti». Demak tashrifchi bayroqni TIL
+       * ko'rsatkichi deb o'qiydi; endi u `active` bilan almashadi.
        *
-       * ⛔ Bayroq — DAVLAT belgisi, TIL belgisi emas. Shuning uchun u
-       *    bitta, guruhning O'ZIDA turadi va har tugmada TAKRORLANMAYDI:
-       *    ruscha yozuv ham O'zbekistonda ishlatiladi va yonига rus
-       *    bayrog'ini qo'yish xato bo'lardi.
+       * ⛔ Har TUGMADA emas, guruhda BITTA: uchta bayroq bir qatorda
+       *    ola-bula bo'lib, tanlangani ajralib turmasdi.
        *
-       * ⛔ EMOJI EMAS, INLINE SVG (`uz-flag.tsx`): Windows'da `🇺🇿`
-       *    bayroq bo'lib chizilmaydi — o'sha yerdagi izohga qarang.
-       *    Bu Xromdagi tekshiruvda topildi, kod ko'rinishida emas.
+       * ⚠ `aria-hidden`: guruh nomi `aria-label` da bor va har tugmaning
+       *   o'z `aria-label` i bor — bayroq skrinriderga hech nima qo'shmaydi.
        */}
-      <UzFlag className="h-3 w-6 shrink-0 rounded-[1px] ring-1 ring-black/20" />
+      <LocaleFlag
+        className="h-3 w-6 shrink-0 rounded-[1px] ring-1 ring-black/20 transition-opacity"
+        locale={active as MarketingLocale}
+      />
 
       {LOCALES.map((code) => {
         const isActive = code === active;

@@ -1,3 +1,4 @@
+import { EyeOff, FileSearch, NotebookPen } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 import { Reveal } from "@/components/marketing/reveal";
@@ -19,7 +20,17 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
  *    (G-land-3(c); taqiqlangan chaqiruv nomlari izohda ham literal
  *    yozilmaydi — badge.tsx dagi kodbaza konvensiyasi).
  */
-const PAIN_CARDS = ["a", "b", "c"] as const;
+/*
+ * ⛔ IKONKALAR (260819) — dekoratsiya EMAS, TANIB OLISH belgisi. Uchtasi
+ *    ham og'riqning O'ZINI ko'rsatadi: daftar · qidiruv (dalil yo'q) ·
+ *    yopiq ko'z (hamma joyni ko'rib bo'lmaydi). Har biri `aria-hidden` —
+ *    ma'no sarlavhada, ikonka uni FAQAT tezroq topishga yordam beradi.
+ */
+const PAIN_CARDS = [
+  { key: "a", Icon: NotebookPen },
+  { key: "b", Icon: FileSearch },
+  { key: "c", Icon: EyeOff },
+] as const;
 
 export async function PainCards() {
   const t = await getTranslations("landing");
@@ -33,16 +44,19 @@ export async function PainCards() {
         </h2>
       </Reveal>
       <div className="grid gap-5 md:grid-cols-3">
-        {PAIN_CARDS.map((key, index) => (
+        {PAIN_CARDS.map(({ key, Icon }, index) => (
           <Reveal className="h-full" delayIndex={index} key={key}>
             <Card className="landing-card h-full">
               <CardHeader>
-                <h3 className="landing-h3">
+                <span aria-hidden="true" className="landing-icon">
+                  <Icon className="size-5" strokeWidth={1.75} />
+                </span>
+                <h3 className="mt-4 landing-h3">
                   {t(`pain.${key}.title`)}
                 </h3>
               </CardHeader>
               <CardContent>
-                <p className="max-w-[66ch] text-sm leading-relaxed text-text-muted">
+                <p className="max-w-[66ch] landing-body text-text-muted">
                   {t(`pain.${key}.body`)}
                 </p>
               </CardContent>

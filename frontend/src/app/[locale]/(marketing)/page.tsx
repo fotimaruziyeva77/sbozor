@@ -15,6 +15,7 @@ import { Proof } from "@/components/marketing/proof";
 import { Reveal } from "@/components/marketing/reveal";
 import { RoleCards } from "@/components/marketing/role-cards";
 import { Section } from "@/components/marketing/section";
+import { SmoothAnchor } from "@/components/marketing/smooth-anchor";
 import { StepLine } from "@/components/marketing/step-line";
 import { TrustBlock } from "@/components/marketing/trust-block";
 import { Card, CardContent } from "@/components/ui/card";
@@ -205,6 +206,8 @@ export default async function MarketingRootPage({
   return (
     <>
       <JsonLd data={organizationJsonLd} />
+      {/* Anker siljishi — hech nima chizmaydi, faqat hodisa tinglaydi. */}
+      <SmoothAnchor />
       <JsonLd data={faqJsonLd} />
       {/* ⛔ Header hero bilan BIR XIL tungi qamrovda (dizayn v2): oq tasma
           indigo ustida qolsa birinchi ekran ikkiga bo'linib ko'rinardi.
@@ -265,7 +268,7 @@ export default async function MarketingRootPage({
                   <h2 className="landing-h2 tracking-tight">
                     {t("form.title")}
                   </h2>
-                  <p className="max-w-[66ch] text-sm leading-relaxed text-text-muted">
+                  <p className="max-w-[66ch] landing-lead text-text-muted">
                     {t("form.subtitle")}
                   </p>
                 </div>
@@ -289,19 +292,19 @@ export default async function MarketingRootPage({
                   {tCommon("appName").slice(0, 2)}
                 </span>
                 <div className="min-w-[12.5rem] flex-1">
-                  <p className="text-xs text-text-muted">
+                  <p className="landing-micro text-text-muted">
                     {t("contact.label")}
                   </p>
                   {contactPhone ? (
                     <a
-                      className="mt-1 inline-flex text-sm font-semibold text-text hover:text-accent-text"
+                      className="mt-1 inline-flex landing-lead font-semibold text-text hover:text-accent-text"
                       data-numeric
                       href={`tel:${contactPhone}`}
                     >
                       {contactPhone}
                     </a>
                   ) : null}
-                  <p className="mt-0.5 text-xs text-text-muted">
+                  <p className="mt-0.5 landing-micro text-text-muted">
                     {t("contact.hours")}
                   </p>
                 </div>
@@ -309,7 +312,7 @@ export default async function MarketingRootPage({
                   <a
                     className={cn(
                       "inline-flex min-h-11 items-center justify-center rounded-lg",
-                      "border border-border px-5 text-sm font-semibold text-text",
+                      "border border-border px-5 landing-note font-semibold text-text",
                       "hover:border-accent hover:text-accent-text",
                     )}
                     href={contactTelegram}

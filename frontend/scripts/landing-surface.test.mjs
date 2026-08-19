@@ -105,8 +105,13 @@ const CLIENT_ISLANDS = [
   // temasiga `useSyncExternalStore` bilan obuna bo'ladi; `nav-menu.tsx`
   // esa ATAYIN Server Component (anker havolalarda holat yo'q).
   "components/marketing/theme-toggle.tsx",
+  // 260819 — oltinchi ORIGINAL orol. Anker siljishini O'ZIMIZ chizamiz
+  // (brauzerning `smooth` i masofani hisobga olmaydi va uzoq siljishda
+  // «qo'pol» chiqadi). Delegatsiya bo'lgani uchun `nav-menu.tsx` SERVER
+  // Component bo'lib qoladi — LCP yo'li klientga bog'lanmaydi.
+  "components/marketing/smooth-anchor.tsx",
 ];
-const CLIENT_ISLANDS_COUNT = 7;
+const CLIENT_ISLANDS_COUNT = 8;
 
 /**
  * G-land-1(c) — `(marketing)/layout.tsx` provayderiga uzatiladigan fazoviy

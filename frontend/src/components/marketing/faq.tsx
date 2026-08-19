@@ -45,10 +45,10 @@ export async function Faq() {
               {/* Native marker saqlanadi (display o'zgartirilmaydi — JS'siz
                   affordans); ≥44px nishon (§15.10) `py-4` bilan: 28px satr +
                   32px padding = 60px qator. */}
-              <summary className="cursor-pointer py-4 landing-h3">
+              <summary className="cursor-pointer py-5 landing-h3">
                 {t(`faq.q${n}`)}
               </summary>
-              <p className="max-w-[66ch] pb-4 text-sm leading-relaxed text-text-muted">
+              <p className="max-w-[66ch] pb-5 landing-body text-text-muted">
                 {t(`faq.a${n}`)}
               </p>
             </details>

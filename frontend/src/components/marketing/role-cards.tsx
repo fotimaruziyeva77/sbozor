@@ -1,3 +1,4 @@
+import { ClipboardCheck, LayoutDashboard, Smartphone } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 import { Reveal } from "@/components/marketing/reveal";
@@ -20,13 +21,19 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
  *
  * ⛔ Sarlavha ierarxiyasi: blok o'z `<h2>` sini chizadi; rollar — `<h3>`.
  */
+/*
+ * ⛔ 260819: HARF (D/K/N) IKONKAGA ALMASHDI. Harf faqat o'zbekcha
+ *    o'qiydigan odamga ishlardi — ruscha sahifada «D» direktorni
+ *    bildirmasdi va uch tilda uch xil harf kerak bo'lardi. Ikonka
+ *    esa tildan mustaqil: panel · telefon · tekshiruv varaqasi.
+ */
 const ROLE_CARDS: ReadonlyArray<{
   key: "director" | "cashier" | "inspector";
-  letter: string;
+  Icon: typeof LayoutDashboard;
 }> = [
-  { key: "director", letter: "D" },
-  { key: "cashier", letter: "K" },
-  { key: "inspector", letter: "N" },
+  { key: "director", Icon: LayoutDashboard },
+  { key: "cashier", Icon: Smartphone },
+  { key: "inspector", Icon: ClipboardCheck },
 ];
 
 export async function RoleCards() {
@@ -41,26 +48,23 @@ export async function RoleCards() {
         </h2>
       </Reveal>
       <div className="grid gap-5 md:grid-cols-3">
-        {ROLE_CARDS.map(({ key, letter }, index) => (
+        {ROLE_CARDS.map(({ key, Icon }, index) => (
           <Reveal className="h-full" delayIndex={index} key={key}>
             <Card className="landing-card h-full">
               <CardHeader>
-                <span
-                  aria-hidden="true"
-                  className="flex size-10 items-center justify-center rounded-md bg-accent/10 text-sm font-bold text-accent-text"
-                >
-                  {letter}
+                <span aria-hidden="true" className="landing-icon">
+                  <Icon className="size-5" strokeWidth={1.75} />
                 </span>
-                <h3 className="mt-3 landing-h3">
+                <h3 className="mt-4 landing-h3">
                   {t(`roles.${key}.title`)}
                 </h3>
               </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <p className="max-w-[66ch] text-sm leading-relaxed text-text-muted">
+              <CardContent className="flex flex-col gap-4">
+                <p className="max-w-[66ch] landing-body text-text-muted">
                   {t(`roles.${key}.body`)}
                 </p>
                 {/* Bitta aniq, tekshiriladigan da'vo (§9.3) — skrinshot o'rni. */}
-                <p className="text-xs font-semibold text-accent-text">
+                <p className="landing-note font-semibold text-accent-text">
                   {t(`roles.${key}.claim`)}
                 </p>
               </CardContent>

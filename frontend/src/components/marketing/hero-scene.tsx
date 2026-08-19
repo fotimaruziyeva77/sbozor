@@ -465,7 +465,7 @@ export function HeroScene() {
           <span>ⓘ </span>
           {t("scene.sampleBadge")}
         </p>
-        <p aria-hidden="true" className="text-xs text-text-muted">
+        <p aria-hidden="true" className="landing-micro text-text-muted">
           {t("scene.marketLabel")}
         </p>
       </div>
@@ -481,7 +481,7 @@ export function HeroScene() {
           >
             {t(`scene.phase${scene.phase}`)}
           </p>
-          <span className="text-xs text-text-muted">
+          <span className="landing-micro text-text-muted">
             {t("scene.revenueLabel")}
             {" · "}
             <span
@@ -495,7 +495,7 @@ export function HeroScene() {
         </div>
         {/* Faza IZOHI — sahnaning nima ko'rsatayotganini SO'Z bilan aytadi
             (dizayn v2 `stageHint`). min-h yorliq almashganda sakratmaydi. */}
-        <p className="min-h-9 text-xs leading-relaxed text-text-muted">
+        <p className="min-h-9 landing-note text-text-muted">
           {t(`scene.hint${scene.phase}`, { stall: UNPAID_STALL_LABEL })}
         </p>
         <div aria-hidden="true" className="landing-sweep-frame relative">
@@ -572,7 +572,7 @@ export function HeroScene() {
             yopadi; rang YAKKA signal bo'lib qolmaydi (§15.12). */}
         <ul
           aria-hidden="true"
-          className="flex flex-wrap gap-x-3.5 gap-y-1.5 text-xs text-text-muted"
+          className="flex flex-wrap gap-x-3.5 gap-y-1.5 landing-micro text-text-muted"
         >
           {(
             [
@@ -658,7 +658,7 @@ export function HeroScene() {
           <p className="text-sm font-semibold text-text">
             {t("scene.reportTitle")}
           </p>
-          <dl className="mt-2 flex flex-col gap-1 text-xs text-text-muted">
+          <dl className="mt-2 flex flex-col gap-1.5 landing-micro text-text-muted">
             <div className="flex items-baseline justify-between gap-3">
               <dt>{t("scene.reportOccupied")}</dt>
               <dd data-numeric>215</dd>
@@ -678,7 +678,7 @@ export function HeroScene() {
           </dl>
         </div>
         {/* v2: boshqaruv taklifi — «bu mahsulotning o'zi». */}
-        <p className="text-center text-xs text-text-muted">
+        <p className="text-center landing-micro text-text-muted">
           {t("scene.dotsHint")}
         </p>
       </div>

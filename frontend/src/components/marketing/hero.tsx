@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 
+import { Check, Sparkles } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 import { HeroScene } from "@/components/marketing/hero-scene";
@@ -59,7 +60,7 @@ export async function Hero() {
           </h1>
         </div>
         <p
-          className="motion-enter max-w-[50ch] text-lg leading-relaxed text-text-muted"
+          className="motion-enter max-w-[50ch] landing-lead text-text-muted"
           style={{ "--i": 1 } as CSSProperties}
         >
           {t("hero.sub")}
@@ -91,20 +92,29 @@ export async function Hero() {
           </Link>
         </div>
         <p
-          className="motion-enter text-xs text-text-muted"
+          className="motion-enter landing-note text-text-muted"
           style={{ "--i": 2 } as CSSProperties}
         >
           {t("hero.microline")}
         </p>
         <p
-          className="motion-enter max-w-[54ch] text-sm leading-relaxed text-text-muted"
+          className="motion-enter flex max-w-[54ch] items-start gap-2 landing-body text-text-muted"
           style={{ "--i": 3 } as CSSProperties}
         >
-          <span aria-hidden="true">⭐ </span>
+          {/* ⛔ 260819: `⭐` emojisi SVG ga almashdi — emoji har OSda
+              boshqacha (Windows'da rangli, Linux'da qora) va matn
+              satrining balandligini ham surib yuborardi. */}
+          <Sparkles
+            aria-hidden="true"
+            className="mt-1 size-4 shrink-0 text-warning-text"
+            strokeWidth={2}
+          />
+          <span>
           <strong className="font-semibold text-text">
             {t("hero.claimStrong")}
           </strong>{" "}
           {t("hero.claim")}
+          </span>
         </p>
         {/*
          * Ishonch qatori — ✓ belgilari DEKORATIV (§15.12: rang yolg'iz
@@ -113,33 +123,44 @@ export async function Hero() {
          * to'liq va halol izoh ishonch blokida.
          */}
         <ul
-          className="motion-enter flex flex-wrap gap-x-5 gap-y-2 text-xs text-text-muted"
+          className="motion-enter flex flex-wrap gap-x-5 gap-y-2 landing-note text-text-muted"
           style={{ "--i": 4 } as CSSProperties}
         >
           <li>
-            <a className="underline-offset-2 hover:underline" href="#ishonch">
-              <span aria-hidden="true" className="font-semibold text-success-text">
-                ✓{" "}
-              </span>
+            <a
+              className="inline-flex items-center gap-1.5 underline-offset-2 hover:underline"
+              href="#ishonch"
+            >
+              <Check
+                aria-hidden="true"
+                className="size-4 shrink-0 text-success-text"
+                strokeWidth={2.5}
+              />
               {t("trust.residency")}
             </a>
           </li>
-          <li>
-            <span aria-hidden="true" className="font-semibold text-success-text">
-              ✓{" "}
-            </span>
+          <li className="inline-flex items-center gap-1.5">
+            <Check
+              aria-hidden="true"
+              className="size-4 shrink-0 text-success-text"
+              strokeWidth={2.5}
+            />
             {t("trust.vpn")}
           </li>
-          <li>
-            <span aria-hidden="true" className="font-semibold text-success-text">
-              ✓{" "}
-            </span>
+          <li className="inline-flex items-center gap-1.5">
+            <Check
+              aria-hidden="true"
+              className="size-4 shrink-0 text-success-text"
+              strokeWidth={2.5}
+            />
             {t("trust.audit")}
           </li>
-          <li>
-            <span aria-hidden="true" className="font-semibold text-success-text">
-              ✓{" "}
-            </span>
+          <li className="inline-flex items-center gap-1.5">
+            <Check
+              aria-hidden="true"
+              className="size-4 shrink-0 text-success-text"
+              strokeWidth={2.5}
+            />
             {t("trust.languages")}
           </li>
         </ul>

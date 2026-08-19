@@ -166,6 +166,15 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    /*
+     * ⛔ Anker siljishi uchun ZAXIRA yo'l. Asosiy silliqlikni
+     * `marketing/smooth-anchor.tsx` chizadi (masofaga qarab 450…1100ms),
+     * lekin JS yuklanmagan yoki xatolik bergan holatda ham sakrash
+     * qo'pol bo'lmasin. `prefers-reduced-motion` bloki buni
+     * `auto !important` bilan bekor qiladi — u pastda turibdi.
+     */
+    scroll-behavior: smooth;
+    scroll-padding-top: 1.5rem;
   }
 
   body {
@@ -559,13 +568,136 @@
    * qiymatlar ilova shkalasiga a'zo bo'lishi ham kerak emas —
    * ular FAQAT landing uchun. */
   .landing-h2 {
-    font-size: 1.625rem;
+    /* 260819: 26px -> 28…36px. Foydalanuvchi: «sayt yozuvlari juda
+       kichik». Seksiya sarlavhasi sahifadagi ikkinchi eng katta matn
+       bo'lishi kerak — 26px hero (44px) dan keyin juda past tushardi. */
+    font-size: clamp(1.75rem, 2.7vw, 2.25rem);
     font-weight: 600;
-    line-height: 1.25;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
   }
   .landing-h3 {
-    font-size: 1.125rem;
+    /* 260819: 18px -> 20px. Karta sarlavhasi tanadan (17px) sezilarli
+       ajralib turishi kerak; 18/14 farqi zaif edi. */
+    font-size: 1.25rem;
     font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+
+  /* ---- LANDING TIPOGRAFIYA SHKALASI (260819) --------------------------
+   *
+   * ⛔⛔ NEGA ALOHIDA SHKALA KERAK BO'LDI. Marketing yuzasida 26 ta
+   *     `text-sm` (14px) va 22 ta `text-xs` (12px) ishlatilgan edi. Bu
+   *     ILOVA shkalasi va u O'Z O'RNIDA to'g'ri: kassir/direktor ekrani —
+   *     zich jadval, u yerda 14px maksimal ma'lumotni bir ekranga sig'diradi.
+   *
+   *     Landing esa BUTUNLAY BOSHQA vazifa: uni telefonda, ko'chada,
+   *     bir marta va shoshib o'qiydilar. 14px matn u yerda «kichkina
+   *     yozuv» bo'lib tuyuladi va odam o'qimay ketadi. Foydalanuvchi
+   *     buni aynan shunday ta'rifladi.
+   *
+   * ⛔ `text-base` YOZIB BO'LMAYDI: G-land-5(d) uni marketing yuzasida
+   *    NOLGA qulflagan (L-2 reyestri, butun `src` bo'ylab 7/7). Shuning
+   *    uchun shkala SHU YERDA, o'z nomlari bilan yashaydi — komponentda
+   *    ixtiyoriy o'lcham ham taqiqlangan (G-land-5(d)).
+   *
+   * ⛔ To'rt pog'ona, ko'p emas: har qo'shimcha pog'ona qaysi birini
+   *    ishlatishni tanlash yukini oshiradi va shkala jimgina buziladi.
+   */
+  .landing-lead {
+    /* Hero ostidagi javob, seksiya kirish matni — 19px. */
+    font-size: 1.1875rem;
+    line-height: 1.6;
+  }
+  .landing-body {
+    /* Asosiy o'qish matni: karta tanasi, qadam izohi — 17px. */
+    font-size: 1.0625rem;
+    line-height: 1.7;
+  }
+  .landing-note {
+    /* Ikkilamchi izoh: hisob usuli, ogohlantirish — 15px. */
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+  .landing-micro {
+    /* Yorliq, legenda, mikro-qator — 13px (12px dan sezilarli katta). */
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  /* ---- LANDING FORMASI — IKONKANING JOYI --------------------------
+   *
+   * ⛔⛔ BU YERDA FAQAT JOYLASHUV QOLDI, O'LCHAM EMAS — VA BU
+   *     XROMDA O'LCHANGAN XATONING NATIJASI.
+   *
+   *     Avval shu blokda `.landing-form input { height: 3.25rem;
+   *     font-size: 1rem }` turardi. U UMUMAN ISHLAMADI: brauzerda
+   *     o'lchanganda maydon hamon 40px/14px edi.
+   *
+   *     Sabab qatlamlarda: Tailwind utilitalari `@layer utilities` da,
+   *     bu blok esa `@layer components` da. CSS kaskadida utilities
+   *     YUQORI turadi, ya'ni elementdagi `h-10 text-sm` bu qoidani
+   *     HAR DOIM yengadi. Kod to'g'ri ko'rinardi, darvoza yashil edi,
+   *     ekranda esa hech nima o'zgarmagandi.
+   *
+   *     Shuning uchun o'lcham endi komponentda, UTILITA bilan beriladi
+   *     (`h-13 text-lg` — tailwind-merge bazaviy `h-10 text-sm` ni
+   *     almashtiradi). Bu yerda esa faqat utilita bilan
+   *     RAQOBATLASHMAYDIGAN narsa qoladi.
+   *
+   * ⛔ 18px (`text-lg`) — 16px dan katta, demak iOS Safari fokusda
+   *    sahifani ZUMLAMAYDI. Bu telefonda to'ldiriladigan forma uchun
+   *    jiddiy shart, bezak emas.
+   */
+  .landing-field-icon {
+    position: absolute;
+    top: 50%;
+    left: 1rem;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+    pointer-events: none;
+  }
+
+  /* ---- IKONKA PLITASI -------------------------------------------------
+   *
+   * Foydalanuvchi: «iconlar qo'sh… bachkana qilmasdan hammaga mos qilib
+   * boyit». Shuning uchun ikonka RASM emas, BELGI: bir xil o'lchamli
+   * yumaloq plita, aksent rangining eng past to'yinganligida. U kartani
+   * bezamaydi — sarlavhani BIR QARASHDA taniydigan qiladi.
+   *
+   * ⛔ Har seksiyada bir xil shakl — uchta har xil ikonka uslubi
+   *    sahifani «bachkana» qiladi, aynan shundan qochilgan.
+   */
+  .landing-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.875rem;
+    color: var(--color-accent-text);
+    background: color-mix(in oklch, var(--color-accent) 12%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-accent) 22%, transparent);
+    transition:
+      background-color var(--motion-base) var(--ease-out),
+      transform var(--motion-base) var(--ease-out);
+  }
+  /* ⛔ Harakat FAQAT kursorli qurilmada va FAQAT karta hover'ida: ikonka
+     o'zi hover nishoni EMAS (u bosilmaydi), shuning uchun mustaqil
+     hover holati foydalanuvchini adashtirardi. Ko'tarilish 2px —
+     «tirik» tuyuladi, lekin ko'zni charchatmaydi. */
+  @media (hover: hover) {
+    .landing-card:hover .landing-icon,
+    .landing-role:hover .landing-icon {
+      background: color-mix(in oklch, var(--color-accent) 20%, transparent);
+      transform: translateY(-2px);
+    }
+  }
+  /* Tungi qamrovdagi plita — chegara kuchliroq, aks holda fonda yo'qoladi. */
+  .landing-night .landing-icon {
+    background: color-mix(in oklch, var(--color-accent) 18%, transparent);
+    border-color: color-mix(in oklch, var(--color-accent) 34%, transparent);
   }
   /* Konteyner kengligi — dizaynda 1160px (bizning 6xl 1152px edi). */
   .landing-shell {
@@ -605,7 +737,8 @@
 
   /* Kicker — seksiya ustidagi harf-oralig'li aksent yorliq (v2). */
   .landing-kicker {
-    font-size: 12px;
+    /* 260819: 12px -> 13px (umumiy kattalashtirish bilan birga). */
+    font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.14em;
     text-transform: uppercase;

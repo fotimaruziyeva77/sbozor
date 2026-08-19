@@ -3,7 +3,16 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Hash,
+  Loader2,
+  Phone,
+  ShieldCheck,
+  Store,
+  User,
+} from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -238,21 +247,31 @@ export function DemoForm() {
        */
       <div
         aria-live="polite"
-        className="motion-enter flex flex-col items-center gap-2 rounded-lg border border-border bg-surface p-8 text-center"
+        className="motion-enter flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-10 text-center"
         role="status"
       >
-        <Check aria-hidden="true" className="size-8 text-success-text" />
-        <p className="landing-h3 tracking-tight">
+        {/* Doira ichidagi belgi — «bo'ldi» hissi belgining O'ZIDAN
+            emas, uning JOYLASHUVIDAN keladi: markazda, katta, tinch. */}
+        <span className="flex size-14 items-center justify-center rounded-full bg-success/15">
+          <Check
+            aria-hidden="true"
+            className="size-7 text-success-text"
+            strokeWidth={2.5}
+          />
+        </span>
+        <p className="landing-h2 tracking-tight">
           {t("form.success.title")}
         </p>
-        <p className="text-sm text-text-muted">{t("form.success.body")}</p>
+        <p className="max-w-[40ch] landing-body text-text-muted">
+          {t("form.success.body")}
+        </p>
       </div>
     );
   }
 
   return (
     <form
-      className="flex flex-col gap-4"
+      className="landing-form flex flex-col gap-5"
       noValidate
       /*
        * `handleSubmit(onSubmit)` HODISA ichida chaqiriladi (renderda emas):
@@ -263,64 +282,133 @@ export function DemoForm() {
         void handleSubmit(onSubmit)(event);
       }}
     >
-      <Field
-        error={errors.name?.message}
-        id="demo-name"
-        label={t("form.name")}
-      >
-        <Input
-          aria-describedby={errors.name ? "demo-name-error" : undefined}
-          aria-invalid={errors.name ? true : undefined}
-          autoComplete="name"
+      {/*
+       * ⛔⛔ IKKI USTUN (260819) — «hozirgi globalda mashxur formalar
+       *     kabi» topshirig'ining o'zagi. To'rtta maydon bir ustunda
+       *     turganda forma UZUN ko'rinadi va odam boshlashdan oldin
+       *     charchaydi; juftlab qo'yilganda esa u ikki qatorga siqiladi
+       *     va «tez to'ldiraman» degan taassurot beradi.
+       *
+       *     ⛔ Telefonda (`sm` dan past) BIR USTUN: 375px da ikkita
+       *       52px maydon yonma-yon sig'maydi va yorliqlar kesilardi.
+       */}
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field
+          error={errors.name?.message}
           id="demo-name"
-          {...register("name")}
-        />
-      </Field>
+          label={t("form.name")}
+          size="lg"
+        >
+          <div className="relative">
+            <User
+              aria-hidden="true"
+              className="landing-field-icon size-5"
+              strokeWidth={1.75}
+            />
+            <Input
+              aria-describedby={errors.name ? "demo-name-error" : undefined}
+              aria-invalid={errors.name ? true : undefined}
+              autoComplete="name"
+              className="h-13 rounded-xl pl-11 text-lg"
+              id="demo-name"
+              placeholder={t("form.phName")}
+              {...register("name")}
+            />
+          </div>
+        </Field>
 
-      <Field
-        error={errors.phone?.message}
-        id="demo-phone"
-        label={t("form.phone")}
-      >
-        <Input
-          aria-describedby={errors.phone ? "demo-phone-error" : undefined}
-          aria-invalid={errors.phone ? true : undefined}
-          autoComplete="tel"
+        <Field
+          error={errors.phone?.message}
+          hint={t("form.hintPhone")}
           id="demo-phone"
-          inputMode="tel"
-          type="tel"
-          {...register("phone")}
-        />
-      </Field>
+          label={t("form.phone")}
+          size="lg"
+        >
+          <div className="relative">
+            <Phone
+              aria-hidden="true"
+              className="landing-field-icon size-5"
+              strokeWidth={1.75}
+            />
+            <Input
+              aria-describedby={
+                errors.phone ? "demo-phone-error" : "demo-phone-hint"
+              }
+              aria-invalid={errors.phone ? true : undefined}
+              autoComplete="tel"
+              className="h-13 rounded-xl pl-11 text-lg"
+              id="demo-phone"
+              inputMode="tel"
+              placeholder={t("form.phPhone")}
+              type="tel"
+              {...register("phone")}
+            />
+          </div>
+        </Field>
 
-      <Field
-        error={errors.marketName?.message}
-        id="demo-market"
-        label={t("form.market")}
-      >
-        <Input
-          aria-describedby={errors.marketName ? "demo-market-error" : undefined}
-          aria-invalid={errors.marketName ? true : undefined}
-          autoComplete="organization"
+        <Field
+          error={errors.marketName?.message}
           id="demo-market"
-          {...register("marketName")}
-        />
-      </Field>
+          label={t("form.market")}
+          size="lg"
+        >
+          <div className="relative">
+            <Store
+              aria-hidden="true"
+              className="landing-field-icon size-5"
+              strokeWidth={1.75}
+            />
+            <Input
+              aria-describedby={
+                errors.marketName ? "demo-market-error" : undefined
+              }
+              aria-invalid={errors.marketName ? true : undefined}
+              autoComplete="organization"
+              className="h-13 rounded-xl pl-11 text-lg"
+              id="demo-market"
+              placeholder={t("form.phMarket")}
+              {...register("marketName")}
+            />
+          </div>
+        </Field>
 
-      <Field
-        error={errors.stallCount?.message}
-        id="demo-stalls"
-        label={t("form.stallCount")}
-      >
-        <Input
-          aria-describedby={errors.stallCount ? "demo-stalls-error" : undefined}
-          aria-invalid={errors.stallCount ? true : undefined}
-          autoComplete="off"
+        {/* ⛔ «ixtiyoriy» YORLIQDA yozilgan, yulduzcha bilan emas: yulduzcha
+            qaysi maydon majburiyligini FAQAT o'rganib bilgan odamga
+            aytadi. Bu forma esa birinchi marta ko'riladi. */}
+        <Field
+          error={errors.stallCount?.message}
           id="demo-stalls"
-          inputMode="numeric"
-          {...register("stallCount")}
-        />
-      </Field>
+          label={
+            <>
+              {t("form.stallCount")}{" "}
+              <span className="font-normal text-text-muted">
+                — {t("form.optional")}
+              </span>
+            </>
+          }
+          size="lg"
+        >
+          <div className="relative">
+            <Hash
+              aria-hidden="true"
+              className="landing-field-icon size-5"
+              strokeWidth={1.75}
+            />
+            <Input
+              aria-describedby={
+                errors.stallCount ? "demo-stalls-error" : undefined
+              }
+              aria-invalid={errors.stallCount ? true : undefined}
+              autoComplete="off"
+              className="h-13 rounded-xl pl-11 text-lg"
+              id="demo-stalls"
+              inputMode="numeric"
+              placeholder={t("form.phStalls")}
+              {...register("stallCount")}
+            />
+          </div>
+        </Field>
+      </div>
 
       {/*
         Rozilik — maxfiylik havolasi yorliq ICHIDA (§15.4): bosish maydoni
@@ -329,7 +417,7 @@ export function DemoForm() {
       */}
       <div className="flex flex-col gap-2">
         <label
-          className="flex cursor-pointer items-start gap-3 text-sm"
+          className="flex cursor-pointer items-start gap-3 landing-note"
           htmlFor="demo-consent"
         >
           <input
@@ -337,7 +425,7 @@ export function DemoForm() {
               errors.consent ? "demo-consent-error" : undefined
             }
             aria-invalid={errors.consent ? true : undefined}
-            className="mt-0.5 size-4 shrink-0 accent-accent"
+            className="mt-0.5 size-5 shrink-0 accent-accent"
             id="demo-consent"
             type="checkbox"
             {...register("consent")}
@@ -386,19 +474,28 @@ export function DemoForm() {
          * blok sabab VA keyingi qadamni aytadi (D-02), fokus shu yerga.
          */
         <div
-          className="rounded-sm bg-danger/10 px-3 py-2"
+          className="rounded-xl bg-danger/10 px-4 py-3"
           ref={alertRef}
           role="alert"
           tabIndex={-1}
         >
-          <p className="text-sm font-semibold text-danger-text">
+          <p className="landing-note font-semibold text-danger-text">
             {t("form.error.title")}
           </p>
-          <p className="text-sm text-danger-text">{formError}</p>
+          <p className="landing-note text-danger-text">{formError}</p>
         </div>
       ) : null}
 
-      <Button disabled={isSubmitting} size="hero" type="submit">
+      {/* ⛔ TO'LIQ KENGLIK — forma kartasining eng oxirgi va eng katta
+          elementi. Yarim kenglikdagi tugma «yana bir narsa qoldimi?»
+          degan ikkilanish beradi; to'liq kenglik esa «shu — oxiri»
+          deydi. Strelka harakat yo'nalishini bildiradi (statik). */}
+      <Button
+        className="w-full"
+        disabled={isSubmitting}
+        size="hero"
+        type="submit"
+      >
         {isSubmitting ? (
           <>
             <Loader2
@@ -408,9 +505,24 @@ export function DemoForm() {
             {t("form.submitting")}
           </>
         ) : (
-          t("form.submit")
+          <>
+            {t("form.submit")}
+            <ArrowRight aria-hidden="true" className="size-5" />
+          </>
         )}
       </Button>
+
+      {/* ⛔ Tugma OSTIDA, ustida emas: odam avval «yuborishga tayyorman»
+          deb qaror qiladi, keyin «xavfsizmi?» deb so'raydi. Javob aynan
+          shu tartibda joylashgan. */}
+      <p className="flex items-start gap-2 landing-micro text-text-muted">
+        <ShieldCheck
+          aria-hidden="true"
+          className="mt-px size-4 shrink-0"
+          strokeWidth={1.75}
+        />
+        {t("form.privacyNote")}
+      </p>
     </form>
   );
 }

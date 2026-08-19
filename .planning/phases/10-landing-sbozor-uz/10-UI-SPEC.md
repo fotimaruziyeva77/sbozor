@@ -276,6 +276,7 @@ Landing komponentlari `src/components/marketing/**` da yashaydi va ⛔ **`ui/` g
 | 2 | `marketing/step-line.tsx` | `IntersectionObserver` (qadam ochilishi) |
 | 3 | `marketing/reveal.tsx` | `IntersectionObserver` o'ramasi (scroll-reveal) — ⛔ **bitta** umumiy ta'rif |
 | 4 | `marketing/demo-form.tsx` | `react-hook-form` + `fetch` |
+| 6 | `marketing/smooth-anchor.tsx` | ⛔ **260819 da QO'SHILDI**: hech nima chizmaydi (`return null`), faqat hujjat darajasida anker bosilishini tinglaydi. Brauzerning `scroll-behavior: smooth` i masofani hisobga olmaydi (~500ms, doim) va uzoq siljishda foydalanuvchi buni «qo'pol» deb baholadi |
 | 5 | `marketing/theme-toggle.tsx` | ⛔ **260819 da QO'SHILDI** (foydalanuvchi, raqobatchi bilan solishtiruvdan): `useSyncExternalStore` orqali DOM temasiga obuna + `onClick`. Holat brauzerda yashaydi, serverda emas — orolsiz imkonsiz |
 
 ⛔ Qolgan hammasi — **Server Component**. ⛔ `LocaleSwitcher` **oltinchi emas**: u allaqachon klient komponenti va landing uni **import qiladi**, yangi orol ochmaydi (**G-land-1(c)**). ⛔ `marketing/nav-menu.tsx` ham orol EMAS — beshta anker havolada holat yo'q, u **Server Component** bo'lib qoladi.

@@ -1,3 +1,4 @@
+import { Sparkles } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 import { Reveal } from "@/components/marketing/reveal";
@@ -26,16 +27,20 @@ export async function Proof() {
     <Reveal>
       {/* v2: och ko'k gradient banner, markazda — ⭐ dalil bayonot sifatida. */}
       <div className="landing-proof rounded-2xl px-8 py-12 text-center">
-        <p aria-hidden="true" className="text-lg text-warning-text">
-          ★
-        </p>
-        <h2 className="mx-auto mt-3 max-w-[32ch] landing-h2 tracking-tight text-balance">
+        {/* ⛔ 260819: `★` belgisi ikonkaga almashdi. Sabab — matn
+            belgisi shrift bo'yicha har OSda boshqacha chiziladi va
+            ba'zi tizimlarda rangli emoji bo'lib ketardi; SVG hamma
+            joyda bir xil. */}
+        <span aria-hidden="true" className="landing-icon mx-auto">
+          <Sparkles className="size-5" strokeWidth={1.75} />
+        </span>
+        <h2 className="mx-auto mt-4 max-w-[32ch] landing-h2 tracking-tight text-balance">
           {t("proof.title")}
         </h2>
-        <p className="mx-auto mt-3 max-w-[52ch] text-lg leading-relaxed text-text-muted">
+        <p className="mx-auto mt-4 max-w-[52ch] landing-lead text-text-muted">
           {t("proof.body")}
         </p>
-        <p className="mx-auto mt-2 max-w-[52ch] text-sm leading-relaxed text-text-muted">
+        <p className="mx-auto mt-3 max-w-[52ch] landing-note text-text-muted">
           {t("proof.note")}
         </p>
       </div>

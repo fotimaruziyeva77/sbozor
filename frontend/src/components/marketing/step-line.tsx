@@ -1,5 +1,6 @@
 "use client";
 
+import { Camera, FileCheck2, ScanLine } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useSyncExternalStore } from "react";
 
@@ -46,7 +47,17 @@ import { prefersReducedMotion } from "@/lib/motion";
  *    konvensiyasi). Avtomatik harakat faqat hero sahnasida.
  * =============================================================================
  */
-const STEPS = ["s1", "s2", "s3"] as const;
+/*
+ * ⛔ IKONKALAR (260819): kamera · qarash chizig'i · tayyor hisobot —
+ *    uch qadamning MA'NOSI, ketma-ketlikda o'qiladi. Raqamli doira
+ *    o'z o'rnida qoladi (u chiziqning to'lish nuqtasi), ikonka esa
+ *    matn yonida turadi.
+ */
+const STEPS = [
+  { key: "s1", Icon: Camera },
+  { key: "s2", Icon: ScanLine },
+  { key: "s3", Icon: FileCheck2 },
+] as const;
 
 /** No-op obuna — bir martalik o'qish (lib/motion.ts falsafasi). */
 const subscribeNoop = (): (() => void) => () => {};
@@ -83,7 +94,7 @@ export function StepLine() {
           className="landing-step-fill absolute top-2 bottom-2 left-[13px] w-0.5 rounded-full bg-accent"
         />
         <ol className="flex flex-col gap-10">
-          {STEPS.map((key, index) => (
+          {STEPS.map(({ key, Icon }, index) => (
             <li className="relative pl-11" key={key}>
               {/* Qadam raqami: border-ui -> accent (bare `transition` —
                   yumshoqlik @theme default juftligidan, §10.1). */}
@@ -105,10 +116,15 @@ export function StepLine() {
                 }
                 threshold={0.4}
               >
-                <h3 className="landing-h3">
-                  {t(`steps.${key}.title`)}
-                </h3>
-                <p className="mt-1 max-w-[66ch] text-sm leading-relaxed text-text-muted">
+                <div className="flex items-center gap-3">
+                  <span aria-hidden="true" className="landing-icon">
+                    <Icon className="size-5" strokeWidth={1.75} />
+                  </span>
+                  <h3 className="landing-h3">
+                    {t(`steps.${key}.title`)}
+                  </h3>
+                </div>
+                <p className="mt-2 max-w-[66ch] landing-body text-text-muted">
                   {t(`steps.${key}.body`)}
                 </p>
               </Reveal>

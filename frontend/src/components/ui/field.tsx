@@ -36,6 +36,17 @@ export type FieldProps = {
   /** Boshqaruv elementining `id` si — yorliq va izoh shunga bog'lanadi. */
   id: string;
   label: ReactNode;
+  /*
+   * ⛔ `lg` — LANDING formasi uchun (260819). Ilova formalarida 12px
+   *    izoh to'g'ri: u zich ekranda qo'shimcha satr, o'qilishi shart
+   *    emas. Landingda esa izoh BEGONA odamga yozilgan («shu raqamga
+   *    qo'ng'iroq qilamiz») va 12px da u shunchaki ko'rinmaydi.
+   *
+   * ⛔ Yorliq `lg` da ham `text-sm` bo'lib qoladi va bu ONGLI: yorliq
+   *    maydon MATNIDAN (18px) kichik bo'lishi kerak, aks holda ikkalasi
+   *    bir og'irlikda bo'lib ierarxiya yo'qoladi.
+   */
+  size?: "md" | "lg";
 };
 
 export function Field({
@@ -45,6 +56,7 @@ export function Field({
   hint,
   id,
   label,
+  size = "md",
 }: FieldProps) {
   return (
     <div className={cn("flex flex-col gap-2", className)}>
@@ -53,7 +65,13 @@ export function Field({
       </label>
       {children}
       {hint ? (
-        <p className="text-xs text-text-muted" id={`${id}-hint`}>
+        <p
+          className={cn(
+            size === "lg" ? "text-sm" : "text-xs",
+            "text-text-muted",
+          )}
+          id={`${id}-hint`}
+        >
           {hint}
         </p>
       ) : null}

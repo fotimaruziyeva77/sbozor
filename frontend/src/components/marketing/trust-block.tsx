@@ -1,3 +1,4 @@
+import { Languages, Lock, MapPin, ScrollText } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 import { Reveal } from "@/components/marketing/reveal";
@@ -26,7 +27,17 @@ import { Reveal } from "@/components/marketing/reveal";
  * ⛔ Sarlavha ierarxiyasi: blok o'z `<h2>` sini chizadi (10-07 `<Section>`
  *    ni `title` prop'siz va `id` siz o'raydi — anchor shu faylda).
  */
-const TRUST_BANDS = ["residency", "vpn", "audit", "languages"] as const;
+/*
+ * ⛔ IKONKALAR (260819): joylashuv · qulf · jurnal varaqasi · tillar.
+ *    Ishonch bloki eng «quruq» matnli qism edi — to'rtta bir xil
+ *    ko'rinishdagi ustun. Ikonka har ustunga yuz beradi.
+ */
+const TRUST_BANDS = [
+  { key: "residency", Icon: MapPin },
+  { key: "vpn", Icon: Lock },
+  { key: "audit", Icon: ScrollText },
+  { key: "languages", Icon: Languages },
+] as const;
 
 export async function TrustBlock() {
   const t = await getTranslations("landing");
@@ -41,13 +52,16 @@ export async function TrustBlock() {
       </Reveal>
       {/* v2: to'rt ustun (yorug' fon) — davlat/yurist savollariga to'g'ridan. */}
       <div className="grid gap-x-6 gap-y-6 sm:grid-cols-2 min-[1100px]:grid-cols-4">
-        {TRUST_BANDS.map((key, index) => (
+        {TRUST_BANDS.map(({ key, Icon }, index) => (
           <Reveal delayIndex={index} key={key}>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-3">
+              <span aria-hidden="true" className="landing-icon">
+                <Icon className="size-5" strokeWidth={1.75} />
+              </span>
               <h3 className="landing-h3">
                 {t(`trustBlock.${key}.title`)}
               </h3>
-              <p className="max-w-[66ch] text-sm leading-relaxed text-text-muted">
+              <p className="max-w-[66ch] landing-body text-text-muted">
                 {t(`trustBlock.${key}.body`)}
               </p>
             </div>
