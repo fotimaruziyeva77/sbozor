@@ -64,7 +64,21 @@ import { cn } from "@/lib/cn";
  * ⛔ Shusiz kassir rasta raqamini FAQAT yoddan bilishi kerak edi: ro'yxat
  *   ham, xarita ham unga yopiq (o'lchandi, 2026-08-18).
  */
-const ROW_LETTERS = ["A", "B", "C", "D"] as const;
+/*
+ * ⛔⛔ QATOR HARFLARI SERVERDAN — QOTIRILGAN EMAS (260820).
+ *
+ *     Bu yerda `["A","B","C","D"]` yozilgandi. Oqibati ikki tomonlama
+ *     va ikkalasi ham jonli ko'rindi:
+ *
+ *       · Karmanada faqat A va B bor -> kassir ekranida IKKITA
+ *         O'LIK tugma turardi (bosilsa «rasta topilmadi»);
+ *       · qatori E dan boshlanadigan bozorda kassirga YORDAM
+ *         BO'LMASDI — u kodni yoddan terishi kerak edi.
+ *
+ *     Kassirda `MARKET_DATA_VIEW` yo'q (C-10), ya'ni u rastalar
+ *     ro'yxatini o'zi ko'ra olmaydi — shuning uchun harflar
+ *     `GET /billing/pending` javobida (`row_prefixes`) keladi.
+ */
 
 export type StallLookupProps = {
   /** Qidiruv maydonining joriy qiymati (sahifa holatida, ⛔ URL'da EMAS). */
@@ -81,6 +95,13 @@ export type StallLookupProps = {
   ownsStep: boolean;
   /** `autoFocus` va §8.5 fokus qaytishi uchun — egasi sessiya komponenti. */
   inputRef: RefObject<HTMLInputElement | null>;
+  /**
+   * Bozorda MAVJUD qator harflari (`GET /billing/pending`).
+   *
+   * ⛔ Bo'sh massiv — tugmalar UMUMAN chizilmaydi. Raqamli kodli
+   *    bozorda («23», «107») harf tugmasi ma'nosiz bo'lardi.
+   */
+  rowPrefixes: readonly string[];
   /** Maydon `id` si — `Field` yorlig'i shunga bog'lanadi. */
   fieldId: string;
 };
@@ -94,6 +115,7 @@ export function StallLookup({
   notFound,
   ownsStep,
   inputRef,
+  rowPrefixes,
   fieldId,
 }: StallLookupProps) {
   const t = useTranslations();
@@ -107,7 +129,7 @@ export function StallLookup({
           ⛔ `data-collect-option` YO'Q: bu rastani TANLAMAYDI, ro'yxatni
           ochadi — ya'ni ≤3 ta'sir shartnomasining sanog'iga kirmaydi. */}
       <div className="flex flex-wrap gap-2">
-        {ROW_LETTERS.map((letter) => (
+        {rowPrefixes.map((letter) => (
           <button
             className={cn(
               "min-h-11 min-w-11 cursor-pointer rounded-md border px-3",
@@ -120,6 +142,20 @@ export function StallLookup({
             onClick={() => {
               onValueChange(letter);
               onSubmit(letter);
+              /*
+               * ⛔⛔ FOKUS MAYDONGA QAYTADI (260820, jonli o'lchandi).
+               *
+               *     Harf bosilgach fokus TUGMADA qolardi va kassir
+               *     raqamni darhol tera olmasdi — avval maydonni
+               *     bosishi kerak edi. Telefonda bu qo'shimcha
+               *     tegish, ya'ni «≤3 bosish» va'dasining buzilishi.
+               *
+               * ⚠ Fokus qaytishi ro'yxatni YOPMAYDI: harf bosilganda
+               *   server mosliklarni qaytaradi va ular tanlash uchun
+               *   ochiq qoladi — kassir xohlasa teradi, xohlasa
+               *   ro'yxatdan tanlaydi.
+               */
+              inputRef.current?.focus();
             }}
             type="button"
           >

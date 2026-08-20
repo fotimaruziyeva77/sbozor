@@ -3231,6 +3231,26 @@ class PendingMarketResponse(BaseModel):
     outstanding_soum: int
     pending_stall_count: int
     fetched_at: datetime
+    row_prefixes: list[str]
+    """Bozorda MAVJUD qator harflari — kassir tugmalari uchun (260820).
+
+    =======================================================================
+    ⛔⛔ NEGA SERVERDAN: kassirda `MARKET_DATA_VIEW` YO'Q, ya'ni u
+        rastalar ro'yxatini ham, xaritani ham ko'ra olmaydi (C-10).
+        Klient qator harflarini o'zi bila olmaydi.
+
+        Frontendda ular `["A","B","C","D"]` deb QOTIRIB qo'yilgandi.
+        Oqibati ikki tomonlama:
+          · Karmanada faqat A va B bor -> ikkita O'LIK tugma;
+          · qatori E dan boshlanadigan bozorda kassirga YORDAM YO'Q,
+            u kodni yoddan terishi kerak.
+
+        Endi ro'yxat bozorning O'Z rastalaridan hosil bo'ladi: kod
+        boshidagi harf(lar), takrorsiz, alifbo tartibida.
+
+    ⛔ RAQAMLI KODLAR («23») HARF BERMAYDI va ro'yxatga tushmaydi —
+       ular uchun tugma ham ma'nosiz bo'lardi.
+    """
 
 
 class MapDayStatusRow(BaseModel):

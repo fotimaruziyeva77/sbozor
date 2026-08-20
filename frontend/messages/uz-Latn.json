@@ -45,7 +45,8 @@
     "collect": "Yig'ish",
     "billing": "Patta hisobi",
     "reconciliation": "Nomuvofiqliklar",
-    "reports": "Hisobotlar"
+    "reports": "Hisobotlar",
+    "switchMarket": "Bozorni almashtirish"
   },
   "auth": {
     "phoneLabel": "Telefon raqami",
@@ -1476,7 +1477,9 @@
     "shiftNone": "Smena ochilmagan",
     "shiftNoneHint": "Patta yozish uchun avval smenani oching — «Patta yig‘ish» sahifasidan.",
     "blindHint": "Naqdni smena yopilganda o‘zingiz sanaysiz. Tizim o‘z summasini ko‘rsatmaydi — shuning uchun bu yerda yig‘indi yo‘q.",
-    "panelDraft": "Qoralama"
+    "panelDraft": "Qoralama",
+    "stepOptional": "ixtiyoriy",
+    "cameraless": "Kamerasiz rejim — kamera ulangach o'lchanadi"
   },
   "reports": {
     "title": "Hisobotlar",

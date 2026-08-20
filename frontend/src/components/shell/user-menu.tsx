@@ -1,14 +1,14 @@
 "use client";
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, LogOut } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, LogOut } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { useRouter } from "@/i18n/navigation";
 import { useLogout } from "@/lib/auth-queries";
 import { useAuthStore } from "@/lib/auth-store";
 import type { RoleLabelKey } from "@/lib/rbac";
-import { roleLabelKey } from "@/lib/rbac";
+import { hasPermission, roleLabelKey } from "@/lib/rbac";
 
 /**
  * Foydalanuvchi menyusi: ism/telefon, rollar va chiqish.

@@ -276,6 +276,9 @@ async def billing_pending(
             outstanding_soum=market.outstanding_soum,
             pending_stall_count=market.pending_stall_count,
             fetched_at=market.fetched_at,
+            row_prefixes=await billing_repo.row_prefixes(
+                session, market_id=market_id
+            ),
         )
 
     stall = projection.stall

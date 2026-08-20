@@ -1,6 +1,12 @@
 "use client";
 
-import { useFormatter, useLocale, useNow, useTimeZone } from "next-intl";
+import {
+  useFormatter,
+  useLocale,
+  useNow,
+  useTimeZone,
+  useTranslations,
+} from "next-intl";
 
 import {
   Banknote,
@@ -27,6 +33,8 @@ import {
   formatPercent,
   formatSoum,
 } from "@/lib/format-number";
+import { useAuthStore } from "@/lib/auth-store";
+import { useSetupStatusQuery } from "@/lib/market-queries";
 import { useAccuracyReport, useOccupancyDay } from "@/lib/occupancy-queries";
 import { useReconciliationReport } from "@/lib/reconciliation-queries";
 import {
@@ -79,6 +87,7 @@ const RING = 2 * Math.PI * 16;
 const WINDOW_DAYS = 30;
 
 export function SixTiles({ period }: { period: Period }) {
+  const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
   const timeZone = useTimeZone() ?? "Asia/Tashkent";
@@ -122,6 +131,24 @@ export function SixTiles({ period }: { period: Period }) {
   const occupancy = useOccupancyDay(day, todayIso);
   const accuracy = useAccuracyReport({ from: windowFrom, to: day });
   const shifts = useShiftReport(day);
+
+  /*
+   * ⛔⛔ KAMERASIZ REJIM — UCHTA KATAK SABABINI AYTISHI KERAK (260820).
+   *
+   *     Pilot bozor kameralarni keyinroq (MikroTik orqali) ulaydi.
+   *     Shu vaqtgacha «Band, lekin to'lovsiz», «Bandlik» va «AI
+   *     aniqligi» kataklarida `—` turadi va direktor uni IKKI XIL
+   *     o'qishi mumkin: «o'lchandi, natija nol» yoki «tizim buzuq».
+   *     Ikkinchisi bizga qimmatga tushadi.
+   *
+   *     Endi ular ochiq aytadi: kamera yo'q, ulangach o'lchanadi.
+   *     Bu «yo'qlikka alert» prinsipining teskarisi emas — bu
+   *     ATAYIN tanlangan rejim va uni muammo deb ko'rsatish
+   *     ogohlantirishni qadrsizlantirardi.
+   */
+  const marketId = useAuthStore().principal?.marketId ?? null;
+  const setup = useSetupStatusQuery(marketId);
+  const cameraless = setup.data !== undefined && setup.data.cameras === 0;
 
 
   /* --- 1: tushum --------------------------------------------------------- */
@@ -502,7 +529,7 @@ export function SixTiles({ period }: { period: Period }) {
 
       {/* --- 2 ------------------------------------------------------------ */}
       <PanelTile
-        dot="warning"
+        dot={cameraless ? undefined : "warning"}
         href="/reports/compare"
         icon={TriangleAlert}
         label="Band, lekin to'lovsiz"
@@ -534,7 +561,9 @@ export function SixTiles({ period }: { period: Period }) {
               leakCount !== null && leakCount > 0 && "text-warning-text",
             )}
           >
-            {leakCount === null ? "—" : formatAmount(format, leakCount, locale)}
+            {leakCount === null
+              ? "—"
+              : formatAmount(format, leakCount, locale)}
           </p>
           <span className="dir-tile-unit">rasta</span>
           {dLeak === null ? null : <Badge tone={dLeak.tone}>{dLeak.text}</Badge>}
@@ -587,7 +616,9 @@ export function SixTiles({ period }: { period: Period }) {
             <p className="dir-tile-note">
               {occMeasured
                 ? `${formatAmount(format, occ.occupied, locale)} / ${formatAmount(format, occ.stalls, locale)} rasta band`
-                : "Bandlik hali o'lchanmagan"}
+                : cameraless
+                  ? t("dashboard.cameraless")
+                  : "Bandlik hali o'lchanmagan"}
             </p>
           </div>
         </div>

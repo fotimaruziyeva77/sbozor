@@ -250,9 +250,33 @@ describe("direktor", () => {
     expect(document.body.textContent).not.toContain(
       messages.dashboard.marketStatus,
     );
+
+    /*
+     * ⛔⛔ `setup-status` SO'ROVI ENDI KUTILADI — VA BU O'ZGARISH
+     *     ASOSLANGAN (260820).
+     *
+     *     Ilgari bu yerda `toEqual([])` turardi va uning sababi
+     *     «huquq tekshiruvi so'rovdan OLDIN» kontraktini o'lchash
+     *     edi: karta `market_manage` bilan darvozalangan, direktorda
+     *     esa u YO'Q.
+     *
+     *     Endi so'rov BOSHQA sabab bilan ketadi: `SixTiles` undan
+     *     kamera sonini o'qib, KAMERASIZ REJIMni aniqlaydi. Pilot
+     *     bozor kameralarni keyinroq ulaydi va usiz «Bandlik»
+     *     katagida `—` turardi — direktor uni «tizim buzuq» deb
+     *     o'qishi mumkin edi.
+     *
+     *     ⚠ Bu huquq buzilishi EMAS: `GET /markets/{id}/setup-status`
+     *       `MARKET_DATA_VIEW` talab qiladi va u direktorda BOR
+     *       (`markets.py` docstringi buni ochiq yozgan: «direktor
+     *       bozorning to'liqligini KO'RADI, lekin faollashtira
+     *       olmaydi»). Marshrut auditga ham yozmaydi.
+     *
+     *     DA'VONING ASL YARMI SAQLANDI: karta CHIZILMAYDI (yuqorida).
+     */
     expect(
       requestedPaths().filter((path) => path.includes("setup-status")),
-    ).toEqual([]);
+    ).toHaveLength(1);
   });
 });
 

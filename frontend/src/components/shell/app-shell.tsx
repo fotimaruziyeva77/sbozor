@@ -96,7 +96,24 @@ type NavItem = {
     | "audit"
     | "newMarket";
   icon: LucideIcon;
-  permission: Permission | null;
+  /**
+   * Yozuvni ochadigan huquq(lar).
+   *
+   * ⛔⛔ MASSIV — «BIRORTASI YETSA» (any-of), «hammasi» EMAS (260820).
+   *
+   *     «Bandlik» yozuvi ikki xil odamga kerak va sabablari BOSHQA:
+   *       · nazoratchi — o'z ishining NATIJASINI ko'radi
+   *         (`occupancy_review`);
+   *       · direktor — hisobdorlik sifatida ko'radi (`report_view`).
+   *
+   *     Bitta huquq yozilganda ulardan biri HAR DOIM yo'qotardi:
+   *     `report_view` nazoratchini, `occupancy_review` esa
+   *     direktorni chiqarib tashlardi [test ushladi].
+   *
+   * ⚠ Bu XAVFSIZLIK chegarasi EMAS (fayl boshidagi DIQQAT bandi) —
+   *   haqiqiy darvoza sahifada va serverda.
+   */
+  permission: Permission | readonly Permission[] | null;
   group: NavGroup;
 };
 
@@ -253,10 +270,18 @@ const NAV_ITEMS: readonly NavItem[] = [
     group: "market",
   },
   {
+    /*
+     * ⛔ `occupancy_review` — `report_view` EMAS (260820). Bandlikni
+     *    NAZORATCHI o'lchaydi va u o'z ishining natijasini ko'rishi
+     *    kerak. Direktor esa uni hisobdorlik sifatida ko'radi
+     *    (`report_view`). Ikkalasi ham kerak, shuning uchun yozuv
+     *    MASSIV oladi va «birortasi yetsa» qoidasi bilan ishlaydi —
+     *    sahifa darvozasi ham aynan shunday.
+     */
     href: "/occupancy",
     labelKey: "occupancy",
     icon: Store,
-    permission: "report_view",
+    permission: ["occupancy_review", "report_view"],
     group: "market",
   },
   /*
@@ -453,7 +478,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const roles = principal?.roles ?? [];
   const items = NAV_ITEMS.filter(
-    (item) => item.permission === null || hasPermission(roles, item.permission),
+    (item) =>
+      item.permission === null ||
+      (Array.isArray(item.permission)
+        ? item.permission.some((permission) => hasPermission(roles, permission))
+        : hasPermission(roles, item.permission as Permission)),
   );
 
   const primary = items.slice(0, MOBILE_PRIMARY_COUNT);

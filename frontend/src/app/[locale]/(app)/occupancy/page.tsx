@@ -69,7 +69,26 @@ export default function OccupancyPage() {
   const t = useTranslations();
   const { principal } = useAuthStore();
 
-  if (!hasPermission(principal?.roles ?? [], "report_view")) {
+  /*
+   * ⛔⛔ IKKI HUQUQDAN BIRI YETARLI (260820).
+   *
+   *     Ilgari bu yerda faqat `report_view` turardi va NAZORATCHI
+   *     403 olardi — holbuki bandlikni AYNAN U o'lchaydi va
+   *     sahifaning O'ZIDA unga atalgan shox bor (`canReview`).
+   *     Ya'ni ekran nazoratchini kutardi, eshik esa yopiq edi.
+   *
+   *     Natijasi buzuq halqa: nazoratchi kun bo'yi kadr ko'rib
+   *     qaror yozadi, lekin o'z ishining NATIJASINI ko'ra olmaydi.
+   *
+   * ⚠ SIZIB CHIQISH YO'Q: bu yuzada PUL maydoni umuman yo'q —
+   *   javob `stalls/occupied/empty/no_coverage/human_confirmed`
+   *   sanoqlaridan iborat (`occupancy.py`).
+   */
+  const roles = principal?.roles ?? [];
+  if (
+    !hasPermission(roles, "report_view") &&
+    !hasPermission(roles, "occupancy_review")
+  ) {
     return <ForbiddenNotice />;
   }
 

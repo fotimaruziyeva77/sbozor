@@ -20,6 +20,7 @@ import type { AdjustmentReasonValue, PaymentMethodValue } from "@/lib/api-types"
 import { useAuthStore } from "@/lib/auth-store";
 import {
   dropPendingAfterPayment,
+  useMarketPending,
   usePendingStall,
 } from "@/lib/billing-pending-queries";
 import type { PendingStall } from "@/lib/billing-pending-queries";
@@ -189,6 +190,13 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
   const [vendorRecord, setVendorRecord] = useState<PaymentRecord | null>(null);
   const hasOpenShift =
     shift.data === undefined ? null : shift.data !== null;
+
+  /*
+   * ⛔ Qator harflari uchun BOZOR kesimi ham so'raladi. Bu qo'shimcha
+   *    yuk emas: javob kichik va u `staleTime: 0` bilan smena
+   *    davomida bir necha marta baribir yangilanadi.
+   */
+  const marketPending = useMarketPending();
 
   const pending = usePendingStall(submittedCode, {
     enabled: hasOpenShift === true,
@@ -423,6 +431,7 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
         onSubmit={startLookup}
         onValueChange={setDraft}
         ownsStep={stall === null}
+        rowPrefixes={marketPending.data?.row_prefixes ?? []}
         value={draft}
       />
 

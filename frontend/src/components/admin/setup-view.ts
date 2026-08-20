@@ -34,6 +34,23 @@ export type SetupStep = {
   count: number | null;
   total: number | null;
   href: "/map" | "/stalls" | "/tariffs" | "/vendors" | "/calendar" | "/cameras";
+  /**
+   * Qadam IXTIYORIYmi — foizga KIRMAYDI.
+   *
+   * ⛔⛔ KAMERASIZ BOZOR TO'LIQ ISHLAYDI VA BU MAHSULOT QARORI
+   *     (D-16: kamera faollashtirishni HECH QACHON to'smaydi).
+   *
+   *     Pilot bozor kameralarni keyinroq (MikroTik orqali) ulaydi va
+   *     shu vaqtgacha ekran «86% tayyor» deb turardi — ya'ni to'liq
+   *     ishlayotgan bozorni CHALA deb ko'rsatardi. Bu har kuni
+   *     ko'rinadigan yolg'on: sozlash halqasi «ishlashga tayyormi?»
+   *     savoliga javob beradi, javob esa HA edi.
+   *
+   *     Endi foiz faqat MAJBURIY qadamlardan hisoblanadi; kamera
+   *     ro'yxatda qoladi (ko'rinadi, unutilmaydi), lekin darajani
+   *     pasaytirmaydi.
+   */
+  optional?: boolean;
 };
 
 /**
@@ -103,25 +120,32 @@ export function setupSteps(status: SetupStatusResponse): SetupStep[] {
       count: status.cameras,
       total: null,
       href: "/cameras",
+      optional: true,
     },
   ];
 }
 
 /** Bajarilgan qadamlar ulushi — 0..100 oralig'ida BUTUN son. */
 export function setupPercent(steps: readonly SetupStep[]): number {
-  if (steps.length === 0) return 0;
-  const done = steps.filter((step) => step.done).length;
-  return Math.round((done / steps.length) * 100);
+  /*
+   * ⛔ IXTIYORIY QADAMLAR MAXRAJGA KIRMAYDI (260820). Kamerasiz bozor
+   *    to'liq ishlaydi, ya'ni u 100% tayyor. Kamerani maxrajda
+   *    qoldirish «tayyor emas» degan yolg'on beradi.
+   */
+  const required = steps.filter((step) => step.optional !== true);
+  if (required.length === 0) return 0;
+  const done = required.filter((step) => step.done).length;
+  return Math.round((done / required.length) * 100);
 }
 
 /** Diqqat talab qiladigan bitta band. */
 export type Attention = {
   /** `admin.attention.*` tarjima kaliti. */
-  key: "stallsWithoutCategory" | "categoriesWithoutTariff" | "noCameras" | "noCalendar";
+  key: "stallsWithoutCategory" | "categoriesWithoutTariff" | "noCalendar";
   /** Sarlavhadagi son; `null` bo'lsa yorliq sonsiz o'qiladi. */
   count: number | null;
   tone: "warning" | "danger";
-  href: "/stalls" | "/tariffs" | "/cameras" | "/calendar";
+  href: "/stalls" | "/tariffs" | "/calendar";
 };
 
 /**
@@ -130,7 +154,7 @@ export type Attention = {
  * ⛔ Ohang tanlovi ma'noli, bezak emas:
  *    `danger`  — PUL YO'QOLADI (tarifsiz rastaga patta hisoblanmaydi;
  *                ish kuni belgilanmasa kunlik hisob umuman yurmaydi);
- *    `warning` — o'lchov to'liq emas, lekin pul oqmayapti (kamera yo'q).
+ *    `warning` — o'lchov to'liq emas, lekin pul oqmayapti.
  *
  *    Bu farq qat'iy: hamma narsani qizil qilish qizilni ma'nosiz
  *    qiladi va haqiqiy pul yo'qotishi ko'zga tashlanmay qoladi.
@@ -168,9 +192,22 @@ export function attentionItems(status: SetupStatusResponse): Attention[] {
     items.push({ key: "noCalendar", count: null, tone: "danger", href: "/calendar" });
   }
 
-  if (status.cameras === 0) {
-    items.push({ key: "noCameras", count: null, tone: "warning", href: "/cameras" });
-  }
+  /*
+   * ⛔⛔ «KAMERA ULANMAGAN» DIQQAT BANDI OLIB TASHLANDI (260820).
+   *
+   *     Pilot bozor kameralarni keyinroq ulaydi va shu vaqtgacha
+   *     panelda har kuni QIZIL-SARIQ karta turardi: «Kamera ulanmagan
+   *     — bandlik o'lchanmaydi». Lekin bu MUAMMO EMAS, bu TANLANGAN
+   *     ish rejimi: patta yig'ish, qarz, hisobot — hammasi kamerasiz
+   *     ishlaydi.
+   *
+   *     Har kuni ko'rinadigan va hech qachon hal qilinmaydigan
+   *     ogohlantirish — ogohlantirishning O'ZINI qadrsizlantiradi:
+   *     odam undan keyin haqiqiy qizil kartani ham ko'rmay qo'yadi.
+   *
+   *     Kamera holati YO'QOLMADI: u sozlash ro'yxatida «ixtiyoriy»
+   *     bo'lib turadi va ulanganda o'z-o'zidan ✓ bo'ladi.
+   */
 
   return items;
 }

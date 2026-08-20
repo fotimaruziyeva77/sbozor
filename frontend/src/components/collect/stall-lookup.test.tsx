@@ -128,6 +128,10 @@ function Harness({ onSubmit }: { onSubmit: (code: string) => void }) {
       onSubmit={onSubmit}
       onValueChange={setValue}
       ownsStep
+      /* ⛔ Harflar endi SERVERDAN keladi (`row_prefixes`) — testda ular
+         aniq berilishi kerak, aks holda tugmalar chizilmaydi va
+         «harf tugmasi» da'volari jimgina ma'nosiz bo'lib qolardi. */
+      rowPrefixes={["A", "B"]}
       value={value}
     />
   );

@@ -393,6 +393,32 @@ def _money_from_row(
     )
 
 
+_ROW_PREFIXES = text(
+    """
+    SELECT DISTINCT substring(s.code FROM '^[A-Za-z]+') AS prefix
+      FROM stalls s
+     WHERE s.market_id = :market_id
+       AND s.code ~ '^[A-Za-z]'
+     ORDER BY prefix
+    """
+)
+"""Bozorda mavjud qator harflari — kassir tugmalari uchun (260820).
+
+⛔ `DISTINCT` + `substring(... FROM '^[A-Za-z]+')`: kod «A-01» bo'lsa
+   «A», «AB-3» bo'lsa «AB». Raqamdan boshlanadigan kod («23») harf
+   bermaydi va `~ '^[A-Za-z]'` sharti uni butunlay chiqarib tashlaydi —
+   unga tugma chizish ma'nosiz bo'lardi.
+
+⛔ CHAQIRUVCHI TENANT KONTEKSTINI O'RNATGAN BO'LISHI SHART: so'rovdagi
+   `market_id` NIYAT, RLS esa KAFOLAT.
+"""
+
+
+async def row_prefixes(session: AsyncSession, *, market_id: UUID) -> list[str]:
+    """Bozor rastalari kodlarining harf boshlari — takrorsiz, tartiblangan."""
+    result = await session.execute(_ROW_PREFIXES, {"market_id": market_id})
+    return [row.prefix for row in result if row.prefix]
+
 async def resolve_stall_day_money(
     session: AsyncSession,
     *,

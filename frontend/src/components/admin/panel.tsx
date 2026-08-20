@@ -120,12 +120,6 @@ const ATTENTION_TEXT: Record<
     why: "Qaysi kunlar patta hisoblanishi noma'lum — kunlik hisob yurmaydi.",
     action: "Kalendarni ochish",
   },
-  noCameras: {
-    title: "Kamera ulanmagan",
-    unit: null,
-    why: "Bandlik o'lchanmaydi — «band, lekin to'lovsiz» rastalar ko'rinmaydi.",
-    action: "Kameralarni ochish",
-  },
 };
 
 /** Reestr kataklarining ikonkalari — Stitch `Material Symbols` mosligi. */
@@ -242,6 +236,18 @@ export function AdminPanel({
                       <StepMark done={item.done} />
                       <span className="min-w-0 flex-1 truncate">
                         {STEP_LABEL[item.key]}
+                        {/*
+                         * ⛔ «ixtiyoriy» YORLIG'I — qadam ko'rinadi,
+                         *    lekin u BAJARILMASA ham bozor tayyor.
+                         *    Kamerasiz ishlayotgan bozor uchun bu
+                         *    yagona to'g'ri xabar: «bu yerda ish bor,
+                         *    lekin u sizni to'smaydi».
+                         */}
+                        {item.optional === true ? (
+                          <span className="ml-2 text-xs text-text-muted">
+                            {t("dashboard.stepOptional")}
+                          </span>
+                        ) : null}
                       </span>
                       <span className="shrink-0 font-mono text-xs text-text-muted tabular-nums">
                         {stepCount(item, format, locale)}

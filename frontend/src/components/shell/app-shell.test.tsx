@@ -275,18 +275,48 @@ describe("AppShell — nazoratchining uyi va bandlik hisoboti (05-UI-SPEC §4.6)
     }
   });
 
-  test("NAZORAT: `inspector` da «Bandlik» KO'RINMAYDI (`report_view` yo'q)", () => {
+  /*
+   * ⛔⛔ DA'VO TESKARISIGA O'ZGARDI — VA BU ONGLI QAROR (260820).
+   *
+   *   Ilgari bu test «`inspector` da Bandlik KO'RINMAYDI» deb turardi,
+   *   chunki menyu yozuvi `report_view` bilan darvozalangan edi.
+   *
+   *   Jonli UAT'da ma'lum bo'ldiki, bu buzuq halqa: bandlikni AYNAN
+   *   nazoratchi o'lchaydi — kun bo'yi kadr ko'rib qaror yozadi —
+   *   lekin o'z ishining NATIJASINI ko'ra olmaydi. Sahifaning
+   *   O'ZIDA unga atalgan shox (`canReview`) allaqachon bor edi,
+   *   ya'ni ekran nazoratchini kutardi, eshik esa yopiq edi.
+   *
+   *   ⚠ SIZIB CHIQISH YO'Q: bu yuzada PUL maydoni umuman yo'q —
+   *     javob `stalls/occupied/empty/no_coverage/human_confirmed`
+   *     sanoqlaridan iborat.
+   *
+   *   Menyu yozuvi endi IKKI huquqni «birortasi yetsa» qoidasi bilan
+   *   qabul qiladi: nazoratchi ham, direktor ham ko'radi.
+   */
+  test("`inspector` navigatsiyada «Bandlik» ni KO'RADI (`occupancy_review`)", () => {
     seedRoles(["inspector"]);
     renderShell();
 
-    expect(
-      screen.queryByRole("link", { name: OCCUPANCY_LABEL }),
-    ).not.toBeInTheDocument();
+    const links = screen.getAllByRole("link", { name: OCCUPANCY_LABEL });
+    expect(links.length).toBeGreaterThan(0);
 
     /*
      * NAZORAT MAJBURIY: usiz bu test qobiq UMUMAN chizilmagan holatda ham
      * yashil ko'rinardi (`market_manage` testidagi bilan bir xil sabab).
      */
+    expect(
+      screen.getAllByRole("link", { name: DASHBOARD_LABEL }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  test("NAZORAT: `cashier` da «Bandlik» KO'RINMAYDI — ikkala huquq ham yo'q", () => {
+    seedRoles(["cashier"]);
+    renderShell();
+
+    expect(
+      screen.queryByRole("link", { name: OCCUPANCY_LABEL }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getAllByRole("link", { name: DASHBOARD_LABEL }).length,
     ).toBeGreaterThan(0);

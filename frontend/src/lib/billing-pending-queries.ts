@@ -302,6 +302,18 @@ export const pendingMarketSummarySchema = z.strictObject({
   outstanding_soum: soumSchema,
   pending_stall_count: z.number().int(),
   fetched_at: z.string(),
+  /*
+   * ⛔⛔ QATOR HARFLARI — KASSIR TUGMALARI UCHUN (260820).
+   *
+   *     Kassirda `MARKET_DATA_VIEW` yo'q (C-10), ya'ni u rastalar
+   *     ro'yxatini ko'ra olmaydi va qator harflarini o'zi bila
+   *     olmaydi. Klientda ular `["A","B","C","D"]` deb QOTIRIB
+   *     qo'yilgandi — Karmanada ikkita O'LIK tugma bo'lib turardi.
+   *
+   * ⚠ `strictObject` bu maydonni serverdan kelganda RAD ETARDI —
+   *   ya'ni sxema o'z ishini qildi va o'zgarish jimgina o'tmadi.
+   */
+  row_prefixes: z.array(z.string()),
 });
 
 export type PendingMarketSummary = z.infer<typeof pendingMarketSummarySchema>;
