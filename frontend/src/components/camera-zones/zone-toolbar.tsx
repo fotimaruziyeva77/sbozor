@@ -65,80 +65,107 @@ export function ZoneToolbar({
   const t = useTranslations();
   const atLimit = zoneCount >= MAX_ZONES_PER_CAMERA;
 
+  /*
+   * ⛔⛔ SABAB KO'RINADIGAN BO'LDI (260820, jonli ko'rildi).
+   *
+   *     Tugmalar `aria-disabled` bilan o'chiriladi va bosilganda sabab
+   *     `onAnnounce` ga uzatiladi — lekin u `sr-only role="status"` ga
+   *     tushadi, ya'ni FAQAT SKRINRIDER eshitadi. Ko'zi ko'radigan
+   *     foydalanuvchi kulrang «Qator bo'yicha bo'lish» ni bosadi va
+   *     HECH NARSA bo'lmaydi: na harakat, na sabab.
+   *
+   *     Endi shart tugmalar ostida, DOIMIY qatorda turadi — ya'ni u
+   *     bosishdan OLDIN o'rgatadi, bosgandan keyin ayblamaydi.
+   *
+   * ⚠ `onAnnounce` OLIB TASHLANMAYDI: skrinrider uchun bosishga
+   *   javob berish baribir kerak — ko'rinadigan qator uni almashtirmaydi.
+   */
+  const hint = !canCopy
+    ? t("cameraZones.copyNeedsOne")
+    : !canRowSplit
+      ? t("cameraZones.rowNeedsTwo")
+      : null;
+
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button
-        aria-disabled={atLimit ? true : undefined}
-        className={atLimit ? "opacity-60" : undefined}
-        onClick={() => {
-          if (atLimit) {
-            onAnnounce(t("cameraZones.maxZones", { max: MAX_ZONES_PER_CAMERA }));
-            return;
-          }
-          onCreateZone();
-        }}
-        size="sm"
-        variant="secondary"
-      >
-        <Plus aria-hidden="true" />
-        {t("cameraZones.newZone")}
-      </Button>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          aria-disabled={atLimit ? true : undefined}
+          className={atLimit ? "opacity-60" : undefined}
+          onClick={() => {
+            if (atLimit) {
+              onAnnounce(
+                t("cameraZones.maxZones", { max: MAX_ZONES_PER_CAMERA }),
+              );
+              return;
+            }
+            onCreateZone();
+          }}
+          size="sm"
+          variant="secondary"
+        >
+          <Plus aria-hidden="true" />
+          {t("cameraZones.newZone")}
+        </Button>
 
-      <Button
-        aria-disabled={canRowSplit ? undefined : true}
-        className={canRowSplit ? undefined : "opacity-60"}
-        onClick={() => {
-          if (!canRowSplit) {
-            onAnnounce(t("cameraZones.rowNeedsTwo"));
-            return;
-          }
-          onOpenRowSplit();
-        }}
-        size="sm"
-        variant="secondary"
-      >
-        <Rows3 aria-hidden="true" />
-        {t("cameraZones.rowSplit")}
-      </Button>
+        <Button
+          aria-disabled={canRowSplit ? undefined : true}
+          className={canRowSplit ? undefined : "opacity-60"}
+          onClick={() => {
+            if (!canRowSplit) {
+              onAnnounce(t("cameraZones.rowNeedsTwo"));
+              return;
+            }
+            onOpenRowSplit();
+          }}
+          size="sm"
+          variant="secondary"
+        >
+          <Rows3 aria-hidden="true" />
+          {t("cameraZones.rowSplit")}
+        </Button>
 
-      <Button
-        aria-disabled={canCopy ? undefined : true}
-        className={canCopy ? undefined : "opacity-60"}
-        onClick={() => {
-          if (!canCopy) {
-            onAnnounce(t("cameraZones.copyNeedsOne"));
-            return;
-          }
-          onCopyZone();
-        }}
-        size="sm"
-        variant="secondary"
-      >
-        <Copy aria-hidden="true" />
-        {t("cameraZones.copyZone")}
-      </Button>
+        <Button
+          aria-disabled={canCopy ? undefined : true}
+          className={canCopy ? undefined : "opacity-60"}
+          onClick={() => {
+            if (!canCopy) {
+              onAnnounce(t("cameraZones.copyNeedsOne"));
+              return;
+            }
+            onCopyZone();
+          }}
+          size="sm"
+          variant="secondary"
+        >
+          <Copy aria-hidden="true" />
+          {t("cameraZones.copyZone")}
+        </Button>
 
-      <Button
-        aria-disabled={canUndo ? undefined : true}
-        className={canUndo ? undefined : "opacity-60"}
-        onClick={onUndo}
-        size="sm"
-        variant="secondary"
-      >
-        <Undo2 aria-hidden="true" />
-        {t("cameraZones.undo")}
-      </Button>
+        <Button
+          aria-disabled={canUndo ? undefined : true}
+          className={canUndo ? undefined : "opacity-60"}
+          onClick={onUndo}
+          size="sm"
+          variant="secondary"
+        >
+          <Undo2 aria-hidden="true" />
+          {t("cameraZones.undo")}
+        </Button>
 
-      <Button
-        aria-disabled={canRedo ? undefined : true}
-        className={canRedo ? undefined : "opacity-60"}
-        onClick={onRedo}
-        size="sm"
-        variant="secondary"
-      >
-        <Redo2 aria-hidden="true" />
-        {t("cameraZones.redo")}
-      </Button>
+        <Button
+          aria-disabled={canRedo ? undefined : true}
+          className={canRedo ? undefined : "opacity-60"}
+          onClick={onRedo}
+          size="sm"
+          variant="secondary"
+        >
+          <Redo2 aria-hidden="true" />
+          {t("cameraZones.redo")}
+        </Button>
+      </div>
+
+      {hint === null ? null : <p className="text-xs text-text-muted">{hint}</p>}
     </div>
   );
 }
