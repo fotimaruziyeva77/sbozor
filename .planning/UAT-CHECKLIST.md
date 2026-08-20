@@ -281,6 +281,79 @@ Bu blok beshala rolda alohida bajariladi; natija rol bo'limida yoziladi.
 
 ---
 
-## Natijalar
+## NATIJALAR — 2026-08-20, Chrome, jonli
 
-> Test bajarilgach shu yerga yoziladi.
+### Qamrov
+
+| Rol | Bajarildi | Izoh |
+|---|---|---|
+| Platforma admini | **chuqur** | Bozor yaratishdan zona chizishgacha to'liq |
+| Kassir | **chuqur** | Smena · to'lov · ko'r sanoq — uchtasi ham oxirigacha |
+| Nazoratchi | **o'rta** | Yuza va navbatlar; navbat bo'sh (kadr yo'q) |
+| Bozor admini | **chuqur** | Oldingi sessiyada 8 nuqson topilib tuzatilgan |
+| Direktor | **chuqur** | Oldingi sessiyada panel · davr · trend tekshirilgan |
+
+⛔ **Bajarilmadi va sababi bor:** kadr olish (`/snapshots`) va nizo
+(`/reconciliation`) oqimlari — ular kamera KADRLARINI talab qiladi,
+kadrlar esa zona chizilgandan keyin jadval bo'yicha olinadi. Zona
+endi bitta chizildi; kadr sikli aylanganda alohida sinaladi.
+
+### Tuzatilgan nuqsonlar
+
+| # | Nuqson | Og'irlik |
+|---|---|---|
+| 1 | `setup-status` kamera sonini **qotirilgan 0** qaytarardi — panel 6 ta ishlayotgan kamerani ko'rmay, soxta qizil ogohlantirish chizardi | **jiddiy** |
+| 2 | Sahifa yangilansa bozorning **qoralama holati yo'qolardi** — «Faollashtirish» havolasi g'oyib bo'lardi | **jiddiy** |
+| 3 | Zona muharririda o'chirilgan tugma sababini **faqat skrinriderga** aytardi | o'rta |
+| 4 | Platforma adminida **ikki sarlavha** — bozor nomi va rol ikki marta | o'rta |
+| 5 | «Bozor holati» kartasi panel bilan **takrorlanardi** | o'rta |
+| 6 | Bozor tanlash ekrani 1878px'da **210px karta**, chap chekkada | o'rta |
+| 7 | «Yangi bozor» amali **faqat bo'sh ro'yxatda** bor edi | o'rta |
+| 8 | `.dir-tile-note` qoidasi boshqa kartalarga sizib, ~200px teshik qoldirardi | kichik |
+| 9 | Rastalar yuzasida pul **`UZS 10,000`** — vergul va ISO kodi bilan | kichik |
+
+### Tasdiqlangan asosiy kafolatlar
+
+- ✅ **Ko'r sanoq**: kassir smena yopishda tizim summasini ham, farqni
+  ham KO'RMAYDI. 10 000 yozib, 9 000 deklaratsiya qilindi — ekranda
+  faqat 9 000 qoldi.
+- ✅ **Ijara izolyatsiyasi**: yangi bozorda Karmananing 41 rastasi,
+  26 sotuvchisi va 3700+ audit yozuvidan BIRI HAM ko'rinmadi.
+- ✅ **Rasta biriktirish konflikti**: band rastaga ikkinchi sotuvchi
+  rad etilib, kim bandligi aytiladi.
+- ✅ **Tarif tarixi**: kelajak sana ishlaydi, o'tgan narx qulflangan.
+- ✅ **Ish kunlari**: o'zgartirish OQIBATI tasdiqda aytiladi.
+- ✅ **Halollik**: «Bu kutilayotgan summa — hisob hali yozilmagan»,
+  «Bugungi patta hisobi hali yakunlanmagan» — soxta son yo'q.
+
+### ⭐ Bozor sxemasini chizish — javob
+
+**Rastalarni qo'lda chizib bo'lmaydi.** `stalls` jadvalida koordinata
+ustuni yo'q, `konva`/`react-konva` o'rnatilmagan. `/map` — sxematik:
+zona = qator, rastalar kod tartibida, «Rasta qo'shilgach xarita
+AVTOMATIK chiziladi».
+
+**Haqiqiy chizish kamera zonalarida bor va u yaxshi ishlaydi:**
+bir rasta zonasi = **4 bosish** (Yangi zona → ro'yxatdan tanlash →
+Rastani biriktirish → rastani tanlash). Tepalar sichqoncha bilan ham,
+klaviatura bilan ham suriladi; nusxalash, qaytarish, qator bo'yicha
+bo'lish bor; 60 zona chegarasi.
+
+⚠ **«Qator bo'yicha bo'lish» AYNAN IKKI zona tanlangan bo'lishini
+talab qiladi** — endi bu ekranda yozilgan (avval faqat skrinrider
+eshitardi).
+
+### Ochiq savollar (qaror foydalanuvchida)
+
+1. **Plan-xaritani qo'lda chizish** — qurilsinmi? Kerak: `stalls` ga
+   `x/y` (nullable), API, `react-konva` muharrir.
+2. **Bozorni sessiya ichida almashtirish** yo'q — platforma admini
+   chiqib qayta kirishi kerak. Kodda «v2 ga qoldirildi, alohida audit
+   talab qiladi» deb yozilgan, lekin audit yozuvi ALLAQACHON bor
+   («Bozorlar · Bozor tanlandi»).
+3. **Nazoratchi `/occupancy` ni ko'rmaydi** (`report_view` yo'q) —
+   ya'ni o'z ishining natijasini ko'ra olmaydi. Bu qaror atayinmi?
+4. **Yig'ish ekranidagi A/B/C/D prefikslari** — bu bozorda C va D
+   yo'q; ular ma'lumotdan hosil bo'lishi kerakmi?
+5. **Prefiks bosilgach fokus maydonga o'tmaydi** — kassir raqamni
+   darhol tera olmaydi (telefonda muhim).
