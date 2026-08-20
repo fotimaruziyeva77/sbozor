@@ -9,11 +9,11 @@ Birinchi reliz (Karmana pilot, 12 hafta) talablari. Har biri roadmap fazalariga 
 
 ### Poydevor (FOUND)
 
-- [ ] **FOUND-01**: Foydalanuvchi rolga mos kirish oladi — platforma admini, direktor, bozor admini, kassir, nazoratchi (RBAC); har rol faqat o'z bozori ma'lumotini ko'radi
-- [ ] **FOUND-02**: Tenant izolyatsiyasi: har jadvalda `market_id` + Postgres RLS; cross-tenant kirish avtomatik test bilan isbotlangan
-- [ ] **FOUND-03**: Har moliyaviy/ma'muriy harakat audit jurnaliga yoziladi (kim, qachon, nima, eski→yangi); jurnal o'zgartirib bo'lmaydigan
-- [ ] **FOUND-04**: Interfeys 3 tilda (o'zbek-lotin asosiy, o'zbek-kirill, rus); til bir bosishda almashadi
-- [ ] **FOUND-05**: Biznes-kun Asia/Tashkent bo'yicha hisoblanadi (`business_date`); pul qiymatlari butun so'mda (BIGINT)
+- [x] **FOUND-01**: Foydalanuvchi rolga mos kirish oladi — platforma admini, direktor, bozor admini, kassir, nazoratchi (RBAC); har rol faqat o'z bozori ma'lumotini ko'radi
+- [x] **FOUND-02**: Tenant izolyatsiyasi: har jadvalda `market_id` + Postgres RLS; cross-tenant kirish avtomatik test bilan isbotlangan
+- [x] **FOUND-03**: Har moliyaviy/ma'muriy harakat audit jurnaliga yoziladi (kim, qachon, nima, eski→yangi); jurnal o'zgartirib bo'lmaydigan
+- [x] **FOUND-04**: Interfeys 3 tilda (o'zbek-lotin asosiy, o'zbek-kirill, rus); til bir bosishda almashadi
+- [x] **FOUND-05**: Biznes-kun Asia/Tashkent bo'yicha hisoblanadi (`business_date`); pul qiymatlari butun so'mda (BIGINT)
 - [x] **FOUND-06**: Tizim o'zini kuzatadi: kamera offline, o'tkazib yuborilgan snapshot, backup xatosi — platforma adminiga Telegram-alert; xatolar Sentry'da
 - [ ] **FOUND-07**: Kunlik avtomatik backup (Postgres + obyekt-ombor) boshqa lokatsiyaga; tiklash mashqi kamida bir marta o'tkazilgan
 
@@ -92,7 +92,7 @@ haqiqatni ikki tildan aytadi.*
 - [x] **LAND-02**: Hero 12s "jonli bozor" siklini o'ynaydi (xarita → kamera nuri → amber «Band, lekin to'lovsiz» → to'lov → hisobot); video EMAS, `prefers-reduced-motion`da statik final-kadr
 - [x] **LAND-03**: Demo-forma yuborilganda so'rov admin Telegram-botga yetadi (mavjud bot-service infratuzilmasi orqali) — alohida CRM yo'q
 - [x] **LAND-04**: Ishonch bloki (ma'lumotlar O'zbekistonda · NVR faqat VPN · har amal auditda · 3 til) va pilot holati halol («Karmana sinovda», yolg'on raqam YO'Q)
-- [x] **LAND-05**: Lighthouse ≥95, LCP <1,5 s (statik sahifada), SEO meta/OG/structured data to'liq
+- [ ] **LAND-05**: Lighthouse ≥95, LCP <1,5 s (statik sahifada), SEO meta/OG/structured data to'liq
 
 ## v2 Requirements
 
@@ -149,11 +149,11 @@ Har v1 talab aynan bitta fazaga biriktirilgan. Phase 0 (dala treki) — tashqi b
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | Phase 1 | Pending |
-| FOUND-02 | Phase 1 | Pending |
-| FOUND-03 | Phase 1 | Pending |
-| FOUND-04 | Phase 1 | Pending |
-| FOUND-05 | Phase 1 | Pending |
+| FOUND-01 | Phase 1 | Done |
+| FOUND-02 | Phase 1 | Done |
+| FOUND-03 | Phase 1 | Done |
+| FOUND-04 | Phase 1 | Done |
+| FOUND-05 | Phase 1 | Done |
 | FOUND-06 | Phase 4 | Done |
 | FOUND-07 | Phase 8 | Blocked (1-da'vo YARIM, 2-da'vo umuman o'lchanmagan: zaxira zanjirining O'ZI to'liq qurilgan va statik darvoza bilan qulflangan (tests/unit/test_backup_contract.py), yurak urishi halqasi mahsulot skripti orqali o'lchanadi (tests/integration/test_backup_heartbeat.py, test_phase8_criteria.py::test_sc3_*) va dump -> TOZA server -> ma'lumot zanjiri bajariladi (tests/integration/test_restore_drill.py); LEKIN «boshqa lokatsiyaga ketadi» REAL offsite restic repo'sini talab qiladi — RESTIC_REPOSITORY/RESTIC_PASSWORD .env da YO'Q — va «toza serverda tiklash mashqi kamida bir marta muvaffaqiyatli o'tkazilgan» REAL VPS ni talab qiladi. Egasi: Ops, tetigi: VPS deploy'i, bandlari 08-HUMAN-UAT.md #1 va #2. ⛔ Qo'shimcha: tiklangan bazada sbozor_app ning 0 GRANT'i bor (deferred-items №5), ya'ni tiklash tartibiga migratsiyani qayta yugurtirish qadami kerak) |
 | MARKET-01 | Phase 2 | Done |
@@ -242,6 +242,43 @@ takrori bo'lardi (890 yashil test ortida to'rtta haqiqiy bo'shliq).
 ⚠ **`Blocked` bu yerda «ish to'xtadi» degani EMAS** — u «dalil to'liq
 emas va yetishmayotgan dalil NOMLANGAN» degani. Uchala bandning ham
 yopilish yo'li o'z qatorida yozilgan (Ops deploy'i, 4-faza).
+
+### Poydevorning kechikkan hukmi (2026-08-20) — DALIL BILAN
+
+⛔⛔ **BU YOZUV ODATNI TUZATADI, KODNI EMAS.**
+
+`FOUND-01…05` Phase 1 bilan **2026-07-29 da qurilgan va o'shanda
+o'lchangan** edi, lekin traceability jadvalida `Pending` bo'lib
+qolgan. Ya'ni `ROADMAP.md` fazani `[x] completed` deb yopgan, bu fayl
+esa beshta bandni «hali bajarilmagan» deb ko'rsatib turgan — **ikki
+fayl bir yil davomida ikki xil haqiqat aytishi mumkin edi**.
+
+⚠ `scripts/check-requirements-sync.mjs` buni USHLAMAGAN va bu uning
+nuqsoni emas: u ro'yxat bilan jadvalni solishtiradi, ikkalasida ham
+`Pending` turgan — **izchil, lekin izchil ravishda NOTO'G'RI**. Skript
+`ROADMAP.md` ni umuman o'qimaydi. Bu bo'shliq shu yerda NOMLANADI.
+
+⛔ Dalil qidirilib topildi, TAXMIN QILINMADI: quyidagi har bir test
+   2026-08-20 dagi to'liq to'plamda (2822 o'tdi, 0 nosozlik) yashil.
+
+⛔ **YO'L-YO'LAKAY IKKINCHI NOMUVOFIQLIK TOPILDI VA TUZATILDI:**
+`LAND-05` ro'yxatda `[x]` belgilangan, jadvalda esa `Blocked` edi —
+ya'ni `check-requirements-sync.mjs` **qizil turgan**. Jadval TO'G'RI:
+Lighthouse ≥95 va LCP <1,5 s CI'da umuman o'lchanmaydi. Belgi
+olib tashlandi.
+
+⚠ Ikkala nuqson ham BIR SINFDAN: hujjat kod bilan emas, **ODAT** bilan
+yangilanadi va odat unutiladi. Skript ikkinchisini ushladi, birinchisini
+esa ushlay olmadi — chunki u `ROADMAP.md` ni o'qimaydi. Bu farq yuqorida
+NOMLANGAN, «skript bor» degan tinchlik bilan yopilmadi.
+
+| Talab | Yangi holat | Nima o'lchandi va QAYSI test bilan | Nima o'lchanMAGAN |
+|---|---|---|---|
+| **FOUND-01** | `Pending` -> **`Done`** | **(a) RBAC** — `tests/unit/test_rbac_matrix.py`: beshala rol ALOHIDA o'lchanadi va da'volar MANFIY, ya'ni huquq QO'SHILIB ketsa ham qizaradi (direktorda boshqaruv YO'Q, kassir va nazoratchida `market_data_view` YO'Q, `market_manage` FAQAT platforma adminida, `camera_manage` AYNAN ikki adminda). **(b) «har rol faqat o'z bozorini ko'radi»** — `tests/tenancy/test_cross_tenant.py`: begona obyekt `404` beradi va u NOMA'LUM ID'dan farq qilmaydi (mavjudlik sizmaydi), javob begona identifikatorni sizdirmaydi, foydalanuvchi ro'yxatida qo'shni bozor a'zosi yo'q, platforma admini TANLANMAGAN bozorga yeta olmaydi | Rollarning REAL taqsimoti: kim qaysi rolni oladi — tashkiliy qaror va u Karmanada o'rnatiladi |
+| **FOUND-02** | `Pending` -> **`Done`** | **(a)** `tests/tenancy/test_meta.py::test_every_table_is_tenant_scoped` — HAR jadvalda `market_id` + RLS `ENABLE` + `FORCE` + policy, va TO'RTTASI ALOHIDA tekshiriladi, chunki ular alohida buziladi: `ENABLE` yo'q -> policy TA'SIRSIZ (Pitfall 10), `FORCE` yo'q -> ega chetda qoladi. Ustiga `test_app_role_cannot_bypass_rls`, `test_no_bypassrls_role_exists`, `test_app_cannot_disable_triggers`. **(b) «avtomatik test bilan isbotlangan»** — `test_cross_tenant.py` MARSHRUT MATRITSASI: har yangi endpoint reyestrga qo'shilishi SHART, aks holda `test_no_matrix_route_returns_422` qizaradi. ⭐ Bu darvoza 260820 da `PUT /stalls/plan` ni AYNAN shu sababdan ushladi — ya'ni u yashab turibdi, muzeyda emas | Ilova qatlamidagi `market_id` shartlari RLS bilan IKKI QAVAT; 260820 sabotaji o'lchadi: SQL shartini olib tashlaganda ham izolyatsiya ushlab qoldi. Ya'ni ikkinchi qavatning O'ZI mustaqil o'lchanmagan (ataylab — RLS birinchi) |
+| **FOUND-03** | `Pending` -> **`Done`** | **(a) «kim, qachon, nima, eski->yangi»** — `tests/integration/test_audit_write.py`: ORM yozuvi AYNAN bitta qator beradi, `UPDATE` faqat O'ZGARGAN kalitlarni yozadi, `DELETE` eski qiymatni saqlaydi, **XOM SQL ham auditlanadi** (ya'ni kafolat TRIGGERDA, ilova intizomida emas), aktyorsiz o'zgarish ham yoziladi, `system` aktyor turi qayd etiladi va no-op `UPDATE` hech nima yozmaydi. **(b) o'zgarmaslik** — `test_audit_immutable.py`: `sbozor_app` `UPDATE`/`DELETE`/`TRUNCATE` qila olmaydi va **EGA roli ostidagi `UPDATE` ham hech nimani o'zgartirmaydi** | «HAR moliyaviy/ma'muriy harakat» — qamrov jadval bo'yicha o'lchanadi, INSON harakatlari ro'yxati bo'yicha emas. Yangi jadval qo'shilib triggeri unutilsa, buni `test_meta.py` ushlaydi; yangi ISH OQIMI auditsiz qolsa — hech nima ushlamaydi |
+| **FOUND-04** | `Pending` -> **`Done`** | **(a) uch til** — `frontend/scripts/check-messages.mjs`: 1682 kalit x 3 til, kalit va ICU parity TENGLIK bilan; `gen-cyrillic.test.mjs` transliteratsiya SIFATINI qo'riqlaydi (lotin qoldig'i, semantik nuqson, raqam aralashgan token); backend tomonda `test_me_locale.py::test_locale_enum_matches_frontend_routing` — server enum'i frontend marshrutiga TENG, ya'ni ikki ro'yxat ajralib keta olmaydi. **(b) «bir bosishda»** — `frontend/src/components/shell/locale-switcher.test.tsx`: bitta bosish `replace` + sessiyada `PATCH /me` beradi; tanlov PROFILDA saqlanadi va qayta kirishdan keyin ham qoladi (`test_locale_survives_a_new_login`), almashish auditga eski->yangi bilan tushadi | Tarjimaning MAZMUNI: kirill hosilasi mexanik tekshiriladi, lekin uchala tildagi matn TABIIY ekanini faqat ona tilida so'zlashuvchi ayta oladi |
+| **FOUND-05** | `Pending` -> **`Done`** | **(a) biznes-kun** — `tests/integration/test_business_date.py`: mahalliy yarim tundan OLDIN o'sha kunda qoladi, KEYIN keyingi kunga o'tadi, UTC ertalabki soati o'sha biznes-kun; ⭐ **NAIVE cast chegarada BOSHQA javob berishi ALOHIDA o'lchangan** (`test_naive_date_cast_disagrees_at_the_boundary`), ya'ni test tasodifan yashil emas; DB qatlami kod qatlami bilan mos va `business_date` to'g'ridan-to'g'ri YOZILMAYDI. **(b) BIGINT butun so'm** — `tests/integration/test_money_constraints.py`: ustun TIPI `bigint` deb tekshiriladi, nol va manfiy rad etiladi, eng katta xavfsiz so'm AYNAN qaytadi | Yozgi/qishki vaqt o'tishi — Asia/Tashkent'da DST YO'Q (UTC+5, doimiy), shuning uchun o'lchanadigan hodisaning O'ZI yo'q |
 
 ### Qoidaning qayta qo'llanishi (2026-08-03, `03-14`) — DALIL BILAN
 
