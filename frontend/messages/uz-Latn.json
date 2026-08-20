@@ -611,7 +611,8 @@
     "backToMap": "Xaritaga qaytish",
     "viewSchematic": "Sxematik",
     "viewPlan": "Chizilgan plan",
-    "notDrawnNote": "Yana {count} ta rasta chizilmagan — ular bu ko'rinishda yo'q."
+    "notDrawnNote": "Yana {count} ta rasta chizilmagan — ular bu ko'rinishda yo'q.",
+    "notDrawnYet": "Bu rasta bozorda bor, lekin planda hali chizilmagan — «Sxematik» ko'rinishda ko'ring."
   },
   "wizard": {
     "title": "Yangi bozor",

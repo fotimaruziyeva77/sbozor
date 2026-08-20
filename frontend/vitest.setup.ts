@@ -18,3 +18,28 @@ import { afterEach } from "vitest";
 afterEach(() => {
   cleanup();
 });
+
+/*
+ * =============================================================================
+ * ⛔⛔ `scrollIntoView` POLIFILI — JSDOM BO'SHLIG'I, MAHSULOT NUQSONI EMAS.
+ *
+ *   `Element.prototype.scrollIntoView` — brauzerda HAR DOIM mavjud
+ *   standart API, jsdom esa uni umuman amalga oshirmagan. Uni
+ *   chaqiradigan effekt testda `TypeError` bilan yiqiladi va nosozlik
+ *   REACT RENDERIDA ko'rinadi — ya'ni sabab butunlay boshqa joyda
+ *   qidiriladi.
+ *
+ * ⛔ KOMPONENTDA `typeof` QO'RIQCHISI QO'YILMAYDI: brauzerda bu funksiya
+ *   har doim bor va qo'riqchi HAQIQIY nosozlikni (masalan noto'g'ri
+ *   element tanlangani) jimgina yutib yuborardi. Bo'shliq test
+ *   MUHITIDA, shuning uchun tuzatish ham shu yerda.
+ *
+ * ⚠ `noop` — u ATAYIN hech nima qilmaydi: jsdom joylashuvni umuman
+ *   hisoblamaydi, ya'ni «ko'rinadigan joyga surildimi?» degan da'voni bu
+ *   yerda o'lchab bo'lmaydi va soxta amalga oshirish soxta ishonch
+ *   berardi. Fokus esa HAQIQIY va u o'lchanadi.
+ * =============================================================================
+ */
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView(): void {};
+}

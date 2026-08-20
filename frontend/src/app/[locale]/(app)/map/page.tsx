@@ -195,7 +195,7 @@ function MapSurface({
       {view === "schematic" ? (
         <StallMap focusCode={focusCode} onSelectStall={onSelectStall} />
       ) : (
-        <PlanView onSelectStall={onSelectStall} />
+        <PlanView focusCode={focusCode} onSelectStall={onSelectStall} />
       )}
     </div>
   );

@@ -70,6 +70,8 @@ const TIME_ZONE = "Asia/Tashkent";
 const NOW = new Date("2026-08-16T09:00:00Z");
 
 const MAP_PATH = "/stalls/map";
+const SECOND_STALL_ID = "55555555-5555-4555-8555-555555555555";
+const SECOND_STALL_CODE = "77";
 const AMOUNT_SOUM = 15_000;
 
 const STALL_DETAIL = {
@@ -112,7 +114,7 @@ const DAY_STATUS = {
  * `undefined` qaytaruvchi mock sxema validatsiyasida tushunarsiz xato
  * berib, yo'l xatosini yashirardi (`cameras/page.test.tsx` qoidasi).
  */
-function routeFetch(): void {
+function routeFetch(plan: { x: number; y: number } | null = null): void {
   apiClientMock.apiFetch.mockImplementation((path: string) => {
     if (path === MAP_PATH) {
       return Promise.resolve({
@@ -126,6 +128,20 @@ function routeFetch(): void {
                 code: STALL_CODE,
                 status: "active",
                 has_vendor: true,
+                plan_x: plan?.x ?? null,
+                plan_y: plan?.y ?? null,
+              },
+              /*
+               * ⛔ IKKINCHI RASTA HAR DOIM CHIZILMAGAN — «bor, lekin
+               *   planda yo'q» holatini o'lchash uchun bitta rastali
+               *   seed YETMAYDI: chizma bo'lmasa almashtirgichning
+               *   O'ZI chiqmaydi.
+               */
+              {
+                id: SECOND_STALL_ID,
+                code: SECOND_STALL_CODE,
+                status: "active",
+                has_vendor: false,
                 plan_x: null,
                 plan_y: null,
               },
@@ -149,7 +165,7 @@ let client: QueryClient;
  * URL holatini o'qiydi va adaptersiz u ish vaqtida yiqilardi — ya'ni
  * nosozlik sahifada emas, testda ko'rinardi va sabab yashirinardi.
  */
-function renderPage(roles: readonly string[]) {
+function renderPage(roles: readonly string[], searchParams = "") {
   setSession({
     accessToken: "test-access-token",
     markets: [],
@@ -173,7 +189,7 @@ function renderPage(roles: readonly string[]) {
       now={NOW}
       timeZone={TIME_ZONE}
     >
-      <NuqsTestingAdapter searchParams="">
+      <NuqsTestingAdapter searchParams={searchParams}>
         <QueryClientProvider client={client}>
           <AuthProvider>
             <MapPage />
@@ -249,4 +265,147 @@ test("`market_data_view` YO'Q rolda sahifa rad javobini beradi va SO'ROV KETMAYD
   );
 
   expect(apiClientMock.apiFetch).not.toHaveBeenCalled();
+});
+
+/* =========================================================================
+ * QO'LDA CHIZILGAN PLAN — KO'RINISH ALMASHTIRGICHI (260820).
+ * ========================================================================= */
+
+test("chizma YO'Q bo'lsa almashtirgich UMUMAN chiqmaydi", async () => {
+  /*
+   * ⛔ Bo'sh ekranga olib boradigan tugma foydalanuvchini «men nimadir
+   *   buzdimmi?» degan savolga qo'yardi. Almashtirgich chizma paydo
+   *   bo'lgandagina tug'iladi.
+   */
+  routeFetch();
+  renderPage(["market_admin"]);
+
+  await waitFor(() => expect(cellButton()).toBeTruthy());
+  expect(screen.queryByRole("button", { name: "Chizilgan plan" })).toBeNull();
+});
+
+test("chizma BOR bo'lsa ham BOSHLANG'ICH ko'rinish sxematik", async () => {
+  /*
+   * ⛔⛔ Sxematik ko'rinish HAR DOIM to'liq — unda barcha rasta bor.
+   *     Plan esa CHALA bo'lishi mumkin (yarmi chizilgan) va uni sukut
+   *     bo'yicha ochish odamga bozorning yarmini ko'rsatib, qolganini
+   *     YASHIRARDI.
+   */
+  routeFetch({ x: 2, y: 1 });
+  renderPage(["market_admin"]);
+
+  const schematic = await screen.findByRole("button", { name: "Sxematik" });
+  expect(schematic.getAttribute("aria-pressed")).toBe("true");
+  expect(
+    screen
+      .getByRole("button", { name: "Chizilgan plan" })
+      .getAttribute("aria-pressed"),
+  ).toBe("false");
+});
+
+test("⭐ CHIZILGAN PLANDA LEGENDA YO'QOLMAYDI", async () => {
+  /*
+   * =======================================================================
+   * ⛔⛔ 260820 DA CHROMEDA O'LCHANGAN NUQSONNING DARVOZASI.
+   *
+   *   Kataklar ikkala ko'rinishda AYNAN bir xil ranglarni oladi
+   *   (`StallCell`), lekin legenda faqat sxematik ko'rinishda edi —
+   *   ya'ni plan ochilganda qizil-ko'k-yashil TUSHUNTIRISHSIZ qolardi.
+   *
+   *   Rang yagona signal bo'lmasligi kerak (WCAG 1.4.1) va legenda
+   *   aynan o'sha ikkinchi kanal.
+   * =======================================================================
+   */
+  routeFetch({ x: 2, y: 1 });
+  renderPage(["market_admin"]);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Chizilgan plan" }));
+
+  await waitFor(() =>
+    expect(document.body.textContent).toContain(messages.map.legendTitle),
+  );
+  /* Rasta chizmada — ya'ni legenda tushuntiradigan katak CHINDAN bor. */
+  expect(cellButton()).toBeTruthy();
+});
+
+test("⭐ CHIZILMAGAN RASTA SONI AYTILADI — jimgina yo'qolmaydi", async () => {
+  /*
+   * =======================================================================
+   * ⛔⛔ PLAN CHALA BO'LISHI MUMKIN VA BU YOMON EMAS. Yomoni — buni
+   *     AYTMASLIK.
+   *
+   *     Chizilgan ko'rinishda faqat koordinatasi bor rasta chiziladi.
+   *     Odam ekranda 17 ta rasta ko'rib, bozorda 41 ta borligini bilmay
+   *     qolardi — va bu son hisobotdagi son bilan mos kelmasdi.
+   * =======================================================================
+   */
+  routeFetch({ x: 0, y: 0 });
+  renderPage(["market_admin"]);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Chizilgan plan" }));
+
+  await waitFor(() =>
+    expect(screen.getByText(/Yana 1 ta rasta chizilmagan/)).toBeTruthy(),
+  );
+});
+
+test("⭐ CHIZISH HAVOLASI DIREKTORGA KO'RINMAYDI", async () => {
+  /*
+   * ⛔ Direktorda `stall_manage` YO'Q (D-07): u xaritani ko'radi, lekin
+   *   ko'chira olmaydi. Havolani ko'rsatib, bosilgach 403 berish «nega
+   *   menga ruxsat yo'q?» savolini ekranda emas, XATODA tug'dirardi.
+   */
+  routeFetch();
+  renderPage(["director"]);
+
+  await waitFor(() => expect(cellButton()).toBeTruthy());
+  expect(screen.queryByRole("link", { name: /Planni chizish/ })).toBeNull();
+});
+
+test("chizish havolasi bozor adminida BOR", async () => {
+  routeFetch();
+  renderPage(["market_admin"]);
+
+  await waitFor(() =>
+    expect(screen.getByRole("link", { name: /Planni chizish/ })).toBeTruthy(),
+  );
+});
+
+test("⭐ CHIZILMAGAN RASTA «TOPILMADI» DEB ATALMAYDI", async () => {
+  /*
+   * =======================================================================
+   * ⛔⛔ 260820 DA CHROMEDA TOPILGAN NOZIK YOLG'ON.
+   *
+   *   Chizilgan planda faqat «topildi / topilmadi» bor edi. Chizilmagan
+   *   rasta qidirilganda ekran «xaritada topilmadi» derdi — LEKIN rasta
+   *   bozorda BOR, u shunchaki hali chizilmagan.
+   *
+   *   Odam uni yo'q deb o'ylab, reestrga qarab vaqt sarflardi. Endi
+   *   xabar qayerga qarashni AYTADI.
+   * =======================================================================
+   */
+  routeFetch({ x: 0, y: 0 });
+  renderPage(["market_admin"], `q=${SECOND_STALL_CODE}`);
+
+  await waitFor(() => expect(cellButton()).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "Chizilgan plan" }));
+
+  await waitFor(() =>
+    expect(document.body.textContent).toContain(messages.plan.notDrawnYet),
+  );
+  expect(document.body.textContent).not.toContain(messages.map.notFound);
+});
+
+test("bozorda UMUMAN yo'q raqam — «topilmadi» deyiladi", async () => {
+  /* ⛔ Ijobiy nazorat: yangi xabar eskisini YUTIB yubormasin. */
+  routeFetch({ x: 0, y: 0 });
+  renderPage(["market_admin"], "q=999");
+
+  await waitFor(() => expect(cellButton()).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "Chizilgan plan" }));
+
+  await waitFor(() =>
+    expect(document.body.textContent).toContain(messages.map.notFound),
+  );
+  expect(document.body.textContent).not.toContain(messages.plan.notDrawnYet);
 });

@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 
 import { gridSize } from "@/components/stalls/plan-model";
 import { StallCell } from "@/components/stalls/stall-cell";
+import { StallMapLegend } from "@/components/stalls/stall-map-legend";
 import type { StallCell as StallCellData } from "@/components/stalls/stall-map-types";
 import { DAY_STATE_KEYS, dayToneOf, toneOf } from "@/components/stalls/stall-tone";
 import { useMapDayStatusQuery } from "@/lib/map-day-queries";
@@ -43,8 +44,11 @@ import { useStallMapQuery } from "@/lib/market-queries";
 const CELL_PX = 44;
 
 export function PlanView({
+  focusCode,
   onSelectStall,
 }: {
+  /** `/map?q=` dagi raqam — sxematik ko'rinishdagi bilan BIR XIL xulq. */
+  focusCode: string;
   onSelectStall: (stallId: string) => void;
 }) {
   const t = useTranslations();
@@ -98,8 +102,80 @@ export function PlanView({
     [placed],
   );
 
+  /*
+   * ⛔⛔ UCH HOLAT, IKKI EMAS (260820, Chromeda o'lchandi).
+   *
+   *   Avval faqat «topildi / topilmadi» bor edi va chizilmagan rasta
+   *   qidirilganda ekran «xaritada topilmadi» derdi. Bu YOLG'ON: rasta
+   *   bozorda BOR, u shunchaki hali chizilmagan. Odam esa uni yo'q deb
+   *   o'ylab, reestrga qarab vaqt sarflardi.
+   *
+   *   Endi uchinchi holat alohida: «bor, lekin chizilmagan» va u
+   *   qayerga qarashni AYTADI.
+   */
+  const focusState: "none" | "drawn" | "notDrawn" | "missing" =
+    focusCode === ""
+      ? "none"
+      : placed.some((item) => item.cell.code === focusCode)
+        ? "drawn"
+        : (mapQuery.data?.zones ?? []).some((zone) =>
+              zone.cells.some((cell) => cell.code === focusCode),
+            )
+          ? "notDrawn"
+          : "missing";
+
+  /*
+   * ⛔⛔ QIDIRUV BU YERDA HAM ISHLASHI SHART (260820, Chromeda o'lchandi).
+   *
+   *   Qidiruv maydoni ikkala ko'rinish USTIDA turadi, lekin fokus
+   *   mantig'i faqat `stall-map.tsx` da edi — ya'ni chizilgan planda
+   *   raqam terilganda MUTLAQO hech nima bo'lmasdi. Ko'rinib turgan,
+   *   bosiladigan, jim ishlaydigan boshqaruv — eng yomon turi:
+   *   foydalanuvchi «men noto'g'ri terdimmi?» deb o'ylaydi.
+   *
+   * ⚠ Nusxa emas, ZANJIR bir xil: `data-stall-code` atributi `StallCell`
+   *   ning O'ZIDA (u ikkala ko'rinishda ham ishlatiladi), shuning uchun
+   *   bu effekt sxematik ko'rinishdagi bilan aynan bir xil selektorni
+   *   qidiradi. `<details>` bu yerda yo'q — plan yig'ilmaydi.
+   */
+  useEffect(() => {
+    if (focusCode === "") return;
+    const target = document.querySelector<HTMLButtonElement>(
+      `[data-stall-code="${CSS.escape(focusCode)}"]`,
+    );
+    if (!target) return;
+    target.scrollIntoView({ block: "nearest", inline: "nearest" });
+    target.focus();
+  }, [focusCode, placed]);
+
   return (
     <div className="flex flex-col gap-3">
+      {/*
+       * ⛔⛔ LEGENDA CHIZILGAN PLANDA HAM (260820).
+       *
+       *   Kataklar sxematik ko'rinish bilan AYNAN bir xil ranglarni
+       *   oladi (`StallCell`), lekin legenda faqat u yerda edi — ya'ni
+       *   ko'rinish almashtirilganda qizil-ko'k-yashil TUSHUNTIRISHSIZ
+       *   qolardi. Rang esa yagona signal bo'lmasligi kerak (WCAG
+       *   1.4.1) va legenda aynan o'sha ikkinchi kanal.
+       */}
+      <StallMapLegend
+        showPaymentStates={
+          dayLayer.status !== null && dayLayer.status.market_active
+        }
+      />
+
+      {focusState === "notDrawn" ? (
+        <p className="text-sm text-text-muted" role="status">
+          {t("plan.notDrawnYet")}
+        </p>
+      ) : null}
+      {focusState === "missing" ? (
+        <p className="text-sm text-text-muted" role="status">
+          {t("map.notFound")}
+        </p>
+      ) : null}
+
       <div className="overflow-auto rounded-lg border border-border bg-surface p-3">
         <div
           className="grid gap-1"
