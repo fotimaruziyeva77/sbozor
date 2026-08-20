@@ -604,6 +604,19 @@ Reja `/three-way/ledger` degan edi — sabab va tanlov `reports.py` ning
    tahriri emas.
 """
 
+LIVE_REVENUE_ROUTE = "/api/v1/reports/live"
+"""⛔ BU PREFIKSDAGI YAGONA `.xlsx` JUFTSIZ O'QISH MARSHRUTI (260819).
+
+Panel BUGUNGI tushumni ko'rsatishi kerak, `/reports/revenue` esa
+`report_period_future` bilan bugungi kunni RAD ETADI — u YOPILGAN
+kunlar ustida ishlaydi va bu qoida ataylab (hisobot muzlatilgan
+haqiqat bo'lishi kerak).
+
+⛔ EKSPORTI YO'Q VA BO'LMAYDI: eksport — DALIL, dalil esa yopilmagan
+   kundan chiqarilmaydi. Bugungi son ekranda ko'rsatiladi, faylga
+   tushmaydi.
+"""
+
 REPORTS_ROUTES = (
     "/api/v1/reports/accuracy.xlsx",
     "/api/v1/reports/anomalies",
@@ -613,6 +626,7 @@ REPORTS_ROUTES = (
     "/api/v1/reports/compare.xlsx",
     "/api/v1/reports/debtors",
     "/api/v1/reports/debtors.xlsx",
+    LIVE_REVENUE_ROUTE,
     "/api/v1/reports/revenue",
     "/api/v1/reports/revenue.xlsx",
 )
@@ -685,7 +699,7 @@ def _reports_paths() -> list[str]:
     )
 
 
-def test_the_reports_surface_is_exactly_ten_routes() -> None:
+def test_the_reports_surface_is_exactly_eleven_routes() -> None:
     """DARVOZANING NAZORATI — pastdagi testlar BO'SH to'plamda yashil bo'lmaydi.
 
     ⛔ To'plam TENGLIGI bilan (D-31), «kamida o'ntasi» bilan EMAS:
@@ -694,8 +708,15 @@ def test_the_reports_surface_is_exactly_ten_routes() -> None:
 
     ⚠ SON 3 -> 7 (08-12: to'rt `.xlsx` eksporti) -> 8 (08-14: daftar
       importi) -> 10 (08-16: solishtiruvning JSON va `.xlsx` yuzasi)
+      -> 11 (260819: `/reports/live`, panelning bugungi tushumi)
       tarzida ONGLI ravishda oshirildi va HAR SAFAR TEST NOMI bilan
       birga. Nom sonni aytadi, ya'ni o'sish diff'da ko'rinadi.
+
+    ⛔⛔ O'N BIRINCHISI BU DARVOZANI BIR MARTA CHETLAB O'TDI VA SABABI
+        QAYD ETILADI (260820): `/reports/live` 260819 da qo'shilgan,
+        lekin o'sha commitda TO'LIQ to'plam yugurtirilmagan — faqat
+        tegishli fayllar. Darvoza ISHLAGAN, uni HECH KIM KO'RMAGAN.
+        Ya'ni nosozlik reyestrda emas, ODATDA edi.
 
     ⛔ METODLAR MARSHRUT BO'YICHA o'lchanadi (`REPORTS_ROUTE_METHODS`):
        `POST` bo'lgan EKSPORT bayt-tasnif darvozasidan jimgina chetlab
@@ -742,7 +763,7 @@ def test_every_reports_route_is_documented_in_openapi() -> None:
         if path.startswith(REPORTS_PREFIX)
     }
 
-    assert len(documented) == 10, sorted(documented)
+    assert len(documented) == 11, sorted(documented)
     assert {path for _, path in documented} == set(REPORTS_ROUTES)
 
 

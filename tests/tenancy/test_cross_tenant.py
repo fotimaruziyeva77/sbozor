@@ -654,6 +654,23 @@ BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
         "category_id": str(seed.domain.market_a.category_ids[0]),
     },
     RouteSpec("PATCH", "/api/v1/stalls/{stall_id}"): lambda _: {"note": "matritsa"},
+    RouteSpec("PUT", "/api/v1/stalls/plan"): lambda seed: {
+        # ⛔ RASTA **A** BOZORIDAN (260820). Matritsa marshrutning tenant
+        #    da'vosini sinaydi, tananing validatsiyasini emas: A ning
+        #    rastasi bilan so'rov endpoint MANTIG'IGA yetib boradi va
+        #    o'sha yerda RLS o'lchanadi. B ning ID'sini qo'yish esa 422
+        #    javobida uni AKS ETTIRARDI va `test_no_route_leaks_...` ni
+        #    o'z-o'zidan yiqitardi (qo'shni `.../category` bilan bir xil
+        #    sabab).
+        "placed": [
+            {
+                "stall_id": str(seed.domain.market_a.stall_ids[0]),
+                "plan_x": 0,
+                "plan_y": 0,
+            }
+        ],
+        "cleared": [],
+    },
     RouteSpec("POST", "/api/v1/stalls/{stall_id}/category"): lambda seed: {
         # Toifa **A** bozoridan: matritsa YO'L PARAMETRINI (B ning rastasi)
         # sinaydi, tana emas. A ning toifasi bilan so'rov 404 gacha yetib

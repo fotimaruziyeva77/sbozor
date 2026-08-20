@@ -746,9 +746,31 @@ async def test_sc5_map_groups_stalls_by_zone_in_code_order(
         "da'vosi `code_sort` umuman ishlamaganda ham yashil bo'lardi"
     )
 
-    # --- 3. Katakning AYNAN to'rt maydoni ---
+    # --- 3. Katakning AYNAN olti maydoni ---
+    #
+    # ⛔⛔ SON TO'RTDAN OLTIGA ONGLI RAVISHDA OSHIRILDI (260820): qo'lda
+    #     chizilgan plan `plan_x`/`plan_y` ni qo'shdi. To'plam TENGLIGI
+    #     saqlanadi (D-31) — `>=` ga aylantirilmaydi, aks holda javobga
+    #     kelajakda sudralib kiradigan har qanday maydon jimgina o'tib
+    #     ketardi.
+    #
+    # ⛔ D-19 BEKOR QILINMADI: sxematik ko'rinish AVVALGIDEK avtomatik
+    #    joylashadi va koordinata `NULL` bo'lishi mumkin. Ular IXTIYORIY
+    #    ikkinchi qatlam — pastdagi da'vo aynan shuni qulflaydi.
     for cell in cells:
-        assert set(cell) == {"id", "code", "status", "has_vendor"}, cell
+        assert set(cell) == {
+            "id",
+            "code",
+            "status",
+            "has_vendor",
+            "plan_x",
+            "plan_y",
+        }, cell
+
+    # Bu seed planni CHIZMAYDI, ya'ni koordinata `NULL` bo'lishi SHART:
+    # agar server chizilmagan rastaga `0` bersa, muharrir hamma rastani
+    # chap-yuqori burchakka bosib qo'yardi.
+    assert {(cell["plan_x"], cell["plan_y"]) for cell in cells} == {(None, None)}
 
     # --- 4. Katak va karta bir xil haqiqatni aytadi ---
     with_vendor = [cell for cell in cells if cell["has_vendor"]]

@@ -562,7 +562,19 @@ async def test_the_market_projection_returns_every_counter(
     env: Env,
     director_headers: dict[str, str],
 ) -> None:
-    """Bozor kesimi — ⛔ NOL HAM NATIJA (§9.5, `occupancy.py:122-124`)."""
+    """Bozor kesimi — ⛔ NOL HAM NATIJA (§9.5, `occupancy.py:122-124`).
+
+    ⛔⛔ `row_prefixes` ONGLI RAVISHDA QO'SHILDI (260820). Kassirda
+        `MARKET_DATA_VIEW` YO'Q, ya'ni u rastalar ro'yxatini ham,
+        xaritani ham ko'ra olmaydi — qator harflari («A», «B») esa unga
+        tugma bo'lib kerak. Ular avval KLIENTGA QOTIRILGAN edi (A/B/C/D)
+        va bu bozorda mavjud bo'lmagan harfni ham ko'rsatardi.
+
+    ⛔ To'plam TENGLIGI saqlanadi (D-31): `>=` ga aylantirish javobga
+       kelajakda sudralib kiradigan har qanday maydonni — jumladan
+       shaxsiy ma'lumotni — jimgina o'tkazib yubordardi. C-10 darvozasi
+       aynan shunga tayanadi.
+    """
     response = await api_client.get(PENDING_URL, headers=director_headers)
 
     assert response.status_code == 200, response.text
@@ -574,8 +586,13 @@ async def test_the_market_projection_returns_every_counter(
         "outstanding_soum",
         "pending_stall_count",
         "fetched_at",
+        "row_prefixes",
     }, body
     assert body["service_date"] == business_today().isoformat()
+
+    # Prefikslar MA'LUMOTDAN keladi — qotirilgan ro'yxatdan emas.
+    assert body["row_prefixes"] == sorted(body["row_prefixes"])
+    assert all(prefix.isalpha() for prefix in body["row_prefixes"]), body
 
 
 # ===========================================================================
