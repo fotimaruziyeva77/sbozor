@@ -546,6 +546,11 @@ class MapCellRow:
     code: str
     status: str
     has_vendor: bool
+    # ⛔ `None` — rasta plan-xaritada JOYLASHTIRILMAGAN va u sxematik
+    #    rejimda chiziladi. «Joylashtirilmagan» va «(0,0) da» BOSHQA
+    #    ikki holat (`0026` migratsiyasi izohi).
+    plan_x: int | None
+    plan_y: int | None
 
 
 @dataclass(frozen=True)
@@ -691,6 +696,45 @@ birinchi sahifada `NULL` bo'ladi — tipsiz `NULL` asyncpg'ga noma'lum tip
 bilan ketardi (`audit_repo.py::_PLATFORM_AUDIT` bilan bir xil sabab).
 """
 
+
+_PLAN_PLACE = text(
+    """
+    UPDATE stalls s
+       SET plan_x = v.x,
+           plan_y = v.y,
+           updated_at = now()
+      FROM unnest(
+             CAST(:ids AS uuid[]),
+             CAST(:xs  AS integer[]),
+             CAST(:ys  AS integer[])
+           ) AS v(id, x, y)
+     WHERE s.market_id = :market_id
+       AND s.id = v.id
+    """
+)
+"""Rastalarni plan-xaritaga joylashtirish — bitta `UPDATE` (260820).
+
+⚠ `s.market_id = :market_id` — IKKINCHI QATLAM, birinchisi emas.
+  260820 sabotaji o'lchadi: bu shartni olib tashlaganda ham begona
+  bozorning rastasi yangilanmadi — RLS `UPDATE ... FROM unnest(...)`
+  yo'lini ham qoplaydi. Shart shunga qaramay qoladi: u xom SQL yoki
+  `sbozor_owner` roli ostida ishga tushgan kelajakdagi yo'lni ham
+  yopadi va o'qiyotgan odamga chegara BOR ekanini ko'rsatib turadi.
+"""
+
+_PLAN_CLEAR = text(
+    """
+    UPDATE stalls
+       SET plan_x = NULL,
+           plan_y = NULL,
+           updated_at = now()
+     WHERE market_id = :market_id
+       AND id = ANY(CAST(:ids AS uuid[]))
+    """
+)
+"""Rastani plandan chiqarish — u SXEMATIK rejimga qaytadi, yo'qolmaydi."""
+
+
 _MAP_ROWS = text(
     """
     SELECT z.id   AS zone_id,
@@ -698,6 +742,8 @@ _MAP_ROWS = text(
            s.id   AS stall_id,
            s.code,
            s.status,
+           s.plan_x,
+           s.plan_y,
            (a.stall_id IS NOT NULL) AS has_vendor
     FROM zones z
     LEFT JOIN stalls s
@@ -837,12 +883,59 @@ class StallRepository(TenantScopedRepository):
                         code=row.code,
                         status=row.status,
                         has_vendor=row.has_vendor,
+                        plan_x=row.plan_x,
+                        plan_y=row.plan_y,
                     )
                 )
 
         if current is not None:
             zones.append(MapZoneRow(id=current[0], name=current[1], cells=tuple(cells)))
         return zones
+
+    async def save_plan(
+        self,
+        *,
+        placed: list[tuple[UUID, int, int]],
+        cleared: list[UUID],
+    ) -> tuple[int, int]:
+        """Plan-xarita koordinatalarini BIR TRANZAKSIYADA yozadi (260820).
+
+        =================================================================
+        ⛔⛔ IKKI SO'ROV, IKKALASI HAM `market_id` BILAN — RLS ustiga
+            NIYAT ham yoziladi (`billing_repo` Pitfall 9 qoidasi).
+
+        ⛔ `unnest` bilan BITTA `UPDATE`: 300 rasta uchun 300 so'rov
+           yozish tranzaksiyani cho'zib, muharrirdagi «Saqlash» ni
+           sekundlarga aylantirardi.
+
+        ⛔ QAYTGAN SON — HAQIQATAN O'ZGARGAN QATORLAR SONI, klient
+           yuborgan ro'yxat uzunligi EMAS. Farq bo'lsa (masalan boshqa
+           bozorning rastasi yuborilgan) u JIMGINA yutilmaydi: RLS
+           bunday qatorni yangilamaydi va sanoq kichik chiqadi.
+        =================================================================
+        """
+        placed_count = 0
+        cleared_count = 0
+
+        if placed:
+            result = await self.session.execute(
+                _PLAN_PLACE,
+                {
+                    "market_id": self.market_id,
+                    "ids": [item[0] for item in placed],
+                    "xs": [item[1] for item in placed],
+                    "ys": [item[2] for item in placed],
+                },
+            )
+            placed_count = result.rowcount or 0
+
+        if cleared:
+            result = await self.session.execute(
+                _PLAN_CLEAR, {"market_id": self.market_id, "ids": cleared}
+            )
+            cleared_count = result.rowcount or 0
+
+        return placed_count, cleared_count
 
     async def create(
         self,

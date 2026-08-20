@@ -119,6 +119,8 @@ type MockCell = {
   code: string;
   status: "active" | "maintenance" | "closed";
   has_vendor: boolean;
+  plan_x: number | null;
+  plan_y: number | null;
 };
 
 function cell(
@@ -130,6 +132,8 @@ function cell(
     code,
     status: "active",
     has_vendor: true,
+    plan_x: null,
+    plan_y: null,
     ...overrides,
   };
 }

@@ -71,6 +71,35 @@ export function UserMenu() {
 
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
 
+          {/*
+           * =================================================================
+           * ⛔⛔ BOZOR ALMASHTIRISH — MENYUDA YAGONA CHIQISH YO'LI (260820).
+           *
+           *   `nav.switchMarket` satri uchala tilda ALLAQACHON bor edi,
+           *   lekin u HECH QAYERDA chaqirilmasdi (`grep` bilan
+           *   o'lchandi) — ya'ni tarjima qilingan, tekshirilgan va
+           *   ekranga hech qachon chiqmagan matn.
+           *
+           *   Natijasi mayda emas: bir nechta bozorga a'zo odam —
+           *   avvalo platforma admini — boshqa bozorga o'tish uchun
+           *   TIZIMDAN CHIQIB, qayta kirishi kerak edi. Bu kunda
+           *   o'nlab marta takrorlanadigan ish.
+           *
+           * ⛔ `market_view_all` OSTIDA: bitta bozorga biriktirilgan
+           *   kassir yoki nazoratchi uchun bu havola bo'sh ro'yxatga
+           *   olib borardi.
+           * =================================================================
+           */}
+          {hasPermission(principal.roles, "market_view_all") ? (
+            <DropdownMenu.Item
+              className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm outline-none select-none data-[highlighted]:bg-surface-muted"
+              onSelect={() => router.push("/select-market")}
+            >
+              <ArrowLeftRight aria-hidden="true" className="size-4" />
+              {t("nav.switchMarket")}
+            </DropdownMenu.Item>
+          ) : null}
+
           <DropdownMenu.Item
             className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm outline-none select-none data-[highlighted]:bg-surface-muted"
             disabled={logout.isPending}

@@ -43,6 +43,7 @@ import {
   stallDetailSchema,
   stallListResponseSchema,
   stallMapResponseSchema,
+  stallPlanResponseSchema,
   tariffItemSchema,
   tariffListResponseSchema,
   vendorListItemSchema,
@@ -50,6 +51,7 @@ import {
   zoneItemSchema,
   zoneListResponseSchema,
 } from "@/lib/api-types";
+import type { PlanDiff } from "@/components/stalls/plan-model";
 import type {
   BlockingItem,
   ImportErrorItem,
@@ -95,6 +97,7 @@ export const ZONES_PATH = "/zones";
 export const CATEGORIES_PATH = "/categories";
 export const STALLS_PATH = "/stalls";
 export const STALL_MAP_PATH = "/stalls/map";
+export const STALL_PLAN_PATH = "/stalls/plan";
 export const TARIFFS_PATH = "/tariffs";
 export const CALENDAR_PATH = "/calendar";
 export const VENDORS_PATH = "/vendors";
@@ -508,6 +511,33 @@ export function useStallMapQuery(options?: { enabled?: boolean }) {
     queryFn: () =>
       apiFetch(STALL_MAP_PATH, { schema: stallMapResponseSchema }),
     enabled: marketId !== null && (options?.enabled ?? true),
+  });
+}
+
+/**
+ * Qo'lda chizilgan planni saqlash — FARQ bilan, butun chizma bilan EMAS.
+ *
+ * =============================================================================
+ * ⛔⛔ FAQAT `map` KESHI YANGILANADI, `stalls` EMAS.
+ *
+ *     Koordinata rasta REESTRIDA ko'rinmaydi (u yerda kod, zona, toifa,
+ *     sotuvchi bor) va usta holatiga ham ta'sir qilmaydi — chizma
+ *     IXTIYORIY (sozlash foizining maxrajida yo'q). Keraksiz kalitni
+ *     invalidatsiya qilish 1000 rastali bozorda ikkita og'ir so'rovni
+ *     bekorga qayta yugurtirardi.
+ * =============================================================================
+ */
+export function useSaveStallPlan() {
+  const client = useQueryClient();
+  const marketId = useMarketId() ?? "";
+  return useMutation({
+    mutationFn: (input: PlanDiff) =>
+      apiFetch(STALL_PLAN_PATH, {
+        method: "PUT",
+        body: { placed: input.placed, cleared: input.cleared },
+        schema: stallPlanResponseSchema,
+      }),
+    onSuccess: () => invalidate(client, [mapKey(marketId)]),
   });
 }
 

@@ -77,6 +77,8 @@ const MAP: readonly MapZone[] = [
       code: `14-${String.fromCharCode(65 + index)}`,
       has_vendor: false,
       id,
+      plan_x: null,
+      plan_y: null,
       status: "active" as const,
     })),
   },

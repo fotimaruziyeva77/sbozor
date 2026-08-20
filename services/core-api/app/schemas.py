@@ -1176,15 +1176,33 @@ class MapCell(BaseModel):
     qo'shilishi API kontraktini o'zgartirishni talab qilardi; hosila
     funksiyada esa u bitta `switch` ga qo'shiladi.
 
-    ⚠ KOORDINATA HAM YO'Q (D-19): joylashuv avtomatik (CSS Grid), ya'ni
-    hech kim rastalarni qo'lda joylashtirmaydi va saqlanadigan `x`/`y`
-    bo'lmagani uchun ular eskirib ham qolmaydi.
+    ⛔⛔ KOORDINATA QO'SHILDI — D-19 QAYTA KO'RIB CHIQILDI (260820).
+
+    D-19 «koordinata YO'Q» derdi va sababi asosli edi: joylashuv
+    avtomatik (CSS Grid), ya'ni hech kim rastalarni qo'lda
+    joylashtirmaydi va saqlanadigan `x`/`y` eskirib qolmaydi.
+
+    Foydalanuvchi talabi shuni o'zgartirdi: sxematik xarita bozorning
+    HAQIQIY joylashuvini ifodalay olmaydi — qatorlar orasidagi yo'l,
+    burchakdagi katta rasta, ikki blokka bo'lingan bozor. Ma'muriyat
+    xaritani aynan shu tarzda o'qiydi.
+
+    ⚠ «ESKIRIB QOLISH» xavfi TUG'ILMADI va sabab sxemada: koordinata
+      rastaning O'Z QATORIDA yashaydi. Rasta o'chirilsa koordinata ham
+      o'chadi, kodi o'zgarsa koordinata o'sha rastada qoladi — ya'ni
+      «yo'q rastaning koordinatasi» holati mavjud emas.
+
+    ⛔ IKKALASI HAM `None` BO'LISHI MUMKIN va u NORMAL holat:
+      joylashtirilmagan rasta sxematik rejimda chiziladi. Ikki rejim
+      yonma-yon yashaydi va bozor xohlaganda ko'chadi.
     """
 
     id: UUID
     code: str
     status: StallStatus
     has_vendor: bool
+    plan_x: int | None
+    plan_y: int | None
 
 
 class MapZone(BaseModel):
@@ -1196,6 +1214,54 @@ class MapZone(BaseModel):
     id: UUID
     name: str
     cells: list[MapCell]
+
+
+class StallPlanItem(BaseModel):
+    """Bitta rastaning plan-xaritadagi joyi."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stall_id: UUID
+    plan_x: int = Field(ge=0, lt=1000)
+    plan_y: int = Field(ge=0, lt=1000)
+
+
+class StallPlanRequest(BaseModel):
+    """`PUT /stalls/plan` — plan-xaritani BIR MARTA saqlash.
+
+    =======================================================================
+    ⛔⛔ OMMAVIY, BITTALAB EMAS — VA BU MUHARRIRNING SHAKLIDAN KELIB
+        CHIQADI.
+
+    Muharrirda odam o'nlab rastani suradi, keyin bir marta «Saqlash»
+    bosadi (kamera zonalari muharriri bilan bir xil naqsh). Har surish
+    uchun alohida `PATCH` yuborish uch narsani buzardi:
+      · yarim saqlangan plan — tarmoq uzilsa rastalarning bir qismi
+        ko'chgan, bir qismi eski joyda qolardi;
+      · 300 rastali bozorda 300 so'rov;
+      · «bekor qilish» ma'nosini yo'qotardi.
+
+    ⛔ `ochirilgan` MAYDONI BOR: joylashtirilgan rastani plandan
+       CHIQARISH kerak bo'lishi mumkin (noto'g'ri qo'yilgan, yoki bozor
+       sxematik rejimga qaytmoqchi). Uni `plan_x = null` bilan yuborish
+       `Field(ge=0)` bilan ziddiyatga kirardi, shuning uchun alohida
+       ro'yxat.
+    =======================================================================
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    placed: list[StallPlanItem] = Field(default_factory=list, max_length=2000)
+    cleared: list[UUID] = Field(default_factory=list, max_length=2000)
+
+
+class StallPlanResponse(BaseModel):
+    """Saqlangandan keyingi holat — SERVER sanaydi, klient emas."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    placed_count: int
+    cleared_count: int
 
 
 class StallMapResponse(BaseModel):

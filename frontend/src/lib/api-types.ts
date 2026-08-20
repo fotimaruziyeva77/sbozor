@@ -570,15 +570,26 @@ export const stallListResponseSchema = z.object({
 /**
  * Xaritadagi bitta katak.
  *
- * `tone` ham, koordinata ham YO'Q va qo'shilmaydi (D-19/D-20): rang
- * frontendda hosil bo'ladi, joylashuv esa avtomatik (CSS Grid) — saqlangan
- * `x`/`y` bo'lmagani uchun ular eskirib ham qolmaydi.
+ * `tone` YO'Q va qo'shilmaydi (D-20): rang frontendda hosil bo'ladi.
+ *
+ * ⛔⛔ KOORDINATA ESA BOR — VA U D-19 NI BEKOR QILMAYDI (260820).
+ *
+ *     D-19 «xarita joylashuvini avtomatik qoldiramiz» degan edi va
+ *     SXEMATIK ko'rinish uchun bu O'ZGARMADI: `plan_x` NULL bo'lganda
+ *     rasta zona bloklarida, kod tartibida, CSS Grid bilan chiziladi.
+ *
+ *     `plan_x`/`plan_y` — IXTIYORIY IKKINCHI QATLAM: bozor admini
+ *     bozorning haqiqiy shaklini qo'lda chizganda to'ladi. Ular
+ *     `null` bo'lgan bozor hech qanday funksiyani yo'qotmaydi.
  */
 export const mapCellSchema = z.object({
   id: z.uuid(),
   code: z.string(),
   status: stallStatusSchema,
   has_vendor: z.boolean(),
+  /** Panjara indeksi (0..999) yoki `null` — hali chizilmagan. */
+  plan_x: z.number().int().nullable(),
+  plan_y: z.number().int().nullable(),
 });
 export type MapCell = z.infer<typeof mapCellSchema>;
 
@@ -594,6 +605,19 @@ export type MapZone = z.infer<typeof mapZoneSchema>;
 export const stallMapResponseSchema = z.object({
   zones: z.array(mapZoneSchema),
 });
+
+/**
+ * `PUT /stalls/plan` — QO'LDA CHIZILGAN PLANNI SAQLASH.
+ *
+ * ⛔⛔ SANOQLAR SERVERDAN KELADI va ular yuborilgan ro'yxat uzunligi
+ *     EMAS — haqiqatan o'zgargan qatorlar soni. Muharrir «12 ta rasta
+ *     saqlandi» deb yozganda bu HAQIQAT bo'lishi kerak.
+ */
+export const stallPlanResponseSchema = z.object({
+  placed_count: z.number().int(),
+  cleared_count: z.number().int(),
+});
+export type StallPlanResponse = z.infer<typeof stallPlanResponseSchema>;
 
 /* --- Tariflar (D-06/D-07) ------------------------------------------------ */
 

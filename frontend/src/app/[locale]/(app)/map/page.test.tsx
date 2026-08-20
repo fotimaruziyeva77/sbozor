@@ -126,6 +126,8 @@ function routeFetch(): void {
                 code: STALL_CODE,
                 status: "active",
                 has_vendor: true,
+                plan_x: null,
+                plan_y: null,
               },
             ],
           },

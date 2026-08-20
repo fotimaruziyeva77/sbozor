@@ -61,6 +61,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKeyConstraint,
     Index,
+    Integer,
     PrimaryKeyConstraint,
     SmallInteger,
     Text,
@@ -381,6 +382,37 @@ class Stall(Base, TenantMixin, TimestampMixin):
     # 6-fazada hisob YOZILMAYDI — bu holat qiymatlarining MAZMUNI.
     status: Mapped[str] = mapped_column(Text(), nullable=False, server_default=text("'active'"))
     note: Mapped[str | None] = mapped_column(Text(), nullable=True)
+
+    # =====================================================================
+    # ⛔⛔ PLAN-XARITADAGI JOY — IXTIYORIY VA U SHUNDAY QOLADI (260820).
+    #
+    # Bugungacha plan-xarita SXEMATIK edi: zona = qator, rastalar kod
+    # tartibida avtomatik terilardi. Bu ishlaydi, lekin bozorning
+    # HAQIQIY joylashuvini ko'rsatmaydi — «A qatori bilan B qatori
+    # orasida yo'l bor» yoki «burchakdagi rasta kattaroq» degan narsani
+    # ifodalab bo'lmaydi. Ma'muriyat esa xaritani aynan shu tarzda
+    # o'qiydi.
+    #
+    # ⛔ IKKALA USTUN HAM `NULL` BO'LISHI MUMKIN VA BU ASOSIY QAROR:
+    #    · mavjud bozorlar (Karmana) hech narsa yo'qotmaydi — ular
+    #      sxematik xaritada qolaveradi;
+    #    · Excel bilan 1000 rasta import qilgan bozor darhol ishlay
+    #      boshlaydi, keyin xohlasa joylashtiradi;
+    #    · «koordinatasi yo'q» va «koordinatasi (0,0)» BOSHQA ikki
+    #      holat va ularni aralashtirish rastalarni chap yuqori
+    #      burchakka yig'ib qo'yardi.
+    #
+    # ⛔ O'LCHOV BIRLIGI — SHARTLI KATAK, PIKSEL EMAS. Piksel ekran
+    #    o'lchamiga bog'lanardi va boshqa qurilmada plan siljib
+    #    ketardi. Katak esa o'lchamsiz: muharrir ham, ko'ruvchi ham
+    #    uni o'z kengligiga moslaydi.
+    #
+    # ⛔ `NUMERIC` EMAS, `INTEGER`: rasta katakka tortiladi (snap),
+    #    ya'ni kasr koordinata mavjud emas. Butun son solishtirishni
+    #    ham, saqlashni ham soddalashtiradi.
+    # =====================================================================
+    plan_x: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    plan_y: Mapped[int | None] = mapped_column(Integer(), nullable=True)
 
 
 class StallCodeRegistry(Base, TenantMixin):

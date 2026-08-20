@@ -113,6 +113,8 @@ from app.schemas import (
     StallListItem,
     StallListResponse,
     StallMapResponse,
+    StallPlanRequest,
+    StallPlanResponse,
     StallQuery,
     StallUpdateRequest,
 )
@@ -380,6 +382,8 @@ async def stall_map(
                         code=cell.code,
                         status=StallStatus(cell.status),
                         has_vendor=cell.has_vendor,
+                        plan_x=cell.plan_x,
+                        plan_y=cell.plan_y,
                     )
                     for cell in zone.cells
                 ],
@@ -388,6 +392,43 @@ async def stall_map(
         ]
     )
 
+
+
+@router.put("/plan", response_model=StallPlanResponse)
+async def save_stall_plan(
+    principal: StallManagerDep,
+    session: TenantSessionDep,
+    payload: StallPlanRequest,
+) -> StallPlanResponse:
+    """Plan-xaritani saqlaydi — BIR MARTA, butun plan uchun (260820).
+
+    =======================================================================
+    ⛔⛔ MARSHRUT `GET /{stall_id}` DAN OLDIN e'lon qilingan: `"plan"`
+        UUID emas va teskari tartibda so'rov `{stall_id}` shabloniga
+        tushib 422 berardi (modul docstringidagi `/map` bilan bir xil
+        tuzoq).
+
+    ⛔ `STALL_MANAGE`: planni bozorni BOSHQARADIGAN odam chizadi —
+       platforma admini va bozor admini. Direktorda bu huquq YO'Q
+       (D-07), ya'ni u xaritani KO'RADI, lekin ko'chira olmaydi.
+
+    ⛔ QAYTGAN SONLAR SERVERDAN: klient yuborgan ro'yxat uzunligi emas,
+       HAQIQATAN o'zgargan qatorlar soni. Begona bozorning rastasi
+       yuborilsa RLS uni yangilamaydi va sanoq kichik chiqadi — ya'ni
+       farq jimgina yutilmaydi.
+
+    ⛔ BO'SH TANA — 400 EMAS, oddiy 0/0. «Hech narsa o'zgarmadi» xato
+       emas: muharrir hech narsa surmasdan «Saqlash» bosishi mumkin va
+       unga qizil xato ko'rsatish hech kimga foyda bermaydi.
+    =======================================================================
+    """
+    repo = StallRepository(session, _market_id(principal))
+    placed_count, cleared_count = await repo.save_plan(
+        placed=[(item.stall_id, item.plan_x, item.plan_y) for item in payload.placed],
+        cleared=list(payload.cleared),
+    )
+    await session.commit()
+    return StallPlanResponse(placed_count=placed_count, cleared_count=cleared_count)
 
 @router.get(
     "/{stall_id}",
