@@ -245,7 +245,7 @@ def _setup_status_response(status_row: SetupStatusRow) -> SetupStatusResponse:
         stalls_with_category=status_row.stalls_with_category,
         vendors=status_row.vendors,
         calendar_configured=status_row.calendar_configured,
-        cameras=0,
+        cameras=status_row.cameras,
         can_activate=not blocking,
         blocking=blocking,
     )

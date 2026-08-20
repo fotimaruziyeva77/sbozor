@@ -2,7 +2,9 @@
 
 import type { ReactNode } from "react";
 import { AlertCircle } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
+
+import { formatSoum } from "@/lib/format-number";
 
 import { EvidenceLink } from "@/components/reconciliation/evidence-link";
 import { StallStatusBadge } from "@/components/stalls/stall-list";
@@ -180,6 +182,7 @@ const DAY_REASON_KEYS: Record<
 function StallDayStatus({ stallId }: { stallId: string }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
   const { principal } = useAuthStore();
   const dayLayer = useMapDayStatusQuery();
 
@@ -197,12 +200,16 @@ function StallDayStatus({ stallId }: { stallId: string }) {
 
   if (row === null) return null;
 
-  const money = (value: number) =>
-    format.number(value, {
-      style: "currency",
-      currency: "UZS",
-      maximumFractionDigits: 0,
-    });
+  /*
+   * ⛔⛔ `Intl` VALYUTA USLUBI EMAS — `formatSoum` (260820, ekranda ko'rildi).
+   *
+   *     `style: "currency"` ekranda «UZS 10,000» beradi: ISO kodi va
+   *     VERGUL bilan guruhlash. Mahsulotning qolgan hamma joyida esa
+   *     «10 000 so'm» — ingichka bo'sh joy va o'zbekcha so'z. Bitta
+   *     ekranda ikki xil pul formati — ma'muriyat uchun ikki xil tizim
+   *     taassuroti.
+   */
+  const money = (value: number) => formatSoum(format, value, locale);
 
   const evidenceIds = caseQuery.data?.evidence_snapshot_ids ?? [];
 
@@ -302,6 +309,7 @@ function StallCardBody({
   const t = useTranslations();
   const tStatus = useTranslations("stalls.status");
   const format = useFormatter();
+  const locale = useLocale();
 
   const categoryLabel = stall.category_name ?? t("stalls.categoryUnset");
 
@@ -334,11 +342,7 @@ function StallCardBody({
               {t("stalls.noTariff")}
             </span>
           ) : (
-            format.number(stall.tariff_soum, {
-              style: "currency",
-              currency: "UZS",
-              maximumFractionDigits: 0,
-            })
+            formatSoum(format, stall.tariff_soum, locale)
           )}
         </dd>
 

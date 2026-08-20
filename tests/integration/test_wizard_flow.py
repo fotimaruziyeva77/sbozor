@@ -829,12 +829,19 @@ async def test_cameras_never_block_activation(
     api_client: httpx.AsyncClient,
     new_market: Callable[..., Any],
 ) -> None:
-    """`cameras` maydoni javobda BOR, qiymati `0`, `blocking` da esa YO'Q (D-16).
+    """Kamerasiz bozorda `cameras` = 0 va u `blocking` da YO'Q (D-16).
 
     D-16: usta kamerasiz yakunlanadi va bozor "ishlashga tayyor" holatiga
-    o'tadi. Maydonning javobda BUGUNDAN turishi 3–5 fazalar uchun
-    qoldirilgan ilgak: haqiqiy sanoq qo'shilganda javob SHAKLI
-    o'zgarmaydi.
+    o'tadi.
+
+    ⛔⛔ 260820: SANOQ ENDI HAQIQIY. Ilgari router `cameras=0` deb
+        QOTIRIB qo'yardi ("3–5 fazalar uchun ilgak"). Jadval allaqachon
+        mavjud edi va Karmana test bozorida 6 ta kamera onlayn turardi —
+        admin paneli esa "Kamera ulanmagan · 0" deb QIZIL ogohlantirish
+        chizardi. Bu mahsulotning o'z qoidasini buzardi (T-05-04).
+
+        Bu test o'zgarmadi va u endi KUCHLIROQ: kamerasiz bozorda nol
+        HAQIQIY o'lchov natijasi, qotirilgan qiymat emas.
     """
     market_id, headers, _ = await new_market(name="Usta kamerasiz")
 

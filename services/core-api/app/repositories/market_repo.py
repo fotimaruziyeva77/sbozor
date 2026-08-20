@@ -88,10 +88,20 @@ class MarketRow:
 class SetupStatusRow:
     """Ustaning to'liqlik sanoqlari — BITTA so'rovning natijasi.
 
-    `cameras` bu yerda YO'Q va bo'lmaydi ham: kamera jadvali 3–5
-    fazalarda tug'iladi, ya'ni bugun sanaladigan narsaning O'ZI mavjud
-    emas. Javobdagi doimiy `0` — router qatlamining ilgagi (D-16), DB
-    so'rovining natijasi emas.
+    ⛔⛔ `cameras` ENDI BU YERDA VA U HAQIQIY SANOQ (260820).
+
+    Ilgari bu maydon yo'q edi va router `cameras=0` deb qotirib
+    qo'yardi; izohda «kamera jadvali 3–5 fazalarda tug'iladi, ya'ni
+    sanaladigan narsaning O'ZI mavjud emas» deyilgan edi. U izoh
+    ESKIRGAN — jadval bor va Karmana test bozorida 6 ta kamera onlayn.
+
+    Oqibati ekranda ko'rindi: admin paneli «Kamera ulanmagan · 0» deb
+    QIZIL ogohlantirish chizardi, kameralar esa ishlab turardi. Bu
+    mahsulotning o'z qoidasini buzardi — «o'lchanmagan qiymat o'rniga
+    nol yozilmaydi» (T-05-04).
+
+    ⚠ Arxivlanganlar sanalmaydi: arxivlangan kamera bandlikni
+      o'lchamaydi.
 
     `categories_total` ham yo'q: u `categories` ning O'ZI. Bitta sonni
     ikki nom bilan o'qish ikkinchi haqiqat manbaini tug'dirardi —
@@ -99,6 +109,7 @@ class SetupStatusRow:
     ko'rsatadi) shakl talabi, sanoq talabi emas.
     """
 
+    cameras: int
     zones: int
     categories: int
     stalls: int
@@ -178,6 +189,27 @@ _SETUP_STATUS = text(
           WHERE s.market_id = :market_id)                        AS stalls,
         (SELECT count(*) FROM vendors v
           WHERE v.market_id = :market_id)                        AS vendors,
+        /*
+         * ⛔⛔ KAMERA SANOG'I — QOTIRILGAN NOL O'RNIGA (260820).
+         *
+         *     Router qatlamida `cameras=0` yozilgan edi va uning izohi
+         *     «kamera jadvali 3–5 fazalarda tug'iladi, sanaladigan
+         *     narsaning O'ZI yo'q» derdi. U izoh ESKIRGAN: jadval
+         *     allaqachon bor va Karmana test bozorida 6 ta kamera
+         *     ONLAYN turibdi.
+         *
+         *     Oqibati ekranda ko'rindi: admin paneli «Kamera ulanmagan
+         *     · 0» deb qizil ogohlantirish chizardi, holbuki kameralar
+         *     ishlayotgan edi. Bu mahsulotning o'z qoidasini buzardi —
+         *     «o'lchanmagan qiymat o'rniga nol yozilmaydi».
+         *
+         * ⛔ ARXIVLANGANLAR SANALMAYDI: arxivlangan kamera bandlikni
+         *    o'lchamaydi, ya'ni «ulangan kamera» sanog'iga kirmasligi
+         *    kerak.
+         */
+        (SELECT count(*) FROM cameras cam
+          WHERE cam.market_id = :market_id
+            AND NOT cam.is_archived)                              AS cameras,
         (SELECT count(*) FROM stall_categories c
           WHERE c.market_id = :market_id
             AND EXISTS (
@@ -377,4 +409,5 @@ class MarketRepository:
             tariffs_covered=row.tariffs_covered,
             stalls_with_category=row.stalls_with_category,
             calendar_configured=bool(row.calendar_configured),
+            cameras=row.cameras,
         )

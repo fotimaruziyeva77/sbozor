@@ -2,7 +2,9 @@
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Ban, CalendarClock, Ellipsis, Pencil, Wrench } from "lucide-react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
+
+import { formatSoum } from "@/lib/format-number";
 
 import { useStallFilters } from "@/components/stalls/stall-filters";
 import { Badge } from "@/components/ui/badge";
@@ -192,6 +194,7 @@ function StallRow({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const locale = useLocale();
 
   // D-16: zona, toifa va sotuvchi nomi DB kontenti — TARJIMA QILINMAYDI.
   // Ular `truncate` bo'ladi va yoniga doim `title` qo'yiladi (§5.1 qoida 4).
@@ -237,11 +240,7 @@ function StallRow({
           <span className="sr-only">{t("stalls.tariffLabel")}: </span>
           {stall.tariff_soum === null
             ? t("stalls.noTariff")
-            : format.number(stall.tariff_soum, {
-                style: "currency",
-                currency: "UZS",
-                maximumFractionDigits: 0,
-              })}
+            : formatSoum(format, stall.tariff_soum, locale)}
         </p>
 
         <div className="justify-self-end">
