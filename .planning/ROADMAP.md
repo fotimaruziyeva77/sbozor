@@ -606,17 +606,30 @@ Yetim (orphan) talab yo'q, dublikat biriktirish yo'q.
 **Execution Order:**
 Phase 0 parallel ishlaydi. Build fazalari raqam tartibida: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 (2 va 3 vaqt bo'yicha ustma-ust tushadi).
 
+⛔⛔ **SANOQLAR 2026-08-20 DA QAYTA O'LCHANDI** — `.planning/phases/*/`
+dagi `*-PLAN.md` fayllari SANALDI, qo'lda yozilgan sondan ko'chirilmadi.
+Uchta qator yolg'on aytayotgan ekan: 1-faza «Planned 0/10», 2-faza
+«Planned 0/17» (ikkalasi ham 2026-07/08 da YOPILGAN va ular ustiga
+sakkizta faza qurilgan), 3-faza esa «11/11» (aslida 14/14 — o'z
+belgisi shuni aytardi). 9 va 10-fazalar jadvalda UMUMAN yo'q edi.
+
+⚠ Sabab: bu jadval **qo'lda** yangilanadi va yuqoridagi `- [x]`
+ro'yxati bilan bog'lanmagan. Endi `scripts/check-requirements-sync.mjs`
+ikkalasini ham solishtiradi.
+
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Dala treki va tashqi bog'liqliklar | N/A | Not started | - |
-| 1. Poydevor va tenant xavfsizligi | 0/10 | Planned | - |
-| 2. Bozor domeni va ustasi | 0/17 | Planned | - |
-| 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 11/11 | Complete | 2026-08-03 |
+| 1. Poydevor va tenant xavfsizligi | 15/15 | Complete | 2026-07-29 |
+| 2. Bozor domeni va ustasi | 24/24 | Complete | 2026-08-03 |
+| 3. NVR avtomatik kashfiyoti va tarmoq ulanishi | 14/14 | Complete | 2026-08-03 |
 | 4. Snapshot pipeline | 14/14 | Tekshirildi (human_needed — 5/5 mezon, 7 HUMAN-UAT bandi ochiq) | 2026-08-16 |
 | 5. Kamera zonalari, CV va nazoratchi tasdig'i | 15/15 | Tekshirildi (human_needed — 4/5 to'liq, SC2 ONNX'ga bog'liq) | 2026-08-16 |
 | 6. Billing va kassir | 14/14 | Complete   | 2026-08-11 |
 | 7. Nomuvofiqlik, bildirishnoma va botlar | 23/23 | Complete   | 2026-08-13 |
-| 8. Hisobotlar, mustahkamlash va ishga tushirish | 20/20 | Complete    | 2026-08-16 |
+| 8. Hisobotlar, mustahkamlash va ishga tushirish | 20/20 | Complete | 2026-08-16 |
+| 9. UI-polish — motion qatlami | 7/7 | Complete | 2026-08-17 |
+| 10. Landing — sbozor.uz | 8/8 | Complete | 2026-08-17 |
 
 ### Phase 9: UI-polish — motion qatlami
 

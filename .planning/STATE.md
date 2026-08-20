@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 10 UI-SPEC approved
-last_updated: "2026-08-17T19:22:29.456Z"
-last_activity: 2026-08-17
+stopped_at: Phase 10 bajarildi (8/8) — 11-faza rejalashtirilmagan
+last_updated: "2026-08-20T11:00:00.000Z"
+last_activity: 2026-08-20
 progress:
   total_phases: 11
   completed_phases: 10
@@ -21,17 +21,32 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-28)
 
 **Core value:** Bozor ma'muriyati har bir band rastadan patta to'liq yig'ilayotganini raqamlar va rasm-dalil bilan ko'radi — "band, lekin to'lovsiz" rastalar kunlik hisobotda avtomatik fosh bo'ladi.
-**Current focus:** Phase 10 — landing-sbozor-uz
+**Current focus:** Deploy — subdomen ostida serverga chiqarish
 
 ## Current Position
 
-Phase: 10
-Plan: Not started
+Phase: 10 (bajarildi)
+Plan: 10-08 (oxirgisi)
 Total Plans in Phase: 8
-Status: Ready to execute
-Last activity: 2026-08-17
+Status: Complete
+Last activity: 2026-08-20
 
-Progress: [██████████] 100% (7/7 reja — 09-01…09-07)
+Progress: [██████████] 100% (8/8 reja — 10-01…10-08)
+
+⛔⛔ **BU BLOK 2026-08-20 DA TO'G'RILANDI — U UCH KUN ESKIRGAN EDI.**
+
+Fayl «Phase 10 · Not started · Ready to execute» deb turgan, holbuki
+o'sha fazaning sakkizala rejasi ham `SUMMARY` bilan yopilgan
+(2026-08-17) va `ROADMAP.md` da «Qoidaning 10-fazadagi qo'llanishi
+(2026-08-17, `10-08`) — DALIL BILAN» bo'limi bor.
+
+⚠ Bu YAKKA holat emas edi: o'sha kuni `REQUIREMENTS.md` da beshta
+talab hukmsiz (`Pending`), `ROADMAP.md` ning holat jadvalida esa uchta
+qator yolg'on sanoq bilan turgani topildi. Barchasi BIR SINFDAN —
+hujjat qo'lda yangilanadi va odat unutiladi.
+
+Endi to'rtala manba `scripts/check-requirements-sync.mjs` bilan
+MEXANIK solishtiriladi.
 
 ✅ **9-FAZANING IJROSI TUGADI (7/7 reja).** `09-07` faza darvozasini yopdi:
 beshala ROADMAP mezoni `frontend/scripts/phase9-criteria.test.mjs` da
