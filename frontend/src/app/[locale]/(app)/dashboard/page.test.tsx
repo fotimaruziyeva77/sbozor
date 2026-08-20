@@ -165,11 +165,23 @@ afterEach(() => {
 });
 
 /* ---------------------------------------------------------------------------
- * H7 — PLATFORMA ADMINI KARTANI KO'RADI
+ * H7 — PLATFORMA ADMINI QORALAMA HOLATINI KO'RADI
+ *
+ * ⛔⛔ DA'VO O'ZGARDI, MAQSAD O'ZGARMADI (260820).
+ *
+ *   Ilgari bu test «Bozor holati» KARTASINI qidirardi. Karta to'rt
+ *   hisoblagich berardi (rasta · sotuvchi · kamera · foydalanuvchi) va
+ *   `AdminPanel` qo'shilgach ular BIR EKRANDA IKKI MARTA turib qoldi —
+ *   panelning REESTR bo'limi aynan o'sha sonlarni ko'rsatadi. Karta
+ *   panel chizilganda olib tashlandi.
+ *
+ *   MAQSAD esa o'sha: platforma admini bozor TIRIKMI yoki QORALAMAMI —
+ *   bilishi kerak. Endi buni panel sarlavhasidagi «Qoralama» belgisi
+ *   aytadi, shuning uchun test aynan shuni qidiradi.
  * ------------------------------------------------------------------------ */
 
 describe("platforma admini", () => {
-  test("bozor holati kartasi chiziladi", async () => {
+  test("qoralama bozorda «Qoralama» belgisi chiziladi", async () => {
     routeFetch();
     renderPage(["platform_admin"], {
       isPlatformAdmin: true,
@@ -177,11 +189,35 @@ describe("platforma admini", () => {
     });
 
     expect(
-      await screen.findByText(messages.dashboard.marketStatus),
+      await screen.findByText(messages.dashboard.panelDraft),
     ).toBeInTheDocument();
+    /* Takroriy karta QAYTMAYDI — bu darvozaning ikkinchi yarmi. */
+    expect(document.body.textContent).not.toContain(
+      messages.dashboard.marketStatus,
+    );
+  });
+
+  test("FAOL bozorda «Qoralama» belgisi chizilmaydi", async () => {
+    routeFetch();
+    renderPage(["platform_admin"], {
+      isPlatformAdmin: true,
+      marketIsActive: true,
+    });
+
+    expect(await screen.findByText("Admin paneli")).toBeInTheDocument();
     expect(
-      await screen.findByText(messages.dashboard.statusDraft),
-    ).toBeInTheDocument();
+      screen.queryByText(messages.dashboard.panelDraft),
+    ).not.toBeInTheDocument();
+  });
+
+  test("holat NOMA'LUM bo'lsa belgi chizilmaydi — to'qilgan da'vo yo'q", async () => {
+    routeFetch();
+    renderPage(["platform_admin"], { isPlatformAdmin: true });
+
+    expect(await screen.findByText("Admin paneli")).toBeInTheDocument();
+    expect(
+      screen.queryByText(messages.dashboard.panelDraft),
+    ).not.toBeInTheDocument();
   });
 });
 

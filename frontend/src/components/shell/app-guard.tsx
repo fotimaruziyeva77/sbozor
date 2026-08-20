@@ -96,7 +96,19 @@ export function AppGuard({ children }: { children: React.ReactNode }) {
     if (principal.marketId === null || enrichStarted.current) return;
     enrichStarted.current = true;
 
-    void loadPrincipal(principal.marketName)
+    /*
+     * ⛔ Bu yerdan FAQAT `userId/phone/fullName` olinadi (pastda), ya'ni
+     *    bozor holati bu yo'ldan o'tmaydi — mavjud qiymat uzatiladi va
+     *    u `updatePrincipal` ga tushmaydi.
+     */
+    void loadPrincipal(
+      principal.marketName === null
+        ? null
+        : {
+            name: principal.marketName,
+            isActive: principal.marketIsActive ?? false,
+          },
+    )
       .then((profile) => {
         updatePrincipal({
           userId: profile.userId,

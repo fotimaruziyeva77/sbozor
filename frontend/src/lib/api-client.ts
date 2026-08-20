@@ -299,7 +299,24 @@ export async function apiFetch<T>(
  * bo'yicha u tarjima qilinmaydi va qanday kiritilgan bo'lsa shunday ko'rinadi.
  */
 export async function loadPrincipal(
-  marketName: string | null,
+  /*
+   * ⛔⛔ BOZOR NOMI EMAS, BUTUN BOZOR — VA BU NUQSON TUZATMASI (260820).
+   *
+   *     Bu funksiya `/me` javobidan Principal quradi va `restoreSession`
+   *     uni `setSession` bilan yozadi — ya'ni `applySession` qo'ygan
+   *     qiymatlarni USTIDAN YOZADI. Ilgari bu yerga faqat `name`
+   *     kelardi, `is_active` esa JIMGINA tushib qolardi.
+   *
+   *     Natijasi jonli ko'rildi: sahifa YANGILANGANDAN keyin platforma
+   *     adminining bosh ekranida bozor holati «Qoralama» emas, «—»
+   *     bo'lib qolar va «Faollashtirish» havolasi UMUMAN yo'qolardi
+   *     (havola ataylab `isActive === false` da chiziladi, `!isActive`
+   *     da emas). Ya'ni platforma adminining ASOSIY amali bir
+   *     yangilanishdan keyin g'oyib bo'lardi.
+   *
+   * ⚠ `null` — bozor tanlanmagan sessiya (`/select-market` dan oldin).
+   */
+  market: { name: string; isActive: boolean } | null,
 ): Promise<Principal> {
   const me = await apiFetch("/me", { schema: meResponseSchema });
   return {
@@ -308,7 +325,8 @@ export async function loadPrincipal(
     fullName: me.full_name,
     roles: me.roles,
     marketId: me.market_id,
-    marketName,
+    marketName: market?.name ?? null,
+    marketIsActive: market?.isActive,
     isPlatformAdmin: me.is_platform_admin,
     locale: me.locale,
     mustChangePassword: me.must_change_password,
@@ -330,7 +348,10 @@ export async function restoreSession(): Promise<boolean> {
   if (!session) return false;
 
   try {
-    const principal = await loadPrincipal(session.market.name);
+    const principal = await loadPrincipal({
+      name: session.market.name,
+      isActive: session.market.is_active,
+    });
     setSession({
       accessToken: session.access_token,
       principal,

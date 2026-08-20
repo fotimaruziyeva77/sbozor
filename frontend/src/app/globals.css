@@ -1449,8 +1449,19 @@
  *    kartalarning izoh chizig'i BIR SATHDA bo'ladi. Qiymat yuqorida,
  *    izoh pastda — ko'z ikkalasini alohida o'qiydi.
  */
-.dir-tile-note {
+/*
+ * ⛔ `margin-top: auto` FAQAT KATAK ICHIDA (`.dir-tile` avlodi).
+ *
+ *    Qoida sinfning O'ZIGA yozilganda u panel kartalariga ham sizib
+ *    ketdi: «Xodimlar» kartasidagi «Hali xodim qo'shilmagan» xabari
+ *    kartaning PASTIGA yopishib, tepasida ~200px oq joy qolardi
+ *    [jonli ko'rildi]. Xabar — kontent, u kontent joyida turishi kerak.
+ */
+.dir-tile .dir-tile-note {
   margin-top: auto;
+}
+
+.dir-tile-note {
   padding-top: 0.75rem;
   font-size: 0.8125rem;
   color: var(--color-text-muted);

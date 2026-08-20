@@ -91,7 +91,10 @@
       "helpNote": "Bozor administratoriga ayting — u sizga yangi parol beradi. Birinchi kirishda tizim uni o‘zingiz tanlagan parolga almashtirishni so‘raydi.",
       "backToSite": "← Saytga qaytish",
       "helpTitle": "Parol esdan chiqdimi?"
-    }
+    },
+    "selectMarketLead": "Bozor tanlanmaguncha hech qanday ma'lumot ochilmaydi — har bozor o'z ichida yopiq.",
+    "selectMarketCreate": "Yangi bozor qo'shish",
+    "selectMarketCount": "{count} ta bozor"
   },
   "users": {
     "title": "Foydalanuvchilar",
@@ -1472,7 +1475,8 @@
     "shiftOpenSince": "Ochiq — {time} dan beri",
     "shiftNone": "Smena ochilmagan",
     "shiftNoneHint": "Patta yozish uchun avval smenani oching — «Patta yig‘ish» sahifasidan.",
-    "blindHint": "Naqdni smena yopilganda o‘zingiz sanaysiz. Tizim o‘z summasini ko‘rsatmaydi — shuning uchun bu yerda yig‘indi yo‘q."
+    "blindHint": "Naqdni smena yopilganda o‘zingiz sanaysiz. Tizim o‘z summasini ko‘rsatmaydi — shuning uchun bu yerda yig‘indi yo‘q.",
+    "panelDraft": "Qoralama"
   },
   "reports": {
     "title": "Hisobotlar",

@@ -140,11 +140,27 @@ export function AdminPanel({
   marketId,
   marketName,
   roleLabel,
+  isDraft,
 }: {
   marketId: string;
   marketName: string;
   roleLabel: string;
+  /*
+   * ⛔⛔ QORALAMA HOLATI — PLATFORMA ADMINI UCHUN ENG MUHIM FAKT (260820).
+   *
+   *     Yangi bozor `is_active = false` bilan tug'iladi va u
+   *     faollashtirilmaguncha ISHLAMAYDI. Panel esa buni HECH QAYERDA
+   *     aytmasdi: platforma admini 14% halqani ko'rib, bozor tirikmi
+   *     yoki qoralamami — bilmasdi [jonli ko'rildi].
+   *
+   * ⛔ `boolean | undefined` — UCHINCHI HOLAT ATAYIN: `undefined`
+   *    «noma'lum» degani va o'shanda belgi UMUMAN chizilmaydi.
+   *    `!isDraft` yozib «faol» deb ko'rsatish o'lchanmagan da'vo
+   *    bo'lardi (`market-status-card.tsx` da o'rnatilgan qoida).
+   */
+  isDraft: boolean | undefined;
 }) {
+  const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
   const timeZone = useTimeZone() ?? "Asia/Tashkent";
@@ -173,7 +189,12 @@ export function AdminPanel({
           <div className="dir-eyebrow">
             {marketName} · {roleLabel}
           </div>
-          <h1 className="dir-title">Admin paneli</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="dir-title">Admin paneli</h1>
+            {isDraft === true ? (
+              <Badge tone="warning">{t("dashboard.panelDraft")}</Badge>
+            ) : null}
+          </div>
           {/*
            * ⛔ `formatBusinessDay` — XOM `Intl` EMAS. O'zbek lotin
            *    yozuvi uchun brauzer ICU'sida oy nomlari yo'q va u

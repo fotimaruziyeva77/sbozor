@@ -74,6 +74,23 @@ export default function DashboardPage() {
     principal?.marketId !== null &&
     hasPermission(roles, "tariff_manage");
 
+  /*
+   * ⛔⛔ «PANEL BORMI?» — BITTA HISOB, UCH JOYDA ISHLATILADI (260820).
+   *
+   *     Avval umumiy sarlavha va `HeadlineCard` `report_view` bilan
+   *     yashirilardi — ya'ni faqat DIREKTOR nazarda tutilgan edi.
+   *     `AdminPanel` `tariff_manage` bilan qo'shilgach, PLATFORMA
+   *     ADMINI ikkalasini ham oldi: ekranda «Boshqaruv paneli / Bozor:
+   *     … / Rollar: …» va darhol ostida «KARMANA TEST BOZORI ·
+   *     PLATFORMA ADMINI / Admin paneli» turardi — bozor nomi ham,
+   *     rol ham IKKI MARTA [jonli ko'rildi].
+   *
+   *     Shart endi ROLGA emas, EKRANDAGI HOLATGA bog'landi: panel
+   *     chizilsa, umumiy sarlavha chizilmaydi. Yangi panel qo'shilsa
+   *     ham qoida o'z-o'zidan to'g'ri ishlaydi.
+   */
+  const panelShown = adminPanelShown || hasPermission(roles, "report_view");
+
   const sections = adminPanelShown
     ? []
     : SECTIONS.filter((section) => hasPermission(roles, section.permission));
@@ -92,7 +109,7 @@ export default function DashboardPage() {
        * ⚠ Kassir va nazoratchida QOLADI: ularda dizayn paneli yo'q va
        *   bu blok yagona kontekst (qaysi bozor, qaysi rol).
        */}
-      {hasPermission(roles, "report_view") ? null : (
+      {panelShown ? null : (
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">
             {t("nav.dashboard")}
@@ -125,7 +142,7 @@ export default function DashboardPage() {
        * ⚠ Kassir va nazoratchida QOLADI: ularda olti katak yo'q va
        *   sarlavha kartasi yagona ko'rsatkich.
        */}
-      {hasPermission(roles, "report_view") ? null : (
+      {panelShown ? null : (
         <HeadlineCard marketId={principal?.marketId ?? null} />
       )}
 
@@ -215,6 +232,14 @@ export default function DashboardPage() {
        */}
       {principal?.marketId && hasPermission(roles, "tariff_manage") ? (
         <AdminPanel
+          /* `undefined` — holat NOMA'LUM (sessiya tiklanmagan);
+             o'shanda belgi chizilmaydi. */
+          isDraft={
+            principal.marketIsActive === undefined ||
+            principal.marketIsActive === null
+              ? undefined
+              : !principal.marketIsActive
+          }
           marketId={principal.marketId}
           marketName={principal.marketName ?? "Bozor"}
           roleLabel={roleLabels.join(" · ")}
@@ -249,7 +274,22 @@ export default function DashboardPage() {
        *    (`cameras/page.tsx` da o'rnatilgan naqsh). Haqiqiy nazorat
        *    serverda.
        */}
-      {hasPermission(roles, "market_manage") && principal?.marketId ? (
+      {/*
+       * ⛔⛔ ADMIN PANELI CHIZILGANDA BU KARTA CHIZILMAYDI (260820).
+       *
+       *     `MarketStatusCard` to'rt hisoblagich beradi: rasta ·
+       *     sotuvchi · kamera · foydalanuvchi. `AdminPanel` ning
+       *     REESTR bo'limi AYNAN shu sonlarni, sozlash halqasi esa
+       *     ularning to'liqligini ko'rsatadi — ya'ni bir ekranda bir
+       *     xil to'rt son IKKI MARTA turardi [jonli ko'rildi].
+       *
+       * ⚠ HOLAT VA FAOLLASHTIRISH YO'QOLMAYDI: panelning sozlash
+       *   katagi «Ustani ochish →» bilan aynan o'sha ustaga, ya'ni
+       *   faollashtirish qadamiga olib boradi.
+       */}
+      {hasPermission(roles, "market_manage") &&
+      principal?.marketId &&
+      !adminPanelShown ? (
         <MarketStatusCard
           isActive={principal.marketIsActive}
           marketId={principal.marketId}

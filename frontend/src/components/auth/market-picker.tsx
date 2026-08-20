@@ -196,6 +196,19 @@ export function MarketPicker() {
 
   return (
     <div className="flex flex-col gap-3">
+      {/*
+       * ⛔⛔ SANOQ — PLATFORMA ADMINI UCHUN (260820).
+       *
+       *     Bir nechta bozorni boshqaradigan odam ro'yxatga qaraganda
+       *     birinchi «nechta?» deb so'raydi. Sanoq bitta qatorda,
+       *     ro'yxat esa ostida.
+       */}
+      {options.length > 1 ? (
+        <p className="text-sm text-text-muted">
+          {t("auth.selectMarketCount", { count: options.length })}
+        </p>
+      ) : null}
+
       <ul aria-label={t("auth.selectMarket")} className="flex flex-col gap-2">
         {options.map((market) => (
           <li key={market.id}>
@@ -241,6 +254,28 @@ export function MarketPicker() {
         >
           {formError}
         </p>
+      ) : null}
+
+      {/*
+       * ⛔⛔ «YANGI BOZOR» RO'YXAT BO'SH BO'LMAGANDA HAM (260820).
+       *
+       *     Ilgari bu amal FAQAT bo'sh holatda bor edi. Ya'ni ikkinchi
+       *     bozorni yaratish uchun platforma admini avval BIRINCHISIGA
+       *     kirib, keyin yon paneldagi «Yangi bozor» ni topishi kerak
+       *     edi — o'zi hech qanday aloqasi yo'q bozorning ichidan.
+       *     Bozor yaratish esa platforma adminining ASOSIY ishi.
+       *
+       * ⛔ IKKILAMCHI ko'rinishda: birlamchi amal — bozorga KIRISH
+       *    (§10.1: sahifada bitta `variant="default"`). Yaratish esa
+       *    kamdan-kam va u ro'yxatning ustiga chiqmasligi kerak.
+       */}
+      {canCreate ? (
+        <Link
+          className={buttonVariants({ variant: "secondary", size: "lg" })}
+          href={NEW_MARKET_PATH}
+        >
+          {t("auth.selectMarketCreate")}
+        </Link>
       ) : null}
     </div>
   );
