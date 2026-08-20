@@ -328,32 +328,70 @@ endi bitta chizildi; kadr sikli aylanganda alohida sinaladi.
 
 ### ⭐ Bozor sxemasini chizish — javob
 
-**Rastalarni qo'lda chizib bo'lmaydi.** `stalls` jadvalida koordinata
-ustuni yo'q, `konva`/`react-konva` o'rnatilmagan. `/map` — sxematik:
-zona = qator, rastalar kod tartibida, «Rasta qo'shilgach xarita
-AVTOMATIK chiziladi».
+**QURILDI (2026-08-20, commit `edfaf20`).** Avvalgi holat: `stalls` da
+koordinata ustuni yo'q edi, `/map` faqat sxematik chizardi.
 
-**Haqiqiy chizish kamera zonalarida bor va u yaxshi ishlaydi:**
-bir rasta zonasi = **4 bosish** (Yangi zona → ro'yxatdan tanlash →
-Rastani biriktirish → rastani tanlash). Tepalar sichqoncha bilan ham,
-klaviatura bilan ham suriladi; nusxalash, qaytarish, qator bo'yicha
-bo'lish bor; 60 zona chegarasi.
+**Endi:** `/map/plan` — qo'lda chizish muharriri (`stall_manage` ostida,
+direktorda YO'Q). Bosh harakat bitta: **bo'sh katakni bosish** —
+navbatdagi rasta o'sha yerga tushadi va navbat o'zi siljiydi, ya'ni
+qator «bos-bos-bos» bilan teriladi. Surish qatorni bir harakatda
+to'kadi. «O'chirish» rejimi rastani navbatga qaytaradi.
 
-⚠ **«Qator bo'yicha bo'lish» AYNAN IKKI zona tanlangan bo'lishini
-talab qiladi** — endi bu ekranda yozilgan (avval faqat skrinrider
-eshitardi).
+Chizma **ixtiyoriy qatlam**: koordinatasiz bozor sxematik ko'rinishda
+ishlashda davom etadi. `/map` da almashtirgich (Sxematik / Chizilgan
+plan) FAQAT chizma bor bo'lganda chiqadi; boshlang'ich ko'rinish har
+doim sxematik, chunki u to'liq (plan chala bo'lishi mumkin).
 
-### Ochiq savollar (qaror foydalanuvchida)
+⛔ `konva`/`react-konva` QO'SHILMADI: panjara statik va kataklar haqiqiy
+`<button>` bo'lishi kerak (klaviatura, fokus, skrinrider, SSR tekinga
+keladi) — canvas bularning hammasini qo'lda qayta yozishni talab
+qilardi. Bu `stall-map.tsx` dagi qaror bilan bir xil.
 
-1. **Plan-xaritani qo'lda chizish** — qurilsinmi? Kerak: `stalls` ga
-   `x/y` (nullable), API, `react-konva` muharrir.
-2. **Bozorni sessiya ichida almashtirish** yo'q — platforma admini
-   chiqib qayta kirishi kerak. Kodda «v2 ga qoldirildi, alohida audit
-   talab qiladi» deb yozilgan, lekin audit yozuvi ALLAQACHON bor
-   («Bozorlar · Bozor tanlandi»).
+**Chromeda o'lchangan uch nuqson** (hammasi «ekran ochiladi, chiroyli
+ko'rinadi, ishlamaydi» turkumidan):
+
+1. Kataklar orasidagi **4px oraliq bosishni yutardi** — hodisa katakka
+   emas, konteynerga tushardi. Oraliq endi tugmaning ichida.
+2. **Tez surish oraliq kataklarni tashlab ketardi** — o'lchovda 1, 3 va
+   10-ustunlar to'lgan, oradagilari bo'sh qolgan. Bu shunchaki teshik
+   emas edi: navbat siljigani uchun keyingi rastalar ham noto'g'ri
+   joyga tushardi. `cellsBetween` yo'lni to'ldiradi.
+3. `hasPointerCapture` yo'q muhitda **`pointerdown` istisno bilan
+   uzilib**, butun bosishni yo'q qilardi.
+
+**Kamera zonalarida chizish** avvalgidek ishlaydi: bir rasta zonasi =
+4 bosish; tepalar sichqoncha va klaviatura bilan suriladi; nusxalash,
+qaytarish, qator bo'yicha bo'lish bor; 60 zona chegarasi.
+
+⚠ «Qator bo'yicha bo'lish» AYNAN IKKI zona tanlangan bo'lishini talab
+qiladi — endi bu ekranda yozilgan (avval faqat skrinrider eshitardi).
+
+### Ochiq savollar
+
+1. ~~**Plan-xaritani qo'lda chizish**~~ — **QURILDI** (yuqoriga qarang).
+2. ~~**Bozorni sessiya ichida almashtirish**~~ — **TUZATILDI**
+   (`edfaf20`). Topilma o'zi ham qiziq edi: `nav.switchMarket` satri
+   uchala tilda tarjima qilingan va glossariy darvozasidan o'tgan,
+   lekin HECH QAYERDA chaqirilmagan edi — ya'ni tayyor, tekshirilgan va
+   ekranga hech qachon chiqmagan matn. Endi foydalanuvchi menyusida,
+   `market_view_all` ostida.
 3. **Nazoratchi `/occupancy` ni ko'rmaydi** (`report_view` yo'q) —
    ya'ni o'z ishining natijasini ko'ra olmaydi. Bu qaror atayinmi?
 4. **Yig'ish ekranidagi A/B/C/D prefikslari** — bu bozorda C va D
    yo'q; ular ma'lumotdan hosil bo'lishi kerakmi?
 5. **Prefiks bosilgach fokus maydonga o'tmaydi** — kassir raqamni
    darhol tera olmaydi (telefonda muhim).
+
+### ⛔ Muhit eslatmasi — 8080 portida TO'QNASHUV (2026-08-20)
+
+Lokal mashinada **Apache** `127.0.0.1:8080` ni egallab olgan, Docker
+nginx esa faqat `[::1]:8080` da javob beradi. Chrome IPv4 ni afzal
+ko'rgani uchun `http://localhost:8080` da **Apache'ning 404 sahifasi**
+chiqadi — dastur emas.
+
+Qo'shimcha port ochish yordam bermaydi: Windows Firewall uchala
+profilda yoqilgan va yangi tinglovchini bloklaydi (8090 da o'lchandi —
+`curl` ishladi, Chrome yo'q).
+
+Yechim foydalanuvchida: Apache'ni to'xtatish yoki uni boshqa portga
+ko'chirish.
