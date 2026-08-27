@@ -136,6 +136,57 @@ set $up_camagent camagent-gateway;
         proxy_read_timeout 300s;
     }
 
+    # --- CamAgent operator paneli (260828) ---
+    #
+    # NEGA KERAK: aktivatsiya kodi va kadr olish jadvali shu yerdan
+    # kiritiladi. Busiz har amal uchun serverga SSH bilan kirish kerak
+    # bo'lardi va 12 bozorli ish jarayonida bu real to'siq.
+    #
+    # ⛔ HIMOYA — GATEWAY KALITI (`CAMAGENT_GW_ADMIN_TOKEN`, 24 bayt),
+    #    sbozor sessiyasi EMAS. Ikkalasini bog'lash uchun `auth_request`
+    #    kerak, u esa gateway'ni core-api'ning rol modeliga bog'lardi —
+    #    CamAgent atayin mustaqil (u boshqa loyihalarda ham ishlaydi).
+    #    Kalitsiz so'rov 401 oladi va gateway xato urinishlarni IP bo'yicha
+    #    cheklaydi (`PANEL_MAX_TRIES`).
+    #
+    # ⚠ `/camagent/` PREFIKSI OLIB TASHLANADI: gateway o'z ichida `/admin`
+    #   yo'lini biladi. `proxy_pass` oxiridagi `/` aynan shuni qiladi.
+    #
+    # ⛔ HAVOLALAR QAYTA YOZILADI (`sub_filter`). Gateway HTML'i o'zining
+    #    yo'llarini `/admin/...` deb yozadi — u prefiks ortida turganini
+    #    bilmaydi. Qayta yozilmasa bosh sahifa ochilardi, ichidagi har
+    #    havola esa sbozor frontendiga tushib 404 berardi: eng yomon shakl,
+    #    chunki «ishlayapti» ga o'xshaydi.
+    #
+    #    Muqobil — gateway'ga `root_path` berib 61 ta havolani kod ichida
+    #    prefiksli qilish. U CamAgent'ni sbozor'ning joylashuv qaroriga
+    #    bog'lab qo'yardi, holbuki u boshqa loyihalarda ham ishlaydi.
+    #
+    # ⚠ `Accept-Encoding` TOZALANADI: `sub_filter` gzip'langan javobni
+    #   ko'ra olmaydi va jimgina hech narsa almashtirmasdi. Panel sahifasi
+    #   kichik, siqilmagani sezilmaydi.
+    location /camagent/ {
+        proxy_pass http://$up_camagent:8787/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Accept-Encoding "";
+        sub_filter_types text/html;
+        sub_filter_once off;
+        sub_filter 'href="/admin'   'href="/camagent/admin';
+        sub_filter 'action="/admin' 'action="/camagent/admin';
+        sub_filter 'href="/live'    'href="/camagent/live';
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Jonli video (WHEP) va panel ichidagi kamera devori uchun.
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+    }
+
     location /api/ {
         proxy_pass http://$up_core:8000;
         proxy_http_version 1.1;

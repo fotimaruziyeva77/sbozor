@@ -133,6 +133,12 @@ class GatewayDB:
             ("agents", "config_json", "TEXT"),
             ("snapshots", "quarantined", "INTEGER DEFAULT 0"),
             ("events", "actor", "TEXT"),
+            # Kod bilan birga beriladigan jadval: agent BIRINCHI ulanishidayoq
+            # to'g'ri vaqtlar bilan ishlaydi. Busiz obyektga borgan odam
+            # standart jadval bilan qaytardi va uni keyin paneldan
+            # to'g'rilash ESDAN CHIQARDI — birinchi kunlar rasmi noto'g'ri
+            # vaqtda olinardi va buni faqat hisobotda sezardik.
+            ("activation_codes", "config_json", "TEXT"),
             # Ijara uzaytirilganda `start_stream` QAYSI NVR'ga tegishli
             # ekanini bilish kerak: ikki NVR'li obyektda serialsiz buyruq
             # birinchi NVR'ga tushib, noto'g'ri kamerani ochardi.
@@ -158,15 +164,42 @@ class GatewayDB:
 
     # --- aktivatsiya kodlari ---
 
-    def create_code(self, market_name: str, key_prefix: str, code: str | None = None) -> str:
+    def create_code(self, market_name: str, key_prefix: str, code: str | None = None,
+                    config: dict | None = None) -> str:
+        """Aktivatsiya kodi; `config` berilsa agent uni BIRINCHI ulanishda oladi.
+
+        `config` — TO'LIQ konfiguratsiya emas, faqat ustiga yoziladigan
+        maydonlar (odatda `schedule`). Qolgani `DEFAULT_CONFIG` dan keladi,
+        ya'ni bu yerga yozilgan yarim konfiguratsiya agentni nosoz holatga
+        tushira olmaydi.
+        """
         # 3 bayt = 24 bit edi: prefiks bozor nomi (ochiq), qolgani 16.7 mln
         # variant — tezlik limitisiz bir soatda topib bo'lardi. Endi 128 bit.
         code = code or f"{key_prefix.upper()[:12]}-{secrets.token_urlsafe(16)}"
         self._exec(
-            "INSERT INTO activation_codes(code, market_name, key_prefix, created_at) VALUES(?,?,?,?)",
-            (code, market_name, key_prefix, time.time()),
+            "INSERT INTO activation_codes(code, market_name, key_prefix, created_at,"
+            " config_json) VALUES(?,?,?,?,?)",
+            (code, market_name, key_prefix, time.time(),
+             json.dumps(config, ensure_ascii=False) if config else None),
         )
         return code
+
+    def set_code_config(self, code: str, config: dict | None) -> bool:
+        """Ishlatilmagan kodga jadval biriktiradi (yoki olib tashlaydi).
+
+        ⛔ ISHLATILGAN KODGA TEGMAYDI: agent allaqachon yaratilgan bo'lsa
+           konfiguratsiya `agents.config_json` da yashaydi va bu yerdagi
+           o'zgarish JIMGINA E'TIBORSIZ qolardi — operator esa jadvalni
+           o'zgartirdim deb o'ylardi.
+        """
+        rows = self._rows("SELECT used_by FROM activation_codes WHERE code=?", (code,))
+        if not rows or rows[0]["used_by"]:
+            return False
+        self._exec(
+            "UPDATE activation_codes SET config_json=? WHERE code=?",
+            (json.dumps(config, ensure_ascii=False) if config else None, code),
+        )
+        return True
 
     def use_code(self, code: str, instance_id: str) -> dict | None:
         rows = self._rows("SELECT * FROM activation_codes WHERE code=?", (code,))
@@ -176,7 +209,15 @@ class GatewayDB:
         if row["used_by"] and row["used_by"] != instance_id:
             return {"used": True}
         self._exec("UPDATE activation_codes SET used_by=? WHERE code=?", (instance_id, code))
-        return {"used": False, "market_name": row["market_name"], "key_prefix": row["key_prefix"]}
+        config = None
+        raw = row["config_json"] if "config_json" in row.keys() else None
+        if raw:
+            try:
+                config = json.loads(raw)
+            except json.JSONDecodeError:
+                config = None
+        return {"used": False, "market_name": row["market_name"],
+                "key_prefix": row["key_prefix"], "config": config}
 
     def list_codes(self) -> list[dict]:
         return [dict(r) for r in self._rows("SELECT * FROM activation_codes ORDER BY created_at DESC")]

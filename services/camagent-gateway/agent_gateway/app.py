@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import html
 import json
+import re
 import secrets
 import time
 from datetime import datetime, timezone
@@ -28,6 +29,42 @@ ALLOWED_COMMANDS = {
     "enable_channel", "disable_channel", "restart", "get_logs",
     "start_stream", "stop_stream", "update_agent",
 }
+
+MAX_SCHEDULE_SLOTS = 48
+"""Bir kundagi kadr olish vaqtlari chegarasi (yarim soatlik jadval sig'adi).
+
+Bu — xato yozuvdan himoya, texnik chegara emas: 40 kamerali bozorda 48 slot
+kuniga 1920 rasm degani va sekin uplink'da navbat ulgurmasdi. Chegaraga
+urilgan operator o'ylab ko'rishi kerak."""
+
+
+def parse_schedule(times: str) -> list[str]:
+    """«06:00, 7:00» -> `["06:00", "07:00"]`. Xato bo'lsa `ValueError`.
+
+    ⛔ IKKI FORMA HAM SHU YERGA KELADI (kod yaratish va jadvalni
+       o'zgartirish). Ikkinchi nusxa yozilsa ular vaqt o'tib bir-biridan
+       ajralardi va operator bir joyda qabul qilingan yozuvni ikkinchisida
+       rad etilgan holda ko'rardi.
+
+    Natija TARTIBLANGAN va TAKRORSIZ: agent jadvalni shu ko'rinishda
+    saqlaydi, panel esa shuni ko'rsatadi — ikkalasi bir xil bo'lmasa
+    operator «saqlanmadi shekilli» deb qayta yuborardi.
+    """
+    parsed: list[str] = []
+    for raw in re.split(r"[,\s;]+", times.strip()):
+        if not raw:
+            continue
+        m = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", raw)
+        if not m:
+            raise ValueError(f"vaqt formati noto'g'ri: {raw!r} — HH:MM kutilgan")
+        parsed.append(f"{int(m.group(1)):02d}:{m.group(2)}")
+    schedule = sorted(set(parsed))
+    if not schedule:
+        raise ValueError("kamida bitta vaqt kerak — bo'sh jadval rasm olishni "
+                         "butunlay to'xtatardi")
+    if len(schedule) > MAX_SCHEDULE_SLOTS:
+        raise ValueError(f"{MAX_SCHEDULE_SLOTS} tadan ko'p vaqt kiritildi")
+    return schedule
 
 DEFAULT_CONFIG = {
     "v": 1,
@@ -57,6 +94,16 @@ HEARTBEAT_RED_S = 600  # 10 daqiqa heartbeat yo'q → qizil holat
 MAX_SNAPSHOT_MB = 25   # bitta kadr uchun oqilona chegara (haqiqiylari ~40 KB)
 ACTIVATE_MAX_TRIES = 10        # bir IP dan
 ACTIVATE_WINDOW_S = 600        # 10 daqiqada
+
+PANEL_MAX_TRIES = 12           # xato kalit bilan, bir IP dan
+PANEL_WINDOW_S = 600
+"""Panel kaliti uchun tezlik limiti (260828).
+
+Kalit 24 baytlik tasodifiy satr, ya'ni uni TOPIB bo'lmaydi. Limit boshqa
+narsa uchun: panel teskari proksi orqali INTERNETGA chiqarilganda xato
+kalit bilan kelgan so'rovlar oqimi jurnalni to'ldirardi va haqiqiy
+hodisalar orasida yo'qolardi. Chegara xato urinishlarga qo'yiladi —
+to'g'ri kalit bilan ishlayotgan operator hech qachon sezmaydi."""
 
 
 class RateLimiter:
@@ -262,6 +309,7 @@ class Gateway:
         # ko'chirilgani haqidagi belgi yo'qolmasligi kerak.
         self.quarantined: dict[str, set[str]] = self.db.all_quarantine()
         self.activate_limiter = RateLimiter(ACTIVATE_MAX_TRIES, ACTIVATE_WINDOW_S)
+        self.panel_limiter = RateLimiter(PANEL_MAX_TRIES, PANEL_WINDOW_S)
         # Jonli video. MediaMTX o'rnatilmagan bo'lsa hech narsa yiqilmaydi —
         # panel "yangilanuvchi rasm" zaxira rejimiga o'tadi.
         self.media = MediaServer(self.data_dir / "media")
@@ -322,10 +370,22 @@ def build_router(data_dir: str | Path, storage: SnapshotStorage | None = None,
     router.gateway = gw  # testlar va sbozor uchun qulay havola
 
     def check_admin(request: Request) -> bool:
+        """Panel kalitini tekshiradi va XATO urinishlarni sanaydi.
+
+        ⚠ SANOQ FAQAT XATODA (`activate` bilan bir xil qaror): to'g'ri
+          kalit bilan ishlayotgan operator sahifani necha marta yangilasa
+          ham chegaraga urilmaydi.
+        """
+        client_ip = request.client.host if request.client else "?"
         supplied = (request.cookies.get("camagent_admin")
                     or request.query_params.get("token")
                     or request.headers.get("X-Admin-Token", ""))
-        return secrets.compare_digest(supplied or "", gw.admin_token)
+        if not gw.panel_limiter.allow(client_ip):
+            return False
+        if secrets.compare_digest(supplied or "", gw.admin_token):
+            return True
+        gw.panel_limiter.fail(client_ip)
+        return False
 
     def remember_token(request: Request, response: Response) -> Response:
         _secure(response)
@@ -386,6 +446,15 @@ def build_router(data_dir: str | Path, storage: SnapshotStorage | None = None,
             agent = gw.db.create_agent(info["market_name"], info["key_prefix"], instance_id)
         gw.db.log_event(agent["agent_id"], "activated", f"kod={code} instance={instance_id}")
         cfg = gw.config_for(gw.db.agent_by_id(agent["agent_id"]) or agent)
+        # Kodga biriktirilgan sozlama (odatda jadval) — AGENT YOZUVI HALI
+        # YO'Q bo'lgan paytda kiritilgan qaror. U faqat YANGI agentga
+        # qo'llanadi: mavjud agentda paneldan kiritilgan jadval bo'lishi
+        # mumkin va kodni qayta ishlatish uni ortga qaytarardi.
+        if info.get("config") and not existing:
+            cfg = {**cfg, **info["config"]}
+            gw.set_config(agent["agent_id"], cfg)
+            gw.db.log_event(agent["agent_id"], "config_from_code",
+                            ", ".join(sorted(info["config"])))
         return {"v": 1, "token": agent["token"], "agent_id": agent["agent_id"], "config": cfg}
 
     # ------------------------------------------------ WebSocket
@@ -674,8 +743,23 @@ def build_router(data_dir: str | Path, storage: SnapshotStorage | None = None,
                 f"<td>{_esc(hbj.get('status'))}</td><td>{_esc(a.get('agent_version'))}</td>"
                 f"<td>{_fmt_mbps(mbps)}</td></tr>")
 
+        def code_schedule(c: dict) -> str:
+            """Kodga biriktirilgan jadval — u KO'RINISHI shart.
+
+            Ko'rinmasa operator kodni «standart jadval bilan» deb o'ylab
+            obyektga jo'natardi va farqni faqat birinchi kun rasmlaridan
+            bilib olardi."""
+            try:
+                cfg = json.loads(c.get("config_json") or "null")
+            except json.JSONDecodeError:
+                return "<span class='bad'>buzuq</span>"
+            if not cfg or not cfg.get("schedule"):
+                return "<span class='muted'>standart</span>"
+            return html.escape(", ".join(cfg["schedule"]))
+
         codes = "".join(
             f"<tr><td><code>{_esc(c['code'])}</code></td><td>{html.escape(c['market_name'])}</td>"
+            f"<td class='wrapcell'>{code_schedule(c)}</td>"
             f"<td class='{'muted' if c['used_by'] else 'ok'}'>"
             f"{'ishlatilgan' if c['used_by'] else 'bo`sh'}</td></tr>"
             for c in gw.db.list_codes())
@@ -703,13 +787,19 @@ sahifa 10 soniyada yangilanadi</p>
 
 <h2>Aktivatsiya kodlari</h2>
 <div class="tablewrap"><table>
-<tr><th>Kod</th><th>Bozor</th><th>Holati</th></tr>
-{codes or "<tr><td colspan='3' class='empty'>kod yo`q</td></tr>"}
+<tr><th>Kod</th><th>Bozor</th><th>Jadval</th><th>Holati</th></tr>
+{codes or "<tr><td colspan='4' class='empty'>kod yo`q</td></tr>"}
 </table></div>
 <div class="panel"><form method="post" action="/admin/codes">
 Bozor nomi: <input name="market_name" required placeholder="Karmana bozori">
 Prefiks: <input name="key_prefix" required placeholder="karmana-01">
-<button>Kod yaratish</button></form></div>
+<br>Kadr olish jadvali (ixtiyoriy):
+<input name="times" size="52"
+ placeholder="{', '.join(DEFAULT_CONFIG['schedule'])}">
+<button>Kod yaratish</button>
+<p class="hint">Jadval kiritilsa agent BIRINCHI ulanishidayoq shu vaqtlar
+bilan ishlaydi — obyektdan qaytib panelga kirish shart emas. Bo'sh
+qoldirilsa standart jadval qo'llanadi.</p></form></div>
 
 <h2>Oxirgi hodisalar (audit)</h2>
 <div class="tablewrap"><table>
@@ -721,11 +811,21 @@ Prefiks: <input name="key_prefix" required placeholder="karmana-01">
 
     @router.post("/admin/codes")
     async def admin_create_code(request: Request, market_name: str = Form(...),
-                                key_prefix: str = Form(...)):
+                                key_prefix: str = Form(...),
+                                times: str = Form(default="")):
         if not check_admin(request):
             return deny()
-        code = gw.db.create_code(market_name, key_prefix)
-        gw.db.log_event(None, "code_created", f"{code} -> {market_name}",
+        config = None
+        if times.strip():
+            try:
+                config = {"schedule": parse_schedule(times)}
+            except ValueError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=400)
+        code = gw.db.create_code(market_name, key_prefix, config=config)
+        detail = f"{code} -> {market_name}"
+        if config:
+            detail += f" (jadval: {', '.join(config['schedule'])})"
+        gw.db.log_event(None, "code_created", detail,
                         actor=f"panel@{request.client.host if request.client else '?'}")
         return RedirectResponse("/admin", status_code=303)
 
@@ -823,6 +923,23 @@ IP <code>{html.escape(str(nvr.get('ip') or '-'))}</code></p>
 {chan_rows or "<tr><td colspan='6' class='empty'>kanal yo`q</td></tr>"}
 </table></div>""")
 
+        # Jadval — eng ko'p o'zgartiriladigan sozlama, shuning uchun unga
+        # alohida forma. JSON maydonига `{"config": {"schedule": [...]}}`
+        # yozish operatorni sintaksis xatosi bilan yolg'iz qoldirardi va
+        # xato jadval RASM OLINMASLIGI bilan tugardi (4-prinsip).
+        cur_cfg = gw.config_for(a)
+        cur_schedule = ", ".join(cur_cfg.get("schedule") or [])
+        schedule_block = f"""<h3>Kadr olish jadvali</h3>
+<div class="panel">
+<form method="post" action="/admin/agent/{agent_id}/schedule">
+<p>Vaqtlar vergul bilan, bozorning mahalliy vaqtida
+(<code>{_esc(cur_cfg.get('timezone'))}</code>):</p>
+<input name="times" size="70" value="{html.escape(cur_schedule)}">
+<br><button>Jadvalni saqlash</button>
+<p class="hint">Saqlangach agentga darhol yuboriladi. Agent oflayn bo'lsa —
+keyingi ulanishida oladi (desired-state).</p>
+</form></div>"""
+
         body = f"""<h1>{html.escape(a['market_name'])}</h1>
 <p class="hint"><a href="/admin">&larr; barcha agentlar</a> &middot;
 <code>{agent_id}</code> &middot;
@@ -831,6 +948,8 @@ versiya {_esc(a.get('agent_version'))} &middot;
 navbat {_esc(hbj.get('queue_len'))} &middot;
 disk {_esc(hbj.get('disk_free_mb'))} MB</p>
 {quarantine_block}
+
+{schedule_block}
 
 <h3>Buyruq yuborish</h3>
 <div class="panel">{buttons}</div>
@@ -872,6 +991,41 @@ Kim, qachon, qaysi kamerani ochgani shu yerda qoladi.</p>
 </table></div>"""
         return remember_token(request, HTMLResponse(
             _page(f"{a['market_name']} — CamAgent", body, refresh_s=15)))
+
+    @router.post("/admin/agent/{agent_id}/schedule")
+    async def admin_set_schedule(agent_id: str, request: Request,
+                                 times: str = Form(default="")):
+        """Jadvalni ALOHIDA forma bilan o'zgartiradi (`update_config` ustida).
+
+        ⛔ BO'SH JADVAL RAD ETILADI. U sintaktik jihatdan to'g'ri, lekin
+           ma'nosi «bu obyektda umuman rasm olinmasin» — ya'ni bitta bo'sh
+           maydon butun bozorni jimgina o'chirардi. Ataylab to'xtatish
+           kerak bo'lsa agentning o'zi olib tashlanadi.
+
+        ⚠ VAQTLAR TARTIBLANADI VA TAKRORI OLIB TASHLANADI: agent jadvalni
+          shu ko'rinishda saqlaydi va panelda ko'rsatilgan matn bilan
+          diskdagi qiymat bir xil bo'lishi kerak — aks holda operator
+          «saqlanmadi shekilli» deb ikkinchi marta yuborardi.
+        """
+        if not check_admin(request):
+            return deny()
+        agent = gw.db.agent_by_id(agent_id)
+        if not agent:
+            return JSONResponse({"error": "agent topilmadi"}, status_code=404)
+
+        try:
+            schedule = parse_schedule(times)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+        cfg = gw.config_for(agent)
+        cfg["schedule"] = schedule
+        gw.set_config(agent_id, cfg)
+        cmd_id = gw.db.queue_command(agent_id, "update_config", {"config": cfg})
+        gw.db.log_event(agent_id, "schedule_changed", f"{', '.join(schedule)} ({cmd_id})",
+                        actor=f"panel@{request.client.host if request.client else '?'}")
+        await gw.push_pending_commands(agent_id)
+        return RedirectResponse(f"/admin/agent/{agent_id}", status_code=303)
 
     @router.post("/admin/agent/{agent_id}/command")
     async def admin_command(agent_id: str, request: Request, name: str = Form(...),
