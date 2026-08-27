@@ -253,23 +253,49 @@ async def accuracy(client: httpx.AsyncClient, headers: dict[str, str]) -> dict[s
 # ===========================================================================
 
 
-@pytest.mark.parametrize("url", [OCCUPANCY_URL, ACCURACY_URL, ROUND_URL])
-async def test_the_inspector_cannot_reach_the_report(
+@pytest.mark.parametrize("url", [ACCURACY_URL, ROUND_URL])
+async def test_the_inspector_cannot_reach_the_measurement(
     api_client: httpx.AsyncClient, inspector_headers: dict[str, str], url: str
 ) -> None:
-    """⛔ NAZORATCHI O'Z ANIQLIGINI KO'RMAYDI — UCHALA marshrut ham 403.
+    """⛔ NAZORATCHI O'ZIGA QO'YILGAN BAHONI KO'RMAYDI — IKKALA marshrut 403.
 
     Sabab maxfiylikda emas: ko'rsa u RAQAMNI YAXSHILASHGA urinardi va
     o'lchov o'zi o'lchayotgan narsani o'zgartirardi. «Tez qaror» sanog'i
     esa aynan shu urinishning izi bo'lib qolardi.
 
-    ⚠ UCHALA MARSHRUT HAM ALOHIDA sinaladi: bitta marshrutni sinash
-      keyingi ijrochi qo'shadigan to'rtinchisini qamramasdi va huquq
+    ⛔ `/round` SHU RO'YXATDA QOLADI, garchi u «kunlik holat» ko'rinsa
+       ham: javobida `fast_decisions`, `dont_know` va `unanswered` bor.
+       Uni ochish yuqoridagi teshikni boshqa nom ostida ochardi.
+
+    ⚠ IKKALA MARSHRUT HAM ALOHIDA sinaladi: bitta marshrutni sinash
+      keyingi ijrochi qo'shadigan uchinchisini qamramasdi va huquq
       darvozasi marshrut bo'yicha «esdan chiqadigan» narsaga aylanardi.
     """
     response = await api_client.get(url, headers=inspector_headers)
 
     assert response.status_code == 403, f"{url}: {response.status_code} — {response.text}"
+
+
+async def test_the_inspector_can_reach_the_daily_occupancy(
+    api_client: httpx.AsyncClient, inspector_headers: dict[str, str]
+) -> None:
+    """NAZORATCHI O'Z ISHINING NATIJASINI KO'RADI — kunlik bandlik 200.
+
+    ⛔ BU YUQORIDAGI TESTNING ZIDDI EMAS, UNING CHEGARASI. Nazoratchi kun
+       bo'yi kadr ko'rib qaror yozadi; kunlik bandlik sanoqlari —
+       `stalls/occupied/empty/no_coverage/human_confirmed` — o'sha ishning
+       NATIJASI, unga qo'yilgan BAHO emas. Baho `/accuracy` va `/round` da
+       qoladi.
+
+    ⚠ 260820 da klient qatlami bu sahifani nazoratchiga ochgan edi
+      (`app-shell.tsx` menyusi + `occupancy/page.tsx` darvozasi), server
+      esa o'shanda yangilanmagan: menyu ko'rinardi, sahifa ochilardi,
+      so'rov 403 olardi va UI uni «Ma'lumot yuklanmadi» deb ko'rsatardi.
+      Bu test o'sha yarim qolgan o'zgarishning ikkinchi yarmini qulflaydi.
+    """
+    response = await api_client.get(OCCUPANCY_URL, headers=inspector_headers)
+
+    assert response.status_code == 200, response.text
 
 
 async def test_the_director_can_reach_the_report(

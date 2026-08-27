@@ -86,12 +86,18 @@ __all__ = ["ACCURACY_WINDOW_DAYS", "router"]
 router = APIRouter(tags=["occupancy"])
 
 ReportViewerDep = Annotated[Principal, Depends(require_permission(Permission.REPORT_VIEW))]
-"""⛔ FAQAT ANIQLIK YUZASI UCHUN (`/accuracy`). Sabab — T-05-58: nazoratchi
-O'Z aniqligini ko'rsa raqamni yaxshilashga urinardi va o'lchov o'zi
-o'lchayotgan narsani o'zgartirardi."""
+"""⛔ O'LCHOV YUZALARI UCHUN — `/accuracy` VA `/round`. Sabab — T-05-58:
+nazoratchi O'Z aniqligini ko'rsa raqamni yaxshilashga urinardi va o'lchov
+o'zi o'lchayotgan narsani o'zgartirardi.
+
+⛔ `/round` SHU YERDA QOLISHI MAJBURIY, garchi u «kunlik» ko'rinsa ham:
+   javobida `fast_decisions`, `dont_know` va `unanswered` bor, ya'ni u
+   NAZORATCHINING O'Z XATTI-HARAKATINI o'lchaydi. Aniqlik raqamidan
+   yashirinib, tez qaror sanog'ini ko'rsatish o'sha teshikni boshqa nom
+   ostida ochardi."""
 
 OCCUPANCY_VIEW_PERMISSIONS = (Permission.REPORT_VIEW, Permission.OCCUPANCY_REVIEW)
-"""Kunlik BANDLIK va namuna holatini ikki xil ish uchun ikki xil odam ko'radi.
+"""Kunlik BANDLIKNI ikki xil ish uchun ikki xil odam ko'radi.
 
 =========================================================================
 ⛔ BU DARVOZA 260827 DA QO'SHILDI VA U YARIM QOLGAN O'ZGARISHNI YOPADI.
@@ -108,10 +114,10 @@ sahifa OCHILADI, `GET /occupancy` esa **403** qaytaradi va UI uni
 nosozligiga o'xshab qoladi va nazoratchi mavjud bo'lmagan muammoni
 qidiradi.
 
-⛔ `/accuracy` BU DARVOZAGA KIRMAYDI va bu butun qarorning yuragi:
-   T-05-58 ning sababi aynan ANIQLIK raqamiga tegishli, kunlik bandlikka
-   emas. Nazoratchi o'z ishining natijasini ko'radi, o'z BAHOSINI —
-   yo'q.
+⛔ `/accuracy` VA `/round` BU DARVOZAGA KIRMAYDI va bu butun qarorning
+   yuragi: T-05-58 ning sababi aynan O'LCHOV raqamlariga tegishli, kunlik
+   bandlikka emas. Nazoratchi o'z ishining NATIJASINI ko'radi, o'ziga
+   qo'yilgan BAHONI — yo'q.
 
 ⚠ SIZIB CHIQISH YO'Q: bu yuzada pul maydoni umuman yo'q — javob
   `stalls/occupied/empty/no_coverage/human_confirmed` sanoqlaridan iborat.
@@ -254,7 +260,7 @@ async def occupancy_accuracy(
 
 @router.get("/round", response_model=OccupancyRoundResponse)
 async def occupancy_round(
-    principal: OccupancyViewerDep,
+    principal: ReportViewerDep,
     session: TenantSessionDep,
     day: Annotated[date | None, Query()] = None,
 ) -> OccupancyRoundResponse:

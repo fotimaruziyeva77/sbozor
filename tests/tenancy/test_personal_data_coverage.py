@@ -630,10 +630,7 @@ kengaytmasi AYNAN dalil-kadr baytlari uchun edi. Ikkinchi element
 qo'shilishi — ongli qaror va u shu yerda ko'rinadi.
 """
 
-OCCUPANCY_DUAL_ROLE_ROUTES = (
-    "/api/v1/occupancy",
-    "/api/v1/occupancy/round",
-)
+OCCUPANCY_DUAL_ROLE_ROUTES = ("/api/v1/occupancy",)
 """IKKINCHI, ALOHIDA e'lon — kunlik BANDLIK yuzasi (260827).
 
 =========================================================================
@@ -648,10 +645,12 @@ sahifasini ochdi (menyu + sahifa darvozasi), server esa o'shanda
 yangilanmagan — natijada menyu KO'RINARDI, sahifa OCHILARDI va so'rov
 **403** olardi. 260827 da server klientga moslashtirildi.
 
-⛔ `/api/v1/occupancy/accuracy` BU RO'YXATDA YO'Q va bo'lmaydi ham:
-   T-05-58 ning sababi (nazoratchi o'z ANIQLIGINI ko'rsa raqamni
-   yaxshilashga urinardi) aynan aniqlik yuzasiga tegishli. Uch marshrutdan
-   ikkitasi ochildi, uchinchisi — YO'Q.
+⛔ RO'YXAT BITTA MARSHRUTDAN IBORAT. `/accuracy` ham, `/round` ham unda
+   YO'Q va bo'lmaydi ham: T-05-58 ning sababi (nazoratchi o'z BAHOSINI
+   ko'rsa raqamni yaxshilashga urinardi) IKKALA O'LCHOV yuzasiga
+   tegishli — `/round` javobida `fast_decisions` va `dont_know` bor,
+   ya'ni u aniqlik raqamini boshqa nom ostida qaytarardi. Uch
+   marshrutdan BITTASI ochildi.
 =========================================================================
 """
 
