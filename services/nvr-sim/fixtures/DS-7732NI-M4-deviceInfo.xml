@@ -1,0 +1,40 @@
+<!--
+  MANBA (yozib olingan dump, QO'LDA YOZILMAGAN):
+    repozitoriy : github.com/maciej-or/hikvision_next
+    fayl        : tests/fixtures/devices/DS-7732NI-M4.json
+    ISAPI yo'li : /ISAPI/System/deviceInfo
+    upstream    : c5f6cb85f6e8 (2024-12-04)
+    blob sha1   : 92c315bd8dc163efe15ec0491f52bdcfa72232b6
+    olingan     : 2026-08-03
+    qurilma     : DS-7732NI-M4
+
+  O'ZGARTIRISH: yo'q. Element tartibi, atributlar, namespace va qiymatlar
+  dumpdan VERBATIM. Yagona qo'shimcha — shu izoh.
+
+  NEGA BU MUHIM (Pitfall 4, `simulator-confirms-itself`): agar bu XML bizning
+  parserimiz kutgan shaklda O'YLAB TOPILSA, test faqat "kod o'z taxminiga mos"
+  ekanini isbotlardi — CI yashil, real qurilma qora.
+
+  Yuqoridagi dump anonimlashtirilgan holda yuqori oqimda saqlanadi (IP'lar
+  `1.0.0.x`, seriya raqamlari nollangan, MAC almashtirilgan) — ya'ni bu yerda
+  hech kimning haqiqiy tarmoq ma'lumoti yo'q.
+-->
+<DeviceInfo version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+  <deviceName>NVR Casa Torino</deviceName>
+  <deviceID>484c3430-3730-0000-0000-e0baaded0bea</deviceID>
+  <model>DS-7732NI-M4</model>
+  <serialNumber>DS-7732NI-M4-0000000000CCRRL00000000WCVU</serialNumber>
+  <macAddress>22:ea:fb:38:1e:06</macAddress>
+  <firmwareVersion>V5.03.020</firmwareVersion>
+  <firmwareReleasedDate>build 240904</firmwareReleasedDate>
+  <encoderVersion>V5.0</encoderVersion>
+  <encoderReleasedDate>build 240531</encoderReleasedDate>
+  <deviceType>NVR</deviceType>
+  <telecontrolID>255</telecontrolID>
+  <hardwareVersion>B-R-K21B1-00</hardwareVersion>
+  <decordChannelNums>16</decordChannelNums>
+  <VGANums>1</VGANums>
+  <USBNums>3</USBNums>
+  <auxoutNums>0</auxoutNums>
+  <regionVersion>basic</regionVersion>
+</DeviceInfo>

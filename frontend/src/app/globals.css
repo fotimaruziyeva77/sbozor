@@ -1,0 +1,2333 @@
+@import "tailwindcss";
+
+/*
+ * SBOZOR dizayn tokenlari — Apple-uslub minimal.
+ *
+ * Tailwind 4 CSS-first konfiguratsiya: `tailwind.config.js` / `tailwind.config.ts`
+ * YARATILMAYDI (CLAUDE.md cheklovi). Barcha tokenlar shu `@theme` blokida.
+ *
+ * Nomlash: `--color-*` → `bg-*` / `text-*` / `border-*` utilitalari,
+ *          `--radius-*` → `rounded-*`, `--shadow-*` → `shadow-*`,
+ *          `--motion-*` → `duration-(--motion-*)`, `--ease-*` → `ease-(--ease-*)`.
+ *
+ * ⛔ KONTRAST IZOHLARI — MASHINA O'QIYDIGAN DA'VO (G-motion-5(c)).
+ *    Har «juftlik: N.NN:1» qatori `node scripts/contrast.test.mjs --print`
+ *    chiqishidan GENERATSIYA qilingan (gamut siyosati: gamma fazoda [0,1]
+ *    ga kesish; tint kompozitsiyasi gamma fazoda, ostki qatlam — tema
+ *    surface'i). Qo'lda yozilgan son ±0.01 solishtiruvda darvozani
+ *    qizartiradi — sonni O'ZGARTIRISHDAN OLDIN --print yugurtiring.
+ */
+@theme {
+  /* ---- Tipografika ---------------------------------------------------- */
+  --font-sans:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Inter,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ---- Harakat davomiyligi — YOPIQ REYESTR (3 qiymat) [L-2] ------------
+   *   fast — bosish javoblari, hover, chiqish animatsiyalari
+   *   base — kirish (8px pastdan + fade), dialog, check-draw
+   *   slow — sahna almashinuvi, bayram, summa uchishi
+   * ⛔ Reyestrdan tashqari davomiylik UTILITA sifatida yozilmaydi
+   *    (`duration-<raqam>` — 0 marta, G-motion-3(b)). Kompozit qiymatlar
+   *    (800ms · 600ms · 300ms · 1.5s · 200ms) FAQAT quyidagi `@keyframes`
+   *    ta'riflari ichida yashaydi (09-UI-SPEC §4.3).
+   */
+  --motion-fast: 150ms;
+  --motion-base: 250ms;
+  --motion-slow: 400ms;
+
+  /* ---- Ease egri chiziqlari [L-2] --------------------------------------
+   * ⛔ `--ease-out` Tailwind standartini (0, 0, 0.2, 1) ATAYLAB qayta
+   *    ta'riflaydi va bu XAVFSIZ: kodbazada `ease-*` utilitasi 0 marta
+   *    [M-3]. Bitta nom, bitta ma'no (09-UI-SPEC §4.2).
+   * ⛔ `--ease-spring` — AYNAN 2 joy: toast kirishi, rasta yon paneli.
+   */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ⛔⛔ USIZ 30 TA MAVJUD `transition-colors` ESKI EGRIDA QOLARDI:
+   * Tailwind 4 bare `transition-*` utilitalarini `--ease-out` dan EMAS,
+   * `--default-transition-*` juftligidan oziqlantiradi [09-RESEARCH
+   * Naqsh 2, kompilyatsiya bilan o'lchangan]. Shu ikki bog'lash «yumshoq
+   * tormoz bitta joydan boshqariladi» da'vosini ROST qiladi. */
+  --default-transition-timing-function: var(--ease-out);
+  --default-transition-duration: var(--motion-fast);
+
+  /* ---- Matn shkalasi — KATTALASHTIRILGAN (2026-08-25, foydalanuvchi) ---
+   *
+   * ⛔⛔ ROLLAR SONI O'ZGARMADI — FAQAT QIYMATLARI. Bu farq muhim:
+   *     `typography.test.mjs` yangi utilita ROLINI (`text-base`,
+   *     `text-xl`) chegara bilan ushlab turadi va o'sha chegara
+   *     KO'TARILMAYDI. Shriftni kattalashtirishning YAGONA to'g'ri yo'li
+   *     — tokenni surish, chunki u BUTUN ilovaga bir vaqtda tegadi va
+   *     hech qanday komponent «o'zicha kattaroq» bo'lib qolmaydi.
+   *
+   * Talab: «UI psixologik odamga yoqimli qil shriftlarini ham
+   * kattalashtir lekin insonlar uchun yoqimli va nafis bo'lishi zarur».
+   *
+   * O'LCHOVLAR (Tailwind standartidan -> yangi):
+   *     xs   12 -> 13px    yordamchi yozuv, badge
+   *     sm   14 -> 15px    ⛔ ASOSIY MATN ROLI — kassir eng ko'p shuni o'qiydi
+   *     base 16 -> 17px    (deviatsiya roli, chegarasi qulflangan)
+   *     lg   18 -> 20px    bo'lim sarlavhasi
+   *     2xl  24 -> 27px    sahifa sarlavhasi
+   *
+   * ⚠ SATR BALANDLIGI HAM OSHDI (1.5 -> 1.55): «nafislik» o'lchamdan
+   *   emas, NAFAS OLISHDAN keladi. Zich matn kattalashtirilganda ham
+   *   charchatadi — masterplan §2 ning «satr balandligi ritmi» bandi.
+   *
+   * ⛔ `--text-display` (40px) VA `--text-hero` TEGILMADI: birinchisi
+   *    `typography.test.mjs` da `h-11` (44px) geometriyasiga JUFTLANGAN
+   *    va uni surish CLS darvozasini qizartirardi; ikkinchisi landing
+   *    hero'sining bir martalik registri.
+   */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.45;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.55;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.55;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.4;
+  --text-2xl: 1.6875rem;
+  --text-2xl--line-height: 1.25;
+
+  /* ---- Pul roli — Display-XL (40px / 1.1) [L-9] ------------------------
+   * ⛔ AYNAN 2 mahsulot faylida: collect/pending-card, headline/headline-card
+   *    (faqat `unit === "soum"` shoxida) — G-motion-7(a,b). */
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.1;
+
+  /* ---- Landing hero sarlavhasi — AYNAN 1 faylda (G-land-5(a), 10-UI-SPEC
+   * §7.1.1) ------------------------------------------------------------
+   * Suyuq: telefonda 28px, hokimlik proyektorida 44px. `text-display`
+   * (40px) ISHLATILMAYDI — u pul roli va reyestri `typography.test.mjs`
+   * ning `TEXT_DISPLAY_FILES` bilan IKKI app fayliga `deepEqual`
+   * qulflangan; uchinchi fayl o'sha darvozani qizartiradi. Bu token matn
+   * shkalasining a'zosi emas — bir martalik display registri
+   * (`components/marketing/hero.tsx` ning yagona `h1` i). */
+  --text-hero: clamp(1.875rem, 4.8vw, 3.25rem);
+  --text-hero--line-height: 1.12;
+  --text-hero--letter-spacing: -0.02em;
+
+  /* ---- Neytral shkala — ILIQ BAZA [L-1, sketch 002-B] ------------------
+   * Iliqlik YUZALARDAN keladi, matndan emas: `bg`/`surface-muted`/`border`
+   * stone-ohangga o'tdi (#FAFAF9 / #F5F5F4 / #E7E5E4), matn va `border-ui`
+   * tokenlari TEGILMADI — M-17: hammasi AA dan o'tadi.
+   *
+   * IKKI XIL CHEGARA, ikki xil mas'uliyat:
+   *
+   *   `--color-border`    — FAQAT DEKORATIV: karta konturi, ajratkich
+   *                         chiziq, panel va dialog chegarasi. WCAG 2.2
+   *                         SC 1.4.11 dekorativ chegaraga QO'LLANMAYDI,
+   *                         shuning uchun past nisbat ataylab saqlanadi.
+   *                         WCAG 1.4.3. border/surface: 1.29:1
+   *                         (dekorativ — chegara talabi qo'llanmaydi).
+   *   `--color-border-ui` — MAJBURIY: chegarasi elementni "boshqaruv
+   *                         elementi" sifatida tanitadigan har narsa —
+   *                         input, select, textarea, checkbox, xarita
+   *                         katagi.
+   */
+  /* ⛔ FON CHUQURLASHTIRILDI: 0.985 -> 0.962 (2026-08-25).
+   *
+   *   Foydalanuvchi topilmasi: «background umuman ko'rinmaydi ko'zni
+   *   charchatib yuboradi». Ikkala shikoyat ham BITTA sababdan:
+   *   fon (0.985) va karta (1.0) orasidagi farq 1.5% edi — ko'z uchun
+   *   bu ikki YUZA emas, bitta yorug' tekislik. Kassir kun bo'yi
+   *   qaraydigan ekran esa deyarli sof oq bo'lib qolardi.
+   *
+   *   Yangi qiymat kartani ANIQ suzdiradi va yorqinlikni pasaytiradi,
+   *   lekin ohang O'ZGARMAYDI (chroma 0.001 -> 0.004, hue 106 — o'sha
+   *   iliq stone).
+   *
+   * ⚠⚠ KONTRAST O'ZGARDI VA BIR YO'NALISHDA PASAYDI — buni yashirmaslik
+   *   SHART. Fon quyuqlashgani uchun O'RTA ohangli tokenlar unga
+   *   YAQINLASHDI:
+   *
+   *       border-ui/bg   3.49 -> 3.26   (chegara 3.0 — WCAG 1.4.11 ✓)
+   *       text-muted/bg  5.06 -> 4.73   (chegara 4.5 — WCAG 1.4.3 AA ✓)
+   *
+   *   Ikkalasi ham chegaradan YUQORI, lekin zaxira qisqardi. Fonni
+   *   BUNDAN chuqurroq qilish `text-muted` ni 4.5 dan pastga tushiradi
+   *   — ya'ni 0.962 shu yo'nalishdagi AMALIY CHEGARA va undan
+   *   nariga borish `--color-text-muted` ni ham quyuqlashtirishni
+   *   TALAB QILADI.
+   *
+   *   ⛔ Asosiy matn (`text/bg`) TEGILMADI — u 0.205 va nisbati 15:1
+   *      dan yuqori bo'lib qoladi.
+   *
+   *   Sonlar `G-motion-5(c)` bilan ±0.01 da qulflangan va ular
+   *   kalkulyatorning CHIQISHI (`contrast.test.mjs --print`). */
+  --color-bg: oklch(0.965 0.008 292);
+  --color-surface: oklch(1 0 0);
+  --color-surface-muted: oklch(0.955 0.009 292);
+  --color-border: oklch(0.916 0.012 292);
+  /* WCAG 1.4.11. border-ui/surface: 3.97:1 · border-ui/bg: 3.58:1 ·
+   * border-ui/surface-muted: 3.47:1 */
+  --color-border-ui: oklch(0.6 0.018 292);
+  --color-border-strong: oklch(0.86 0.014 292);
+  --color-text: oklch(0.215 0.015 292);
+  /* WCAG 1.4.3. text-muted/surface-muted: 5.28:1 · text-muted/bg: 5.44:1
+   * (0.556 dan 0.53 ga tushirilgan — avvalgi qiymat buzilish edi: 4.31). */
+  --color-text-muted: oklch(0.5 0.02 292);
+
+  /* ---- Bitta aksent rang ---------------------------------------------- */
+  /* WCAG 1.4.3. accent-fg/accent: 5.19:1 (0.58 dan 0.56 ga tushirilgan —
+   * oq matn avvalgi fonda 4.36 edi, buzilish). */
+  --color-accent: oklch(0.55 0.2 278);
+  --color-accent-hover: oklch(0.51 0.2 278);
+  --color-accent-fg: oklch(1 0 0);
+  /* WCAG 1.4.3. accent-text/accent@10: 6.41:1 — aksent MATNI tint fonida
+   * (`bg-accent/10`, ostki qatlam surface). ⛔ To'yingan `bg-accent` ustida
+   * ISHLATILMAYDI (o'lchandi: 1.28 — G-motion-5(d) regressiya qulfi). */
+  --color-accent-text: oklch(0.47 0.19 278);
+
+  /* ---- Semantik holat ranglari ----------------------------------------
+   * Rasta holatlari: band (success) / noaniq (warning) / qarzdor (danger).
+   *
+   * Uch xil rol, aralashtirilmaydi (DIQQAT: bu izohda `bg-` naqshini
+   * yulduzcha bilan yozib bo'lmaydi — `yulduzcha + qiya chiziq` ketma-ketligi
+   * CSS izohini erta yopadi va butun blok buziladi):
+   *   `--color-<holat>`      — TO'YINGAN FON (tugma foni, holat nuqtasi).
+   *   `--color-<holat>-fg`   — o'sha to'yingan fon USTIDAGI matn.
+   *   `--color-<holat>-text` — TINT fon (`bg-danger/12`, `bg-warning/20`)
+   *                            ustidagi MATN. Asosiy token matn sifatida
+   *                            AA dan O'TMAYDI.
+   *
+   * TAQIQ: `--color-warning` HECH QACHON matn rangi bo'lmaydi — u faqat
+   * fon. WCAG 1.4.3. warning/surface: 2.06:1 (TAQIQ dalili — matn
+   * sifatida o'tmaydi). Sariq tintdagi matn uchun `bg-warning/20` ustida
+   * `text-text` — WCAG 1.4.3. text/warning@20: 15.25:1 — yoki
+   * `--color-warning-text`.
+   */
+  --color-success: oklch(0.63 0.16 162);
+  /* WCAG 1.4.3. success-fg/success: 5.66:1 (O-06: oq varianti 3.27 edi —
+   * M-20 latent tuzoq; juftlik kodda hali ishlatilmaydi, lekin reyestr
+   * istisnosiz to'liq bo'lishi uchun quyuq qiymatga o'tkazildi —
+   * hech qanday piksel o'zgarmadi). */
+  --color-success-fg: oklch(0.205 0 0);
+  /* WCAG 1.4.3. success-text/success@12: 5.11:1 (avvalgi qiymat 2.87 —
+   * buzilish edi). */
+  --color-success-text: oklch(0.48 0.14 162);
+  --color-warning: oklch(0.78 0.15 70);
+  --color-warning-fg: oklch(0.205 0 0);
+  /* WCAG 1.4.3. warning-text/warning@20: 5.34:1 */
+  --color-warning-text: oklch(0.5 0.11 70);
+  --color-danger: oklch(0.58 0.21 27);
+  --color-danger-hover: oklch(0.53 0.21 27);
+  --color-danger-fg: oklch(1 0 0);
+  /* WCAG 1.4.3. danger-text/danger@12: 5.52:1 (avvalgi qiymat 3.97 —
+   * buzilish edi). */
+  --color-danger-text: oklch(0.5 0.19 27);
+  /* INFO (teal) — YARMARKA holati uchun (0028): rasta band, lekin patta
+   * ATAYIN olinmaydi. Beshinchi mustaqil hue — xarita legendasi kamida
+   * 5 rang talab qiladi (foydalanuvchi, 2026-08-25) va success/accent/
+   * warning/danger to'rttasi band edi. */
+  --color-info: oklch(0.62 0.13 205);
+  --color-info-fg: oklch(0.205 0 0);
+  /* WCAG 1.4.3. info-text/info@20: (gate --print bilan sinxronlanadi) */
+  --color-info-text: oklch(0.45 0.11 210);
+
+  /* ---- Radiuslar (kartalar 12–16px) ----------------------------------- */
+  --radius-sm: 0.625rem; /* 10px — inputlar */
+  --radius-md: 0.875rem; /* 14px — tugmalar, kichik kartalar */
+  --radius-lg: 1.125rem; /* 18px — kartalar, modallar */
+
+  /* ---- Soyalar (yumshoq, past kontrast) ------------------------------- */
+  /* ⛔ SOYALAR KUCHAYTIRILDI (2026-08-25, foydalanuvchi topilmasi:
+   *    «background umuman ko'rinmaydi»).
+   *
+   *   Eski qiymatlar (0.04 / 0.06 alfa) amalda KO'RINMASDI: karta oq,
+   *   fon deyarli oq, soya esa sezilmas — uchalasi bitta tekislikka
+   *   yopishib qolardi va ko'z qayerda karta boshlanishini QIDIRARDI.
+   *   Aynan shu charchatadi.
+   *
+   *   Yechim masterplan §1.1 ning o'zida yozilgan: «3 daraja balandlik,
+   *   har daraja o'z soyasi bilan — qatlam hissi shu yerdan».
+   *
+   * ⛔ RANG TOKENLARIGA TEGILMAYDI: soya kontrast nisbatlariga umuman
+   *    ta'sir qilmaydi, ya'ni `G-motion-5(b)` juftliklari va izohlardagi
+   *    `N.NN:1` da'volari O'ZGARISHSIZ qoladi. */
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.06), 0 2px 8px oklch(0 0 0 / 0.08);
+  --shadow-raised: 0 2px 6px oklch(0 0 0 / 0.07), 0 12px 32px oklch(0 0 0 / 0.13);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    /*
+     * ⛔ Anker siljishi uchun ZAXIRA yo'l. Asosiy silliqlikni
+     * `marketing/smooth-anchor.tsx` chizadi (masofaga qarab 450…1100ms),
+     * lekin JS yuklanmagan yoki xatolik bergan holatda ham sakrash
+     * qo'pol bo'lmasin. `prefers-reduced-motion` bloki buni
+     * `auto !important` bilan bekor qiladi — u pastda turibdi.
+     */
+    scroll-behavior: smooth;
+    scroll-padding-top: 1.5rem;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Klaviatura navigatsiyasi ko'rinadigan bo'lsin (WCAG 2.4.7) */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /*
+   * ⛔⛔ G-motion-1(a) — REDUCED-MOTION NING BIRINCHI QATLAMI.
+   *
+   * `motion-reduce:animate-none` utilitasi FAQAT `animation` ga tegadi —
+   * `transition-duration` ga TEGMAYDI [O'LCHANDI: 09-RESEARCH Tuzoq 9].
+   * Shuning uchun bu blok ikkinchi emas, BIRINCHI qatlam: `!important`
+   * deklaratsiyalari qatlam tartibidan QAT'I NAZAR oddiy deklaratsiyalardan
+   * ustun, ya'ni blok `@layer base` ichida bo'lsa ham kafolatli ishlaydi
+   * va React yuklanishidan OLDIN kuchga kiradi. Vestibulyar buzilishi
+   * bo'lgan foydalanuvchi uchun bu a11y talabi, sozlama emas (T-09-06).
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /*
+   * Raqam ustunlari «sakramasin» [L-9, masterplan §2]. ⛔ Mavjud 94 ta
+   * qo'lda yozilgan `tabular-nums` sinfi OLIB TASHLANMAYDI (ular zararsiz;
+   * supurish 40+ faylga tegardi). Yangi kod sinfni qo'lda yozmaydi —
+   * jadval, `.money` va `[data-numeric]` avtomatik oladi.
+   */
+  :where(table, .money, [data-numeric]) {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /*
+   * Plan-xaritaning zona bloki (UI-SPEC §7.8).
+   *
+   * 1000 katak = 360px kenglikda ~8700px skroll. `content-visibility: auto`
+   * brauzerga ekrandan TASHQARIDAGI zonalarni render qilmaslikni aytadi,
+   * `contain-intrinsic-size` esa render qilinmagan blokning taxminiy
+   * balandligini beradi — usiz skroll paneli har blok ochilganda sakrardi.
+   *
+   * Bu virtualizatsiya KUTUBXONASINING o'rnini bosadi: nol bog'liqlik,
+   * nol JS, nol test yuzasi. Tugmalar DOM'da qoladi, ya'ni klaviatura,
+   * skrinrider va brauzer qidiruvi ishlashda davom etadi — virtualizatsiya
+   * esa aynan shularni yo'qotardi.
+   */
+  .zone-block {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 400px;
+  }
+
+  /*
+   * =========================================================================
+   * @KEYFRAMES REYESTRI — YOPIQ, 9 NOM (G-motion-3(a,c), 09-UI-SPEC §4.3;
+   * ⛔ 9-nom `sweep` — 10-UI-SPEC §5.4 ning ONGLI kengaytmasi, L-9/L-10).
+   *
+   * ⛔ RUXSAT ETILGAN XOSSALAR TO'PLAMI: transform · opacity · background ·
+   *    background-color · background-position · box-shadow ·
+   *    stroke-dashoffset · stroke-dasharray. `width`/`height`/`top`/`left`/
+   *    `right`/`bottom`/`margin`/`padding` — BIRORTASI HAM YOZILMAYDI:
+   *    arzon Androidda har kadrda layout hisobi 60fps ni o'ldiradi.
+   * ⛔ `@keyframes` FAQAT shu faylda ta'riflanadi — komponent faylida 0.
+   * ⛔ Kompozit davomiyliklar (800ms · 300ms · 1.5s · 200ms) FAQAT shu
+   *    ta'riflar ichida yashaydi — komponentda takrorlanmaydi.
+   * ⛔ Sinf prefiksi `motion-`, `animate-` EMAS: `animate-*` prefiksi
+   *    G-motion-1(b) ning `motion-reduce:` juftlik skaniga tushadi va u
+   *    faqat `Loader2` uchun mo'ljallangan.
+   * =========================================================================
+   */
+
+  /* 2-qadam: check-mark chizilishi — 250ms (--motion-base), SVG shtrix.
+   * `stroke-dasharray: 30` statik tayyorgarlik, harakat FAQAT offset'da. */
+  @keyframes draw {
+    from {
+      stroke-dashoffset: 30;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  .motion-check-draw {
+    stroke-dasharray: 30;
+    animation: draw var(--motion-base) var(--ease-out) both;
+  }
+
+  /* 3-qadam: karta yashil halqa pulsi — 300ms KOMPOZIT (bir urish uchun
+   * base'dan sal uzun, slow'dan qisqa — sketch 001-B timingi). */
+  @keyframes ringpulse {
+    from {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+    to {
+      transform: scale(1.06);
+      opacity: 0;
+    }
+  }
+  .motion-ring-pulse {
+    animation: ringpulse 300ms var(--ease-out) both;
+  }
+
+  /* 5-qadam: yangi qator qo'nishi — 800ms KOMPOZIT (fon so'nishi sekin
+   * bo'lishi kerak, aks holda kassir qatorni ilg'amaydi). Fon success
+   * tinti (0.18) dan shaffofga, siljish -4px dan 0 ga. */
+  @keyframes landin {
+    from {
+      background-color: oklch(0.63 0.16 150 / 0.18);
+      transform: translateY(-4px);
+    }
+    to {
+      background-color: transparent;
+      transform: translateY(0);
+    }
+  }
+  .motion-row-land {
+    animation: landin 800ms var(--ease-out) both;
+  }
+
+  /* Kirish — 8px pastdan + fade, --motion-base (§4.4 qoida 1). Stagger
+   * ro'yxatlarda: elementga inline `--i` indeksi beriladi, kechikish
+   * 60ms qadam bilan hisoblanadi. */
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .motion-enter {
+    animation: enter var(--motion-base) var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 60ms);
+  }
+
+  /* Skeleton shimmer — 1.5s KOMPOZIT [L-5; spinner TAQIQ]. Sinf STATIK
+   * gradient va 200% o'lcham beradi; `@keyframes` FAQAT
+   * `background-position` ni siljitadi (kompozitor-do'st, layout yo'q). */
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+  .motion-shimmer {
+    background-image: linear-gradient(
+      90deg,
+      var(--color-surface-muted),
+      var(--color-border),
+      var(--color-surface-muted)
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s linear infinite;
+  }
+
+  /* Real-vaqt yangilanish: BIR marta yashil «nafas» — 800ms KOMPOZIT
+   * [L-6, §10.6]. Halqa success/0.25 dan odatiy karta soyasiga qaytadi. */
+  @keyframes breath {
+    from {
+      box-shadow: 0 0 0 6px oklch(0.63 0.16 150 / 0.25);
+    }
+    to {
+      box-shadow: var(--shadow-card);
+    }
+  }
+  .motion-breath {
+    animation: breath 800ms var(--ease-out) both;
+  }
+
+  /* Nomuvofiqlik case'i: amber diqqat-halqasi — BIR marta, --motion-slow
+   * [L-5, §10.5]. ⛔ Qayta pulsatsiya YO'Q — ogohlantirish charchatmasin. */
+  @keyframes attention {
+    from {
+      box-shadow: 0 0 0 0 oklch(0.78 0.15 85 / 0.55);
+    }
+    to {
+      box-shadow: 0 0 0 10px oklch(0.78 0.15 85 / 0);
+    }
+  }
+  .motion-attention {
+    animation: attention var(--motion-slow) var(--ease-out) both;
+    animation-iteration-count: 1;
+  }
+
+  /* Landing hero sahnasi: kamera nuri — 2s KOMPOZIT, linear (10-UI-SPEC
+   * §5.4). ⛔ Sketch manbasining `@keyframes sweepgo { left: 0 → 100% }`
+   * shakli ATAYIN TAKRORLANMADI: `left` — quyuqroq BANNED_KEYFRAME_PROPS
+   * ro'yxatida nomma-nom (motion-tokens.test.mjs, L-8) va har kadrda
+   * layout hisobini qo'zg'atib arzon Androidda 60fps ni o'ldiradi.
+   * `translateX(100cqw)` — sof kompozitor xossasi; masofa CSS'dan keladi,
+   * JS geometriya o'qimaydi. */
+  @keyframes sweep {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(100cqw);
+    }
+  }
+  .landing-sweep {
+    animation: sweep 2s linear;
+  }
+
+  /* `cqw` eng yaqin KONTEYNER ajdodga nisbatan hal bo'ladi — nur chizig'i
+   * shu sinf berilgan xarita konteynerining FARZANDI bo'lishi SHART
+   * (10-RESEARCH eslatmasi), aks holda 100cqw viewport'ga tushib nur
+   * ekran kengligicha uchardi. */
+  .landing-sweep-frame {
+    container-type: inline-size;
+  }
+
+  /* 3-qadam chizig'ining to'lishi (10-UI-SPEC §10.2). ⛔ `height` bilan
+   * EMAS (L-8 ning ikkinchi buzilishi — sketch'ning `.prog { height... }`
+   * shakli): `transform: scaleY()` kompozitorda qoladi. 900ms — KOMPOZIT
+   * qiymat va u FAQAT shu faylda yashaydi, komponentda takrorlanmaydi.
+   * Daraja deklarativ `data-step` atributi orqali — komponent faylida
+   * geometriya (inline `style`) UMUMAN yozilmaydi (G-land-3(b) skanerlaydi). */
+  .landing-step-fill {
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform 900ms var(--ease-out);
+  }
+  [data-step="1"] .landing-step-fill {
+    transform: scaleY(0.3333);
+  }
+  [data-step="2"] .landing-step-fill {
+    transform: scaleY(0.6667);
+  }
+  [data-step="3"] .landing-step-fill {
+    transform: scaleY(1);
+  }
+
+  /* ==== ISH YUZASI FONI — «KIRISH SAHIFASIDAGIDEK» (260819) ===========
+   *
+   * ⛔⛔ NEGA QO'SHILDI: foydalanuvchi «hozirgi ko'rinish juda ham sodda
+   *     va oddiy» dedi va kirish sahifasining sahnasini ko'rsatdi. Ish
+   *     yuzalari haqiqatan yassi `--color-bg` ustida turardi — kontent
+   *     bilan fon orasida hech qanday chuqurlik yo'q edi.
+   *
+   * ⛔⛔ LEKIN KIRISH SAHNASI AYNAN KO'CHIRILMAYDI — VA BU QAT'IY.
+   *
+   *     Kirishda 14 ustunli «jonli xarita» bor va u CHEKSIZ animatsiya
+   *     qiladi (`cellglow` 14s, `scanbeam` 18s). Kirish sahifasi 10
+   *     soniya ko'riladi; ish yuzasini esa kassir SMENA BO'YI ko'radi.
+   *     Cheksiz takrorlanuvchi harakat u yerda charchatadi — bu
+   *     loyihaning yozib qo'yilgan qoidasi (motion: «takrorlanuvchi
+   *     harakat ish yuzasida TAQIQ»).
+   *
+   *     Shuning uchun bu yerda HARAKAT YO'Q: faqat statik qatlamlar —
+   *     ikkita yumshoq radial nur va juda nozik to'r. Chuqurlik bor,
+   *     tinchlik ham.
+   *
+   * ⛔ `position: fixed` — fon SCROLL BILAN SURILMAYDI. `absolute`
+   *    bo'lsa uzun sahifada (audit jurnali, hisobotlar) nur pastda
+   *    yo'qolib, sahifaning yarmi yana yassi bo'lib qolardi.
+   *
+   * ⛔ `z-index: -1` + `isolation: isolate` — qatlamlar KONTENT OSTIDA
+   *    qoladi va ilovaning boshqa `z-index` larini (sticky sarlavha 40,
+   *    modal 50) qo'zg'atmaydi.
+   *
+   * ⛔⛔ «QUYOSH OSTIDA» TEMASIDA FON UMUMAN CHIZILMAYDI. U rejim
+   *     kassirning DALA sharoiti uchun: ochiq havoda, quyosh tushib
+   *     turgan ekranda maksimal kontrast kerak. Har qanday tint yoki
+   *     to'r u yerda o'qishni QIYINLASHTIRADI, chiroyli qilmaydi.
+   */
+  .app-scene {
+    position: relative;
+    isolation: isolate;
+  }
+  .app-scene::before,
+  .app-scene::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+  /* 1-qatlam — ikki yumshoq nur (yuqori chap: aksent, yuqori o'ng: yashil). */
+  .app-scene::before {
+    background:
+      radial-gradient(
+        980px 520px at 6% -8%,
+        oklch(0.62 0.17 255 / 0.16),
+        transparent 64%
+      ),
+      radial-gradient(
+        840px 460px at 104% -4%,
+        oklch(0.62 0.14 165 / 0.11),
+        transparent 62%
+      );
+  }
+  /* 2-qatlam — «qog'oz to'ri». Maska bilan pastga qarab yo'qoladi:
+     butun sahifa bo'ylab to'r shovqin bo'lardi. */
+  .app-scene::after {
+    background-image:
+      linear-gradient(to right, oklch(0.45 0 0 / 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(0.45 0 0 / 0.045) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(
+      1100px 620px at 50% -12%,
+      rgb(0 0 0 / 100%),
+      transparent 72%
+    );
+  }
+  /* Tungi qamrov — kirish sahnasining ohangi (indigo), lekin tinchroq. */
+  [data-theme="dark"] .app-scene::before {
+    background:
+      radial-gradient(
+        1000px 560px at 8% -10%,
+        oklch(0.4 0.07 258 / 0.55),
+        transparent 64%
+      ),
+      radial-gradient(
+        820px 460px at 104% -6%,
+        oklch(0.34 0.06 195 / 0.4),
+        transparent 62%
+      );
+  }
+  [data-theme="dark"] .app-scene::after {
+    background-image:
+      linear-gradient(to right, oklch(0.8 0 0 / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(0.8 0 0 / 0.05) 1px, transparent 1px);
+  }
+  /* ⛔ Dala rejimi — TOZA OQ, bezaksiz (yuqoridagi izoh). */
+  [data-theme="sun"] .app-scene::before,
+  [data-theme="sun"] .app-scene::after {
+    display: none;
+  }
+
+  /* ---- Sarlavha va kartalar — fon ustida «suzadi» --------------------
+   * Fon endi tekstura tashiydi, ya'ni yassi `bg-surface` uning ustida
+   * kesilgan qog'oz bo'lib ko'rinardi. Yengil shaffoflik + blur ikkalasini
+   * bir muhitga qo'shadi.
+   * ⛔ «Quyosh ostida» da shaffoflik YO'Q: dala rejimida matn ostidagi
+   *   har qanday tiniqlik kontrastni yeydi.
+   */
+  /*
+   * ⛔ FAQAT SARLAVHA VA PASTKI PANEL uchun (260819). Kartalar bu
+   *    sinfni OLMAYDI: (a) ularda `bg-surface` utilitasi bor va u
+   *    kaskadda bu qoidani yengadi — ya'ni samara nol bo'lardi;
+   *    (b) ro'yxatda o'nlab karta bo'ladi va har biriga blur berish
+   *    arzon Androidda scroll'ni sekinlashtiradi. Sarlavha bilan
+   *    pastki panel esa sahifada BITTADAN.
+   */
+  .app-scene .app-surface {
+    /* ⛔ 94%, 82% EMAS (K-02 auditi): scroll paytida ostidagi matn
+     * sarlavha bilan aralashib o'qilardi — quyoshda telefonda yanada
+     * yomon. Blur kuchaytirildi, shaffoflik esa deyarli yopildi. */
+    background: color-mix(in oklch, var(--color-surface) 94%, transparent);
+    backdrop-filter: blur(12px);
+  }
+  [data-theme="sun"] .app-scene .app-surface {
+    background: var(--color-surface);
+    backdrop-filter: none;
+  }
+
+  /* ---- Landing «tungi bozor» atmosferasi (marketing yuza) --------------
+   * Vizual qatlam FAQAT statik fon/soya: yangi @keyframes YO'Q (reyestr
+   * yopiq), geometriya tranzitsiyasi YO'Q (G-land-3). Rang qiymatlari
+   * dark-qamrov tokenlari oilasidan — kontrast juftliklari o'sha isbotlangan
+   * to'plamda qoladi. */
+  /* Qamrov ichida meros rang qayta hal bo'lsin — aks holda rang utilitasisiz
+   * elementlar (h3 va h.k.) BODY'ning yorug' qiymatini olib ko'rinmay qoladi. */
+  .landing-night {
+    color: var(--color-text);
+  }
+  /* Landing v2 (claude.ai/design buyurtmasi): chuqur INDIGO gradient. */
+  .landing-night {
+    position: relative;
+    background: linear-gradient(
+      180deg,
+      oklch(0.21 0.03 262),
+      oklch(0.24 0.035 258)
+    );
+  }
+  .landing-night > * {
+    position: relative;
+  }
+  /* ==== KIRISH SAHNASI — «Sbozor Login» dizayni ========================
+   * Dizayn qiymatlari AYNAN: sahna radial gradienti, ustidagi parda,
+   * shishasimon karta va orqa fondagi «tirik bozor xaritasi». Barchasi
+   * SHU YERDA yashaydi — komponentlarda ixtiyoriy o'lcham/rang yozilmaydi.
+   * ⛔ Harakat GPU-toza: faqat opacity va transform (G-land-3 ruhida).
+   * Reduced-motion global blok bilan o'chadi — alohida shox kerak emas. */
+  .login-scene {
+    /* ⛔ Meros rang QAYTA hal bo'lsin: `color` body'da BIR MARTA hisoblanadi
+       va aniq qiymat bo'lib pastga meros bo'ladi — qamrov tokenni
+       o'zgartirsa ham sarlavhalar quyuq qolardi (`.landing-night` dagi
+       ayni sabab). */
+    color: var(--color-text);
+    background: radial-gradient(
+      1200px 700px at 12% 18%,
+      oklch(0.28 0.05 258),
+      oklch(0.19 0.028 262) 62%
+    );
+  }
+  /* Parda — pastga qarab quyuqlashadi, karta ostidagi xarita susayadi. */
+  /* Kirish sarlavhasi — dizayn: clamp(28px, 3.6vw, 42px). */
+  .login-title {
+    font-size: clamp(1.75rem, 3.6vw, 2.625rem);
+    line-height: 1.15;
+    font-weight: 700;
+  }
+  .login-veil {
+    background: linear-gradient(
+      180deg,
+      oklch(0.19 0.028 262 / 0.1),
+      oklch(0.17 0.026 262 / 0.78)
+    );
+  }
+  /* Kirish kartasi — shishasimon panel (dizayn: 20px radius, blur 10px). */
+  .login-card {
+    background: oklch(0.24 0.03 260 / 0.92);
+    border: 1px solid oklch(0.38 0.03 260);
+    border-radius: 20px;
+    box-shadow: 0 28px 70px oklch(0.1 0.02 260 / 0.55);
+    backdrop-filter: blur(10px);
+    animation: cardin 700ms var(--ease-out) both;
+  }
+  /* Yon ustun matni — dizayn: 17px/1.6 (shkalamizdagi 18px emas). */
+  .login-lead {
+    font-size: 1.0625rem;
+    line-height: 1.6;
+  }
+  .login-sub {
+    font-size: 0.8125rem;
+  }
+  /* Karta ichidagi boshqaruvlar dizayn o'lchamiga keltiriladi. ⛔ Qamrov
+     `.login-card` bilan CHEGARALANGAN: ilovaning Input/Button standartlari
+     (admin oqimlari) TEGILMAYDI. */
+  .login-card input:not([type="checkbox"]) {
+    height: 46px;
+    border-radius: 10px;
+  }
+  .login-card button[type="submit"] {
+    min-height: 56px;
+    font-size: 1.0625rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 26px oklch(0.62 0.18 255 / 0.4);
+  }
+
+  /* Orqa fon xaritasi: 14 ustun, chetlaridan chiqib turadi. */
+  .login-map {
+    position: absolute;
+    inset: -6% -4%;
+    display: grid;
+    grid-template-columns: repeat(14, 1fr);
+    gap: 10px;
+    opacity: 0.55;
+  }
+  .login-map > span {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    border: 1px solid oklch(0.42 0.03 260 / 0.5);
+    background: oklch(0.3 0.025 260 / 0.3);
+    animation: cellglow 14s ease-in-out infinite;
+  }
+  .login-map > span[data-cell="paid"] {
+    border-color: oklch(0.5 0.09 155 / 0.35);
+    background: oklch(0.4 0.07 155 / 0.16);
+  }
+  .login-map > span[data-cell="flag"] {
+    border-color: oklch(0.62 0.12 80 / 0.5);
+    background: oklch(0.45 0.09 80 / 0.22);
+  }
+  /* Kamera nuri — sahna bo'ylab sekin pastga suriladi. */
+  .login-beam {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 28%;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      oklch(0.72 0.14 255 / 0.13),
+      transparent
+    );
+    animation: scanbeam 18s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+  /* Ko'tarilib yo'qoladigan holat yorliqlari. */
+  .login-chip {
+    position: absolute;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0.6;
+    animation: floatup 16s ease-in-out infinite;
+  }
+
+  /* ---- Landing tipografiyasi: DIZAYN v2 ning AYNAN qiymatlari --------
+   * Shkalamiz 24px/18px-700 beradi, dizaynda esa 26px/18px-600. Farq
+   * o'lchangan (h2: 24 vs 26, og'irlik 700 vs 600) va u ko'rinadi, shuning
+   * uchun marketing yuzasi shu ikki sinfni ishlatadi. Utilita EMAS:
+   * ixtiyoriy o'lcham komponentda taqiqlangan (G-land-5(d)) va bu
+   * qiymatlar ilova shkalasiga a'zo bo'lishi ham kerak emas —
+   * ular FAQAT landing uchun. */
+  .landing-h2 {
+    /* 260819: 26px -> 28…36px. Foydalanuvchi: «sayt yozuvlari juda
+       kichik». Seksiya sarlavhasi sahifadagi ikkinchi eng katta matn
+       bo'lishi kerak — 26px hero (44px) dan keyin juda past tushardi. */
+    font-size: clamp(1.75rem, 2.7vw, 2.25rem);
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+  }
+  .landing-h3 {
+    /* 260819: 18px -> 20px. Karta sarlavhasi tanadan (17px) sezilarli
+       ajralib turishi kerak; 18/14 farqi zaif edi. */
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+
+  /* ---- LANDING TIPOGRAFIYA SHKALASI (260819) --------------------------
+   *
+   * ⛔⛔ NEGA ALOHIDA SHKALA KERAK BO'LDI. Marketing yuzasida 26 ta
+   *     `text-sm` (14px) va 22 ta `text-xs` (12px) ishlatilgan edi. Bu
+   *     ILOVA shkalasi va u O'Z O'RNIDA to'g'ri: kassir/direktor ekrani —
+   *     zich jadval, u yerda 14px maksimal ma'lumotni bir ekranga sig'diradi.
+   *
+   *     Landing esa BUTUNLAY BOSHQA vazifa: uni telefonda, ko'chada,
+   *     bir marta va shoshib o'qiydilar. 14px matn u yerda «kichkina
+   *     yozuv» bo'lib tuyuladi va odam o'qimay ketadi. Foydalanuvchi
+   *     buni aynan shunday ta'rifladi.
+   *
+   * ⛔ `text-base` YOZIB BO'LMAYDI: G-land-5(d) uni marketing yuzasida
+   *    NOLGA qulflagan (L-2 reyestri, butun `src` bo'ylab 7/7). Shuning
+   *    uchun shkala SHU YERDA, o'z nomlari bilan yashaydi — komponentda
+   *    ixtiyoriy o'lcham ham taqiqlangan (G-land-5(d)).
+   *
+   * ⛔ To'rt pog'ona, ko'p emas: har qo'shimcha pog'ona qaysi birini
+   *    ishlatishni tanlash yukini oshiradi va shkala jimgina buziladi.
+   */
+  .landing-lead {
+    /* Hero ostidagi javob, seksiya kirish matni — 19px. */
+    font-size: 1.1875rem;
+    line-height: 1.6;
+  }
+  .landing-body {
+    /* Asosiy o'qish matni: karta tanasi, qadam izohi — 17px. */
+    font-size: 1.0625rem;
+    line-height: 1.7;
+  }
+  .landing-note {
+    /* Ikkilamchi izoh: hisob usuli, ogohlantirish — 15px. */
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+  .landing-micro {
+    /* Yorliq, legenda, mikro-qator — 13px (12px dan sezilarli katta). */
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  /* ---- LANDING FORMASI — IKONKANING JOYI --------------------------
+   *
+   * ⛔⛔ BU YERDA FAQAT JOYLASHUV QOLDI, O'LCHAM EMAS — VA BU
+   *     XROMDA O'LCHANGAN XATONING NATIJASI.
+   *
+   *     Avval shu blokda `.landing-form input { height: 3.25rem;
+   *     font-size: 1rem }` turardi. U UMUMAN ISHLAMADI: brauzerda
+   *     o'lchanganda maydon hamon 40px/14px edi.
+   *
+   *     Sabab qatlamlarda: Tailwind utilitalari `@layer utilities` da,
+   *     bu blok esa `@layer components` da. CSS kaskadida utilities
+   *     YUQORI turadi, ya'ni elementdagi `h-10 text-sm` bu qoidani
+   *     HAR DOIM yengadi. Kod to'g'ri ko'rinardi, darvoza yashil edi,
+   *     ekranda esa hech nima o'zgarmagandi.
+   *
+   *     Shuning uchun o'lcham endi komponentda, UTILITA bilan beriladi
+   *     (`h-13 text-lg` — tailwind-merge bazaviy `h-10 text-sm` ni
+   *     almashtiradi). Bu yerda esa faqat utilita bilan
+   *     RAQOBATLASHMAYDIGAN narsa qoladi.
+   *
+   * ⛔ 18px (`text-lg`) — 16px dan katta, demak iOS Safari fokusda
+   *    sahifani ZUMLAMAYDI. Bu telefonda to'ldiriladigan forma uchun
+   *    jiddiy shart, bezak emas.
+   */
+  .landing-field-icon {
+    position: absolute;
+    top: 50%;
+    left: 1rem;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+    pointer-events: none;
+  }
+
+  /* ---- IKONKA PLITASI -------------------------------------------------
+   *
+   * Foydalanuvchi: «iconlar qo'sh… bachkana qilmasdan hammaga mos qilib
+   * boyit». Shuning uchun ikonka RASM emas, BELGI: bir xil o'lchamli
+   * yumaloq plita, aksent rangining eng past to'yinganligida. U kartani
+   * bezamaydi — sarlavhani BIR QARASHDA taniydigan qiladi.
+   *
+   * ⛔ Har seksiyada bir xil shakl — uchta har xil ikonka uslubi
+   *    sahifani «bachkana» qiladi, aynan shundan qochilgan.
+   */
+  .landing-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.875rem;
+    color: var(--color-accent-text);
+    background: color-mix(in oklch, var(--color-accent) 12%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-accent) 22%, transparent);
+    transition:
+      background-color var(--motion-base) var(--ease-out),
+      transform var(--motion-base) var(--ease-out);
+  }
+  /* ⛔ Harakat FAQAT kursorli qurilmada va FAQAT karta hover'ida: ikonka
+     o'zi hover nishoni EMAS (u bosilmaydi), shuning uchun mustaqil
+     hover holati foydalanuvchini adashtirardi. Ko'tarilish 2px —
+     «tirik» tuyuladi, lekin ko'zni charchatmaydi. */
+  @media (hover: hover) {
+    .landing-card:hover .landing-icon,
+    .landing-role:hover .landing-icon {
+      background: color-mix(in oklch, var(--color-accent) 20%, transparent);
+      transform: translateY(-2px);
+    }
+  }
+  /* Tungi qamrovdagi plita — chegara kuchliroq, aks holda fonda yo'qoladi. */
+  .landing-night .landing-icon {
+    background: color-mix(in oklch, var(--color-accent) 18%, transparent);
+    border-color: color-mix(in oklch, var(--color-accent) 34%, transparent);
+  }
+  /* Konteyner kengligi — dizaynda 1160px (bizning 6xl 1152px edi). */
+  .landing-shell {
+    max-width: 72.5rem;
+  }
+
+  /* Sotuvchiga ko'rsatiladigan summa (K-3). ⛔ `text-display` EMAS: u pul
+   * roli reyestri bo'lib AYNAN ikki mahsulot fayliga qulflangan va har
+   * a'zosidan skeleton balandligi juftligi talab qilinadi — bu dialogda esa
+   * yuklanish holati umuman yo'q (yozuv allaqachon qo'lda). Shuning uchun
+   * o'lcham shu yerda yashaydi, reyestr tegilmaydi. */
+  .collect-vendor-amount {
+    font-size: 2.5rem;
+    line-height: 1.1;
+  }
+
+  /* Xarita katagining nomi (A-1…E-6) — shkaladan KICHIK, chunki u
+   * katak ichidagi belgi, matn emas. Utilita EMAS: ixtiyoriy o'lcham
+   * komponentda taqiqlangan (G-land-5(d)), qiymat shu yerda yashaydi. */
+  .landing-cell-id {
+    font-size: 0.5625rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* Audit natijasi — kartaning eng katta soni (dizayn v2 qiymati).
+   * ⛔ `--text-hero` EMAS: u hero sarlavhasiga qulflangan (G-land-5(a)). */
+  .landing-loss-total {
+    font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+    line-height: 1.1;
+  }
+
+  /* Header tasmasi — gradientning BOSHLANISH rangi (chok ko'rinmasin). */
+  .landing-night-top {
+    background: oklch(0.21 0.03 262);
+    color: var(--color-text);
+  }
+
+  /* Kicker — seksiya ustidagi harf-oralig'li aksent yorliq (v2). */
+  .landing-kicker {
+    /* 260819: 12px -> 13px (umumiy kattalashtirish bilan birga). */
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-accent-text);
+  }
+  .landing-night .landing-kicker {
+    color: oklch(0.72 0.13 255);
+  }
+
+  /* Sahna kartasi — v2 panel soyasi. */
+  .landing-glow {
+    box-shadow: 0 24px 60px oklch(0.1 0.02 260 / 0.5);
+  }
+
+  /* Tungi LANDING sahnasida holat kataklari — v2 to'liq bo'yalgan + nur.
+   * ⛔ `.landing-night` bilan toraytirilgan: tema scope'i orqali yozilsa
+   * admin kassir setkasi ham jimgina o'zgarardi, ustiga bu selektor faylda
+   * haqiqiy scope'dan OLDIN turib gate parserini adashtiradi. */
+  .landing-night [data-state="paid"] {
+    background-color: oklch(0.42 0.08 155);
+    border-color: oklch(0.6 0.11 155);
+    box-shadow: 0 0 12px oklch(0.6 0.13 155 / 0.3);
+  }
+  .landing-night [data-state="unpaid"] {
+    background-color: oklch(0.55 0.11 80);
+    border-color: oklch(0.78 0.14 80);
+    box-shadow: 0 0 14px oklch(0.78 0.14 80 / 0.45);
+  }
+
+  /* v2 karta hover — marketing kartalari -4px ko'tariladi. */
+  @media (hover: hover) {
+    .landing-card {
+      transition:
+        transform var(--motion-base) var(--ease-out),
+        box-shadow var(--motion-base) var(--ease-out);
+    }
+    .landing-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 14px 32px oklch(0.2 0.01 95 / 0.1);
+    }
+  }
+
+  /* v2 ⭐ dalil banneri — och ko'k gradient. */
+  .landing-proof {
+    background: linear-gradient(
+      135deg,
+      oklch(0.95 0.03 255),
+      oklch(0.985 0.008 255)
+    );
+    border: 1px solid oklch(0.88 0.04 255);
+  }
+
+  /* Birlamchi CTA nuri — sahifadagi YAGONA yonuvchi tugma (K-2 fokus). */
+  .landing-cta-glow {
+    box-shadow: 0 10px 34px oklch(0.56 0.19 255 / 0.45);
+  }
+  .landing-cta-glow:hover {
+    box-shadow: 0 12px 46px oklch(0.56 0.19 255 / 0.6);
+  }
+
+  /* Hero ostidagi halol raqamlar lentasi. */
+  .landing-stats {
+    border-top: 1px solid oklch(1 0 0 / 0.12);
+  }
+
+  /* Demo seksiyasi — iliqdan oqishga o'tish + kartaga yumshoq aksent nur. */
+  .landing-demo {
+    background: linear-gradient(
+      180deg,
+      var(--color-surface-muted),
+      var(--color-bg)
+    );
+  }
+  .landing-demo-card {
+    box-shadow:
+      0 18px 60px oklch(0.56 0.19 255 / 0.14),
+      var(--shadow-raised);
+  }
+
+  /* ---- Kirish sahnasi kadrlari (dizayn «Sbozor Login») ----------------
+   * ⛔ To'rttasi ham GPU-toza: cellglow — opacity; scanbeam — transform;
+   * floatup — transform + opacity; cardin — transform + opacity. */
+  @keyframes cellglow {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 0.78;
+    }
+  }
+  @keyframes scanbeam {
+    0% {
+      transform: translateY(-30%);
+    }
+    100% {
+      transform: translateY(130%);
+    }
+  }
+  @keyframes floatup {
+    0% {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+    20%,
+    80% {
+      opacity: 0.55;
+    }
+    100% {
+      transform: translateY(-22px);
+      opacity: 0;
+    }
+  }
+  @keyframes cardin {
+    from {
+      opacity: 0;
+      transform: translateY(18px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Forma xatosi: 2px shake — 200ms KOMPOZIT (§12.7). ⛔ Login kartasi
+   * shake QILMAYDI [masterplan §6.1 — «ayblov» hissi]. Reduced-motion'da
+   * global blok buni 0.01ms ga tushiradi — faqat matn qoladi. */
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-2px);
+    }
+    75% {
+      transform: translateX(2px);
+    }
+  }
+  .motion-shake {
+    animation: shake 200ms var(--ease-out);
+  }
+}
+
+/*
+ * ===========================================================================
+ * TEMA SCOPE'LARI — ⛔⛔ ATAYLAB QATLAMSIZ (G-motion-4, 09-RESEARCH Naqsh 1).
+ *
+ * `@theme` `@layer theme` ga kompilyatsiya bo'ladi; QATLAMSIZ CSS esa
+ * qatlamli CSS'dan HAR DOIM ustun [O'LCHANDI: @tailwindcss/postcss@4.3.3
+ * kompilyatsiyasi]. Bu bloklar `@layer` ichiga o'ralsa, override JIMGINA
+ * o'lardi. `@theme inline` ham TAQIQ — u utilitani var() o'rniga qiymatga
+ * kompilyatsiya qiladi va scope umuman ishlamay qolardi (G-motion-4(b)).
+ *
+ * ⛔ `--color-*-text` oilasining HAMMASI (4 ta) IKKALA scope'da HAM bor —
+ *    M-18 darsining mexanik shakli: sketch tokenlari beshta AA buzilishi
+ *    olib kelgan edi.
+ * ===========================================================================
+ */
+
+/* Tungi rejim [09-UI-SPEC §5.3] — 06:00 smenalar, kechki hisobot.
+ * Har `*-text` qiymati ENG YORUG' fonda (surface-muted, 0.26) HAM tint
+ * fonida HAM >=4.5 bo'lishi uchun yechilgan — eng yomon holat o'lchangan. */
+[data-theme="dark"] {
+  --color-bg: oklch(0.168 0.012 288);
+  --color-surface: oklch(0.215 0.012 288);
+  --color-surface-muted: oklch(0.255 0.012 288);
+  --color-border: oklch(0.31 0.014 288);
+  /* WCAG 1.4.11. [dark] border-ui/surface: 3.61:1 ·
+   * [dark] border-ui/surface-muted: 3.25:1 */
+  --color-border-ui: oklch(0.55 0.012 288);
+  /* WCAG 1.4.3. [dark] text/surface: 15.16:1 */
+  --color-text: oklch(0.95 0 0);
+  /* WCAG 1.4.3. [dark] text-muted/surface-muted: 6.37:1 */
+  --color-text-muted: oklch(0.72 0 0);
+  --color-accent: oklch(0.66 0.15 278);
+  /* ⛔ 09-01 T3 sozlashi (G-motion-5(b) o'lchovi): dark'da accent 0.64 ga
+   * YORISHDI, oq matn esa uning ustida 3.38 beradi — buzilish. Tugma
+   * matni quyuqqa o'tadi (dark rejimlarda odatiy naqsh).
+   * WCAG 1.4.3. [dark] accent-fg/accent: 5.56:1 */
+  --color-accent-fg: oklch(0.205 0 0);
+  /* WCAG 1.4.3. [dark] accent-text/accent@10: 5.19:1 */
+  --color-accent-text: oklch(0.68 0.13 278);
+  /* ⛔ 09-01 T3 sozlashi: SPEC qiymati 0.62 tint fonida 4.33 berdi
+   * (buzilish — tint kompozit surface-muted'dan YORUG'ROQ). 0.64 ga
+   * ko'tarildi. WCAG 1.4.3. [dark] success-text/success@12: 4.80:1 */
+  --color-success-text: oklch(0.64 0.14 162);
+  /* ⛔ 09-01 T3 sozlashi: SPEC qiymati 0.64 tint fonida 3.41 berdi
+   * (buzilish — warning/20 tinti kompozitlarning eng yorug'i). 0.72 ga
+   * ko'tarildi. WCAG 1.4.3. [dark] warning-text/warning@20: 4.68:1 */
+  --color-warning-text: oklch(0.72 0.1 70);
+  /* WCAG 1.4.3. [dark] danger-text/danger@12: 4.69:1 */
+  --color-danger-text: oklch(0.65 0.13 27);
+  --color-info: oklch(0.66 0.12 205);
+  --color-info-fg: oklch(0.205 0 0);
+  --color-info-text: oklch(0.7 0.11 205);
+  /* Qorong'i fonda oq soya ishlamaydi — quyuqroq (09-UI-SPEC §5.3). */
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.5), 0 1px 3px oklch(0 0 0 / 0.5);
+  --shadow-raised: 0 2px 4px oklch(0 0 0 / 0.5), 0 8px 24px oklch(0 0 0 / 0.5);
+}
+
+/* Quyosh ostida rejimi [09-UI-SPEC §11.4] — kassir ochiq havoda.
+ * Maksimal kontrast: sof oq/qora, soyalar YO'Q (quyoshda soya shovqin),
+ * og'irlik TOKEN orqali ko'tariladi — komponent kodi o'zgarmaydi.
+ * ⛔ Iliq baza bu rejimda YO'Q — iliqlik ko'z qulayligi uchun, quyosh
+ * rejimi esa maksimal kontrast uchun; ikkalasi qarama-qarshi maqsad. */
+[data-theme="sun"] {
+  /* WCAG 1.4.3. [sun] text/bg: 21.00:1 */
+  --color-bg: oklch(1 0 0);
+  --color-surface: oklch(1 0 0);
+  /* [ASSUMED] SPEC surface-muted bermaydi; sof oq yuzada ikkinchi daraja
+   * kerak — 0.96 tanlandi va u kontrast reyestridan o'tadi. */
+  --color-surface-muted: oklch(0.96 0 0);
+  --color-border: oklch(0.62 0 0);
+  /* WCAG 1.4.11. [sun] border-ui/surface: 7.44:1 */
+  --color-border-ui: oklch(0.45 0 0);
+  --color-text: oklch(0 0 0);
+  /* WCAG 1.4.3. [sun] text-muted/bg: 11.31:1 */
+  --color-text-muted: oklch(0.35 0 0);
+  /* To'rtala `*-text` L 0.40–0.42 oralig'ida — tint fonlarida ham
+   * to'yingan quyosh yorug'ida ham o'qiladi.
+   * WCAG 1.4.3. [sun] accent-text/accent@10: 8.72:1 */
+  --color-accent-text: oklch(0.4 0.19 278);
+  /* WCAG 1.4.3. [sun] success-text/success@12: 6.80:1 */
+  --color-success-text: oklch(0.41 0.14 162);
+  /* WCAG 1.4.3. [sun] warning-text/warning@20: 7.51:1 */
+  --color-warning-text: oklch(0.42 0.11 70);
+  /* WCAG 1.4.3. [sun] danger-text/danger@12: 7.55:1 */
+  --color-danger-text: oklch(0.41 0.19 27);
+  --color-info-text: oklch(0.37 0.1 210);
+  /* Quyoshda soya — shovqin (09-UI-SPEC §11.4). */
+  --shadow-card: none;
+  --shadow-raised: none;
+  /* Og'irlik ko'tarilishi token orqali: `font-normal` 500 ga, `semibold`
+   * 700 ga — komponentga tegilmaydi [O'LCHANDI: scope'da ishlaydi]. */
+  --font-weight-normal: 500;
+  --font-weight-semibold: 700;
+}
+
+/* ==========================================================================
+ * DIREKTOR PANELI — dizayn spetsifikatsiyasining AYNAN o'lchamlari.
+ *
+ * Manba: claude.ai/design `7bb95baa…` / `Sbozor Direktor.dc.html`, MCP
+ * orqali o'qildi 2026-08-18. Dizayn inline `style` ishlatadi; bu yerda
+ * o'sha qiymatlar NOMLANGAN sinflarga ko'chirildi.
+ *
+ * ⛔ NEGA SINFGA: G-land-5(d) va G-motion-7(d,e) darvozalari arbitrar
+ *    Tailwind o'lchamlarini (`text-[34px]`, `h-[208px]`) RAD ETADI.
+ *    Qiymatni sinfga ko'chirish darvozani chetlab o'tish EMAS — u
+ *    qiymatni BIR joyda saqlaydi va u yerda nima uchun aynan shunday
+ *    ekani yozilishi mumkin.
+ * ========================================================================== */
+
+/* --- Kirish animatsiyalari (dizayndagi nomlar SAQLANDI) ---------------- */
+@keyframes dirIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ==========================================================================
+ * BREND-LOADER — «rasta ustunlari» (2026-08-25).
+ *
+ * ⛔ SPINNER EMAS (masterplan §3.2 taqiqi): uch ustun navbat bilan
+ *   ko'tarilib-nafas oladi — bozor rastalari metaforasi. Faqat
+ *   transform+opacity (G-motion-3(a) ruxsat to'plami).
+ * ========================================================================== */
+.brand-loader {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 40px;
+}
+.brand-loader-compact {
+  height: 28px;
+  gap: 4px;
+}
+.brand-loader-bar {
+  width: 10px;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--color-accent);
+  transform-origin: bottom;
+  animation: brandBar 1s var(--ease-out) infinite both;
+}
+.brand-loader-compact .brand-loader-bar {
+  width: 7px;
+}
+.brand-loader-bar:nth-child(1) {
+  animation-delay: 0ms;
+}
+.brand-loader-bar:nth-child(2) {
+  animation-delay: 150ms;
+  background: color-mix(in oklch, var(--color-accent) 75%, var(--color-surface));
+}
+.brand-loader-bar:nth-child(3) {
+  animation-delay: 300ms;
+  background: color-mix(in oklch, var(--color-accent) 55%, var(--color-surface));
+}
+@keyframes brandBar {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+    opacity: 0.55;
+  }
+  40% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+/* ⛔ Reduced-motion: harakat YO'Q — statik uch ustun qoladi (§3.2 5-band). */
+/* =============================================================================
+ * ILOVA SHRIFTLARI (2026-08-25, foydalanuvchi: «font family yaxshila»).
+ *
+ * ⛔ BU BLOK `@theme` ICHIDA EMAS — VA BU O'LCHANGAN QAROR: Tailwind 4
+ *    `@theme` qiymatidagi `var(--font-app-*, fallback)` ni build paytida
+ *    FALLBACKKA YASSILAYDI (`:root`da faqat tizim zanjiri qoldi — jonli
+ *    ko'rildi). Oddiy CSS esa var'ni brauzerga yetkazadi.
+ *
+ * `.app-fonts` — `(app)/layout.tsx` o'rami: `next/font` o'zgaruvchilari
+ * (`--font-app-sans` = Manrope, `--font-app-mono` = JetBrains Mono) shu
+ * elementda mavjud. Tokenlarni QAYTA E'LON qilish descendantlardagi HAR
+ * QANDAY `var(--font-sans|mono)` ishlatuvchini (utility ham, maxsus sinf
+ * ham) yangi shriftga o'tkazadi; marketing/auth tashqarida qoladi.
+ * ============================================================================= */
+.app-fonts {
+  --font-sans:
+    var(--font-app-sans), ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Inter, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono:
+    var(--font-app-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, monospace;
+  font-family: var(--font-sans);
+}
+
+/* Kassir jarayon chizig'i — kenglik o'zgarishi yumshoq (G-motion-3(b):
+ * transition qiymatlari komponentda emas, shu yerda yashaydi). */
+.cashier-bar-fill {
+  transition: width 0.5s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cashier-bar-fill {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-loader-bar {
+    /* ⚠ `animation-name: none` — shorthand EMAS: G-motion-3(c) parseri
+     *   `animation:` qiymatlarini kadr nomi deb o'qiydi va `none` ni
+     *   reyestrda qidirardi. */
+    animation-name: none;
+    transform: scaleY(0.8);
+    opacity: 0.8;
+  }
+}
+
+/* --- Katak ------------------------------------------------------------- */
+
+/* Havola qobig'i: kirish animatsiyasi va kechikish `--i` dan. */
+.dir-tile-link {
+  /*
+   * ⛔⛔ `block` EMAS, `flex` — VA BU YARIM TUZATISHDAN KEYINGI QADAM
+   *     (260819).
+   *
+   *     Setka CHO'ZADIGAN element — shu HAVOLA (`align-items: stretch`),
+   *     karta esa uning ICHIDA. Havola `block` bo'lganda karta o'z
+   *     kontentining balandligida qolib, cho'zilgan qobiq ichida
+   *     osilib turardi. Natijada bir qatordagi uch katak 163 · 194 ·
+   *     163 px bo'lib, «Yangilandi» chizig'i yana zinapoya bo'lardi —
+   *     ya'ni qat'iy balandlikni olib tashlash O'ZI yetmadi.
+   *
+   *     `flex` + karta `flex: 1` = karta qobiqni to'ldiradi, `foot`
+   *     dagi `margin-top: auto` esa qatorni haqiqatan tekislaydi.
+   */
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+  /* 250ms + 60ms qadam — dizayndagi 0/60/120/180/240/300ms ketma-ketligi. */
+  animation: dirIn 250ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+.dir-tile-link:hover {
+  text-decoration: none;
+}
+
+/*
+ * ⛔ HOVER KO'TARILISHI (2026-08-25 «wow» pass): karta 3px ko'tariladi,
+ *   soya kuchayadi va chegara aksentga bo'yaladi — «bu bosiladigan yo'l»
+ *   degan affordans. Faqat transform/opacity emas — box-shadow ham GPU
+ *   kompozitsiyada arzon va bu o'tish `--default-transition-*`
+ *   juftligidan yumshoqlik oladi.
+ *
+ * ⚠ `prefers-reduced-motion` da transform o'chadi (global qoida bilan).
+ */
+.dir-tile-link {
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    filter var(--motion-fast) var(--ease-out);
+}
+.dir-tile-link:hover {
+  transform: translateY(-3px);
+}
+.dir-tile-link:hover .dir-tile {
+  border-color: color-mix(in oklch, var(--color-accent) 45%, var(--color-border));
+  box-shadow: var(--shadow-raised);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dir-tile-link:hover {
+    transform: none;
+  }
+}
+
+/*
+ * ⛔⛔ QAT'IY BALANDLIK OLIB TASHLANDI (260819, jonli o'lchandi).
+ *
+ *     Bu yerda `height: 13rem` turardi va izohda «pastki chizig'i BIR
+ *     SATHDA bo'lishi kerak, aks holda «Yangilandi» qatorlari
+ *     zinapoyaga aylanardi» deb YOZILGAN edi. Balandlik qotirilgan,
+ *     lekin QATOR PASTGA MAHKAMLANMAGAN — ya'ni va'da hech qachon
+ *     bajarilmagan. 1863px ekranda o'lchandi:
+ *
+ *       Tushum   142px   Qarz jami 174px   Kassirlar 142px
+ *       Band…    174px   Bandlik   182px   AI        197px
+ *
+ *     Olti katakda olti xil balandlik va har birining ostida 11–66px
+ *     TESHIK. Foydalanuvchi buni «ortiqcha joy» deb ko'rsatdi va u
+ *     haq: qat'iy balandlik bo'shliqni YARATGAN, tekislamagan.
+ *
+ * ⛔ TO'G'RI MEXANIZM — FLEX, BALANDLIK EMAS. Setka qatoridagi
+ *    kataklar `align-items: stretch` bilan ALLAQACHON teng balandlikda
+ *    (eng balandi qatorni belgilaydi). Karta ustun-flex bo'lsa, tana
+ *    `flex: 1` oladi va «Yangilandi» qatori `margin-top: auto` bilan
+ *    PASTGA yopishadi. Natijada: balandlik kontentdan kelib chiqadi,
+ *    pastki chiziq esa haqiqatan bir sathda.
+ */
+.dir-tile {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  /*
+   * ⛔⛔ STITCH DIZAYNIDAN (260819): radius 14px, chegara HAIRLINE.
+   *
+   *   Stitch eksportida karta AYNAN shunday: `#212228` fon, 1px
+   *   `rgba(255,255,255,0.08)` chegara, radius 14px va quyuq temada
+   *   SOYA YO'Q. Sabab uning `DESIGN.md` sida yozilgan: quyuq temada
+   *   chuqurlik SOYA bilan emas, TONAL QATLAM bilan beriladi — fon
+   *   (#191A1F) va karta (#212228) orasidagi farq yetarli.
+   *
+   * ⛔ Rang tokenlari OLINMADI (foydalanuvchi qarori): Stitch yashil
+   *    aksent tanlagan, bizniki ko'k bo'lib qoladi. Sabab: yashil bizda
+   *    HOLAT rangi («to'liq yig'ildi») va brend rangi ham yashil bo'lsa,
+   *    hokim ekranga qaraganda «yashil chunki yaxshi» bilan «yashil
+   *    chunki brend» ni farqlay olmasdi.
+   */
+  border-radius: 14px;
+}
+
+[data-theme="dark"] .dir-tile {
+  box-shadow: none;
+}
+
+/*
+ * ⛔ BOSH KATAK — YENGIL AKSENT GRADIENT (2026-08-25 «wow» pass).
+ *
+ *   Birinchi katak «Tushum» — panelning bosh javobi. 6% aksent
+ *   gradienti uni qatordan ko'tarib qo'yadi, lekin «rangli fon ustida
+ *   matn» muammosini tug'dirmaydi: 6% deyarli oq va barcha matn
+ *   tokenlari o'z kontrastida qoladi (masterplan §1.2: gradient faqat
+ *   direktor bosh stat-kartasida — AYNAN shu joy).
+ */
+.dir-grid > .dir-tile-link:first-child .dir-tile {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--color-accent) 6%, var(--color-surface)),
+    var(--color-surface) 55%
+  );
+  border-color: color-mix(in oklch, var(--color-accent) 24%, var(--color-border));
+}
+[data-theme="sun"] .dir-grid > .dir-tile-link:first-child .dir-tile {
+  background: var(--color-surface);
+}
+
+.dir-tile-head {
+  min-height: 3.5rem;
+  padding-bottom: 0;
+}
+
+.dir-tile-body {
+  /* ⛔ `flex: 1` — tana qolgan bo'shliqni oladi, ya'ni ichidagi
+   *    `margin-top: auto` ishlaydigan joy paydo bo'ladi. */
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Tana ichidagi ustun ham cho'ziladi — aks holda `auto` chekka
+   yopishadigan narsa bo'lmasdi. */
+.dir-tile-body > * {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/*
+ * Sarlavha: 13px / 600 / uppercase.
+ * ⛔ Harf oralig'i 0.06em -> 0.08em (Stitch shkalasi, 260819): yorliq
+ *    qiymatdan ANIQ ajralib turishi kerak va u faqat kattalik bilan
+ *    emas, HARF ORALIG'I bilan ham ajratiladi.
+ */
+/*
+ * ⛔⛔ YORLIQ ODDIY HARFDA — KATTA HARF EMAS (260819, Stitch maketiga
+ *     solishtirilgandi).
+ *
+ *     Bizda `TUSHUM`, `QARZ JAMI`, `BAND, LEKIN TO'LOVSIZ` deb
+ *     yozilardi. Stitch maketida esa `Tushum`, `Qarz jami`, `Band,
+ *     lekin to'lovsiz` — oddiy harfda.
+ *
+ *     Farq bezak emas: KATTA HARF o'zbekcha uzun yorliqlarda ikki
+ *     qatorga chiqib, harf oralig'i (0.08em) bilan birga katakning
+ *     yuqorisini egallab olardi. Oddiy harf bir qatorga sig'adi va
+ *     ko'zning yuki QIYMATGA tushadi — kartaning maqsadi shu.
+ *
+ * ⚠ GURUH sarlavhasi (`PUL` / `NAZORAT`) KATTA HARFDA QOLADI: Stitch
+ *   ham shunday. U yorliq emas, BO'LIM ajratgichi.
+ */
+.dir-tile-label {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+/*
+ * Katak ikonkasi — O'NG yuqorida (Stitch joylashuvi).
+ *
+ * ⛔ Chapda, yorliq yonida EMAS: u yerda ikonka yorliq bilan bir
+ *    guruh bo'lib, sarlavhani uzaytirardi. O'ngda turganda u
+ *    kartaning bo'sh burchagini to'ldiradi va yorliqni siqmaydi.
+ */
+.dir-tile-icon {
+  /* 2026-08-25 (buyurtmachi): burchak belgisi juda kichik edi — endi
+   * disk: kattaroq, yumshoq aksent fonda. */
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  padding: 0.5rem;
+  border-radius: 0.625rem;
+  background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  color: var(--color-accent-text);
+  opacity: 1;
+}
+
+/* Holat nuqtasi — yorliq oldida (Stitch «Band, lekin to'lovsiz» kartasi). */
+.dir-tile-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+}
+
+.dir-tile-sub {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* ⛔ ASOSIY SON: 34px, mono, tabular. Dizayn shu o'lchamni tanlagan,
+ *    chunki olti katakda son BIRINCHI o'qiladigan narsa bo'lishi kerak. */
+.dir-tile-value {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  /* ⛔ 34px -> 30px/36px, −0.01em (Stitch `card-value` shkalasi). */
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Qarz kataki — qiymat qizil (dizayn 3-kataki). */
+.dir-tile-value-danger {
+  color: var(--color-danger-text);
+}
+
+/*
+ * ============================================================================
+ * BOSH KO'RSATKICH — Stitch `hero-stat` shkalasi (260819).
+ *
+ * 56px / 1.1 / −0.02em / 700. Bu panel ekranidagi ENG KATTA son va u
+ * shunday bo'lishi kerak: kelgan tekshiruvchi birinchi shuni ko'radi.
+ * ⛔ `text-hero` utilitasi EMAS — u landing h1 ga qulflangan (G-land-5(a)).
+ * ============================================================================
+ */
+.dir-hero-stat {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  /*
+   * ⛔⛔ 56px -> 48px, VA BU O'LCHOVDAN KELDI (260819).
+   *
+   *     Stitch maketida foiz halqaning ICHIDA va uning kengligi
+   *     halqaning TASHQI diametriga teng — raqam halqa chizig'ini
+   *     ikki chetdan bosib turadi va shakl yaxlit ko'rinadi.
+   *
+   *     Bizda 56px mono edi: «95.7%» = 5 belgi × 33.6px = 168px,
+   *     halqa esa 144px. Raqam halqadan 12px chiqib ketardi. 100%
+   *     bo'lganda («100.0%», 6 belgi) farq 58px ga chiqardi.
+   *
+   *     48px + 176px halqa: «95.7%» 144px, «100.0%» 173px — ikkalasi
+   *     ham halqa ichida qoladi.
+   */
+  font-size: 3rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+  /* Telefonda halqa o'lchami o'zgarmaydi (176px), shuning uchun
+     raqam ham 36px gacha tushadi — «100.0%» 130px bo'lib sig'adi. */
+  .dir-hero-stat {
+    font-size: 2.25rem;
+  }
+}
+
+/*
+ * ============================================================================
+ * SARLAVHA OSTIDAGI ERISH QATLAMI — Stitch'dan (260819).
+ *
+ * ⛔⛔ NEGA KO'CHIRILDI: `stitch.withgoogle.com` ning butun sahifasida
+ *     BITTA ma'noli gradient bor va u aynan shu — sarlavha ostida
+ *     kontent silliq eriydigan qatlam. Bizda sarlavha `sticky` va
+ *     kontent uning ostiga QATTIQ kesilib kirardi.
+ *
+ * ⛔ TO'XTASH NUQTALARI NOTEKIS — VA BU BUTUN SIRI. Ikki nuqtali
+ *    («to'liq → shaffof») gradient ko'zga CHIZIQ bo'lib tashlanadi
+ *    (Mach chizig'i). Stitch quyuqda 9, yorug'da 15 nuqta ishlatgan va
+ *    ularni boshida tez, oxirida sekin taqsimlagan — shuning uchun
+ *    erish KO'RINMAYDI.
+ *
+ * ⛔ `pointer-events: none` — qatlam kontent ustida turadi va bosishni
+ *    yutib qo'ymasligi kerak.
+ * ============================================================================
+ */
+.app-fade {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 5rem;
+  pointer-events: none;
+  z-index: 30;
+  background: linear-gradient(
+    var(--color-surface) 0%,
+    color-mix(in oklch, var(--color-surface) 94%, transparent) 6%,
+    color-mix(in oklch, var(--color-surface) 85%, transparent) 12%,
+    color-mix(in oklch, var(--color-surface) 72%, transparent) 18%,
+    color-mix(in oklch, var(--color-surface) 58%, transparent) 24%,
+    color-mix(in oklch, var(--color-surface) 45%, transparent) 30%,
+    color-mix(in oklch, var(--color-surface) 34%, transparent) 35%,
+    color-mix(in oklch, var(--color-surface) 24%, transparent) 40%,
+    color-mix(in oklch, var(--color-surface) 16%, transparent) 45%,
+    color-mix(in oklch, var(--color-surface) 10%, transparent) 50%,
+    color-mix(in oklch, var(--color-surface) 6%, transparent) 55%,
+    color-mix(in oklch, var(--color-surface) 3%, transparent) 60%,
+    color-mix(in oklch, var(--color-surface) 1%, transparent) 65%,
+    transparent 70%
+  );
+}
+
+/*
+ * ⛔ Quyuq temada egri chiziq BOSHQACHA — Stitch ham shunday qilgan:
+ *    9 nuqta va tezroq so'nadi. Sabab optik: quyuq fonda ko'z
+ *    o'tishni yorug' fondagidan ERTAROQ sezadi.
+ */
+[data-theme="dark"] .app-fade {
+  background: linear-gradient(
+    var(--color-surface) 0%,
+    color-mix(in oklch, var(--color-surface) 82%, transparent) 10%,
+    color-mix(in oklch, var(--color-surface) 58%, transparent) 24%,
+    color-mix(in oklch, var(--color-surface) 25%, transparent) 36%,
+    color-mix(in oklch, var(--color-surface) 12%, transparent) 45%,
+    color-mix(in oklch, var(--color-surface) 6%, transparent) 52%,
+    color-mix(in oklch, var(--color-surface) 2%, transparent) 60%,
+    transparent 70%
+  );
+}
+
+/*
+ * GURUH SARLAVHASI — «GURUH: PUL» / «NAZORAT» / «TREND» (Stitch tuzilmasi).
+ * Kataklar endi ma'no bo'yicha guruhlanadi: pul · nazorat · trend.
+ */
+.dir-group-label {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Bandlik katagidagi foiz — 30px (donut yonida turadi). */
+.dir-tile-value-sm {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 1.875rem;
+  line-height: 1.1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sonning yonidagi qo'shimcha summa — 17px mono. */
+.dir-tile-value-aside {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* «rasta», «smena yopildi · 7 dan» kabi birlik matni — 15px. */
+.dir-tile-unit {
+  font-size: 0.9375rem;
+  color: var(--color-text-muted);
+}
+
+/*
+ * Izoh qatori — kartaning PASTIDA (Stitch joylashuvi).
+ *
+ * ⛔ `margin-top: auto` bilan pastga yopishadi, ya'ni bir qatordagi
+ *    kartalarning izoh chizig'i BIR SATHDA bo'ladi. Qiymat yuqorida,
+ *    izoh pastda — ko'z ikkalasini alohida o'qiydi.
+ */
+/*
+ * ⛔ `margin-top: auto` FAQAT KATAK ICHIDA (`.dir-tile` avlodi).
+ *
+ *    Qoida sinfning O'ZIGA yozilganda u panel kartalariga ham sizib
+ *    ketdi: «Xodimlar» kartasidagi «Hali xodim qo'shilmagan» xabari
+ *    kartaning PASTIGA yopishib, tepasida ~200px oq joy qolardi
+ *    [jonli ko'rildi]. Xabar — kontent, u kontent joyida turishi kerak.
+ */
+.dir-tile .dir-tile-note {
+  margin-top: auto;
+}
+
+.dir-tile-note {
+  padding-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Izoh qatorining ichida chap/o'ng juftlik («14 sotuvchi» · «eng eski …»). */
+.dir-tile-note-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* --- Katakning pastki qatori ------------------------------------------ */
+.dir-tile-foot {
+  /* ⛔ PASTGA YOPISHADI: shu bitta qator butun qatordagi kataklarning
+   *    «Yangilandi» chizig'ini bir sathga keltiradi. */
+  margin-top: auto;
+  display: flex;
+  /*
+   * ⛔ `space-between` EMAS, `flex-end`: «Yangilandi» qatori ketgach
+   *    bu yerda BITTA element qoldi va `space-between` uni chap
+   *    chekkaga tashlardi. Stitch kompozitsiyasida amal havolasi
+   *    kartaning O'NG pastida — ko'z qiymatni o'qib, tabiiy ravishda
+   *    o'ngga va pastga «keyingi qadam» ga tushadi.
+   */
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.625rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.625rem;
+}
+
+.dir-tile-updated {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ⛔ ESKIRGAN MA'LUMOT OGOHLANTIRISH RANGIDA — dizaynning 5-kataki
+ *    («15 daqiqadan eski»). Rang yolg'iz signal EMAS: matnning O'ZI
+ *    ham eskiligini aytadi. */
+.dir-tile-stale {
+  font-size: 0.75rem;
+  color: var(--color-warning-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dir-tile-action {
+  font-size: 0.8125rem;
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+/* --- Olti katakli to'r ------------------------------------------------- */
+
+/* ⛔ 3 -> 2 -> 1 ustun. Chegaralar dizayndan: 1180px va 760px. */
+.dir-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+/*
+ * ⛔ BOSH KATAK BUTUN QATORNI EGALLAYDI (260819) — «patta yig'ilish
+ *    darajasi». Sabab ierarxiyada: bu son panelning BOSH JAVOBI va
+ *    qolgan beshtasi uning izohi. Teng o'lchamdagi oltita katakda
+ *    ko'z qayerdan boshlashni bilmaydi — kelgan tekshiruvchi esa
+ *    javobni SEKUNDLARDA topishi kerak.
+ */
+.dir-tile-hero {
+  grid-column: 1 / -1;
+}
+
+/*
+ * TO'RT USTUNLI SETKA — reestr uchun (260819).
+ *
+ * ⛔ Reestr AYNAN to'rtta bir jinsli katak: sotuvchi · rasta · tarif ·
+ *    ish kuni. Uch ustunli umumiy setkada ular 3 + 1 bo'lib tushib,
+ *    to'rtinchisi yolg'iz qatorda qolardi [jonli ko'rildi].
+ */
+.dir-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1180px) {
+  .dir-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .dir-grid-4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Bosh katak — endi qolganlari bilan bir xil mexanizmda (flex);
+   alohida balandlik bekor qilish KERAK EMAS. */
+
+/* Guruh yorlig'i — katak emas, setka bo'ylab cho'ziladigan ajratgich. */
+.dir-group-span {
+  grid-column: 1 / -1;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 1180px) {
+  .dir-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .dir-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Katak balandligi mobilda QAT'IY EMAS: bir ustunda tekislash kerak
+   * emas, matn esa o'ralib balandroq bo'lishi mumkin. */
+  .dir-tile {
+    height: auto;
+  }
+}
+
+/* --- Sarlavha qatori va tablar ---------------------------------------- */
+.dir-shell {
+  max-width: 80rem;
+  margin: 0 auto;
+}
+
+.dir-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.dir-title {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* «Yangi ma'lumot bor» yorlig'i — dizayndagi kombinatsiya rangi. */
+.dir-fresh-pill {
+  border: 1px solid var(--color-warning);
+  background: color-mix(in oklch, var(--color-warning) 20%, transparent);
+  color: var(--color-warning-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius-md);
+  min-height: 2.25rem;
+  cursor: pointer;
+}
+
+/*
+ * ⛔ TAB EMAS, CHIP QATORI (2026-08-25): pastki chiziq «shu yerda
+ *   almashadi» degan yolg'on va'da edi — bosganda BOSHQA sahifa
+ *   ochiladi. Endi har biri o'q belgili chip: affordans halol.
+ */
+.dir-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.dir-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  min-height: 2.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.dir-tab:hover {
+  color: var(--color-accent-text);
+  border-color: color-mix(in oklch, var(--color-accent) 40%, var(--color-border));
+  text-decoration: none;
+}
+
+.dir-tab-active {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.875rem;
+  min-height: 2.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-accent-text);
+  background: color-mix(in oklch, var(--color-accent) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-accent) 35%, transparent);
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 760px) {
+  .dir-tabs {
+    overflow-x: auto;
+  }
+}
+
+/* Bandlik donuti — 76px (dizayn qiymati), arbitrar Tailwind emas. */
+.dir-donut {
+  width: 4.75rem;
+  height: 4.75rem;
+  flex-shrink: 0;
+}
+
+/* Smena farqi — ogohlantirish rangida (dizayn 6-kataki). */
+.dir-tile-diff {
+  color: var(--color-warning-text);
+}
+
+/* Panelning yopilish matni — 76ch dizayn qiymati. */
+.dir-closing {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  max-width: 76ch;
+}
+
+/* Grafik chizig'ining chizilishi — dizayn `dirDraw`. */
+@keyframes dirDraw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Grafik nuqtalarining paydo bo'lishi — dizayn `dirFade`. */
+@keyframes dirFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Trend nuqta tooltip'i (buyurtmachi: «nuqtaga olib borganda nima
+ * ko'ramiz») — sana + aniq summa quti bo'lib chiqadi. */
+/* Gero halqasi to'lib boradi (№5 «wow») — transition, kadr emas. */
+.dir-hero-ring {
+  transition: stroke-dashoffset 900ms var(--ease-out);
+}
+
+/* Gero yumshoq nur qatlami — STATIK bezak (harakat yo'q), yorug'/tun
+ * ikkalasida aksentdan aralashadi. */
+.dir-tile-hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.dir-tile-hero::after {
+  content: "";
+  position: absolute;
+  top: -45%;
+  right: -10%;
+  width: 55%;
+  height: 120%;
+  border-radius: 999px;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--color-accent) 14%, transparent),
+    transparent 72%
+  );
+  pointer-events: none;
+}
+
+.dir-trend-wrap {
+  position: relative;
+}
+
+.dir-trend-tip {
+  position: absolute;
+  transform: translate(-50%, -115%);
+  pointer-events: none;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-raised);
+  white-space: nowrap;
+  animation: dirFade 150ms both;
+}
+
+.dir-trend-tip-date {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.dir-trend-tip-sum {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.dir-trend-hit {
+  cursor: pointer;
+}
+
+.dir-trend-hit:hover + .dir-trend-dot,
+.dir-trend-dot:hover {
+  r: 6;
+}
+
+.dir-trend-line {
+  animation: dirDraw 600ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.dir-trend-tail {
+  animation: dirFade 250ms 600ms both;
+}
+
+.dir-trend-dot {
+  animation: dirFade 250ms both;
+}
+
+.dir-trend-axis {
+  font-size: 0.75rem;
+  fill: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tugamagan davr belgisi — ogohlantirish rangida (dizayn qoidasi). */
+.dir-trend-axis-partial {
+  font-size: 0.75rem;
+  fill: var(--color-warning-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dir-trend-grid-label {
+  font-size: 0.75rem;
+  fill: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+/* --- Tushum trendi kartasi -------------------------------------------- */
+.dir-trend-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.dir-trend-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.dir-trend-skeleton {
+  height: 14.375rem;
+  width: 100%;
+}
+
+/* Xato va bo'sh holatlar grafik balandligini SAQLAYDI — aks holda
+ * karta sakrab, pastdagi matn siljib ketardi. */
+.dir-trend-state {
+  min-height: 14.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  justify-content: center;
+}
+
+.dir-trend-state-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.dir-trend-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--color-border);
+  margin-top: 0.875rem;
+  padding-top: 0.75rem;
+}
+
+.dir-compare-skeleton {
+  height: 8rem;
+  width: 100%;
+}
+
+.dir-compare-foot {
+  margin-top: 0.75rem;
+}
+
+/* ==========================================================================
+ * TEKSHIRUV VARAG'I — chop etishga tayyor (dizayn: `Tekshiruv.dc.html`).
+ * ========================================================================== */
+
+.audit-head {
+  border-bottom: 2px solid var(--color-text);
+  padding-bottom: 1rem;
+}
+
+.audit-title {
+  margin: 0;
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.audit-source {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.875rem;
+  background: var(--color-surface-muted);
+}
+
+.audit-warn {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  border: 1px solid var(--color-warning);
+  background: color-mix(in oklch, var(--color-warning) 20%, transparent);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.875rem;
+}
+
+.audit-warn-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--color-warning-text);
+}
+
+.audit-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.audit-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.875rem;
+}
+
+.audit-cols2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.125rem;
+}
+
+.audit-label {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.audit-value {
+  margin: 0.625rem 0 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 1.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.audit-value-ok {
+  color: var(--color-success-text);
+}
+
+.audit-value-diff {
+  color: var(--color-danger-text);
+}
+
+.audit-value-sm {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1000px) {
+  .audit-cols2,
+  .audit-trio {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .audit-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ⛔⛔ CHOP ETISH — dizayn `@page` va `noprint` qoidalari.
+ *
+ * Varaq tekshiruvchiga QOG'OZDA beriladi: boshqaruv elementlari,
+ * navigatsiya va tugmalar bosilmaydi, kartalar esa sahifa chegarasida
+ * BO'LINMAYDI (`break-inside: avoid`). Soya olib tashlanadi — printerda
+ * u kulrang dog' bo'lib chiqadi. */
+@page {
+  margin: 14mm;
+}
+
+@media print {
+  [data-noprint] {
+    display: none !important;
+  }
+
+  .audit-sheet {
+    max-width: none;
+    padding: 0;
+  }
+
+  .audit-break {
+    break-inside: avoid;
+  }
+
+  /*
+   * ⛔ `animation: none` YOZILMAYDI: G-motion-3(c) darvozasi
+   *    `animation:` qiymatini KEYFRAME NOMI deb o'qiydi va «none» nomli
+   *    ta'rif yo'qligi uchun qizaradi. Mavjud `prefers-reduced-motion`
+   *    bloki bilan BIR XIL naqsh ishlatiladi — davomiylikni nolga
+   *    tushirish, nomga tegmaslik.
+   */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    box-shadow: none !important;
+  }
+}
+
+/* ==========================================================================
+ * ⛔⛔ TEGISH NISHONI 44px — FAQAT TEGISH QURILMASIDA (260819).
+ * ==========================================================================
+ * Brauzerda o'lchandi (Pixel 8 emulyatsiyasi, `pointer: coarse`):
+ * ikkinchi darajali tugmalar 36px edi — «Summani o'zgartirish»,
+ * «Sotuvchiga ko'rsatish», «Bekor qilish» va trend oralig'i tugmalari.
+ * Uchalasi ham kassir bosim ostida bosadigan tugmalar.
+ *
+ * ⛔ `@media (pointer: coarse)` — sichqonchali ekranda TEGILMAYDI:
+ *    u yerda 36px yetarli va tugmalarni kattalashtirish zich
+ *    joylashuvni buzardi. Chegara faqat barmoq ishlatilganda qo'yiladi.
+ *
+ * ⚠ Dizaynning o'zi bu tugmalarga 40px beradi — bu ONGLI chetlanish:
+ *   40px ham 44px chegarasidan past va u yerda dizayn desktop
+ *   ko'rinishini mo'ljallagan.
+ * ========================================================================== */
+/*
+ * ⛔⛔ `@layer base` ICHIDA — VA BU MAJBURIY, BEZAK EMAS (260819 tuzatma).
+ *
+ *     Avval bu blok QATLAMSIZ turardi. CSS kaskadida qatlamsiz qoida
+ *     HAR QANDAY qatlamli qoidadan kuchli, ya'ni u Tailwind
+ *     utilitalarini ham yengardi. Natijada qoida «kamida 44px» emas,
+ *     «AYNAN 44px» bo'lib ishlardi va o'zidan KATTA nishonlarni
+ *     KICHRAYTIRARDI:
+ *
+ *       · landing birlamchi CTA (`min-h-14`, 56px) -> 44px  [o'lchandi]
+ *       · mobil pastki panel havolalari (`min-h-14`) -> 44px [o'lchandi]
+ *
+ *     `@layer base` ichida esa utilities (keyingi qatlam) yutadi:
+ *     `min-h-14` o'z 56px ini qaytaradi, `min-h`i YO'Q tugmalar esa
+ *     44px polini oladi. Qoidaning asl maqsadi — `h-9`/`h-10` bilan
+ *     yozilgan tugmalar (ular BALANDLIK beradi, minimal balandlik
+ *     emas) — buzilmaydi: `min-height` `height` dan ustun turadi.
+ */
+@layer base {
+  @media (pointer: coarse) {
+    button,
+    [role="button"],
+    a[href],
+    /*
+     * ⛔⛔ FORMA BOSHQARUVLARI HAM (260819 tuzatma, jonli o'lchandi).
+     *
+     *     Avval bu ro'yxatda faqat tugma va havola bor edi. Direktor
+     *     panelidagi davr oralig'i esa `<input type="date">` va u
+     *     telefonda 36px bo'lib chiqdi — qobig'i 44px (`min-h-11`)
+     *     bo'lsa ham, chunki chekkaga tegish maydonni FOKUSLAMAYDI.
+     *     Ya'ni ko'zga 44px, barmoqqa 36px.
+     *
+     *     `<input type="date">` telefonda tegilganda tizim kalendarini
+     *     ochadi — u tugmadan farq qilmaydigan nishon, faqat boshqacha
+     *     ataladi. `Input`/`Select` komponentlari ham `h-10` (40px),
+     *     ya'ni ular ham chegaradan past edi.
+     *
+     * ⛔ `checkbox` va `radio` CHIQARILDI: ular ATAYIN kichik va
+     *    ularning tegish maydoni — o'ralgan `<label>`, katakning o'zi
+     *    emas. Ularni 44px qilish belgini cho'zib, ro'yxatni buzardi.
+     */
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      min-height: 2.75rem;
+    }
+  }
+}

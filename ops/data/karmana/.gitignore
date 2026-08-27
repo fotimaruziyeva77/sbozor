@@ -1,0 +1,25 @@
+# SBOZOR — Karmana bozorining REAL ma'lumot fayllari repozitoriyga TUSHMAYDI.
+#
+# NEGA (bu qoida qaytarib bo'lmaydigan xatoning oldini oladi):
+#   Sotuvchining F.I.Sh. va telefon raqami — SHAXSIY MA'LUMOT
+#   (O'zbekiston Respublikasining "Shaxsga doir ma'lumotlar to'g'risida"gi
+#   qonuni; loyihaning "davlat bosqichiga tayyor" maqsadi shuni talab
+#   qiladi). Git tarixiga bir marta tushgan fayl esa keyin `git rm` bilan
+#   ham YO'QOLMAYDI — u har bir klon, har bir fork va har bir CI
+#   keshida qoladi. Tarixni qayta yozish yagona yo'l bo'lib qolardi.
+#
+#   Shuning uchun bu katalogda FAQAT yo'riqnoma (README.md) va shu fayl
+#   saqlanadi. Shablon repoda saqlanmaydi — u
+#   `GET /api/v1/imports/template?kind=stalls` dan olinadi (yagona
+#   haqiqat manbai; repodagi nusxa zona/toifa ro'yxati o'zgarganda
+#   jimgina eskirardi).
+#
+# T-02-128 — bu qoida `git check-ignore` bilan mexanik tekshiriladi.
+
+*.xlsx
+*.xls
+*.csv
+
+# Ish katalogi — skriptning `--out` va `--file` yo'llari shu yerni
+# ko'rsatadi (README, "Tartib" bo'limi).
+local/

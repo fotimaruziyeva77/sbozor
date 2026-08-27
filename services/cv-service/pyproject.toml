@@ -1,0 +1,132 @@
+[project]
+name = "cv-service"
+version = "0.1.0"
+description = "SBOZOR cv-service — zona bandligini aniqlash (ONNX + supervision), taskiq worker"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    # =====================================================================
+    # ⚠⚠ LOYIHANING IKKINCHI BOG'LIQLIK TO'PLAMI — VA U ATAYIN ALOHIDA.
+    #
+    # `core-api` `opencv` ni ATAYIN rad etadi va bu taqiq MEXANIK
+    # (`tests/unit/test_runtime_deps.py:91-94` — IKKALA guruhda ham).
+    # Ya'ni CV kutubxonalarini mavjud `tests` konteyneriga olib kirish
+    # o'lchangan darvozani BO'SHATISH bo'lardi. Qaror va rad etilgan
+    # muqobil `services/cv-service/README.md` da yozilgan (W0-2).
+    #
+    # ⚠⚠ `rfdetr` BU YERDA YO'Q VA U HECH QACHON QO'SHILMAYDI (D-04).
+    # `torch` uning ekstrasi emas, MAJBURIY bog'liqligi (~800 MB) —
+    # o'rnatilishi bilan ishlab chiqarish image'i o'sha hajmni oladi.
+    # Ishlab chiqarish yo'li: `onnxruntime` + OLDINDAN eksport qilingan
+    # `.onnx` (retsept: `ops/models/README.md`). PML variantlari
+    # (`rfdetr-plus`) esa alohida distributivda va ular ham TAQIQ (D-03).
+    #
+    # Uchala taqiq ham `tests/unit/test_license_fence.py` da UCH QATLAMDA
+    # qulflangan: manifest, `uv.lock` va o'rnatilgan metadata.
+    # =====================================================================
+    #
+    # --- Aniqlash yadrosi (05-07) ---
+    "onnxruntime==1.28.0",
+    "supervision==0.30.0",
+    "opencv-python-headless==4.14.0.94",
+    "numpy==2.5.1",
+    "Pillow==12.3.0",
+    # --- Navbat va ombor (05-08) ---
+    #
+    # `arq` ATAYIN ISHLATILMADI (D-06, `core-api` bilan bir xil sabab):
+    # u `redis[hiredis]<6` talab qiladi. `taskiq-redis 1.2.3` esa
+    # `redis<9,>=8.0.0` — quyidagi pin bilan AYNAN mos.
+    #
+    # `aioboto3` ham ATAYIN yo'q (D-17): u `aiobotocore[boto3]==2.25.1` ni
+    # qattiq qadaydi va pinlarni pastga tortadi (EMPIRIK tasdiqlangan).
+    "taskiq==0.12.4",
+    "taskiq-redis==1.2.3",
+    "redis[hiredis]==8.0.1",
+    "aiobotocore==3.9.0",
+    # --- Minimal HTTP yuzasi (D-23) ---
+    #
+    # ⚠ `cv-service` HTTP XIZMATI EMAS. FastAPI faqat health yuzasi uchun;
+    #   HTTP marshrutlari bundan KENGAYMAYDI (`app/main.py` docstringi).
+    "fastapi==0.140.13",
+    "uvicorn[standard]==0.51.0",
+    # --- Sozlama, jurnal, kuzatuv ---
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "structlog==26.1.0",
+    # ⚠ `SENTRY_DSN` `compose.yaml` da berilgan JARAYON `init_sentry()` ni
+    #   chaqirishi SHART — `tests/unit/test_sentry_processes.py` buni
+    #   compose'dan HOSILA qilib talab qiladi (04-13, §S-10).
+    "sentry-sdk[fastapi]==2.66.1",
+    # --- Baza (05-08: `occupancy_events` yozuvi) ---
+    "sqlalchemy[asyncio]==2.0.51",
+    "asyncpg==0.31.0",
+    # `ZoneInfo("Asia/Tashkent")` slim image'da BUSIZ yiqiladi.
+    "tzdata==2026.3",
+    # Modellar, enumlar, tenant konteksti — UCHALA servis uchun BIR manba.
+    "sbozor-core",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.0",
+    "mypy==2.3.0",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+]
+
+[tool.uv]
+# Virtual loyiha: `cv-service` ning o'zi paket sifatida qurilmaydi —
+# faqat bog'liqliklari sync qilinadi (`core-api` bilan bir xil qaror).
+package = false
+
+[tool.uv.sources]
+sbozor-core = { path = "../../packages/sbozor-core", editable = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# `.`      -> `app` paketi (rootdir `services/cv-service`, ya'ni
+#             `cv-tests` konteynerining `working_dir` i).
+# `tests`  -> `fixtures` paketi. ⚠ `tests/` ning O'ZI paket EMAS
+#             (`__init__.py` yo'q) — repo ildizidagi `tests/` bilan AYNAN
+#             bir xil shakl. Paket qilinsa `fixtures.detections` va
+#             `tests.fixtures.detections` bitta faylning IKKI nomi bo'lib
+#             qolardi va `mypy` uni rad etadi (o'lchandi, 2026-08-08).
+pythonpath = [".", "tests"]
+# ⚠ `-m "not model"` STANDART HOLAT: HAQIQIY `.onnx` artefaktini talab
+#   qiladigan testlar (`ops/models/rfdetr-large.onnx`) fazani
+#   BLOKLAMAYDI — bu `core-api` dagi `-m "not hardware"` qarorining aynan
+#   takrori va sabab bir xil: tashqi bog'liqlik hech qachon `Blocks:`
+#   bo'lmaydi (ROADMAP self-service qoidasi).
+addopts = "-q --strict-markers -m \"not model\""
+markers = [
+    "golden: oltin to'plamga qarshi ANIQLIK o'lchovi — real Karmana kadrlari kelmaguncha UXLAB YOTADI (W0-9, D-01)",
+    "model: haqiqiy ONNX artefaktini talab qiladi (`ops/models/rfdetr-large.onnx`) — standart zanjirdan CHETDA, `pytest -m model` bilan ishga tushadi",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# Testlarda `assert` — pytest'ning asosiy mexanizmi.
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = []
+# `fixtures` paketi test modullaridan import qilinadi (pytest `pythonpath`
+# bilan AYNAN bir xil yo'l).
+mypy_path = "tests"
+
+[[tool.mypy.overrides]]
+# `py.typed` YO'Q paketlar. `supervision` va `cv2` uchun rasmiy stub
+# paketi yo'q; `onnxruntime` va `aiobotocore` da ham marker fayli yo'q.
+# Chaqiruv joylari `Any` bilan ishlaydi va qaytgan qiymat DARHOL o'z
+# tipimizga o'giriladi (`core-api` dagi `openpyxl` qarori bilan bir xil).
+module = ["supervision.*", "cv2.*", "onnxruntime.*", "aiobotocore.*", "botocore.*"]
+ignore_missing_imports = true

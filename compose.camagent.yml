@@ -1,0 +1,90 @@
+# =============================================================================
+# CamAgent gateway — IXTIYORIY QATLAM (alohida fayl, asosiy compose.yaml
+# TEGILMAGAN).
+#
+# NIMA BU: WireGuard tunnel qurib bo'lmaydigan bozorlar uchun agent-kanal.
+# Bozor kompyuteridagi CamAgent (alohida repo: `Kamera/`) NVR'dan jadval
+# bo'yicha rasm oladi va SHU servisga TASHQARIDAN ulanib yuboradi
+# (WS + HTTPS, muzlatilgan protokol: services/camagent-gateway/docs/
+# protocol.md). Bozor modemida port ochilmaydi, NVR internetga
+# chiqarilmaydi — tunnel o'rnatish esa umuman kerak emas.
+#
+# NEGA ALOHIDA FAYL: compose.yaml ustidagi strukturaviy darvozalar
+# (test_storage_config.py va sheriklari) asosiy faylni parse qiladi;
+# ixtiyoriy qatlamni alohida faylda saqlash ularga umuman tegmaydi.
+#
+# ISHGA TUSHIRISH:
+#     docker compose -f compose.yaml -f compose.camagent.yml up -d --wait
+# (yoki barcha odatiy buyruqlarga `-f compose.camagent.yml` qo'shiladi)
+#
+# RASM QAYERGA TUSHADI: mavjud SeaweedFS bucket'iga (`sbozor-snapshots`),
+# `camagent/` prefiksi ostida, har rasm yonida `.json` sidecar bilan.
+# Alohida bucket ham, s3.json'da yangi identity ham KERAK EMAS — bu ATAYIN:
+# `test_exactly_one_identity` darvozasi identity sonini bittada qulflagan,
+# retention/orphan supurgilari esa faqat `{uuid}/{sana}/` prefikslarini
+# ko'radi, ya'ni `camagent/` ularga ko'rinmaydi va o'chirilmaydi.
+#
+# PANEL (dev-panel, vaqtinchalik): tashqariga OCHILMAYDI. VPS'da ko'rish:
+#     ssh -L 8787:127.0.0.1:8787 server
+# va pastdagi `ports:` qatorining izohini oching (127.0.0.1 ga bog'laydi,
+# T-04-02 buzilmaydi — tashqi interfeysga chiqmaydi).
+# =============================================================================
+
+services:
+  camagent-gateway:
+    build:
+      context: services/camagent-gateway
+    environment:
+      CAMAGENT_GW_HOST: 0.0.0.0
+      CAMAGENT_GW_PORT: "8787"
+      CAMAGENT_GW_DATA: /data
+      # Panel kaliti. BO'SH qoldirilsa har ishga tushishda TASODIFIY
+      # yangi kalit yaratiladi (jurnalda chiqadi) — ya'ni har restart
+      # paneldan chiqarib yuboradi. Doimiy qiymat bering (.env):
+      #   python -c "import secrets;print(secrets.token_urlsafe(24))"
+      CAMAGENT_GW_ADMIN_TOKEN: ${CAMAGENT_GW_ADMIN_TOKEN:-}
+      # Ishlab chiqarishda oldindan ma'lum KARMANA-TEST kodi yaratilmaydi.
+      CAMAGENT_GW_NO_BOOTSTRAP: "1"
+      # S3 — mavjud SeaweedFS, mavjud identity kalitlari, `camagent/` prefiksi.
+      CAMAGENT_GW_S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
+      CAMAGENT_GW_S3_ENDPOINT: ${S3_ENDPOINT_URL:-http://storage:8333}
+      CAMAGENT_GW_S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      CAMAGENT_GW_S3_SECRET_KEY: ${S3_SECRET_KEY}
+      CAMAGENT_GW_S3_PREFIX: camagent
+      # Jonli video (ixtiyoriy): MediaMTX + TURN sozlanganda to'ldiriladi.
+      # Bo'sh bo'lsa panel "yangilanuvchi rasm" rejimida ishlayveradi.
+      CAMAGENT_MEDIA_HOST: ${CAMAGENT_MEDIA_HOST:-}
+      CAMAGENT_MEDIA_SECRET: ${CAMAGENT_MEDIA_SECRET:-}
+      CAMAGENT_TURN_URL: ${CAMAGENT_TURN_URL:-}
+      CAMAGENT_TURN_USER: ${CAMAGENT_TURN_USER:-}
+      CAMAGENT_TURN_PASS: ${CAMAGENT_TURN_PASS:-}
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      # SQLite (gateway.db, WAL) + media konfiguratsiyasi. 12 bozor uchun
+      # SQLite o'lchangan va yetarli (CamAgent repo, yuk sinovi: 3360 rasm
+      # xatosiz); PostgreSQL'ga ko'chish yo'li integration.md 3-bo'limda.
+      # Zaxira: restic ro'yxatiga `camagent_data` volume'ini ham qo'shing.
+      - camagent_data:/data
+    # `ports:` ATAYIN YO'Q (T-04-02 bilan bir xil qoida). Tashqi yo'l —
+    # faqat nginx `location /api/v1/agent/`. Panel uchun SSH tunnel:
+    # ports:
+    #   - "127.0.0.1:8787:8787"
+    healthcheck:
+      # `python` konteynerda bor; `nc`/`curl` slim image'da yo'q.
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8787/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      storage:
+        condition: service_healthy
+    # Ko'p-loyihali serverning o'rnatilgan konvensiyasi
+    # (compose.host-nginx.yml izohiga qarang): chegarasiz konteyner
+    # shishganda OOM-killer qurboni BOSHQA loyiha bo'lardi.
+    mem_limit: 256m
+    cpus: 0.5
+    restart: unless-stopped
+
+volumes:
+  camagent_data:

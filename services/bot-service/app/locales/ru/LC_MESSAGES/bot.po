@@ -1,0 +1,136 @@
+# SBOZOR bot-service — RUS katalogi (D-30, D-31).
+#
+# ⛔⛔ BU FAYL MUSTAQIL TARJIMA VA U TRANSLITERATSIYA HOSILASI EMAS —
+#    G7-9 ning uchinchi bandi AYNAN SHU FAKT ustiga qurilgan.
+#
+#    `frontend/messages/ru.json` ham shunday. Ya'ni bu faylni LOTIN
+#    tokeni (`yig'im`, `do'kon`) bilan skanerlash MAZMUNIDAN QAT'I NAZAR
+#    har doim 0 qaytaradi va darvoza «mavjud bo'lib ko'rinib, hech
+#    nimani o'lchamaydigan» holatga tushardi. Shuning uchun taqiqlangan
+#    sinonimlar `ops/i18n/glossary.json` da PER-LOCALE yozilgan va bu
+#    yerda ruscha tokenlar (`лавк`, `магазин`) izlanadi.
+#
+# ⛔⛔ `сбор` TAQIQ RO'YXATIDA YO'Q va bu ATAYIN (07-UI-SPEC §14.5, M-11):
+#    u ruscha copy'da IKKI XIL MA'NODA ishlatiladi va uni taqiqlash
+#    1-6-fazaning 13 kalitini qizartirardi. Sabab `glossary.json` ning
+#    `notes` bo'limida so'z bilan yozilgan; egasi — 8-faza (O-03).
+#    ⚠ Shunga qaramay bu katalogda `сбор` ISHLATILMAYDI: reyestrdagi
+#      atama `патта` va yangi matn siljishni kuchaytirmasligi kerak.
+msgid ""
+msgstr ""
+"Project-Id-Version: sbozor-bot 0.1.0\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+
+# --- /start va menyu ---------------------------------------------------
+msgid "bot.start.greeting"
+msgstr ""
+"Здравствуйте! Это бот рынка.\n"
+"\n"
+"Нажмите кнопку ниже и поделитесь своим номером — после этого вы увидите "
+"здесь свой долг и оплаты."
+
+msgid "bot.start.bound"
+msgstr "Здравствуйте! Выберите одну из кнопок ниже."
+
+msgid "bot.shareContact"
+msgstr "Поделиться номером"
+
+msgid "bot.menu.debt"
+msgstr "Мой долг"
+
+msgid "bot.menu.payments"
+msgstr "Мои оплаты"
+
+msgid "bot.menu.more"
+msgstr "Ещё"
+
+# --- Bog'lanish (BOT-01) -----------------------------------------------
+msgid "bot.binding.neutral"
+msgstr "Связать не удалось. Обратитесь в администрацию рынка."
+
+msgid "bot.binding.ok"
+msgstr "Вы подключены. Теперь вы видите здесь свой долг и оплаты."
+
+# ⛔ 07-18 — MUSTAQIL TARJIMA, transliteratsiya hosilasi EMAS. Matnda
+#    «лавк»/«магазин» ham, «сбор» ham YO'Q (G7-9 per-locale taqiqi).
+msgid "bot.binding.director"
+msgstr "Вы подключены. Ежедневные сообщения по рынку будут приходить в этот чат."
+
+msgid "bot.notBound"
+msgstr "Сначала поделитесь своим номером: /start"
+
+msgid "bot.error.retry"
+msgstr "Сейчас ответить не удалось. Попробуйте позже."
+
+# --- Qoldiq (BOT-02, 1/2) ----------------------------------------------
+msgid "bot.summary.header"
+msgstr "Состояние на сегодня:"
+
+msgid "bot.summary.market"
+msgstr "Торговое место {stalls} — долг: {amount} сум."
+
+msgid "bot.summary.noStalls"
+msgstr "не закреплено"
+
+# --- To'lov tarixi (BOT-02, 2/2) ---------------------------------------
+#
+# ⛔ UCHTA SHAKL — ruschada 1 / 2-4 / 5+ va bu `nplurals=3` bilan
+#    deklaratsiya qilingan. Qo'lda yozilgan `if n == 1` shu yerda
+#    buzilardi.
+msgid "bot.payments.header.one"
+msgid_plural "bot.payments.header.many"
+msgstr[0] "Последняя {count} запись об оплате:"
+msgstr[1] "Последние {count} записи об оплате:"
+msgstr[2] "Последних {count} записей об оплате:"
+
+msgid "bot.payments.row"
+msgstr "{date} · место {stall}: патта {due} сум, оплачено {paid} сум — {state}"
+
+msgid "bot.payments.settled"
+msgstr "полностью"
+
+msgid "bot.payments.unsettled"
+msgstr "есть остаток"
+
+msgid "bot.payments.empty"
+msgstr "Записей об оплате не найдено."
+
+msgid "bot.payments.noMore"
+msgstr "Больше записей нет."
+
+# --- Qaysi BOZOR (WR-03) -----------------------------------------------
+#
+# ⛔ Taqiqlangan tokenlar (`лавк`, `магазин`) bu yerda YO'Q: savdo joyi —
+#    `место`, bozor esa `рынок` (reyestrdagi atamalar bilan bir xil).
+msgid "bot.payments.marketHeader"
+msgstr "По торговому месту {stalls}:"
+
+msgid "bot.payments.marketFallback"
+msgstr "По рынку {market}:"
+
+# --- Buzuq sahifa navbati (WR-02) --------------------------------------
+msgid "bot.payments.stale"
+msgstr "Данные страницы устарели. Нажмите «Мои оплаты» ещё раз."
+
+# --- Zaxira javob (WR-04) ----------------------------------------------
+#
+# ⛔ MUSTAQIL TARJIMA. Taqiqlangan tokenlar (`лавк`, `магазин`) bu matnda
+#    YO'Q va `сбор` ham ISHLATILMAYDI (reyestrdagi atama — `патта`).
+msgid "bot.unknown"
+msgstr ""
+"Не понял. Воспользуйтесь кнопками ниже: «Мой долг» или «Мои оплаты».\n"
+"Начать заново — /start, пояснение терминов — /help."
+
+# --- /help — atamalar izohi --------------------------------------------
+msgid "bot.help.terms"
+msgstr ""
+"Термины:\n"
+"патта — ежедневная плата за торговлю;\n"
+"место — ваше торговое место;\n"
+"долг — неоплаченная патта;\n"
+"смена — рабочая смена кассира."

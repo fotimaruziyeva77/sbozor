@@ -1,0 +1,65 @@
+# --- Sirlar (HECH QACHON commit qilinmaydi) ---
+.env
+.env.local
+.env.*.local
+!.env.example
+# SeaweedFS S3 rekviziti (04-01). SeaweedFS `s3.json` ichida muhit
+# o'zgaruvchisini INTERPOLATSIYA QILMAYDI, ya'ni kalitlar faylga LITERAL
+# yoziladi. Repoda faqat `.example` qoladi — `.env` bilan aynan bir xil
+# naqsh (`ops/seaweedfs/README.md`).
+ops/seaweedfs/s3.json
+
+# --- ML artefaktlari (05-02, D-24) ---
+# ONNX modeli yuzlab MB va `git-lfs` bu loyihada YO'Q. Artefaktni ops
+# qo'yadi, image esa uni build paytida `COPY` qiladi — ish paytida yuklab
+# olish YO'Q. Eksport retsepti va manba: `ops/models/README.md`.
+#
+# ⚠ `.gitattributes:31` dagi `*.onnx binary` O'ZGARTIRILMAYDI — u boshqa
+#   qaror (diff shovqinini oldini olish) va u bilan ziddiyat yo'q.
+ops/models/*.onnx
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage/
+htmlcov/
+dist/
+build/
+
+# --- gettext (bot-service) ---
+#
+# ⛔ `.mo` — BUILD ARTEFAKTI va u commitga TUSHMAYDI. Commit qilingan
+#    `.mo` `.po` dan JIMGINA eskirardi: matn o'zgargan, darvoza esa eski
+#    baytni o'lchagan bo'lardi. Kompilyatsiya ikki joyda va ikkalasi ham
+#    shartsiz: `services/bot-service/Dockerfile` (`pybabel compile`) va
+#    `services/bot-service/tests/conftest.py`.
+*.mo
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+.turbo/
+next-env.d.ts
+
+# --- Loglar va OS ---
+*.log
+.DS_Store
+Thumbs.db
+
+# --- Muharrirlar ---
+.idea/
+*.swp
+
+# Claude Code worktrees/session artifacts
+.claude/

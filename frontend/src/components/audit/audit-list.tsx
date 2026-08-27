@@ -1,0 +1,251 @@
+"use client";
+
+import { useMemo } from "react";
+import { Eye, PencilLine, Plus, Trash2 } from "lucide-react";
+import { useFormatter, useLocale, useTimeZone, useTranslations } from "next-intl";
+
+import { AuditDiff } from "@/components/audit/audit-diff";
+import { useAuditFilters } from "@/components/audit/audit-filters";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import type { AuditEntry } from "@/lib/api-types";
+import { isAuditAction, isAuditTable } from "@/lib/api-types";
+import { formatInstant } from "@/lib/format-day";
+import { adminErrorMessageKey, useAuditQuery, useUsersQuery } from "@/lib/queries";
+
+/*
+ * =============================================================================
+ * AUDIT RO'YXATI — FAQAT O'QISH (D-12, T-01-72).
+ *
+ * Bu komponentda birorta yozuv yoki o'chirish amali YO'Q va bo'lishi ham
+ * mumkin emas: `audit_log` append-only (01-05 da to'rt qatlamli DB himoyasi
+ * bilan), ya'ni "tahrirlash" tugmasi baribir xato bilan tugardi va
+ * jurnalning o'zgarmasligiga shubha uyg'otardi.
+ *
+ * Har yozuv KARTA ko'rinishida (topshiriq §7) va D-12 ning to'rt ustuni
+ * aniq ko'rinadi:
+ *   KIM       -> `actor_label` / foydalanuvchi ismi / tizim
+ *   QACHON    -> `at` (Asia/Tashkent) + `business_date`
+ *   NIMA      -> `action` + `table_name` (tarjima qilingan)
+ *   ESKI->YANGI -> `AuditDiff`
+ * =============================================================================
+ */
+
+export function AuditList() {
+  const t = useTranslations();
+  const { filters } = useAuditFilters();
+  const auditQuery = useAuditQuery(filters);
+
+  /*
+   * "Kim" ustunining manbai IKKI QISMDAN iborat. `GET /audit` javobi
+   * `actor_label` ni beradi, lekin ism/telefonni ATAYIN bermaydi — audit
+   * javobiga profil maydonlarini qo'shish shaxsiy ma'lumot yuzasini
+   * kengaytirardi (01-07 qarori). Shuning uchun ism `GET /users` dan,
+   * ID bo'yicha ulanadi; foydalanuvchi topilmasa `actor_label` qoladi.
+   */
+  const usersQuery = useUsersQuery();
+  const actorNames = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const user of usersQuery.data?.items ?? []) {
+      map.set(user.id, user.full_name ?? user.phone);
+    }
+    return map;
+  }, [usersQuery.data]);
+
+  if (auditQuery.isPending) {
+    return (
+      <p className="text-sm text-text-muted" role="status">
+        {t("common.loading")}
+      </p>
+    );
+  }
+
+  if (auditQuery.isError) {
+    return (
+      <p
+        className="rounded-sm bg-danger/10 px-3 py-2 text-sm text-danger-text"
+        role="alert"
+      >
+        {t(adminErrorMessageKey(auditQuery.error))}
+      </p>
+    );
+  }
+
+  const entries = auditQuery.data.pages.flatMap((page) => page.items);
+
+  if (entries.length === 0) {
+    return (
+      <EmptyState
+        description={t("audit.emptyStateHint")}
+        title={t("audit.emptyState")}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-text-muted" role="status">
+        {t("audit.resultCount", { count: entries.length })}
+      </p>
+
+      <ul aria-label={t("audit.title")} className="flex flex-col gap-3">
+        {entries.map((entry) => (
+          <li key={entry.id}>
+            <AuditCard
+              actorName={
+                entry.actor_user_id === null
+                  ? null
+                  : (actorNames.get(entry.actor_user_id) ?? null)
+              }
+              entry={entry}
+            />
+          </li>
+        ))}
+      </ul>
+
+      {auditQuery.hasNextPage ? (
+        <div>
+          <Button
+            disabled={auditQuery.isFetchingNextPage}
+            onClick={() => void auditQuery.fetchNextPage()}
+            variant="secondary"
+          >
+            {auditQuery.isFetchingNextPage
+              ? t("common.loading")
+              : t("audit.loadMore")}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AuditCard({
+  actorName,
+  entry,
+}: {
+  actorName: string | null;
+  entry: AuditEntry;
+}) {
+  const t = useTranslations();
+  const tActions = useTranslations("audit.actions");
+  const tTables = useTranslations("audit.tables");
+  const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
+
+  /*
+   * Vaqt `next-intl` ning formatlagichi bilan chiqadi — mintaqa
+   * `src/i18n/request.ts` da BITTA joyda (`Asia/Tashkent`) belgilangan va
+   * provayder orqali klientga o'tadi. Sanani qo'lda formatlash har
+   * komponentda mintaqani qayta e'lon qilishga majbur qilardi va bir kun
+   * kimdir UTC'ni ko'rsatib qo'yardi — bu esa yozuvni noto'g'ri
+   * biznes-kunga bog'lardi (FOUND-05).
+   */
+  const at = formatInstant(
+    format,
+    new Date(entry.at),
+    locale,
+    timeZone,
+    "medium",
+    "medium",
+  );
+
+  // Noma'lum qiymat XOM holda ko'rinadi: u DB dagi texnik identifikator
+  // (keyingi fazalarning yangi hodisasi yoki jadvali) va uni yashirish
+  // jurnalda tushunarsiz bo'shliq qoldirardi.
+  const actionLabel = isAuditAction(entry.action)
+    ? tActions(entry.action)
+    : entry.action;
+  const tableLabel = isAuditTable(entry.table_name)
+    ? tTables(entry.table_name)
+    : entry.table_name;
+
+  const isDbTrigger = entry.source === "db_trigger";
+
+  /*
+   * 2026-08-25 (buyurtmachi №7): amal TURI bir qarashda — ikonka diski
+   * rang bilan: yozish yashil, o'zgartirish indigo, o'chirish qizil,
+   * o'qish xira. Rang YOLG'IZ signal emas (WCAG 1.4.1) — yorliq matni
+   * yonida turadi.
+   */
+  const ActionIcon =
+    entry.action === "insert"
+      ? Plus
+      : entry.action === "update"
+        ? PencilLine
+        : entry.action === "delete"
+          ? Trash2
+          : Eye;
+  const actionTone =
+    entry.action === "insert"
+      ? "bg-success/10 text-success-text"
+      : entry.action === "update"
+        ? "bg-accent/12 text-accent-text"
+        : entry.action === "delete"
+          ? "bg-danger/10 text-danger-text"
+          : "bg-surface-muted text-text-muted";
+
+  return (
+    <Card>
+      <CardHeader className="gap-2 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          {/* NIMA */}
+          <span className="flex min-w-0 items-center gap-3">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "grid size-10 shrink-0 place-items-center rounded-lg",
+                actionTone,
+              )}
+            >
+              <ActionIcon aria-hidden className="size-5" />
+            </span>
+            <span className="min-w-0 text-lg font-semibold">
+              <span className="sr-only">{t("audit.what")}: </span>
+              {actionLabel}{" "}
+              <span className="font-normal text-text-muted">· {tableLabel}</span>
+            </span>
+          </span>
+
+          {/* QACHON */}
+          <span className="shrink-0 font-mono text-sm tabular-nums text-text-muted">
+            <span className="sr-only">{t("audit.when")}: </span>
+            {at}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-muted">
+          {/* KIM — D-16: ism/telefon tarjima qilinmaydi. */}
+          <span>
+            {t("audit.who")}:{" "}
+            <span className="font-semibold text-text">
+              {actorName ?? entry.actor_label ?? t("audit.systemActor")}
+            </span>
+          </span>
+
+          <span>
+            {t("audit.businessDate")}: {entry.business_date}
+          </span>
+
+          {/*
+           * `accent` tone = `bg-accent/10 text-accent-text` — o'lchangan
+           * 3.82:1 (AA buzilishi) -> 5.29:1.
+           */}
+          <Badge tone={isDbTrigger ? "neutral" : "accent"}>
+            <span className="sr-only">{t("audit.sourceLabel")}: </span>
+            {isDbTrigger ? t("audit.sourceDbTrigger") : t("audit.sourceApp")}
+          </Badge>
+        </div>
+      </CardHeader>
+
+      {/* ESKI -> YANGI */}
+      <CardContent>
+        <AuditDiff entry={entry} />
+      </CardContent>
+    </Card>
+  );
+}

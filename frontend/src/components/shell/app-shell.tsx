@@ -1,0 +1,729 @@
+"use client";
+
+import { useState } from "react";
+import {
+  Banknote,
+  CalendarClock,
+  CalendarDays,
+  ClipboardCheck,
+  Ellipsis,
+  FileSpreadsheet,
+  FileWarning,
+  HandCoins,
+  LayoutDashboard,
+  Map,
+  ReceiptText,
+  ScrollText,
+  Store,
+  UserRound,
+  Users,
+  Video,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { useTranslations } from "next-intl";
+
+import { LocaleSwitcher } from "@/components/shell/locale-switcher";
+import { NavMoreSheet } from "@/components/shell/nav-more-sheet";
+import type { NavSheetItem } from "@/components/shell/nav-more-sheet";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { UserMenu } from "@/components/shell/user-menu";
+import { Link, usePathname } from "@/i18n/navigation";
+import { useAuthStore } from "@/lib/auth-store";
+import { cn } from "@/lib/cn";
+import type { Permission } from "@/lib/rbac";
+import { hasPermission } from "@/lib/rbac";
+
+/*
+ * Ilova qobig'i — Apple-uslub minimal navigatsiya (topshiriq §7):
+ * yumshoq chegaralar, past kontrast, jadval-og'ir tartib yo'q.
+ *
+ * Mobil kenglikda navigatsiya PASTKI panelga tushadi — kassir bu ilovani
+ * telefonda ishlatadi (PROJECT.md cheklovi) va yon panel u yerda ekranning
+ * yarmini yeb qo'yardi.
+ *
+ * 2-FAZA KENGAYTMASI (UI-SPEC §12.3): bo'limlar soni 3 dan 8 ga chiqdi.
+ *   * Desktop — uch guruh: (guruhsiz) Boshqaruv paneli · Bozor · Tizim.
+ *     Guruhlash sakkizta yassi havolani skanerlanadigan qiladi.
+ *   * Mobil   — ENG KO'PI 5 element: birinchi to'rttasi + "Ko'proq".
+ *     360px kenglikda 8 element har biriga ~45px qoldirardi va barmoq
+ *     nishoni 44px dan pastga tushardi (WCAG 2.5.8).
+ *
+ * DIQQAT: `permission` faqat MENYUNI YASHIRADI. Foydalanuvchi yashirilgan
+ * yo'lni to'g'ridan-to'g'ri ochsa, sahifadagi so'rov serverda 403 oladi —
+ * xavfsizlik chegarasi o'sha yerda (T-01-62 / T-02-101). Kassir va
+ * nazoratchida `market_data_view` YO'Q (RESEARCH A8), ya'ni ular faqat
+ * Boshqaruv panelini ko'radi va bu ro'yxatdan avtomatik kelib chiqadi.
+ */
+
+/** Yon paneldagi guruh; `null` — sarlavhasiz, eng tepada. */
+type NavGroup = "market" | "system" | null;
+
+type NavItem = {
+  href:
+    | "/dashboard"
+    | "/map"
+    | "/stalls"
+    | "/vendors"
+    | "/tariffs"
+    | "/calendar"
+    | "/cameras"
+    | "/snapshots"
+    | "/review"
+    | "/occupancy"
+    | "/collect"
+    | "/billing"
+    | "/reconciliation"
+    | "/reports"
+    | "/users"
+    | "/audit"
+    | "/markets/new";
+  labelKey:
+    | "dashboard"
+    | "map"
+    | "stalls"
+    | "vendors"
+    | "tariffs"
+    | "calendar"
+    | "cameras"
+    | "snapshots"
+    | "review"
+    | "occupancy"
+    | "collect"
+    | "billing"
+    | "reconciliation"
+    | "reports"
+    | "users"
+    | "audit"
+    | "newMarket";
+  icon: LucideIcon;
+  /**
+   * Yozuvni ochadigan huquq(lar).
+   *
+   * ⛔⛔ MASSIV — «BIRORTASI YETSA» (any-of), «hammasi» EMAS (260820).
+   *
+   *     «Bandlik» yozuvi ikki xil odamga kerak va sabablari BOSHQA:
+   *       · nazoratchi — o'z ishining NATIJASINI ko'radi
+   *         (`occupancy_review`);
+   *       · direktor — hisobdorlik sifatida ko'radi (`report_view`).
+   *
+   *     Bitta huquq yozilganda ulardan biri HAR DOIM yo'qotardi:
+   *     `report_view` nazoratchini, `occupancy_review` esa
+   *     direktorni chiqarib tashlardi [test ushladi].
+   *
+   * ⚠ Bu XAVFSIZLIK chegarasi EMAS (fayl boshidagi DIQQAT bandi) —
+   *   haqiqiy darvoza sahifada va serverda.
+   */
+  permission: Permission | readonly Permission[] | null;
+  group: NavGroup;
+};
+
+/*
+ * TARTIB MA'NOLI va tasodifiy emas:
+ *   * mobil panel birinchi TO'RTTASINI oladi (`MOBILE_PRIMARY_COUNT`), ya'ni
+ *     bu ro'yxatning boshi = eng ko'p ishlatiladigan bo'limlar;
+ *   * yon panel guruhlarni shu tartibda chizadi (guruhsiz -> Bozor -> Tizim).
+ * Elementni ko'chirish IKKALA yuzani ham o'zgartiradi.
+ */
+const NAV_ITEMS: readonly NavItem[] = [
+  {
+    href: "/dashboard",
+    labelKey: "dashboard",
+    icon: LayoutDashboard,
+    permission: null,
+    group: null,
+  },
+  {
+    href: "/map",
+    labelKey: "map",
+    icon: Map,
+    permission: "market_data_view",
+    group: "market",
+  },
+  {
+    href: "/stalls",
+    labelKey: "stalls",
+    icon: Store,
+    permission: "market_data_view",
+    group: "market",
+  },
+  {
+    // Sotuvchi — SHAXSIY MA'LUMOT, shuning uchun o'z huquqi bor (D-09).
+    href: "/vendors",
+    labelKey: "vendors",
+    icon: UserRound,
+    permission: "vendor_view",
+    group: "market",
+  },
+  {
+    href: "/tariffs",
+    labelKey: "tariffs",
+    icon: Banknote,
+    permission: "market_data_view",
+    group: "market",
+  },
+  {
+    href: "/calendar",
+    labelKey: "calendar",
+    icon: CalendarDays,
+    permission: "market_data_view",
+    group: "market",
+  },
+  /*
+   * "Kameralar" — 3-fazaning YAGONA yangi bo'limi (UI-SPEC §3.3).
+   *
+   * `market` GURUHIDA: kamera — bozor ICHIDAGI obyekt (xarita, rasta va
+   * tarif bilan bir qatorda), platforma amali emas. "Yangi bozor" ning
+   * `system` guruhida turishi bilan izchil.
+   *
+   * `/calendar` DAN KEYIN TURISHI ATAYIN: yuqoridagi izohga ko'ra
+   * ro'yxatning BOSHI mobil pastki panelning birinchi to'rttasini beradi
+   * (`MOBILE_PRIMARY_COUNT`). Kamerani yuqoriga ko'chirish kassir va
+   * admin eng ko'p ishlatadigan bo'limni paneldan siqib chiqarardi —
+   * jonli ko'rish esa KUNLIK amal emas, u nizo yoki tekshiruvda
+   * ochiladi. Element "Ko'proq" varag'iga tushadi va mobil kontrakt
+   * (eng ko'pi 5 element) BUZILMAYDI.
+   *
+   * `camera_view` faqat menyuni yashiradi (fayl boshidagi DIQQAT
+   * bandiga qarang). Haqiqiy darvoza — `require_permission(CAMERA_VIEW)`
+   * (03-06/03-07).
+   */
+  {
+    href: "/cameras",
+    labelKey: "cameras",
+    icon: Video,
+    permission: "camera_view",
+    group: "market",
+  },
+  /*
+   * "Kadr olish" — 4-fazaning YAGONA yangi bo'limi (04-UI-SPEC §4.8).
+   *
+   * `/cameras` DAN BEVOSITA KEYIN: kadr olish — kameraning bevosita
+   * davomi va huquqi ham AYNAN BIR XIL (`camera_view`), ya'ni ikkala
+   * yozuv bir vaqtda paydo bo'ladi va bir vaqtda yo'qoladi. Yangi
+   * `Permission` QO'SHILMAYDI (04-PATTERNS §3.9) — `lib/rbac.ts` va
+   * `rbac.py` matritsalari bu fazada TEGILMAYDI.
+   *
+   * MOBIL KONTRAKT BUZILMAYDI [O'LCHANDI: 04-UI-SPEC M-7]: ro'yxat
+   * 10 -> 11 ga o'sdi, `MOBILE_PRIMARY_COUNT` esa 4 bo'lib qoladi, ya'ni
+   * pastki panel 4 + "Ko'proq" = 5 element. Yozuv "Ko'proq" varag'iga
+   * tushadi — kadr olish jurnali KUNLIK amal emas, u nizo yoki
+   * tekshiruvda ochiladi (kameralar bilan bir xil mulohaza).
+   *
+   * `CalendarClock` ATAYIN: reja (kalendar) + vaqt (soat) — fazaning
+   * ikkala mazmuni. `Camera` ishlatilmaydi, u `/cameras` da band va
+   * ikki bo'limni bir xil ko'rsatardi.
+   */
+  {
+    href: "/snapshots",
+    labelKey: "snapshots",
+    icon: CalendarClock,
+    permission: "camera_view",
+    group: "market",
+  },
+  /*
+   * "Ko'rib chiqish" va "Bandlik" — 5-fazaning IKKITA yangi bo'limi
+   * (05-UI-SPEC §4.6).
+   *
+   * ⛔ ENG MUHIM NATIJA NAVIGATSIYADA. Bugungacha `inspector` roli FAQAT
+   * Boshqaruv panelini ko'rardi (bitta yozuv) — ya'ni nazoratchining ishi
+   * uchun ekran UMUMAN YO'Q edi. Shu ikki qatordan keyin u ikkita yozuv
+   * ko'radi va `/review` uning UYIGA aylanadi.
+   *
+   * `/snapshots` DAN BEVOSITA KEYIN: domen zanjiri shunday o'qiladi —
+   * kamera -> kadr -> ko'rib chiqish -> bandlik. Ikkalasi ham `market`
+   * guruhida, chunki bandlik bozor ICHIDAGI ma'lumot, platforma amali
+   * emas ("Yangi bozor" ning `system` guruhida turishi bilan izchil).
+   *
+   * ⛔ YANGI `Permission` O'YLAB TOPILMAYDI. `occupancy_review` va
+   * `report_view` IKKALA matritsada ham ALLAQACHON bor
+   * (`lib/rbac.ts:44-45`, `rbac.py`) va bu fazada ularning HECH BIRI
+   * TEGILMAYDI (05-UI-SPEC M-8). Yangi huquq qo'shish `rbac.py` bilan
+   * BIRGA qilinishi kerak bo'lardi, aks holda tugma ko'rinib turib 403
+   * berardi (`rbac.ts:62-67` dagi izoh).
+   *
+   * ⚠ O-03 (§16.4): `platform_admin` da `report_view` YO'Q, ya'ni u
+   * "Bandlik" ni ko'rmaydi. Bu fazada RBAC tegilmagani uchun QABUL
+   * QILINADI — rollar TO'PLAM (1-faza D-05), tekshirish uchun unga
+   * `market_admin` roli ham beriladi.
+   *
+   * MOBIL KONTRAKT BUZILMAYDI [O'LCHANDI: 05-UI-SPEC M-7]: ro'yxat
+   * 11 -> 13 ga o'sdi, `MOBILE_PRIMARY_COUNT` esa 4 bo'lib qoladi.
+   * Nazoratchida esa jami ikki yozuv bor, ya'ni "Ko'proq" tugmasi
+   * umuman chizilmaydi.
+   *
+   * ⛔ `/review/blind` NAVIGATSIYAGA QO'SHILMAYDI: u SESSIYA, bo'lim
+   * emas. Unga faqat ko'rib chiqish uyidan, OCHIQ NIYAT bilan kiriladi
+   * (§7.2). Menyuda turgan havola uni "yana bir ro'yxat" qilib
+   * ko'rsatib, ko'r auditning butun ma'nosini yo'qotardi.
+   *
+   * Ikonkalar: `ClipboardCheck` (ko'rib chiqish ro'yxati) va `Store`
+   * (rasta/bandlik). `Camera`, `Video`, `CalendarClock` BAND; `ScanEye`
+   * rad etildi — u "kuzatuv" ni anglatib, nazoratchini kameraga
+   * qaratardi. `Store` `/stalls` bilan BAHAM ko'riladi va bu ataylab:
+   * ikkala ekran ham RASTA haqida, faqat boshqa savol bilan.
+   */
+  {
+    href: "/review",
+    labelKey: "review",
+    icon: ClipboardCheck,
+    permission: "occupancy_review",
+    group: "market",
+  },
+  {
+    /*
+     * ⛔ `occupancy_review` — `report_view` EMAS (260820). Bandlikni
+     *    NAZORATCHI o'lchaydi va u o'z ishining natijasini ko'rishi
+     *    kerak. Direktor esa uni hisobdorlik sifatida ko'radi
+     *    (`report_view`). Ikkalasi ham kerak, shuning uchun yozuv
+     *    MASSIV oladi va «birortasi yetsa» qoidasi bilan ishlaydi —
+     *    sahifa darvozasi ham aynan shunday.
+     */
+    href: "/occupancy",
+    labelKey: "occupancy",
+    icon: Store,
+    permission: ["occupancy_review", "report_view"],
+    group: "market",
+  },
+  /*
+   * "Yig'ish" va "Patta hisobi" — 6-fazaning IKKITA yangi bo'limi
+   * (06-UI-SPEC §4.6).
+   *
+   * ⛔ ENG MUHIM NATIJA YANA NAVIGATSIYADA. Bugungacha `cashier` roli FAQAT
+   * Boshqaruv panelini ko'rardi (bitta yozuv) — ya'ni kassirning KUNLIK ishi
+   * uchun ekran umuman yo'q edi (o'lchandi: 06-UI-SPEC M-6/M-7). Shu ikki
+   * qatordan keyin u ikkita yozuv ko'radi va `/collect` uning UYIGA aylanadi.
+   *
+   * `/occupancy` DAN BEVOSITA KEYIN: domen zanjiri kamera -> kadr -> ko'rib
+   * chiqish -> bandlik -> YIG'ISH -> patta hisobi bo'lib o'qiladi. Ikkalasi
+   * ham `market` guruhida — patta bozor ICHIDAGI hodisa.
+   *
+   * ⛔ HUQUQLAR: `/collect` — `payment_create` (kassirda ALLAQACHON bor edi),
+   * `/billing` — `report_view` (direktor va bozor adminida bor). Yangi ikki
+   * huquq (`billing_collect_view`, `shift_manage`) MARSHRUT ICHIDAGI
+   * so'rovlarni qo'riqlaydi, menyuni EMAS: menyu "kim pul yig'adi" va "kim
+   * hisobot o'qiydi" degan savolga javob beradi, "kim proyeksiyani o'qiy
+   * oladi" degan savolga emas.
+   *
+   * MOBIL KONTRAKT BUZILMAYDI [O'LCHANDI: 06-UI-SPEC M-6]: ro'yxat 13 -> 15
+   * ga o'sdi, `MOBILE_PRIMARY_COUNT` esa 4 bo'lib qoladi. Kassirda jami ikki
+   * yozuv bor (`/dashboard` + `/collect`), ya'ni "Ko'proq" tugmasi unda
+   * umuman chizilmaydi va overflow NOL.
+   *
+   * ⛔ `/collect/shift` NAVIGATSIYAGA QO'SHILMAYDI: u `/collect` sahifasi
+   * sarlavhasidagi havola (`/cameras/[id]/zones` bilan bir xil naqsh — bola
+   * marshrut nav elementi emas). Menyudagi uchinchi yozuv kuniga 2 marta
+   * bosiladigan amalni kuniga 500 marta bosiladigani bilan TENG og'irlikka
+   * qo'yardi (§4.2).
+   *
+   * Ikonkalar: `HandCoins` (qo'lga pul — yig'ish) va `ReceiptText` (yozilgan
+   * hisob). `Banknote` BAND (`/tariffs`), `Receipt` esa `ReceiptText` bilan
+   * bir xil o'qilardi.
+   */
+  {
+    href: "/collect",
+    labelKey: "collect",
+    icon: HandCoins,
+    permission: "payment_create",
+    group: "market",
+  },
+  {
+    href: "/billing",
+    labelKey: "billing",
+    icon: ReceiptText,
+    permission: "report_view",
+    group: "market",
+  },
+  /*
+   * "Nomuvofiqliklar" — 7-fazaning YAGONA yangi bo'limi (07-UI-SPEC §4.7).
+   *
+   * `/billing` DAN BEVOSITA KEYIN: domen zanjiri kamera -> kadr -> ko'rib
+   * chiqish -> bandlik -> yig'ish -> patta hisobi -> NOMUVOFIQLIK bo'lib
+   * o'qiladi. Nomuvofiqlik — patta hisobining NATIJASI, ya'ni u hisobdan
+   * KEYIN turadi va oldin emas.
+   *
+   * ⛔ YANGI `Permission` QO'SHILMAYDI: `report_view` ikkala matritsada
+   * ham ALLAQACHON bor va bu faza `rbac.ts` ↔ `rbac.py` juftligiga
+   * UMUMAN TEGMAYDI. Hukm (holat o'zgartirish) esa `dispute_decide`
+   * ostida va u ham MAVJUD — bugungacha iste'molchisiz turgan edi.
+   *
+   * MOBIL KONTRAKT BUZILMAYDI [O'LCHANDI: 07-UI-SPEC M-5]: ro'yxat
+   * 15 -> 16 ga o'sdi, `MOBILE_PRIMARY_COUNT` esa 4 bo'lib qoladi.
+   * ⛔ Kassirda jami YANA IKKI yozuv (`/dashboard` + `/collect`) —
+   * `report_view` unda YO'Q, ya'ni overflow NOL bo'lib qoladi va
+   * 6-fazaning kassir kontrakti O'ZGARMAYDI.
+   *
+   * `FileWarning` ATAYIN: hujjat (hisobot) + ogohlantirish — bo'limning
+   * ikkala mazmuni. ⛔ `Gavel`/`Scale` RAD ETILDI: bolg'a va tarozi —
+   * HUKM metaforasi; ular navbatni "sud" qilib ko'rsatib, "asossiz"
+   * holatini AYBLOVGA aylantirardi. `TriangleAlert` ham rad etildi — u
+   * XATO ikonkasi va yetkazilmagan xabar uchun band.
+   */
+  {
+    href: "/reconciliation",
+    labelKey: "reconciliation",
+    icon: FileWarning,
+    permission: "report_view",
+    group: "market",
+  },
+  /*
+   * "Hisobotlar" — 8-fazaning YAGONA yangi bo'limi (08-UI-SPEC §4.7).
+   *
+   * `/reconciliation` DAN BEVOSITA KEYIN, `system` guruhidan OLDIN: domen
+   * zanjiri kamera -> kadr -> ko'rib chiqish -> bandlik -> yig'ish ->
+   * patta hisobi -> nomuvofiqlik -> HISOBOT bo'lib o'qiladi. Hisobot —
+   * hamma oldingi bosqichning DAVR KESIMIDAGI hosilasi, ya'ni u kunlik
+   * yuzalardan KEYIN turadi.
+   *
+   * ⛔ YANGI `Permission` QO'SHILMAYDI: `report_view` ikkala matritsada
+   *    ham ALLAQACHON bor (`lib/rbac.ts`, `rbac.py`) va bu faza o'sha
+   *    juftlikka UMUMAN TEGMAYDI (08-UI-SPEC M-6). Haqiqiy darvoza —
+   *    server marshrutlaridagi `require_permission` (08-07/08-12/08-16).
+   *
+   * MOBIL KONTRAKT BUZILMAYDI [O'LCHANDI: 08-UI-SPEC M-5]: ro'yxat
+   * 16 -> 17 ga o'sdi, `MOBILE_PRIMARY_COUNT` esa 4 bo'lib qoladi.
+   * ⛔ Kassirda jami YANA IKKI yozuv (`/dashboard` + `/collect`) va
+   *    nazoratchida ham IKKI (`/dashboard` + `/review`) — ikkalasida ham
+   *    `report_view` YO'Q, ya'ni overflow NOL bo'lib qoladi va 6/5-faza
+   *    kontraktlari O'ZGARMAYDI.
+   *
+   * ⛔ `/reports/compare` NAVIGATSIYAGA KIRMAYDI (§4.7): u parallel
+   *    rejimning 2–4 haftasi uchun va doimiy navigatsiya sloti uni
+   *    cutover'dan keyin ham ABADIY qoldirardi. Havola `/reports`
+   *    sahifasining sarlavhasida — `/collect` -> `/collect/shift` bilan
+   *    AYNI naqsh (bola marshrut nav elementi emas).
+   *
+   * `FileSpreadsheet` ATAYIN: `FileText` — `/audit` da band bo'lgan
+   * «hujjat» ma'nosi; `Download` esa AMALNI bildiradi va u sahifa
+   * ichidagi to'rtta tugmada takrorlanadi — navigatsiyada amal ikonkasi
+   * JOY ikonkasidan kuchsizroq.
+   */
+  {
+    href: "/reports",
+    labelKey: "reports",
+    icon: FileSpreadsheet,
+    permission: "report_view",
+    group: "market",
+  },
+  /*
+   * ⚠ IN-06 (07-faza deferred §7b): bu yozuv 7-fazagacha BIR QATORDA
+   *   turgan va faylning qolgan o'n oltitasi ko'p qatorda edi. Yangi
+   *   yozuv qo'shilayotgan commitda o'sha nomuvofiqlik ham tugatildi —
+   *   diff'ni o'qiydigan odam ikki xil shaklni «ma'noli farq» deb
+   *   o'qishi mumkin edi.
+   */
+  {
+    href: "/users",
+    labelKey: "users",
+    icon: Users,
+    permission: "user_view",
+    group: "system",
+  },
+  {
+    href: "/audit",
+    labelKey: "audit",
+    icon: ScrollText,
+    permission: "audit_view",
+    group: "system",
+  },
+  /*
+   * "Yangi bozor" — CR-03 ning ikkinchi to'sig'ini yopadigan yozuv.
+   *
+   * OXIRDA TURISHI ATAYIN: yuqoridagi izohga ko'ra ro'yxatning BOSHI mobil
+   * pastki panelning birinchi to'rttasini beradi. Yozuv oxirda bo'lgani
+   * uchun u "Ko'proq" varag'iga tushadi va UI-SPEC §12.3 ning "mobilda eng
+   * ko'pi 5 element" kontrakti BUZILMAYDI. Uni yuqoriga ko'chirish kassir
+   * eng ko'p ishlatadigan bo'limni paneldan siqib chiqarardi.
+   *
+   * `system` GURUHI ATAYIN: bu bozor ICHIDAGI ma'lumot emas (Bozor guruhi
+   * — xarita, rastalar, tariflar), balki platforma darajasidagi amal.
+   *
+   * `market_manage` faqat menyuni yashiradi (yuqoridagi DIQQAT bandiga
+   * qarang). Haqiqiy darvozalar: `markets/new/page.tsx` (`market_manage`
+   * VA `isPlatformAdmin`) hamda server `POST /markets` (02-11).
+   */
+  {
+    href: "/markets/new",
+    labelKey: "newMarket",
+    icon: Store,
+    permission: "market_manage",
+    group: "system",
+  },
+];
+
+/** Pastki panelda to'g'ridan-to'g'ri ko'rinadigan element soni (+ "Ko'proq" = 5). */
+const MOBILE_PRIMARY_COUNT = 4;
+
+/**
+ * Yon paneldagi guruhlar CHIZILISH tartibida.
+ *
+ * `titleKey` TO'LIQ kalit (`nav.` prefiksi bilan) va literal tip sifatida
+ * e'lon qilinadi: `src/global.ts` dagi augmentatsiya tufayli mavjud
+ * bo'lmagan kalit KOMPILYATSIYA VAQTIDA xatoga aylanadi, runtime'dagi
+ * `MISSING_MESSAGE` ga aylanmaydi.
+ */
+const NAV_GROUPS: readonly {
+  group: NavGroup;
+  titleKey: "nav.groupMarket" | "nav.groupSystem" | null;
+}[] = [
+  { group: null, titleKey: null },
+  { group: "market", titleKey: "nav.groupMarket" },
+  { group: "system", titleKey: "nav.groupSystem" },
+];
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const t = useTranslations();
+  const pathname = usePathname();
+  const { principal } = useAuthStore();
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const roles = principal?.roles ?? [];
+  const items = NAV_ITEMS.filter(
+    (item) =>
+      item.permission === null ||
+      (Array.isArray(item.permission)
+        ? item.permission.some((permission) => hasPermission(roles, permission))
+        : hasPermission(roles, item.permission as Permission)),
+  );
+
+  const primary = items.slice(0, MOBILE_PRIMARY_COUNT);
+  const overflow = items.slice(MOBILE_PRIMARY_COUNT);
+
+  const sheetItems: readonly NavSheetItem[] = overflow.map((item) => ({
+    href: item.href,
+    label: t(`nav.${item.labelKey}`),
+    icon: item.icon,
+    active: pathname === item.href,
+  }));
+
+  return (
+    // `app-scene` — statik fon qatlamlari (globals.css). Harakat YO'Q:
+    // kassir bu ekranni smena bo'yi ko'radi.
+    <div className="app-scene flex min-h-full flex-1 flex-col">
+      {/*
+       * ⛔⛔ SARLAVHA TELEFONDA IKKI QATOR (260819) — VA BU O'LCHOVDAN
+       *     KELIB CHIQQAN QAROR, DID EMAS.
+       *
+       *     Kassir hisobi bilan 375px ekranda o'lchandi: sarlavhaning
+       *     ichki kengligi 625px edi, ya'ni ekrandan 250px KENG.
+       *     Aybdorlar: tema guruhi 208px (uchta so'z) va til guruhi
+       *     258px (uchta endonim × 80px). Kassir esa PROJECT.md
+       *     cheklovi bo'yicha aynan telefonda ishlaydi.
+       *
+       *     Ikonka va ixcham kod ~200px tejadi, lekin 375px da hammasi
+       *     BIR QATORGA baribir sig'maydi (brend nomi ham kerak).
+       *     Shuning uchun: 1-qator — bozor nomi + foydalanuvchi menyusi,
+       *     2-qator — tema + til. Landing sarlavhasi bilan AYNI yechim.
+       *
+       * ⛔ `sticky` FAQAT `md` dan yuqorida: ikki qatorli sarlavha ~108px
+       *    va uni telefonda yopishtirib qo'yish ekranning 13% ini
+       *    doimiy yeb turardi. Kassirga doimiy kerak bo'lgan narsa —
+       *    pastki panel (u `fixed`) va to'lov paneli, sarlavha emas.
+       */}
+      {/*
+       * ⛔ `relative` — ichidagi `.app-fade` qatlami sarlavhaga nisbatan
+       *    joylashadi (`top: 100%`), ya'ni u sarlavhaning OSTIDAN
+       *    boshlanadi va scroll qilinayotgan kontentni yumshoq yutadi.
+       */}
+      <header className="app-surface relative z-40 border-b border-border md:sticky md:top-0">
+        <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:flex-nowrap md:justify-between">
+          <div className="mr-auto min-w-0">
+            <p className="text-xs text-text-muted">{t("shell.marketLabel")}</p>
+            {/* D-16: bozor nomi DB kontenti — tarjima qilinmaydi. */}
+            <p className="truncate text-sm font-semibold">
+              {principal?.marketName ?? t("common.appName")}
+            </p>
+          </div>
+          {/* Foydalanuvchi menyusi — mobil 1-qatorning o'ng chekkasida. */}
+          <div className="order-2 shrink-0 md:order-3">
+            <UserMenu />
+          </div>
+          {/* Tema + til — mobilda O'Z qatorida, `md` dan bir qatorda. */}
+          <div className="order-3 flex w-full shrink-0 items-center justify-end gap-2 md:order-2 md:w-auto">
+            {/* 09-UI-SPEC §11.2: tema almashtirgich LocaleSwitcher YONIDA. */}
+            <ThemeToggle />
+            <LocaleSwitcher />
+          </div>
+        </div>
+
+        {/*
+         * ⛔⛔ ERISH QATLAMI — Stitch'dan ko'chirilgan yagona gradient
+         *    (globals.css `.app-fade`). Sarlavha `sticky` bo'lgani uchun
+         *    kontent uning ostiga QATTIQ kesilib kirardi; bu qatlam
+         *    o'sha chekkani yo'q qiladi.
+         *
+         * ⛔ FAQAT `md` dan yuqorida: telefonda sarlavha `sticky` emas
+         *    (yuqoridagi izoh), ya'ni yutiladigan chekka ham yo'q.
+         */}
+        <div aria-hidden="true" className="app-fade hidden md:block" />
+      </header>
+
+      {/*
+       * =====================================================================
+       * ⛔⛔ KENGLIK 1152px -> 1600px (260819, jonli o'lchandi).
+       * =====================================================================
+       * Bu yerda `max-w-6xl` (1152px) turardi. 1863px ekranda o'lchandi:
+       *
+       *     chapda bo'sh 356px · yon panel 208px · KONTENT 888px ·
+       *     o'ngda bo'sh 371px
+       *
+       * Ya'ni ekranning 48% i ishlatilardi, 39% i esa bo'm-bo'sh edi.
+       * Direktor paneli uchta katakni 285px ga siqib, sarlavhada 358px
+       * teshik qoldirardi. Foydalanuvchi buni birinchi ko'rgan narsasi
+       * qilib ko'rsatdi — va u haq.
+       *
+       * ⛔ NEGA `max-w-6xl` NOTO'G'RI EDI: 1152px — MAQOLA o'lchovi
+       *    (65–75 belgi qatorda). Bu mahsulotda esa uzun matn YO'Q:
+       *    har ekran ro'yxat, jadval, karta setkasi yoki xarita. Ular
+       *    kengaygan sari YAXSHILANADI — jadvalda ustun kesilmaydi,
+       *    setkada karta nafas oladi, xaritada rasta ko'rinadi.
+       *
+       * ⛔ NEGA CHEKSIZ EMAS: 1600px dan keyin sarlavha bilan o'ng
+       *    chekkadagi boshqaruvlar orasi ko'z bir sakrashda o'ta
+       *    olmaydigan masofaga chiqadi (24" monitorda ~50sm). Chegara
+       *    ekranni ishlatadi, lekin ko'zni yugurtirmaydi.
+       * =====================================================================
+       */}
+      <div className="mx-auto flex w-full max-w-[100rem] flex-1 gap-6 px-4 py-6">
+        {/* Yon panel — faqat `md` dan kattaroq ekranlarda. */}
+        <nav
+          aria-label={t("shell.sections")}
+          className="hidden w-60 shrink-0 flex-col gap-5 md:flex"
+        >
+          {NAV_GROUPS.map(({ group, titleKey }) => {
+            const groupItems = items.filter((item) => item.group === group);
+            // Huquqi yo'q foydalanuvchida butun guruh bo'sh qolishi mumkin —
+            // u holda SARLAVHA ham chizilmaydi (bo'sh sarlavha "bu yerda
+            // nimadir bor" degan yolg'on signal berardi).
+            if (groupItems.length === 0) return null;
+
+            return (
+              <div className="flex flex-col gap-1" key={titleKey ?? "root"}>
+                {titleKey === null ? null : (
+                  <p className="px-3 text-xs font-semibold tracking-wider text-text-muted uppercase">
+                    {t(titleKey)}
+                  </p>
+                )}
+                {groupItems.map((item) => (
+                  <NavLink
+                    active={pathname === item.href}
+                    href={item.href}
+                    icon={item.icon}
+                    key={item.href}
+                    label={t(`nav.${item.labelKey}`)}
+                  />
+                ))}
+              </div>
+            );
+          })}
+        </nav>
+
+        <main className="min-w-0 flex-1 pb-20 md:pb-0">{children}</main>
+      </div>
+
+      {/* Mobil pastki panel — barmoq nishoni uchun kamida 44px balandlik. */}
+      <nav
+        aria-label={t("shell.sections")}
+        className="app-surface fixed inset-x-0 bottom-0 z-40 flex border-t border-border md:hidden"
+      >
+        {primary.map((item) => {
+          const Icon = item.icon;
+          const active = pathname === item.href;
+          return (
+            <Link
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs font-semibold",
+                active ? "text-accent-text" : "text-text-muted",
+              )}
+              href={item.href}
+              key={item.href}
+              prefetch={false}
+            >
+              <Icon aria-hidden="true" className="size-5" />
+              {t(`nav.${item.labelKey}`)}
+            </Link>
+          );
+        })}
+
+        {overflow.length === 0 ? null : (
+          <button
+            aria-expanded={moreOpen}
+            className={cn(
+              "flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs",
+              // Yashirilgan bo'limlardan biri ochiq bo'lsa, "Ko'proq" ham
+              // faol ko'rinadi — aks holda pastki panelda HECH BIR element
+              // belgilanmagan holat paydo bo'lardi.
+              sheetItems.some((item) => item.active)
+                ? "text-accent"
+                : "text-text-muted",
+            )}
+            onClick={() => setMoreOpen(true)}
+            type="button"
+          >
+            <Ellipsis aria-hidden="true" className="size-5" />
+            {t("nav.more")}
+          </button>
+        )}
+      </nav>
+
+      <NavMoreSheet
+        description={t("shell.sections")}
+        items={sheetItems}
+        onOpenChange={setMoreOpen}
+        open={moreOpen}
+        title={t("nav.more")}
+      />
+    </div>
+  );
+}
+
+function NavLink({
+  active,
+  href,
+  icon: Icon,
+  label,
+}: {
+  active: boolean;
+  href: NavItem["href"];
+  icon: NavItem["icon"];
+  label: string;
+}) {
+  return (
+    <Link
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "relative flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition-colors",
+        /*
+         * ⛔ FAOL HOLAT — AKSENT TINT + CHAP INDIKATOR (2026-08-25 redizayn).
+         *
+         *   `bg-surface-muted` faol yozuvni hover holatidan AJRATMASDI:
+         *   ikkalasi bir xil kulrang edi va ko'z «men qayerdaman?» degan
+         *   savolga rangdan javob olmasdi. Endi faol yozuv aksent
+         *   oilasidan (matn AA — `accent-text` tint ustida o'lchangan),
+         *   hover esa neytral bo'lib qoladi — ikki holat ikki rang.
+         */
+        active
+          ? "bg-accent/12 text-accent-text"
+          : "text-text-muted hover:bg-surface-muted hover:text-text",
+      )}
+      href={href}
+      /*
+       * ⛔ `prefetch={false}` (K-05 auditi): bitta sahifa yuklashda 12 ta
+       *    ortiqcha `_rsc` so'rovi o'lchangan edi — har ko'ringan Link
+       *    o'z marshrutini oldindan tortadi. Bozor telefonining sekin
+       *    internetida bu keraksiz trafik; navigatsiya bosilganda
+       *    yuklanadi va Next buni baribir keshda saqlaydi.
+       */
+      prefetch={false}
+    >
+      {active ? (
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-2 left-0 w-1 rounded-full bg-accent"
+        />
+      ) : null}
+      <Icon aria-hidden="true" className="size-5" />
+      {label}
+    </Link>
+  );
+}

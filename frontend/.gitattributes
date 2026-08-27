@@ -1,0 +1,12 @@
+# Frontend fayllari repoda ham, ish katalogida ham LF bilan saqlanadi.
+#
+# Busiz Windows'da CRLF bilan checkout bo'ladi va `gen-cyrillic.mjs --check`
+# ning bayt taqqoslashi CI (ubuntu-latest, LF) bilan farq qiladi — drift
+# darvozasi soxta qizil beradi.
+* text=auto eol=lf
+
+# Ikkilik fayllar — hech qanday konvertatsiya qilinmaydi.
+*.ico binary
+*.png binary
+*.jpg binary
+*.woff2 binary

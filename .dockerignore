@@ -1,0 +1,35 @@
+# SBOZOR — repo ildizi build konteksti istisnolari.
+#
+# BuildKit uchun AMALDAGI fayl shu: barcha image'lar `context: .` bilan
+# quriladi. `services/core-api/.dockerignore` bilan sinxron ushlab turilsin.
+#
+# KRITIK: `.env` (JWT_SECRET, DB parollari) hech qachon image qatlamiga
+# tushmasligi kerak — `dev` stage'da `COPY . /app` bor.
+
+.git
+.gitignore
+.gitattributes
+.planning
+.github
+.claude
+
+# Sirlar HECH QACHON image qatlamiga tushmaydi.
+.env
+.env.*
+!.env.example
+
+node_modules
+frontend
+.next
+
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+htmlcov
+coverage
+
+*.docx
+*.log

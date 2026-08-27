@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sbozor-core"
+version = "0.1.0"
+description = "SBOZOR umumiy yadro: modellar, tenancy, xavfsizlik, vaqt va pul yordamchilari"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "sqlalchemy[asyncio]==2.0.51",
+    "asyncpg==0.31.0",
+    "pydantic==2.13.4",
+    "pyjwt==2.13.0",
+    "pwdlib[argon2]==0.3.0",
+    "phonenumbers==9.0.35",
+    "structlog==26.1.0",
+    "tzdata==2026.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["sbozor_core"]

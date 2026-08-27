@@ -1,0 +1,36 @@
+<!--
+  MANBA (yozib olingan dump, QO'LDA YOZILMAGAN):
+    repozitoriy : github.com/maciej-or/hikvision_next
+    fayl        : tests/fixtures/devices/DS-7616NI-K2.json
+    ISAPI yo'li : /ISAPI/System/deviceInfo
+    upstream    : a0e59ea7426c (2024-10-14)
+    blob sha1   : a145a70cf86383ce18ad576841381b477c947b8e
+    olingan     : 2026-08-03
+    qurilma     : DS-7616NI-K2
+
+  O'ZGARTIRISH: yo'q. Element tartibi, atributlar, namespace va qiymatlar
+  dumpdan VERBATIM. Yagona qo'shimcha — shu izoh.
+
+  NEGA BU MUHIM (Pitfall 4, `simulator-confirms-itself`): agar bu XML bizning
+  parserimiz kutgan shaklda O'YLAB TOPILSA, test faqat "kod o'z taxminiga mos"
+  ekanini isbotlardi — CI yashil, real qurilma qora.
+
+  Yuqoridagi dump anonimlashtirilgan holda yuqori oqimda saqlanadi (IP'lar
+  `1.0.0.x`, seriya raqamlari nollangan, MAC almashtirilgan) — ya'ni bu yerda
+  hech kimning haqiqiy tarmoq ma'lumoti yo'q.
+-->
+<DeviceInfo version="1.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+  <deviceName>NVR</deviceName>
+  <deviceID>48473931-3030-0000-0000-acb00f0000bd</deviceID>
+  <model>DS-7616NI-K2</model>
+  <serialNumber>DS-7616NI-K20000000000CCRRG00000000WCVU</serialNumber>
+  <macAddress>87:02:30:0a:c5:06</macAddress>
+  <firmwareVersion>V4.74.210</firmwareVersion>
+  <firmwareReleasedDate>build 240108</firmwareReleasedDate>
+  <encoderVersion>V5.0</encoderVersion>
+  <encoderReleasedDate>build 231018</encoderReleasedDate>
+  <deviceType>NVR</deviceType>
+  <telecontrolID>255</telecontrolID>
+  <hardwareVersion>B-R-K51-00</hardwareVersion>
+  <manufacturer>hikvision</manufacturer>
+</DeviceInfo>

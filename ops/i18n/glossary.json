@@ -1,0 +1,81 @@
+{
+  "_readme": [
+    "G7-9 NING YAGONA MANBAI (D-30). Ikki iste'molchi bor va ular BIR XIL faylni o'qiydi:",
+    "  frontend/scripts/glossary.test.mjs  -> messages/*.json  VA  bot .po kataloglari",
+    "  (bot yarmi ham o'sha skriptda: ikki manbani bitta darvoza solishtirmasa,",
+    "   ular jimgina ajralib ketardi va aynan shu D-30 ning oldini olmoqchi bo'lgan holat).",
+    "",
+    "QIYMATLAR O'ZAK, TO'LIQ SO'Z EMAS (07-UI-SPEC §14.5). Sabab grammatik:",
+    "o'zbek tili AGGLYUTINATIV (patta -> pattani, pattaning), rus tili esa FLEKTIV",
+    "(место -> места, местами). To'liq so'z bilan qidirish «торговые места» ni",
+    "TOPMASDI va darvoza yolg'on-qizil bergan bo'lardi.",
+    "",
+    "APOSTROF SHAKLLARI (', ʻ, ʼ, ‘, ’) taqqoslashdan OLDIN bitta shaklga",
+    "keltiriladi — frontend/scripts/gen-cyrillic.mjs dagi normalizatsiya bilan AYNI.",
+    "Aks holda «yig'im» ni «yig’im» dan farqlash mumkin bo'lardi va taqiq",
+    "JIMGINA yashil qolardi."
+  ],
+  "_banned_synonyms_readme": [
+    "IKKI POG'ONALI VA PER-LOCALE: {atama: {locale: [token, ...]}}.",
+    "",
+    "NEGA PER-LOCALE VA NEGA BU FAZANING ENG NOZIK TUZOG'I (07-UI-SPEC §16.4, M-11):",
+    "ru.json MUSTAQIL tarjima fayli, lotin matnidan transliteratsiya HOSILASI EMAS",
+    "(faqat uz-Cyrl.json hosila). Ya'ni ru.json ni lotin «yig'im» tokeni bilan",
+    "skanerlash MAZMUNIDAN QAT'I NAZAR har doim 0 qaytaradi — darvoza mavjud bo'lib",
+    "ko'rinardi va HECH NIMANI o'lchamasdi. O'sha mantiq uz-Cyrl ga ham tegishli.",
+    "",
+    "BO'SH RO'YXAT QONUNIY VA MA'NOLI QIYMAT: u «bu locale'da taqiq yo'q» deydi.",
+    "",
+    "«yig'im» VA «yig'ish» FARQLANADI: token AYNAN «yig'im» bo'lishi shart, «yig'»",
+    "EMAS. nav.collect = «Yig'ish» (AMAL) qonuniy va qisqartirilgan token uni",
+    "birinchi kunidayoq qizartirardi."
+  ],
+  "_sbor_exception": [
+    "QAROR (07-UI-SPEC §14.5 / §16.4 d, M-11): rus tilidagi «сбор» TAQIQ RO'YXATIGA",
+    "KIRMAYDI va bu bo'shliq emas, ONGLI ISTISNO.",
+    "",
+    "SABAB O'LCHANGAN: ru copy'da «сбор» 13 kalitda va IKKI XIL MA'NODA —",
+    "  nav.collect = «Сбор» (AMAL, «Yig'ish»)  VA",
+    "  «ежедневный сбор» = «kunlik patta» (LEVY, 8 kalit: categories.emptyStateHint,",
+    "  stalls.noTariffHint, tariffs.emptyStateHint, calendar.*, wizard.weekdaysHint).",
+    "Uni taqiqlash 1-6-fazaning 13 kalitini birinchi kunidayoq qizartirardi va",
+    "tuzatish COPY MIGRATSIYASI bo'lardi — 7-faza qamrovidan TASHQARIDA.",
+    "",
+    "BU HAQIQIY TERMINOLOGIK SILJISH VA U YO'QOTILMAYDI: egasi — 8-fazaning uch",
+    "tilli yakuniy tekshiruvi (07-UI-SPEC §18, O-03), tetigi o'sha reja.",
+    "",
+    "SHUNING UCHUN «patta» ning ru ro'yxati [] — va bu BO'SHLIQ EMAS, QAROR.",
+    "Uning YO'QLIGI frontend/scripts/glossary.test.mjs da TO'PLAM TENGLIGI bilan",
+    "qulflangan: kutilgan ro'yxat test faylida QAYTA YOZILGAN va bu fayldan",
+    "IMPORT QILINMAYDI (05-15 darsi — import darvozani o'zi tekshirayotgan",
+    "qiymatga bog'lardi va fayldan jimgina o'chirilgan token o'tib ketardi)."
+  ],
+  "terms": {
+    "patta": { "uz-Latn": "patta", "uz-Cyrl": "патта", "ru": "патт" },
+    "rasta": { "uz-Latn": "rasta", "uz-Cyrl": "раста", "ru": "мест" },
+    "qarz": { "uz-Latn": "qarz", "uz-Cyrl": "қарз", "ru": "долг" },
+    "smena": { "uz-Latn": "smena", "uz-Cyrl": "смена", "ru": "смен" }
+  },
+  "banned_synonyms": {
+    "patta": {
+      "uz-Latn": ["yig'im"],
+      "uz-Cyrl": ["йиғим"],
+      "ru": []
+    },
+    "rasta": {
+      "uz-Latn": ["do'kon"],
+      "uz-Cyrl": ["дўкон"],
+      "ru": ["лавк", "магазин"]
+    },
+    "qarz": {
+      "uz-Latn": [],
+      "uz-Cyrl": [],
+      "ru": []
+    },
+    "smena": {
+      "uz-Latn": [],
+      "uz-Cyrl": [],
+      "ru": []
+    }
+  }
+}

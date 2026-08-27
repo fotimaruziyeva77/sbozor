@@ -1,0 +1,165 @@
+# SBOZOR — repo ildizi: FAQAT vosita konfiguratsiyasi.
+#
+# `[project]` bo'limi ATAYIN YO'Q — uv bu katalogni loyiha deb hisoblamasligi
+# kerak. Har bir servis o'z `pyproject.toml` + `uv.lock` iga ega (aiogram
+# pydantic/redis pin konflikti shuni talab qiladi).
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# Sessiya doirasidagi async fixture'lar (`app_engine`) va ularni ishlatadigan
+# testlar AYNAN BIR event loop'da bo'lishi shart — aks holda asyncpg ulanishi
+# boshqa loop'ga bog'lanib qoladi va test "loop is closed" bilan yiqiladi.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+# `.`                  -> `migrations` paketi (helpers, entities) testlardan
+#                         import qilinadi; Alembic ham `prepend_sys_path = .`
+#                         bilan aynan shu yo'lni ishlatadi.
+# `tests`              -> `fixtures` paketi (seed'lar va umumiy fixture tiplari).
+# `services/core-api`  -> `app` paketi (FastAPI ilovasi). Servis kodi o'z
+#                         katalogida yashaydi, testlar esa repo ildizida —
+#                         busiz `import app.security.rbac` topilmaydi. Aynan
+#                         shu yo'lni `mypy_path` va Dockerfile'ning
+#                         `WORKDIR /app/services/core-api` i ham ishlatadi.
+# Bu ATAYIN aniq yozilgan: pytest'ning rootdir'ga qarab sys.path ni o'zi
+# to'ldirishi test faylining qayerda turishiga bog'liq va jimgina o'zgaradi.
+pythonpath = [".", "tests", "services/core-api"]
+# ⚠ `-m "not hardware"` STANDART HOLAT (03-11). Real qurilma talab qiladigan
+#   to'plam (`tests/integration/test_real_nvr.py`) FAZANI BLOKLAMAYDI —
+#   ROADMAP ning self-service qoidasi: «tashqi bog'liqlik hech qachon
+#   `Blocks:` bo'lmaydi». Filtr AYNAN SHU YERDA, `package.json` da emas:
+#   `npm run test` ham, xostdagi yalang'och `pytest` ham, IDE ham bir xil
+#   standartni olishi kerak — uchta joyda takrorlangan filtr ikkitasida
+#   unutilardi.
+#
+#   Buyruq qatoridagi `-m` bu qiymatni TO'LIQ ALMASHTIRADI (pytest'da `-m`
+#   `store` turidagi opsiya), ya'ni `pytest -m hardware` va
+#   `pytest -m "sim and not slow"` kutilgandek ishlaydi. O'lchandi:
+#   `-m hardware --collect-only` -> 5 test, `-m "not hardware"` -> 0.
+#
+# ⚠ 5-FAZA FILTRNI `model` BILAN KENGAYTIRDI (05-01/T1, W0-10) va sabab
+#   `hardware` nikidan FARQ QILADI, shuning uchun u yozib qo'yiladi:
+#   `hardware` — tashqi QURILMA (real NVR) yo'qligi; `model` — repoda
+#   SAQLANMAYDIGAN artefakt. ONNX fayli image'ga build paytida `COPY`
+#   bilan kiradi (D-24 / W0-12) va `.gitignore` uni repoga kiritmaydi,
+#   ya'ni `tests` konteynerida u YO'Q.
+#
+#   NEGA FILTR, NEGA `pytest.skip` EMAS: skip JIMGINA o'tadi va «o'lchov
+#   bajarildi» degan yolg'on yashil beradi — artefakt bor deb o'ylangan
+#   holatda ham to'plam yashil bo'lardi. Filtr esa OCHIQ: testlar
+#   TANLANMAGANI `-m` qatorida ko'rinib turadi. Shuning uchun `model`
+#   markerli testning O'ZI artefakt yo'qligida YIQILADI (skip QILMAYDI) —
+#   `-m model` yozgan odam o'lchovni ATAYIN so'ragan bo'ladi va sukunat
+#   javob bo'la olmaydi.
+addopts = "-q --strict-markers -m \"not hardware and not model\""
+markers = [
+    "tenancy: tenant izolyatsiyasi (RLS) invariantlari — faza darvozasi, majburiy yashil",
+    # 3-FAZA. `--strict-markers` ostida e'lon qilinmagan marker YIG'ILISH
+    # paytida yiqiladi ("unknown marker"), ya'ni `-m sim` yozgan zahoti
+    # butun to'plam qizarardi va sabab test mantig'ida emas, shu ro'yxatda
+    # bo'lardi. Shuning uchun markerlar simulyator KODIDAN OLDIN e'lon
+    # qilinadi (W0-5).
+    "sim: simulyatsiya qilingan Hikvision NVR ustidagi uchidan-uchiga testlar (CAM-09) — `--profile sim` talab qiladi",
+    "hardware: faqat real NVR bilan ishlaydigan testlar — CI'da `-m \"not hardware\"` bilan chetlab o'tiladi, fazani BLOKLAMAYDI",
+    "slow: uzoq davom etadigan sim stsenariylari (25 kanal) — standart `test:sim` zanjiridan chetda, `npm run test:sim:slow` bilan ishga tushadi",
+    # 5-FAZA (W0-10). Ikkalasi ham KOD YOZILISHIDAN OLDIN e'lon qilinadi —
+    # 3-fazadagi `sim`/`slow` bilan aynan bir xil sabab: `--strict-markers`
+    # ostida e'lon qilinmagan marker YIG'ILISHDA yiqiladi va butun fayl
+    # umuman ishga tushmaydi.
+    "golden: oltin to'plam harness'i — UXLAB YOTADIGAN aniqlik darvozasi; `source='karmana'` qatorlar paydo bo'lgan kuni KODSIZ uyg'onadi (D-01/D-02, W0-9)",
+    "model: HAQIQIY ONNX artefaktini talab qiladigan o'lchov — artefakt repoda saqlanmaydi (D-24: build paytida `COPY`), shuning uchun standart `addopts` uni OCHIQ filtr bilan chiqaradi; artefakt yo'qligida test SKIP emas, YIQILADI",
+    # 8-FAZA (08-08, FOUND-07). ⛔ `slow` QAYTA ISHLATILMADI VA SABAB
+    #   O'SHA MARKERNING O'Z TA'RIFIDA: u «uzoq davom etadigan SIM
+    #   stsenariylari» deb e'lon qilingan va `npm run test:sim` /
+    #   `test:sim:slow` uni AYNAN `sim` bilan juftlab filtrlaydi
+    #   (`-m "sim and not slow"` / `-m "sim and slow"`). Tiklash mashqi
+    #   simulyatorga UMUMAN tegmaydi, ya'ni uni `slow` ga qo'shish
+    #   markerning ta'rifini JIMGINA kengaytirardi va `-m slow` yozgan
+    #   odam kutmagan testni olardi.
+    #
+    # ⛔⛔ MARKER STANDART `addopts` DAN CHIQARILMAYDI VA BU TAQIQ.
+    #   `addopts = -m "not hardware and not model"` — `restore` u yerda
+    #   YO'Q, ya'ni test `npm run test` va `npm run gate` da YUGURADI.
+    #   Marker faqat NARXNI hujjatlaydi (qo'shimcha postgres konteyneri),
+    #   o'lchovni CHETLATMAYDI: chiqarilsa 08-20 ning faza mezoni testi
+    #   uni chaqira olmasdi va FOUND-07 ning CI qatlami jimgina yo'qolardi.
+    "restore: tiklash mashqi — dump'ni TOZA postgres konteyneriga tiklaydi (D-16a); QO'SHIMCHA konteyner ko'taradi, lekin standart to'plamdan CHIQARILMAYDI",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# ⚠ `services/cv-service` — LOYIHANING IKKINCHI TOOLCHAIN'I (05-02, W0-2),
+#   `services/bot-service` — UCHINCHISI (07-01, D-09).
+#   Ikkalasi ham o'z `pyproject.toml` idagi ruff/mypy bloklari bilan
+#   `npm run cv:lint` / `npm run bot:lint` ostida, O'Z konteynerida
+#   tekshiriladi. Ikki konfiguratsiya bir xil fayllarni tekshirsa ular
+#   sekin-asta ajralib ketardi: begona servisga qo'shilgan per-file-ignore
+#   o'sha servisning lintida o'tib, `npm run lint` da yiqilardi va sabab
+#   kodda emas, IKKI NUSXADA bo'lardi.
+extend-exclude = [
+    ".venv",
+    "node_modules",
+    ".planning",
+    "frontend",
+    ".next",
+    "services/cv-service",
+    "services/bot-service",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# Testlarda `assert` — pytest'ning asosiy mexanizmi.
+# S105/S106: test fixture'laridagi dev parol literallari (haqiqiy sir emas).
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = []
+# ⚠⚠ `services/cv-service` ISTISNO QILINISHI MAJBURIY, XOHISH EMAS — VA
+#    BU O'LCHANGAN (2026-08-08):
+#
+#      services/cv-service/app/__init__.py: error: Duplicate module named
+#      "app" (also at "./services/core-api/app/__init__.py")
+#      Found 1 error in 1 file (errors prevented further checking)
+#
+#    Ikkala servisning ham paketi `app` deb ataladi (05-PATTERNS §1.2) va
+#    ular BOSHQA image'larda yashaydi, ya'ni ular hech qachon bitta
+#    jarayonda uchrashmaydi. `mypy .` esa butun reponi bitta ildizdan
+#    yuradi va ikkalasini bir vaqtda ko'radi — «errors prevented further
+#    checking» bilan BUTUN tekshiruv to'xtaydi.
+#
+#    `cv-service` o'z `mypy` ini `npm run cv:lint` ostida, O'Z
+#    konfiguratsiyasi va O'Z bog'liqliklari bilan yuritadi (u yerda
+#    `onnxruntime`/`supervision` stublari kerak, bu yerda esa ular
+#    o'rnatilmagan ham).
+#
+# ⚠⚠ `services/bot-service` 07-01 DA QO'SHILDI VA SABAB AYNAN O'SHA —
+#    QAYTA O'LCHANDI (2026-08-12, `tests` konteynerida):
+#
+#      services/core-api/app/__init__.py: error: Duplicate module named
+#      "app" (also at "./services/bot-service/app/__init__.py")
+#      Found 1 error in 1 file (errors prevented further checking)
+#
+#    Ya'ni uchinchi servisning tug'ilishi `npm run lint` ni BUTUNLAY
+#    to'xtatardi va nosozlik `bot-service` da emas, `core-api` da
+#    ko'rsatilardi. `bot-service` o'z `mypy` ini `npm run bot:lint`
+#    ostida yuritadi (u yerda `aiogram` bor, bu yerda esa u ATAYIN
+#    o'rnatilmagan — `tests/unit/test_runtime_deps.py`).
+exclude = ["^frontend/", "^\\.planning/", "^services/cv-service/", "^services/bot-service/"]
+# `tests/fixtures` paketi test modullaridan `fixtures.*` sifatida, `app` esa
+# `services/core-api` dan import qilinadi (pytest `pythonpath` bilan bir xil yo'l).
+mypy_path = "tests:services/core-api"
+
+[[tool.mypy.overrides]]
+# `py.typed` YO'Q paketlar (o'lchandi: uchalasida ham marker fayli yo'q).
+# `openpyxl`/`xlsxwriter`/`defusedxml` uchun rasmiy stub paketlari alohida
+# yashaydi (`types-*`) va ular AYRIM versiyalarda kutubxonadan orqada
+# qoladi — shuning uchun bu yerda "stub yo'q" deb tan olinadi, chaqiruv
+# joylari esa `Any` bilan ishlaydi va qaytariladigan qiymat DARHOL o'z
+# tipimizga (`SheetRow`, `bytes`) o'giriladi.
+module = ["testcontainers.*", "alembic_utils.*", "openpyxl.*", "xlsxwriter.*", "defusedxml.*"]
+ignore_missing_imports = true

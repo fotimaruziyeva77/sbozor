@@ -1,0 +1,129 @@
+[project]
+name = "core-api"
+version = "0.1.0"
+description = "SBOZOR core-api — FastAPI HTTP qatlami (auth, RBAC, audit, hisobotlar)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi==0.140.13",
+    "uvicorn[standard]==0.51.0",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "sqlalchemy[asyncio]==2.0.51",
+    "asyncpg==0.31.0",
+    "alembic==1.18.5",
+    "alembic-utils==0.8.8",
+    "pyjwt==2.13.0",
+    "pwdlib[argon2]==0.3.0",
+    "cryptography==49.0.0",
+    "phonenumbers==9.0.35",
+    "structlog==26.1.0",
+    "asgi-correlation-id==5.0.1",
+    "redis[hiredis]==8.0.1",
+    "sentry-sdk[fastapi]==2.66.1",
+    "tzdata==2026.3",
+    "python-multipart==0.0.32",
+    "email-validator==2.3.0",
+    # --- NVR domeni: ISAPI klienti va fon navbati (03-01, D-16/D-06) ---
+    #
+    # To'rtalasi ham 03-RESEARCH ning "Package Legitimacy Audit" jadvalida
+    # `slopcheck install -e pypi` bilan tekshirilgan va `[OK]` verdikti
+    # olgan; `[ASSUMED]`/`[SUS]`/`[SLOP]` paket YO'Q.
+    #
+    # `httpx` BU YERGA `[dependency-groups] dev` DAN KO'CHDI (D-16).
+    # Sabab: ISAPI klienti (03-05) — ISHLAB CHIQARISH kodi, dev guruhi esa
+    # runtime image'ga TUSHMAYDI (`Dockerfile` ning `runtime` target'i
+    # `uv sync --frozen --no-dev` bilan quriladi). Ko'chirilmaganda 24 ta
+    # test fayli `httpx` ni `dev` target'da topib YASHIL qolardi, xato esa
+    # FAQAT DEPLOY paytida `ModuleNotFoundError: httpx` bo'lib chiqardi —
+    # ya'ni yashil CI hech nima isbotlamasdi (03-RESEARCH Pitfall 7).
+    #
+    # `arq` ATAYIN ISHLATILMADI (D-06). U `redis[hiredis]<6,>=4.2.0` talab
+    # qiladi, bu faylda esa `redis[hiredis]==8.0.1` pini bor: `arq` ni
+    # o'rnatish `redis` ni 5.x ga TUSHIRARDI va `app/security/ratelimit.py`
+    # bilan sessiya keshini jimgina eskiroq klientda qoldirardi. 2026-08-02
+    # da PyPI metadata'si va EMPIRIK o'rnatish bilan tasdiqlangan
+    # (03-RESEARCH E.16 / Pitfall 1). `taskiq-redis 1.2.3` esa
+    # `redis<9,>=8.0.0` talab qiladi — mavjud pin bilan AYNAN mos.
+    "httpx==0.28.1",
+    "taskiq==0.12.4",
+    "taskiq-redis==1.2.3",
+    "tenacity==9.1.4",
+    # --- Excel import/eksport (02-12, D-13) ---
+    #
+    # Uchalasi ham 02-RESEARCH ning "Package Legitimacy Audit" jadvalida
+    # `slopcheck install -e pypi` bilan tekshirilgan va `[OK]` verdikti
+    # olgan; `[ASSUMED]`/`[SUS]` paket yo'q.
+    #
+    # ROLLAR ALMASHTIRILMAYDI: `openpyxl` faqat O'QIYDI, `XlsxWriter` faqat
+    # YOZADI (CLAUDE.md loyiha standarti — `openpyxl` yozishda butun
+    # kitobni xotirada quradi, `XlsxWriter` esa doimiy xotirada oqadi).
+    #
+    # `defusedxml` — openpyxl'ning O'Z hujjatidagi talab: usiz u quadratic
+    # blowup / billion laughs hujumlaridan HIMOYALANMAGAN. U ZIP-bombaga
+    # yordam BERMAYDI — ikkinchi darvoza `app/services/xlsx_reader.py` da.
+    "openpyxl==3.1.5",
+    "defusedxml==0.7.1",
+    "XlsxWriter==3.2.9",
+    # --- Snapshot quvuri: S3 ombori va sifat filtri (04-01, W0-2, D-17/D-13) ---
+    #
+    # IKKALASI HAM 04-RESEARCH ning "Package Legitimacy Audit" jadvalida
+    # `slopcheck install -e pypi` bilan tekshirilgan va `[OK]` verdikti
+    # olgan (2026-08-04); `[ASSUMED]`/`[SUS]`/`[SLOP]` paket YO'Q, ya'ni
+    # bloklovchi inson checkpointi talab qilinmaydi.
+    #
+    # ⚠ IKKALASI HAM PROD GURUHIDA — VA BU AYNAN `httpx` EPIZODINING
+    # (D-16, yuqoridagi izoh) TAKRORI. `app/services/storage.py` (04-06) va
+    # `app/services/quality.py` (04-04) — ISHLAB CHIQARISH kodi, `Dockerfile`
+    # ning `runtime` target'i esa `uv sync --frozen --no-dev` bilan quriladi.
+    # `dev` guruhida qolganda BUTUN TEST TO'PLAMI YASHIL bo'lardi (u `dev`
+    # target'da ishlaydi) va xato FAQAT DEPLOY paytida
+    # `ModuleNotFoundError: aiobotocore` bo'lib chiqardi — servis umuman
+    # ko'tarilmasdi (T-04-03). `tests/unit/test_runtime_deps.py` ikkala
+    # yo'nalishni ham qulflaydi.
+    #
+    # `aioboto3` ATAYIN QO'SHILMADI (D-17). U `aiobotocore[boto3]==2.25.1`
+    # ni QATTIQ qadaydi, ya'ni `aiobotocore` ni 3.9.0 dan bitta major
+    # ORQAGA va `boto3` ni uch minor pastga tortadi. Bu `arq` epizodining
+    # IKKINCHI NUSXASI va u EMPIRIK kuzatilgan, taxmin qilingan emas
+    # (04-RESEARCH §D.9.2, PyPI bilan 2026-08-04 da tasdiqlangan; paketning
+    # oxirgi relizi — 2025-10-30). `minio-py` ham ishlatilmaydi: S3 API
+    # omborni REFAKTOR emas, SOZLAMA o'zgarishi qilib saqlaydi (CLAUDE.md).
+    #
+    # `opencv-python-headless` BU YERGA QO'SHILMAYDI (D-13). Sifat filtri
+    # uchun `Pillow` ning `ImageStat` i yetadi; `opencv` — `cv-service`
+    # ning bog'liqligi va u 5-fazada tug'iladi. Uni bu yerda "har ehtimolga
+    # qarshi" saqlash runtime image'ga ~70 MB va keraksiz hujum yuzasini
+    # qo'shardi.
+    "aiobotocore==3.9.0",
+    "Pillow==12.3.0",
+    "sbozor-core",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.0",
+    "mypy==2.3.0",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov==7.1.0",
+    "testcontainers[postgres]==4.15.0",
+    # Sinxron `pg_catalog` meta-so'rovlari uchun (tenancy meta-testlari).
+    "psycopg[binary]==3.3.4",
+    # `respx` — `httpx` uchun mock transport (03-05 ISAPI klientining unit
+    # testlari). 03-RESEARCH "Package Legitimacy Audit": `slopcheck install
+    # -e pypi` -> `[OK]`, BSD-3-Clause, 0.23.1 (2026-04-08).
+    #
+    # U ATAYIN `dev` da qoladi — mock qatlami ishlab chiqarish kodidan
+    # HECH QACHON chaqirilmaydi, ya'ni `httpx` bilan bir xil sabab bu yerda
+    # TESKARI ishlaydi. `tests/unit/test_runtime_deps.py` ikkala yo'nalishni
+    # ham qulflaydi.
+    "respx==0.23.1",
+]
+
+[tool.uv]
+# Virtual loyiha: `core-api` ning o'zi paket sifatida qurilmaydi/o'rnatilmaydi,
+# faqat bog'liqliklari sync qilinadi. `app` moduli working-dir orqali topiladi.
+package = false
+
+[tool.uv.sources]
+sbozor-core = { path = "../../packages/sbozor-core", editable = true }

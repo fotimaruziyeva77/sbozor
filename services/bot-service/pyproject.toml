@@ -1,0 +1,135 @@
+[project]
+name = "bot-service"
+version = "0.1.0"
+description = "SBOZOR bot-service — sotuvchi va direktor Telegram botlari (aiogram long-polling)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    # =====================================================================
+    # ⚠⚠ LOYIHANING UCHINCHI BOG'LIQLIK TO'PLAMI — VA U ALOHIDA BO'LISHI
+    #    QULAYLIK EMAS, MAJBURIYAT (D-09).
+    #
+    # `aiogram 3.30.0` ning metadatasi IKKI qattiq shift beradi:
+    #     redis[hiredis] >=6.2.0,<8      va      pydantic >=2.4.1,<2.14
+    # `core-api` esa `redis[hiredis]==8.0.1` ga QADALGAN
+    # (`tests/unit/test_runtime_deps.py::test_redis_pin_is_not_downgraded`
+    # buni MEXANIK qulflaydi). Ya'ni ikki servis bitta navbat klientini
+    # BO'LISHA OLMAYDI — bu `arq` darsining aynan takrori: o'shanda
+    # `uv add arq` `redis` ni jimgina 5.x ga tushirib, buzilishni
+    # `app/security/ratelimit.py` da — BUTUNLAY BOSHQA joyda — chiqargan
+    # bo'lardi (D-06).
+    #
+    # Shuning uchun bu manifest va uning `uv.lock` i `core-api`/`cv-service`
+    # nikiga TEGMAYDI. Qaror `services/bot-service/README.md` §1 da
+    # yozilgan.
+    # =====================================================================
+    #
+    # =====================================================================
+    # ⛔⛔ QUYIDAGI PAKETLAR BU YERGA HECH QACHON QO'SHILMAYDI (D-08/1).
+    #     Taqiq MEXANIK: `services/bot-service/tests/unit/test_runtime_deps.py`
+    #     har birini `importlib.metadata` bilan VA `import` xulqi bilan
+    #     IKKI QATLAMDA o'lchaydi.
+    #
+    #   `sqlalchemy`  — DB ulanishi IKKINCHI RLS yuzasini ochardi: tenant
+    #                   izolyatsiyasi `core-api` da bir marta o'lchangan,
+    #                   ikkinchi yuza uni ikkinchi marta isbotlashni talab
+    #                   qilardi va bot Telegram'dan kelgan AUTENTIFIKATSIYA
+    #                   QILINMAGAN oqim ostida turadi (T-07-01).
+    #   `asyncpg`     — yuqoridagi bilan bir xil sabab; drayver mavjudligi
+    #                   «bitta so'rovcha yozib qo'ysak bo'ladi» yo'lini
+    #                   ochardi.
+    #   `sbozor-core` — ⚠ VASVASA ENG KATTA BAND: unda enumlar va pul turi
+    #                   bor. Lekin u `models/` orqali SQLAlchemy'ni TORTADI,
+    #                   ya'ni yuqoridagi ikki taqiqni BILVOSITA buzardi.
+    #                   Botga kerak bo'lgani — matn va son, va ular ichki
+    #                   API javobidan shundayligicha keladi.
+    #   `taskiq`      — bot JOB BAJARMAYDI (D-08: u faqat KIRUVCHI oqimni
+    #   `taskiq-redis`  qabul qiladi). Jo'natish `worker` konteynerining
+    #                   `notify.outbox_tick` vazifasida qoladi — ikkinchi
+    #                   orkestratsiya mexanizmi tug'ilmaydi.
+    #   `phonenumbers`— E.164 normalizatsiyasi `core-api` DA (D-25). Ikki
+    #                   joyda normallashtirish ikki xil natija bergan kunda
+    #                   bog'lanish JIMGINA buzilardi: bot bir shaklni
+    #                   yozardi, server boshqasini izlardi va «sotuvchi
+    #                   topilmadi» xatosi ma'lumot xatosiga o'xshab
+    #                   ko'rinardi.
+    # =====================================================================
+    #
+    # --- Telegram framework (07-01, BOT-01/BOT-02) ---
+    #
+    # `fast`  -> aiodns + uvloop; `redis` -> FSM ombori; `i18n` -> Babel
+    # (D-30: bot matnlari `.po` katalogida, gettext ko'plik qoidalari bilan).
+    "aiogram[fast,redis,i18n]==3.30.0",
+    # ⛔ `8.` EMAS: aiogram 3.30 `redis[hiredis]<8,>=6.2.0` talab qiladi.
+    #    7.4.1 — o'sha oynadagi eng yangi (07-RESEARCH § Standard Stack).
+    "redis[hiredis]==7.4.1",
+    # --- Sozlama, jurnal, kuzatuv ---
+    #
+    # ⛔ `2.14` EMAS: aiogram `pydantic<2.14,>=2.4.1`. Qiymatning O'ZI
+    #    `core-api` niki bilan bir xil, lekin u ALOHIDA lockfaylda yashaydi.
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "structlog==26.1.0",
+    # ⚠ `SENTRY_DSN` `compose.yaml` da berilgan JARAYON `init_sentry()` ni
+    #   chaqirishi SHART — `tests/unit/test_sentry_processes.py` buni
+    #   compose'dan HOSILA qilib talab qiladi (04-13, §S-10).
+    "sentry-sdk[fastapi]==2.66.1",
+    # --- `core-api` ning ichki API'si (07-08) ---
+    #
+    # Botning YAGONA ma'lumot manbai. Bazaga to'g'ridan-to'g'ri borish
+    # yuqoridagi taqiq ro'yxatida.
+    "httpx==0.28.1",
+    # `ZoneInfo("Asia/Tashkent")` slim image'da BUSIZ yiqiladi.
+    "tzdata==2026.3",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.0",
+    "mypy==2.3.0",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+]
+
+[tool.uv]
+# Virtual loyiha: `bot-service` ning o'zi paket sifatida qurilmaydi —
+# faqat bog'liqliklari sync qilinadi (`core-api`/`cv-service` bilan bir xil).
+package = false
+
+[tool.uv.sources]
+# ⚠⚠ ATAYIN BO'SH — VA BU BLOK ATAYIN QOLDIRILGAN.
+#
+# `core-api` va `cv-service` bu yerda `sbozor-core` ni `editable` manba
+# sifatida e'lon qiladi. `bot-service` E'LON QILMAYDI: `sbozor-core`
+# `models/` orqali SQLAlchemy'ni tortadi va yuqoridagi D-08/1 taqig'ini
+# bilvosita buzardi. Blok o'chirilmasdan bo'sh qoldirilgan, chunki uning
+# YO'QLIGI «unutilgan» deb o'qilardi, bo'shligi esa QAROR bo'lib turadi.
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# `.`      -> `app` paketi (rootdir `services/bot-service`, ya'ni
+#             `bot-tests` konteynerining `working_dir` i).
+# `tests`  -> kelgusi `fixtures` paketi. ⚠ `tests/` ning O'ZI paket EMAS
+#             (`__init__.py` yo'q) — repo ildizidagi `tests/` va
+#             `cv-service/tests/` bilan AYNAN bir xil shakl.
+pythonpath = [".", "tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# Testlarda `assert` — pytest'ning asosiy mexanizmi. `S105`/`S106` —
+# testdagi soxta token literallari (ular sir emas, uskuna).
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = []
+mypy_path = "tests"

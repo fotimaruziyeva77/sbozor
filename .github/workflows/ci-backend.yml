@@ -1,0 +1,57 @@
+name: ci-backend
+
+# Backend darvozasi: lint -> format -> types -> testlar.
+# GitHub runner'ida Docker mavjud, shuning uchun testcontainers to'g'ridan-to'g'ri
+# ishlaydi va `TEST_DATABASE_URL` O'RNATILMAYDI (haqiqiy postgres:18.4-trixie
+# konteyneri ko'tariladi). SQLite ishlatish TAQIQLANGAN — RLS unda yo'q.
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Aynan reliz tegiga qulflangan: astral-sh/setup-uv `v8`/`v9` uchun
+      # ko'chuvchi major teg chiqarmaydi (oxirgisi v7), shuning uchun v9.0.0.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          version: 0.11.33
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen --project services/core-api
+
+      - name: Lint (ruff)
+        run: uv run --project services/core-api ruff check .
+
+      # ALOHIDA qadam, `ruff check .` ichida emas (T-01-80). Sabab: umumiy
+      # lint yiqilganda sabab o'nlab diagnostika orasida yo'qoladi, bu qadam
+      # esa qizarganda nomi bilan aytadi — SQL injection. Qoida `[tool.ruff]`
+      # da allaqachon yoqilgan, ya'ni bu takror emas, KO'RINUVCHANLIK.
+      - name: SQL injection gate
+        run: uv run --project services/core-api ruff check --select S608 .
+
+      - name: Format check (ruff)
+        run: uv run --project services/core-api ruff format --check .
+
+      - name: Types (mypy strict)
+        run: uv run --project services/core-api mypy .
+
+      - name: Tests (pytest + testcontainers)
+        run: uv run --project services/core-api pytest -q
+
+      # FOUND-02 darvozasi ALOHIDA ishlaydi (T-01-81). To'liq to'plam
+      # allaqachon shu testlarni qamraydi — takror ATAYIN: darvozani
+      # o'chirish endi `pytest -q` ni "tezlashtirish" emas, quvurdan
+      # QADAM O'CHIRISH bo'ladi va u diff'da ko'rinadi.
+      - name: Tenancy gate (FOUND-02)
+        run: uv run --project services/core-api pytest tests/tenancy -q

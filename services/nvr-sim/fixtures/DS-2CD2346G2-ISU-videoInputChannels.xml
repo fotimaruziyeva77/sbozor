@@ -1,0 +1,29 @@
+<!--
+  MANBA (yozib olingan dump, QO'LDA YOZILMAGAN):
+    repozitoriy : github.com/maciej-or/hikvision_next
+    fayl        : tests/fixtures/devices/DS-2CD2346G2-ISU.json
+    ISAPI yo'li : /ISAPI/System/Video/inputs/channels
+    upstream    : c83426ec2e19 (2024-11-24)
+    blob sha1   : 89be73551de1a8ea51e90ad77cb06bf732e3a3fa
+    olingan     : 2026-08-03
+    qurilma     : DS-2CD2346G2-ISU
+
+  O'ZGARTIRISH: yo'q. Element tartibi, atributlar, namespace va qiymatlar
+  dumpdan VERBATIM. Yagona qo'shimcha — shu izoh.
+
+  NEGA BU MUHIM (Pitfall 4, `simulator-confirms-itself`): agar bu XML bizning
+  parserimiz kutgan shaklda O'YLAB TOPILSA, test faqat "kod o'z taxminiga mos"
+  ekanini isbotlardi — CI yashil, real qurilma qora.
+
+  Yuqoridagi dump anonimlashtirilgan holda yuqori oqimda saqlanadi (IP'lar
+  `1.0.0.x`, seriya raqamlari nollangan, MAC almashtirilgan) — ya'ni bu yerda
+  hech kimning haqiqiy tarmoq ma'lumoti yo'q.
+-->
+<VideoInputChannelList version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+  <VideoInputChannel version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+    <id>1</id>
+    <inputPort>1</inputPort>
+    <name>Atelier</name>
+    <videoFormat>PAL</videoFormat>
+  </VideoInputChannel>
+</VideoInputChannelList>

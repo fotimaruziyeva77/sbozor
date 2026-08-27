@@ -1,0 +1,623 @@
+"""NVR domeni: qurilma, uning siri, kameralar (kanallar) va kashfiyot yugurishlari.
+
+=============================================================================
+BU FAYLDA UCHTA QAT'IY QAROR YASHAYDI. UCHALASI HAM "QULAYLIK UCHUN"
+BUZILISHI OSON, SHUNING UCHUN SABABLARI SHU YERDA TURADI.
+
+1. SIR ALOHIDA JADVALDA (`nvr_credentials`) VA AUDIT TRIGGERIDAN CHIQARILGAN.
+   Ikki MUSTAQIL sabab bir xil qarorga olib keladi — pastdagi
+   `NvrCredential` docstringiga qarang.
+
+2. `cameras` DA `rtsp_url` USTUNI YO'Q. URL — HOSILA, ustun emas.
+   Sabab `Camera` docstringida.
+
+3. KAMERANING IDENTIFIKATSIYA KALITI — `(market_id, nvr_id, channel_no)`.
+   Seriya raqami/MAC/IP kalit EMAS (`03-RESEARCH.md` A.4): ular kamera
+   almashtirilganda o'zgaradi, kanal esa NVR'dagi jismoniy uyaning o'zi.
+   `source_ip`/`source_model` — KUZATILADIGAN atributlar, ya'ni ular
+   o'zgarsa bu "boshqa kamera" degani emas, "shu kanaldagi kamera
+   almashtirildi" degani va aynan shu fakt 5-fazada zonaning yaroqsiz
+   bo'lib qolish sababini beradi.
+=============================================================================
+
+TO'RTALA JADVAL HAM TENANT JADVALI (`03-PATTERNS.md` §S-1): `market_id` +
+RLS `ENABLE` va `FORCE` + tenant policy + `market_id` bilan boshlanuvchi
+domen konstraytlari + composite FK. `market_id` ustunida inline `ForeignKey`
+YOZILMAYDI — sabab `models/base.py::market_fk_column()` docstringida.
+
+O'CHIRISH SIYOSATI (D-10): kamera qatori HECH QACHON `DELETE` qilinmaydi.
+`is_archived` bayrog'i ishlatiladi, chunki 4-fazadagi snapshotlar va
+5-fazadagi zonalar `cameras.id` ga bog'lanadi — qator yo'qolsa ular yetim
+qoladi. Yagona istisno — `market_delete_draft()` kaskadi (qoralama bozor
+butunlay o'chiriladi va unda hech qanday tarix yo'q).
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    LargeBinary,
+    PrimaryKeyConstraint,
+    SmallInteger,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import CIDR, INET, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PgUuid
+from sqlalchemy.orm import Mapped, mapped_column
+
+from sbozor_core.enums import CameraStatus, DiscoveryRunStatus
+from sbozor_core.models.base import Base, TenantMixin, TimestampMixin, uuid_pk
+from sbozor_core.models.snapshot import CAPTURE_METHOD_CHECK
+
+__all__ = [
+    "CAMERA_NVR_INDEX",
+    "CAMERA_STATUS_CHECK",
+    "CAMERA_STATUS_VALUES",
+    "CAPTURE_STREAM_CHECK",
+    "CAPTURE_STREAM_VALUES",
+    "DISCOVERY_ACTIVE_RUN_INDEX",
+    "DISCOVERY_RUN_ACTIVE_PREDICATE",
+    "DISCOVERY_RUN_ACTIVE_STATUSES",
+    "DISCOVERY_RUN_STATUS_CHECK",
+    "DISCOVERY_RUN_STATUS_VALUES",
+    "TUNNEL_SUBNET_INDEX",
+    "TUNNEL_SUBNET_PREDICATE",
+    "Camera",
+    "NvrCredential",
+    "NvrDevice",
+    "NvrDiscoveryRun",
+]
+
+CAMERA_STATUS_VALUES: tuple[str, ...] = tuple(status.value for status in CameraStatus)
+DISCOVERY_RUN_STATUS_VALUES: tuple[str, ...] = tuple(status.value for status in DiscoveryRunStatus)
+
+DISCOVERY_RUN_ACTIVE_STATUSES: tuple[str, ...] = (
+    DiscoveryRunStatus.QUEUED.value,
+    DiscoveryRunStatus.RUNNING.value,
+)
+"""«Bir vaqtda ikki skan bo'lolmaydi» qoidasining FAOL to'plami (T-03-16).
+
+`0012_nvr_domain` dagi qisman UNIQUE indeksning predikati AYNAN shu
+ro'yxatdan hosil qilinadi, qo'lda ko'chirilmaydi: ikki nusxa ajralib
+ketganda indeks jimgina hech nimani qamramay qolardi va NVR ikki barobar
+yuk (va ikki barobar `401` urinishi -> hisob qulflanishi) olardi.
+"""
+
+
+def _quoted(values: tuple[str, ...]) -> str:
+    """SQL literal ro'yxati. Qiymatlar `StrEnum` a'zolari — tashqi kirish emas.
+
+    `market.py` va `identity.py` dagi jufti bilan bir xil ikki qatorli
+    funksiya va u ATAYIN uchinchi marta takrorlanadi: umumiy modulga
+    chiqarish `models/base.py` ning ommaviy yuzasini kengaytirardi, har bir
+    chaqiruvchi esa baribir O'Z enum'i bilan qulflangan.
+    """
+    return ", ".join(f"'{value}'" for value in values)
+
+
+CAMERA_STATUS_CHECK = f"status IN ({_quoted(CAMERA_STATUS_VALUES)})"
+"""`cameras.status` faqat ma'lum holatlardan biri (ifoda enum'dan HOSILA)."""
+
+DISCOVERY_RUN_STATUS_CHECK = f"status IN ({_quoted(DISCOVERY_RUN_STATUS_VALUES)})"
+"""`nvr_discovery_runs.status` faqat ma'lum holatlardan biri (ifoda enum'dan HOSILA)."""
+
+DISCOVERY_RUN_ACTIVE_PREDICATE = f"status IN ({_quoted(DISCOVERY_RUN_ACTIVE_STATUSES)})"
+"""Qisman UNIQUE indeksning predikati — `DISCOVERY_RUN_ACTIVE_STATUSES` dan HOSILA."""
+
+TUNNEL_SUBNET_PREDICATE = "tunnel_subnet IS NOT NULL"
+"""D-07 indeksining predikati — subnet HALI e'lon qilinmagan qurilmalar qamralmaydi."""
+
+CAPTURE_STREAM_VALUES: tuple[str, ...] = ("main", "sub")
+"""`cameras.capture_stream` — kadr QAYSI oqimdan olinadi (D-09).
+
+Enum sifatida `sbozor_core.enums` ga chiqarilmadi va bu ATAYIN: qiymatlar
+Hikvision kanal raqamlashining O'ZIDAN kelib chiqadi (`<camera>01` = asosiy,
+`<camera>02` = sub-oqim) va ular loyihaning domen tushunchasi emas, NVR
+protokolining fakti. `cameras.has_substream` bilan juftlikda ishlaydi:
+sub-oqimi yo'q kamerada `'sub'` tanlash kadr olishni yiqitardi.
+"""
+
+CAPTURE_STREAM_CHECK = f"capture_stream IN ({_quoted(CAPTURE_STREAM_VALUES)})"
+"""`cameras.capture_stream` faqat `'main'` yoki `'sub'` (ifoda ro'yxatdan HOSILA)."""
+
+# ===========================================================================
+# QISMAN / GLOBAL INDEKS NOMLARI — MODEL VA MIGRATSIYA UCHUN YAGONA MANBA
+# ===========================================================================
+#
+# ⚠ NEGA INDEKSLAR MODELDA HAM E'LON QILINADI (o'lchangan, 03-03):
+# `op.create_index(...)` yolg'iz o'zi yetarli EMAS. Alembic autogenerate
+# model metadata'sini baza bilan solishtiradi va modelda e'lon qilinmagan
+# indeksni "o'chirilgan" deb hisoblaydi — `test_autogenerate_is_empty`
+# uchta `remove_index` bilan QIZARDI (birinchi o'lchov). Ya'ni migratsiyada
+# indeks yaratish uni sxemaga qo'shadi, LEKIN keyingi `alembic revision
+# --autogenerate` uni O'CHIRISHNI taklif qilardi va kimdir buni "tozalash"
+# deb qabul qilishi mumkin edi.
+#
+# Nomlar va predikatlar shu yerda, ikkala tomon (model `Index(...)` va
+# `0012_nvr_domain`) SHU KONSTANTALARDAN oladi — literal takrorlanmaydi.
+
+DISCOVERY_ACTIVE_RUN_INDEX = "uq_nvr_discovery_runs_market_id_nvr_id_active"
+TUNNEL_SUBNET_INDEX = "uq_nvr_devices_tunnel_subnet_global"
+CAMERA_NVR_INDEX = "ix_cameras_market_id_nvr_id"
+
+
+class NvrDevice(Base, TenantMixin, TimestampMixin):
+    """NVR qurilmasi — bozorning kameralarga yagona kirish nuqtasi (CAM-01).
+
+    PAROL BU YERDA YO'Q va bu ATAYIN: u `nvr_credentials` da yashaydi.
+    `username` esa shu yerda qoladi — u sir emas, u qurilmaning konfiguratsiya
+    atributi va uni ko'rsatish onboarding'da kerak («qaysi hisob bilan
+    ulanyapmiz?»). Sirni ajratish sababi `NvrCredential` docstringida.
+
+    `tunnel_subnet` GLOBAL NOYOB (D-07) — bu shu fayldagi YAGONA tenant
+    chegarasidan tashqaridagi cheklov va u `0012_nvr_domain` da qisman UNIQUE
+    indeks sifatida yoziladi (model darajasida emas, chunki u qisman va
+    `market_id` bilan boshlanmaydi). Sabab mahsulot darajasida: ko'p tarmoq
+    `192.168.1.0/24` ishlatadi va ikkita bozor bir xil subnet e'lon qilsa
+    VPS ning marshrut jadvali chalkashadi — A bozorining trafigi B ga ketishi
+    mumkin (T-03-19). `1:1 NAT` yechimi ATAYIN implement qilinmaydi
+    (D-07): to'qnashuvda onboarding aniq xato beradi.
+    """
+
+    __tablename__ = "nvr_devices"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["market_id"], ["markets.id"], name="fk_nvr_devices_market_id_markets"
+        ),
+        # Composite FK NISHONI: `cameras`, `nvr_credentials` va
+        # `nvr_discovery_runs` `(market_id, nvr_id)` ga havola qiladi, ya'ni
+        # cross-tenant bog'lanish SXEMA darajasida yopiladi (T-03-14). RLS
+        # chetlab o'tilishi mumkin bo'lgan har qanday yo'lda (migratsiya,
+        # `psql`, xato yozilgan `SECURITY DEFINER`) bu FK baribir turadi.
+        UniqueConstraint("market_id", "id", name="uq_nvr_devices_market_id_id"),
+        # Bitta bozorda bitta NVR ikki marta qo'shilmaydi. `port` kalitga
+        # KIRADI: bitta xostda ikkita qurilma (masalan HTTP 80 va 8080 da)
+        # bo'lishi haqiqiy holat, `host` ning yolg'iz o'zi esa uni bloklardi.
+        UniqueConstraint("market_id", "host", "port", name="uq_nvr_devices_market_id_host_port"),
+        CheckConstraint("port BETWEEN 1 AND 65535", name="port_range"),
+        # `rtsp_port` NULL bo'lishi MUMKIN ("hali kashf etilmagan"), lekin
+        # to'ldirilgan bo'lsa u ham haqiqiy port bo'lishi shart.
+        CheckConstraint(
+            "rtsp_port IS NULL OR rtsp_port BETWEEN 1 AND 65535", name="rtsp_port_range"
+        ),
+        # Bo'sh yoki faqat bo'shliqdan iborat `host` hech qachon ulanmaydi va
+        # jimgina "fantom qurilma" qatorini yaratardi (`zones.name_not_blank`
+        # bilan bir xil sabab).
+        CheckConstraint("length(btrim(host)) > 0", name="host_not_blank"),
+        CheckConstraint("length(btrim(username)) > 0", name="username_not_blank"),
+        # --- 4-faza: kadr olish sozlamalari (`0014_snapshot_domain`) ---
+        CheckConstraint(CAPTURE_METHOD_CHECK, name="capture_method_allowed"),
+        # Nol yoki manfiy chegara semaforni butunlay yopib, o'sha NVR ning
+        # BARCHA kameralarini jimgina kadrsiz qoldirardi.
+        CheckConstraint("max_concurrent_captures > 0", name="max_concurrent_captures_positive"),
+        CheckConstraint("capture_stagger_ms >= 0", name="capture_stagger_ms_non_negative"),
+        CheckConstraint(
+            "observed_stream_limit IS NULL OR observed_stream_limit > 0",
+            name="observed_stream_limit_positive",
+        ),
+        # D-07 — BOZORLAR ARO (global) noyoblik. Qisman: subnet hali e'lon
+        # qilinmagan qurilmalar bir-biriga xalaqit bermaydi.
+        #
+        # ⚠ `market_id` BILAN BOSHLANMAYDI VA BU ATAYIN — indeks nomi
+        #   `tests/tenancy/test_meta.py::INDEX_EXCEPTIONS` ga sabab bilan
+        #   qo'shilgan. Noyoblikni `(market_id, tunnel_subnet)` ga tushirish
+        #   himoyani BUTUNLAY yo'q qilardi: to'qnashuv aynan bozorlar
+        #   ORASIDA yuz beradi (T-03-19).
+        Index(
+            TUNNEL_SUBNET_INDEX,
+            "tunnel_subnet",
+            unique=True,
+            postgresql_where=text(TUNNEL_SUBNET_PREDICATE),
+        ),
+    )
+
+    id: Mapped[UUID] = uuid_pk()
+    # IP yoki hostname. OMMAVIY IP chegarada rad etiladi (`03-RESEARCH.md`
+    # C.11) — bu yerda CHECK bilan emas: `inet` tipi ham, matn regex'i ham
+    # "xususiy diapazon" ta'rifini DB'ga muzlatib qo'yardi va WireGuard
+    # topologiyasi o'zgarganda migratsiya talab qilardi. Ustun `text`,
+    # chunki hostname ham qabul qilinadi.
+    host: Mapped[str] = mapped_column(Text(), nullable=False)
+    port: Mapped[int] = mapped_column(Integer(), nullable=False, server_default=text("80"))
+    use_tls: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+    # ⚠ IKKI USTUN JUFTLIK: `rtsp_port` NULL = "hali skan qilinmagan",
+    # `rtsp_port_assumed = true` = "554 fallback ishlatildi" (`03-RESEARCH.md`
+    # A.2). Ularni bitta ustunga birlashtirib bo'lmaydi: "kashf etilgan 554"
+    # va "taxmin qilingan 554" bir xil raqam, lekin DIAGNOSTIKADA butunlay
+    # boshqa holat — birinchisi ishonchli, ikkinchisi jonli ko'rish
+    # yiqilganda birinchi tekshiriladigan gumondor.
+    rtsp_port: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    rtsp_port_assumed: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default=text("false")
+    )
+    # OCHIQ MATN — sir EMAS. Parol `nvr_credentials.password_encrypted` da.
+    username: Mapped[str] = mapped_column(Text(), nullable=False)
+    model: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # Qurilmaning BARQAROR identifikatori — diagnostika uchun kuzatiladi.
+    # Kalit sifatida ISHLATILMAYDI: qurilma almashtirilganda `host` o'sha
+    # bo'lib qolishi mumkin va o'shanda seriya raqami bo'yicha "yangi NVR"
+    # yaratish butun kamera tarixini uzib qo'yardi.
+    serial_number: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    firmware_version: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # `NVR` / `IPCamera` — kashfiyot YO'LINI belgilaydi (`03-RESEARCH.md` E.15):
+    # NVR uchun `InputProxy/channels`, yakka kamera uchun boshqa endpoint.
+    device_type: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # D-07. Noyoblik BOZORLAR ARO va u `0012` dagi qisman UNIQUE indeksda
+    # (klass docstringiga qarang) — bu yerda faqat ustunning o'zi.
+    tunnel_subnet: Mapped[str | None] = mapped_column(CIDR(), nullable=True)
+    last_discovery_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # ===================================================================
+    # 4-FAZA: KADR OLISH SOZLAMALARI (D-06/D-07/D-08)
+    # ===================================================================
+    #
+    # `sbozor_core.enums.CaptureMethod`. UCHALA yo'l ham bitta protokol
+    # ortida quriladi (D-06), ya'ni tanlov MA'LUMOT, kod emas: yangi
+    # bozorda usulni almashtirish uchun deploy ham, shart ham kerak emas.
+    #
+    # ⚠ `isapi` — «ZAXIRA» EMAS (D-07). ISAPI `/picture` NOL RTSP
+    #   sessiyasi ochadi, go2rtc esa sessiyani ochiq ushlab turadi. Ya'ni
+    #   NVR ning o'lchanmagan sessiya chegarasiga yaqinlashganda `isapi`
+    #   eng XAVFSIZ yo'l bo'lib qoladi va tanlov ataylab unga o'tkaziladi.
+    #   Standart `go2rtc` bo'lishining sababi boshqa: u jonli ko'rish uchun
+    #   baribir ishlab turadi, ya'ni kadr olish qo'shimcha ulanish ochmaydi.
+    capture_method: Mapped[str] = mapped_column(
+        Text(), nullable=False, server_default=text("'go2rtc'")
+    )
+    # D-08 — STANDART 1, ya'ni KETMA-KET. `04-RESEARCH.md` §B.6 dagi 4
+    # taklifi ATAYIN rad etilgan va sabab ARIFMETIKADA: sovuq kadr ~4 s,
+    # 25 kamera to'liq ketma-ket = 100 s, grace oynasi esa 600 s. Ya'ni
+    # NVR ning O'LCHANMAGAN sessiya chegarasi bu fazani HECH QACHON
+    # bloklay olmaydi — u faqat kechikish narxini beradi. Parallellikni
+    # oshirish real NVR'da o'lchangandan KEYIN qilinadi, taxmin bilan emas
+    # (simulyator sessiya chegarasini umuman modellashtirmaydi).
+    max_concurrent_captures: Mapped[int] = mapped_column(
+        SmallInteger(), nullable=False, server_default=text("1")
+    )
+    # Ketma-ket kadrlar orasidagi pauza. Cho'qqini yumshatadi: 7 slotning
+    # har biri AYNI BIR daqiqada 25 kadr talab qiladi va o'rtacha yuk bu
+    # yerda yolg'on gapiradi.
+    capture_stagger_ms: Mapped[int] = mapped_column(
+        Integer(), nullable=False, server_default=text("500")
+    )
+    # ADAPTIV PASAYTIRISH uchun: `nvr_stream_limit` xatosi kelganda tizim
+    # kuzatilgan chegarani shu yerga yozadi va keyingi urinishlarni unga
+    # moslaydi.
+    #
+    # ⚠ AVTOMATIK OSHIRISH YO'Q va bu ATAYIN. Chegarani muvaffaqiyatdan
+    #   keyin ko'tarish tebranish (oscillation) beradi: tizim chegaraga
+    #   uriladi -> pasaytiradi -> muvaffaqiyat -> ko'taradi -> yana
+    #   uriladi. Har tsikl NVR ga muvaffaqiyatsiz sessiya urinishi va
+    #   kadrsiz slot narxida tushardi. Qiymatni ko'tarish — ODAMNING
+    #   qarori.
+    observed_stream_limit: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
+
+
+class NvrCredential(Base, TenantMixin):
+    """NVR paroli — ALOHIDA jadvalda va AUDIT TRIGGERIDAN BUTUNLAY CHIQARILGAN.
+
+    =========================================================================
+    IKKI MUSTAQIL SABAB, BIR XIL QAROR (`03-PATTERNS.md` §S-6, SC#4).
+
+    (a) `fn_audit_row()` `to_jsonb(NEW)` YOZADI. Trigger bu jadvalga ulansa
+        Fernet SHIFRMATNI `audit_log.new_value` ga tushardi. Bu ochiq matn
+        emas, lekin kalit buzilganda u TARIXIY parollarni ham beradi — ya'ni
+        shifrlash o'z ma'nosini yo'qotardi va `audit_log` (append-only,
+        o'chirib bo'lmaydigan jadval) eng uzoq yashaydigan sir omboriga
+        aylanardi (T-03-13).
+
+    (b) `attach_audit_trigger()` jadvalning birlamchi kaliti `id uuid`
+        bo'lishini TALAB qiladi (`fn_audit_row()` `row_id` ni `uuid` ga
+        keltiradi). Bu 1:1 jadvalda esa PK — `nvr_id`, ya'ni trigger bu
+        yerda TEXNIK jihatdan ham ishlamaydi. `stall_code_registry` bilan
+        aynan bir xil holat.
+
+    Ikkalasidan birortasi yolg'iz ham yetarli bo'lardi; ikkitasi birga
+    qarorni MUHOKAMASIZ qiladi. Shuning uchun jadval
+    `sbozor_core.schema_contract.AUDITED_TABLES` ga QO'SHILMAYDI va bu
+    istisno o'sha reyestrning docstringida to'rtinchi band sifatida yozilgan.
+
+    AUDIT IZI YO'QOLMAYDI: parol o'zgarishining FAKTI ilova qatlamida
+    `nvr_devices` ustiga QIYMATSIZ yoziladi
+    (`action='nvr_credentials_updated'`, `03-RESEARCH.md` E.15) — ya'ni
+    "kim, qachon parolni almashtirdi" savoliga javob bor, "parol nima edi"
+    savoliga esa hech qachon bo'lmaydi.
+    =========================================================================
+
+    `TimestampMixin` YO'Q: `created_at` ma'nosiz (qator NVR bilan birga
+    tug'iladi va uning `created_at` i `nvr_devices` da), `updated_at` esa
+    ATAYIN mavjud va u YAGONA vaqt belgisi — rotatsiya qachon bo'lganini
+    aynan shu ustun aytadi.
+    """
+
+    __tablename__ = "nvr_credentials"
+    __table_args__ = (
+        # PK `nvr_id` — 1:1 munosabat sxemada, ilova qatlamida emas. Ikkinchi
+        # qator paydo bo'lsa «qaysi parol amaldagisi?» savoli javobsiz
+        # qolardi va ulanish tasodifiy natija berardi.
+        PrimaryKeyConstraint("nvr_id", name="pk_nvr_credentials"),
+        ForeignKeyConstraint(
+            ["market_id"], ["markets.id"], name="fk_nvr_credentials_market_id_markets"
+        ),
+        ForeignKeyConstraint(
+            ["market_id", "nvr_id"],
+            ["nvr_devices.market_id", "nvr_devices.id"],
+            name="fk_nvr_credentials_market_id_nvr_id_nvr_devices",
+        ),
+        # Bo'sh `bytea` — "parol bor" degan YOLG'ON da'vo bo'lardi va
+        # ulanish `401` bilan yiqilib, sabab noma'lum qolardi.
+        CheckConstraint("octet_length(password_encrypted) > 0", name="password_not_empty"),
+        CheckConstraint("key_version > 0", name="key_version_positive"),
+    )
+
+    nvr_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), nullable=False)
+    # Fernet TOKENI (`cryptography`), ochiq matn EMAS. Kalit env/secret dan
+    # keladi va DB'da HECH QACHON saqlanmaydi (CLAUDE.md spec §5).
+    password_encrypted: Mapped[bytes] = mapped_column(LargeBinary(), nullable=False)
+    # Kalit rotatsiyasini KUZATILADIGAN qiladi: kalit almashtirilganda eski
+    # versiyadagi qatorlar qaysiligi so'rov bilan topiladi. Usiz rotatsiya
+    # «hammasini qayta shifrlab ko'ramiz» ga aylanardi.
+    key_version: Mapped[int] = mapped_column(
+        SmallInteger(), nullable=False, server_default=text("1")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class Camera(Base, TenantMixin, TimestampMixin):
+    """NVR kanali — 4-fazadagi snapshot va 5-fazadagi zonaning tayanch obyekti.
+
+    =========================================================================
+    `rtsp_url` USTUNI ATAYIN YO'Q (`03-RESEARCH.md` A.2, `03-PATTERNS.md` §3.1).
+
+    URL SOF FUNKSIYADA hosil qilinadi: `nvr_devices.host` + kashf etilgan
+    `rtsp_port` + `{channel_no}01`/`{channel_no}02`. Ustun qo'shilsa IKKITA
+    haqiqat manbai paydo bo'lardi va ikkalasi ham noto'g'ri tomonga ketardi:
+
+      * NVR ning IP'si yoki RTSP porti o'zgarganda BITTA qator emas, 25 ta
+        kamera URL'i yangilanishi kerak bo'lardi — va bittasi unutilsa
+        jonli ko'rish jimgina eski manzilga urinardi;
+      * URL ichida foydalanuvchi nomi/parol bo'lishi mumkin bo'lgan shakl
+        (`rtsp://user:pass@host/...`) sirni `cameras` jadvaliga, ya'ni
+        AUDIT TRIGGERI ULANGAN jadvalga olib kirardi — `NvrCredential`
+        docstringidagi butun ajratish bekor bo'lardi.
+
+    ⚠ Bu ustunni «qulaylik uchun» qo'shish taklifi kelsa: qulaylik sof
+    funksiyada, ustunda emas.
+    =========================================================================
+
+    IKKI BAYROQ, BIR XIL SEMANTIKA — «ADMIN QARORIGA TEGILMAYDI»:
+
+      `name_overridden` — nomni admin qo'lda o'zgartirgan. Qayta skan NVR dan
+                          kelgan nomni YOZMAYDI (SC#2: "mavjudi tegilmaydi").
+      `is_archived`     — kanalni admin arxivlagan (D-10 dagi soft-delete).
+                          Qayta skan uni TIKLAMAYDI.
+
+    Ikkalasi ham bir xil qoidaga bo'ysunadi va bu tasodif emas: kashfiyot
+    NVR ni HAQIQAT manbai deb biladi, LEKIN admin qarori undan ustun. Aks
+    holda har kechagi skan adminning ishini bekor qilardi va u buni faqat
+    ertasi kuni sezardi.
+
+    QATOR HECH QACHON O'CHIRILMAYDI (D-10): 4-fazadagi snapshotlar va
+    5-fazadagi zonalar `cameras.id` ga bog'lanadi.
+    """
+
+    __tablename__ = "cameras"
+    __table_args__ = (
+        ForeignKeyConstraint(["market_id"], ["markets.id"], name="fk_cameras_market_id_markets"),
+        ForeignKeyConstraint(
+            ["market_id", "nvr_id"],
+            ["nvr_devices.market_id", "nvr_devices.id"],
+            name="fk_cameras_market_id_nvr_id_nvr_devices",
+        ),
+        UniqueConstraint("market_id", "id", name="uq_cameras_market_id_id"),
+        # ⚠ SC#2 NING YAGONA DB KAFOLATI (T-03-15).
+        #
+        #   Ilova qatlamidagi «avval tekshir, keyin yoz» IKKI PARALLEL skanda
+        #   ikkalasini ham o'tkazib yuborardi (ikkalasi ham bo'sh holatni
+        #   ko'radi) va kanal uchun IKKITA qator tug'ilardi. 5-fazada esa
+        #   zona qaysi qatorga bog'langani tasodifga bog'liq bo'lib qolardi.
+        #
+        #   Konstrayt `market_id` bilan BOSHLANADI — tenant invarianti #5
+        #   (`test_tenant_indexes_lead_with_market_id`).
+        #
+        #   Buzilganda SQLSTATE `23505`; 03-05 dagi upsert aynan shu
+        #   konstraytga `ON CONFLICT` qiladi.
+        UniqueConstraint(
+            "market_id", "nvr_id", "channel_no", name="uq_cameras_market_id_nvr_id_channel_no"
+        ),
+        # go2rtc'dagi oqim nomi — GLOBAL noyob (`03-RESEARCH.md` D.13).
+        # ⚠ Bu ATAYIN tenant chegarasidan tashqarida: go2rtc bitta jarayon va
+        #   uning oqim nomlari fazosi BARCHA bozorlar uchun umumiy. Nom
+        #   `cam_<uuid4>` ko'rinishida hosil qilinadi, ya'ni to'qnashuv
+        #   amalda imkonsiz — konstrayt esa nom QO'LDA berilgan holatda
+        #   ikki bozorning oqimini bir-birining ustiga yozishni bloklaydi.
+        UniqueConstraint("stream_name", name="uq_cameras_stream_name"),
+        CheckConstraint("channel_no > 0", name="channel_no_positive"),
+        CheckConstraint(CAMERA_STATUS_CHECK, name="status_allowed"),
+        CheckConstraint("length(btrim(name)) > 0", name="name_not_blank"),
+        CheckConstraint("length(btrim(stream_name)) > 0", name="stream_name_not_blank"),
+        # --- 4-faza: kadr QAYSI oqimdan olinadi (`0014_snapshot_domain`) ---
+        CheckConstraint(CAPTURE_STREAM_CHECK, name="capture_stream_allowed"),
+        # «Shu NVR ning kameralari» — kashfiyot upsert'i va ro'yxat
+        # so'rovining asosiy yo'li. `market_id` bilan BOSHLANADI.
+        Index(CAMERA_NVR_INDEX, "market_id", "nvr_id"),
+    )
+
+    id: Mapped[UUID] = uuid_pk()
+    nvr_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), nullable=False)
+    # IDENTIFIKATSIYA KALITI (`03-RESEARCH.md` A.4) — NVR dagi jismoniy uya.
+    channel_no: Mapped[int] = mapped_column(Integer(), nullable=False)
+    stream_name: Mapped[str] = mapped_column(Text(), nullable=False)
+    name: Mapped[str] = mapped_column(Text(), nullable=False)
+    name_overridden: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default=text("false")
+    )
+    # `sbozor_core.enums.CameraStatus`. Boshlang'ich qiymat `unknown` va bu
+    # ATAYIN: `offline` ni standart qilish «kamera buzuq» degan YOLG'ON
+    # dalilni birinchi o'lchovdan OLDIN yozardi.
+    status: Mapped[str] = mapped_column(Text(), nullable=False, server_default=text("'unknown'"))
+    # D-10 dagi soft-delete. `DELETE` HECH QACHON.
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default=text("false")
+    )
+    # `{ch}02` mavjudmi (`03-RESEARCH.md` A.2). `true` STANDART, chunki
+    # Hikvision NVR larida sub-oqim odatiy holat; kashfiyot uni tekshirib
+    # `false` ga tushiradi. Teskari standart har bir kamerani «sub-oqimsiz»
+    # deb belgilab, jonli ko'rishni asosiy (og'ir) oqimga majburlardi.
+    has_substream: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default=text("true")
+    )
+    # KUZATILADIGAN atributlar — kalit EMAS (fayl boshidagi 3-band).
+    # O'zgarishi `fn_audit_row()` triggeri orqali auditga tushadi va 5-fazada
+    # «zona nega yaroqsiz bo'lib qoldi?» savoliga javob beradi.
+    source_ip: Mapped[str | None] = mapped_column(INET(), nullable=True)
+    source_model: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # HECH QACHON YANGILANMAYDI — kanal birinchi marta qachon ko'rilgani.
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # HAR SKANDA yangilanadi. `last_seen_at` eskirishi «kanal yo'qoldi»
+    # signali va u `status` dan MUSTAQIL: status oxirgi O'LCHOVni aytadi,
+    # bu ustun esa o'lchov QACHON bo'lganini.
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # ===================================================================
+    # 4-FAZA: KADR QAYSI OQIMDAN OLINADI (D-09)
+    # ===================================================================
+    #
+    # `'main'` STANDART va bu tanlovning IKKALA yuzi ham yozib qo'yilishi
+    # kerak, chunki ular qarama-qarshi tomonga tortadi:
+    #
+    #   `'sub'`  omborni ~12× KAMAYTIRADI (sub-oqim ancha kichik kadr) va
+    #            NVR ning chiquvchi bitreytini ham shuncha yengillashtiradi;
+    #   `'sub'`  5-fazaning ANIQLIK SHIFTINI PASAYTIRADI — kichik kadrda
+    #            uzoq rastadagi mollar detektor uchun bir necha pikselga
+    #            aylanadi va «band» qarori ishonchsiz bo'lib qoladi.
+    #
+    # Ikkinchisi qaytarib bo'lmaydigan yo'qotish (arxivdagi kadr qayta
+    # olinmaydi), birinchisi esa faqat pul — shuning uchun standart
+    # `'main'`. QAROR REAL KADRDA O'LCHANADI (Phase 0/pilot), taxmin bilan
+    # emas, va bu ustun o'sha o'lchovdan keyin BITTA `UPDATE` bilan
+    # o'zgaradi.
+    #
+    # `has_substream = false` bo'lgan kamerada `'sub'` tanlash kadr olishni
+    # yiqitadi — bog'liqlik ilova qatlamida tekshiriladi, DB'da emas:
+    # `has_substream` kashfiyot bilan O'ZGARADI va CHECK ikkalasini
+    # muzlatib qo'yardi.
+    capture_stream: Mapped[str] = mapped_column(
+        Text(), nullable=False, server_default=text("'main'")
+    )
+
+
+class NvrDiscoveryRun(Base, TenantMixin):
+    """Kashfiyot yugurishi — SC#2 ni KUZATILADIGAN qiladigan yozuv (CAM-08).
+
+    Jadval faqat jurnal emas, u IKKI vazifani bajaradi:
+
+      1. Frontend `id` bo'yicha poll qiladi (kashfiyot HTTP so'rovi ichida
+         emas, JOB da ishlaydi — `03-RESEARCH.md` E.16).
+      2. `status IN ('queued','running')` ustidagi QISMAN UNIQUE indeks
+         (`0012_nvr_domain`) bir NVR uchun IKKINCHI parallel skanni
+         bloklaydi. Ilova qatlami 409 ni aynan shu konstrayt buzilishidan
+         hosil qiladi (03-06), ya'ni «tekshir-keyin-yoz» poygasi yo'q.
+         Bu shunchaki tozalik emas: ikki skan NVR ga ikki barobar yuk va
+         ikki barobar `401` urinishi beradi — Hikvision hisobi qulflanishi
+         mumkin (T-03-16).
+
+    `TimestampMixin` YO'Q: hodisa jadvali `created_at`/`updated_at` emas,
+    `started_at`/`finished_at` bilan o'lchanadi va ikkinchi vaqt juftligi
+    faqat chalkashlik qo'shardi (`StallAssignment` bilan bir xil qoida).
+    """
+
+    __tablename__ = "nvr_discovery_runs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["market_id"], ["markets.id"], name="fk_nvr_discovery_runs_market_id_markets"
+        ),
+        ForeignKeyConstraint(
+            ["market_id", "nvr_id"],
+            ["nvr_devices.market_id", "nvr_devices.id"],
+            name="fk_nvr_discovery_runs_market_id_nvr_id_nvr_devices",
+        ),
+        UniqueConstraint("market_id", "id", name="uq_nvr_discovery_runs_market_id_id"),
+        CheckConstraint(DISCOVERY_RUN_STATUS_CHECK, name="status_allowed"),
+        # Yakunlangan yugurishning tugash vaqti boshlanishidan OLDIN
+        # bo'lolmaydi — teskari juftlik davomiylikni manfiy qilardi va
+        # SC#3 dagi «sekin NVR» o'lchovini ma'nosiz qilardi.
+        CheckConstraint(
+            "finished_at IS NULL OR finished_at >= started_at", name="finished_after_started"
+        ),
+        CheckConstraint(
+            "channels_found IS NULL OR channels_found >= 0", name="channels_found_non_negative"
+        ),
+        CheckConstraint(
+            "channels_added IS NULL OR channels_added >= 0", name="channels_added_non_negative"
+        ),
+        CheckConstraint(
+            "channels_marked_offline IS NULL OR channels_marked_offline >= 0",
+            name="channels_marked_offline_non_negative",
+        ),
+        # ⚠ BIR VAQTDA IKKI KASHFIYOT BO'LOLMAYDI (T-03-16).
+        #   Qisman: yakunlangan yugurishlar (`succeeded`/`failed`) indeksga
+        #   TUSHMAYDI, ya'ni tarix cheksiz to'planaveradi va faqat FAOL
+        #   qator qulflanadi. API 409 ni AYNAN shu konstrayt buzilishidan
+        #   hosil qiladi (03-06) — «tekshir-keyin-yoz» poygasi yo'q.
+        #   `market_id` bilan BOSHLANADI (tenant invarianti #5).
+        Index(
+            DISCOVERY_ACTIVE_RUN_INDEX,
+            "market_id",
+            "nvr_id",
+            unique=True,
+            postgresql_where=text(DISCOVERY_RUN_ACTIVE_PREDICATE),
+        ),
+    )
+
+    id: Mapped[UUID] = uuid_pk()
+    nvr_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), nullable=False)
+    # `sbozor_core.enums.DiscoveryRunStatus`.
+    status: Mapped[str] = mapped_column(Text(), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # UCHALASI HAM `NULL` bo'lishi mumkin — yugurish HALI tugamagan. Nolga
+    # tenglashtirish «0 ta kanal topildi» degan YOLG'ON natija berardi va
+    # `queued` holatdagi yugurish muvaffaqiyatsiz skandan farq qilmasdi.
+    channels_found: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    channels_added: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    channels_marked_offline: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    # KOD, MATN EMAS (`03-RESEARCH.md` E.15 / A.3 taksonomiyasi). Frontend
+    # uni uch tilga tarjima qiladi (`nvr.error.clock_drift` va h.k.) —
+    # CLAUDE.md ning «3 til majburiy» qoidasi. Matn saqlansa u bitta tilda
+    # muzlab qolardi.
+    error_code: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # Xom diagnostika (drift soniyalari, xom ISAPI javobi).
+    # ⚠ YOZISHDAN OLDIN `mask_sensitive` DAN O'TADI (`03-PATTERNS.md` §S-7):
+    #   filtr faqat KALIT nomiga qaraydi, ya'ni parol shu yerga NOMLANGAN
+    #   kalit sifatida tushishi shart, formatlangan matn ichida hech qachon.
+    error_detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB(), nullable=True)
+    # Kim ishga tushirdi. `users.id` ga FK ATAYIN YO'Q: `users` — GLOBAL
+    # jadval (`GLOBAL_TABLES`), unda `market_id` yo'q va composite FK
+    # qurib bo'lmaydi; oddiy FK esa foydalanuvchi o'chirilganda kashfiyot
+    # tarixini ham olib ketardi. `NULL` = fon/tizim yugurishi
+    # (`ActorKind.SYSTEM`).
+    triggered_by: Mapped[UUID | None] = mapped_column(PgUuid(as_uuid=True), nullable=True)

@@ -1,0 +1,50 @@
+# Dev qulayligi — `docker compose` bu faylni AVTOMATIK yuklaydi.
+#
+# Portlar FAQAT 127.0.0.1 ga bog'lanadi: db va cache hech qachon tashqi
+# tarmoq interfeysiga ochilmaydi (T-01-04).
+#
+# Xost port raqamlari o'zgaruvchan: standart 5432/6379/8000, lekin xostda
+# mahalliy Postgres/Redis allaqachon ishlayotgan bo'lsa `.env` da
+# DB_HOST_PORT / CACHE_HOST_PORT / API_HOST_PORT bilan almashtiriladi.
+# Bog'lanish interfeysi (127.0.0.1) O'ZGARMAYDI.
+
+services:
+  db:
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
+
+  cache:
+    ports:
+      - "127.0.0.1:${CACHE_HOST_PORT:-6379}:6379"
+
+  core-api:
+    build:
+      target: dev
+    # `command` MERGE QILINMAYDI — u bazadagi ro'yxatni butunlay ALMASHTIRADI,
+    # shuning uchun `--proxy-headers`/`--forwarded-allow-ips` bu yerda ham
+    # takrorlanishi shart (CR-04). Aks holda dev stek (`npm run up` bu faylni
+    # AVTOMATIK yuklaydi) tuzatilmagan holatda qolardi va nginx ortidagi
+    # haqiqiy mijoz IP'si yana yo'qolardi.
+    #
+    # DIQQAT: bu yerda ham `*` ISHLATILMAYDI. Wildcard uvicornni
+    # `always_trust` rejimiga o'tkazadi va u `X-Forwarded-For` ning CHAP
+    # elementini oladi — ya'ni qiymatni mijozning o'zi tanlaydi. Qiymat
+    # `compose.yaml` bilan BIR XIL bo'lishi shart (sabab va empirik o'lchov
+    # tavsifi o'sha yerda), aks holda dev va prod turli xavfsizlik holatida
+    # qolardi va regressiya faqat prod'da ko'rinardi.
+    command:
+      - "uvicorn"
+      - "app.main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--reload"
+      - "--proxy-headers"
+      - "--forwarded-allow-ips"
+      - "${FORWARDED_ALLOW_IPS:-172.16.0.0/12}"
+    working_dir: /app/services/core-api
+    volumes:
+      - .:/app
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"

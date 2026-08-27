@@ -1,0 +1,9 @@
+# CamAgent gateway bog'liqliklari — core-api bilan BIR XIL versiyalar
+# (fastapi/uvicorn/requests), bitta stack ikki xil versiyada yashamasin.
+fastapi==0.140.13
+uvicorn[standard]==0.51.0
+python-multipart==0.0.32
+requests==2.32.5
+# S3-mos ombor (SeaweedFS). Gateway sinxron kod — shuning uchun boto3,
+# aiobotocore emas (core-api'dagi qaror unga tegishli, bu servisga emas).
+boto3==1.40.11

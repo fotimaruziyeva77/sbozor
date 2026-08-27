@@ -1,0 +1,1137 @@
+# SBOZOR — yagona orkestratsiya nuqtasi.
+# Xost mashinasida `make` YO'Q (Windows) — barcha yorliqlar root `package.json` da.
+#
+# Profillar:
+#   (yo'q)   -> db, cache, storage, core-api, worker, scheduler, cv-service,
+#               bot-service, go2rtc, backup : `npm run up`
+#   migrate  -> Alembic one-shot job   : `npm run migrate`
+#   web      -> frontend (01-02 rejasi Dockerfile'ni yaratadi)
+#   proxy    -> nginx
+#   test     -> pytest + testcontainers: `npm run test`
+#            -> cv-tests (IKKINCHI image, `services/cv-service/Dockerfile`): `npm run cv:test`
+#   sim      -> nvr-sim + nvr-sim-rtsp (CAM-09): `npm run test:sim`
+
+name: sbozor
+
+services:
+  db:
+    image: postgres:18.4-trixie
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sbozor}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SBOZOR_OWNER_PASSWORD: ${SBOZOR_OWNER_PASSWORD}
+      SBOZOR_APP_PASSWORD: ${SBOZOR_APP_PASSWORD}
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      # DIQQAT: postgres 18+ image'i ma'lumotni major-versiya bo'yicha
+      # kataloglarda saqlaydi (/var/lib/postgresql/18/docker), shuning uchun
+      # volume `/var/lib/postgresql` ga o'rnatiladi — `/var/lib/postgresql/data` ga EMAS
+      # (aks holda konteyner "unused mount/volume" xatosi bilan yiqiladi).
+      - pgdata:/var/lib/postgresql
+      # Rollar + parollar: faqat birinchi ishga tushishda (bo'sh data katalogida) bajariladi.
+      - ./ops/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # DIQQAT: xost portiga publish QILINMAYDI (T-01-04).
+    # Dev uchun `compose.override.yml` uni 127.0.0.1 ga bog'laydi.
+    restart: unless-stopped
+
+  cache:
+    image: valkey/valkey:9.1.1-alpine
+    # Kesh — davomiylik kerak emas (volume yo'q), RDB/AOF o'chirilgan.
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    environment:
+      TZ: ${TZ:-Asia/Tashkent}
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  storage:
+    # DALIL-KADRLARNING S3-MOS ARXIVI (04-01, CAM-07, W0-4).
+    #
+    # ⚠ PROFILSIZ — `worker` va `go2rtc` bilan bir xil sabab: bu ISHLAB
+    # CHIQARISH komponenti. Profil ortiga yashirilsa kadr olish zanjiri
+    # yuklash bosqichida yiqilardi va sabab «tarmoq nosozligi» bo'lib
+    # ko'rinardi.
+    #
+    # OLTINCHI KONTEYNER, UCHINCHI SERVIS EMAS: SeaweedFS — TAYYOR image,
+    # biz yozgan kod emas (`db`, `cache`, `go2rtc`, `nginx` bilan bir
+    # toifa). CLAUDE.md ning «aynan 3 ta servis» cheklovi BIZNING
+    # servislarimizga tegishli va u buzilmaydi.
+    #
+    # MinIO EMAS: repo 2026-04-25 da ARXIVLANGAN (read-only, xavfsizlik
+    # yamog'i yo'q) va bu yerda shaxsiy ma'lumot saqlanadi. Garage ham
+    # emas — AGPL-3.0 (CLAUDE.md taqig'i). SeaweedFS 4.40 — Apache-2.0.
+    image: chrislusf/seaweedfs:4.40
+    command:
+      - "server"
+      - "-dir=/data"
+      - "-s3"
+      # ⚠ 8333 — SeaweedFS ning STANDART qiymati, lekin u ANIQ beriladi:
+      # standartga tayanish keyingi major versiyada jimgina buzilardi va
+      # healthcheck bilan ilova ikkalasi birdan boshqa portga qarardi.
+      - "-s3.port=8333"
+      - "-s3.config=/etc/seaweedfs/s3.json"
+      # Ko'p mayda fayl (175 JPEG/kun/bozor) — SeaweedFS ning maqsadli
+      # holati. 1 GB volume fayllari zaxira nusxa uchun qulay.
+      - "-master.volumeSizeLimitMB=1024"
+    volumes:
+      - seaweed:/data
+      # ⚠ `:ro` MAJBURIY — `go2rtc.yaml` va `mediamtx.yml` bilan bir xil
+      # qoida: server o'z konfiguratsiyasini QAYTA YOZA OLMASLIGI kerak.
+      #
+      # ⚠ BU FAYL REPODA YO'Q va bo'lmasligi ham kerak — unda S3 sirlari
+      # bor. Repoda `ops/seaweedfs/s3.json.example` turadi (`.env.example`
+      # va `wg0.conf.example` bilan aynan bir xil naqsh):
+      #     cp ops/seaweedfs/s3.json.example ops/seaweedfs/s3.json
+      # va ichidagi namunaviy kalitlarni haqiqiylari bilan almashtiring
+      # (yo'riqnoma — `ops/seaweedfs/README.md`).
+      - ./ops/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    environment:
+      TZ: ${TZ:-Asia/Tashkent}
+    # =====================================================================
+    # ⚠⚠ `ports:` BLOKI ATAYIN YO'Q — VA U QO'SHILMAYDI (T-04-02).
+    #
+    # `go2rtc` dagi ogohlantirish (pastda, 8555/udp bandi) SO'ZMA-SO'Z shu
+    # yerga tegishli: compose `ports:` bandi Docker'ning `iptables`
+    # qoidalarini yozadi va u host firewall'ini CHETLAB O'TADI — ya'ni
+    # «UFW da yopiq» degan ishonch YOLG'ON bo'lib qolardi.
+    #
+    # Bu ombor BARCHA bozorlarning dalil-kadrlarini saqlaydi; ular bozor
+    # tashrifchilarining shaxsiy ma'lumoti va O'zR qonuni ostidagi
+    # ma'lumot. Rasmga yagona yo'l — `core-api` ning proxy endpointi
+    # (04-09), presigned URL EMAS.
+    # =====================================================================
+    healthcheck:
+      # `nc` — `go2rtc` va `nvr-sim-rtsp` bilan BIR XIL qaror: «jarayon
+      # tinglayaptimi?» savoliga to'liq javob va u tekshirilmagan
+      # endpointga tayanmaydi.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8333"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  migrate:
+    # One-shot job. Alembic ILOVA STARTUP'ida ishga tushmaydi.
+    profiles: ["migrate"]
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: dev
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      # DDL egasi roli — ilova roli EMAS.
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL}
+      TZ: ${TZ:-Asia/Tashkent}
+    working_dir: /app
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  core-api:
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: runtime
+    # --workers 1: kelajakdagi scheduler/cron dublikatining oldini oladi.
+    #
+    # --proxy-headers + --forwarded-allow-ips (CR-04) — bu ikkisi MAJBURIY.
+    # uvicorn `X-Forwarded-For` ni FAQAT `--forwarded-allow-ips` ro'yxatidagi
+    # manzildan qabul qiladi; standart qiymat `127.0.0.1`. nginx esa compose
+    # tarmog'ida BOSHQA konteyner manzilida turadi — ya'ni bayroqsiz uning
+    # sarlavhasi TASHLAB YUBORILADI va `request.client.host` har doim proxy
+    # IP'si bo'lardi (`auth.py::_client_ip` ishonch qarorini ataylab shu
+    # qatlamga topshiradi). Oqibati ikkita:
+    #   1) `rl:login:ip:<proxy-ip>` — BUTUN PLATFORMA uchun bitta sanagich.
+    #      Chegara (IP_LIMIT=50) parol tekshiruvidan OLDIN ishlaydi, ya'ni
+    #      muvaffaqiyatli login uni tozalay olmaydi: ~51 anonim so'rov barcha
+    #      kassir/admin/direktorni 15 daqiqaga qulflaydi.
+    #   2) `audit_log.ip` har doim proxy manzilini yozadi — "kimdan" savoli
+    #      javobsiz qoladi (FOUND-03 dalil sifati).
+    #
+    # `*` NEGA TAQIQLANGAN (01-13 regressiyasi, hotfix bilan yopildi):
+    # uvicorn 0.51.0 `_TrustedHosts.always_trust` holatida
+    # `get_trusted_client_address()` zanjirning BIRINCHI (chap) elementini
+    # qaytaradi. nginx `$proxy_add_x_forwarded_for` bilan mijoz yuborgan
+    # qiymat aynan CHAPDA turardi -> `request.client.host` ni mijozning o'zi
+    # tanlardi: rate-limit chetlab o'tilardi, istalgan qurbonni qulflash
+    # mumkin edi va `audit_log.ip` soxta qiymat yozardi. nginx endi
+    # `$remote_addr` bilan USTIGA yozadi (ops/nginx/nginx.conf), bu yerda esa
+    # wildcard O'RNIGA tarmoq oralig'i turadi — ikki qatlam mustaqil.
+    #
+    # ANIQ RO'YXAT bilan uvicorn zanjirni O'NGDAN CHAPGA yuradi va birinchi
+    # ISHONCHSIZ hop'da to'xtaydi — to'g'ri algoritm aynan shu.
+    #
+    # QIYMAT QANDAY TANLANDI (empirik, 2026-07-29):
+    #   docker network inspect sbozor_default --format '{{json .IPAM.Config}}'
+    #   -> [{"Subnet":"172.19.0.0/16","Gateway":"172.19.0.1"}]
+    # Kuzatilgan /16 QADALMAYDI: Docker bridge tarmoqlariga subnetni standart
+    # puldan (172.16.0.0/12 -> /16 bo'laklar) DINAMIK beradi, ya'ni tarmoq
+    # qayta yaratilsa `sbozor_default` 172.20.x, 172.21.x ... bo'lib qolishi
+    # mumkin va qadalgan /16 jimgina ishlamay qo'yardi. Shuning uchun standart
+    # — butun pul: 172.16.0.0/12 (172.16.0.0 – 172.31.255.255).
+    #
+    # Prod'da toraytiring: tarmoqqa aniq subnet bering va `FORWARDED_ALLOW_IPS`
+    # ga aynan o'sha /16 ni (yoki nginx konteyneri manzilini) yozing.
+    command:
+      - "uvicorn"
+      - "app.main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--workers"
+      - "1"
+      - "--proxy-headers"
+      - "--forwarded-allow-ips"
+      - "${FORWARDED_ALLOW_IPS:-172.16.0.0/12}"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      VALKEY_URL: ${VALKEY_URL:-redis://cache:6379/0}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-sbozor}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-sbozor-api}
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-15}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-30}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # NVR rekvizitlarining Fernet kaliti (03-04, SC#4). STANDART QIYMAT
+      # ATAYIN YO'Q: `:-` bilan bo'sh qiymat berish ilovani shifrlashsiz
+      # ko'tarardi. Berilmasa `Settings` ISHGA TUSHISHDA yiqiladi va xato
+      # matni kalit hosil qilish buyrug'ini beradi (T-03-22).
+      NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
+      NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
+      # --- Snapshot ombori (04-01, CAM-07) ---
+      #
+      # ⚠ `S3_ACCESS_KEY`/`S3_SECRET_KEY` da `:-` BILAN BO'SH STANDART
+      # ATAYIN BERILMAGAN — `NVR_CREDENTIAL_KEY` (worker bloki, T-03-22)
+      # bilan AYNAN bir xil qaror. Bo'sh standart bilan servis muvaffaqiyatli
+      # KO'TARILARDI va xato faqat BIRINCHI KADRNI yuklashda — ya'ni
+      # ertalab 06:00 da, hech kim qaramayotgan paytda — chiqardi.
+      # Berilmasa `Settings` ISHGA TUSHISHDA yiqiladi (04-04).
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://storage:8333}
+      S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # --- Servis-servis tokeni (07-08, D-10) ---
+      #
+      # ⚠ `bot-service` BLOKIDAGI BILAN AYNI O'ZGARUVCHI va bu MAJBURIY:
+      # ikkalasi bitta sirning ikki uchi. Alohida nom berilsa ular jimgina
+      # ajralib ketardi va bot har so'rovda `401` olardi — jurnalda esa
+      # «token noto'g'ri» dan boshqa hech nima ko'rinmasdi.
+      #
+      # ⛔ `:-` BILAN STANDART YO'Q, lekin BO'SH QIYMAT ISHGA TUSHISHNI
+      # TO'XTATMAYDI — `NVR_CREDENTIAL_KEY` dan farqi shu. Bo'sh token
+      # `/internal/bot/*` ni `503` bilan BUTUNLAY yopadi (fail-closed),
+      # ya'ni sotuvchi boti ishlamaydi, lekin kadr olish, patta hisobi va
+      # veb yuzasi ISHLAB TURAVERADI. Yiqilish esa bot yuzasi uchun butun
+      # platformani to'xtatardi.
+      BOT_SERVICE_TOKEN: ${BOT_SERVICE_TOKEN}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: Asia/Tashkent
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    # NVR KASHFIYOTINING FON ISHCHISI (03-06, D-06).
+    #
+    # ⚠ PROFILSIZ — VA BU ATAYIN. `nvr-sim` va `migrate` dan farqli o'laroq
+    # bu ISHLAB CHIQARISH komponenti: `npm run up` uni ham ko'taradi.
+    # Profil ortiga yashirilsa `POST /nvr-devices/{id}/discover` 202 qaytarib,
+    # yugurish esa MANGU `queued` bo'lib qolardi — hech qanday xato
+    # bermasdan (aynan o'sha "jimgina yolg'on" sinfi).
+    #
+    # TO'RTINCHI KONTEYNER, UCHINCHI SERVIS EMAS: `core-api` kod bazasining
+    # boshqa entrypoint'i — `migrate` va `tests` bilan aynan bir xil naqsh,
+    # ya'ni CLAUDE.md ning "aynan 3 ta servis" cheklovi buzilmaydi
+    # (`03-RESEARCH.md` E.16 va `03-PATTERNS.md` §S-14 ikkalasi ham buni
+    # aniq aytadi).
+    #
+    # `target: runtime` — `migrate`/`tests`/`nvr-sim` `dev` ni ishlatadi.
+    # Sabab: worker prod'da ishlaydi, ya'ni unda pytest/ruff/mypy kerak
+    # emas va non-root foydalanuvchi (`appuser`, T-01-07) bo'lishi shart.
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: runtime
+    # `--workers 1` — endi bu SAMARADORLIK talabi, KORREKTLIK talabi EMAS
+    # (04-07 da yangilandi).
+    #
+    # 3-fazada bu qator «ikkinchi jarayon cron vazifalarini IKKI MARTA
+    # ishga tushirardi» deb yozilgan edi. D-03 o'sha xavfni STRUKTURAVIY
+    # ravishda yopdi: tik IDEMPOTENT (`ensure_plan` -> `ON CONFLICT DO
+    # NOTHING`, `claim_due` -> `FOR UPDATE SKIP LOCKED` + ijara), ya'ni
+    # ikkinchi jarayon dublikat qator ham, dublikat kadr ham yarata
+    # olmaydi.
+    #
+    # Qator SAQLANADI, chunki ikkinchi jarayon ORTIQCHA: u bir xil
+    # qatorlar ustida qulf raqobatini va NVR ga qo'shimcha bosimni
+    # tug'dirardi, foyda esa nol — kunlik ~175 vazifa bitta jarayonda
+    # bemalol bajariladi. Ya'ni bu chegara endi ishonch emas, TEJAMKORLIK.
+    #
+    # ⚠ `app/jobs/capture.py` ning `_GLOBAL_SEMAPHORES` i JARAYON
+    #   darajasida ishlaydi: ikkinchi jarayon global konkurentlik
+    #   chegarasini AMALDA ikki barobar qilardi (D-08).
+    command: ["taskiq", "worker", "app.worker:broker", "--workers", "1"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      VALKEY_URL: ${VALKEY_URL:-redis://cache:6379/0}
+      # ⚠ `JWT_SECRET` WORKER'GA KERAK EMAS, LEKIN U BUSIZ KO'TARILMAYDI —
+      # va bu O'LCHANGAN fakt, taxmin emas:
+      #
+      #   ValidationError: 1 validation error for Settings
+      #   jwt_secret  Field required [type=missing, ...]
+      #
+      # Sabab: `Settings` — SERVISGA yagona sozlama obyekti va uni har bir
+      # entrypoint to'liq quradi. Uni entrypoint bo'yicha bo'lish (masalan
+      # `WorkerSettings`) ikki modelning jimgina ajralib ketishiga yo'l
+      # ochardi — o'shanda `core-api` bir maydonni qo'shib, worker uni
+      # ko'rmay qolardi.
+      #
+      # Xavfsizlik jihatidan bu YANGI teshik emas: worker allaqachon
+      # `NVR_CREDENTIAL_KEY` ni ushlab turadi va `settings.py` ning O'Z
+      # izohi aynan uni "yagona eng qimmat sir" deb belgilaydi (JWT kaliti
+      # oshkor bo'lsa sessiyalar bekor qilinadi, shifr kaliti oshkor
+      # bo'lsa BARCHA NVR parollari ochiladi). Ikkalasi bir xil xost, bir
+      # xil image va bir xil ishonch chegarasida.
+      JWT_SECRET: ${JWT_SECRET}
+      # ⚠ SHIFR KALITI SHU YERDA MAJBURIY (03-04 ning ochiq bandi).
+      # Kashfiyot jobi NVR parolini `nvr_credentials` dan o'qiydi va uni
+      # `decrypt_nvr_password` bilan ochadi, ya'ni `Settings` bu maydonsiz
+      # UMUMAN qurilmaydi va konteyner ishga tushishda
+      # `ValidationError: nvr_credential_key Field required` bilan
+      # yiqiladi. `:-` bilan bo'sh standart berish esa undan YOMONROQ
+      # bo'lardi: worker ko'tarilib, xato faqat birinchi kashfiyotda
+      # chiqardi (T-03-22).
+      NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
+      NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
+      # --- Snapshot ombori (04-01, CAM-07) — `core-api` bloki bilan bir xil ---
+      # Kadr olish va saqlash siyosati AYNAN shu jarayonda ishlaydi, ya'ni
+      # sirlar bu yerda ham majburiy va `:-` bilan bo'sh standart YO'Q.
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://storage:8333}
+      S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # --- Telegram alertlari (04-08, FOUND-06) ---
+      #
+      # ⚠ BU IKKISI YUQORIDAGI S3 KALITLARIDAN TESKARI: `:-` bilan bo'sh
+      # standart ATAYIN beriladi. Bo'sh token — QONUNIY holat: «alertlar
+      # o'chiq» degani va u `log.warning` bilan bir marta e'lon qilinadi.
+      # Sabab operatsion: bot tokeni bozorga o'rnatishdan OLDIN ba'zan
+      # mavjud bo'lmaydi va o'shanda kadr olish TO'XTAMASLIGI kerak —
+      # alertsiz kadr alertli kadrsizlikdan yaxshiroq (D-19, §S-11).
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: Asia/Tashkent
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    # DIQQAT: xost portiga publish QILINMAYDI — worker HTTP yuzasi bermaydi.
+    restart: unless-stopped
+
+  scheduler:
+    # SNAPSHOT QUVURINING PLANERI (04-01/04-07, D-02, W0-3).
+    #
+    # ⚠⚠ PROFILSIZ — VA BU BU BLOKDAGI ENG MUHIM QATOR. `worker` bilan
+    # bir xil sabab, lekin oqibati BATTAR: planer profil ortida qolsa
+    # kunlik reja HECH QACHON materializatsiya bo'lmasdi va HECH QANDAY
+    # XATO CHIQMASDI — `docker compose ps` toza, jurnal bo'sh, jadval
+    # jimgina bo'sh. Bu «jimgina yolg'on» sinfining eng qimmat namunasi:
+    # nosozlik faqat kun oxirida, hisobot bo'sh chiqqanda sezilardi.
+    #
+    # YETTINCHI KONTEYNER, UCHINCHI SERVIS EMAS: `core-api` kod bazasining
+    # boshqa entrypoint'i — `worker`, `migrate` va `tests` bilan aynan bir
+    # xil naqsh (`target: runtime`, boshqa `command`).
+    #
+    # D-02: planer FAQAT holatsiz 1-daqiqalik tik beradi. Reja, ijara
+    # (lease), idempotentlik va yo'qlik yozuvi Postgres `capture_runs` da
+    # yashaydi. taskiq'ning cron holati (`SchedulerLoop.cron_tasks_last_run`)
+    # — jarayon xotirasidagi oddiy `dict`, taqsimlangan qulf yo'q.
+    # `RedisScheduleSource` ham yaroqsiz: `cache` `--save "" --appendonly no`
+    # bilan ishlaydi, ya'ni qayta ko'tarilganda hamma bozorning jadvali
+    # jimgina yo'qolardi.
+    #
+    # D-03: tik IDEMPOTENT, shuning uchun taskiq'ning uchala nosozlik
+    # rejimi (dublikat ishga tushish, o'tkazib yuborish, qayta ishga
+    # tushish) zararsiz — «aynan bitta planer» operatsion talabi YO'Q.
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: runtime
+    # ⚠ `app.worker:scheduler` obyekti 04-07 da tug'iladi (`app/worker.py`
+    # o'sha rejaning fayli). Konteyner ta'rifi ATAYIN OLDIN yoziladi —
+    # W0-3 ning butun mazmuni «profilsizlik migratsiyadan va koddan OLDIN
+    # qulflansin» degani. Shu sababli `docker compose up scheduler` 04-07
+    # gacha import xatosi beradi; `docker compose config` esa bugundan
+    # profilsizlikni isbotlaydi (`tests/unit/test_storage_config.py`).
+    command: ["taskiq", "scheduler", "app.worker:scheduler"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      VALKEY_URL: ${VALKEY_URL:-redis://cache:6379/0}
+      # `worker` bloki bilan bir xil sabab (`Settings` — SERVISGA yagona
+      # sozlama obyekti va uni har bir entrypoint TO'LIQ quradi).
+      JWT_SECRET: ${JWT_SECRET}
+      NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
+      NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://storage:8333}
+      S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: Asia/Tashkent
+    depends_on:
+      cache:
+        condition: service_healthy
+    # =====================================================================
+    # ⚠⚠ `healthcheck` ATAYIN YOZILMAGAN — VA U SOXTALASHTIRILMAYDI.
+    #
+    # `taskiq scheduler` HTTP yuzasi bermaydi, jarayon tirikligi esa
+    # «tik ketyaptimi?» savoliga JAVOB BERMAYDI. Aynan shu nosozlik sinfi
+    # 3-fazada o'lchangan (`worker.py:136-144`): konteyner `Up`,
+    # `docker compose ps` sog'lom ko'rsatadi va BIRORTA vazifa hech qachon
+    # bajarilmaydi. `CMD true` yoki `pgrep taskiq` kabi healthcheck
+    # aynan o'sha holatni «sog'lom» deb belgilab, YOLG'ON ISHONCH berardi.
+    #
+    # Yagona ishonchli signal — BAZADAGI natija. U `alert_sweep` va
+    # `/internal/self-check` zimmasida (04-07/04-08), konteyner
+    # healthcheck'ida emas (RESEARCH Pitfall 14).
+    # =====================================================================
+    # DIQQAT: xost portiga publish QILINMAYDI — planer HTTP yuzasi bermaydi.
+    restart: unless-stopped
+
+  cv-service:
+    # ZONA BANDLIGINI ANIQLASH WORKER'I (05-02, AI-02, D-23).
+    #
+    # ⚠⚠ UCHINCHI SERVIS — «yana bitta konteyner» EMAS. `worker`,
+    # `scheduler`, `migrate` va `tests` `core-api` IMAGE'ining boshqa
+    # entrypointlari edi; bu esa O'Z `pyproject.toml`, `uv.lock` va
+    # `Dockerfile` i bilan keladi (W0-2). Sabab bog'liqliklarda:
+    # `core-api` `opencv` ni ATAYIN rad etadi va taqiq MEXANIK
+    # (`tests/unit/test_runtime_deps.py:91-94` — ikkala guruhda ham).
+    # CLAUDE.md ning «aynan 3 ta servis» cheklovi BUZILMAYDI: `cv-service`
+    # allaqachon uchlikning a'zosi.
+    #
+    # ⚠ PROFILSIZ — `worker`/`scheduler`/`storage` bilan bir xil sabab: bu
+    # ISHLAB CHIQARISH komponenti. Profil ortiga yashirilsa kadr olingan,
+    # navbatga qo'yilgan va HECH QACHON aniqlanmagan bo'lardi — hech
+    # qanday xato bermasdan (aynan o'sha «jimgina yolg'on» sinfi).
+    #
+    # ⚠ SOF WORKER (05-08): `app/main.py` dagi minimal FastAPI bu
+    # konteynerda YURITILMAYDI. Sabab pastdagi healthcheck bandida.
+    build:
+      context: .
+      dockerfile: services/cv-service/Dockerfile
+      target: runtime
+    # `--workers 1`: aniqlash CPU'ga bog'liq va ONNX sessiyasi
+    # `intra_op_num_threads` bilan allaqachon parallel ishlaydi. Ikkinchi
+    # jarayon bir xil yadrolar uchun O'ZI bilan raqobatlashardi va har
+    # biri ikkinchi ONNX sessiyasini (yana ~model hajmi RAM) ochardi.
+    command: ["taskiq", "worker", "app.worker:broker", "--workers", "1"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      VALKEY_URL: ${VALKEY_URL:-redis://cache:6379/0}
+      # --- Aniqlagich (D-08/D-24) ---
+      #
+      # ⚠ `:-` bilan standart BERILGAN va bu S3 kalitlaridan ATAYIN farq
+      # qiladi: yo'lning O'ZI sir emas va u image ichidagi qat'iy joyga
+      # ishora qiladi (`Dockerfile`: `COPY ops/models/ /app/models/`).
+      # Artefaktning YO'QLIGI esa jimgina o'tmaydi — `Settings` ning
+      # `field_validator` i konteynerni ISHGA TUSHISHDA to'xtatadi
+      # (`ops/models/README.md`).
+      CV_MODEL_PATH: ${CV_MODEL_PATH:-/app/models/rfdetr-large.onnx}
+      CV_INTRA_OP_THREADS: ${CV_INTRA_OP_THREADS:-4}
+      # --- Snapshot ombori: FAQAT O'QISH rekviziti (T-05-06) ---
+      #
+      # ⚠ `S3_ACCESS_KEY`/`S3_SECRET_KEY` da `:-` BILAN BO'SH STANDART
+      # ATAYIN YO'Q — `core-api`/`worker` bloklari bilan aynan bir xil
+      # qaror. Bo'sh standart bilan servis muvaffaqiyatli KO'TARILARDI va
+      # xato faqat BIRINCHI kadrni o'qishda chiqardi.
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://storage:8333}
+      S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: Asia/Tashkent
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    # =====================================================================
+    # ⚠⚠ `healthcheck` ATAYIN YOZILMAGAN — VA U SOXTALASHTIRILMAYDI.
+    #
+    # `scheduler` blokidagi qaror so'zma-so'z shu yerga tegishli:
+    # `taskiq worker` HTTP yuzasi bermaydi va jarayon tirikligi «aniqlash
+    # bajarilyaptimi?» savoliga JAVOB BERMAYDI. `nc -z` uchun ataylab port
+    # ochish (yoki `app/main.py` ni shu konteynerda yuritish) o'z portiga
+    # o'zi javob beradigan yuza bo'lardi — ya'ni «sog'lom» degan YOLG'ON
+    # ISHONCH.
+    #
+    # Yagona ishonchli signal — BAZADAGI natija: `cv_detect` yurak urishi
+    # va uni o'qiydigan `/internal/self-check` (`core-api`,
+    # `EXPECTED_COMPONENTS`). Komponent bugundan reyestrda turadi va
+    # `never_seen` holatida — 05-08 uni yozadigan qiladi.
+    # =====================================================================
+    # DIQQAT: xost portiga publish QILINMAYDI (T-05-07) — worker tarmoq
+    # yuzasi bermaydi va u faqat compose tarmog'idan ko'rinadi.
+    restart: unless-stopped
+
+  cv-tests:
+    # `cv-service` NING TEST KONTEYNERI (W0-2).
+    #
+    # ⚠ NEGA MAVJUD `tests` KONTEYNERI YETMAYDI: u `core-api` image'ida
+    # ishlaydi va u yerda `onnxruntime`/`supervision`/`cv2` YO'Q — ularni
+    # o'sha muhitga qo'shish `test_runtime_deps.py:91-94` dagi
+    # O'LCHANGAN taqiqni bo'shatish bo'lardi. Naqsh esa AYNAN o'sha:
+    # `tests` `core-api` Dockerfile'ining `dev` target'ini qayta
+    # ishlatgani kabi, bu ham `cv-service` nikini qayta ishlatadi.
+    #
+    # ⚠ `SENTRY_DSN` ATAYIN BERILMAYDI: test jarayoni ishlab chiqarish
+    # kuzatuvi emas va `tests/unit/test_sentry_processes.py` ning
+    # predikati aynan shu kalit bo'yicha ishlaydi — uni bu yerga qo'yish
+    # darvozadan test konteyneri uchun ham `init_sentry()` talab qilardi.
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: services/cv-service/Dockerfile
+      target: dev
+    command: ["pytest", "-q"]
+    environment:
+      # =================================================================
+      # ⚠⚠ INTEGRATSIYA TESTLARI MIGRATSIYA QILINGAN BAZAGA BORADI (05-08).
+      #
+      # `tests` konteyneri `testcontainers` bilan O'Z Postgres'ini
+      # ko'taradi; bu konteyner esa BUNI QILMAYDI va sabab narxda:
+      # bo'sh konteynerga sxema kerak, sxema esa `alembic` +
+      # `alembic-utils` ni (RLS siyosatlari va o'zgarmaslik triggerlari
+      # `migrations/entities/` da yashaydi) IKKINCHI image'ga olib
+      # kirardi. `Base.metadata.create_all()` bilan qisqartirish YO'Q:
+      # u RLS ni ham, triggerlarni ham yaratmaydi — ya'ni aynan
+      # o'lchanishi kerak bo'lgan kafolatlar sinalmasdi.
+      #
+      # ⚠ SXEMA TAYYORLIGI TESTNING SHARTI: `npm run migrate` bajarilmagan
+      #   bo'lsa `tests/conftest.py` QATTIQ yiqiladi va buyruqni nomma-nom
+      #   ko'rsatadi (`skip` shoxi ATAYIN yo'q — 05-07 ning `model`
+      #   markeri bilan bir xil qaror).
+      #
+      # ⚠ `depends_on: db` shu sababdan qo'shilgan: `npm run cv:test`
+      #   bazani O'ZI ko'taradi. Birlik testlari (`pytest tests/unit`)
+      #   bazaga umuman tegmaydi — fixture faqat SO'RALGANDA quriladi.
+      # =================================================================
+      DATABASE_URL: ${DATABASE_URL}
+      # ⚠⚠ SEED ROLI ILOVA ROLIDAN BOSHQA — VA BU O'LCHANGAN ZARURIYAT.
+      #
+      # `sbozor_app` da `markets` uchun FAQAT `SELECT` bor (o'lchandi
+      # 2026-08-09: `information_schema.role_table_grants`). Bozor
+      # yaratish — EGA ning ishi, ya'ni test seed'i ham egadan boradi
+      # (repo ildizidagi `tests/conftest.py` ning `owner_url` i bilan
+      # aynan bir xil bo'linish).
+      #
+      # ⚠ AJRATISH TESTNI KUCHAYTIRADI, ZAIFLASHTIRMAYDI: `detect` VA
+      #   uning natijasini o'qish HAMON `sbozor_app` (NOSUPERUSER,
+      #   NOBYPASSRLS) ostida boradi, ya'ni RLS da'vosi haqiqiy qoladi.
+      #   Ikkalasini bitta rolga yig'ish seed uchun `markets` INSERT
+      #   grantini ilova roliga berishni talab qilardi — ya'ni testni
+      #   qulaylashtirish uchun MAHSULOT huquqini kengaytirish.
+      CV_TEST_SEED_DATABASE_URL: ${MIGRATION_DATABASE_URL}
+      TZ: Asia/Tashkent
+    depends_on:
+      db:
+        condition: service_healthy
+    # ⚠ `/app` EMAS: `pytest`, `ruff` va `mypy` uchalasi ham
+    # `services/cv-service/pyproject.toml` ni topishi SHART. `/app` da
+    # ular repo ildizidagi konfiguratsiyani olib, `core-api` ning
+    # to'plamini shu image'da ishga tushirardi (u yerda `respx`/
+    # `testcontainers` yo'q, ya'ni nosozlik sababi butunlay boshqa joyda
+    # ko'rinardi).
+    working_dir: /app/services/cv-service
+    volumes:
+      - .:/app
+
+  bot-service:
+    # SOTUVCHI VA DIREKTOR TELEGRAM BOTLARI (07-01, BOT-01, DQ-1).
+    #
+    # ⚠⚠ UCHINCHI VA OXIRGI SERVIS — «yana bitta konteyner» EMAS.
+    # `worker`, `scheduler`, `migrate` va `tests` `core-api` IMAGE'ining
+    # boshqa entrypointlari; `bot-service` esa O'Z `pyproject.toml`,
+    # `uv.lock` va `Dockerfile` i bilan keladi (D-09). Sabab
+    # bog'liqliklarda va u MEXANIK: `aiogram 3.30` `redis[hiredis]<8` va
+    # `pydantic<2.14` talab qiladi, `core-api` esa `redis==8.0.1` ga
+    # qadalgan (`tests/unit/test_runtime_deps.py::
+    # test_redis_pin_is_not_downgraded`). Ikki servis bitta navbat
+    # klientini BO'LISHA OLMAYDI — bu `arq` darsining aynan takrori (D-06).
+    # CLAUDE.md ning «aynan 3 ta servis» cheklovi BUZILMAYDI: `bot-service`
+    # allaqachon uchlikning a'zosi.
+    #
+    # ⚠ PROFILSIZ — `worker`/`scheduler`/`cv-service` bilan bir xil sabab:
+    # bu ISHLAB CHIQARISH komponenti va `npm run up` uni ham ko'taradi.
+    # Profil ortiga yashirilsa sotuvchi botga yozardi va javob HECH QACHON
+    # kelmasdi — hech qanday xato bermasdan (aynan o'sha «jimgina yolg'on»
+    # sinfi).
+    build:
+      context: .
+      dockerfile: services/bot-service/Dockerfile
+      target: runtime
+    # ⚠ `modul:atribut` SHAKLI YO'Q va bu ATAYIN: `python -m` `aiogram`
+    # uchun yagona to'g'ri ishga tushirish yo'li (u `uvicorn`/`taskiq` kabi
+    # obyektni argument sifatida QABUL QILMAYDI). Shu sababdan
+    # `tests/unit/test_sentry_processes.py` ning (b) bosqichi 07-01 da
+    # `-m <modul>` shaklini ham o'qiydigan qilib KENGAYTIRILDI va kirish
+    # nuqtasi moduli `main` nomli MODUL DARAJASIDAGI atributni e'lon
+    # qilishi SHART (`app/main.py` ning o'sha atribut ustidagi docstringi).
+    command: ["python", "-m", "app.main"]
+    environment:
+      # ⚠⚠ BIR XIL TOKEN IKKI MAQSADDA (A1) — VA BU ONGLI QAROR.
+      # `core-api`/`worker` shu tokenni ALERT supurgisi uchun ishlatadi,
+      # bu konteyner esa SOTUVCHI boti uchun. Ikkinchi token ikkinchi bot
+      # profili, ikkinchi nom va foydalanuvchida chalkashlik demakdir.
+      #
+      # ⛔ `:-` BILAN BO'SH STANDART YO'Q — bu `worker` blokidagi
+      # `TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}` dan ATAYIN farq
+      # qiladi. U yerda bo'sh token QONUNIY holat («alertlar o'chiq»,
+      # D-19), bu yerda esa bo'sh token — servisning MAVJUD BO'LISH
+      # sababining yo'qligi: tokensiz bot Telegram'ga umuman ulana
+      # olmaydi. `Settings` uni ishga tushishda RAD ETADI (T-07-02).
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      # Servis-servis tokeni (D-10): `hmac.compare_digest` bilan
+      # solishtiriladi va foydalanuvchi sessiyasini TUG'DIRMAYDI.
+      BOT_SERVICE_TOKEN: ${BOT_SERVICE_TOKEN}
+      CORE_API_URL: ${CORE_API_URL:-http://core-api:8000}
+      # ⛔ `db 1` — `core-api` ning `db 0` idan AJRATILGAN. U yerda
+      # rate-limit sanagichlari, sessiya keshi va `sbozor:jobs` navbati
+      # yashaydi; aiogram FSM kalitlarini o'sha makonga qo'shish `FLUSHDB`
+      # xatosini IKKI TIZIMNI BIRDAN yiqitadigan xatoga aylantirardi
+      # (`app/settings.py::DEFAULT_VALKEY_URL`).
+      VALKEY_URL: ${BOT_VALKEY_URL:-redis://cache:6379/1}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: Asia/Tashkent
+    # =====================================================================
+    # ⛔ `db` GA BOG'LIQLIK YO'Q — VA BU UNUTILGAN EMAS (D-08/1).
+    #
+    # Bot Postgres'ni KO'RMAYDI: uning yagona ma'lumot manbai `core-api`
+    # ning `/internal/bot/*` yuzasi. Sabab xavfsizlik chegarasida —
+    # Telegram'dan kelgan oqim AUTENTIFIKATSIYA QILINMAGAN va loyihaning
+    # ishonch chegarasidan TASHQARIDA, ya'ni bu konteynerga baza ulanishi
+    # berish IKKINCHI RLS yuzasini ochardi (T-07-01). Taqiq
+    # `services/bot-service/tests/unit/test_runtime_deps.py` da MEXANIK:
+    # `sqlalchemy`/`asyncpg` UMUMAN o'rnatilmagan.
+    #
+    # `cache` esa KERAK: aiogram FSM ombori (`RedisStorage`) shu yerda.
+    # =====================================================================
+    depends_on:
+      cache:
+        condition: service_healthy
+    # =====================================================================
+    # ⛔⛔ `deploy.replicas` YOZILMAYDI — VA BU BLOKDAGI ENG MUHIM SATR.
+    #
+    # Telegram Bot API da bir tokenga AYNAN BITTA `getUpdates` oqimi
+    # bo'lishi mumkin. Ikkinchi jarayon `409 Conflict` oladi YOKI
+    # update'ni TORTIB OLADI — ya'ni ikkinchi nusxa ishonchlilikni
+    # oshirmaydi, xabarlarni YO'QOTADI (DQ-1, T-07-03).
+    #
+    # Darvoza: `docker compose config | grep -c "replicas"` -> 0.
+    # =====================================================================
+    # =====================================================================
+    # ⚠⚠ `healthcheck` ATAYIN YOZILMAGAN — VA U SOXTALASHTIRILMAYDI.
+    #
+    # `cv-service` va `scheduler` bloklaridagi qaror so'zma-so'z shu yerga
+    # tegishli: long-poller HTTP yuzasi BERMAYDI va jarayon tirikligi
+    # «sotuvchi javob oldimi?» savoliga JAVOB BERMAYDI. `nc -z` uchun
+    # ataylab port ochish o'z portiga o'zi javob beradigan yuza bo'lardi —
+    # ya'ni «sog'lom» degan YOLG'ON ISHONCH. Bot `409` ostida jim qolgan
+    # holatda ham jarayon TIRIK bo'lardi.
+    # =====================================================================
+    # DIQQAT: xost portiga publish QILINMAYDI — bot tarmoq yuzasi bermaydi
+    # va uning yagona chiquvchi yo'li Telegram'ga HTTPS.
+    restart: unless-stopped
+
+  bot-tests:
+    # `bot-service` NING TEST KONTEYNERI (`cv-tests` naqshining takrori).
+    #
+    # ⚠ NEGA MAVJUD `tests` KONTEYNERI YETMAYDI: u `core-api` image'ida
+    # ishlaydi va u yerda `aiogram` YO'Q — uni o'sha muhitga qo'shish
+    # `test_runtime_deps.py:97-99` dagi O'LCHANGAN taqiqni bo'shatish
+    # bo'lardi (`aiogram` `pydantic<2.14` va `redis<8` ni qadaydi).
+    # TO'RTINCHI SERVIS TUG'ILMAYDI: bu o'sha image'ning boshqa
+    # entrypointi, `cv-tests` ↔ `cv-service` bilan aynan bir xil naqsh.
+    #
+    # ⚠ `SENTRY_DSN` ATAYIN BERILMAYDI: test jarayoni ishlab chiqarish
+    # kuzatuvi emas va `tests/unit/test_sentry_processes.py` ning predikati
+    # aynan shu kalit bo'yicha ishlaydi — uni bu yerga qo'yish darvozadan
+    # test konteyneri uchun ham `init_sentry()` talab qilardi, ya'ni CI
+    # xatolari mijozning Sentry loyihasiga oqib tushardi.
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: services/bot-service/Dockerfile
+      target: dev
+    command: ["pytest", "-q"]
+    environment:
+      # ⚠⚠ STANDART QIYMAT TOKEN SHAKLIGA MOS BO'LISHI SHART, «test-token»
+      # KIFOYA QILMAYDI — VA BU O'LCHANGAN FAKT, taxmin emas:
+      #
+      #   aiogram/utils/token.py: validate_token() -> TokenValidationError
+      #   («Token is invalid!») — token `<raqamlar>:<sir>` shaklida
+      #   bo'lmasa `Bot(...)` KONSTRUKTORI yiqiladi.
+      #
+      # `app/main.py` `bot` ni MODUL DARAJASIDA quradi, ya'ni yaroqsiz
+      # shakldagi standart bilan `import app.main` yozadigan HAR test
+      # yig'ilishda yiqilardi va sabab test mantig'ida emas, compose
+      # standartida bo'lardi.
+      #
+      # ⚠ QIYMAT SIR EMAS, USKUNA: u Telegram'da mavjud emas va tarmoqqa
+      #   umuman chiqmaydi (testlar `MockedBot` bilan ishlaydi).
+      #
+      # ⛔⛔ QIYMAT LITERAL — `${...:-...}` INDIREKTSIYASI OLIB TASHLANDI
+      #   (07-21, WR-10/B-9). Yuqoridagi «sir emas, uskuna» jumlasi ilgari
+      #   ROST EMAS EDI: `:-` STANDART emas, MAJBURLASH — u faqat
+      #   o'zgaruvchi BO'SH bo'lganda ishlaydi, ya'ni ISHLAYDIGAN har
+      #   qanday `.env` da (dev mashinasida u HAR DOIM to'ldirilgan)
+      #   konteynerga PROD Telegram tokeni va PROD servis tokeni oqib
+      #   o'tardi.
+      #
+      # ⛔ OQIBAT IKKI TOMONLAMA:
+      #   * `app/main.py:51` `Bot(token=...)` ni MODUL DARAJASIDA quradi,
+      #     ya'ni token `import app.main` bilan yuklanadi va tasodifiy
+      #     tarmoq chaqirig'i prod botni `409 Conflict` bilan JIM
+      #     qoldirishi mumkin edi (DQ-1);
+      #   * CI chiqishida yoki xato izida qiymat ko'rinsa u PROD siri
+      #     bo'lardi, uskuna emas.
+      #
+      # ⚠ AJRATILGANLIK MEXANIK DARVOZA BILAN QO'RIQLANADI:
+      #   `tests/unit/test_dev_environment.py` bu ikki qiymatda `${` YO'Q
+      #   ekanini VA `bot-service` blokida u BOR ekanini birga o'lchaydi —
+      #   ya'ni «hamma joyda literal» emas, AYNAN test konteynerining
+      #   ajratilgani.
+      TELEGRAM_BOT_TOKEN: "123456:TEST-TOKEN-NOT-REAL"
+      BOT_SERVICE_TOKEN: "test-service-token"
+      CORE_API_URL: http://core-api:8000
+      VALKEY_URL: ${BOT_VALKEY_URL:-redis://cache:6379/1}
+      TZ: Asia/Tashkent
+    # ⛔ `depends_on` YO'Q — VA BU ATAYIN: birlik testlari `MockedBot`
+    # bilan ishlaydi va TARMOQQA CHIQMAYDI. `cache` ga bog'lanish
+    # ishlatilmaydigan konteynerni ko'tarardi va testlarga «Valkey tirik»
+    # degan yolg'on shart qo'shardi.
+    #
+    # ⚠ `/app` EMAS: `pytest`, `ruff` va `mypy` uchalasi ham
+    # `services/bot-service/pyproject.toml` ni topishi SHART. `/app` da
+    # ular repo ildizidagi konfiguratsiyani olib, `core-api` ning
+    # to'plamini shu image'da ishga tushirardi.
+    working_dir: /app/services/bot-service
+    volumes:
+      - .:/app
+
+  go2rtc:
+    # JONLI KO'RISHNING MEDIA SERVERI (03-07, CAM-03).
+    #
+    # ⚠ PROFILSIZ — `worker` bilan bir xil sabab: bu ISHLAB CHIQARISH
+    # komponenti va `npm run up` uni ham ko'taradi. Profil ortiga
+    # yashirilsa `POST /cameras/{id}/live-token` 503 qaytarardi va
+    # sabab «tarmoq nosozligi» bo'lib ko'rinardi.
+    #
+    # BESHINCHI KONTEYNER, TO'RTINCHI SERVIS EMAS: go2rtc — TAYYOR
+    # image, biz yozgan kod emas (`nginx`, `db`, `cache` bilan bir xil
+    # toifa). CLAUDE.md ning «aynan 3 ta servis» cheklovi BIZNING
+    # servislarimizga tegishli va u buzilmaydi.
+    image: alexxit/go2rtc:1.9.14
+    environment:
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      # ⚠ `:ro` MAJBURIY. go2rtc `PATCH /api/config` bilan o'z YAML'iga
+      # YOZA OLADI va o'sha yo'l `exec:` ni faylga muhrlab qo'yardi —
+      # ya'ni RCE qayta ishga tushirishdan keyin ham SAQLANIB qolardi.
+      # Faqat-o'qish mount bu yo'lni butunlay yopadi (D-11).
+      - ./ops/go2rtc/go2rtc.yaml:/config/go2rtc.yaml:ro
+    # =====================================================================
+    # ⚠⚠ `ports:` BLOKI ATAYIN YO'Q — VA U QO'SHILMAYDI.
+    #
+    # go2rtc ning HTTP API'si (1984) `PUT /api/streams?src=exec:<buyruq>`
+    # bilan konteynerda root sifatida IXTIYORIY BUYRUQ bajaradi
+    # (GHSA-wwww-5h25-jf98, CVSS 9.1). Portni xostga publish qilish shu
+    # yuzani internetga ochardi.
+    #
+    # WebRTC ning UDP 8555 i ham SHU YERDA emas, FIREWALL darajasida
+    # ochiladi (`03-PATTERNS.md` §3.11): compose `ports:` bandi Docker'ning
+    # `iptables` qoidalarini yozadi va u host firewall'ini CHETLAB O'TADI —
+    # ya'ni «UFW da yopiq» degan ishonch yolg'on bo'lib qolardi.
+    #
+    # Media yo'li: brauzer -> nginx `/live/...` (auth_request) -> go2rtc.
+    # =====================================================================
+    healthcheck:
+      # `/api/streams` EMAS: healthcheck aynan biz bloklayotgan yuzani
+      # so'rab turardi va u konfiguratsiyada «bu yo'l normal» degan
+      # taassurot qoldirardi. `nc` port ochiqligini tekshiradi — bu
+      # «jarayon tirikmi?» savoliga to'liq javob (`nvr-sim-rtsp` bilan
+      # bir xil qaror).
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8554"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  backup:
+    # KUNLIK ZAXIRA — POSTGRES + DALIL ARXIVI, OFFSITE (FOUND-07, D-12/D-13/D-15).
+    #
+    # ⚠⚠ PROFILSIZ — VA BU BLOKDAGI ENG MUHIM QATOR. `worker`/`scheduler`
+    # bilan bir xil sabab, lekin oqibati ULARNIKIDAN HAM UZOQROQ: profil
+    # ortida qolgan zaxira HECH QACHON olinmasdi va HECH QANDAY xato
+    # chiqmasdi — `docker compose ps` toza, jurnal bo'sh, offsite repo
+    # bo'sh. Nosozlik faqat FALOKAT KUNI, tiklash kerak bo'lganda
+    # bilinardi.
+    #
+    # ⚠ FARQI SHUNDAKI BU HOLATNI TIZIM O'ZI KO'RADI: zaxira olinmasa
+    # `system_heartbeats['backup']` yangilanmaydi va `alert_sweep` 26
+    # soatdan keyin `backup_stale` (CRITICAL, `never_suppressed`) ni
+    # ko'taradi. Ya'ni profilsizlik + yurak urishi BIRGA ishlaydi:
+    # birinchisi zaxirani ishga tushiradi, ikkinchisi uning yo'qligini
+    # fosh qiladi.
+    #
+    # SAKKIZINCHI KONTEYNER, TO'RTINCHI SERVIS EMAS: bu tayyor image
+    # (`postgres:18.4-trixie`) ustidagi ops skripti — `db`, `cache`,
+    # `storage`, `go2rtc`, `nginx` bilan bir toifa, biz yozgan servis
+    # EMAS. CLAUDE.md ning «aynan 3 ta servis» cheklovi BIZNING
+    # servislarimizga (`core-api`, `cv-service`, `bot-service`) tegishli
+    # va u buzilmaydi.
+    build:
+      context: .
+      dockerfile: ops/backup/Dockerfile
+    environment:
+      # ⛔ `DATABASE_URL` ISHLATILMAYDI — VA U `sed` BILAN HAM
+      #    KONVERTATSIYA QILINMAYDI.
+      #
+      #    `.env` dagi `DATABASE_URL` — `postgresql+asyncpg://…`, ya'ni
+      #    SQLAlchemy DIALEKTI. `psql` va `pg_dump` uni `invalid URI
+      #    scheme` bilan RAD ETADI. Konvertatsiya esa bir joyda IKKI
+      #    HAQIQAT MANBAI tug'dirardi: parol o'zgarganda biri jimgina
+      #    eskirardi va nosozlik «zaxira ishlamayapti» bo'lib, sababi
+      #    esa `.env` da ko'rinmasdi.
+      BACKUP_DATABASE_URL: ${BACKUP_DATABASE_URL}
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY}
+      # ⛔ SIR COMPOSE FAYLIDA LITERAL EMAS — `${...}` orqali (T-08-18).
+      #    Yo'qolsa zaxira BUTUNLAY tiklanmaydi; saqlash tartibi
+      #    `ops/backup/README.md` §3 da MAJBURIY band sifatida.
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD}
+      # ⛔ OFFSITE REKVIZITLAR — LOKAL SeaweedFS NIKI EMAS (D-14).
+      #    `S3_ACCESS_KEY`/`S3_SECRET_KEY` shu VPS'ning shu diskiga
+      #    ishora qiladi; ularni bu yerga qo'yish zaxirani baza bilan
+      #    BIR XIL failure domain'da qoldirardi, ya'ni bitta diskning
+      #    o'limi uchalasini birdan olib ketardi va FOUND-07 ning
+      #    «boshqa lokatsiya» talabi qog'ozda qolardi.
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY}
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      # ⚠ `:ro` MAJBURIY va sabab `storage` blokidan MEROS: jarayon
+      #   o'zi o'qiyotgan manbani QAYTA YOZA OLMASLIGI kerak. Bu yerda u
+      #   yana bir qadam qattiqroq (T-08-19): zaxira jarayoni butun dalil
+      #   arxiviga kiradi, ya'ni yozish huquqi bilan u bitta xato buyruq
+      #   ostida aynan himoya qilishi kerak bo'lgan narsani yo'q qila
+      #   olardi. `forget --prune` esa faqat restic repo'siga tegadi.
+      - seaweed:/seaweed:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    # ⚠ `healthcheck` ATAYIN YOZILMAGAN — `scheduler`/`cv-service`/
+    #   `bot-service` bloklaridagi qaror so'zma-so'z shu yerga tegishli:
+    #   tsikl HTTP yuzasi bermaydi va jarayon tirikligi «zaxira
+    #   olindimi?» savoliga JAVOB BERMAYDI (sozlanmagan konteyner ham
+    #   MANGU `Up` bo'lib turadi). Yagona ishonchli signal — BAZADAGI
+    #   yurak urishi va uni o'qiydigan `alert_sweep` / `/internal/self-check`.
+    # DIQQAT: xost portiga publish QILINMAYDI — tsikl tarmoq yuzasi bermaydi.
+    restart: unless-stopped
+
+  frontend:
+    # `frontend/Dockerfile` 01-02 rejasida yaratiladi — shu sababli profil ortida,
+    # aks holda `npm run up` build xatosi berardi.
+    profiles: ["web"]
+    build:
+      context: ./frontend
+    # =====================================================================
+    # ⛔⛔ `NEXT_PUBLIC_API_BASE_URL` BU YERDA YO'Q — VA U QAYTARILMAYDI
+    #    (WR-14, 08-11).
+    #
+    # Ikki sabab, ikkalasi ham o'lchangan:
+    #
+    #  1. `NEXT_PUBLIC_*` Next.js da BUILD paytida bandlga inline
+    #     qilinadi. Runtime `environment` kaliti `node server.js` ga
+    #     yetib borardi-yu, allaqachon qadalgan qiymatni O'ZGARTIRA
+    #     OLMASDI. Operator uni almashtirsa, o'zgarish JIMGINA
+    #     e'tiborsiz qolardi — aynan `tests/unit/test_compose_sim_env.py`
+    #     yopgan «o'lik konfiguratsiya» sinfi.
+    #
+    #  2. ⛔ KALIT `build.args` GA KO'CHIRILMADI (ya'ni «tiriltirilmadi»)
+    #     VA BU ONGLI QAROR: `08-UI-SPEC.md` M-9 ga ko'ra core-api'da
+    #     `CORSMiddleware` UMUMAN YO'Q va refresh cookie'si `SameSite=Lax`
+    #     (T-01-61). Boshqa origin qo'yilishi bilan AVTORIZATSIYANING
+    #     O'ZI yiqiladi. Ya'ni ishlaydigan tugma qilib qo'yish o'lik
+    #     kalitni ishlaydigan TUZOQQA aylantirardi.
+    #
+    # Yagona haqiqat manbai — `frontend/src/lib/api-client.ts:31` dagi
+    # `"/api/v1"` zaxirasi (bitta domen topologiyasi, nginx orqali).
+    # Boshqa origin haqiqatan kerak bo'lganda avval CORS va cookie
+    # siyosati qayta ko'rib chiqiladi — o'shanda bu kalit `build.args`
+    # bilan qaytadi.
+    #
+    # Regressiya to'sig'i: `tests/unit/test_compose_sim_env.py::
+    # test_the_dead_frontend_api_base_url_key_does_not_come_back`.
+    # =====================================================================
+    environment:
+      TZ: ${TZ:-Asia/Tashkent}
+    depends_on:
+      - core-api
+    restart: unless-stopped
+
+  nginx:
+    profiles: ["proxy"]
+    image: nginx:1.30.4-alpine
+    volumes:
+      - ./ops/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # ⛔ Ilova marshrutlari YAGONA manbadan: dev va production AYNI
+      #    faylni o'qiydi. Nusxa qilinsa, birida tuzatilgan xavfsizlik
+      #    xatosi ikkinchisida jimgina qolardi.
+      - ./ops/nginx/app.inc:/etc/nginx/app.inc:ro
+    ports:
+      - "${PROXY_HOST_PORT:-8080}:80"
+    restart: unless-stopped
+
+  nvr-sim:
+    # SIMULYATSIYA QILINGAN HIKVISION NVR (CAM-09).
+    #
+    # `profiles: ["sim"]` — bu YAGONA va STRUKTURAVIY himoya (T-03-07):
+    # prod deploy profilsiz ishlaydi, ya'ni profilsiz `docker compose up`
+    # bu konteynerni umuman KO'RMAYDI. Intizomga (".env da o'chirib qo'yamiz")
+    # tayanadigan yechim ertami-kechmi buziladi, profil esa buzilmaydi.
+    #
+    # `core-api` Dockerfile'ining `dev` target'i QAYTA ISHLATILADI (B.9):
+    # yangi Dockerfile yo'q, CI'da yangi build qatlami yo'q, yangi paket yo'q.
+    # Bu TO'RTINCHI KONTEYNER, uchinchi servis emas — `migrate` va `tests`
+    # bilan aynan bir xil naqsh, ya'ni CLAUDE.md ning "aynan 3 ta servis"
+    # cheklovi buzilmaydi.
+    profiles: ["sim"]
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: dev
+    # ⚠ `--no-date-header` MAJBURIY. uvicorn o'z `Date` sarlavhasini ASGI
+    # javobidan OLDIN qo'yadi; sim esa siljitilgan `Date` ni qo'yadi (A.3
+    # soat-farqi yo'lining yagona sinov vositasi). Bayroqsiz javobda IKKITA
+    # `Date` bo'lardi, `httpx` ularni vergul bilan qo'shib berardi va
+    # `parsedate_to_datetime` yiqilardi — ya'ni drift o'lchovi jimgina
+    # ishlamay qolardi.
+    #
+    # `--workers` BERILMAYDI: holat jarayon xotirasida yashaydi va ikkinchi
+    # ishchi bo'lsa `POST /__sim__/state` ularning faqat bittasiga tegardi.
+    command:
+      - "uvicorn"
+      - "sim.main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "--no-date-header"
+    working_dir: /app/services/nvr-sim
+    environment:
+      # D-09: CI'da 6 kanal (tez, `DS-7616NI-K2` fixture'iga mos). 25 kanal —
+      # alohida sekin test va u konteynerni qayta ko'tarmasdan, ish paytida
+      # `POST /__sim__/state {"channel_count": 25}` bilan o'rnatiladi.
+      SIM_CHANNEL_COUNT: "${SIM_CHANNEL_COUNT:-6}"
+      #
+      # ⚠ BU YERDA «RTSP XOSTI» KALITI YO'Q — VA U QAYTA QO'SHILMAYDI.
+      #
+      # Ilgari shu blokda ikkita kalit turardi: RTSP serverining alohida
+      # konteyner nomi va uning porti. Ularni HECH KIM o'qimasdi
+      # (03-VERIFICATION GAP-1: «RTSP oyog'i hech qachon ulanmaganining
+      # bevosita dalili»). Sabab tuzatilganda kalitlarga ehtiyoj ham
+      # yo'qoldi: to'g'ri modelda alohida «RTSP xosti» tushunchasi UMUMAN
+      # MAVJUD EMAS — RTSP NVR'ning O'Z manzilida turadi, xuddi real
+      # qurilmadagidek (`nvr-sim-rtsp` xizmati, `network_mode`).
+      #
+      # Takrorlanishi `tests/unit/test_compose_sim_env.py` bilan to'silgan:
+      # compose'dagi HAR BIR `SIM_*` kalitining iste'molchisi bo'lishi shart.
+      #
+      # `adminAccesses` javobida E'LON QILINADIGAN port (A.2). U tinglash
+      # portidan ATAYIN ajratilgan: `port_moved` stsenariysi aynan
+      # "e'lon qilingan port 554 emas" holatini sinaydi.
+      SIM_RTSP_PORT_ADVERTISED: "${SIM_RTSP_PORT_ADVERTISED:-554}"
+      SIM_USERNAME: "${SIM_USERNAME:-admin}"
+      SIM_PASSWORD: "${SIM_PASSWORD:-Sim12345}"
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      - .:/app
+    healthcheck:
+      # Nishon ATAYIN `/__sim__/state`: u Digest talab qilmaydi va
+      # `mode="slow"` da HECH QACHON kechiktirilmaydi. `/ISAPI/*` ni
+      # tekshirsak, `slow` yoki `bad_password` testi konteynerni
+      # `unhealthy` qilib butun stack'ni yiqitardi.
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request;urllib.request.urlopen('http://localhost:8080/__sim__/state')
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # DIQQAT: xost portiga publish QILINMAYDI (T-01-04, T-03-12) — ichki test
+    # yuzasi tarmoqqa ochilmaydi; sim faqat compose tarmog'idan ko'rinadi.
+
+  nvr-sim-rtsp:
+    # SIM NVR'NING RTSP OYOG'I (CAM-09, CAM-03; 03-VERIFICATION GAP-1).
+    #
+    # =====================================================================
+    # ⚠⚠ `network_mode: service:nvr-sim` — BU REJANING MARKAZIY QARORI,
+    #    QULAYLIK EMAS.
+    #
+    # Real NVR'da ISAPI ham, RTSP ham BITTA manzilda yashaydi. Kashfiyot
+    # `rtsp://<nvr_devices.host>:<kashf-etilgan-port>/Streaming/Channels/<id>`
+    # ni quradi, ya'ni xost ISAPI so'ralgan xost bilan AYNAN BIR XIL.
+    # Ilgari RTSP alohida konteynerda (`go2rtc-sim`), alohida xostda va
+    # `sim_cam_01…06` degan BOSHQA nomlar bilan turardi — mahsulot
+    # yo'lidan boradigan test yozilgan taqdirda ham ulanadigan joyi yo'q
+    # edi. Tarmoq fazasini bo'lishish shu bo'shliqni tuzilma darajasida
+    # yopadi: `nvr-sim:554` aynan shu serverga tushadi.
+    #
+    # `network_mode` ishlatilgani uchun bu xizmatda:
+    #   * `ports:`    YOZILMAYDI — netns `nvr-sim` niki, u esa publish
+    #                 qilinmagan (T-01-04, T-03-12);
+    #   * `networks:` YOZILMAYDI — compose ikkalasini birga qabul qilmaydi;
+    #   * `depends_on:` KERAK EMAS — `network_mode: service:` bog'liqlikni
+    #                 o'zi hosil qiladi.
+    # =====================================================================
+    #
+    # ⚠ IMAGE DIGEST BILAN QADALGAN (T-03-82, T-03-SC). Teg ko'chirilishi
+    #   mumkin, digest — yo'q. Ta'minot zanjiri tekshiruvi (2026-08-03):
+    #   `bluenviron/mediamtx` — MIT, arxivlanmagan, 19 711 yulduz, oxirgi
+    #   release `v1.19.3` (2026-07-23). Faqat `--profile sim` ostida
+    #   ishlaydi va prodga hech qachon chiqmaydi.
+    #
+    # ⚠ D-11: `runOnDemand` buyrug'i FAQAT `:ro` mount qilingan STATIK
+    #   configdan keladi; `api:` konfiguratsiyada butunlay o'chirilgan,
+    #   ya'ni ish paytida buyruq yozish yo'li YO'Q.
+    profiles: ["sim"]
+    image: bluenviron/mediamtx:1.19.3-ffmpeg@sha256:e8eda6a884bbb2eaebf0c0454200ddc8087f428e091bae10d20e330a08558778
+    network_mode: "service:nvr-sim"
+    environment:
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      # `:ro` MAJBURIY — server o'z konfiguratsiyasini QAYTA YOZA OLMASLIGI
+      # kerak (go2rtc'dagi `PATCH /api/config` sinfidagi yo'l).
+      - ./ops/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    healthcheck:
+      # 554 ga TCP ulanish — «jarayon tirikmi?» savoliga to'liq javob.
+      # `-ffmpeg` variant Alpine asosida va busybox `nc` ni beradi.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "554"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  tests:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: services/core-api/Dockerfile
+      target: dev
+    command: ["pytest", "-q"]
+    environment:
+      # testcontainers konteyner ichidan Docker'ni boshqaradi (docker-outside-of-docker):
+      # ishga tushirilgan Postgres xost portiga publish qilinadi, biz unga
+      # host.docker.internal orqali boramiz.
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+      # Sim testlari (`-m sim`) unga HAQIQIY TCP orqali boradi — `ASGITransport`
+      # EMAS. Sabab: `ASGITransport` tarmoqni chetlab o'tadi, ya'ni "kod NVR
+      # bilan gaplasha oladi" da'vosi umuman sinalmasdan qolardi. Konteyner
+      # ko'tarilmagan bo'lsa `sim_url` fixture'i CI'da `fail` beradi (skip emas).
+      NVR_SIM_BASE_URL: "http://nvr-sim:8080"
+      SIM_USERNAME: "${SIM_USERNAME:-admin}"
+      SIM_PASSWORD: "${SIM_PASSWORD:-Sim12345}"
+      # `-m sim` ostidagi ombor testlari (04-06/04-08) HAQIQIY SeaweedFS
+      # konteyneriga boradi — S3 mock'i ishlatilmaydi. Sabab 03-14 da
+      # o'lchangan: mock'langan qatlam «kod ombor bilan gaplasha oladi»
+      # da'vosini umuman sinamaydi va yashil bo'lib turaveradi.
+      #
+      # ⚠ BU YERDA `:-` BILAN STANDART BERILGAN va bu `core-api`/`worker`
+      # bloklaridan ATAYIN farq qiladi: sim rekviziti SIR EMAS, u test
+      # uskunasining qismi (`SIM_PASSWORD` bilan aynan bir xil qaror).
+      # Prod bloklarida esa bo'sh standart yiqilishni deploy paytiga
+      # surib qo'yardi.
+      S3_ENDPOINT_URL: "${S3_ENDPOINT_URL:-http://storage:8333}"
+      S3_BUCKET: "${S3_BUCKET:-sbozor-snapshots}"
+      S3_ACCESS_KEY: "${S3_ACCESS_KEY:-sbozor-local-access-key}"
+      S3_SECRET_KEY: "${S3_SECRET_KEY:-sbozor-local-secret-key}"
+      CI: "${CI:-}"
+      TZ: Asia/Tashkent
+    # =====================================================================
+    # ⚠ `storage` BOG'LIQLIGI E'LON QILINGAN (04-12, 04-06 ning ochiq bandi).
+    #
+    # O'lchangan holat: `storage` ko'tarilmagan bo'lsa yalang'och
+    # `npm run test` 16 ta testni HARD FAIL bilan yiqitadi (`s3_client`
+    # fixture'i bucketga yeta olmaydi). `npm run gate` buni qoplaydi —
+    # u `sim:up` bilan boshlanadi — lekin `npm run test` ni to'g'ridan-
+    # to'g'ri chaqirgan dasturchi sababni faqat 16 ta stack trace'dan
+    # o'qib topardi.
+    #
+    # ⚠ `db`/`cache` bu yerda YO'Q va bu ATAYIN: baza testcontainers bilan
+    # test jarayonining O'ZI tomonidan ko'tariladi (`tests/conftest.py::
+    # pg_container`), ya'ni compose darajasida ularga bog'lanish ikkinchi,
+    # ishlatilmaydigan Postgres ko'tarardi.
+    #
+    # ⚠ `nvr-sim` ham YO'Q: u `sim` profilida va uning yo'qligi TO'G'RI
+    # xulqqa ega — `sim_url` fixture'i dev mashinasida `skip`, CI'da
+    # `fail` beradi (`tests/fixtures/nvr_sim.py`). Bu farq ataylab
+    # saqlanadi.
+    # =====================================================================
+    depends_on:
+      storage:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  pgdata:
+  # SeaweedFS ning master + volume + filer holati. NOMLANGAN VOLUME
+  # (bind mount emas): dalil arxivi konteyner qayta qurilganda ham
+  # saqlanib qolishi shart va u `pgdata` bilan bir xil toifada — 8-fazadagi
+  # zaxira nusxa siyosati ikkalasini ham qamraydi.
+  seaweed:

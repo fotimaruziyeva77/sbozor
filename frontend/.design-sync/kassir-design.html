@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_ds/sbozor-uz-design-system-557d55c4-7a9e-4ced-aa17-6c9ad8551308/styles.css">
+<script src="_ds/sbozor-uz-design-system-557d55c4-7a9e-4ced-aa17-6c9ad8551308/_ds_bundle.js"></script>
+<style>
+:root{--font-sans:'Instrument Sans',ui-sans-serif,-apple-system,system-ui,sans-serif;}
+html,body{margin:0;padding:0;min-height:100%;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+a{color:var(--color-accent-text);text-decoration:none;font-weight:600;}
+a:hover{text-decoration:underline;}
+@keyframes toastin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes flyrow{0%{opacity:0;transform:translateY(-18px) scale(.98)}100%{opacity:1;transform:none}}
+@media (max-width:899px){[data-kassir-grid]{grid-template-columns:1fr !important;}}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important;}}
+</style>
+</helmet>
+
+<div data-theme="{{ themeAttr }}" style="min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans)">
+  <div style="max-width:1200px;margin:0 auto;padding:14px 16px 108px">
+
+    <div style="border:1px dashed var(--color-border-ui);border-radius:var(--radius-lg);padding:14px 14px 4px;margin-bottom:18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
+        <div>
+          <div class="landing-kicker" style="color:var(--color-text-muted)">DEMO BOSHQARUVI</div>
+          <div style="font-size:13px;color:var(--color-text-muted);margin-top:4px">Ekran holatlarini almashtirib ko&#8216;rish uchun. Mahsulotda bu blok yo&#8216;q.</div>
+        </div>
+        <x-import component-from-global-scope="SbozorUI.Button" variant="ghost" size="sm" onClick="{{ togglePanel }}" hint-size="auto,36px">{{ panelToggleLabel }}</x-import>
+      </div>
+      <sc-if value="{{ panelOpen }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;padding-bottom:14px">
+          <x-import component-from-global-scope="SbozorUI.Field" id="d-shift" label="Smena" hint-size="100%,64px">
+            <x-import component-from-global-scope="SbozorUI.Select" id="d-shift" value="{{ dShift }}" onChange="{{ onDShift }}" hint-size="100%,40px">
+              <option value="open">Ochiq</option>
+              <option value="closed">Ochiq smena yo&#8216;q</option>
+            </x-import>
+          </x-import>
+          <x-import component-from-global-scope="SbozorUI.Field" id="d-case" label="Rasta holati" hint-size="100%,64px">
+            <x-import component-from-global-scope="SbozorUI.Select" id="d-case" value="{{ dCase }}" onChange="{{ onDCase }}" hint-size="100%,40px">
+              <option value="plain">Oddiy — qarzi yo&#8216;q</option>
+              <option value="debt">Eski qarz bor</option>
+              <option value="advance">Ortiqcha to&#8216;langan — avans</option>
+              <option value="notfound">Rasta topilmadi</option>
+              <option value="notariff">Tarif topilmadi</option>
+              <option value="repair">Rasta ta&#8216;mirda</option>
+              <option value="novendor">Sotuvchi biriktirilmagan</option>
+              <option value="noamount">Server summani bermadi</option>
+              <option value="loading">Yuklanmoqda</option>
+            </x-import>
+          </x-import>
+          <x-import component-from-global-scope="SbozorUI.Field" id="d-market" label="Bozor" hint-size="100%,64px">
+            <x-import component-from-global-scope="SbozorUI.Select" id="d-market" value="{{ dMarket }}" onChange="{{ onDMarket }}" hint-size="100%,40px">
+              <option value="open">Ochiq</option>
+              <option value="closed">Bugun yopiq</option>
+            </x-import>
+          </x-import>
+          <x-import component-from-global-scope="SbozorUI.Field" id="d-net" label="Aloqa" hint-size="100%,64px">
+            <x-import component-from-global-scope="SbozorUI.Select" id="d-net" value="{{ dNet }}" onChange="{{ onDNet }}" hint-size="100%,40px">
+              <option value="on">Bor</option>
+              <option value="off">Tarmoq uzildi</option>
+            </x-import>
+          </x-import>
+          <x-import component-from-global-scope="SbozorUI.Field" id="d-list" label="Oxirgi to&#8216;lovlar" hint-size="100%,64px">
+            <x-import component-from-global-scope="SbozorUI.Select" id="d-list" value="{{ dList }}" onChange="{{ onDList }}" hint-size="100%,40px">
+              <option value="full">Yozuvlar bor</option>
+              <option value="empty">Bo&#8216;sh</option>
+              <option value="loading">Yuklanmoqda</option>
+            </x-import>
+          </x-import>
+          <x-import component-from-global-scope="SbozorUI.Field" id="d-void" label="Bekor qilish javobi" hint-size="100%,64px">
+            <x-import component-from-global-scope="SbozorUI.Select" id="d-void" value="{{ dVoid }}" onChange="{{ onDVoid }}" hint-size="100%,40px">
+              <option value="ok">Yozildi</option>
+              <option value="err">Xato qaytdi</option>
+            </x-import>
+          </x-import>
+          <x-import component-from-global-scope="SbozorUI.Field" id="d-perm" label="Ruxsat" hint-size="100%,64px">
+            <x-import component-from-global-scope="SbozorUI.Select" id="d-perm" value="{{ dPerm }}" onChange="{{ onDPerm }}" hint-size="100%,40px">
+              <option value="yes">Bor</option>
+              <option value="no">Ruxsat yo&#8216;q</option>
+            </x-import>
+          </x-import>
+          <x-import component-from-global-scope="SbozorUI.Field" id="d-theme" label="Tema" hint-size="100%,64px">
+            <x-import component-from-global-scope="SbozorUI.Select" id="d-theme" value="{{ dTheme }}" onChange="{{ onDTheme }}" hint-size="100%,40px">
+              <option value="light">Yorug&#8216;</option>
+              <option value="sun">Quyosh ostida</option>
+              <option value="dark">Tungi</option>
+            </x-import>
+          </x-import>
+        </div>
+      </sc-if>
+    </div>
+
+    <header style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px">
+      <div style="display:flex;align-items:baseline;gap:12px;min-width:0">
+        <span style="font-size:18px;font-weight:700;letter-spacing:0.08em">S<span style="color:var(--color-accent-text)">BOZOR</span></span>
+        <span style="font-size:14px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Chorsu bozori</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;gap:2px;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:3px">
+          <span style="padding:5px 9px;border-radius:6px;font-size:12px;font-weight:600;background:var(--color-text);color:var(--color-bg)">UZ</span>
+          <span style="padding:5px 9px;border-radius:6px;font-size:12px;color:var(--color-text-muted)">&#1038;&#1047;</span>
+          <span style="padding:5px 9px;border-radius:6px;font-size:12px;color:var(--color-text-muted)">RU</span>
+        </div>
+        <button onClick="{{ cycleTheme }}" title="Tema" style="min-width:44px;min-height:44px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:transparent;color:var(--color-text);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">{{ themeShort }}</button>
+        <div style="width:36px;height:36px;border-radius:999px;background:var(--color-surface-muted);border:1px solid var(--color-border);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">KM</div>
+      </div>
+    </header>
+
+    <sc-if value="{{ offline }}" hint-placeholder-val="{{ false }}">
+      <div role="status" class="motion-enter" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-danger);color:var(--color-danger-fg);margin-bottom:16px">
+        <span style="font-size:14px;font-weight:600">&#9888; Tarmoq uzildi</span>
+        <span style="font-size:13px;opacity:.92">To&#8216;lov hozir yozilmaydi. Qayta yuborish dublikat yaratmaydi.</span>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ noPermission }}" hint-placeholder-val="{{ false }}">
+      <x-import component-from-global-scope="SbozorUI.Card" hint-size="100%,240px">
+        <x-import component-from-global-scope="SbozorUI.CardContent" className="pt-5" hint-size="100%,200px">
+          <div style="display:flex;justify-content:center;margin-bottom:2px"><x-import component-from-global-scope="SbozorUI.Badge" tone="danger" hint-size="auto,24px">Ruxsat yo&#8216;q</x-import></div>
+          <x-import component-from-global-scope="SbozorUI.EmptyState" title="Bu amal uchun ruxsat yo&#8216;q" description="Kassir hisobiga bu sahifa berilmagan. Bozor administratoriga murojaat qiling." hint-size="100%,160px"></x-import>
+          <div style="display:flex;justify-content:center"><a href="#panel">&#8592; Boshqaruv paneliga qaytish</a></div>
+        </x-import>
+      </x-import>
+    </sc-if>
+
+    <sc-if value="{{ appVisible }}" hint-placeholder-val="{{ true }}">
+      <div data-kassir-grid="1" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,380px);gap:20px;align-items:start">
+
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+            <h1 style="font-size:26px;font-weight:600;margin:0">Patta yig&#8216;ish</h1>
+            <a href="#smena">Smena</a>
+          </div>
+
+          <sc-if value="{{ shiftClosed }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="SbozorUI.Card" hint-size="100%,240px">
+              <x-import component-from-global-scope="SbozorUI.CardContent" className="pt-5" hint-size="100%,200px">
+                <div style="display:flex;justify-content:center;margin-bottom:2px"><x-import component-from-global-scope="SbozorUI.Badge" tone="warning" hint-size="auto,24px">&#9888; Smena yopiq</x-import></div>
+                <x-import component-from-global-scope="SbozorUI.EmptyState" title="Ochiq smena yo&#8216;q" description="Avval smenani ochish kerak. Shundan keyin to&#8216;lov yozish oynasi ochiladi." hint-size="100%,150px"></x-import>
+                <x-import component-from-global-scope="SbozorUI.Button" className="w-full min-h-14" size="lg" onClick="{{ openShift }}" hint-size="100%,56px">Smenani ochish</x-import>
+              </x-import>
+            </x-import>
+          </sc-if>
+
+          <sc-if value="{{ flowVisible }}" hint-placeholder-val="{{ true }}">
+            <x-import component-from-global-scope="SbozorUI.Card" hint-size="100%,520px">
+              <x-import component-from-global-scope="SbozorUI.CardHeader" hint-size="100%,72px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                  <h2 class="landing-h3" style="margin:0">1 &#183; Rasta</h2>
+                  <span style="font-size:12px;color:var(--color-text-muted)">{{ todayLabel }}</span>
+                </div>
+                <p class="text-sm text-text-muted" style="margin:0">Qator tugmasini bosing yoki raqamni kiritib &#171;Enter&#187; bosing.</p>
+              </x-import>
+              <x-import component-from-global-scope="SbozorUI.CardContent" hint-size="100%,420px">
+
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+                  <sc-for list="{{ rows }}" as="row" hint-placeholder-count="4">
+                    <button onClick="{{ row.onPick }}" style="{{ row.style }}">{{ row.label }}</button>
+                  </sc-for>
+                  <button onClick="{{ openQr }}" style="min-height:44px;padding:0 14px;border:1px dashed var(--color-border-ui);border-radius:var(--radius-md);background:transparent;color:var(--color-text-muted);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">QR &#183; eskiz</button>
+                </div>
+
+                <x-import component-from-global-scope="SbozorUI.Field" id="stall" label="Rasta raqami" hint="{{ stallHint }}" error="{{ stallError }}" hint-size="100%,96px">
+                  <x-import component-from-global-scope="SbozorUI.Input" id="stall" className="min-h-14 text-lg" inputMode="numeric" autoComplete="off" placeholder="01" value="{{ query }}" onChange="{{ onQuery }}" onKeyDown="{{ onQueryKey }}" ref="{{ inputRef }}" hint-size="100%,56px"></x-import>
+                </x-import>
+
+                <sc-if value="{{ showMatches }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:14px">
+                    <div style="font-size:12px;font-weight:600;letter-spacing:0.02em;color:var(--color-text-muted);margin-bottom:8px">{{ matchesTitle }}</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;max-height:288px;overflow-y:auto">
+                      <sc-for list="{{ matches }}" as="m" hint-placeholder-count="3">
+                        <button onClick="{{ m.onPick }}" style="{{ m.style }}">
+                          <span style="font-size:17px;font-weight:600">{{ m.code }}</span>
+                          <span style="{{ m.tagStyle }}">{{ m.tag }}</span>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ amountLoading }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--color-border);display:flex;flex-direction:column;gap:10px">
+                    <x-import component-from-global-scope="SbozorUI.Skeleton" className="h-5 w-28" hint-size="112px,20px"></x-import>
+                    <x-import component-from-global-scope="SbozorUI.Skeleton" className="h-12 w-48" hint-size="192px,48px"></x-import>
+                    <x-import component-from-global-scope="SbozorUI.Skeleton" className="h-4 w-36" hint-size="144px,16px"></x-import>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ stallPicked }}" hint-placeholder-val="{{ false }}">
+                  <div class="motion-enter" style="margin-top:18px;padding-top:18px;border-top:1px solid var(--color-border)">
+
+                    <div class="bg-warning/20" style="display:flex;gap:10px;padding:11px 13px;border-radius:var(--radius-md);margin-bottom:16px">
+                      <span class="text-warning-text" style="font-size:14px;font-weight:700;line-height:1.2">&#9888;</span>
+                      <span class="text-sm" style="line-height:1.5">Bu <strong>kutilayotgan</strong> summa &#8212; hisob hali yozilmagan.</span>
+                    </div>
+
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+                      <span style="font-size:18px;font-weight:600">{{ pickedCode }}</span>
+                      <x-import component-from-global-scope="SbozorUI.Badge" tone="{{ pickedTone }}" hint-size="auto,24px">{{ pickedBadge }}</x-import>
+                    </div>
+
+                    <sc-if value="{{ noTariff }}" hint-placeholder-val="{{ false }}">
+                      <div class="motion-enter" style="display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:var(--radius-md);border:1px solid var(--color-danger);margin:8px 0 14px">
+                        <span class="text-danger-text" style="font-size:14px;font-weight:600">&#10005; Tarif topilmadi</span>
+                        <span class="text-sm text-text-muted">Bu rasta uchun summa hisoblanmadi. Bozor administratoriga aytish kerak.</span>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ showAmount }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+                        <span class="text-display font-mono tabular-nums" style="font-weight:600">{{ amountText }}</span>
+                        <span style="font-size:20px;font-weight:600;color:var(--color-text-muted)">so&#8216;m</span>
+                      </div>
+                      <div class="text-sm text-text-muted" style="margin-top:4px">{{ amountDayText }}</div>
+                    </sc-if>
+
+                    <sc-if value="{{ noAmountFromServer }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:var(--radius-md);border:1px solid var(--color-danger);margin:8px 0 4px">
+                        <span class="text-danger-text" style="font-size:14px;font-weight:600">&#10005; Summa serverdan kelmadi</span>
+                        <span class="text-sm text-text-muted">Tasdiqlash ishlamaydi. Aloqani tekshirib rastani qayta tanlang.</span>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ hasDebt }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top:14px;padding:13px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border);background:var(--color-surface-muted)">
+                        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+                          <span class="text-sm" style="font-weight:600">Eski qarz</span>
+                          <span class="font-mono tabular-nums text-sm">{{ debtText }} so&#8216;m</span>
+                        </div>
+                        <div class="text-sm text-text-muted" style="margin-top:4px">{{ debtDaysText }}</div>
+                        <x-import component-from-global-scope="SbozorUI.Button" variant="secondary" className="w-full min-h-12 mt-3" onClick="{{ toggleWithDebt }}" hint-size="100%,48px">{{ withDebtLabel }}</x-import>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ isAdvance }}" hint-placeholder-val="{{ false }}">
+                      <div class="text-sm" style="margin-top:12px;padding:12px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border);background:var(--color-surface-muted)">Ortiqcha to&#8216;langan &#8212; <span class="font-mono tabular-nums">4 000</span> so&#8216;m avans hisobda turadi.</div>
+                    </sc-if>
+
+                    <sc-if value="{{ marketClosed }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;margin-top:12px;padding:12px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border)">
+                        <span class="text-warning-text text-sm" style="font-weight:600">&#9888; Bugun bozor yopiq</span>
+                        <span class="text-sm text-text-muted">Bugungi patta hisoblanmaydi. To&#8216;lovni baribir yozish mumkin.</span>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ stallRepair }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;margin-top:12px;padding:12px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border)">
+                        <span class="text-warning-text text-sm" style="font-weight:600">&#9888; Reyestrda: ta&#8216;mirda</span>
+                        <span class="text-sm text-text-muted">To&#8216;lov bloklanmaydi &#8212; yozish mumkin.</span>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ noVendor }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;margin-top:12px;padding:12px 14px;border-radius:var(--radius-md);border:1px solid var(--color-border)">
+                        <span class="text-warning-text text-sm" style="font-weight:600">&#9888; Rastaga sotuvchi biriktirilmagan</span>
+                        <span class="text-sm text-text-muted">To&#8216;lov bloklanmaydi. Reyestrni administrator to&#8216;g&#8216;rilaydi.</span>
+                      </div>
+                    </sc-if>
+
+                    <div style="margin-top:10px">
+                      <x-import component-from-global-scope="SbozorUI.Button" variant="ghost" size="sm" onClick="{{ openChange }}" hint-size="auto,36px">Summani o&#8216;zgartirish</x-import>
+                    </div>
+
+                    <div style="margin-top:22px">
+                      <h2 class="landing-h3" style="margin:0 0 10px">2 &#183; To&#8216;lov turi</h2>
+                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                        <button onClick="{{ pickCash }}" style="{{ cashStyle }}">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.6"></circle></svg>
+                          <span>Naqd</span>
+                        </button>
+                        <button onClick="{{ pickCard }}" style="{{ cardStyle }}">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"></rect><path d="M2 10h20"></path></svg>
+                          <span>Terminal</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style="margin-top:22px">
+                      <h2 class="landing-h3" style="margin:0 0 10px">3 &#183; Tasdiq</h2>
+                      <x-import component-from-global-scope="SbozorUI.Button" className="w-full min-h-14 text-lg" size="lg" aria-disabled="{{ confirmBlocked }}" aria-describedby="confirm-note" onClick="{{ onConfirm }}" hint-size="100%,56px">{{ confirmLabel }}</x-import>
+                      <p id="confirm-note" class="text-sm text-text-muted" style="margin:8px 0 0">{{ confirmNote }}</p>
+                      <sc-if value="{{ netError }}" hint-placeholder-val="{{ false }}">
+                        <div class="motion-shake" style="margin-top:12px;padding:12px 14px;border-radius:var(--radius-md);border:1px solid var(--color-danger)">
+                          <div class="text-danger-text text-sm" style="font-weight:600">&#10005; Tarmoq uzildi &#8212; to&#8216;lov yozilmadi</div>
+                          <div class="text-sm text-text-muted" style="margin:4px 0 10px">Qayta yuborish dublikat yaratmaydi.</div>
+                          <x-import component-from-global-scope="SbozorUI.Button" variant="secondary" className="min-h-11" size="sm" onClick="{{ onConfirm }}" hint-size="auto,44px">Qayta yuborish</x-import>
+                        </div>
+                      </sc-if>
+                    </div>
+
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ justWritten }}" hint-placeholder-val="{{ false }}">
+                  <div role="status" style="margin-top:18px;padding-top:18px;border-top:1px solid var(--color-border);display:flex;align-items:center;gap:12px">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path class="motion-check-draw" d="M4 12.5 9.5 18 20 6.5"></path></svg>
+                    <div>
+                      <div style="font-size:16px;font-weight:600">To&#8216;lov yozildi</div>
+                      <div class="text-sm text-text-muted">{{ writtenLine }}</div>
+                    </div>
+                  </div>
+                </sc-if>
+
+              </x-import>
+            </x-import>
+          </sc-if>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <x-import component-from-global-scope="SbozorUI.Card" hint-size="100%,360px">
+            <x-import component-from-global-scope="SbozorUI.CardHeader" hint-size="100%,64px">
+              <h2 class="landing-h3" style="margin:0">Oxirgi to&#8216;lovlar</h2>
+              <p class="text-sm text-text-muted" style="margin:0">Server oxirgi 5 yozuvni beradi. Bekor qilingan yozuv ro&#8216;yxatda qoladi.</p>
+            </x-import>
+            <x-import component-from-global-scope="SbozorUI.CardContent" hint-size="100%,280px">
+              <sc-if value="{{ listLoading }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <x-import component-from-global-scope="SbozorUI.Skeleton" className="h-16 w-full" hint-size="100%,64px"></x-import>
+                  <x-import component-from-global-scope="SbozorUI.Skeleton" className="h-16 w-full" hint-size="100%,64px"></x-import>
+                  <x-import component-from-global-scope="SbozorUI.Skeleton" className="h-16 w-full" hint-size="100%,64px"></x-import>
+                </div>
+              </sc-if>
+              <sc-if value="{{ listEmpty }}" hint-placeholder-val="{{ false }}">
+                <x-import component-from-global-scope="SbozorUI.EmptyState" className="py-8" title="Bu smenada to&#8216;lov yozilmagan" description="Birinchi to&#8216;lovni yozsangiz, shu yerda ko&#8216;rinadi." hint-size="100%,140px"></x-import>
+              </sc-if>
+              <sc-if value="{{ listVisible }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column">
+                  <sc-for list="{{ payments }}" as="p" hint-placeholder-count="5">
+                    <div style="{{ p.rowStyle }}">
+                      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                        <span style="font-size:15px;font-weight:600">{{ p.code }}</span>
+                        <span class="{{ p.amountClass }}">{{ p.amountText }}</span>
+                      </div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:6px">
+                        <span class="text-sm text-text-muted" style="display:flex;align-items:center;gap:6px">{{ p.methodIcon }}{{ p.methodLabel }} &#183; {{ p.timeText }}</span>
+                        <x-import component-from-global-scope="SbozorUI.Badge" tone="{{ p.tone }}" hint-size="auto,24px">{{ p.status }}</x-import>
+                      </div>
+                      <div class="text-xs text-text-muted" style="margin-top:6px">{{ p.dayText }}</div>
+                      <sc-if value="{{ p.canCancel }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;gap:8px;margin-top:10px">
+                          <x-import component-from-global-scope="SbozorUI.Button" variant="secondary" size="sm" className="min-h-11" onClick="{{ p.onShow }}" hint-size="auto,44px">Sotuvchiga ko&#8216;rsatish</x-import>
+                          <x-import component-from-global-scope="SbozorUI.Button" variant="ghost" size="sm" className="min-h-11" onClick="{{ p.onCancel }}" hint-size="auto,44px">Bekor qilish</x-import>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </x-import>
+          </x-import>
+
+          <sc-if value="{{ todayVisible }}" hint-placeholder-val="{{ true }}">
+            <x-import component-from-global-scope="SbozorUI.Card" hint-size="100%,300px">
+              <x-import component-from-global-scope="SbozorUI.CardHeader" hint-size="100%,72px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                  <h2 class="landing-h3" style="margin:0">Bugun &#8212; qatorlar</h2>
+                  <x-import component-from-global-scope="SbozorUI.Badge" tone="muted" hint-size="auto,24px">Yo&#8216;l xaritasi</x-import>
+                </div>
+                <p class="text-sm text-text-muted" style="margin:0">Qaysi rastadan olingan, qaysinisi qolgan. Yurgan sari ro&#8216;yxat qisqaradi.</p>
+              </x-import>
+              <x-import component-from-global-scope="SbozorUI.CardContent" hint-size="100%,220px">
+                <div style="display:flex;flex-direction:column;gap:14px">
+                  <sc-for list="{{ todayRows }}" as="r" hint-placeholder-count="4">
+                    <div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+                        <span style="font-size:14px;font-weight:600">{{ r.label }}-qator</span>
+                        <span class="text-xs text-text-muted">{{ r.leftText }}</span>
+                      </div>
+                      <div style="display:flex;flex-wrap:wrap;gap:6px">
+                        <sc-for list="{{ r.stalls }}" as="s" hint-placeholder-count="6">
+                          <button onClick="{{ s.onPick }}" style="{{ s.chipStyle }}">{{ s.chipText }}</button>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </x-import>
+            </x-import>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+
+  <nav style="position:fixed;left:0;right:0;bottom:0;height:56px;display:flex;background:var(--color-surface);border-top:1px solid var(--color-border);z-index:40">
+    <a href="#panel" style="flex:1;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--color-text-muted);text-decoration:none">Boshqaruv paneli</a>
+    <a href="#yigish" style="flex:1;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--color-text);text-decoration:none;box-shadow:inset 0 -2px 0 var(--color-accent)">Yig&#8216;ish</a>
+  </nav>
+
+  <sc-if value="{{ toastVisible }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="{{ toastStyle }}">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:14px;font-weight:600">{{ toastText }}</span>
+        <sc-if value="{{ toastAction }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ openVendor }}" style="min-height:36px;padding:0 12px;border:1px solid currentColor;border-radius:var(--radius-md);background:transparent;color:inherit;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Sotuvchiga ko&#8216;rsatish</button>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <x-import component-from-global-scope="SbozorUI.ConfirmDialog" open="{{ cancelOpen }}" on-open-change="{{ setCancelOpen }}" on-confirm="{{ doCancel }}" is-busy="{{ cancelBlocked }}" title="To&#8216;lovni bekor qilish" description="{{ cancelDescription }}" confirm-label="Bekor qilishni yozish" cancel-label="Yopish" hint-size="0,0">
+    <x-import component-from-global-scope="SbozorUI.Field" id="void-reason" label="Bekor qilish sababi" hint="{{ cancelHint }}" hint-size="100%,80px">
+      <x-import component-from-global-scope="SbozorUI.Select" id="void-reason" value="{{ cancelReason }}" onChange="{{ onCancelReason }}" hint-size="100%,40px">
+        <option value="">Sababni tanlang</option>
+        <option value="wrong_stall">Rasta xato tanlangan</option>
+        <option value="wrong_amount">Summa xato kiritilgan</option>
+        <option value="double">Ikki marta yozilgan</option>
+        <option value="vendor_refused">Sotuvchi to&#8216;lovdan qaytdi</option>
+        <option value="director">Direktor ko&#8216;rsatmasi</option>
+      </x-import>
+    </x-import>
+  </x-import>
+
+  <x-import component-from-global-scope="SbozorUI.Dialog.Root" open="{{ changeOpen }}" on-open-change="{{ setChangeOpen }}" hint-size="0,0">
+    <x-import component-from-global-scope="SbozorUI.Dialog.Content" size="sm" sheet-on-mobile="{{ true }}" title="Summani o&#8216;zgartirish" description="Bu kundalik amal emas. Yangi summa sabab bilan audit jurnaliga yoziladi." hint-size="0,0">
+      <div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">
+        <x-import component-from-global-scope="SbozorUI.Field" id="chg-reason" label="O&#8216;zgartirish sababi" hint-size="100%,80px">
+          <x-import component-from-global-scope="SbozorUI.Select" id="chg-reason" value="{{ changeReason }}" onChange="{{ onChangeReason }}" hint-size="100%,40px">
+            <option value="">Sababni tanlang</option>
+            <option value="tariff_fix">Tarif tuzatildi</option>
+            <option value="late_review">Kech ko&#8216;rib chiqildi</option>
+            <option value="director_waiver">Direktor ruxsati</option>
+          </x-import>
+        </x-import>
+        <x-import component-from-global-scope="SbozorUI.Field" id="chg-amount" label="Yangi summa" hint="Butun son, so&#8216;m" hint-size="100%,88px">
+          <x-import component-from-global-scope="SbozorUI.Input" id="chg-amount" className="min-h-14 font-mono tabular-nums text-lg" inputMode="numeric" value="{{ changeAmount }}" onChange="{{ onChangeAmount }}" hint-size="100%,56px"></x-import>
+        </x-import>
+        <x-import component-from-global-scope="SbozorUI.Dialog.Footer" hint-size="100%,56px">
+          <x-import component-from-global-scope="SbozorUI.Button" className="min-h-12 sm:flex-1" aria-disabled="{{ changeBlocked }}" onClick="{{ saveChange }}" hint-size="auto,48px">Saqlash</x-import>
+          <x-import component-from-global-scope="SbozorUI.Button" variant="secondary" className="min-h-12 sm:flex-1" onClick="{{ closeChange }}" hint-size="auto,48px">Bekor qilish</x-import>
+        </x-import>
+      </div>
+    </x-import>
+  </x-import>
+
+  <x-import component-from-global-scope="SbozorUI.Dialog.Root" open="{{ vendorOpen }}" on-open-change="{{ setVendorOpen }}" hint-size="0,0">
+    <x-import component-from-global-scope="SbozorUI.Dialog.Content" size="sm" sheet-on-mobile="{{ true }}" title="Sotuvchiga ko&#8216;rsatish" description="Telefonni burib ko&#8216;rsating. Chek chop etilmaydi &#8212; bu ekrandagi tasdiq." hint-size="0,0">
+      <div style="margin-top:16px;padding:22px 18px;border:1px solid var(--color-border);border-radius:var(--radius-lg);text-align:center">
+        <div style="display:flex;justify-content:center;margin-bottom:12px">
+          <x-import component-from-global-scope="SbozorUI.Badge" tone="success" hint-size="auto,24px">&#10003; To&#8216;lov yozildi</x-import>
+        </div>
+        <div style="font-size:30px;font-weight:600;letter-spacing:0.01em">{{ vendorCode }}</div>
+        <div style="display:flex;align-items:baseline;justify-content:center;gap:8px;margin-top:8px">
+          <span class="text-display font-mono tabular-nums" style="font-weight:600">{{ vendorAmount }}</span>
+          <span style="font-size:20px;font-weight:600;color:var(--color-text-muted)">so&#8216;m</span>
+        </div>
+        <div class="text-base text-text-muted" style="margin-top:10px">{{ vendorDay }}</div>
+        <div class="text-base" style="margin-top:2px">{{ vendorTime }}</div>
+      </div>
+      <x-import component-from-global-scope="SbozorUI.Dialog.Footer" hint-size="100%,56px">
+        <x-import component-from-global-scope="SbozorUI.Button" className="min-h-12 sm:flex-1" onClick="{{ closeVendor }}" hint-size="auto,48px">Yopish</x-import>
+      </x-import>
+    </x-import>
+  </x-import>
+
+  <x-import component-from-global-scope="SbozorUI.Dialog.Root" open="{{ qrOpen }}" on-open-change="{{ setQrOpen }}" hint-size="0,0">
+    <x-import component-from-global-scope="SbozorUI.Dialog.Content" size="sm" sheet-on-mobile="{{ true }}" title="QR bilan topish &#8212; eskiz" description="Hozir ishlamaydi. Bu keyingi bosqich uchun eskiz: rastadagi stikerda QR bo&#8216;lsa, kassir skanerlaydi va summa to&#8216;g&#8216;ridan-to&#8216;g&#8216;ri chiqadi." hint-size="0,0">
+      <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="height:150px;border:1px dashed var(--color-border-ui);border-radius:var(--radius-lg);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);font-size:13px">Kamera oynasi &#8212; eskiz</div>
+        <div class="text-sm text-text-muted">Bugungi yo&#8216;l: rasta raqami taxta yoki stikerda jismonan yozilgan bo&#8216;lishi kerak. QR uchun stiker chop etish va kamera ruxsati talab qilinadi.</div>
+        <x-import component-from-global-scope="SbozorUI.Dialog.Footer" hint-size="100%,56px">
+          <x-import component-from-global-scope="SbozorUI.Button" variant="secondary" className="min-h-12 sm:flex-1" onClick="{{ closeQr }}" hint-size="auto,48px">Yopish</x-import>
+        </x-import>
+      </div>
+    </x-import>
+  </x-import>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:900},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Yorug‘&quot;,&quot;Quyosh ostida&quot;,&quot;Tungi&quot;],&quot;default&quot;:&quot;Yorug‘&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Ko‘rinish&quot;},&quot;showTodayPanel&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Ko‘rinish&quot;}}">
+const MONTHS = ['yanvar','fevral','mart','aprel','may','iyun','iyul','avgust','sentabr','oktabr','noyabr','dekabr'];
+const money = n => String(Math.abs(Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+const dateUz = d => d.getDate() + '-' + MONTHS[d.getMonth()];
+const timeUz = d => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+
+const ROWS = [
+  { label: 'A', stalls: [['A-01', 8000, true], ['A-02', 8000, false], ['A-03', 12000, true], ['A-04', 8000, false], ['A-05', 8000, false]] },
+  { label: 'B', stalls: [['B-01', 12000, true], ['B-02', 12000, true], ['B-03', 8000, false], ['B-04', 8000, false]] },
+  { label: 'C', stalls: [['C-01', 8000, false], ['C-02', 8000, false], ['C-03', 8000, true], ['C-04', 12000, false], ['C-05', 8000, false], ['C-06', 8000, false]] },
+  { label: 'D', stalls: [['D-01', 16000, false], ['D-02', 8000, true], ['D-03', 8000, false]] }
+];
+
+class Component extends DCLogic {
+  state = {
+    panelOpen: true,
+    demo: { shift: 'open', kase: 'plain', market: 'open', net: 'on', list: 'full', vd: 'ok', perm: 'yes', theme: 'light' },
+    query: '', row: null, picked: null, method: null, withDebt: false,
+    submitting: false, netError: false, justWritten: false,
+    toast: null, cancelOpen: false, cancelId: null, cancelReason: '',
+    changeOpen: false, changeReason: '', changeAmount: '8000',
+    vendorOpen: false, vendor: null, qrOpen: false,
+    paid: { 'A-01': 1, 'A-03': 1, 'B-01': 1, 'B-02': 1, 'C-03': 1, 'D-02': 1 },
+    payments: null
+  };
+
+  componentDidMount() {
+    const now = new Date();
+    const mk = (min, code, amount, method, status, day) => ({
+      id: code + '-' + min, code, amount, method, status,
+      at: new Date(now.getTime() - min * 60000), day
+    });
+    this.setState({ payments: [
+      mk(4, 'D-02', 8000, 'cash', 'written', 0),
+      mk(11, 'C-03', 12000, 'card', 'written', 0),
+      mk(19, 'B-02', -8000, 'cash', 'reversal', 0),
+      mk(19, 'B-02', 8000, 'cash', 'canceled', 0),
+      mk(34, 'B-01', 12000, 'cash', 'written', -1)
+    ] });
+    this.applyTheme();
+    if (this.props.theme) this.setState({ demo: { ...this.state.demo, theme: this.themeKey(this.props.theme) } });
+    setTimeout(() => this.focusInput(), 120);
+  }
+  componentDidUpdate(prevProps) {
+    this.applyTheme();
+    if (prevProps.theme !== this.props.theme && this.props.theme) {
+      this.setState({ demo: { ...this.state.demo, theme: this.themeKey(this.props.theme) } });
+    }
+  }
+  themeKey(v) { return v === 'Quyosh ostida' ? 'sun' : v === 'Tungi' ? 'dark' : 'light'; }
+  applyTheme() {
+    const t = this.state.demo.theme;
+    const el = document.documentElement;
+    if (t === 'light') el.removeAttribute('data-theme'); else el.setAttribute('data-theme', t);
+  }
+  focusInput() { const el = this.inputEl; if (el && el.focus) el.focus(); }
+  setDemo(k, v) {
+    const demo = { ...this.state.demo, [k]: v };
+    const reset = ['kase', 'shift', 'perm'].indexOf(k) >= 0;
+    this.setState(reset ? { demo, picked: null, method: null, withDebt: false, justWritten: false, netError: false, query: '', row: null } : { demo });
+  }
+  toast(text, tone, action) {
+    clearTimeout(this._tt);
+    this.setState({ toast: { text, tone, action } });
+    this._tt = setTimeout(() => this.setState({ toast: null }), 7000);
+  }
+  amountOf(code) {
+    for (const r of ROWS) for (const s of r.stalls) if (s[0] === code) return s[1];
+    return 8000;
+  }
+  pick(code) {
+    this.setState({ picked: code, method: null, withDebt: false, netError: false, justWritten: false, query: code.slice(2) });
+  }
+  submit() {
+    const k = this.state.demo.kase;
+    if (!this.state.picked || !this.state.method || k === 'notariff' || k === 'noamount') return;
+    if (this.state.demo.net === 'off') { this.setState({ netError: true }); return; }
+    if (this.state.submitting) return;
+    this.setState({ submitting: true, netError: false });
+    setTimeout(() => {
+      const code = this.state.picked;
+      const total = this.total();
+      const at = new Date();
+      const rec = { id: code + '-' + at.getTime(), code, amount: total, method: this.state.method, status: 'written', at, day: 0, fresh: true };
+      const list = [rec].concat(this.state.payments || []).slice(0, 5);
+      this.setState({
+        submitting: false, justWritten: true, payments: list,
+        paid: { ...this.state.paid, [code]: 1 },
+        vendor: rec
+      });
+      this.toast('To\u2018lov yozildi \u00b7 ' + code + ' \u00b7 ' + money(total) + ' so\u2018m', 'success', true);
+      setTimeout(() => {
+        this.setState({ picked: null, method: null, withDebt: false, justWritten: false, query: '', row: null });
+        this.focusInput();
+      }, 1700);
+    }, 650);
+  }
+  total() {
+    const base = this.amountOf(this.state.picked || 'A-01');
+    return this.state.withDebt && this.state.demo.kase === 'debt' ? base + 16000 : base;
+  }
+  doCancel() {
+    const id = this.state.cancelId;
+    if (!this.state.cancelReason || !id) return;
+    if (this.state.demo.vd === 'err') {
+      this.setState({ cancelOpen: false, cancelReason: '' });
+      this.toast('Bekor qilinmadi \u2014 server javob bermadi. Qayta urinib ko\u2018ring.', 'danger', false);
+      return;
+    }
+    const src = (this.state.payments || []).find(p => p.id === id);
+    const at = new Date();
+    const rev = { id: id + '-rev', code: src.code, amount: -src.amount, method: src.method, status: 'reversal', at, day: src.day, fresh: true };
+    const list = [rev].concat((this.state.payments || []).map(p => p.id === id ? { ...p, status: 'canceled' } : p)).slice(0, 5);
+    this.setState({ payments: list, cancelOpen: false, cancelReason: '', cancelId: null });
+    this.toast('Bekor qilish yozildi \u00b7 ' + src.code + ' \u00b7 ' + money(src.amount) + ' so\u2018m', 'success', false);
+  }
+
+  renderVals() {
+    const s = this.state, d = s.demo, k = d.kase;
+    const noPermission = d.perm === 'no';
+    const shiftClosed = !noPermission && d.shift === 'closed';
+    const flowVisible = !noPermission && d.shift === 'open';
+    const picked = s.picked;
+    const amountLoading = flowVisible && k === 'loading' && !!picked;
+    const stallPicked = flowVisible && !!picked && k !== 'loading';
+    const noTariff = k === 'notariff';
+    const noAmountFromServer = k === 'noamount';
+    const hasDebt = k === 'debt';
+    const base = this.amountOf(picked || 'A-01');
+    const total = this.total();
+    const now = new Date();
+    const today = dateUz(now);
+
+    const chip = (active, big) => 'display:flex;align-items:center;justify-content:center;gap:8px;min-height:' + (big ? 56 : 44) + 'px;padding:0 16px;border-radius:var(--radius-md);border:1px solid ' + (active ? 'var(--color-text)' : 'var(--color-border-ui)') + ';background:' + (active ? 'var(--color-surface-muted)' : 'transparent') + ';color:var(--color-text);font-family:inherit;font-size:' + (big ? 16 : 15) + 'px;font-weight:600;cursor:pointer';
+
+    const rows = ROWS.map(r => ({
+      label: r.label,
+      style: chip(s.row === r.label, false),
+      onPick: () => this.setState({ row: r.label, query: '', picked: null, justWritten: false })
+    }));
+
+    const q = s.query.trim();
+    const rowSel = s.row;
+    let matchList = [];
+    if (rowSel && !picked) matchList = ROWS.find(r => r.label === rowSel).stalls;
+    else if (q.length && !picked) matchList = ROWS.reduce((a, r) => a.concat(r.stalls.filter(x => x[0].slice(2).indexOf(q) === 0)), []);
+    const notFound = flowVisible && k === 'notfound' && (q.length > 0);
+
+    const matches = (notFound ? [] : matchList).map(x => {
+      const isPaid = !!s.paid[x[0]];
+      return {
+        code: x[0], onPick: () => this.pick(x[0]),
+        style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:56px;padding:0 16px;border-radius:var(--radius-md);border:1px solid var(--color-border-ui);background:var(--color-surface);color:var(--color-text);font-family:inherit;text-align:left;cursor:pointer',
+        tag: isPaid ? '\u2713 Bugun to\u2018langan' : 'To\u2018lanmagan',
+        tagStyle: 'font-size:13px;font-weight:600;color:' + (isPaid ? 'var(--color-success-text)' : 'var(--color-text-muted)')
+      };
+    });
+
+    const methodIcon = m => React.createElement('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, 'aria-hidden': 'true' },
+      m === 'cash' ? React.createElement('rect', { x: 2, y: 6, width: 20, height: 12, rx: 2 }) : React.createElement('rect', { x: 2, y: 5, width: 20, height: 14, rx: 2 }),
+      m === 'cash' ? React.createElement('circle', { cx: 12, cy: 12, r: 2.6 }) : React.createElement('path', { d: 'M2 10h20' }));
+
+    const payments = (s.payments || []).map((p, i) => {
+      const canceled = p.status === 'canceled';
+      const rev = p.status === 'reversal';
+      return {
+        code: p.code,
+        amountText: (rev ? '\u2212' : '') + money(p.amount) + ' so\u2018m',
+        amountClass: 'font-mono tabular-nums text-sm' + (canceled ? ' line-through text-text-muted' : ''),
+        methodIcon: methodIcon(p.method),
+        methodLabel: p.method === 'cash' ? 'Naqd' : 'Terminal',
+        timeText: dateUz(p.at) + ', ' + timeUz(p.at),
+        dayText: p.day === 0 ? today + ' uchun' : dateUz(new Date(p.at.getTime() - 86400000)) + ' uchun (qarz)',
+        status: canceled ? 'Bekor qilingan' : rev ? 'Bekor qilish yozuvi' : 'To\u2018lov yozildi',
+        tone: canceled ? 'muted' : rev ? 'warning' : 'success',
+        canCancel: p.status === 'written',
+        rowStyle: 'padding:14px 0;border-bottom:1px solid var(--color-border);' + (p.fresh ? 'animation:flyrow .4s var(--ease-out) both;' : ''),
+        onCancel: () => this.setState({ cancelOpen: true, cancelId: p.id, cancelReason: '' }),
+        onShow: () => this.setState({ vendorOpen: true, vendor: p })
+      };
+    });
+
+    const todayRows = ROWS.map(r => {
+      const left = r.stalls.filter(x => !s.paid[x[0]]).length;
+      return {
+        label: r.label,
+        leftText: left === 0 ? 'hammasi olingan' : left + ' ta qolgan',
+        stalls: r.stalls.map(x => {
+          const isPaid = !!s.paid[x[0]];
+          return {
+            chipText: (isPaid ? '\u2713 ' : '') + x[0],
+            chipStyle: 'min-height:36px;padding:0 10px;border-radius:var(--radius-sm);border:1px solid ' + (isPaid ? 'var(--color-success)' : 'var(--color-border-ui)') + ';background:transparent;color:' + (isPaid ? 'var(--color-success-text)' : 'var(--color-text)') + ';font-family:inherit;font-size:13px;font-weight:600;cursor:pointer',
+            onPick: () => this.pick(x[0])
+          };
+        })
+      };
+    });
+
+    const confirmBlocked = !s.method || noTariff || noAmountFromServer;
+    let confirmNote = 'Naqd yoki Terminal tanlangach yoziladi.';
+    if (noTariff) confirmNote = 'Tarif topilmagani uchun yozib bo\u2018lmaydi.';
+    else if (noAmountFromServer) confirmNote = 'Summa serverdan kelmagani uchun yozib bo\u2018lmaydi.';
+    else if (s.method) confirmNote = 'Yoziladi: ' + money(total) + ' so\u2018m \u00b7 ' + (s.method === 'cash' ? 'naqd' : 'terminal') + ' \u00b7 ' + today + '.';
+
+    const v = s.vendor;
+    const toastTone = s.toast && s.toast.tone === 'danger' ? 'var(--color-danger)' : 'var(--color-text)';
+
+    return {
+      themeAttr: d.theme === 'light' ? '' : d.theme,
+      themeShort: d.theme === 'sun' ? 'Quyosh' : d.theme === 'dark' ? 'Tungi' : 'Yorug\u2018',
+      cycleTheme: () => this.setDemo('theme', d.theme === 'light' ? 'sun' : d.theme === 'sun' ? 'dark' : 'light'),
+      panelOpen: s.panelOpen,
+      panelToggleLabel: s.panelOpen ? 'Yashirish' : 'Ko\u2018rsatish',
+      togglePanel: () => this.setState({ panelOpen: !s.panelOpen }),
+      dShift: d.shift, dCase: d.kase, dMarket: d.market, dNet: d.net, dList: d.list, dVoid: d.vd, dPerm: d.perm, dTheme: d.theme,
+      onDShift: e => this.setDemo('shift', e.target.value),
+      onDCase: e => this.setDemo('kase', e.target.value),
+      onDMarket: e => this.setDemo('market', e.target.value),
+      onDNet: e => this.setDemo('net', e.target.value),
+      onDList: e => this.setDemo('list', e.target.value),
+      onDVoid: e => this.setDemo('vd', e.target.value),
+      onDPerm: e => this.setDemo('perm', e.target.value),
+      onDTheme: e => this.setDemo('theme', e.target.value),
+
+      noPermission, shiftClosed, flowVisible,
+      appVisible: !noPermission,
+      openShift: () => { this.setDemo('shift', 'open'); this.toast('Smena ochildi \u00b7 ' + today + ', ' + timeUz(now), 'success', false); },
+      offline: d.net === 'off',
+      todayLabel: today,
+      todayVisible: this.props.showTodayPanel !== false,
+
+      rows, matches,
+      showMatches: flowVisible && !picked && matches.length > 0,
+      matchesTitle: rowSel ? rowSel + '-qator rastalari' : 'Mos rastalar',
+      stallHint: notFound ? '' : 'Qator tugmasi ro\u2018yxatni ochadi. Ro\u2018yxatda «bugun to\u2018langan» belgisi turadi.',
+      stallError: notFound ? 'Bunday raqamli rasta topilmadi. Raqamni tekshirib qayta kiriting.' : '',
+      query: s.query,
+      inputRef: el => { this.inputEl = el; },
+      onQuery: e => this.setState({ query: e.target.value, picked: null, row: null, justWritten: false }),
+      onQueryKey: e => {
+        if (e.key !== 'Enter') return;
+        const list = ROWS.reduce((a, r) => a.concat(r.stalls.filter(x => x[0].slice(2).indexOf(s.query.trim()) === 0)), []);
+        if (k !== 'notfound' && list.length === 1) this.pick(list[0][0]);
+      },
+
+      amountLoading, stallPicked, noTariff, noAmountFromServer, hasDebt,
+      isAdvance: k === 'advance',
+      marketClosed: d.market === 'closed',
+      stallRepair: k === 'repair',
+      noVendor: k === 'novendor',
+      showAmount: !noTariff,
+      pickedCode: picked || '',
+      pickedBadge: hasDebt ? 'Qarzdor' : k === 'advance' ? 'Avans bor' : k === 'repair' ? 'Ta\u2018mirda' : k === 'novendor' ? 'Sotuvchi yo\u2018q' : 'Qarzi yo\u2018q',
+      pickedTone: hasDebt ? 'danger' : k === 'advance' ? 'accent' : k === 'repair' || k === 'novendor' ? 'warning' : 'success',
+      amountText: money(total),
+      amountDayText: s.withDebt && hasDebt
+        ? 'Bugun (' + today + ') va qarzdor 2 kun: 15-avgust, 16-avgust yopiladi.'
+        : today + ' uchun kutilayotgan patta.',
+      debtText: money(16000),
+      debtDaysText: '2 kun yopilmagan: 15-avgust, 16-avgust.',
+      withDebtLabel: s.withDebt ? '\u2713 Qarz ham qo\u2018shildi \u00b7 ' + money(base + 16000) + ' so\u2018m' : 'Qarzni ham olish \u00b7 ' + money(base + 16000) + ' so\u2018m',
+      toggleWithDebt: () => this.setState({ withDebt: !s.withDebt }),
+
+      cashStyle: chip(s.method === 'cash', false).replace('min-height:44px', 'min-height:48px'),
+      cardStyle: chip(s.method === 'card', false).replace('min-height:44px', 'min-height:48px'),
+      pickCash: () => this.setState({ method: 'cash', netError: false }),
+      pickCard: () => this.setState({ method: 'card', netError: false }),
+
+      confirmBlocked, confirmNote,
+      confirmLabel: s.submitting ? 'Yuborilmoqda…' : 'To\u2018lovni tasdiqlash',
+      onConfirm: () => this.submit(),
+      netError: s.netError,
+      justWritten: s.justWritten,
+      writtenLine: v ? v.code + ' \u00b7 ' + money(v.amount) + ' so\u2018m \u00b7 ' + timeUz(v.at) : '',
+
+      payments,
+      listLoading: d.list === 'loading',
+      listEmpty: d.list === 'empty',
+      listVisible: d.list === 'full',
+      todayRows,
+
+      toastVisible: !!s.toast,
+      toastText: s.toast ? s.toast.text : '',
+      toastAction: !!(s.toast && s.toast.action),
+      toastStyle: 'position:fixed;left:16px;right:16px;bottom:70px;max-width:520px;margin:0 auto;z-index:60;padding:13px 16px;border-radius:var(--radius-md);background:var(--color-surface);border:1px solid ' + toastTone + ';color:var(--color-text);box-shadow:var(--shadow-raised);animation:toastin .25s var(--ease-out) both',
+      openVendor: () => this.setState({ vendorOpen: true }),
+
+      cancelOpen: s.cancelOpen,
+      setCancelOpen: o => this.setState({ cancelOpen: o, cancelReason: o ? s.cancelReason : '' }),
+      cancelBlocked: !s.cancelReason,
+      cancelReason: s.cancelReason,
+      cancelHint: s.cancelReason ? '' : 'Sabab tanlanmaguncha tasdiq bloklangan. Erkin matn yo\u2018q.',
+      cancelDescription: 'Yozuv ro\u2018yxatdan yo\u2018qolmaydi \u2014 qatorda «Bekor qilingan» bo\u2018lib qoladi va manfiy summali bekor qilish yozuvi qo\u2018shiladi.',
+      onCancelReason: e => this.setState({ cancelReason: e.target.value }),
+      doCancel: () => this.doCancel(),
+
+      changeOpen: s.changeOpen,
+      openChange: () => this.setState({ changeOpen: true, changeAmount: String(base), changeReason: '' }),
+      setChangeOpen: o => this.setState({ changeOpen: o }),
+      closeChange: () => this.setState({ changeOpen: false }),
+      changeReason: s.changeReason,
+      onChangeReason: e => this.setState({ changeReason: e.target.value }),
+      changeAmount: s.changeAmount,
+      onChangeAmount: e => this.setState({ changeAmount: e.target.value.replace(/[^0-9]/g, '') }),
+      changeBlocked: !s.changeReason || !s.changeAmount,
+      saveChange: () => {
+        if (!s.changeReason || !s.changeAmount) return;
+        this.setState({ changeOpen: false });
+        this.toast('Summa o\u2018zgartirildi \u00b7 ' + money(Number(s.changeAmount)) + ' so\u2018m \u00b7 sabab yozildi', 'success', false);
+      },
+
+      vendorOpen: s.vendorOpen,
+      setVendorOpen: o => this.setState({ vendorOpen: o }),
+      closeVendor: () => this.setState({ vendorOpen: false }),
+      vendorCode: v ? v.code : '',
+      vendorAmount: v ? money(v.amount) : '',
+      vendorDay: v ? (v.day === 0 ? today + ' uchun' : 'qarz kuni uchun') : '',
+      vendorTime: v ? dateUz(v.at) + ', ' + timeUz(v.at) : '',
+
+      qrOpen: s.qrOpen,
+      openQr: () => this.setState({ qrOpen: true }),
+      setQrOpen: o => this.setState({ qrOpen: o }),
+      closeQr: () => this.setState({ qrOpen: false })
+    };
+  }
+}
+
+</script>
+</body>
+</html>

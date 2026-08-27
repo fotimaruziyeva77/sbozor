@@ -1,0 +1,777 @@
+"use client";
+
+import {
+  useFormatter,
+  useLocale,
+  useNow,
+  useTimeZone,
+  useTranslations,
+} from "next-intl";
+import {
+  Banknote,
+  CalendarDays,
+  Check,
+  ScanLine,
+  Store,
+  TriangleAlert,
+  UserRound,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+import {
+  attentionItems,
+  setupPercent,
+  setupSteps,
+} from "@/components/admin/setup-view";
+import type { Attention, SetupStep } from "@/components/admin/setup-view";
+import { PanelTile } from "@/components/panel/tile";
+import { businessDayIn } from "@/components/snapshots/day-picker";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Link } from "@/i18n/navigation";
+import { cn } from "@/lib/cn";
+import { isAuditAction, isAuditTable } from "@/lib/api-types";
+import { formatBusinessDay } from "@/lib/format-day";
+import { formatAmount } from "@/lib/format-number";
+import { useSetupStatusQuery } from "@/lib/market-queries";
+import { EMPTY_AUDIT_FILTERS, useAuditQuery, useUsersQuery } from "@/lib/queries";
+import { roleLabelKey } from "@/lib/rbac";
+
+/*
+ * =============================================================================
+ * BOZOR ADMINI PANELI — Stitch «Admin paneli» maketining tuzilmasi.
+ *
+ * ⛔⛔ NEGA ALOHIDA PANEL, DIREKTORNIKI EMAS.
+ *
+ *     Bugungacha bozor admini `/dashboard` da DIREKTOR panelini
+ *     ko'rardi (ikkalasida ham `report_view` bor). Lekin ular BOSHQA
+ *     ikki savolga javob beradi:
+ *
+ *       direktor      -> «pul to'liq yig'ilyaptimi?»   (hisobdorlik)
+ *       bozor admini  -> «bozorim ishlashga tayyormi?» (sozlash)
+ *
+ *     Bitta ekranda ikkalasini ko'rsatish har ikkisini ham
+ *     susaytiradi. Stitch maketida ham admin panelida PUL YO'Q — u
+ *     sozlash, reestr, xodim va o'zgarishlar haqida. Bu to'g'ri
+ *     qaror va biz uni AYNAN ko'chiramiz.
+ *
+ *     ⚠ Bozor admini pulni yo'qotmaydi: `report_view` unda qoladi va
+ *       `/reports` menyuda turadi.
+ *
+ * ⛔⛔ TARTIB IERARXIYA BO'YICHA VA U TASODIFIY EMAS:
+ *
+ *       1. SOZLASH      — «tayyormanmi?» Bosh javob, butun qator.
+ *       2. DIQQAT       — «nima buzuq?» FAQAT haqiqiy bandlar.
+ *       3. REESTR       — «nimam bor?» To'rtta joyga eshik.
+ *       4. XODIM + JURNAL — «kim ishlayapti, kim nima o'zgartirdi?»
+ *
+ *     Yuqoridan pastga: holat -> muammo -> mulk -> odam. Bozor admini
+ *     ertalab ekranni ochganda birinchi savoli aynan birinchisi.
+ *
+ * ⛔ RANGLAR STITCHDAN (foydalanuvchi qarori, 260819): yashil zumrad
+ *    (`oklch(… 162)`), sariq amber (`oklch(… 70)`). Ular BIZNING
+ *    semantik tokenlarimiz — ya'ni «bajarildi» va «diqqat» ma'nosi
+ *    butun mahsulotda bir xil qoladi, faqat ohang Stitchnikiga keldi.
+ *
+ * ⛔ RANG YOLG'IZ SIGNAL EMAS: har holat ikonka VA matn bilan ham
+ *    keladi. Rang ko'rmaydigan odam ekranni to'liq o'qiy oladi.
+ * =============================================================================
+ */
+
+/**
+ * Sozlash qadamlarining I18N KALITI — `setup-view.ts` dagi `key` bo'yicha.
+ *
+ * 2026-08-26 tarjima tuzatishi: qattiq o'zbekcha matn kalitga o'tdi
+ * (rus sessiyada panel o'zbekcha qolib ketardi). Mavjud sahifa
+ * sarlavhalari QAYTA YOZILMAYDI — nav/zones/categories kalitlari
+ * ishlatiladi, shunda menyu va qadam bir xil ataladi.
+ */
+const STEP_LABEL_KEY = {
+  zones: "zones.title",
+  stalls: "nav.stalls",
+  categories: "categories.title",
+  tariffs: "adminPanel.stepTariffs",
+  vendors: "nav.vendors",
+  calendar: "nav.calendar",
+  cameras: "nav.cameras",
+} as const satisfies Record<SetupStep["key"], string>;
+
+/**
+ * Diqqat bandlarining KALITLARI — sarlavha, sabab va amal.
+ *
+ * ⛔ HAR BANDDA «NIMA BO'LADI» QATORI BOR va u eng muhim qism:
+ *    «16 rasta» o'zi hech narsa demaydi, «bu rastalarga patta
+ *    hisoblanmaydi» esa odamni harakatga keltiradi. Muammoni sanash
+ *    oson, OQIBATINI aytish esa mahsulotning ishi.
+ */
+const ATTENTION_KEYS = {
+  stallsWithoutCategory: {
+    title: "adminPanel.attStallsTitle",
+    unit: "adminPanel.attStallsUnit",
+    why: "adminPanel.attStallsWhy",
+    action: "adminPanel.attStallsAction",
+  },
+  categoriesWithoutTariff: {
+    title: "adminPanel.attTariffTitle",
+    unit: "adminPanel.attTariffUnit",
+    why: "adminPanel.attTariffWhy",
+    action: "adminPanel.attTariffAction",
+  },
+  noCalendar: {
+    title: "adminPanel.attCalendarTitle",
+    unit: null,
+    why: "adminPanel.attCalendarWhy",
+    action: "adminPanel.attCalendarAction",
+  },
+} as const satisfies Record<
+  Attention["key"],
+  { title: string; unit: string | null; why: string; action: string }
+>;
+
+/** Reestr kataklarining ikonkalari — Stitch `Material Symbols` mosligi. */
+const REGISTRY_ICON: Record<string, LucideIcon> = {
+  vendors: UserRound,
+  stalls: Store,
+  tariffs: Banknote,
+  calendar: CalendarDays,
+};
+
+export function AdminPanel({
+  marketId,
+  marketName,
+  roleLabel,
+  isDraft,
+}: {
+  marketId: string;
+  marketName: string;
+  roleLabel: string;
+  /*
+   * ⛔⛔ QORALAMA HOLATI — PLATFORMA ADMINI UCHUN ENG MUHIM FAKT (260820).
+   *
+   *     Yangi bozor `is_active = false` bilan tug'iladi va u
+   *     faollashtirilmaguncha ISHLAMAYDI. Panel esa buni HECH QAYERDA
+   *     aytmasdi: platforma admini 14% halqani ko'rib, bozor tirikmi
+   *     yoki qoralamami — bilmasdi [jonli ko'rildi].
+   *
+   * ⛔ `boolean | undefined` — UCHINCHI HOLAT ATAYIN: `undefined`
+   *    «noma'lum» degani va o'shanda belgi UMUMAN chizilmaydi.
+   *    `!isDraft` yozib «faol» deb ko'rsatish o'lchanmagan da'vo
+   *    bo'lardi (`market-status-card.tsx` da o'rnatilgan qoida).
+   */
+  isDraft: boolean | undefined;
+}) {
+  const t = useTranslations();
+  const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone() ?? "Asia/Tashkent";
+  const now = useNow();
+  const todayIso = businessDayIn(timeZone, now);
+
+  const setup = useSetupStatusQuery(marketId);
+  const users = useUsersQuery();
+  /*
+   * ⛔ Jurnal FAQAT oxirgi beshta yozuv uchun so'raladi. Panel — audit
+   *    sahifasining nusxasi EMAS, u faqat «yaqinda nima o'zgardi»
+   *    savoliga javob beradi va to'liq javob uchun havola qo'yadi.
+   */
+  const audit = useAuditQuery(EMPTY_AUDIT_FILTERS);
+
+  const status = setup.data ?? null;
+  const steps = status === null ? [] : setupSteps(status);
+  const percent = status === null ? null : setupPercent(steps);
+  const attention = status === null ? [] : attentionItems(status);
+
+
+  return (
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <div className="dir-eyebrow">
+            {marketName} · {roleLabel}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="dir-title">{t("adminPanel.title")}</h1>
+            {isDraft === true ? (
+              <Badge tone="warning">{t("dashboard.panelDraft")}</Badge>
+            ) : null}
+          </div>
+          {/*
+           * ⛔ `formatBusinessDay` — XOM `Intl` EMAS. O'zbek lotin
+           *    yozuvi uchun brauzer ICU'sida oy nomlari yo'q va u
+           *    «2026 M08 19» beradi (jonli o'lchandi). Helper faqat
+           *    shu til uchun jadval bilan yozadi; direktor paneli ham
+           *    AYNAN shuni ishlatadi.
+           */}
+          <p className="dir-tile-sub">
+            {formatBusinessDay(format, todayIso, locale)}
+            {" · "}
+            {t("director.updatedLine", {
+              time: format.dateTime(now, { timeStyle: "short" }),
+            })}
+          </p>
+        </div>
+      </header>
+
+      <div className="dir-grid">
+        {/* ---------------------------------------------------------------
+         * 1. SOZLASH — bosh javob, butun qatorni egallaydi.
+         * ------------------------------------------------------------ */}
+        <PanelTile
+          action={t("adminPanel.heroAction")}
+          className="dir-tile-hero"
+          href="/markets/setup"
+          label={t("adminPanel.heroLabel")}
+          step={0}
+          sub={t("adminPanel.heroSub")}
+        >
+          {setup.isPending ? (
+            <Skeleton className="h-32 rounded-lg" />
+          ) : percent === null ? (
+            <p className="dir-tile-note">{t("adminPanel.setupUnread")}</p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-6">
+              <SetupRing percent={percent} />
+
+              <ul className="grid min-w-0 flex-1 grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                {steps.map((item) => (
+                  <li key={item.key}>
+                    <Link
+                      className="flex items-center gap-2.5 rounded-sm py-1 text-sm text-text hover:text-accent-text"
+                      href={item.href}
+                    >
+                      <StepMark done={item.done} />
+                      <span className="min-w-0 flex-1 truncate">
+                        {t(STEP_LABEL_KEY[item.key])}
+                        {/*
+                         * ⛔ «ixtiyoriy» YORLIG'I — qadam ko'rinadi,
+                         *    lekin u BAJARILMASA ham bozor tayyor.
+                         *    Kamerasiz ishlayotgan bozor uchun bu
+                         *    yagona to'g'ri xabar: «bu yerda ish bor,
+                         *    lekin u sizni to'smaydi».
+                         */}
+                        {item.optional === true ? (
+                          <span className="ml-2 text-xs text-text-muted">
+                            {t("dashboard.stepOptional")}
+                          </span>
+                        ) : null}
+                        {/*
+                         * ⛔ A1 (2026-08-25 auditi): «0/2» ko'rinib turib
+                         *    Tariflar sahifasida narxlar amalda bo'lishi
+                         *    mumkin — qadam tarif BOZOR ISH BOSHLAGAN
+                         *    SANADAN qamrashini o'lchaydi
+                         *    (`market_repo.py::tariffs_covered`,
+                         *    `valid_from <= operating_since`). Sababsiz
+                         *    bu QARAMA-QARSHILIK bo'lib o'qiladi — bir
+                         *    qator izoh savolni yopadi.
+                         */}
+                        {item.key === "tariffs" && !item.done ? (
+                          <span className="ml-2 text-xs text-text-muted">
+                            {t("dashboard.stepTariffCoverageHint")}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="shrink-0 font-mono text-xs text-text-muted tabular-nums">
+                        {stepCount(
+                          item,
+                          format,
+                          locale,
+                          t("adminPanel.countYes"),
+                          t("adminPanel.countNo"),
+                        )}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </PanelTile>
+
+        {/* ---------------------------------------------------------------
+         * 2. DIQQAT TALAB QILADI — bo'sh bo'lsa BUTUN BO'LIM chizilmaydi.
+         *
+         * ⛔ «Muammo yo'q» degan bo'sh karta CHIZILMAYDI: u ekranda joy
+         *    egallab, ko'zni har kuni bo'sh javobga o'rgatardi. Bo'lim
+         *    faqat aytadigan gapi bo'lganda paydo bo'ladi — shuning
+         *    uchun paydo bo'lgani O'ZI signal.
+         * ------------------------------------------------------------ */}
+        {attention.length > 0 ? (
+          <>
+            <p className="dir-group-span dir-group-label">
+              {t("adminPanel.attentionGroup")}
+            </p>
+            {attention.map((item, index) => (
+              <AttentionCard item={item} key={item.key} step={index + 1} />
+            ))}
+          </>
+        ) : null}
+
+      </div>
+
+      {/*
+       * ⛔ REESTR TO'RT KATAK VA U ALOHIDA SETKADA (260819).
+       *
+       *    Umumiy setka uch ustunli; to'rt katak u yerda 3 + 1 bo'lib
+       *    tushib, to'rtinchisi yolg'iz qatorda qolardi [jonli
+       *    ko'rildi]. Reestr — bir jinsli TO'RTLIK (sotuvchi · rasta ·
+       *    tarif · ish kuni), shuning uchun u o'z setkasida to'rt
+       *    ustun oladi.
+       */}
+      <p className="dir-group-label">{t("adminPanel.registryGroup")}</p>
+      <div className="dir-grid dir-grid-4">
+        <RegistryTile
+          action={t("adminPanel.regListAction")}
+          count={status?.vendors ?? null}
+          href="/vendors"
+          icon="vendors"
+          label={t("nav.vendors")}
+          step={1}
+          sub={t("adminPanel.regVendorsSub")}
+          unit={t("adminPanel.unitPeople")}
+        />
+        <RegistryTile
+          action={t("adminPanel.attStallsAction")}
+          count={status?.stalls ?? null}
+          href="/stalls"
+          icon="stalls"
+          label={t("nav.stalls")}
+          step={2}
+          sub={
+            status === null
+              ? t("adminPanel.regStallsSub")
+              : t("adminPanel.regStallsZones", {
+                  count: formatAmount(format, status.zones, locale),
+                })
+          }
+          unit={t("adminPanel.unitCount")}
+        />
+        <RegistryTile
+          action={t("adminPanel.attTariffAction")}
+          count={status?.categories_total ?? null}
+          href="/tariffs"
+          icon="tariffs"
+          label={t("nav.tariffs")}
+          step={3}
+          sub={
+            status === null
+              ? t("adminPanel.regTariffsSub")
+              : t("adminPanel.regTariffsCovered", {
+                  count: formatAmount(format, status.tariffs_covered, locale),
+                })
+          }
+          unit={t("adminPanel.unitCategories")}
+        />
+        <RegistryTile
+          action={t("adminPanel.attCalendarAction")}
+          count={null}
+          href="/calendar"
+          icon="calendar"
+          label={t("nav.calendar")}
+          step={4}
+          stateText={
+            status === null
+              ? null
+              : status.calendar_configured
+                ? t("adminPanel.calSet")
+                : t("adminPanel.calUnset")
+          }
+          sub={t("adminPanel.regCalendarSub")}
+          unit=""
+        />
+      </div>
+
+      {/* -----------------------------------------------------------------
+       * 4. XODIMLAR + OXIRGI O'ZGARISHLAR — yonma-yon, teng og'irlikda.
+       *
+       * ⛔ Ular BIR QATORDA turishi ma'noli: «kim ishlaydi» va «kim nima
+       *    qildi» bitta savolning ikki yarmi. Ajratilsa, xodim ro'yxati
+       *    quruq ma'lumotnomaga aylanardi.
+       * -------------------------------------------------------------- */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <StaffCard
+          isPending={users.isPending}
+          rows={users.data?.items ?? null}
+        />
+        <ChangesCard
+          isPending={audit.isPending}
+          rows={audit.data?.pages[0]?.items ?? null}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================================
+ * Sozlash halqasi — direktor panelidagi bosh halqa bilan AYNAN bir
+ * matematikada (`dasharray = 2πr`, `dashoffset = dasharray × (1 − ulush)`).
+ * ======================================================================= */
+function SetupRing({ percent }: { percent: number }) {
+  const t = useTranslations();
+  const RADIUS = 44;
+  const dash = 2 * Math.PI * RADIUS;
+  const offset = dash * (1 - percent / 100);
+  const complete = percent === 100;
+
+  return (
+    <div className="relative size-32 shrink-0">
+      <svg className="size-full -rotate-90" viewBox="0 0 100 100">
+        <circle
+          cx="50"
+          cy="50"
+          fill="none"
+          r={RADIUS}
+          stroke="var(--color-border)"
+          strokeWidth="12"
+        />
+        <circle
+          cx="50"
+          cy="50"
+          fill="none"
+          r={RADIUS}
+          stroke={
+            complete ? "var(--color-success)" : "var(--color-warning)"
+          }
+          strokeDasharray={dash.toFixed(2)}
+          strokeDashoffset={offset.toFixed(2)}
+          strokeLinecap="round"
+          strokeWidth="12"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        {/* ⛔ `dir-tile-value-sm` (30px mono) — direktor panelidagi
+               bandlik donuti bilan AYNAN bir shkalada. O'z o'lchamimni
+               yozsam (`text-3xl`), ikki panel bir xil ko'rinadigan
+               halqani boshqa kattalikda chizardi. */}
+        <span className="dir-tile-value-sm">{percent}%</span>
+        <span className="dir-tile-unit">{t("adminPanel.ringReady")}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Qadam belgisi — ✓ yoki ⚠. Rang YOLG'IZ signal emas, shakl ham farq qiladi. */
+function StepMark({ done }: { done: boolean }) {
+  const t = useTranslations();
+  const Icon = done ? Check : TriangleAlert;
+  return (
+    <span
+      className={cn(
+        "flex size-5 shrink-0 items-center justify-center rounded-full",
+        done
+          ? "bg-success/15 text-success-text"
+          : "bg-warning/20 text-warning-text",
+      )}
+    >
+      <Icon aria-hidden="true" className="size-3" />
+      <span className="sr-only">
+        {done ? t("adminPanel.markDone") : t("adminPanel.markPending")}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * `6 / 6`, `284` yoki kalendar uchun «bor»/«yo'q».
+ *
+ * ⛔ Formatlovchi TASHQARIDAN: raqam guruhlash uz-Latn da INGICHKA
+ *    bo'sh joy bilan (24 180 000), boshqa tillarda esa `Intl` bilan
+ *    qilinadi (`formatAmount`). Bu yerda o'z formatimni yozsam,
+ *    panel qolgan ekranlardan boshqacha raqam ko'rsatardi.
+ */
+function stepCount(
+  step: SetupStep,
+  format: ReturnType<typeof useFormatter>,
+  locale: string,
+  /* «bor»/«yo'q» TARJIMA bo'lib keladi — bu funksiya hook chaqira olmaydi. */
+  yes: string,
+  no: string,
+): string {
+  if (step.count === null) return step.done ? yes : no;
+  if (step.total === null) return formatAmount(format, step.count, locale);
+  return `${formatAmount(format, step.count, locale)} / ${formatAmount(format, step.total, locale)}`;
+}
+
+/* ==========================================================================
+ * Diqqat katagi — chap chekkasida ohang chizig'i (Stitch naqshi).
+ * ======================================================================= */
+function AttentionCard({ item, step }: { item: Attention; step: number }) {
+  const t = useTranslations();
+  const format = useFormatter();
+  const locale = useLocale();
+  const text = ATTENTION_KEYS[item.key];
+  const danger = item.tone === "danger";
+
+  return (
+    <Link
+      className="dir-tile-link"
+      href={item.href}
+      style={{ "--i": step } as never}
+    >
+      <Card
+        className={cn(
+          "dir-tile border-l-3",
+          danger ? "border-l-danger" : "border-l-warning",
+        )}
+      >
+        <CardHeader className="dir-tile-head">
+          <div className="flex items-start justify-between gap-3">
+            <p className="dir-tile-label">{t(text.title)}</p>
+            <TriangleAlert
+              aria-hidden="true"
+              className={cn(
+                "size-4 shrink-0",
+                danger ? "text-danger-text" : "text-warning-text",
+              )}
+            />
+          </div>
+        </CardHeader>
+
+        <CardContent className="dir-tile-body">
+          <div className="flex flex-col gap-3">
+            {item.count === null ? (
+              /* ⛔ O'RAMA MAJBURIY: `dir-tile-body` ustun-flex va uning
+                 bolalari `align-items: stretch` bilan BUTUN kenglikka
+                 cho'ziladi. Yorliq o'ramasiz butun kartani egallab
+                 yotardi [jonli ko'rildi]. */
+              <div>
+                <Badge tone={danger ? "danger" : "warning"}>
+                  {t("adminPanel.notConfigured")}
+                </Badge>
+              </div>
+            ) : (
+              <p className="dir-tile-value">
+                {formatAmount(format, item.count, locale)}
+                {text.unit === null ? null : (
+                  <span className="dir-tile-unit"> {t(text.unit)}</span>
+                )}
+              </p>
+            )}
+
+            <p className="dir-tile-note">{t(text.why)}</p>
+
+            <div className="dir-tile-foot">
+              <span className="dir-tile-action">{t(text.action)} →</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+/* ==========================================================================
+ * Reestr katagi — `PanelTile` ning yupqa o'ramasi.
+ * ======================================================================= */
+function RegistryTile({
+  action,
+  count,
+  href,
+  icon,
+  label,
+  step,
+  stateText = null,
+  sub,
+  unit,
+}: {
+  action: string;
+  count: number | null;
+  href: "/vendors" | "/stalls" | "/tariffs" | "/calendar";
+  icon: keyof typeof REGISTRY_ICON;
+  label: string;
+  step: number;
+  stateText?: string | null;
+  sub: string;
+  unit: string;
+}) {
+  const format = useFormatter();
+  const locale = useLocale();
+  const Icon = REGISTRY_ICON[icon] ?? ScanLine;
+
+  return (
+    <PanelTile
+      action={action}
+      href={href}
+      icon={Icon}
+      label={label}
+      step={step}
+      sub={sub}
+    >
+      <div className="flex items-center gap-3">
+        {/*
+         * ⛔ O'LCHANMAGAN QIYMAT O'RNIGA NOL YOZILMAYDI (T-05-04):
+         *    «bozorda 0 ta sotuvchi bor» va «sotuvchilar sonini
+         *    bilmayman» butunlay boshqa ikki gap.
+         */}
+        {count === null && stateText === null ? (
+          <p className="dir-tile-value text-text-muted">—</p>
+        ) : count === null ? (
+          <p className="text-sm text-text">{stateText}</p>
+        ) : (
+          <p className="dir-tile-value">
+            {formatAmount(format, count, locale)}
+            <span className="dir-tile-unit"> {unit}</span>
+          </p>
+        )}
+      </div>
+    </PanelTile>
+  );
+}
+
+/* ==========================================================================
+ * Xodimlar — qisqa ro'yxat, to'liq boshqaruv `/users` da.
+ * ======================================================================= */
+const STAFF_LIMIT = 5;
+
+function StaffCard({
+  isPending,
+  rows,
+}: {
+  isPending: boolean;
+  rows: readonly {
+    id: string;
+    phone: string;
+    full_name: string | null;
+    roles: readonly string[];
+    is_active: boolean;
+  }[] | null;
+}) {
+  const t = useTranslations();
+  const tRoles = useTranslations("roles");
+  const format = useFormatter();
+  const locale = useLocale();
+  const shown = rows?.slice(0, STAFF_LIMIT) ?? [];
+
+  return (
+    <Card className="flex flex-col gap-4 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="dir-tile-label">{t("adminPanel.staffTitle")}</p>
+        <Link className="dir-tile-action" href="/users">
+          {t("adminPanel.allLink")} →
+        </Link>
+      </div>
+
+      {isPending ? (
+        <Skeleton className="h-32 rounded-lg" />
+      ) : rows === null ? (
+        <p className="dir-tile-note">{t("adminPanel.staffUnread")}</p>
+      ) : shown.length === 0 ? (
+        <p className="dir-tile-note">{t("adminPanel.staffEmpty")}</p>
+      ) : (
+        <ul className="flex flex-col">
+          {shown.map((row) => (
+            <li
+              className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0"
+              key={row.id}
+            >
+              {/* ⛔ Ism `null` bo'lishi mumkin — o'shanda TELEFON yoziladi,
+                     bo'sh katak emas: xodimni tanib bo'lmaydigan qator
+                     ro'yxatni foydasiz qiladi. */}
+              <span className="min-w-0 flex-1 truncate text-sm text-text">
+                {row.full_name ?? row.phone}
+              </span>
+              <span className="shrink-0 text-xs text-text-muted">
+                {/* ⛔ Rol nomlari `roles.*` dan — `/users` sahifasi bilan
+                    BIR manba (bir rol ikki ekranda ikki xil atalmasin). */}
+                {row.roles
+                  .map((role) => roleLabelKey(role))
+                  .filter((key): key is NonNullable<typeof key> => key !== null)
+                  .map((key) => tRoles(key))
+                  .join(", ")}
+              </span>
+              <Badge tone={row.is_active ? "success" : "danger"}>
+                {row.is_active
+                  ? t("users.statusActive")
+                  : t("users.statusBlocked")}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {rows !== null && rows.length > STAFF_LIMIT ? (
+        <p className="dir-tile-note">
+          {t("adminPanel.staffMore", {
+            count: formatAmount(format, rows.length - STAFF_LIMIT, locale),
+          })}
+        </p>
+      ) : null}
+    </Card>
+  );
+}
+
+/* ==========================================================================
+ * Oxirgi o'zgarishlar — audit jurnalining boshi.
+ * ======================================================================= */
+const CHANGES_LIMIT = 5;
+
+function ChangesCard({
+  isPending,
+  rows,
+}: {
+  isPending: boolean;
+  rows: readonly {
+    id: number;
+    action: string;
+    table_name: string;
+    actor_label: string | null;
+    at: string;
+  }[] | null;
+}) {
+  const format = useFormatter();
+  /*
+   * ⛔ Yorliqlar `/audit` SAHIFASI BILAN AYNAN BIR MANBADAN
+   *    (`audit.actions.*` / `audit.tables.*`). O'z ro'yxatimni yozsam,
+   *    panelda «tarif o'zgardi», jurnalda esa boshqacha yozilib, bir
+   *    voqea ikki xil atalardi.
+   */
+  const t = useTranslations();
+  const tActions = useTranslations("audit.actions");
+  const tTables = useTranslations("audit.tables");
+  const shown = rows?.slice(0, CHANGES_LIMIT) ?? [];
+
+  return (
+    <Card className="flex flex-col gap-4 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="dir-tile-label">{t("adminPanel.changesTitle")}</p>
+        <Link className="dir-tile-action" href="/audit">
+          {t("adminPanel.changesAll")} →
+        </Link>
+      </div>
+
+      {isPending ? (
+        <Skeleton className="h-32 rounded-lg" />
+      ) : rows === null ? (
+        <p className="dir-tile-note">{t("adminPanel.changesUnread")}</p>
+      ) : shown.length === 0 ? (
+        <p className="dir-tile-note">{t("adminPanel.changesEmpty")}</p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {shown.map((row) => (
+            <li className="flex items-start gap-3" key={row.id}>
+              <span
+                aria-hidden="true"
+                className="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-text">
+                  {isAuditTable(row.table_name)
+                    ? tTables(row.table_name)
+                    : row.table_name}
+                  {" · "}
+                  {isAuditAction(row.action)
+                    ? tActions(row.action)
+                    : row.action}
+                </p>
+                <p className="text-xs text-text-muted">
+                  {format.dateTime(new Date(row.at), { timeStyle: "short" })}
+                  {row.actor_label === null ? null : ` · ${row.actor_label}`}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}

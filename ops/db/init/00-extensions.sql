@@ -1,0 +1,49 @@
+-- SBOZOR — PostgreSQL kengaytmalari. KENGAYTMALAR UCHUN YAGONA HAQIQAT MANBAI.
+--
+-- Bu fayl IKKI joyda bajariladi:
+--   1) `db` konteyneri birinchi ishga tushganda — docker-entrypoint-initdb.d orqali
+--   2) `tests/conftest.py` tomonidan testcontainer ustida — VERBATIM o'qib bajariladi
+--
+-- Shuning uchun bu yerda psql o'zgaruvchilari (:'var') yoki env interpolatsiyasi
+-- ISHLATILMAYDI — `01-roles.sql` bilan aynan bir xil qoida.
+--
+-- RAQAM PREFIKSI AHAMIYATLI: `docker-entrypoint-initdb.d` fayllarni nom bo'yicha
+-- alifbo tartibida bajaradi, ya'ni `00-` `01-roles.sql` dan OLDIN ishlaydi.
+-- Kengaytma rollardan oldin kerak emas, lekin tartib ATAYIN shunday: kengaytma
+-- bazaning eng past qatlami va u yerdagi xato boshqa hech narsa yaratilishidan
+-- oldin ko'rinishi kerak.
+--
+-- NEGA BU FAYL BOR — YA'NI NEGA MIGRATSIYA BUNI O'ZI QILMAYDI (2-faza, Pitfall 1,
+-- jonli `postgres:18.4-trixie` da EMPIRIK o'lchangan):
+--
+--   `sbozor_owner` bilan `CREATE EXTENSION btree_gist` bajarilsa:
+--       ERROR:  permission denied to create extension "btree_gist"
+--       HINT:   Must have CREATE privilege on current database to create
+--               this extension.
+--
+--   `btree_gist` — *trusted* kengaytma, lekin "trusted" superuser talabini
+--   BAZA DARAJASIDAGI `CREATE` huquqi talabiga almashtiradi, uni umuman
+--   yo'q qilmaydi. `01-roles.sql` esa `sbozor_owner` ni `NOCREATEDB` qilib
+--   yaratadi va u bazaning EGASI emas (faqat `public` sxemaning egasi).
+--
+--   MUQOBIL YO'L RAD ETILDI: `GRANT CREATE ON DATABASE sbozor TO sbozor_owner`
+--   ham ishlaydi (o'lchandi — shundan keyin owner kengaytmani o'rnatdi va
+--   `extowner = sbozor_owner` bo'ldi), LEKIN u migratsiya roliga baza
+--   darajasida yangi sxema yaratish huquqini ham berardi. Bu imtiyoz
+--   kengayishi: `public` dan tashqarida, RLS meta-testlari umuman
+--   ko'rmaydigan sxemada jadval yaratish yo'li ochilardi.
+--
+-- NEGA `btree_gist` KERAK:
+--   `stall_assignments` jadvalidagi
+--       EXCLUDE USING gist (market_id WITH =, stall_id WITH =, period WITH &&)
+--   konstrayti uchun (D-09: bitta rasta bir vaqtda bitta sotuvchida).
+--   GiST indeksi standart holatda `uuid`/`date` kabi SKALYAR tiplar uchun
+--   operator klassiga ega emas — `btree_gist` aynan o'sha klasslarni beradi.
+--   Usiz `market_id WITH =` qismi `data type uuid has no default operator
+--   class for access method "gist"` bilan yiqiladi.
+--
+-- Migratsiya bu yerga TAYANADI, takrorlamaydi: `migrations/helpers.py::
+-- require_extension()` kengaytma yo'qligida baland ovozda yiqiladi va shu
+-- faylni nomma-nom ko'rsatadi.
+
+CREATE EXTENSION IF NOT EXISTS btree_gist;
