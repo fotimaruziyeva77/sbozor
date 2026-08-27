@@ -630,6 +630,34 @@ kengaytmasi AYNAN dalil-kadr baytlari uchun edi. Ikkinchi element
 qo'shilishi — ongli qaror va u shu yerda ko'rinadi.
 """
 
+OCCUPANCY_DUAL_ROLE_ROUTES = (
+    "/api/v1/occupancy",
+    "/api/v1/occupancy/round",
+)
+"""IKKINCHI, ALOHIDA e'lon — kunlik BANDLIK yuzasi (260827).
+
+=========================================================================
+⛔ NEGA `SNAPSHOT_EVIDENCE_FRAME_ROUTES` GA QO'SHILMADI: o'sha ro'yxat
+   05-15 ning DALIL-KADR baytlari haqidagi qarorini nom bilan saqlaydi va
+   uning yuqoridagi docstringi «ro'yxat bitta elementdan iborat va u
+   SHUNDAY QOLISHI kerak» deb turadi. Boshqa domenning marshrutini o'sha
+   nom ostiga tiqish ikkala qarorni ham o'qib bo'lmas qilardi.
+
+BU YERDAGI QAROR BOSHQA: 260820 da klient qatlami nazoratchiga bandlik
+sahifasini ochdi (menyu + sahifa darvozasi), server esa o'shanda
+yangilanmagan — natijada menyu KO'RINARDI, sahifa OCHILARDI va so'rov
+**403** olardi. 260827 da server klientga moslashtirildi.
+
+⛔ `/api/v1/occupancy/accuracy` BU RO'YXATDA YO'Q va bo'lmaydi ham:
+   T-05-58 ning sababi (nazoratchi o'z ANIQLIGINI ko'rsa raqamni
+   yaxshilashga urinardi) aynan aniqlik yuzasiga tegishli. Uch marshrutdan
+   ikkitasi ochildi, uchinchisi — YO'Q.
+=========================================================================
+"""
+
+ANY_PERMISSION_GATE_ROUTES = SNAPSHOT_EVIDENCE_FRAME_ROUTES + OCCUPANCY_DUAL_ROLE_ROUTES
+"""«Yo P yo Q» darvozasi ko'tarilishi mumkin bo'lgan TO'LIQ to'plam."""
+
 SNAPSHOT_CAMERA_ONLY_ROUTES = (
     "/api/v1/capture-runs",
     "/api/v1/snapshots/{snapshot_id}",
@@ -1091,10 +1119,10 @@ def test_the_any_permission_gate_exists_nowhere_else_in_the_app() -> None:
         if isinstance(route, APIRoute) and required_any_permissions(route)
     )
 
-    assert gated == sorted(SNAPSHOT_EVIDENCE_FRAME_ROUTES), (
+    assert gated == sorted(ANY_PERMISSION_GATE_ROUTES), (
         "«kamida bittasi» darvozasini ko'targan marshrutlar to'plami "
         f"o'zgardi.\n  Topildi:   {gated}\n  E'lon qilingan: "
-        f"{sorted(SNAPSHOT_EVIDENCE_FRAME_ROUTES)}\n\n"
+        f"{sorted(ANY_PERMISSION_GATE_ROUTES)}\n\n"
         "Yangi «yo P yo Q» darvozasi qo'shilgan bo'lsa — u huquq talabini "
         "BO'SHASHTIRADI (P siz ham o'tish mumkin) va shuning uchun u "
         "`SNAPSHOT_EVIDENCE_FRAME_ROUTES` da NOM BILAN e'lon qilinishi kerak. "

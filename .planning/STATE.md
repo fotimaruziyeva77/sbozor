@@ -160,6 +160,32 @@ Jonli tekshirish uchun lokal bazaga test-bozor va ikki hisob qo'shildi:
 +998900000021 (direktor) / +998900000022 (bozor admini), parol
 Tarjima2026! — FAQAT lokal dev baza, prodga tegmaydi. Jami 1967×3 kalit.
 
+## 2026-08-27 — kamera oqimi JONLI ishga tushirildi (sim, lokal)
+
+Buyurtmachi: «loyihani ishga tushur, kamera ham ishga tushsin». Lokal
+stack `--profile sim` bilan ko'tarildi (nvr-sim ISAPI + nvr-sim-rtsp
+mediamtx/ffmpeg, bitta netns — loyihaning O'Z simulyatori). MAHSULOT
+YO'LI bilan tekshirildi: Kameralar sahifasida NVR ulash formasi
+(nvr-sim:8080, admin/Sim12345) -> «Qurilma topildi: DS-7616NI-K2, 6
+kanal, soat farqi 0 s» -> kashfiyot -> 6 kamera Onlayn -> jonli
+ko'rish dialogi -> live-token 200 -> go2rtc MSE video 1280×720 jonli
+o'ynadi (kadr foydalanuvchiga yuborildi). Kadr olish: seasonal jadval
+API'si `starts_on <= bugun`ni 422 bilan rad etadi (D-05 — to'g'ri
+qoida), demo uchun lokal test bozorga jadval qatori DBdan yozildi
+(19:36/19:39 slotlari) -> capture.tick 6/6 succeeded, snapshots
+jadvalga tushdi, sahifada «Olindi 6/12 · yaroqli 6», kadr dialogi:
+«Kadr yaroqli — kunduzgi yorug'lik · To'liq saqlangan · Oqimdan ·
+97 KB» (kadr ham yuborildi). Ya'ni NVR->kashfiyot->jonli->jadval->
+kadr->sifat-hukmi->ombor zanjiri TO'LIQ ishlaydi.
+
+Mayda kuzatuvlar (tuzatilmadi, ongli): kamera qatorida «oxirgi
+ko'rilgan: -22 s» — sim soati oldinda, manfiy son chiqadi (displey
+formati); kadr dialogida «O'lchami 320×180» metadata, blob esa
+1280×720 (saqlangan o'lchov vs ko'rsatilayotgan). Brauzer-harness
+cheklovi: pane yashirin bo'lsa skrinshot/koordinata-klik ishlamaydi,
+ba'zi sahifalarda ref-klik ham o'tmadi — diagnostika JS bilan
+bajarildi.
+
 ## Current Position
 
 Phase: 10 (bajarildi)

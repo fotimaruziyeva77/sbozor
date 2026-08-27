@@ -31,7 +31,11 @@ import { Link } from "@/i18n/navigation";
 import type { StallListItem } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import { marketErrorMessageKey } from "@/lib/market-errors";
-import { useCalendarQuery, useSetupStatusQuery } from "@/lib/market-queries";
+import {
+  useCalendarQuery,
+  useSetupStatusQuery,
+  useTariffsQuery,
+} from "@/lib/market-queries";
 import { hasPermission } from "@/lib/rbac";
 
 /*
@@ -138,7 +142,8 @@ function StepContent({
 }) {
   const t = useTranslations();
 
-  const [tariffCreateOpen, setTariffCreateOpen] = useState(false);
+  /* 4-qadamning holati `TariffStep` ichiga ko'chdi (260827) — sabab
+     o'sha komponentning docstringida. */
   const [vendorCreateOpen, setVendorCreateOpen] = useState(false);
 
   if (step === 1) return <RequisitesSummary />;
@@ -146,35 +151,7 @@ function StepContent({
   if (step === 3) return <CategoryList canManage={canManageStalls} />;
 
   if (step === 4) {
-    return (
-      <div className="flex flex-col gap-4">
-        {canManageTariffs ? (
-          <Button
-            className="self-start"
-            onClick={() => setTariffCreateOpen(true)}
-          >
-            <Plus aria-hidden="true" />
-            {t("tariffs.create")}
-          </Button>
-        ) : null}
-
-        {/*
-         * ⚠ 02-15 dagi ro'yxat va dialog O'ZGARISHSIZ. Dialogning sana
-         * `min` i `useTariffsQuery()` javobidagi `min_valid_from` dan
-         * TO'G'RIDAN-TO'G'RI keladi va bu yerda hech narsa hisoblanmaydi:
-         * qoralama bozorda u O'TMISHDAGI sana bo'ladi (server qoidasi
-         * 02-09 T-02-70) va boshlang'ich narx aynan o'shanga yoziladi.
-         * Ikkinchi, o'z chegarasini hisoblaydigan forma bu qadamni
-         * bajarilmas qilardi.
-         */}
-        <TariffList
-          canManage={canManageTariffs}
-          categoryFilter=""
-          createOpen={tariffCreateOpen}
-          onCreateOpenChange={setTariffCreateOpen}
-        />
-      </div>
-    );
+    return <TariffStep canManage={canManageTariffs} />;
   }
 
   if (step === 5) return <StallsStep canManage={canManageStalls} />;
@@ -219,6 +196,63 @@ function StepContent({
  * `?step=1` yuborishi mumkin (`fetchFirstIncompleteStep` ning fail-safe
  * qiymati) va foydalanuvchi bo'sh ekranga tushmasligi kerak.
  */
+/**
+ * 4-qadam — TARIF.
+ *
+ * =========================================================================
+ * ⛔ TUGMA RO'YXAT HOLATIGA BOG'LANDI (260827, jonli sinovda o'lchandi).
+ *
+ * Ilgari tugma shartsiz chizilardi va `createOpen` ni `TariffList` ga
+ * uzatardi. `TariffList` esa dialogni FAQAT `tariffsQuery.data` bo'lganda
+ * montaj qiladi — ya'ni so'rov yiqilgan yoki hali yuklanmagan holatda
+ * bosish HECH NIMA QILMASDI: dialog yo'q, xato yo'q, jurnal ham jim.
+ * O'rnatuvchi tugmani qayta-qayta bosardi va ustaning 4-qadami
+ * «ishlamayapti» bo'lib qolardi.
+ *
+ * ⚠ SO'ROV IKKI MARTA KETMAYDI: `useTariffsQuery()` AYNI `queryKey` bilan
+ *   chaqiriladi va TanStack uni `TariffList` niki bilan deduplikatsiya
+ *   qiladi (`cameras/page.tsx` dagi `useDiscoveryRunQuery` naqshi).
+ * =========================================================================
+ */
+function TariffStep({ canManage }: { canManage: boolean }) {
+  const t = useTranslations();
+  const [createOpen, setCreateOpen] = useState(false);
+  const tariffs = useTariffsQuery();
+
+  return (
+    <div className="flex flex-col gap-4">
+      {canManage ? (
+        <Button
+          className="self-start"
+          /* Dialog `TariffList` ichida shu shart bilan montaj qilinadi —
+             ikkalasi BIR XIL manbaga qaraydi, ya'ni ajralib keta olmaydi. */
+          disabled={tariffs.data === undefined}
+          onClick={() => setCreateOpen(true)}
+        >
+          <Plus aria-hidden="true" />
+          {t("tariffs.create")}
+        </Button>
+      ) : null}
+
+      {/*
+       * ⚠ 02-15 dagi ro'yxat va dialog O'ZGARISHSIZ. Dialogning sana
+       * `min` i `useTariffsQuery()` javobidagi `min_valid_from` dan
+       * TO'G'RIDAN-TO'G'RI keladi va bu yerda hech narsa hisoblanmaydi:
+       * qoralama bozorda u O'TMISHDAGI sana bo'ladi (server qoidasi
+       * 02-09 T-02-70) va boshlang'ich narx aynan o'shanga yoziladi.
+       * Ikkinchi, o'z chegarasini hisoblaydigan forma bu qadamni
+       * bajarilmas qilardi.
+       */}
+      <TariffList
+        canManage={canManage}
+        categoryFilter=""
+        createOpen={createOpen}
+        onCreateOpenChange={setCreateOpen}
+      />
+    </div>
+  );
+}
+
 function RequisitesSummary() {
   const t = useTranslations();
   const { principal } = useAuthStore();

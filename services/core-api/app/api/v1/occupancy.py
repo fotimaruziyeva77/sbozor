@@ -47,7 +47,12 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sbozor_core.timeutil import business_today
 
-from app.deps import Principal, TenantSessionDep, require_permission
+from app.deps import (
+    Principal,
+    TenantSessionDep,
+    require_any_permission,
+    require_permission,
+)
 from app.repositories.occupancy_repo import OccupancyRepository
 from app.schemas import (
     ConfusionMatrixOut,
@@ -81,7 +86,41 @@ __all__ = ["ACCURACY_WINDOW_DAYS", "router"]
 router = APIRouter(tags=["occupancy"])
 
 ReportViewerDep = Annotated[Principal, Depends(require_permission(Permission.REPORT_VIEW))]
-"""⛔ `OCCUPANCY_REVIEW` EMAS. Modul docstringidagi birinchi bandning mexanizmi."""
+"""⛔ FAQAT ANIQLIK YUZASI UCHUN (`/accuracy`). Sabab — T-05-58: nazoratchi
+O'Z aniqligini ko'rsa raqamni yaxshilashga urinardi va o'lchov o'zi
+o'lchayotgan narsani o'zgartirardi."""
+
+OCCUPANCY_VIEW_PERMISSIONS = (Permission.REPORT_VIEW, Permission.OCCUPANCY_REVIEW)
+"""Kunlik BANDLIK va namuna holatini ikki xil ish uchun ikki xil odam ko'radi.
+
+=========================================================================
+⛔ BU DARVOZA 260827 DA QO'SHILDI VA U YARIM QOLGAN O'ZGARISHNI YOPADI.
+
+260820 da klient qatlami nazoratchiga bu sahifani OCHDI (`app/[locale]/
+(app)/occupancy/page.tsx` va `components/shell/app-shell.tsx` —
+`permission: ["occupancy_review", "report_view"]`), sabab yozilgan holda:
+nazoratchi kun bo'yi kadr ko'rib qaror yozadi, lekin o'z ishining
+NATIJASINI ko'ra olmasdi. SERVER esa o'sha kuni yangilanmagan.
+
+O'lchangan oqibat (260827, jonli sinov): menyuda «Bandlik» KO'RINADI,
+sahifa OCHILADI, `GET /occupancy` esa **403** qaytaradi va UI uni
+«Ma'lumot yuklanmadi» deb ko'rsatadi — ya'ni huquq masalasi tarmoq
+nosozligiga o'xshab qoladi va nazoratchi mavjud bo'lmagan muammoni
+qidiradi.
+
+⛔ `/accuracy` BU DARVOZAGA KIRMAYDI va bu butun qarorning yuragi:
+   T-05-58 ning sababi aynan ANIQLIK raqamiga tegishli, kunlik bandlikka
+   emas. Nazoratchi o'z ishining natijasini ko'radi, o'z BAHOSINI —
+   yo'q.
+
+⚠ SIZIB CHIQISH YO'Q: bu yuzada pul maydoni umuman yo'q — javob
+  `stalls/occupied/empty/no_coverage/human_confirmed` sanoqlaridan iborat.
+=========================================================================
+"""
+
+OccupancyViewerDep = Annotated[
+    Principal, Depends(require_any_permission(*OCCUPANCY_VIEW_PERMISSIONS))
+]
 
 ACCURACY_WINDOW_DAYS: Final[int] = 30
 """Aniqlik hisobotining STANDART davri — oxirgi 30 kun (§11.5).
@@ -113,7 +152,7 @@ def _interval(interval: ProportionInterval) -> ProportionIntervalOut:
 
 @router.get("", response_model=OccupancyDayResponse)
 async def occupancy_day(
-    principal: ReportViewerDep,
+    principal: OccupancyViewerDep,
     session: TenantSessionDep,
     day: Annotated[date | None, Query()] = None,
 ) -> OccupancyDayResponse:
@@ -215,7 +254,7 @@ async def occupancy_accuracy(
 
 @router.get("/round", response_model=OccupancyRoundResponse)
 async def occupancy_round(
-    principal: ReportViewerDep,
+    principal: OccupancyViewerDep,
     session: TenantSessionDep,
     day: Annotated[date | None, Query()] = None,
 ) -> OccupancyRoundResponse:

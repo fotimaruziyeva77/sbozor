@@ -5,9 +5,12 @@ import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryState } from "nuqs";
 
+import { LayoutGrid, List } from "lucide-react";
+
 import { BrandLoader } from "@/components/ui/brand-loader";
 import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { CameraList } from "@/components/cameras/camera-list";
+import { CameraWall } from "@/components/cameras/camera-wall";
 import { isDiscoveryRunId } from "@/components/cameras/camera-page-state";
 import { CoverageCard } from "@/components/camera-zones/coverage-card";
 import { DiscoveryPanel } from "@/components/cameras/discovery-panel";
@@ -15,6 +18,8 @@ import { NvrCard } from "@/components/cameras/nvr-card";
 import { NvrForm } from "@/components/cameras/nvr-form";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Field } from "@/components/ui/field";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { NvrDevice } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
@@ -137,7 +142,32 @@ function CamerasWorkspace() {
   const [formOpen, setFormOpen] = useState(false);
   const [rescanError, setRescanError] = useState<string | null>(null);
 
-  const device: NvrDevice | null = devices.data?.items[0] ?? null;
+  /*
+   * ⚠ BIR NECHTA QURILMA (2026-08-27, NVRsiz obyekt topilmasi).
+   *
+   * MVP «bitta NVR» deb qurilgan edi (`items[0]`), lekin haqiqiy obyektda
+   * kameralar NVR'ga ulanmagan chiqdi va har yakka kamera ALOHIDA
+   * `nvr_devices` yozuvi bo'ldi — bitta bozorda 16 ta qurilma. `items[0]`
+   * o'shanda faqat birinchisini ko'rsatib, qolgan 15 tasini YASHIRARDI
+   * (ro'yxat ham, karta ham, qayta skanerlash ham unga yeta olmasdi).
+   *
+   * Yechim — tanlagich: karta/panel/ro'yxat semantikasi o'zgarmaydi,
+   * ular endi TANLANGAN qurilmaga qaraydi. Bitta qurilmali bozorlarda
+   * tanlagich UMUMAN chizilmaydi — eski xulq to'liq saqlanadi.
+   */
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+  /*
+   * Ko'rinish rejimi — RO'YXAT (standart) yoki DEVOR (mozaika).
+   * URL'ga yozilmaydi: devor N jonli oqim ochadi, ulashiladigan havola
+   * ochilgan zahoti oqimlarni ishga tushirib yuborardi (§8.7 ruhida).
+   * Standart — ro'yxat, ya'ni mavjud xulq va testlar o'zgarmaydi.
+   */
+  const [viewMode, setViewMode] = useState<"list" | "wall">("list");
+  const deviceItems = devices.data?.items ?? [];
+  const device: NvrDevice | null =
+    deviceItems.find((item) => item.id === selectedDeviceId) ??
+    deviceItems[0] ??
+    null;
 
   /*
    * ⚠ AYNI `queryKey`, ya'ni AYNI kesh yozuvi: `DiscoveryPanel` ham shu
@@ -199,7 +229,75 @@ function CamerasWorkspace() {
         </p>
       ) : null}
 
+      {/*
+       * --- Ko'rinish rejimi: Ro'yxat | Devor --------------------------
+       * Segment tugma — HOLAT ko'rsatkichi, aksent budjetiga (§2.4)
+       * tegmaydi. Onlayn kamera ko'p bo'lganda «bittalab tanlash»
+       * o'rniga devor (mozaika) hammasini bir ekranda beradi.
+       */}
+      <div
+        aria-label={t("cameras.title")}
+        className="flex w-fit gap-1 rounded-md bg-surface-muted p-1"
+        role="group"
+      >
+        <Button
+          aria-pressed={viewMode === "list"}
+          onClick={() => setViewMode("list")}
+          size="sm"
+          variant={viewMode === "list" ? "secondary" : "ghost"}
+        >
+          <List aria-hidden="true" />
+          {t("cameras.viewList")}
+        </Button>
+        <Button
+          aria-pressed={viewMode === "wall"}
+          onClick={() => setViewMode("wall")}
+          size="sm"
+          variant={viewMode === "wall" ? "secondary" : "ghost"}
+        >
+          <LayoutGrid aria-hidden="true" />
+          {t("cameras.viewWall")}
+        </Button>
+      </div>
+
+      {viewMode === "wall" ? <CameraWall /> : null}
+
+      {/*
+       * --- Qurilma tanlagichi (faqat 2+ qurilmada) ---------------------
+       *
+       * ⚠ Select — BOSHQARUV, tugma emas: aksent budjetiga (§2.4)
+       *   tegmaydi. Tanlov URL'ga yozilmaydi: qurilmalar soni va
+       *   tartibi skan bilan o'zgaradi, eski havoladagi indeks esa
+       *   boshqa qurilmaga tushib chalkashtirardi.
+       */}
+      {viewMode === "list" && deviceItems.length > 1 ? (
+        <Field
+          className="max-w-md"
+          id="camera-device"
+          label={t("cameras.devicePicker")}
+        >
+          <Select
+            id="camera-device"
+            onChange={(event) => {
+              setSelectedDeviceId(event.target.value);
+              // Kashfiyot paneli qurilmaga bog'liq — boshqa qurilmaning
+              // `?run=` i yangi tanlov ostida 404 chalkashligini berardi.
+              void setRun(null);
+            }}
+            value={device?.id ?? ""}
+          >
+            {deviceItems.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.host}
+                {item.model === null ? "" : ` · ${item.model}`}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : null}
+
       {/* --- ZONA (A): NVR kartasi yoki formasi -------------------------- */}
+      {viewMode === "list" ? (
       <section aria-label={t("cameras.nvrCard")}>
         {devices.isPending ? (
           <div aria-busy="true" role="status">
@@ -244,6 +342,7 @@ function CamerasWorkspace() {
           />
         )}
       </section>
+      ) : null}
 
       {/*
        * --- ZONA (B): kashfiyot paneli ---------------------------------
@@ -256,7 +355,7 @@ function CamerasWorkspace() {
        * ⚠ `?run=` YAROQSIZ bo'lsa yuqoridagi effekt uni JIMGINA
        *   tozalaydi, ya'ni bu yerga faqat tekshirilgan qiymat keladi.
        */}
-      {device !== null && run !== "" && isDiscoveryRunId(run) ? (
+      {viewMode === "list" && device !== null && run !== "" && isDiscoveryRunId(run) ? (
         <section aria-label={t("cameras.discover")}>
           <DiscoveryPanel
             nvrId={device.id}
@@ -267,6 +366,7 @@ function CamerasWorkspace() {
       ) : null}
 
       {/* --- ZONA (C): kameralar ro'yxati -------------------------------- */}
+      {viewMode === "list" ? (
       <section aria-label={t("cameras.title")}>
         <CameraList
           canManage={canManage}
@@ -277,6 +377,7 @@ function CamerasWorkspace() {
           }}
         />
       </section>
+      ) : null}
 
       {/*
        * --- ZONA (D): zona qamrovi (5-faza, §5.5) -----------------------
@@ -296,7 +397,7 @@ function CamerasWorkspace() {
        *    `GET /camera-zones/coverage` ga so'rov HAM ketmaydi
        *    (`users/page.tsx:54-63` naqshi). Haqiqiy nazorat serverda.
        */}
-      {canManage ? (
+      {viewMode === "list" && canManage ? (
         <section aria-label={t("cameraZones.coverageTitle")}>
           <CoverageCard />
         </section>

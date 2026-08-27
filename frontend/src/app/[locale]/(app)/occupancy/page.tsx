@@ -126,8 +126,21 @@ function OccupancyWorkspace() {
   const { day, todayIso } = useDaySelection();
 
   const canReview = hasPermission(principal?.roles ?? [], "occupancy_review");
+  /*
+   * ⛔ ANIQLIK — FAQAT HISOBOT HUQUQIDA (260827, T-05-58 ning davomi).
+   *
+   * Sahifaning o'zi ikki huquqdan biri bilan ochiladi (yuqoridagi izoh),
+   * LEKIN `/occupancy/accuracy` serverda `REPORT_VIEW` ostida QOLADI:
+   * nazoratchi o'z ANIQLIGINI ko'rsa raqamni yaxshilashga urinardi.
+   *
+   * ⚠ `enabled` — QULAYLIK EMAS, ZARURAT: usiz nazoratchi sessiyasida
+   *   so'rov baribir ketardi, 403 olardi va UI uni «Ma'lumot yuklanmadi»
+   *   deb ko'rsatardi — ya'ni huquq qarori nosozlikka o'xshab qolardi.
+   *   Haqiqiy nazorat serverda; bu — o'sha qarorning ko'zgusi.
+   */
+  const canSeeAccuracy = hasPermission(principal?.roles ?? [], "report_view");
   const occupancy = useOccupancyDay(day, todayIso);
-  const accuracy = useAccuracyReport();
+  const accuracy = useAccuracyReport({ enabled: canSeeAccuracy });
   const round = useAuditRound(day, todayIso);
   const [noCoverageOnly, setNoCoverageOnly] = useNoCoverageOnly();
 
@@ -235,6 +248,12 @@ function OccupancyWorkspace() {
        *    namunasi. Kun almashtirilganda bu blok umuman qayta
        *    so'ralmaydi.
        */}
+      {/*
+       * ⛔ NAZORATCHIDA ZONA (B) UMUMAN CHIZILMAYDI: bo'sh skelet yoki
+       *    xato bloki «bu yerda men ko'ra olmaydigan narsa bor» degan
+       *    savolni tug'dirardi. Yo'qlik — eng toza javob.
+       */}
+      {canSeeAccuracy ? (
       <section
         aria-busy={accuracy.isFetching}
         aria-label={t("occupancy.accuracyTitle")}
@@ -263,6 +282,7 @@ function OccupancyWorkspace() {
           <ConfusionMatrix report={accuracy.data} />
         )}
       </section>
+      ) : null}
 
       {/* --- ZONA (C): namuna holati ------------------------------------- */}
       <section aria-busy={round.isFetching} aria-label={t("occupancy.roundTitle")}>
