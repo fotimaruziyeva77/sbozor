@@ -149,8 +149,13 @@ set $up_camagent camagent-gateway;
     #    Kalitsiz so'rov 401 oladi va gateway xato urinishlarni IP bo'yicha
     #    cheklaydi (`PANEL_MAX_TRIES`).
     #
-    # ⚠ `/camagent/` PREFIKSI OLIB TASHLANADI: gateway o'z ichida `/admin`
-    #   yo'lini biladi. `proxy_pass` oxiridagi `/` aynan shuni qiladi.
+    # ⚠ PREFIKS `rewrite` BILAN OLIB TASHLANADI, `proxy_pass` oxiridagi
+    #   `/` BILAN EMAS. Sabab nginx'ning qoidasida: `proxy_pass` da
+    #   O'ZGARUVCHI ishlatilganda (`$up_camagent` — servis ko'tarilmagan
+    #   bo'lsa ham nginx ishga tushsin degan qaror) URI qismi E'TIBORGA
+    #   OLINMAYDI va so'rov gateway'ga `/camagent/admin` ko'rinishida
+    #   yetib borardi — ya'ni 404, lekin nginx'dan emas, gateway'dan.
+    #   [260828 da aynan shu o'lchandi.]
     #
     # ⛔ HAVOLALAR QAYTA YOZILADI (`sub_filter`). Gateway HTML'i o'zining
     #    yo'llarini `/admin/...` deb yozadi — u prefiks ortida turganini
@@ -166,11 +171,14 @@ set $up_camagent camagent-gateway;
     #   ko'ra olmaydi va jimgina hech narsa almashtirmasdi. Panel sahifasi
     #   kichik, siqilmagani sezilmaydi.
     location /camagent/ {
-        proxy_pass http://$up_camagent:8787/;
+        rewrite ^/camagent/(.*)$ /$1 break;
+        proxy_pass http://$up_camagent:8787;
         proxy_http_version 1.1;
 
+        # `sub_filter_types` YOZILMAYDI: `text/html` standartda allaqachon
+        # bor va uni takrorlash nginx'ni har reload'da ogohlantirishga
+        # majbur qilardi (o'lchandi 260828).
         proxy_set_header Accept-Encoding "";
-        sub_filter_types text/html;
         sub_filter_once off;
         sub_filter 'href="/admin'   'href="/camagent/admin';
         sub_filter 'action="/admin' 'action="/camagent/admin';
