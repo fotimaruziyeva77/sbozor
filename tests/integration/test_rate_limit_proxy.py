@@ -484,7 +484,19 @@ def test_nginx_overwrites_forwarded_for_instead_of_appending() -> None:
 
     assert sources, f"{NGINX_CONF} da `X-Forwarded-For` direktivasi yo'q"
     # Har bir `location` uchun bittadan — biri unutilsa teshik ochiq qoladi.
-    assert len(sources) == 2, f"kutilgan 2 ta direktiva, topildi: {sources}"
+    #
+    # ⚠ SON QASDAN QATTIQ YOZILGAN: yangi `location` qo'shgan ijrochi shu
+    #   yerda to'xtaydi va direktivani YOZGANINI tasdiqlaydi. Sonni
+    #   ko'tarishdan oldin `set(sources)` shartini o'qing — u haqiqiy
+    #   talab, son esa faqat e'tibor uyg'otadigan qo'ng'iroq.
+    #
+    # 260828: 4 ga ko'tarildi. IKKI QADAM BIRDAN, chunki son ORQADA
+    # QOLGAN edi — `/api/v1/agent/` (CamAgent gateway) 260826 da qo'shilib
+    # uchinchi direktivani keltirgan, lekin bu sanoq 2 da qolgan va test
+    # o'shandan beri QIZIL turgan. Bugun `/camagent/` (operator paneli)
+    # to'rtinchisini qo'shdi. Ikkala yo'l ham `$remote_addr` bilan ustiga
+    # yozadi — pastdagi `set(sources)` shartida o'lchanadi.
+    assert len(sources) == 4, f"kutilgan 4 ta direktiva, topildi: {sources}"
     assert set(sources) == {"$remote_addr"}, (
         "`X-Forwarded-For` `$remote_addr` bilan USTIGA yozilishi shart. "
         f"Topildi: {sources}. `$proxy_add_x_forwarded_for` mijozga zanjirning "
