@@ -67,6 +67,16 @@ services:
       CAMAGENT_TURN_URL: ${CAMAGENT_TURN_URL:-}
       CAMAGENT_TURN_USER: ${CAMAGENT_TURN_USER:-}
       CAMAGENT_TURN_PASS: ${CAMAGENT_TURN_PASS:-}
+      # ⛔ sbozor BAZASIGA SINXRONIZATSIYA (260829, ixtiyoriy).
+      #
+      #   Agent topgan kameralar sbozor `nvr_devices`/`cameras`
+      #   jadvallariga yoziladi. Busiz sbozor kameralar sahifasi BO'SH
+      #   qoladi: uning o'z `discover` mexanizmi bozor tarmog'iga tunnel
+      #   talab qiladi va obyektda u yo'q.
+      #
+      # ⚠ BO'SH QOLDIRILSA modul o'chadi va gateway o'zicha ishlayveradi —
+      #   CamAgent sbozor'siz boshqa loyihalarda ham ishlatiladi.
+      CAMAGENT_SBOZOR_DSN: ${CAMAGENT_SBOZOR_DSN:-}
       TZ: ${TZ:-Asia/Tashkent}
     volumes:
       # SQLite (gateway.db, WAL) + media konfiguratsiyasi. 12 bozor uchun

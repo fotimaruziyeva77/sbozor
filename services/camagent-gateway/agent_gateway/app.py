@@ -312,6 +312,12 @@ class Gateway:
         self.quarantined: dict[str, set[str]] = self.db.all_quarantine()
         self.activate_limiter = RateLimiter(ACTIVATE_MAX_TRIES, ACTIVATE_WINDOW_S)
         self.panel_limiter = RateLimiter(PANEL_MAX_TRIES, PANEL_WINDOW_S)
+        # sbozor bazasiga sinxronizatsiya — IXTIYORIY (`CAMAGENT_SBOZOR_DSN`).
+        # Berilmagan bo'lsa modul o'chadi va gateway o'zicha ishlayveradi:
+        # CamAgent boshqa loyihalarda sbozor'siz ham ishlatiladi.
+        from .sbozor_sync import SbozorSync
+
+        self.sbozor = SbozorSync()
         # Jonli video. MediaMTX o'rnatilmagan bo'lsa hech narsa yiqilmaydi —
         # panel "yangilanuvchi rasm" zaxira rejimiga o'tadi.
         self.media = MediaServer(self.data_dir / "media")
@@ -502,6 +508,21 @@ def build_router(data_dir: str | Path, storage: SnapshotStorage | None = None,
             changes = detect_channel_changes(old_nvrs, new_nvrs)
             gw.db.mark_registered(aid, instance_id, str(reg.get("agent_version", "?")),
                                   new_nvrs)
+            # ⛔ SBOZOR RO'YXATI SHU YERDA TO'G'RILANADI (260829).
+            #
+            #   Agent har ulanishda qurilmalarning TO'LIQ ro'yxatini
+            #   yuboradi (6-prinsip: desired-state). Shuning uchun bu
+            #   chaqiruv ham to'liq: kamera qo'shilsa qo'shiladi, nomi
+            #   o'zgarsa yangilanadi. sbozor `discover` obyektga tunnel
+            #   talab qiladi va u YO'Q — bu esa o'sha bo'shliqni yopadi.
+            #
+            # ⚠ Xato yutiladi (`SbozorSync` ichida): sinxronizatsiya
+            #   yiqilsa ham agent ro'yxatdan o'tishi va kadr olishi
+            #   davom etadi.
+            if gw.sbozor.enabled:
+                n = gw.sbozor.sync_devices(agent.get("key_prefix") or "", new_nvrs)
+                if n:
+                    gw.db.log_event(aid, "sbozor_sync", f"{n} ta kanal")
             if changes:
                 gw.quarantine_channels(aid, changes)
                 gw.db.set_warning(aid, "kanal o'zgardi: " + "; ".join(changes[:3]))
