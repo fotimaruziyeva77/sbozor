@@ -1,3 +1,7 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
 /*
  * =============================================================================
  * NISBIY VAQT — «12 soat oldin» (260828).
@@ -29,44 +33,46 @@
  * =============================================================================
  */
 
-/** `t()` ning shu modul uchun kerakli qismi — next-intl'ga bog'liqlik yo'q. */
-type Translate = (key: string, values?: Record<string, number>) => string;
-
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 
 /**
- * «12 soat oldin» / «3 daqiqa oldin» / «hozirgina».
+ * «12 soat oldin» / «3 daqiqa oldin» / «hozirgina» qaytaradigan funksiya.
  *
- * Args:
- *     value: o'lchanadigan payt.
- *     now: joriy payt — ARGUMENT, `Date.now()` EMAS: chaqiruvchi uni
- *         `useNow()` dan oladi va komponent sof bo'lib qoladi.
- *     t: `useTranslations()` qaytargan funksiya.
+ * ⚠ HOOK, sof funksiya EMAS — VA BU TIP TALABI (260828, `tsc` ikki marta
+ *   ushladi). `t` ni argument sifatida uzatish uchun uning tipini yozish
+ *   kerak: qo'lda yozilgan `(key: string) => string` next-intl ning
+ *   literal-kalitli tipiga mos kelmaydi, `ReturnType<typeof
+ *   useTranslations>` esa «union type is too complex» beradi. Katalogni
+ *   shu yerda o'qish ikkala muammoni ham yo'q qiladi.
  *
  * Returns:
- *     Tarjima qilingan matn. KELAJAKDAGI payt ham «hozirgina» beradi:
- *     soat farqi (agent va server) tufayli bir necha soniyalik kelajak
- *     normal holat va uni «-1 daqiqa» deb ko'rsatish xato bo'lardi.
+ *     `(value, now) => string`. `now` ARGUMENT bo'lib qoladi:
+ *     chaqiruvchi uni `useNow()` dan oladi va komponent sof qolaveradi.
+ *     KELAJAKDAGI payt «hozirgina» beradi — agent va server soati bir
+ *     necha soniyaga farq qilishi normal (CLAUDE.md §8) va uni
+ *     «-1 daqiqa» deb ko'rsatish nosozlikka o'xshardi.
  */
-export function formatRelativePast(
-  value: Date,
-  now: Date,
-  t: Translate,
-): string {
-  const diff = now.getTime() - value.getTime();
+export function useRelativePast(): (value: Date, now: Date) => string {
+  const t = useTranslations();
 
-  if (diff < MINUTE_MS) {
-    return t("common.relativeJustNow");
-  }
-  if (diff < HOUR_MS) {
-    return t("common.relativeMinutesAgo", {
-      minutes: Math.floor(diff / MINUTE_MS),
-    });
-  }
-  if (diff < DAY_MS) {
-    return t("common.relativeHoursAgo", { hours: Math.floor(diff / HOUR_MS) });
-  }
-  return t("common.relativeDaysAgo", { days: Math.floor(diff / DAY_MS) });
+  return (value: Date, now: Date): string => {
+    const diff = now.getTime() - value.getTime();
+
+    if (diff < MINUTE_MS) {
+      return t("common.relativeJustNow");
+    }
+    if (diff < HOUR_MS) {
+      return t("common.relativeMinutesAgo", {
+        minutes: Math.floor(diff / MINUTE_MS),
+      });
+    }
+    if (diff < DAY_MS) {
+      return t("common.relativeHoursAgo", {
+        hours: Math.floor(diff / HOUR_MS),
+      });
+    }
+    return t("common.relativeDaysAgo", { days: Math.floor(diff / DAY_MS) });
+  };
 }

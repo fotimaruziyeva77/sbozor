@@ -24,7 +24,7 @@ import { cn } from "@/lib/cn";
  * funksiya YETTI joydan bittaga yig'ildi.
  */
 import { localeHref } from "@/lib/locale-href";
-import { formatRelativePast } from "@/lib/format-relative";
+import { useRelativePast } from "@/lib/format-relative";
 
 /*
  * =============================================================================
@@ -91,6 +91,7 @@ export function CameraRow({
    *   tug'dirardi. `next-intl` ning hooki qiymatni provayderdan oladi.
    */
   const now = useNow();
+  const relativePast = useRelativePast();
 
   /*
    * Sabab BOSILGANDA e'lon qilinadi (UI-SPEC §8.6). `aria-describedby`
@@ -111,7 +112,7 @@ export function CameraRow({
   const metaTail = [
     camera.source_model,
     t("cameras.lastSeen", {
-      time: formatRelativePast(new Date(camera.last_seen_at), now, t),
+      time: relativePast(new Date(camera.last_seen_at), now),
     }),
   ].filter((part): part is string => Boolean(part));
 

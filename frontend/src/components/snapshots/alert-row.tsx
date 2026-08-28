@@ -9,7 +9,7 @@ import { ALERT_SEVERITIES } from "@/lib/api-types";
 import type { AlertEvent, AlertSeverityValue } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
 import { formatInstant } from "@/lib/format-day";
-import { formatRelativePast } from "@/lib/format-relative";
+import { useRelativePast } from "@/lib/format-relative";
 
 /*
  * =============================================================================
@@ -248,6 +248,7 @@ export function AlertRow({ alert }: { alert: AlertEvent }) {
   const locale = useLocale();
   const timeZone = useTimeZone();
   const now = useNow();
+  const relativePast = useRelativePast();
 
   const severity: SeverityView = isAlertSeverity(alert.severity)
     ? SEVERITY_VIEW[alert.severity]
@@ -332,7 +333,7 @@ export function AlertRow({ alert }: { alert: AlertEvent }) {
         </span>
         <span>
           {t("snapshots.alertLastSeen", {
-            time: formatRelativePast(new Date(alert.last_seen_at), now, t),
+            time: relativePast(new Date(alert.last_seen_at), now),
           })}
         </span>
       </div>
