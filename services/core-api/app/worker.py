@@ -861,6 +861,7 @@ def _capture_policy(settings: Settings) -> CapturePolicy:
         batch_size=settings.capture_batch_size,
         global_concurrency=settings.capture_global_concurrency,
         quality=settings.quality_thresholds(),
+        seed_mode=settings.occupancy_seed_mode,
     )
 
 

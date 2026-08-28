@@ -113,6 +113,7 @@ from app.services.capture_errors import (
 #   Buni `grep -cE "^\s*(import|from)\s+taskiq" app/jobs/capture.py` -> 0
 #   mexanik tasdiqlaydi.
 from app.services.cv_queue import enqueue_detect
+from app.services.review_seed import seed_snapshot
 from app.services.frame_source import CaptureTarget, DeviceEndpoint, capture_frame
 from app.services.isapi.client import RTSP_FALLBACK_PORT
 from app.services.live_source import authenticated_rtsp_source
@@ -284,6 +285,14 @@ class CapturePolicy:
     batch_size: int
     global_concurrency: int
     quality: QualityThresholds
+    seed_mode: bool = False
+    """Urug' rejimi — model yo'q paytda nazoratchi navbatini to'ldirish.
+
+    ⚠ STANDART `False` VA BU `Settings` DAGIDAN FARQ QILADI (u yerda
+      `True`). Sabab: bu obyekt TESTDA ham quriladi va urug' yozish
+      testning kutilmagan yon ta'siri bo'lmasligi kerak. Ishlab
+      chiqarishda qiymat `_capture_policy()` orqali sozlamadan keladi.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -1026,6 +1035,24 @@ async def _capture_one(
             await CaptureRepository(session, market_id).finish_succeeded(
                 run.run_id, snapshot_id=snapshot_id, method=frame.method
             )
+
+            # ===============================================================
+            # URUG' REJIMI — MODEL YO'Q PAYTDA DATASET YIG'ISH (260828).
+            #
+            # ⛔ SHU TRANZAKSIYA ICHIDA VA BU ATAYIN: kadr qatori bilan
+            #    urug' hodisasi BIRGA yoziladi yoki ikkalasi ham yozilmaydi.
+            #    Alohida tranzaksiyada kadr yozilib, hodisa yiqilsa — o'sha
+            #    kadr nazoratchi navbatiga HECH QACHON tushmasdi va uni
+            #    keyin topishning yo'li yo'q edi (qaysi kadr qolib ketgani
+            #    hech qayerda yozilmasdi).
+            #
+            # ⚠ `enqueue_detect` DAN FARQLI: u navbatga xabar yuboradi va
+            #   xatosi YUTILADI, bu esa BAZAGA yozadi — ya'ni yutilmaydi.
+            # ===============================================================
+            if policy.seed_mode and report.verdict == VERDICT_OK:
+                await seed_snapshot(
+                    session, market_id=market_id, snapshot_id=snapshot_id
+                )
     except Exception as exc:  # noqa: BLE001 - job jarayoni yiqilmasligi SHART
         log.exception("capture_record_failed", **log_context)
         await _record_failure(

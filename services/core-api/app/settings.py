@@ -360,6 +360,23 @@ class Settings(BaseSettings):
     #   aniqligi o'lchanadi — ya'ni chegarani yumshatish o'lchov
     #   asbobining o'zini buzadi.
     review_uncertain_daily_budget: Annotated[int, Field(ge=1)] = 50
+    # ⛔⛔ URUG' REJIMI — MODEL YO'Q PAYTDA DATASET YIG'ISH (260828).
+    #
+    #   Yoqilganda har yaroqli kadr faol zonalari bo'yicha `uncertain`
+    #   hodisa oladi (`model_version='seed-v0'`, `confidence=0`) va
+    #   nazoratchi navbatiga tushadi. Nazoratchining javobi
+    #   `zone_reviews` ga yoziladi — bu KELAJAKDAGI MODELNING DATASETI.
+    #
+    #   Standart `True` VA BU ATAYIN: bugun `ops/models/*.onnx` yo'q,
+    #   ya'ni `cv-service` umuman ishlamaydi. Sozlama `False` bo'lsa
+    #   tizim jimgina hech narsa yig'masdi va buni faqat model o'qitish
+    #   kuni — «dataset qani?» degan savol bilan — bilardik.
+    #
+    # ⚠ MODEL PAYDO BO'LGACH `0` GA O'TKAZILADI. Ikkalasi birga
+    #   ishlaganda bitta kadr+zona uchun ikkita qaror bo'lardi
+    #   (`model_version` unique kalitning bir qismi, ya'ni baza RAD
+    #   ETMAYDI) va patta hisobi qaysi birini olishini bilmasdi.
+    occupancy_seed_mode: bool = True
     # ⚠ 30 — D-13 ning O'LCHANGAN qiymati: oylik ±2–3 f.p. aniqlik
     #   oralig'i. Uni PASAYTIRISH oraliqni kengaytiradi, ya'ni hisobotning
     #   «aniqlik 92%» da'vosi kuchsizlanadi — bu qulaylik emas, O'LCHOV

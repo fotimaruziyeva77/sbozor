@@ -210,6 +210,10 @@ services:
       # matni kalit hosil qilish buyrug'ini beradi (T-03-22).
       NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
       NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
+      # Urug' rejimi — model yo'q paytda dataset yig'ish (260828).
+      # Model paydo bo'lgach `false`: aks holda bitta kadr+zona uchun
+      # ikkita qaror yoziladi.
+      OCCUPANCY_SEED_MODE: ${OCCUPANCY_SEED_MODE:-true}
       # --- Snapshot ombori (04-01, CAM-07) ---
       #
       # ⚠ `S3_ACCESS_KEY`/`S3_SECRET_KEY` da `:-` BILAN BO'SH STANDART
@@ -331,6 +335,10 @@ services:
       # chiqardi (T-03-22).
       NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
       NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
+      # Urug' rejimi — model yo'q paytda dataset yig'ish (260828).
+      # Model paydo bo'lgach `false`: aks holda bitta kadr+zona uchun
+      # ikkita qaror yoziladi.
+      OCCUPANCY_SEED_MODE: ${OCCUPANCY_SEED_MODE:-true}
       # --- Snapshot ombori (04-01, CAM-07) — `core-api` bloki bilan bir xil ---
       # Kadr olish va saqlash siyosati AYNAN shu jarayonda ishlaydi, ya'ni
       # sirlar bu yerda ham majburiy va `:-` bilan bo'sh standart YO'Q.
@@ -405,6 +413,10 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       NVR_CREDENTIAL_KEY: ${NVR_CREDENTIAL_KEY}
       NVR_CREDENTIAL_KEYS_RETIRED: ${NVR_CREDENTIAL_KEYS_RETIRED:-}
+      # Urug' rejimi — model yo'q paytda dataset yig'ish (260828).
+      # Model paydo bo'lgach `false`: aks holda bitta kadr+zona uchun
+      # ikkita qaror yoziladi.
+      OCCUPANCY_SEED_MODE: ${OCCUPANCY_SEED_MODE:-true}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://storage:8333}
       S3_BUCKET: ${S3_BUCKET:-sbozor-snapshots}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
