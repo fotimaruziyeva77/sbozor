@@ -12,7 +12,11 @@
     "languageLabel": "Язык",
     "readOnlyNote": "Только просмотр — добавление и изменение доступны администратору рынка.",
     "deltaNotComplete": "не полный период",
-    "deltaNoChange": "0.0% без изменений"
+    "deltaNoChange": "0.0% без изменений",
+    "relativeJustNow": "только что",
+    "relativeMinutesAgo": "{minutes} мин назад",
+    "relativeHoursAgo": "{hours} ч назад",
+    "relativeDaysAgo": "{days} дн назад"
   },
   "shell": {
     "marketLabel": "Рынок",

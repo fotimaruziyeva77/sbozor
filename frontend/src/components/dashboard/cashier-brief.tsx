@@ -15,7 +15,7 @@ import {
   RefreshCw,
   TriangleAlert,
 } from "lucide-react";
-import { useFormatter, useLocale, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useNow, useTranslations } from "next-intl";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { BrandLoader } from "@/components/ui/brand-loader";
@@ -76,6 +76,16 @@ export function CashierBrief({ marketId }: { marketId: string | null }) {
   const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
+  /*
+   * ⛔ `Date.now()` EMAS (260828, `react-hooks/purity` ushladi).
+   *
+   *   Render paytida chaqirilgan `Date.now()` har qayta renderda boshqa
+   *   qiymat berardi — ya'ni komponent SOF EMAS: server tomonda
+   *   hisoblangan soat mijoznikidan farq qilib, hydration mos kelmasdi.
+   *   `useNow()` — next-intl ning shu maqsad uchun bergan hooki: qiymat
+   *   render ichida BARQAROR.
+   */
+  const now = useNow();
   const { data, isLoading, refetch: refetchShift } = useOpenShift();
   const roster = useCollectRoster("unpaid", 1);
   const headline = useHeadline(marketId);
@@ -91,7 +101,7 @@ export function CashierBrief({ marketId }: { marketId: string | null }) {
   const openHours =
     openedAt === null
       ? null
-      : Math.floor((Date.now() - openedAt.getTime()) / 3_600_000);
+      : Math.floor((now.getTime() - openedAt.getTime()) / 3_600_000);
 
   const paid = roster.data?.paid_count ?? null;
   const unpaid = roster.data?.unpaid_count ?? null;

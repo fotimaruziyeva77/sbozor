@@ -9,6 +9,7 @@ import { ALERT_SEVERITIES } from "@/lib/api-types";
 import type { AlertEvent, AlertSeverityValue } from "@/lib/api-types";
 import { cn } from "@/lib/cn";
 import { formatInstant } from "@/lib/format-day";
+import { formatRelativePast } from "@/lib/format-relative";
 
 /*
  * =============================================================================
@@ -331,7 +332,7 @@ export function AlertRow({ alert }: { alert: AlertEvent }) {
         </span>
         <span>
           {t("snapshots.alertLastSeen", {
-            time: format.relativeTime(new Date(alert.last_seen_at), now),
+            time: formatRelativePast(new Date(alert.last_seen_at), now, t),
           })}
         </span>
       </div>

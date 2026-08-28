@@ -83,6 +83,45 @@ const REVENUE_REPORT = {
   shown_count: 7,
 };
 
+/*
+ * `GET /occupancy/accuracy` — `SixTiles` ning aniqlik katagi uchun.
+ *
+ * ⛔⛔ ALOHIDA FIXTURE VA BU MAJBURIY (260828 da audit ushladi).
+ *
+ *     Ilgari marshrutlash `path.startsWith("/occupancy")` edi va
+ *     `/occupancy/accuracy` SO'ROVIGA HAM kunlik bandlik javobi
+ *     qaytardi. Unda `correct` maydoni yo'q, `SixTiles` esa
+ *     `acc.correct.lower` ni o'qiydi — natijada butun panel
+ *     `TypeError: Cannot read properties of undefined` bilan yiqilardi
+ *     va IKKI test qizil turardi.
+ *
+ *     Haqiqiy ilovada bu holat BO'LMAYDI: `apiFetch` javobni
+ *     `accuracyReportSchema` bilan tekshiradi va `correct` MAJBURIY.
+ *     Ya'ni bu — fixture xatosi, kod xatosi emas; darvoza esa
+ *     marshrutni ANIQ ajratishda.
+ */
+const ACCURACY_REPORT = {
+  from_date: "2026-07-18",
+  to_date: "2026-08-16",
+  drawn: 40,
+  answered: 32,
+  unanswered: 8,
+  dont_know: 2,
+  matrix: {
+    true_occupied: 18,
+    false_occupied: 2,
+    false_empty: 1,
+    true_empty: 9,
+  },
+  n: 30,
+  measured: true,
+  min_sample: 20,
+  base_rate: 0.63,
+  correct: { point: 0.9, lower: 0.74, upper: 0.98 },
+  false_occupied: { point: 0.07, lower: 0.01, upper: 0.22 },
+  false_empty: { point: 0.03, lower: 0.0, upper: 0.17 },
+};
+
 /** KECHAgi yopilgan kun — `OccupancyDonut` sxemasi uchun to'liq shakl. */
 const OCCUPANCY_DAY = {
   day: "2026-08-16",
@@ -104,6 +143,30 @@ function routeFetch(): void {
     }
     if (path.startsWith("/reports/revenue")) {
       return Promise.resolve(REVENUE_REPORT);
+    }
+    /* ⚠ ANIQLIK BIRINCHI: `/occupancy` prefiksi uni ham qamrab olardi. */
+    /*
+     * KASSIR KARTASI TALAB QILADIGAN UCHTA SO'ROV (260828). Ularsiz
+     * `cashier-brief` xato holatida qolardi va «Smena holati» sarlavhasi
+     * UMUMAN chizilmasdi — quyidagi test esa aynan o'sha sarlavhani
+     * «sahifa bo'sh emas» langari sifatida ishlatadi.
+     */
+    if (path === "/shifts/open") {
+      return Promise.resolve({
+        id: "01a04695-0000-7000-8000-000000000001",
+        opened_at: "2026-08-16T04:00:00Z",
+        closed_at: null,
+        declared_soum: null,
+        collected_soum: 0,
+        payments_count: 0,
+      });
+    }
+    if (path.startsWith("/billing/collect-roster")) {
+      return Promise.resolve({ items: [], paid_count: 0, unpaid_count: 0 });
+    }
+    if (path.startsWith("/payments/recent")) return Promise.resolve({ items: [] });
+    if (path.startsWith("/occupancy/accuracy")) {
+      return Promise.resolve(ACCURACY_REPORT);
     }
     if (path.startsWith("/occupancy")) return Promise.resolve(OCCUPANCY_DAY);
     return Promise.reject(new Error(`kutilmagan so'rov: ${path}`));
@@ -351,8 +414,14 @@ describe("G-motion-6(b) — kassir tushum va bandlikni KO'RMAYDI", () => {
      * umumiy `nav.dashboard` sarlavhasi o'rnini «Xush kelibsiz» egalladi,
      * eski matnga qadalgan tekshiruv yolg'on-qizil bo'lib qoldi.
      */
+    /*
+     * ⚠ `findByText`, `getByText` EMAS (260828): kassir kartasi ochiq
+     *   smenani SO'RAYDI va so'rov tugamaguncha `BrandLoader` chizadi.
+     *   Sinxron `getByText` o'sha loader ustida ishlab, sarlavhani
+     *   topolmasdi — test POYGA holatida qizil turardi.
+     */
     expect(
-      screen.getByText(messages.dashboard.shiftCardTitle),
+      await screen.findByText(messages.dashboard.shiftCardTitle),
     ).toBeInTheDocument();
 
     await waitFor(() => {
@@ -407,12 +476,21 @@ describe("G-motion-6(b) — direktor OLTI KATAKNI va trendni KO'RADI", () => {
     renderPage(["director"], { marketIsActive: true });
 
     await waitFor(() => {
-      /* Dizaynning olti katagidan uchtasi — ular birga chiziladi. */
-      expect(document.body.textContent).toContain("Kechagi tushum");
-      expect(document.body.textContent).toContain("Band, lekin to'lovsiz");
-      expect(document.body.textContent).toContain("Qarz jami");
+      /*
+       * Dizaynning olti katagidan uchtasi — ular birga chiziladi.
+       *
+       * ⛔ MATNLAR KATALOGDAN OLINADI, qattiq yozilmaydi (260828). Ilgari
+       *   bu yerda «Kechagi tushum» turardi; katak nomi «Tushum» ga
+       *   qisqartirilgach test QIZIL bo'lib qoldi va o'sha holatda
+       *   qolib ketdi — ya'ni darvoza bo'lishdan to'xtadi. Kalitga
+       *   bog'langan tasdiq matn tahririga chidaydi, katak YO'QOLSA esa
+       *   baribir qizaradi.
+       */
+      expect(document.body.textContent).toContain(messages.director.tileRevenue);
+      expect(document.body.textContent).toContain(messages.director.tileLeak);
+      expect(document.body.textContent).toContain(messages.director.tileDebt);
       /* Trend kartasi. */
-      expect(document.body.textContent).toContain("Tushum trendi");
+      expect(document.body.textContent).toContain(messages.director.trendTitle);
     });
 
     /* Teskari nazorat: so'rovlar HAQIQATAN ketgan — 0-so'rov holatida

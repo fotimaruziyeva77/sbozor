@@ -146,7 +146,7 @@ export function TariffDialog({
       // qiymat qo'yiladi, hech narsa taqiqlanmaydi.
       validFrom: isInitialTariff ? minValidFrom : "",
     }),
-    [categories, isInitialTariff, minValidFrom],
+    [categories, isInitialTariff, minValidFrom, presetCategoryId],
   );
 
   const schema = useMemo(

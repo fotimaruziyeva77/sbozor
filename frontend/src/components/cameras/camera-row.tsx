@@ -24,6 +24,7 @@ import { cn } from "@/lib/cn";
  * funksiya YETTI joydan bittaga yig'ildi.
  */
 import { localeHref } from "@/lib/locale-href";
+import { formatRelativePast } from "@/lib/format-relative";
 
 /*
  * =============================================================================
@@ -110,7 +111,7 @@ export function CameraRow({
   const metaTail = [
     camera.source_model,
     t("cameras.lastSeen", {
-      time: format.relativeTime(new Date(camera.last_seen_at), now),
+      time: formatRelativePast(new Date(camera.last_seen_at), now, t),
     }),
   ].filter((part): part is string => Boolean(part));
 

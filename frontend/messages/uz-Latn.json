@@ -12,7 +12,11 @@
     "languageLabel": "Til",
     "readOnlyNote": "Faqat ko'rish — qo'shish va o'zgartirish bozor admini huquqida.",
     "deltaNotComplete": "to'liq emas",
-    "deltaNoChange": "0.0% o'zgarishsiz"
+    "deltaNoChange": "0.0% o'zgarishsiz",
+    "relativeJustNow": "hozirgina",
+    "relativeMinutesAgo": "{minutes} daqiqa oldin",
+    "relativeHoursAgo": "{hours} soat oldin",
+    "relativeDaysAgo": "{days} kun oldin"
   },
   "shell": {
     "marketLabel": "Bozor",

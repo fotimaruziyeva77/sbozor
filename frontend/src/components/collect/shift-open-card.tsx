@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { CircleDot, DoorOpen, Loader2 } from "lucide-react";
-import { useFormatter, useLocale, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useNow, useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,13 @@ export function ShiftOpenCard({ onRequestClose }: ShiftOpenCardProps) {
   const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
+  /*
+   * ⛔ `Date.now()` EMAS (260828, `react-hooks/purity` ushladi) —
+   *   sabab `cashier-brief.tsx` dagi bilan bir xil: render paytida
+   *   chaqirilgan soat komponentni SOF EMAS qiladi va serverda
+   *   hisoblangan davomiylik mijoznikidan farq qilardi.
+   */
+  const now = useNow();
 
   const { data, isLoading, refetch } = useOpenShift();
   const openShift = useOpenShiftMutation();
@@ -221,7 +228,8 @@ export function ShiftOpenCard({ onRequestClose }: ShiftOpenCardProps) {
                 const totalMinutes = Math.max(
                   0,
                   Math.floor(
-                    (Date.now() - new Date(shift.opened_at).getTime()) / 60_000,
+                    (now.getTime() - new Date(shift.opened_at).getTime()) /
+                      60_000,
                   ),
                 );
                 return t("collect.shiftDurationShort", {

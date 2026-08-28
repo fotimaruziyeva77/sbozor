@@ -98,6 +98,25 @@ export function UserList({
    *    holatga majburlardi va o'sha holat matn emas, forma talab qiladi.
    */
   const [rolesFor, setRolesFor] = useState<UserListItem | null>(null);
+  /*
+   * 2026-08-25 (buyurtmachi №6): ro'yxatda standart holatda FAQAT faol
+   * xodimlar — bloklangan sinov akkauntlari ish ro'yxatini to'sib
+   * turardi. Bloklanganlar yo'qolmaydi: segment tugmasi ortida.
+   *
+   * ⛔⛔ BU YERDA TURISHI SHART — QUYIDAGI `isPending`/`isError` ERTA
+   *     RETURN'LARIDAN OLDIN (260828 da jonli o'lchandi).
+   *
+   *     Ilgari u ro'yxat o'qilgandan KEYIN turardi: birinchi render
+   *     (`isPending`) hooklarni SANAMASDAN qaytardi, ma'lumot kelgach
+   *     esa bitta ortiq hook chaqirildi va React butun sahifani
+   *     yiqitdi (#310 «Rendered more hooks than during the previous
+   *     render»). API 200 qaytarardi, ya'ni sabab tarmoqda ham,
+   *     huquqda ham KO'RINMASDI — ekranda faqat «This page couldn't
+   *     load» turardi.
+   */
+  const [statusFilter, setStatusFilter] = useState<"active" | "blocked" | "all">(
+    "active",
+  );
 
   const blockUser = useBlockUser();
   const unblockUser = useUnblockUser();
@@ -140,14 +159,6 @@ export function UserList({
   }
 
   const allItems = usersQuery.data.items;
-  /*
-   * 2026-08-25 (buyurtmachi №6): ro'yxatda standart holatda FAQAT faol
-   * xodimlar — bloklangan sinov akkauntlari ish ro'yxatini to'sib
-   * turardi. Bloklanganlar yo'qolmaydi: segment tugmasi ortida.
-   */
-  const [statusFilter, setStatusFilter] = useState<"active" | "blocked" | "all">(
-    "active",
-  );
   const activeCount = allItems.filter((u) => u.is_active).length;
   const blockedCount = allItems.length - activeCount;
   const items =

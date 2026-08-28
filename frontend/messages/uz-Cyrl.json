@@ -12,7 +12,11 @@
     "languageLabel": "Тил",
     "readOnlyNote": "Фақат кўриш — қўшиш ва ўзгартириш бозор админи ҳуқуқида.",
     "deltaNotComplete": "тўлиқ эмас",
-    "deltaNoChange": "0.0% ўзгаришсиз"
+    "deltaNoChange": "0.0% ўзгаришсиз",
+    "relativeJustNow": "ҳозиргина",
+    "relativeMinutesAgo": "{minutes} дақиқа олдин",
+    "relativeHoursAgo": "{hours} соат олдин",
+    "relativeDaysAgo": "{days} кун олдин"
   },
   "shell": {
     "marketLabel": "Бозор",

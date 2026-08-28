@@ -29,7 +29,16 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
-    include: ["src/**/*.test.tsx"],
+    /*
+     * ⛔ `.ts` HAM QAMRALADI (260828). Ilgari bu yerda faqat `*.test.tsx`
+     *    turardi va `src/lib/` dagi sof funksiya testi `.ts` kengaytmasi
+     *    bilan yozilsa JIMGINA o'tkazib yuborilardi — vitest «No test
+     *    files found» demasdi ham, chunki boshqa 109 ta fayl topilardi.
+     *
+     *    `scripts/*.test.mjs` bilan qamrov MASALASI YO'Q: u boshqa
+     *    papkada va `node --test` ostida qoladi (fayl boshidagi izoh).
+     */
+    include: ["src/**/*.test.{ts,tsx}"],
     /*
      * `restoreMocks` ATAYIN YOQILMAGAN: u `vi.spyOn` josuslarini tiklaydi,
      * lekin `vi.fn()` bilan qurilgan modul mock'larining chaqiruv TARIXINI
