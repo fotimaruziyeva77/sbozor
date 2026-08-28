@@ -183,6 +183,11 @@ set $up_camagent camagent-gateway;
         sub_filter 'href="/admin'   'href="/camagent/admin';
         sub_filter 'action="/admin' 'action="/camagent/admin';
         sub_filter 'href="/live'    'href="/camagent/live';
+        # ⛔ `src` HAM QAYTA YOZILADI (260828, jonli panelda o'lchandi):
+        #    kadr eskizlari `<img src="/admin/snapshot_img?...">` bo'lib
+        #    keladi va prefikssiz so'ralganda frontendga tushib 404 berardi
+        #    — sahifa ochilar, LEKIN RASMLAR KO'RINMASDI.
+        sub_filter 'src="/admin'    'src="/camagent/admin';
 
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;

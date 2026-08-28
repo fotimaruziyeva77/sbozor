@@ -557,11 +557,28 @@ class GatewayDB:
 
         Rasmlar QOLADI — ular dalil. Faqat agent yozuvi va uning
         sozlamalari o'chiriladi.
+
+        ⛔ KOD HAM BO'SHATILADI (260828) va busiz bu funksiya o'z nomidagi
+           va'dani BAJARMASDI. «Bitta token = bitta agent» qoidasi kodni
+           birinchi `instance_id` ga bog'laydi; agent yozuvi o'chirilsa-yu
+           `activation_codes.used_by` qolsa, YANGI kompyuter o'sha kod
+           bilan aktivatsiya qila olmasdi va operator sababini panelda
+           ko'rmasdi — kod «ishlatilgan» bo'lib turaverardi, egasi esa
+           yo'q edi.
+
+        ⚠ HIMOYA YO'QOLMAYDI: kod faqat SHU agentning instance'idan
+          bo'shaydi. Agent o'chirilmagan bo'lsa, ikkinchi kompyuter
+          hamon rad etiladi (`use_code` -> `{"used": True}`).
         """
+        rows = self._rows("SELECT instance_id FROM agents WHERE agent_id=?", (agent_id,))
+        instance_id = rows[0]["instance_id"] if rows else None
         for sql in ("DELETE FROM agents WHERE agent_id=?",
                     "DELETE FROM quarantine WHERE agent_id=?",
                     "DELETE FROM commands WHERE agent_id=?"):
             self._exec(sql, (agent_id,))
+        if instance_id:
+            self._exec("UPDATE activation_codes SET used_by=NULL WHERE used_by=?",
+                       (instance_id,))
 
     def command_by_id(self, cmd_id: str) -> dict | None:
         rows = self._rows("SELECT * FROM commands WHERE cmd_id=?", (cmd_id,))
