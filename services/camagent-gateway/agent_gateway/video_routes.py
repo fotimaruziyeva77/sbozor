@@ -391,15 +391,26 @@ def attach(router, gw, *, check_admin, deny, page, secure, esc, media):
         cfg = gw.config_for(agent) or {}
         limit = int((cfg.get("stream") or {}).get("max_channels", 2))
 
-        kataklar, kanallar = [], []
+        # ⛔⛔ KALIT — `seriya|kanal`, FAQAT KANAL EMAS (260829, Karmanada
+        #     o'lchandi).
+        #
+        #     NVR'siz obyektda har kamera ALOHIDA qurilma va hammasining
+        #     kanali `1`. Kalit sifatida faqat kanal raqami olinganda
+        #     brauzer 16 ta kamerani BITTA deb hisoblardi: birinchisi
+        #     ochilgach qolganlari «allaqachon jonli» bo'lib `return`
+        #     qilardi va «Barchasini yoqish» hech narsa qilmasdi.
+        kataklar, kalitlar = [], []
         for nvr in nvrs:
+            seriya = str(nvr.get("serial") or "")
             for c in nvr.get("channels") or []:
                 if not c.get("enabled", True):
                     continue
                 ch = int(c.get("id", 0))
-                kanallar.append(ch)
+                kalit = f"{seriya}|{ch}"
+                kalitlar.append(kalit)
                 kataklar.append(
-                    f"<div class='cam' data-ch='{ch}'>"
+                    f"<div class='cam' data-key='{esc(kalit)}' "
+                    f"data-ch='{ch}' data-serial='{esc(seriya)}'>"
                     f"<div class='camview'>"
                     f"<video muted playsinline autoplay></video>"
                     f"<button class='play' title='jonli ko`rish'>&#9654;</button>"
@@ -409,7 +420,7 @@ def attach(router, gw, *, check_admin, deny, page, secure, esc, media):
 
         body = f"""<h1>{esc(agent.get('market_name'))} — barcha kameralar</h1>
 <p class="hint"><a href="/admin/agent/{esc(agent_id)}">&larr; obyekt sahifasi</a>
-&middot; {len(kanallar)} ta kamera &middot; jonli video bir vaqtda
+&middot; {len(kalitlar)} ta kamera &middot; jonli video bir vaqtda
 <b>{limit}</b> tagacha</p>
 <div class="panel">
   <button id="barchasi">Barchasini yoqish</button>
@@ -422,7 +433,7 @@ ochiladi. <b>Ikki marta bosilsa</b> katta ko'rinishga o'tadi
 <div class="wall">{''.join(kataklar) or "<p class='empty'>kanal yo`q</p>"}</div>
 <script src="/admin/stream/wall.js" defer></script>
 <script id="cfg" type="application/json">{json.dumps(
-    {"agent": agent_id, "channels": kanallar, "limit": limit})}</script>"""
+    {"agent": agent_id, "channels": kalitlar, "limit": limit})}</script>"""
 
         javob = HTMLResponse(page(f"{agent.get('market_name')} — kameralar", body))
         javob.headers["Content-Security-Policy"] = (
@@ -656,10 +667,14 @@ _WALL_JS = r"""
 (function () {
   var cfg = JSON.parse(document.getElementById('cfg').textContent);
   var holat = document.getElementById('holat');
-  var jonlilar = {};                    // kanal -> {pc, session}
+  // ⛔ KALIT `seriya|kanal` (260829): NVR'siz obyektda 16 kameraning
+  //    hammasida kanal `1` va faqat kanal bo'yicha ular BITTA kamera
+  //    bo'lib ko'rinardi — birinchisi ochilgach qolganlari «allaqachon
+  //    jonli» deb rad etilardi.
+  var jonlilar = {};                    // kalit -> {pc, session}
 
-  function katak(ch) {
-    return document.querySelector('.cam[data-ch="' + ch + '"]');
+  function katak(k) {
+    return document.querySelector('.cam[data-key="' + k + '"]');
   }
   function belgi(ch, matn, sinf) {
     var b = katak(ch).querySelector('.badge');
@@ -691,8 +706,10 @@ _WALL_JS = r"""
     }
     jonlilar[ch] = { session: null, pc: null };
     belgi(ch, 'ulanmoqda', 'kutish');
+    var el = katak(ch);
     var fd = new FormData();
-    fd.append('channel', ch);
+    fd.append('channel', el ? el.getAttribute('data-ch') : ch);
+    fd.append('nvr_serial', el ? el.getAttribute('data-serial') : '');
     fd.append('format', 'json');
     try {
       var r = await fetch('/admin/agent/' + cfg.agent + '/stream/start',
@@ -760,7 +777,7 @@ _WALL_JS = r"""
   });
 
   document.querySelectorAll('.cam').forEach(function (el) {
-    var ch = el.getAttribute('data-ch');
+    var ch = el.getAttribute('data-key');
     el.querySelector('.play').addEventListener('click', function (e) {
       e.stopPropagation();
       if (jonlilar[ch]) { ochir(ch); } else { och(ch); }

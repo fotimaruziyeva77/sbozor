@@ -90,6 +90,11 @@ services:
     #   - "127.0.0.1:8787:8787"
     ports:
       - "8554:8554/tcp"
+      # ⛔ WebRTC UDP — BRAUZER shu portga ulanadi (260829). MediaMTX
+      #   `webrtcAdditionalHosts` orqali tashqi manzilni ICE nomzodi
+      #   qilib beradi; port yopiq bo'lsa nomzod e'lon qilinadi-yu
+      #   ulanish o'rnatilmaydi va ekran QORA qoladi.
+      - "8989:8989/udp"
     healthcheck:
       # `python` konteynerda bor; `nc`/`curl` slim image'da yo'q.
       test: ["CMD", "python", "-c",

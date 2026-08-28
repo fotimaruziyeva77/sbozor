@@ -55,7 +55,19 @@ apiAddress: 127.0.0.1:{api_port}
 webrtc: yes
 webrtcAddress: 127.0.0.1:{whep_port}
 webrtcLocalUDPAddress: :{udp_port}
-{ice_servers}
+# ⛔⛔ TASHQI MANZIL ICE NOMZODI SIFATIDA E'LON QILINADI (260829, jonli
+#     serverda o'lchandi).
+#
+#     Usiz MediaMTX faqat O'ZI ko'rgan manzillarni beradi — Docker
+#     tarmog'ida bu `172.x.x.x`, ya'ni brauzer yeta olmaydigan IP.
+#     Natijada oqim serverga MUVAFFAQIYATLI kelib turardi (jurnalda
+#     `is publishing`), panel «JONLI» deb yozardi, ekran esa QORA
+#     qolardi va sabab hech qayerda ko'rinmasdi.
+#
+# ⚠ UDP PORTI HAM OCHIQ BO'LISHI SHART (`compose.camagent.yml`):
+#   nomzod e'lon qilinadi-yu port yopiq bo'lsa natija bir xil — qora
+#   ekran.
+{additional_hosts}{ice_servers}
 # RTSP - agent shu yerga push qiladi. Yagona tashqi port.
 #
 # `rtspTransports: [tcp]` MUHIM: standart sozlamada MediaMTX RTP/RTCP
@@ -214,9 +226,15 @@ class MediaServer:
                    f"  - url: {self.turn_url}\n"
                    f"    username: {self.turn_user}\n"
                    f"    password: {self.turn_pass}\n")
+        # Tashqi manzil — agent push qiladigan host bilan BIR XIL: brauzer
+        # ham o'sha nomga boradi, ya'ni ikkinchi sozlama kerak emas.
+        hosts = ""
+        if self.public_host:
+            hosts = f"webrtcAdditionalHosts: [{self.public_host}]\n"
         matn = _CONFIG.format(api_port=self.api_port, whep_port=self.whep_port,
                               rtsp_port=self.rtsp_port,
                               udp_port=self.whep_port + 100, ice_servers=ice,
+                              additional_hosts=hosts,
                               pub_secret=self.pub_secret)
         yol = self.data_dir / "mediamtx.yml"
         yol.parent.mkdir(parents=True, exist_ok=True)
