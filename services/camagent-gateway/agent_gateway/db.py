@@ -339,6 +339,45 @@ class GatewayDB:
     def snapshot_count(self) -> int:
         return self._rows("SELECT COUNT(*) AS n FROM snapshots")[0]["n"]
 
+    # --- tozalash (retention) ---
+
+    def snapshots_older_than(self, cutoff: float, limit: int) -> list[dict]:
+        """Saqlash muddati o'tgan kadrlar — ENG ESKISIDAN boshlab.
+
+        Args:
+            cutoff: `received_at` shu qiymatdan KICHIK bo'lganlar.
+            limit: bir partiyada nechta. Partiya kerak: 12 bozorda bir
+                yillik to'planma o'n minglab qator bo'ladi va ularni
+                bitta tranzaksiyada o'chirish bazani bloklab qo'yardi.
+
+        Returns:
+            `idem_key` va `storage_ref` — o'chirish uchun yetarli
+            minimum. To'liq qator o'qilmaydi: partiya kattaligida bu
+            ortiqcha xotira.
+        """
+        return [dict(r) for r in self._rows(
+            "SELECT idem_key, storage_ref, size_bytes FROM snapshots"
+            " WHERE received_at < ? ORDER BY received_at LIMIT ?",
+            (cutoff, limit))]
+
+    def delete_snapshot_row(self, idem_key: str) -> None:
+        """Metadata qatorini o'chiradi.
+
+        ⛔⛔ FAQAT RASM O'CHIRILGANDAN KEYIN CHAQIRILADI. Teskari tartibda
+            metadata yo'qolib, rasm S3'da qolardi — uni endi HECH KIM
+            topa olmaydi (havola faqat shu qatorda edi) va u abadiy
+            chiqindi bo'lib joy egallardi.
+        """
+        self._exec("DELETE FROM snapshots WHERE idem_key=?", (idem_key,))
+
+    def oldest_snapshot_age_days(self, now: float) -> float | None:
+        """Eng eski kadr necha kunlik. Panel shu sondan foydalanadi."""
+        rows = self._rows("SELECT MIN(received_at) AS t FROM snapshots")
+        eng_eski = rows[0]["t"] if rows else None
+        if eng_eski is None:
+            return None
+        return max(0.0, (now - float(eng_eski)) / 86400.0)
+
     # --- buyruqlar va hodisalar ---
 
     def queue_command(self, agent_id: str, name: str, params: dict) -> str:

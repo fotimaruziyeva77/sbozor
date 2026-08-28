@@ -51,6 +51,15 @@ services:
       CAMAGENT_GW_S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       CAMAGENT_GW_S3_SECRET_KEY: ${S3_SECRET_KEY}
       CAMAGENT_GW_S3_PREFIX: camagent
+      # Tozalash (260828). Standart 90 — sbozor'ning `RETENTION_FULL_DAYS`
+      # bilan bir xil. `0` yozilsa tozalash butunlay o'chadi.
+      #
+      # ⛔ SBOZOR SUPURGISI BU KADRLARGA TEGMAYDI: u faqat
+      #   `{uuid}/{sana}/` prefikslarini ko'radi, `camagent/` esa undan
+      #   TASHQARIDA (`docs/integration.md` 0-bo'limidagi qaror). Ya'ni
+      #   bu qator yo'q bo'lsa kadrlar HECH QACHON o'chirilmaydi —
+      #   o'lchangan hajm 12 bozorga 210 GB/yil.
+      CAMAGENT_GW_RETENTION_DAYS: ${CAMAGENT_GW_RETENTION_DAYS:-90}
       # Jonli video (ixtiyoriy): MediaMTX + TURN sozlanganda to'ldiriladi.
       # Bo'sh bo'lsa panel "yangilanuvchi rasm" rejimida ishlayveradi.
       CAMAGENT_MEDIA_HOST: ${CAMAGENT_MEDIA_HOST:-}

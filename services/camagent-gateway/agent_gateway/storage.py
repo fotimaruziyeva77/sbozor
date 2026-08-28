@@ -26,6 +26,16 @@ class SnapshotStorage:
     def open_snapshot(self, ref: str) -> bytes:
         raise NotImplementedError
 
+    def delete_snapshot(self, ref: str) -> bool:
+        """Rasmni (va uning `.json` yo'ldoshini) o'chiradi.
+
+        Returns:
+            Rasm endi YO'Q bo'lsa `True`. Allaqachon yo'q bo'lgani ham
+            `True` — tozalash IDEMPOTENT bo'lishi kerak, aks holda yarim
+            o'chirilgan kadr har kuni qayta urinishga tushardi.
+        """
+        raise NotImplementedError
+
 
 def _safe(name: str) -> str:
     """Fayl nomi uchun xavfsiz satr.
@@ -71,10 +81,27 @@ class DiskStorage(SnapshotStorage):
         return str(rel).replace("\\", "/")
 
     def open_snapshot(self, ref: str) -> bytes:
+        path = self._resolve(ref)
+        return path.read_bytes()
+
+    def delete_snapshot(self, ref: str) -> bool:
+        path = self._resolve(ref)
+        try:
+            path.unlink(missing_ok=True)
+            # Yo'ldosh ham ketadi: rasmsiz sidecar indeksni qayta
+            # yig'ishda «bor edi, yo'qolibdi» degan soxta xulosa berardi.
+            path.with_suffix(".json").unlink(missing_ok=True)
+        except OSError:
+            log.warning("rasm o'chirilmadi: %s", ref)
+            return False
+        return True
+
+    def _resolve(self, ref: str) -> Path:
+        """Yo'lni tekshiradi — storage papkasidan chiqib ketmasin."""
         path = (self.root / ref).resolve()
         if self.root.resolve() not in path.parents and path != self.root.resolve():
             raise PermissionError("storage tashqarisiga murojaat")
-        return path.read_bytes()
+        return path
 
 
 class S3Storage(SnapshotStorage):
@@ -142,16 +169,31 @@ class S3Storage(SnapshotStorage):
         return f"s3://{self.bucket}/{obj}"
 
     def open_snapshot(self, ref: str) -> bytes:
+        # Panel ref'ni so'rovdan oladi — begona bucket'ga chiqib ketmasin
+        # (`DiskStorage._resolve` bilan bir xil chegara).
+        obj = self._object_from_ref(ref)
+        resp = self.client.get_object(Bucket=self.bucket, Key=obj)
+        return resp["Body"].read()
+
+    def delete_snapshot(self, ref: str) -> bool:
+        obj = self._object_from_ref(ref)
+        try:
+            self.client.delete_object(Bucket=self.bucket, Key=obj)
+            self.client.delete_object(Bucket=self.bucket,
+                                      Key=obj[:-len(".jpg")] + ".json")
+        except Exception:                             # noqa: BLE001
+            log.warning("S3 rasm o'chirilmadi: %s", obj)
+            return False
+        return True
+
+    def _object_from_ref(self, ref: str) -> str:
+        """`s3://bucket/kalit` -> `kalit`, chegara tekshiruvi bilan."""
         if not ref.startswith("s3://"):
             raise PermissionError("S3 bo'lmagan havola")
         bucket, _, obj = ref[len("s3://"):].partition("/")
         if bucket != self.bucket or not obj:
-            # Panel ref'ni so'rovdan oladi — begona bucket'ga chiqib
-            # ketmasin (DiskStorage'dagi containment tekshiruvi bilan
-            # bir xil chegara).
             raise PermissionError("begona bucket yoki bo'sh kalit")
-        resp = self.client.get_object(Bucket=self.bucket, Key=obj)
-        return resp["Body"].read()
+        return obj
 
 
 def storage_from_env(data_dir: Path) -> SnapshotStorage:

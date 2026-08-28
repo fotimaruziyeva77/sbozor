@@ -22,6 +22,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from . import video_routes
 from .db import GatewayDB
 from .media import MediaServer
+from .retention import retention_days
+from .retention import sweep as retention_sweep
 from .storage import DiskStorage, SnapshotStorage
 
 ALLOWED_COMMANDS = {
@@ -771,9 +773,23 @@ def build_router(data_dir: str | Path, storage: SnapshotStorage | None = None,
             for e in gw.db.list_events(30))
 
         total = len(gw.db.list_agents())
+
+        # Saqlash muddati — OPERATOR KO'RADIGAN YAGONA joy. Busiz «eski
+        # kadr qani?» savoliga javob faqat kodda va `.env` da qolardi.
+        kun = retention_days()
+        eng_eski = gw.db.oldest_snapshot_age_days(time.time())
+        if kun <= 0:
+            saqlash = "tozalash o'chiq — kadrlar cheksiz saqlanadi"
+        elif eng_eski is None:
+            saqlash = f"{kun} kun saqlanadi"
+        else:
+            saqlash = (f"{kun} kun saqlanadi &middot; eng eskisi "
+                       f"{eng_eski:.0f} kunlik")
+
         body = f"""<h1>CamAgent gateway</h1>
 <p class="hint">{online_count}/{total} agent onlayn &middot;
 {gw.db.snapshot_count()} ta rasm qabul qilindi &middot;
+{saqlash} &middot;
 <a href="/admin/snapshots">rasmlar</a> &middot;
 <a href="/admin/slots">slot to'liqligi</a> &middot;
 sahifa 10 soniyada yangilanadi</p>
@@ -1219,4 +1235,61 @@ def build_app(data_dir: str | Path, storage: SnapshotStorage | None = None,
     def healthz() -> dict:
         return {"status": "ok"}
 
+    # --- tozalash (retention) ---
+    #
+    # ⚠ FON VAZIFASI `build_app`DA, `build_router`DA EMAS — `/healthz`
+    #   bilan bir xil sabab: router sbozor'ning o'z app'iga ulanganda
+    #   tozalashni O'SHA loyiha o'zi rejalashtiradi (uning `taskiq`
+    #   ishchisi bor) va ikkita jadval bir vaqtda yugurmasin.
+    #
+    # ⛔ INTERVAL SOATLARDA, cron'da EMAS: gateway qayta ishga tushishi
+    #   mumkin va cron'ga bog'langan tozalash o'sha kuni umuman
+    #   o'tkazib yuborilardi. Har 6 soatda bir yugurish partiyani
+    #   (500 kadr) kunlik oqimdan tez tozalaydi.
+    @app.on_event("startup")
+    async def _tozalash_boshlansin() -> None:
+        if retention_days() <= 0:
+            log.info("tozalash o'chirilgan — fon vazifasi ishga tushirilmadi")
+            return
+        app.state.retention_task = asyncio.create_task(
+            _tozalash_halqasi(router.gateway))
+
+    @app.on_event("shutdown")
+    async def _tozalash_toxtasin() -> None:
+        task = getattr(app.state, "retention_task", None)
+        if task is not None:
+            task.cancel()
+
     return app
+
+
+RETENTION_INTERVAL_S = 6 * 3600
+"""Ikki yugurish orasi. Kunlik oqim (12 bozor ~1400 kadr) partiyaga
+(500) sig'maydi, shuning uchun kuniga to'rt marta yuguriladi."""
+
+RETENTION_FIRST_DELAY_S = 120
+"""Ishga tushgach birinchi yugurishgacha. Kechikish ATAYIN: gateway
+ko'tarilgan zahoti agentlar ulanadi va navbatdagi kadrlarni yuboradi —
+tozalash o'sha eng band daqiqada disk bilan raqobatlashmasin."""
+
+
+async def _tozalash_halqasi(gw: Gateway) -> None:
+    """Muddati o'tgan kadrlarni davriy o'chiradi.
+
+    ⛔ HALQA HECH QACHON O'LMAYDI: har xato ushlanadi va keyingi
+       intervalda qayta uriniladi. Tozalash to'xtasa disk jimgina
+       to'lardi va buni faqat server yiqilgan kuni bilardik.
+    """
+    await asyncio.sleep(RETENTION_FIRST_DELAY_S)
+    while True:
+        try:
+            natija = await run_in_threadpool(retention_sweep, gw.db, gw.storage)
+            if natija.deleted:
+                gw.db.log_event(None, "retention_sweep",
+                                f"{natija.deleted} kadr, "
+                                f"{natija.freed_bytes // 1048576} MB")
+        except asyncio.CancelledError:
+            raise
+        except Exception:                             # noqa: BLE001
+            log.exception("tozalash halqasida xato")
+        await asyncio.sleep(RETENTION_INTERVAL_S)
