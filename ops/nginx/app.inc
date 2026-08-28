@@ -175,9 +175,16 @@ set $up_camagent camagent-gateway;
         proxy_pass http://$up_camagent:8787;
         proxy_http_version 1.1;
 
-        # `sub_filter_types` YOZILMAYDI: `text/html` standartda allaqachon
-        # bor va uni takrorlash nginx'ni har reload'da ogohlantirishga
-        # majbur qilardi (o'lchandi 260828).
+        # ⛔ JS FAYLLARI HAM QAYTA YOZILADI (260828, jonli video sinovi).
+        #   Kamera devori mantiqi alohida `wall.js` da yashaydi va oqimni
+        #   `fetch('/admin/agent/.../stream/start')` bilan boshlaydi.
+        #   `sub_filter` standartda FAQAT `text/html` ni ko'radi, ya'ni bu
+        #   chaqiruv prefikssiz ketardi va 404 olardi — plitkada «xato»,
+        #   holbuki oqim serverga muvaffaqiyatli kelib turardi.
+        #
+        # ⚠ `text/html` bu ro'yxatda YOZILMAYDI: u standartda allaqachon
+        #   bor va takrorlansa nginx har reload'da ogohlantiradi.
+        sub_filter_types application/javascript text/javascript;
         proxy_set_header Accept-Encoding "";
         sub_filter_once off;
         sub_filter 'href="/admin'   'href="/camagent/admin';
@@ -188,6 +195,14 @@ set $up_camagent camagent-gateway;
         #    keladi va prefikssiz so'ralganda frontendga tushib 404 berardi
         #    — sahifa ochilar, LEKIN RASMLAR KO'RINMASDI.
         sub_filter 'src="/admin'    'src="/camagent/admin';
+        # ⛔ JAVASCRIPT ICHIDAGI YO'LLAR HAM (260828, jonli video sinovida
+        #    o'lchandi): panel oqimni `fetch('/admin/agent/.../stream/start')`
+        #    bilan boshlaydi. HTML atributlari qayta yozilgani bilan bu
+        #    chaqiruv prefikssiz ketardi, 404 olardi va plitkada faqat
+        #    «xato» ko'rinardi — oqim esa serverga MUVAFFAQIYATLI kelib
+        #    turardi (MediaMTX jurnalida `is publishing`).
+        sub_filter "fetch('/admin"   "fetch('/camagent/admin";
+        sub_filter 'fetch("/admin'   'fetch("/camagent/admin';
 
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;

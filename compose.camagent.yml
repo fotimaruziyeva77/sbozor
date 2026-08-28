@@ -74,10 +74,22 @@ services:
       # xatosiz); PostgreSQL'ga ko'chish yo'li integration.md 3-bo'limda.
       # Zaxira: restic ro'yxatiga `camagent_data` volume'ini ham qo'shing.
       - camagent_data:/data
-    # `ports:` ATAYIN YO'Q (T-04-02 bilan bir xil qoida). Tashqi yo'l —
-    # faqat nginx `location /api/v1/agent/`. Panel uchun SSH tunnel:
-    # ports:
+    # ⛔ FAQAT RTSP PUBLISH PORTI OCHIQ (260828, jonli video uchun).
+    #
+    #   Agent oqimni TASHQARIDAN push qiladi (`rtsp://campub:SECRET@host:
+    #   8554/...`), ya'ni bu port internetdan ko'rinishi SHART — usiz
+    #   jonli video umuman ishlamaydi. Parol `CAMAGENT_MEDIA_SECRET` da
+    #   va u har oqim URL'ining ichida keladi.
+    #
+    # ⚠ WHEP (8889) VA API (9997) OCHILMAYDI: brauzer MediaMTX'ga
+    #   to'g'ridan-to'g'ri bormaydi, u `/camagent/` proksisi orqali
+    #   o'tadi (CLAUDE.md 4-bo'lim: «havolani bilgan har kim kamerani
+    #   ko'rardi — huquq tekshiruvi chetlab o'tilardi»).
+    #
+    # Panel uchun SSH tunnel (ixtiyoriy):
     #   - "127.0.0.1:8787:8787"
+    ports:
+      - "8554:8554/tcp"
     healthcheck:
       # `python` konteynerda bor; `nc`/`curl` slim image'da yo'q.
       test: ["CMD", "python", "-c",

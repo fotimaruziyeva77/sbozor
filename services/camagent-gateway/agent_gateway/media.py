@@ -67,11 +67,13 @@ rtsp: yes
 rtspAddress: :{rtsp_port}
 rtspTransports: [tcp]
 
-# Kerak bo'lmagan protokollar butunlay o'chiriladi: har biri o'z
-# portini band qiladi.
-moq: no
-
 # Ortiqcha protokollar o'chirilgan: hujum yuzasi kichik bo'lsin.
+#
+# ⛔ `moq:` YOZILMAYDI (260828, jonli serverda o'lchandi). MediaMTX bu
+#   maydonni BILMAYDI va noma'lum kalitni ko'rgan zahoti butunlay
+#   ishga tushmaydi: «ERR: json: unknown field "moq"». Natijada jonli
+#   video umuman ochilmasdi, panel esa faqat «xato» deb ko'rsatardi —
+#   sabab MediaMTX jurnalining ichida qolardi.
 rtmp: no
 hls: no
 srt: no
