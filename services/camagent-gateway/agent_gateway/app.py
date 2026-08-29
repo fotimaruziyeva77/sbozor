@@ -686,6 +686,12 @@ def build_router(data_dir: str | Path, storage: SnapshotStorage | None = None,
             ref = gw.storage.save_snapshot(x_idempotency_key, body, meta)
             gw.db.record_snapshot(x_idempotency_key, agent["agent_id"], ref,
                                   meta, len(body))
+            # sbozor hisobiga qo'shish — S3'ga YOZILGANDAN KEYIN.
+            # Tartib muhim: sbozor kadr baytlarini S3'dan o'qiydi, ya'ni
+            # xabar oldin ketsa u bo'sh kalitni topardi.
+            if gw.sbozor.api_url:
+                gw.sbozor.notify_snapshot(agent.get("key_prefix") or "",
+                                          meta, ref, len(body))
 
         await run_in_threadpool(_persist)
         return {"v": 1, "ok": True, "duplicate": False}

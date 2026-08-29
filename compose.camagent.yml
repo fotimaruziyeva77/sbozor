@@ -77,6 +77,11 @@ services:
       # ⚠ BO'SH QOLDIRILSA modul o'chadi va gateway o'zicha ishlayveradi —
       #   CamAgent sbozor'siz boshqa loyihalarda ham ishlatiladi.
       CAMAGENT_SBOZOR_DSN: ${CAMAGENT_SBOZOR_DSN:-}
+      # Kadr xabari — BAZA EMAS, HTTP: `snapshots` yozuvi sifat
+      # tahlilini talab qiladi va u core-api'da (`quality.py`).
+      # Gateway FAKT yuboradi, BAHO o'sha yerda beriladi.
+      CAMAGENT_SBOZOR_API: ${CAMAGENT_SBOZOR_API:-}
+      CAMAGENT_SBOZOR_TOKEN: ${CAMAGENT_SBOZOR_TOKEN:-}
       TZ: ${TZ:-Asia/Tashkent}
     volumes:
       # SQLite (gateway.db, WAL) + media konfiguratsiyasi. 12 bozor uchun

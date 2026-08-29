@@ -240,6 +240,9 @@ services:
       # veb yuzasi ISHLAB TURAVERADI. Yiqilish esa bot yuzasi uchun butun
       # platformani to'xtatardi.
       BOT_SERVICE_TOKEN: ${BOT_SERVICE_TOKEN}
+      # CamAgent gateway kadr xabari uchun (260829). Bo'sh bo'lsa
+      # `/internal/camagent/*` 503 qaytaradi (fail-closed).
+      CAMAGENT_SERVICE_TOKEN: ${CAMAGENT_SERVICE_TOKEN:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: Asia/Tashkent
@@ -644,6 +647,9 @@ services:
       # Servis-servis tokeni (D-10): `hmac.compare_digest` bilan
       # solishtiriladi va foydalanuvchi sessiyasini TUG'DIRMAYDI.
       BOT_SERVICE_TOKEN: ${BOT_SERVICE_TOKEN}
+      # CamAgent gateway kadr xabari uchun (260829). Bo'sh bo'lsa
+      # `/internal/camagent/*` 503 qaytaradi (fail-closed).
+      CAMAGENT_SERVICE_TOKEN: ${CAMAGENT_SERVICE_TOKEN:-}
       CORE_API_URL: ${CORE_API_URL:-http://core-api:8000}
       # ⛔ `db 1` — `core-api` ning `db 0` idan AJRATILGAN. U yerda
       # rate-limit sanagichlari, sessiya keshi va `sbozor:jobs` navbati

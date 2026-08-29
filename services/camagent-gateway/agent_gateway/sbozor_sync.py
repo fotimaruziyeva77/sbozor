@@ -74,6 +74,10 @@ class SbozorSync:
 
     def __init__(self, dsn: str = ""):
         self.dsn = dsn or os.environ.get("CAMAGENT_SBOZOR_DSN", "")
+        # Kadr xabari uchun — BAZA EMAS, HTTP. Sabab: `snapshots` yozuvi
+        # sifat tahlilini talab qiladi va u core-api'da (`quality.py`).
+        self.api_url = os.environ.get("CAMAGENT_SBOZOR_API", "")
+        self.api_token = os.environ.get("CAMAGENT_SBOZOR_TOKEN", "")
         self._psycopg: Any = None
         if not self.dsn:
             log.info("sbozor sinxronizatsiyasi o'chiq (CAMAGENT_SBOZOR_DSN yo'q)")
@@ -90,7 +94,66 @@ class SbozorSync:
     def enabled(self) -> bool:
         return bool(self.dsn and self._psycopg)
 
-    # ------------------------------------------------ qurilmalar
+
+    # ------------------------------------------------ kadrlar
+
+    def notify_snapshot(self, key_prefix: str, meta: dict, ref: str,
+                        size_bytes: int) -> bool:
+        """Kadr S3'ga yozilgach sbozor'ga xabar beradi.
+
+        ⛔⛔ SIFAT VERDIKTI BU YERDA HISOBLANMAYDI. `snapshots.is_billable`
+            verdiktdan GENERATED ustun sifatida chiqadi — ya'ni baho PUL
+            qaroriga bevosita ta'sir qiladi. Chegaralar va ularning
+            versiyasi sbozor tomonida yashaydi; gateway o'z verdiktini
+            yuborsa ikkita chegara to'plami paydo bo'lardi va ular
+            jimgina ajralib ketardi.
+
+            Shuning uchun bu yerda faqat FAKT: kadr qayerda, qachon,
+            qaysi kameradan. Baho — core-api'da.
+
+        ⚠ XATO YUTILADI: sbozor javob bermasa ham kadr S3'da va gateway
+          bazasida QOLADI (4-prinsip). Keyingi kadr yana urinadi.
+        """
+        market_id = market_id_from_prefix(key_prefix)
+        if not (self.api_url and self.api_token and market_id):
+            return False
+        seriya = str(meta.get("nvr_serial") or "")
+        kanal = int(meta.get("channel") or 0)
+        if not seriya or kanal <= 0:
+            return False
+
+        vaqt = _iso(meta.get("agent_time")) or _hozir()
+        slot = _slot_from_meta(meta, vaqt)
+        try:
+            import json
+            import urllib.request
+
+            tana = json.dumps({
+                "market_id": market_id,
+                "camera_serial": seriya,
+                "channel_no": kanal,
+                "object_key": _s3_key(ref),
+                "size_bytes": int(size_bytes),
+                "captured_at": vaqt,
+                "slot_time": slot,
+                # Jadval sloti bo'lmasa (qo'lda buyruq) kadr o'z vaqtiga
+                # rejalashtirilgan deb yoziladi — sbozor uni «kech» deb
+                # belgilamasin.
+                "scheduled_at": vaqt,
+                "late": bool(meta.get("late")),
+            }).encode()
+            req = urllib.request.Request(
+                f"{self.api_url.rstrip('/')}/internal/camagent/snapshot",
+                data=tana, method="POST",
+                headers={"Content-Type": "application/json",
+                         "Authorization": f"Bearer {self.api_token}"})
+            with urllib.request.urlopen(req, timeout=15) as javob:
+                return javob.status == 200
+        except Exception as exc:                  # noqa: BLE001
+            log.warning("sbozor kadr xabari yiqildi: %s", exc)
+            return False
+
+
 
     def sync_devices(self, key_prefix: str, nvrs: list[dict]) -> int:
         """Agent topgan qurilmalarni `nvr_devices` + `cameras` ga yozadi.
@@ -186,3 +249,36 @@ class SbozorSync:
                 )
                 yozildi += 1
         return yozildi
+
+
+def _s3_key(ref: str) -> str:
+    """`s3://bucket/kalit` -> `kalit`. Disk rejimida ref o'zi kalit."""
+    if ref.startswith("s3://"):
+        qism = ref[5:].split("/", 1)
+        return qism[1] if len(qism) == 2 else qism[0]
+    return ref
+
+
+def _iso(qiymat: object) -> str:
+    return str(qiymat) if qiymat else ""
+
+
+def _hozir() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _slot_from_meta(meta: dict, vaqt: str) -> str:
+    """Jadval sloti — kadr metadatasidan yoki olingan vaqtdan.
+
+    Agent slot vaqtini `trigger` da beradi (`slot:06:00`); qo'lda
+    buyruqda (`command:...`) slot yo'q va o'shanda kadr olingan soat
+    ishlatiladi.
+    """
+    trigger = str(meta.get("trigger") or "")
+    if trigger.startswith("slot:"):
+        return trigger[5:][:5]
+    return (vaqt[11:16] or "00:00") if len(vaqt) >= 16 else "00:00"
+
+    # ------------------------------------------------ qurilmalar

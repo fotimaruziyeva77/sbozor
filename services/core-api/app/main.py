@@ -39,6 +39,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.internal.bot import router as bot_internal_router
+from app.api.internal.camagent import router as camagent_internal_router
 from app.api.internal.live_authz import router as live_authz_router
 from app.api.internal.self_check import router as self_check_router
 from app.api.v1.assignments import router as assignments_router
@@ -448,6 +449,9 @@ app.include_router(self_check_router)
 # `tests/integration/test_bot_internal_api.py` da TO'LIQ qayta tiklangan
 # (tokensiz -> 401; noto'g'ri token -> 401; sozlanmagan token -> 503).
 app.include_router(bot_internal_router)
+# CamAgent gateway — kadrlarni sbozor hisobiga qo'shadi (260829).
+# Servis tokeni bilan himoyalangan, `include_in_schema=False`.
+app.include_router(camagent_internal_router)
 # --- 07-10: nomuvofiqlik hisoboti va case navbati (RECON-01, RECON-02) ---
 #
 # ⛔ ALOHIDA PREFIKS, `/billing` OSTIDA EMAS — VA SABAB 06-08 NING

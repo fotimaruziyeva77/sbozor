@@ -487,6 +487,15 @@ class Settings(BaseSettings):
     #   tasodifan chiqib keta olmaydi.
     bot_service_token: SecretStr = SecretStr("")
 
+    # ⛔ CamAgent GATEWAY TOKENI (260829). Gateway kadr S3'ga yozilgach
+    #   `/internal/camagent/snapshot` ga xabar beradi; core-api uni O'Z
+    #   sifat tahlilidan o'tkazib `snapshots` ga yozadi.
+    #
+    #   ⚠ BO'SH BO'LSA MARSHRUT 503 QAYTARADI (fail-closed), 401 EMAS:
+    #     «sozlanmagan» va «noto'g'ri token» — ikki xil holat va ular
+    #     operatorga ham shunday ko'rinishi kerak.
+    camagent_service_token: SecretStr = SecretStr("")
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"
