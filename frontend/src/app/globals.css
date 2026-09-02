@@ -2393,3 +2393,17 @@
  *   yozish G-motion-3(c) darvozasini buzardi: u `none` ni kadr NOMI deb
  *   o'qiydi va reyestrda topa olmaydi.
  */
+
+/*
+ * Katak mini-grafigi — raqamning yonidagi shakl (260902).
+ *
+ * ⛔ BALANDLIK QAT'IY: `ResponsiveContainer` ota-elementning
+ *    balandligini o'lchaydi va u `auto` bo'lsa NOLGA teng chiqadi —
+ *    grafik jimgina chizilmasdi (Recharts ning eng ko'p uchraydigan
+ *    tuzog'i).
+ */
+.dir-spark {
+  height: 2.75rem;
+  margin-top: 0.75rem;
+  width: 100%;
+}

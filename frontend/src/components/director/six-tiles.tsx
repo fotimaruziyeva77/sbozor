@@ -42,6 +42,7 @@ import { useAccuracyReport, useOccupancyDay } from "@/lib/occupancy-queries";
 import { useReconciliationReport } from "@/lib/reconciliation-queries";
 import { useRevenueReport } from "@/lib/report-queries";
 import { FlowSpark } from "@/components/director/flow-spark";
+import { TileSpark } from "@/components/director/tile-spark";
 import {
   useLiveRevenue,
   useReceivablesReport,
@@ -556,6 +557,14 @@ export function SixTiles({ period }: { period: Period }) {
           </p>
           {dRev === null ? null : <Badge tone={dRev.tone}>{dRev.text}</Badge>}
         </div>
+
+        {/*
+         * ⛔ SHAKL RAQAMNING IZOHI (260902): «4 067 000 so'm» yolg'iz
+         *    turganda HOLATNI aytadi, yo'nalishni emas. Ustunlar
+         *    «o'syaptimi yoki tushyaptimi» degan savolga hisobotga
+         *    kirmasdan javob beradi.
+         */}
+        <TileSpark bars={flowPoints} />
       </PanelTile>
 
       {/* --- 3 ------------------------------------------------------------ */}

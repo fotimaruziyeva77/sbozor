@@ -58,7 +58,7 @@ const ROADMAP_PATH = path.join(REPO_ROOT, ".planning", "ROADMAP.md");
 /**
  * SC#5 — `dependencies` TO'PLAM TENGLIGI reyestri (G-motion-3(d), L-8 0 KB).
  *
- * ⛔ `deepEqual`, SON EMAS: `length === 18` shakli paket ALMASHTIRILGANDA
+ * ⛔ `deepEqual`, SON EMAS: `length === 20` shakli paket ALMASHTIRILGANDA
  *    (biri chiqib, biri kirganda) yolg'on yashil qolardi. To'plam tengligi
  *    ikkalasini ham ushlaydi. Bu `motion-tokens.test.mjs` dagi tekshiruvning
  *    IKKINCHI, MUSTAQIL nusxasi (T-09-SC) — mahsulot konstantasidan import
@@ -70,6 +70,7 @@ const DEPENDENCY_REGISTRY = [
   "@radix-ui/react-dropdown-menu",
   "@radix-ui/react-select",
   "@tanstack/react-query",
+  "@tanstack/react-table",
   "class-variance-authority",
   "clsx",
   "date-fns",
@@ -80,6 +81,7 @@ const DEPENDENCY_REGISTRY = [
   "react",
   "react-dom",
   "react-hook-form",
+  "recharts",
   "sonner",
   "tailwind-merge",
   "zod",
@@ -630,8 +632,11 @@ test("REYESTR NAZORATI — takror yo'q, quyi chegaralar joyida, modul hech narsa
   }
   assert.equal(
     DEPENDENCY_REGISTRY.length,
-    18,
-    "dependencies reyestri aynan 18 nom (09-UI-SPEC §3.2 holati) — o'zgargan bo'lsa, sabab bilan yangilang",
+    20,
+    "dependencies reyestri aynan 20 nom (260902: `recharts` va " +
+      "`@tanstack/react-table` direktor paneli uchun qo'shildi, sabab " +
+      "`motion-tokens.test.mjs` dagi EXPECTED_DEPENDENCIES izohida) — " +
+      "o'zgargan bo'lsa, sabab bilan yangilang",
   );
   assert.equal(CRITERION_ANCHORS.length, 5, "langar reyestri mezon soniga teng");
   assert.ok(

@@ -131,12 +131,35 @@ const CELEBRATION_IDENTIFIERS = ["confetti", "konfetti", "burst", "particle"];
  * ⛔ 09-UI-SPEC avval «20 paket» degan edi — o'lchov 18 berdi (09-01
  *    tuzatishi). Haqiqat manbai — shu reyestr + `assert.deepEqual`.
  */
+/*
+ * ⛔⛔ RO'YXAT 260902 DA IKKI NOMGA KENGAYDI — BUYURTMACHI QARORI BILAN.
+ *
+ *     `recharts` va `@tanstack/react-table` L-8 ning «0 KB» tanlovi
+ *     ostida ATAYLAB rad etilgan edi va o'sha qaror to'g'ri edi: har
+ *     qulflangan animatsiya sof CSS bilan chiqadi.
+ *
+ *     Direktor paneli esa boshqa toifadagi talab oldi: u «bozorning
+ *     yuzi» — kelgan tekshiruvchi yoki hokimlik vakili bozor holatini
+ *     AYNAN shu ekrandan biladi. Talab qilingan ko'rinish (har katakda
+ *     diagramma, taqsimot donutlari, qiymat yorliqli maydonlar) qo'lda
+ *     SVG bilan ham chiqadi, lekin u yuzlab qator geometriya va o'z
+ *     tooltip/o'q/legend qatlamlarini talab qilardi — ya'ni ichki
+ *     kutubxona yozish, faqat testsiz.
+ *
+ * ⚠ `framer-motion` QO'SHILMADI va bu ONGLI: mavjud CSS kadrlari
+ *   (`dirIn`, `dirDraw`, `dirFlowDraw`, halqa to'lishi) kerakli
+ *   harakatni allaqachon beradi va ular bepul. Motion kutubxonasi
+ *   L-8 ostida QOLADI.
+ *
+ * ⚠ `lottie-*` ham taqiqlanganicha qoladi.
+ */
 const EXPECTED_DEPENDENCIES = [
   "@hookform/resolvers",
   "@radix-ui/react-dialog",
   "@radix-ui/react-dropdown-menu",
   "@radix-ui/react-select",
   "@tanstack/react-query",
+  "@tanstack/react-table",
   "class-variance-authority",
   "clsx",
   "date-fns",
@@ -147,6 +170,7 @@ const EXPECTED_DEPENDENCIES = [
   "react",
   "react-dom",
   "react-hook-form",
+  "recharts",
   "sonner",
   "tailwind-merge",
   "zod",
@@ -160,7 +184,6 @@ const EXPECTED_DEPENDENCIES = [
 const FORBIDDEN_DEPENDENCY_NAMES = [
   "motion",
   "framer-motion",
-  "recharts",
   "gsap",
   "canvas-confetti",
   "react-spring",
@@ -391,8 +414,8 @@ test("reyestrlar uzunligi quyi chegaradan kam EMAS va takrorsiz", () => {
   );
   assert.equal(
     EXPECTED_DEPENDENCIES.length,
-    18,
-    "bog'liqlik reyestri 18 nomdan chetlandi — reyestrni o'zgartirishdan oldin " +
+    20,
+    "bog'liqlik reyestri 20 nomdan chetlandi — reyestrni o'zgartirishdan oldin " +
       "09-UI-SPEC G-motion-3(d) va L-8 (0 KB byudjeti) qayta ochilishi shart",
   );
 
