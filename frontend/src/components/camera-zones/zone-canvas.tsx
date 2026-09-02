@@ -311,6 +311,26 @@ export function ZoneCanvas({
                 event.stopPropagation();
                 onSelectZone(zone.id);
               }}
+              /*
+               * ⛔⛔ `fill="none"` BO'LGAN SVG SHAKLNING ICHIGA BOSIB
+               *    BO'LMAYDI (260902, obyektda o'lchandi).
+               *
+               *    Tanlanmagan zonaning ichi bo'sh (yuqoridagi `fill`),
+               *    ya'ni brauzer uchun u «teshik»: bosish faqat 2 px
+               *    chiziqning O'ZIGA tekkanda ishlardi. Operator
+               *    to'rtburchak ichiga bosardi va hech narsa bo'lmasdi —
+               *    zona tanlanmas, tepalar chiqmas, «Nusxalash» esa
+               *    «avval zonani tanlang» deb turaverardi.
+               *
+               *    53 rastadan bittasi chizilganining sababi shu edi.
+               *
+               * ⚠ `fill` O'ZGARTIRILMAYDI: tanlanmagan zona SHAFFOF
+               *   qolishi kerak (§6.4 — kadr ko'rinib tursin). `fill`
+               *   ni `transparent` qilish ham bosiladigan qilardi, lekin
+               *   niyatni yashirardi: bu yerda o'zgarayotgan narsa
+               *   ko'rinish emas, HODISA MAYDONI.
+               */
+              pointerEvents="all"
               points={pointsAttr(zone.polygon, vh)}
               stroke={
                 zone.invalid

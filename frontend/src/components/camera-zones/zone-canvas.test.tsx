@@ -303,3 +303,70 @@ describe("oldindan ko'rish", () => {
     ).toBe("4 4");
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * ZONANI BOSIB TANLASH
+ *
+ * ⛔⛔ BU BLOK 260902 DA OBYEKTDA O'LCHANGAN NOSOZLIKDAN TUG'ILDI.
+ *
+ *    Tanlanmagan zona `fill="none"` bilan chiziladi — brauzer uchun
+ *    bu «teshik», ya'ni shakl ICHIGA bosish hodisa BERMAYDI. Operator
+ *    to'rtburchak ichiga bosardi, zona tanlanmasdi, tepalar chiqmasdi va
+ *    «Nusxalash» «avval zonani tanlang» deb turaverardi. 53 rastadan
+ *    bittasi chizilganining sababi aynan shu edi.
+ *
+ * ⚠ ESKI TESTLAR BU BO'SHLIQDAN O'TIB KETGAN: ular `<polygon>`
+ *   SONINI sanardi va `onSelectZone` ni BO'SH funksiya bilan berardi,
+ *   ya'ni bosish yo'li hech qachon o'lchanmasdi.
+ * ------------------------------------------------------------------------ */
+
+describe("zonani bosib tanlash", () => {
+  test("⛔ poligon ICHIGA bosilganda zona tanlanadi", () => {
+    const tanlangan: string[] = [];
+    const { container } = renderCanvas([makeZone("z-1")], {
+      onSelectZone: (id) => tanlangan.push(id),
+    });
+
+    const polygon = container.querySelector("polygon");
+    expect(polygon).not.toBeNull();
+    fireEvent.pointerDown(polygon as SVGPolygonElement, { pointerId: 1 });
+
+    expect(tanlangan).toEqual(["z-1"]);
+  });
+
+  test("⛔ tanlanmagan zonaning hodisa maydoni butun shakl", () => {
+    /*
+     * `fill` SHAFFOF QOLADI (kadr ko'rinib tursin), lekin bosish butun
+     * yuzada ishlashi kerak — ikkalasini bir vaqtda beradigan yagona
+     * narsa `pointer-events`. Uni `fill="transparent"` bilan almashtirish
+     * ham ishlardi, lekin niyatni yashirardi.
+     */
+    const { container } = renderCanvas([makeZone("z-1")], {
+      selectedZoneId: null,
+    });
+
+    const polygon = container.querySelector("polygon") as SVGPolygonElement;
+    expect(polygon.getAttribute("fill")).toBe("none");
+    expect(polygon.getAttribute("pointer-events")).toBe("all");
+  });
+
+  test("bosish fonga o'tmaydi — tanlov darhol bekor bo'lmasin", () => {
+    /*
+     * SVG fonida `onBackgroundPress` turadi va u tanlovni BEKOR qiladi.
+     * Poligon hodisani to'xtatmasa, bitta bosishda zona avval tanlanib,
+     * keyin darhol bekor bo'lardi — tashqaridan «umuman ishlamayapti»
+     * bo'lib ko'rinardi.
+     */
+    const fonBosildi: number[] = [];
+    const { container } = renderCanvas([makeZone("z-1")], {
+      onBackgroundPress: () => fonBosildi.push(1),
+      onSelectZone: () => {},
+    });
+
+    fireEvent.pointerDown(container.querySelector("polygon") as SVGPolygonElement, {
+      pointerId: 2,
+    });
+
+    expect(fonBosildi).toHaveLength(0);
+  });
+});
