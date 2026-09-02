@@ -166,6 +166,7 @@ export function ZoneCanvas({
   onBackgroundPress,
   onInsertMidpoint,
   onMoveVertex,
+  onMoveZone,
   onSelectZone,
   preview,
   selectedZoneId,
@@ -194,6 +195,16 @@ export function ZoneCanvas({
   onBackgroundPress: () => void;
   onInsertMidpoint: (edgeIndex: number) => void;
   onMoveVertex: (index: number, point: Pt) => void;
+  /**
+   * Butun zonani siljitish — QADAM bo'yicha, mutlaq holat emas.
+   *
+   * ⛔ ZONA ID BILAN, «tanlangan zona» DEB EMAS. Bir bosishda ikki
+   *    narsa bo'ladi: zona tanlanadi va sudrash boshlanadi. `selectedZoneId`
+   *    esa React holati — u keyingi renderda yangilanadi, ya'ni birinchi
+   *    `pointermove` hali ESKI tanlovni ko'rardi va sudrash boshqa zonani
+   *    surib yuborardi.
+   */
+  onMoveZone: (zoneId: string, dx: number, dy: number) => void;
   onSelectZone: (zoneId: string) => void;
   /** DL-2 ning oldindan ko'rishi — punktir, hali MAVJUD EMAS (§10.5). */
   preview: readonly Poly[];
@@ -240,6 +251,51 @@ export function ZoneCanvas({
     if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
     const point = normalizedFromEvent(event);
     if (point !== null) onMoveVertex(index, point);
+  }
+
+  /*
+   * Butun zonani sudrash.
+   *
+   * ⛔ QADAM HISOBLANADI, MUTLAQ HOLAT EMAS. Har `pointermove` da
+   *    kursorning OLDINGI nuqtadan farqi olinadi va poligon o'shancha
+   *    siljitiladi. Boshlang'ich nuqtadan mutlaq farq olish oson
+   *    ko'rinardi, lekin `translate` poligonni kadr chegarasida
+   *    TO'XTATADI: chetga tekkandan keyin mutlaq hisob poligonni kursor
+   *    bilan birga «tortib» ketardi va qo'yib yuborilganda u
+   *    kutilmagan joyda qolardi.
+   *
+   * ⚠ CHEGARANI `translate` QO'YADI, bu yer emas: u poligonning
+   *   chegaraviy to'rtburchagini 0..1 ichida ushlaydi. Ikki joyda
+   *   cheklash bir kun ajralib ketardi.
+   */
+  const zonaSudrash = useRef<{ id: string; oxirgi: Pt } | null>(null);
+
+  function beginZoneDrag(
+    event: ReactPointerEvent<SVGPolygonElement>,
+    zoneId: string,
+  ): void {
+    event.stopPropagation();
+    onSelectZone(zoneId);
+    const point = normalizedFromEvent(event);
+    if (point === null) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    zonaSudrash.current = { id: zoneId, oxirgi: point };
+  }
+
+  function dragZone(event: ReactPointerEvent<SVGPolygonElement>): void {
+    const holat = zonaSudrash.current;
+    if (holat === null) return;
+    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+    const point = normalizedFromEvent(event);
+    if (point === null) return;
+    const dx = point[0] - holat.oxirgi[0];
+    const dy = point[1] - holat.oxirgi[1];
+    holat.oxirgi = point;
+    if (dx !== 0 || dy !== 0) onMoveZone(holat.id, dx, dy);
+  }
+
+  function endZoneDrag(): void {
+    zonaSudrash.current = null;
   }
 
   return (
@@ -298,8 +354,8 @@ export function ZoneCanvas({
             <polygon
               className={
                 zone.invalid
-                  ? "[stroke-dasharray:6_3] [filter:drop-shadow(0_0_1px_rgb(0_0_0/0.9))]"
-                  : "[filter:drop-shadow(0_0_1px_rgb(0_0_0/0.9))]"
+                  ? "cursor-move [stroke-dasharray:6_3] [filter:drop-shadow(0_0_1px_rgb(0_0_0/0.9))]"
+                  : "cursor-move [filter:drop-shadow(0_0_1px_rgb(0_0_0/0.9))]"
               }
               fill={
                 isSelected
@@ -307,10 +363,10 @@ export function ZoneCanvas({
                   : "none"
               }
               key={zone.id}
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                onSelectZone(zone.id);
-              }}
+              onPointerCancel={endZoneDrag}
+              onPointerDown={(event) => beginZoneDrag(event, zone.id)}
+              onPointerMove={dragZone}
+              onPointerUp={endZoneDrag}
               /*
                * ⛔⛔ `fill="none"` BO'LGAN SVG SHAKLNING ICHIGA BOSIB
                *    BO'LMAYDI (260902, obyektda o'lchandi).

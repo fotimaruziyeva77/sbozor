@@ -618,6 +618,17 @@ export function ZoneEditor({
                   moveVertex(selected.polygon, index, point),
                 );
               }}
+              onMoveZone={(zoneId, dx, dy) => {
+                /*
+                 * ⛔ ZONA ID BO'YICHA IZLANADI, `selected` DAN OLINMAYDI.
+                 *    Sudrash zonani tanlash bilan BIR harakatda boshlanadi,
+                 *    ya'ni birinchi `pointermove` da `selected` hali eski
+                 *    qiymatni ko'rsatardi va boshqa zona surilib ketardi.
+                 */
+                const zona = zones.find((item) => item.id === zoneId);
+                if (zona === undefined) return;
+                updatePolygon(zoneId, translate(zona.polygon, dx, dy));
+              }}
               onSelectZone={selectZone}
               preview={preview}
               selectedZoneId={selectedZoneId}

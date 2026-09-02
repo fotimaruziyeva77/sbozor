@@ -74,6 +74,7 @@ function renderCanvas(
       onBackgroundPress={() => {}}
       onInsertMidpoint={() => {}}
       onMoveVertex={() => {}}
+      onMoveZone={() => {}}
       onSelectZone={() => {}}
       preview={[]}
       selectedZoneId={null}
@@ -368,5 +369,118 @@ describe("zonani bosib tanlash", () => {
     });
 
     expect(fonBosildi).toHaveLength(0);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * BUTUN ZONANI SUDRAB KO'CHIRISH
+ *
+ * ⛔ NEGA QO'SHILDI (260902, obyektdagi ish tezligidan). Ilgari faqat
+ *    TEPALAR sudralardi: 53 rastali bozorda har to'rtburchak uchun to'rt
+ *    burchakni alohida joylash kerak edi. Endi shakl bir harakatda
+ *    ko'chadi — bittasini chizib, nusxalab, joyiga surish yo'li ochiladi.
+ * ------------------------------------------------------------------------ */
+
+describe("zonani sudrab ko'chirish", () => {
+  function sudra(
+    polygon: SVGPolygonElement,
+    dan: { clientX: number; clientY: number },
+    ga: { clientX: number; clientY: number },
+  ): void {
+    polygon.setPointerCapture = () => {};
+    polygon.hasPointerCapture = () => true;
+    fireEvent.pointerDown(polygon, { pointerId: 3, ...dan });
+    fireEvent.pointerMove(polygon, { pointerId: 3, ...ga });
+  }
+
+  test("⛔ sudralganda QADAM beriladi, mutlaq holat emas", () => {
+    const qadamlar: Array<[string, number, number]> = [];
+    const { container } = renderCanvas([makeZone("z-1")], {
+      onMoveZone: (id, dx, dy) => qadamlar.push([id, dx, dy]),
+    });
+
+    const polygon = container.querySelector("polygon") as SVGPolygonElement;
+    polygon.getBoundingClientRect = () => new DOMRect(0, 0, 0, 0);
+    const svg = container.querySelector("svg") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      new DOMRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+    sudra(
+      polygon,
+      { clientX: FRAME_WIDTH / 2, clientY: FRAME_HEIGHT / 2 },
+      { clientX: FRAME_WIDTH / 2 + FRAME_WIDTH / 10, clientY: FRAME_HEIGHT / 2 },
+    );
+
+    expect(qadamlar).toHaveLength(1);
+    const [id, dx, dy] = qadamlar[0];
+    expect(id).toBe("z-1");
+    expect(dx).toBeCloseTo(0.1, 5);
+    expect(dy).toBeCloseTo(0, 5);
+  });
+
+  test("⛔ sudrash zonaning O'Z id'sini beradi", () => {
+    /*
+     * Bir bosishda zona tanlanadi VA sudrash boshlanadi. `selectedZoneId`
+     * esa React holati — u keyingi renderda yangilanadi. Agar sudrash
+     * «tanlangan zona» ga tayansa, birinchi harakat ESKI tanlovni
+     * surib yuborardi.
+     */
+    const qadamlar: string[] = [];
+    const { container } = renderCanvas(
+      [makeZone("z-1"), makeZone("z-2")],
+      { onMoveZone: (id) => qadamlar.push(id), selectedZoneId: "z-1" },
+    );
+
+    const ikkinchi = container.querySelectorAll("polygon")[1] as SVGPolygonElement;
+    const svg = container.querySelector("svg") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      new DOMRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+    sudra(ikkinchi, { clientX: 100, clientY: 100 }, { clientX: 140, clientY: 100 });
+
+    expect(qadamlar).toEqual(["z-2"]);
+  });
+
+  test("ushlanmagan ko'rsatkich harakati e'tiborsiz qoladi", () => {
+    /*
+     * `setPointerCapture` siz kursor SVG'dan chiqib ketganda hodisa
+     * boshqa elementga tushardi va zona yarim yo'lda «tushib qolardi».
+     */
+    const qadamlar: string[] = [];
+    const { container } = renderCanvas([makeZone("z-1")], {
+      onMoveZone: (id) => qadamlar.push(id),
+    });
+
+    const polygon = container.querySelector("polygon") as SVGPolygonElement;
+    polygon.setPointerCapture = () => {};
+    polygon.hasPointerCapture = () => false;
+    const svg = container.querySelector("svg") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      new DOMRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+    fireEvent.pointerDown(polygon, { clientX: 100, clientY: 100, pointerId: 4 });
+    fireEvent.pointerMove(polygon, { clientX: 200, clientY: 100, pointerId: 4 });
+
+    expect(qadamlar).toHaveLength(0);
+  });
+
+  test("qo'yib yuborilgach sudrash tugaydi", () => {
+    const qadamlar: string[] = [];
+    const { container } = renderCanvas([makeZone("z-1")], {
+      onMoveZone: (id) => qadamlar.push(id),
+    });
+
+    const polygon = container.querySelector("polygon") as SVGPolygonElement;
+    const svg = container.querySelector("svg") as SVGSVGElement;
+    svg.getBoundingClientRect = () =>
+      new DOMRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+    sudra(polygon, { clientX: 100, clientY: 100 }, { clientX: 140, clientY: 100 });
+    const sudrashdan_keyin = qadamlar.length;
+
+    fireEvent.pointerUp(polygon, { pointerId: 3 });
+    fireEvent.pointerMove(polygon, { clientX: 300, clientY: 100, pointerId: 3 });
+
+    expect(qadamlar).toHaveLength(sudrashdan_keyin);
   });
 });
