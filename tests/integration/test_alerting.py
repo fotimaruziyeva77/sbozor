@@ -1378,7 +1378,7 @@ def test_send_message_accepts_chat_id_without_new_method() -> None:
     )
 
 
-async def test_sweep_is_skipped_without_ops_chat_but_sender_stays_open(
+async def test_sweep_runs_without_ops_chat_and_sender_stays_open(
     test_settings: Settings,
 ) -> None:
     """⛔ Pitfall 9 — ops chatining YO'QLIGI kvitansiyani O'CHIRMAYDI.
@@ -1393,8 +1393,35 @@ async def test_sweep_is_skipped_without_ops_chat_but_sender_stays_open(
 
     Shuning uchun:
       1. jo'natuvchi TOKEN borligida ochiladi -> `sender.enabled is True`;
-      2. SUPURGI esa chaqiruv joyida `alerts_enabled` bilan o'raladi ->
-         `alert_sweep` UMUMAN chaqirilmaydi.
+      2. DAYJEST chaqiruv joyida `alerts_enabled` bilan o'raladi -> u
+         FAQAT xabar yuborish uchun yashaydi va manzilsiz ma'nosiz.
+
+    =======================================================================
+    ⛔⛔ SUPURGI ENDI BU CHEGARADAN TASHQARIDA (260902, jonli tizimda
+       o'lchandi) — va bu ONGLI qaytarish, tasodifiy emas.
+
+    Ilgari supurgi ham `alerts_enabled` bilan o'ralgan edi. Ishlab
+    chiqarish serverida `TELEGRAM_CHAT_ID` bo'sh bo'lgani uchun u har
+    besh daqiqada ishga tushib DARHOL qaytardi va natija shunday
+    ko'rindi:
+
+      * `alert_events` jadvalida 0 qator;
+      * `system_heartbeats` da `alert_sweep` komponenti umuman yo'q;
+      * `backup` konteyneri 12 KUN `backup_unconfigured` deb qaytardi va
+        bitta ham zaxira olmadi;
+      * `backup_stale` — CRITICAL va `never_suppressed` — hech qachon
+        ko'tarilmadi.
+
+    Eski qarorning asosi «manzilsiz supurgi `notified_at` ni bo'sh
+    qoldiradi va sabab hech qayerda ko'rinmaydi» edi. Bu asos NOTO'G'RI
+    va buni `_notify` ning O'Z docstringi aytadi: Telegram yiqilganda
+    ham `alert_events` qatori BARIBIR yoziladi, `notified_at` `NULL`
+    qoladi va UI aynan shu holatni «xabar yuborilmadi» deb
+    KO'RSATADI. Ya'ni yozuv ham, sabab ham ko'rinadi — yo'qolgan narsa
+    faqat Telegram xabari edi.
+
+    Farq amalda o'lchandi: tuzatishdan keyingi birinchi yugurishda 6 ta
+    ogohlantirish yozildi, shundan 2 tasi CRITICAL.
 
     ⚠ NAZORAT BANDI MAJBURIY: bayroq `True` bo'lganda vazifa
       `sessionmaker` ga BORISHI shart. Usiz «vazifa ishlamadi» da'vosi
@@ -1428,13 +1455,19 @@ async def test_sweep_is_skipped_without_ops_chat_but_sender_stays_open(
         )
 
         context = _worker_context(sender, alerts_enabled=tuned.alerts_enabled)
-        await worker.alert_sweep_task(context)
+
+        # SUPURGI ops chatisiz ham resursga BORADI: uning ishi — bazaga
+        # yozish, xabar yuborish esa alohida va ixtiyoriy qadam.
+        with pytest.raises(AssertionError, match="sessionmaker"):
+            await worker.alert_sweep_task(context)
+
+        # DAYJEST esa bormaydi: u faqat xabar yuborish uchun yashaydi.
         await worker.daily_digest_task(context)
 
-        # NAZORAT: bayroq yoqilganda ikkala vazifa ham resursga BORADI.
+        # NAZORAT: bayroq yoqilganda dayjest ham resursga BORADI — usiz
+        # «vazifa ishlamadi» da'vosi vazifaning butunlay bo'sh bo'lishi
+        # bilan ham bajarilardi (05-fazaning W-2 darsi).
         live = _worker_context(sender, alerts_enabled=True)
-        with pytest.raises(AssertionError, match="sessionmaker"):
-            await worker.alert_sweep_task(live)
         with pytest.raises(AssertionError, match="sessionmaker"):
             await worker.daily_digest_task(live)
     finally:
