@@ -1,4 +1,4 @@
-﻿"""CamAgent kadrlarini sbozor hisobiga qabul qiladi.
+"""CamAgent kadrlarini sbozor hisobiga qabul qiladi.
 
 =============================================================================
 NEGA BU MARSHRUT BOR
