@@ -700,12 +700,17 @@ export function ZoneEditor({
           {/* --- (C) Asboblar ------------------------------------------- */}
           <ZoneToolbar
             canCopy={selected !== null}
+            canDelete={selected !== null}
             canRedo={redoStack.length > 0}
             canRowSplit={canRowSplit}
             canUndo={undoStack.length > 0}
             onAnnounce={announce}
             onCopyZone={copySelectedZone}
             onCreateZone={createZone}
+            onDeleteZone={() => {
+              if (selected === null) return;
+              setDeleteZoneId(selected.id);
+            }}
             onOpenRowSplit={() => setRowSplitOpen(true)}
             onRedo={redo}
             onUndo={undo}

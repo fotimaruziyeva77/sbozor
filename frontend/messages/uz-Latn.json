@@ -1126,7 +1126,8 @@
       "zone_stall_already_covered": "Mavjud zonani tahrirlang yoki boshqa rastani tanlang. Bir rasta bir necha kamerada bo'lishi mumkin — bu normal.",
       "zone_camera_has_no_frame": "Kadr olish bo'limida kamera holatini tekshiring. Birinchi yaroqli kadr kelgach, bu sahifa o'zi ochiladi.",
       "zone_aspect_mismatch": "Zonalarni kadr bilan solishtiring va kerak bo'lsa tepalarni ko'chiring. Zonalar o'zi siljimaydi — joyini siz tekshirasiz."
-    }
+    },
+    "deleteNeedsOne": "Avval o'chiriladigan zonani tanlang."
   },
   "review": {
     "title": "Ko'rib chiqish",

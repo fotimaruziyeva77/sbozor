@@ -422,7 +422,7 @@ describe("⛔ «Tiklash» yo'li MAVJUD EMAS (§6.6, §16.2)", () => {
 });
 
 describe("⛔ AKSENT BUDJETI — asboblarda aksent fonli tugma YO'Q (§10.3)", () => {
-  test("beshala asbob ham `secondary`", () => {
+  test("oltala asbob ham `secondary`", () => {
     const { container } = render(
       <NextIntlClientProvider
         locale="uz-Latn"
@@ -431,11 +431,13 @@ describe("⛔ AKSENT BUDJETI — asboblarda aksent fonli tugma YO'Q (§10.3)", (
       >
         <ZoneToolbar
           canCopy
+          canDelete
           canRedo
           canRowSplit
           canUndo
           onAnnounce={() => {}}
           onCopyZone={() => {}}
+          onDeleteZone={() => {}}
           onCreateZone={() => {}}
           onOpenRowSplit={() => {}}
           onRedo={() => {}}
@@ -445,7 +447,9 @@ describe("⛔ AKSENT BUDJETI — asboblarda aksent fonli tugma YO'Q (§10.3)", (
       </NextIntlClientProvider>,
     );
 
-    expect(screen.getAllByRole("button")).toHaveLength(5);
+    // Yangi zona, Qator bo'yicha bo'lish, Nusxalash, O'chirish,
+    // Qaytarish, Qaytarilganni tiklash.
+    expect(screen.getAllByRole("button")).toHaveLength(6);
     /*
      * ⚠ SINF NOMI BILAN o'lchanadi: sahifadagi YAGONA aksent fonli tugma
      *   `[Zonalarni saqlash]` va u muharrirda. Asboblardan birortasi
@@ -466,11 +470,13 @@ describe("⛔ AKSENT BUDJETI — asboblarda aksent fonli tugma YO'Q (§10.3)", (
       >
         <ZoneToolbar
           canCopy={false}
+          canDelete={false}
           canRedo={false}
           canRowSplit={false}
           canUndo={false}
           onAnnounce={onAnnounce}
           onCopyZone={() => {}}
+          onDeleteZone={() => {}}
           onCreateZone={onCreateZone}
           onOpenRowSplit={() => {}}
           onRedo={() => {}}
@@ -508,11 +514,13 @@ describe("⛔ AKSENT BUDJETI — asboblarda aksent fonli tugma YO'Q (§10.3)", (
       >
         <ZoneToolbar
           canCopy={false}
+          canDelete={false}
           canRedo={false}
           canRowSplit={false}
           canUndo={false}
           onAnnounce={onAnnounce}
           onCopyZone={() => {}}
+          onDeleteZone={() => {}}
           onCreateZone={() => {}}
           onOpenRowSplit={onOpenRowSplit}
           onRedo={() => {}}

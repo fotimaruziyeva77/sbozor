@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Plus, Redo2, Rows3, Undo2 } from "lucide-react";
+import { Copy, Plus, Redo2, Rows3, Trash2, Undo2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { MAX_ZONES_PER_CAMERA } from "@/lib/zone-geometry";
 
 /*
  * =============================================================================
- * ASBOBLAR QATORI — BESH TUGMA, VA UCHALASI HAM SOF GEOMETRIYA.
+ * ASBOBLAR QATORI — OLTI TUGMA, VA UCHALA YORDAMCHI HAM SOF GEOMETRIYA.
  *
  * ⛔ HAMMASI `secondary`. Sahifada AKSENT FONLI TUGMA FAQAT BITTA —
  *    `[Zonalarni saqlash]` (§10.3 №6). Asboblardan birortasini aksent
@@ -38,18 +38,22 @@ import { MAX_ZONES_PER_CAMERA } from "@/lib/zone-geometry";
 
 export function ZoneToolbar({
   canCopy,
+  canDelete,
   canRedo,
   canRowSplit,
   canUndo,
   onAnnounce,
   onCopyZone,
   onCreateZone,
+  onDeleteZone,
   onOpenRowSplit,
   onRedo,
   onUndo,
   zoneCount,
 }: {
   canCopy: boolean;
+  /** O'chirish uchun ham AYNAN bitta zona tanlangan bo'lishi kerak. */
+  canDelete: boolean;
   canRedo: boolean;
   /** DL-2 uchun AYNAN ikki zona tanlangan bo'lishi kerak (§6.7). */
   canRowSplit: boolean;
@@ -57,6 +61,7 @@ export function ZoneToolbar({
   onAnnounce: (message: string) => void;
   onCopyZone: () => void;
   onCreateZone: () => void;
+  onDeleteZone: () => void;
   onOpenRowSplit: () => void;
   onRedo: () => void;
   onUndo: () => void;
@@ -140,6 +145,35 @@ export function ZoneToolbar({
         >
           <Copy aria-hidden="true" />
           {t("cameraZones.copyZone")}
+        </Button>
+
+        {/*
+         * ⛔⛔ O'CHIRISH SHU YERDA BO'LISHI KERAK (260902, obyektda
+         *    o'lchandi). Amal bor edi, lekin u «Rastani biriktirish»
+         *    dialogining ICHIDA yashiringandi — tugmaning nomi o'chirish
+         *    borligini aytmaydi va operator uni topa olmadi. Noto'g'ri
+         *    chizilgan zonani yo'qotishning yagona yo'li «Qaytarish»
+         *    edi, u esa ORALIQDAGI barcha ishni ham qaytarardi.
+         *
+         * ⚠ TASDIQ DIALOGI SAQLANADI: o'chirish bir bosishda
+         *   bajarilmaydi. Zona geometriyasi qo'lda chizilgan ish va uni
+         *   tasodifan yo'qotish qimmat.
+         */}
+        <Button
+          aria-disabled={canDelete ? undefined : true}
+          className={canDelete ? undefined : "opacity-60"}
+          onClick={() => {
+            if (!canDelete) {
+              onAnnounce(t("cameraZones.deleteNeedsOne"));
+              return;
+            }
+            onDeleteZone();
+          }}
+          size="sm"
+          variant="secondary"
+        >
+          <Trash2 aria-hidden="true" />
+          {t("cameraZones.deleteZone")}
         </Button>
 
         <Button
