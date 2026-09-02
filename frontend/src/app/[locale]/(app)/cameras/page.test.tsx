@@ -150,6 +150,25 @@ function renderPage(roles: readonly string[]) {
   );
 }
 
+/**
+ * Ro'yxat ko'rinishiga o'tadi.
+ *
+ * ⛔ SAHIFA DEVOR BILAN OCHILADI (260901, operator talabi bilan
+ *    o'zgartirildi): kun kameralar devoridan boshlanadi, ro'yxat esa
+ *    ikkinchi qadam. Bu fayldagi testlar NVR kartasi, qamrov kartasi va
+ *    diagnostika haqida — ularning hammasi RO'YXAT ichida yashaydi,
+ *    ya'ni o'lchashdan oldin o'sha ko'rinishga o'tish kerak.
+ *
+ * ⚠ TAB TUGMASI ROLI BO'YICHA topiladi, matn bo'yicha emas: sarlavha
+ *   ham «Kameralar», devor tugmasi ham — matn bo'yicha qidiruv
+ *   ikkalasini topib, testni ikki xil sababdan yiqitardi.
+ */
+function royxatgaOt(): void {
+  fireEvent.click(
+    screen.getByRole("button", { name: messages.cameras.viewList }),
+  );
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   client = new QueryClient({
@@ -170,6 +189,7 @@ describe("direktor", () => {
   test("NVR kartasining UCHALA amali ham ko'rinmaydi", async () => {
     routeFetch();
     renderPage(["director"]);
+    royxatgaOt();
 
     // Skelet o'tguncha kutamiz — karta chizilgandan KEYIN o'lchaymiz.
     await screen.findByText(messages.cameras.nvrCard);
@@ -182,16 +202,23 @@ describe("direktor", () => {
   test("pasport va sahifa mazmuni QOLADI — sahifa bo'sh emas", async () => {
     routeFetch();
     renderPage(["director"]);
+    royxatgaOt();
 
     await screen.findByText(messages.cameras.nvrCard);
 
     expect(document.body.textContent).toContain(DEVICE.host);
-    expect(screen.getByText(messages.cameras.title)).toBeInTheDocument();
+    // ⚠ ROL BO'YICHA, MATN BO'YICHA EMAS: sahifa sarlavhasi ham,
+    //   devor tugmasi ham «Kameralar» deb ataladi (260901 dagi nomlash
+    //   qarori), ya'ni matn bo'yicha qidiruv IKKI element topadi.
+    expect(
+      screen.getByRole("heading", { name: messages.cameras.title }),
+    ).toBeInTheDocument();
   });
 
   test("`camera-zones` ga so'rov YO'Q — qamrov `camera_manage` ostida", async () => {
     routeFetch();
     renderPage(["director"]);
+    royxatgaOt();
 
     await screen.findByText(messages.cameras.nvrCard);
 
@@ -209,6 +236,7 @@ describe("bozor admini", () => {
   test("uchala amal ham render qilinadi", async () => {
     routeFetch();
     renderPage(["market_admin"]);
+    royxatgaOt();
 
     await screen.findByText(messages.cameras.nvrCard);
 
@@ -220,6 +248,7 @@ describe("bozor admini", () => {
   test("qamrov kartasi so'raladi", async () => {
     routeFetch();
     renderPage(["market_admin"]);
+    royxatgaOt();
 
     await waitFor(() => {
       expect(
@@ -237,6 +266,9 @@ describe("nazoratchi", () => {
   test("rad etish ko'rinadi va `apiFetch` UMUMAN chaqirilmaydi", async () => {
     routeFetch();
     renderPage(["inspector"]);
+    // ⚠ `royxatgaOt()` BU YERDA CHAQIRILMAYDI: huquq yo'q foydalanuvchida
+    //   ish maydoni umuman mount qilinmaydi, ya'ni ko'rinish tugmalari ham
+    //   yo'q. Rad etish tabdan OLDIN chiziladi — test aynan shuni o'lchaydi.
 
     expect(screen.getByText(messages.errors.forbidden)).toBeInTheDocument();
 
@@ -267,6 +299,7 @@ describe("diagnostika rejimi (Topilma №F)", () => {
   test("«Diagnostika» bosilganda diagnostika legendasi ochiladi, «Saqlash…» YO'Q", async () => {
     routeFetch();
     renderPage(["market_admin"]);
+    royxatgaOt();
 
     const diagnose = await screen.findByRole("button", {
       name: DIAGNOSTICS_LABEL,
@@ -282,6 +315,7 @@ describe("diagnostika rejimi (Topilma №F)", () => {
   test("NVR YO'Q sahifada «NVR ulash» AVVALGIDEK saqlash formasini ochadi", async () => {
     routeFetchWithoutDevice();
     renderPage(["market_admin"]);
+    royxatgaOt();
 
     const connect = await screen.findByRole("button", {
       name: messages.cameras.connectNvr,
