@@ -46,11 +46,30 @@ BEGIN
     FROM jsonb_each(v_new) AS n(k, v)
     WHERE n.v IS DISTINCT FROM (v_old -> n.k);
 
+    -- Hech narsa o'zgarmagan UPDATE audit shovqini yaratmaydi: jurnal
+    -- o'qiladigan bo'lib qolishi kerak, aks holda undan hech kim
+    -- foydalanmaydi va u faqat disk yeydi.
     IF v_keys IS NULL THEN
       RETURN NULL;
     END IF;
 
-    -- Telemetriya audit hodisasi emas (modul docstringi).
+    -- ⛔⛔ TELEMETRIYA AUDIT HODISASI EMAS (260829, panelda o'lchandi).
+    --
+    --     `last_seen_at` / `last_discovery_at` — «qurilma hali
+    --     javob beryapti» degan o'lchov. U CamAgent obyektida har
+    --     heartbeat'da (60 s) 16 kamera uchun suriladi va audit
+    --     triggeriga har safar UPDATE bo'lib ko'rinardi: 24 daqiqada
+    --     432 yozuv, ya'ni kuniga ~26 000. Jurnal shu bilan to'lib,
+    --     HAQIQIY o'zgarishlar — nom tahriri, arxivlash, rekvizit
+    --     almashuvi — ularning orasida ko'rinmay qolardi.
+    --
+    --     Nizoda audit jurnali BIRINCHI so'raladigan hujjat: uni
+    --     telemetriya bilan to'ldirish uni yaroqsiz qiladi.
+    --
+    -- ⚠ `updated_at` ro'yxatda, LEKIN u YOLG'IZ o'zgarmaydi — u har
+    --   doim haqiqiy o'zgarish bilan birga keladi. Ro'yxatda turishi
+    --   shuning uchun xavfsiz: faqat telemetriya bilan BIRGA
+    --   kelganida yozuv o'tkazib yuboriladi.
     IF v_keys <@ ARRAY['last_seen_at', 'last_discovery_at', 'updated_at'] THEN
       RETURN NULL;
     END IF;
