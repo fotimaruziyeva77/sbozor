@@ -1045,8 +1045,27 @@ async def alert_sweep_task(context: Annotated[Context, TaskiqDepends()]) -> None
        bu yerda esa SOZLAMA.
     """
     state = context.state
+    # ⛔⛔ SUPURGI OPS CHATISIZ HAM ISHLAYDI (260902, jonli tizimda
+    #    o'lchandi). Ilgari shu yerda `if not state.alerts_enabled:
+    #    return` turardi va u BUTUN KUZATUV QATLAMINI o'chirib qo'ygan
+    #    edi: `TELEGRAM_CHAT_ID` bo'sh bo'lgani uchun supurgi har besh
+    #    daqiqada ishga tushib, birinchi qatorda qaytardi.
+    #
+    #    Narxi o'lchandi: zaxira 12 KUN olinmadi, `backup_stale` esa
+    #    CRITICAL va `never_suppressed` bo'lishiga qaramay HECH QACHON
+    #    ko'tarilmadi — `alert_events` da nol qator, `system_heartbeats`
+    #    da `alert_sweep` yo'q. Nosozlik faqat qo'lda tekshirilganda
+    #    topildi.
+    #
+    # ⚠ YUBORISH BILAN YOZISH BOG'LIQ EMAS: `_notify` Telegram
+    #   yiqilganda ham `alert_events` qatorini QOLDIRADI va
+    #   `notified_at` ni `NULL` qilib ketadi — UI aynan shu holatni
+    #   «xabar yuborilmadi» deb ko'rsatadi. Ya'ni manzilsiz supurgi
+    #   ma'nosiz emas: u panelga ko'rinadigan yozuvni baribir yaratadi.
     if not state.alerts_enabled:
-        return
+        # Har yugurishda yoziladi: sabab jurnalda TURSIN, aks holda
+        # «alertlar jim» holati yana ko'rinmas bo'lardi.
+        log.info("alert_sweep_without_ops_chat")
     await alert_sweep(state.sessionmaker, state.sender)
 
 
