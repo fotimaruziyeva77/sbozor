@@ -496,6 +496,17 @@ class Settings(BaseSettings):
     #     operatorga ham shunday ko'rinishi kerak.
     camagent_service_token: SecretStr = SecretStr("")
 
+    # ⛔ GATEWAY MANZILI — JONLI KO'RISH UCHUN (260829). CamAgent
+    #   obyektida kameraga to'g'ridan-to'g'ri ulanib bo'lmaydi; sbozor
+    #   gateway'dan oqim so'raydi va agent uni MediaMTX'ga uzatadi
+    #   (`services/camagent_live.py`).
+    #
+    #   ⚠ ICHKI MANZIL: konteyner nomi, ommaviy URL emas. Bu chaqiruv
+    #     xizmat tokenini olib yuradi va u tashqi tarmoqqa chiqmasligi
+    #     kerak. Bo'sh bo'lsa CamAgent kameralarida jonli ko'rish 503
+    #     beradi — kadr olish va boshqa hammasi ishlayveradi.
+    camagent_gateway_url: str = ""
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"

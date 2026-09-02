@@ -63,7 +63,15 @@ services:
       # Jonli video (ixtiyoriy): MediaMTX + TURN sozlanganda to'ldiriladi.
       # Bo'sh bo'lsa panel "yangilanuvchi rasm" rejimida ishlayveradi.
       CAMAGENT_MEDIA_HOST: ${CAMAGENT_MEDIA_HOST:-}
+      # Server ICHIDAN o'qish manzili: sbozor go2rtc'si oqimni shu
+      # yerdan oladi. Konteyner nomi — RTSP trafigi Docker
+      # tarmog'ida qoladi va tashqi interfeysga chiqib qaytmaydi.
+      CAMAGENT_MEDIA_INTERNAL_HOST: camagent-gateway
       CAMAGENT_MEDIA_SECRET: ${CAMAGENT_MEDIA_SECRET:-}
+      # O'qish paroli — PUBLISH PAROLIDAN BOSHQA (sbozor go2rtc'si
+      # shu bilan oqimni o'qiydi). Bir xil bo'lsa o'qiy oladigan
+      # servis panelga soxta video PUSH ham qila olardi.
+      CAMAGENT_MEDIA_READ_SECRET: ${CAMAGENT_MEDIA_READ_SECRET:-}
       CAMAGENT_TURN_URL: ${CAMAGENT_TURN_URL:-}
       CAMAGENT_TURN_USER: ${CAMAGENT_TURN_USER:-}
       CAMAGENT_TURN_PASS: ${CAMAGENT_TURN_PASS:-}

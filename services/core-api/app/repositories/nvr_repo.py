@@ -71,7 +71,7 @@ from uuid import UUID
 from sbozor_core.enums import CameraStatus, DiscoveryRunStatus
 from sbozor_core.models import Camera, NvrCredential, NvrDevice, NvrDiscoveryRun
 from sbozor_core.tenancy import TenantScopedRepository
-from sqlalchemy import Boolean, case, literal_column, select, update
+from sqlalchemy import Boolean, case, literal_column, select, text, update
 from sqlalchemy.dialects.postgresql import Insert, insert
 
 from app.repositories.audit_repo import mask_sensitive
@@ -140,6 +140,17 @@ class UpsertCounts:
     def with_marked_offline(self, count: int) -> UpsertCounts:
         """`mark_missing_offline()` natijasini qo'shib yangi nusxa qaytaradi."""
         return replace(self, channels_marked_offline=count)
+
+
+CAMAGENT_STALE_SECONDS = 900
+"""Shuncha vaqt heartbeat kelmasa CamAgent kamerasi «ulanmagan» deb
+ko'rsatiladi (15 daqiqa).
+
+Heartbeat har 60 soniyada keladi, ya'ni chegara o'n besh barobar keng:
+qisqa uzilish (tarmoq sakrashi, agent qayta ishga tushishi) panelni
+qizartirmaydi, haqiqiy to'xtash esa yashirinmaydi. Gateway o'z
+panelida 10 daqiqadan keyin qizil beradi — bu yerdagi oyna sal
+kengroq, chunki sbozor bir qadam uzoqda turadi."""
 
 
 class NvrRepository(TenantScopedRepository):
@@ -446,6 +457,53 @@ class NvrRepository(TenantScopedRepository):
             statement = statement.where(Camera.is_archived.is_(False))
         result = await self.session.execute(statement.order_by(Camera.channel_no))
         return result.scalars().all()
+
+    async def wall_context(self) -> dict[UUID, tuple[UUID | None, bool]]:
+        """Har kamera uchun `(oxirgi_kadr_id, aloqa_eskirganmi)`.
+
+        ⛔ NEGA ALOHIDA SO'ROV, `list_cameras` GA JOIN EMAS: `Camera`
+           ORM modeli `cameras` jadvalining aynan ko'zgusi va unga
+           hisoblangan ustun qo'shish modelni «qisman to'ldirilgan»
+           holatga olib kelardi — keyingi o'quvchi uni bazadan deb
+           o'ylardi. Lug'at esa chaqiruv joyida ochiq birlashtiriladi.
+
+        ⚠ `purged` kadr QAYTMAYDI: u arxivdan chiqarilgan va rasm
+          so'rovi baribir 404 berardi — katakcha «kadr hali yo'q»
+          deyishi to'g'riroq.
+
+        ⛔⛔ ESKIRISH BAYROG'I — `cameras.status` YOLG'ONINI YOPADI
+            (260829, panelda o'lchandi).
+
+            `status` ustuni AGENT AYTGAN paytdagi holatda qotib qoladi
+            va uni hech kim eskirtirmaydi. Agent to'xtaganda panel «16
+            ta kamera Onlayn» deb ko'rsataverardi, yonida esa «oxirgi
+            ko'rilgan: 1 soat oldin» — ikkita qarama-qarshi fakt bir
+            qatorda. Nizoda bu qimmat: operator kameralar ishlayapti
+            deb hisoblab, keyin o'sha soatlar uchun kadr yo'qligini
+            ko'radi.
+
+        ⚠ FAQAT `camagent` QURILMALARI. Ularning `last_seen_at` i har
+          heartbeat'da (60 s) suriladi, ya'ni eskirish HAQIQIY signal.
+          sbozor o'zi ulanadigan NVR'da bu ustun kashfiyotda
+          yangilanadi — u kamdan-kam ishlaydi va bir xil chegara
+          butun flotni «oflayn» qilib qo'yardi.
+        """
+        satrlar = (await self.session.execute(text("""
+            SELECT c.id,
+                   (SELECT s.id FROM snapshots s
+                     WHERE s.market_id = c.market_id
+                       AND s.camera_id = c.id
+                       AND s.storage_tier <> 'purged'
+                     ORDER BY s.captured_at DESC
+                     LIMIT 1),
+                   (d.username = 'camagent'
+                    AND c.last_seen_at < now() - make_interval(secs => :chegara))
+              FROM cameras c
+              JOIN nvr_devices d
+                ON d.market_id = c.market_id AND d.id = c.nvr_id
+             WHERE c.market_id = :m
+        """), {"m": self.market_id, "chegara": CAMAGENT_STALE_SECONDS})).all()
+        return {r[0]: (r[1], bool(r[2])) for r in satrlar}
 
     async def rename_camera(self, camera_id: UUID, name: str) -> bool:
         """Kamerani qayta nomlaydi va `name_overridden` ni BIRGA qo'yadi.

@@ -242,7 +242,7 @@ function LiveSession({
     setPhase("authorizing");
     setTransport(null);
     try {
-      const ticket = await liveToken.mutateAsync(camera.id);
+      const ticket = await liveToken.mutateAsync({ cameraId: camera.id });
       setUrl(ticket.url);
       setStartedAt(Date.now());
       setNow(Date.now());

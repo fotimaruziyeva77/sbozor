@@ -380,14 +380,36 @@ KO'RINISHI shart — `schedule_repo.uncovered_days()` aynan shuning uchun bor.
 _CLAIM_DUE = text(
     """
     WITH due AS (
-        SELECT id
-          FROM capture_runs
-         WHERE market_id = :market_id
-           AND status = 'pending'
-           AND scheduled_at <= now()
-           AND scheduled_at > now() - make_interval(secs => :grace_seconds)
-           AND (locked_until IS NULL OR locked_until <= now())
-         ORDER BY scheduled_at
+        SELECT c.id
+          FROM capture_runs c
+          JOIN nvr_devices d
+            ON d.market_id = c.market_id
+           AND d.id = c.nvr_id
+         WHERE c.market_id = :market_id
+           AND c.status = 'pending'
+           AND c.scheduled_at <= now()
+           AND c.scheduled_at > now() - make_interval(secs => :grace_seconds)
+           AND (c.locked_until IS NULL OR c.locked_until <= now())
+           /*
+            * ⛔⛔ CamAgent QURILMALARI OLINMAYDI (260829, Karmanada
+            *     o'lchandi).
+            *
+            *     Bunday obyektda kameraga SERVERDAN yo'l yo'q: agent
+            *     kadrni O'ZI yuboradi (CamAgent 1-prinsipi — modemda
+            *     port ochilmaydi). Ish baribir olinsa, har slot uchun
+            *     ulanish urinishi ketardi va HAMMASI xato bilan
+            *     tugardi: Karmanada bir kunda 48 ta «xato» yozuvi
+            *     paydo bo'ldi va ular alert kanalini to'ldirardi.
+            *
+            * ⚠ REJA (`capture_runs`) BARIBIR YARATILADI va bu ATAYIN:
+            *   `pending` qator kadr kelganda `ok` bo'ladi
+            *   (`internal/camagent.py`), kelmasa esa grace oynasidan
+            *   keyin `missed` — ya'ni «kamera kadr yubormayapti»
+            *   holati SEZILADI. Rejani umuman yaratmaslik bu
+            *   nazoratni yo'q qilardi.
+            */
+           AND d.username <> 'camagent'
+         ORDER BY c.scheduled_at
          LIMIT :batch
          FOR UPDATE SKIP LOCKED
     )

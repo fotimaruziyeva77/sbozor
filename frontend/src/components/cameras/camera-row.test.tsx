@@ -52,6 +52,8 @@ function makeCamera(overrides: Partial<Camera> = {}): Camera {
     source_ip: "192.168.1.101",
     source_model: "DS-2CD2143G0",
     last_seen_at: "2026-08-03T09:30:00Z",
+    // Devor katakchasi oxirgi kadrni ko'rsatadi (260829)
+    last_snapshot_id: null,
     ...overrides,
   };
 }

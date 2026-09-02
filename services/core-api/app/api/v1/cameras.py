@@ -55,6 +55,7 @@ from uuid import UUID
 import structlog
 from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import SecretStr
 from sbozor_core.enums import CameraStatus
 
 from app.deps import Principal, TenantSessionDep, require_permission
@@ -70,6 +71,13 @@ from app.security.audit import TABLE_CAMERAS, AuditReadIntent, audit_read
 from app.security.rbac import Permission
 from app.security.secrets import decrypt_nvr_password
 from app.security.tokens import LIVE_TOKEN_MAX_TTL_SECONDS, issue_live_token
+from app.services.camagent_live import (
+    PREVIEW_DURATION_S,
+    STREAM_DURATION_S,
+    CamAgentLiveError,
+    is_camagent_device,
+    open_stream as open_camagent_stream,
+)
 from app.services.go2rtc import TRANSPORT_HINT, Go2rtcClient, Go2rtcError, live_view_url
 from app.services.live_source import authenticated_rtsp_source
 from app.services.rtsp import rtsp_url
@@ -159,7 +167,8 @@ def normalize_source_ip(value: str | None) -> str | None:
         return value
 
 
-def _read(camera: Camera) -> CameraRead:
+def _read(camera: Camera, oxirgi_kadr: UUID | None = None,
+          eskirgan: bool = False) -> CameraRead:
     """Qator -> javob modeli.
 
     ⚠ `stream_name` BU YERDA UMUMAN O'QILMAYDI (`schemas.py` dagi bo'lim
@@ -172,12 +181,18 @@ def _read(camera: Camera) -> CameraRead:
         channel_no=camera.channel_no,
         name=camera.name,
         name_overridden=camera.name_overridden,
-        status=CameraStatus(camera.status),
+        # ⛔ ESKIRGAN ALOQA «ONLAYN» BO'LIB KO'RINMAYDI (260829).
+        #   `cameras.status` agent aytgan paytdagi holatda qotib
+        #   qoladi; eskirish bayrog'i uni haqiqatga qaytaradi
+        #   (`nvr_repo.CAMAGENT_STALE_SECONDS`).
+        status=(CameraStatus.OFFLINE if eskirgan
+                else CameraStatus(camera.status)),
         is_archived=camera.is_archived,
         has_substream=camera.has_substream,
         source_ip=normalize_source_ip(camera.source_ip),
         source_model=camera.source_model,
         last_seen_at=camera.last_seen_at,
+        last_snapshot_id=oxirgi_kadr,
     )
 
 
@@ -250,13 +265,20 @@ async def list_cameras(
     """
     repo = NvrRepository(session, _market_id(principal))
     rows = await repo.list_cameras(query.nvr_id, include_archived=bool(query.archived))
+
+    # ⚠ FILTR HISOBLANGAN HOLATGA QARAYDI, ustunga emas: aks holda
+    #   «Ulanmagan» filtri agent to'xtagan bozorda BO'SH ro'yxat
+    #   qaytarardi — ya'ni operator muammoni aynan uni qidirayotgan
+    #   joyda topa olmasdi.
+    kontekst = await repo.wall_context()
+    javob = [_read(row, *kontekst.get(row.id, (None, False))) for row in rows]
     if query.status is not None:
-        rows = [row for row in rows if row.status == str(query.status)]
+        javob = [c for c in javob if c.status == query.status]
 
     intent.filters = _describe(query)
-    intent.result_count = len(rows)
+    intent.result_count = len(javob)
 
-    return CameraListResponse(items=[_read(row) for row in rows])
+    return CameraListResponse(items=javob)
 
 
 @router.patch(
@@ -391,6 +413,8 @@ async def _ensure_stream(
     camera: Camera,
     device: NvrDevice,
     repo: NvrRepository,
+    viewer: str = "",
+    duration_s: int = STREAM_DURATION_S,
 ) -> None:
     """Oqimni go2rtc'da LAZY ro'yxatga oladi — REKVIZIT BILAN (RESEARCH D.13).
 
@@ -431,6 +455,45 @@ async def _ensure_stream(
             ochib bo'lmasa — **503** (`_live_unavailable()`).
     """
     settings: Settings = state.settings  # type: ignore[attr-defined]
+
+    if is_camagent_device(device):
+        # ⛔ CAMAGENT YO'LI (260829) — sabab `services/camagent_live.py`
+        #    boshida. Qisqasi: `device.host` bozorning ICHKI manzili va
+        #    serverdan unga yo'l yo'q; oqimni agent O'ZI serverga uzatadi.
+        #
+        # ⚠ REKVIZIT O'QILMAYDI: parol agentda qoladi va serverga hech
+        #   qachon kelmaydi. Quyidagi `get_credential`/`decrypt` zanjiri
+        #   bu yo'lda 503 berardi — qator umuman yaratilmaydi.
+        try:
+            manba, _ = await open_camagent_stream(
+                settings.camagent_gateway_url,
+                settings.camagent_service_token.get_secret_value(),
+                market_id=repo.market_id,
+                camera_serial=device.serial_number or "",
+                channel_no=camera.channel_no,
+                # ⚠ KO'RUVCHI NOMI — `sbozor:{user_id}`. Ikki maqsad:
+                #   (1) gateway jurnalida KIM ochgani qoladi (11-bo'lim:
+                #       «kim, qachon, qaysi kamerani ochgani yoziladi»);
+                #   (2) gateway o'sha odamning eski oqimini yopa oladi —
+                #       dialog yopilganini bilmaydi va usiz agentdagi
+                #       kanal chegarasi to'lib qolardi.
+                viewer=viewer or "sbozor",
+                duration_s=duration_s,
+            )
+        except CamAgentLiveError as exc:
+            # `Go2rtcError` ga aylantiramiz: chaqiruvchi uni allaqachon
+            # 503 ga o'giradi va UI «Qayta urinish» beradi. Yangi xato
+            # turi UI'da yangi holat talab qilardi — sabab esa operator
+            # uchun bir xil: «jonli ko'rish hozir ishlamayapti».
+            raise Go2rtcError(type(exc).__name__) from exc
+        # ⚠ `SecretStr` — `ensure_stream` NING SHARTNOMASI. Bu yo'lda
+        #   manzilda parol YO'Q (o'qish MediaMTX'da ochiq), lekin tur
+        #   bir xil qolishi kerak: `go2rtc.py` uni `get_secret_value()`
+        #   bilan ochadi va boshqa turda ilova 500 beradi.
+        async with Go2rtcClient(settings.go2rtc_url) as client:
+            await client.ensure_stream(camera.stream_name, SecretStr(manba))
+        return
+
     url = rtsp_url(
         device.host,
         device.rtsp_port if device.rtsp_port is not None else _DEFAULT_RTSP_PORT,
@@ -484,6 +547,7 @@ async def issue_live_token_for_camera(
     principal: CameraViewerDep,
     intent: LiveViewIntentDep,
     session: TenantSessionDep,
+    preview: Annotated[bool, Query()] = False,
 ) -> LiveTokenResponse:
     """Qisqa muddatli ULANISH CHIPTASI (`CAMERA_VIEW` + `live_view` auditi).
 
@@ -512,7 +576,21 @@ async def issue_live_token_for_camera(
         raise _not_found()
 
     try:
-        await _ensure_stream(request.app.state, camera, device, repo)
+        # ⛔ KO'RUVCHI NOMIGA KAMERA HAM KIRADI (260829). Devor 16
+        #   katakchani BIR VAQTDA ochadi; nom faqat foydalanuvchidan
+        #   iborat bo'lsa gateway ularni BIR seans deb hisoblab, har
+        #   yangisi oldingisini yopardi va devorda bitta katakcha
+        #   jonlanardi.
+        #
+        # ⚠ Dialog xulqi saqlanadi: AYNI kamerani qayta ochish eski
+        #   seansni baribir yopadi — nom o'sha bo'ladi.
+        await _ensure_stream(
+            request.app.state, camera, device, repo,
+            viewer=f"sbozor:{principal.user_id}:{camera_id}",
+            # Devor katakchasi 10 soniyadan keyin oxirgi kadrga
+            # qaytadi — oqim shundan uzoq yashashi kerak emas.
+            duration_s=PREVIEW_DURATION_S if preview else STREAM_DURATION_S,
+        )
     except Go2rtcError as exc:
         # ⚠ 503, 500 EMAS: bu bizning kodimizdagi xato emas, TASHQI
         #   servisning holati. UI uni «jonli ko'rish hozir ishlamayapti»

@@ -243,6 +243,9 @@ services:
       # CamAgent gateway kadr xabari uchun (260829). Bo'sh bo'lsa
       # `/internal/camagent/*` 503 qaytaradi (fail-closed).
       CAMAGENT_SERVICE_TOKEN: ${CAMAGENT_SERVICE_TOKEN:-}
+      # Jonli ko'rish: CamAgent obyektida kameraga to'g'ridan-to'g'ri
+      # ulanib bo'lmaydi — oqim gateway orqali so'raladi.
+      CAMAGENT_GATEWAY_URL: ${CAMAGENT_GATEWAY_URL:-http://camagent-gateway:8787}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: Asia/Tashkent
@@ -650,6 +653,9 @@ services:
       # CamAgent gateway kadr xabari uchun (260829). Bo'sh bo'lsa
       # `/internal/camagent/*` 503 qaytaradi (fail-closed).
       CAMAGENT_SERVICE_TOKEN: ${CAMAGENT_SERVICE_TOKEN:-}
+      # Jonli ko'rish: CamAgent obyektida kameraga to'g'ridan-to'g'ri
+      # ulanib bo'lmaydi — oqim gateway orqali so'raladi.
+      CAMAGENT_GATEWAY_URL: ${CAMAGENT_GATEWAY_URL:-http://camagent-gateway:8787}
       CORE_API_URL: ${CORE_API_URL:-http://core-api:8000}
       # ⛔ `db 1` — `core-api` ning `db 0` idan AJRATILGAN. U yerda
       # rate-limit sanagichlari, sessiya keshi va `sbozor:jobs` navbati

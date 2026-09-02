@@ -1113,6 +1113,15 @@ export const cameraSchema = z.object({
   source_ip: z.string().nullable(),
   source_model: z.string().nullable(),
   last_seen_at: z.string(),
+  /*
+   * DEVOR KATAKCHASI uchun oxirgi kadr (260829). Katakcha 10 soniya
+   * jonli ko'rsatib SHU kadrga qaytadi — sabab `camera-wall.tsx`
+   * dagi `LIVE_PREVIEW_MS` izohida.
+   *
+   * `.default(null)` — eski server bilan mos qoladi (maydon yo'q
+   * bo'lsa katakcha «kadr hali yo'q» deydi, yiqilmaydi).
+   */
+  last_snapshot_id: z.uuid().nullable().default(null),
 });
 export type Camera = z.infer<typeof cameraSchema>;
 

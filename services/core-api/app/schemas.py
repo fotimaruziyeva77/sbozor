@@ -2193,6 +2193,17 @@ class CameraRead(BaseModel):
     source_model: str | None
     last_seen_at: datetime
 
+    last_snapshot_id: UUID | None = None
+    """DEVOR KATAKCHASI uchun oxirgi kadr (260829).
+
+    Katakcha 10 soniya JONLI ko'rsatadi, keyin shu kadrga qaytadi.
+    Uzluksiz 16 oqim bozorning butun uplink'ini (o'lchangan 10.7
+    Mbit/s) sahifaga bog'lab qo'yardi va sahifa ochiq qolgan har
+    daqiqa NVR bitreyt byudjetidan yerdi (4-prinsip).
+
+    `None` — kamera hali kadr yubormagan; katakcha buni ochiq aytadi.
+    """
+
 
 class CameraListResponse(BaseModel):
     """`GET /cameras` — keyset sahifa (`next_cursor` `null` bo'lsa oxirgisi).

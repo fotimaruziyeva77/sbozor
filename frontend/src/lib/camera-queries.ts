@@ -547,10 +547,18 @@ export function useRestoreCamera() {
  */
 export function useLiveToken() {
   return useMutation({
-    mutationFn: (cameraId: string) =>
-      apiFetch(`${CAMERAS_PATH}/${cameraId}/live-token`, {
-        method: "POST",
-        schema: liveTokenSchema,
-      }),
+    /*
+     * `preview` — DEVOR KATAKCHASI uchun (260829). Server oqimga
+     * qisqa muddat beradi (`PREVIEW_DURATION_S`): katakcha 10 soniya
+     * jonli ko'rsatib oxirgi kadrga qaytadi, ya'ni 16 ta oqim
+     * bozorning uplink'ida uzoq turmaydi.
+     */
+    mutationFn: ({ cameraId, preview = false }: LiveTokenArgs) =>
+      apiFetch(
+        `${CAMERAS_PATH}/${cameraId}/live-token${preview ? "?preview=true" : ""}`,
+        { method: "POST", schema: liveTokenSchema },
+      ),
   });
 }
+
+export type LiveTokenArgs = { cameraId: string; preview?: boolean };

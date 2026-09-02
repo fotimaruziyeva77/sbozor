@@ -46,6 +46,7 @@ import hmac
 from datetime import date, datetime, time
 from typing import Annotated
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -111,7 +112,15 @@ class SnapshotIn(BaseModel):
     object_key: str = Field(min_length=1, max_length=512)
     size_bytes: int = Field(gt=0)
     captured_at: datetime
-    slot_time: str = Field(pattern=r"^\d{2}:\d{2}(:\d{2})?$")
+    slot_time: str = Field(default="", pattern=r"^(\d{2}:\d{2}(:\d{2})?)?$")
+    """Jadval sloti — AGENT jadvalidan, MAHALLIY vaqtda.
+
+    ⛔ BO'SH BO'LISHI MUMKIN va o'shanda u `scheduled_at` dan BOZOR
+       MINTAQASIDA hisoblanadi (260829). Gateway UTC'da ishlaydi va
+       jadval sloti bo'lmagan kadrga (qo'lda `snapshot_now`) UTC soatini
+       qo'yardi: Karmanada `06:18` da olingan kadr jadvalda `01:18`
+       ustuni bo'lib chiqdi va operator uni tanimadi.
+    """
     scheduled_at: datetime
     late: bool = False
 
@@ -193,19 +202,65 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
     # 3. `capture_runs` вЂ” `snapshots.capture_run_id` NOT NULL.
     #    Idempotentlik `(market_id, camera_id, business_date, slot_time)`
     #    unique cheklovi orqali.
+    # ⚠ MINTAQA BOZORNIKI, QATTIQ YOZILGAN EMAS. `markets.timezone`
+    #   ustuni bor va u bo'yicha `capture_repo._ENSURE_PLAN` reja
+    #   quradi — bu yerda boshqa mintaqa ishlatilsa, bir xil kadr ikki
+    #   xil `business_date` ga tushib, reja bilan JUFTLASHMASDI.
+    mintaqa = (await session.execute(
+        text("SELECT timezone FROM markets WHERE id = :m"),
+        {"m": market_id})).scalar_one_or_none() or "Asia/Tashkent"
+
+    # ⛔ SLOT — ENG YAQIN JADVAL SLOTI, XOM SOAT EMAS (260829).
+    #
+    #   Kadr slot vaqtida TANIQ olinmaydi: agent `07:00` slotini
+    #   `07:00:05` da yakunlaydi va 16 kamera 16 xil soniyada tugaydi.
+    #   Xom vaqt ishlatilsa jadvalda `07:00:00`, `07:00:01` … deb 16 ta
+    #   ALOHIDA ustun paydo bo'lardi va rejadagi `07:00` sloti «olinmadi»
+    #   bo'lib turaverardi — o'lchangan.
+    #
+    # ⚠ Oyna ATAYIN keng (10 daqiqa): sekin obyektda 40 kamera ketma-ket
+    #   olinadi va oxirgisi bir necha daqiqa kechikadi. Oynadan tashqari
+    #   qolgan kadr esa haqiqatan REJAGA KIRMAGAN — u shunday ko'rinishi
+    #   kerak, yashirilmasligi.
+    if not payload.slot_time:
+        yaqin = (await session.execute(text("""
+            SELECT s.slot_time
+              FROM snapshot_schedule_slots s
+              JOIN snapshot_schedules sc
+                ON sc.id = s.schedule_id AND sc.market_id = s.market_id
+             WHERE sc.market_id = :m
+               AND sc.period @> (:t AT TIME ZONE :tz)::date
+             ORDER BY abs(extract(epoch FROM
+                       (s.slot_time - (:t AT TIME ZONE :tz)::time)))
+             LIMIT 1
+        """), {"m": market_id, "t": payload.scheduled_at,
+               "tz": mintaqa})).scalar_one_or_none()
+    else:
+        yaqin = None
+
     slot = _slot(payload.slot_time)
+    if slot is None and yaqin is not None:
+        farq = abs((datetime.combine(date.min, yaqin)
+                    - datetime.combine(date.min, _mahalliy(
+                        payload.scheduled_at, mintaqa))).total_seconds())
+        if farq <= 600:
+            slot = yaqin
     run = (await session.execute(text("""
         INSERT INTO capture_runs
             (market_id, camera_id, nvr_id, slot_time, scheduled_at, status,
              attempts, started_at, finished_at, capture_method, is_market_open)
-        VALUES (:market_id, :camera_id, :nvr_id, :slot, :scheduled_at,
+        VALUES (:market_id, :camera_id, :nvr_id,
+                COALESCE(:slot, date_trunc('minute',
+                          :scheduled_at AT TIME ZONE :tz)::time),
+                :scheduled_at,
                 'succeeded', 1, :captured_at, :captured_at, 'isapi',
-                market_is_open(:market_id, (:scheduled_at AT TIME ZONE 'Asia/Tashkent')::date))
+                market_is_open(:market_id, (:scheduled_at AT TIME ZONE :tz)::date))
         ON CONFLICT ON CONSTRAINT uq_capture_runs_market_id_camera_id_business_date_slot_time
         DO UPDATE SET status = 'succeeded', finished_at = EXCLUDED.finished_at
         RETURNING id, snapshot_id
     """), {"market_id": market_id, "camera_id": camera_id, "nvr_id": nvr_id,
            "slot": slot, "scheduled_at": payload.scheduled_at,
+           "tz": mintaqa,
            "captured_at": payload.captured_at})).first()
     run_id, mavjud_snapshot = run[0], run[1]
     if mavjud_snapshot is not None:
@@ -220,13 +275,15 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
              quality_verdict, quality_mean, quality_stddev, quality_saturation,
              quality_thresholds_version, light_mode, capture_method)
         VALUES (:market_id, :run_id, :camera_id, :scheduled_at, :captured_at,
-                :slot, :object_key, :size_bytes, :width, :height,
+                COALESCE(:slot, date_trunc('minute',
+                          :scheduled_at AT TIME ZONE :tz)::time),
+                :object_key, :size_bytes, :width, :height,
                 :verdict, :mean, :stddev, :saturation, :tv, :light, 'isapi')
         ON CONFLICT (market_id, object_key) DO NOTHING
         RETURNING id
     """), {"market_id": market_id, "run_id": run_id, "camera_id": camera_id,
            "scheduled_at": payload.scheduled_at, "captured_at": payload.captured_at,
-           "slot": slot, "object_key": payload.object_key,
+           "slot": slot, "tz": mintaqa, "object_key": payload.object_key,
            "size_bytes": payload.size_bytes, "width": hisobot.width,
            "height": hisobot.height, "verdict": hisobot.verdict,
            "mean": hisobot.mean, "stddev": hisobot.stddev,
@@ -245,7 +302,15 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
     return SnapshotOut(snapshot_id=snapshot_id, quality_verdict=hisobot.verdict)
 
 
-def _slot(qiymat: str) -> time:
+def _mahalliy(payt: datetime, mintaqa: str) -> time:
+    """UTC momentni bozor mintaqasidagi SOATga o'giradi."""
+    return payt.astimezone(ZoneInfo(mintaqa)).time()
+
+
+def _slot(qiymat: str) -> time | None:
+    """`HH:MM` -> `time`. Bo'sh qiymat -> `None` (SQL o'zi hisoblaydi)."""
+    if not qiymat:
+        return None
     soat, daqiqa, *qolgan = qiymat.split(":")
     return time(int(soat), int(daqiqa), int(qolgan[0]) if qolgan else 0)
 
