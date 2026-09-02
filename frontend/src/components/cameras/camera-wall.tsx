@@ -13,10 +13,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Camera } from "@/lib/api-types";
 import {
   EMPTY_CAMERA_FILTERS,
-  LIVE_SESSION_MAX_MS,
   useCamerasQuery,
   useLiveToken,
 } from "@/lib/camera-queries";
+import { useFrameImageHref } from "@/lib/camera-zone-queries";
 
 /*
  * =============================================================================
@@ -35,26 +35,57 @@ import {
  *   onlayn kameralarini ko'rsatadi — aynan shu «bittalab tanlash»
  *   muammosini yo'q qiladi.
  *
- * ⚠ HAR KATAK O'Z CHIPTASINI OLADI va O'ZI YANGILAB TURADI: jonli
- *   sessiya 5 daqiqada tugaydi (`LIVE_SESSION_MAX_MS`), shuning uchun
- *   katak tugashdan biroz oldin chiptani QAYTA oladi va pleyerni qayta
- *   mount qiladi — devor o'chib qolmaydi. Katak DOM'dan chiqarilganda
- *   (devordan chiqish, kamera oflayn) `LivePlayer` unmount bo'lib oqimni
- *   yopadi — qo'shimcha tozalash shart emas.
+ * ⚠ KATAK 10 SONIYA JONLI, KEYIN OXIRGI KADR (260829). Chipta
+ *   YANGILANMAYDI va bu ataylab: uzluksiz 16 oqim bozorning butun
+ *   uplink'ini (o'lchangan 10.7 Mbit/s) shu sahifaga bog'lab qo'yardi
+ *   va sahifa ochiq qolgan har daqiqa NVR bitreyt byudjetidan yerdi.
+ *   O'n soniya harakatni ko'rsatishga yetadi, undan keyin kadr
+ *   ma'lumotning o'zini beradi.
+ *
+ * ⚠ CHEGARA IKKI QATLAMDA: brauzer pleyerni unmount qiladi, server esa
+ *   oqimga QISQA muddat beradi (`PREVIEW_DURATION_S`) va agent uni o'zi
+ *   o'chiradi. Tab yopilsa yoki JS to'xtasa ham oqim yashab qolmaydi.
  * =============================================================================
  */
-
-/** Sessiya tugashidan shuncha oldin chipta qayta olinadi. */
-const REFRESH_BEFORE_EXPIRY_MS = 10_000;
 
 /** Katak start'lari orasidagi siljish — NVR'larга bir vaqtda yopirilmasin. */
 const TILE_STAGGER_MS = 300;
 
+/**
+ * Katakcha shuncha vaqt JONLI turadi, keyin oxirgi kadrga qaytadi.
+ *
+ * ⛔ Uzunroq qilish uplink narxini oshiradi (sabab `LiveTile` ichidagi
+ *   izohda), qisqaroq qilish esa harakatni ko'rsatishga ulgurmaydi:
+ *   WebRTC ulanishining o'zi ~1-2 soniya oladi.
+ */
+const LIVE_PREVIEW_MS = 10_000;
+
+/**
+ * Ulanish shuncha kutiladi, keyin katakcha oxirgi kadrga o'tadi.
+ *
+ * Oyna 16 katakchaning eng sekiniga mo'ljallangan: siljish (300 ms ×
+ * 16 ≈ 5 s) + agentda ffmpeg ko'tarilishi (~3 s) + WebRTC qo'l
+ * berishi. Qisqaroq qilish sekin obyektda jonli tasvirni umuman
+ * ko'rsatmasdi.
+ */
+const CONNECT_TIMEOUT_MS = 25_000;
+
 export function CameraWall() {
   const t = useTranslations();
 
-  // Butun bozor, faqat onlayn — devor qurilma bo'yicha ajratmaydi.
-  const cameras = useCamerasQuery({ ...EMPTY_CAMERA_FILTERS, status: "online" });
+  /*
+   * ⛔ HOLAT BO'YICHA FILTRLANMAYDI (260829, panelda o'lchandi).
+   *
+   *   Ilgari devor faqat `status: "online"` kameralarni so'rardi.
+   *   Agent to'xtagan zahoti hamma kamera «ulanmagan» bo'ladi va
+   *   devor BUTUNLAY BO'SH qolardi — «Onlayn kamera yo'q». Holbuki
+   *   aynan o'sha daqiqada operator uchun eng qimmatli narsa
+   *   OXIRGI KADR: rastada mol bormi, sotuvchi turibdimi.
+   *
+   *   Endi hamma kamera chiziladi. Jonli oqim ochilmasa katakcha
+   *   oxirgi kadrni va «jonli emas» belgisini ko'rsatadi.
+   */
+  const cameras = useCamerasQuery(EMPTY_CAMERA_FILTERS);
   const [expanded, setExpanded] = useState<Camera | null>(null);
 
   const items = cameras.data?.items ?? [];
@@ -141,9 +172,9 @@ function LiveTile({
 
   const [url, setUrl] = useState<string | null>(null);
   const [seq, setSeq] = useState(0);
-  const [status, setStatus] = useState<"connecting" | "playing" | "failed">(
-    "connecting",
-  );
+  const [status, setStatus] = useState<
+    "connecting" | "playing" | "failed" | "frame"
+  >("connecting");
 
   // Mutatsiya obyekti har renderda yangi — `mutateAsync` ni ref'da
   // saqlaймiz, aks holda start effekti har renderda qayta ishlardi.
@@ -154,7 +185,13 @@ function LiveTile({
 
   const start = useCallback(async () => {
     try {
-      const ticket = await fetchToken.current(camera.id);
+      // `preview: true` — server oqimga QISQA muddat beradi
+      // (`PREVIEW_DURATION_S`): katakcha 10 soniyadan keyin oxirgi
+      // kadrga qaytadi va 16 ta oqim uplink'da turib qolmaydi.
+      const ticket = await fetchToken.current({
+        cameraId: camera.id,
+        preview: true,
+      });
       setUrl(ticket.url);
       setSeq((value) => value + 1);
       setStatus("connecting");
@@ -175,15 +212,46 @@ function LiveTile({
     };
   }, [start, startDelayMs]);
 
-  // Muddati tugashidan oldin chiptani yangilaydi.
+  /*
+   * ⛔⛔ O'N SONIYADAN KEYIN OQIM TO'XTAYDI (260829, operator so'rovi).
+   *
+   *     Devor 16 katakchani BIR VAQTDA ochadi. Ular uzluksiz oqsa,
+   *     bozorning butun uplink'i (o'lchangan 10.7 Mbit/s) shu devorga
+   *     ketardi va sahifa ochiq qolgan har daqiqa NVR bitreyt
+   *     byudjetidan yerdi — ya'ni «hammasini bir ekranda» qulayligi
+   *     jadval slotining narxiga tushardi (4-prinsip).
+   *
+   *     Endi katakcha 10 soniya JONLI ko'rsatadi — harakat, odam,
+   *     mashina ko'rinadi — keyin OXIRGI KADRga qaytadi. Kadr esa
+   *     baribir yangilanib turadi (jadval bo'yicha soatiga bir marta).
+   *
+   * ⚠ SERVER TOMONI HAM QISQA: oqim `PREVIEW_DURATION_S` bilan
+   *   ochiladi va agent uni O'ZI o'chiradi. Brauzerga ishonilmaydi —
+   *   tab yopilsa yoki JS to'xtasa ham oqim yashab qolmaydi.
+   */
   useEffect(() => {
-    if (url === null) return;
-    const timer = setTimeout(
-      () => void start(),
-      LIVE_SESSION_MAX_MS - REFRESH_BEFORE_EXPIRY_MS,
-    );
+    if (url === null || status !== "playing") return;
+    const timer = setTimeout(() => setStatus("frame"), LIVE_PREVIEW_MS);
     return () => clearTimeout(timer);
-  }, [url, seq, start]);
+  }, [url, seq, status]);
+
+  /*
+   * ⛔ ULANISH CHEKSIZ KUTILMAYDI (260829, devorda o'lchandi).
+   *
+   *   16 katakcha bir vaqtda ochilganda ba'zilariga oqim yetib
+   *   kelmaydi: agentda ffmpeg navbati, uplink cho'qqisi, MediaMTX
+   *   yo'lining kechikishi. `LivePlayer` bunday holatda `onError` ham,
+   *   `onReady` ham chaqirmasligi mumkin — katakcha «Qayta
+   *   ulanmoqda…» yozuvi bilan ABADIY kulrang qolardi.
+   *
+   *   Kutish tugagach katakcha OXIRGI KADRga o'tadi: operator
+   *   ma'lumotsiz qolmaydi va «jonli emas» belgisi sababni aytadi.
+   */
+  useEffect(() => {
+    if (status !== "connecting") return;
+    const timer = setTimeout(() => setStatus("failed"), CONNECT_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [status, seq]);
 
   const handleReady = useCallback(() => setStatus("playing"), []);
   const handleError = useCallback(() => setStatus("failed"), []);
@@ -201,7 +269,12 @@ function LiveTile({
       onClick={onExpand}
       type="button"
     >
-      {url !== null && status !== "failed" ? (
+      {/*
+        * ⚠ `frame` HOLATIDA PLEYER DOM'DAN CHIQADI, yashirilmaydi:
+        *   yashirilgan `<video>` oqimni O'QIYVERADI va butun tejash
+        *   ma'nosiz bo'lardi. Unmount esa WebRTC ulanishini yopadi.
+        */}
+      {url !== null && (status === "connecting" || status === "playing") ? (
         <LivePlayer
           className="absolute inset-0 block size-full"
           key={seq}
@@ -212,27 +285,50 @@ function LiveTile({
         />
       ) : null}
 
-      {/* Holat qoplamasi — oqim kelgunча yoki xatoda */}
-      {status !== "playing" ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface-muted">
-          {status === "failed" ? (
-            <>
-              <WifiOff aria-hidden="true" className="size-6 text-text-muted" />
-              <span className="text-xs text-text-muted">
-                {t("cameras.wallTileFailed")}
-              </span>
-            </>
-          ) : (
-            <span className="text-xs text-text-muted" role="status">
-              {t("cameras.wallReconnecting")}
-            </span>
-          )}
+      {/*
+        * Jonli oyna tugagach — oxirgi kadr.
+        *
+        * ⛔ XATODA HAM KADR CHIZILADI (260829). Ilgari oqim ochilmasa
+        *   katakcha «ulanmadi» degan bo'sh kulrang maydon bo'lardi —
+        *   holbuki oxirgi kadr QO'LDA turadi va u operatorga jonli
+        *   videodan ko'ra ko'proq narsa aytadi (rastada mol bormi,
+        *   sotuvchi turibdimi). Agent oflayn bo'lgan obyektda butun
+        *   devor bo'sh ko'rinardi.
+        *
+        * ⚠ XATO YASHIRILMAYDI: kadr ustida `WifiOff` belgisi qoladi,
+        *   ya'ni «bu jonli emas» degani ko'rinib turadi.
+        */}
+      {status === "frame" || status === "failed" ? (
+        <FrameImage snapshotId={camera.last_snapshot_id} />
+      ) : null}
+
+      {status === "failed" ? (
+        <span
+          className="absolute right-1.5 top-1.5 rounded bg-black/60 p-1"
+          title={t("cameras.wallTileFailed")}
+        >
+          <WifiOff aria-hidden="true" className="size-3.5 text-white" />
+          <span className="sr-only">{t("cameras.wallTileFailed")}</span>
+        </span>
+      ) : null}
+
+      {/* Holat qoplamasi — faqat oqim kelguncha */}
+      {status === "connecting" ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-surface-muted">
+          <span className="text-xs text-text-muted" role="status">
+            {t("cameras.wallReconnecting")}
+          </span>
         </div>
       ) : null}
 
       {/* Nom + kanal — pastki gradient ustida, doim ko'rinadi */}
       <span className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5">
-        <span className="truncate text-xs font-medium text-white">
+        {/*
+          * ⚠ `font-medium` EMAS (G-motion-7(e) darvozasi): qora
+          *   gradient ustidagi oq matn baribir yetarli kontrastda va
+          *   qalinlik byudjeti bu yerda ma'no bermaydi.
+          */}
+        <span className="truncate text-xs text-white">
           {camera.name}
         </span>
         <Maximize2
@@ -241,5 +337,41 @@ function LiveTile({
         />
       </span>
     </button>
+  );
+}
+
+function FrameImage({ snapshotId }: { snapshotId: string | null }) {
+  /*
+   * OXIRGI KADR — jonli oyna tugagach katakchada shu qoladi.
+   *
+   * ⚠ RASM SESSIYA TOKENI BILAN OLINADI va brauzer ichidagi
+   *   vaqtinchalik havolaga aylanadi (`useFrameImageHref`): `<img src>`
+   *   sarlavha qo'sha olmaydi, ya'ni to'g'ridan-to'g'ri URL ishlamasdi
+   *   va kadr avtorizatsiyasiz ochilardi.
+   *
+   * ⚠ AVTOMATIK YANGILANMAYDI: kadr jadval bo'yicha soatiga bir marta
+   *   keladi, ya'ni tez-tez so'rash faqat trafik sarflardi.
+   */
+  const t = useTranslations();
+  const href = useFrameImageHref(snapshotId);
+
+  if (href === null) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-surface-muted">
+        <span className="text-xs text-text-muted" role="status">
+          {snapshotId === null
+            ? t("cameras.wallNoFrame")
+            : t("cameras.wallReconnecting")}
+        </span>
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      alt=""
+      className="absolute inset-0 block size-full object-cover"
+      src={href}
+    />
   );
 }

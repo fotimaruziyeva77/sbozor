@@ -283,10 +283,10 @@
     "nvrCard": "NVR qurilmasi",
     "devicePicker": "Qurilma",
     "viewList": "Ro'yxat",
-    "viewWall": "Devor",
+    "viewWall": "Kameralar",
     "wallTitle": "Barcha kameralar",
-    "wallHint": "{count} ta onlayn kamera — bosib kattalashtiring",
-    "wallEmpty": "Onlayn kamera yo'q",
+    "wallHint": "{count} ta kamera — bosib kattalashtiring",
+    "wallEmpty": "Kamera hali qo'shilmagan",
     "wallEmptyHint": "Kameralar onlayn bo'lganda shu yerda jonli ko'rinadi.",
     "wallReconnecting": "Qayta ulanmoqda…",
     "wallTileFailed": "Ulanmadi",
@@ -394,7 +394,9 @@
       "device_not_supported": "Hozircha faqat Hikvision qurilmalari ulanadi. Boshqa brend kerak bo'lsa texnik yordamga murojaat qiling.",
       "nvr_stream_limit": "Boshqa dasturlarda ochiq turgan oqimlarni yoping va qayta urinib ko'ring. Takrorlansa, quyidagi texnik tafsilotni yordam xizmatiga yuboring.",
       "channel_offline": "Kamera quvvatini va kabelni tekshiring, so'ng qayta skanerlang."
-    }
+    },
+    "deviceAll": "Hammasi ({count} ta qurilma)",
+    "wallNoFrame": "Kadr hali yo'q"
   },
   "categories": {
     "actions": "Amallar",

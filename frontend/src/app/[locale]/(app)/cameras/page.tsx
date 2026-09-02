@@ -162,12 +162,40 @@ function CamerasWorkspace() {
    * ochilgan zahoti oqimlarni ishga tushirib yuborardi (§8.7 ruhida).
    * Standart — ro'yxat, ya'ni mavjud xulq va testlar o'zgarmaydi.
    */
-  const [viewMode, setViewMode] = useState<"list" | "wall">("list");
+  /*
+   * ⛔ STANDART REJIM — DEVOR (260829, operator so'rovi).
+   *
+   *   Kameralar sahifasini ochgan odamning birinchi savoli «bozorda
+   *   hozir nima bo'lyapti?» — ro'yxat esa unga 16 qator matn beradi va
+   *   javob uchun yana bitta bosish talab qiladi. Devor javobni
+   *   DARHOL ko'rsatadi.
+   *
+   * ⚠ RO'YXAT YO'QOLMAYDI: u ikkinchi tab bo'lib qoladi va qurilma
+   *   boshqaruvi (nom o'zgartirish, arxivlash, kashfiyot) faqat o'sha
+   *   yerda — devor ATAYIN ko'rish yuzasi.
+   */
+  const [viewMode, setViewMode] = useState<"list" | "wall">("wall");
   const deviceItems = devices.data?.items ?? [];
+  /*
+   * ⛔⛔ KO'P QURILMALI OBYEKTDA STANDART — «HAMMASI» (260829, Karmanada
+   *     o'lchandi).
+   *
+   *     NVR'siz obyektda har kamera ALOHIDA qurilma: 16 kamera = 16
+   *     qurilma, har birida bitta kanal. Eski mantiq birinchisini tanlab
+   *     qo'yardi va operator BITTA kamerani ko'rardi — qolgan 15 tasini
+   *     tanlagichdan birma-bir ochish kerak edi. U esa ro'yxat bo'sh deb
+   *     o'ylardi.
+   *
+   *     `null` -> `CameraList` `nvrId` siz so'raydi -> BARCHA kameralar.
+   *     NVR kartasi (zona A) esa faqat aniq qurilma tanlanganda chiziladi:
+   *     «hammasi» rejimida u qaysi qurilmani ko'rsatishini bilmaydi.
+   *
+   * ⚠ BITTA QURILMALI BOZOR O'ZGARMAYDI: tanlagich umuman chizilmaydi va
+   *   o'sha yagona qurilma tanlanadi (eski xulq).
+   */
   const device: NvrDevice | null =
     deviceItems.find((item) => item.id === selectedDeviceId) ??
-    deviceItems[0] ??
-    null;
+    (deviceItems.length === 1 ? deviceItems[0] : null);
 
   /*
    * ⚠ AYNI `queryKey`, ya'ni AYNI kesh yozuvi: `DiscoveryPanel` ham shu
@@ -240,15 +268,12 @@ function CamerasWorkspace() {
         className="flex w-fit gap-1 rounded-md bg-surface-muted p-1"
         role="group"
       >
-        <Button
-          aria-pressed={viewMode === "list"}
-          onClick={() => setViewMode("list")}
-          size="sm"
-          variant={viewMode === "list" ? "secondary" : "ghost"}
-        >
-          <List aria-hidden="true" />
-          {t("cameras.viewList")}
-        </Button>
+        {/*
+          * Tartib STANDART REJIMGA ergashadi: birinchi tugma — ochilishda
+          * ko'rinadigan rejim. Teskarisi «tanlangan ikkinchi element»
+          * degan kichik, lekin har kirishda takrorlanadigan chalkashlik
+          * berardi.
+          */}
         <Button
           aria-pressed={viewMode === "wall"}
           onClick={() => setViewMode("wall")}
@@ -257,6 +282,15 @@ function CamerasWorkspace() {
         >
           <LayoutGrid aria-hidden="true" />
           {t("cameras.viewWall")}
+        </Button>
+        <Button
+          aria-pressed={viewMode === "list"}
+          onClick={() => setViewMode("list")}
+          size="sm"
+          variant={viewMode === "list" ? "secondary" : "ghost"}
+        >
+          <List aria-hidden="true" />
+          {t("cameras.viewList")}
         </Button>
       </div>
 
@@ -286,6 +320,14 @@ function CamerasWorkspace() {
             }}
             value={device?.id ?? ""}
           >
+            {/*
+              * ⛔ BIRINCHI VARIANT — «hammasi», va u STANDART tanlangan
+              *   (`device === null`). NVR'siz obyektda aynan shu ko'rinish
+              *   kerak: 16 kamera bitta ro'yxatda.
+              */}
+            <option value="">
+              {t("cameras.deviceAll", { count: deviceItems.length })}
+            </option>
             {deviceItems.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.host}
@@ -306,7 +348,14 @@ function CamerasWorkspace() {
           </div>
         ) : devices.isError ? (
           <LoadFailed onRetry={() => void devices.refetch()} />
-        ) : device === null || formOpen ? (
+        ) : (device === null && deviceItems.length === 0) || formOpen ? (
+          /*
+           * ⚠ «NVR ulanmagan» faqat QURILMA UMUMAN BO'LMAGANDA (260829).
+           *   «Hammasi» tanlanganda `device` ataylab `null` bo'ladi —
+           *   o'shanda bu blok chiqsa, 16 kamerali obyektda «bu bozorda
+           *   hali NVR ulanmagan» degan yozuv ro'yxatning ustida turardi
+           *   va operator qaysi biriga ishonishni bilmasdi.
+           */
           <NvrZoneWithoutDevice
             canManage={canManage}
             device={device}
@@ -318,6 +367,14 @@ function CamerasWorkspace() {
               if (result.runId !== null) void setRun(result.runId);
             }}
           />
+        ) : device === null ? (
+          /*
+           * ⚠ «HAMMASI» REJIMI — KARTA YO'Q (260829). Karta BITTA
+           *   qurilmaning holatini (proshivka, skan, parol) ko'rsatadi;
+           *   «hammasi» tanlanganda u qaysi birini ko'rsatishini bilmaydi.
+           *   Ro'yxat esa quyida to'liq chiziladi.
+           */
+          null
         ) : (
           <NvrCard
             /*
