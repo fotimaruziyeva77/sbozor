@@ -40,6 +40,8 @@ import { useAuthStore } from "@/lib/auth-store";
 import { useSetupStatusQuery } from "@/lib/market-queries";
 import { useAccuracyReport, useOccupancyDay } from "@/lib/occupancy-queries";
 import { useReconciliationReport } from "@/lib/reconciliation-queries";
+import { useRevenueReport } from "@/lib/report-queries";
+import { FlowSpark } from "@/components/director/flow-spark";
 import {
   useLiveRevenue,
   useReceivablesReport,
@@ -123,6 +125,28 @@ export function SixTiles({ period }: { period: Period }) {
   const prev = comparePeriod(period);
   const partial = includesToday(period, todayIso);
   const windowFrom = shiftIsoDay(day, -(WINDOW_DAYS - 1));
+
+  /*
+   * ⛔⛔ OQIM CHIZIG'I DAVRGA BO'YSUNMAYDI — U DOIM OXIRGI YETTI KUN.
+   *
+   *     Sabab gero katagining vazifasida: u «pul qanday oqyapti» degan
+   *     savolga javob beradi, davr esa «qaysi oraliqni hisoblaymiz»
+   *     degan boshqa savol. Agar chiziq davrga bog'lansa, standart
+   *     «Bugun» da u BITTA nuqtaga aylanardi va grafik umuman
+   *     chizilmasdi — ya'ni panel har kuni ertalabdan kechgacha
+   *     bo'sh gero bilan ochilardi (260902 da jonli panelda ko'rildi).
+   *
+   * ⚠ KECHA BILAN TUGAYDI: bugungi kun yopilmagan va uning qiymati
+   *   soat sayin o'sib boradi — chiziqning oxirgi nuqtasi tushib
+   *   turgandek ko'rinardi.
+   */
+  const flowTo = shiftIsoDay(todayIso, -1);
+  const flowFrom = shiftIsoDay(flowTo, -6);
+  const flow = useRevenueReport({ from: flowFrom, to: flowTo });
+  const flowPoints = (flow.data?.rows ?? []).map((row) => ({
+    label: row.business_date.slice(8),
+    value: row.collected_soum,
+  }));
 
   /*
    * ⛔⛔ `/reports/live`, `/reports/revenue` EMAS (260819).
@@ -372,7 +396,7 @@ export function SixTiles({ period }: { period: Period }) {
          * ⛔ Kompozitsiya IKKALA holatda ham BIR XIL, faqat qiymatlar
          *    «—» bo'ladi — panel ma'lumot kelganda sakramaydi.
          */}
-        <div className="flex flex-wrap items-center gap-7">
+        <div className="dir-hero-flow">
           <div className="relative size-44 shrink-0">
             <svg aria-hidden="true" className="size-full -rotate-90" viewBox="0 0 40 40">
               <circle
@@ -472,6 +496,21 @@ export function SixTiles({ period }: { period: Period }) {
               </p>
             ) : null}
           </div>
+
+          {/*
+           * ⛔ EKRANNING ENG QIMMATLI JOYI ENDI BO'SH TURMAYDI (260902).
+           *    Gero katagining o'ng yarmi butunlay bo'sh edi; direktor esa
+           *    panelga «pul qanday oqyapti» degan savol bilan qaraydi va
+           *    javobni SHAKLDA kutadi.
+           *
+           * ⚠ IKKI NUQTADAN KAM BO'LSA CHIZILMAYDI: bitta nuqtadan
+           *   «tendensiya» yasash yolg'on bo'lardi.
+           */}
+          {flowPoints.length >= 2 ? (
+            <div className="dir-flow">
+              <FlowSpark points={flowPoints} />
+            </div>
+          ) : null}
         </div>
       </PanelTile>
 

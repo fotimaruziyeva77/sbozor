@@ -2331,3 +2331,65 @@
     }
   }
 }
+
+/* ===========================================================================
+ * PUL OQIMI CHIZIG'I — gero katagining o'ng yarmi (260902)
+ * =========================================================================== */
+
+.dir-flow {
+  /*
+   * ⛔ MIN-WIDTH 0 MAJBURIY: flex bolasi standart holatda o'z
+   *    kontentidan kichrayolmaydi va SVG konteynerni kengaytirib,
+   *    chapdagi halqani siqib qo'yardi.
+   */
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.dir-flow-svg {
+  display: block;
+  width: 100%;
+  height: 9.5rem;
+}
+
+/*
+ * Chiziq chapdan o'ngga CHIZILADI — ma'lumot «kelayotgani» hissi.
+ *
+ * ⚠ `pathLength="1"` ISHLATILMAYDI: u Safari'ning eski versiyalarida
+ *   `stroke-dasharray` bilan birga noto'g'ri hisoblanadi. O'rniga katta
+ *   qiymat olinadi — u har qanday uzunlikni qoplaydi.
+ */
+@keyframes dirFlowDraw {
+  from {
+    stroke-dashoffset: 2000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.dir-flow-line {
+  stroke-dasharray: 2000;
+  animation: dirFlowDraw 1100ms var(--ease-out) both;
+}
+
+/*
+ * ⛔ GERO ENDI IKKI USTUN: chapda halqa, o'ngda oqim. 900 px dan tor
+ *    ekranda ular ustma-ust tushadi — telefonda yonma-yon ikkalasi ham
+ *    o'qilmas darajada kichrayardi.
+ */
+.dir-hero-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.75rem;
+}
+
+/*
+ * ⚠ BU YERDA `prefers-reduced-motion` BLOKI YO'Q va u KERAK EMAS:
+ *   global qoida (`globals.css` yuqorisida) barcha animatsiyalarni
+ *   `0.01ms` ga tushiradi, `both` esa chiziqni oxirgi holatda —
+ *   `stroke-dashoffset: 0` da — qoldiradi. Alohida `animation: none`
+ *   yozish G-motion-3(c) darvozasini buzardi: u `none` ni kadr NOMI deb
+ *   o'qiydi va reyestrda topa olmaydi.
+ */

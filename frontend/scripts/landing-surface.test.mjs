@@ -197,7 +197,13 @@ const AUTH_KEYFRAMES = ["cellglow", "scanbeam", "floatup", "cardin"];
  * ⚠ `dirBreath` dizaynda e'lon qilingan, lekin HECH QAYERDA
  *   ishlatilmagan (dizayn manbasida ham) — shuning uchun u KO'CHIRILMADI.
  */
-const DIRECTOR_KEYFRAMES = ["dirIn", "dirDraw", "dirFade"];
+/*
+ * ⛔ `dirFlowDraw` — gero katagidagi pul oqimi chizig'i (260902).
+ *    Chiziq chapdan o'ngga chiziladi: ma'lumot «kelayotgani» hissi.
+ *    `.dir-flow-line` sinfida ishlatiladi, ya'ni G-motion-3(c)
+ *    talabi bajarilgan.
+ */
+const DIRECTOR_KEYFRAMES = ["dirIn", "dirDraw", "dirFade", "dirFlowDraw"];
 /**
  * ⛔ ONGLI KENGAYISH (2026-08-25, uchinchi marta): brend-loader — bozor
  * «rasta ustunlari» metaforasi (foydalanuvchi talabi: «Loader quy,
@@ -214,7 +220,7 @@ const KEYFRAMES_REGISTRY = [
   ...DIRECTOR_KEYFRAMES,
   ...LOADER_KEYFRAMES,
 ];
-const KEYFRAMES_COUNT = 17;
+const KEYFRAMES_COUNT = 18;
 
 /**
  * G-land-3(c) — avtomatik harakat manbai bo'lishga RUXSAT ETILGAN yagona
