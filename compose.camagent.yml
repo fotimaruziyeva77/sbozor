@@ -60,6 +60,14 @@ services:
       #   bu qator yo'q bo'lsa kadrlar HECH QACHON o'chirilmaydi —
       #   o'lchangan hajm 12 bozorga 210 GB/yil.
       CAMAGENT_GW_RETENTION_DAYS: ${CAMAGENT_GW_RETENTION_DAYS:-90}
+      # Jonli video oylik byudjeti (daqiqa). 260906: 600 chegarasi
+      # Karmanada URILDI (600.2/600) va butun jonli video o'chdi — kadr
+      # olish esa davom etaverdi (4-prinsip ishladi).
+      #
+      # ⚠ CHEGARA O'CHIRILMADI va bu ataylab: TURN qo'yilgan kuni u
+      #   yagona himoya bo'lib qoladi. Hozir TURN yo'q, ya'ni trafik
+      #   to'g'ridan-to'g'ri ketadi va hech nima turmaydi.
+      CAMAGENT_GW_VIDEO_BUDGET_MIN: ${CAMAGENT_GW_VIDEO_BUDGET_MIN:-600}
       # Jonli video (ixtiyoriy): MediaMTX + TURN sozlanganda to'ldiriladi.
       # Bo'sh bo'lsa panel "yangilanuvchi rasm" rejimida ishlayveradi.
       CAMAGENT_MEDIA_HOST: ${CAMAGENT_MEDIA_HOST:-}
