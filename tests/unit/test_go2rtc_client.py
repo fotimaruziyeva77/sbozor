@@ -52,7 +52,7 @@ NGINX_CONF = REPO_ROOT / "ops" / "nginx" / "nginx.conf"
 """⚠ Yo'lning O'ZI kerak bo'lgan joyda qoladi; MAZMUN esa
 `effective_nginx_conf()` dan o'qiladi — u `include` ni ham kuzatadi
 (`tests/fixtures/nginx_conf.py` moduli boshidagi izoh)."""
-COMPOSE = REPO_ROOT / "compose.yaml"
+COMPOSE = REPO_ROOT / "deployment" / "compose.yaml"
 GO2RTC_CONF = REPO_ROOT / "ops" / "go2rtc" / "go2rtc.yaml"
 
 SAFE_SOURCE = "rtsp://192.168.1.64:554/Streaming/Channels/101"

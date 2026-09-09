@@ -28,7 +28,7 @@ o'zgarmaydi — dalada qolgan eski agentlar ishlashda davom etishi shart.
 
 2. Ko'taring (asosiy compose BUZILMAYDI — bu ixtiyoriy qatlam):
 
-       docker compose -f compose.yaml -f compose.camagent.yml up -d --build --wait camagent-gateway
+       docker compose -f deployment/compose.yaml -f deployment/compose.camagent.yml up -d --build --wait camagent-gateway
 
 3. nginx allaqachon `/api/v1/agent/` ni shu servisga yo'naltiradi
    (`ops/nginx/app.inc`) — nginx'ni qayta yuklang:
@@ -42,7 +42,7 @@ o'zgarmaydi — dalada qolgan eski agentlar ishlashda davom etishi shart.
    va `compose.camagent.yml` dagi `ports:` izohini oching, yoki panelga
    umuman kirmasdan aktivatsiya kodini quyidagicha yarating:
 
-       docker compose -f compose.yaml -f compose.camagent.yml exec camagent-gateway \
+       docker compose -f deployment/compose.yaml -f deployment/compose.camagent.yml exec camagent-gateway \
          python -c "from agent_gateway.db import GatewayDB; \
 print(GatewayDB('/data/gateway.db').create_code('Karmana bozori','karmana-01'))"
 

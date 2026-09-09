@@ -178,8 +178,8 @@ beradi. Tizimning guruhlashi aynan shu sababdan majburiy.
 `.env` yangilangandan keyin worker'ni qayta ishga tushiring:
 
 ```bash
-docker compose up -d --build worker scheduler
-docker compose logs worker --tail 20 | grep -E "worker_started|alerts_disabled"
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml up -d --build worker scheduler
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml logs worker --tail 20 | grep -E "worker_started|alerts_disabled"
 ```
 
 - `worker_started ... alerts=True` → alertlar **yoqilgan**;

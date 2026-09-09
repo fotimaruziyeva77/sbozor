@@ -55,7 +55,7 @@ from typing import Any, Final
 import yaml  # type: ignore[import-untyped]
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
-COMPOSE: Final = REPO_ROOT / "compose.yaml"
+COMPOSE: Final = REPO_ROOT / "deployment" / "compose.yaml"
 PACKAGE_JSON: Final = REPO_ROOT / "package.json"
 
 TOKEN_KEYS: Final[tuple[str, ...]] = ("TELEGRAM_BOT_TOKEN", "BOT_SERVICE_TOKEN")
@@ -112,7 +112,28 @@ def _up_services() -> list[str]:
     scripts = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))["scripts"]
     words = scripts["up"].split()
     skip = {"docker", "compose", "up"}
-    return [word for word in words if word not in skip and not _FLAG_RE.match(word)]
+
+    # ⛔ BAYROQNING QIYMATI HAM TASHLANADI, faqat bayroqning O'ZI emas.
+    #    Compose fayllari `deployment/` ga ko'chgach `up` skripti
+    #    `-f deployment/compose.yaml -f deployment/compose.override.yml`
+    #    bilan keldi. Eski parser `-f` ni tashlab yo'lni SERVIS deb
+    #    o'qirdi va darvoza «compose.yaml da yo'q servis» deb qizardi —
+    #    ya'ni u yolg'on qizil berardi, mahsulotda esa nuqson yo'q edi.
+    QIYMAT_OLADIGAN = {"-f", "--file", "-p", "--project-name", "--profile"}
+
+    natija: list[str] = []
+    qiymat_kutilmoqda = False
+    for word in words:
+        if qiymat_kutilmoqda:
+            qiymat_kutilmoqda = False
+            continue
+        if word in QIYMAT_OLADIGAN:
+            qiymat_kutilmoqda = True
+            continue
+        if word in skip or _FLAG_RE.match(word):
+            continue
+        natija.append(word)
+    return natija
 
 
 # ---------------------------------------------------------------------------

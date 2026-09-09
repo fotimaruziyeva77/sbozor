@@ -107,10 +107,10 @@ python -c "import secrets;print(secrets.token_urlsafe(48))"
 ## 4. Birinchi ishga tushirish
 
 ```bash
-cp .env.example .env          # va besh kalitni to'ldiring
-docker compose build backup
-docker compose up -d backup
-docker compose logs -f backup
+cp deployment/.env.example deployment/.env          # va besh kalitni to'ldiring
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml build backup
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml up -d backup
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml logs -f backup
 ```
 
 Repo **avtomatik** yaratiladi: skript `restic cat config` bilan tekshiradi
@@ -121,14 +121,14 @@ o'ldirardi.)
 Kunni kutmasdan qo'lda bir marta yugurtirish:
 
 ```bash
-docker compose exec backup /opt/backup/run-backup.sh
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup /opt/backup/run-backup.sh
 ```
 
 Natijani tekshirish:
 
 ```bash
-docker compose exec backup restic snapshots
-docker compose exec db psql -U postgres -d sbozor \
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup restic snapshots
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec db psql -U postgres -d sbozor \
   -c "SELECT component, last_seen_at, detail FROM system_heartbeats WHERE component = 'backup'"
 ```
 

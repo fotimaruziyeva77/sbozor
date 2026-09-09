@@ -53,4 +53,4 @@ echo "3/3 · Vaqtinchalik nginx to'xtatilmoqda…"
 docker rm -f sbozor-acme >/dev/null
 
 echo "Tayyor. Endi:"
-echo "  docker compose -f compose.yaml -f compose.prod.yml --profile proxy up -d"
+echo "  docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml --profile proxy up -d"

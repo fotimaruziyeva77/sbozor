@@ -30,7 +30,7 @@ services:
       # (aks holda konteyner "unused mount/volume" xatosi bilan yiqiladi).
       - pgdata:/var/lib/postgresql
       # Rollar + parollar: faqat birinchi ishga tushishda (bo'sh data katalogida) bajariladi.
-      - ./ops/db/init:/docker-entrypoint-initdb.d:ro
+      - ../ops/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -93,7 +93,7 @@ services:
       #     cp ops/seaweedfs/s3.json.example ops/seaweedfs/s3.json
       # va ichidagi namunaviy kalitlarni haqiqiylari bilan almashtiring
       # (yo'riqnoma — `ops/seaweedfs/README.md`).
-      - ./ops/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+      - ../ops/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     environment:
       TZ: ${TZ:-Asia/Tashkent}
     # =====================================================================
@@ -123,7 +123,7 @@ services:
     # One-shot job. Alembic ILOVA STARTUP'ida ishga tushmaydi.
     profiles: ["migrate"]
     build:
-      context: .
+      context: ..
       dockerfile: services/core-api/Dockerfile
       target: dev
     command: ["alembic", "upgrade", "head"]
@@ -133,14 +133,14 @@ services:
       TZ: ${TZ:-Asia/Tashkent}
     working_dir: /app
     volumes:
-      - .:/app
+      - ..:/app
     depends_on:
       db:
         condition: service_healthy
 
   core-api:
     build:
-      context: .
+      context: ..
       dockerfile: services/core-api/Dockerfile
       target: runtime
     # --workers 1: kelajakdagi scheduler/cron dublikatining oldini oladi.
@@ -287,7 +287,7 @@ services:
     # Sabab: worker prod'da ishlaydi, ya'ni unda pytest/ruff/mypy kerak
     # emas va non-root foydalanuvchi (`appuser`, T-01-07) bo'lishi shart.
     build:
-      context: .
+      context: ..
       dockerfile: services/core-api/Dockerfile
       target: runtime
     # `--workers 1` — endi bu SAMARADORLIK talabi, KORREKTLIK talabi EMAS
@@ -401,7 +401,7 @@ services:
     # rejimi (dublikat ishga tushish, o'tkazib yuborish, qayta ishga
     # tushish) zararsiz — «aynan bitta planer» operatsion talabi YO'Q.
     build:
-      context: .
+      context: ..
       dockerfile: services/core-api/Dockerfile
       target: runtime
     # ⚠ `app.worker:scheduler` obyekti 04-07 da tug'iladi (`app/worker.py`
@@ -472,7 +472,7 @@ services:
     # ⚠ SOF WORKER (05-08): `app/main.py` dagi minimal FastAPI bu
     # konteynerda YURITILMAYDI. Sabab pastdagi healthcheck bandida.
     build:
-      context: .
+      context: ..
       dockerfile: services/cv-service/Dockerfile
       target: runtime
     # `--workers 1`: aniqlash CPU'ga bog'liq va ONNX sessiyasi
@@ -546,7 +546,7 @@ services:
     # darvozadan test konteyneri uchun ham `init_sentry()` talab qilardi.
     profiles: ["test"]
     build:
-      context: .
+      context: ..
       dockerfile: services/cv-service/Dockerfile
       target: dev
     command: ["pytest", "-q"]
@@ -600,7 +600,7 @@ services:
     # ko'rinardi).
     working_dir: /app/services/cv-service
     volumes:
-      - .:/app
+      - ..:/app
 
   bot-service:
     # SOTUVCHI VA DIREKTOR TELEGRAM BOTLARI (07-01, BOT-01, DQ-1).
@@ -623,7 +623,7 @@ services:
     # kelmasdi — hech qanday xato bermasdan (aynan o'sha «jimgina yolg'on»
     # sinfi).
     build:
-      context: .
+      context: ..
       dockerfile: services/bot-service/Dockerfile
       target: runtime
     # ⚠ `modul:atribut` SHAKLI YO'Q va bu ATAYIN: `python -m` `aiogram`
@@ -723,7 +723,7 @@ services:
     # xatolari mijozning Sentry loyihasiga oqib tushardi.
     profiles: ["test"]
     build:
-      context: .
+      context: ..
       dockerfile: services/bot-service/Dockerfile
       target: dev
     command: ["pytest", "-q"]
@@ -780,7 +780,7 @@ services:
     # to'plamini shu image'da ishga tushirardi.
     working_dir: /app/services/bot-service
     volumes:
-      - .:/app
+      - ..:/app
 
   go2rtc:
     # JONLI KO'RISHNING MEDIA SERVERI (03-07, CAM-03).
@@ -802,7 +802,7 @@ services:
       # YOZA OLADI va o'sha yo'l `exec:` ni faylga muhrlab qo'yardi —
       # ya'ni RCE qayta ishga tushirishdan keyin ham SAQLANIB qolardi.
       # Faqat-o'qish mount bu yo'lni butunlay yopadi (D-11).
-      - ./ops/go2rtc/go2rtc.yaml:/config/go2rtc.yaml:ro
+      - ../ops/go2rtc/go2rtc.yaml:/config/go2rtc.yaml:ro
     # =====================================================================
     # ⚠⚠ `ports:` BLOKI ATAYIN YO'Q — VA U QO'SHILMAYDI.
     #
@@ -854,7 +854,7 @@ services:
     # servislarimizga (`core-api`, `cv-service`, `bot-service`) tegishli
     # va u buzilmaydi.
     build:
-      context: .
+      context: ..
       dockerfile: ops/backup/Dockerfile
     environment:
       # ⛔ `DATABASE_URL` ISHLATILMAYDI — VA U `sed` BILAN HAM
@@ -906,7 +906,7 @@ services:
     # aks holda `npm run up` build xatosi berardi.
     profiles: ["web"]
     build:
-      context: ./frontend
+      context: ../frontend
     # =====================================================================
     # ⛔⛔ `NEXT_PUBLIC_API_BASE_URL` BU YERDA YO'Q — VA U QAYTARILMAYDI
     #    (WR-14, 08-11).
@@ -946,11 +946,11 @@ services:
     profiles: ["proxy"]
     image: nginx:1.30.4-alpine
     volumes:
-      - ./ops/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../ops/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       # ⛔ Ilova marshrutlari YAGONA manbadan: dev va production AYNI
       #    faylni o'qiydi. Nusxa qilinsa, birida tuzatilgan xavfsizlik
       #    xatosi ikkinchisida jimgina qolardi.
-      - ./ops/nginx/app.inc:/etc/nginx/app.inc:ro
+      - ../ops/nginx/app.inc:/etc/nginx/app.inc:ro
     ports:
       - "${PROXY_HOST_PORT:-8080}:80"
     restart: unless-stopped
@@ -970,7 +970,7 @@ services:
     # cheklovi buzilmaydi.
     profiles: ["sim"]
     build:
-      context: .
+      context: ..
       dockerfile: services/core-api/Dockerfile
       target: dev
     # ⚠ `--no-date-header` MAJBURIY. uvicorn o'z `Date` sarlavhasini ASGI
@@ -1018,7 +1018,7 @@ services:
       SIM_PASSWORD: "${SIM_PASSWORD:-Sim12345}"
       TZ: ${TZ:-Asia/Tashkent}
     volumes:
-      - .:/app
+      - ..:/app
     healthcheck:
       # Nishon ATAYIN `/__sim__/state`: u Digest talab qilmaydi va
       # `mode="slow"` da HECH QACHON kechiktirilmaydi. `/ISAPI/*` ni
@@ -1076,7 +1076,7 @@ services:
     volumes:
       # `:ro` MAJBURIY — server o'z konfiguratsiyasini QAYTA YOZA OLMASLIGI
       # kerak (go2rtc'dagi `PATCH /api/config` sinfidagi yo'l).
-      - ./ops/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - ../ops/mediamtx/mediamtx.yml:/mediamtx.yml:ro
     healthcheck:
       # 554 ga TCP ulanish — «jarayon tirikmi?» savoliga to'liq javob.
       # `-ffmpeg` variant Alpine asosida va busybox `nc` ni beradi.
@@ -1089,7 +1089,7 @@ services:
   tests:
     profiles: ["test"]
     build:
-      context: .
+      context: ..
       dockerfile: services/core-api/Dockerfile
       target: dev
     command: ["pytest", "-q"]
@@ -1149,7 +1149,7 @@ services:
       - "host.docker.internal:host-gateway"
     working_dir: /app
     volumes:
-      - .:/app
+      - ..:/app
       - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:

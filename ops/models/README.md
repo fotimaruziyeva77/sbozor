@@ -79,7 +79,7 @@ Fayl joyiga qo'yilgach image qayta quriladi (`COPY` build paytida
 bajariladi):
 
 ```bash
-docker compose build cv-service && docker compose up -d cv-service
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml build cv-service && docker compose up -d cv-service
 ```
 
 ## 4. ⚠ Nega repoda saqlanmaydi

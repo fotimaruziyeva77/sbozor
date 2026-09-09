@@ -63,3 +63,8 @@ Thumbs.db
 
 # Claude Code worktrees/session artifacts
 .claude/
+
+# Claude Code skill lockfayli — sbozorga aloqasi YO'Q, tasodifan
+# commitga tushgan. Fayl diskda QOLADI (skill versiyalari qadalgan),
+# lekin repo tarixiga kirmaydi.
+skills-lock.json

@@ -50,8 +50,8 @@ uni §8 dagi rollback tartibi bilan hal qiling.
 ### 1.2 Image'larni qurish
 
 ```bash
-docker compose build core-api worker scheduler cv-service bot-service backup
-docker compose --profile web build frontend
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml build core-api worker scheduler cv-service bot-service backup
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml --profile web build frontend
 ```
 
 **Kutilgan natija:** har bir servis uchun `Built` qatori; xatosiz exit 0.
@@ -88,7 +88,7 @@ npm run up
 sog'lom bo'lgandan keyin qaytadi.
 
 ```bash
-docker compose ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
 ```
 
 **Kutilgan natija:** ⛔ **o'nta** qator `running` holatida —
@@ -100,7 +100,7 @@ docker compose ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
 ### 1.5 Yuza qatlam (profil ortidagi ikkitasi)
 
 ```bash
-docker compose --profile web --profile proxy up -d frontend nginx --wait
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml --profile web --profile proxy up -d frontend nginx --wait
 ```
 
 **Kutilgan natija:** `frontend` va `nginx` `running`; `curl -sS -o
@@ -125,7 +125,7 @@ aks holda u eski jadval bilan yuguradi va ⛔ **hech qanday xato
 chiqmaydi**: jurnal toza, navbat esa yangi vazifa uchun mangu bo'sh.
 
 ```bash
-docker compose up -d --force-recreate scheduler worker
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml up -d --force-recreate scheduler worker
 ```
 
 **Kutilgan natija:** ikkala konteyner ham `Recreated` va keyin `running`;
@@ -135,7 +135,7 @@ va uning `"sentry": true|false` maydoni.
 ### 2.2 Jadval haqiqatan yangilanganini o'lchash
 
 ```bash
-docker compose exec db psql -U postgres -d sbozor \
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec db psql -U postgres -d sbozor \
   -c "SELECT component, last_seen_at FROM system_heartbeats ORDER BY component"
 ```
 
@@ -202,7 +202,7 @@ Besh kalit `.env` da: `BACKUP_DATABASE_URL`, `RESTIC_REPOSITORY`,
 (izohlari — `ops/backup/README.md` §2).
 
 ```bash
-docker compose logs backup --tail 20
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml logs backup --tail 20
 ```
 
 **Kutilgan natija:** `backup_unconfigured` qatori **YO'Q**. U chiqayotgan
@@ -213,7 +213,7 @@ ishlab «muvaffaqiyat» yozmaydi) va 26 soatdan keyin `backup_stale`
 ### 4.2 Birinchi zaxirani tunni kutmasdan olish
 
 ```bash
-docker compose exec backup /opt/backup/run-backup.sh
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup /opt/backup/run-backup.sh
 ```
 
 **Kutilgan natija:** ikkita `restic` xulosasi (biri `postgres` tegi
@@ -222,7 +222,7 @@ xulosasi, exit **0**. Nol bo'lmagan kod — zanjir o'sha qadamda
 **to'xtadi** va yurak urishi **yozilmadi**.
 
 ```bash
-docker compose exec backup restic snapshots --compact
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup restic snapshots --compact
 ```
 
 **Kutilgan natija:** kamida ikki snapshot: `sbozor-<sana>.dump`
@@ -230,7 +230,7 @@ docker compose exec backup restic snapshots --compact
 bugungi sana bilan.
 
 ```bash
-docker compose exec db psql -U postgres -d sbozor \
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec db psql -U postgres -d sbozor \
   -c "SELECT component, last_seen_at, detail FROM system_heartbeats WHERE component = 'backup'"
 ```
 
@@ -275,21 +275,21 @@ platformada ilova har so'rovda `permission denied for table` olardi.
 Tiklash **to'rt** qadam, aynan shu tartibda:
 
 ```bash
-docker compose exec backup restic restore latest --tag postgres --target /tmp/restore
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup restic restore latest --tag postgres --target /tmp/restore
 ```
 
 **Kutilgan natija:** `restored` xulosasi va `/tmp/restore` ichida
 `sbozor-<sana>.dump` fayli.
 
 ```bash
-docker compose exec backup psql "${BACKUP_DATABASE_URL}" -c "SELECT version()"
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup psql "${BACKUP_DATABASE_URL}" -c "SELECT version()"
 ```
 
 **Kutilgan natija:** `PostgreSQL 18.x` — ⛔ tiklanadigan serverning
 majori manbaning majoriga **teng** bo'lishi shart.
 
 ```bash
-docker compose exec backup pg_restore --no-owner --no-privileges \
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup pg_restore --no-owner --no-privileges \
   --dbname="${BACKUP_DATABASE_URL}" /tmp/restore/sbozor-<sana>.dump
 ```
 
@@ -315,7 +315,7 @@ SUPERUSER yoki `BYPASSRLS` talab qiladi, `sbozor_app` va `sbozor_owner`
 esa ATAYIN `NOSUPERUSER NOBYPASSRLS`.
 
 ```bash
-docker compose exec db psql -U postgres -d sbozor \
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec db psql -U postgres -d sbozor \
   -c "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname IN ('postgres','sbozor_owner','sbozor_app')"
 ```
 
@@ -351,7 +351,7 @@ tegishli:
 | Migratsiya ro'yxatidagi o'rni | ⛔ **VPS bilan BIR QATORDA**: hosting ko'chganda repo ham ko'chadi |
 
 ```bash
-docker compose exec backup sh -c 'echo "${RESTIC_REPOSITORY%%/*}"'
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup sh -c 'echo "${RESTIC_REPOSITORY%%/*}"'
 ```
 
 **Kutilgan natija:** offsite endpoint sxemasi (`s3:https:` bilan
@@ -373,8 +373,8 @@ shuning uchun `db` bilan aynan bir xil image ustida quriladi
 (`ops/backup/README.md` §6).
 
 ```bash
-docker compose exec backup pg_dump --version
-docker compose exec db postgres --version
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup pg_dump --version
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec db postgres --version
 ```
 
 **Kutilgan natija:** ikkala qatorning ham MAJOR raqami **teng**
@@ -388,7 +388,7 @@ docker compose exec db postgres --version
 | 2 | `db` image tegini yangilash va `docker compose up -d db` | Server majori endi backup majoridan katta emas |
 
 ```bash
-docker compose exec backup /opt/backup/run-backup.sh
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup /opt/backup/run-backup.sh
 ```
 
 **Kutilgan natija:** exit 0 — yangilashdan **keyin** zaxira zanjiri
@@ -444,8 +444,8 @@ ajratilgan.
 ```bash
 git log --oneline -n 10
 git checkout <oxirgi-ishlaydigan-teg>
-docker compose build core-api worker scheduler cv-service bot-service backup
-docker compose up -d --force-recreate core-api worker scheduler cv-service bot-service
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml build core-api worker scheduler cv-service bot-service backup
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml up -d --force-recreate core-api worker scheduler cv-service bot-service
 ```
 
 **Kutilgan natija:** konteynerlar eski image bilan `running`;
@@ -474,7 +474,7 @@ yo'qoladi. Downgrade zaruriyati tug'ilsa avval §4.2 ning zaxirasi
 ### 8.3 Rollback qarorining chegarasi
 
 ```bash
-docker compose exec db psql -U postgres -d sbozor \
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec db psql -U postgres -d sbozor \
   -c "SELECT version_num FROM alembic_version"
 ```
 

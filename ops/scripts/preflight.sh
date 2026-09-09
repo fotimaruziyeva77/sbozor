@@ -40,8 +40,8 @@ detail() { printf '     %s\n' "$1"; }
 # `.env` dan qiymat o'qiydi. ⛔ QIYMATNING O'ZI hech qachon chop etilmaydi —
 #    bu fayl sirlar bilan to'la va preflight chiqishi jurnалga tushishi mumkin.
 envval() {
-  [ -f .env ] || return 0
-  sed -n "s/^$1=//p" .env | head -n 1
+  [ -f deployment/.env ] || return 0
+  sed -n "s/^$1=//p" deployment/.env | head -n 1
 }
 
 # Bo'sh emasligini tekshiradi; ikkinchi argument — nima uchun kerakligi.
@@ -72,10 +72,10 @@ echo "=============================================================="
 # --- 1. `.env` ning o'zi ---------------------------------------------------
 echo
 echo "1) Konfiguratsiya fayli"
-if [ -f .env ]; then
-  ok ".env mavjud"
+if [ -f deployment/.env ]; then
+  ok "deployment/.env mavjud"
 else
-  red ".env yo'q — 'cp .env.example .env' qilib to'ldiring"
+  red "deployment/.env yo'q — 'cp deployment/.env.example deployment/.env' qilib to'ldiring"
 fi
 
 # --- 1.1. `.env` NAMUNADAN ORQADA QOLMAGANMI --------------------------------
@@ -95,10 +95,10 @@ fi
 #   2-bandda alohida tekshiriladi.
 echo
 echo "1.1) .env namunadan orqada qolmaganmi"
-if [ -f .env ] && [ -f .env.example ]; then
+if [ -f deployment/.env ] && [ -f deployment/.env.example ]; then
   missing="$(
-    awk -F= '/^[A-Z0-9_]+=/ {print $1}' .env.example | sort -u > /tmp/_pf_ex
-    awk -F= '/^[A-Z0-9_]+=/ {print $1}' .env         | sort -u > /tmp/_pf_cur
+    awk -F= '/^[A-Z0-9_]+=/ {print $1}' deployment/.env.example | sort -u > /tmp/_pf_ex
+    awk -F= '/^[A-Z0-9_]+=/ {print $1}' deployment/.env         | sort -u > /tmp/_pf_cur
     comm -23 /tmp/_pf_ex /tmp/_pf_cur
   )"
   count="$(printf '%s' "$missing" | grep -c . || true)"
@@ -137,9 +137,9 @@ need S3_SECRET_KEY         "cv-service va worker ko'tarilmaydi"
 # ishlatilganda — masalan birinchi zaxira nusxasida — chiqadi.
 echo
 echo "2.1) Namunadan qolgan o'rin to'ldiruvchilar"
-if [ -f .env ]; then
+if [ -f deployment/.env ]; then
   # ⚠ Faqat KALIT nomi chop etiladi, qiymat EMAS.
-  stale="$(grep -nE '^[A-Z0-9_]+=.*(CHANGEME|TODO|REPLACE_ME|xxxxx)' .env | cut -d= -f1 | cut -d: -f2 || true)"
+  stale="$(grep -nE '^[A-Z0-9_]+=.*(CHANGEME|TODO|REPLACE_ME|xxxxx)' deployment/.env | cut -d= -f1 | cut -d: -f2 || true)"
   if [ -z "$stale" ]; then
     ok "o'rin to'ldiruvchi qolmagan"
   else
@@ -210,13 +210,13 @@ want TELEGRAM_CHAT_ID    "alertlar boradigan chat ko'rsatilmagan"
 echo
 echo "8) Compose"
 if [ -n "$DOMAIN" ]; then
-  if PUBLIC_DOMAIN="$DOMAIN" docker compose -f compose.yaml -f compose.prod.yml \
+  if PUBLIC_DOMAIN="$DOMAIN" docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml \
        --profile proxy config >/dev/null 2>&1; then
     ok "prod konfiguratsiyasi yig'iladi"
 
     # ⛔ 8080 PORTI TEKSHIRUVI — `ports: !override` ishlayotganini
     #    HAQIQIY chiqishdan o'lchaydi, yozilganiga ishonmaydi.
-    published="$(PUBLIC_DOMAIN="$DOMAIN" docker compose -f compose.yaml -f compose.prod.yml \
+    published="$(PUBLIC_DOMAIN="$DOMAIN" docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml \
        --profile proxy config 2>/dev/null | grep -c 'published: "8080"' || true)"
     if [ "$published" = "0" ]; then
       ok "8080 porti prod'da OCHILMAYDI"

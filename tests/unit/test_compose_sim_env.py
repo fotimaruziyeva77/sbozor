@@ -41,7 +41,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-COMPOSE = REPO_ROOT / "compose.yaml"
+COMPOSE = REPO_ROOT / "deployment" / "compose.yaml"
 MEDIAMTX_CONF = REPO_ROOT / "ops" / "mediamtx" / "mediamtx.yml"
 
 CONSUMER_ROOTS = ("services/nvr-sim", "tests", "ops")

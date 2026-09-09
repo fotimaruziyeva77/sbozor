@@ -58,7 +58,7 @@ from taskiq.abc.broker import AsyncBroker as _AsyncBrokerImpl
 from taskiq.cli.scheduler.run import run_scheduler
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
-COMPOSE: Final = REPO_ROOT / "compose.yaml"
+COMPOSE: Final = REPO_ROOT / "deployment" / "compose.yaml"
 
 CORE_API_ROOT: Final = REPO_ROOT / "services" / "core-api"
 """SHU KONTEYNER YURITADIGAN YAGONA KOD BAZASI.

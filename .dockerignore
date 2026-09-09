@@ -16,7 +16,14 @@
 # Sirlar HECH QACHON image qatlamiga tushmaydi.
 .env
 .env.*
+# ⛔ `**/` SHART: Docker naqshlari TO'LIQ nisbiy yo'lga solishtiriladi,
+#    ya'ni yalang'och `.env` FAQAT ildizdagisini tutadi. Fayllar
+#    `deployment/` ga ko'chgach `deployment/.env` build kontekstiga
+#    JIMGINA tushardi va sirlar image qatlamida qolardi.
+**/.env
+**/.env.*
 !.env.example
+!**/.env.example
 
 node_modules
 frontend
@@ -31,5 +38,9 @@ frontend
 htmlcov
 coverage
 
+# Hujjatlar hech qanday image'ga kerak emas. `**/` bu yerda ham SHART:
+# fayllar `docs/` ga ko'chdi va yalang'och `*.docx` faqat ildizni tutadi.
+docs
 *.docx
+**/*.docx
 *.log

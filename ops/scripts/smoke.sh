@@ -15,7 +15,7 @@
 #
 # Ishlatilishi (istalgan mashinadan — server SHART EMAS):
 #   sh ops/scripts/smoke.sh demo.sbozor.uz
-#   sh ops/scripts/smoke.sh            # domen `.env` dagi PUBLIC_DOMAIN dan
+#   sh ops/scripts/smoke.sh            # domen `deployment/.env` dagi PUBLIC_DOMAIN dan
 #
 # Chiqish kodi: 0 — hammasi o'tdi, 1 — kamida bitta nuqson.
 # =============================================================================
@@ -25,8 +25,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 DOMAIN="${1:-}"
-if [ -z "$DOMAIN" ] && [ -f .env ]; then
-  DOMAIN="$(sed -n 's/^PUBLIC_DOMAIN=//p' .env | head -n 1)"
+if [ -z "$DOMAIN" ] && [ -f deployment/.env ]; then
+  DOMAIN="$(sed -n 's/^PUBLIC_DOMAIN=//p' deployment/.env | head -n 1)"
 fi
 if [ -z "$DOMAIN" ]; then
   echo "⛔ Domen berilmadi. Ishlatilishi: sh ops/scripts/smoke.sh demo.sbozor.uz"

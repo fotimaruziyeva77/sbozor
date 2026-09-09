@@ -14,8 +14,8 @@
 # ixtiyoriy qatlamni alohida faylda saqlash ularga umuman tegmaydi.
 #
 # ISHGA TUSHIRISH:
-#     docker compose -f compose.yaml -f compose.camagent.yml up -d --wait
-# (yoki barcha odatiy buyruqlarga `-f compose.camagent.yml` qo'shiladi)
+#     docker compose -f deployment/compose.yaml -f deployment/compose.camagent.yml up -d --wait
+# (yoki barcha odatiy buyruqlarga `-f deployment/compose.camagent.yml` qo'shiladi)
 #
 # RASM QAYERGA TUSHADI: mavjud SeaweedFS bucket'iga (`sbozor-snapshots`),
 # `camagent/` prefiksi ostida, har rasm yonida `.json` sidecar bilan.
@@ -33,7 +33,7 @@
 services:
   camagent-gateway:
     build:
-      context: services/camagent-gateway
+      context: ../services/camagent-gateway
     environment:
       CAMAGENT_GW_HOST: 0.0.0.0
       CAMAGENT_GW_PORT: "8787"

@@ -852,7 +852,7 @@ def test_self_check_is_not_wired_into_the_container_healthcheck() -> None:
       Bu `stalls.py:82-84` da o'rnatilgan qoidaning aynan o'zi: matn
       darvozasi sababni yozishga TO'SQINLIK QILMASLIGI kerak.
     """
-    compose = pathlib.Path("compose.yaml").read_text(encoding="utf-8")
+    compose = pathlib.Path("deployment/compose.yaml").read_text(encoding="utf-8")
     config = [line for line in compose.splitlines() if not line.lstrip().startswith("#")]
     offenders = [line for line in config if "self-check" in line or "self_check" in line]
 

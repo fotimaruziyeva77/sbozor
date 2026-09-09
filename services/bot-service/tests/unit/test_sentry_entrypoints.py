@@ -44,7 +44,7 @@ from typing import Final, NamedTuple
 import pytest
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[4]
-COMPOSE: Final = REPO_ROOT / "compose.yaml"
+COMPOSE: Final = REPO_ROOT / "deployment" / "compose.yaml"
 SERVICE_DOCKERFILE: Final = "services/bot-service/Dockerfile"
 
 SENTRY_ENV_KEY: Final = "SENTRY_DSN"

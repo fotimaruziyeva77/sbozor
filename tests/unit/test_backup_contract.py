@@ -54,8 +54,8 @@ BACKUP_DIR: Final = REPO_ROOT / "ops" / "backup"
 RUN_BACKUP: Final = BACKUP_DIR / "run-backup.sh"
 LOOP: Final = BACKUP_DIR / "loop.sh"
 HEARTBEAT: Final = BACKUP_DIR / "heartbeat.sql"
-COMPOSE: Final = REPO_ROOT / "compose.yaml"
-ENV_EXAMPLE: Final = REPO_ROOT / ".env.example"
+COMPOSE: Final = REPO_ROOT / "deployment" / "compose.yaml"
+ENV_EXAMPLE: Final = REPO_ROOT / "deployment" / ".env.example"
 
 MIN_SCANNED_FILES: Final = 5
 """Quyi chegara — 1-qoida.

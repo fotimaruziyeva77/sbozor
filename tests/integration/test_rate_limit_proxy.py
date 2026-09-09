@@ -82,7 +82,7 @@ CLIENT_PORT = 51_000
 # (`working_dir: /app`, `.:/app`), xostda ham bir xil ishlaydi.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NGINX_CONF = REPO_ROOT / "ops" / "nginx" / "nginx.conf"
-COMPOSE_FILES = (REPO_ROOT / "compose.yaml", REPO_ROOT / "compose.override.yml")
+COMPOSE_FILES = (REPO_ROOT / "deployment" / "compose.yaml", REPO_ROOT / "deployment" / "compose.override.yml")
 
 # nginx konteynerining compose bridge tarmog'idagi manzili (kuzatilgan
 # `sbozor_default` = 172.19.0.0/16 ichidan). uvicorn uchun bu — PEER, ya'ni
@@ -531,7 +531,7 @@ def test_compose_never_trusts_every_proxy() -> None:
 
 def test_env_example_does_not_ship_the_wildcard() -> None:
     """`.env.example` ham `*` tarqatmaydi — u har bir dev'ning `.env` iga ko'chadi."""
-    env_example = REPO_ROOT / ".env.example"
+    env_example = REPO_ROOT / "deployment" / ".env.example"
     assignments = [
         line.split("=", 1)[1].strip()
         for line in _strip_comments(env_example.read_text(encoding="utf-8")).splitlines()

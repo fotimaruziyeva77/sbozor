@@ -51,8 +51,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 S3_CONFIG_EXAMPLE = REPO_ROOT / "ops" / "seaweedfs" / "s3.json.example"
-ENV_EXAMPLE = REPO_ROOT / ".env.example"
-COMPOSE = REPO_ROOT / "compose.yaml"
+ENV_EXAMPLE = REPO_ROOT / "deployment" / ".env.example"
+COMPOSE = REPO_ROOT / "deployment" / "compose.yaml"
 
 ENV_LINE = re.compile(r"^([A-Z][A-Z0-9_]*)=(.*)$")
 """`.env.example` ning yagona qabul qilinadigan shakli — `KEY=VALUE`.

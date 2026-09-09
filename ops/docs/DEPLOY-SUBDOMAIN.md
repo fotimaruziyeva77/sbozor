@@ -61,7 +61,7 @@ ALLOW_NO_CV=1 sh ops/scripts/preflight.sh
 va stack'ni cv-service'siz ko'taring:
 
 ```bash
-docker compose -f compose.yaml -f compose.prod.yml --profile proxy up -d --scale cv-service=0
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml --profile proxy up -d --scale cv-service=0
 ```
 
 ⚠ Bunda **bandlik o'lchanmaydi**: «band, lekin to'lovsiz» hisoboti doim nol
@@ -82,7 +82,7 @@ Let's Encrypt haftalik limitini yeb qo'ymaslik uchun.
 ## 4. Ishga tushirish
 
 ```
-docker compose -f compose.yaml -f compose.prod.yml --profile proxy up -d
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml --profile proxy up -d
 ```
 
 ⛔ Fayllar **oshkora** sanaladi. `compose.override.yml` avtomatik qo'shiladi va
@@ -92,7 +92,7 @@ ataylab nomlamaydi.
 ## 5. Migratsiya va birinchi admin
 
 ```
-docker compose -f compose.yaml -f compose.prod.yml --profile migrate run --rm migrate
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml --profile migrate run --rm migrate
 ```
 
 ### 5.1. Birinchi platforma admini
@@ -105,7 +105,7 @@ hisob **umuman tug'ilmaydi**. Bu qadam o'tkazib yuborilsa, deploy
 tugaydi va tizimga **hech kim kira olmaydi**.
 
 ```
-docker compose -f compose.yaml -f compose.prod.yml --profile migrate run --rm   -e BOOTSTRAP_PHONE=+998901234567   -e BOOTSTRAP_NAME="Ism Familiya"   -e BOOTSTRAP_PASSWORD='bir-martalik-parol'   migrate python ops/scripts/bootstrap_admin.py
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml --profile migrate run --rm   -e BOOTSTRAP_PHONE=+998901234567   -e BOOTSTRAP_NAME="Ism Familiya"   -e BOOTSTRAP_PASSWORD='bir-martalik-parol'   migrate python ops/scripts/bootstrap_admin.py
 ```
 
 - Parol **bir martalik**: birinchi kirishda ilova majburan almashtirishga
@@ -164,7 +164,7 @@ joriy so'rovlarni tugatadi, uzilish bo'lmaydi.
 Tekshirish (sertifikat muddati):
 
 ```
-docker compose -f compose.yaml -f compose.prod.yml --profile proxy exec nginx   sh -c 'openssl x509 -enddate -noout -in /etc/letsencrypt/live/$PUBLIC_DOMAIN/fullchain.pem'
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml --profile proxy exec nginx   sh -c 'openssl x509 -enddate -noout -in /etc/letsencrypt/live/$PUBLIC_DOMAIN/fullchain.pem'
 ```
 
 ## Portlar
@@ -179,7 +179,7 @@ ikkinchi eshik, uni skaner birinchi kuni topadi.
 Tekshirish:
 
 ```
-docker compose -f compose.yaml -f compose.prod.yml --profile proxy config | grep -A3 published
+docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml --profile proxy config | grep -A3 published
 ```
 
 ## Nima production'da KO'TARILMAYDI

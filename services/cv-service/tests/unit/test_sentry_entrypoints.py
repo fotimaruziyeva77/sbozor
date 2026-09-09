@@ -41,7 +41,7 @@ from fastapi import FastAPI
 from taskiq import AsyncBroker, TaskiqEvents, TaskiqScheduler
 
 REPO_ROOT: Final = Path(__file__).resolve().parents[4]
-COMPOSE: Final = REPO_ROOT / "compose.yaml"
+COMPOSE: Final = REPO_ROOT / "deployment" / "compose.yaml"
 SERVICE_DOCKERFILE: Final = "services/cv-service/Dockerfile"
 
 SENTRY_ENV_KEY: Final = "SENTRY_DSN"

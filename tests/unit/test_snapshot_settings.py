@@ -43,7 +43,7 @@ from unit.test_quality_filter import _SHIPPED
 type BuildSettings = Callable[..., Settings]
 """`build` fixture'ining tipi — har testda takrorlanmasin."""
 
-_ENV_EXAMPLE: Final = Path(__file__).resolve().parents[2] / ".env.example"
+_ENV_EXAMPLE: Final = Path(__file__).resolve().parents[2] / "deployment" / ".env.example"
 
 PHASE4_PREFIXES: Final[tuple[str, ...]] = (
     "S3_",

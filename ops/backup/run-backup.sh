@@ -5,7 +5,7 @@
 #
 # Ishlatilishi:
 #     /opt/backup/run-backup.sh          # `loop.sh` chaqiradi
-#     docker compose exec backup /opt/backup/run-backup.sh   # qo'lda
+#     docker compose -f deployment/compose.yaml -f deployment/compose.prod.yml exec backup /opt/backup/run-backup.sh   # qo'lda
 #
 # Chiqish kodi: 0 — TO'RTALA qadam ham bajarildi VA yurak urishi yozildi;
 # nol bo'lmagan kod — zanjir o'sha qadamda TO'XTADI va yurak urishi

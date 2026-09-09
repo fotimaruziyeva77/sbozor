@@ -16,7 +16,7 @@ fayl emas. Qobiliyatning o'zi Karmana miqyosida (8 zona / ~600 rasta /
 ~480 sotuvchi) **allaqachon o'lchangan** va o'lchov CI'da takrorlanadi:
 
 ```sh
-docker compose --profile test run --rm tests \
+docker compose -f deployment/compose.yaml -f deployment/compose.override.yml --profile test run --rm tests \
   pytest tests/integration/test_karmana_scale_import.py -q
 ```
 
