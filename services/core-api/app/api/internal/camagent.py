@@ -40,6 +40,7 @@ idempotency kaliti deterministik). Shuning uchun `capture_runs` ham,
 `snapshots` ham `ON CONFLICT` bilan yoziladi: takroriy xabar ikkinchi
 qator YARATMAYDI va `is_billable` ikki marta sanalmaydi.
 """
+
 from __future__ import annotations
 
 import hmac
@@ -51,13 +52,14 @@ from zoneinfo import ZoneInfo
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sbozor_core.tenancy import ActorKind, set_tenant_context
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from sbozor_core.tenancy import ActorKind, set_tenant_context
-
 from app.services import storage as storage_mod
-from app.services.quality import QUALITY_THRESHOLDS_VERSION, analyze
+from app.services.cv_queue import enqueue_detect
+from app.services.quality import QUALITY_THRESHOLDS_VERSION, VERDICT_OK, analyze
+from app.services.review_seed import seed_snapshot
 from app.settings import Settings
 
 log = structlog.get_logger(__name__)
@@ -87,12 +89,10 @@ async def _require_service_token(request: Request) -> None:
     expected = expected.get_secret_value() if expected else ""
     if not expected:
         log.warning("camagent_internal_token_not_configured", path=request.url.path)
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail=_UNAVAILABLE)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=_UNAVAILABLE)
     if not hmac.compare_digest(_presented_token(request).encode(), expected.encode()):
         log.warning("camagent_internal_token_rejected", path=request.url.path)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail=_UNAUTHORIZED)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNAUTHORIZED)
 
 
 ServiceToken = Annotated[None, Depends(_require_service_token)]
@@ -153,20 +153,56 @@ async def accept_snapshot(
     #   RLS esa `app.market_id` GUC'siz 0 qator beradi, ya'ni kontekstsiz
     #   kamera topilmasdi va kadr jimgina yo'qolardi.
     sessionmaker: async_sessionmaker[AsyncSession] = async_sessionmaker(
-        request.app.state.engine, expire_on_commit=False)
+        request.app.state.engine, expire_on_commit=False
+    )
     async with sessionmaker() as session, session.begin():
         await set_tenant_context(
-            session, market_id=payload.market_id, actor_id=None,
+            session,
+            market_id=payload.market_id,
+            actor_id=None,
             actor_kind=ActorKind.SYSTEM,
-            request_id=f"camagent:{payload.object_key[:64]}")
-        return await _accept(session, request, settings, payload, market_id)
+            request_id=f"camagent:{payload.object_key[:64]}",
+        )
+        natija = await _accept(session, request, settings, payload, market_id)
+
+    # =====================================================================
+    # ⛔ CV NAVBATIGA — TRANZAKSIYA YOPILGANDAN KEYIN (`jobs/capture.py`
+    #    naqshi, `04-PATTERNS.md` §3.3 4-qadam). Ikki sabab:
+    #
+    #    (a) ichkarida bo'lsa CV navbatining nosozligi (Valkey uzilgan)
+    #        `COMMIT` ni yiqitardi va KADR OLISH ham yiqilardi — holbuki
+    #        obyekt allaqachon S3 da va dalil YO'QOLMAGAN;
+    #    (b) xabar `COMMIT` dan OLDIN chiqsa `cv-service` hali MAVJUD
+    #        BO'LMAGAN `snapshots` qatorini izlardi va «ko'rinmadi» deb
+    #        chiqib ketardi.
+    #
+    # ⚠ FAQAT YANGI va `ok` kadr uchun. Takroriy xabar (agent tarmoq
+    #   uzilganda qayta yuboradi) navbatni bekorga to'ldirardi; yaroqsiz
+    #   kadrda esa `occupancy_events` ning kompozit FK'si `(id, true)`
+    #   juftligini TALAB qiladi va u jadvalda umuman yo'q (D-21) — ya'ni
+    #   oldindan filtrlanadigan xato IMKONSIZ xatoga aylanardi.
+    #
+    # ⚠ Xatosi YUTILADI (`cv_queue.py` docstringi), shuning uchun bu
+    #   yerda `try` YO'Q va bu ATAYIN: ikkinchi qatlam «qaysi biri
+    #   yutdi?» savolini tug'dirardi.
+    # =====================================================================
+    if (
+        natija.snapshot_id is not None
+        and not natija.duplicate
+        and natija.quality_verdict == VERDICT_OK
+    ):
+        await enqueue_detect(market_id=payload.market_id, snapshot_id=natija.snapshot_id)
+
+    return natija
 
 
 async def _accept(session, request, settings, payload, market_id) -> SnapshotOut:
     # 1. Kamera вЂ” seriya + kanal bo'yicha. Sinxronizatsiya (`sbozor_sync`)
     #    uni allaqachon yaratgan bo'lishi kerak; topilmasa kadr YO'QOLMAYDI,
     #    lekin hisobga ham kirmaydi va sabab jurnalga tushadi.
-    qator = (await session.execute(text("""
+    qator = (
+        await session.execute(
+            text("""
         SELECT c.id, c.nvr_id
           FROM cameras c
           JOIN nvr_devices d ON d.id = c.nvr_id AND d.market_id = c.market_id
@@ -174,24 +210,32 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
            AND d.serial_number = :serial
            AND c.channel_no = :channel
          LIMIT 1
-    """), {"market_id": market_id, "serial": payload.camera_serial,
-           "channel": payload.channel_no})).first()
+    """),
+            {
+                "market_id": market_id,
+                "serial": payload.camera_serial,
+                "channel": payload.channel_no,
+            },
+        )
+    ).first()
     if qator is None:
-        log.warning("camagent_snapshot_camera_not_found",
-                    market_id=market_id, serial=payload.camera_serial,
-                    channel=payload.channel_no)
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail="camera_not_found")
+        log.warning(
+            "camagent_snapshot_camera_not_found",
+            market_id=market_id,
+            serial=payload.camera_serial,
+            channel=payload.channel_no,
+        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="camera_not_found")
     camera_id, nvr_id = qator[0], qator[1]
 
     # 2. Kadr baytlari вЂ” sifat tahlili uchun.
     try:
         baytlar = await _read_object(settings, payload.object_key)
-    except Exception as exc:                      # noqa: BLE001
-        log.warning("camagent_snapshot_read_failed",
-                    key=payload.object_key, error=str(exc))
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
-                            detail="object_unreadable") from exc
+    except Exception as exc:  # noqa: BLE001
+        log.warning("camagent_snapshot_read_failed", key=payload.object_key, error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="object_unreadable"
+        ) from exc
 
     # в›” CHEGARALAR SOZLAMADAN, standart qiymatlardan EMAS: operator
     #   ularni `.env` orqali o'zgartirishi mumkin va CamAgent kadrlari
@@ -206,9 +250,9 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
     #   ustuni bor va u bo'yicha `capture_repo._ENSURE_PLAN` reja
     #   quradi — bu yerda boshqa mintaqa ishlatilsa, bir xil kadr ikki
     #   xil `business_date` ga tushib, reja bilan JUFTLASHMASDI.
-    mintaqa = (await session.execute(
-        text("SELECT timezone FROM markets WHERE id = :m"),
-        {"m": market_id})).scalar_one_or_none() or "Asia/Tashkent"
+    mintaqa = (
+        await session.execute(text("SELECT timezone FROM markets WHERE id = :m"), {"m": market_id})
+    ).scalar_one_or_none() or "Asia/Tashkent"
 
     # ⛔ SLOT — ENG YAQIN JADVAL SLOTI, XOM SOAT EMAS (260829).
     #
@@ -223,7 +267,9 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
     #   qolgan kadr esa haqiqatan REJAGA KIRMAGAN — u shunday ko'rinishi
     #   kerak, yashirilmasligi.
     if not payload.slot_time:
-        yaqin = (await session.execute(text("""
+        yaqin = (
+            await session.execute(
+                text("""
             SELECT s.slot_time
               FROM snapshot_schedule_slots s
               JOIN snapshot_schedules sc
@@ -233,19 +279,26 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
              ORDER BY abs(extract(epoch FROM
                        (s.slot_time - (:t AT TIME ZONE :tz)::time)))
              LIMIT 1
-        """), {"m": market_id, "t": payload.scheduled_at,
-               "tz": mintaqa})).scalar_one_or_none()
+        """),
+                {"m": market_id, "t": payload.scheduled_at, "tz": mintaqa},
+            )
+        ).scalar_one_or_none()
     else:
         yaqin = None
 
     slot = _slot(payload.slot_time)
     if slot is None and yaqin is not None:
-        farq = abs((datetime.combine(date.min, yaqin)
-                    - datetime.combine(date.min, _mahalliy(
-                        payload.scheduled_at, mintaqa))).total_seconds())
+        farq = abs(
+            (
+                datetime.combine(date.min, yaqin)
+                - datetime.combine(date.min, _mahalliy(payload.scheduled_at, mintaqa))
+            ).total_seconds()
+        )
         if farq <= 600:
             slot = yaqin
-    run = (await session.execute(text("""
+    run = (
+        await session.execute(
+            text("""
         INSERT INTO capture_runs
             (market_id, camera_id, nvr_id, slot_time, scheduled_at, status,
              attempts, started_at, finished_at, capture_method, is_market_open)
@@ -258,17 +311,28 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
         ON CONFLICT ON CONSTRAINT uq_capture_runs_market_id_camera_id_business_date_slot_time
         DO UPDATE SET status = 'succeeded', finished_at = EXCLUDED.finished_at
         RETURNING id, snapshot_id
-    """), {"market_id": market_id, "camera_id": camera_id, "nvr_id": nvr_id,
-           "slot": slot, "scheduled_at": payload.scheduled_at,
-           "tz": mintaqa,
-           "captured_at": payload.captured_at})).first()
+    """),
+            {
+                "market_id": market_id,
+                "camera_id": camera_id,
+                "nvr_id": nvr_id,
+                "slot": slot,
+                "scheduled_at": payload.scheduled_at,
+                "tz": mintaqa,
+                "captured_at": payload.captured_at,
+            },
+        )
+    ).first()
     run_id, mavjud_snapshot = run[0], run[1]
     if mavjud_snapshot is not None:
-        return SnapshotOut(snapshot_id=mavjud_snapshot,
-                           quality_verdict=hisobot.verdict, duplicate=True)
+        return SnapshotOut(
+            snapshot_id=mavjud_snapshot, quality_verdict=hisobot.verdict, duplicate=True
+        )
 
     # 4. `snapshots` вЂ” sifat verdikti bilan.
-    snap = (await session.execute(text("""
+    snap = (
+        await session.execute(
+            text("""
         INSERT INTO snapshots
             (market_id, capture_run_id, camera_id, scheduled_at, captured_at,
              slot_time, object_key, size_bytes, width, height,
@@ -281,24 +345,64 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
                 :verdict, :mean, :stddev, :saturation, :tv, :light, 'isapi')
         ON CONFLICT (market_id, object_key) DO NOTHING
         RETURNING id
-    """), {"market_id": market_id, "run_id": run_id, "camera_id": camera_id,
-           "scheduled_at": payload.scheduled_at, "captured_at": payload.captured_at,
-           "slot": slot, "tz": mintaqa, "object_key": payload.object_key,
-           "size_bytes": payload.size_bytes, "width": hisobot.width,
-           "height": hisobot.height, "verdict": hisobot.verdict,
-           "mean": hisobot.mean, "stddev": hisobot.stddev,
-           "saturation": hisobot.saturation,
-           "tv": QUALITY_THRESHOLDS_VERSION, "light": hisobot.light_mode})).first()
-    if snap is None:                              # takroriy `object_key`
+    """),
+            {
+                "market_id": market_id,
+                "run_id": run_id,
+                "camera_id": camera_id,
+                "scheduled_at": payload.scheduled_at,
+                "captured_at": payload.captured_at,
+                "slot": slot,
+                "tz": mintaqa,
+                "object_key": payload.object_key,
+                "size_bytes": payload.size_bytes,
+                "width": hisobot.width,
+                "height": hisobot.height,
+                "verdict": hisobot.verdict,
+                "mean": hisobot.mean,
+                "stddev": hisobot.stddev,
+                "saturation": hisobot.saturation,
+                "tv": QUALITY_THRESHOLDS_VERSION,
+                "light": hisobot.light_mode,
+            },
+        )
+    ).first()
+    if snap is None:  # takroriy `object_key`
         return SnapshotOut(quality_verdict=hisobot.verdict, duplicate=True)
 
     snapshot_id = snap[0]
-    await session.execute(text(
-        "UPDATE capture_runs SET snapshot_id = :sid WHERE id = :rid"),
-        {"sid": snapshot_id, "rid": run_id})
+    await session.execute(
+        text("UPDATE capture_runs SET snapshot_id = :sid WHERE id = :rid"),
+        {"sid": snapshot_id, "rid": run_id},
+    )
 
-    log.info("camagent_snapshot_accepted", market_id=market_id,
-             camera_id=str(camera_id), verdict=hisobot.verdict)
+    # =====================================================================
+    # URUG' REJIMI — MODEL YO'Q PAYTDA BANDLIKNI ODAM O'LCHAYDI.
+    #
+    # ⛔ SHU TRANZAKSIYA ICHIDA VA BU ATAYIN (`jobs/capture.py` bilan
+    #    bir xil qaror): kadr qatori bilan urug' hodisasi BIRGA yoziladi
+    #    yoki ikkalasi ham yozilmaydi. Alohida tranzaksiyada kadr yozilib
+    #    hodisa yiqilsa, o'sha kadr nazoratchi navbatiga HECH QACHON
+    #    tushmasdi va qaysi kadr qolib ketgani hech qayerda yozilmasdi.
+    #
+    # ⚠ `cv-service` GA MUHTOJ EMAS va aynan shu sababdan bu yerda:
+    #   `seed_snapshot` sof BAZA ishi, ONNX modelisiz ishlaydi. CamAgent
+    #   obyektlarida model hali yo'q (`ops/models/` bo'sh), bandlik esa
+    #   BUGUN o'lchanishi kerak — aks holda hisob-kitob kutib turardi.
+    #
+    # ⚠ Zonasi yo'q kamera uchun `zones=0` qaytadi va bu XATO EMAS:
+    #   kalibrovka qilinmagan kamera shunchaki hodisa bermaydi. Zona
+    #   chizilgan sayin hodisalar o'zi paydo bo'la boshlaydi.
+    # =====================================================================
+    if settings.occupancy_seed_mode and hisobot.verdict == VERDICT_OK:
+        await seed_snapshot(session, market_id=payload.market_id, snapshot_id=snapshot_id)
+
+    log.info(
+        "camagent_snapshot_accepted",
+        market_id=market_id,
+        camera_id=str(camera_id),
+        verdict=hisobot.verdict,
+    )
     return SnapshotOut(snapshot_id=snapshot_id, quality_verdict=hisobot.verdict)
 
 
