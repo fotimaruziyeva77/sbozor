@@ -208,6 +208,8 @@ __all__ = [
     "CaseRowResponse",
     "CaseUpdateRequest",
     "HitRateResponse",
+    "OpenCaseDayResponse",
+    "OpenCaseDaysResponse",
     "ReconciliationReportResponse",
     "ReconciliationReportRow",
     # --- 07-16: xabar yetkazilishi — direktor ko'radigan yozuv (BOT-04) ---
@@ -4569,6 +4571,35 @@ class HitRateResponse(BaseModel):
     """`new` + `in_review` — ⛔ MAXRAJGA KIRMAYDI, lekin YASHIRILMAYDI ham."""
     hit_rate: float | None
     """⛔ `None` — «hali o'lchov yo'q». `0.0` bilan ALMASHTIRILMAYDI."""
+
+
+class OpenCaseDayResponse(BaseModel):
+    """Hal qilinmagan (`new`/`in_review`) case'lari bor BITTA kun."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    open_count: int
+
+
+class OpenCaseDaysResponse(BaseModel):
+    """`GET /reconciliation/open-days` — hal qilinmagan ishli kunlar (260924-hpm).
+
+    =======================================================================
+    ⛔⛔ NEGA KERAK: case ro'yxati KUN kesimida va standart kun KECHA,
+       «band, lekin to'lovsiz» ishi esa kamida 4 kun oldingi sana bilan
+       tug'iladi. Prod'da 5 ta ish 4 hafta hech kim ko'rmagan holda turdi —
+       ular mavjud edi, faqat hech bir ekran ularning KUNINI aytmasdi.
+
+    ⛔ FAQAT KUN VA SON: rasta kodi, sotuvchi va summa bu yerda YO'Q — ular
+       o'sha kunning ro'yxatida, o'z huquqi va o'z darvozalari ostida.
+    =======================================================================
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    days: list[OpenCaseDayResponse]
+    """Yangidan eskiga. ⚠ Uzunligi cheklangan (`OPEN_CASE_DAYS_LIMIT`)."""
 
 
 # ---------------------------------------------------------------------------

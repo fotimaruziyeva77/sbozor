@@ -76,6 +76,7 @@ import { domainKey } from "@/lib/market-queries";
 export const RECONCILIATION_REPORT_PATH = "/reconciliation/report";
 export const RECONCILIATION_CASES_PATH = "/reconciliation/cases";
 export const RECONCILIATION_DELIVERY_PATH = "/reconciliation/delivery";
+export const RECONCILIATION_OPEN_DAYS_PATH = "/reconciliation/open-days";
 
 /**
  * Bitta sahifadagi eng ko'p case — SERVER CHEGARASINING ko'zgusi.
@@ -390,6 +391,24 @@ export const deliveryListSchema = z.strictObject({
 
 export type DeliveryList = z.infer<typeof deliveryListSchema>;
 
+/**
+ * `GET /reconciliation/open-days` — hal qilinmagan ishli kunlar (260924-hpm).
+ *
+ * ⛔ FAQAT KUN VA SON: rasta, sotuvchi va summa o'sha kunning ro'yxatida
+ *    qoladi. Sahifa bu javob bilan faqat «qaysi kunga qarash kerak?»
+ *    degan savolga javob beradi.
+ */
+export const openCaseDaysSchema = z.strictObject({
+  days: z.array(
+    z.strictObject({
+      day: z.string(),
+      open_count: z.number().int(),
+    }),
+  ),
+});
+
+export type OpenCaseDays = z.infer<typeof openCaseDaysSchema>;
+
 /* --- Kesh kalitlari (TUG'ILISHIDANOQ doiralangan, §5.4) ------------------- */
 
 /*
@@ -428,6 +447,10 @@ export const deliveryKey = (marketId: string, day: string) =>
  */
 export const caseDetailKey = (marketId: string, caseId: string) =>
   domainKey(marketId, "recon-case", caseId);
+
+/** Kunlararo ochiq ishlar — KUNSIZ kalit: javob tanlangan kunga bog'liq emas. */
+export const openDaysKey = (marketId: string) =>
+  domainKey(marketId, "recon-open-days");
 
 /** Yozilgan hisobot O'ZGARMAS (D-07) — 60 soniya XAVFSIZ. */
 export const REPORT_STALE_TIME_MS = 60_000;
@@ -530,6 +553,24 @@ export function useReconciliationReport(
       ),
     enabled: marketId !== null && day !== "" && (options?.enabled ?? true),
     staleTime: REPORT_STALE_TIME_MS,
+  });
+}
+
+/**
+ * `GET /reconciliation/open-days` — kun tanlagichi yonidagi e'lon uchun.
+ *
+ * ⚠ Navbat bilan AYNI tezlikda eskiradi (`CASES_STALE_TIME_MS`): hukm
+ *   chiqarilganda ikkalasi birga bekor qilinadi (`useCaseUpdate`).
+ */
+export function useOpenCaseDays() {
+  const marketId = useReconciliationMarketId();
+
+  return useQuery({
+    queryKey: openDaysKey(marketId ?? ""),
+    queryFn: () =>
+      apiFetch(RECONCILIATION_OPEN_DAYS_PATH, { schema: openCaseDaysSchema }),
+    enabled: marketId !== null,
+    staleTime: CASES_STALE_TIME_MS,
   });
 }
 
@@ -724,7 +765,7 @@ export function useDeliveries(
  * o'ylardi — ya'ni to'g'ri ishlagan yozuv buzuq bo'lib ko'rinardi.
  * =========================================================================
  *
- * ⛔⛔ BEKOR QILINADIGAN DOMENLAR — VA NEGA ULAR IKKITA, UCHTA EMAS:
+ * ⛔⛔ BEKOR QILINADIGAN DOMENLAR — UCHTA, VA NEGA `recon-hitrate` ULARDA YO'Q:
  *
  *   `recon-cases`  — navbat qatorining O'ZI (holat, mas'ul) ⛔ VA
  *                    ANIQLIK ULUSHI ham. Ulush ⛔ ALOHIDA SO'ROV
@@ -735,6 +776,8 @@ export function useDeliveries(
  *                    ⛔ NO-OP bo'lardi — kodda esa «ulush ham
  *                    yangilanadi» degan YOLG'ON izoh qolardi.
  *   `recon-report` — hisobot qatoridagi case NISHONI (§8.5).
+ *   `recon-open-days` — kunlararo ochiq ishlar e'loni (260924-hpm): hukm
+ *                    chiqarilgan ish o'z kunining sanog'idan chiqadi.
  *
  * Bittasi unutilsa ekranda ⛔ IKKI XIL HAQIQAT qolardi: navbatda
  * «Asosli», hisobot qatorida esa hamon «Yangi».
@@ -787,7 +830,7 @@ export function useCaseUpdate() {
       void client.invalidateQueries({
         queryKey: caseDetailKey(marketId, input.caseId),
       });
-      for (const domain of ["recon-cases", "recon-report"]) {
+      for (const domain of ["recon-cases", "recon-report", "recon-open-days"]) {
         void client.invalidateQueries({ queryKey: domainKey(marketId, domain) });
       }
     },

@@ -614,7 +614,7 @@
     "dayStateDue": "сегодняшний сбор не оплачен",
     "dayStateFair": "ярмарка — патта не взимается",
     "dayStateFree": "продавец не закреплён",
-    "dayStateMismatch": "открытое расхождение",
+    "dayStateMismatch": "нерешённое расхождение",
     "dayStateNoBilling": "сегодня начисление не делается",
     "dayStatePaid": "сегодняшний сбор оплачен",
     "dayStatusAmount": "Сегодняшний сбор",
@@ -631,7 +631,7 @@
     "legendFairStall": "Ярмарка (патта не взимается)",
     "legendFree": "Зелёный — продавец не закреплён, сегодня сбор не ожидается",
     "legendMaintenance": "На ремонте",
-    "legendMismatch": "Жёлтый — есть открытое расхождение",
+    "legendMismatch": "Жёлтый — есть нерешённое расхождение",
     "legendNoBilling": "Без цвета — сегодня по этому месту начисление не делается",
     "legendNoVendor": "Без продавца",
     "legendPaid": "Синий — сегодняшний сбор оплачен полностью",
@@ -643,7 +643,8 @@
     "skipLink": "Пропустить схему",
     "title": "Схема рынка",
     "zoneLabel": "Зона {name}",
-    "zoneStallCount": "Мест: {count}"
+    "zoneStallCount": "Мест: {count}",
+    "dayStatusOpenCase": "Открыть расхождение"
   },
   "plan": {
     "title": "Ручное черчение плана",
@@ -1554,7 +1555,9 @@
       "case_resolution_required": "Напишите причину вашего решения.",
       "case_forbidden": "Обратитесь к директору.",
       "assignee_not_in_market": "Выберите сотрудника этого рынка из списка."
-    }
+    },
+    "openDaysTitle": "Нерешённые расхождения есть и в другие дни:",
+    "openDaysCount": "{count, plural, one {# расхождение} few {# расхождения} many {# расхождений} other {# расхождения}}"
   },
   "headline": {
     "revenue_today": "Сегодняшняя выручка",

@@ -113,11 +113,14 @@ __all__ = [
     "CaseRow",
     "CaseTransition",
     "HitRate",
+    "OPEN_CASE_DAYS_LIMIT",
+    "OpenCaseDay",
     "OpenCasesResult",
     "case_detail",
     "case_evidence",
     "hit_rate",
     "list_cases",
+    "open_case_days",
     "open_cases",
     "transition",
 ]
@@ -966,6 +969,69 @@ async def hit_rate(
         pending=int(row["pending"]),
         rate=None if denominator == 0 else justified / denominator,
     )
+
+
+# ===========================================================================
+# 3a. HAL QILINMAGAN ISHLI KUNLAR — navbatning KUNLARARO ko'rinishi (260924-hpm)
+# ===========================================================================
+
+OPEN_CASE_DAYS_LIMIT: Final[int] = 60
+"""Javobdagi kunlar chegarasi — yangidan eskiga.
+
+⚠ Ochiq case o'z-o'zidan yopilmaydi, ya'ni ro'yxat nazariy jihatdan
+  cheksiz o'sadi. 60 kun — `CASE_LOOKBACK_DAYS` ning ikki baravari: undan
+  eski ochiq ish allaqachon qarzdorlik reestrining savoli.
+"""
+
+_OPEN_CASE_DAYS = text(
+    """
+    SELECT rc.service_date AS day,
+           count(*)::int   AS open_count
+      FROM reconciliation_cases rc
+     WHERE rc.market_id = :market_id
+       AND rc.status = ANY(:open_statuses)
+     GROUP BY rc.service_date
+     ORDER BY rc.service_date DESC
+     LIMIT :limit
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("open_statuses", type_=_TEXT_ARRAY),
+    bindparam("limit", type_=Integer()),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class OpenCaseDay:
+    """Hal qilinmagan case'lari bor bitta kun."""
+
+    day: date
+    open_count: int
+
+
+async def open_case_days(session: AsyncSession, *, market_id: UUID) -> list[OpenCaseDay]:
+    """Hal qilinmagan (`new`/`in_review`) case'li kunlar — yangidan eskiga.
+
+    ⛔ NEGA KERAK: `list_cases()` KUN kesimida, sahifaning standart kuni
+       esa KECHA; «band, lekin to'lovsiz» ishi kamida `overdue_days` + 1
+       kun oldingi sana bilan tug'iladi. Kunlararo ko'rinishsiz bunday ish
+       mavjud bo'lib turib hech bir ekranda chiqmasdi (prod'da 5 ta ish 4
+       hafta ko'rilmadi).
+
+    ⚠ «Ochiq» ta'rifi `_PENDING_STATUSES` — hit-rate maxrajidan chiqarilgan
+      AYNI to'plam; xaritaning sariq rangi ham shu ikki holatga qaraydi.
+    """
+    rows = await session.execute(
+        _OPEN_CASE_DAYS,
+        {
+            "market_id": market_id,
+            "open_statuses": list(_PENDING_STATUSES),
+            "limit": OPEN_CASE_DAYS_LIMIT,
+        },
+    )
+    return [
+        OpenCaseDay(day=row["day"], open_count=int(row["open_count"])) for row in rows.mappings()
+    ]
 
 
 # ===========================================================================

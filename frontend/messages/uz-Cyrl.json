@@ -614,7 +614,7 @@
     "dayStateDue": "бугунги патта тўланмаган",
     "dayStateFair": "ярмарка — патта олинмайди",
     "dayStateFree": "сотувчи бириктирилмаган",
-    "dayStateMismatch": "очиқ номувофиқлик",
+    "dayStateMismatch": "ҳал қилинмаган номувофиқлик",
     "dayStateNoBilling": "бугун ҳисоб ёзилмайди",
     "dayStatePaid": "бугунги патта тўланган",
     "dayStatusAmount": "Бугунги патта",
@@ -631,7 +631,7 @@
     "legendFairStall": "Ярмарка (патта олинмайди)",
     "legendFree": "Яшил — сотувчи бириктирилмаган, бугун патта кутилмайди",
     "legendMaintenance": "Таъмирда",
-    "legendMismatch": "Сариқ — очиқ номувофиқлик бор",
+    "legendMismatch": "Сариқ — ҳал қилинмаган номувофиқлик бор",
     "legendNoBilling": "Рангсиз — бугун бу растага ҳисоб ёзилмайди",
     "legendNoVendor": "Сотувчисиз",
     "legendPaid": "Кўк — бугунги патта тўлиқ тўланган",
@@ -643,7 +643,8 @@
     "skipLink": "Харитани ўтказиб юбориш",
     "title": "План-харита",
     "zoneLabel": "{name} зонаси",
-    "zoneStallCount": "{count} та раста"
+    "zoneStallCount": "{count} та раста",
+    "dayStatusOpenCase": "Номувофиқликни очиш"
   },
   "plan": {
     "title": "Планни қўлда чизиш",
@@ -1554,7 +1555,9 @@
       "case_resolution_required": "Қарорингиз сабабини ёзинг.",
       "case_forbidden": "Директорга мурожаат қилинг.",
       "assignee_not_in_market": "Рўйхатдан шу бозор ходимини танланг."
-    }
+    },
+    "openDaysTitle": "Бошқа кунларда ҳал қилинмаган номувофиқликлар бор:",
+    "openDaysCount": "{count} та номувофиқлик"
   },
   "headline": {
     "revenue_today": "Бугунги тушум",

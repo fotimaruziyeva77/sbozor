@@ -12,6 +12,7 @@ import {
 } from "@/components/reconciliation/day-picker";
 import { DeliveryList } from "@/components/reconciliation/delivery-list";
 import { HitRateCard } from "@/components/reconciliation/hit-rate-card";
+import { OpenCaseDays } from "@/components/reconciliation/open-case-days";
 import { UnpaidList } from "@/components/reconciliation/unpaid-list";
 import { UnregisteredList } from "@/components/reconciliation/unregistered-list";
 import { useAuthStore } from "@/lib/auth-store";
@@ -116,6 +117,8 @@ function ReconciliationWorkspace() {
       {/* --- A: KUN TANLAGICHI — ikkala kunda ham ------------------------- */}
       <section data-recon-block="day">
         <ReconciliationDayPicker />
+        {/* Boshqa kunlardagi hal qilinmagan ishlar — tanlagichning yordamchisi. */}
+        <OpenCaseDays day={selection.day} onSelect={selection.setDay} />
       </section>
 
       {/*

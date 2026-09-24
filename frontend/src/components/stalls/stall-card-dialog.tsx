@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, FileWarning } from "lucide-react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { formatSoum } from "@/lib/format-number";
@@ -12,6 +12,7 @@ import { DAY_STATE_KEYS } from "@/components/stalls/stall-tone";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Link } from "@/i18n/navigation";
 import type { StallDetail } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import type { MapDayRow } from "@/lib/map-day-queries";
@@ -203,8 +204,9 @@ function StallDayStatus({ stallId }: { stallId: string }) {
    *   so'rov ketmaydi va dalil bo'limi ham chizilmaydi.
    */
   const roles = principal?.roles ?? [];
+  const canViewReports = hasPermission(roles, "report_view");
   const caseQuery = useCaseDetail(row?.open_case_id ?? null, {
-    enabled: hasPermission(roles, "report_view"),
+    enabled: canViewReports,
   });
 
   if (row === null) return null;
@@ -288,6 +290,26 @@ function StallDayStatus({ stallId }: { stallId: string }) {
           </>
         )}
       </dl>
+
+      {/*
+       * ⛔ ISHNING O'Z KUNIGA — BIR BOSISHDA (260924-hpm). Nomuvofiqliklar
+       *   sahifasi standart KECHAni ko'rsatadi, ish esa O'Z kunida
+       *   turadi: «band, lekin to'lovsiz» ishi kamida 4 kun oldingi sana
+       *   bilan tug'iladi. Havolasiz uni topib bo'lmasdi — prod'da 5 ta
+       *   sariq rastaning ishini 4 hafta hech kim ko'rmadi.
+       *
+       * ⚠ `report_view` — sahifaning O'Z huquqi: huquqsiz rolga olib
+       *   boradigan havola faqat «ruxsat yo'q» ekraniga yetaklardi.
+       */}
+      {row.open_case_service_date !== null && canViewReports ? (
+        <Link
+          className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-semibold text-accent-text underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:outline-none"
+          href={`/reconciliation?day=${encodeURIComponent(row.open_case_service_date)}`}
+        >
+          <FileWarning aria-hidden="true" className="size-4" />
+          {t("map.dayStatusOpenCase")}
+        </Link>
+      ) : null}
 
       {/*
        * ⛔ DALIL — HAVOLA, KADR EMAS (D-C7). MAVJUD `EvidenceLink`

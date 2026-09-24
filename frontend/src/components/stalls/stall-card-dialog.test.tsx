@@ -349,3 +349,51 @@ describe("Dalil havolasi (D-C7)", () => {
     expect(screen.queryByText(messages.recon.evidenceOpen)).toBeNull();
   });
 });
+
+describe("Nomuvofiqlik ishiga havola (260924-hpm)", () => {
+  /*
+   * ⛔ Nomuvofiqliklar sahifasi standart KECHAni ko'rsatadi, «band, lekin
+   *   to'lovsiz» ishi esa kamida 4 kun oldingi sanada tug'iladi. Prod'da 5
+   *   ta sariq rastaning ishini 4 hafta hech kim ko'rmadi — sariq katakdan
+   *   ishning O'Z kuniga havola bo'lmagani uchun.
+   */
+  test("ochiq case'da ishning O'Z KUNIGA havola bor", async () => {
+    routeFetch([
+      dayRow({
+        state: "mismatch",
+        open_case_id: CASE_ID,
+        open_case_service_date: CASE_DATE,
+      }),
+    ]);
+    renderCard(["director"]);
+
+    const label = await screen.findByText(messages.map.dayStatusOpenCase);
+    expect(label.closest("a")?.getAttribute("href")).toBe(
+      `/reconciliation?day=${CASE_DATE}`,
+    );
+  });
+
+  test("case YO'Q bo'lsa havola CHIZILMAYDI", async () => {
+    routeFetch([dayRow()]);
+    renderCard(["director"]);
+
+    await screen.findByText(messages.map.dayStatusTitle);
+
+    expect(screen.queryByText(messages.map.dayStatusOpenCase)).toBeNull();
+  });
+
+  test("`report_view` yo'q rolda havola CHIZILMAYDI (sahifa baribir yopiq)", async () => {
+    routeFetch([
+      dayRow({
+        state: "mismatch",
+        open_case_id: CASE_ID,
+        open_case_service_date: CASE_DATE,
+      }),
+    ]);
+    renderCard(["cashier"]);
+
+    await screen.findByText(messages.map.dayStatusTitle);
+
+    expect(screen.queryByText(messages.map.dayStatusOpenCase)).toBeNull();
+  });
+});

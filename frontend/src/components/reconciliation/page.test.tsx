@@ -193,13 +193,19 @@ function routeFetch({
   caseRows,
   deliveryRows = [deliveryRow("delivered")],
   nextCaseRows = null,
+  openDays = [],
 }: {
   reportRows: Row[];
   caseRows: ReturnType<typeof caseRow>[];
   deliveryRows?: ReturnType<typeof deliveryRow>[];
   nextCaseRows?: ReturnType<typeof caseRow>[] | null;
+  openDays?: { day: string; open_count: number }[];
 }) {
   apiClientMock.apiFetch.mockImplementation((path: string) => {
+    /* 260924-hpm — kun tanlagichi yonidagi e'lon (kunsiz marshrut). */
+    if (path === "/reconciliation/open-days") {
+      return Promise.resolve({ days: openDays });
+    }
     if (
       nextCaseRows !== null &&
       path.startsWith("/reconciliation/cases") &&
@@ -552,5 +558,65 @@ describe("⛔ G-29 (c): mazmun MOCK'DAGI AYNAN QIYMATGA qadalgan", () => {
     expect(
       container.querySelector('[data-recon-content="delivery"]')?.textContent,
     ).toContain(messages.recon.emptyDelivery);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 260924-hpm — BOSHQA KUNLARDAGI HAL QILINMAGAN ISHLAR                       */
+/* -------------------------------------------------------------------------- */
+
+describe("260924-hpm: kun tanlagichi yonidagi ochiq ishlar e'loni", () => {
+  /*
+   * ⛔ Prod'da 5 ta «band, lekin to'lovsiz» ishi 4 hafta ko'rilmadi: navbat
+   *   KUN kesimida, standart kun KECHA, ishlar esa 26–27-avgustda edi.
+   */
+  const OLDER = shiftIsoDay(YESTERDAY, -4);
+
+  test("tanlangan kundan BOSHQA ochiq kun ko'rsatiladi, tanlangani esa yo'q", async () => {
+    routeFetch({
+      reportRows: [unpaidRow()],
+      caseRows: [caseRow("new")],
+      openDays: [
+        { day: YESTERDAY, open_count: 1 },
+        { day: OLDER, open_count: 4 },
+      ],
+    });
+    const view = await renderPage(YESTERDAY);
+
+    const notice = await within(view.container).findByText(messages.recon.openDaysTitle);
+    const block = notice.closest('[data-recon-block="day"]');
+    expect(block, "e'lon kun tanlagichi BLOKI ICHIDA bo'lishi kerak (G-29)").not.toBeNull();
+
+    const buttons = within(block as HTMLElement).getAllByRole("button", {
+      name: /nomuvofiqlik/u,
+    });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent).toContain("4 ta nomuvofiqlik");
+  });
+
+  test("boshqa ochiq kun bo'lmasa e'lon UMUMAN chizilmaydi", async () => {
+    routeFetch({
+      reportRows: [unpaidRow()],
+      caseRows: [caseRow("new")],
+      openDays: [{ day: YESTERDAY, open_count: 1 }],
+    });
+    const view = await renderPage(YESTERDAY);
+
+    expect(within(view.container).queryByText(messages.recon.openDaysTitle)).toBeNull();
+  });
+
+  test("e'lon bloklar to'plamini O'ZGARTIRMAYDI va mazmun atributini chiqarmaydi", async () => {
+    routeFetch({
+      reportRows: [unpaidRow()],
+      caseRows: [caseRow("new")],
+      openDays: [{ day: OLDER, open_count: 2 }],
+    });
+    const view = await renderPage(YESTERDAY);
+
+    await within(view.container).findByText(messages.recon.openDaysTitle);
+    expect(attrValues(view.container, "data-recon-block")).toEqual(new Set(BLOCKS_PAST));
+    expect(
+      view.container.querySelector('[data-recon-block="day"] [data-recon-content]'),
+    ).toBeNull();
   });
 });

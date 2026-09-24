@@ -1588,3 +1588,67 @@ def _seed_foreign_anomaly(conn: Connection[TupleRow], env: Env, *, day: date) ->
         ),
     )
     return anomaly_id
+
+
+OPEN_DAYS_URL = "/api/v1/reconciliation/open-days"
+
+
+async def test_open_days_lists_only_unresolved_days_newest_first(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    recon: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ 260924-hpm: hal qilinmagan ishli kunlar — kunlararo ko'rinish.
+
+    =======================================================================
+    Prod'da 5 ta «band, lekin to'lovsiz» ishi 4 hafta ko'rilmadi: case
+    ro'yxati KUN kesimida, standart kun KECHA, ishlar esa 26–27-avgustda
+    edi. Bu marshrut sahifaga o'sha kunlarni aytadi.
+
+    DA'VOLAR BIRGALIKDA:
+      * yopilgan (`justified`) ish sanoqqa KIRMAYDI — xaritaning sariq
+        rangi bilan AYNI «ochiq» ta'rifi;
+      * kunlar YANGIDAN ESKIGA;
+      * B bozorining ochiq ishi KO'RINMAYDI (tenant chegarasi).
+    =======================================================================
+    """
+    day = _report_day()
+    older = day - timedelta(days=3)
+
+    _seed_unpaid_charge(sync_owner_conn, recon, day=older)
+    _seed_unregistered_anomaly(sync_owner_conn, recon, day=day, stall_index=1)
+    _, closed_case = _seed_unregistered_anomaly(sync_owner_conn, recon, day=day, stall_index=2)
+    closed = await api_client.patch(
+        f"{CASES_URL}/{closed_case}",
+        json={"status": ReconciliationCaseStatus.JUSTIFIED.value},
+        headers=director_headers,
+    )
+    assert closed.status_code == 200, closed.text
+    seed_case(
+        sync_owner_conn,
+        market_id=recon.base.market_b.id,
+        service_date=day,
+        anomaly_id=_seed_foreign_anomaly(sync_owner_conn, recon, day=day),
+    )
+
+    response = await api_client.get(OPEN_DAYS_URL, headers=director_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "days": [
+            {"day": day.isoformat(), "open_count": 1},
+            {"day": older.isoformat(), "open_count": 1},
+        ]
+    }
+
+
+async def test_the_cashier_cannot_read_open_days(
+    api_client: httpx.AsyncClient,
+    recon: Env,
+    cashier_headers: dict[str, str],
+) -> None:
+    """`report_view` — sahifaning O'Z huquqi; kassirda u yo'q (D-25 ko'r smena)."""
+    response = await api_client.get(OPEN_DAYS_URL, headers=cashier_headers)
+
+    assert response.status_code == 403, response.text

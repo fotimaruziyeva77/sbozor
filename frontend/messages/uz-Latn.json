@@ -614,7 +614,7 @@
     "dayStateDue": "bugungi patta to'lanmagan",
     "dayStateFair": "yarmarka — patta olinmaydi",
     "dayStateFree": "sotuvchi biriktirilmagan",
-    "dayStateMismatch": "ochiq nomuvofiqlik",
+    "dayStateMismatch": "hal qilinmagan nomuvofiqlik",
     "dayStateNoBilling": "bugun hisob yozilmaydi",
     "dayStatePaid": "bugungi patta to'langan",
     "dayStatusAmount": "Bugungi patta",
@@ -631,7 +631,7 @@
     "legendFairStall": "Yarmarka (patta olinmaydi)",
     "legendFree": "Yashil — sotuvchi biriktirilmagan, bugun patta kutilmaydi",
     "legendMaintenance": "Ta'mirda",
-    "legendMismatch": "Sariq — ochiq nomuvofiqlik bor",
+    "legendMismatch": "Sariq — hal qilinmagan nomuvofiqlik bor",
     "legendNoBilling": "Rangsiz — bugun bu rastaga hisob yozilmaydi",
     "legendNoVendor": "Sotuvchisiz",
     "legendPaid": "Ko'k — bugungi patta to'liq to'langan",
@@ -643,7 +643,8 @@
     "skipLink": "Xaritani o'tkazib yuborish",
     "title": "Plan-xarita",
     "zoneLabel": "{name} zonasi",
-    "zoneStallCount": "{count} ta rasta"
+    "zoneStallCount": "{count} ta rasta",
+    "dayStatusOpenCase": "Nomuvofiqlikni ochish"
   },
   "plan": {
     "title": "Planni qo'lda chizish",
@@ -1554,7 +1555,9 @@
       "case_resolution_required": "Qaroringiz sababini yozing.",
       "case_forbidden": "Direktorga murojaat qiling.",
       "assignee_not_in_market": "Ro'yxatdan shu bozor xodimini tanlang."
-    }
+    },
+    "openDaysTitle": "Boshqa kunlarda hal qilinmagan nomuvofiqliklar bor:",
+    "openDaysCount": "{count} ta nomuvofiqlik"
   },
   "headline": {
     "revenue_today": "Bugungi tushum",

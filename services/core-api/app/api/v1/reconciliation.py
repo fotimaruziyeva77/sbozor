@@ -82,6 +82,8 @@ from app.schemas import (
     DeliveryListResponse,
     DeliveryRow,
     HitRateResponse,
+    OpenCaseDayResponse,
+    OpenCaseDaysResponse,
     ReconciliationReportResponse,
     ReconciliationReportRow,
 )
@@ -814,6 +816,24 @@ async def reconciliation_hit_rate(
         unjustified=measured.unjustified,
         open_cases=measured.pending,
         hit_rate=measured.rate,
+    )
+
+
+@router.get("/open-days", response_model=OpenCaseDaysResponse)
+async def reconciliation_open_days(
+    principal: ReportViewerDep,
+    session: TenantSessionDep,
+) -> OpenCaseDaysResponse:
+    """Hal qilinmagan ishli kunlar — navbatning KUNLARARO ko'rinishi (260924-hpm).
+
+    ⛔ Case ro'yxati KUN kesimida va standart kun KECHA; «band, lekin
+       to'lovsiz» ishi esa kamida 4 kun oldingi sanada tug'iladi. Bu
+       marshrut sahifaga o'sha kunlarni AYTADI — ro'yxatning o'zi o'z
+       marshrutida qoladi. Arifmetika `reconciliation_repo.open_case_days()`.
+    """
+    days = await reconciliation_repo.open_case_days(session, market_id=_market_id(principal))
+    return OpenCaseDaysResponse(
+        days=[OpenCaseDayResponse(day=item.day, open_count=item.open_count) for item in days]
     )
 
 
