@@ -114,6 +114,8 @@ class _Fixture:
     camera_ids: tuple[UUID, ...]
     schedule_id: UUID
     today: date
+    other_market_id: UUID
+    """B bozori — tik HAMMA bozor ustida yuradi (`test_duplicate_tick_is_noop`)."""
 
     @property
     def planned_rows(self) -> int:
@@ -180,6 +182,7 @@ def _build(nvr: NvrDomainSeed, snap: SnapshotDomainSeed, today: date) -> _Fixtur
         camera_ids=rows.active_camera_ids,
         schedule_id=snap.market_a.schedule_id,
         today=today,
+        other_market_id=nvr.market_b.market_id,
     )
 
 
@@ -336,7 +339,13 @@ async def test_duplicate_tick_is_noop(
         second = await capture_tick(api_sessionmaker, policy=POLICY)
         after_second = await _rows_for_day(tenant_session, fx.market_id, fx.today)
 
-        assert first.created == fx.planned_rows, first
+        # ⚠ TIK HAMMA BOZOR USTIDA YURADI: seed jadvallari `[SEED_BUSINESS_DATE,
+        #   ∞)` va 2026-09-01 dan beri B ning jadvali ham BUGUNNI qamraydi —
+        #   birinchi tik B ga ham reja yozadi (o'lchandi: 14 + 7 = 21). Sanoq
+        #   shuning uchun IKKALA bozorning haqiqiy qatorlari bilan
+        #   solishtiriladi; A ning to'liq rejasi pastda ALOHIDA o'lchanadi.
+        others = await _rows_for_day(tenant_session, fx.other_market_id, fx.today)
+        assert first.created == fx.planned_rows + len(others), first
         assert second.created == 0, "ikkinchi tik yangi qator yaratdi"
         assert len(after_second) == len(after_first) == fx.planned_rows
         assert {row["id"] for row in after_second} == {row["id"] for row in after_first}, (

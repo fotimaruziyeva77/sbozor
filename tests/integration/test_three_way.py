@@ -65,6 +65,7 @@ from fixtures.billing_domain import (
     add_payment,
     add_zone_with_event_on,
     billing_domain_before_day_close,
+    day_tariff_soum,
 )
 from fixtures.market_domain import A_STALL_CODES, B_STALL_CODES
 from fixtures.nvr_domain import nvr_rows
@@ -1464,7 +1465,10 @@ async def test_yesterdays_expectation_uses_yesterdays_tariff(
     assert charged_row.ai_expected_soum == TARIFF_SOUM, (
         "hisobi bor rastaning kutilgani MUZLATILGAN tarifdan olinishi kerak edi"
     )
-    assert uncharged_row.ai_expected_soum == TARIFF_SOUM, (
+    # ⛔ «O'sha kunning tarifi» — seed zanjiridan KUN BO'YICHA, qadalgan
+    #   `TARIFF_SOUM` EMAS: zanjir 2026-09-02 da 15 000 -> 20 000 ga o'tadi,
+    #   solishtiruv kuni esa «kecha»ga ergashadi (`day_tariff_soum` docstringi).
+    assert uncharged_row.ai_expected_soum == day_tariff_soum(compare.day), (
         "hisobsiz band rastaning kutilgani O'SHA KUNNING tarifidan olinishi kerak edi"
     )
     assert charged_row.ai_expected_soum != LATE_TARIFF_SOUM
@@ -1973,7 +1977,8 @@ async def test_an_occupied_but_unpaid_stall_is_an_occupancy_gap(
         "nazorat: daftar va tizim MOS bo'lishi kerak — aks holda birinchi ikki "
         "sinf ishga tushib, uchinchisi umuman o'lchanmasdi"
     )
-    assert row.ai_expected_soum == TARIFF_SOUM
+    # Hisobsiz band rasta — kutilgani SHU KUNNING tarifidan (yuqoridagi testga qarang).
+    assert row.ai_expected_soum == day_tariff_soum(compare.day)
     assert counts == {"ledger_over": 0, "system_over": 0, "ai_mismatch": 1, "match": 0}
 
 

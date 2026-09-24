@@ -47,11 +47,11 @@ from uuid import UUID, uuid4
 import pytest
 from fixtures.admin_api import session_headers
 from fixtures.billing_domain import (
-    DAY_TOTAL_SOUM,
     BillingDomainSeed,
     add_daily_charge,
     add_payment,
     billing_domain_before_day_close,
+    day_total_soum,
 )
 from fixtures.market_domain import MarketDomainSeed
 from fixtures.notification_domain import seed_case
@@ -107,7 +107,13 @@ MAP_ROW_KEYS = frozenset(
 MAP_BODY_KEYS = frozenset({"service_date", "market_active", "market_open", "rows"})
 
 PARTIAL_SOUM = 5_000
-"""Qisman to'lov — `DAY_TOTAL_SOUM` (15 000) dan KICHIK va noldan KATTA.
+"""Qisman to'lov — bugungi to'liq pattadan (`day_total_soum()`: 17 000 yoki
+22 000) KICHIK va noldan KATTA.
+
+⛔ Bugungi summa QADALMAYDI: bu fayl `business_today()` ustida ishlaydi,
+   tarif zanjiri esa `NEXT_TARIFF_VALID_FROM` da o'zgaradi — qadalgan
+   `DAY_TOTAL_SOUM` 2026-09-02 dan beri o'n bitta testni JIMGINA qizartirgan
+   edi (`day_total_soum` docstringi).
 
 ⚠ Qator `override_reason` bilan yoziladi: `OVERRIDE_IS_PAIRED_CHECK`
   (`(amount_soum = quote_soum) = (override_reason IS NULL)`) server
@@ -340,6 +346,7 @@ async def test_a_fully_paid_stall_is_blue(
 ) -> None:
     """T1 — bugungi tarifi to'liq yopilgan rasta `paid`."""
     today = business_today()
+    total = day_total_soum(today)
     _set_calendar(sync_owner_conn, market_id=env.market_id, day=today, is_open=True)
     stall_id = env.stall("stall_with_two_occupied_slots")
 
@@ -351,15 +358,15 @@ async def test_a_fully_paid_stall_is_blue(
         cashier_id=env.cashier_id,
         shift_id=env.shift_id,
         service_date=today,
-        amount_soum=DAY_TOTAL_SOUM,
-        quote_soum=DAY_TOTAL_SOUM,
+        amount_soum=total,
+        quote_soum=total,
     )
 
     row = _row(await _fetch(api_client, admin_headers), stall_id)
 
     assert row["state"] == "paid", row
-    assert row["amount_soum"] == DAY_TOTAL_SOUM
-    assert row["paid_soum"] == DAY_TOTAL_SOUM
+    assert row["amount_soum"] == total
+    assert row["paid_soum"] == total
     assert row["unavailable_reason"] is None
     # ⛔ QOLDIQ SERVERDA AYIRILADI (D-20) va katakning rangi AYNI shu
     #   songa qaraydi — klientdagi ikkinchi ayirish taqiqlanadi.
@@ -377,13 +384,14 @@ async def test_an_unpaid_stall_is_red(
     ⚠ `paid_soum` NOL bo'lib QAYTADI, maydon TUSHIB QOLMAYDI: nol —
       NATIJA («bugun hali to'lanmadi»), uning yo'qligi emas.
     """
-    _set_calendar(sync_owner_conn, market_id=env.market_id, day=business_today(), is_open=True)
+    today = business_today()
+    _set_calendar(sync_owner_conn, market_id=env.market_id, day=today, is_open=True)
     stall_id = env.stall("stall_with_one_ai_occupied_slot")
 
     row = _row(await _fetch(api_client, admin_headers), stall_id)
 
     assert row["state"] == "due", row
-    assert row["amount_soum"] == DAY_TOTAL_SOUM
+    assert row["amount_soum"] == day_total_soum(today)
     assert row["paid_soum"] == 0
 
 
@@ -400,6 +408,7 @@ async def test_a_partially_paid_stall_stays_red(
     mahsulot AYNAN fosh qilishi kerak bo'lgan holat.
     """
     today = business_today()
+    total = day_total_soum(today)
     _set_calendar(sync_owner_conn, market_id=env.market_id, day=today, is_open=True)
     stall_id = env.stall("stall_with_two_occupied_slots")
 
@@ -412,7 +421,7 @@ async def test_a_partially_paid_stall_stays_red(
         shift_id=env.shift_id,
         service_date=today,
         amount_soum=PARTIAL_SOUM,
-        quote_soum=DAY_TOTAL_SOUM,
+        quote_soum=total,
         override_reason=AdjustmentReason.PARTIAL_DAY.value,
     )
 
@@ -420,8 +429,8 @@ async def test_a_partially_paid_stall_stays_red(
 
     assert row["state"] == "due", row
     assert row["paid_soum"] == PARTIAL_SOUM
-    assert row["amount_soum"] == DAY_TOTAL_SOUM
-    assert row["remaining_soum"] == DAY_TOTAL_SOUM - PARTIAL_SOUM
+    assert row["amount_soum"] == total
+    assert row["remaining_soum"] == total - PARTIAL_SOUM
 
 
 async def test_a_stall_without_a_vendor_is_green(
@@ -516,6 +525,7 @@ async def test_an_open_case_outranks_a_full_payment(
     savolni YOPMAYDI.
     """
     today = business_today()
+    total = day_total_soum(today)
     _set_calendar(sync_owner_conn, market_id=env.market_id, day=today, is_open=True)
     stall_id = env.stall("stall_with_two_occupied_slots")
 
@@ -527,8 +537,8 @@ async def test_an_open_case_outranks_a_full_payment(
         cashier_id=env.cashier_id,
         shift_id=env.shift_id,
         service_date=today,
-        amount_soum=DAY_TOTAL_SOUM,
-        quote_soum=DAY_TOTAL_SOUM,
+        amount_soum=total,
+        quote_soum=total,
     )
     charge_id, service_date = add_daily_charge(
         sync_owner_conn,
@@ -551,8 +561,8 @@ async def test_an_open_case_outranks_a_full_payment(
     assert row["open_case_id"] == str(case_id)
     assert row["open_case_service_date"] == service_date.isoformat()
     # ⚠ Pul MAYDONLARI YO'QOLMAYDI: karta ularni AYNI qatordan o'qiydi.
-    assert row["paid_soum"] == DAY_TOTAL_SOUM
-    assert row["amount_soum"] == DAY_TOTAL_SOUM
+    assert row["paid_soum"] == total
+    assert row["amount_soum"] == total
 
 
 async def test_a_closed_case_does_not_paint_yellow(
@@ -643,6 +653,7 @@ async def test_a_reversed_payment_falls_back_to_red(
     rastani MANGU ko'k qoldirardi.
     """
     today = business_today()
+    total = day_total_soum(today)
     _set_calendar(sync_owner_conn, market_id=env.market_id, day=today, is_open=True)
     stall_id = env.stall("stall_with_two_occupied_slots")
 
@@ -654,8 +665,8 @@ async def test_a_reversed_payment_falls_back_to_red(
         cashier_id=env.cashier_id,
         shift_id=env.shift_id,
         service_date=today,
-        amount_soum=DAY_TOTAL_SOUM,
-        quote_soum=DAY_TOTAL_SOUM,
+        amount_soum=total,
+        quote_soum=total,
     )
     add_payment(
         sync_owner_conn,
@@ -665,8 +676,8 @@ async def test_a_reversed_payment_falls_back_to_red(
         cashier_id=env.cashier_id,
         shift_id=env.shift_id,
         service_date=today,
-        amount_soum=DAY_TOTAL_SOUM,
-        quote_soum=DAY_TOTAL_SOUM,
+        amount_soum=total,
+        quote_soum=total,
         kind=PaymentKind.REVERSAL.value,
         reverses_payment_id=original_id,
         reversal_reason=ReversalReason.WRONG_STALL.value,
@@ -679,7 +690,7 @@ async def test_a_reversed_payment_falls_back_to_red(
         "belgili yig'indi nolga tushishi SHART — aks holda storno jimgina "
         "e'tiborsiz qolardi va xarita to'lanmagan rastani ko'k ko'rsatardi"
     )
-    assert row["remaining_soum"] == DAY_TOTAL_SOUM
+    assert row["remaining_soum"] == total
 
 
 # ===========================================================================

@@ -112,6 +112,7 @@ from fixtures.billing_domain import (
     add_charge_evidence,
     add_daily_charge,
     billing_domain,
+    day_tariff_soum,
 )
 from fixtures.notification_domain import (
     cleanup_case_targets,
@@ -210,14 +211,22 @@ VENDOR_CHAT = 7_700_000_302
 
 MESSAGE_ID = 555_000_111
 
-RECEIPT_SOUM = TARIFF_SOUM
-"""⛔ TO'LOV SUMMASI TARIFDAN — LITERAL EMAS VA BU MAJBURIY.
 
-`POST /payments` server hisoblagan summadan HAR QANDAY chetlanish uchun
-NOMLANGAN sabab talab qiladi (`reason_required`, D-19 sxemaga
-ko'chirilgan). Qadalgan «chiroyli» son bu mezonni sabab-kod yo'liga
-burib yuborardi — holbuki o'lchanayotgan narsa NORMAL kassa oqimi.
-"""
+def _receipt_soum() -> int:
+    """⛔ TO'LOV SUMMASI BUGUNGI TARIFDAN — LITERAL EMAS VA BU MAJBURIY.
+
+    `POST /payments` server hisoblagan summadan HAR QANDAY chetlanish uchun
+    NOMLANGAN sabab talab qiladi (`reason_required`, D-19 sxemaga
+    ko'chirilgan). Qadalgan «chiroyli» son bu mezonni sabab-kod yo'liga
+    burib yuborardi — holbuki o'lchanayotgan narsa NORMAL kassa oqimi.
+
+    ⛔ FUNKSIYA, KONSTANTA EMAS: tarif zanjiri 2026-09-02 da o'zgaradi
+       (15 000 -> 20 000). Qadalgan `TARIFF_SOUM` o'sha kundan beri aynan
+       yuqoridagi sabab-kod yo'liga tushib qoldi (`day_tariff_soum`
+       docstringi).
+    """
+    return day_tariff_soum(business_today())
+
 
 _COUNT_CASE_EVENTS = (
     "SELECT count(*) FROM reconciliation_case_events WHERE market_id = %s AND case_id = %s"
@@ -1161,10 +1170,12 @@ async def test_sc3_director_gets_two_messages_and_every_role_gets_one_number(
     #    holatda ham mezon KASSIRNING SONINI emas, boshqa darvozani
     #    o'lchagan bo'lardi.
     #
-    # ⚠ DA'VO BUNDAN ZAIFLASHMAYDI: sanoq `1`, kun summasi esa `15 000`.
+    # ⚠ DA'VO BUNDAN ZAIFLASHMAYDI: sanoq `1`, kun summasi esa bugungi tarif.
     paid = await api_client.post(
         PAYMENTS_URL,
-        json=_payment_body(stall_code=env.stall_code(env.stall_ids[0]), amount_soum=RECEIPT_SOUM),
+        json=_payment_body(
+            stall_code=env.stall_code(env.stall_ids[0]), amount_soum=_receipt_soum()
+        ),
         headers=cashier_headers,
     )
     assert paid.status_code in {200, 201}, paid.text
@@ -1195,7 +1206,7 @@ async def test_sc3_director_gets_two_messages_and_every_role_gets_one_number(
         (str(env.market_id),),
     ).fetchone()
     assert day_total is not None
-    assert int(day_total[0]) == RECEIPT_SOUM, day_total
+    assert int(day_total[0]) == _receipt_soum(), day_total
     assert answers["cashier"]["value"] == 1, (
         f"kassirning soni yozilgan kvitansiyani ko'rsatishi kerak edi: {answers['cashier']}"
     )
@@ -1445,7 +1456,7 @@ async def test_sc5_receipt_is_immediate_and_overdue_reminder_respects_settings(
 
     # ---- 1. TO'LOV -> KVITANSIYA NIYATI, TAKROR `POST` -> IKKINCHI QATOR YO'Q.
     stall_code = env.stall_code(env.stall_ids[0])
-    body = _payment_body(stall_code=stall_code, amount_soum=RECEIPT_SOUM, key="phase7-sc5-once")
+    body = _payment_body(stall_code=stall_code, amount_soum=_receipt_soum(), key="phase7-sc5-once")
     first = await api_client.post(PAYMENTS_URL, json=body, headers=cashier_headers)
     assert first.status_code in {200, 201}, first.text
     repeated = await api_client.post(PAYMENTS_URL, json=body, headers=cashier_headers)
@@ -1497,7 +1508,7 @@ async def test_sc5_receipt_is_immediate_and_overdue_reminder_respects_settings(
     #     u BOT-03 ni o'lchanmagan qoldirardi.
     stale_day = business_today() - timedelta(days=30)
     for market_id, stall_id, vendor_id, tariff_id, amount in (
-        (env.market_id, env.stall_ids[1], receipt_vendor, env.tariff_id, 3 * RECEIPT_SOUM),
+        (env.market_id, env.stall_ids[1], receipt_vendor, env.tariff_id, 3 * _receipt_soum()),
         (env.market_b_id, env.stall_b_ids[0], env.vendor_b_id, env.tariff_b_id, TARIFF_SOUM),
     ):
         add_daily_charge(

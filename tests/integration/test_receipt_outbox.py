@@ -61,9 +61,9 @@ from app.repositories import outbox_repo
 from app.services.alerts import TELEGRAM_API_BASE, TELEGRAM_SEND_METHOD
 from fixtures.admin_api import session_headers
 from fixtures.billing_domain import (
-    TARIFF_SOUM,
     BillingDomainSeed,
     billing_domain_before_day_close,
+    day_tariff_soum,
 )
 from fixtures.market_domain import MarketDomainSeed
 from fixtures.notification_domain import seed_notification_settings, seed_outbox_row
@@ -150,6 +150,16 @@ class Bed:
     @property
     def vendor_id(self) -> UUID:
         return self.billing.market_a.vendor_id
+
+    @property
+    def tariff(self) -> int:
+        """BUGUNGI rasta puli — «faqat rasta puli» taklifi, sabab kodisiz o'tadi.
+
+        ⛔ Qadalgan `TARIFF_SOUM` EMAS: tarif zanjiri 2026-09-02 da o'zgaradi
+           va qadalgan 15 000 o'sha kundan beri `reason_required` (422) bilan
+           rad etilardi (`day_tariff_soum` docstringi).
+        """
+        return day_tariff_soum(self.today)
 
     def stall_code(self) -> str:
         """Stsenariy rastasining KODI — ⛔ **BAZADAN**, seed ro'yxatidan emas."""
@@ -339,7 +349,7 @@ async def test_receipt_is_enqueued_once_per_payment(
     =======================================================================
     """
     code = bed.stall_code()
-    payload = _body(stall_code=code, amount_soum=TARIFF_SOUM, key="cash05-bir-xil-kalit")
+    payload = _body(stall_code=code, amount_soum=bed.tariff, key="cash05-bir-xil-kalit")
 
     first = await _post(api_client, cashier_headers, payload)
     assert first.status_code == 201, first.text
@@ -383,7 +393,7 @@ async def test_the_receipt_payload_carries_exactly_the_registry_keys(
     """
     code = bed.stall_code()
     response = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=TARIFF_SOUM)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=bed.tariff)
     )
     assert response.status_code == 201, response.text
 
@@ -392,7 +402,7 @@ async def test_the_receipt_payload_carries_exactly_the_registry_keys(
         f"navbat qatorining kalitlari {sorted(payload)} — reyestr esa "
         f"{sorted(RECEIPT_PAYLOAD_KEYS)} kutadi"
     )
-    assert payload["amount_soum"] == TARIFF_SOUM
+    assert payload["amount_soum"] == bed.tariff
     assert payload["stall_code"] == code
     assert payload["cashier_name"] == f"{bed.base.market_a.name} kassiri", (
         "kassir ismi seed'dagi qiymat emas — `principal` dan olingan `user_id` boshqa "
@@ -413,7 +423,7 @@ async def test_the_cashier_name_never_reaches_the_http_response(
     """
     code = bed.stall_code()
     response = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=TARIFF_SOUM)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=bed.tariff)
     )
     assert response.status_code == 201, response.text
 
@@ -445,7 +455,7 @@ async def test_two_concurrent_requests_enqueue_one_receipt(
     =======================================================================
     """
     code = bed.stall_code()
-    payload = _body(stall_code=code, amount_soum=TARIFF_SOUM, key="cash05-parallel-0001")
+    payload = _body(stall_code=code, amount_soum=bed.tariff, key="cash05-parallel-0001")
 
     first, second = await asyncio.gather(
         _post(api_client, cashier_headers, payload),
@@ -573,7 +583,7 @@ async def test_payment_succeeds_while_telegram_is_down(
         )
 
         response = await _post(
-            api_client, cashier_headers, _body(stall_code=code, amount_soum=TARIFF_SOUM)
+            api_client, cashier_headers, _body(stall_code=code, amount_soum=bed.tariff)
         )
 
         assert response.status_code == 201, (
@@ -638,7 +648,7 @@ async def test_quiet_hours_do_not_hold_the_receipt(
 
     code = bed.stall_code()
     response = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=TARIFF_SOUM)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=bed.tariff)
     )
     assert response.status_code == 201, response.text
 
@@ -714,7 +724,7 @@ async def test_a_reversal_writes_no_receipt(
     """
     code = bed.stall_code()
     created = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=TARIFF_SOUM)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=bed.tariff)
     )
     assert created.status_code == 201, created.text
     before = len(bed.outbox())

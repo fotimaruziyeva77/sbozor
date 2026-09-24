@@ -33,9 +33,9 @@ from uuid import UUID
 import pytest
 from fixtures.admin_api import session_headers
 from fixtures.billing_domain import (
-    DAY_TOTAL_SOUM,
-    TARIFF_SOUM,
     billing_domain_before_day_close,
+    day_tariff_soum,
+    day_total_soum,
 )
 from fixtures.market_domain import (
     A_SERVICE_FEE_LABEL,
@@ -46,6 +46,7 @@ from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import SEED_PASSWORD, TwoMarketSeed
+from sbozor_core.timeutil import business_today
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -110,6 +111,20 @@ class Env:
         stall_id: UUID | None = getattr(self.billing.market_a, name)
         assert stall_id is not None, f"nazorat: seedda {name!r} rastasi yo'q"
         return stall_id
+
+    @property
+    def tariff(self) -> int:
+        """BUGUNGI rasta puli — server `business_today()` bo'yicha taklif qiladigan son.
+
+        ⛔ Qadalgan `TARIFF_SOUM` EMAS: tarif zanjiri 2026-09-02 da o'zgaradi
+           (`day_tariff_soum` docstringi).
+        """
+        return day_tariff_soum(business_today())
+
+    @property
+    def day_total(self) -> int:
+        """BUGUNGI to'liq patta — rasta puli + xizmat haqi."""
+        return day_total_soum(business_today())
 
 
 @pytest.fixture
@@ -207,9 +222,9 @@ async def test_the_pending_payload_splits_the_day_amount_into_two_components(
     assert response.status_code == 200, response.text
     body = response.json()
 
-    assert body["stall_amount_soum"] == TARIFF_SOUM, "rasta puli tarifdan kelmadi"
+    assert body["stall_amount_soum"] == env.tariff, "rasta puli tarifdan kelmadi"
     assert body["fee_amount_soum"] == A_SERVICE_FEE_SOUM, "xizmat haqi qo'shilmadi"
-    assert body["amount_soum"] == DAY_TOTAL_SOUM, "yig'indi ikki komponentga teng emas"
+    assert body["amount_soum"] == env.day_total, "yig'indi ikki komponentga teng emas"
     assert body["stall_amount_soum"] + body["fee_amount_soum"] == body["amount_soum"], (
         "komponentlar yig'indiga teng emas — klient noto'g'ri summa yuborardi"
     )
@@ -248,7 +263,7 @@ async def test_paying_only_the_stall_part_needs_no_reason_code(
         headers=cashier_headers,
         json={
             "stall_code": code,
-            "amount_soum": TARIFF_SOUM,
+            "amount_soum": env.tariff,
             "method": "cash",
             "idempotency_key": "fee-off-0001",
         },
@@ -258,7 +273,7 @@ async def test_paying_only_the_stall_part_needs_no_reason_code(
         f"«faqat rasta puli» sabab kodisiz o'tmadi: {response.status_code} {response.text}"
     )
     body = response.json()
-    assert body["amount_soum"] == TARIFF_SOUM
+    assert body["amount_soum"] == env.tariff
 
     # ⛔ `quote_soum` JAVOBDA YO'Q (D-20 — u ichki qaror), shuning uchun
     #   «server buni O'Z taklifi deb tanidimi?» savoli AUDITDAN
@@ -316,7 +331,7 @@ async def test_a_payment_moves_the_stall_between_the_two_lists(
         headers=cashier_headers,
         json={
             "stall_code": code,
-            "amount_soum": DAY_TOTAL_SOUM,
+            "amount_soum": env.day_total,
             "method": "cash",
             "idempotency_key": "roster-move-0001",
         },

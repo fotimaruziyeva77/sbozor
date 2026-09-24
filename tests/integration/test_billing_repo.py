@@ -68,6 +68,7 @@ from fixtures.billing_domain import (
     add_payment,
     billing_domain,
     billing_domain_before_day_close,
+    day_total_soum,
 )
 from fixtures.market_domain import (
     A_OPEN_WEEKDAYS,
@@ -878,9 +879,14 @@ async def test_a_second_write_leaves_the_existing_charge_untouched(
     assert rows is not None and rows[0] == 1
     assert before is not None and after is not None
     assert before == after, "yozilgan hisob O'ZGARMAS — summa ham, tug'ilgan vaqti ham"
-    # ⛔ Yozilgan hisobning `amount_soum` i — YIG'INDI (0027).
-    assert before[0] == DAY_TOTAL_SOUM
-    assert before[1] == env.live.tariff_id, "D-09: `tariff_id` HAM saqlanadi"
+    # ⛔ Yozilgan hisobning `amount_soum` i — YIG'INDI (0027), va u SHU KUNNING
+    #   tarifidan: `_open_past_day` bugunga ergashadi, zanjir esa
+    #   `NEXT_TARIFF_VALID_FROM` da o'zgaradi.
+    assert before[0] == day_total_soum(day)
+    expected_tariff_id = (
+        env.live.next_tariff_id if day >= NEXT_TARIFF_VALID_FROM else env.live.tariff_id
+    )
+    assert before[1] == expected_tariff_id, "D-09: `tariff_id` HAM saqlanadi"
 
 
 async def test_write_charge_refuses_a_charge_without_a_vendor(
@@ -1707,10 +1713,14 @@ async def test_the_market_debt_is_not_netted_against_another_vendors_advance(
         quote_soum=45_000,
     )
 
+    # ⛔ `as_of` — BUGUN, qadalgan `SEED_BUSINESS_DATE` EMAS: qarz
+    #   `service_date < as_of` bilan sanaladi, hisob esa KECHA yozilgan.
+    #   Qadalgan 2026-09-01 bilan hisob 2026-09-02 dan boshlab proyeksiyadan
+    #   JIMGINA tushib qoldi va test mahsulot o'zgarmasdan qizardi.
     async with tenant_session(env.market_id) as session:
         balances = await vendor_outstanding(session, market_id=env.market_id)
         projection = await pending_projection(
-            session, market_id=env.market_id, as_of=SEED_BUSINESS_DATE
+            session, market_id=env.market_id, as_of=_service_day(sync_owner_conn, 0)
         )
 
     # ⛔ NAZORAT: holat HAQIQATAN ikki qarama-qarshi belgidan iborat.

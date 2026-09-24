@@ -359,20 +359,33 @@ class Env:
         code: str = row[0]
         return code
 
-    def tariff_amount(self) -> int:
-        """Seedning D kunidagi tarifi — ⛔ BAZADAN, LITERAL EMAS.
+    def tariff_amount(self, day: date | None = None) -> int:
+        """Seed tarif zanjirining SHU KUNDAGI summasi — ⛔ BAZADAN, LITERAL EMAS.
 
         Qadalgan `15 000` fixture konstantasi bilan birga o'zgarardi va
         «hisob QAYSI tarifdan olindi?» savoli javobsiz qolardi. Bu yerda
-        summa AYNAN o'sha `tariffs` qatoridan o'qiladi.
+        summa AYNAN o'sha `tariffs` zanjiridan o'qiladi.
+
+        ⛔ KUN BO'YICHA, BIRINCHI QATOR EMAS: zanjir ikki qatorli
+           (`NEXT_TARIFF_VALID_FROM` = 2026-09-02 da 15 000 -> 20 000),
+           mezonlarning kuni esa «bugun»ga ergashadi (`_open_past_day`).
+           Faqat birinchi qatorni o'qish o'sha kundan beri SC#1/SC#2/SC#5 ni
+           JIMGINA qizartirdi — mahsulot to'g'ri summani yozib turgan edi.
+           Kun berilmasa — bugun (kassir `POST /payments` da ko'radigan narx).
         """
         row = self.conn.execute(
-            "SELECT amount_soum FROM tariffs WHERE id = %s", (str(self.live.tariff_id),)
+            "SELECT amount_soum FROM tariffs "
+            "WHERE id = ANY(%s::uuid[]) AND valid_from <= %s "
+            "ORDER BY valid_from DESC LIMIT 1",
+            (
+                [str(self.live.tariff_id), str(self.live.next_tariff_id)],
+                self.today if day is None else day,
+            ),
         ).fetchone()
         assert row is not None, "nazorat: seedning tarif qatori bazada yo'q"
         return int(row[0])
 
-    def day_total_amount(self) -> int:
+    def day_total_amount(self, day: date | None = None) -> int:
         """Kunlik pattaning TO'LIQ summasi — ⛔ BAZADAN, LITERAL EMAS (0027).
 
         =====================================================================
@@ -393,14 +406,15 @@ class Env:
           bo'ladi. Bu HALOL javob, nosozlik emas.
         =====================================================================
         """
+        on = self.today if day is None else day
         row = self.conn.execute(
             "SELECT amount_soum FROM market_service_fees "
             "WHERE market_id = %s AND valid_from <= %s "
             "ORDER BY valid_from DESC LIMIT 1",
-            (str(self.market_id), self.today),
+            (str(self.market_id), on),
         ).fetchone()
         fee = 0 if row is None else int(row[0])
-        return self.tariff_amount() + fee
+        return self.tariff_amount(on) + fee
 
 
 @pytest.fixture
@@ -938,8 +952,8 @@ async def test_sc1_immutable_daily_charge_is_written_once(
         f"(kutilgan: 2 slotli + nazoratchi tasdiqlagan): {sorted(map(str, written))}"
     )
 
-    # ⛔ 0027: «TO'LIQ kunlik patta» = tarif + majburiy xizmat haqi.
-    expected = env.day_total_amount()
+    # ⛔ 0027: «TO'LIQ kunlik patta» = tarif + majburiy xizmat haqi — SHU KUNNING.
+    expected = env.day_total_amount(day)
     for stall_id, (amount, _created) in written.items():
         assert amount == expected, (
             f"{stall_id} rastasining summasi {amount}, kutilgan {expected} "
@@ -1094,7 +1108,7 @@ async def test_sc2_charge_reaches_evidence_and_cannot_be_edited(
     amount = sync_owner_conn.execute(
         "SELECT amount_soum FROM daily_charges WHERE id = %s", (str(charge_id),)
     ).fetchone()
-    assert amount is not None and amount[0] == env.day_total_amount(), (
+    assert amount is not None and amount[0] == env.day_total_amount(day), (
         "tuzatish ASL hisobni o'zgartirdi — u ALOHIDA qator bo'lishi shart"
     )
 
@@ -1158,7 +1172,7 @@ async def test_sc3_debt_is_computed_and_unassigned_becomes_anomaly(
         outstanding = await billing_repo.vendor_outstanding(
             session, market_id=market_id, vendor_ids=[env.vendor_id], as_of=env.today
         )
-    assert outstanding.get(env.vendor_id, 0) >= env.tariff_amount(), (
+    assert outstanding.get(env.vendor_id, 0) >= env.tariff_amount(day), (
         "biriktirilgan sotuvchining qoldig'i yozilgan hisobni QAMRAMADI — «qarz "
         f"biriktirilgan sotuvchida ko'rinadi» sharti buzilgan: {outstanding}"
     )

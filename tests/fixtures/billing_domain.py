@@ -200,6 +200,8 @@ __all__ = [
     "billing_domain",
     "billing_domain_before_day_close",
     "cleanup_billing_domain",
+    "day_tariff_soum",
+    "day_total_soum",
     "seed_billing_domain",
     "slot_count",
 ]
@@ -268,6 +270,37 @@ Kun D ga TENG bo'lsa `uq_tariffs_market_id_category_id_valid_from`
 birinchi qatorni rad etardi; D dan OLDIN bo'lsa u D kunidagi narxni
 ALMASHTIRARDI va seed o'z tarifini o'zi buzardi.
 """
+
+
+def day_tariff_soum(day: date) -> int:
+    """SHU KUNNING rasta puli (xizmat haqisiz) — tarif zanjiridan HOSILA.
+
+    =========================================================================
+    ⛔⛔ «BUGUN» BILAN ISHLAYDIGAN TEST QADALGAN `TARIFF_SOUM` /
+       `DAY_TOTAL_SOUM` NI OLMAYDI.
+
+    Tarif zanjiri `NEXT_TARIFF_VALID_FROM` (qadalgan sana, 2026-09-02) da
+    o'zgaradi. `business_today()` bilan ishlagan testlar o'sha kundan
+    boshlab JIMGINA qizardi: kutilma 15 000 / 17 000, server esa (to'g'ri
+    ravishda) 20 000 / 22 000 qaytarardi va to'lov testlari
+    `reason_required` bilan yiqilardi — 2026-09-24 da o'lchandi. Mahsulot
+    to'g'ri edi, kalendar esa testlarni «eskirtirdi».
+
+    `test_billing_close.expected_tariff()` bilan AYNI qoida — o'sha fayl
+    bu tuzoqni allaqachon yopgan edi.
+    =========================================================================
+    """
+    return NEXT_DAY_TARIFF_SOUM if day >= NEXT_TARIFF_VALID_FROM else TARIFF_SOUM
+
+
+def day_total_soum(day: date) -> int:
+    """SHU KUNNING to'liq pattasi (tarif + xizmat haqi) — `day_tariff_soum` dan.
+
+    ⚠ Xizmat haqi seedda bitta qator, ya'ni kunlar orasidagi farq FAQAT
+      tarifdan keladi (`NEXT_DAY_DAY_TOTAL_SOUM` docstringi).
+    """
+    return day_tariff_soum(day) + A_SERVICE_FEE_SOUM
+
 
 CLOSED_BUSINESS_DATE = SEED_BUSINESS_DATE + timedelta(days=2)
 """Kalendar istisnosi bilan YOPIQ deb belgilangan kun (D-10).

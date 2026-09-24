@@ -54,11 +54,11 @@ import pytest
 from app.main import app as fastapi_app
 from fixtures.admin_api import session_headers
 from fixtures.billing_domain import (
-    DAY_TOTAL_SOUM,
     BillingDomainSeed,
     add_daily_charge,
     add_payment,
     billing_domain_before_day_close,
+    day_total_soum,
 )
 from fixtures.market_domain import MarketDomainSeed
 from fixtures.nvr_domain import nvr_rows
@@ -140,6 +140,18 @@ class Env:
         self.base = base
         self.conn = conn
         self.today = today
+
+    @property
+    def day_total(self) -> int:
+        """BUGUNGI to'liq patta (tarif + xizmat haqi) — server `POST /payments` da
+        taklif qiladigan AYNI summa.
+
+        ⛔ Qadalgan `DAY_TOTAL_SOUM` EMAS: tarif zanjiri `NEXT_TARIFF_VALID_FROM`
+           (2026-09-02) da o'zgaradi va bu fayl `market_today` ustida ishlaydi —
+           qadalgan son o'sha kundan beri har to'lovni «summa o'zgargan, sabab
+           yo'q» (`reason_required`) qilib qo'yardi.
+        """
+        return day_total_soum(self.today)
 
     @property
     def market_id(self) -> UUID:
@@ -413,7 +425,7 @@ async def test_the_same_key_twice_writes_one_row_and_returns_the_same_payment(
        uzilishida qayta yuborish kassir uchun KO'RINMAS bo'lishi kerak.
     """
     code = env.code(env.stall("stall_with_two_occupied_slots"))
-    payload = _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM, key="sc5a-bir-xil-kalit")
+    payload = _body(stall_code=code, amount_soum=env.day_total, key="sc5a-bir-xil-kalit")
 
     first = await _post(api_client, cashier_headers, payload)
     assert first.status_code == 201, first.text
@@ -455,7 +467,7 @@ async def test_a_fully_paid_stall_rejects_a_second_payment_without_a_reason(
     first = await _post(
         api_client,
         cashier_headers,
-        _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM, key="dup-birinchi"),
+        _body(stall_code=code, amount_soum=env.day_total, key="dup-birinchi"),
     )
     assert first.status_code == 201, first.text
 
@@ -463,7 +475,7 @@ async def test_a_fully_paid_stall_rejects_a_second_payment_without_a_reason(
     second = await _post(
         api_client,
         cashier_headers,
-        _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM, key="dup-ikkinchi"),
+        _body(stall_code=code, amount_soum=env.day_total, key="dup-ikkinchi"),
     )
     assert second.status_code == 409, second.text
     assert _detail(second) == "stall_already_paid"
@@ -473,7 +485,7 @@ async def test_a_fully_paid_stall_rejects_a_second_payment_without_a_reason(
     replay = await _post(
         api_client,
         cashier_headers,
-        _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM, key="dup-birinchi"),
+        _body(stall_code=code, amount_soum=env.day_total, key="dup-birinchi"),
     )
     assert replay.status_code == 200, replay.text
     assert replay.json()["payment_id"] == first.json()["payment_id"]
@@ -539,7 +551,7 @@ async def test_a_debt_moving_payment_is_still_idempotent_on_retry(
     debt = 45_000
     env.add_debt(stall_id=stall_id, vendor_id=env.vendor_id, amount_soum=debt)
 
-    amount = DAY_TOTAL_SOUM + debt if pays_the_debt_too else debt
+    amount = env.day_total + debt if pays_the_debt_too else debt
     payload = _body(stall_code=code, amount_soum=amount, key=f"cr02-{label}")
 
     first = await _post(api_client, cashier_headers, payload)
@@ -584,14 +596,14 @@ async def test_a_replayed_key_sent_to_another_stall_is_rejected(
     first = await _post(
         api_client,
         cashier_headers,
-        _body(stall_code=env.code(first_stall), amount_soum=DAY_TOTAL_SOUM, key=key),
+        _body(stall_code=env.code(first_stall), amount_soum=env.day_total, key=key),
     )
     assert first.status_code == 201, first.text
 
     second = await _post(
         api_client,
         cashier_headers,
-        _body(stall_code=other_code, amount_soum=DAY_TOTAL_SOUM, key=key),
+        _body(stall_code=other_code, amount_soum=env.day_total, key=key),
     )
 
     assert second.status_code == 409, second.text
@@ -599,7 +611,7 @@ async def test_a_replayed_key_sent_to_another_stall_is_rejected(
     assert len(env.payments()) == 1
 
     control = await _post(
-        api_client, cashier_headers, _body(stall_code=other_code, amount_soum=DAY_TOTAL_SOUM)
+        api_client, cashier_headers, _body(stall_code=other_code, amount_soum=env.day_total)
     )
     assert control.status_code == 201, f"nazorat yiqildi — 409 rastadan edi: {control.text}"
     assert len(env.payments()) == 2
@@ -621,7 +633,7 @@ async def test_two_concurrent_requests_write_one_row_and_neither_returns_5xx(
     =======================================================================
     """
     code = env.code(env.stall("stall_with_two_occupied_slots"))
-    payload = _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM, key="parallel-kalit-0001")
+    payload = _body(stall_code=code, amount_soum=env.day_total, key="parallel-kalit-0001")
 
     first, second = await asyncio.gather(
         _post(api_client, cashier_headers, payload),
@@ -741,7 +753,7 @@ async def test_a_written_payment_cannot_be_updated_even_with_raw_sql(
 
     code = env.code(env.stall("stall_with_two_occupied_slots"))
     created = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=env.day_total)
     )
     assert created.status_code == 201, created.text
     payment_id = created.json()["payment_id"]
@@ -761,7 +773,7 @@ async def test_a_reversal_is_a_new_row_and_the_original_is_untouched(
     """
     code = env.code(env.stall("stall_with_two_occupied_slots"))
     created = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=env.day_total)
     )
     assert created.status_code == 201, created.text
     original = created.json()
@@ -779,8 +791,8 @@ async def test_a_reversal_is_a_new_row_and_the_original_is_untouched(
     payment_row = next(row for row in rows if row[1] == "payment")
     reversal_row = next(row for row in rows if row[1] == "reversal")
 
-    assert payment_row[2] == DAY_TOTAL_SOUM, "ASL qator o'zgargan — D-23 buzilgan"
-    assert reversal_row[2] == DAY_TOTAL_SOUM, "storno summasi MUSBAT KATTALIK bo'lishi kerak (C-5)"
+    assert payment_row[2] == env.day_total, "ASL qator o'zgargan — D-23 buzilgan"
+    assert reversal_row[2] == env.day_total, "storno summasi MUSBAT KATTALIK bo'lishi kerak (C-5)"
     assert reversal_row[4] == "wrong_amount", "`reversal_reason` yozilmagan"
     assert reversal_row[7] == UUID(original["payment_id"])
 
@@ -794,7 +806,7 @@ async def test_reversing_twice_is_rejected(
     """
     code = env.code(env.stall("stall_with_two_occupied_slots"))
     created = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=env.day_total)
     )
     payment_id = created.json()["payment_id"]
 
@@ -823,7 +835,7 @@ async def test_a_reversal_without_a_reason_is_rejected(
     """`reason_code` siz storno -> **422** (Pydantic darajasida, D-19)."""
     code = env.code(env.stall("stall_with_two_occupied_slots"))
     created = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=env.day_total)
     )
     payment_id = created.json()["payment_id"]
 
@@ -860,7 +872,7 @@ async def test_a_changed_amount_without_a_reason_is_rejected(
     """Chetlangan summa + sababsiz -> **422 `reason_required`**; qator YOZILMAYDI."""
     code = env.code(env.stall("stall_with_two_occupied_slots"))
     response = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM - 5_000)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=env.day_total - 5_000)
     )
 
     assert response.status_code == 422, response.text
@@ -898,7 +910,7 @@ async def test_a_changed_amount_with_a_reason_is_written_and_audited(
     """
     stall_id = env.stall("stall_with_two_occupied_slots")
     code = env.code(stall_id)
-    partial = DAY_TOTAL_SOUM - 5_000
+    partial = env.day_total - 5_000
 
     response = await _post(
         api_client,
@@ -918,10 +930,10 @@ async def test_a_changed_amount_with_a_reason_is_written_and_audited(
     assert len(audit) == 1, f"aynan bitta `payment_override` qatori kutilgan: {audit}"
     actor, quote_soum, amount_soum, reason_code, quotes = audit[0]
     assert actor == env.cashier_id, "aktor yozilmagan"
-    assert int(quote_soum) == DAY_TOTAL_SOUM, "ESKI (server bergan) summa yozilmagan"
+    assert int(quote_soum) == env.day_total, "ESKI (server bergan) summa yozilmagan"
     assert int(amount_soum) == partial, "YANGI summa yozilmagan"
     assert reason_code == "partial_day"
-    assert DAY_TOTAL_SOUM in quotes, f"server taklif to'plami yozilmagan: {quotes}"
+    assert env.day_total in quotes, f"server taklif to'plami yozilmagan: {quotes}"
 
 
 async def test_an_unchanged_amount_with_a_reason_is_rejected(
@@ -942,7 +954,7 @@ async def test_an_unchanged_amount_with_a_reason_is_rejected(
     response = await _post(
         api_client,
         cashier_headers,
-        _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM, reason_code="director_waiver"),
+        _body(stall_code=code, amount_soum=env.day_total, reason_code="director_waiver"),
     )
 
     assert response.status_code == 422, response.text
@@ -973,7 +985,7 @@ async def test_a_partial_and_an_overpayment_are_both_allowed(
     over = await _post(
         api_client,
         cashier_headers,
-        _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM * 3, reason_code="director_waiver"),
+        _body(stall_code=code, amount_soum=env.day_total * 3, reason_code="director_waiver"),
     )
     assert over.status_code == 201, over.text
 
@@ -1026,7 +1038,7 @@ async def test_on_a_closed_day_without_a_debt_the_named_reason_is_visible(
     env.set_market_open(is_open=False)
 
     response = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=env.day_total)
     )
 
     assert response.status_code == 422, response.text
@@ -1086,11 +1098,11 @@ async def test_paying_the_total_due_needs_no_reason_code(
     env.add_debt(stall_id=stall_id, vendor_id=env.vendor_id, amount_soum=debt)
 
     response = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM + debt)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=env.day_total + debt)
     )
 
     assert response.status_code == 201, response.text
-    assert env.outstanding(env.vendor_id) == -DAY_TOTAL_SOUM, (
+    assert env.outstanding(env.vendor_id) == -env.day_total, (
         "jami to'langach eski qarz to'liq yopilishi kerak edi"
     )
 
@@ -1378,7 +1390,7 @@ async def test_the_payment_payload_has_exactly_the_eight_keys(
     """
     code = env.code(env.stall("stall_with_two_occupied_slots"))
     response = await _post(
-        api_client, cashier_headers, _body(stall_code=code, amount_soum=DAY_TOTAL_SOUM)
+        api_client, cashier_headers, _body(stall_code=code, amount_soum=env.day_total)
     )
     assert response.status_code == 201, response.text
 
