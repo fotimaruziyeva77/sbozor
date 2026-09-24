@@ -37,8 +37,6 @@ from __future__ import annotations
 
 import inspect
 
-import pytest
-
 
 class TestSupurgiOpsChatsizIshlaydi:
     def test_erta_qaytish_yoq(self) -> None:

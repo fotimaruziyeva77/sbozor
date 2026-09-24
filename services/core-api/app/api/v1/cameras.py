@@ -76,6 +76,8 @@ from app.services.camagent_live import (
     STREAM_DURATION_S,
     CamAgentLiveError,
     is_camagent_device,
+)
+from app.services.camagent_live import (
     open_stream as open_camagent_stream,
 )
 from app.services.go2rtc import TRANSPORT_HINT, Go2rtcClient, Go2rtcError, live_view_url
@@ -167,8 +169,7 @@ def normalize_source_ip(value: str | None) -> str | None:
         return value
 
 
-def _read(camera: Camera, oxirgi_kadr: UUID | None = None,
-          eskirgan: bool = False) -> CameraRead:
+def _read(camera: Camera, oxirgi_kadr: UUID | None = None, eskirgan: bool = False) -> CameraRead:
     """Qator -> javob modeli.
 
     ⚠ `stream_name` BU YERDA UMUMAN O'QILMAYDI (`schemas.py` dagi bo'lim
@@ -185,8 +186,7 @@ def _read(camera: Camera, oxirgi_kadr: UUID | None = None,
         #   `cameras.status` agent aytgan paytdagi holatda qotib
         #   qoladi; eskirish bayrog'i uni haqiqatga qaytaradi
         #   (`nvr_repo.CAMAGENT_STALE_SECONDS`).
-        status=(CameraStatus.OFFLINE if eskirgan
-                else CameraStatus(camera.status)),
+        status=(CameraStatus.OFFLINE if eskirgan else CameraStatus(camera.status)),
         is_archived=camera.is_archived,
         has_substream=camera.has_substream,
         source_ip=normalize_source_ip(camera.source_ip),
@@ -585,7 +585,10 @@ async def issue_live_token_for_camera(
         # ⚠ Dialog xulqi saqlanadi: AYNI kamerani qayta ochish eski
         #   seansni baribir yopadi — nom o'sha bo'ladi.
         await _ensure_stream(
-            request.app.state, camera, device, repo,
+            request.app.state,
+            camera,
+            device,
+            repo,
             viewer=f"sbozor:{principal.user_id}:{camera_id}",
             # Devor katakchasi 10 soniyadan keyin oxirgi kadrga
             # qaytadi — oqim shundan uzoq yashashi kerak emas.

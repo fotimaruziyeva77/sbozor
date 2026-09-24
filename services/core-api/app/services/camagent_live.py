@@ -30,6 +30,7 @@
   qatorining yo'qligi shuning uchun XATO EMAS — odatdagi yo'lda esa u
   503 beradi.
 """
+
 from __future__ import annotations
 
 from typing import Any

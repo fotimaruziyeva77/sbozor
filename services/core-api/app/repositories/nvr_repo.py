@@ -488,7 +488,9 @@ class NvrRepository(TenantScopedRepository):
           yangilanadi — u kamdan-kam ishlaydi va bir xil chegara
           butun flotni «oflayn» qilib qo'yardi.
         """
-        satrlar = (await self.session.execute(text("""
+        satrlar = (
+            await self.session.execute(
+                text("""
             SELECT c.id,
                    (SELECT s.id FROM snapshots s
                      WHERE s.market_id = c.market_id
@@ -502,7 +504,10 @@ class NvrRepository(TenantScopedRepository):
               JOIN nvr_devices d
                 ON d.market_id = c.market_id AND d.id = c.nvr_id
              WHERE c.market_id = :m
-        """), {"m": self.market_id, "chegara": CAMAGENT_STALE_SECONDS})).all()
+        """),
+                {"m": self.market_id, "chegara": CAMAGENT_STALE_SECONDS},
+            )
+        ).all()
         return {r[0]: (r[1], bool(r[2])) for r in satrlar}
 
     async def rename_camera(self, camera_id: UUID, name: str) -> bool:

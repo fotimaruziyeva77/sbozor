@@ -113,12 +113,12 @@ from app.services.capture_errors import (
 #   Buni `grep -cE "^\s*(import|from)\s+taskiq" app/jobs/capture.py` -> 0
 #   mexanik tasdiqlaydi.
 from app.services.cv_queue import enqueue_detect
-from app.services.review_seed import seed_snapshot
 from app.services.frame_source import CaptureTarget, DeviceEndpoint, capture_frame
 from app.services.isapi.client import RTSP_FALLBACK_PORT
 from app.services.live_source import authenticated_rtsp_source
 from app.services.object_key import object_key
 from app.services.quality import VERDICT_OK, analyze
+from app.services.review_seed import seed_snapshot
 from app.services.rtsp import rtsp_url
 from app.services.storage import StorageError
 
@@ -1050,9 +1050,7 @@ async def _capture_one(
             #   xatosi YUTILADI, bu esa BAZAGA yozadi — ya'ni yutilmaydi.
             # ===============================================================
             if policy.seed_mode and report.verdict == VERDICT_OK:
-                await seed_snapshot(
-                    session, market_id=market_id, snapshot_id=snapshot_id
-                )
+                await seed_snapshot(session, market_id=market_id, snapshot_id=snapshot_id)
     except Exception as exc:  # noqa: BLE001 - job jarayoni yiqilmasligi SHART
         log.exception("capture_record_failed", **log_context)
         await _record_failure(

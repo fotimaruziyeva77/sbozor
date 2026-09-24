@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import html
 import json
+import logging
 import re
 import secrets
 import time
@@ -25,6 +26,8 @@ from .media import MediaServer
 from .retention import retention_days
 from .retention import sweep as retention_sweep
 from .storage import DiskStorage, SnapshotStorage
+
+log = logging.getLogger("agent_gateway.app")
 
 ALLOWED_COMMANDS = {
     "snapshot_now", "rescan_nvr", "update_config", "update_credentials",

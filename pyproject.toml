@@ -97,6 +97,14 @@ target-version = "py313"
 #   sekin-asta ajralib ketardi: begona servisga qo'shilgan per-file-ignore
 #   o'sha servisning lintida o'tib, `npm run lint` da yiqilardi va sabab
 #   kodda emas, IKKI NUSXADA bo'lardi.
+#
+# ⚠ `services/camagent-gateway` — VENDORED NUSXA (`VENDORED.md`: haqiqat
+#   manbai CamAgent reposidagi `agent_gateway/`, bu yerda QO'LDA
+#   TAHRIRLANMAYDI). U o'z uslubi bilan keladi va bu reponing qat'iy
+#   ruff/mypy qoidalariga moslashtirilsa keyingi sinxronizatsiya hammasini
+#   qaytarib yozardi. 2026-09-24 da o'lchandi: vendoring'dan beri
+#   `npm run lint` shu nusxa tufayli qizil edi (ruff 31 + mypy 118 xato).
+#   Lint mas'uliyati — manba reposida.
 extend-exclude = [
     ".venv",
     "node_modules",
@@ -105,6 +113,7 @@ extend-exclude = [
     ".next",
     "services/cv-service",
     "services/bot-service",
+    "services/camagent-gateway",
 ]
 
 [tool.ruff.lint]
@@ -149,7 +158,16 @@ plugins = []
 #    ko'rsatilardi. `bot-service` o'z `mypy` ini `npm run bot:lint`
 #    ostida yuritadi (u yerda `aiogram` bor, bu yerda esa u ATAYIN
 #    o'rnatilmagan — `tests/unit/test_runtime_deps.py`).
-exclude = ["^frontend/", "^\\.planning/", "^services/cv-service/", "^services/bot-service/"]
+#
+# ⚠ `services/camagent-gateway` — VENDORED NUSXA, ruff bo'limidagi izohga
+#   qarang (mypy 118 xato aynan shu nusxada edi).
+exclude = [
+    "^frontend/",
+    "^\\.planning/",
+    "^services/cv-service/",
+    "^services/bot-service/",
+    "^services/camagent-gateway/",
+]
 # `tests/fixtures` paketi test modullaridan `fixtures.*` sifatida, `app` esa
 # `services/core-api` dan import qilinadi (pytest `pythonpath` bilan bir xil yo'l).
 mypy_path = "tests:services/core-api"

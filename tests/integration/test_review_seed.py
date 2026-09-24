@@ -20,15 +20,13 @@ adashtirilmaydi.
    bo'lardi.
 =============================================================================
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
 from uuid import UUID
 
 import pytest
-from psycopg import Connection
-from psycopg.rows import TupleRow
-
 from app.services.review_seed import (
     SEED_CONFIDENCE,
     SEED_MODEL_VERSION,
@@ -40,12 +38,13 @@ from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import TwoMarketSeed
-
+from psycopg import Connection
+from psycopg.rows import TupleRow
 
 
 def _scalar(conn: Connection[TupleRow], sql: str, params: tuple[object, ...]) -> object:
     with conn.cursor() as cur:
-        cur.execute(sql, params)  # type: ignore[arg-type]
+        cur.execute(sql, params)
         row = cur.fetchone()
     return None if row is None else row[0]
 
@@ -159,7 +158,9 @@ async def test_hodisa_MODEL_DEB_KORINMAYDI(
         """,
         (market_id, kadr, SEED_MODEL_VERSION, SEED_CONFIDENCE),
     )
-    assert qator >= 1, "urug' hodisasi kutilgan uch maydon bilan yozilmadi"
+    assert isinstance(qator, int) and qator >= 1, (
+        "urug' hodisasi kutilgan uch maydon bilan yozilmadi"
+    )
 
 
 async def test_IDEMPOTENT_ikkinchi_yugurish_dublikat_yaratmaydi(

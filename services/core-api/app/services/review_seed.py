@@ -44,6 +44,7 @@ indeksi va `review_assignments.queue_kind='uncertain'` o'zgarmaydi.
   birini olishini bilmasdi.
 =============================================================================
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -154,9 +155,7 @@ _INSERT_ASSIGNMENT = text(
 """
 
 
-async def seed_snapshot(
-    session: AsyncSession, *, market_id: UUID, snapshot_id: UUID
-) -> SeedResult:
+async def seed_snapshot(session: AsyncSession, *, market_id: UUID, snapshot_id: UUID) -> SeedResult:
     """Bitta kadr uchun urug' hodisalarini va navbatni yozadi.
 
     Args:

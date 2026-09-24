@@ -82,7 +82,10 @@ CLIENT_PORT = 51_000
 # (`working_dir: /app`, `.:/app`), xostda ham bir xil ishlaydi.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NGINX_CONF = REPO_ROOT / "ops" / "nginx" / "nginx.conf"
-COMPOSE_FILES = (REPO_ROOT / "deployment" / "compose.yaml", REPO_ROOT / "deployment" / "compose.override.yml")
+COMPOSE_FILES = (
+    REPO_ROOT / "deployment" / "compose.yaml",
+    REPO_ROOT / "deployment" / "compose.override.yml",
+)
 
 # nginx konteynerining compose bridge tarmog'idagi manzili (kuzatilgan
 # `sbozor_default` = 172.19.0.0/16 ichidan). uvicorn uchun bu — PEER, ya'ni
