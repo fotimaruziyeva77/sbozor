@@ -109,6 +109,16 @@ completed: 2026-09-24
 6. **Manfiy «-22 s»** — `41f5587` (2026-08-28) da allaqachon tuzatilgan edi, qayta
    ish qilinmadi.
 
+## Prod'da bajarildi (2026-09-24)
+
+- Kod GitHub orqali (`c226caa`) serverga chiqarildi; tekshiruv: konteynerda yangi qoida bor.
+  Baza oxirgi migratsiyada (0029), zaxira nusxa olindi (`/srv/sbozor-baza-20260924.dump`).
+- 1, 2, 6, 7-sentabr «Ish kunlari» da yopiq deb belgilandi — quruq yugurish ularni to'g'ri
+  to'xtatdi (skript HECH NARSA yozmagan holda).
+- Tiklash: 22 ish kuni × 33 rasta = **726 hisob** biriktirish bo'yicha, kamera bo'yicha 0, xato 0.
+  Har kun: 8–9 zonali rasta tasdiqsiz o'tkazildi, 4–8 rasta bugungi holati (yopiq/ta'mirda)
+  tufayli o'tkazildi. 28-avgust — kadr yo'q, hisobsiz.
+
 ## Ochiq qoldi (buyurtmachi qarori / tashqi)
 
 - Prod'ga deploy va tiklashni yurgizish. Oldin: 1, 2, 6, 7-sentabr (to'lov 0)

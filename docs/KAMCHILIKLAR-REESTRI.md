@@ -151,9 +151,11 @@
 | ✅ P-6 | `/internal/camagent/snapshot` tenancy matritsasida 3 ta qizil, o'z kontrakti o'lchanmagan | `EXEMPT_ROUTES` + `test_camagent_internal_auth.py` | `8c4f9f4` |
 | ✅ P-7 | Root lint darvozasi vendoring'dan beri qizil (ruff 37, mypy 125); vendored gateway'da `log` aniqlanmagan (tozalash halqasini o'ldirardi) | Vendored nusxa root lintdan chiqarildi, `log` tuzatildi, o'z fayllarimiz tozalandi | `603a972` |
 | ✅ P-8 | `camagent.py` izohlari mojibake, `_accept` tiplanmagan | Tiklandi, tiplandi, `.one()` | `d9a20dc` |
-| ⬜ P-9 | Prod'ga deploy + o'tgan kunlarni tiklash | Buyurtmachi qarori: 1, 2, 6, 7-sentabr yopiqmi; 28-avgust va 10-sentabr; keyin `backfill_charges.py` (avval `BACKFILL_DRY_RUN=1`) | — |
+| ✅ P-9 | Prod'ga deploy + o'tgan kunlarni tiklash | 2026-09-24 bajarildi: `c226caa` deploy qilindi; 1, 2, 6, 7-sentabr «Ish kunlari» da yopiq deb belgilandi; tiklash (`backfill_charges.py`, avval quruq yugurish) — 22 ish kuni × 33 rasta = **726 hisob** biriktirish bo'yicha, xatosiz. 28-avgust — kadr umuman yo'q, hisobsiz qoldi (P-13) | ops |
 | ⬜ P-10 | 26–27-avgustdagi 5 ta ochiq «band, lekin to'lovsiz» ishi | Nazoratchi/direktor ko'rib chiqadi | — |
 | 🔒 P-11 | Vendored `agent_gateway/app.py` dagi `log` tuzatmasi | CamAgent (Kamera) manba reposiga kiritilsin — aks holda keyingi sinxronizatsiya qaytaradi | — |
+| ⬜ P-12 | Zonali 8–9 rasta faqat nazoratchi tasdig'i bilan hisoblanadi — prod'da AI modeli yo'q, ya'ni navbat ko'rib chiqilmasa ular amalda tekin | Buyurtmachi qarori: model ishga tushguncha biriktirish bo'yicha hisoblash YOKI navbatni ko'rib chiqib, tiklash skriptini qayta yurgizish (xavfsiz, faqat yetishmaganini qo'shadi) | — |
+| ⬜ P-13 | Kadr UMUMAN kelmagan kun (masalan CamAgent uzilishi, 28-avgust) butun bozor uchun hisobsiz qoladi — gibrid qoida slot qatori bor rastalarga ishlaydi | Buyurtmachi qarori: bunday kunni kamerasiz kun sifatida biriktirish bo'yicha hisoblash (`billing_no_charges` alerti hozircha faqat ko'rsatadi) | — |
 
 ---
 *Reestr har yopilgan band bilan yangilanadi. "Hech narsa qolmasligi" sharti: 1–3 va 6-bo'limlar to'liq ✅ bo'lgunicha 8-faza yakunlanmaydi deb hisoblanmaydi. 8-bo'lim hududlaridan chiqqan yangi topilmalar reestrga qo'shiladi.*
