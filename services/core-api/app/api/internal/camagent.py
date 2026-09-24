@@ -8,7 +8,7 @@ sbozor kadrlarni O'ZI oladi: `capture_tick` rejani materializatsiya
 qiladi, worker NVR'ga ulanib rasm oladi va sifatini tahlil qiladi. Bu
 yo'l bozor tarmog'iga TUNNEL talab qiladi.
 
-CamAgent obyektlarida tunnel YO'Q вЂ” u yerda kadrni AGENT oladi va
+CamAgent obyektlarida tunnel YO'Q — u yerda kadrni AGENT oladi va
 tashqariga o'zi yuboradi. Kadr sbozor S3'iga tushadi, lekin `snapshots`
 jadvaliga TUSHMAYDI: ya'ni `/uz/snapshots` bo'sh qoladi, zona chizib
 bo'lmaydi va bandlik tahlili boshlanmaydi.
@@ -18,11 +18,11 @@ yerga xabar beradi, core-api esa uni O'Z sifat tahlilidan o'tkazib
 `capture_runs` + `snapshots` yozadi.
 
 =============================================================================
-в›”в›” SIFAT TAHLILI SHU YERDA, GATEWAY'DA EMAS
+⛔⛔ SIFAT TAHLILI SHU YERDA, GATEWAY'DA EMAS
 =============================================================================
 
 `quality_verdict` dan `snapshots.is_billable` GENERATED ustun sifatida
-hisoblanadi вЂ” ya'ni verdikt PUL qaroriga bevosita ta'sir qiladi.
+hisoblanadi — ya'ni verdikt PUL qaroriga bevosita ta'sir qiladi.
 Chegaralar (`QualityThresholds`) va ularning versiyasi sbozor tomonida
 yashaydi va vaqt o'tishi bilan o'zgaradi.
 
@@ -32,7 +32,7 @@ har xil baholanardi. Shuning uchun gateway FAKT yuboradi (kadr qayerda,
 qachon, qaysi kameradan), BAHO esa shu yerda beriladi.
 
 =============================================================================
-вљ  IDEMPOTENT вЂ” AGENT QAYTA YUBORISHI MUMKIN
+⚠ IDEMPOTENT — AGENT QAYTA YUBORISHI MUMKIN
 =============================================================================
 
 Agent tarmoq uzilganda navbatdan qayta yuboradi (CLAUDE.md 6-bo'lim:
@@ -52,7 +52,8 @@ from zoneinfo import ZoneInfo
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sbozor_core.tenancy import ActorKind, set_tenant_context
+from sbozor_core.enums import ActorKind
+from sbozor_core.tenancy import set_tenant_context
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -71,12 +72,12 @@ _UNAVAILABLE = "unavailable"
 
 
 # ===========================================================================
-# AUTENTIFIKATSIYA вЂ” `bot.py` bilan BIR XIL naqsh
+# AUTENTIFIKATSIYA — `bot.py` bilan BIR XIL naqsh
 # ===========================================================================
 
 
 def _presented_token(request: Request) -> str:
-    """вљ  Sarlavha yo'q bo'lsa BO'SH SATR: ikkala yo'l ham
+    """⚠ Sarlavha yo'q bo'lsa BO'SH SATR: ikkala yo'l ham
     `compare_digest` ga boradi va vaqt bo'yicha farq qilmaydi."""
     header = request.headers.get("authorization", "")
     scheme, _, value = header.partition(" ")
@@ -104,7 +105,7 @@ ServiceToken = Annotated[None, Depends(_require_service_token)]
 
 
 class SnapshotIn(BaseModel):
-    """Gateway yuboradigan FAKTLAR вЂ” baho emas."""
+    """Gateway yuboradigan FAKTLAR — baho emas."""
 
     market_id: UUID
     camera_serial: str = Field(min_length=1, max_length=128)
@@ -139,17 +140,17 @@ async def accept_snapshot(
 ) -> SnapshotOut:
     """Agent olgan kadrni sbozor hisobiga qo'shadi.
 
-    в›” KADR BAYTLARI S3'DAN O'QILADI, so'rov tanasida kelmaydi: 400 KB
+    ⛔ KADR BAYTLARI S3'DAN O'QILADI, so'rov tanasida kelmaydi: 400 KB
        JPEG'ni JSON ichida yuborish base64 tufayli 33% o'sardi va
        `client_max_body_size` ni ikkala tomonda ham qayta sozlashni
-       talab qilardi. Gateway kadrni ALLAQACHON S3'ga yozgan вЂ” bu yerda
+       talab qilardi. Gateway kadrni ALLAQACHON S3'ga yozgan — bu yerda
        faqat kalit keladi.
     """
     settings: Settings = request.app.state.settings
     market_id = str(payload.market_id)
 
-    # в›” TENANT KONTEKSTI QO'LDA O'RNATILADI (`jobs/capture.py` naqshi).
-    #   Bu marshrutda `Principal` YO'Q вЂ” so'rovchi ODAM emas, SERVIS.
+    # ⛔ TENANT KONTEKSTI QO'LDA O'RNATILADI (`jobs/capture.py` naqshi).
+    #   Bu marshrutda `Principal` YO'Q — so'rovchi ODAM emas, SERVIS.
     #   RLS esa `app.market_id` GUC'siz 0 qator beradi, ya'ni kontekstsiz
     #   kamera topilmasdi va kadr jimgina yo'qolardi.
     sessionmaker: async_sessionmaker[AsyncSession] = async_sessionmaker(
@@ -196,8 +197,14 @@ async def accept_snapshot(
     return natija
 
 
-async def _accept(session, request, settings, payload, market_id) -> SnapshotOut:
-    # 1. Kamera вЂ” seriya + kanal bo'yicha. Sinxronizatsiya (`sbozor_sync`)
+async def _accept(
+    session: AsyncSession,
+    request: Request,
+    settings: Settings,
+    payload: SnapshotIn,
+    market_id: str,
+) -> SnapshotOut:
+    # 1. Kamera — seriya + kanal bo'yicha. Sinxronizatsiya (`sbozor_sync`)
     #    uni allaqachon yaratgan bo'lishi kerak; topilmasa kadr YO'QOLMAYDI,
     #    lekin hisobga ham kirmaydi va sabab jurnalga tushadi.
     qator = (
@@ -228,7 +235,7 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="camera_not_found")
     camera_id, nvr_id = qator[0], qator[1]
 
-    # 2. Kadr baytlari вЂ” sifat tahlili uchun.
+    # 2. Kadr baytlari — sifat tahlili uchun.
     try:
         baytlar = await _read_object(settings, payload.object_key)
     except Exception as exc:  # noqa: BLE001
@@ -237,13 +244,13 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
             status_code=status.HTTP_502_BAD_GATEWAY, detail="object_unreadable"
         ) from exc
 
-    # в›” CHEGARALAR SOZLAMADAN, standart qiymatlardan EMAS: operator
+    # ⛔ CHEGARALAR SOZLAMADAN, standart qiymatlardan EMAS: operator
     #   ularni `.env` orqali o'zgartirishi mumkin va CamAgent kadrlari
-    #   ham AYNI chegara bilan baholanishi shart вЂ” aks holda bir xil
+    #   ham AYNI chegara bilan baholanishi shart — aks holda bir xil
     #   kadr ikki yo'lda har xil verdikt olardi.
     hisobot = analyze(baytlar, settings.quality_thresholds())
 
-    # 3. `capture_runs` вЂ” `snapshots.capture_run_id` NOT NULL.
+    # 3. `capture_runs` — `snapshots.capture_run_id` NOT NULL.
     #    Idempotentlik `(market_id, camera_id, business_date, slot_time)`
     #    unique cheklovi orqali.
     # ⚠ MINTAQA BOZORNIKI, QATTIQ YOZILGAN EMAS. `markets.timezone`
@@ -322,14 +329,14 @@ async def _accept(session, request, settings, payload, market_id) -> SnapshotOut
                 "captured_at": payload.captured_at,
             },
         )
-    ).first()
+    ).one()  # `ON CONFLICT DO UPDATE ... RETURNING` har doim BITTA qator qaytaradi.
     run_id, mavjud_snapshot = run[0], run[1]
     if mavjud_snapshot is not None:
         return SnapshotOut(
             snapshot_id=mavjud_snapshot, quality_verdict=hisobot.verdict, duplicate=True
         )
 
-    # 4. `snapshots` вЂ” sifat verdikti bilan.
+    # 4. `snapshots` — sifat verdikti bilan.
     snap = (
         await session.execute(
             text("""
@@ -420,9 +427,9 @@ def _slot(qiymat: str) -> time | None:
 
 
 async def _read_object(settings: Settings, key: str) -> bytes:
-    """S3'dan kadr baytlarini o'qiydi вЂ” sbozor'ning O'Z mijozi bilan.
+    """S3'dan kadr baytlarini o'qiydi — sbozor'ning O'Z mijozi bilan.
 
-    вљ  Har chaqiruvda yangi mijoz: `storage.open()` kontekst menejeri
+    ⚠ Har chaqiruvda yangi mijoz: `storage.open()` kontekst menejeri
       (`services/storage.py`) va u ulanishni o'zi yopadi. Kadr qabul
       qilish kamdan-kam (soatiga 16 ta), ya'ni ulanishni ushlab turish
       foydadan ko'ra murakkablik keltirardi.
