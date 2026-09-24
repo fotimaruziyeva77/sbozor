@@ -137,5 +137,23 @@
 | Xavfsizlik retro-auditi | Threat-modellar va RLS testlari bor; maxsus hujum-sinovi yurgizilmagan | `/gsd:secure-phase` barcha fazalar bo'yicha (go-live'dan oldin) |
 | 8-faza yangi yuzalari | Hali qurilmagan | O'z verifikatori + ijrodan keyin 4-rol smoke-sayr takrori |
 
+## 9. PROD TAHLILI — 2026-09-24 (Karmana, quick 260924-hpm)
+
+> **Manba:** prod bazasidan faqat-o'qish so'rovlari (buyurtmachi yurgizgan) + to'liq lokal test/lint yugurishi.
+
+| № | Kamchilik | Yechim | Commit |
+|---|---|---|---|
+| ✅ P-1 | **KRITIK:** 28-avgustdan 28 kun davomida bironta patta hisobi yozilmadi (to'lovlar kuniga 30–44). Kamera ulangach bozor butunlay D-04 ga o'tdi, zona esa 53 rastadan 6–9 tasida — zonasiz rastalar hisobsiz qoldi | Gibrid qoida: zonasiz rasta biriktirish bo'yicha (`_charge_by_assignment`), zonali — D-04; kech tasdiq dalilsiz hisobni kamaytirmaydi; tiklash skripti bo'sh kunni so'ramasdan hisoblamaydi | `ba3edc3` |
+| ✅ P-2 | Uzilish 28 kun sezilmadi: `billing.close` har kecha ishladi, faqat natijasi 0 edi | `billing_no_charges` alerti — ochiq kunda to'lov bor, hisob yo'q | `add2376` |
+| ✅ P-3 | Xaritadagi 5 sariq rasta 4 hafta ko'rilmagan ishlar edi: «ochiq nomuvofiqlik» matni noaniq, kartadan ishga yo'l yo'q, sahifa faqat kechani ko'rsatadi | Matn «hal qilinmagan», kartada ish kuniga havola, `GET /reconciliation/open-days` + e'lon | `6cc6e44` |
+| ✅ P-4 | Landing kalkulyatorida oylik yo'qotish soni chiqmas edi («Oyiga ~ so‘m») | `t.rich` tegi; regressiya testi | `ffd6604` |
+| ✅ P-5 | 37 ta test seed sanasi o'tmishga qolgach qizargan (sana-bombasi) | Summa kundan hosila (`day_tariff_soum`/`day_total_soum`) | `123bc0f` |
+| ✅ P-6 | `/internal/camagent/snapshot` tenancy matritsasida 3 ta qizil, o'z kontrakti o'lchanmagan | `EXEMPT_ROUTES` + `test_camagent_internal_auth.py` | `8c4f9f4` |
+| ✅ P-7 | Root lint darvozasi vendoring'dan beri qizil (ruff 37, mypy 125); vendored gateway'da `log` aniqlanmagan (tozalash halqasini o'ldirardi) | Vendored nusxa root lintdan chiqarildi, `log` tuzatildi, o'z fayllarimiz tozalandi | `603a972` |
+| ✅ P-8 | `camagent.py` izohlari mojibake, `_accept` tiplanmagan | Tiklandi, tiplandi, `.one()` | `d9a20dc` |
+| ⬜ P-9 | Prod'ga deploy + o'tgan kunlarni tiklash | Buyurtmachi qarori: 1, 2, 6, 7-sentabr yopiqmi; 28-avgust va 10-sentabr; keyin `backfill_charges.py` (avval `BACKFILL_DRY_RUN=1`) | — |
+| ⬜ P-10 | 26–27-avgustdagi 5 ta ochiq «band, lekin to'lovsiz» ishi | Nazoratchi/direktor ko'rib chiqadi | — |
+| 🔒 P-11 | Vendored `agent_gateway/app.py` dagi `log` tuzatmasi | CamAgent (Kamera) manba reposiga kiritilsin — aks holda keyingi sinxronizatsiya qaytaradi | — |
+
 ---
 *Reestr har yopilgan band bilan yangilanadi. "Hech narsa qolmasligi" sharti: 1–3 va 6-bo'limlar to'liq ✅ bo'lgunicha 8-faza yakunlanmaydi deb hisoblanmaydi. 8-bo'lim hududlaridan chiqqan yangi topilmalar reestrga qo'shiladi.*

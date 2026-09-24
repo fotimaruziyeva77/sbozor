@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 10 bajarildi (8/8) — 11-faza rejalashtirilmagan
-last_updated: "2026-08-20T11:00:00.000Z"
-last_activity: 2026-08-20
+last_updated: "2026-09-24T12:00:00.000Z"
+last_activity: 2026-09-24
 progress:
   total_phases: 11
   completed_phases: 10
@@ -192,7 +192,7 @@ Phase: 10 (bajarildi)
 Plan: 10-08 (oxirgisi)
 Total Plans in Phase: 8
 Status: Complete
-Last activity: 2026-08-20
+Last activity: 2026-09-24 — quick 260924-hpm (prod hisob uzilishi, `billing_no_charges`, nomuvofiqlik topiluvchanligi)
 
 Progress: [██████████] 100% (8/8 reja — 10-01…10-08)
 
@@ -508,6 +508,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260924-hpm | Prod tahlili: 28 kunlik hisob uzilishi (gibrid qoida: zonasiz rasta biriktirish bo'yicha) + xavfsiz tiklash/qarz skriptlari, `billing_no_charges` alerti, xarita/nomuvofiqlik topiluvchanligi, landing oylik soni, sana-bombasi testlari, camagent matritsasi, lint darvozasi | 2026-09-24 | 123bc0f, ba3edc3, add2376, 6cc6e44, d9a20dc, 8c4f9f4, 603a972, ffd6604 | [260924-hpm-prod-hisob-uzilishi-va-xarita-nomuvofiql](./quick/260924-hpm-prod-hisob-uzilishi-va-xarita-nomuvofiql/) |
 | 260816-75e | Topilma №C: MARKET-06 plan-xarita to'lov ranglari + rasta kartasi + /billing/map | 2026-08-16 | 9dbd631, 192eb2e, 43b4628 | [260816-75e-topilma-c-market-06-plan-xarita-tolov-ra](./quick/260816-75e-topilma-c-market-06-plan-xarita-tolov-ra/) |
 | 260816-75g | Topilma №F+№G+№H: diagnostika rejimi, rol tahrirlash, admin dashboard holati | 2026-08-16 | 4d0e583, f57c3da, a13c447 | [260816-75g-topilma-f-g-h-diagnostika-yorligi-rol-ta](./quick/260816-75g-topilma-f-g-h-diagnostika-yorligi-rol-ta/) |
 | 260816-75c | Topilma №L+№E+№M: kassir lookup konteksti, kelajak tarif yorlig'i, bekor qatorlarini ajratish | 2026-08-16 | f2b1830, aed8391, 93c0a78 | [260816-75c-topilma-l-e-m-kassir-lookup-kontksti-kel](./quick/260816-75c-topilma-l-e-m-kassir-lookup-kontksti-kel/) |
