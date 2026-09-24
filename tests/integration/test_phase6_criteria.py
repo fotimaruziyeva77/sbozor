@@ -947,14 +947,30 @@ async def test_sc1_immutable_daily_charge_is_written_once(
     await _materialise_and_close(app_sessionmaker, day)
 
     written = _charges(sync_owner_conn, market_id, day)
-    assert set(written) == {scenario.two_ai_slots, scenario.human_slot}, (
-        "hisob yozilgan rastalar to'plami mezon matniga MOS EMAS "
-        f"(kutilgan: 2 slotli + nazoratchi tasdiqlagan): {sorted(map(str, written))}"
+    # ⚠ 2026-09-24 (gibrid qoida): ZONASIZ, biriktirilgan rastalar endi
+    #   biriktirish bo'yicha hisob oladi — DALILSIZ. Mezon matni KAMERA
+    #   hukmi haqida, shuning uchun to'plam dalil bo'yicha ajratiladi va
+    #   qolgan har bir hisobda dalil YO'QLIGI alohida talab qilinadi.
+    with_evidence = {
+        row[0]
+        for row in sync_owner_conn.execute(
+            "SELECT DISTINCT c.stall_id FROM daily_charges c "
+            "JOIN charge_evidence e ON e.market_id = c.market_id AND e.charge_id = c.id "
+            "WHERE c.market_id = %s AND c.service_date = %s",
+            (str(market_id), day),
+        ).fetchall()
+    }
+    assert with_evidence == {scenario.two_ai_slots, scenario.human_slot}, (
+        "kamera hukmidan hisob yozilgan rastalar to'plami mezon matniga MOS EMAS "
+        f"(kutilgan: 2 slotli + nazoratchi tasdiqlagan): {sorted(map(str, with_evidence))}"
     )
+    assert with_evidence <= set(written), "dalilli hisob `daily_charges` da yo'q"
 
     # ⛔ 0027: «TO'LIQ kunlik patta» = tarif + majburiy xizmat haqi — SHU KUNNING.
     expected = env.day_total_amount(day)
     for stall_id, (amount, _created) in written.items():
+        if stall_id not in with_evidence:
+            continue
         assert amount == expected, (
             f"{stall_id} rastasining summasi {amount}, kutilgan {expected} "
             "(tarif + xizmat haqi) — «toifa tarifi bo'yicha TO'LIQ kunlik "

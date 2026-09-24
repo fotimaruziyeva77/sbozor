@@ -81,6 +81,22 @@ Uch band, uchalasi ham ALOHIDA xulq (`06-RESEARCH.md` Pitfall 5):
   CHAQIRILMAYDI va u DUBLIKAT bo'lardi.
 
 =============================================================================
+6. ⛔⛔ GIBRID QOIDA — ZONASIZ RASTA BIRIKTIRISH BO'YICHA (2026-09-24).
+
+Kamerali bozorda ham zonasi yo'q rasta o'lchanmaydi. Ilgari u faqat
+`no_coverage_stall` anomaliyasini olardi va hisobsiz qolardi — ya'ni
+bozorga BITTA kamera ulanishi zonasiz barcha rastalarning tushumini
+jimgina o'chirardi. Prod'da aynan shu bo'ldi: 28-avgustdan 28 kun
+davomida 0 ta hisob, to'lovlar esa har kuni keldi.
+
+Endi zonasiz (`no_coverage_only`) rasta kamerasiz bozor bilan AYNI
+qoidalar bo'yicha hisoblanadi (`_charge_by_assignment`). Zonali rastalar
+D-04 da qoladi. Materializatsiya qilinmagan rastaga TEGILMAYDI
+(Pitfall 2 — `day_close` dan oldingi yugurish hamon hech nima yozmaydi).
+Bunday hisobda dalil-kadr YO'Q va kech tasdiq uni kamaytirmaydi
+(`_late_review` docstringi).
+
+=============================================================================
 ⚠ HAR BOZOR UCHUN ALOHIDA TRANZAKSIYA (`day_close.py` ning qoidasi):
   bitta tranzaksiyada ikki bozor — tenant sizib chiqishining eng qisqa
   yo'li; qolaversa bitta bozordagi nosozlik qolganlarining kunini ham
@@ -196,6 +212,15 @@ class BillingCloseResult:
     skipped_existing: int = 0
     """Hisob ALLAQACHON bor edi (D-06 kaliti konfliktga urildi)."""
     skipped_unbilled: int = 0
+    """⛔ «KO'RDIK, LEKIN BAND EMAS» — slot qatorlari BOR, D-04 sharti bajarilmadi.
+
+    ⚠ `no_slot_rows` DAN AJRALGAN va bu farq BUTUN Pitfall 2 NING
+      MAZMUNI: bu son «job ishladi va rasta hisobga tushmadi» degani,
+      qo'shnisi esa «biz umuman ko'rmadik». Ikkisi bitta songa siqilsa
+      `day_close` dan OLDIN yugurgan job «hamma rasta bo'sh» degan YOLG'ON
+      hisobot berardi va u to'g'ri hisobotdan MEXANIK ravishda
+      ajralmasdi.
+    """
     skipped_fair: int = 0
     """Yarmarka rastalari (0028) — band, lekin patta ATAYIN olinmaydi.
 
@@ -215,24 +240,22 @@ class BillingCloseResult:
     Bozorda ulangan kamera 0 ta va slot hukmi ham yo'q bo'lsa, hisob
     BANDLIK o'rniga BIRIKTIRISH bo'yicha yoziladi; kamera ulangan zahoti
     bozor o'z-o'zidan D-04 rejimga qaytadi (shart har kuni qayta o'qiladi).
+
+    ⚠ D-04 ga qaytish BUTUN bozorni emas, faqat ZONALI rastalarni
+      o'lchovga o'tkazadi: zonasiz rasta biriktirish bo'yicha hisoblanishda
+      davom etadi (`_close_stall` (1)-shoxi, 2026-09-24).
     """
     charged_auto: int = 0
-    """Avto-rejimda yozilgan hisoblar — `charged` dan ATAYIN alohida:
+    """BIRIKTIRISH bo'yicha yozilgan hisoblar — `charged` dan ATAYIN alohida:
     daydjestda «kameradan tasdiqlangan» va «biriktirishdan avtomatik»
-    farqlanishi kerak (dalil-kadr YO'Q)."""
-    skipped_unassigned_auto: int = 0
-    """Avto-rejimda sotuvchisiz qolgan faol rastalar — hisob yozilmaydi
-    (D-28: egasiz qarz yo'q) va bandlik dalili ham yo'qligi uchun
-    `unassigned_occupied` anomaliyasi HAM yozilmaydi."""
-    """⛔ «KO'RDIK, LEKIN BAND EMAS» — slot qatorlari BOR, D-04 sharti bajarilmadi.
+    farqlanishi kerak (dalil-kadr YO'Q).
 
-    ⚠ `no_slot_rows` DAN AJRALGAN va bu farq BUTUN Pitfall 2 NING
-      MAZMUNI: bu son «job ishladi va rasta hisobga tushmadi» degani,
-      qo'shnisi esa «biz umuman ko'rmadik». Ikkisi bitta songa siqilsa
-      `day_close` dan OLDIN yugurgan job «hamma rasta bo'sh» degan YOLG'ON
-      hisobot berardi va u to'g'ri hisobotdan MEXANIK ravishda
-      ajralmasdi.
-    """
+    Ikki manbadan: kamerasiz bozor (`markets_no_camera`) va kamerali
+    bozorning ZONASIZ rastalari (gibrid qoida, `_close_stall` (1)-shoxi)."""
+    skipped_unassigned_auto: int = 0
+    """Biriktirish bo'yicha yo'lda sotuvchisiz qolgan faol rastalar — hisob
+    yozilmaydi (D-28: egasiz qarz yo'q) va bandlik dalili ham yo'qligi uchun
+    `unassigned_occupied` anomaliyasi HAM yozilmaydi."""
     no_slot_rows: int = 0
     """⛔ MATERIALIZATSIYA QILINMAGAN faol rastalar soni (Pitfall 2, C-3).
 
@@ -508,36 +531,63 @@ async def _close_market_without_cameras(
     existing = await market_day_charges(session, market_id=market_id, service_date=business_date)
 
     for money in money_rows:
-        if money.unavailable_reason == FAIR_STALL:
-            result.skipped_fair += 1
-            continue
-        if money.unavailable_reason in (STALL_CLOSED, STALL_MAINTENANCE):
-            result.skipped_inactive += 1
-            continue
-        if money.vendor_id is None:
-            result.skipped_unassigned_auto += 1
-            continue
-        if money.amount_soum is None:
-            # Qolgan yagona sabab tarif bo'shlig'i (bozor ochiq — chaqiruvchi
-            # tekshirdi): kamera-rejim bilan AYNI kanal, jimgina yutilmaydi.
-            result.errors.append(f"billing_close_tariff_missing:{money.stall_code}")
-            continue
-        if existing.get(money.stall_id) is not None:
-            result.skipped_existing += 1
-            continue
-
-        charge_id = await write_charge(
+        await _charge_by_assignment(
             session,
             market_id=market_id,
-            stall_id=money.stall_id,
-            service_date=business_date,
+            business_date=business_date,
             money=money,
+            existing=existing.get(money.stall_id),
+            result=result,
         )
-        if charge_id is None:
-            # D-06 idempotentligi poygada ham ishlaydi — qayta yugurish normal.
-            result.skipped_existing += 1
-            continue
-        result.charged_auto += 1
+
+
+async def _charge_by_assignment(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    business_date: date,
+    money: StallDayMoney,
+    existing: ExistingCharge | None,
+    result: BillingCloseResult,
+) -> None:
+    """Bir rastaning bir kuni — hisob BIRIKTIRISH bo'yicha (o'lchovsiz).
+
+    ⛔ IKKI CHAQIRUVCHI, BITTA QOIDA: kamerasiz bozor
+       (`_close_market_without_cameras`) va kamerali bozorning ZONASIZ
+       rastasi (`_close_stall` (1)-shoxi). Qoidalar ikki joyda yozilsa
+       bir kun ajralib ketardi va zonasiz rasta kamerasiz bozordagi
+       qo'shnisidan boshqacha hisoblanardi.
+    """
+    if money.unavailable_reason == FAIR_STALL:
+        result.skipped_fair += 1
+        return
+    if money.unavailable_reason in (STALL_CLOSED, STALL_MAINTENANCE):
+        result.skipped_inactive += 1
+        return
+    if money.vendor_id is None:
+        result.skipped_unassigned_auto += 1
+        return
+    if money.amount_soum is None:
+        # Qolgan yagona sabab tarif bo'shlig'i (bozor ochiq — chaqiruvchi
+        # tekshirdi): kamera-rejim bilan AYNI kanal, jimgina yutilmaydi.
+        result.errors.append(f"billing_close_tariff_missing:{money.stall_code}")
+        return
+    if existing is not None:
+        result.skipped_existing += 1
+        return
+
+    charge_id = await write_charge(
+        session,
+        market_id=market_id,
+        stall_id=money.stall_id,
+        service_date=business_date,
+        money=money,
+    )
+    if charge_id is None:
+        # D-06 idempotentligi poygada ham ishlaydi — qayta yugurish normal.
+        result.skipped_existing += 1
+        return
+    result.charged_auto += 1
 
 
 async def _close_stall(
@@ -579,6 +629,30 @@ async def _close_stall(
         )
         if anomaly_id is not None:
             result.anomalies_no_coverage += 1
+
+        # (1.5) ⛔⛔ GIBRID QOIDA (2026-09-24, prod'da o'lchangan uzilish).
+        #
+        #   Karmanada 28-avgustda kamera ulandi va bozor BUTUNLAY D-04 ga
+        #   o'tdi, zona esa 53 rastadan 6–9 tasida edi: qolganlari shu
+        #   shoxda qaytib ketdi va 28 kun davomida bironta hisob
+        #   yozilmadi (to'lovlar esa kuniga 30–44 ta kelaverdi).
+        #
+        #   Zonasiz rasta — o'lchovning YO'QLIGI, «bo'sh» degan javob emas.
+        #   Bu kamerasiz bozor bilan AYNI holat, shuning uchun AYNI
+        #   ma'muriy prezumpsiya qo'llanadi: biriktirilgan faol rasta
+        #   hisoblanadi (`_charge_by_assignment`). Zonali rastalar D-04 da
+        #   qoladi — bu yo'l o'lchov bilan BAHSLASHMAYDI.
+        if money is None:
+            result.errors.append(f"billing_close_money_missing:{verdict.stall_code}")
+            return
+        await _charge_by_assignment(
+            session,
+            market_id=market_id,
+            business_date=business_date,
+            money=money,
+            existing=charge,
+            result=result,
+        )
         return
 
     # (2) KO'RDIK, LEKIN BAND EMAS — va shu yerda KECH KELGAN TASDIQ shoxi.
@@ -677,8 +751,18 @@ async def _late_review(
     ⚠ HOLAT FAQAT INSON ARALASHUVIDAN TUG'ILADI: `occupancy_events`
       SHARTSIZ o'zgarmas (`0018`), ya'ni slot `occupied` dan `empty` ga
       faqat `zone_reviews` javobi bilan o'ta oladi.
+
+    ⛔⛔ DALILSIZ HISOB KAMAYTIRILMAYDI (2026-09-24). Yuqoridagi taxmin
+       faqat D-04 hukmidan yozilgan hisobga to'g'ri. BIRIKTIRISH bo'yicha
+       yozilgan hisob (kamerasiz bozor, zonasiz rasta) hech qachon «band»
+       hukmiga tayanmagan: keyin rastaga zona chizilib, o'tgan kun qayta
+       yopilsa, uning slotlari NOANIQ AI hukmi bilan «bo'sh» bo'lib
+       chiqardi va bu shox avto-hisobni nolga tushirardi. Keyingi inson
+       tasdig'ida esa hisob ALLAQACHON bor — qayta yozilmasdi va rasta
+       o'sha kun uchun jimgina TEKIN qolardi. Bunday hisobni tuzatish —
+       inson qarori (`charge_adjustments`, sabab kodi bilan).
     """
-    if charge is None:
+    if charge is None or not charge.has_evidence:
         return
     adjustment_id = await write_late_review_adjustment(session, market_id=market_id, charge=charge)
     if adjustment_id is not None:

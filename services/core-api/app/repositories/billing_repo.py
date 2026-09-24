@@ -1022,7 +1022,13 @@ _MARKET_DAY_CHARGES = text(
     """
     SELECT c.stall_id    AS stall_id,
            c.id          AS charge_id,
-           c.amount_soum AS amount_soum
+           c.amount_soum AS amount_soum,
+           EXISTS (
+               SELECT 1
+                 FROM charge_evidence e
+                WHERE e.market_id = c.market_id
+                  AND e.charge_id = c.id
+           )             AS has_evidence
       FROM daily_charges c
      WHERE c.market_id = :market_id
        AND c.service_date = :service_date
@@ -1057,6 +1063,11 @@ class ExistingCharge:
 
     charge_id: UUID
     amount_soum: int
+    has_evidence: bool
+    """Hisobda kamera dalili (`charge_evidence`) bormi — ya'ni u D-04 hukmidan
+    yozilganmi. `False` — BIRIKTIRISH bo'yicha yozilgan hisob (kamerasiz
+    bozor yoki zonasiz rasta): kech tasdiq shoxi uni KAMAYTIRMAYDI
+    (`billing_close._late_review` docstringi)."""
 
 
 async def market_day_charges(
@@ -1072,7 +1083,9 @@ async def market_day_charges(
     )
     return {
         row["stall_id"]: ExistingCharge(
-            charge_id=row["charge_id"], amount_soum=int(row["amount_soum"])
+            charge_id=row["charge_id"],
+            amount_soum=int(row["amount_soum"]),
+            has_evidence=bool(row["has_evidence"]),
         )
         for row in result.mappings()
     }

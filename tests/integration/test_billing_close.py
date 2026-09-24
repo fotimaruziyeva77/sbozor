@@ -58,6 +58,7 @@ from fixtures.market_domain import (
     A_OPEN_WEEKDAYS,
     A_SERVICE_FEE_SOUM,
     MarketDomainSeed,
+    to_pg_period,
 )
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import OccupancyDomainSeed, occupancy_rows
@@ -272,7 +273,16 @@ class PastDay:
     =========================================================================
     """
 
-    __slots__ = ("_conn", "_events", "_exceptions", "_market_id", "_reviews", "_rows", "_zones")
+    __slots__ = (
+        "_conn",
+        "_events",
+        "_exceptions",
+        "_market_id",
+        "_reviews",
+        "_rows",
+        "_stalls",
+        "_zones",
+    )
 
     def __init__(self, conn: Connection[TupleRow], market_ids: tuple[UUID, ...]) -> None:
         self._conn = conn
@@ -282,6 +292,7 @@ class PastDay:
         self._zones: list[UUID] = []
         self._reviews: list[UUID] = []
         self._exceptions: list[UUID] = []
+        self._stalls: list[UUID] = []
 
     def frame(
         self, *, market_id: UUID, camera_id: UUID, slot: Any, day: date, is_market_open: bool = True
@@ -363,6 +374,51 @@ class PastDay:
         )
         self._reviews.append(assignment_id)
 
+    def zoneless_stall(
+        self, *, market_id: UUID, zone_id: UUID, category_id: UUID, vendor_id: UUID
+    ) -> UUID:
+        """ZONASIZ, lekin toifali va biriktirilgan YANGI rasta (gibrid qoida, 2026-09-24).
+
+        ⚠ YANGI rasta, stsenariynikilar EMAS: ular testlar ichida zona oladi
+          (`occupied()`), ya'ni ularning qamrovi testga qarab o'zgaradi. Bu
+          rastaga hech qanday kamera zonasi YOZILMAYDI — test o'zi
+          `occupied()` ni chaqirmaguncha.
+
+        ⚠ TOZALASH TARTIBI FK BO'YICHA: biriktirish va toifa davri
+          `_rows` da (bola avval), rasta esa ALOHIDA — uni kod registri
+          (`stall_code_registry`, triggerdan tug'iladi, `id` ustuni YO'Q)
+          ushlab turadi va u `stall_id` bo'yicha oxirida o'chiriladi.
+        """
+        stall_id, period_id, assignment_id = uuid4(), uuid4(), uuid4()
+        self._conn.execute(
+            "INSERT INTO stalls (id, market_id, zone_id, code) VALUES (%s, %s, %s, %s)",
+            (str(stall_id), str(market_id), str(zone_id), f"ZL-{stall_id.hex[:6]}"),
+        )
+        self._conn.execute(
+            "INSERT INTO stall_category_periods (id, market_id, stall_id, category_id, valid_from) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (str(period_id), str(market_id), str(stall_id), str(category_id), BILLING_VALID_FROM),
+        )
+        self._conn.execute(
+            "INSERT INTO stall_assignments (id, market_id, stall_id, vendor_id, period) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (
+                str(assignment_id),
+                str(market_id),
+                str(stall_id),
+                str(vendor_id),
+                to_pg_period(BILLING_VALID_FROM, None),
+            ),
+        )
+        self._rows.extend(
+            [
+                ("stall_assignments", assignment_id),
+                ("stall_category_periods", period_id),
+            ]
+        )
+        self._stalls.append(stall_id)
+        return stall_id
+
     def close_day(self, *, market_id: UUID, day: date) -> None:
         """Kalendar istisnosi — shu kunni AYNAN shu bozor uchun yopiq qiladi (D-10)."""
         exception_id = uuid4()
@@ -416,6 +472,12 @@ class PastDay:
                 "DELETE FROM market_calendar_exceptions WHERE id = ANY(%s::uuid[])",
                 ([str(value) for value in self._exceptions],),
             )
+        if self._stalls:
+            ids = [str(value) for value in self._stalls]
+            self._conn.execute(
+                "DELETE FROM stall_code_registry WHERE stall_id = ANY(%s::uuid[])", (ids,)
+            )
+            self._conn.execute("DELETE FROM stalls WHERE id = ANY(%s::uuid[])", (ids,))
 
 
 def _nvr_of(conn: Connection[TupleRow], market_id: UUID) -> UUID:
@@ -696,9 +758,13 @@ async def test_a_second_run_touches_nothing(
     snapshot_after = charges(sync_owner_conn, env.market_id, scenario.day)
 
     assert first.charged > 0, "birinchi yugurish hech nima yozmadi — nazorat buzildi"
-    assert second.charged == 0, f"qayta yugurish {second.charged} yangi hisob yozdi"
-    assert second.skipped_existing == first.charged, (
-        f"«allaqachon bor» sanog'i {second.skipped_existing}, kutilgani {first.charged}"
+    assert (second.charged, second.charged_auto) == (0, 0), (
+        f"qayta yugurish {second.charged}+{second.charged_auto} yangi hisob yozdi"
+    )
+    # ⚠ Ikkala manba ham: kamera hukmi VA gibrid qoidaning biriktirish yo'li.
+    expected_existing = first.charged + first.charged_auto
+    assert second.skipped_existing == expected_existing, (
+        f"«allaqachon bor» sanog'i {second.skipped_existing}, kutilgani {expected_existing}"
     )
     assert snapshot_after == snapshot_before, "qayta yugurish yozilgan hisobga TEGDI (D-06/D-07)"
 
@@ -888,8 +954,25 @@ async def test_charges_without_a_reviewer_are_counted_not_hidden(
     result = await billing_close(app_sessionmaker, business_date=scenario.day)
 
     written = charges(sync_owner_conn, env.market_id, scenario.day)
-    assert set(written) == {scenario.billable_ai, scenario.billable_human}, (
-        f"kutilgan ikki rasta o'rniga: {sorted(str(key) for key in written)}"
+    # ⚠ 2026-09-24 (gibrid qoida): seedning ZONASIZ, lekin biriktirilgan
+    #   rastalari endi biriktirish bo'yicha hisob oladi. Bu testning da'vosi
+    #   KAMERA hukmidan yozilgan hisoblar haqida — shuning uchun to'plam
+    #   DALIL bo'yicha ajratiladi, qolganlari esa aniq `charged_auto` ga
+    #   teng va dalilsiz bo'lishi SHART (aralashib ketsa test qizaradi).
+    evidence = _evidence_by_stall(sync_owner_conn, env.market_id, scenario.day)
+    camera_written = {stall_id for stall_id, count in evidence.items() if count > 0}
+    assert camera_written == {scenario.billable_ai, scenario.billable_human}, (
+        f"kutilgan ikki rasta o'rniga: {sorted(str(key) for key in camera_written)}"
+    )
+    # ⚠ `charged_auto` IKKALA bozorning yugurishi — dalilsiz hisoblar ham
+    #   ikkala bozordan sanaladi (B ning zonasiz rastalari ham shu yo'lda).
+    evidence_b = _evidence_by_stall(sync_owner_conn, env.other_market_id, scenario.day)
+    without_evidence = sum(
+        1 for counts in (evidence, evidence_b) for count in counts.values() if count == 0
+    )
+    assert without_evidence == result.charged_auto, (
+        f"dalilsiz hisoblar {without_evidence}, "
+        f"`charged_auto` {result.charged_auto} — sanoqlar aralashdi"
     )
     assert result.charged == 2
     assert result.resolved_without_reviewer == 1, (
@@ -1221,3 +1304,131 @@ async def test_a_market_without_cameras_charges_by_assignment(
     assert again.charged_auto == 0, "ikkinchi yugurish yana hisob yozdi (D-06 buzildi)"
     assert again.skipped_existing >= len(expected)
     assert set(charges(sync_owner_conn, env.market_id, scenario.day)) == expected
+
+
+# ===========================================================================
+# 10. ⛔⛔ GIBRID QOIDA — ZONASIZ RASTA KAMERALI BOZORDA HAM HISOBLANADI
+# ===========================================================================
+
+
+def _evidence_by_stall(conn: Connection[TupleRow], market_id: UUID, day: date) -> dict[UUID, int]:
+    """`{stall_id: dalil qatorlari soni}` — shu kunning har hisobi uchun."""
+    rows = conn.execute(
+        "SELECT c.stall_id, count(e.charge_id) FROM daily_charges c "
+        "LEFT JOIN charge_evidence e ON e.market_id = c.market_id AND e.charge_id = c.id "
+        "WHERE c.market_id = %s AND c.service_date = %s GROUP BY c.stall_id",
+        (str(market_id), day),
+    ).fetchall()
+    return {row[0]: int(row[1]) for row in rows}
+
+
+def _new_zoneless_stall(env: Env, past: PastDay) -> UUID:
+    return past.zoneless_stall(
+        market_id=env.market_id,
+        zone_id=env.domain.market_a.zone_ids[0],
+        category_id=env.live.category_id,
+        vendor_id=env.live.vendor_id,
+    )
+
+
+async def test_a_zoneless_stall_in_a_camera_market_is_charged_by_assignment(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    scenario: Scenario,
+    env: Env,
+    past: PastDay,
+) -> None:
+    """⛔⛔ PROD'DAGI 28 KUNLIK UZILISHNING REGRESSIYA DARVOZASI (2026-09-24).
+
+    =========================================================================
+    Karmanada 28-avgustda kamera ulandi va bozor butunlay D-04 ga o'tdi;
+    zona 53 rastadan 6–9 tasida edi. Qolganlari `no_coverage_only` shoxida
+    faqat anomaliya olib qaytdi — 28 kun davomida 0 ta hisob, to'lovlar
+    esa kuniga 30–44 ta.
+
+    DA'VOLAR:
+      (1) kamerali bozorning zonasiz, biriktirilgan rastasi hisob OLADI —
+          o'sha kunning tarifi + xizmat haqi, DALILSIZ;
+      (2) `no_coverage_stall` anomaliyasi HAMON yoziladi — qamrov nuqsoni
+          yashirilmaydi, u endi tushumni o'chirmaydi xolos;
+      (3) kamera hukmidan yozilgan hisoblar dalili bilan joyida qoladi;
+      (4) qayta yugurish hech nima yozmaydi (D-06).
+    =========================================================================
+    """
+    stall_id = _new_zoneless_stall(env, past)
+
+    await day_close(app_sessionmaker, business_date=scenario.day)
+    result = await billing_close(app_sessionmaker, business_date=scenario.day)
+
+    written = charges(sync_owner_conn, env.market_id, scenario.day)
+    assert stall_id in written, (
+        "kamerali bozorning zonasiz rastasiga hisob yozilmadi — prod'dagi uzilish qaytdi"
+    )
+    amount, tariff_amount, _ = written[stall_id]
+    assert tariff_amount == expected_tariff(scenario.day)
+    assert amount == expected_tariff(scenario.day) + A_SERVICE_FEE_SOUM
+    assert result.charged_auto >= 1, f"avto-hisob sanog'i {result.charged_auto}"
+    assert result.errors == [], f"kutilmagan xato: {result.errors}"
+
+    evidence = _evidence_by_stall(sync_owner_conn, env.market_id, scenario.day)
+    assert evidence[stall_id] == 0, "biriktirish bo'yicha hisobga kamera dalili yozildi"
+    assert evidence[scenario.billable_ai] > 0, "kamera hukmidan yozilgan hisob dalilsiz qoldi"
+    assert scenario.billable_human in written, "kamera hukmidan yozilgan hisob yo'qoldi"
+
+    day_anomalies = anomalies(sync_owner_conn, env.market_id, scenario.day)
+    kinds = {row[1] for row in day_anomalies if row[0] == stall_id}
+    assert AnomalyKind.NO_COVERAGE_STALL.value in kinds, (
+        "qamrov nuqsoni yashirildi — zonasiz rasta anomaliyasiz o'tdi (D-05)"
+    )
+
+    again = await billing_close(app_sessionmaker, business_date=scenario.day)
+    assert (again.charged, again.charged_auto) == (0, 0), "ikkinchi yugurish yana hisob yozdi"
+    assert charges(sync_owner_conn, env.market_id, scenario.day) == written
+
+
+async def test_a_late_review_never_decreases_a_charge_by_assignment(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    env: Env,
+    past: PastDay,
+) -> None:
+    """⛔ Zona keyin chizilsa, noaniq AI hukmi avto-hisobni NOLGA TUSHIRMAYDI.
+
+    =========================================================================
+    Ssenariy prod'da kutilgan tartib: rasta zonasiz kunda biriktirish
+    bo'yicha hisob oladi, keyin unga zona chiziladi va o'sha kun qayta
+    yopiladi — slotda bitta AI «band» (D-04 sharti bajarilmaydi).
+
+    Himoyasiz holatda kech tasdiq shoxi hisobni TO'LIQ kamaytirardi;
+    keyingi inson tasdig'ida esa hisob ALLAQACHON bor — qayta yozilmasdi
+    va rasta o'sha kun uchun jimgina TEKIN qolardi.
+    =========================================================================
+    """
+    day = _open_past_days(sync_owner_conn, 1)[0]
+    stall_id = _new_zoneless_stall(env, past)
+    camera_id = env.occupancy.market_a.camera_id
+    snapshot_id = past.frame(market_id=env.market_id, camera_id=camera_id, slot=_SLOT_A, day=day)
+
+    await day_close(app_sessionmaker, business_date=day)
+    await billing_close(app_sessionmaker, business_date=day)
+    before = charges(sync_owner_conn, env.market_id, day)
+    assert stall_id in before, "nazorat: zonasiz rastaga birinchi yugurishda hisob yozilmadi"
+
+    past.occupied(
+        market_id=env.market_id,
+        camera_id=camera_id,
+        stall_id=stall_id,
+        snapshot_id=snapshot_id,
+        day=day,
+        slot=_SLOT_A,
+        center=(0.80, 0.80),
+        version=31,
+    )
+    await day_close(app_sessionmaker, business_date=day)
+    late = await billing_close(app_sessionmaker, business_date=day)
+
+    assert late.adjustments_late_review == 0, (
+        "biriktirish bo'yicha yozilgan hisob noaniq AI hukmi bilan kamaytirildi"
+    )
+    assert adjustments(sync_owner_conn, env.market_id) == []
+    assert charges(sync_owner_conn, env.market_id, day)[stall_id] == before[stall_id]

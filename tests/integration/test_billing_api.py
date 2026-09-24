@@ -954,7 +954,7 @@ async def test_the_charge_detail_survives_a_system_written_adjustment(
         adjustment_id = await write_late_review_adjustment(
             session,
             market_id=env.market_id,
-            charge=ExistingCharge(charge_id=charge_id, amount_soum=TARIFF_SOUM),
+            charge=ExistingCharge(charge_id=charge_id, amount_soum=TARIFF_SOUM, has_evidence=True),
         )
     assert adjustment_id is not None, "tuzatish yozilmadi — test o'z holatini qurmadi"
 
