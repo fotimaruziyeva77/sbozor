@@ -2035,7 +2035,7 @@
       "dailyLabel": "Kuniga to‘lovsiz qolishi mumkin",
       "dailyUnit": "rasta",
       "yearLabel": "Yiliga taxminiy yo‘qotish",
-      "monthlyInline": "Oyiga ~{amount} so‘m",
+      "monthlyInline": "Oyiga ~<amount>{sum}</amount> so‘m",
       "currency": "so‘m",
       "method": "Hisob usuli: rastalar soni × har 20 rastadan biri to'lovsiz × patta narxi × oyiga 26 ish kuni. Haqiqiy ko'rsatkich sinov davomida o'lchanadi.",
       "findings": {

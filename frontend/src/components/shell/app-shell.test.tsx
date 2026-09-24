@@ -42,7 +42,14 @@ const navigationMock = vi.hoisted(() => ({
 }));
 
 vi.mock("@/i18n/navigation", () => ({
-  Link: ({ children, href, ...rest }: ComponentProps<"a">) => (
+  // `prefetch` — Link'ning o'z propi, DOM atributi emas: `<a>` ga tushsa
+  // React «non-boolean attribute» ogohlantirishini beradi.
+  Link: ({
+    children,
+    href,
+    prefetch: _prefetch,
+    ...rest
+  }: ComponentProps<"a"> & { prefetch?: boolean }) => (
     <a href={href} {...rest}>
       {children}
     </a>

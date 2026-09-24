@@ -1,6 +1,6 @@
 "use client";
 
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Check, TriangleAlert } from "lucide-react";
@@ -410,13 +410,21 @@ export function LossCalc() {
             <span ref={yearlyRef}>{formatSum(yearlyLoss)}</span>{" "}
             {t("calc.currency")}
           </p>
-          {/* ⛔ Oylik summa `t.rich` bilan: `{amount}` o'rniga TUGUN
-              qo'yiladi, chunki rAF faqat SONNI almashtiradi — matnning
-              qolgani (so'zlar, valyuta) tegilmasligi kerak. */}
-          <p className="mt-2 landing-note text-text-muted" data-numeric>
+          {/* ⛔ Oylik summa `t.rich` TEGI bilan: son `<amount>` ICHIDA
+              (`{sum}`), teg esa ref'li TUGUN beradi — rAF faqat SONNI
+              almashtiradi, matnning qolgani (so'zlar, valyuta) tegilmaydi.
+              ⛔ `{amount}` ARGUMENTIGA funksiya berish ISHLAMAYDI: next-intl
+              funksiyani faqat teg uchun chaqiradi va satr sonsiz chiqardi
+              (2026-09-24, `loss-calc.test.tsx` oylik bloki). */}
+          <p
+            className="mt-2 landing-note text-text-muted"
+            data-numeric
+            data-testid="loss-calc-monthly"
+          >
             {t.rich("calc.monthlyInline", {
-              amount: () => (
-                <span ref={monthlyRef}>{formatSum(monthlyLoss)}</span>
+              sum: formatSum(monthlyLoss),
+              amount: (chunks: ReactNode) => (
+                <span ref={monthlyRef}>{chunks}</span>
               ),
             })}
           </p>

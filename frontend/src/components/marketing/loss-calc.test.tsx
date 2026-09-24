@@ -175,3 +175,32 @@ describe("LossCalc — raqam animatsiyasi (260819)", () => {
     );
   });
 });
+
+/*
+ * ⛔⛔ OYLIK SATR — SON EKRANDA BORMI (2026-09-24).
+ *
+ *     `t.rich` ning `{amount}` ARGUMENTIGA funksiya berilgan edi. next-intl
+ *     funksiyani faqat TEG uchun chaqiradi, argumentga esa funksiyaning
+ *     O'ZINI qo'yadi: React uni chiza olmaydi (stderr'da «Functions are
+ *     not valid as a React child») va satr «Oyiga ~ so‘m» bo'lib, SONSIZ
+ *     chiqardi. Yuqoridagi testlar faqat yillik tugunni o'lchagani uchun
+ *     bu hech qachon qizarmagan.
+ */
+describe("LossCalc — oylik satr (2026-09-24)", () => {
+  test("oylik yo'qotish soni satrda ko'rinadi", () => {
+    renderCalc();
+
+    expect(screen.getByTestId("loss-calc-monthly")).toHaveTextContent(
+      grouped(yearlyFor(DEFAULT_STALLS) / MONTHS),
+    );
+  });
+
+  test("slayder surilganda oylik son ham yangilanadi (rAF yugurmasa ham)", () => {
+    renderCalc();
+    moveSlider(1200);
+
+    expect(screen.getByTestId("loss-calc-monthly")).toHaveTextContent(
+      grouped(yearlyFor(1200) / MONTHS),
+    );
+  });
+});
