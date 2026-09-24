@@ -109,7 +109,13 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final
 
 import structlog
-from sbozor_core.enums import ActorKind, AlertSeverity, CaptureRunStatus, OutboxStatus
+from sbozor_core.enums import (
+    ActorKind,
+    AlertSeverity,
+    CaptureRunStatus,
+    OutboxStatus,
+    PaymentKind,
+)
 from sbozor_core.models.notification import NotificationOutbox
 from sbozor_core.models.ops import SystemHeartbeat
 from sbozor_core.models.snapshot import (
@@ -120,8 +126,9 @@ from sbozor_core.models.snapshot import (
     Snapshot,
 )
 from sbozor_core.tenancy import set_tenant_context
-from sbozor_core.timeutil import business_date, now_tz
-from sqlalchemy import func, select, text, update
+from sbozor_core.timeutil import MARKET_TZ, business_date, now_tz
+from sqlalchemy import Date, Text, bindparam, func, select, text, update
+from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -156,6 +163,7 @@ __all__ = [
     "ALERT_META",
     "ALERT_SWEEP_COMPONENT",
     "BACKUP_COMPONENT",
+    "BILLING_SILENCE_FROM_HOUR",
     "NEVER_SUPPRESSED_ALERT_KEYS",
     "NOTIFICATION_STALE_MINUTES",
     "PLATFORM_SCOPED_ALERT_KEYS",
@@ -163,7 +171,9 @@ __all__ = [
     "DigestResult",
     "SweepResult",
     "alert_sweep",
+    "billing_silence_signals",
     "daily_digest",
+    "last_closed_day",
     "raise_alert",
 ]
 
@@ -263,6 +273,44 @@ daqiqalik chegara o'tkinchi Telegram uzilishida HAM ateshlaydi.
    `SLOT_FAILURE_RATIO`) modul konstantasi; ikkinchi konvensiya ochish
    «bu chegara qayerda?» savolini har o'quvchi uchun qaytadan tug'dirardi.
 =============================================================================
+"""
+
+BILLING_SILENCE_FROM_HOUR: Final[int] = 6
+"""«To'lov bor, hisob yo'q» tekshiruvi KECHAGA qaraydigan soat (Toshkent) — 2026-09-24.
+
+Kechaning hisobini `billing.close` 04:10 da yozadi (`BILLING_CLOSE_CRON`),
+ya'ni 06:00 gacha kechaning hisobi QONUNIY yo'q. Shu oraliqda KECHAGIDAN
+OLDINGI kun tekshiriladi.
+
+⛔ Oyna yarim tunda kechaga ko'chsa, ochiq alert har kecha 00:00 da
+   «tiklanib» (manba yo'qoldi) ertalab QAYTA tug'ilardi — Telegramga har
+   kuni ikki soxta xabar (tiklandi + yangi) ketardi va eskalatsiya
+   hisoblagichi har safar noldan boshlanardi.
+"""
+
+_BILLING_SILENCE = text(
+    """
+    SELECT market_is_open(:market_id, :day) AS market_open,
+           (SELECT count(*)
+              FROM payments
+             WHERE market_id = :market_id
+               AND business_date = :day
+               AND kind = :payment)          AS payment_count,
+           (SELECT count(*)
+              FROM daily_charges
+             WHERE market_id = :market_id
+               AND service_date = :day)       AS charge_count
+    """
+).bindparams(
+    bindparam("market_id", type_=PgUuid(as_uuid=True)),
+    bindparam("day", type_=Date()),
+    bindparam("payment", type_=Text()),
+)
+"""Oxirgi YOPILGAN kunning uch fakti — ⛔ BITTA so'rovda, AYNI tenant sessiyasida.
+
+⛔ `market_is_open()` INVOKER va fail-closed (`billing_close.py` 4-bandi):
+   chaqiruv `_tenant_session()` ichida, aks holda har kun «yopiq» bo'lib
+   alert HECH QACHON tug'ilmasdi.
 """
 
 ALERT_DETAIL_KEYS: Final[frozenset[str]] = frozenset(
@@ -453,6 +501,31 @@ ALERT_META: Final[dict[str, AlertMeta]] = {
         #   (`vendor_binding_conflict` bilan aynan bir xil sabab).
         AlertMeta(
             "notification_stale",
+            AlertSeverity.WARNING.value,
+            never_suppressed=False,
+            platform_scoped=False,
+        ),
+        # -------------------------------------------------------------
+        # 7-GURUH — «TO'LOV BOR, HISOB YO'Q» (2026-09-24, prod'da o'lchangan).
+        # -------------------------------------------------------------
+        # ⛔⛔ `billing_close_stale` BU HOLATNI KO'RMAYDI VA BU O'LCHANGAN.
+        #   Karmanada 28-avgustdan 28 kun davomida patta hisobi yozilmadi:
+        #   job HAR KECHA ishladi (yurak urishi yangi), faqat natija 0 edi —
+        #   kamera ulangach zonasiz rastalar hisobdan tushib qoldi, to'lovlar
+        #   esa kuniga 30–44 ta kelaverdi. Bu D-20 ning «job tirik, natija
+        #   yo'q» jimligi (`notification_stale` bilan bir sinf) va uni
+        #   faqat NATIJANING O'ZI ko'rsatadi: ochiq kunda to'lov bor, hisob 0.
+        #
+        # * `WARNING` -> `ESCALATION_HOURS` bilan `critical`: bitta kunlik
+        #   o'tkinchi holat (masalan kechikkan qayta yugurish) qotgan
+        #   uzilishdan ajralsin.
+        # * `never_suppressed=False` — shart butun kun rost turadi va
+        #   supurgi 5 daqiqada yuguradi; debounce'siz bu D-22 ning «75 ta
+        #   xabar» sinfi bo'lardi.
+        # * `platform_scoped=False` — `daily_charges`/`payments` TENANT
+        #   jadvallari, har bozor direktori O'Z holatini ko'radi.
+        AlertMeta(
+            "billing_no_charges",
             AlertSeverity.WARNING.value,
             never_suppressed=False,
             platform_scoped=False,
@@ -851,7 +924,7 @@ async def _market_signals(
     today: date,
     moment: datetime,
 ) -> list[_Signal]:
-    """Bugungi `capture_runs` va CHIQUVCHI NAVBATdan chiqadigan signallar.
+    """Bugungi `capture_runs`, CHIQUVCHI NAVBAT va oxirgi yopilgan kunning hisobidan signallar.
 
     ⚠⚠ MANBA — QATOR, ISTISNO EMAS (D-20). «Slot umuman bajarilmadi»
        holatida hech qanday istisno yo'q; uni faqat `mark_missed()` yozgan
@@ -898,9 +971,26 @@ async def _market_signals(
             )
         ).one()
 
+        # ⛔ UCHINCHI MANBA — «to'lov bor, hisob yo'q» (7-guruh, 2026-09-24).
+        billing = (
+            await session.execute(
+                _BILLING_SILENCE,
+                {
+                    "market_id": market_id,
+                    "day": last_closed_day(moment),
+                    "payment": PaymentKind.PAYMENT.value,
+                },
+            )
+        ).one()
+
     return [
         *_signals_from_runs(rows),
         *_notification_signals(pending_count=queue[0], oldest_created_at=queue[1], moment=moment),
+        *billing_silence_signals(
+            market_open=bool(billing.market_open),
+            payment_count=int(billing.payment_count),
+            charge_count=int(billing.charge_count),
+        ),
     ]
 
 
@@ -944,6 +1034,37 @@ def _notification_signals(
             ),
         )
     ]
+
+
+def last_closed_day(moment: datetime) -> date:
+    """Hisobi ALLAQACHON yozilgan bo'lishi kerak bo'lgan oxirgi kun.
+
+    `BILLING_SILENCE_FROM_HOUR` dan keyin — kecha, undan oldin — kechagidan
+    oldingi kun (konstanta docstringi). Sof funksiya: soat ARGUMENT.
+    """
+    lag = 1 if moment.astimezone(MARKET_TZ).hour >= BILLING_SILENCE_FROM_HOUR else 2
+    return business_date(moment) - timedelta(days=lag)
+
+
+def billing_silence_signals(
+    *, market_open: bool, payment_count: int, charge_count: int
+) -> list[_Signal]:
+    """«To'lov bor, hisob yo'q» — sof funksiya (`_notification_signals` naqshi).
+
+    ⛔ UCHALA SHART HAM KERAK:
+       * yopiq kunda hisob QONUNIY yo'q (D-10) — to'lov esa bo'lishi mumkin
+         (eski qarz undirilgan);
+       * to'lovsiz ochiq kun — bo'sh bozor, uzilish emas (bu yerda signal
+         bersak har bayramda soxta alert chiqardi);
+       * bitta hisob ham bo'lsa job natija bergan — qisman qamrov boshqa
+         savol va u daydjestning sanoqlarida ko'rinadi.
+
+    Returns:
+        Bo'sh ro'yxat yoki AYNAN BITTA `billing_no_charges` signali.
+    """
+    if not market_open or payment_count == 0 or charge_count > 0:
+        return []
+    return [_Signal("billing_no_charges", None, _detail())]
 
 
 def _signals_from_runs(rows: Sequence[Any]) -> list[_Signal]:

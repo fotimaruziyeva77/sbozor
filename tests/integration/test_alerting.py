@@ -35,6 +35,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+from contextlib import contextmanager
 from datetime import datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -53,6 +54,7 @@ from app.jobs.alerting import (
     PLATFORM_SCOPED_ALERT_KEYS,
     alert_sweep,
     daily_digest,
+    last_closed_day,
 )
 from app.jobs.billing_close import BILLING_CLOSE_COMPONENT
 from app.jobs.capture import CapturePolicy, capture_tick
@@ -84,6 +86,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from app.settings import Settings
+    from fixtures.market_domain import MarketDomainSeed
     from fixtures.two_markets import TwoMarketSeed
     from psycopg import Connection
     from psycopg.rows import TupleRow
@@ -1654,3 +1657,130 @@ async def test_last_failure_is_isolated_between_concurrent_tasks(sender: AlertSe
     assert blocked_failure.retry_after is None, (
         "`403` javobida `retry_after` paydo bo'ldi — qiymatlar vazifalar orasida aralashgan"
     )
+
+
+# ===========================================================================
+# 7-GURUH — «TO'LOV BOR, HISOB YO'Q» (2026-09-24, prod'da o'lchangan uzilish)
+#
+# Karmanada 28 kun davomida patta hisobi yozilmadi: `billing.close` har
+# kecha ishladi (yurak urishi yangi — `billing_close_stale` jim), natijasi
+# esa 0 edi; to'lovlar kuniga 30–44 ta kelaverdi. Manba — NATIJANING O'ZI.
+# ===========================================================================
+
+
+@contextmanager
+def _paid_day(
+    conn: Connection[TupleRow],
+    *,
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+    day: date,
+    is_open: bool,
+) -> Iterator[None]:
+    """Kalendar holati + bitta to'lov (`business_date = day`), hisobsiz.
+
+    ⚠ `business_date` `created_at` DAN HOSILA (generated) — kunni qurishning
+      yagona yo'li `created_at` ni OSHKORA yozish.
+    ⚠ TO'LOVNI O'CHIRISH uchun bozor vaqtincha NOFAOL qilinadi — o'zgarmaslik
+      qo'riqchisi faqat shunda ruxsat beradi (`test_headline.py` naqshi).
+    """
+    market = two_markets.market_a
+    exception_id, shift_id, payment_id = uuid4(), uuid4(), uuid4()
+    conn.execute(
+        "INSERT INTO market_calendar_exceptions (id, market_id, exception_date, is_open, note) "
+        "VALUES (%s, %s, %s, %s, %s)",
+        (str(exception_id), str(market.id), day, is_open, "billing_no_charges testi"),
+    )
+    conn.execute(
+        "INSERT INTO cashier_shifts (id, market_id, cashier_id, status) VALUES (%s, %s, %s, %s)",
+        (str(shift_id), str(market.id), str(market.cashier_user_id), "open"),
+    )
+    conn.execute(
+        "INSERT INTO payments "
+        "(id, market_id, stall_id, vendor_id, service_date, amount_soum, quote_soum, "
+        " kind, method, idempotency_key, request_fingerprint, shift_id, cashier_id, created_at) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, 'payment', 'cash', %s, %s, %s, %s, %s)",
+        (
+            str(payment_id),
+            str(market.id),
+            str(market_domain.market_a.stall_ids[0]),
+            str(market_domain.market_a.vendor_ids[0]),
+            day,
+            17_000,
+            17_000,
+            f"silence-{payment_id}",
+            "silence-fingerprint",
+            str(shift_id),
+            str(market.cashier_user_id),
+            datetime.combine(day, time(11, 0), MARKET_TZ),
+        ),
+    )
+    try:
+        yield
+    finally:
+        conn.execute("UPDATE markets SET is_active = false WHERE id = %s", (str(market.id),))
+        conn.execute("DELETE FROM payments WHERE id = %s", (str(payment_id),))
+        conn.execute("UPDATE markets SET is_active = true WHERE id = %s", (str(market.id),))
+        conn.execute("DELETE FROM cashier_shifts WHERE id = %s", (str(shift_id),))
+        conn.execute("DELETE FROM market_calendar_exceptions WHERE id = %s", (str(exception_id),))
+
+
+async def test_payments_without_charges_raise_a_billing_alert(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sender: AlertSender,
+    bed: _Bed,
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+) -> None:
+    """⛔ Ochiq kunda to'lov bor, hisob 0 -> `billing_no_charges` (warning, bozor kesimida)."""
+    moment = datetime.combine(bed.today, time(10, 0), MARKET_TZ)
+    day = last_closed_day(moment)
+
+    with _paid_day(
+        sync_owner_conn, two_markets=two_markets, market_domain=market_domain, day=day, is_open=True
+    ):
+        async with respx.mock(assert_all_called=False) as router:
+            router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+            await _sweep(api_sessionmaker, sender, now=moment)
+
+        silent = [row for row in bed.alerts() if row["alert_key"] == "billing_no_charges"]
+
+    assert len(silent) == 1, (
+        f"{day} da to'lov bor, hisob yo'q — lekin {len(silent)} ta alert. Prod'dagi 28 kunlik "
+        "sukunat takrorlansa uni hech nima aytmasdi"
+    )
+    assert silent[0]["severity"] == AlertSeverity.WARNING.value
+    assert silent[0]["subject_id"] is None
+
+
+async def test_payments_on_a_closed_day_stay_silent(
+    api_sessionmaker: async_sessionmaker[AsyncSession],
+    sender: AlertSender,
+    bed: _Bed,
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+) -> None:
+    """⛔ SALBIY NAZORAT: yopiq kunda hisob QONUNIY yo'q (D-10) — alert yo'q.
+
+    Usiz «to'lov bor» shartining o'zi yetarli bo'lardi va eski qarz
+    undirilgan har bayram kuni soxta alert chiqardi.
+    """
+    moment = datetime.combine(bed.today, time(10, 0), MARKET_TZ)
+    day = last_closed_day(moment)
+
+    with _paid_day(
+        sync_owner_conn,
+        two_markets=two_markets,
+        market_domain=market_domain,
+        day=day,
+        is_open=False,
+    ):
+        async with respx.mock(assert_all_called=False) as router:
+            router.post(SEND_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+            await _sweep(api_sessionmaker, sender, now=moment)
+
+        keys = [row["alert_key"] for row in bed.alerts()]
+
+    assert "billing_no_charges" not in keys, "yopiq kundagi to'lov «hisob yo'q» alertini berdi"

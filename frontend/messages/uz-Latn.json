@@ -956,7 +956,8 @@
       "reconciliationStale": "Nomuvofiqlik tekshiruvi bajarilmadi",
       "digestStale": "Kunlik hisobot xabari tayyorlanmadi",
       "overdueStale": "Qarzdorlik eslatmasi tayyorlanmadi",
-      "notificationStale": "Navbatdagi xabar uzoq vaqt yuborilmadi"
+      "notificationStale": "Navbatdagi xabar uzoq vaqt yuborilmadi",
+      "billingNoCharges": "To'lovlar bor, lekin patta hisobi yozilmagan"
     },
     "alertOpenCount": "Ochiq: {count}",
     "alertFirstSeen": "Birinchi marta: {time}",

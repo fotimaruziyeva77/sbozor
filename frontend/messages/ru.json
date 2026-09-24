@@ -956,7 +956,8 @@
       "reconciliationStale": "Проверка расхождений не выполнялась",
       "digestStale": "Ежедневная сводка не подготовлена",
       "overdueStale": "Напоминание о долге не подготовлено",
-      "notificationStale": "Сообщение долго не уходит из очереди"
+      "notificationStale": "Сообщение долго не уходит из очереди",
+      "billingNoCharges": "Оплаты есть, но патта не начислена"
     },
     "alertOpenCount": "Открытых: {count}",
     "alertFirstSeen": "Впервые: {time}",

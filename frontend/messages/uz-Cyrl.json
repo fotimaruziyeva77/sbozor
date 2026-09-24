@@ -956,7 +956,8 @@
       "reconciliationStale": "Номувофиқлик текшируви бажарилмади",
       "digestStale": "Кунлик ҳисобот хабари тайёрланмади",
       "overdueStale": "Қарздорлик эслатмаси тайёрланмади",
-      "notificationStale": "Навбатдаги хабар узоқ вақт юборилмади"
+      "notificationStale": "Навбатдаги хабар узоқ вақт юборилмади",
+      "billingNoCharges": "Тўловлар бор, лекин патта ҳисоби ёзилмаган"
     },
     "alertOpenCount": "Очиқ: {count}",
     "alertFirstSeen": "Биринчи марта: {time}",

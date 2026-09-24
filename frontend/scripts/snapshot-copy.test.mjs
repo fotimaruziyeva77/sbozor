@@ -460,8 +460,11 @@ test("G-4: skaner haqiqatan fayl mazmunini o'qiydi (nazorat)", () => {
 
 const ALERT_ROW = path.join(SNAPSHOT_COMPONENTS_DIR, "alert-row.tsx");
 
-/** §11.7 — bugungi ogohlantirish turlarining soni (07-08 + 07-14 + Topilma №I). */
-const ALERT_TITLE_KEY_COUNT = 16;
+/**
+ * §11.7 — bugungi ogohlantirish turlarining soni (07-08 + 07-14 + Topilma №I
+ * + 260924-hpm «to'lov bor, hisob yo'q»).
+ */
+const ALERT_TITLE_KEY_COUNT = 17;
 
 /** `snapshots.alertKey.*` — ogohlantirish sarlavhalarining YAGONA guruhi. */
 const ALERT_KEY_GROUP = "alertKey";
@@ -483,7 +486,7 @@ function lookupTrail(tree, trail) {
   return trail.reduce((node, step) => (node ?? {})[step], tree);
 }
 
-test("G-36: `ALERT_TITLE_KEYS` o'qildi va AYNAN o'n besh a'zo (nazorat)", () => {
+test("G-36: `ALERT_TITLE_KEYS` o'qildi va a'zolar soni qulflangan (nazorat)", () => {
   const pairs = readAlertTitleKeys();
 
   assert.equal(

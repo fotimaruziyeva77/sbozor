@@ -180,6 +180,7 @@ export const ALERT_TITLE_KEYS = {
   digest_stale: "snapshots.alertKey.digestStale",
   overdue_stale: "snapshots.alertKey.overdueStale",
   notification_stale: "snapshots.alertKey.notificationStale",
+  billing_no_charges: "snapshots.alertKey.billingNoCharges",
 } as const;
 
 type AlertTitleKey = (typeof ALERT_TITLE_KEYS)[keyof typeof ALERT_TITLE_KEYS];
