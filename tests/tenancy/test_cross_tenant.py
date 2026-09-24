@@ -342,6 +342,21 @@ EXEMPT_ROUTES: dict[str, str] = {
     "/internal/bot/vendor/payments": _BOT_INTERNAL_REASON.format(
         route="GET /internal/bot/vendor/payments"
     ),
+    "/internal/camagent/snapshot": (
+        "global — CamAgent gateway -> `core-api` servis-servis yuzasi (POST "
+        "/internal/camagent/snapshot): uni FOYDALANUVCHI emas, gateway chaqiradi va "
+        "unda foydalanuvchi access tokeni UMUMAN bo'lmaydi. Autentifikatsiya — STATIK "
+        "servis sirri (`Settings.camagent_service_token`, `hmac.compare_digest`); "
+        "bozor tanadagi `market_id` dan olinadi va kamera O'SHA bozor ichida seriya + "
+        "kanal bo'yicha qidiriladi. Ya'ni matritsaning uchala token da'vosi "
+        "(tokensiz/buzilgan/muddati o'tgan -> 401) bu yerda MA'NOSIZ va sozlanmagan "
+        "token holatida kontrakt 503 — 2026-09-24 gacha shu uch da'vo qizil turgan. "
+        "QAMROVI TO'LIQ QAYTA TIKLANGAN: `tests/integration/test_camagent_internal_"
+        "auth.py` sozlanmagan token -> 503, tokensiz va noto'g'ri token -> 401 (ayni "
+        "javob, `Set-Cookie` YO'Q), begona bozor kamerasi -> 404 (musbat nazorat "
+        "bilan), OpenAPI'da yo'l YO'Q va router sessiya primitivlarini ishlatmasligini "
+        "alohida o'lchaydi"
+    ),
     "/api/v1/audit/platform": (
         "global — platforma-global (`market_id IS NULL`) audit qatorlari, ya'ni "
         "HECH QAYSI bozorga tegishli bo'lmagan yozuvlar; tenant qatorlari undan "
