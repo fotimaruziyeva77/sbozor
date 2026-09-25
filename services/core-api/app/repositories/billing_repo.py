@@ -123,6 +123,8 @@ __all__ = [
     "CollectRoster",
     "CollectRosterRow",
     "PendingStall",
+    "SettlementCharge",
+    "SettlementCredit",
     "SlotEvidenceRow",
     "StallDayMoney",
     "StallSlotVerdict",
@@ -136,10 +138,13 @@ __all__ = [
     "market_day_charges",
     "pending_projection",
     "resolve_stall_day_money",
+    "settlement_charge_dues",
+    "settlement_credit",
     "vendor_charge_allocation",
     "vendor_outstanding",
     "write_anomaly",
     "write_charge",
+    "write_director_waiver",
     "write_evidence",
     "write_late_review_adjustment",
 ]
@@ -1406,6 +1411,180 @@ async def vendor_charge_allocation(
     credit_soum = int(credit.scalar_one())
 
     return allocate_charge_credit(charges, credit_soum)
+
+
+# ===========================================================================
+# 5a. O'TGAN DAVRNI YOPISH — BUYURTMACHI QARORI (260925-kvq)
+#
+# Iste'molchi — `app/jobs/debt_settlement.py`. Bu bo'lim faqat O'QIYDI va
+# kechirish qatorini YOZADI; «qaysi hisob qancha kamayadi» qarori
+# `allocate_charge_credit()` da qoladi.
+# ===========================================================================
+
+_SETTLEMENT_CHARGE_DUES = text(
+    f"""
+    SELECT c.id           AS charge_id,
+           c.vendor_id    AS vendor_id,
+           c.service_date AS service_date,
+           s.code         AS stall_code,
+           (c.amount_soum + COALESCE(adj.total, 0))::bigint AS due_soum
+      FROM daily_charges c
+      JOIN stalls s
+        ON s.market_id = c.market_id
+       AND s.id = c.stall_id
+      LEFT JOIN LATERAL (
+        SELECT sum({_SIGNED_ADJUSTMENT_EXPR}) AS total
+        FROM charge_adjustments a
+        WHERE a.market_id = c.market_id
+          AND a.charge_id = c.id
+      ) adj ON true
+     WHERE c.market_id = :market_id
+       AND c.service_date < :before
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("before", type_=Date()),
+    bindparam("increase", type_=Text()),
+)
+"""`_VENDOR_CHARGE_DUES` ning BOZOR kesimidagi jufti — `charge_id` bilan.
+
+⚠ Alohida so'rov, chunki kechirish qatori hisobning `id` sini talab qiladi,
+  `ChargeDue` esa uni ATAYIN tashimaydi (06-01 kontrakti). Butun bozor bitta
+  so'rovda — sotuvchi boshiga so'rov bu yerda kerak emas.
+⛔ Netlash `_SIGNED_ADJUSTMENT_EXPR` dan — ikkinchi nusxa yozilmaydi.
+"""
+
+_SETTLEMENT_CREDIT = text(
+    f"""
+    SELECT p.vendor_id AS vendor_id,
+           COALESCE(sum({_SIGNED_PAYMENT_EXPR})
+                    FILTER (WHERE COALESCE(o.business_date, p.business_date) < :before),
+                    0)::bigint AS before_soum,
+           COALESCE(sum({_SIGNED_PAYMENT_EXPR})
+                    FILTER (WHERE COALESCE(o.business_date, p.business_date) >= :before),
+                    0)::bigint AS since_soum
+      FROM payments p
+      LEFT JOIN payments o
+        ON o.market_id = p.market_id
+       AND o.id = p.reverses_payment_id
+     WHERE p.market_id = :market_id
+     GROUP BY p.vendor_id
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("before", type_=Date()),
+    bindparam("reversal", type_=Text()),
+)
+"""Sotuvchi krediti chegara kunidan OLDIN va KEYIN — `_SIGNED_PAYMENT_EXPR` dan.
+
+⛔ KUN — TO'LOV YOZILGAN KUN (`business_date`), `service_date` EMAS: kassir
+   «[Qarzni ham olish]» bilan bugun olgan pul ham `service_date = bugun`
+   bilan yoziladi, ya'ni o'sha ustun «qaysi kun uchun» ni aytmaydi.
+
+⛔ STORNO ASL TO'LOVNING KUNIGA TEGISHLI (`COALESCE(o.business_date, ...)`):
+   eski to'lov bugun bekor qilinsa, u eski davrning krediti edi va eski
+   davrdan ayriladi. Aks holda bugungi pattadan ayrilib, bugun to'lagan
+   sotuvchi qarzdor bo'lib chiqardi.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class SettlementCharge:
+    """Eski davrning bitta hisobi — tuzatishlar bilan netlangan, `id` si bilan."""
+
+    charge_id: UUID
+    vendor_id: UUID
+    due: ChargeDue
+
+
+@dataclass(frozen=True, slots=True)
+class SettlementCredit:
+    """Sotuvchining belgili krediti — chegara kunidan oldin va keyin."""
+
+    before_soum: int
+    since_soum: int
+
+
+async def settlement_charge_dues(
+    session: AsyncSession, *, market_id: UUID, before: date
+) -> list[SettlementCharge]:
+    """`service_date < before` bo'lgan hisoblar, tuzatishlar bilan netlangan."""
+    rows = await session.execute(
+        _SETTLEMENT_CHARGE_DUES,
+        {
+            "market_id": market_id,
+            "before": before,
+            "increase": AdjustmentDirection.INCREASE.value,
+        },
+    )
+    return [
+        SettlementCharge(
+            charge_id=row["charge_id"],
+            vendor_id=row["vendor_id"],
+            due=ChargeDue(
+                service_date=row["service_date"],
+                stall_code=str(row["stall_code"]),
+                due_soum=int(row["due_soum"]),
+            ),
+        )
+        for row in rows.mappings()
+    ]
+
+
+async def settlement_credit(
+    session: AsyncSession, *, market_id: UUID, before: date
+) -> dict[UUID, SettlementCredit]:
+    """`{vendor_id: SettlementCredit}` — to'lovi bor sotuvchilar."""
+    rows = await session.execute(
+        _SETTLEMENT_CREDIT,
+        {
+            "market_id": market_id,
+            "before": before,
+            "reversal": PaymentKind.REVERSAL.value,
+        },
+    )
+    return {
+        row["vendor_id"]: SettlementCredit(
+            before_soum=int(row["before_soum"]), since_soum=int(row["since_soum"])
+        )
+        for row in rows.mappings()
+    }
+
+
+async def write_director_waiver(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    charge_id: UUID,
+    amount_soum: int,
+    actor_user_id: UUID,
+) -> UUID:
+    """Direktor qarori bilan hisobni KAMAYTIRADI — alohida qator, tahrir emas (D-07).
+
+    ⛔ `actor_user_id` MAJBURIY: kechirish — insonning qarori va «kim qaror
+       qildi?» savoliga `NULL` (tizim) javobi yolg'on bo'lardi
+       (`write_late_review_adjustment()` ning teskari holati).
+    ⛔ `write_app_audit()` CHAQIRILMAYDI — audit qatorini DB-trigger yozadi.
+    """
+    if amount_soum <= 0:
+        raise ValueError(
+            f"kechirish summasi musbat bo'lishi shart: {amount_soum} "
+            "(`ck_charge_adjustments_amount_soum_positive`)"
+        )
+    stmt = (
+        pg_insert(ChargeAdjustment)
+        .values(
+            market_id=market_id,
+            charge_id=charge_id,
+            direction=AdjustmentDirection.DECREASE.value,
+            reason_code=AdjustmentReason.DIRECTOR_WAIVER.value,
+            amount_soum=assert_safe_soum(amount_soum),
+            actor_user_id=actor_user_id,
+        )
+        .returning(ChargeAdjustment.id)
+    )
+    adjustment_id: UUID = (await session.execute(stmt)).scalar_one()
+    return adjustment_id
 
 
 # ===========================================================================

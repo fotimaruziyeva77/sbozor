@@ -116,12 +116,14 @@ __all__ = [
     "OPEN_CASE_DAYS_LIMIT",
     "OpenCaseDay",
     "OpenCasesResult",
+    "PendingCase",
     "case_detail",
     "case_evidence",
     "hit_rate",
     "list_cases",
     "open_case_days",
     "open_cases",
+    "pending_cases_before",
     "transition",
 ]
 
@@ -1031,6 +1033,63 @@ async def open_case_days(session: AsyncSession, *, market_id: UUID) -> list[Open
     )
     return [
         OpenCaseDay(day=row["day"], open_count=int(row["open_count"])) for row in rows.mappings()
+    ]
+
+
+_PENDING_CASES_BEFORE = text(
+    """
+    SELECT rc.id           AS case_id,
+           rc.service_date AS service_date,
+           rc.subject_kind AS subject_kind,
+           rc.status       AS status
+      FROM reconciliation_cases rc
+     WHERE rc.market_id = :market_id
+       AND rc.status = ANY(:open_statuses)
+       AND rc.service_date < :before
+     ORDER BY rc.service_date, rc.id
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("open_statuses", type_=_TEXT_ARRAY),
+    bindparam("before", type_=Date()),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PendingCase:
+    """Hal qilinmagan bitta case — chegara kunidan oldingi davrni yopish uchun."""
+
+    case_id: UUID
+    service_date: date
+    subject_kind: str
+    status: str
+
+
+async def pending_cases_before(
+    session: AsyncSession, *, market_id: UUID, before: date
+) -> list[PendingCase]:
+    """`service_date < before` bo'lgan hal qilinmagan case'lar (260925-kvq).
+
+    ⚠ Ikkala sinf ham qaytadi: xarita sarig'i ikkalasidan chiqadi
+      (`billing_repo._OPEN_CASE_BY_STALL`). «Hal qilinmagan» ta'rifi —
+      `open_case_days()` bilan AYNI `_PENDING_STATUSES`.
+    """
+    rows = await session.execute(
+        _PENDING_CASES_BEFORE,
+        {
+            "market_id": market_id,
+            "open_statuses": list(_PENDING_STATUSES),
+            "before": before,
+        },
+    )
+    return [
+        PendingCase(
+            case_id=row["case_id"],
+            service_date=row["service_date"],
+            subject_kind=str(row["subject_kind"]),
+            status=str(row["status"]),
+        )
+        for row in rows.mappings()
     ]
 
 
