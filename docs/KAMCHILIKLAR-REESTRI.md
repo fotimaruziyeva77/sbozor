@@ -152,10 +152,11 @@
 | ✅ P-7 | Root lint darvozasi vendoring'dan beri qizil (ruff 37, mypy 125); vendored gateway'da `log` aniqlanmagan (tozalash halqasini o'ldirardi) | Vendored nusxa root lintdan chiqarildi, `log` tuzatildi, o'z fayllarimiz tozalandi | `603a972` |
 | ✅ P-8 | `camagent.py` izohlari mojibake, `_accept` tiplanmagan | Tiklandi, tiplandi, `.one()` | `d9a20dc` |
 | ✅ P-9 | Prod'ga deploy + o'tgan kunlarni tiklash | 2026-09-24 bajarildi: `c226caa` deploy qilindi; 1, 2, 6, 7-sentabr «Ish kunlari» da yopiq deb belgilandi; tiklash (`backfill_charges.py`, avval quruq yugurish) — 22 ish kuni × 33 rasta = **726 hisob** biriktirish bo'yicha, xatosiz. 28-avgust — kadr umuman yo'q, hisobsiz qoldi (P-13) | ops |
-| ⬜ P-10 | 26–27-avgustdagi 5 ta ochiq «band, lekin to'lovsiz» ishi | Nazoratchi/direktor ko'rib chiqadi | — |
+| ⬜ P-10 | 26–27-avgustdagi 5 ta ochiq «band, lekin to'lovsiz» ishi | Buyurtmachi qarori bilan P-14 skripti yopadi (25-sentabrdan oldingi hamma ochiq ish) | — |
 | 🔒 P-11 | Vendored `agent_gateway/app.py` dagi `log` tuzatmasi | CamAgent (Kamera) manba reposiga kiritilsin — aks holda keyingi sinxronizatsiya qaytaradi | — |
 | ⬜ P-12 | Zonali 8–9 rasta faqat nazoratchi tasdig'i bilan hisoblanadi — prod'da AI modeli yo'q, ya'ni navbat ko'rib chiqilmasa ular amalda tekin | Buyurtmachi qarori: model ishga tushguncha biriktirish bo'yicha hisoblash YOKI navbatni ko'rib chiqib, tiklash skriptini qayta yurgizish (xavfsiz, faqat yetishmaganini qo'shadi) | — |
 | ⬜ P-13 | Kadr UMUMAN kelmagan kun (masalan CamAgent uzilishi, 28-avgust) butun bozor uchun hisobsiz qoladi — gibrid qoida slot qatori bor rastalarga ishlaydi | Buyurtmachi qarori: bunday kunni kamerasiz kun sifatida biriktirish bo'yicha hisoblash (`billing_no_charges` alerti hozircha faqat ko'rsatadi) | — |
+| ⬜ P-14 | Tiklangan 28 kunlik qarz va undan tug'ilgan sariq rastalar (kassirga qo'ng'iroqlar). Buyurtmachi qarori (2026-09-25): 25-sentabrdan oldingi qarzlar to'langan deb hisoblansin, shu kundan tizim odatdagidek | `ops/scripts/settle_debts.py` (quick 260925-kvq): soxta to'lovsiz — «Direktor kechirdi» tuzatishi (aktor direktor, audit bilan), faqat eski to'lovlar bilan yopilmagan qoldiq (FIFO); bugungi to'lov va avans tegilmaydi; eski ochiq ishlar «Asossiz» + izoh. Kod tayyor — prod'da quruq yugurish, zaxira, keyin `SETTLE_APPLY=1` | `a3a618e` |
 
 ---
 *Reestr har yopilgan band bilan yangilanadi. "Hech narsa qolmasligi" sharti: 1–3 va 6-bo'limlar to'liq ✅ bo'lgunicha 8-faza yakunlanmaydi deb hisoblanmaydi. 8-bo'lim hududlaridan chiqqan yangi topilmalar reestrga qo'shiladi.*

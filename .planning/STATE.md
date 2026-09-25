@@ -192,7 +192,7 @@ Phase: 10 (bajarildi)
 Plan: 10-08 (oxirgisi)
 Total Plans in Phase: 8
 Status: Complete
-Last activity: 2026-09-24 — quick 260924-hpm (prod hisob uzilishi, `billing_no_charges`, nomuvofiqlik topiluvchanligi)
+Last activity: 2026-09-25 — quick 260925-kvq (25-sentabrgacha qarzlarni «Direktor kechirdi» bilan yopish, eski ochiq ishlarni yopish)
 
 Progress: [██████████] 100% (8/8 reja — 10-01…10-08)
 
@@ -509,6 +509,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260924-hpm | Prod tahlili: 28 kunlik hisob uzilishi (gibrid qoida: zonasiz rasta biriktirish bo'yicha) + xavfsiz tiklash/qarz skriptlari, `billing_no_charges` alerti, xarita/nomuvofiqlik topiluvchanligi, landing oylik soni, sana-bombasi testlari, camagent matritsasi, lint darvozasi | 2026-09-24 | 123bc0f, ba3edc3, add2376, 6cc6e44, d9a20dc, 8c4f9f4, 603a972, ffd6604 | [260924-hpm-prod-hisob-uzilishi-va-xarita-nomuvofiql](./quick/260924-hpm-prod-hisob-uzilishi-va-xarita-nomuvofiql/) |
+| 260925-kvq | Buyurtmachi qarori: 25-sentabrgacha qarzlar to'langan deb hisoblanadi — `settle_debts.py` («Direktor kechirdi» tuzatishi, soxta to'lovsiz; bugungi to'lov va avans tegilmaydi; eski ochiq ishlar «Asossiz») | 2026-09-25 | a3a618e | [260925-kvq-25-sentabrgacha-qarzlarni-yopish-va-ochi](./quick/260925-kvq-25-sentabrgacha-qarzlarni-yopish-va-ochi/) |
 | 260816-75e | Topilma №C: MARKET-06 plan-xarita to'lov ranglari + rasta kartasi + /billing/map | 2026-08-16 | 9dbd631, 192eb2e, 43b4628 | [260816-75e-topilma-c-market-06-plan-xarita-tolov-ra](./quick/260816-75e-topilma-c-market-06-plan-xarita-tolov-ra/) |
 | 260816-75g | Topilma №F+№G+№H: diagnostika rejimi, rol tahrirlash, admin dashboard holati | 2026-08-16 | 4d0e583, f57c3da, a13c447 | [260816-75g-topilma-f-g-h-diagnostika-yorligi-rol-ta](./quick/260816-75g-topilma-f-g-h-diagnostika-yorligi-rol-ta/) |
 | 260816-75c | Topilma №L+№E+№M: kassir lookup konteksti, kelajak tarif yorlig'i, bekor qatorlarini ajratish | 2026-08-16 | f2b1830, aed8391, 93c0a78 | [260816-75c-topilma-l-e-m-kassir-lookup-kontksti-kel](./quick/260816-75c-topilma-l-e-m-kassir-lookup-kontksti-kel/) |
