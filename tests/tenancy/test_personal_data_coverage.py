@@ -980,20 +980,22 @@ def test_the_reconciliation_gate_sees_the_routes() -> None:
        marshrutini ham qamrab olganini KO'RADI.
 
     ⚠ 07-16 BITTASINI QO'SHDI (`GET /delivery`, BOT-04): to'rt YO'L ->
-      BESH YO'L. ⚠ «Yo'l», «marshrut» EMAS: `GET` va `PATCH`
+      BESH YO'L. ⚠ 260924-hpm YANA BITTASINI QO'SHDI
+      (`GET /open-days`): BESH YO'L -> OLTI YO'L. ⚠ «Yo'l», «marshrut» EMAS: `GET` va `PATCH`
       `/cases/{case_id}` da BITTA yo'lni bo'lishadi, ya'ni lug'atning
       kaliti oltita marshrut uchun beshta.
     """
     found = reconciliation_routes(fastapi_app)
 
-    assert len(found) == 5, sorted(found)
+    assert len(found) == 6, sorted(found)
     assert f"{RECONCILIATION_PREFIX}/report" in found
     assert f"{RECONCILIATION_PREFIX}/cases/{{case_id}}" in found
     assert f"{RECONCILIATION_PREFIX}/delivery" in found
+    assert f"{RECONCILIATION_PREFIX}/open-days" in found
 
 
 def test_reconciliation_routes_are_not_personal() -> None:
-    """⛔ G7-6: beshala marshrut ham `PERSONAL_ROUTES` GA TUSHMAYDI (D-05).
+    """⛔ G7-6: oltala marshrut ham `PERSONAL_ROUTES` GA TUSHMAYDI (D-05).
 
     =========================================================================
     ⛔⛔ DARVOZA YANGI MARSHRUTLARNI AVTOMATIK QAMRAYDI — BU TEST UNI

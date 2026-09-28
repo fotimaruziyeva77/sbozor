@@ -461,9 +461,10 @@ RECONCILIATION_ROUTES = (
     "/api/v1/reconciliation/cases/{case_id}",
     "/api/v1/reconciliation/delivery",
     "/api/v1/reconciliation/hit-rate",
+    "/api/v1/reconciliation/open-days",
     "/api/v1/reconciliation/report",
 )
-"""Besh YO'L, olti MARSHRUT: `cases/{case_id}` da `GET` VA `PATCH` bor.
+"""Olti YO'L, yetti MARSHRUT: `cases/{case_id}` da `GET` VA `PATCH` bor.
 
 ⚠ 07-16 BITTASINI QO'SHDI — `GET /delivery` (BOT-04). ⛔ VA U YOLG'IZ
   `GET`: yetkazilganlik navbati APPEND-ONLY (D-20) va uning yagona
@@ -471,6 +472,14 @@ RECONCILIATION_ROUTES = (
   holatni qo'lda o'zgartirish marshruti ⛔ UMUMAN yozilmagan —
   quyidagi to'plam tengligi buni AYNAN o'lchaydi va yangi metod
   qo'shilgan zahoti qizaradi.
+
+⚠ 260924-hpm YANA BITTASINI QO'SHDI — `GET /open-days`. Sabab
+  o'lchangan: case ro'yxati KUN kesimida va standart kun KECHA,
+  «band, lekin to'lovsiz» ishi esa kamida 4 kun oldingi sana bilan
+  tug'iladi — prod'da 5 ta ish 4 hafta hech kim ko'rmagan holda
+  turdi. ⛔ U HAM YOLG'IZ `GET`: marshrut faqat kun va sonni
+  qaytaradi, ro'yxatning o'zi o'z marshrutida va o'z huquqi ostida
+  qoladi (`schemas.OpenCaseDaysResponse`).
 """
 
 
@@ -485,10 +494,10 @@ def _reconciliation_paths() -> list[str]:
     )
 
 
-def test_the_reconciliation_surface_is_exactly_six_routes() -> None:
+def test_the_reconciliation_surface_is_exactly_seven_routes() -> None:
     """DARVOZANING NAZORATI — pastdagi ikki test BO'SH to'plamda yashil bo'lmaydi.
 
-    ⛔ To'plam TENGLIGI bilan (D-31), «kamida oltitasi» bilan EMAS: yettinchi
+    ⛔ To'plam TENGLIGI bilan (D-31), «kamida yettitasi» bilan EMAS: sakkizinchi
        marshrut qo'shilishi ONGLI qaror va u shu yerda ko'rinishi kerak —
        ayniqsa u `PATCH` yoki `DELETE` bo'lsa (case tarixi o'zgarmas,
        D-14; yetkazilganlik navbati append-only, D-20).
@@ -514,11 +523,12 @@ def test_the_reconciliation_surface_is_exactly_six_routes() -> None:
         ("PATCH", "/api/v1/reconciliation/cases/{case_id}"),
         ("GET", "/api/v1/reconciliation/hit-rate"),
         ("GET", "/api/v1/reconciliation/delivery"),
+        ("GET", "/api/v1/reconciliation/open-days"),
     }, sorted(walked)
 
 
 def test_every_reconciliation_route_is_documented_in_openapi() -> None:
-    """⛔ Oltalasi ham OpenAPI'da BOR — `/internal/bot/*` dan TESKARI da'vo.
+    """⛔ Yettalasi ham OpenAPI'da BOR — `/internal/bot/*` dan TESKARI da'vo.
 
     Bu yuzaning mijozi BRAUZER: 07-15 (hisobot) va 07-16 (case navbati +
     yetkazilganlik) klient sxemasini shu kontraktdan oladi.
@@ -533,7 +543,7 @@ def test_every_reconciliation_route_is_documented_in_openapi() -> None:
         if path.startswith(RECONCILIATION_PREFIX)
     }
 
-    assert len(documented) == 6, sorted(documented)
+    assert len(documented) == 7, sorted(documented)
     assert {path for _, path in documented} == set(RECONCILIATION_ROUTES)
 
 
