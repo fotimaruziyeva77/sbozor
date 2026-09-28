@@ -124,8 +124,10 @@ export function MarketPicker() {
   const logout = useLogout({
     // Sessiya har qanday holatda tozalanadi: server javobi kelmasa ham
     // brauzerda o'lik token qolib ketmasligi kerak.
+    //
+    // ⚠ `"signed_out"` — sabab `user-menu.tsx` dagi bilan AYNI.
     onSettled: () => {
-      clearSession();
+      clearSession("signed_out");
       router.replace("/login");
     },
   });

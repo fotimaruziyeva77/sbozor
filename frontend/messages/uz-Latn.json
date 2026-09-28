@@ -65,6 +65,8 @@
     "signIn": "Kirish",
     "signingIn": "Kirilmoqda",
     "invalidCredentials": "Telefon raqami yoki parol xato",
+    "sessionExpiredTitle": "Sessiya muddati tugadi",
+    "sessionExpiredNote": "Xavfsizlik uchun tizim sizni chiqardi. Yozilgan to'lovlar saqlanib qoldi — qaytadan kiring.",
     "invalidPhone": "Telefon raqami noto'g'ri kiritilgan",
     "tooManyAttempts": "Urinishlar soni ko'payib ketdi. Biroz kutib, qayta urinib ko'ring",
     "accountBlocked": "Hisob bloklangan. Bozor ma'muriyatiga murojaat qiling",

@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useRouter } from "@/i18n/navigation";
 import { ApiError, NetworkError, apiFetch } from "@/lib/api-client";
 import { loginResponseSchema } from "@/lib/api-types";
-import { useAuthStore } from "@/lib/auth-store";
+import { readSessionEndReason, useAuthStore } from "@/lib/auth-store";
 
 /*
  * D-01: identifikator — TELEFON. Elektron pochta / login nomi maydoni yo'q.
@@ -60,6 +60,14 @@ export function LoginForm() {
   const router = useRouter();
   const { setSession } = useAuthStore();
   const [formError, setFormError] = useState<string | null>(null);
+
+  /*
+   * ⚠ DERIVATSIYA, `useState` + `useEffect` EMAS — `app-guard.tsx` bilan
+   *   ayni qaror. Effektda `setState` qilish ortiqcha render tug'diradi
+   *   va lint darvozasi (`react-hooks/set-state-in-effect`) uni rad etadi.
+   *   O'qish sof, tozalash esa `setSession()` da.
+   */
+  const sessionExpired = readSessionEndReason() === "expired";
   /* «Sbozor Login» dizayni: parolni ko'rsatish tugmasi. Faqat KO'RINISH —
      qiymat baribir shu inputda qoladi, hech qayerga yozilmaydi. */
   const [passwordShown, setPasswordShown] = useState(false);
@@ -149,6 +157,25 @@ export function LoginForm() {
       noValidate
       onSubmit={handleSubmit(onSubmit)}
     >
+      {/*
+        ⚠ `danger` EMAS, `info`: bu XATO emas — odam hech nimani noto'g'ri
+          qilmagan. Qizil ramka «bir narsani buzdim» degan ma'no berardi.
+        ⚠ To'lovlar haqidagi jumla MATNDA turadi va u bezak emas: kassir
+          birinchi savoli aynan shu («yozganlarim ketdimi?»).
+      */}
+      {sessionExpired ? (
+        <div
+          className="rounded-sm bg-info/15 px-3 py-2 text-info-text"
+          role="status"
+        >
+          <p className="text-sm font-semibold">
+            {t("auth.sessionExpiredTitle")}
+          </p>
+          <p className="mt-0.5 text-sm leading-relaxed">
+            {t("auth.sessionExpiredNote")}
+          </p>
+        </div>
+      ) : null}
       <Field
         error={errors.phone?.message}
         id="phone"

@@ -29,8 +29,12 @@ export function UserMenu() {
   const logout = useLogout({
     // Server javobidan QAT'I NAZAR sessiya tozalanadi: aks holda tarmoq
     // uzilganda brauzerda ishlaydigan token qolib ketardi.
+    //
+    // ⚠ `"signed_out"` — bu ATAYLAB chiqish. Standart qiymat (`expired`)
+    //   qolsa, tugmani o'zi bosgan odamga login sahifasida «sessiya
+    //   muddati tugadi» deyilardi.
     onSettled: () => {
-      clearSession();
+      clearSession("signed_out");
       router.replace("/login");
     },
   });

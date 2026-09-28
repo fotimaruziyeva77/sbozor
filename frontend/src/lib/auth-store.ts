@@ -179,13 +179,54 @@ function readServerSession(): Session {
  * render qilib ulgurardi.
  */
 export function setSession(next: Session): void {
+  // Yangi sessiya — eski sessiyaning tugash sababi endi ahamiyatsiz.
+  sessionEndReason = null;
   memorySession = next;
   emitSessionReset();
   emit();
 }
 
+/*
+ * ⛔ SESSIYA NEGA TUGAGANI — LOGIN SAHIFASIGA YETKAZILADIGAN YAGONA BIT.
+ *
+ * Kassir smena o'rtasida to'satdan kirish sahifasida paydo bo'lardi va
+ * sababni HECH KIM aytmasdi. O'lchangan holat (260914 auditi): 1987 ta
+ * matn ichida «sessiya tugadi» degan bitta ham xabar yo'q edi. Odam uchun
+ * bu «dastur buzildi — yozgan to'lovlarim ketdimi?» degani.
+ *
+ * ⚠ IKKI HOLAT FARQLANADI VA BU FARQ MAJBURIY:
+ *     `expired`    — sessiya O'LDI (refresh rad etildi / 401);
+ *     `signed_out` — odam O'ZI chiqdi (`useLogout`).
+ *   Farqlanmasa chiqish tugmasini bosgan odamga ham «muddati tugadi»
+ *   deyilardi va xabar ishonchini yo'qotardi.
+ *
+ * ⛔ SESSIYASIZ HOLAT BELGILANMAYDI. Birinchi marta kelgan mehmonda
+ *   `restoreSession()` baribir yiqiladi (refresh cookie yo'q) va u AYNAN
+ *   shu yo'ldan o'tadi. `accessToken !== null` sharti o'shani kesadi —
+ *   usiz HAR BIR yangi mehmon «sessiyangiz tugadi» ni ko'rardi.
+ */
+export type SessionEndReason = "expired" | "signed_out";
+
+let sessionEndReason: SessionEndReason | null = null;
+
+/**
+ * Oxirgi sessiya NEGA tugagani. ⛔ SOF O'QISH — hech nimani o'zgartirmaydi.
+ *
+ * ⚠ NEGA TOZALAMAYDI: bu qiymat RENDER paytida o'qiladi
+ * (`login-form.tsx`). O'qishda tozalasa, render — nojo'ya ta'sirli
+ * bo'lardi va React'ning qat'iy rejimidagi ikkilangan render xabarni
+ * birinchi o'tishdayoq yeb qo'yardi. Tozalash `setSession()` da: sabab
+ * «oxirgi sessiya nega tugadi» degani va YANGI sessiya paydo bo'lishi
+ * bilan u ahamiyatini yo'qotadi.
+ */
+export function readSessionEndReason(): SessionEndReason | null {
+  return sessionEndReason;
+}
+
 /** Sessiyani o'chiradi (logout, refresh muvaffaqiyatsizligi). */
-export function clearSession(): void {
+export function clearSession(reason: SessionEndReason = "expired"): void {
+  // Sessiya BOR edi-yu endi yo'q — faqat shunda sabab qayd etiladi.
+  if (memorySession.accessToken !== null) sessionEndReason = reason;
   memorySession = EMPTY_SESSION;
   emitSessionReset();
   emit();
