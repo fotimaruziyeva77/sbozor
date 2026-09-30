@@ -202,36 +202,129 @@ def _stall_code(conn: Connection[TupleRow], stall_id: UUID) -> str:
 # ===========================================================================
 
 
-async def test_the_pending_payload_splits_the_day_amount_into_two_components(
+def _vendor_stalls_on(
+    conn: Connection[TupleRow], stall_id: UUID, service_date: str
+) -> dict[str, str]:
+    """Shu rasta EGASIGA o'sha kuni biriktirilgan BARCHA rastalar: kod -> `code_sort`.
+
+    ⚠ Seed ichidagi nomlar bo'yicha taxmin QILINMAYDI. Birinchi urinishda
+      test ikkita rastani qo'lda sanab chiqqan edi va u YOLG'ON QIZIL berdi:
+      seed uchinchi rastani ham o'sha sotuvchiga biriktirgan
+      (`stall_occupied_without_assignment` ning ikkinchi davri
+      `SEED_BUSINESS_DATE + 7` dan ochiq va u bugunni QAMRAB OLADI).
+      Ro'yxat shu sababdan BAZADAN olinadi.
+
+    ⚠ Kun ham taxmin qilinmaydi: `CURRENT_DATE` server mintaqasiniki,
+      mahsulotning «bugun» i esa bozor mintaqasida. Sana proyeksiyaning
+      O'ZIDAN (`service_date`) uzatiladi.
+    """
+    rows = conn.execute(
+        """
+        SELECT s2.code, s2.code_sort
+          FROM stall_assignments a1
+          JOIN stall_assignments a2
+            ON a2.market_id = a1.market_id
+           AND a2.vendor_id = a1.vendor_id
+           AND a2.period @> %s::date
+          JOIN stalls s2 ON s2.id = a2.stall_id
+         WHERE a1.stall_id = %s
+           AND a1.period @> %s::date
+         ORDER BY s2.code_sort
+        """,
+        (service_date, str(stall_id), service_date),
+    ).fetchall()
+    return {str(r[0]): str(r[1]) for r in rows}
+
+
+async def test_the_service_fee_is_charged_once_per_vendor_not_per_stall(
     api_client: httpx.AsyncClient,
     sync_owner_conn: Connection[TupleRow],
     env: Env,
     cashier_headers: dict[str, str],
 ) -> None:
-    """⛔ UCHTA SON BIR-BIRIGA SOLISHTIRILADI — mexanizm emas, NATIJA.
+    """⛔⛔ TAROZI — SOTUVCHIGA, RASTAGA EMAS (260930, buyurtmachi qarori).
 
-    «Ustun bor va CHECK bor» degan da'vo summaning TO'G'RILIGINI
-    isbotlamaydi. Bu yerda HTTP javobining o'zidan o'qilgan uch son
-    tekshiriladi va ular seed konstantalari bilan langarlanadi.
+    =======================================================================
+    Ilgari xizmat haqi HAR rastaga qo'shilardi: ikki rastali sotuvchi
+    tarozini ikki marta to'lardi. Karmanada o'lchandi — 36 sotuvchidan
+    14 tasida birdan ortiq rasta bor, ya'ni kuniga 17 ta ortiqcha tarozi.
+
+    =======================================================================
+    ⛔ UCHALA DA'VO HAM KERAK VA BIRORTASI YETARLI EMAS:
+
+      1. tarozi AYNAN BITTA rastada («bor» emas, BITTA);
+      2. u ENG KICHIK `code_sort` li HISOB OLADIGAN rastada;
+      3. qolganlarida `0` VA `fee_label` `None`.
+
+    Yolg'iz 1-band ESKI xatti-harakatni ham o'tkazib yuborardi emas —
+    lekin yolg'iz «ko'taruvchida tarozi bor» da'vosi o'tkazardi: eski
+    kodda u HAMMA rastada bor edi. 3-band aynan o'sha farqni kesadi.
+
+    ⚠ KO'TARUVCHI `code_sort` BO'YICHA aniqlanadi va test uni O'ZI
+      hisoblamaydi — qiymat bazadagi generated ustundan o'qiladi
+      (`models/market.py:156`). Aks holda tartib ifodasi ikki joyda
+      yashardi.
     """
-    code = _stall_code(sync_owner_conn, env.stall("stall_with_two_occupied_slots"))
+    anchor_id = env.stall("stall_with_two_occupied_slots")
+    anchor_code = _stall_code(sync_owner_conn, anchor_id)
 
-    response = await api_client.get(
-        PENDING_URL, params={"stall_code": code}, headers=cashier_headers
+    birinchi = await api_client.get(
+        PENDING_URL, params={"stall_code": anchor_code}, headers=cashier_headers
     )
-    assert response.status_code == 200, response.text
-    body = response.json()
+    assert birinchi.status_code == 200, birinchi.text
+    kun = birinchi.json()["service_date"]
 
-    assert body["stall_amount_soum"] == env.tariff, "rasta puli tarifdan kelmadi"
-    assert body["fee_amount_soum"] == A_SERVICE_FEE_SOUM, "xizmat haqi qo'shilmadi"
-    assert body["amount_soum"] == env.day_total, "yig'indi ikki komponentga teng emas"
-    assert body["stall_amount_soum"] + body["fee_amount_soum"] == body["amount_soum"], (
-        "komponentlar yig'indiga teng emas — klient noto'g'ri summa yuborardi"
+    tartib = _vendor_stalls_on(sync_owner_conn, anchor_id, kun)
+    assert len(tartib) > 1, f"seed bu sotuvchiga bitta rasta bergan ({tartib}) — qoida O'LCHANMAYDI"
+
+    javob: dict[str, Any] = {}
+    for kod in tartib:
+        response = await api_client.get(
+            PENDING_URL, params={"stall_code": kod}, headers=cashier_headers
+        )
+        assert response.status_code == 200, response.text
+        javob[kod] = response.json()
+
+    # --- Komponentlar yig'indiga teng (klient noto'g'ri summa yubormasin).
+    for kod, body in javob.items():
+        assert body["stall_amount_soum"] + body["fee_amount_soum"] == body["amount_soum"], (
+            f"{kod}: komponentlar yig'indiga teng emas"
+        )
+
+    # --- 1. Tarozi AYNAN BITTA rastada.
+    tarozili = [kod for kod, body in javob.items() if body["fee_amount_soum"]]
+    assert len(tarozili) == 1, (
+        f"tarozi {len(tarozili)} ta rastada — sotuvchiga bir marta bo'lishi shart: {javob}"
     )
 
-    assert body["fee_label"] == A_SERVICE_FEE_LABEL, (
+    # --- 2. Va u ENG KICHIK `code_sort` li HISOB OLADIGAN rastada.
+    #     ⚠ «Hisob oladigan» sharti majburiy: yopiq/ta'mirdagi yoki tarifsiz
+    #       rasta ko'taruvchi bo'lsa, tarozi HECH QAYERDA yozilmasdi.
+    hisobli = sorted(
+        (tartib[kod], kod)
+        for kod, body in javob.items()
+        if body["amount_unavailable_reason"] is None
+    )
+    assert hisobli, "sotuvchining bugun hisob oladigan rastasi yo'q — seed buzilgan"
+    kutilgan = hisobli[0][1]
+    assert tarozili[0] == kutilgan, (
+        f"tarozi eng kichik kodli rastada emas: kutilgan={kutilgan}, "
+        f"haqiqiy={tarozili[0]}, tartib={tartib}"
+    )
+
+    assert javob[kutilgan]["fee_amount_soum"] == A_SERVICE_FEE_SOUM, "xizmat haqi qo'shilmadi"
+    assert javob[kutilgan]["fee_label"] == A_SERVICE_FEE_LABEL, (
         "nom SERVERDAN kelishi shart — u bozor kiritgan matn va klient uni qotirib qo'ymaydi"
     )
+
+    # --- 3. Qolganlarida tarozi UMUMAN KO'RINMAYDI.
+    for kod, body in javob.items():
+        if kod == kutilgan:
+            continue
+        assert body["fee_amount_soum"] == 0, f"{kod}: tarozi qayta olindi"
+        assert body["fee_label"] is None, (
+            f"{kod}: «Tarozi» qatori kassir ekranida UMUMAN chiqmasligi kerak"
+        )
 
 
 async def test_paying_only_the_stall_part_needs_no_reason_code(
@@ -322,6 +415,16 @@ async def test_a_payment_moves_the_stall_between_the_two_lists(
     """To'lov rastani «to'lanmagan» dan «to'langan» ga KO'CHIRADI va sanoq suriladi."""
     code = _stall_code(sync_owner_conn, env.stall("stall_with_two_occupied_slots"))
 
+    # ⚠ SUMMA SEED KONSTANTASIDAN EMAS, PROYEKSIYADAN (260930). Tarozi endi
+    #   sotuvchining bitta rastasida bo'lgani uchun `day_total` bu rastaga
+    #   TO'G'RI KELMASLIGI mumkin va ortiqcha to'lov `reason_required` bilan
+    #   rad etilardi. Bu testning da'vosi arifmetika emas, RO'YXAT
+    #   KO'CHISHI — shuning uchun to'liq summa mahsulotning O'ZIDAN olinadi
+    #   (arifmetika yuqoridagi testda seed konstantalari bilan o'lchanadi).
+    qarz = (
+        await api_client.get(PENDING_URL, params={"stall_code": code}, headers=cashier_headers)
+    ).json()["amount_soum"]
+
     before = (
         await api_client.get(ROSTER_URL, params={"state": "unpaid"}, headers=cashier_headers)
     ).json()
@@ -331,7 +434,7 @@ async def test_a_payment_moves_the_stall_between_the_two_lists(
         headers=cashier_headers,
         json={
             "stall_code": code,
-            "amount_soum": env.day_total,
+            "amount_soum": qarz,
             "method": "cash",
             "idempotency_key": "roster-move-0001",
         },

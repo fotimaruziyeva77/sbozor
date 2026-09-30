@@ -133,6 +133,7 @@ from fixtures.billing_domain import (
     add_payment,
     add_zone_with_event_on,
     billing_domain_before_day_close,
+    stall_day_total_soum,
 )
 from fixtures.frames import frame_bytes
 from fixtures.market_domain import A_OPEN_WEEKDAYS, MarketDomainSeed
@@ -967,10 +968,14 @@ async def test_sc1_immutable_daily_charge_is_written_once(
     assert with_evidence <= set(written), "dalilli hisob `daily_charges` da yo'q"
 
     # ⛔ 0027: «TO'LIQ kunlik patta» = tarif + majburiy xizmat haqi — SHU KUNNING.
-    expected = env.day_total_amount(day)
+    #
+    # ⚠ KUTILMA HAR RASTA UCHUN ALOHIDA (260930): tarozi endi RASTAGA emas,
+    #   SOTUVCHIGA kuniga bir marta olinadi, ya'ni bir sotuvchining ikkinchi
+    #   rastasida u `0`. Yagona `expected` hammaga to'g'ri kelmaydi.
     for stall_id, (amount, _created) in written.items():
         if stall_id not in with_evidence:
             continue
+        expected = stall_day_total_soum(sync_owner_conn, stall_id=stall_id, day=day)
         assert amount == expected, (
             f"{stall_id} rastasining summasi {amount}, kutilgan {expected} "
             "(tarif + xizmat haqi) — «toifa tarifi bo'yicha TO'LIQ kunlik "
@@ -1121,10 +1126,15 @@ async def test_sc2_charge_reaches_evidence_and_cannot_be_edited(
         "qildi?» savoli javobsiz qoladi (D-02)"
     )
 
+    # ⚠ RASTA HISOBNING O'ZIDAN olinadi (260930): kutilma rastaga bog'liq,
+    #   chunki tarozi sotuvchining faqat bitta rastasida bo'ladi.
     amount = sync_owner_conn.execute(
-        "SELECT amount_soum FROM daily_charges WHERE id = %s", (str(charge_id),)
+        "SELECT amount_soum, stall_id FROM daily_charges WHERE id = %s",
+        (str(charge_id),),
     ).fetchone()
-    assert amount is not None and amount[0] == env.day_total_amount(day), (
+    assert amount is not None, "nazorat: hisob qatori yo'q"
+    kutilgan = stall_day_total_soum(sync_owner_conn, stall_id=amount[1], day=day)
+    assert amount[0] == kutilgan, (
         "tuzatish ASL hisobni o'zgartirdi — u ALOHIDA qator bo'lishi shart"
     )
 

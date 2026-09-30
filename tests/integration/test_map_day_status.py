@@ -51,7 +51,7 @@ from fixtures.billing_domain import (
     add_daily_charge,
     add_payment,
     billing_domain_before_day_close,
-    day_total_soum,
+    stall_day_total_soum,
 )
 from fixtures.market_domain import MarketDomainSeed
 from fixtures.notification_domain import seed_case
@@ -346,9 +346,11 @@ async def test_a_fully_paid_stall_is_blue(
 ) -> None:
     """T1 — bugungi tarifi to'liq yopilgan rasta `paid`."""
     today = business_today()
-    total = day_total_soum(today)
     _set_calendar(sync_owner_conn, market_id=env.market_id, day=today, is_open=True)
     stall_id = env.stall("stall_with_two_occupied_slots")
+    # ⚠ SUMMA RASTA BO'YICHA (260930): tarozi endi sotuvchining BITTA
+    #   rastasida, ya'ni «kunning to'liq pattasi» rastaga bog'liq bo'ldi.
+    total = stall_day_total_soum(sync_owner_conn, stall_id=stall_id, day=today)
 
     add_payment(
         sync_owner_conn,
@@ -391,7 +393,7 @@ async def test_an_unpaid_stall_is_red(
     row = _row(await _fetch(api_client, admin_headers), stall_id)
 
     assert row["state"] == "due", row
-    assert row["amount_soum"] == day_total_soum(today)
+    assert row["amount_soum"] == stall_day_total_soum(sync_owner_conn, stall_id=stall_id, day=today)
     assert row["paid_soum"] == 0
 
 
@@ -408,9 +410,11 @@ async def test_a_partially_paid_stall_stays_red(
     mahsulot AYNAN fosh qilishi kerak bo'lgan holat.
     """
     today = business_today()
-    total = day_total_soum(today)
     _set_calendar(sync_owner_conn, market_id=env.market_id, day=today, is_open=True)
     stall_id = env.stall("stall_with_two_occupied_slots")
+    # ⚠ SUMMA RASTA BO'YICHA (260930): tarozi endi sotuvchining BITTA
+    #   rastasida, ya'ni «kunning to'liq pattasi» rastaga bog'liq bo'ldi.
+    total = stall_day_total_soum(sync_owner_conn, stall_id=stall_id, day=today)
 
     add_payment(
         sync_owner_conn,
@@ -525,9 +529,11 @@ async def test_an_open_case_outranks_a_full_payment(
     savolni YOPMAYDI.
     """
     today = business_today()
-    total = day_total_soum(today)
     _set_calendar(sync_owner_conn, market_id=env.market_id, day=today, is_open=True)
     stall_id = env.stall("stall_with_two_occupied_slots")
+    # ⚠ SUMMA RASTA BO'YICHA (260930): tarozi endi sotuvchining BITTA
+    #   rastasida, ya'ni «kunning to'liq pattasi» rastaga bog'liq bo'ldi.
+    total = stall_day_total_soum(sync_owner_conn, stall_id=stall_id, day=today)
 
     add_payment(
         sync_owner_conn,
@@ -653,9 +659,11 @@ async def test_a_reversed_payment_falls_back_to_red(
     rastani MANGU ko'k qoldirardi.
     """
     today = business_today()
-    total = day_total_soum(today)
     _set_calendar(sync_owner_conn, market_id=env.market_id, day=today, is_open=True)
     stall_id = env.stall("stall_with_two_occupied_slots")
+    # ⚠ SUMMA RASTA BO'YICHA (260930): tarozi endi sotuvchining BITTA
+    #   rastasida, ya'ni «kunning to'liq pattasi» rastaga bog'liq bo'ldi.
+    total = stall_day_total_soum(sync_owner_conn, stall_id=stall_id, day=today)
 
     original_id = add_payment(
         sync_owner_conn,

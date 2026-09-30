@@ -82,6 +82,7 @@ from sbozor_core.enums import (
     PaymentKind,
     ReconciliationCaseStatus,
     ResolutionSource,
+    StallStatus,
 )
 from sbozor_core.models import BillingAnomaly, ChargeAdjustment, ChargeEvidence, DailyCharge
 from sbozor_core.models.billing import LATE_REVIEW_ADJUSTMENT_PREDICATE
@@ -161,6 +162,28 @@ o'zgargan kuni filtr jimgina hech nimaga tushmasdi — so'rov ishlayverardi,
 faqat natija bo'sh bo'lardi.
 """
 
+_UNBILLABLE_STATUSES: tuple[str, ...] = (
+    StallStatus.FAIR.value,
+    StallStatus.CLOSED.value,
+    StallStatus.MAINTENANCE.value,
+)
+"""Kunlik hisob YOZILMAYDIGAN rasta holatlari — `_money_from_row()` bilan JUFT.
+
+=============================================================================
+⛔ BU RO'YXAT IKKINCHI HAQIQAT MANBAI EMAS VA BO'LMASLIGI SHART.
+
+Haqiqiy qaror `_money_from_row()` da: u holat bo'yicha shoxlanadi va HAR
+BIRI uchun boshqa sabab qaytaradi (kassirga ko'rinadigan matn har xil).
+Bu yerdagi ro'yxat esa SQL ga kerak — tarozini ko'taradigan rastani
+tanlashda «bu rasta bugun hisob oladimi?» savoliga javob berish uchun.
+
+⚠ IKKALASI AJRALIB KETMASLIGI MEXANIK QULFLANGAN:
+  `test_service_fee_per_vendor.py::test_unbillable_statuses_match_the_money_rule`
+  `StallStatus` ning HAR a'zosini `_money_from_row()` dan o'tkazadi va
+  «summa yo'q» natijasi AYNAN shu ro'yxatga teng ekanini o'lchaydi.
+  Yangi holat qo'shilsa darvoza qizaradi — jimgina eskirmaydi.
+"""
+
 
 # ===========================================================================
 # BELGILI PUL IFODALARI — HAR BIRI AYNAN BIR MARTA YOZILGAN (C-5, G-14)
@@ -224,20 +247,34 @@ _STALL_DAY_MONEY = text(
            AND f.valid_from <= :as_of
          ORDER BY f.valid_from DESC
          LIMIT 1
-    )
-    SELECT s.id            AS stall_id,
-           s.code          AS stall_code,
-           s.status        AS stall_status,
-           asg.vendor_id   AS vendor_id,
-           tar.tariff_id   AS tariff_id,
-           tar.amount_soum AS tariff_amount_soum,
-           fee.amount_soum AS fee_amount_soum,
-           fee.label       AS fee_label,
-           cal.market_open AS market_open
-      FROM stalls s
-      CROSS JOIN calendar cal
-      LEFT JOIN fee ON true
-      LEFT JOIN LATERAL (
+    ),
+    -- ⛔⛔ TAROZI — SOTUVCHIGA, RASTAGA EMAS (260930, buyurtmachi qarori).
+    --
+    --   Ilgari xizmat haqi HAR rastaga qo'shilardi va ikki rastali
+    --   sotuvchi tarozini ikki marta to'lardi. O'lchangan holat: 36
+    --   sotuvchidan 14 tasida birdan ortiq rasta bor, ya'ni kuniga 17 ta
+    --   ortiqcha tarozi.
+    --
+    --   Endi u sotuvchining o'sha kuni HISOB OLADIGAN rastalaridan
+    --   ENG KICHIK KODLISIGA bir marta tushadi; qolganlarida `0`.
+    --
+    -- ⚠ TARTIB `code_sort` BO'YICHA, `code` BO'YICHA EMAS. Kod — `text`,
+    --   ya'ni oddiy solishtirishda "10" < "9" bo'lardi va tarozi noto'g'ri
+    --   rastaga tushardi (`models/market.py:154-183`).
+    --
+    -- ⚠ «HISOB OLADIGAN» SHARTI MAJBURIY: ko'taruvchi yopiq/ta'mirdagi
+    --   yoki tarifsiz rasta bo'lsa, tarozi HECH QAYERDA yozilmasdi —
+    --   sotuvchi uni bir kunlik bo'sh rasta bilan chetlab o'tardi.
+    --
+    -- ⚠ SOTUVCHISIZ RASTA O'ZGARMAYDI: guruhlash uchun kalit yo'q, shu
+    --   sababdan u tarozini o'zi ko'taradi (bugungi xatti-harakat).
+    stall_day AS (
+        SELECT s.id, s.code, s.code_sort, s.status,
+               asg.vendor_id,
+               tar.tariff_id,
+               tar.amount_soum AS tariff_amount_soum
+          FROM stalls s
+          LEFT JOIN LATERAL (
         SELECT p.category_id
         FROM stall_category_periods p
         WHERE p.market_id = s.market_id
@@ -263,16 +300,64 @@ _STALL_DAY_MONEY = text(
           AND sa.period @> :as_of
         LIMIT 1
       ) asg ON true
-     WHERE s.market_id = :market_id
-       AND (:stall_id IS NULL OR s.id = :stall_id)
-       AND (:stall_code IS NULL OR s.code = :stall_code)
-     ORDER BY s.code_sort, s.id
+         WHERE s.market_id = :market_id
+    ),
+    -- So'ralgan rasta(lar). Filtr SHU YERDA — oyna funksiyasidan OLDIN
+    -- emas, KEYIN: aks holda bitta rasta so'ralganda sotuvchining qolgan
+    -- rastalari ko'rinmay qolardi va ko'taruvchi HAR DOIM o'sha yakka
+    -- rasta bo'lib chiqardi.
+    target AS (
+        SELECT id, vendor_id
+          FROM stall_day
+         WHERE (:stall_id IS NULL OR id = :stall_id)
+           AND (:stall_code IS NULL OR code = :stall_code)
+    ),
+    -- ⚠ FAQAT KERAKLI SOTUVCHILAR: bitta rasta so'ralganda bu CTE o'sha
+    --   sotuvchining bir nechta rastasini ko'radi, butun bozorni EMAS.
+    carrier AS (
+        SELECT id
+          FROM (
+            SELECT sd.id,
+                   row_number() OVER (
+                       PARTITION BY sd.vendor_id
+                       ORDER BY sd.code_sort, sd.id
+                   ) AS rn
+              FROM stall_day sd
+             CROSS JOIN calendar cal
+             WHERE sd.vendor_id IN (
+                       SELECT vendor_id FROM target WHERE vendor_id IS NOT NULL
+                   )
+               AND cal.market_open
+               AND sd.status <> ALL(:unbillable_statuses)
+               AND sd.tariff_amount_soum IS NOT NULL
+          ) ranked
+         WHERE ranked.rn = 1
+    )
+    SELECT sd.id                  AS stall_id,
+           sd.code                AS stall_code,
+           sd.status              AS stall_status,
+           sd.vendor_id           AS vendor_id,
+           sd.tariff_id           AS tariff_id,
+           sd.tariff_amount_soum  AS tariff_amount_soum,
+           fee.amount_soum        AS fee_amount_soum,
+           fee.label              AS fee_label,
+           cal.market_open        AS market_open,
+           (
+               sd.vendor_id IS NULL
+               OR sd.id IN (SELECT id FROM carrier)
+           )                      AS carries_fee
+      FROM stall_day sd
+      JOIN target tg ON tg.id = sd.id
+      CROSS JOIN calendar cal
+      LEFT JOIN fee ON true
+     ORDER BY sd.code_sort, sd.id
     """
 ).bindparams(
     bindparam("market_id", type_=_UUID),
     bindparam("as_of", type_=Date()),
     bindparam("stall_id", type_=_UUID),
     bindparam("stall_code", type_=Text()),
+    bindparam("unbillable_statuses", type_=ARRAY(Text())),
 )
 """`stall_repo.py:602-629` ning KENGAYTMASI — verbatim, uch ATAYIN farq bilan.
 
@@ -403,6 +488,7 @@ def _money_from_row(
     fee_amount_soum: int | None,
     fee_label: str | None,
     market_open: bool,
+    carries_fee: bool,
 ) -> StallDayMoney:
     """Xom qatordan `StallDayMoney` — juftlangan invariant SHU YERDA majburlanadi.
 
@@ -488,7 +574,14 @@ def _money_from_row(
         #     `or 0` uni «xizmat haqi yo'q» ga aylantiradi — bu YAGONA
         #     halol talqin, chunki qator yo'qligi «nol so'm» degani.
         stall_part = assert_safe_soum(int(tariff_amount_soum))
-        fee_part = assert_safe_soum(int(fee_amount_soum or 0))
+        # ⛔ TAROZI FAQAT KO'TARUVCHI RASTADA (260930). Qaysi rasta
+        #   ko'tarishi SQL da yechiladi va sabab `_STALL_DAY_MONEY` ning
+        #   izohida — bu yerda takrorlanmaydi.
+        #
+        # ⚠ `fee_label` quyida `fee_part` ga qarab beriladi, ya'ni
+        #   ko'tarmaydigan rastada «Tarozi xizmati» qatori kassir ekranida
+        #   UMUMAN chiqmaydi. Aynan shu talab qilingan edi.
+        fee_part = assert_safe_soum(int(fee_amount_soum or 0) if carries_fee else 0)
         amount, reason = assert_safe_soum(stall_part + fee_part), None
 
     if (amount is None) != (reason is not None):
@@ -585,6 +678,7 @@ async def resolve_stall_day_money(
             "as_of": as_of,
             "stall_id": stall_id,
             "stall_code": stall_code,
+            "unbillable_statuses": list(_UNBILLABLE_STATUSES),
         },
     )
     return [
@@ -598,6 +692,7 @@ async def resolve_stall_day_money(
             fee_amount_soum=row["fee_amount_soum"],
             fee_label=row["fee_label"],
             market_open=bool(row["market_open"]),
+            carries_fee=bool(row["carries_fee"]),
         )
         for row in result.mappings()
     ]

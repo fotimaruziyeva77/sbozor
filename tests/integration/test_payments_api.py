@@ -58,7 +58,7 @@ from fixtures.billing_domain import (
     add_daily_charge,
     add_payment,
     billing_domain_before_day_close,
-    day_total_soum,
+    stall_day_total_soum,
 )
 from fixtures.market_domain import MarketDomainSeed
 from fixtures.nvr_domain import nvr_rows
@@ -141,17 +141,29 @@ class Env:
         self.conn = conn
         self.today = today
 
-    @property
-    def day_total(self) -> int:
-        """BUGUNGI to'liq patta (tarif + xizmat haqi) — server `POST /payments` da
-        taklif qiladigan AYNI summa.
+    def day_total_for(self, stall_id: UUID) -> int:
+        """SHU RASTANING bugungi to'liq pattasi — server kutayotgan AYNI summa.
 
         ⛔ Qadalgan `DAY_TOTAL_SOUM` EMAS: tarif zanjiri `NEXT_TARIFF_VALID_FROM`
            (2026-09-02) da o'zgaradi va bu fayl `market_today` ustida ishlaydi —
            qadalgan son o'sha kundan beri har to'lovni «summa o'zgargan, sabab
            yo'q» (`reason_required`) qilib qo'yardi.
+
+        ⛔ VA `day_total_soum(day)` HAM EMAS (260930): tarozi endi RASTAGA
+           emas, SOTUVCHIGA bir marta olinadi, ya'ni kunning narxi rastaga
+           bog'liq bo'ldi. Sabab va yagona nusxa — `stall_day_total_soum()`.
         """
-        return day_total_soum(self.today)
+        return stall_day_total_soum(self.conn, stall_id=stall_id, day=self.today)
+
+    @property
+    def day_total(self) -> int:
+        """Stsenariyning ASOSIY rastasining bugungi to'liq pattasi.
+
+        ⚠ Bu faylning aksariyat testi aynan shu rasta bilan ishlaydi.
+          BOSHQA rasta bilan ishlaydigan joylar `day_total_for()` ni
+          OSHKORA chaqiradi — aks holda summa jimgina noto'g'ri bo'lardi.
+        """
+        return self.day_total_for(self.stall("stall_with_two_occupied_slots"))
 
     @property
     def market_id(self) -> UUID:
@@ -596,14 +608,22 @@ async def test_a_replayed_key_sent_to_another_stall_is_rejected(
     first = await _post(
         api_client,
         cashier_headers,
-        _body(stall_code=env.code(first_stall), amount_soum=env.day_total, key=key),
+        _body(
+            stall_code=env.code(first_stall),
+            amount_soum=env.day_total_for(first_stall),
+            key=key,
+        ),
     )
     assert first.status_code == 201, first.text
 
     second = await _post(
         api_client,
         cashier_headers,
-        _body(stall_code=other_code, amount_soum=env.day_total, key=key),
+        _body(
+            stall_code=other_code,
+            amount_soum=env.day_total_for(other_stall),
+            key=key,
+        ),
     )
 
     assert second.status_code == 409, second.text
@@ -611,7 +631,9 @@ async def test_a_replayed_key_sent_to_another_stall_is_rejected(
     assert len(env.payments()) == 1
 
     control = await _post(
-        api_client, cashier_headers, _body(stall_code=other_code, amount_soum=env.day_total)
+        api_client,
+        cashier_headers,
+        _body(stall_code=other_code, amount_soum=env.day_total_for(other_stall)),
     )
     assert control.status_code == 201, f"nazorat yiqildi — 409 rastadan edi: {control.text}"
     assert len(env.payments()) == 2

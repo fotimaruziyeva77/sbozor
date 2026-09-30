@@ -302,6 +302,92 @@ def day_total_soum(day: date) -> int:
     return day_tariff_soum(day) + A_SERVICE_FEE_SOUM
 
 
+_FEE_CARRIER_SQL = """
+    SELECT s2.id
+      FROM stall_assignments a_self
+      JOIN stall_assignments a2
+        ON a2.market_id = a_self.market_id
+       AND a2.vendor_id = a_self.vendor_id
+       AND a2.period @> %(day)s::date
+      JOIN stalls s2 ON s2.id = a2.stall_id
+     WHERE a_self.stall_id = %(stall_id)s
+       AND a_self.period @> %(day)s::date
+       AND s2.status = 'active'
+       AND EXISTS (
+             SELECT 1
+               FROM stall_category_periods p
+               JOIN tariffs t
+                 ON t.market_id = p.market_id
+                AND t.category_id = p.category_id
+                AND t.valid_from <= %(day)s::date
+              WHERE p.market_id = s2.market_id
+                AND p.stall_id = s2.id
+                AND p.valid_from <= %(day)s::date
+           )
+     ORDER BY s2.code_sort, s2.id
+     LIMIT 1
+"""
+"""Sotuvchining o'sha kungi TAROZI KO'TARUVCHISI — eng kichik `code_sort`.
+
+⚠ «Hisob oladigan» sharti (`status = 'active'` + tarifi bor) MAJBURIY:
+  usiz ko'taruvchi yopiq yoki tarifsiz rasta bo'lib chiqishi va tarozi
+  HECH QAYERDA yozilmasligi mumkin edi.
+"""
+
+
+def stall_day_total_soum(conn: Connection[TupleRow], *, stall_id: UUID, day: date) -> int:
+    """SHU RASTANING o'sha kungi to'liq pattasi — TEST ORAKULI.
+
+    =========================================================================
+    ⛔⛔ NEGA `day_total_soum(day)` YETARLI EMAS (260930).
+
+    Tarozi endi RASTAGA emas, SOTUVCHIGA kuniga bir marta olinadi: u
+    sotuvchining o'sha kuni hisob oladigan rastalaridan eng kichik
+    `code_sort` lisiga tushadi, qolganlarida `0`. Ya'ni «kunning to'liq
+    pattasi» degan tushuncha endi RASTAGA bog'liq.
+
+    `day_total_soum(day)` o'z kuchida qoladi — u KUNNING narxini beradi va
+    ko'taruvchi rasta uchun to'g'ri. Lekin «shu rastaga qancha to'lash
+    kerak?» degan savolga faqat shu funksiya javob beradi.
+
+    =========================================================================
+    ⚠ BU MAHSULOT QOIDASINING NUSXASI VA U SHU YERDA YAGONA.
+
+    Qoidaning O'ZI `billing_repo._STALL_DAY_MONEY` ning `carrier` CTE'sida
+    va uni HTTP orqali `test_service_fee_and_roster.py` hamda
+    `tests/unit/test_service_fee_per_vendor.py` o'lchaydi — ISHONCH
+    o'shalarda. Bu yerdagi nusxa boshqa ish qiladi: tarozi bilan UMUMAN
+    bog'liq bo'lmagan testlar (idempotentlik, storno, audit, parallellik)
+    to'g'ri summani yubora olsin.
+
+    ⚠ Nusxani testlar ICHIGA tarqatmang — 26 ta joyda takrorlangan
+      qoida birinchi o'zgarishda 26 ta joyda ajralib ketardi. Shu bois u
+      seedda, BITTA funksiyada.
+
+    =========================================================================
+    Bu tuzoqning sinfi loyihada YANGI EMAS: `day_tariff_soum()` docstringi
+    2026-09-24 dagi aynan shunday hodisani yozgan — qadalgan narx tarif
+    zanjiri surilganda testlarni JIMGINA eskirtirgan edi.
+    """
+    # ⛔ SOTUVCHISI YO'Q RASTA TAROZINI O'ZI KO'TARADI — mahsulotdagi
+    #    `carries_fee` ning `vendor_id IS NULL` shoxi. Guruhlash uchun kalit
+    #    yo'q, ya'ni «sotuvchiga bir marta» qoidasi unga qo'llanmaydi.
+    #
+    # ⚠ BU SHOX BIRINCHI URINISHDA TUSHIB QOLGAN EDI va test uni ushladi:
+    #   oracle bozor kesimida 5 o'rniga 3 ta haq sanab, mahsulotdan ajralib
+    #   ketgandi. Oracle'ning butun xavfi shunda — u jimgina eskirishi mumkin.
+    biriktirilgan = conn.execute(
+        "SELECT 1 FROM stall_assignments WHERE stall_id = %s AND period @> %s::date LIMIT 1",
+        (str(stall_id), day),
+    ).fetchone()
+    if biriktirilgan is None:
+        return day_tariff_soum(day) + A_SERVICE_FEE_SOUM
+
+    row = conn.execute(_FEE_CARRIER_SQL, {"day": day, "stall_id": str(stall_id)}).fetchone()
+    kotaruvchi = row is not None and str(row[0]) == str(stall_id)
+    return day_tariff_soum(day) + (A_SERVICE_FEE_SOUM if kotaruvchi else 0)
+
+
 CLOSED_BUSINESS_DATE = SEED_BUSINESS_DATE + timedelta(days=2)
 """Kalendar istisnosi bilan YOPIQ deb belgilangan kun (D-10).
 

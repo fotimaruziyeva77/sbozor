@@ -68,7 +68,8 @@ from fixtures.billing_domain import (
     add_payment,
     billing_domain,
     billing_domain_before_day_close,
-    day_total_soum,
+    day_tariff_soum,
+    stall_day_total_soum,
 )
 from fixtures.market_domain import (
     A_OPEN_WEEKDAYS,
@@ -882,7 +883,8 @@ async def test_a_second_write_leaves_the_existing_charge_untouched(
     # ⛔ Yozilgan hisobning `amount_soum` i — YIG'INDI (0027), va u SHU KUNNING
     #   tarifidan: `_open_past_day` bugunga ergashadi, zanjir esa
     #   `NEXT_TARIFF_VALID_FROM` da o'zgaradi.
-    assert before[0] == day_total_soum(day)
+    # ⚠ 260930: tarozi sotuvchiga bir marta — kutilma rastaga bog'liq.
+    assert before[0] == stall_day_total_soum(sync_owner_conn, stall_id=stall_id, day=day)
     expected_tariff_id = (
         env.live.next_tariff_id if day >= NEXT_TARIFF_VALID_FROM else env.live.tariff_id
     )
@@ -1617,7 +1619,7 @@ async def test_an_ambiguous_prefix_returns_matches_without_an_amount(
 
 
 async def test_the_market_projection_returns_zero_as_a_result(
-    tenant_session: TenantSessionFactory, env: Env
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
 ) -> None:
     """UI-SPEC §9.5 — bozor kesimi; ⛔ NOL HAM NATIJA.
 
@@ -1641,15 +1643,28 @@ async def test_the_market_projection_returns_zero_as_a_result(
     assert projection.matches == ()
     assert projection.market is not None
     assert projection.market.pending_stall_count == len(A_STALL_CODES_BY_SORT)
-    # ⛔ 0027: HAR rastaga xizmat haqi qo'shiladi, ya'ni bozor kesimi
-    #   rastalar SONIGA ko'paytirilgan haq bilan o'sadi. Ifoda ATAYIN
-    #   ochiq yozilgan (qadalgan son emas): u qaysi qo'shiluvchi
-    #   qayerdan kelganini o'quvchiga aytadi.
+    # ⛔ 0027 + 260930: xizmat haqi HAR RASTAGA emas, HAR SOTUVCHIGA bir
+    #   marta. Ya'ni bozor kesimidagi haqlar soni RASTALAR soniga emas,
+    #   haq to'laydigan rastalar soniga teng.
+    #
+    # ⚠ SON QADALMAYDI va seed ichidagi biriktirishlardan TAXMIN ham
+    #   qilinmaydi: u har rastaning kutilmasidan HOSILA qilinadi
+    #   (`stall_day_total_soum()` — qoidaning yagona test-tomon nusxasi).
+    #   Qadalgan son seed biriktirishlari o'zgargan kuni jimgina
+    #   eskirardi.
+    tarozili_rasta = sum(
+        1
+        for (sid,) in sync_owner_conn.execute(
+            "SELECT id FROM stalls WHERE market_id = %s", (str(env.market_id),)
+        ).fetchall()
+        if stall_day_total_soum(sync_owner_conn, stall_id=sid, day=SEED_BUSINESS_DATE)
+        > day_tariff_soum(SEED_BUSINESS_DATE)
+    )
     assert projection.market.pending_amount_soum == (
         4 * TARIFF_SOUM
         + A_TARIFF_AMOUNTS[1]
         + A_TARIFF_AMOUNTS[2]
-        + len(A_STALL_CODES_BY_SORT) * A_SERVICE_FEE_SOUM
+        + tarozili_rasta * A_SERVICE_FEE_SOUM
     )
     assert projection.market.outstanding_soum == 0
     assert projection.market.fetched_at.tzinfo is not None

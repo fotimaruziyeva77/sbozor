@@ -53,10 +53,10 @@ from fixtures.billing_domain import (
     add_billable_frame,
     add_zone_with_event_on,
     billing_domain_before_day_close,
+    stall_day_total_soum,
 )
 from fixtures.market_domain import (
     A_OPEN_WEEKDAYS,
-    A_SERVICE_FEE_SOUM,
     MarketDomainSeed,
     to_pg_period,
 )
@@ -996,9 +996,11 @@ async def test_charges_without_a_reviewer_are_counted_not_hidden(
     assert tariff_amount == expected_tariff(scenario.day), (
         "tarif ustuni o'sha kunning tarifidan ajralib ketdi (D-09)"
     )
-    assert amount == expected_tariff(scenario.day) + A_SERVICE_FEE_SOUM, (
-        "hisob summasi tarif + xizmat haqi yig'indisiga teng emas (0027)"
-    )
+    # ⚠ KUTILMA RASTA BO'YICHA (260930): tarozi endi SOTUVCHIGA kuniga bir
+    #   marta, ya'ni bir sotuvchining ikkinchi rastasida u `0`.
+    assert amount == stall_day_total_soum(
+        sync_owner_conn, stall_id=scenario.billable_ai, day=scenario.day
+    ), "hisob summasi tarif + xizmat haqi yig'indisiga teng emas (0027)"
 
 
 # ===========================================================================
@@ -1366,7 +1368,8 @@ async def test_a_zoneless_stall_in_a_camera_market_is_charged_by_assignment(
     )
     amount, tariff_amount, _ = written[stall_id]
     assert tariff_amount == expected_tariff(scenario.day)
-    assert amount == expected_tariff(scenario.day) + A_SERVICE_FEE_SOUM
+    # ⚠ 260930: tarozi sotuvchiga bir marta — kutilma rastaga bog'liq.
+    assert amount == stall_day_total_soum(sync_owner_conn, stall_id=stall_id, day=scenario.day)
     assert result.charged_auto >= 1, f"avto-hisob sanog'i {result.charged_auto}"
     assert result.errors == [], f"kutilmagan xato: {result.errors}"
 
