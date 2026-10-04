@@ -21,7 +21,8 @@
   "shell": {
     "marketLabel": "Bozor",
     "loading": "Sessiya tiklanmoqda",
-    "sections": "Bo'limlar"
+    "sections": "Bo'limlar",
+    "offlineBanner": "Server bilan aloqa yo'q — ekrandagi ma'lumot eski bo'lishi mumkin va saqlash ishlamaydi."
   },
   "roles": {
     "cashier": "Kassir",
@@ -46,6 +47,8 @@
     "newMarket": "Yangi bozor",
     "more": "Ko'proq",
     "groupMarket": "Bozor",
+    "groupWatch": "Kuzatuv",
+    "groupMoney": "Pul",
     "groupSystem": "Tizim",
     "logout": "Chiqish",
     "cameras": "Kameralar",

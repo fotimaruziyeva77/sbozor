@@ -18,6 +18,11 @@ import {
   setSession,
   updatePrincipal,
 } from "@/lib/auth-store";
+import {
+  isAbortError,
+  markReachable,
+  markUnreachable,
+} from "@/lib/connectivity";
 
 /**
  * core-api bilan gaplashadigan yagona yo'l.
@@ -220,14 +225,29 @@ export async function apiRequest(
     }
 
     try {
-      return await fetch(buildUrl(path), {
+      const response = await fetch(buildUrl(path), {
         method,
         headers,
         credentials: "include",
         body: payload,
         signal,
       });
+      /*
+       * ⛔ JAVOB KELDI = SERVER TIRIK, status MUHIM EMAS. 500 ham, 401 ham
+       *    aloqa borligini isbotlaydi — ular SERVER javobi. Shu yerda
+       *    `response.ok` ni tekshirsak, server xatosi «internet yo'q»
+       *    bo'lib ko'rinardi va operator modemni qidirib yurardi.
+       */
+      markReachable();
+      return response;
     } catch (cause) {
+      /*
+       * ⚠ BEKOR QILISH ALOQA UZILISHI EMAS. `AbortError` foydalanuvchi
+       *   sahifadan chiqib ketganda yoki `react-query` so'rovni
+       *   to'xtatganda keladi; uni hisoblasak tez navigatsiyada banner
+       *   YOLG'ON chiqardi (`connectivity.ts` sarlavhasi).
+       */
+      if (!isAbortError(cause)) markUnreachable();
       throw new NetworkError(cause);
     }
   };

@@ -21,7 +21,8 @@
   "shell": {
     "marketLabel": "Бозор",
     "loading": "Сессия тикланмоқда",
-    "sections": "Бўлимлар"
+    "sections": "Бўлимлар",
+    "offlineBanner": "Сервер билан алоқа йўқ — экрандаги маълумот эски бўлиши мумкин ва сақлаш ишламайди."
   },
   "roles": {
     "cashier": "Кассир",
@@ -46,6 +47,8 @@
     "newMarket": "Янги бозор",
     "more": "Кўпроқ",
     "groupMarket": "Бозор",
+    "groupWatch": "Кузатув",
+    "groupMoney": "Пул",
     "groupSystem": "Тизим",
     "logout": "Чиқиш",
     "cameras": "Камералар",

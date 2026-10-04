@@ -21,7 +21,8 @@
   "shell": {
     "marketLabel": "Рынок",
     "loading": "Восстановление сессии",
-    "sections": "Разделы"
+    "sections": "Разделы",
+    "offlineBanner": "Нет связи с сервером — данные на экране могут быть устаревшими, сохранение не работает."
   },
   "roles": {
     "cashier": "Кассир",
@@ -46,6 +47,8 @@
     "newMarket": "Новый рынок",
     "more": "Ещё",
     "groupMarket": "Рынок",
+    "groupWatch": "Наблюдение",
+    "groupMoney": "Деньги",
     "groupSystem": "Система",
     "logout": "Выход",
     "cameras": "Камеры",

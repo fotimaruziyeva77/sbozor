@@ -28,6 +28,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import messages from "../../../messages/uz-Latn.json";
 import { AppShell } from "@/components/shell/app-shell";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
+import {
+  markUnreachable,
+  resetConnectivity,
+} from "@/lib/connectivity";
 import { ROLES } from "@/lib/rbac";
 
 /*
@@ -394,5 +398,160 @@ describe("AppShell — nazoratchining uyi va bandlik hisoboti (05-UI-SPEC §4.6)
       // NAZORAT: panel BO'SH bo'lsa yuqoridagi assert jimgina o'tardi.
       expect(elements, `«${role}» rolida pastki panel bo'sh`).toBeGreaterThan(0);
     }
+  });
+});
+
+/*
+ * ===========================================================================
+ * YON PANELDA GURUH UYUMI BO'LMAYDI (261004, o'lchangan).
+ *
+ * O'lchov: direktor va bozor adminida 14 banddan 11 TASI bitta «Bozor»
+ * sarlavhasi ostida edi. Guruhlash bor edi, lekin hech narsani ajratmasdi —
+ * ko'z har safar ro'yxatni boshidan o'qishga majbur edi.
+ *
+ * Bu darvoza yangi band qo'shilganda uyum QAYTIB o'smasligini qulflaydi:
+ * `NAV_ITEMS` ga yozuv qo'shgan odam uni to'g'ri guruhga qo'yishi SHART,
+ * aks holda shu test qizaradi va sabab ekranda yoziladi.
+ * ===========================================================================
+ */
+describe("AppShell — yon panelda guruh uyumi bo'lmaydi (261004)", () => {
+  /**
+   * Bitta sarlavha ostidagi eng ko'p band.
+   *
+   * ⚠ ANIQ SONGA QADALMAGAN: 6 — «ko'z bir qarashda qamrab oladi» chegarasi,
+   *   bugungi eng kattasi esa 5 (direktorning «Bozor» i). Ya'ni bitta band
+   *   qo'shish uchun joy bor, ikkitasi esa qaror talab qiladi.
+   */
+  const MAX_GURUH = 6;
+
+  const GURUHLAR = [
+    messages.nav.groupMarket,
+    messages.nav.groupWatch,
+    messages.nav.groupMoney,
+    messages.nav.groupSystem,
+  ] as const;
+
+  /** Yon panel: «Ko'proq» TUGMASI faqat pastki panelda — `mobileBar()` bilan ayni mantiq. */
+  function sidebar(): HTMLElement {
+    const bars = screen.getAllByRole("navigation");
+    const bar = bars.find(
+      (nav) => within(nav).queryAllByRole("button").length === 0,
+    );
+    expect(bar, "yon panel topilmadi").toBeDefined();
+    return bar as HTMLElement;
+  }
+
+  /** Sarlavha -> o'sha guruhdagi havolalar soni. Guruh chizilmasa — yozuv yo'q. */
+  function guruhSanogi(): Map<string, number> {
+    const panel = sidebar();
+    const natija = new Map<string, number>();
+    for (const sarlavha of GURUHLAR) {
+      const topildi = within(panel).queryByText(sarlavha);
+      if (topildi === null) continue;
+      const konteyner = topildi.parentElement;
+      expect(konteyner, `«${sarlavha}» guruhi konteyneri yo'q`).not.toBeNull();
+      natija.set(
+        sarlavha,
+        within(konteyner as HTMLElement).getAllByRole("link").length,
+      );
+    }
+    return natija;
+  }
+
+  test.each([
+    ["director"],
+    ["market_admin"],
+    ["platform_admin"],
+    ["cashier"],
+    ["inspector"],
+  ])("`%s`: hech bir guruh chegaradan oshmaydi", (rol) => {
+    seedRoles([rol]);
+    renderShell();
+
+    const oshganlar = [...guruhSanogi()]
+      .filter(([, n]) => n > MAX_GURUH)
+      .map(([g, n]) => `${g}=${n}`);
+
+    expect(
+      oshganlar,
+      `${rol} da guruh ${MAX_GURUH} banddan oshdi: ${oshganlar.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  /*
+   * ⛔⛔ QUYI CHEGARA — USIZ YUQORIDAGI DARVOZA TRIVIAL O'TARDI.
+   *
+   * Chizish buzilsa yoki sarlavhalar topilmasa, `guruhSanogi()` BO'SH
+   * qaytarardi va «oshgan guruh yo'q» asserti yashil bo'lardi. Aynan
+   * `MINIMUM_SCANNED_ROUTES` qo'riqlaydigan nosozlik sinfi.
+   */
+  test("QUYI CHEGARA: direktor haqiqatan to'rt guruhni va 14 havolani ko'radi", () => {
+    seedRoles(["director"]);
+    renderShell();
+
+    const sanoq = guruhSanogi();
+
+    // «Tizim» dan tashqari uchta guruh ham chizilgan bo'lishi SHART —
+    // ya'ni bo'linish haqiqatan ishlayapti, hammasi bir uyumda emas.
+    expect([...sanoq.keys()].sort()).toEqual(
+      [...GURUHLAR].sort((a, b) => a.localeCompare(b)),
+    );
+
+    // Jami havola soni: 14 band, biri («Boshqaruv paneli») guruhsiz.
+    const jami = [...sanoq.values()].reduce((a, b) => a + b, 0);
+    expect(jami, "direktorda guruhli havolalar soni kutilganidan kam").toBe(13);
+
+    // Va eng kattasi AYNAN 5 — o'lchangan holat kodda qotib qolsin.
+    expect(Math.max(...sanoq.values())).toBe(5);
+  });
+});
+
+/*
+ * ===========================================================================
+ * ALOQA YO'Q BANNERI — HAR EKRANDA (261004).
+ *
+ * Ilgari uzilish faqat HARAKAT paytida ko'rinardi: kassir «To'lash» ni
+ * bosardi va xato olardi. Navbatda sotuvchi turganda bu har biriga bitta
+ * behuda urinish degani. Banner qobiqda, ya'ni rolga bog'liq emas:
+ * direktor panelidagi «bugungi daromad» ham uzilishda jimgina kechagi
+ * holatni ko'rsatib turardi.
+ * ===========================================================================
+ */
+describe("AppShell — aloqa yo'q banneri (261004)", () => {
+  const BANNER = messages.shell.offlineBanner;
+
+  afterEach(() => {
+    resetConnectivity();
+  });
+
+  test("aloqa BOR bo'lsa banner CHIZILMAYDI", () => {
+    seedRoles(["cashier"]);
+    renderShell();
+
+    expect(screen.queryByText(BANNER)).toBeNull();
+  });
+
+  test("aloqa YO'Q bo'lsa banner chiziladi va e'lon qilinadi", () => {
+    markUnreachable();
+    seedRoles(["cashier"]);
+    renderShell();
+
+    const banner = screen.getByText(BANNER);
+    expect(banner).toBeInTheDocument();
+    /*
+     * ⚠ `role="status"` + `aria-live` MAJBURIY: banner sahifa ALLAQACHON
+     *   ochiq bo'lganda paydo bo'ladi, ya'ni ekran o'quvchisi uni o'zi
+     *   sezmaydi — e'lon qilinishi kerak.
+     */
+    expect(banner).toHaveAttribute("role", "status");
+    expect(banner).toHaveAttribute("aria-live", "polite");
+  });
+
+  test("banner ROLGA bog'liq emas — direktorda ham chiziladi", () => {
+    markUnreachable();
+    seedRoles(["director"]);
+    renderShell();
+
+    expect(screen.getByText(BANNER)).toBeInTheDocument();
   });
 });

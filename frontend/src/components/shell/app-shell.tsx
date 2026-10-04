@@ -30,6 +30,7 @@ import { UserMenu } from "@/components/shell/user-menu";
 import { Link, usePathname } from "@/i18n/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import { cn } from "@/lib/cn";
+import { useUnreachable } from "@/lib/connectivity";
 import type { Permission } from "@/lib/rbac";
 import { hasPermission } from "@/lib/rbac";
 
@@ -56,7 +57,7 @@ import { hasPermission } from "@/lib/rbac";
  */
 
 /** Yon paneldagi guruh; `null` — sarlavhasiz, eng tepada. */
-type NavGroup = "market" | "system" | null;
+type NavGroup = "market" | "watch" | "money" | "system" | null;
 
 type NavItem = {
   href:
@@ -192,7 +193,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "cameras",
     icon: Video,
     permission: "camera_view",
-    group: "market",
+    group: "watch",
   },
   /*
    * "Kadr olish" — 4-fazaning YAGONA yangi bo'limi (04-UI-SPEC §4.8).
@@ -218,7 +219,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "snapshots",
     icon: CalendarClock,
     permission: "camera_view",
-    group: "market",
+    group: "watch",
   },
   /*
    * "Ko'rib chiqish" va "Bandlik" — 5-fazaning IKKITA yangi bo'limi
@@ -267,7 +268,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "review",
     icon: ClipboardCheck,
     permission: "occupancy_review",
-    group: "market",
+    group: "watch",
   },
   {
     /*
@@ -282,7 +283,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "occupancy",
     icon: Store,
     permission: ["occupancy_review", "report_view"],
-    group: "market",
+    group: "watch",
   },
   /*
    * "Yig'ish" va "Patta hisobi" — 6-fazaning IKKITA yangi bo'limi
@@ -324,14 +325,14 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "collect",
     icon: HandCoins,
     permission: "payment_create",
-    group: "market",
+    group: "money",
   },
   {
     href: "/billing",
     labelKey: "billing",
     icon: ReceiptText,
     permission: "report_view",
-    group: "market",
+    group: "money",
   },
   /*
    * "Nomuvofiqliklar" — 7-fazaning YAGONA yangi bo'limi (07-UI-SPEC §4.7).
@@ -363,7 +364,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "reconciliation",
     icon: FileWarning,
     permission: "report_view",
-    group: "market",
+    group: "money",
   },
   /*
    * "Hisobotlar" — 8-fazaning YAGONA yangi bo'limi (08-UI-SPEC §4.7).
@@ -402,7 +403,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "reports",
     icon: FileSpreadsheet,
     permission: "report_view",
-    group: "market",
+    group: "money",
   },
   /*
    * ⚠ IN-06 (07-faza deferred §7b): bu yozuv 7-fazagacha BIR QATORDA
@@ -463,18 +464,55 @@ const MOBILE_PRIMARY_COUNT = 4;
  */
 const NAV_GROUPS: readonly {
   group: NavGroup;
-  titleKey: "nav.groupMarket" | "nav.groupSystem" | null;
+  titleKey:
+    | "nav.groupMarket"
+    | "nav.groupWatch"
+    | "nav.groupMoney"
+    | "nav.groupSystem"
+    | null;
 }[] = [
   { group: null, titleKey: null },
   { group: "market", titleKey: "nav.groupMarket" },
+  { group: "watch", titleKey: "nav.groupWatch" },
+  { group: "money", titleKey: "nav.groupMoney" },
   { group: "system", titleKey: "nav.groupSystem" },
 ];
+/*
+ * ⛔⛔ «BOZOR» GURUHI UCHGA BO'LINDI (261004, O'LCHANGAN).
+ *
+ * Direktor va bozor adminida 14 banddan 11 TASI bitta «Bozor»
+ * sarlavhasi ostida tekis ro'yxat bo'lib turardi:
+ *
+ *     map, stalls, vendors, tariffs, calendar, cameras, snapshots,
+ *     occupancy, billing, reconciliation, reports
+ *
+ * Guruhlash BOR edi, lekin u hech narsani ajratmasdi: 14 dan 11 i
+ * bitta uyumda bo'lsa, sarlavha faqat bezak. Ko'z har safar
+ * boshidan o'qib chiqishga majbur edi.
+ *
+ * Yangi bo'linish MA'NO bo'yicha, alifbo yoki huquq bo'yicha emas:
+ *
+ *     Bozor    — TUZILISHI, kamdan-kam o'zgaradi (xarita, rasta,
+ *                sotuvchi, tarif, kalendar)
+ *     Kuzatuv  — NIMA BO'LAYOTGANI (kamera, kadrlar, bandlik,
+ *                ko'rib chiqish)
+ *     Pul      — PUL (yig'ish, hisob, solishtirish, hisobotlar)
+ *
+ * Natija: eng katta guruh 11 -> 5. Chegara `app-shell.test.tsx`
+ * dagi darvoza bilan qulflangan — yangi band qo'shilib uyum qaytib
+ * o'smasin.
+ *
+ * ⚠ `review` ham `watch` da: u nazoratchining ASOSIY ishi, lekin
+ *   guruh ROLGA emas, MA'NOGA qarab tanlanadi. Nazoratchida bu
+ *   guruhda ikki band bo'ladi va bu normal.
+ */
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const t = useTranslations();
   const pathname = usePathname();
   const { principal } = useAuthStore();
   const [moreOpen, setMoreOpen] = useState(false);
+  const unreachable = useUnreachable();
 
   const roles = principal?.roles ?? [];
   const items = NAV_ITEMS.filter(
@@ -556,6 +594,41 @@ export function AppShell({ children }: { children: React.ReactNode }) {
          */}
         <div aria-hidden="true" className="app-fade hidden md:block" />
       </header>
+
+      {/*
+       * =====================================================================
+       * ⛔⛔ ALOQA YO'Q BANNERI (261004).
+       * =====================================================================
+       * Ilgari aloqa uzilgani faqat HARAKAT paytida ko'rinardi: kassir
+       * «To'lash» ni bosardi va «Tarmoq bilan aloqa yo'q» xatosini olardi.
+       * Navbatda sotuvchi turganda bu har biriga bitta behuda urinish
+       * degani, va ekrandagi sonlar qachonlik ekani ham bilinmasdi.
+       *
+       * Banner HAR EKRANDA chiziladi, chunki eskirgan son faqat kassirda
+       * emas: direktor panelidagi «bugungi daromad» ham uzilish paytida
+       * jimgina kechagi holatni ko'rsatib turardi.
+       *
+       * ⚠ MANBA `navigator.onLine` EMAS — sabab `connectivity.ts`
+       *   sarlavhasida: bozor kompyuteri NVR bilan bitta LAN da va modem
+       *   internetni yo'qotsa ham brauzer «ulangan» deb turadi.
+       */}
+      {unreachable ? (
+        <div
+          aria-live="polite"
+          /*
+           * ⚠ RANG `badge.tsx:42` NAQSHI: `bg-danger/12 text-danger-text`.
+           *   Kontrast o'sha yerda O'LCHANGAN (5.54:1) va uchala temada
+           *   `globals.css` ning o'z darvozasidan o'tadi. To'q `bg-danger`
+           *   + oq matn ishlatsam, banner ekranning eng qora dog'i bo'lib,
+           *   ko'zni kontentdan tortib olardi — u xabar, ogohlantirish
+           *   dialogi emas.
+           */
+          className="border-b border-danger/30 bg-danger/12 px-4 py-2 text-center text-sm text-danger-text"
+          role="status"
+        >
+          {t("shell.offlineBanner")}
+        </div>
+      ) : null}
 
       {/*
        * =====================================================================
