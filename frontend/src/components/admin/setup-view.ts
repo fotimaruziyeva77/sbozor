@@ -61,7 +61,26 @@ export type SetupStep = {
  *    panel ustaning davomi bo'lib o'qilishi kerak, undan boshqa
  *    hikoya aytmasligi.
  */
-export function setupSteps(status: SetupStatusResponse): SetupStep[] {
+export function setupSteps(
+  status: SetupStatusResponse,
+  /**
+   * Birorta kamera KO'RMAYDIGAN rastalar soni — `null` bo'lsa NOMA'LUM.
+   *
+   * ⛔⛔ NEGA IKKINCHI ARGUMENT, `SetupStatusResponse` ICHIDA EMAS
+   *     (261004): qamrov `GET /camera-zones/coverage` da hisoblanadi va
+   *     u YAGONA manba (`ZoneCoverageResponse` docstringi). Uni
+   *     `setup-status` ichida qayta hisoblasak, bitta son ikki joyda
+   *     ikki ta'rif bilan yashardi va bir kun ajralib ketardi —
+   *     kameralar sahifasi «27 qamrovsiz», panel esa boshqa son
+   *     ko'rsatardi.
+   *
+   * ⚠ `null` — hali yuklanmagan yoki huquq yo'q. O'shanda ESKI xulq
+   *   saqlanadi (kamera bor -> qadam bajarilgan): yuklanmagan ma'lumot
+   *   tufayli yashil belgini olib qo'yish «ish orqaga ketdi» degan
+   *   yolg'on signal berardi.
+   */
+  uncovered: number | null = null,
+): SetupStep[] {
   return [
     {
       key: "zones",
@@ -116,7 +135,22 @@ export function setupSteps(status: SetupStatusResponse): SetupStep[] {
     },
     {
       key: "cameras",
-      done: status.cameras > 0,
+      /*
+       * ⛔⛔ «KAMERA BOR» ≠ «QADAM TUGADI» (261004, jonli o'lchandi).
+       *
+       *     Karmanada 16 kamera bor va qadam YASHIL ✓ turardi — lekin
+       *     27 rasta birorta kamera ko'rmaydi va 12 kamera umuman
+       *     zonaga biriktirilmagan. Ya'ni bozorning uchdan ikki qismi
+       *     tizimga KO'RINMAYDI, qadam esa «bajarildi» deb turardi.
+       *
+       *     Kamera o'rnatish ishning YARMI; ikkinchi yarmi — uni rasta
+       *     bilan bog'lash. Qadam ikkalasini ham o'lchaydi.
+       *
+       * ⚠ FOIZGA TEGMAYDI: qadam `optional` bo'lib QOLADI (D-16,
+       *   quyidagi izoh) — kamerasiz bozor baribir 100% tayyor.
+       *   Bu yerda faqat ✓ ning rostligi tuzatiladi.
+       */
+      done: status.cameras > 0 && (uncovered === null || uncovered === 0),
       count: status.cameras,
       total: null,
       href: "/cameras",

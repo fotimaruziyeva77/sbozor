@@ -119,3 +119,63 @@ describe("attentionItems", () => {
     expect(items[0]?.tone).toBe("danger");
   });
 });
+
+/*
+ * ===========================================================================
+ * KAMERA QADAMI QAMROVNI HAM O'LCHAYDI (261004, jonli o'lchandi).
+ *
+ * Karmanada 16 kamera bor edi va qadam YASHIL ✓ turardi. Lekin:
+ *
+ *     qamrovdagi rasta   14
+ *     qamrovsiz rasta    27   <- birorta kamera ko'rmaydi
+ *     zonasiz kamera     12   <- o'rnatilgan, lekin hech narsaga bog'lanmagan
+ *
+ * Ya'ni bozorning uchdan ikki qismi tizimga ko'rinmasdi, qadam esa
+ * «bajarildi» deb turardi. Kamera o'rnatish ishning yarmi; ikkinchi
+ * yarmi — uni rasta bilan bog'lash.
+ * ===========================================================================
+ */
+describe("setupSteps — kamera qadami qamrovni ham o'lchaydi", () => {
+  const BILAN_KAMERA: SetupStatusResponse = { ...COMPLETE, cameras: 16 };
+
+  function kameraQadami(uncovered: number | null) {
+    const step = setupSteps(BILAN_KAMERA, uncovered).find(
+      (s) => s.key === "cameras",
+    );
+    expect(step, "kamera qadami yo'q").toBeDefined();
+    return step as NonNullable<typeof step>;
+  }
+
+  test("⛔ KARMANA HOLATI: kamera bor, 27 rasta qamrovsiz -> BAJARILMAGAN", () => {
+    expect(kameraQadami(27).done).toBe(false);
+  });
+
+  test("qamrov to'liq bo'lsa -> bajarilgan", () => {
+    expect(kameraQadami(0).done).toBe(true);
+  });
+
+  test("⚠ QAMROV NOMA'LUM bo'lsa ESKI xulq saqlanadi", () => {
+    /*
+     * Yuklanmagan yoki huquqsiz holat. Yashil belgini olib qo'yish
+     * «ish orqaga ketdi» degan yolg'on signal berardi.
+     */
+    expect(kameraQadami(null).done).toBe(true);
+  });
+
+  test("kamera UMUMAN yo'q bo'lsa qamrov qarorga ta'sir qilmaydi", () => {
+    const step = setupSteps({ ...COMPLETE, cameras: 0 }, 0).find(
+      (s) => s.key === "cameras",
+    );
+    expect(step?.done).toBe(false);
+  });
+
+  test("⛔ FOIZ O'ZGARMAYDI — qadam IXTIYORIY bo'lib qoladi (D-16)", () => {
+    /*
+     * Eng muhim nazorat: tuzatish faqat ✓ ning rostligiga tegadi.
+     * Qamrovsiz bozor baribir 100% TAYYOR — kamerasiz bozor to'liq
+     * ishlaydi va kamera faollashtirishni hech qachon to'smaydi.
+     */
+    expect(setupPercent(setupSteps(BILAN_KAMERA, 27))).toBe(100);
+    expect(setupPercent(setupSteps(BILAN_KAMERA, 0))).toBe(100);
+  });
+});

@@ -1640,6 +1640,7 @@
     "statusDraft": "Qoralama",
     "stepOptional": "ixtiyoriy",
     "stepTariffCoverageHint": "narx bozor ish boshlagan sanadan qamrashi kerak",
+    "stepCameraCoverageHint": "{count} ta rasta qamrovsiz",
     "todayResult": "Bugungi natija",
     "updatedAt": "Yangilandi: {time}",
     "welcome": "Xush kelibsiz, {name}!",

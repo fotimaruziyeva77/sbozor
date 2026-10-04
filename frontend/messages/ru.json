@@ -1640,6 +1640,7 @@
     "statusDraft": "Черновик",
     "stepOptional": "необязательно",
     "stepTariffCoverageHint": "цена должна покрывать дату старта работы базара",
+    "stepCameraCoverageHint": "{count} мест без охвата",
     "todayResult": "Итог за сегодня",
     "updatedAt": "Обновлено: {time}",
     "welcome": "Добро пожаловать, {name}!",

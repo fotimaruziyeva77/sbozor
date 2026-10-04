@@ -1640,6 +1640,7 @@
     "statusDraft": "Қоралама",
     "stepOptional": "ихтиёрий",
     "stepTariffCoverageHint": "нарх бозор иш бошлаган санадан қамраши керак",
+    "stepCameraCoverageHint": "{count} та раста қамровсиз",
     "todayResult": "Бугунги натижа",
     "updatedAt": "Янгиланди: {time}",
     "welcome": "Хуш келибсиз, {name}!",

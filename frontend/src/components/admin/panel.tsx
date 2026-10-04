@@ -34,6 +34,7 @@ import { cn } from "@/lib/cn";
 import { isAuditAction, isAuditTable } from "@/lib/api-types";
 import { formatBusinessDay } from "@/lib/format-day";
 import { formatAmount } from "@/lib/format-number";
+import { useZoneCoverage } from "@/lib/camera-zone-queries";
 import { useSetupStatusQuery } from "@/lib/market-queries";
 import { EMPTY_AUDIT_FILTERS, useAuditQuery, useUsersQuery } from "@/lib/queries";
 import { roleLabelKey } from "@/lib/rbac";
@@ -169,6 +170,13 @@ export function AdminPanel({
   const todayIso = businessDayIn(timeZone, now);
 
   const setup = useSetupStatusQuery(marketId);
+  /*
+   * ⛔ QAMROV — kamera qadamining IKKINCHI yarmi (`setup-view.setupSteps`).
+   *    Ayrim so'rov, chunki u YAGONA manbada hisoblanadi
+   *    (`GET /camera-zones/coverage`) va uni `setup-status` ichida
+   *    takrorlash ikkinchi haqiqat manbaini tug'dirardi.
+   */
+  const coverage = useZoneCoverage();
   const users = useUsersQuery();
   /*
    * ⛔ Jurnal FAQAT oxirgi beshta yozuv uchun so'raladi. Panel — audit
@@ -178,7 +186,10 @@ export function AdminPanel({
   const audit = useAuditQuery(EMPTY_AUDIT_FILTERS);
 
   const status = setup.data ?? null;
-  const steps = status === null ? [] : setupSteps(status);
+  const steps =
+    status === null
+      ? []
+      : setupSteps(status, coverage.data?.uncovered ?? null);
   const percent = status === null ? null : setupPercent(steps);
   const attention = status === null ? [] : attentionItems(status);
 
@@ -268,6 +279,24 @@ export function AdminPanel({
                         {item.key === "tariffs" && !item.done ? (
                           <span className="ml-2 text-xs text-text-muted">
                             {t("dashboard.stepTariffCoverageHint")}
+                          </span>
+                        ) : null}
+                        {/*
+                         * ⛔ KAMERA BOR, LEKIN QADAM TUGAMAGAN — SABABI
+                         *    DARHOL YOZILADI. Usiz admin «16 ta kamera
+                         *    bor, nega belgi qo'yilmagan?» degan savol
+                         *    bilan qolardi va buni QARAMA-QARSHILIK deb
+                         *    o'qirdi (tariflardagi A1 bilan ayni holat).
+                         */}
+                        {item.key === "cameras" &&
+                        !item.done &&
+                        item.count !== null &&
+                        item.count > 0 &&
+                        coverage.data !== undefined ? (
+                          <span className="ml-2 text-xs text-text-muted">
+                            {t("dashboard.stepCameraCoverageHint", {
+                              count: coverage.data.uncovered,
+                            })}
                           </span>
                         ) : null}
                       </span>
