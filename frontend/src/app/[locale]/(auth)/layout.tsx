@@ -70,7 +70,29 @@ export default async function AuthLayout({
         <div aria-hidden="true" className="login-veil absolute inset-0" />
 
         <div className="landing-shell relative z-[2] mx-auto flex w-full flex-1 flex-col px-6 pt-7 pb-16">
-          <header className="mb-14 flex items-center justify-between gap-4">
+          {/*
+           * ⛔⛔ `flex-wrap` — 375px DA SARLAVHA KESILARDI (261004, brauzerda
+           *    o'lchandi).
+           *
+           *    Pixel o'lchovi (iPhone SE kengligi, 375px):
+           *
+           *        header (px-6 ichida)        327px
+           *        ichki guruh (til + havola)  251px, o'ng chekkasi 383px
+           *        => «Saytga qaytish» AYNAN 8px kesilgan
+           *
+           *    Sahifa SILJIMASDI va aynan shuning uchun nuqson ko'zga
+           *    tashlanmasdi: tashqi `.login-scene` da `overflow: hidden`
+           *    bor, ya'ni toshgan matn scrollbar BERMASDAN shunchaki
+           *    qirqilardi. `scrollWidth === clientWidth === 375` — ya'ni
+           *    "gorizontal siljish bormi" degan tekshiruv buni TOPMAYDI.
+           *
+           * ⚠ YASHIRISH EMAS, O'RASH: havola ham, logo ham `/` ga olib
+           *   boradi, ya'ni uni telefonda yashirish mumkin edi. Lekin
+           *   "logo — bosh sahifaga havola" konvensiyasini bozor xodimi
+           *   bilishi SHART emas; o'raganda hech narsa yo'qolmaydi va
+           *   `mb-14` pastdagi bo'shliq ikkinchi qatorni ko'taradi.
+           */}
+          <header className="mb-14 flex flex-wrap items-center justify-between gap-4">
             {/* So'zbelgi landing bilan bir xil shakl (S + aksent). */}
             <Link
               className="inline-flex min-h-11 items-center text-lg font-bold tracking-[0.08em] text-text"
