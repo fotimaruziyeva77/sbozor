@@ -308,18 +308,7 @@ BERISHDA.
   mahsulot signalini tashimaydi.
 """
 
-_CLAIM_TEMPLATE: Final[str] = f"""
-    SELECT ra.id                         AS assignment_id,
-           ev.snapshot_id                AS snapshot_id,
-           ev.business_date              AS business_date,
-           ev.slot_time                  AS slot_time,
-           cz.stall_id                   AS stall_id,
-           cz.polygon                    AS polygon,
-           st.code                       AS stall_code,
-           z.name                        AS zone_name,
-           cam.name                      AS camera_name,
-           cam.channel_no                AS channel_no,
-           {_BILLING_IMPACT}             AS has_active_vendor
+_CLAIM_SOURCE: Final[str] = """
       FROM review_assignments ra
       JOIN occupancy_events ev
         ON ev.market_id = ra.market_id
@@ -343,6 +332,37 @@ _CLAIM_TEMPLATE: Final[str] = f"""
              FROM zone_reviews zr
             WHERE zr.review_assignment_id = ra.id
        )
+"""
+"""JAVOBSIZ band qaysi shartda navbatda turadi — YAGONA ta'rif.
+
+=============================================================================
+⛔⛔ BU BLOK IKKI JOYDA ISHLATILADI VA IKKINCHI NUSXA YOZILMAYDI:
+
+    `_CLAIM_TEMPLATE`   — navbatdan BITTA band oladi;
+    `_AVAILABLE_COUNT`  — navbatda NECHTA band kutayotganini sanaydi.
+
+Agar ular alohida yozilsa, bir kun ajralib ketardi va natija eng yomon
+shaklda bo'lardi: ekran «5 ta ish bor» deb turardi, nazoratchi bosardi va
+«bugun ish yo'q» degan javob olardi. Sanoq navbatning O'ZI bilan bitta
+shartdan chiqishi SHART.
+
+⚠ `JOIN` lar ham shartning bir qismi: zonasi, rastasi yoki kamerasi
+  yo'q band navbatdan OLINMAYDI, ya'ni u sanoqqa ham kirmasligi kerak.
+"""
+
+_CLAIM_TEMPLATE: Final[str] = f"""
+    SELECT ra.id                         AS assignment_id,
+           ev.snapshot_id                AS snapshot_id,
+           ev.business_date              AS business_date,
+           ev.slot_time                  AS slot_time,
+           cz.stall_id                   AS stall_id,
+           cz.polygon                    AS polygon,
+           st.code                       AS stall_code,
+           z.name                        AS zone_name,
+           cam.name                      AS camera_name,
+           cam.channel_no                AS channel_no,
+           {_BILLING_IMPACT}             AS has_active_vendor
+{_CLAIM_SOURCE}
      {{order_by}}
      LIMIT 1
     FOR UPDATE OF ra SKIP LOCKED
@@ -385,6 +405,32 @@ _CLAIM_NEXT_BLIND = text(_CLAIM_TEMPLATE.format(order_by=_BLIND_ORDER)).bindpara
   ustuvorlik ifodasi olib tashlanganda parametr ORTIQCHA bo'lib qolardi
   va uni berish «bu yerda ham chegaraga yaqinlik hisobga olinadi» degan
   YOLG'ON o'qishga yo'l ochardi.
+"""
+
+_AVAILABLE_COUNT = text(
+    f"""
+    SELECT count(*) AS available
+{_CLAIM_SOURCE}
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=PgUuid(as_uuid=True)),
+    bindparam("queue_kind", type_=Text()),
+)
+"""Navbatda NECHTA javobsiz band kutyapti — `_CLAIM_SOURCE` DAN.
+
+⛔ NEGA KERAK (261003, o'lchangan): nazoratchining uyi ikkala navbatni
+   ham `0 / 30` ko'rinishida ko'rsatardi va bu IKKI xil holatni bir xil
+   chizardi — «30 ta ish kutyapti» va «umuman ish yo'q».
+
+   Jonli bazada o'lchandi: `blind_audit` navbatida 0 ta band bor va
+   HECH QACHON bo'lmagan (namuna CV'siz tortilmaydi), `uncertain` da esa
+   2614 ta band kutyapti va ularning BIRORTASIGA javob berilmagan.
+   Nazoratchi birinchi kartani bosib bo'sh ekranga tushardi, haqiqiy ish
+   esa pastda ko'rinmay qolardi.
+
+⚠ `budget` BILAN ARALASHTIRMANG: `budget` — kunlik CHEGARA («bugun
+  30 tagacha»), bu son esa NAVBATNING o'zi («umuman nechta bor»).
+  Ikkalasi mustaqil: byudjet 30 bo'lib, navbat bo'sh bo'lishi mumkin.
 """
 
 _HAS_ANY_ROUND = text(
@@ -739,6 +785,25 @@ class ReviewRepository(TenantScopedRepository):
                 "queue_kind": queue_kind,
                 "business_date": business_date,
             },
+        )
+        return int(result.scalar_one())
+
+    async def available_count(self, *, queue_kind: str) -> int:
+        """Navbatda NECHTA javobsiz band kutyapti — `_AVAILABLE_COUNT` DAN.
+
+        ⚠ `daily_answered_count()` BILAN ARALASHTIRMANG: u «bugun men
+          nechta javob berdim», bu esa «umuman nechta ish qoldi». Ikkalasi
+          mustaqil — bugun 0 javob berilgan bo'lib, navbat ham bo'sh
+          bo'lishi mumkin, va aynan shu ikki holat ekranda BIR XIL
+          ko'rinardi.
+
+        ⛔ KUNGA BOG'LIQ EMAS va bu ATAYIN: band javob kutib bir necha kun
+           turishi mumkin (jonli bazada 2614 tasi shunday turgan). Kunga
+           bog'lasak, kechagi ish bugun «yo'q» bo'lib ko'rinardi.
+        """
+        result = await self.session.execute(
+            _AVAILABLE_COUNT,
+            {"market_id": self.market_id, "queue_kind": queue_kind},
         )
         return int(result.scalar_one())
 

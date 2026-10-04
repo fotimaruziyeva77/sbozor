@@ -27,6 +27,7 @@ from collections.abc import Iterator
 from uuid import UUID
 
 import pytest
+from app.repositories.review_repo import ReviewRepository
 from app.services.review_seed import (
     SEED_CONFIDENCE,
     SEED_MODEL_VERSION,
@@ -40,6 +41,7 @@ from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import TwoMarketSeed
 from psycopg import Connection
 from psycopg.rows import TupleRow
+from sbozor_core.enums import ReviewQueueKind
 
 
 def _scalar(conn: Connection[TupleRow], sql: str, params: tuple[object, ...]) -> object:
@@ -271,3 +273,70 @@ async def test_navbat_yoqolsa_KEYINGI_YUGURISH_TIKLAYDI(
     assert tiklash.seeded == birinchi.seeded, (
         "navbat tiklanmadi — kadr nazoratchiga hech qachon ko'rinmasdi"
     )
+
+
+# =============================================================================
+# EKRANDAGI SON — TUGMA ORTIDAGI SAHIFA BILAN BITTA HAQIQAT (261003).
+#
+# `available_count()` nazoratchining uyidagi «Navbatda N ta» sonini beradi va
+# N == 0 bo'lsa tugma O'LADI. Demak sanoq bilan `claim_next()` ning ROZILIGI —
+# UI da'vosining o'zi, bezak emas: sanoq 0 ko'rsatib claim band bersa, haqiqiy
+# ish ko'rinmay qolardi; sanoq musbat bo'lib claim bo'sh qaytarsa, nazoratchi
+# bosib bo'sh ekranga tushardi. Ikkinchisi JONLI SERVERDA aynan shunday edi.
+# =============================================================================
+
+
+async def test_sanoq_CLAIM_bilan_rozi(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    zonali_kadr: UUID,
+    two_markets: TwoMarketSeed,
+    market_domain: MarketDomainSeed,
+    migrated: None,
+) -> None:
+    """Sanoq bazadagi haqiqat bilan teng, va claim u bilan kelishadi."""
+    market_id = two_markets.market_a.id
+
+    async with tenant_session(market_id) as session:
+        natija = await seed_snapshot(session, market_id=market_id, snapshot_id=zonali_kadr)
+    assert natija.seeded >= 1, "urug' navbatni to'ldirmadi — testning sharti yo'q"
+
+    # --- Oracle: sanoqni TAKRORLAMAYDI, bazadan XOM holda oladi -------------
+    #     Repo'ning SQL'ini test ichida qayta yozsak, ikkisi birga xato
+    #     bo'lardi va test buni ko'rmasdi.
+    xom = _scalar(
+        sync_owner_conn,
+        """
+        SELECT count(*) FROM review_assignments ra
+         WHERE ra.market_id = %s AND ra.queue_kind = 'uncertain'
+           AND NOT EXISTS (
+               SELECT 1 FROM zone_reviews zr
+                WHERE zr.review_assignment_id = ra.id
+           )
+        """,
+        (market_id,),
+    )
+    assert isinstance(xom, int) and xom >= 1
+
+    async with tenant_session(market_id) as session:
+        repo = ReviewRepository(session, market_id)
+        noaniq = await repo.available_count(queue_kind=ReviewQueueKind.UNCERTAIN.value)
+        kor = await repo.available_count(queue_kind=ReviewQueueKind.BLIND_AUDIT.value)
+        band = await repo.claim_next(queue_kind=ReviewQueueKind.UNCERTAIN.value)
+        kor_band = await repo.claim_next_blind()
+
+    # ⛔ 1. Sanoq JOIN'larda ish yo'qotmaydi. Zonasi yoki rastasi yo'q band
+    #       claim'ga tushmaydi, ya'ni sanoqqa ham kirmasligi kerak — lekin
+    #       bu urug'da hammasi zonali, demak ikki son TENG bo'lishi shart.
+    #       Teng bo'lmasa JOIN zanjiri sanoqdan ko'proq/kamroq kesyapti.
+    assert noaniq == xom, f"sanoq {noaniq}, bazada {xom} ta javobsiz band"
+
+    # ⛔ 2. ASOSIY DA'VO: son musbat -> claim BAND BERADI.
+    assert noaniq > 0
+    assert band is not None, "sanoq musbat, claim esa bo'sh — tugma bo'sh ekranga olib borardi"
+
+    # ⛔ 3. TESKARI TOMON, va aynan shu jonli serverda buzilgan edi: ko'r
+    #       audit navbati BO'SH (namuna `audit_draw` siz tortilmaydi).
+    #       Sanoq 0 bermasa, tugma faol turardi va bosilardi.
+    assert kor == 0, f"ko'r audit navbati bo'sh, sanoq esa {kor} berdi"
+    assert kor_band is None, "sanoq 0, claim esa band berdi — son yolg'on"

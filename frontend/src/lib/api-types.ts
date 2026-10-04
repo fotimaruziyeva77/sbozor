@@ -1880,11 +1880,20 @@ export const answerResponseSchema = z.object({
 });
 export type AnswerResult = z.infer<typeof answerResponseSchema>;
 
-/** Bitta navbatning kunlik hisoblagichi — UCHALA son ham serverdan. */
+/**
+ * Bitta navbatning hisoblagichi — TO'RTALA son ham serverdan.
+ *
+ * ⚠ `available` BYUDJETDAN MUSTAQIL (261003): dastlabki uchtasi
+ *   «bugun nechta qila olaman», to'rtinchisi «umuman nechta ish bor».
+ *   Usiz ekran «30 ta ish kutyapti» va «umuman ish yo'q» holatlarini
+ *   bir xil (`0 / 30`) chizardi — sabab `QueueBudget` ning server
+ *   tomonidagi docstringida.
+ */
 export const queueBudgetSchema = z.object({
   answered: z.number().int(),
   budget: z.number().int(),
   remaining: z.number().int(),
+  available: z.number().int(),
 });
 export type QueueBudget = z.infer<typeof queueBudgetSchema>;
 

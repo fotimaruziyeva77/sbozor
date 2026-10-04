@@ -946,8 +946,33 @@ async def test_budget_endpoint_reports_both_queues(
     inspector_headers: dict[str, str],
     env: Env,
 ) -> None:
-    """`GET /review/budget` ikkala navbatning uchligini beradi (UI-SPEC §7.2)."""
+    """`GET /review/budget` ikkala navbatning TO'RTLIGINI beradi (UI-SPEC §7.2).
+
+    ⛔⛔ `available` 261003 DA QO'SHILDI VA BU TEST SHAKLNI EMAS,
+        MUSTAQILLIKNI o'lchaydi: bitta javob berilganda `remaining`
+        50->49 ga tushadi (CHEGARA sarflandi), `available` esa 1->0 ga
+        (ISH tugadi). Ikki son bir-biriga TAYANMAYDI.
+
+        Usiz ekran «30 ta ish kutyapti» va «umuman ish yo'q» holatlarini
+        bir xil (`0 / 30`) chizardi: jonli serverda ko'r audit navbati
+        bo'sh turib tugma FAOL edi, 2614 ta haqiqiy noaniq band esa
+        pastda `0 / 50` deb belgilangan va bironta javob olmagan.
+
+    ⚠ TENGLIK ATAYIN TO'LIQ (`==`, maydon-maydon emas): javobga yangi
+      son qo'shilsa bu test YIQILSIN. Aynan shu tarzda u 261003 da
+      `available` ni tutib oldi.
+    """
     await build_queue(tenant_session, env)
+
+    # --- JAVOBDAN OLDIN: chegara butun, navbatda 1 ta ish -------------------
+    oldin = (await api_client.get(BUDGET_URL, headers=inspector_headers)).json()
+    assert oldin["uncertain"] == {
+        "answered": 0,
+        "budget": 50,
+        "remaining": 50,
+        "available": 1,
+    }
+
     item = (await api_client.get(NEXT_URL, headers=inspector_headers)).json()
     await api_client.post(
         f"{REVIEW_URL}/{item['assignment_id']}/answer",
@@ -960,8 +985,22 @@ async def test_budget_endpoint_reports_both_queues(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["day"] == business_today().isoformat()
-    assert body["uncertain"] == {"answered": 1, "budget": 50, "remaining": 49}
-    assert body["blind_audit"] == {"answered": 0, "budget": 30, "remaining": 30}
+    # `remaining` CHEGARAdan, `available` NAVBATdan — ikkisi birga harakatlandi
+    # va bu TASODIF emas: bitta band bor edi va unga javob berildi.
+    assert body["uncertain"] == {
+        "answered": 1,
+        "budget": 50,
+        "remaining": 49,
+        "available": 0,
+    }
+    # ⛔ KO'R AUDIT: chegara TO'LIQ (30), navbat esa BO'SH (0) — jonli
+    #    serverdagi holat AYNAN shu va UI endi tugmani o'ldiradi.
+    assert body["blind_audit"] == {
+        "answered": 0,
+        "budget": 30,
+        "remaining": 30,
+        "available": 0,
+    }
 
 
 # ===========================================================================

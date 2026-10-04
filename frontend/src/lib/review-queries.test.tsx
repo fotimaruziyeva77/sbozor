@@ -116,6 +116,14 @@ function budgetPayload(answered: {
   blindMax: number;
   uncertain: number;
   uncertainMax: number;
+  /*
+   * ⚠ `available` — NAVBATDA nechta ish bor; byudjetdan MUSTAQIL (261003).
+   *   Standart qiymat ATAYIN musbat: bu faylning qolgan testlari «ish bor,
+   *   faqat chegara tugadi» holatini o'lchaydi va nol standart ularni
+   *   jimgina «ish yo'q» holatiga aylantirib yuborardi.
+   */
+  blindAvailable?: number;
+  uncertainAvailable?: number;
 }) {
   return {
     day: DAY,
@@ -123,11 +131,13 @@ function budgetPayload(answered: {
       answered: answered.uncertain,
       budget: answered.uncertainMax,
       remaining: Math.max(0, answered.uncertainMax - answered.uncertain),
+      available: answered.uncertainAvailable ?? 99,
     },
     blind_audit: {
       answered: answered.blind,
       budget: answered.blindMax,
       remaining: Math.max(0, answered.blindMax - answered.blind),
+      available: answered.blindAvailable ?? 99,
     },
   };
 }
@@ -390,6 +400,70 @@ describe("`/review` uyi", () => {
       expect(link).toHaveAttribute("aria-disabled", "true");
       expect(link).not.toHaveAttribute("href");
     }
+  });
+
+  /*
+   * ========================================================================
+   * ⛔⛔ BO'SH NAVBAT — BYUDJET TUGAGANIDAN BOSHQA HOLAT (261003).
+   *
+   * Jonli bazada o'lchandi: `blind_audit` navbatida 0 ta band bor va HECH
+   * QACHON bo'lmagan (namuna CV'siz tortilmaydi), `uncertain` da esa
+   * 2614 ta band kutyapti va BIRORTASIGA javob berilmagan.
+   *
+   * Ilgari ikkala holat ham `0 / 30` bo'lib bir xil chizilardi va tugma
+   * FAOL turardi — nazoratchi birinchi kartani bosib bo'sh ekranga
+   * tushardi, 2614 ta haqiqiy ish esa pastda ko'rinmay qolardi.
+   * ========================================================================
+   */
+  test("⛔ navbat BO'SH bo'lsa tugma bosilmaydi va sabab yoziladi", async () => {
+    apiClientMock.apiFetch.mockResolvedValue(
+      budgetPayload({
+        blind: 0,
+        blindMax: 30,
+        blindAvailable: 0,
+        uncertain: 0,
+        uncertainMax: 50,
+        uncertainAvailable: 2614,
+      }),
+    );
+
+    renderHome();
+
+    // Ko'r audit: ish yo'q — nishon, sabab va O'LIK tugma.
+    expect(await screen.findByText(messages.review.queueEmpty)).toBeInTheDocument();
+    expect(screen.getByText(messages.review.blindEmptyNote)).toBeInTheDocument();
+
+    const blind = screen.getByText(messages.review.startBlind);
+    expect(blind).toHaveAttribute("aria-disabled", "true");
+    expect(blind).not.toHaveAttribute("href");
+
+    // ⛔ ASOSIY DA'VO: ikkinchi navbat SHU PAYTDA ishlaydi. Usiz test
+    //    «hammasi o'chdi» holatini ham qanoatlantirardi.
+    const uncertain = screen.getByText(messages.review.continueUncertain);
+    expect(uncertain).not.toHaveAttribute("aria-disabled");
+    expect(uncertain).toHaveAttribute("href");
+  });
+
+  test("navbat hajmi EKRANDA — byudjetdan alohida son", async () => {
+    apiClientMock.apiFetch.mockResolvedValue(
+      budgetPayload({
+        blind: 0,
+        blindMax: 30,
+        blindAvailable: 0,
+        uncertain: 0,
+        uncertainMax: 50,
+        uncertainAvailable: 2614,
+      }),
+    );
+
+    renderHome();
+
+    // 2614 — navbat; 50 — kunlik chegara. Ikkalasi AYRIM ko'rinadi.
+    expect(
+      await screen.findByText(
+        messages.review.waiting.replace("{count}", "2614"),
+      ),
+    ).toBeInTheDocument();
   });
 
   test("⛔ byudjet ko'rsatkichi PROGRESS BAR emas", async () => {

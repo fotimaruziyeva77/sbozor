@@ -126,6 +126,7 @@ function ReviewHome() {
             actionHref={localeHref(locale, "/review/blind")}
             actionLabel={t("review.startBlind")}
             counters={budget.data.blind_audit}
+            emptyNote={t("review.blindEmptyNote")}
             immutableNote={t("review.blindImmutable")}
             lead={t("review.blindLead")}
             title={t("review.blindTitle")}
@@ -135,6 +136,7 @@ function ReviewHome() {
             actionHref={localeHref(locale, "/review/uncertain")}
             actionLabel={t("review.continueUncertain")}
             counters={budget.data.uncertain}
+            emptyNote={t("review.uncertainEmptyNote")}
             immutableNote={null}
             lead={t("review.uncertainLead")}
             title={t("review.uncertainTitle")}
@@ -170,6 +172,7 @@ function QueueCard({
   actionHref,
   actionLabel,
   counters,
+  emptyNote,
   immutableNote,
   lead,
   title,
@@ -177,18 +180,41 @@ function QueueCard({
   actionHref: string;
   actionLabel: string;
   counters: QueueBudget;
+  emptyNote: string;
   immutableNote: string | null;
   lead: string;
   title: string;
 }) {
   const t = useTranslations();
+  /*
+   * ⛔⛔ IKKI XIL «BOSIB BO'LMAYDI» VA ULAR ARALASHTIRILMAYDI (261003).
+   *
+   *   `done`  — BUGUNGI CHEGARA tugadi; ish bor, lekin ertaga.
+   *   `empty` — NAVBAT bo'sh; bugun ham, ertaga ham bosishdan foyda yo'q.
+   *
+   * Ilgari faqat `done` bor edi va `0 / 30` ikkala holatni ham bir xil
+   * chizardi: tugma FAOL turardi, nazoratchi bosardi va bo'sh ekranga
+   * tushardi. Jonli bazada o'lchandi — `blind_audit` navbatida 0 ta band
+   * bor va hech qachon bo'lmagan, `uncertain` da esa 2614 tasi kutyapti.
+   */
   const done = counters.remaining === 0;
+  const empty = counters.available === 0;
+  const blocked = done || empty;
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <h2 className="text-sm font-semibold">{title}</h2>
-        {done ? <Badge tone="success">{t("review.budgetDone")}</Badge> : null}
+        {/*
+          ⚠ TARTIB: bo'sh navbat BYUDJETDAN USTUN. Ikkalasi ham rost
+            bo'lsa («bugun 30 ta javob berdim va navbat ham tugadi»)
+            foydalanuvchiga kerakligi — ish qolmagani.
+        */}
+        {empty ? (
+          <Badge tone="muted">{t("review.queueEmpty")}</Badge>
+        ) : done ? (
+          <Badge tone="success">{t("review.budgetDone")}</Badge>
+        ) : null}
       </CardHeader>
 
       <CardContent className="flex flex-col gap-3">
@@ -198,6 +224,19 @@ function QueueCard({
         <p className="font-mono text-xs tabular-nums">
           {t("review.today", { done: counters.answered, max: counters.budget })}
         </p>
+
+        {/*
+          ⛔ NAVBAT HAJMI — BYUDJETDAN ALOHIDA QATOR. Uni «12 / 50» ga
+             qo'shib yuborish ikki xil sonni bitta kasrga aylantirardi va
+             «50» nimani anglatishi (chegarami? navbatmi?) noaniq bo'lardi.
+        */}
+        {empty ? (
+          <p className="text-xs text-text-muted">{emptyNote}</p>
+        ) : (
+          <p className="font-mono text-xs tabular-nums text-text-muted">
+            {t("review.waiting", { count: counters.available })}
+          </p>
+        )}
 
         {immutableNote === null ? null : (
           <p className="flex items-center gap-2 text-xs text-text-muted">
@@ -214,13 +253,13 @@ function QueueCard({
          *   O'ZI yopiladi, ko'rinishi esa qoladi.
          */}
         <a
-          aria-disabled={done ? true : undefined}
+          aria-disabled={blocked ? true : undefined}
           className={
-            done
+            blocked
               ? "inline-flex w-fit items-center rounded-md bg-surface-muted px-4 py-2 text-sm font-medium text-text-muted"
               : "inline-flex w-fit items-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg"
           }
-          href={done ? undefined : actionHref}
+          href={blocked ? undefined : actionHref}
         >
           {actionLabel}
         </a>

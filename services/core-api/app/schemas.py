@@ -2984,6 +2984,22 @@ class QueueBudget(BaseModel):
     answered: int
     budget: int
     remaining: int
+    available: int
+    """Navbatda kutayotgan javobsiz bandlar soni — BYUDJETDAN MUSTAQIL.
+
+    ⛔ NEGA QO'SHILDI (261003, jonli bazada o'lchandi): uchala son ham
+       BYUDJET haqida edi, ya'ni ekran «30 ta ish kutyapti» va «umuman ish
+       yo'q» holatlarini BIR XIL (`0 / 30`) chizardi.
+
+       O'lchov: `blind_audit` navbatida 0 ta band bor va hech qachon
+       bo'lmagan (namuna CV'siz tortilmaydi), `uncertain` da esa 2614 ta
+       band kutyapti va BIRORTASIGA javob berilmagan. Nazoratchi birinchi
+       kartani bosib bo'sh ekranga tushardi, 2614 ta haqiqiy ish esa
+       pastda, ko'rinmay qolardi.
+
+    ⚠ `remaining` BILAN ARALASHTIRMANG: `remaining` — bugun yana nechta
+      javob berish MUMKIN (chegara), bu esa nechta ish BOR (navbat).
+    """
 
 
 class ReviewBudgetResponse(BaseModel):

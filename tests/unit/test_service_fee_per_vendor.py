@@ -19,11 +19,15 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from app.repositories.billing_repo import _UNBILLABLE_STATUSES, _money_from_row
+from app.repositories.billing_repo import (
+    _UNBILLABLE_STATUSES,
+    StallDayMoney,
+    _money_from_row,
+)
 from sbozor_core.enums import StallStatus
 
 
-def _pul(*, status: str = "active", carries_fee: bool = True):
+def _pul(*, status: str = "active", carries_fee: bool = True) -> StallDayMoney:
     """Yaroqli kirish — faqat o'lchanayotgan maydon o'zgaradi."""
     return _money_from_row(
         stall_id=uuid4(),

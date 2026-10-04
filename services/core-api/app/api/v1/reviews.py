@@ -524,16 +524,35 @@ async def review_budget(
     blind = await repo.daily_answered_count(
         principal.user_id, business_date, queue_kind=ReviewQueueKind.BLIND_AUDIT.value
     )
+    # ⛔ NAVBATNING O'ZI — byudjetdan MUSTAQIL son (261003). Sabab
+    #    `QueueBudget.available` docstringida.
+    uncertain_available = await repo.available_count(queue_kind=ReviewQueueKind.UNCERTAIN.value)
+    blind_available = await repo.available_count(queue_kind=ReviewQueueKind.BLIND_AUDIT.value)
     return ReviewBudgetResponse(
         day=business_date,
-        uncertain=_budget(uncertain, settings.review_uncertain_daily_budget),
-        blind_audit=_budget(blind, settings.review_blind_daily_budget),
+        uncertain=_budget(
+            uncertain,
+            settings.review_uncertain_daily_budget,
+            available=uncertain_available,
+        ),
+        blind_audit=_budget(blind, settings.review_blind_daily_budget, available=blind_available),
     )
 
 
-def _budget(answered: int, budget: int) -> QueueBudget:
-    """`remaining` HECH QACHON MANFIY EMAS (`QueueBudget` docstringi)."""
-    return QueueBudget(answered=answered, budget=budget, remaining=max(0, budget - answered))
+def _budget(answered: int, budget: int, *, available: int) -> QueueBudget:
+    """`remaining` HECH QACHON MANFIY EMAS (`QueueBudget` docstringi).
+
+    ⚠ `available` KALIT-SO'Z (`*` dan keyin) VA BU ATAYIN: uchala argument
+      ham `int` va `budget` bilan `available` o'rni almashsa mypy HECH
+      NARSA DEMASDI — ekran kunlik chegarani navbat hajmi deb ko'rsatib
+      yurardi. Nomlanganda almashtirish imkonsiz.
+    """
+    return QueueBudget(
+        answered=answered,
+        budget=budget,
+        remaining=max(0, budget - answered),
+        available=available,
+    )
 
 
 @router.post("/{review_assignment_id}/answer", response_model=AnswerResponse)
