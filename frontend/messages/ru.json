@@ -325,6 +325,8 @@
     "errorDetails": "Технические подробности",
     "channel": "Канал",
     "lastSeen": "последний раз: {time}",
+    "lastCapture": "последний кадр: {time}",
+    "noCaptureEver": "кадров не было",
     "filterStatus": "Состояние",
     "filterAll": "Все",
     "showArchived": "Показать архивные",
@@ -370,7 +372,8 @@
       "online": "В сети",
       "offline": "Не в сети",
       "unknown": "Ещё не проверено",
-      "archived": "В архиве"
+      "archived": "В архиве",
+      "noCapture": "Кадры не поступают"
     },
     "errorCause": {
       "nvr_bad_credentials": "Неверный логин или пароль.",

@@ -325,6 +325,8 @@
     "errorDetails": "Техник тафсилот",
     "channel": "Канал",
     "lastSeen": "охирги кўрилган: {time}",
+    "lastCapture": "охирги кадр: {time}",
+    "noCaptureEver": "кадр олинмаган",
     "filterStatus": "Ҳолат",
     "filterAll": "Ҳаммаси",
     "showArchived": "Архивланганларни кўрсатиш",
@@ -370,7 +372,8 @@
       "online": "Онлайн",
       "offline": "Уланмаган",
       "unknown": "Ҳали текширилмаган",
-      "archived": "Архивда"
+      "archived": "Архивда",
+      "noCapture": "Кадр келмаяпти"
     },
     "errorCause": {
       "nvr_bad_credentials": "Логин ёки парол нотўғри.",

@@ -325,6 +325,8 @@
     "errorDetails": "Texnik tafsilot",
     "channel": "Kanal",
     "lastSeen": "oxirgi ko'rilgan: {time}",
+    "lastCapture": "oxirgi kadr: {time}",
+    "noCaptureEver": "kadr olinmagan",
     "filterStatus": "Holat",
     "filterAll": "Hammasi",
     "showArchived": "Arxivlanganlarni ko'rsatish",
@@ -370,7 +372,8 @@
       "online": "Onlayn",
       "offline": "Ulanmagan",
       "unknown": "Hali tekshirilmagan",
-      "archived": "Arxivda"
+      "archived": "Arxivda",
+      "noCapture": "Kadr kelmayapti"
     },
     "errorCause": {
       "nvr_bad_credentials": "Login yoki parol noto'g'ri.",

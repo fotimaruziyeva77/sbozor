@@ -54,6 +54,7 @@ function makeCamera(overrides: Partial<Camera> = {}): Camera {
     last_seen_at: "2026-08-03T09:30:00Z",
     // Devor katakchasi oxirgi kadrni ko'rsatadi (260829)
     last_snapshot_id: null,
+    last_capture_at: null,
     ...overrides,
   };
 }
@@ -69,7 +70,7 @@ type Handlers = {
 
 function renderRow(
   camera: Camera,
-  options: { canManage?: boolean } = {},
+  options: { canManage?: boolean; newestCaptureAt?: string | null } = {},
 ): Handlers {
   const handlers: Handlers = {
     onArchive: vi.fn<CameraHandler>(),
@@ -89,6 +90,17 @@ function renderRow(
         <CameraRow
           camera={camera}
           canManage={options.canManage ?? true}
+          /*
+           * ⚠ STANDART — KAMERANING O'Z KADR VAQTI, ya'ni "orqada
+           *   qolmagan". Nol yoki `null` standart qo'ysak, bu faylning
+           *   QOLGAN testlari jimgina «kadr kelmayapti» holatiga
+           *   tushib, «Onlayn» nishonini kutgan joyda qizarardi.
+           */
+          newestCaptureAt={
+            options.newestCaptureAt === undefined
+              ? camera.last_capture_at
+              : options.newestCaptureAt
+          }
           {...handlers}
         />
       </ul>
@@ -270,5 +282,68 @@ describe("qator razmetkasi", () => {
 
     fireEvent.click(screen.getByText(messages.cameras.rename));
     expect(handlers.onRename).toHaveBeenCalledWith(camera);
+  });
+});
+
+/*
+ * ===========================================================================
+ * KADR KELMAYAPTI — YASHIL «ONLAYN» NI ALMASHTIRADI (261004).
+ *
+ * Karmanada o'lchandi: 192.168.1.245 tarmoqda «hozirgina» javob beradi
+ * (`status=online`), oxirgi kadri esa 08-29 — 36 kundan beri DALIL
+ * yig'ilmagan. `last_seen_at` ni kashfiyot suradi, kadr olish emas, ya'ni
+ * yashil nishon hech qachon qizarmasdi.
+ * ===========================================================================
+ */
+describe("CameraRow — kadr kelmayotgan kamera (261004)", () => {
+  const NO_CAPTURE_LABEL = messages.cameras.status.noCapture;
+
+  test("⛔ orqada qolgan kamerada «Onlayn» O'RNIGA «Kadr kelmayapti»", () => {
+    renderRow(
+      makeCamera({
+        status: "online",
+        last_capture_at: "2026-08-29T13:00:00Z",
+      }),
+      { newestCaptureAt: "2026-10-04T12:00:00Z" },
+    );
+
+    expect(screen.getByText(NO_CAPTURE_LABEL)).toBeInTheDocument();
+    /*
+     * ⛔ ASOSIY DA'VO: yashil nishon YO'Q. Ikkalasi birga chizilsa
+     *    foydalanuvchi ikki qarama-qarshi faktni ko'rardi va odatda
+     *    YASHILGA ishonardi — ya'ni tuzatish hech narsani o'zgartirmasdi.
+     */
+    expect(screen.queryByText(ONLINE_LABEL)).toBeNull();
+  });
+
+  test("kadr berib turgan kamerada «Onlayn» QOLADI", () => {
+    renderRow(
+      makeCamera({
+        status: "online",
+        last_capture_at: "2026-10-04T12:00:00Z",
+      }),
+      { newestCaptureAt: "2026-10-04T12:00:00Z" },
+    );
+
+    expect(screen.getByText(ONLINE_LABEL)).toBeInTheDocument();
+    expect(screen.queryByText(NO_CAPTURE_LABEL)).toBeNull();
+  });
+
+  test("ARXIVLANGAN kamerada «Kadr kelmayapti» CHIQMAYDI", () => {
+    /*
+     * Arxivlangan kanal uchun bu TO'G'RI, lekin foydasiz: undan kadr
+     * kutilmaydi va ogohlantirish shovqinga aylanardi.
+     */
+    renderRow(
+      makeCamera({
+        is_archived: true,
+        status: "online",
+        last_capture_at: null,
+      }),
+      { newestCaptureAt: "2026-10-04T12:00:00Z" },
+    );
+
+    expect(screen.getByText(ARCHIVED_LABEL)).toBeInTheDocument();
+    expect(screen.queryByText(NO_CAPTURE_LABEL)).toBeNull();
   });
 });

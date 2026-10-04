@@ -2195,6 +2195,27 @@ class CameraRead(BaseModel):
     source_model: str | None
     last_seen_at: datetime
 
+    last_capture_at: datetime | None = None
+    """Oxirgi kadr QACHON olingani — `last_seen_at` BILAN ARALASHTIRMANG.
+
+    ⛔ IKKALASI BOSHQA SAVOLGA JAVOB BERADI (261004, jonli o'lchov):
+
+           `last_seen_at`    qurilma tarmoqda javob berdimi (KASHFIYOT)
+           `last_capture_at` qurilma KADR berdimi (DALIL)
+
+       Karmanada 192.168.1.245: `last_seen_at` hozirgina, oxirgi kadri
+       esa 08-29 — ya'ni 36 kundan beri dalil yig'ilmagan, panel esa
+       uni yashil «Onlayn» ko'rsatgan. Birinchisi ikkinchisini
+       KAFOLATLAMAYDI va shuning uchun ikkalasi ham qaytariladi.
+
+    ⚠ «Eskirgan» chegarasi BU YERDA YO'Q va bu ataylab: javob jadvalga
+      bog'liq (Karmana 06:00-13:00, boshqa bozor boshqacha). Sabab
+      `nvr_repo.wall_context` docstringida.
+
+    `.default(None)` — kadri umuman yo'q kamera uchun ham, eski klient
+    uchun ham xavfsiz.
+    """
+
     last_snapshot_id: UUID | None = None
     """DEVOR KATAKCHASI uchun oxirgi kadr (260829).
 
@@ -2218,6 +2239,23 @@ class CameraListResponse(BaseModel):
 
     items: list[CameraRead]
     next_cursor: str | None = None
+
+    newest_capture_at: datetime | None = None
+    """Bozordagi ENG YANGI kadr vaqti — kamera eskirishining O'LCHOV ASOSI.
+
+    ⛔ NEGA JAVOBDA, KLIENTDA EMAS (261004): `items` STATUS BO'YICHA
+       FILTRLANADI (`list_cameras`). Klient uni ro'yxatning o'zidan
+       hisoblasa, «Ulanmagan» filtri qo'yilgan zahoti taqqoslash asosi
+       FILTRLANGAN to'plamdan olinardi va hamma kamera «kadr beryapti»
+       bo'lib ko'rinardi — ya'ni ogohlantirish aynan uni qidirayotgan
+       ekranda o'chib qolardi.
+
+       Bu qiymat `wall_context()` dan, ya'ni FILTRDAN OLDIN va butun
+       bozor bo'yicha olinadi.
+
+    ⚠ `None` — bozorda umuman kadr yo'q (yangi obyekt). Klient o'shanda
+      hech kimni eskirgan deb belgilamaydi (`captureStale`).
+    """
 
 
 class CameraQuery(BaseModel):

@@ -85,6 +85,8 @@ from app.services.live_source import authenticated_rtsp_source
 from app.services.rtsp import rtsp_url
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from sbozor_core.models import Camera, NvrDevice
 
     from app.settings import Settings
@@ -169,7 +171,12 @@ def normalize_source_ip(value: str | None) -> str | None:
         return value
 
 
-def _read(camera: Camera, oxirgi_kadr: UUID | None = None, eskirgan: bool = False) -> CameraRead:
+def _read(
+    camera: Camera,
+    oxirgi_kadr: UUID | None = None,
+    eskirgan: bool = False,
+    oxirgi_kadr_vaqti: datetime | None = None,
+) -> CameraRead:
     """Qator -> javob modeli.
 
     ⚠ `stream_name` BU YERDA UMUMAN O'QILMAYDI (`schemas.py` dagi bo'lim
@@ -193,6 +200,10 @@ def _read(camera: Camera, oxirgi_kadr: UUID | None = None, eskirgan: bool = Fals
         source_model=camera.source_model,
         last_seen_at=camera.last_seen_at,
         last_snapshot_id=oxirgi_kadr,
+        # ⛔ `last_seen_at` YONIDA TURADI VA BU MAQSADLI: ular ikki xil
+        #    savolga javob beradi va biri ikkinchisini kafolatlamaydi
+        #    (`schemas.CameraRead.last_capture_at`).
+        last_capture_at=oxirgi_kadr_vaqti,
     )
 
 
@@ -271,14 +282,20 @@ async def list_cameras(
     #   qaytarardi — ya'ni operator muammoni aynan uni qidirayotgan
     #   joyda topa olmasdi.
     kontekst = await repo.wall_context()
-    javob = [_read(row, *kontekst.get(row.id, (None, False))) for row in rows]
+    javob = [_read(row, *kontekst.get(row.id, (None, False, None))) for row in rows]
+
+    # ⛔ ENG YANGI KADR — `kontekst` DAN, ya'ni FILTRDAN OLDIN va butun bozor
+    #    bo'yicha (`CameraListResponse.newest_capture_at` izohi). `javob` dan
+    #    hisoblash status filtri ostida yolg'on asos berardi.
+    kadr_vaqtlari = [v for _, _, v in kontekst.values() if v is not None]
+    eng_yangi_kadr = max(kadr_vaqtlari) if kadr_vaqtlari else None
     if query.status is not None:
         javob = [c for c in javob if c.status == query.status]
 
     intent.filters = _describe(query)
     intent.result_count = len(javob)
 
-    return CameraListResponse(items=javob)
+    return CameraListResponse(items=javob, newest_capture_at=eng_yangi_kadr)
 
 
 @router.patch(

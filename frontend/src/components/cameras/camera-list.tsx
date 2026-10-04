@@ -257,6 +257,7 @@ export function CameraList({
               camera={camera}
               canManage={canManage}
               key={camera.id}
+              newestCaptureAt={cameras.data?.newest_capture_at ?? null}
               onArchive={setArchiving}
               onRename={setRenaming}
               onRestore={(target) => void restoreCamera(target)}

@@ -1122,6 +1122,21 @@ export const cameraSchema = z.object({
    * bo'lsa katakcha «kadr hali yo'q» deydi, yiqilmaydi).
    */
   last_snapshot_id: z.uuid().nullable().default(null),
+  /*
+   * ⛔⛔ OXIRGI KADR QACHON OLINGANI — `last_seen_at` BILAN
+   *    ARALASHTIRMANG (261004, jonli bazada o'lchandi).
+   *
+   *        `last_seen_at`    qurilma tarmoqda javob berdimi (KASHFIYOT)
+   *        `last_capture_at` qurilma KADR berdimi (DALIL)
+   *
+   *    Karmanada 192.168.1.245: tarmoqda «hozirgina», oxirgi kadri esa
+   *    08-29 — 36 kundan beri dalil yig'ilmagan, panel esa yashil
+   *    «Onlayn» ko'rsatib turgan.
+   *
+   * `.default(null)` — eski server bilan ham, kadri umuman yo'q kamera
+   * bilan ham xavfsiz.
+   */
+  last_capture_at: z.string().nullable().default(null),
 });
 export type Camera = z.infer<typeof cameraSchema>;
 
@@ -1135,6 +1150,15 @@ export type Camera = z.infer<typeof cameraSchema>;
 export const cameraListResponseSchema = z.object({
   items: z.array(cameraSchema),
   next_cursor: z.string().nullable(),
+  /*
+   * ⛔ ESKIRISHNING O'LCHOV ASOSI — SERVERDAN, ro'yxatdan hisoblanmaydi
+   *    (261004). `items` status bo'yicha SERVERDA filtrlanadi, ya'ni
+   *    undan `max` olish «Ulanmagan» filtri ostida filtrlangan
+   *    to'plamni asos qilib olardi va ogohlantirish aynan uni
+   *    qidirayotgan ekranda o'chib qolardi. Sabab backenddagi
+   *    `CameraListResponse.newest_capture_at` docstringida.
+   */
+  newest_capture_at: z.string().nullable().default(null),
 });
 
 /**

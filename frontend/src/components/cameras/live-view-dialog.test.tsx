@@ -130,6 +130,7 @@ function makeCamera(overrides: Partial<Camera> = {}): Camera {
     last_seen_at: "2026-08-03T09:29:00Z",
     // Devor katakchasi oxirgi kadrni ko'rsatadi (260829)
     last_snapshot_id: null,
+    last_capture_at: null,
     ...overrides,
   };
 }

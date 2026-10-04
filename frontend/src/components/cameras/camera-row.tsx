@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useFormatter, useLocale, useNow, useTranslations } from "next-intl";
 
+import { captureStale } from "@/components/cameras/camera-page-state";
 import { CameraStatusBadge } from "@/components/cameras/camera-status-badge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +67,12 @@ export function channelLabel(channelNo: number): string {
 
 export type CameraRowProps = {
   camera: Camera;
+  /*
+   * ⛔ BOZORDAGI ENG YANGI KADR — eskirishni NISBIY o'lchash uchun
+   *    (`camera-page-state.captureStale`). Qator buni O'ZI hisoblay
+   *    olmaydi: u faqat bitta kamerani ko'radi.
+   */
+  newestCaptureAt: string | null;
   /** `camera_manage` — usiz nom, arxiv va qaytarish amallari YO'Q. */
   canManage: boolean;
   onArchive: (camera: Camera) => void;
@@ -76,6 +83,7 @@ export type CameraRowProps = {
 
 export function CameraRow({
   camera,
+  newestCaptureAt,
   canManage,
   onArchive,
   onRename,
@@ -109,11 +117,29 @@ export function CameraRow({
    * lekin `last_seen_at` HECH QACHON tushib qolmaydi — u majburiy
    * maydon va ayni paytda skanning ikkinchi dalil kanali.
    */
+  /*
+   * ⛔⛔ KADR KELMAYAPTIMI — YASHIL «Onlayn» NI ALMASHTIRADI (261004).
+   *    Sabab `api-types.cameraSchema.last_capture_at` izohida:
+   *    `last_seen_at` qurilma TARMOQDA javob berganini, bu esa KADR
+   *    berganini aytadi, va birinchisi ikkinchisini kafolatlamaydi.
+   */
+  const kadrYoq = captureStale(camera.last_capture_at, newestCaptureAt);
+
   const metaTail = [
     camera.source_model,
     t("cameras.lastSeen", {
       time: relativePast(new Date(camera.last_seen_at), now),
     }),
+    /*
+     * ⚠ OXIRGI KADR META QATORIDA HAR DOIM TURADI, faqat muammo
+     *   bo'lganda emas: nishon «nima bo'ldi» ni aytadi, bu qator esa
+     *   «qachondan beri» ni. Nizoda aynan ikkinchisi kerak bo'ladi.
+     */
+    camera.last_capture_at === null
+      ? t("cameras.noCaptureEver")
+      : t("cameras.lastCapture", {
+          time: relativePast(new Date(camera.last_capture_at), now),
+        }),
   ].filter((part): part is string => Boolean(part));
 
   return (
@@ -174,6 +200,7 @@ export function CameraRow({
 
         <CameraStatusBadge
           isArchived={camera.is_archived}
+          noCapture={kadrYoq}
           status={camera.status}
         />
 

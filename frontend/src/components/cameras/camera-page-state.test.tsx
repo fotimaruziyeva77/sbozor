@@ -22,6 +22,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   cameraEmptyKind,
+  captureStale,
   isDiscoveryRunId,
 } from "@/components/cameras/camera-page-state";
 
@@ -104,5 +105,56 @@ describe("isDiscoveryRunId — `?run=` ning tekshiruvi (§5.4)", () => {
     ["<script>alert(1)</script>", false],
   ])("%s -> %s", (value, expected) => {
     expect(isDiscoveryRunId(value)).toBe(expected);
+  });
+});
+
+/*
+ * ===========================================================================
+ * `captureStale` — «ONLAYN» YASHILINING YOLG'ONINI YOPADI (261004).
+ *
+ * Jonli bazada o'lchandi (Karmana):
+ *
+ *     192.168.1.245   status=online   last_seen=10-04 12:42
+ *                     OXIRGI KADR     08-29 13:00   (jami 8 ta kadr)
+ *     qolgan 15 tasi  oxirgi kadr     10-04 12:00   (261-269 ta kadr)
+ *
+ * Ya'ni bitta kamera 36 kundan beri DALIL yig'magan va panel uni yashil
+ * ko'rsatgan. `last_seen_at` ni KASHFIYOT suradi (qurilma tarmoqda javob
+ * berdi), kadr olish emas — shuning uchun u hech qachon qizarmasdi.
+ * ===========================================================================
+ */
+describe("captureStale — kamera kadr bermay qo'yganmi", () => {
+  const YANGI = "2026-10-04T12:00:00Z";
+
+  test("⛔ KARMANA HOLATI: 36 kun orqada qolgan kamera ESKIRGAN", () => {
+    expect(captureStale("2026-08-29T13:00:00Z", YANGI)).toBe(true);
+  });
+
+  test("boshqalar bilan birga kadr bergan kamera eskirmagan", () => {
+    expect(captureStale(YANGI, YANGI)).toBe(false);
+  });
+
+  test("⚠ BIR NECHA SOAT ORQADA QOLISH ESKIRISH EMAS — jadval oynasi", () => {
+    /*
+     * Karmanada jadval 06:00-13:00. Kechqurun BARCHA kameraning oxirgi
+     * kadri bir necha soat eski bo'ladi va bu NORMAL. Mutlaq chegara
+     * («6 soatdan eski bo'lsa») har kuni butun flotni sariq qilardi.
+     */
+    expect(captureStale("2026-10-04T06:00:00Z", YANGI)).toBe(false);
+    expect(captureStale("2026-10-03T13:00:00Z", YANGI)).toBe(false);
+  });
+
+  test("⛔ boshqalarda kadr BOR, bunda UMUMAN yo'q -> eskirgan", () => {
+    expect(captureStale(null, YANGI)).toBe(true);
+  });
+
+  test("⛔ BOZORDA UMUMAN KADR YO'Q BO'LSA — HECH KIM aybdor emas", () => {
+    /*
+     * Yangi obyekt yoki agent hali ulanmagan holat. Bu yerda butun
+     * ro'yxatni sariq qilish operatorni mavjud bo'lmagan nosozlikni
+     * qidirishga yuborardi.
+     */
+    expect(captureStale(null, null)).toBe(false);
+    expect(captureStale("2026-01-01T00:00:00Z", null)).toBe(false);
   });
 });

@@ -83,3 +83,36 @@ export function isDiscoveryRunId(value: string): boolean {
     value,
   );
 }
+
+/**
+ * Bitta kundan ortiq ORQADA QOLISH — «kadr kelmayapti» deyish uchun chegara.
+ *
+ * ⛔ CHEGARA MUTLAQ EMAS, NISBIY (261004). «Oxirgi kadr 6 soatdan eski
+ *    bo'lsa» degan qoida Karmanada (06:00-13:00 jadval) har kuni
+ *    kechqurun BUTUN flotni sariq qilib qo'yardi — kechki slot yo'q,
+ *    demak kadr ham yo'q, va bu NORMAL. Shuning uchun o'lchov boshqa
+ *    kameralar bilan solishtiriladi: ular kadr berib turganda bu
+ *    bermayotgan bo'lsa — muammo kamerada, jadvalda emas.
+ */
+const KECHIKISH_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Kamera kadr bermay qo'yganmi — BOSHQA kameralarga nisbatan.
+ *
+ * ⛔ `newest === null` DA HAR DOIM `false`: bozorda umuman kadr yo'q bo'lsa
+ *    (yangi obyekt, agent hali ulanmagan) hech kimni ayblash mumkin emas —
+ *    va o'shanda butun ro'yxatni sariq qilish operatorni mavjud bo'lmagan
+ *    nosozlikni qidirishga yuborardi.
+ */
+export function captureStale(
+  lastCaptureAt: string | null,
+  newest: string | null,
+): boolean {
+  if (newest === null) return false;
+  // Kadri UMUMAN yo'q, boshqalarda esa bor -> shubhasiz muammo.
+  if (lastCaptureAt === null) return true;
+  return (
+    new Date(newest).getTime() - new Date(lastCaptureAt).getTime() >
+    KECHIKISH_MS
+  );
+}

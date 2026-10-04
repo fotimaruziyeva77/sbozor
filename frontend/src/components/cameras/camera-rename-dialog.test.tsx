@@ -78,6 +78,7 @@ const CAMERA: Camera = {
   last_seen_at: "2026-08-16T05:00:00Z",
   // Devor katakchasi oxirgi kadrni ko'rsatadi (260829)
   last_snapshot_id: null,
+  last_capture_at: null,
 };
 
 function seedSession(): void {

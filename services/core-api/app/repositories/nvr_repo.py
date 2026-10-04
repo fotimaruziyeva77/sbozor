@@ -458,8 +458,10 @@ class NvrRepository(TenantScopedRepository):
         result = await self.session.execute(statement.order_by(Camera.channel_no))
         return result.scalars().all()
 
-    async def wall_context(self) -> dict[UUID, tuple[UUID | None, bool]]:
-        """Har kamera uchun `(oxirgi_kadr_id, aloqa_eskirganmi)`.
+    async def wall_context(
+        self,
+    ) -> dict[UUID, tuple[UUID | None, bool, datetime | None]]:
+        """Har kamera uchun `(oxirgi_kadr_id, aloqa_eskirganmi, oxirgi_kadr_vaqti)`.
 
         ⛔ NEGA ALOHIDA SO'ROV, `list_cameras` GA JOIN EMAS: `Camera`
            ORM modeli `cameras` jadvalining aynan ko'zgusi va unga
@@ -482,6 +484,35 @@ class NvrRepository(TenantScopedRepository):
             deb hisoblab, keyin o'sha soatlar uchun kadr yo'qligini
             ko'radi.
 
+        ⛔⛔ KADR VAQTI HAM QAYTADI — VA BU IKKINCHI YOLG'ONNI YOPADI
+            (261004, jonli bazada o'lchandi).
+
+            Yuqoridagi eskirish bayrog'i AGENT jim qolganini qamraydi.
+            Lekin agent TIRIK bo'lib, bitta kamera kadr BERMAY qo'yishi
+            mumkin — va o'shanda `status` baribir `online` bo'lib
+            qolaveradi, chunki `last_seen_at` ni KASHFIYOT suradi
+            (qurilma tarmoqda javob berdi), KADR OLISH emas.
+
+            Karmanada o'lchandi:
+
+                192.168.1.245   status=online   last_seen=10-04 12:42
+                                OXIRGI KADR     08-29 13:00  (8 ta kadr)
+                qolgan 15 tasi  oxirgi kadr     10-04 12:00  (261-269 ta)
+
+            Ya'ni bitta kamera 36 KUNDAN BERI dalil yig'magan va panel
+            uni YASHIL ko'rsatib turgan. Kadrlar pul nizosida dalil
+            bo'lgani uchun bu eng qimmat turdagi yolg'on: yo'qolgan
+            dalil faqat nizo chiqqan kuni bilinadi.
+
+            ⚠ CHEGARA BU YERDA QO'YILMAYDI. «Nechchi soatdan keyin
+              eskirgan» degan savolning javobi JADVALGA bog'liq
+              (Karmanada 06:00-13:00, boshqa bozorda boshqacha), va uni
+              serverga qotirib qo'yish bir bozorda to'g'ri, boshqasida
+              noto'g'ri bo'lardi. Vaqtning O'ZI qaytariladi; UI esa uni
+              BOSHQA kameralarning eng yangi kadri bilan solishtiradi —
+              o'lchov o'z-o'zini kalibrlaydi va hech qanday son
+              qotirilmaydi.
+
         ⚠ FAQAT `camagent` QURILMALARI. Ularning `last_seen_at` i har
           heartbeat'da (60 s) suriladi, ya'ni eskirish HAQIQIY signal.
           sbozor o'zi ulanadigan NVR'da bu ustun kashfiyotda
@@ -492,23 +523,28 @@ class NvrRepository(TenantScopedRepository):
             await self.session.execute(
                 text("""
             SELECT c.id,
-                   (SELECT s.id FROM snapshots s
-                     WHERE s.market_id = c.market_id
-                       AND s.camera_id = c.id
-                       AND s.storage_tier <> 'purged'
-                     ORDER BY s.captured_at DESC
-                     LIMIT 1),
+                   k.id,
                    (d.username = 'camagent'
-                    AND c.last_seen_at < now() - make_interval(secs => :chegara))
+                    AND c.last_seen_at < now() - make_interval(secs => :chegara)),
+                   k.captured_at
               FROM cameras c
               JOIN nvr_devices d
                 ON d.market_id = c.market_id AND d.id = c.nvr_id
+              LEFT JOIN LATERAL (
+                   SELECT s.id, s.captured_at
+                     FROM snapshots s
+                    WHERE s.market_id = c.market_id
+                      AND s.camera_id = c.id
+                      AND s.storage_tier <> 'purged'
+                    ORDER BY s.captured_at DESC
+                    LIMIT 1
+              ) k ON true
              WHERE c.market_id = :m
         """),
                 {"m": self.market_id, "chegara": CAMAGENT_STALE_SECONDS},
             )
         ).all()
-        return {r[0]: (r[1], bool(r[2])) for r in satrlar}
+        return {r[0]: (r[1], bool(r[2]), r[3]) for r in satrlar}
 
     async def rename_camera(self, camera_id: UUID, name: str) -> bool:
         """Kamerani qayta nomlaydi va `name_overridden` ni BIRGA qo'yadi.

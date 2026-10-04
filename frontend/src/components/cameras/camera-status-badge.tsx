@@ -1,4 +1,4 @@
-import { Archive, Clock, Wifi, WifiOff } from "lucide-react";
+import { Archive, CameraOff, Clock, Wifi, WifiOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +32,7 @@ import type { CameraStatusValue } from "@/lib/api-types";
 
 type StatusView = {
   Icon: typeof Wifi;
-  labelKey: "online" | "offline" | "unknown" | "archived";
+  labelKey: "online" | "offline" | "unknown" | "archived" | "noCapture";
   tone: BadgeTone;
 };
 
@@ -48,15 +48,39 @@ const ARCHIVED_VIEW: StatusView = {
   tone: "muted",
 };
 
+/**
+ * KADR KELMAYAPTI — «Onlayn» nishonini ALMASHTIRADI, yoniga qo'shilmaydi.
+ *
+ * ⛔ NEGA ALMASHTIRADI: yashil «Onlayn» ning yonida sariq ogohlantirish
+ *    tursa, foydalanuvchi ikkita qarama-qarshi faktni ko'radi va
+ *    odatda YASHILGA ishonadi. Bu yerda yashil YOLG'ON: qurilma
+ *    tarmoqda javob beradi, lekin kadr — ya'ni DALIL — bermaydi.
+ */
+const NO_CAPTURE_VIEW: StatusView = {
+  Icon: CameraOff,
+  labelKey: "noCapture",
+  tone: "warning",
+};
+
 export function CameraStatusBadge({
   isArchived,
+  noCapture = false,
   status,
 }: {
+  noCapture?: boolean;
   isArchived: boolean;
   status: CameraStatusValue;
 }) {
   const t = useTranslations("cameras.status");
-  const view = isArchived ? ARCHIVED_VIEW : STATUS_VIEW[status];
+  /*
+   * ⚠ TARTIB: arxiv > kadr yo'q > holat. Arxivlangan kamera uchun
+   *   «kadr kelmayapti» TO'G'RI, lekin FOYDASIZ — undan kadr kutilmaydi.
+   */
+  const view = isArchived
+    ? ARCHIVED_VIEW
+    : noCapture
+      ? NO_CAPTURE_VIEW
+      : STATUS_VIEW[status];
   const { Icon } = view;
 
   return (
