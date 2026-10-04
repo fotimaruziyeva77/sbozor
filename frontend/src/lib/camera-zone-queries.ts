@@ -287,7 +287,26 @@ export const frameImageKey = (marketId: string, snapshotId: string) =>
  *   ushlab turish uchun hech qanday sabab yo'q va uni ushlab turish
  *   sessiya almashganda ham xotirada qoldirardi.
  */
-export function useFrameImageHref(snapshotId: string | null): string | null {
+/**
+ * Kadr tasviri + UNING HOLATI.
+ *
+ * ⛔⛔ NEGA `useFrameImageHref` YETMAYDI (261004): u `data ?? null`
+ *     qaytaradi, ya'ni UCHTA boshqa holat bitta `null` ga quyiladi —
+ *     «hali yuklanmoqda», «ochib bo'lmadi» va «kadr umuman yo'q».
+ *
+ *     Devor katakchasi shu `null` ni ko'rib «Qayta ulanmoqda…» deb
+ *     yozardi — holbuki o'sha paytda u HECH NARSAGA ulanmayotgan edi:
+ *     jonli urinish allaqachon tugagan va u SAQLANGAN kadrni
+ *     yuklayotgan edi. Jonli serverda natija shunday ko'rindi: ro'yxat
+ *     16 kamerani «Onlayn» deb, katak ko'rinishi esa O'SHA 16 tasini
+ *     «Qayta ulanmoqda…» deb ko'rsatardi — bir sahifaning ikki
+ *     ko'rinishi bir-biriga zid.
+ */
+export function useFrameImage(snapshotId: string | null): {
+  href: string | null;
+  isPending: boolean;
+  isError: boolean;
+} {
   const marketId = useMarketId();
 
   const image = useQuery({
@@ -311,7 +330,22 @@ export function useFrameImageHref(snapshotId: string | null): string | null {
     return () => URL.revokeObjectURL(href);
   }, [href]);
 
-  return href;
+  return {
+    href,
+    /*
+     * ⚠ `snapshotId === null` DA `isPending` TRUE EMAS: so'rov
+     *   `enabled: false` bo'lgani uchun `react-query` uni abadiy
+     *   «pending» deb hisoblaydi va katakcha «yuklanmoqda» yozuvi
+     *   bilan abadiy qolardi. Chaqiruvchi uchun bu holat «kadr yo'q».
+     */
+    isPending: snapshotId !== null && marketId !== null && image.isPending,
+    isError: image.isError,
+  };
+}
+
+/** Faqat havola — holat kerak bo'lmagan chaqiruvchilar uchun. */
+export function useFrameImageHref(snapshotId: string | null): string | null {
+  return useFrameImage(snapshotId).href;
 }
 
 /* --- Muharrir darvozasi (Z-1…Z-8) ------------------------------------------ */

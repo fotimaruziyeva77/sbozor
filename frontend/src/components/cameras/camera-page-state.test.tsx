@@ -23,6 +23,7 @@ import { describe, expect, test } from "vitest";
 import {
   cameraEmptyKind,
   captureStale,
+  frameFallbackKey,
   isDiscoveryRunId,
 } from "@/components/cameras/camera-page-state";
 
@@ -156,5 +157,68 @@ describe("captureStale — kamera kadr bermay qo'yganmi", () => {
      */
     expect(captureStale(null, null)).toBe(false);
     expect(captureStale("2026-01-01T00:00:00Z", null)).toBe(false);
+  });
+});
+
+/*
+ * ===========================================================================
+ * `frameFallbackKey` — BIR SAHIFANING IKKI KO'RINISHI ZID BO'LMAYDI (261004).
+ *
+ * Jonli serverda o'lchandi: kameralar sahifasining RO'YXAT ko'rinishi 16
+ * kamerani «Onlayn · oxirgi ko'rilgan: hozirgina» deb, KATAK ko'rinishi esa
+ * O'SHA 16 tasini «Qayta ulanmoqda…» deb ko'rsatardi.
+ *
+ * Sabab: katakcha kadr havolasi yo'qligining UCHALA sababini bitta matn
+ * bilan atardi — holbuki u paytda jonli urinish allaqachon tugagan va
+ * katakcha hech narsaga ULANMAYOTGAN edi.
+ * ===========================================================================
+ */
+describe("frameFallbackKey — kadr o'rniga nima yoziladi", () => {
+  const KADR = "11111111-1111-4111-8111-111111111111";
+
+  test("⛔ kadr UMUMAN yo'q — yuklanmoqda holatida ham", () => {
+    // Yuklanadigan narsaning O'ZI yo'q, ya'ni «yuklanmoqda» yolg'on.
+    expect(
+      frameFallbackKey({ snapshotId: null, isPending: true, isError: false }),
+    ).toBe("wallNoFrame");
+  });
+
+  test("kadr yuklanayotganda — «yuklanmoqda»", () => {
+    expect(
+      frameFallbackKey({ snapshotId: KADR, isPending: true, isError: false }),
+    ).toBe("wallFrameLoading");
+  });
+
+  test("kadr ochilmaganda — «ochilmadi»", () => {
+    expect(
+      frameFallbackKey({ snapshotId: KADR, isPending: false, isError: true }),
+    ).toBe("wallFrameFailed");
+  });
+
+  test("⚠ XATO yuklanishdan USTUN", () => {
+    // Ikkalasi ham rost bo'lsa, odamga kerakligi — nima NOTO'G'RI ketgani.
+    expect(
+      frameFallbackKey({ snapshotId: KADR, isPending: true, isError: true }),
+    ).toBe("wallFrameFailed");
+  });
+
+  test("⛔ HECH QACHON «qayta ulanmoqda» QAYTARMAYDI", () => {
+    /*
+     * ASOSIY DA'VO. Bu funksiya chaqirilganda jonli urinish tugagan;
+     * «qayta ulanmoqda» aynan shu yerda yolg'on edi va ro'yxat bilan
+     * zid holat tug'dirardi.
+     */
+    const hammasi = [null, KADR].flatMap((snapshotId) =>
+      [true, false].flatMap((isPending) =>
+        [true, false].map((isError) =>
+          frameFallbackKey({ snapshotId, isPending, isError }),
+        ),
+      ),
+    );
+    expect(hammasi).toHaveLength(8);
+    expect(hammasi).not.toContain("wallReconnecting");
+    expect(new Set(hammasi)).toEqual(
+      new Set(["wallNoFrame", "wallFrameLoading", "wallFrameFailed"]),
+    );
   });
 });

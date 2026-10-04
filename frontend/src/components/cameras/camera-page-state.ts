@@ -116,3 +116,44 @@ export function captureStale(
     KECHIKISH_MS
   );
 }
+
+/** Devor katakchasida kadr o'rniga chiziladigan matn kaliti. */
+export type FrameFallbackKey =
+  | "wallNoFrame"
+  | "wallFrameLoading"
+  | "wallFrameFailed";
+
+/**
+ * Kadr ko'rsatib bo'lmaganda QAYSI sabab yoziladi.
+ *
+ * ⛔⛔ «QAYTA ULANMOQDA» BU RO'YXATDA YO'Q VA BU QAROR (261004).
+ *
+ *     Bu funksiya chaqiriladigan paytda jonli urinish ALLAQACHON
+ *     tugagan — katakcha hech narsaga ulanmayapti, u SAQLANGAN kadrni
+ *     yuklayapti. Ilgari shu uch holatning hammasi «Qayta ulanmoqda…»
+ *     deb atalardi va jonli serverda natija shunday ko'rindi: ro'yxat
+ *     16 kamerani «Onlayn», katak ko'rinishi esa O'SHA 16 tasini
+ *     «Qayta ulanmoqda…» deb ko'rsatardi. Bir sahifaning ikki
+ *     ko'rinishi zid bo'lsa, odam qaysi biri rost ekanini aniqlay
+ *     olmaydi va odatda ikkalasiga ham ishonmay qo'yadi.
+ *
+ * ⚠ TARTIB: «kadr yo'q» BIRINCHI tekshiriladi. Kadri bo'lmagan kamera
+ *   uchun «yuklanmoqda» ham, «ochilmadi» ham noto'g'ri bo'lardi —
+ *   yuklanadigan narsaning O'ZI yo'q.
+ */
+export function frameFallbackKey(input: {
+  snapshotId: string | null;
+  isPending: boolean;
+  isError: boolean;
+}): FrameFallbackKey {
+  if (input.snapshotId === null) return "wallNoFrame";
+  if (input.isError) return "wallFrameFailed";
+  if (input.isPending) return "wallFrameLoading";
+  /*
+   * Kadr bor, so'rov tugagan, xato yo'q — lekin havola baribir yo'q.
+   * Amalda bu `gcTime: 0` bilan keshdan chiqib ketgan kadr; «yo'q»
+   * deyish rost, «yuklanmoqda» esa yolg'on bo'lardi (hech narsa
+   * yuklanmayapti).
+   */
+  return "wallNoFrame";
+}

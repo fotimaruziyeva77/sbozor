@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, WifiOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { frameFallbackKey } from "@/components/cameras/camera-page-state";
+
 import { channelLabel } from "@/components/cameras/camera-row";
 import { LivePlayer } from "@/components/cameras/live-player";
 import { LiveViewDialog } from "@/components/cameras/live-view-dialog";
@@ -16,7 +18,10 @@ import {
   useCamerasQuery,
   useLiveToken,
 } from "@/lib/camera-queries";
-import { useFrameImageHref } from "@/lib/camera-zone-queries";
+import {
+  useFrameImage,
+  useFrameImageHref,
+} from "@/lib/camera-zone-queries";
 
 /*
  * =============================================================================
@@ -353,15 +358,36 @@ function FrameImage({ snapshotId }: { snapshotId: string | null }) {
    *   keladi, ya'ni tez-tez so'rash faqat trafik sarflardi.
    */
   const t = useTranslations();
-  const href = useFrameImageHref(snapshotId);
+  const { href, isPending, isError } = useFrameImage(snapshotId);
 
   if (href === null) {
+    /*
+     * ⛔⛔ UCHTA BOSHQA HOLAT — UCHTA BOSHQA MATN (261004).
+     *
+     *     Ilgari bu yerda ikkita shox bor edi va kadr yo'qligidan
+     *     BOSHQA hamma narsa «Qayta ulanmoqda…» deb atalardi. Lekin
+     *     bu nuqtaga yetganda jonli urinish ALLAQACHON TUGAGAN
+     *     (`status` `frame` yoki `failed`) — katakcha hech narsaga
+     *     ulanmayapti, u SAQLANGAN kadrni yuklayapti.
+     *
+     *     Jonli serverda oqibati: ro'yxat 16 kamerani «Onlayn» deb,
+     *     katak ko'rinishi esa O'SHA 16 tasini «Qayta ulanmoqda…» deb
+     *     ko'rsatardi. Bir sahifaning ikki ko'rinishi bir-biriga zid
+     *     bo'lsa, foydalanuvchi qaysi biri rost ekanini aniqlay
+     *     olmaydi — va odatda ikkalasiga ham ishonmay qo'yadi.
+     *
+     * ⚠ TARTIB: «kadr yo'q» BIRINCHI. Kadri bo'lmagan kamera uchun
+     *   «yuklanmoqda» ham, «ochilmadi» ham noto'g'ri bo'lardi —
+     *   yuklanadigan narsaning o'zi yo'q.
+     */
+    const matn = t(
+      `cameras.${frameFallbackKey({ snapshotId, isPending, isError })}`,
+    );
+
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-surface-muted">
         <span className="text-xs text-text-muted" role="status">
-          {snapshotId === null
-            ? t("cameras.wallNoFrame")
-            : t("cameras.wallReconnecting")}
+          {matn}
         </span>
       </div>
     );

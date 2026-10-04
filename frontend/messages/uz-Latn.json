@@ -404,7 +404,9 @@
       "channel_offline": "Kamera quvvatini va kabelni tekshiring, so'ng qayta skanerlang."
     },
     "deviceAll": "Hammasi ({count} ta qurilma)",
-    "wallNoFrame": "Kadr hali yo'q"
+    "wallNoFrame": "Kadr hali yo'q",
+    "wallFrameLoading": "Kadr yuklanmoqda…",
+    "wallFrameFailed": "Kadr ochilmadi"
   },
   "categories": {
     "actions": "Amallar",

@@ -404,7 +404,9 @@
       "channel_offline": "Проверьте питание камеры и кабель, затем выполните повторное сканирование."
     },
     "deviceAll": "Все ({count} устройств)",
-    "wallNoFrame": "Кадра ещё нет"
+    "wallNoFrame": "Кадра ещё нет",
+    "wallFrameLoading": "Кадр загружается…",
+    "wallFrameFailed": "Кадр не открылся"
   },
   "categories": {
     "actions": "Действия",

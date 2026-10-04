@@ -404,7 +404,9 @@
       "channel_offline": "Камера қувватини ва кабелни текширинг, сўнг қайта сканерланг."
     },
     "deviceAll": "Ҳаммаси ({count} та қурилма)",
-    "wallNoFrame": "Кадр ҳали йўқ"
+    "wallNoFrame": "Кадр ҳали йўқ",
+    "wallFrameLoading": "Кадр юкланмоқда…",
+    "wallFrameFailed": "Кадр очилмади"
   },
   "categories": {
     "actions": "Амаллар",
