@@ -406,7 +406,8 @@
     "deviceAll": "Все ({count} устройств)",
     "wallNoFrame": "Кадра ещё нет",
     "wallFrameLoading": "Кадр загружается…",
-    "wallFrameFailed": "Кадр не открылся"
+    "wallFrameFailed": "Кадр не открылся",
+    "zoneOverlayTitle": "На кадре отмечено мест: {count}"
   },
   "categories": {
     "actions": "Действия",

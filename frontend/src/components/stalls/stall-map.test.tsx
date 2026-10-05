@@ -810,3 +810,55 @@ describe("StallMap — Karmana miqyosi", () => {
     expect(new Set(codes).size).toBe(KARMANA_STALL_COUNT);
   }, 30_000);
 });
+
+/*
+ * ===========================================================================
+ * TO'LANGAN = YASHIL, TO'LANMAGAN = QIZIL (261005, buyurtmachi qarori).
+ *
+ * ILGARI TESKARI EDI: `paid` binafsha (`accent`), yashil esa `free` —
+ * ya'ni «sotuvchi biriktirilmagan» — degani edi. Bozorda ishlaydigan odam
+ * yashil katakni ko'rib «to'landi» deb o'qirdi, holbuki o'sha rastada
+ * umuman sotuvchi yo'q edi. Rang eng muhim savolga TESKARI javob berardi.
+ *
+ * Bu darvoza rang MA'NOSINI qulflaydi, aniq sinf matnini emas: tint
+ * zichligi yoki halqa qalinligi dizayn qarori va u o'zgarishi mumkin.
+ * ===========================================================================
+ */
+describe("to'lov ranglari — ma'nosi (261005)", () => {
+  test("⛔ TO'LANGAN rasta YASHIL (`success`)", () => {
+    expect(TONE_STYLES.paid).toContain("bg-success");
+  });
+
+  test("⛔ TO'LANMAGAN rasta QIZIL (`danger`)", () => {
+    expect(TONE_STYLES.debt).toContain("bg-danger");
+  });
+
+  test("⛔ YASHIL BOSHQA HECH NARSANI anglatmaydi", () => {
+    /*
+     * ASOSIY DA'VO. Usiz `paid` ni yashil qilib, `free` ni ham yashil
+     * qoldirish mumkin edi — va o'shanda xaritada ikki xil holat bir xil
+     * ko'rinardi, ya'ni tuzatish hech narsani hal qilmasdi.
+     */
+    const yashillar = Object.entries(TONE_STYLES)
+      .filter(([, cls]) => cls.includes("bg-success"))
+      .map(([tone]) => tone);
+
+    expect(yashillar).toEqual(["paid"]);
+  });
+
+  test("⚠ sotuvchisi yo'q rasta to'lov rangini OLMAYDI", () => {
+    // U na to'lagan, na qarzdor — «o'yindan tashqarida», ya'ni neytral.
+    expect(TONE_STYLES.free).not.toContain("bg-success");
+    expect(TONE_STYLES.free).not.toContain("bg-danger");
+    expect(TONE_STYLES.free).not.toContain("bg-accent");
+  });
+
+  test("QUYI CHEGARA: reyestr haqiqatan o'qildi", () => {
+    /*
+     * `TONE_STYLES` bo'sh yoki import buzilgan bo'lsa yuqoridagi
+     * `.not.toContain` lar TRIVIAL o'tardi.
+     */
+    expect(Object.keys(TONE_STYLES).length).toBeGreaterThanOrEqual(8);
+    expect(TONE_STYLES.debt.length).toBeGreaterThan(10);
+  });
+});

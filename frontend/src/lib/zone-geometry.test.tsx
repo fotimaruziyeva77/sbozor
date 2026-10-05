@@ -31,6 +31,7 @@ import {
   MIN_VERTICES,
   addVertex,
   centroid,
+  centroidOf,
   deleteVertex,
   denormalize,
   insertMidpoint,
@@ -639,5 +640,51 @@ describe("immutabillik (05-UI-SPEC §6.2)", () => {
     expect(Object.is(TRIANGLE, deleteVertex(TRIANGLE, 0))).toBe(true);
     expect(Object.is(BASE, moveVertex(BASE, 99, [0.5, 0.5]))).toBe(true);
     expect(Object.is(BASE, translate(BASE, 0, 0))).toBe(true);
+  });
+});
+
+/*
+ * ===========================================================================
+ * `centroidOf` — RASTA RAQAMI KADRDA QAYERGA QO'YILADI (261005).
+ *
+ * Yorliq noto'g'ri joyda tursa, u qo'shni rastaning ustiga tushadi — ya'ni
+ * kadr «bu rasta 12» deb YOLG'ON aytadi. Nizoda aynan shu kadr dalil
+ * bo'ladi, shuning uchun joylashuv o'lchanadi.
+ * ===========================================================================
+ */
+describe("centroidOf", () => {
+  test("to'rtburchakning markazi", () => {
+    expect(
+      centroidOf([
+        [0.2, 0.4],
+        [0.6, 0.4],
+        [0.6, 0.8],
+        [0.2, 0.8],
+      ]),
+    ).toEqual([0.4, 0.6000000000000001]);
+  });
+
+  test("⛔ TEPALAR ZICHLIGI MARKAZNI SURMAYDI", () => {
+    /*
+     * ASOSIY DA'VO. Chap tomonda uchta tepa, o'ngda bitta: tepalar
+     * O'RTACHASI markazni chapga tortardi va raqam rastaning chekkasiga,
+     * ba'zan qo'shnisining ustiga chiqib ketardi. Chegaralovchi
+     * to'rtburchak zichlikka BEFARQ.
+     */
+    const markaz = centroidOf([
+      [0, 0],
+      [0, 0.5],
+      [0, 1],
+      [1, 1],
+    ]);
+    expect(markaz).toEqual([0.5, 0.5]);
+  });
+
+  test("⚠ BO'SH ko'pburchak — `null`, (0,0) EMAS", () => {
+    /*
+     * Nol qaytarish yorliqni kadrning chap-yuqori burchagiga qo'yardi
+     * va u «shu yerda rasta bor» degan yolg'on signal bo'lardi.
+     */
+    expect(centroidOf([])).toBeNull();
   });
 });

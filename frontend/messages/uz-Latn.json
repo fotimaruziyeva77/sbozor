@@ -406,7 +406,8 @@
     "deviceAll": "Hammasi ({count} ta qurilma)",
     "wallNoFrame": "Kadr hali yo'q",
     "wallFrameLoading": "Kadr yuklanmoqda…",
-    "wallFrameFailed": "Kadr ochilmadi"
+    "wallFrameFailed": "Kadr ochilmadi",
+    "zoneOverlayTitle": "Kadrda {count} ta rasta belgilangan"
   },
   "categories": {
     "actions": "Amallar",

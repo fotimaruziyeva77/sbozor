@@ -141,15 +141,43 @@ export const DAY_STATE_KEYS: Record<MapDayState, StallDayStateKey> = {
  *   o'lchangan; tintni quyuqlashtirish kontrastni faqat OSHIRADI
  *   (matn to'q, fon esa oqdan uzoqlashdi).
  */
+/*
+ * =============================================================================
+ * ⛔⛔ TO'LANGAN = YASHIL, TO'LANMAGAN = QIZIL (261005, buyurtmachi qarori).
+ *
+ *     ILGARI TESKARI EDI VA BU JIM TURGAN TUZOQ BO'LGAN:
+ *
+ *         `paid`  -> `bg-accent`   (binafsha) — ya'ni to'langan rasta
+ *                                   YASHIL EMAS edi;
+ *         `free`  -> `bg-success`  (yashil)   — ya'ni YASHIL «sotuvchi
+ *                                   biriktirilmagan» degani edi.
+ *
+ *     «Yashil = yaxshi/to'langan» — deyarli umumbashariy o'qish, va
+ *     bozorda ishlaydigan odam xaritaga aynan shu kutish bilan qaraydi.
+ *     Eski sxemada u yashil katakni ko'rib «to'landi» deb o'ylardi,
+ *     holbuki o'sha katakda umuman SOTUVCHI YO'Q edi — ya'ni rang eng
+ *     muhim savolga TESKARI javob berardi.
+ *
+ * ⚠ `free` KULRANGGA O'TDI, boshqa rangga emas: sotuvchisi yo'q rasta
+ *   to'lov qatlamida «o'yindan tashqarida» — u na to'lagan, na qarzdor.
+ *   Unga o'z rangini berish uchinchi holatni ko'zga tenglashtirardi.
+ *   Ma'nosi O'ZGARMADI (D-C3): bu BANDLIK emas, BIRIKTIRISH holati va
+ *   legenda matni ham o'zgarmagan.
+ *
+ * ⚠ MATN TOKENLARI JUFTIGA MOS KELADI: `bg-success/18 + text-success-text`
+ *   juftligi `free` da ALLAQACHON ishlatilgan va kontrast reyestridan
+ *   o'tgan, ya'ni almashtirish yangi o'lchanmagan juftlik tug'dirmaydi.
+ * =============================================================================
+ */
 export const TONE_STYLES: Record<StallTone, string> = {
   neutral: "bg-surface text-text font-semibold",
   muted: "bg-surface-muted text-text-muted",
   off: "bg-surface-muted text-text-muted line-through",
-  paid: "bg-accent/20 text-accent-text font-semibold ring-1 ring-inset ring-accent/45",
+  paid: "bg-success/18 text-success-text font-semibold ring-1 ring-inset ring-success/45",
   debt: "bg-danger/18 text-danger-text font-semibold ring-1 ring-inset ring-danger/45",
   mismatch:
     "bg-warning/30 text-warning-text font-semibold ring-1 ring-inset ring-warning/60",
-  free: "bg-success/18 text-success-text ring-1 ring-inset ring-success/45",
+  free: "bg-surface-muted text-text-muted ring-1 ring-inset ring-border",
   fair: "bg-info/20 text-info-text font-semibold ring-1 ring-inset ring-info/45",
 };
 

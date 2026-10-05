@@ -5,6 +5,7 @@ import { Video } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { LivePlayer } from "@/components/cameras/live-player";
+import { LiveZoneOverlay } from "@/components/cameras/live-zone-overlay";
 import { NvrErrorBlock } from "@/components/cameras/nvr-error-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -175,7 +176,7 @@ export function LiveViewDialog({
 
   return (
     <Dialog.Root onOpenChange={onOpenChange} open={open}>
-      <Dialog.Content description={label} sheetOnMobile size="lg" title={title}>
+      <Dialog.Content description={label} sheetOnMobile size="xl" title={title}>
         {/*
          * ⚠ SESSIYA HOLATI SHU BOLADA YASHAYDI VA U DIALOG BILAN BIRGA
          *   O'LADI. `Dialog.Content` yopilganda portaldan chiqariladi,
@@ -270,7 +271,14 @@ function LiveSession({
        */}
       <div
         className={cn(
-          "relative flex aspect-video items-center justify-center overflow-hidden rounded-md",
+          /*
+           * ⚠ `max-h-[70vh]` — oyna kengaygach (261005) 16:9 kadr past
+           *   ekranlarda dialogning `max-h-[85vh]` idan oshib ketardi
+           *   va sarlavha bilan pastdagi boshqaruvlar qirqilardi.
+           *   Chegara urilganda kadr `object-contain` bilan o'z
+           *   nisbatini saqlagan holda kichrayadi — cho'zilmaydi.
+           */
+          "relative flex aspect-video max-h-[70vh] items-center justify-center overflow-hidden rounded-md",
           stage === "idle" ? "bg-surface-muted" : "bg-text",
         )}
         ref={frameRef}
@@ -332,6 +340,22 @@ function LiveSession({
             onTransport={setTransport}
             url={url}
           />
+        ) : null}
+
+        {/*
+         * ⛔⛔ RASTA RAQAMLARI KADR USTIDA (261005, foydalanuvchi talabi).
+         *
+         *     Kadrda o'nlab rasta ko'rinadi va hammasi bir-biriga
+         *     o'xshaydi. Nizoda «bu qaysi rasta?» degan savolga kadrning
+         *     O'ZIDAN javob berib bo'lmasdi — operator zona muharririni
+         *     ochib solishtirishi kerak edi.
+         *
+         * ⚠ FAQAT OQIM KO'RINAYOTGANDA: qoplama kutish, xato va
+         *   muddati o'tgan holatlar ustida chizilsa, u yerda tasvir
+         *   YO'Q va raqamlar bo'sh qora ramkada osilib turardi.
+         */}
+        {stage === "playing" || stage === "expiring" ? (
+          <LiveZoneOverlay cameraId={camera.id} enabled />
         ) : null}
 
         {stage === "playing" || stage === "expiring" ? (

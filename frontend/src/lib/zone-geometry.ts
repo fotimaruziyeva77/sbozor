@@ -527,3 +527,31 @@ export function interpolateRow(first: Poly, last: Poly, n: number): Poly[] {
 
   return out;
 }
+
+/**
+ * Yorliq qo'yish uchun ko'pburchak MARKAZI — chegaralovchi to'rtburchakdan.
+ *
+ * ⛔ TEPALAR O'RTACHASI EMAS, va bu ataylab: bitta tomonda tepalar zich
+ *    bo'lsa o'rtacha o'sha tomonga tortiladi va rasta raqami chekkaga
+ *    chiqib qolardi. Rasta amalda to'rtburchak (§6.5), unda ikkala
+ *    usul ham bir xil natija beradi — farq faqat qo'lda tahrirlangan
+ *    murakkab shaklda ko'rinadi va u yerda bbox markazi barqarorroq.
+ *
+ * ⚠ `null` — bo'sh ko'pburchak. Nol qaytarish `(0,0)` ga, ya'ni kadrning
+ *   chap-yuqori burchagiga yorliq qo'yardi va u «shu yerda zona bor»
+ *   degan yolg'on signal bo'lardi.
+ */
+export function centroidOf(poly: Poly): Pt | null {
+  if (poly.length === 0) return null;
+  let minX = poly[0]![0];
+  let maxX = poly[0]![0];
+  let minY = poly[0]![1];
+  let maxY = poly[0]![1];
+  for (const [x, y] of poly) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return [(minX + maxX) / 2, (minY + maxY) / 2];
+}

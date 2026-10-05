@@ -25,7 +25,7 @@ import { cn } from "@/lib/cn";
  * yo'q qilish emas.
  */
 
-export type DialogSize = "sm" | "md" | "lg";
+export type DialogSize = "sm" | "md" | "lg" | "xl";
 
 /*
  * Kenglik sinflari LITERAL bo'lishi shart: Tailwind manba faylini skanerlaydi,
@@ -35,12 +35,28 @@ const SIZE_CENTERED: Record<DialogSize, string> = {
   sm: "w-[min(26rem,calc(100vw-2rem))]",
   md: "w-[min(28rem,calc(100vw-2rem))]",
   lg: "w-[min(30rem,calc(100vw-2rem))]",
+  /*
+   * ⛔⛔ `xl` — KADR KO'RSATADIGAN OYNA UCHUN (261005, foydalanuvchi
+   *     talabi: «juda kichkina, katta ko'rinishi kerak»).
+   *
+   *     `lg` 30rem = 480px. 16:9 kadr unda 480x270 bo'lib chiqadi —
+   *     ya'ni bozor rastasini ko'rish uchun mo'ljallangan oyna
+   *     telefonning yarmi hajmida edi. Rasta ustidagi raqamni ham,
+   *     sotuvchini ham ajratib bo'lmasdi.
+   *
+   * ⚠ 72rem (1152px) — `app-shell` dagi kontent kengligi bilan BIR
+   *   OILADAN. Undan kattasi 24" monitorda oynaning chekkalarini ko'z
+   *   bir sakrashda qamrab olmaydigan masofaga chiqarardi (o'sha
+   *   yerdagi 1600px chegarasi bilan ayni sabab).
+   */
+  xl: "w-[min(72rem,calc(100vw-2rem))]",
 };
 
 const SIZE_SHEET: Record<DialogSize, string> = {
   sm: "sm:w-[min(26rem,calc(100vw-2rem))]",
   md: "sm:w-[min(28rem,calc(100vw-2rem))]",
   lg: "sm:w-[min(30rem,calc(100vw-2rem))]",
+  xl: "sm:w-[min(72rem,calc(100vw-2rem))]",
 };
 
 /**

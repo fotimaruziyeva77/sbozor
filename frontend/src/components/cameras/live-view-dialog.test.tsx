@@ -360,14 +360,35 @@ describe("LiveViewDialog — DOM", () => {
     expect(screen.getByRole("button", { name: VIEW_LABEL })).toBeInTheDocument();
   });
 
+/**
+ * NECHTA CHIPTA OLINDI — `apiFetch` ning JAMI soni EMAS (261005).
+ *
+ * ⛔⛔ NEGA O'ZGARTIRILDI: bu testlar ilgari `toHaveBeenCalledTimes` ni
+ *     butun `apiFetch` ustida o'lchardi, ya'ni ular «bitta CHIPTA
+ *     olinadi» degan da'voni «dialog JAMI bitta so'rov yuboradi» deb
+ *     yozib qo'ygan edi. Ikkinchisi boshqa da'vo va u NOTO'G'RI: kadr
+ *     ustidagi rasta raqamlari qo'shilganda (261005) dialog zonalarni
+ *     ham so'raydi va sanoq 1 -> 2 ga chiqdi, garchi CHIPTA baribir
+ *     BITTA olingan bo'lsa ham.
+ *
+ * ⚠ DARVOZA ZAIFLASHMADI, AKSINCHA ANIQLASHDI: «bitta chipta» — asl
+ *   niyat (§8.3, har ko'rish uchun yangi huquq tekshiruvi) va u endi
+ *   aynan shu bilan o'lchanadi. Begona so'rov qo'shilishi testni
+ *   qizartirmaydi; IKKINCHI CHIPTA esa qizartiradi.
+ */
+function chiptaSoni(): number {
+  return apiFetch.mock.calls.filter((call) =>
+    String(call[0]).includes("/live-token"),
+  ).length;
+}
+
   test("[Ko'rish] bosilganda chipta olinadi va pleyer montaj qilinadi", async () => {
     apiFetch.mockResolvedValue(TICKET);
 
     renderDialog();
     await startViewing();
 
-    expect(apiFetch).toHaveBeenCalledTimes(1);
-    expect(String(apiFetch.mock.calls[0][0])).toContain("/live-token");
+    expect(chiptaSoni()).toBe(1);
     expect(playerMock.mounts).toBe(1);
     expect(playerMock.lastUrl).toBe(TICKET.url);
   });
@@ -433,7 +454,7 @@ describe("LiveViewDialog — DOM", () => {
     });
 
     // YANGI chipta olindi va pleyer YANGIDAN montaj qilindi.
-    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(chiptaSoni()).toBe(2);
     expect(playerMock.mounts).toBe(2);
   });
 

@@ -406,7 +406,8 @@
     "deviceAll": "Ҳаммаси ({count} та қурилма)",
     "wallNoFrame": "Кадр ҳали йўқ",
     "wallFrameLoading": "Кадр юкланмоқда…",
-    "wallFrameFailed": "Кадр очилмади"
+    "wallFrameFailed": "Кадр очилмади",
+    "zoneOverlayTitle": "Кадрда {count} та раста белгиланган"
   },
   "categories": {
     "actions": "Амаллар",
