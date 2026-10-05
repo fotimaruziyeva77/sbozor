@@ -95,6 +95,46 @@ class SbozorSync:
         return bool(self.dsn and self._psycopg)
 
 
+    def touch_cameras(self, key_prefix: str) -> int:
+        """Bozor kameralarining `last_seen_at` ini yangilaydi.
+
+        ⛔⛔ NEGA KERAK (260829, panelda o'lchandi). sbozor `cameras.status`
+            ni AGENT AYTGAN paytdagi holatda saqlaydi va uni hech kim
+            eskirtirmaydi. Agent to'xtaganda — xizmat yiqilsa, bozor
+            internetdan uzilsa — panel «16 ta kamera Onlayn» deb
+            ko'rsataverardi. Yonida esa «oxirgi ko'rilgan: 1 soat oldin»
+            yozuvi turardi: ikkita qarama-qarshi fakt bir qatorda.
+
+            Nizoda bu qimmat: operator kameralar ishlayapti deb hisoblab,
+            keyin o'sha soatlar uchun kadr yo'qligini ko'radi.
+
+        ⚠ SIGNAL — HEARTBEAT, KADR EMAS. Kadr soatiga bir marta keladi,
+          heartbeat esa har 60 soniyada: faqat kadrga tayanish uzilishni
+          bir soatgacha yashirardi.
+
+        ⚠ FAQAT `camagent` QURILMALARI: sbozor o'zi ulanadigan NVR'ning
+          holatini o'z kashfiyoti bilan biladi va bu yerdagi yangilash
+          uni buzardi.
+        """
+        market_id = market_id_from_prefix(key_prefix)
+        if not (self.enabled and market_id):
+            return 0
+        try:
+            with self._psycopg.connect(self.dsn, autocommit=True) as conn,                     conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE cameras c
+                       SET last_seen_at = now(), updated_at = now()
+                      FROM nvr_devices d
+                     WHERE d.market_id = c.market_id AND d.id = c.nvr_id
+                       AND d.username = 'camagent'
+                       AND c.market_id = %s
+                       AND c.is_archived = false
+                """, (market_id,))
+                return cur.rowcount or 0
+        except Exception as exc:                      # noqa: BLE001
+            log.warning("sbozor kamera vaqtini yangilab bo'lmadi: %s", exc)
+            return 0
+
     # ------------------------------------------------ kadrlar
 
     def notify_snapshot(self, key_prefix: str, meta: dict, ref: str,
@@ -279,6 +319,12 @@ def _slot_from_meta(meta: dict, vaqt: str) -> str:
     trigger = str(meta.get("trigger") or "")
     if trigger.startswith("slot:"):
         return trigger[5:][:5]
-    return (vaqt[11:16] or "00:00") if len(vaqt) >= 16 else "00:00"
+    # ⛔ SLOT YO'Q -> BO'SH QATOR, UTC SOATI EMAS (260829).
+    #   Gateway UTC'da ishlaydi va bozor mintaqasini BILMAYDI. Ilgari
+    #   bu yerda `vaqt[11:16]` qaytarilardi: Karmanada 06:18 da qo'lda
+    #   olingan kadr sbozor jadvalida `01:18` ustuni bo'lib chiqdi va
+    #   operator uni tanimadi. Bo'sh qator core-api'ga «slotni O'ZING
+    #   hisobla» deydi — u bozor mintaqasini biladi.
+    return ""
 
     # ------------------------------------------------ qurilmalar

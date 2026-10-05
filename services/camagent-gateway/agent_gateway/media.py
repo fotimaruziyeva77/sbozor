@@ -97,13 +97,31 @@ srt: no
 # o'tib. Endi:
 #   * PUSH (publish) — faqat `campub` parolini bilgan agent (parol
 #     serverda tasodifiy yaratiladi, publish_url ichida keladi).
-#   * READ  — faqat 127.0.0.1 (WHEP proksi). Tashqi o'qish taqiqlangan.
+#   * READ  — faqat 127.0.0.1 (WHEP proksi) yoki `camread` parolini
+#     bilgan servis. Anonim tashqi o'qish taqiqlangan.
+#
+# ⛔ `camread` NEGA KERAK (260829): sbozor'ning go2rtc'si oqimni SHU
+#   serverning ichidan, LEKIN BOSHQA konteynerdan o'qiydi — ya'ni
+#   uning manba IP'si `127.0.0.1` emas, Docker tarmog'idagi manzil.
+#   Ilgari bunday o'qish jimgina rad etilardi: go2rtc oqimni ro'yxatga
+#   olardi, `frame.jpeg` esa NOL BAYT qaytarardi va sabab hech qanday
+#   jurnalda ko'rinmasdi.
+#
+#   Muqobil — butun Docker subnetiga ruxsat berish — RAD ETILDI:
+#   o'sha tarmoqda frontend, worker va storage ham turadi va ularning
+#   birortasi kamera oqimini o'qishi kerak emas. Parol aniq kimga
+#   ruxsat berilganini KO'RSATADI.
 authInternalUsers:
   - user: campub
     pass: {pub_secret}
     ips: []
     permissions:
       - action: publish
+  - user: camread
+    pass: {read_secret}
+    ips: []
+    permissions:
+      - action: read
   - user: any
     pass:
     ips: ['127.0.0.1', '::1']
@@ -143,6 +161,11 @@ class MediaServer:
         self.rtsp_port = rtsp_port
         # Agent shu manzilga push qiladi. Bo'sh bo'lsa jonli video o'chiq.
         self.public_host = public_host or os.environ.get("CAMAGENT_MEDIA_HOST", "")
+        # Server ICHIDAN o'qish manzili (sbozor go2rtc'si uchun). Konteyner
+        # nomi berilsa RTSP trafigi Docker tarmog'ida qoladi va tashqi
+        # interfeysga chiqib qaytmaydi; berilmasa ommaviy manzil ishlatiladi
+        # — ishlaydi, lekin bir bozorning oqimi kanalni ikki marta yeydi.
+        self.internal_host = os.environ.get("CAMAGENT_MEDIA_INTERNAL_HOST", "")
         self.turn_url = turn_url or os.environ.get("CAMAGENT_TURN_URL", "")
         self.turn_user = turn_user or os.environ.get("CAMAGENT_TURN_USER", "")
         self.turn_pass = turn_pass or os.environ.get("CAMAGENT_TURN_PASS", "")
@@ -153,6 +176,11 @@ class MediaServer:
         # ham olinadi (bir necha server nusxasi bir xil bo'lishi uchun).
         self.pub_secret = (os.environ.get("CAMAGENT_MEDIA_SECRET", "")
                            or secrets.token_urlsafe(24))
+        # O'qish paroli — PUBLISH PAROLIDAN BOSHQA. Bir xil bo'lsa
+        # o'qiy oladigan har bir servis oqim PUSH ham qila olardi, ya'ni
+        # panelda soxta video ko'rsatishi mumkin edi.
+        self.read_secret = (os.environ.get("CAMAGENT_MEDIA_READ_SECRET", "")
+                            or secrets.token_urlsafe(24))
         # Ishga tushmagan bo'lsa SABABI shu yerda qoladi. Busiz panel
         # faqat "ishga tushmagan" deydi va operator nima bo'lganini
         # bilmaydi (o'lchangan: UDP porti band edi, hech qayerda
@@ -235,7 +263,8 @@ class MediaServer:
                               rtsp_port=self.rtsp_port,
                               udp_port=self.whep_port + 100, ice_servers=ice,
                               additional_hosts=hosts,
-                              pub_secret=self.pub_secret)
+                              pub_secret=self.pub_secret,
+                              read_secret=self.read_secret)
         yol = self.data_dir / "mediamtx.yml"
         yol.parent.mkdir(parents=True, exist_ok=True)
         yol.write_text(matn, encoding="utf-8")
@@ -298,22 +327,103 @@ class MediaServer:
     # ------------------------------------------------ manzillar
 
     @staticmethod
-    def path_for(agent_id: str, channel: int) -> str:
+    def path_for(agent_id: str, channel: int, nvr_serial: str = "") -> str:
         """Oqim yo'li. Faqat harf/raqam — MediaMTX yo'l nomi qat'iy va bu
-        qiymat URL'ga tushadi, ya'ni tozalanmasa yo'l chiqishi mumkin."""
-        toza = "".join(c for c in str(agent_id).lower() if c.isalnum())
-        return f"{toza}_{int(channel)}"
+        qiymat URL'ga tushadi, ya'ni tozalanmasa yo'l chiqishi mumkin.
 
-    def publish_url(self, agent_id: str, channel: int) -> str:
+        ⛔⛔ SERIYA YO'LNING BIR QISMI (260829, Karmanada o'lchandi).
+
+            NVR'siz obyektda har kamera ALOHIDA qurilma va ularning
+            HAMMASIDA kanal = 1 (7-bo'lim). Seriyasiz yo'l 16 kamerani
+            bitta `agentid_1` ga yig'ardi: devorda ikkinchi kamerani
+            ochgan operator BIRINCHISINING tasvirini ko'rar va buni
+            «kamera noto'g'ri ulangan» deb hisoblardi. Nizoda esa bu
+            dalilni butunlay yaroqsiz qilardi — kadr ostidagi nom
+            boshqa kameraniki bo'lardi.
+
+            Eski (seriyasiz) chaqiruv ATAYIN saqlanadi: NVR'li obyektda
+            kanal raqami o'zi yagona va yo'l nomini uzaytirish MediaMTX
+            konfiguratsiyasidagi mavjud yo'llarni buzardi.
+        """
+        toza = "".join(c for c in str(agent_id).lower() if c.isalnum())
+        if not nvr_serial:
+            return f"{toza}_{int(channel)}"
+        seriya = "".join(c for c in str(nvr_serial).lower() if c.isalnum())
+        return f"{toza}_{seriya}_{int(channel)}"
+
+    def publish_url(self, agent_id: str, channel: int,
+                    nvr_serial: str = "") -> str:
         """Agent shu manzilga uzatadi (`start_stream` parametri).
 
         Publish paroli URL ichida — faqat shu parolni bilgan agent oqim
         yubora oladi. Parol tasodifiy, ffmpeg jurnalida niqoblanadi.
         """
         return (f"rtsp://campub:{self.pub_secret}@{self.public_host}:"
-                f"{self.rtsp_port}/{self.path_for(agent_id, channel)}")
+                f"{self.rtsp_port}/"
+                f"{self.path_for(agent_id, channel, nvr_serial)}")
 
-    def whep_url(self, agent_id: str, channel: int) -> str:
+    def read_url(self, agent_id: str, channel: int,
+                 nvr_serial: str = "") -> str:
+        """Oqimni O'QISH manzili — sbozor go2rtc'si shu yerdan oladi.
+
+        ⚠ PAROL O'QISH UCHUN, PUBLISH UCHUN EMAS (`camread`). 8554
+          porti internetdan ochiq — anonim o'qish yo'l nomini topgan
+          har kimga kamerani ochib berardi. Publish paroli esa BOSHQA:
+          o'qiy oladigan servis oqim yubora olmaydi.
+        """
+        host = self.internal_host or self.public_host
+        return (f"rtsp://camread:{self.read_secret}@{host}:{self.rtsp_port}/"
+                f"{self.path_for(agent_id, channel, nvr_serial)}")
+
+    def path_ready(self, path: str) -> bool:
+        """Yo'lda oqim BORmi (MediaMTX API).
+
+        `ready: false` — yo'l e'lon qilingan, lekin kadr kelmagan;
+        o'quvchi bunday yo'lga ulanolmaydi.
+        """
+        import json
+        import urllib.request
+
+        try:
+            manzil = f"http://127.0.0.1:{self.api_port}/v3/paths/get/{path}"
+            with urllib.request.urlopen(manzil, timeout=2) as javob:
+                return bool(json.load(javob).get("ready"))
+        except Exception:                              # noqa: BLE001
+            return False
+
+    def wait_ready(self, agent_id: str, channel: int, nvr_serial: str = "",
+                   timeout_s: float = 12.0) -> bool:
+        """Oqim paydo bo'lguncha kutadi.
+
+        ⛔⛔ NEGA KUTISH SHART (260829, jonli sinovda o'lchandi).
+
+            Zanjir: gateway agentga buyruq yuboradi -> agent ffmpeg'ni
+            ko'taradi -> ffmpeg kameradan o'qib MediaMTX'ga uzatadi.
+            Bu ~2-4 soniya. Gateway darrov javob bersa, sbozor o'sha
+            zahoti go2rtc'ga «shu manzildan o'qi» deydi va go2rtc BO'SH
+            yo'lga ulanib **400** oladi.
+
+            O'lchangan hodisa: go2rtc 07:08:01 da ulandi, agent 07:08:03
+            da publish qildi — ikki soniya farq va ekran QORA qoldi.
+            Foydalanuvchi uchun bu «ba'zan ishlaydi, ba'zan yo'q» bo'lib
+            ko'rinardi, ya'ni eng yomon turdagi nosozlik.
+
+        ⚠ KUTISH TUGASA HAM `False` QAYTARILADI, ISTISNO EMAS:
+          chaqiruvchi baribir seansni ochgan va agentga buyruq
+          yuborilgan — oqim keyinroq kelishi mumkin va operatorning
+          «Qayta urinish» bosishi ishlaydi.
+        """
+        yol = self.path_for(agent_id, channel, nvr_serial)
+        oxiri = time.time() + timeout_s
+        while time.time() < oxiri:
+            if self.path_ready(yol):
+                return True
+            time.sleep(0.4)
+        log.warning("oqim %s belgilangan vaqtda tayyor bo'lmadi", yol)
+        return False
+
+    def whep_url(self, agent_id: str, channel: int,
+                 nvr_serial: str = "") -> str:
         """Ichki WHEP manzili — proksi shu yerdan oladi."""
         return (f"http://127.0.0.1:{self.whep_port}/"
-                f"{self.path_for(agent_id, channel)}/whep")
+                f"{self.path_for(agent_id, channel, nvr_serial)}/whep")

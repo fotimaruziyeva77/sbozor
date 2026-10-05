@@ -241,6 +241,23 @@ class GatewayDB:
         rows = self._rows("SELECT * FROM agents WHERE agent_id=?", (agent_id,))
         return dict(rows[0]) if rows else None
 
+    def agents_by_prefix(self, key_prefix: str) -> list[dict]:
+        """Bir bozorga tegishli agentlar.
+
+        sbozor kamerani `market_id` bilan biladi, agentni esa bilmaydi:
+        `nvr_devices` da agent identifikatori yo'q (u CamAgent ichki
+        tushunchasi). Bog'lovchi halqa — `key_prefix`, u kod
+        yaratilayotganda bozorning UUID'i qilib qo'yiladi.
+
+        Ro'yxat qaytariladi, bitta yozuv emas: bir bozorda ikkinchi
+        agent (masalan ikkinchi bino) paydo bo'lishi mumkin va o'shanda
+        kerakli kamera qaysi agentda ekanini seriya bo'yicha topamiz.
+        """
+        rows = self._rows(
+            "SELECT * FROM agents WHERE key_prefix=? ORDER BY last_heartbeat DESC",
+            (key_prefix,))
+        return [dict(r) for r in rows]
+
     def find_agent_for_code_reuse(self, instance_id: str, key_prefix: str) -> dict | None:
         """Ayni kompyuter ayni obyekt kodi bilan qayta aktivatsiya qilyaptimi.
 
@@ -445,7 +462,8 @@ class GatewayDB:
 
     def start_stream_session(self, session_id: str, agent_id: str, channel: int,
                              actor: str, mode: str = "webrtc",
-                             nvr_serial: str = "") -> None:
+                             nvr_serial: str = "",
+                             duration_s: int = 0) -> None:
         """Jonli ko'rish seansini ochadi.
 
         CLAUDE.md 11-bo'lim: "Kim, qachon, qaysi kamerani ochgani
@@ -459,9 +477,26 @@ class GatewayDB:
         now = time.time()
         self._exec(
             "INSERT OR REPLACE INTO stream_sessions(session_id, agent_id, channel,"
-            " nvr_serial, actor, started_at, last_seen_at, mode)"
-            " VALUES(?,?,?,?,?,?,?,?)",
-            (session_id, agent_id, int(channel), nvr_serial or "", actor, now, now, mode))
+            " nvr_serial, actor, started_at, last_seen_at, mode, ended_at, end_reason)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (session_id, agent_id, int(channel), nvr_serial or "", actor, now, now,
+             mode,
+             # ⛔⛔ QISQA KO'RISH DARHOL YOPIQ YOZILADI (260829, byudjet
+             #     tugab qolgach o'lchandi).
+             #
+             #     Devor katakchasi oqimni 20 soniyaga ochadi va agent
+             #     uni O'ZI o'chiradi — ijara umuman kerak emas. Seans
+             #     esa OCHIQ qolardi va reaper uni `SBOZOR_LEASE_S`
+             #     (400 s) dan keyin yopardi. Byudjet hisobiga o'sha
+             #     400 soniya tushardi: 16 katakcha × har sahifa
+             #     ochilishi = 107 daqiqa, ya'ni oylik 600 daqiqalik
+             #     byudjet OLTI marta sahifa ochilishida tugardi.
+             #
+             #     Endi yozuv boshidanoq yopiq va davomiyligi HAQIQIY
+             #     oqim muddatiga teng. Reaper unga tegmaydi,
+             #     `_stop_if_last` ham — oqimni agent o'zi to'xtatadi.
+             (now + duration_s) if duration_s else None,
+             "qisqa ko'rish" if duration_s else None))
 
     def touch_stream_session(self, session_id: str) -> bool:
         """Brauzer hali ochiq — ijarani uzaytiradi.
@@ -505,12 +540,52 @@ class GatewayDB:
             args = (agent_id,)
         return [dict(r) for r in self._rows(sql + " ORDER BY started_at", args)]
 
-    def stale_stream_sessions(self, older_than_s: float) -> list[dict]:
-        """Brauzer aloqasi uzilgan seanslar — ularni yopish kerak."""
-        chegara = time.time() - older_than_s
+    def stale_stream_sessions(self, older_than_s: float,
+                              sbozor_older_than_s: float = 0.0) -> list[dict]:
+        """Brauzer aloqasi uzilgan seanslar — ularni yopish kerak.
+
+        ⛔ IJARA MUDDATI CHAQIRUVCHIGA QARAB IKKI XIL (260829).
+
+           Panel sahifasi har ~15 soniyada «tirikman» deydi, ya'ni 45
+           soniya jimlik u yerda haqiqatan uzilishni bildiradi.
+
+           sbozor esa boshqacha ishlaydi: u ijara emas, CHIPTA
+           yangilaydi va buni 5 daqiqada bir marta qiladi
+           (`LIVE_SESSION_MAX_MS`). Ikkalasiga bir xil chegara
+           qo'llansa, sbozor'da ochilgan video 45 soniyada UZILARDI va
+           foydalanuvchi buni «kamera yiqildi» deb tushunardi.
+
+           `sbozor_older_than_s` = 0 bo'lsa eski xulq saqlanadi.
+        """
+        hozir = time.time()
+        oddiy = hozir - older_than_s
+        if sbozor_older_than_s <= 0:
+            return [dict(r) for r in self._rows(
+                "SELECT * FROM stream_sessions "
+                "WHERE ended_at IS NULL AND last_seen_at < ?", (oddiy,))]
+        sbozor = hozir - sbozor_older_than_s
+        # `actor` sbozor yo'lida `sbozor:{user_id}` shaklida keladi —
+        # kim ko'rgani jurnalda qolishi uchun (11-bo'lim). Shuning uchun
+        # solishtirish PREFIKS bo'yicha.
         return [dict(r) for r in self._rows(
-            "SELECT * FROM stream_sessions WHERE ended_at IS NULL AND last_seen_at < ?",
-            (chegara,))]
+            "SELECT * FROM stream_sessions WHERE ended_at IS NULL AND "
+            "((actor LIKE 'sbozor:%' AND last_seen_at < ?) OR "
+            " (actor NOT LIKE 'sbozor:%' AND last_seen_at < ?))",
+            (sbozor, oddiy))]
+
+    def open_sessions_of_actor(self, actor: str) -> list[dict]:
+        """Bitta ko'ruvchining ochiq seanslari.
+
+        sbozor dialog yopilganda gateway'ga xabar bermaydi (dialogda
+        «yopildi» hodisasi frontend'da qoladi). Shuning uchun YANGI
+        ko'rish so'rovi o'sha odamning eskisini yopadi: aks holda
+        agentdagi `max_channels` chegarasi to'lib qolardi va uchinchi
+        kamerani ochib bo'lmasdi — o'lchangan (260829).
+        """
+        return [dict(r) for r in self._rows(
+            "SELECT * FROM stream_sessions "
+            "WHERE ended_at IS NULL AND actor=? ORDER BY started_at",
+            (actor,))]
 
     def stream_minutes_this_month(self, agent_id: str) -> float:
         """Shu oyda qancha daqiqa jonli video ko'rilgan.
@@ -590,6 +665,33 @@ class GatewayDB:
         self._exec(
             "INSERT INTO events(agent_id, ts, kind, detail, actor) VALUES(?,?,?,?,?)",
             (agent_id, time.time(), kind, detail, actor or "tizim"))
+
+    def last_stream_failure(self, agent_id: str,
+                            max_age_s: float = 600.0) -> str | None:
+        """Agent oxirgi marta oqim NEGA o'lganini aytgan — yoki `None`.
+
+        =====================================================================
+        ⛔⛔ NEGA KERAK (261005, Karmanada o'lchandi): agent `start_stream`
+            ga "ok, boshlandi" deb javob berardi, keyin ffmpeg o'lardi va
+            panel «ehtimol NVR oqim chegarasiga yetgan» deb TAXMIN
+            qilardi. Haqiqiy sabab agentda bor edi, lekin hech qayerda
+            ko'rinmasdi.
+
+        ⚠ VAQT CHEGARASI MAJBURIY: agent sababni HEARTBEATDA yuboradi
+          (60 s), gateway esa oqimni bir necha soniya kutadi. Ya'ni
+          BIRINCHI urinishda sabab hali kelmagan bo'ladi va keyingi
+          urinishda ko'rinadi. Chegarasiz esa bir hafta oldingi xato
+          bugungi nosozlik sababi bo'lib chiqardi — eng yomon turdagi
+          yolg'on, chunki u ishonarli ko'rinadi.
+        =====================================================================
+        """
+        satrlar = self._rows(
+            "SELECT detail FROM events WHERE agent_id = ? AND kind = ? "
+            "AND ts >= ? ORDER BY id DESC LIMIT 1",
+            (agent_id, "stream_failed", time.time() - max_age_s))
+        if not satrlar:
+            return None
+        return str(dict(satrlar[0]).get("detail") or "") or None
 
     def list_events(self, limit: int = 100) -> list[dict]:
         return [dict(r) for r in self._rows("SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,))]

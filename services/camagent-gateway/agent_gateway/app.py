@@ -27,6 +27,17 @@ from .retention import retention_days
 from .retention import sweep as retention_sweep
 from .storage import DiskStorage, SnapshotStorage
 
+# ⛔⛔ TA'RIF YETISHMAS EDI VA BU JIM TURGAN NUQSON BO'LGAN (261005).
+#
+#     `log.info` va `log.exception` quyida (tozalash fon vazifasida)
+#     ishlatiladi, lekin `log` HECH QAYERDA ta'riflanmagan edi — ya'ni
+#     o'sha vazifa ishga tushishi bilan `NameError` bilan yiqilardi.
+#     Import bosqichida ko'rinmaydi: nom faqat chaqirilganda qidiriladi.
+#
+# ⚠ TUZATISH sbozor'dagi VENDORING NUSXASIDA bor edi, manbada esa yo'q.
+#   Ya'ni kimdir "qo'lda tahrirlanmaydi" qoidasini buzib nusxani
+#   tuzatgan va o'zgarishni orqaga qaytarmagan. Natijada sinxronlash
+#   nuqsonni QAYTA olib kelardi. Endi manba o'zi to'g'ri.
 log = logging.getLogger("agent_gateway.app")
 
 ALLOWED_COMMANDS = {
@@ -546,6 +557,13 @@ def build_router(data_dir: str | Path, storage: SnapshotStorage | None = None,
                 mtype = msg.get("type")
                 if mtype == "heartbeat":
                     await run_in_threadpool(gw.db.record_heartbeat, aid, msg)
+                    # sbozor'dagi kamera vaqtini ham surib qo'yamiz —
+                    # aks holda agent to'xtaganda panel «hammasi
+                    # Onlayn» deb ko'rsataverardi (`touch_cameras`).
+                    if gw.sbozor.enabled:
+                        await run_in_threadpool(
+                            gw.sbozor.touch_cameras,
+                            agent.get("key_prefix") or "")
                     await ws.send_text(json.dumps(
                         {"v": 1, "type": "heartbeat_ack", "server_time": _utcnow()}))
                     await gw.push_pending_commands(aid)
@@ -566,8 +584,18 @@ def build_router(data_dir: str | Path, storage: SnapshotStorage | None = None,
                             gw.db.set_warning(aid, "kanal o'zgardi: " + "; ".join(diff[:3]))
                             gw.db.log_event(aid, "channel_changed", "; ".join(diff))
                 elif mtype == "error":
-                    gw.db.log_event(aid, "agent_error",
-                                    f"{msg.get('code')}: {msg.get('message', '')}")
+                    # ⛔ OQIM XATOSI ALOHIDA TURGA YOZILADI (261005).
+                    #
+                    #   `agent_error` — aralash chelak: unda bad_config
+                    #   ham, nvr_unreachable ham yotadi. Oqim sababini
+                    #   o'sha yerdan matn bo'yicha qidirish kerak
+                    #   bo'lardi va u bir kun boshqa xato bilan
+                    #   adashtirilardi. Alohida tur `last_stream_failure`
+                    #   ni ANIQ qiladi.
+                    kod = str(msg.get("code") or "")
+                    tur = "stream_failed" if kod == "stream_failed" else "agent_error"
+                    gw.db.log_event(aid, tur,
+                                    f"{kod}: {msg.get('message', '')}")
                 else:
                     gw.db.log_event(aid, "unknown_msg", str(mtype))
         except (WebSocketDisconnect, asyncio.TimeoutError, json.JSONDecodeError):
