@@ -129,6 +129,21 @@ class Go2rtcError(RuntimeError):
       Sabab `_failure()` docstringida.
     """
 
+    def __init__(self, message: str, agent_reason: str | None = None) -> None:
+        super().__init__(message)
+        self.agent_reason = agent_reason
+        """CamAgent yo'lida AGENT aytgan sabab (261005).
+
+        ⛔ NEGA YANGI XATO TURI OCHILMADI: `cameras.py` dagi izoh buni
+           ataylab rad etgan — yangi tur UI'da yangi holat talab qilardi,
+           operator uchun esa sabab bir xil («jonli ko'rish ishlamayapti»).
+           O'sha qaror KUCHDA: bu maydon yangi HOLAT emas, mavjud
+           holatning IZOHI. UI uni asosiy xabar OSTIDA ko'rsatadi.
+
+        ⚠ `None` — to'g'ridan-to'g'ri NVR yo'lida har doim, CamAgent
+          yo'lida esa gateway hali sabab bilmaganda.
+        """
+
 
 def _failure(method: str, exc: httpx.HTTPError) -> Go2rtcError:
     """`httpx` istisnosini SIRSIZ `Go2rtcError` ga aylantiradi (T-03-87).

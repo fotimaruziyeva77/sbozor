@@ -216,6 +216,8 @@ function LiveSession({
   );
   /** Server aytgan sabab — `null` bo'lsa hali xato bo'lmagan. */
   const [errorKey, setErrorKey] = useState<LiveErrorKey | null>(null);
+  /** AGENT aytgan izoh (ffmpeg xatosi) — ko'pincha `null`. */
+  const [agentReason, setAgentReason] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   /** Har yangilash pleyerni QAYTA MOUNT qiladi (§8.3). */
   const [sessionSeq, setSessionSeq] = useState(0);
@@ -260,6 +262,7 @@ function LiveSession({
        *    "kind" qolardi va UI qolganini O'ZI o'ylab topardi.
        */
       setErrorKey(marketErrorMessageKey(cause));
+      setAgentReason(agentReasonOf(cause));
       setPhase("error");
       setStartedAt(null);
     }
@@ -437,6 +440,7 @@ function LiveSession({
 
       {stage === "error" ? (
         <LiveError
+          agentReason={agentReason}
           errorKey={errorKey}
           kind={errorKind}
           onRefreshList={onRefreshList}
@@ -462,15 +466,38 @@ function errorKindOf(cause: unknown): "not-found" | "forbidden" | "network" | "s
   return "network";
 }
 
+/**
+ * AGENT aytgan izohni xato tanasidan oladi — bo'lmasa `null`.
+ *
+ * ⛔⛔ `detail` DAN EMAS, TANADAN (261005): `detail` SATR bo'lib qoladi
+ *     va frontendning butun xato xaritasi aynan shu satr ustida
+ *     qurilgan. Sabab yonma-yon maydonda keladi, ya'ni yangi ma'lumot
+ *     qo'shilib, eski shartnoma buzilmaydi (`cameras.LiveUnavailable`).
+ *
+ * ⚠ KO'PINCHA `null` VA BU KUTILGAN: agent sababni heartbeatda (60 s)
+ *   yuboradi, gateway esa oqimni bir necha soniya kutadi — birinchi
+ *   urinishda sabab hali kelmagan bo'ladi.
+ */
+function agentReasonOf(cause: unknown): string | null {
+  if (!(cause instanceof ApiError)) return null;
+  const tana = cause.body;
+  if (typeof tana !== "object" || tana === null) return null;
+  const sabab = (tana as { agent_reason?: unknown }).agent_reason;
+  return typeof sabab === "string" && sabab.length > 0 ? sabab : null;
+}
+
 /** `marketErrorMessageKey()` qaytaradigan kalitlar — `t()` uchun tiplangan. */
 type LiveErrorKey = ReturnType<typeof marketErrorMessageKey>;
 
 function LiveError({
+  agentReason,
   errorKey,
   kind,
   onRefreshList,
   onRetry,
 }: {
+  /** AGENT aytgan izoh — asosiy xabar OSTIDA, kichik shriftda. */
+  agentReason: string | null;
   /** Server aytgan sababning tarjima kaliti (`marketErrorMessageKey`). */
   errorKey: LiveErrorKey | null;
   kind: "not-found" | "forbidden" | "network" | "stream";
@@ -517,6 +544,18 @@ function LiveError({
         role="alert"
       >
         <p className="text-sm">{t(errorKey ?? "cameras.liveUnavailable")}</p>
+        {/*
+          ⛔ AGENT IZOHI — ASOSIY XABAR OSTIDA, O'RNIGA EMAS. Yuqoridagi
+             qator operator uchun («ishlamayapti, qayta urinib ko'ring»),
+             bu qator esa TEXNIK dalil: ffmpeg nima deganini aynan
+             ko'rsatadi va u bozor kompyuteriga bormasdan tashxis
+             qo'yish imkonini beradi.
+        */}
+        {agentReason === null ? null : (
+          <p className="font-mono text-xs break-all opacity-80">
+            {t("cameras.liveAgentReason", { reason: agentReason })}
+          </p>
+        )}
         <Button onClick={onRetry} size="sm" variant="secondary">
           {t("common.retry")}
         </Button>

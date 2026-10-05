@@ -410,7 +410,33 @@ _DEFAULT_RTSP_PORT = 554
 _LIVE_UNAVAILABLE = "live_view_unavailable"
 
 
-def _live_unavailable() -> HTTPException:
+class LiveUnavailable(HTTPException):
+    """503 + AGENT aytgan sabab (261005).
+
+    ⛔⛔ NEGA ALOHIDA SINF: `detail` SATR bo'lib QOLISHI shart —
+        frontendning butun xato xaritasi (`market-errors.ts`) aynan
+        shu satr ustida qurilgan va uni lug'atga aylantirish HAR BIR
+        xato xabarini umumiy «xatolik» ga tushirardi.
+
+        Sabab esa javobning YONMA-YON maydonida ketadi; frontend uni
+        `ApiError.body` dan o'qiydi (`apiErrorSchema` tanani to'liq
+        saqlaydi). Shunday qilib yangi ma'lumot qo'shiladi va eski
+        shartnoma buzilmaydi.
+
+    ⚠ `agent_reason` KO'PINCHA `None`: agent sababni heartbeatda (60 s)
+      yuboradi, gateway esa oqimni bir necha soniya kutadi. Birinchi
+      urinishda bo'sh, keyingisida matn.
+    """
+
+    def __init__(self, agent_reason: str | None = None) -> None:
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_LIVE_UNAVAILABLE,
+        )
+        self.agent_reason = agent_reason
+
+
+def _live_unavailable(agent_reason: str | None = None) -> HTTPException:
     """**503**, 500 EMAS — jonli ko'rish hozir ishlamayapti (D-02).
 
     ⚠ REKVIZIT NOSOZLIGI UCHUN YANGI XATO KODI KIRITILMAYDI. Admin uchun
@@ -419,10 +445,7 @@ def _live_unavailable() -> HTTPException:
       urinish yuborilganda ma'noli bo'lardi — bu yo'l esa NVR'ga UMUMAN
       chiqmaydi, ya'ni §4.4 qulfi bu yerga qo'llanmaydi (UI-SPEC §8.5).
     """
-    return HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=_LIVE_UNAVAILABLE,
-    )
+    return LiveUnavailable(agent_reason)
 
 
 async def _ensure_stream(
@@ -502,7 +525,9 @@ async def _ensure_stream(
             # 503 ga o'giradi va UI «Qayta urinish» beradi. Yangi xato
             # turi UI'da yangi holat talab qilardi — sabab esa operator
             # uchun bir xil: «jonli ko'rish hozir ishlamayapti».
-            raise Go2rtcError(type(exc).__name__) from exc
+            # ⚠ SABAB SAQLANADI: xato TURI o'zgarmaydi (yuqoridagi
+            #   qaror kuchda), lekin agent aytgan izoh yo'qolmaydi.
+            raise Go2rtcError(type(exc).__name__, agent_reason=exc.agent_reason) from exc
         # ⚠ `SecretStr` — `ensure_stream` NING SHARTNOMASI. Bu yo'lda
         #   manzilda parol YO'Q (o'qish MediaMTX'da ochiq), lekin tur
         #   bir xil qolishi kerak: `go2rtc.py` uni `get_secret_value()`
@@ -625,7 +650,9 @@ async def issue_live_token_for_camera(
         #   allaqachon tozalaydi — bu esa IKKINCHI qatlam va u
         #   birinchisining kelajakdagi regressiyasidan mustaqil.
         log.warning("go2rtc_unavailable", camera_id=str(camera_id), error=type(exc).__name__)
-        raise _live_unavailable() from exc
+        # ⚠ AGENT AYTGAN SABAB JAVOBGA CHIQADI — UI uni asosiy xabar
+        #   OSTIDA ko'rsatadi va shu bilan taxmin qilishdan qutuladi.
+        raise _live_unavailable(exc.agent_reason) from exc
 
     settings: Settings = request.app.state.settings
     token = issue_live_token(

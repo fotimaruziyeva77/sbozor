@@ -70,6 +70,27 @@ class CamAgentLiveError(RuntimeError):
       (`cameras.py` da `type(exc).__name__` yoziladi).
     """
 
+    def __init__(self, message: str, agent_reason: str | None = None) -> None:
+        super().__init__(message)
+        self.agent_reason = agent_reason
+        """AGENT aytgan sabab — gateway matni EMAS.
+
+        ⛔⛔ NEGA BU ALOHIDA MAYDON VA NEGA U YUQORIDAGI QOIDAGA ZID EMAS
+            (261005): yuqoridagi qoida TASHQI servis matni haqida. Bu
+            qiymat esa BIZNING agentimiz yozgan va u AYNAN operator
+            uchun mo'ljallangan — ffmpeg jurnalining oxirgi xatosi.
+
+            Karmanada o'lchandi: agent `start_stream` ga "ok, boshlandi"
+            deb javob berardi, keyin ffmpeg o'lardi va panel «ehtimol
+            NVR oqim chegarasiga yetgan» deb TAXMIN qilardi. Zanjirda
+            NVR umuman ishtirok etmagan. Haqiqiy sabab agentda bor edi,
+            lekin hech qayerda ko'rinmasdi.
+
+        ⚠ `None` — gateway hali sabab bilmaydi va bu KUTILGAN: agent uni
+          heartbeatda (60 s) yuboradi, gateway esa oqimni bir necha
+          soniya kutadi. Birinchi urinishda `None`, keyingisida matn.
+        """
+
 
 def is_camagent_device(device: Any) -> bool:
     """Qurilma CamAgent orqali keladimi."""
@@ -121,12 +142,23 @@ async def open_stream(
         raise CamAgentLiveError("gateway javob bermadi") from exc
 
     if javob.status_code != 200:
+        # ⚠ SABAB TANADAN O'QILADI va u BO'LMASLIGI MUMKIN: gateway uni
+        #   faqat agent xabar qilgandan keyin biladi (`last_stream_failure`).
+        #   Tahlil qilib bo'lmasa — `None`, ya'ni "bilmayman"; bu yerda
+        #   bo'shliqni taxmin bilan to'ldirish aynan biz tuzatayotgan
+        #   nuqsonning takrori bo'lardi.
+        sabab: str | None = None
+        try:
+            sabab = str((javob.json() or {}).get("agent_reason") or "") or None
+        except ValueError:
+            sabab = None
         log.warning(
             "camagent_stream_rejected",
             status=javob.status_code,
             camera_serial=camera_serial,
+            has_agent_reason=sabab is not None,
         )
-        raise CamAgentLiveError("gateway rad etdi")
+        raise CamAgentLiveError("gateway rad etdi", agent_reason=sabab)
 
     natija = javob.json()
     rtsp = str(natija.get("rtsp_url") or "")

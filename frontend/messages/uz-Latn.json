@@ -346,6 +346,7 @@
     "liveFailed": "Tasvir ochilmadi",
     "liveNotFound": "Bu kamera topilmadi — u arxivlangan bo'lishi mumkin",
     "liveUnavailable": "Jonli ko'rish xizmati javob bermadi. Bir necha soniyadan keyin qayta urinib ko'ring — NVR hisobiga bu urinish yuborilmaydi",
+    "liveAgentReason": "Agent aytdi: {reason}",
     "viewDisabledOffline": "Bu kamera hozir ulanmagan — jonli tasvir mavjud emas",
     "archiveTitle": "Kamerani arxivlash",
     "archiveBody": "«{name}» (kanal {channel}) ro'yxatdan olib qo'yiladi. Kamera va uning tarixi o'chirilmaydi — qayta skanerlashda u avtomatik qaytmaydi. Istalgan vaqtda arxivdan qaytarishingiz mumkin.",

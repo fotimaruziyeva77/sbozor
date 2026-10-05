@@ -650,3 +650,78 @@ describe("LiveViewDialog — xato sababi O'YLAB TOPILMAYDI (261005)", () => {
     ).toBeInTheDocument();
   });
 });
+
+/*
+ * ===========================================================================
+ * AGENT AYTGAN SABAB EKRANDA (261005) — zanjirning oxirgi bo'g'ini.
+ *
+ * Zanjir: agent ffmpeg jurnalidan sababni o'qiydi -> heartbeatda
+ * gateway'ga yuboradi -> gateway uni saqlab, 503 javobiga qo'shadi ->
+ * core-api `agent_reason` maydonini o'tkazadi -> shu yerda ko'rinadi.
+ *
+ * Usiz operator «jonli ko'rish ishlamayapti» dan nariga o'ta olmasdi va
+ * haqiqiy sabab bozor kompyuterida qolib ketardi.
+ * ===========================================================================
+ */
+describe("LiveViewDialog — agent aytgan sabab (261005)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    seedSession();
+  });
+
+  afterEach(() => {
+    clearSession();
+  });
+
+  /*
+   * ⚠ MATNDA go2rtc MANBA SXEMALARI YO'Q va bu ATAYIN:
+   *   `nvr-copy.test.mjs` dagi G-6 darvozasi `frontend/src` da o'sha
+   *   API qabul qiladigan sxemalarning izlarini taqiqlaydi (ro'yxat
+   *   o'sha faylda — bu yerda takrorlansa darvoza O'ZINI ushlardi).
+   *   Sabab ular RCE yuzasi. Darvoza testlarni ham skanerlaydi va bu
+   *   TO'G'RI: fikstura satri ham kodda qoladi.
+   */
+  const SABAB = "s:1 ulanish rad etildi";
+
+  test("⛔ sabab KELSA ekranda ko'rinadi", async () => {
+    apiFetch.mockRejectedValue(
+      new ApiError(503, "live_view_unavailable", {
+        detail: "live_view_unavailable",
+        agent_reason: SABAB,
+      }),
+    );
+
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: VIEW_LABEL }));
+
+    /*
+     * ⚠ `RegExp` EMAS, FUNKSIYA: sabab matni agentdan keladi va unda
+     *   qavs ham, nuqta ham bo'lishi mumkin — ular naqshda metabelgiga
+     *   aylanib, moslik jimgina yo'qolardi.
+     */
+    expect(
+      await screen.findByText((matn) => matn.includes(SABAB)),
+    ).toBeInTheDocument();
+    // ⚠ ASOSIY XABAR HAM QOLADI: izoh uning O'RNINI egallamaydi.
+    expect(screen.getByText(messages.cameras.liveUnavailable)).toBeInTheDocument();
+  });
+
+  test("⛔ sabab YO'Q bo'lsa bo'sh qator CHIZILMAYDI", async () => {
+    /*
+     * NAZORAT BANDI. Birinchi urinishda sabab odatda kelmaydi (agent uni
+     * heartbeatda yuboradi). Bo'sh qator «sabab bor, lekin
+     * ko'rsatilmadi» degan taassurot berardi.
+     */
+    apiFetch.mockRejectedValue(
+      new ApiError(503, "live_view_unavailable", {
+        detail: "live_view_unavailable",
+      }),
+    );
+
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: VIEW_LABEL }));
+
+    await screen.findByRole("alert");
+    expect(screen.queryByText(/Agent aytdi/)).toBeNull();
+  });
+});

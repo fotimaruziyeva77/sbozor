@@ -49,6 +49,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.billing import router as billing_router
 from app.api.v1.calendar import router as calendar_router
 from app.api.v1.camera_zones import router as camera_zones_router
+from app.api.v1.cameras import LiveUnavailable
 from app.api.v1.cameras import router as cameras_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.imports import router as imports_router
@@ -547,6 +548,27 @@ app.include_router(reports_router, prefix=f"{API_V1_PREFIX}/reports")
 # tiklangan (autsiz 200, Set-Cookie yo'q, javob kalitlari, 429, 422,
 # honeypot, delivery_failed + DB'da 0 yangi qator).
 app.include_router(public_router, prefix=f"{API_V1_PREFIX}/public")
+
+
+@app.exception_handler(LiveUnavailable)
+async def live_unavailable_handler(request: Request, exc: LiveUnavailable) -> JSONResponse:
+    """503 javobiga AGENT aytgan sababni qo'shadi (261005).
+
+    ⛔ NEGA ISHLOVCHI KERAK: `HTTPException` faqat `{"detail": ...}`
+       chiqaradi. Sababni `detail` ICHIGA solish uni lug'atga
+       aylantirardi va frontendning butun xato xaritasi (`market-errors
+       .ts`) satr ustida qurilgani uchun HAR BIR xabar umumiy
+       «xatolik» ga tushardi. Yonma-yon maydon esa eski shartnomani
+       buzmaydi.
+
+    ⚠ SABAB BO'LMASA MAYDON UMUMAN QO'SHILMAYDI: bo'sh satr yuborish
+      UI'da bo'sh qator chizardi va «sabab bor, lekin ko'rsatilmadi»
+      degan taassurot berardi.
+    """
+    tana: dict[str, object] = {"detail": exc.detail}
+    if exc.agent_reason:
+        tana["agent_reason"] = exc.agent_reason
+    return JSONResponse(status_code=exc.status_code, content=tana)
 
 
 @app.exception_handler(DBAPIError)
