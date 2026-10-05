@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { LivePlayer } from "@/components/cameras/live-player";
 import { LiveZoneOverlay } from "@/components/cameras/live-zone-overlay";
 import { useFrameImage } from "@/lib/camera-zone-queries";
+import { marketErrorMessageKey } from "@/lib/market-errors";
 import { NvrErrorBlock } from "@/components/cameras/nvr-error-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -213,6 +214,8 @@ function LiveSession({
   const [errorKind, setErrorKind] = useState<"not-found" | "forbidden" | "network" | "stream">(
     "stream",
   );
+  /** Server aytgan sabab — `null` bo'lsa hali xato bo'lmagan. */
+  const [errorKey, setErrorKey] = useState<LiveErrorKey | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   /** Har yangilash pleyerni QAYTA MOUNT qiladi (§8.3). */
   const [sessionSeq, setSessionSeq] = useState(0);
@@ -252,6 +255,11 @@ function LiveSession({
       setPhase("connecting");
     } catch (cause) {
       setErrorKind(errorKindOf(cause));
+      /*
+       * ⛔ SERVER AYTGAN SABABNI SAQLAYMIZ (261005). Ilgari faqat
+       *    "kind" qolardi va UI qolganini O'ZI o'ylab topardi.
+       */
+      setErrorKey(marketErrorMessageKey(cause));
       setPhase("error");
       setStartedAt(null);
     }
@@ -429,6 +437,7 @@ function LiveSession({
 
       {stage === "error" ? (
         <LiveError
+          errorKey={errorKey}
           kind={errorKind}
           onRefreshList={onRefreshList}
           onRetry={() => void startSession()}
@@ -453,11 +462,17 @@ function errorKindOf(cause: unknown): "not-found" | "forbidden" | "network" | "s
   return "network";
 }
 
+/** `marketErrorMessageKey()` qaytaradigan kalitlar — `t()` uchun tiplangan. */
+type LiveErrorKey = ReturnType<typeof marketErrorMessageKey>;
+
 function LiveError({
+  errorKey,
   kind,
   onRefreshList,
   onRetry,
 }: {
+  /** Server aytgan sababning tarjima kaliti (`marketErrorMessageKey`). */
+  errorKey: LiveErrorKey | null;
   kind: "not-found" | "forbidden" | "network" | "stream";
   onRefreshList?: () => void;
   onRetry: () => void;
@@ -472,12 +487,40 @@ function LiveError({
    *   hech qanday xavf yo'q joyda to'xtatib qo'yardi.
    */
   if (kind === "stream") {
+    /*
+     * =====================================================================
+     * ⛔⛔ UI SABABNI O'YLAB TOPMAYDI (261005, jonli serverda o'lchandi).
+     * =====================================================================
+     * Bu yerda `code="nvr_stream_limit"` QOTIRILGAN edi, ya'ni 404 va
+     * 403 dan BOSHQA har qanday server xatosi ekranda aniq NVR tashxisi
+     * bo'lib ko'rinardi: «Ehtimol NVR bir vaqtda ochiladigan oqimlar
+     * chegarasiga yetgan».
+     *
+     * Karmanada o'lchandi va u YOLG'ON chiqdi — zanjirda NVR umuman
+     * ishtirok etmagan:
+     *
+     *     gateway: "oqim ... belgilangan vaqtda tayyor bo'lmadi"
+     *     go2rtc:  error=EOF (hech kim nashr qilmayapti)
+     *     agent:   "ok, boshlandi" (ffmpeg 0.8 s dan keyin o'lgan)
+     *
+     * Yomoni shundaki, matn operatorni ANIQ, lekin NOTO'G'RI yo'lga
+     * yuborardi: u NVR'dagi oqim chegarasini qidirib yurardi.
+     *
+     * Endi server AYTGAN sabab ko'rsatiladi (`marketErrorMessageKey`),
+     * va u uchun tayyor matn ham bor edi: `live_view_unavailable` ->
+     * `cameras.liveUnavailable` («Jonli ko'rish xizmati javob bermadi»).
+     * Ya'ni rost javob allaqachon mavjud edi, UI uni chetlab o'tardi.
+     */
     return (
-      <NvrErrorBlock
-        code="nvr_stream_limit"
-        detail={null}
-        onRetry={onRetry}
-      />
+      <div
+        className="flex flex-col items-start gap-3 rounded-md bg-danger/10 p-4 text-danger-text"
+        role="alert"
+      >
+        <p className="text-sm">{t(errorKey ?? "cameras.liveUnavailable")}</p>
+        <Button onClick={onRetry} size="sm" variant="secondary">
+          {t("common.retry")}
+        </Button>
+      </div>
     );
   }
 

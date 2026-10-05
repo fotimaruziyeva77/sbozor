@@ -97,6 +97,8 @@ vi.mock("@/components/cameras/live-player", async (importOriginal) => {
   };
 });
 
+import { ApiError } from "@/lib/api-client";
+
 const { apiFetch } = apiClientMock;
 
 const MARKET_ID = "11111111-1111-4111-8111-111111111111";
@@ -591,5 +593,60 @@ describe("LiveViewDialog — zonalar saqlangan kadr ustida (261005)", () => {
       expect(screen.getByText(messages.cameras.view)).toBeInTheDocument();
     });
     expect(zonaSorovlari()).toEqual([]);
+  });
+});
+
+/*
+ * ===========================================================================
+ * UI SABABNI O'YLAB TOPMAYDI (261005, jonli serverda o'lchandi).
+ *
+ * `LiveError` da `code="nvr_stream_limit"` QOTIRILGAN edi: 404 va 403 dan
+ * boshqa HAR QANDAY server xatosi ekranda aniq NVR tashxisi bo'lib
+ * ko'rinardi — «Ehtimol NVR bir vaqtda ochiladigan oqimlar chegarasiga
+ * yetgan».
+ *
+ * Karmanada o'lchandi va u YOLG'ON chiqdi: zanjirda NVR umuman ishtirok
+ * etmagan (gateway «oqim tayyor bo'lmadi», go2rtc EOF, agent esa ffmpeg
+ * o'lganini ko'rib turgan). Matn operatorni ANIQ, lekin NOTO'G'RI yo'lga
+ * yuborardi — u NVR'dagi oqim chegarasini qidirardi.
+ * ===========================================================================
+ */
+describe("LiveViewDialog — xato sababi O'YLAB TOPILMAYDI (261005)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    seedSession();
+  });
+
+  afterEach(() => {
+    clearSession();
+  });
+
+  test("⛔ 503 da NVR CHEGARASI haqidagi matn CHIQMAYDI", async () => {
+    apiFetch.mockRejectedValue(
+      new ApiError(503, "live_view_unavailable", { detail: "live_view_unavailable" }),
+    );
+
+    renderDialog();
+    // ⚠ `startViewing()` ISHLATILMAYDI: u pleyer paydo bo'lishini kutadi,
+    //   bu test esa so'rov RAD ETILADIGAN yo'lni o'lchaydi.
+    fireEvent.click(screen.getByRole("button", { name: VIEW_LABEL }));
+
+    await screen.findByRole("alert");
+    expect(
+      screen.queryByText(messages.cameras.errorCause.nvr_stream_limit),
+    ).toBeNull();
+  });
+
+  test("server AYTGAN sabab ko'rsatiladi", async () => {
+    apiFetch.mockRejectedValue(
+      new ApiError(503, "live_view_unavailable", { detail: "live_view_unavailable" }),
+    );
+
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: VIEW_LABEL }));
+
+    expect(
+      await screen.findByText(messages.cameras.liveUnavailable),
+    ).toBeInTheDocument();
   });
 });
