@@ -115,6 +115,9 @@ const TICKET = {
   transport_hint: "webrtc",
 };
 
+/** Kadr identifikatori — fon rasmi va qoplama shartining kirishi. */
+const SNAPSHOT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
 function makeCamera(overrides: Partial<Camera> = {}): Camera {
   return {
     id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -527,3 +530,66 @@ function renderDialogWithRerender(): { rerender: (open: boolean) => void } {
   const view = render(tree(true));
   return { rerender: (open: boolean) => view.rerender(tree(open)) };
 }
+
+/*
+ * ===========================================================================
+ * RASTA RAQAMLARI SAQLANGAN KADR USTIDA HAM (261005, jonli o'lchovdan).
+ *
+ * Qoplama dastlab FAQAT oqim o'ynayotganda chizilardi. Karmanada esa oqim
+ * umuman ulanmaydi — NVR bir vaqtda ochiladigan oqimlar chegarasiga yetgan
+ * va kamera devoridagi 16 katakning HAMMASI saqlangan kadrga tushadi.
+ * Ya'ni buyurtmachi so'ragan raqamlar amalda HECH QACHON ko'rinmasdi.
+ *
+ * Nizoda dalil baribir SAQLANGAN KADR bo'ladi, jonli oqim emas.
+ * ===========================================================================
+ */
+describe("LiveViewDialog — zonalar saqlangan kadr ustida (261005)", () => {
+  /*
+   * ⚠ O'Z TAYYORGARLIGI: `seedSession()` yuqoridagi `describe` ning
+   *   `beforeEach` ida chaqiriladi va bu blokka YETIB KELMAYDI. Sessiyasiz
+   *   `useMarketId()` `null` qaytaradi, zonalar so'rovi esa `enabled: false`
+   *   bo'lib umuman yubormaydi — ya'ni test mahsulotni emas, o'z
+   *   tayyorgarligining yo'qligini o'lchagan bo'lardi.
+   */
+  beforeEach(() => {
+    vi.resetAllMocks();
+    seedSession();
+  });
+
+  afterEach(() => {
+    clearSession();
+  });
+
+  function zonaSorovlari(): string[] {
+    return apiFetch.mock.calls
+      .map((call) => String(call[0]))
+      .filter((url) => url.includes("/camera-zones"));
+  }
+
+  test("⛔ OQIM BOSHLANMAGAN bo'lsa ham zonalar SO'RALADI", async () => {
+    apiFetch.mockResolvedValue({ items: [] });
+
+    renderDialog(makeCamera({ last_snapshot_id: SNAPSHOT_ID }));
+
+    await waitFor(() => {
+      expect(zonaSorovlari().length).toBeGreaterThan(0);
+    });
+  });
+
+  test("⛔ KADRI YO'Q kamerada zonalar so'ralMAYDI", async () => {
+    /*
+     * NAZORAT BANDI. Usiz yuqoridagi test «qoplama HAR DOIM chiziladi»
+     * holatida ham yashil bo'lardi — ya'ni bo'sh qora ramka ustiga
+     * raqamlar chizilgan bo'lardi va buni hech narsa ushlamasdi.
+     */
+    apiFetch.mockResolvedValue({ items: [] });
+
+    renderDialog(makeCamera({ last_snapshot_id: null }));
+
+    // Qisqa kutish: so'rov ketsa, shu oynada ketardi.
+    await waitFor(() => {
+      expect(screen.getByText(messages.cameras.view)).toBeInTheDocument();
+    });
+    expect(zonaSorovlari()).toEqual([]);
+  });
+});

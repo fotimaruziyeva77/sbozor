@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 
 import { LivePlayer } from "@/components/cameras/live-player";
 import { LiveZoneOverlay } from "@/components/cameras/live-zone-overlay";
+import { useFrameImage } from "@/lib/camera-zone-queries";
 import { NvrErrorBlock } from "@/components/cameras/nvr-error-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -285,7 +286,11 @@ function LiveSession({
         tabIndex={-1}
       >
         {stage === "idle" ? (
-          <div className="flex flex-col items-center gap-3">
+          /*
+           * ⚠ PLASHKA — ortda endi KADR turadi (261005). Usiz ikonka va
+           *   matn fotosurat ustida o'qilmasdi.
+           */
+          <div className="relative z-20 flex flex-col items-center gap-3 rounded-lg bg-black/70 px-6 py-5">
             <Video aria-hidden="true" className="size-8 text-text-muted" />
             <p className="text-sm text-text-muted">{t("cameras.liveIdle")}</p>
             <Button onClick={() => void startSession()} size="lg" variant="secondary">
@@ -313,12 +318,24 @@ function LiveSession({
            *   emas. Qizil ramka adminni mavjud bo'lmagan muammoni
            *   qidirishga yuborardi.
            */
-          <div className="flex flex-col items-center gap-3" role="status">
+          <div
+            className="relative z-20 flex flex-col items-center gap-3 rounded-lg bg-black/70 px-6 py-5"
+            role="status"
+          >
             <p className="text-sm text-bg">{t("cameras.liveExpired")}</p>
             <Button onClick={() => void startSession()} size="lg" variant="secondary">
               {t("cameras.resume")}
             </Button>
           </div>
+        ) : null}
+
+        {/*
+         * ⛔ SAQLANGAN KADR — oqim ko'rinmayotgan HAR holatda (261005).
+         *    Sabab `FrameBackdrop` docstringida: Karmanada jonli oqim
+         *    ulanmaydi va raqamlar faqat shu kadr ustida ko'rinadi.
+         */}
+        {!playerVisible(stage) && camera.last_snapshot_id !== null ? (
+          <FrameBackdrop snapshotId={camera.last_snapshot_id} />
         ) : null}
 
         {playerVisible(stage) && url !== null ? (
@@ -354,7 +371,15 @@ function LiveSession({
          *   muddati o'tgan holatlar ustida chizilsa, u yerda tasvir
          *   YO'Q va raqamlar bo'sh qora ramkada osilib turardi.
          */}
-        {stage === "playing" || stage === "expiring" ? (
+        {/*
+         * ⚠ QOPLAMA IKKALA MANBA USTIDA HAM: jonli oqim ustida ham,
+         *   saqlangan kadr ustida ham. `connecting` va `authorizing`
+         *   CHIQARILGAN — u yerda tasvir hali yo'q va raqamlar bo'sh
+         *   ramkada osilib turardi.
+         */}
+        {stage === "playing" ||
+        stage === "expiring" ||
+        (!playerVisible(stage) && camera.last_snapshot_id !== null) ? (
           <LiveZoneOverlay cameraId={camera.id} enabled />
         ) : null}
 
@@ -482,3 +507,35 @@ function LiveError({
     </div>
   );
 }
+
+/**
+ * SAQLANGAN KADR — jonli oqim ko'rinmayotganda oynaning foni.
+ *
+ * =============================================================================
+ * ⛔⛔ NEGA QO'SHILDI (261005, jonli serverda o'lchandi): rasta raqamlari
+ *     dastlab FAQAT oqim o'ynayotganda chizilardi. Karmanada esa oqim
+ *     umuman ulanmaydi — NVR bir vaqtda ochiladigan oqimlar chegarasiga
+ *     yetgan va 16 katakning HAMMASI saqlangan kadrga tushadi. Ya'ni
+ *     buyurtmachi so'ragan raqamlar amalda HECH QACHON ko'rinmasdi.
+ *
+ *     Nizoda dalil baribir SAQLANGAN KADR bo'ladi, jonli oqim emas —
+ *     raqam aynan dalil ustida turishi kerak.
+ *
+ * ⚠ KADR QORAYTIRILMAYDI: ustidagi matn o'z plashkasini oladi
+ *   (`live-view-dialog` dagi `bg-black/70` konteynerlari). Butun kadrni
+ *   50% qoraytirish matnni o'qiladigan qilardi-yu, dalilning O'ZINI
+ *   loyqalantirardi — ya'ni muammoni hal qilib, maqsadni yo'qotardi.
+ */
+function FrameBackdrop({ snapshotId }: { snapshotId: string }) {
+  const { href } = useFrameImage(snapshotId);
+  if (href === null) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      alt=""
+      className="absolute inset-0 size-full object-contain"
+      src={href}
+    />
+  );
+}
+
