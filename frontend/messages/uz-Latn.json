@@ -2168,7 +2168,16 @@
     "vaDay_partial": "Qisman",
     "vaDay_unpaid": "To'lanmagan",
     "vaDay_waived": "Kechirilgan",
-    "vaDay_advance": "Avans"
+    "vaDay_advance": "Hisobsiz kun",
+    "vaHistoryRule": "Holat — o'sha kungi patta yopilganmi. To'lov eng eski qarzdan boshlab yopadi, shuning uchun pul boshqa kuni berilgan bo'lishi mumkin.",
+    "vaHistoryDebt": "qarz: {sum}",
+    "vaHistoryAdvance": "ortiqcha to'lov: {sum}",
+    "vaRowCharged": "Hisob: {sum}",
+    "vaRowNoCharge": "Hisob yozilmagan",
+    "vaRowCash": "Shu kuni to'langan: {sum}",
+    "vaRowNoCash": "Shu kuni to'lov yo'q",
+    "vaRowWaived": "Kechirildi: {sum}",
+    "vaRowDebt": "Qarz: {sum}"
   },
   "auditSheet": {
     "eyebrow": "Tekshiruv uchun yig'ma varaq",

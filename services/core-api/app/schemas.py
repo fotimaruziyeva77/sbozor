@@ -4983,16 +4983,25 @@ class VendorHistoryDay(BaseModel):
       tushgandek ko'rsatardi (`debt_settlement` moduli aynan shuni rad
       etgan).
 
-    ⚠ `advance` — hisobsiz to'lov (oldindan to'lagan yoki hisob keyinroq
-      o'chirilgan). Yopilgan patta bilan aralashtirilmaydi.
+    ⚠ `advance` — hisobsiz kun: o'sha kuni pul olingan, hisob yozilmagan.
+      Yopilgan patta bilan aralashtirilmaydi.
+
+    ⛔ IKKI XIL «TO'LOV» VA ULAR ATAYIN AJRATILGAN:
+       `covered_soum` — FIFO bo'yicha SHU KUN HISOBIGA tushgan qism (holat
+           shundan); `paid_soum` — O'SHA KUNI kassaga yozilgan pul (fakt).
+       Ular teng bo'lishi shart emas: bugungi pul eski qarzni yopadi
+       (sabab `report_repo._VENDOR_DAY_HISTORY` da).
+       `charged_soum − waived_soum = covered_soum + unpaid_soum`.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     service_date: date
     charged_soum: int
-    paid_soum: int
     waived_soum: int
+    covered_soum: int
+    unpaid_soum: int
+    paid_soum: int
     payment_count: int
     last_payment_at: datetime | None
     stall_codes: str | None
@@ -5022,7 +5031,12 @@ class VendorHistoryResponse(BaseModel):
     charged_total_soum: int
     paid_total_soum: int
     waived_total_soum: int
+    unpaid_total_soum: int
     unpaid_days: int
+    # ⛔ DAVR BILAN KESILMAGAN — `/debtors` kartasidagi qarz bilan AYNI son
+    #    (`report_repo.VendorHistory`). Davrdan eski qarz ham shu yerda.
+    outstanding_soum: int
+    advance_soum: int
 
 
 class ReceivablesReportResponse(BaseModel):

@@ -133,6 +133,41 @@ afterEach(() => {
   clearSession();
 });
 
+describe("Sotuvchilar ekrani — to'lov tarixi tugmasi (261006)", () => {
+  test("`report_view` bor rolda har kartada tarix tugmasi chiqadi", async () => {
+    renderVendorsPage();
+
+    expect(
+      await screen.findByRole("button", { name: messages.director.vaShowHistory }),
+    ).toBeInTheDocument();
+  });
+
+  test("`report_view` YO'Q rolda tugma CHIZILMAYDI — aks holda u 403 berardi", async () => {
+    setSession({
+      accessToken: "test-access-token",
+      principal: {
+        userId: "44444444-4444-4444-8444-444444444444",
+        phone: "+998900000001",
+        fullName: "Platforma Admin",
+        roles: ["platform_admin"],
+        marketId: MARKET_ID,
+        marketName: "Karmana markaziy bozori",
+        isPlatformAdmin: true,
+        locale: "uz-Latn",
+        mustChangePassword: false,
+      },
+      markets: [],
+    });
+    renderVendorsPage();
+
+    // Nazorat: karta haqiqatan chizildi — usiz «tugma yo'q» trivial o'tardi.
+    expect(await screen.findByText(VENDOR.full_name)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: messages.director.vaShowHistory }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("Sotuvchilar ekrani — shaxsiy ma'lumot kontrakti (§8.6)", () => {
   test("audit bildirishi ekranda ko'rinadi va u DIALOG emas", async () => {
     renderVendorsPage();

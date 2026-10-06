@@ -687,20 +687,27 @@ async def vendor_history_report(
 
     ⛔ ISM VA TELEFON JAVOBDA YO'Q — sabab `VendorHistoryResponse` da.
 
+    ⛔ HOLAT — FIFO TAQSIMLASHDAN, o'sha kungi to'lovdan EMAS (261006,
+       prod'da o'lchandi: kunma-kun solishtirish nolga tushirilgan qarzni
+       261 kun «to'lanmagan» qilib ko'rsatdi). Sabab va qoida
+       `report_repo._VENDOR_DAY_HISTORY` docstringida.
+
     ⚠ YIG'INDI BUTUN DAVRNIKI: qatorlar faqat HARAKAT bo'lgan kunlar
       uchun, yig'indi esa o'sha qatorlardan. Bozor yopiq kunlar ro'yxatda
-      ham, yig'indida ham YO'Q.
+      ham, yig'indida ham YO'Q. `outstanding_soum` va `advance_soum` esa
+      DAVR BILAN KESILMAGAN — ular `/debtors` kartasidagi qarz bilan AYNI.
     """
     market_id = _market_id(principal)
     period_from, period_to = _report_period(from_date, to_date, settings.report_max_period_days)
 
-    rows = await report_repo.vendor_day_history(
+    history = await report_repo.vendor_day_history(
         session,
         market_id=market_id,
         vendor_id=vendor_id,
         from_date=period_from,
         to_date=period_to,
     )
+    rows = history.rows
     _guard_row_count(len(rows), settings.report_max_rows)
 
     intent.filters = {"vendor_id": str(vendor_id)}
@@ -714,8 +721,10 @@ async def vendor_history_report(
             VendorHistoryDay(
                 service_date=r.service_date,
                 charged_soum=r.charged_soum,
-                paid_soum=r.paid_soum,
                 waived_soum=r.waived_soum,
+                covered_soum=r.covered_soum,
+                unpaid_soum=r.unpaid_soum,
+                paid_soum=r.paid_soum,
                 payment_count=r.payment_count,
                 last_payment_at=r.last_payment_at,
                 stall_codes=r.stall_codes,
@@ -726,7 +735,10 @@ async def vendor_history_report(
         charged_total_soum=sum(r.charged_soum for r in rows),
         paid_total_soum=sum(r.paid_soum for r in rows),
         waived_total_soum=sum(r.waived_soum for r in rows),
+        unpaid_total_soum=sum(r.unpaid_soum for r in rows),
         unpaid_days=sum(1 for r in rows if r.status in ("unpaid", "partial")),
+        outstanding_soum=history.outstanding_soum,
+        advance_soum=history.advance_soum,
     )
 
 

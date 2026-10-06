@@ -18,7 +18,7 @@
  */
 import { describe, expect, test } from "vitest";
 
-import { KUN_TONE } from "@/components/director/vendor-account";
+import { KUN_TONE } from "@/components/director/vendor-days";
 import ru from "../../../messages/ru.json";
 import uzCyrl from "../../../messages/uz-Cyrl.json";
 import uzLatn from "../../../messages/uz-Latn.json";

@@ -97,6 +97,7 @@ export default function VendorsPage() {
       >
         <VendorList
           canManage={canManage}
+          canSeeHistory={hasPermission(roles, "report_view")}
           createOpen={createOpen}
           onCreateOpenChange={setCreateOpen}
         />

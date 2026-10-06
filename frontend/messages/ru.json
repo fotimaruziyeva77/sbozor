@@ -2168,7 +2168,16 @@
     "vaDay_partial": "Частично",
     "vaDay_unpaid": "Не оплачено",
     "vaDay_waived": "Прощено",
-    "vaDay_advance": "Аванс"
+    "vaDay_advance": "Без начисления",
+    "vaHistoryRule": "Статус — закрыт ли сбор за этот день. Оплата сначала гасит самый старый долг, поэтому деньги могли поступить в другой день.",
+    "vaHistoryDebt": "долг: {sum}",
+    "vaHistoryAdvance": "переплата: {sum}",
+    "vaRowCharged": "Начислено: {sum}",
+    "vaRowNoCharge": "Начисления не было",
+    "vaRowCash": "Оплачено в этот день: {sum}",
+    "vaRowNoCash": "В этот день оплаты не было",
+    "vaRowWaived": "Прощено: {sum}",
+    "vaRowDebt": "Долг: {sum}"
   },
   "auditSheet": {
     "eyebrow": "Сводный лист для проверки",

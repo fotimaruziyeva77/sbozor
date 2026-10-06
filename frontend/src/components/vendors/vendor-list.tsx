@@ -7,6 +7,7 @@ import { CalendarPlus, Ellipsis, Pencil, UserMinus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 
+import { VendorDaysRecent } from "@/components/director/vendor-days";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -71,10 +72,16 @@ type PendingAssignment = { mode: AssignmentMode; vendor: VendorListItem };
 
 export function VendorList({
   canManage,
+  canSeeHistory = false,
   createOpen,
   onCreateOpenChange,
 }: {
   canManage: boolean;
+  /**
+   * `report_view` — to'lov tarixi `GET /reports/vendor-history` dan keladi.
+   * Huquqsiz rolga tugma CHIZILMAYDI: aks holda u bosilib 403 berardi.
+   */
+  canSeeHistory?: boolean;
   /**
    * Yaratish dialogining holati sahifada yashaydi (birlamchi CTA sarlavha
    * yonida turadi), dialogning O'ZI esa shu yerda — §8.6 bildirishi
@@ -89,6 +96,11 @@ export function VendorList({
 
   const [editing, setEditing] = useState<VendorListItem | null>(null);
   const [assignment, setAssignment] = useState<PendingAssignment | null>(null);
+  /*
+   * ⚠ BITTA ochiq tarix: har ochiq karta alohida so'rov va yuzlab sotuvchili
+   *   ro'yxatda ular tez ko'payardi (`vendor-account.tsx` bilan bir qaror).
+   */
+  const [tarixOchiq, setTarixOchiq] = useState<string | null>(null);
 
   const isFiltered = urlFilters.q !== "";
   const items = vendorsQuery.data?.pages.flatMap((page) => page.items) ?? [];
@@ -171,8 +183,17 @@ export function VendorList({
             <li key={vendor.id}>
               <VendorCard
                 canManage={canManage}
+                historyOpen={tarixOchiq === vendor.id}
                 onAssign={(mode) => setAssignment({ mode, vendor })}
                 onEdit={() => setEditing(vendor)}
+                onToggleHistory={
+                  canSeeHistory
+                    ? () =>
+                        setTarixOchiq((eski) =>
+                          eski === vendor.id ? null : vendor.id,
+                        )
+                    : undefined
+                }
                 vendor={vendor}
               />
             </li>
@@ -256,13 +277,18 @@ export function VendorList({
 
 function VendorCard({
   canManage,
+  historyOpen,
   onAssign,
   onEdit,
+  onToggleHistory,
   vendor,
 }: {
   canManage: boolean;
+  historyOpen: boolean;
   onAssign: (mode: AssignmentMode) => void;
   onEdit: () => void;
+  /** `undefined` — `report_view` yo'q, tarix tugmasi chizilmaydi. */
+  onToggleHistory: (() => void) | undefined;
   vendor: VendorListItem;
 }) {
   const t = useTranslations();
@@ -334,6 +360,31 @@ function VendorCard({
           ))}
         </div>
       ) : null}
+
+      {/*
+       * TO'LOV TARIXI (261006) — «sotuvchini bossam qaysi kunlari to'lagani
+       * va to'lamagani ko'rinsin». Bu ro'yxat HAR sotuvchini ko'rsatadi,
+       * «Sotuvchi hisobi» esa faqat qarzdorlarni — qarz nolga tushirilgach u
+       * yerda deyarli hech kim qolmagan edi.
+       *
+       * ⚠ So'rov FAQAT OCHILGANDA ketadi (`VendorDaysRecent` shu paytda
+       *   montaj qilinadi) — ro'yxat ochilishi bilan emas.
+       */}
+      {onToggleHistory === undefined ? null : (
+        <div className="mt-2 flex flex-col gap-2">
+          <button
+            aria-expanded={historyOpen}
+            className="w-fit text-sm font-semibold text-accent-text underline underline-offset-4"
+            onClick={onToggleHistory}
+            type="button"
+          >
+            {historyOpen
+              ? t("director.vaHideHistory")
+              : t("director.vaShowHistory")}
+          </button>
+          {historyOpen ? <VendorDaysRecent vendorId={vendor.id} /> : null}
+        </div>
+      )}
     </Card>
   );
 }

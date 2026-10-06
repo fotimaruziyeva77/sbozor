@@ -1672,12 +1672,19 @@ export const alertListResponseSchema = z.object({
  * ⚠ `waived` — «Direktor kechirdi»: pul TUSHMAGAN, qarz kechirilgan.
  *   `paid` bilan birlashtirilmaydi — kassaga tushmagan pulni tushgandek
  *   ko'rsatardi.
+ *
+ * ⛔ IKKI XIL «TO'LOV» (261006): `covered_soum` — FIFO bo'yicha SHU KUN
+ *    hisobiga tushgan qism (holat shundan), `paid_soum` — O'SHA KUNI
+ *    kassaga yozilgan pul (fakt, storno minus). Teng bo'lishi shart emas:
+ *    kassir bugungi pattani va eski qarzni bitta to'lov bilan oladi.
  */
 export const vendorHistoryDaySchema = z.object({
   service_date: z.string(),
   charged_soum: z.number().int(),
-  paid_soum: z.number().int(),
   waived_soum: z.number().int(),
+  covered_soum: z.number().int(),
+  unpaid_soum: z.number().int(),
+  paid_soum: z.number().int(),
   payment_count: z.number().int(),
   last_payment_at: z.string().nullable(),
   stall_codes: z.string().nullable(),
@@ -1700,7 +1707,11 @@ export const vendorHistorySchema = z.object({
   charged_total_soum: z.number().int(),
   paid_total_soum: z.number().int(),
   waived_total_soum: z.number().int(),
+  unpaid_total_soum: z.number().int(),
   unpaid_days: z.number().int(),
+  /** ⛔ DAVR BILAN KESILMAGAN — «Sotuvchi hisobi» kartasidagi qarz bilan AYNI. */
+  outstanding_soum: z.number().int(),
+  advance_soum: z.number().int(),
 });
 export type VendorHistory = z.infer<typeof vendorHistorySchema>;
 

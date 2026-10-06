@@ -10,8 +10,8 @@ import {
 } from "next-intl";
 
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
+import { VendorDays } from "@/components/director/vendor-days";
 import { Badge } from "@/components/ui/badge";
-import type { BadgeTone } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { bucketOf } from "@/lib/debt-aging";
 import { daysBetweenIsoDays, formatBusinessDay } from "@/lib/format-day";
 import { formatAmount, formatSoum } from "@/lib/format-number";
-import { useReceivablesReport, useVendorHistory } from "@/lib/report-queries";
+import { useReceivablesReport } from "@/lib/report-queries";
 
 /*
  * =============================================================================
@@ -29,7 +29,12 @@ import { useReceivablesReport, useVendorHistory } from "@/lib/report-queries";
  * Dizayn beshta blok beradi: profil, qarz tarkibi, TO'LOV TARIXI,
  * kechikish naqshi, maxfiylik eslatmasi.
  *
- * ⛔⛔ TO'LOV TARIXI QURILMADI — VA BU YASHIRILMAYDI.
+ * ✅ TO'LOV TARIXI 261006 DA QURILDI: `GET /reports/vendor-history` va
+ *    umumiy `vendor-days.tsx` (u «Sotuvchilar» ro'yxatida ham ishlatiladi —
+ *    bu sahifa faqat QARZDORLARNI ko'rsatadi). Quyidagi tarix — nega u
+ *    birinchi bosqichda bo'sh qoldirilgani:
+ *
+ * ⛔⛔ TO'LOV TARIXI QURILMADI — VA BU YASHIRILMAYDI (2026-08-19 holati).
  *
  *     Sababi mexanik, uslubiy emas: SERVERDA sotuvchi bo'yicha to'lov
  *     tarixini beradigan endpoint YO'Q. Tekshirildi (2026-08-19):
@@ -232,96 +237,3 @@ export function VendorAccount() {
     </div>
   );
 }
-
-/**
- * Bitta sotuvchining KUNMA-KUN tarixi.
- *
- * ⛔ HOLAT SERVERDAN KELADI (`status`) va bu yerda faqat TARJIMA
- *    qilinadi. Qoidani bu yerda qayta yozish ekran bilan hisobotni
- *    ajratib yuborardi (`report_repo.vendor_day_status`).
- */
-function VendorDays({
-  from,
-  to,
-  vendorId,
-}: {
-  from: string;
-  to: string;
-  vendorId: string;
-}) {
-  const t = useTranslations();
-  const format = useFormatter();
-  const locale = useLocale();
-  const tarix = useVendorHistory(vendorId, { from, to });
-
-  if (tarix.isPending) {
-    return <Skeleton className="h-24" />;
-  }
-  if (tarix.isError) {
-    return <p className="dir-tile-note">{t("errors.loadFailedBody")}</p>;
-  }
-
-  const kunlar = tarix.data?.rows ?? [];
-  if (kunlar.length === 0) {
-    return <p className="dir-tile-note">{t("director.vaHistoryEmpty")}</p>;
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="dir-tile-note">
-        {t("director.vaHistorySummary", {
-          days: kunlar.length,
-          unpaid: tarix.data?.unpaid_days ?? 0,
-        })}
-      </p>
-      <ul className="flex flex-col gap-1">
-        {kunlar.map((kun) => (
-          <li
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
-            key={kun.service_date}
-          >
-            <span className="font-mono text-xs tabular-nums">
-              {formatBusinessDay(format, kun.service_date, locale)}
-            </span>
-            {/*
-              ⚠ RASTA KODI KO'RSATILADI: bir sotuvchida bir nechta rasta
-                bo'lishi mumkin va «qaysi rasta to'lanmagan?» degan savol
-                aynan shu yerda tug'iladi.
-            */}
-            <span className="dir-tile-note">{kun.stall_codes ?? "—"}</span>
-            <span className="font-mono text-xs tabular-nums">
-              {formatSoum(format, kun.paid_soum, locale)}
-              {" / "}
-              {formatSoum(format, kun.charged_soum, locale)}
-            </span>
-            <Badge tone={KUN_TONE[kun.status]}>
-              {t(`director.vaDay_${kun.status}`)}
-            </Badge>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/**
- * Holat -> rang.
- *
- * ⛔ `waived` SARIQ, YASHIL EMAS: pul tushmagan, qarz kechirilgan.
- *    Yashil qilish uni to'langan kun bilan tenglashtirardi va
- *    hisobotda kassaga tushmagan pul tushgandek ko'rinardi.
- */
-export const KUN_TONE: Record<
-  "paid" | "partial" | "unpaid" | "waived" | "advance",
-  BadgeTone
-> = {
-  paid: "success",
-  partial: "warning",
-  unpaid: "danger",
-  waived: "warning",
-  /*
-   * ⚠ `accent`, `success` EMAS: avans — hisobsiz to'lov, ya'ni yopilgan
-   *   patta emas. Yashil uni to'langan kun bilan tenglashtirardi.
-   */
-  advance: "accent",
-};

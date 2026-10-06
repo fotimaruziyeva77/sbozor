@@ -2168,7 +2168,16 @@
     "vaDay_partial": "Қисман",
     "vaDay_unpaid": "Тўланмаган",
     "vaDay_waived": "Кечирилган",
-    "vaDay_advance": "Аванс"
+    "vaDay_advance": "Ҳисобсиз кун",
+    "vaHistoryRule": "Ҳолат — ўша кунги патта ёпилганми. Тўлов энг эски қарздан бошлаб ёпади, шунинг учун пул бошқа куни берилган бўлиши мумкин.",
+    "vaHistoryDebt": "қарз: {sum}",
+    "vaHistoryAdvance": "ортиқча тўлов: {sum}",
+    "vaRowCharged": "Ҳисоб: {sum}",
+    "vaRowNoCharge": "Ҳисоб ёзилмаган",
+    "vaRowCash": "Шу куни тўланган: {sum}",
+    "vaRowNoCash": "Шу куни тўлов йўқ",
+    "vaRowWaived": "Кечирилди: {sum}",
+    "vaRowDebt": "Қарз: {sum}"
   },
   "auditSheet": {
     "eyebrow": "Текширув учун йиғма варақ",
