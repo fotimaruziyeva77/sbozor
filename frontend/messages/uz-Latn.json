@@ -2159,7 +2159,16 @@
     "vaOldestUnknown": "Eng eski qarz sanasi o'lchanmagan",
     "vaOldest": "Eng eski qarz: {date}",
     "vaNoHistoryBadge": "Yo'q",
-    "vaNoHistory": "To'lov tarixi bu yerda ko'rsatilmaydi: serverda sotuvchi bo'yicha to'lov ro'yxatini beradigan yo'l hali yo'q. Mavjud yo'llar bir kunlik yoki kassirning o'z smenasiga tegishli — ulardan tarix yasash serverning javobiga zid bo'lishi mumkin edi."
+    "vaNoHistory": "To'lov tarixi bu yerda ko'rsatilmaydi: serverda sotuvchi bo'yicha to'lov ro'yxatini beradigan yo'l hali yo'q. Mavjud yo'llar bir kunlik yoki kassirning o'z smenasiga tegishli — ulardan tarix yasash serverning javobiga zid bo'lishi mumkin edi.",
+    "vaShowHistory": "To'lov tarixini ko'rish",
+    "vaHideHistory": "Tarixni yopish",
+    "vaHistoryEmpty": "Bu davrda hisob ham, to'lov ham bo'lmagan.",
+    "vaHistorySummary": "{days} kun · to'lanmagan: {unpaid}",
+    "vaDay_paid": "To'landi",
+    "vaDay_partial": "Qisman",
+    "vaDay_unpaid": "To'lanmagan",
+    "vaDay_waived": "Kechirilgan",
+    "vaDay_advance": "Avans"
   },
   "auditSheet": {
     "eyebrow": "Tekshiruv uchun yig'ma varaq",

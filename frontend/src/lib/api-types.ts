@@ -1661,6 +1661,49 @@ export const alertListResponseSchema = z.object({
  *   sabab bilan `list[tuple[float, float]]` yozilgan
  *   (`schemas.py::CameraZoneWrite`).
  */
+/**
+ * Sotuvchi tarixining bitta KUNI (`GET /reports/vendor-history`).
+ *
+ * ⛔⛔ `status` SERVERDAN KELADI VA KLIENTDA QAYTA HISOBLANMAYDI
+ *     (`report_repo.vendor_day_status`). Aks holda ekran «to'landi»
+ *     deb, hisobot «qarzdor» deb ko'rsatishi mumkin edi va qaysi biri
+ *     rost ekani aniqlanmasdi. Bu yerda faqat BELGI tarjima qilinadi.
+ *
+ * ⚠ `waived` — «Direktor kechirdi»: pul TUSHMAGAN, qarz kechirilgan.
+ *   `paid` bilan birlashtirilmaydi — kassaga tushmagan pulni tushgandek
+ *   ko'rsatardi.
+ */
+export const vendorHistoryDaySchema = z.object({
+  service_date: z.string(),
+  charged_soum: z.number().int(),
+  paid_soum: z.number().int(),
+  waived_soum: z.number().int(),
+  payment_count: z.number().int(),
+  last_payment_at: z.string().nullable(),
+  stall_codes: z.string().nullable(),
+  status: z.enum(["paid", "partial", "unpaid", "waived", "advance"]),
+});
+export type VendorHistoryDay = z.infer<typeof vendorHistoryDaySchema>;
+
+/**
+ * `GET /reports/vendor-history?vendor_id=&from=&to=`.
+ *
+ * ⚠ FAQAT HARAKAT BO'LGAN KUNLAR: bozor yopiq va rasta biriktirilmagan
+ *   kunlar ro'yxatda YO'Q — ular «to'lamagan» emas, «hisob bo'lmagan»
+ *   kunlar va ularni ko'rsatish qarzni bo'rttirardi.
+ */
+export const vendorHistorySchema = z.object({
+  vendor_id: z.uuid(),
+  from_date: z.string(),
+  to_date: z.string(),
+  rows: z.array(vendorHistoryDaySchema),
+  charged_total_soum: z.number().int(),
+  paid_total_soum: z.number().int(),
+  waived_total_soum: z.number().int(),
+  unpaid_days: z.number().int(),
+});
+export type VendorHistory = z.infer<typeof vendorHistorySchema>;
+
 export const cameraZonePointSchema = z.tuple([z.number(), z.number()]);
 
 /**

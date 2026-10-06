@@ -116,6 +116,8 @@ from app.schemas import (
     RevenueReportRow,
     ThreeWayReportResponse,
     ThreeWayReportRow,
+    VendorHistoryDay,
+    VendorHistoryResponse,
 )
 from app.security.audit import (
     TABLE_LEDGER_ENTRIES,
@@ -199,6 +201,19 @@ kelajakdagi «faqat ko'rsin» rolini himoya qiladi: bunday rol
 
 ⚠ Bugungi matritsada ikkala huquq ham `director` va `market_admin` da
   BIRGA turadi, ya'ni bu qator hech kimning kirishini TORAYTIRMAYDI.
+"""
+
+VendorHistoryReadIntentDep = Annotated[
+    AuditReadIntent,
+    Depends(audit_read(TABLE_VENDORS, reason="report_vendor_history")),
+]
+"""Bitta sotuvchining tarixini KIM ochgani jurnalga tushadi.
+
+⛔ ALOHIDA SABAB (`report_vendor_history`), `report_receivables` EMAS:
+   reestr «kimdan undirish kerak?» degan UMUMIY savol, bu esa BITTA
+   odamning kunma-kun tarixi. Jurnalda ikkalasini bir nom ostida
+   qoldirish «falonchining hisobini kim ko'rdi?» degan savolga javob
+   berishni imkonsiz qilardi — 11-bo'lim esa aynan shuni talab qiladi.
 """
 
 ReceivablesReadIntentDep = Annotated[
@@ -638,6 +653,80 @@ async def live_revenue(
         total_collected_soum=period.total_collected_soum,
         total_charged_soum=period.total_charged_soum,
         charged_complete=to_date < today,
+    )
+
+
+@router.get("/vendor-history", response_model=VendorHistoryResponse)
+async def vendor_history_report(
+    principal: ReportViewerDep,
+    intent: VendorHistoryReadIntentDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    vendor_id: Annotated[UUID, Query()],
+    from_date: FromDateDep,
+    to_date: ToDateDep,
+) -> VendorHistoryResponse:
+    """Bitta sotuvchining KUNMA-KUN to'lov tarixi.
+
+    =======================================================================
+    ⛔⛔ NEGA BU MARSHRUT PAYDO BO'LDI (261006, foydalanuvchi talabi:
+        «sotuvchi ustiga bossam qaysi kunlari to'lov qilganini ko'rishim
+        kerak, qilmaganlari ham chiqishi kerak»).
+
+        `vendor-account.tsx` da to'lov tarixi bloki BO'SH turardi va
+        sababini o'zi yozardi: serverda sotuvchi bo'yicha to'lov
+        ro'yxatini beradigan yo'l YO'Q edi. Tekshirilgan uchta yo'lning
+        hech biri yaramasdi — biri bir kunlik, ikkinchisi kassirning o'z
+        smenasi, uchinchisi qoldiq (tarix emas).
+
+        Ro'yxatni klientda «yasash» ATAYLAB rad etilgan edi: o'ttizta
+        so'rov va serverning javobiga ZID bo'lishi mumkin bo'lgan
+        ikkinchi hisoblash yo'li. Bu marshrut o'sha bo'shliqni BITTA
+        so'rov bilan yopadi.
+    =======================================================================
+
+    ⛔ ISM VA TELEFON JAVOBDA YO'Q — sabab `VendorHistoryResponse` da.
+
+    ⚠ YIG'INDI BUTUN DAVRNIKI: qatorlar faqat HARAKAT bo'lgan kunlar
+      uchun, yig'indi esa o'sha qatorlardan. Bozor yopiq kunlar ro'yxatda
+      ham, yig'indida ham YO'Q.
+    """
+    market_id = _market_id(principal)
+    period_from, period_to = _report_period(from_date, to_date, settings.report_max_period_days)
+
+    rows = await report_repo.vendor_day_history(
+        session,
+        market_id=market_id,
+        vendor_id=vendor_id,
+        from_date=period_from,
+        to_date=period_to,
+    )
+    _guard_row_count(len(rows), settings.report_max_rows)
+
+    intent.filters = {"vendor_id": str(vendor_id)}
+    intent.result_count = len(rows)
+
+    return VendorHistoryResponse(
+        vendor_id=vendor_id,
+        from_date=period_from,
+        to_date=period_to,
+        rows=[
+            VendorHistoryDay(
+                service_date=r.service_date,
+                charged_soum=r.charged_soum,
+                paid_soum=r.paid_soum,
+                waived_soum=r.waived_soum,
+                payment_count=r.payment_count,
+                last_payment_at=r.last_payment_at,
+                stall_codes=r.stall_codes,
+                status=r.status,
+            )
+            for r in rows
+        ],
+        charged_total_soum=sum(r.charged_soum for r in rows),
+        paid_total_soum=sum(r.paid_soum for r in rows),
+        waived_total_soum=sum(r.waived_soum for r in rows),
+        unpaid_days=sum(1 for r in rows if r.status in ("unpaid", "partial")),
     )
 
 

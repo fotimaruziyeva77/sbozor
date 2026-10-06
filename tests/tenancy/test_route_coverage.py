@@ -639,8 +639,19 @@ REPORTS_ROUTES = (
     LIVE_REVENUE_ROUTE,
     "/api/v1/reports/revenue",
     "/api/v1/reports/revenue.xlsx",
+    "/api/v1/reports/vendor-history",
 )
-"""O'N YO'L, o'n MARSHRUT — to'qqiztasi `GET`, BITTASI `POST`.
+"""O'N BIR YO'L, o'n bir MARSHRUT — o'ntasi `GET`, BITTASI `POST`.
+
+⚠ `vendor-history` 261006 da qo'shildi: BITTA sotuvchining kunma-kun
+  to'lov tarixi. `.xlsx` juftligi YO'Q va bu ataylab — u ekranda,
+  sotuvchi kartasi ochilganda o'qiladigan OPERATIV javob, hujjat emas.
+  Hujjat kerak bo'lsa `/debtors.xlsx` bor.
+
+⚠ U `PERSONAL_ROUTES` ga TUSHMAYDI va pastdagi test buni qulflaydi:
+  javobda ism ham, telefon ham yo'q (klient sotuvchini allaqachon
+  biladi). Ism qo'shilsa o'sha test darhol qizaradi va bu ONGLI qaror
+  bo'lib qoladi.
 
 ⛔ NOMLAR KLIENT KONTRAKTIDAN (`REPORT_KINDS`, 08-03; UI-SPEC §12.1,
    G-43a): `report-queries.ts::buildReportDataPath()` yo'lni AYNAN
@@ -773,7 +784,7 @@ def test_every_reports_route_is_documented_in_openapi() -> None:
         if path.startswith(REPORTS_PREFIX)
     }
 
-    assert len(documented) == 11, sorted(documented)
+    assert len(documented) == 12, sorted(documented)
     assert {path for _, path in documented} == set(REPORTS_ROUTES)
 
 

@@ -56,7 +56,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 
 from sbozor_core.enums import (
     AdjustmentDirection,
@@ -80,7 +80,7 @@ from app.repositories.occupancy_repo import _PER_STALL_CTE
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from datetime import date
+    from datetime import date, datetime
     from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,6 +99,8 @@ __all__ = [
     "LedgerDay",
     "LedgerDayRow",
     "ReceivableRow",
+    "VendorDayRow",
+    "VendorDayStatus",
     "RevenuePeriod",
     "RevenueRow",
     "ThreeWayReport",
@@ -117,6 +119,7 @@ _BIGINT_ARRAY = ARRAY(BigInteger())
 
 _REVERSAL: Final[str] = PaymentKind.REVERSAL.value
 _INCREASE: Final[str] = AdjustmentDirection.INCREASE.value
+_DECREASE: Final[str] = AdjustmentDirection.DECREASE.value
 """Enum qiymatlari so'rov PARAMETRI, so'rov MATNIDAGI literal EMAS.
 
 `billing_repo._OCCUPIED` da o'rnatilgan qoida: matnga yozilgan literal enum
@@ -366,6 +369,92 @@ async def revenue_by_day(
 # 2. QARZDORLIK REESTRI — ISM SERVERDA JOINLANADI (06 `deferred-items.md` №9)
 # ===========================================================================
 
+_VENDOR_DAY_HISTORY = text(
+    """
+    WITH hisoblar AS (
+        SELECT dc.service_date            AS kun,
+               sum(dc.amount_soum)        AS hisob_soum,
+               string_agg(DISTINCT s.code, ', ' ORDER BY s.code) AS rastalar
+          FROM daily_charges dc
+          LEFT JOIN stalls s
+            ON s.market_id = dc.market_id AND s.id = dc.stall_id
+         WHERE dc.market_id = :market_id
+           AND dc.vendor_id = :vendor_id
+           AND dc.service_date BETWEEN :from_date AND :to_date
+         GROUP BY dc.service_date
+    ),
+    kechirilgan AS (
+        SELECT dc.service_date     AS kun,
+               sum(ca.amount_soum) AS kechirilgan_soum
+          FROM charge_adjustments ca
+          JOIN daily_charges dc
+            ON dc.market_id = ca.market_id AND dc.id = ca.charge_id
+         WHERE ca.market_id = :market_id
+           AND dc.vendor_id = :vendor_id
+           AND ca.direction = :decrease
+           AND dc.service_date BETWEEN :from_date AND :to_date
+         GROUP BY dc.service_date
+    ),
+    tolovlar AS (
+        SELECT p.service_date      AS kun,
+               sum(p.amount_soum)  AS tolov_soum,
+               count(*)            AS tolov_soni,
+               max(p.created_at)   AS oxirgi_tolov_at
+          FROM payments p
+         WHERE p.market_id = :market_id
+           AND p.vendor_id = :vendor_id
+           AND p.service_date BETWEEN :from_date AND :to_date
+         GROUP BY p.service_date
+    )
+    SELECT COALESCE(h.kun, t.kun)                  AS service_date,
+           COALESCE(h.hisob_soum, 0)               AS charged_soum,
+           COALESCE(t.tolov_soum, 0)               AS paid_soum,
+           COALESCE(k.kechirilgan_soum, 0)         AS waived_soum,
+           COALESCE(t.tolov_soni, 0)               AS payment_count,
+           t.oxirgi_tolov_at                       AS last_payment_at,
+           h.rastalar                              AS stall_codes
+      FROM hisoblar h
+      FULL OUTER JOIN tolovlar t ON t.kun = h.kun
+      LEFT JOIN kechirilgan k ON k.kun = COALESCE(h.kun, t.kun)
+     ORDER BY COALESCE(h.kun, t.kun) DESC
+    """
+)
+"""Sotuvchining KUNMA-KUN tarixi — YOZILGAN FAKTLAR, qayta hisob EMAS.
+
+=============================================================================
+⛔⛔ BU IKKINCHI HISOBLASH YO'LI EMAS VA FARQ MUHIM.
+
+    `receivables()` qarz ARIFMETIKASINI `billing_repo` dan oladi, chunki
+    u «qancha qarz?» degan savolga javob beradi va javob QOIDADAN
+    chiqadi. Bu so'rov esa boshqa savolga javob beradi: «qaysi kuni
+    nima YOZILGAN?». U uchta jadvalni O'QIYDI va hech qanday tarifni,
+    hech qanday qoidani qayta qo'llamaydi:
+
+        daily_charges      — kassir ekrani va kechki yopilish YOZGAN hisob
+        payments           — kassaga TUSHGAN pul
+        charge_adjustments — kechirilgan summa («Direktor kechirdi»)
+
+    Ya'ni u hisobot bilan ZIDLASHA olmaydi, chunki hisobot ham aynan
+    shu qatorlardan o'sadi.
+
+⛔ `payments.service_date` — TO'LOV QAYSI KUN PATTASINI yopgani, pul
+   qachon tushgani EMAS. Kassir ertalab kechagi pattani yopishi mumkin;
+   o'sha to'lov KECHAGI kunga tushadi va bu to'g'ri — savol «qaysi kuni
+   to'lamagan?» degan savol, «qachon kassaga kelgan?» degan emas.
+
+⚠ `FULL OUTER JOIN` MAJBURIY: hisobsiz to'lov ham (avans yoki hisob
+  keyinroq o'chirilgan), to'lovsiz hisob ham (aynan qidirilayotgan
+  holat) bo'lishi mumkin. `LEFT JOIN` ikkinchisini ko'rsatib,
+  birinchisini JIMGINA yashirardi.
+
+⚠ FAQAT HARAKAT BO'LGAN KUNLAR: bozor yopiq kunlar va rasta
+  biriktirilmagan kunlar qatorga TUSHMAYDI — ular «to'lamagan» emas,
+  «hisob bo'lmagan» kunlar va ularni ro'yxatga qo'shish qarzdorlikni
+  BO'RTTIRIB ko'rsatardi.
+=============================================================================
+"""
+
+
 _RECEIVABLE_ROWS = text(
     """
     WITH outstanding AS (
@@ -489,6 +578,90 @@ class ReceivableRow:
     outstanding_soum: int
     oldest_unpaid_date: date | None
     stall_codes: str | None
+
+
+VendorDayStatus = Literal["paid", "partial", "unpaid", "waived", "advance"]
+
+
+def vendor_day_status(*, charged_soum: int, paid_soum: int, waived_soum: int) -> VendorDayStatus:
+    """Bir kunning holati — YAGONA qoida, server va UI uchun bir xil.
+
+    ⛔⛔ QOIDA SERVERDA, UI DA EMAS: aks holda ekran «to'landi» deb,
+        hisobot «qarzdor» deb ko'rsatishi mumkin edi va qaysi biri rost
+        ekani aniqlanmasdi. UI faqat BELGINI tarjima qiladi.
+
+    ⚠ `waived` ALOHIDA HOLAT, `paid` EMAS: pul tushmagan, qarz
+      KECHIRILGAN. Ikkalasini birlashtirish hisobotda kassaga tushmagan
+      pulni tushgandek ko'rsatardi — bu aynan `debt_settlement` moduli
+      «soxta to'lov yozilmaydi» deb rad etgan narsa.
+
+    ⚠ `advance` — hisobsiz to'lov: sotuvchi oldindan to'lagan yoki hisob
+      keyinroq o'chirilgan. «To'ladi» deb belgilash uni yopilgan patta
+      bilan aralashtirardi.
+    """
+    if charged_soum <= 0:
+        return "advance" if paid_soum > 0 else "paid"
+    qoldiq = charged_soum - paid_soum - waived_soum
+    if qoldiq <= 0:
+        # To'liq yopilgan. Pul umuman tushmagan bo'lsa — bu KECHIRIM.
+        return "waived" if paid_soum <= 0 and waived_soum > 0 else "paid"
+    return "partial" if (paid_soum > 0 or waived_soum > 0) else "unpaid"
+
+
+@dataclass(frozen=True, slots=True)
+class VendorDayRow:
+    """Sotuvchi tarixining bitta KUNI.
+
+    ⚠ `stall_codes` `None` bo'lishi mumkin: hisobsiz to'lov kunida rasta
+      ma'lum emas (hisob qatori yo'q). Bo'shliq KO'RINADI, to'ldirilmaydi.
+    """
+
+    service_date: date
+    charged_soum: int
+    paid_soum: int
+    waived_soum: int
+    payment_count: int
+    last_payment_at: datetime | None
+    stall_codes: str | None
+    status: VendorDayStatus
+
+
+async def vendor_day_history(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    vendor_id: UUID,
+    from_date: date,
+    to_date: date,
+) -> list[VendorDayRow]:
+    """Sotuvchining kunma-kun to'lov tarixi (sabab `_VENDOR_DAY_HISTORY` da)."""
+    rows = await session.execute(
+        _VENDOR_DAY_HISTORY,
+        {
+            "market_id": market_id,
+            "vendor_id": vendor_id,
+            "from_date": from_date,
+            "to_date": to_date,
+            "decrease": _DECREASE,
+        },
+    )
+    return [
+        VendorDayRow(
+            service_date=row["service_date"],
+            charged_soum=int(row["charged_soum"]),
+            paid_soum=int(row["paid_soum"]),
+            waived_soum=int(row["waived_soum"]),
+            payment_count=int(row["payment_count"]),
+            last_payment_at=row["last_payment_at"],
+            stall_codes=row["stall_codes"],
+            status=vendor_day_status(
+                charged_soum=int(row["charged_soum"]),
+                paid_soum=int(row["paid_soum"]),
+                waived_soum=int(row["waived_soum"]),
+            ),
+        )
+        for row in rows.mappings()
+    ]
 
 
 async def receivables(

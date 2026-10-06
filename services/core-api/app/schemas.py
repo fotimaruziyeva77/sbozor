@@ -4970,6 +4970,61 @@ class ReceivablesReportRow(BaseModel):
     """
 
 
+class VendorHistoryDay(BaseModel):
+    """Sotuvchi tarixining bitta KUNI.
+
+    ⛔⛔ `status` SERVERDAN KELADI, KLIENTDA HISOBLANMAYDI
+        (`report_repo.vendor_day_status`). Aks holda ekran «to'landi»
+        deb, hisobot «qarzdor» deb ko'rsatishi mumkin edi va qaysi biri
+        rost ekani aniqlanmasdi. Klient faqat BELGINI tarjima qiladi.
+
+    ⚠ `waived` — «Direktor kechirdi», ya'ni pul TUSHMAGAN. U `paid` dan
+      ajratilgan: ikkalasini birlashtirish kassaga tushmagan pulni
+      tushgandek ko'rsatardi (`debt_settlement` moduli aynan shuni rad
+      etgan).
+
+    ⚠ `advance` — hisobsiz to'lov (oldindan to'lagan yoki hisob keyinroq
+      o'chirilgan). Yopilgan patta bilan aralashtirilmaydi.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    service_date: date
+    charged_soum: int
+    paid_soum: int
+    waived_soum: int
+    payment_count: int
+    last_payment_at: datetime | None
+    stall_codes: str | None
+    status: Literal["paid", "partial", "unpaid", "waived", "advance"]
+
+
+class VendorHistoryResponse(BaseModel):
+    """`GET /reports/vendor-history?vendor_id=&from=&to=` — kunma-kun tarix.
+
+    ⛔ ISM VA TELEFON JAVOBDA YO'Q va bu ataylab: klient sotuvchini
+       allaqachon biladi (u shu sahifada tanlagan), ya'ni ismni bu yerga
+       qo'shish marshrutni SHAXSIY MA'LUMOT reyestriga
+       (`PERSONAL_ROUTES`) kiritardi va har so'rovga qo'shimcha audit
+       talab qilardi — hech qanday yangi ma'lumot bermasdan.
+
+    ⚠ FAQAT HARAKAT BO'LGAN KUNLAR: bozor yopiq va rasta biriktirilmagan
+      kunlar ro'yxatda YO'Q — ular «to'lamagan» emas, «hisob bo'lmagan»
+      kunlar (sabab `report_repo._VENDOR_DAY_HISTORY` da).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    vendor_id: UUID
+    from_date: date
+    to_date: date
+    rows: list[VendorHistoryDay]
+    charged_total_soum: int
+    paid_total_soum: int
+    waived_total_soum: int
+    unpaid_days: int
+
+
 class ReceivablesReportResponse(BaseModel):
     """`GET /reports/debtors?from=&to=` — qarzdorlik reestri.
 

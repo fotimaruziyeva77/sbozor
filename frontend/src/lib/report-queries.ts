@@ -7,10 +7,11 @@ import type { ReportKind } from "@/lib/api-types";
 import {
   anomalyArchiveSchema,
   ledgerImportResultSchema,
-  receivablesReportSchema,
   liveRevenueSchema,
+  receivablesReportSchema,
   revenueReportSchema,
   threeWayReportSchema,
+  vendorHistorySchema,
 } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import { domainKey, IMPORTS_PATH, saveBlob } from "@/lib/market-queries";
@@ -253,6 +254,44 @@ export function useReceivablesReport(
         schema: receivablesReportSchema,
       }),
     enabled: marketId !== null && (options?.enabled ?? true),
+    staleTime: REPORT_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * `GET /reports/vendor-history` — BITTA sotuvchining kunma-kun tarixi.
+ *
+ * ⛔⛔ `enabled` MAJBURIY VA STANDART `false` EMAS, CHAQIRUVCHIDA:
+ *     bu so'rov sotuvchi kartasi OCHILGANDA yuboriladi. Ro'yxatdagi
+ *     har karta uchun avtomatik yuborilsa, bitta ekran o'ttizta so'rov
+ *     qilardi — aynan `vendor-account.tsx` izohi «qilinmaydi» deb rad
+ *     etgan narsa.
+ */
+export function useVendorHistory(
+  vendorId: string | null,
+  period: ReportPeriod,
+  options?: { enabled?: boolean },
+) {
+  const marketId = useMarketId();
+
+  return useQuery({
+    queryKey: [
+      "reports",
+      marketId ?? "",
+      "vendor-history",
+      vendorId ?? "",
+      period.from,
+      period.to,
+    ],
+    queryFn: () =>
+      apiFetch(
+        `/reports/vendor-history?vendor_id=${encodeURIComponent(vendorId ?? "")}` +
+          `&from=${period.from}&to=${period.to}`,
+        { schema: vendorHistorySchema },
+      ),
+    enabled:
+      marketId !== null && vendorId !== null && (options?.enabled ?? true),
     staleTime: REPORT_STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });
