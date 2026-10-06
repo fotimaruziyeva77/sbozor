@@ -166,6 +166,29 @@ class Permission(StrEnum):
     bir xil va ikki marta yozilmaydi.
     """
     REPORT_VIEW = "report_view"
+    VENDOR_HISTORY_VIEW = "vendor_history_view"
+    """BITTA sotuvchining kunma-kun to'lov tarixi (`GET /reports/vendor-history`).
+
+    =========================================================================
+    ⛔⛔ NEGA `REPORT_VIEW` DAN AJRATILDI (261006, buyurtmachi qarori).
+
+    Platforma admini sotuvchini bosib to'lov tarixini ko'rishi kerak edi,
+    lekin unda `REPORT_VIEW` YO'Q va bu ONGLI qaror (Pitfall 11 varianti A,
+    `test_reports_api.py::test_the_platform_admin_cannot_read_any_report`):
+    bozorlararo rolga hisobot yuzasini ochish HAR BOZORNING qarzdorlar
+    ro'yxatini (ism + qarz) BITTA akkauntga to'plardi.
+
+    Buyurtmachiga ikki yo'l ko'rsatildi va u TORINI tanladi: faqat shu
+    huquq beriladi, `REPORT_VIEW` platforma adminida YO'QLIGICHA qoladi.
+    Farq mexanik: tarix javobida ism ham, telefon ham YO'Q
+    (`VendorHistoryResponse`), u bitta sotuvchi bo'yicha va har ochilishi
+    `vendors` o'qish auditiga yoziladi; qarzdorlar reestri esa BUTUN
+    bozorni bitta so'rovda beradi.
+
+    ⚠ Direktor va bozor admini tarixni avval `REPORT_VIEW` orqali ko'rardi —
+      ular bu huquqni ham oladi, ya'ni ularning kirishi o'zgarmaydi.
+    =========================================================================
+    """
     OCCUPANCY_REVIEW = "occupancy_review"
     DISPUTE_DECIDE = "dispute_decide"
     CAMERA_VIEW = "camera_view"
@@ -222,6 +245,9 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.VENDOR_VIEW,
             Permission.CAMERA_VIEW,
             Permission.CAMERA_MANAGE,
+            # 261006: FAQAT sotuvchi to'lov tarixi, `REPORT_VIEW` EMAS —
+            # sabab `Permission.VENDOR_HISTORY_VIEW` docstringida.
+            Permission.VENDOR_HISTORY_VIEW,
         }
     ),
     # D-07: FAQAT ko'rish + nizo qarori. `*_MANAGE` huquqlarining yo'qligi —
@@ -238,6 +264,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.DIRECTOR: frozenset(
         {
             Permission.REPORT_VIEW,
+            Permission.VENDOR_HISTORY_VIEW,
             Permission.AUDIT_VIEW,
             Permission.CAMERA_VIEW,
             Permission.DISPUTE_DECIDE,
@@ -267,6 +294,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.MARKET_DATA_VIEW,
             Permission.VENDOR_VIEW,
             Permission.REPORT_VIEW,
+            Permission.VENDOR_HISTORY_VIEW,
             Permission.CAMERA_VIEW,
             Permission.CAMERA_MANAGE,
             Permission.BILLING_COLLECT_VIEW,

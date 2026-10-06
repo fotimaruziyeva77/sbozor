@@ -84,6 +84,7 @@ if TYPE_CHECKING:
 
 REVENUE_URL = "/api/v1/reports/revenue"
 DEBTORS_URL = "/api/v1/reports/debtors"
+VENDOR_HISTORY_URL = "/api/v1/reports/vendor-history"
 ANOMALIES_URL = "/api/v1/reports/anomalies"
 
 REPORT_URLS = (REVENUE_URL, DEBTORS_URL, ANOMALIES_URL)
@@ -573,6 +574,38 @@ async def test_the_platform_admin_cannot_read_any_report(
     response = await api_client.get(url, params=_period(), headers=platform_admin_headers)
 
     assert response.status_code == 403, f"{url}: {response.status_code} — {response.text}"
+
+
+async def test_the_platform_admin_reads_only_the_vendor_history(
+    api_client: httpx.AsyncClient,
+    reports: Env,
+    platform_admin_headers: dict[str, str],
+) -> None:
+    """⛔ 261006 — PLATFORMA ADMINIGA FAQAT SOTUVCHI TARIXI OCHILDI.
+
+    =======================================================================
+    Buyurtmachi platforma admini sotuvchini bosib to'lov tarixini ko'rishini
+    so'radi va TOR yo'lni tanladi: `VENDOR_HISTORY_VIEW` beriladi,
+    `REPORT_VIEW` EMAS. Yuqoridagi `test_the_platform_admin_cannot_read_any_report`
+    shu sababdan O'ZGARMADI — u qarzdorlar reestrini hali ham 403 da ushlaydi.
+
+    Bu test ikkala yarmini BITTA sessiyada o'lchaydi: tarix 200, reestr
+    403. Faqat birinchisi bo'lsa, huquqni `REPORT_VIEW` ga «soddalashtirish»
+    ham yashil qolardi.
+    =======================================================================
+    """
+    history = await api_client.get(
+        VENDOR_HISTORY_URL,
+        params={**_period(), "vendor_id": str(reports.vendor_id)},
+        headers=platform_admin_headers,
+    )
+    debtors = await api_client.get(DEBTORS_URL, params=_period(), headers=platform_admin_headers)
+
+    assert history.status_code == 200, history.text
+    assert set(history.json()) >= {"rows", "outstanding_soum"}
+    assert debtors.status_code == 403, (
+        "qarzdorlar reestri platforma adminiga YOPIQ qolishi kerak edi — " + debtors.text
+    )
 
 
 # ===========================================================================

@@ -164,6 +164,17 @@ hisobot O'QIMAYDI. Nazoratchida ham yo'q — `ROLE_PERMISSIONS[INSPECTOR]`
 AYNAN `{OCCUPANCY_REVIEW}` (T-05-58).
 """
 
+VendorHistoryViewerDep = Annotated[
+    Principal, Depends(require_permission(Permission.VENDOR_HISTORY_VIEW))
+]
+"""⛔ FAQAT `GET /vendor-history` — `REPORT_VIEW` EMAS (261006, buyurtmachi qarori).
+
+Platforma admini sotuvchi panelida to'lov tarixini ko'radi, lekin
+qarzdorlar reestri va boshqa hisobotlar unga YOPIQLIGICHA qoladi. Sabab
+`rbac.py::Permission.VENDOR_HISTORY_VIEW` docstringida; direktor va bozor
+adminida ikkala huquq ham bor, ya'ni ularning kirishi o'zgarmaydi.
+"""
+
 LedgerImporterDep = Annotated[Principal, Depends(require_permission(Permission.STALL_MANAGE))]
 """⛔ DAFTAR IMPORTI — `STALL_MANAGE`, `REPORT_VIEW` EMAS (D-20, 08-14).
 
@@ -658,7 +669,7 @@ async def live_revenue(
 
 @router.get("/vendor-history", response_model=VendorHistoryResponse)
 async def vendor_history_report(
-    principal: ReportViewerDep,
+    principal: VendorHistoryViewerDep,
     intent: VendorHistoryReadIntentDep,
     session: TenantSessionDep,
     settings: SettingsDep,

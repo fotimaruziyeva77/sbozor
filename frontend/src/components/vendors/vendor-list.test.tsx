@@ -26,7 +26,7 @@
  * EMAS — u tasdiqlangan paketlar ro'yxatiga kirmaydi (01-12 qarori).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import type { ReactElement } from "react";
@@ -34,6 +34,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import messages from "../../../messages/uz-Latn.json";
 import VendorsPage from "@/app/[locale]/(app)/vendors/page";
+import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 import { vendorsKey } from "@/lib/market-queries";
 
@@ -56,6 +57,34 @@ const VENDOR = {
   stall_count: 2,
   stall_codes: ["A-12", "B-7"],
   created_at: "2026-07-01T05:00:00Z",
+};
+
+/** Panelda ko'rinadigan to'lov tarixi — bitta to'langan kun. */
+const HISTORY = {
+  vendor_id: VENDOR.id,
+  from_date: "2026-07-01",
+  to_date: "2026-09-28",
+  rows: [
+    {
+      service_date: "2026-09-28",
+      charged_soum: 26_000,
+      waived_soum: 0,
+      covered_soum: 26_000,
+      unpaid_soum: 0,
+      paid_soum: 26_000,
+      payment_count: 1,
+      last_payment_at: "2026-09-28T05:00:00Z",
+      stall_codes: "A-12",
+      status: "paid",
+    },
+  ],
+  charged_total_soum: 26_000,
+  paid_total_soum: 26_000,
+  waived_total_soum: 0,
+  unpaid_total_soum: 0,
+  unpaid_days: 0,
+  outstanding_soum: 0,
+  advance_soum: 0,
 };
 
 /** `vendors.auditNotice` — uz-Latn qiymati (test AYNAN shu katalogni yuklaydi). */
@@ -89,6 +118,17 @@ function renderVendorsPage(): ReturnType<typeof render> {
     pages: [{ items: [VENDOR], next_cursor: null }],
     pageParams: [null],
   });
+
+  /*
+   * Panel ochilganda tarix so'rovi ketadi — u ham KESHGA ekiladi (HTTP
+   * qatlami mock qilinmaydi, sabab yuqorida). Oyna `VendorDaysRecent` dagi
+   * bilan AYNI: kecha bilan tugaydigan 90 kun.
+   */
+  const to = shiftIsoDay(businessDayIn("Asia/Tashkent", new Date()), -1);
+  queryClient.setQueryData(
+    ["reports", MARKET_ID, "vendor-history", VENDOR.id, shiftIsoDay(to, -89), to],
+    HISTORY,
+  );
 
   const tree: ReactElement = (
     <NextIntlClientProvider locale="uz-Latn" messages={messages}>
@@ -133,16 +173,33 @@ afterEach(() => {
   clearSession();
 });
 
-describe("Sotuvchilar ekrani — to'lov tarixi tugmasi (261006)", () => {
-  test("`report_view` bor rolda har kartada tarix tugmasi chiqadi", async () => {
+describe("Sotuvchilar ekrani — sotuvchi paneli (261006)", () => {
+  test("sotuvchini bosish PANELNI ochadi: aloqa, amallar va to'lov tarixi", async () => {
     renderVendorsPage();
 
+    fireEvent.click(await screen.findByRole("button", { name: VENDOR.full_name }));
+
+    const panel = await screen.findByRole("dialog");
+    expect(within(panel).getByRole("link", { name: VENDOR_PHONE })).toBeInTheDocument();
     expect(
-      await screen.findByRole("button", { name: messages.director.vaShowHistory }),
+      within(panel).getByRole("button", { name: messages.vendors.edit }),
+      "amallar «…» menyusi ostida yashirinmasdan panelda ko'rinishi kerak",
     ).toBeInTheDocument();
+    expect(within(panel).getByText(messages.vendors.paymentHistory)).toBeInTheDocument();
+    // Tarix HAQIQATAN chizildi (keshdagi kun), «huquq yo'q» matni emas.
+    expect(within(panel).getByText(messages.director.vaDay_paid)).toBeInTheDocument();
+    expect(
+      within(panel).queryByText(messages.vendors.paymentHistoryNoAccess),
+    ).not.toBeInTheDocument();
   });
 
-  test("`report_view` YO'Q rolda tugma CHIZILMAYDI — aks holda u 403 berardi", async () => {
+  test("⛔ platforma admini (`report_view` YO'Q) ham tarixni ko'radi — 261006 qarori", async () => {
+    /*
+     * Buyurtmachi platforma adminiga FAQAT sotuvchi to'lov tarixini ochdi
+     * (`vendor_history_view`), hisobotlarni emas. Bu test qarorning ekrandagi
+     * yarmini qulflaydi: tugma `report_view` ga qaytarib bog'lansa, platforma
+     * admini yana bo'sh panel ko'radi va test QIZARADI.
+     */
     setSession({
       accessToken: "test-access-token",
       principal: {
@@ -160,10 +217,12 @@ describe("Sotuvchilar ekrani — to'lov tarixi tugmasi (261006)", () => {
     });
     renderVendorsPage();
 
-    // Nazorat: karta haqiqatan chizildi — usiz «tugma yo'q» trivial o'tardi.
-    expect(await screen.findByText(VENDOR.full_name)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: VENDOR.full_name }));
+
+    const panel = await screen.findByRole("dialog");
+    expect(within(panel).getByText(messages.director.vaDay_paid)).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: messages.director.vaShowHistory }),
+      within(panel).queryByText(messages.vendors.paymentHistoryNoAccess),
     ).not.toBeInTheDocument();
   });
 });

@@ -581,9 +581,9 @@
     "emptyState": "Bu bozorda hali sotuvchi yo'q",
     "emptyStateHint": "Sotuvchisiz ham davom etishingiz mumkin — ularni keyinroq qo'shasiz.",
     "emptyFiltered": "Sotuvchi topilmadi",
-    "emptyFilteredHint": "Ism yoki telefon raqamini tekshiring.",
+    "emptyFilteredHint": "Ism, telefon yoki rasta raqamini tekshiring.",
     "searchLabel": "Sotuvchini qidirish",
-    "searchPlaceholder": "Ism yoki telefon raqami",
+    "searchPlaceholder": "Ism, telefon yoki rasta raqami",
     "clearSearch": "Qidiruvni tozalash",
     "loadMore": "Ko'proq yuklash",
     "resultCount": "{count, plural, other {# ta sotuvchi}} ko'rsatilmoqda",
@@ -611,7 +611,14 @@
     "periodOverlaps": "Bu davrda rastaga boshqa sotuvchi biriktirilgan. Avvalgi davrni yoping yoki boshqa sana tanlang",
     "periodClosed": "Bu biriktirish allaqachon yopilgan",
     "invalidPeriod": "Yopilish sanasi boshlanish sanasidan keyin bo'lishi kerak",
-    "auditNotice": "Sotuvchi ma'lumotlari shaxsiy hisoblanadi — ularni ko'rish audit jurnaliga yoziladi."
+    "auditNotice": "Sotuvchi ma'lumotlari shaxsiy hisoblanadi — ularni ko'rish audit jurnaliga yoziladi.",
+    "panelHint": "Aloqa, rastalar va to'lov tarixi",
+    "paymentHistory": "To'lov tarixi",
+    "paymentHistoryNoAccess": "To'lov tarixi moliyaviy hisobot hisoblanadi — u direktor va bozor admini hisobida ko'rinadi.",
+    "stallFree": "Bo'sh",
+    "stallThisVendor": "Shu sotuvchiniki",
+    "stallTaken": "Band",
+    "stallTakenBy": "Band: {vendor}"
   },
   "map": {
     "cellCategoryUnknown": "toifa ko'rsatilmagan",

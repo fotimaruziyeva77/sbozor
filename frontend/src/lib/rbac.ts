@@ -55,6 +55,10 @@ export const PERMISSIONS = [
   "billing_collect_view",
   "shift_manage",
   "report_view",
+  // 261006: BITTA sotuvchining to'lov tarixi — `report_view` dan AJRATILGAN,
+  // chunki platforma admini uni oladi, hisobotlarni esa OLMAYDI (sabab
+  // `rbac.py::Permission.VENDOR_HISTORY_VIEW` docstringida).
+  "vendor_history_view",
   "occupancy_review",
   "dispute_decide",
   // Kamera yuzasi ham O'QISH/YOZISH ga ajratilgan (3-faza, D-15/D-07):
@@ -91,12 +95,15 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "vendor_view",
     "camera_view",
     "camera_manage",
+    // 261006: faqat sotuvchi to'lov tarixi, `report_view` EMAS.
+    "vendor_history_view",
   ],
   // D-07: FAQAT ko'rish + nizo qarori. `*_manage` huquqlarining YO'QLIGI —
   // bu qatorning asosiy mazmuni. 2-fazada qo'shilgan ikkita huquq ham
   // faqat o'qish.
   director: [
     "report_view",
+    "vendor_history_view",
     "audit_view",
     "camera_view",
     "dispute_decide",
@@ -117,6 +124,7 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     "market_data_view",
     "vendor_view",
     "report_view",
+    "vendor_history_view",
     "camera_view",
     "camera_manage",
     "billing_collect_view",

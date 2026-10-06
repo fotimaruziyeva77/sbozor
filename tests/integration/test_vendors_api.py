@@ -29,6 +29,7 @@ O'ZI tomonidan, bugundan hisoblab yoziladi.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -449,6 +450,87 @@ async def test_vendor_list_includes_stall_codes(
     body = response.json()
     assert body["stall_count"] == len(stalls)
     assert body["stall_codes"] == expected
+
+
+SEARCH_PHONE = "+998909998877"
+"""Rasta qidiruvi testining telefoni — raqamlari tanlangan kodlarga MOS KELMAYDI.
+
+Qidiruv telefon bo'yicha ham `%q%` qiladi. Telefon tanlangan rasta
+kodini (yoki uning prefiksini) o'z ichiga olsa, sotuvchi TELEFON orqali
+topilardi va test rasta qidiruvini umuman o'lchamay yashil bo'lardi —
+shuning uchun kodlar quyida shu telefonga qarab tanlanadi.
+"""
+
+
+async def test_vendor_list_finds_a_vendor_by_todays_stall_code(
+    api_client: httpx.AsyncClient,
+    market_domain: MarketDomainSeed,
+    market_today: date,
+    admin_headers: dict[str, str],
+) -> None:
+    """Rasta raqami bilan qidiruv — ANIQ moslik va faqat BUGUNGI biriktirish (261006).
+
+    Bozorda sotuvchi ko'pincha rastasi bilan so'raladi («41-rasta
+    kimniki?»). Uch da'vo:
+      (1) bugungi rasta kodi sotuvchini TOPADI;
+      (2) kodning PREFIKSI topmaydi — aks holda «4» 40…49 ning hammasini
+          chiqarardi;
+      (3) YOPILGAN (o'tgan) biriktirishning kodi topmaydi — kartada u rasta
+          yo'q, ya'ni foydalanuvchi qator nega topilganini ko'rmasdi.
+    """
+    rows = market_domain.market_a
+    codes = dict(zip(rows.stall_ids, rows.stall_codes, strict=True))
+    free = _free_stalls(rows)
+    current = next(
+        stall
+        for stall in free
+        if len(codes[stall]) >= 2
+        and codes[stall] not in SEARCH_PHONE
+        and codes[stall][:-1] not in SEARCH_PHONE
+    )
+    prefix = codes[current][:-1]
+    past = next(
+        stall
+        for stall in free
+        if stall != current and codes[stall] not in SEARCH_PHONE and codes[stall] != prefix
+    )
+
+    created = await _create_vendor(
+        api_client, admin_headers, full_name="Rastali Qidiruv", phone=SEARCH_PHONE
+    )
+    assert created.status_code == 201, created.text
+    vendor_id = created.json()["id"]
+
+    closed = await api_client.post(
+        ASSIGNMENTS_URL,
+        json={
+            "stall_id": str(past),
+            "vendor_id": vendor_id,
+            "from_date": (market_today - timedelta(days=10)).isoformat(),
+            "to_date": (market_today - timedelta(days=5)).isoformat(),
+        },
+        headers=admin_headers,
+    )
+    assert closed.status_code == 201, closed.text
+    opened = await _assign(
+        api_client,
+        admin_headers,
+        stall_id=current,
+        vendor_id=UUID(vendor_id),
+        from_date=market_today,
+    )
+    assert opened.status_code == 201, opened.text
+
+    async def found(q: str) -> bool:
+        response = await api_client.get(
+            VENDORS_URL, params={"q": q, "limit": 200}, headers=admin_headers
+        )
+        assert response.status_code == 200, response.text
+        return vendor_id in {item["id"] for item in response.json()["items"]}
+
+    assert await found(codes[current]), "bugungi rasta kodi sotuvchini topishi kerak edi"
+    assert not await found(prefix), f"kod prefiksi ({prefix!r}) sotuvchini topmasligi kerak"
+    assert not await found(codes[past]), "yopilgan biriktirishning kodi topmasligi kerak"
 
 
 async def test_vendor_name_is_editable_without_resending_the_phone(

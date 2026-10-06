@@ -283,6 +283,42 @@ def test_camera_manage_holders_are_exactly_the_two_admins() -> None:
     )
 
 
+def test_vendor_history_view_is_granted_without_report_view() -> None:
+    """`VENDOR_HISTORY_VIEW` AYNAN uch rolda va platforma admini `REPORT_VIEW` OLMAYDI.
+
+    =========================================================================
+    ⛔ BUYURTMACHI QARORI (261006) — IKKI YO'NALISHDA QULFLANADI.
+
+    Platforma admini sotuvchini bosib to'lov tarixini ko'rishi kerak edi.
+    Ikki yo'l bor edi: unga `REPORT_VIEW` berish yoki faqat tarixni ochish.
+    Buyurtmachi TORINI tanladi, chunki birinchisi har bozorning qarzdorlar
+    ro'yxatini bitta akkauntga to'plardi (Pitfall 11 varianti A).
+
+    Shuning uchun test IKKALA da'voni ham tutadi: tarix huquqi AYNAN shu
+    uch rolda (yangi rolga «zarari yo'q» deb berilmasin) VA platforma
+    adminida `REPORT_VIEW` hali ham YO'Q — keyingi ijrochi «tarix ochilgan
+    ekan, hisobotlar ham ochilsin» deb qarorni jimgina kengaytirmasin.
+    =========================================================================
+    """
+    holders = {
+        role
+        for role, granted in ROLE_PERMISSIONS.items()
+        if Permission.VENDOR_HISTORY_VIEW in granted
+    }
+
+    assert holders == {Role.PLATFORM_ADMIN, Role.DIRECTOR, Role.MARKET_ADMIN}, (
+        f"`VENDOR_HISTORY_VIEW` quyidagi rollarda: {sorted(str(role) for role in holders)}."
+    )
+    assert Permission.REPORT_VIEW not in ROLE_PERMISSIONS[Role.PLATFORM_ADMIN], (
+        "platforma adminiga `REPORT_VIEW` berilmaydi — buyurtmachi faqat to'lov "
+        "tarixini ochishni tanlagan (261006)"
+    )
+    # Direktor va bozor admini tarixni avval `REPORT_VIEW` orqali ko'rardi —
+    # ularning kirishi torayib qolmagan.
+    for role in (Role.DIRECTOR, Role.MARKET_ADMIN):
+        assert Permission.REPORT_VIEW in ROLE_PERMISSIONS[role]
+
+
 def test_cashier_scope_minimal() -> None:
     """Kassirning huquqlari AYNAN uchta: to'lov, yig'ish yuzasi, smena.
 

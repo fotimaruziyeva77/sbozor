@@ -181,6 +181,16 @@ _VENDOR_ROWS = text(
         :q_prefix IS NULL
         OR v.full_name ILIKE :q_prefix
         OR v.phone_e164 ILIKE :q_any
+        OR EXISTS (
+          SELECT 1
+          FROM stall_assignments sa
+          JOIN stalls s
+            ON s.market_id = sa.market_id AND s.id = sa.stall_id
+          WHERE sa.market_id = v.market_id
+            AND sa.vendor_id = v.id
+            AND sa.period @> :today
+            AND s.code ILIKE :q_code
+        )
       )
       AND (
         :cursor_name IS NULL
@@ -194,6 +204,7 @@ _VENDOR_ROWS = text(
     bindparam("vendor_id", type_=PgUuid(as_uuid=True)),
     bindparam("q_prefix", type_=Text()),
     bindparam("q_any", type_=Text()),
+    bindparam("q_code", type_=Text()),
     bindparam("cursor_name", type_=Text()),
     bindparam("cursor_id", type_=PgUuid(as_uuid=True)),
     bindparam("today", type_=Date()),
@@ -219,6 +230,16 @@ ro'yxati rejalashtiruvchi qaroriga qarab aralashib ketardi. Tartib
 BIR XIL (`period @> :today`). Ikki xil ta'rif bo'lganda sotuvchi
 kartochkasidagi rastalar ro'yxati rasta reestridagi sotuvchi bilan
 ALMASHINUV KUNIDA bir-biriga zid bo'lardi (D-10).
+
+RASTA RAQAMI BO'YICHA QIDIRUV (261006, foydalanuvchi: «sotuvchilar qismi
+ishlatishga noqulay»). Bozorda sotuvchi ko'pincha RASTASI bilan so'raladi
+(«41-rasta kimniki?»), ism yoki telefon bilan emas. Shart:
+
+  * ANIQ moslik (`ILIKE` joker belgisiz, `like_term()` qochirgan) —
+    prefiks bo'lsa «4» 4, 40…49 rastalarning hammasini chiqarardi;
+  * faqat BUGUNGI biriktirish (`period @> :today`) — yuqoridagi
+    `stall_codes` agregati bilan AYNI ta'rif, aks holda qidiruv topgan
+    sotuvchining kartasida o'sha rasta ko'rinmay qolardi.
 
 BITTA SQL MATNI IKKI CHAQIRUVCHIGA XIZMAT QILADI (`:vendor_id IS NULL`
 tarmog'i): ro'yxat va bitta sotuvchi. Ikki nusxa bo'lganda agregat
@@ -279,6 +300,7 @@ class VendorRepository(TenantScopedRepository):
             codes_limit=codes_limit,
             q_prefix=None if term is None else f"{term}%",
             q_any=None if term is None else f"%{term}%",
+            q_code=term,
             cursor_name=cursor_name,
             cursor_id=cursor_id,
             limit=query.limit + 1,
@@ -309,6 +331,7 @@ class VendorRepository(TenantScopedRepository):
             codes_limit=codes_limit,
             q_prefix=None,
             q_any=None,
+            q_code=None,
             cursor_name=None,
             cursor_id=None,
             limit=1,
@@ -323,6 +346,7 @@ class VendorRepository(TenantScopedRepository):
         codes_limit: int,
         q_prefix: str | None,
         q_any: str | None,
+        q_code: str | None,
         cursor_name: str | None,
         cursor_id: UUID | None,
         limit: int,
@@ -336,6 +360,7 @@ class VendorRepository(TenantScopedRepository):
                 "codes_limit": codes_limit,
                 "q_prefix": q_prefix,
                 "q_any": q_any,
+                "q_code": q_code,
                 "cursor_name": cursor_name,
                 "cursor_id": cursor_id,
                 "limit": limit,

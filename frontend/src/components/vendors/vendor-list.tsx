@@ -7,7 +7,6 @@ import { CalendarPlus, Ellipsis, Pencil, UserMinus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 
-import { VendorDaysRecent } from "@/components/director/vendor-days";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AssignmentDialog } from "@/components/vendors/assignment-dialog";
 import type { AssignmentMode } from "@/components/vendors/assignment-dialog";
 import { VendorDialog } from "@/components/vendors/vendor-dialog";
+import { VendorPanel } from "@/components/vendors/vendor-panel";
 import type { VendorListItem } from "@/lib/api-types";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import { useVendorsQuery } from "@/lib/market-queries";
@@ -97,10 +97,11 @@ export function VendorList({
   const [editing, setEditing] = useState<VendorListItem | null>(null);
   const [assignment, setAssignment] = useState<PendingAssignment | null>(null);
   /*
-   * ⚠ BITTA ochiq tarix: har ochiq karta alohida so'rov va yuzlab sotuvchili
-   *   ro'yxatda ular tez ko'payardi (`vendor-account.tsx` bilan bir qaror).
+   * Bosilgan sotuvchi — panel (`vendor-panel.tsx`). Panel FAQAT shu paytda
+   * montaj qilinadi, ya'ni to'lov tarixi so'rovi ro'yxat ochilishi bilan
+   * emas, foydalanuvchi sotuvchini bosganda ketadi.
    */
-  const [tarixOchiq, setTarixOchiq] = useState<string | null>(null);
+  const [tanlangan, setTanlangan] = useState<VendorListItem | null>(null);
 
   const isFiltered = urlFilters.q !== "";
   const items = vendorsQuery.data?.pages.flatMap((page) => page.items) ?? [];
@@ -183,17 +184,10 @@ export function VendorList({
             <li key={vendor.id}>
               <VendorCard
                 canManage={canManage}
-                historyOpen={tarixOchiq === vendor.id}
                 onAssign={(mode) => setAssignment({ mode, vendor })}
                 onEdit={() => setEditing(vendor)}
-                onToggleHistory={
-                  canSeeHistory
-                    ? () =>
-                        setTarixOchiq((eski) =>
-                          eski === vendor.id ? null : vendor.id,
-                        )
-                    : undefined
-                }
+                onOpen={() => setTanlangan(vendor)}
+                searchTerm={urlFilters.q}
                 vendor={vendor}
               />
             </li>
@@ -240,6 +234,25 @@ export function VendorList({
 
       {content}
 
+      {tanlangan !== null ? (
+        <VendorPanel
+          canManage={canManage}
+          canSeeHistory={canSeeHistory}
+          onAssign={(mode) => {
+            setTanlangan(null);
+            setAssignment({ mode, vendor: tanlangan });
+          }}
+          onEdit={() => {
+            setTanlangan(null);
+            setEditing(tanlangan);
+          }}
+          onOpenChange={(next) => {
+            if (!next) setTanlangan(null);
+          }}
+          vendor={tanlangan}
+        />
+      ) : null}
+
       {canManage ? (
         <>
           <VendorDialog
@@ -277,55 +290,117 @@ export function VendorList({
 
 function VendorCard({
   canManage,
-  historyOpen,
   onAssign,
   onEdit,
-  onToggleHistory,
+  onOpen,
+  searchTerm,
   vendor,
 }: {
   canManage: boolean;
-  historyOpen: boolean;
   onAssign: (mode: AssignmentMode) => void;
   onEdit: () => void;
-  /** `undefined` — `report_view` yo'q, tarix tugmasi chizilmaydi. */
-  onToggleHistory: (() => void) | undefined;
+  onOpen: () => void;
+  /** Qidiruv so'zi — u rasta kodiga AYNAN mos kelsa o'sha badge ajraladi. */
+  searchTerm: string;
   vendor: VendorListItem;
 }) {
   const t = useTranslations();
+  const qidiruv = searchTerm.trim().toLowerCase();
 
   return (
     // §8.1: reestr kartasi ZICH — `px-4 py-3`, 10 foydalanuvchi emas,
     // yuzlab sotuvchi ko'riladi.
-    <Card className="px-4 py-3">
+    //
+    // ⚠ BUTUN KARTA BOSILADI (261006): sotuvchini bosish panelni ochadi.
+    //   Ichki havola (telefon) va tugmalar (amallar menyusi) O'Z ishini
+    //   qiladi — ular `closest()` bilan chetlab o'tiladi. Klaviatura va
+    //   skrinrider uchun yo'l — ism TUGMASI, karta emas.
+    <Card
+      className="cursor-pointer px-4 py-3 transition-colors hover:border-border-ui"
+      onClick={(event) => {
+        if (
+          (event.target as HTMLElement).closest(
+            "a, button, [role='menuitem']",
+          ) === null
+        ) {
+          onOpen();
+        }
+      }}
+    >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-1">
           {/* D-16: ism DB kontenti — tarjima qilinmaydi. */}
-          <p className="truncate font-semibold" title={vendor.full_name}>
+          <button
+            aria-haspopup="dialog"
+            className="w-fit max-w-full truncate text-left font-semibold underline-offset-4 hover:underline"
+            onClick={onOpen}
+            title={vendor.full_name}
+            type="button"
+          >
             {vendor.full_name}
-          </p>
+          </button>
 
           {/*
+           * Telefon va rasta kodlari BITTA qatorda (261006): avval kodlar
+           * alohida uchinchi qatorda turardi va har karta keraksiz baland
+           * edi — 36 sotuvchili ro'yxat bir necha ekranga cho'zilardi.
+           *
            * D-16: telefon ham DB kontenti. §8.6: MASKALANMAYDI va
            * "ko'rsatish" tugmasi ostiga yashirilmaydi — u operatsion
            * ma'lumot, admin shu yerdan qo'ng'iroq qiladi.
            */}
-          <a
-            className="w-fit text-sm text-accent-text underline-offset-2 hover:underline"
-            href={`tel:${vendor.phone}`}
-          >
-            {vendor.phone}
-          </a>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <a
+              className="w-fit text-sm text-accent-text underline-offset-2 hover:underline"
+              href={`tel:${vendor.phone}`}
+            >
+              {vendor.phone}
+            </a>
+
+            {/*
+             * Rasta kodlari — FAQAT `≥640px` (§8.2 ustun ustuvorligi).
+             * Telefon ekranida sanoq badge'i yetadi; kodlar qatorni uch
+             * marta uzaytirardi.
+             *
+             * `stall_codes` serverda 20 tagacha kesiladi, `stall_count` esa
+             * to'liq son — ya'ni ro'yxat kesilganda ham "nechta?" javobi
+             * yo'qolmaydi. Har kod ALOHIDA badge: badge hech qachon
+             * `truncate` qilinmaydi (§5.1 qoida 3).
+             *
+             * ⚠ QIDIRILGAN KOD AJRALADI: qidiruv rasta raqami bilan ham
+             *   ishlaydi va ism/telefonda o'sha raqam bo'lmasa, foydalanuvchi
+             *   qator NEGA topilganini aynan shu belgidan ko'radi.
+             */}
+            {vendor.stall_codes.length > 0 ? (
+              <div className="hidden flex-wrap items-center gap-1 sm:flex">
+                <span className="sr-only">{t("vendors.stallCodesLabel")}: </span>
+                {vendor.stall_codes.map((code) => (
+                  <Badge
+                    className="font-mono tabular-nums"
+                    key={code}
+                    tone={
+                      qidiruv !== "" && code.toLowerCase() === qidiruv
+                        ? "accent"
+                        : undefined
+                    }
+                  >
+                    {code}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {/*
-       * ⛔ `flex-wrap`, `shrink-0` YO'Q (260819): bu guruh badge va amal
-       *    tugmalarini tutadi va ularning yig'indisi telefonda 375px dan
-       *    OSHADI. `shrink-0` bilan u hech qachon siqilmasdi va BUTUN
-       *    SAHIFANI cho'zib yuborardi — `/tariffs` da o'lchandi: sahifa
-       *    413px, ekran 375px. Endi tor ekranda guruh ikki satrga
-       *    bo'linadi; keng ekranda ko'rinish o'zgarmaydi.
-       */}
-      <div className="flex flex-wrap items-center justify-end gap-2">
+         * ⛔ `flex-wrap`, `shrink-0` YO'Q (260819): bu guruh badge va amal
+         *    tugmalarini tutadi va ularning yig'indisi telefonda 375px dan
+         *    OSHADI. `shrink-0` bilan u hech qachon siqilmasdi va BUTUN
+         *    SAHIFANI cho'zib yuborardi — `/tariffs` da o'lchandi: sahifa
+         *    413px, ekran 375px. Endi tor ekranda guruh ikki satrga
+         *    bo'linadi; keng ekranda ko'rinish o'zgarmaydi.
+         */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge tone="muted">
             {t("vendors.stallCount", { count: vendor.stall_count })}
           </Badge>
@@ -340,51 +415,6 @@ function VendorCard({
           ) : null}
         </div>
       </div>
-
-      {/*
-       * Rasta kodlari — FAQAT `≥640px` (§8.2 ustun ustuvorligi). Telefon
-       * ekranida sanoq badge'i yetadi; kodlar qatorni uch marta uzaytirardi.
-       *
-       * `stall_codes` serverda 20 tagacha kesiladi, `stall_count` esa to'liq
-       * son — ya'ni ro'yxat kesilganda ham "nechta?" javobi yo'qolmaydi.
-       * Har kod ALOHIDA badge: badge hech qachon `truncate` qilinmaydi
-       * (§5.1 qoida 3), ya'ni raqam yarmi kesilgan holda ko'rinmaydi.
-       */}
-      {vendor.stall_codes.length > 0 ? (
-        <div className="mt-2 hidden flex-wrap items-center gap-1 sm:flex">
-          <span className="sr-only">{t("vendors.stallCodesLabel")}: </span>
-          {vendor.stall_codes.map((code) => (
-            <Badge className="font-mono tabular-nums" key={code}>
-              {code}
-            </Badge>
-          ))}
-        </div>
-      ) : null}
-
-      {/*
-       * TO'LOV TARIXI (261006) — «sotuvchini bossam qaysi kunlari to'lagani
-       * va to'lamagani ko'rinsin». Bu ro'yxat HAR sotuvchini ko'rsatadi,
-       * «Sotuvchi hisobi» esa faqat qarzdorlarni — qarz nolga tushirilgach u
-       * yerda deyarli hech kim qolmagan edi.
-       *
-       * ⚠ So'rov FAQAT OCHILGANDA ketadi (`VendorDaysRecent` shu paytda
-       *   montaj qilinadi) — ro'yxat ochilishi bilan emas.
-       */}
-      {onToggleHistory === undefined ? null : (
-        <div className="mt-2 flex flex-col gap-2">
-          <button
-            aria-expanded={historyOpen}
-            className="w-fit text-sm font-semibold text-accent-text underline underline-offset-4"
-            onClick={onToggleHistory}
-            type="button"
-          >
-            {historyOpen
-              ? t("director.vaHideHistory")
-              : t("director.vaShowHistory")}
-          </button>
-          {historyOpen ? <VendorDaysRecent vendorId={vendor.id} /> : null}
-        </div>
-      )}
     </Card>
   );
 }

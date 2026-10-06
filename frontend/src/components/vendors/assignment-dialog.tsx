@@ -2,8 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Check, Link2, TriangleAlert } from "lucide-react";
-import { useFormatter, useLocale, useTranslations } from "next-intl";
+import {
+  useFormatter,
+  useLocale,
+  useNow,
+  useTimeZone,
+  useTranslations,
+} from "next-intl";
 
+import { businessDayIn } from "@/components/snapshots/day-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -92,10 +99,17 @@ export function AssignmentDialog({
   const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
+  /*
+   * ⚠ SANA BUGUN BILAN TO'LDIRILADI (261006): biriktirish ham, yopish ham
+   *   deyarli har doim «bugundan». Bo'sh maydon har safar kalendarni ochib
+   *   bugunni qidirishni talab qilardi. Yopishda tanlangan sana baribir
+   *   tasdiq jumlasida AYNAN aytiladi (`closeAssignmentConfirm`).
+   */
+  const bugun = businessDayIn(useTimeZone() ?? "Asia/Tashkent", useNow());
 
   const [search, setSearch] = useState("");
   const [stall, setStall] = useState<SelectedStall | null>(null);
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(bugun);
   const [formError, setFormError] = useState<string | null>(null);
   const [stallError, setStallError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
@@ -130,7 +144,7 @@ export function AssignmentDialog({
     if (!next) {
       setSearch("");
       setStall(null);
-      setDate("");
+      setDate(bugun);
       setFormError(null);
       setStallError(null);
       setDateError(null);
@@ -245,6 +259,7 @@ export function AssignmentDialog({
 
         {stall === null ? (
           <StallSuggestions
+            currentVendorId={vendor.id}
             isPending={stallsQuery.isPending}
             onSelect={(next) => {
               setStall(next);
@@ -365,13 +380,21 @@ export function AssignmentDialog({
 }
 
 function StallSuggestions({
+  currentVendorId,
   isPending,
   onSelect,
   stalls,
 }: {
+  currentVendorId: string;
   isPending: boolean;
   onSelect: (stall: SelectedStall) => void;
-  stalls: readonly { code: string; id: string; zone_name: string }[];
+  stalls: readonly {
+    code: string;
+    id: string;
+    zone_name: string;
+    vendor_id: string | null;
+    vendor_name: string | null;
+  }[];
 }) {
   const t = useTranslations();
 
@@ -397,8 +420,39 @@ function StallSuggestions({
             type="button"
           >
             {/* D-16: rasta raqami va zona nomi DB kontenti. */}
-            <span className="font-mono tabular-nums">{item.code}</span>
-            <Badge tone="muted">{item.zone_name}</Badge>
+            <span className="flex min-w-0 items-baseline gap-2">
+              <span className="font-mono tabular-nums">{item.code}</span>
+              <span className="truncate text-xs text-text-muted">
+                {item.zone_name}
+              </span>
+            </span>
+            {/*
+             * ⚠ BAND YOKI BO'SH — TANLASHDAN OLDIN (261006). Avval har
+             *   qatorda faqat zona nomi turardi va rasta boshqa sotuvchiniki
+             *   ekani faqat TANLANGANDAN keyin, ogohlantirish bo'lib
+             *   chiqardi. Endi ro'yxatning o'zida ko'rinadi. Bu TO'SIQ
+             *   EMAS: band rastani tanlash mumkin (almashinuv shu yo'l
+             *   bilan qilinadi) — ogohlantirish pastda avvalgidek chiqadi.
+             */}
+            {item.vendor_id === null ? (
+              <Badge tone="success">{t("vendors.stallFree")}</Badge>
+            ) : item.vendor_id === currentVendorId ? (
+              <Badge tone="accent">{t("vendors.stallThisVendor")}</Badge>
+            ) : (
+              /*
+               * D-16: sotuvchi ismi DB kontenti. Badge EMAS, matn: ism uzun
+               * bo'ladi, badge esa hech qachon `truncate` qilinmaydi (§5.1
+               * qoida 3) — matn kesilishi mumkin, to'liq ismi `title` da.
+               */
+              <span
+                className="max-w-48 truncate text-xs font-semibold text-warning-text"
+                title={item.vendor_name ?? undefined}
+              >
+                {t("vendors.stallTakenBy", {
+                  vendor: item.vendor_name ?? t("vendors.stallTaken"),
+                })}
+              </span>
+            )}
           </button>
         </li>
       ))}
