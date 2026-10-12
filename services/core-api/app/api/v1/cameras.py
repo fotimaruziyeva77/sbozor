@@ -49,6 +49,7 @@ CROSS-TENANT JAVOB — HAR DOIM 404 (T-03-46), 403 EMAS. Begona bozorning
 from __future__ import annotations
 
 import ipaddress
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
@@ -428,15 +429,54 @@ class LiveUnavailable(HTTPException):
       urinishda bo'sh, keyingisida matn.
     """
 
-    def __init__(self, agent_reason: str | None = None) -> None:
+    def __init__(
+        self,
+        agent_reason: str | None = None,
+        *,
+        agent_offline: bool = False,
+        agent_last_seen: float | None = None,
+    ) -> None:
         super().__init__(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=_LIVE_UNAVAILABLE,
+            detail=_LIVE_AGENT_OFFLINE if agent_offline else _LIVE_UNAVAILABLE,
         )
         self.agent_reason = agent_reason
+        self.agent_last_seen_at: datetime | None = _instant_or_none(agent_last_seen)
+        """Agentning oxirgi aloqasi — UI «oxirgi aloqa: 11:32» deb yozadi."""
 
 
-def _live_unavailable(agent_reason: str | None = None) -> HTTPException:
+def _instant_or_none(epoch: float | None) -> datetime | None:
+    """Gateway bergan epoch -> UTC lahza; yaroqsiz qiymat -> `None`.
+
+    ⚠ Qiymat BOSHQA servisdan keladi: `inf` yoki o'ta katta son
+      `fromtimestamp` ni yiqitib, «kompyuter o'chiq» javobini 500 ga
+      aylantirardi. Noma'lum vaqt — ko'rsatilmaydigan vaqt, xato emas.
+    """
+    if epoch is None:
+        return None
+    try:
+        return datetime.fromtimestamp(epoch, tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+_LIVE_AGENT_OFFLINE = "live_agent_offline"
+"""⛔ BOZOR KOMPYUTERI ALOQADA EMAS (261011, prod'da o'lchandi).
+
+`live_view_unavailable` DAN ALOHIDA KOD, chunki operatorning keyingi qadami
+boshqa: «qayta urinib ko'ring» bu yerda HECH QACHON yordam bermaydi —
+kompyuter yoqilishi kerak. Karmanada kompyuter 11:32 da o'chgan va
+kechqurun «Ko'rish» 38 marta bosilgan; har safar umumiy xabar chiqqan va
+sabab bir marta ham aytilmagan.
+"""
+
+
+def _live_unavailable(
+    agent_reason: str | None = None,
+    *,
+    agent_offline: bool = False,
+    agent_last_seen: float | None = None,
+) -> HTTPException:
     """**503**, 500 EMAS — jonli ko'rish hozir ishlamayapti (D-02).
 
     ⚠ REKVIZIT NOSOZLIGI UCHUN YANGI XATO KODI KIRITILMAYDI. Admin uchun
@@ -445,7 +485,9 @@ def _live_unavailable(agent_reason: str | None = None) -> HTTPException:
       urinish yuborilganda ma'noli bo'lardi — bu yo'l esa NVR'ga UMUMAN
       chiqmaydi, ya'ni §4.4 qulfi bu yerga qo'llanmaydi (UI-SPEC §8.5).
     """
-    return LiveUnavailable(agent_reason)
+    return LiveUnavailable(
+        agent_reason, agent_offline=agent_offline, agent_last_seen=agent_last_seen
+    )
 
 
 async def _ensure_stream(
@@ -527,7 +569,12 @@ async def _ensure_stream(
             # uchun bir xil: «jonli ko'rish hozir ishlamayapti».
             # ⚠ SABAB SAQLANADI: xato TURI o'zgarmaydi (yuqoridagi
             #   qaror kuchda), lekin agent aytgan izoh yo'qolmaydi.
-            raise Go2rtcError(type(exc).__name__, agent_reason=exc.agent_reason) from exc
+            raise Go2rtcError(
+                type(exc).__name__,
+                agent_reason=exc.agent_reason,
+                agent_offline=exc.agent_offline,
+                agent_last_seen=exc.last_seen,
+            ) from exc
         # ⚠ `SecretStr` — `ensure_stream` NING SHARTNOMASI. Bu yo'lda
         #   manzilda parol YO'Q (o'qish MediaMTX'da ochiq), lekin tur
         #   bir xil qolishi kerak: `go2rtc.py` uni `get_secret_value()`
@@ -649,10 +696,21 @@ async def issue_live_token_for_camera(
         #   jurnalga olib chiqadigan kanal. `go2rtc.py::_failure()` matnni
         #   allaqachon tozalaydi — bu esa IKKINCHI qatlam va u
         #   birinchisining kelajakdagi regressiyasidan mustaqil.
-        log.warning("go2rtc_unavailable", camera_id=str(camera_id), error=type(exc).__name__)
+        log.warning(
+            "go2rtc_unavailable",
+            camera_id=str(camera_id),
+            error=type(exc).__name__,
+            agent_offline=exc.agent_offline,
+        )
         # ⚠ AGENT AYTGAN SABAB JAVOBGA CHIQADI — UI uni asosiy xabar
         #   OSTIDA ko'rsatadi va shu bilan taxmin qilishdan qutuladi.
-        raise _live_unavailable(exc.agent_reason) from exc
+        # ⛔ AGENT ALOQADA EMASLIGI ALOHIDA KOD bilan (261011) — sabab
+        #   `_LIVE_AGENT_OFFLINE` docstringida.
+        raise _live_unavailable(
+            exc.agent_reason,
+            agent_offline=exc.agent_offline,
+            agent_last_seen=exc.agent_last_seen,
+        ) from exc
 
     settings: Settings = request.app.state.settings
     token = issue_live_token(

@@ -568,6 +568,10 @@ async def live_unavailable_handler(request: Request, exc: LiveUnavailable) -> JS
     tana: dict[str, object] = {"detail": exc.detail}
     if exc.agent_reason:
         tana["agent_reason"] = exc.agent_reason
+    # 261011: «bozor kompyuteri aloqada emas» — UI oxirgi aloqa vaqtini
+    # ko'rsatadi. Vaqt noma'lum bo'lsa maydon qo'shilmaydi (yuqoridagi qoida).
+    if exc.agent_last_seen_at is not None:
+        tana["agent_last_seen_at"] = exc.agent_last_seen_at.isoformat()
     return JSONResponse(status_code=exc.status_code, content=tana)
 
 

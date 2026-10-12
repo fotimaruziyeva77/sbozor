@@ -725,3 +725,89 @@ describe("LiveViewDialog — agent aytgan sabab (261005)", () => {
     expect(screen.queryByText(/Agent aytdi/)).toBeNull();
   });
 });
+
+/*
+ * ===========================================================================
+ * BOZOR KOMPYUTERI O'CHIQ VA KO'RINMAS HOLATLAR (261011, prod skrinshoti).
+ *
+ * Karmanada kompyuter 11:32 da o'chgan; kechqurun operator oynani ochib
+ * faqat qotib qolgan kadrni ko'rdi — chetlarida oq chiziqlar (kadr ORTIDAGI
+ * skeleton), xato esa kadr OSTIDA, ekrandan tashqarida. «Jonli ishlamayapti,
+ * UI umuman ishlamayapti» shikoyati aynan shundan.
+ * ===========================================================================
+ */
+describe("LiveViewDialog — kompyuter o'chiq va holat ko'rinishi (261011)", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    seedSession();
+  });
+
+  afterEach(() => {
+    clearSession();
+  });
+
+  const OXIRGI = "2026-10-11T06:32:00+00:00";
+
+  test("⛔ kompyuter o'chiq: ALOHIDA xabar, oxirgi aloqa vaqti va umumiy xabar EMAS", async () => {
+    apiFetch.mockRejectedValue(
+      new ApiError(503, "live_agent_offline", {
+        detail: "live_agent_offline",
+        agent_last_seen_at: OXIRGI,
+      }),
+    );
+
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: VIEW_LABEL }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(messages.cameras.liveAgentOffline);
+    expect(alert).toHaveTextContent(messages.cameras.liveAgentLastSeen.split("{time}")[0]);
+    expect(
+      screen.queryByText(messages.cameras.liveUnavailable),
+      "«xizmat javob bermadi, qayta urinib ko'ring» bu holatda YOLG'ON maslahat",
+    ).toBeNull();
+  });
+
+  test("⛔ xato KADR ICHIDA chiziladi — ekrandan tashqarida emas", async () => {
+    apiFetch.mockRejectedValue(
+      new ApiError(503, "live_view_unavailable", { detail: "live_view_unavailable" }),
+    );
+
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: VIEW_LABEL }));
+
+    const alert = await screen.findByRole("alert");
+    /*
+     * Ramka — `tabIndex={-1}` li konteyner (fokusni ushlab qoladigan
+     * yagona element). Xato uning ICHIDA bo'lmasa, katta oynada u
+     * kadr ostida, ko'rinadigan maydondan tashqarida qolardi.
+     */
+    expect(alert.closest('[tabindex="-1"]')).not.toBeNull();
+  });
+
+  test("⛔ kutish paytida matn KO'RINADI (faqat skrinrider uchun emas)", async () => {
+    apiFetch.mockReturnValue(new Promise(() => {}));
+
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: VIEW_LABEL }));
+
+    const holat = await screen.findByText(messages.cameras.liveAuthorizing);
+    expect(holat).not.toHaveClass("sr-only");
+    expect(holat.closest('[role="status"]')).not.toBeNull();
+  });
+
+  test("saqlangan kadr «Saqlangan kadr · vaqt» deb belgilanadi — jonli deb o'ylanmaydi", async () => {
+    apiFetch.mockResolvedValue({ items: [] });
+
+    renderDialog(
+      makeCamera({ last_snapshot_id: SNAPSHOT_ID, last_capture_at: OXIRGI }),
+    );
+
+    expect(
+      await screen.findByText((matn) =>
+        matn.startsWith(messages.cameras.liveStoredFrameAt.split("{time}")[0]),
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(messages.cameras.liveBadge)).toBeNull();
+  });
+});

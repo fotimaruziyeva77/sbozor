@@ -129,8 +129,26 @@ class Go2rtcError(RuntimeError):
       Sabab `_failure()` docstringida.
     """
 
-    def __init__(self, message: str, agent_reason: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        agent_reason: str | None = None,
+        *,
+        agent_offline: bool = False,
+        agent_last_seen: float | None = None,
+    ) -> None:
         super().__init__(message)
+        self.agent_offline = agent_offline
+        """Bozordagi agent gateway'ga ulanmagan (261011, `CamAgentLiveError`).
+
+        ⚠ BU YUQORIDAGI «YANGI TUR OCHILMAYDI» QARORIGA ZID EMAS: tur
+          o'zgarmaydi (hammasi 503). Lekin operatorning keyingi qadami
+          BOSHQA — «qayta urinib ko'ring» emas, «bozor kompyuterini yoqing».
+          Karmanada kechqurun 38 urinishning hammasi aynan shu sababdan
+          yiqilgan va ekranda bir marta ham aytilmagan.
+        """
+        self.agent_last_seen = agent_last_seen
+        """Agentning oxirgi aloqasi (epoch soniya) — `None` = noma'lum."""
         self.agent_reason = agent_reason
         """CamAgent yo'lida AGENT aytgan sabab (261005).
 

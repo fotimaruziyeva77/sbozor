@@ -412,6 +412,20 @@ class GatewayDB:
     def mark_command_sent(self, cmd_id: str) -> None:
         self._exec("UPDATE commands SET sent_at=? WHERE cmd_id=?", (time.time(), cmd_id))
 
+    def expire_command(self, cmd_id: str, reason: str) -> None:
+        """Yuborilmagan buyruqni agentga YUBORMASDAN yopadi.
+
+        `sent_at` qo'yiladi — aks holda `pending_commands` uni har ulanishda
+        qayta qaytarardi; natijada sabab yoziladi, ya'ni panelda buyruq
+        «yo'qolgan» emas, «muddati o'tgan» bo'lib ko'rinadi.
+        """
+        self._exec(
+            "UPDATE commands SET sent_at=?, result_json=? WHERE cmd_id=? AND sent_at IS NULL",
+            (time.time(),
+             json.dumps({"ok": False, "expired": True, "detail": reason}, ensure_ascii=False),
+             cmd_id),
+        )
+
     def record_command_result(self, cmd_id: str, result: dict, agent_id: str = "") -> None:
         """Natija AYNI agentning buyrug'iga yoziladi.
 

@@ -70,8 +70,24 @@ class CamAgentLiveError(RuntimeError):
       (`cameras.py` da `type(exc).__name__` yoziladi).
     """
 
-    def __init__(self, message: str, agent_reason: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        agent_reason: str | None = None,
+        *,
+        agent_offline: bool = False,
+        last_seen: float | None = None,
+    ) -> None:
         super().__init__(message)
+        self.agent_offline = agent_offline
+        """Bozordagi agent gateway'ga ULANMAGAN (261011).
+
+        Bu «oqim ishlamadi» emas, «bozor kompyuteri aloqada emas» — sabab
+        boshqa va operatorning keyingi qadami ham boshqa (kompyuterni
+        yoqish), shuning uchun u alohida bayroq bo'lib keladi.
+        """
+        self.last_seen = last_seen
+        """Agentning oxirgi heartbeat'i (epoch soniya) — `None` = hech qachon."""
         self.agent_reason = agent_reason
         """AGENT aytgan sabab — gateway matni EMAS.
 
@@ -148,17 +164,31 @@ async def open_stream(
         #   bo'shliqni taxmin bilan to'ldirish aynan biz tuzatayotgan
         #   nuqsonning takrori bo'lardi.
         sabab: str | None = None
+        oflayn = False
+        oxirgi: float | None = None
         try:
-            sabab = str((javob.json() or {}).get("agent_reason") or "") or None
+            tana = javob.json() or {}
         except ValueError:
-            sabab = None
+            tana = {}
+        if isinstance(tana, dict):
+            sabab = str(tana.get("agent_reason") or "") or None
+            # ⛔ AGENT ALOQADA EMAS (261011): gateway buni KUTMASDAN aytadi.
+            #   Vaqt faqat SON bo'lsa qabul qilinadi — boshqa narsa
+            #   «noma'lum» (`None`), taxmin emas.
+            oflayn = tana.get("agent_offline") is True
+            vaqt = tana.get("last_seen")
+            if isinstance(vaqt, int | float) and not isinstance(vaqt, bool):
+                oxirgi = float(vaqt)
         log.warning(
             "camagent_stream_rejected",
             status=javob.status_code,
             camera_serial=camera_serial,
             has_agent_reason=sabab is not None,
+            agent_offline=oflayn,
         )
-        raise CamAgentLiveError("gateway rad etdi", agent_reason=sabab)
+        raise CamAgentLiveError(
+            "gateway rad etdi", agent_reason=sabab, agent_offline=oflayn, last_seen=oxirgi
+        )
 
     natija = javob.json()
     rtsp = str(natija.get("rtsp_url") or "")

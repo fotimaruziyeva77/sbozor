@@ -2,17 +2,27 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, WifiOff } from "lucide-react";
-import { useTranslations } from "next-intl";
+import {
+  useFormatter,
+  useLocale,
+  useTimeZone,
+  useTranslations,
+} from "next-intl";
 
 import { frameFallbackKey } from "@/components/cameras/camera-page-state";
 
 import { channelLabel } from "@/components/cameras/camera-row";
 import { LivePlayer } from "@/components/cameras/live-player";
-import { LiveViewDialog } from "@/components/cameras/live-view-dialog";
+import {
+  LiveViewDialog,
+  agentLastSeenOf,
+  isAgentOffline,
+} from "@/components/cameras/live-view-dialog";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Camera } from "@/lib/api-types";
+import { formatInstant } from "@/lib/format-day";
 import {
   EMPTY_CAMERA_FILTERS,
   useCamerasQuery,
@@ -92,6 +102,27 @@ export function CameraWall() {
    */
   const cameras = useCamerasQuery(EMPTY_CAMERA_FILTERS);
   const [expanded, setExpanded] = useState<Camera | null>(null);
+  const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
+
+  /*
+   * ⛔⛔ BOZOR KOMPYUTERI O'CHIQ — DEVOR USTIDA BIR MARTA (261011).
+   *
+   *     Prod'da kompyuter 11:32 da o'chgan va kechqurun devor ochilganda
+   *     16 katakning har biri jim yiqilib, «jonli emas» belgisiga tushgan
+   *     — umumiy sabab hech qayerda aytilmagan. Endi birinchi katak
+   *     `live_agent_offline` olishi bilan devor ustida bitta xabar chiqadi
+   *     va QOLGAN kataklar so'rov yubormaydi: kompyuter o'chiq ekani
+   *     ma'lum bo'lgach, har katak uchun alohida rad javobi va alohida
+   *     audit yozuvi faqat shovqin.
+   */
+  const [oflayn, setOflayn] = useState<{ lastSeen: string | null } | null>(null);
+  const oflaynRef = useRef(false);
+  const handleAgentOffline = useCallback((lastSeen: string | null) => {
+    oflaynRef.current = true;
+    setOflayn((eski) => eski ?? { lastSeen });
+  }, []);
 
   const items = cameras.data?.items ?? [];
 
@@ -134,11 +165,28 @@ export function CameraWall() {
       <p className="text-sm text-text-muted">
         {t("cameras.wallHint", { count: items.length })}
       </p>
+      {oflayn === null ? null : (
+        <div
+          className="flex items-start gap-2 rounded-md bg-warning/20 px-3 py-2 text-sm"
+          role="status"
+        >
+          <WifiOff aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          <p>
+            {oflayn.lastSeen === null
+              ? t("cameras.wallAgentOffline")
+              : t("cameras.wallAgentOfflineAt", {
+                  time: formatInstant(format, new Date(oflayn.lastSeen), locale, timeZone),
+                })}
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {items.map((camera, index) => (
           <LiveTile
+            agentOfflineRef={oflaynRef}
             camera={camera}
             key={camera.id}
+            onAgentOffline={handleAgentOffline}
             onExpand={() => setExpanded(camera)}
             startDelayMs={index * TILE_STAGGER_MS}
           />
@@ -164,11 +212,17 @@ export function CameraWall() {
 }
 
 function LiveTile({
+  agentOfflineRef,
   camera,
+  onAgentOffline,
   onExpand,
   startDelayMs,
 }: {
+  /** Kompyuter o'chiq ekani ALLAQACHON ma'lummi — unda katak so'rov yubormaydi. */
+  agentOfflineRef: { readonly current: boolean };
   camera: Camera;
+  /** Birinchi `live_agent_offline` javobi devorga yetkaziladi (banner). */
+  onAgentOffline: (lastSeen: string | null) => void;
   onExpand: () => void;
   startDelayMs: number;
 }) {
@@ -189,6 +243,10 @@ function LiveTile({
   });
 
   const start = useCallback(async () => {
+    if (agentOfflineRef.current) {
+      setStatus("failed");
+      return;
+    }
     try {
       // `preview: true` — server oqimga QISQA muddat beradi
       // (`PREVIEW_DURATION_S`): katakcha 10 soniyadan keyin oxirgi
@@ -200,10 +258,11 @@ function LiveTile({
       setUrl(ticket.url);
       setSeq((value) => value + 1);
       setStatus("connecting");
-    } catch {
+    } catch (cause) {
+      if (isAgentOffline(cause)) onAgentOffline(agentLastSeenOf(cause));
       setStatus("failed");
     }
-  }, [camera.id]);
+  }, [agentOfflineRef, camera.id, onAgentOffline]);
 
   // Boshlanishi — siljish bilan (thundering herd bo'lmasin).
   useEffect(() => {

@@ -292,15 +292,26 @@ def attach(router, gw, *, check_admin, deny, page, secure, esc, media):
         sbozor'dagi qiymat o'sha ro'yxatdan kelgan, ya'ni mos kelishi
         kerak — kelmasa kamera boshqa agentga ko'chgan yoki o'chirilgan.
         """
+        topilgan: list[dict] = []
         for agent in gw.db.agents_by_prefix(market_id):
             try:
                 nvrs = json.loads(agent.get("nvrs_json") or "[]")
             except ValueError:
                 continue
-            for nvr in nvrs:
-                if str(nvr.get("serial") or "") == camera_serial:
-                    return agent, camera_serial
-        return None, ""
+            if any(str(nvr.get("serial") or "") == camera_serial for nvr in nvrs):
+                topilgan.append(agent)
+        if not topilgan:
+            return None, ""
+        # ⛔ ULANGAN AGENT AFZAL (261011, prod'da topildi). Qayta
+        #   o'rnatishlardan keyin bir bozorda bir nechta agent yozuvi
+        #   qoladi va eskisining ro'yxatida o'sha kamera ham turadi.
+        #   Karmanada 43 kundan beri o'lik yozuvga hali ham so'rov
+        #   ketayotgan edi. Ulanganini tanlash — oflayn yozuv faqat boshqa
+        #   iloj qolmaganda qaytadi (va u holda quyida darhol rad etiladi).
+        for agent in topilgan:
+            if agent["agent_id"] in gw.live:
+                return agent, camera_serial
+        return topilgan[0], camera_serial
 
     @router.post("/internal/stream/start")
     async def internal_stream_start(request: Request):
@@ -341,6 +352,29 @@ def attach(router, gw, *, check_admin, deny, page, secure, esc, media):
             return JSONResponse({"error": "kamera hech bir agentda topilmadi"},
                                 status_code=404)
         agent_id = agent["agent_id"]
+        actor = str(tana.get("viewer") or "sbozor")
+
+        # ⛔⛔ AGENT ALOQADA EMAS — KUTILMAYDI, BUYRUQ NAVBATGA QO'YILMAYDI
+        #     (261011, prod'da o'lchandi).
+        #
+        #     Ilgari oflayn agentga ham `start_stream` navbatga qo'yilib,
+        #     `media.wait_ready` oxirigacha kutilardi: operator kadr ustida
+        #     hech qanday izohsiz o'tirar, so'ng umumiy «jonli ko'rish
+        #     ishlamayapti» olardi. Karmanada bozor kompyuteri 11:32 da
+        #     o'chgan va kechqurungi 38 urinishning HAMMASI shunday tugagan
+        #     — sabab («kompyuter o'chiq») bir marta ham ko'rinmagan.
+        #
+        #     Endi javob DARHOL va aniq: `agent_offline` + oxirgi aloqa
+        #     vaqti. sbozor uni operatorga «bozor kompyuteri aloqada emas,
+        #     oxirgi aloqa HH:MM» deb ko'rsatadi.
+        if agent_id not in gw.live:
+            gw.db.log_event(agent_id, "stream_refused",
+                            f"kanal {kanal} ({seriya}): agent aloqada emas",
+                            actor=actor)
+            return JSONResponse({"error": "agent aloqada emas",
+                                 "agent_offline": True,
+                                 "last_seen": agent.get("last_heartbeat")},
+                                status_code=503)
 
         # ⛔ TARTIB MUHIM: `ensure_background()` MediaMTX'ni KO'TARADI,
         #   `available()` esa uni ISHLAYAPTIMI deb so'raydi. Teskari
@@ -362,7 +396,6 @@ def attach(router, gw, *, check_admin, deny, page, secure, esc, media):
             return JSONResponse({"error": "oylik video byudjeti tugadi"},
                                 status_code=503)
 
-        actor = str(tana.get("viewer") or "sbozor")
         muddat = int(tana.get("duration_s") or AGENT_DURATION_S)
         # ⛔ PASTKI CHEGARA 10 SONIYA, `AGENT_DURATION_S` EMAS (260829).
         #
@@ -448,6 +481,13 @@ def attach(router, gw, *, check_admin, deny, page, secure, esc, media):
         seans = gw.db.stream_session(session_id)
         if not seans or seans.get("ended_at"):
             return JSONResponse({"ok": False}, status_code=410)
+        if seans["agent_id"] not in gw.live:
+            # Agent ko'rish o'rtasida uzilgan: oqim allaqachon o'lgan va
+            # ijarani cho'zish faqat navbatga yana bitta eskirgan buyruq
+            # qo'shardi (`push_pending_commands` izohi).
+            gw.db.end_stream_session(session_id, "agent aloqada emas")
+            return JSONResponse({"ok": False, "agent_offline": True},
+                                status_code=410)
         gw.db.touch_stream_session(session_id)
         await _agent_command(seans["agent_id"], "start_stream", {
             "nvr_serial": seans.get("nvr_serial") or "",

@@ -921,3 +921,88 @@ async def api_client_admin_headers(
     """A bozori ADMINI — `CAMERA_MANAGE` bor (arxivlash uchun)."""
     market_a = two_markets.market_a
     return await session_headers(api_client, market_a.admin_phone, market_a.admin_password)
+
+
+# ---------------------------------------------------------------------------
+# 261011 — CamAgent obyektida bozor kompyuteri O'CHIQ
+# ---------------------------------------------------------------------------
+
+
+def _camagent_device(conn: Connection[TupleRow], seed: NvrDomainSeed) -> None:
+    """A bozorining NVR'ini CamAgent qurilmasiga aylantiradi (`is_camagent_device`)."""
+    from app.services.camagent_live import CAMAGENT_USERNAME
+
+    conn.execute(
+        "UPDATE nvr_devices SET username = %s WHERE market_id = %s AND id = %s",
+        (CAMAGENT_USERNAME, str(seed.market_a.market_id), str(seed.market_a.nvr_id)),
+    )
+
+
+async def test_an_offline_market_computer_gets_its_own_code_and_last_seen(
+    api_client: httpx.AsyncClient,
+    viewer_headers: dict[str, str],
+    nvr_seed: NvrDomainSeed,
+    sync_owner_conn: Connection[TupleRow],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """⛔ 261011 — BOZOR KOMPYUTERI O'CHIQ BO'LSA SABAB ANIQ AYTILADI.
+
+    =======================================================================
+    Karmanada kompyuter 11:32 da o'chgan va kechqurun «Ko'rish» 38 marta
+    bosilgan. Har safar umumiy `live_view_unavailable` qaytgan va UI
+    «qayta urinib ko'ring» degan — holbuki qayta urinish bu holatda HECH
+    QACHON yordam bermaydi: kompyuter yoqilishi kerak.
+
+    Endi alohida kod (`live_agent_offline`) va oxirgi aloqa vaqti keladi.
+    =======================================================================
+    """
+    from datetime import UTC, datetime
+
+    from app.services.camagent_live import CamAgentLiveError
+
+    _camagent_device(sync_owner_conn, nvr_seed)
+    oxirgi = 1760160720.0
+
+    async def _oflayn(*_args: object, **_kwargs: object) -> tuple[str, str]:
+        raise CamAgentLiveError("gateway rad etdi", agent_offline=True, last_seen=oxirgi)
+
+    monkeypatch.setattr("app.api.v1.cameras.open_camagent_stream", _oflayn)
+    camera_id = nvr_seed.market_a.active_camera_ids[0]
+
+    response = await api_client.post(_token_url(camera_id), headers=viewer_headers)
+
+    assert response.status_code == 503, response.text
+    body = response.json()
+    assert body["detail"] == "live_agent_offline"
+    assert body["agent_last_seen_at"] == datetime.fromtimestamp(oxirgi, tz=UTC).isoformat()
+
+
+async def test_a_camagent_stream_failure_keeps_the_generic_code_and_its_reason(
+    api_client: httpx.AsyncClient,
+    viewer_headers: dict[str, str],
+    nvr_seed: NvrDomainSeed,
+    sync_owner_conn: Connection[TupleRow],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """NAZORAT: agent ULANGAN, lekin oqim yiqilgan — bu «kompyuter o'chiq» EMAS.
+
+    Usiz yuqoridagi test har qanday CamAgent xatosini `live_agent_offline`
+    ga aylantiradigan buzuq kod bilan ham yashil qolardi.
+    """
+    from app.services.camagent_live import CamAgentLiveError
+
+    _camagent_device(sync_owner_conn, nvr_seed)
+
+    async def _yiqildi(*_args: object, **_kwargs: object) -> tuple[str, str]:
+        raise CamAgentLiveError("gateway rad etdi", agent_reason="ffmpeg: Connection refused")
+
+    monkeypatch.setattr("app.api.v1.cameras.open_camagent_stream", _yiqildi)
+    camera_id = nvr_seed.market_a.active_camera_ids[0]
+
+    response = await api_client.post(_token_url(camera_id), headers=viewer_headers)
+
+    assert response.status_code == 503, response.text
+    body = response.json()
+    assert body["detail"] == "live_view_unavailable"
+    assert body["agent_reason"] == "ffmpeg: Connection refused"
+    assert "agent_last_seen_at" not in body

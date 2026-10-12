@@ -1281,6 +1281,10 @@ export const ERROR_CODES = [
   //   yerga QO'LLANMAYDI va "Qayta urinish" affordansi XAVFSIZ
   //   (UI-SPEC §8.5).
   "live_view_unavailable",
+  // ⛔ 261011: bozor kompyuteri (CamAgent) gateway'ga ULANMAGAN. Alohida kod,
+  //   chunki operatorning keyingi qadami boshqa — «qayta urinish» emas,
+  //   «kompyuterni yoqish». Javobda `agent_last_seen_at` ham keladi.
+  "live_agent_offline",
   // --- 4-faza: snapshot jadvali (04-09) ---
   //
   // ⚠ KADR OLISH TAKSONOMIYASINING O'N BIR KODI BU YERDA ATAYIN YO'Q —

@@ -311,6 +311,17 @@ def detect_channel_changes(old_nvrs: list, new_nvrs: list) -> list[str]:
     return changed
 
 
+VIDEO_COMMANDS = frozenset({"start_stream", "stop_stream"})
+"""Faqat yuborilgan LAHZADA ma'noli buyruqlar (`push_pending_commands`)."""
+
+VIDEO_CMD_TTL_S = 60.0
+"""Video buyrug'i shundan eski bo'lsa agentga yuborilmaydi.
+
+Bir daqiqa — qisqa WS uzilishini (qayta ulanish bir necha soniya) yopadi,
+lekin kechagi «Ko'rish» bosilishlarini ertalabgacha saqlab qolmaydi.
+"""
+
+
 class Gateway:
     """Ulanishlar va holat. Bitta jarayon ichida yashaydi."""
 
@@ -371,6 +382,22 @@ class Gateway:
         if ws is None:
             return
         for cmd in self.db.pending_commands(agent_id):
+            # ⛔⛔ ESKIRGAN VIDEO BUYRUG'I YUBORILMAYDI (261011, prod'da topildi).
+            #
+            #     Agent oflayn paytida operator «Ko'rish» ni bosaverardi va
+            #     har bosish navbatga `start_stream` qo'yardi: Karmanada bir
+            #     kechada 38 ta. Ertalab agent ulanishi bilan hammasi birdan
+            #     yetib borib, hech kim ko'rmayotgan o'nlab oqimni ochardi —
+            #     uplink va oylik video byudjeti behuda ketardi.
+            #
+            #     Video buyrug'i faqat SHU LAHZADA ma'noli: kimdir hozir
+            #     ekran oldida kutyapti. Kechikkani natija bilan yopiladi
+            #     (yuborilmaydi), boshqa buyruqlar esa avvalgidek yetkaziladi.
+            if (cmd["name"] in VIDEO_COMMANDS
+                    and time.time() - float(cmd["created_at"]) > VIDEO_CMD_TTL_S):
+                self.db.expire_command(cmd["cmd_id"], "eskirgan: agent oflayn paytida navbatga tushgan")
+                self.db.log_event(agent_id, "command_expired", f"{cmd['name']} ({cmd['cmd_id']})")
+                continue
             msg = {"v": 1, "type": "command", "id": cmd["cmd_id"],
                    "name": cmd["name"], "params": json.loads(cmd["params_json"] or "{}")}
             await ws.send_text(json.dumps(msg, ensure_ascii=False))

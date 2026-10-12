@@ -68,6 +68,7 @@ export type MarketErrorMessageKey =
   | "cameras.discoveryAlreadyRunning"
   | "cameras.nvrNotFound"
   | "cameras.liveUnavailable"
+  | "cameras.liveAgentOffline"
   | "import.unsupportedType"
   | "import.conflict"
   | "import.staffRosterTooLarge"
@@ -198,6 +199,11 @@ export function marketErrorMessageKey(
       // ning auth qulfi bu yerga qo'llanmaydi.
       case "live_view_unavailable":
         return "cameras.liveUnavailable";
+      // 261011: bozor kompyuteri aloqada emas — sabab va oxirgi aloqa vaqti
+      // (`live-view-dialog.tsx::LiveError`). «Qayta urinish» bu yerda
+      // yordam bermaydi, shuning uchun matn umumiy xabardan AJRATILGAN.
+      case "live_agent_offline":
+        return "cameras.liveAgentOffline";
 
       /* --- snapshot jadvali (04-09, D-05) --- */
       // ⚠ TO'RTTASI TO'RT XIL MATN OLADI va ular birlashtirilmaydi:

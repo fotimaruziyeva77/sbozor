@@ -1,8 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Video } from "lucide-react";
-import { useTranslations } from "next-intl";
+import type { ReactNode } from "react";
+import { Loader2, TriangleAlert, Video, WifiOff } from "lucide-react";
+import {
+  useFormatter,
+  useLocale,
+  useTimeZone,
+  useTranslations,
+} from "next-intl";
 
 import { LivePlayer } from "@/components/cameras/live-player";
 import { LiveZoneOverlay } from "@/components/cameras/live-zone-overlay";
@@ -12,7 +18,6 @@ import { NvrErrorBlock } from "@/components/cameras/nvr-error-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api-client";
 import type { Camera } from "@/lib/api-types";
 import {
@@ -23,6 +28,7 @@ import {
 } from "@/lib/camera-queries";
 import { channelLabel } from "@/components/cameras/camera-row";
 import { cn } from "@/lib/cn";
+import { formatInstant } from "@/lib/format-day";
 
 /*
  * =============================================================================
@@ -206,6 +212,9 @@ function LiveSession({
   onRefreshList?: () => void;
 }) {
   const t = useTranslations();
+  const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
   const liveToken = useLiveToken();
 
   const [phase, setPhase] = useState<LivePhase>("idle");
@@ -218,6 +227,8 @@ function LiveSession({
   const [errorKey, setErrorKey] = useState<LiveErrorKey | null>(null);
   /** AGENT aytgan izoh (ffmpeg xatosi) — ko'pincha `null`. */
   const [agentReason, setAgentReason] = useState<string | null>(null);
+  /** Bozor kompyuterining oxirgi aloqasi — faqat `live_agent_offline` da. */
+  const [agentLastSeen, setAgentLastSeen] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   /** Har yangilash pleyerni QAYTA MOUNT qiladi (§8.3). */
   const [sessionSeq, setSessionSeq] = useState(0);
@@ -263,18 +274,30 @@ function LiveSession({
        */
       setErrorKey(marketErrorMessageKey(cause));
       setAgentReason(agentReasonOf(cause));
+      setAgentLastSeen(agentLastSeenOf(cause));
       setPhase("error");
       setStartedAt(null);
     }
   }
 
+  /*
+   * ⛔⛔ KADR QACHON KO'RINADI (261011, prod skrinshoti).
+   *
+   *     Saqlangan kadr — jonli oqim ko'rinmayotgan HAR holatda, ULANISH
+   *     paytida ham: ilgari `connecting` da kadr olib tashlanar va oyna
+   *     qora bo'lib qolardi, «Ulanmoqda» yozuvi esa pleyerning ORTIDA
+   *     yashirinardi (pleyer `absolute`, yozuv oddiy oqimda edi).
+   */
+  const backdropVisible =
+    stage !== "playing" && stage !== "expiring" && camera.last_snapshot_id !== null;
+
   return (
     <>
       {/*
-       * ⚠ RAMKA FONI (§2.3): `idle` da och — u yerda oqim YO'Q va
-       *   qora to'rtburchak «buzilgan» degan yolg'on signal berardi.
-       *   Qolgan holatlarda qora: oq letterbox tasvir chegarasini
-       *   yo'qotadi va qorong'i bozor kadrida ko'zni qamashtiradi.
+       * ⚠ RAMKA FONI QORA, MAVZUGA BOG'LIQ EMAS (261011): `bg-text` qorong'i
+       *   mavzuda OCH rangga aylanardi va video atrofida oq hoshiya chizardi.
+       *   Kadrsiz `idle` da esa och — u yerda oqim YO'Q va qora to'rtburchak
+       *   «buzilgan» degan yolg'on signal berardi (§2.3).
        *
        * ⚠ `tabIndex={-1}` — ramka fokus TARTIBIGA kirmaydi, lekin
        *   DASTURIY fokusni qabul qiladi. Bu kerak: `[Davom ettirish]`
@@ -287,65 +310,23 @@ function LiveSession({
            * ⚠ `max-h-[70vh]` — oyna kengaygach (261005) 16:9 kadr past
            *   ekranlarda dialogning `max-h-[85vh]` idan oshib ketardi
            *   va sarlavha bilan pastdagi boshqaruvlar qirqilardi.
-           *   Chegara urilganda kadr `object-contain` bilan o'z
-           *   nisbatini saqlagan holda kichrayadi — cho'zilmaydi.
            */
           "relative flex aspect-video max-h-[70vh] items-center justify-center overflow-hidden rounded-md",
-          stage === "idle" ? "bg-surface-muted" : "bg-text",
+          stage === "idle" && camera.last_snapshot_id === null
+            ? "bg-surface-muted"
+            : "bg-black",
         )}
         ref={frameRef}
         tabIndex={-1}
       >
-        {stage === "idle" ? (
-          /*
-           * ⚠ PLASHKA — ortda endi KADR turadi (261005). Usiz ikonka va
-           *   matn fotosurat ustida o'qilmasdi.
-           */
-          <div className="relative z-20 flex flex-col items-center gap-3 rounded-lg bg-black/70 px-6 py-5">
-            <Video aria-hidden="true" className="size-8 text-text-muted" />
-            <p className="text-sm text-text-muted">{t("cameras.liveIdle")}</p>
-            <Button onClick={() => void startSession()} size="lg" variant="secondary">
-              {t("cameras.view")}
-            </Button>
-          </div>
-        ) : null}
-
-        {stage === "authorizing" ? (
-          <div className="flex w-full flex-col gap-2 p-4" role="status">
-            <span className="sr-only">{t("cameras.liveAuthorizing")}</span>
-            <Skeleton className="h-24" />
-          </div>
-        ) : null}
-
-        {stage === "connecting" ? (
-          <p className="text-sm text-bg" role="status">
-            {t("cameras.liveConnecting")}
-          </p>
-        ) : null}
-
-        {stage === "expired" ? (
-          /*
-           * ⚠ XATO RANGI ISHLATILMAYDI — bu NORMAL tugash, nosozlik
-           *   emas. Qizil ramka adminni mavjud bo'lmagan muammoni
-           *   qidirishga yuborardi.
-           */
-          <div
-            className="relative z-20 flex flex-col items-center gap-3 rounded-lg bg-black/70 px-6 py-5"
-            role="status"
-          >
-            <p className="text-sm text-bg">{t("cameras.liveExpired")}</p>
-            <Button onClick={() => void startSession()} size="lg" variant="secondary">
-              {t("cameras.resume")}
-            </Button>
-          </div>
-        ) : null}
-
         {/*
-         * ⛔ SAQLANGAN KADR — oqim ko'rinmayotgan HAR holatda (261005).
-         *    Sabab `FrameBackdrop` docstringida: Karmanada jonli oqim
-         *    ulanmaydi va raqamlar faqat shu kadr ustida ko'rinadi.
+         * QATLAMLAR TARTIBI — DOM TARTIBI (z-index'siz): kadr -> pleyer ->
+         * rasta raqamlari (`z-10`) -> yorliqlar (`z-10`) -> holat
+         * plashkasi (`z-20`). Plashka HAR DOIM eng ustida: ilgari xato
+         * kadrning OSTIDA chizilardi va katta oynada ekrandan tashqarida
+         * qolardi — operator faqat qotib qolgan kadrni ko'rardi.
          */}
-        {!playerVisible(stage) && camera.last_snapshot_id !== null ? (
+        {backdropVisible && camera.last_snapshot_id !== null ? (
           <FrameBackdrop snapshotId={camera.last_snapshot_id} />
         ) : null}
 
@@ -371,36 +352,46 @@ function LiveSession({
         ) : null}
 
         {/*
-         * ⛔⛔ RASTA RAQAMLARI KADR USTIDA (261005, foydalanuvchi talabi).
-         *
-         *     Kadrda o'nlab rasta ko'rinadi va hammasi bir-biriga
-         *     o'xshaydi. Nizoda «bu qaysi rasta?» degan savolga kadrning
-         *     O'ZIDAN javob berib bo'lmasdi — operator zona muharririni
-         *     ochib solishtirishi kerak edi.
-         *
-         * ⚠ FAQAT OQIM KO'RINAYOTGANDA: qoplama kutish, xato va
-         *   muddati o'tgan holatlar ustida chizilsa, u yerda tasvir
-         *   YO'Q va raqamlar bo'sh qora ramkada osilib turardi.
+         * ⛔⛔ RASTA RAQAMLARI TASVIR USTIDA (261005, foydalanuvchi talabi)
+         *     — jonli oqim ustida ham, saqlangan kadr ustida ham. Tasvir
+         *     yo'q joyda (kadrsiz kamera, oqim hali kelmagan) chizilmaydi:
+         *     raqamlar bo'sh qora ramkada osilib turardi.
          */}
-        {/*
-         * ⚠ QOPLAMA IKKALA MANBA USTIDA HAM: jonli oqim ustida ham,
-         *   saqlangan kadr ustida ham. `connecting` va `authorizing`
-         *   CHIQARILGAN — u yerda tasvir hali yo'q va raqamlar bo'sh
-         *   ramkada osilib turardi.
-         */}
-        {stage === "playing" ||
-        stage === "expiring" ||
-        (!playerVisible(stage) && camera.last_snapshot_id !== null) ? (
+        {stage === "playing" || stage === "expiring" || backdropVisible ? (
           <LiveZoneOverlay cameraId={camera.id} enabled />
+        ) : null}
+
+        {/*
+         * ⛔ JONLI YOKI SAQLANGAN — BIR QARASHDA (261011). Prod skrinshotida
+         *   operator saqlangan kadrni jonli tasvir deb o'yladi va «jonli
+         *   ishlamayapti» dedi — farqni hech narsa aytmasdi. Endi chap
+         *   yuqorida doim yorliq: «Jonli» yoki «Saqlangan kadr · vaqt».
+         */}
+        {stage === "playing" || stage === "expiring" ? (
+          <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/70 px-2.5 py-1 text-xs font-semibold text-white">
+            <span aria-hidden="true" className="size-2 rounded-full bg-danger" />
+            {t("cameras.liveBadge")}
+          </span>
+        ) : backdropVisible ? (
+          <span className="absolute top-2 left-2 z-10 rounded-full bg-black/70 px-2.5 py-1 text-xs text-white">
+            {camera.last_capture_at === null
+              ? t("cameras.liveStoredFrame")
+              : t("cameras.liveStoredFrameAt", {
+                  time: formatInstant(
+                    format,
+                    new Date(camera.last_capture_at),
+                    locale,
+                    timeZone,
+                  ),
+                })}
+          </span>
         ) : null}
 
         {stage === "playing" || stage === "expiring" ? (
           /*
            * TRANSPORT BADGE'I — DALA DIAGNOSTIKASI (§8.4). «Tasvir
-           * kechikyapti» shikoyati kelganda birinchi savol shu, va
-           * uni ekranda ko'rsatish telefon orqali diagnostikani bir
-           * bosqichga qisqartiradi. Aksent rangda EMAS: bu holat
-           * ko'rsatkichi, harakat emas.
+           * kechikyapti» shikoyati kelganda birinchi savol shu. Aksent
+           * rangda EMAS: bu holat ko'rsatkichi, harakat emas.
            */
           <Badge
             aria-label={t("cameras.liveTransport", {
@@ -412,42 +403,111 @@ function LiveSession({
             {transport ?? "—"}
           </Badge>
         ) : null}
+
+        {stage === "idle" ? (
+          <Plashka>
+            <Video aria-hidden="true" className="size-8 text-white/70" />
+            <p className="text-sm text-white/80">{t("cameras.liveIdle")}</p>
+            <Button onClick={() => void startSession()} size="lg" variant="secondary">
+              {t("cameras.view")}
+            </Button>
+          </Plashka>
+        ) : null}
+
+        {stage === "authorizing" || stage === "connecting" ? (
+          /*
+           * ⛔ KUTISH KO'RINADI (261011). Ilgari `authorizing` faqat
+           *   `sr-only` matn va kadr ORTIDAGI skeleton edi — skeleton
+           *   kadrning ikki chetidan oq chiziq bo'lib chiqib turardi va
+           *   ekranda hech narsa «kutilyapti» demasdi.
+           */
+          <Plashka role="status">
+            <Loader2
+              aria-hidden="true"
+              className="size-6 animate-spin motion-reduce:animate-none"
+            />
+            <p className="text-sm">
+              {stage === "authorizing"
+                ? t("cameras.liveAuthorizing")
+                : t("cameras.liveConnecting")}
+            </p>
+          </Plashka>
+        ) : null}
+
+        {stage === "expired" ? (
+          /*
+           * ⚠ XATO RANGI ISHLATILMAYDI — bu NORMAL tugash, nosozlik
+           *   emas. Qizil ramka adminni mavjud bo'lmagan muammoni
+           *   qidirishga yuborardi.
+           */
+          <Plashka role="status">
+            <p className="text-sm">{t("cameras.liveExpired")}</p>
+            <Button onClick={() => void startSession()} size="lg" variant="secondary">
+              {t("cameras.resume")}
+            </Button>
+          </Plashka>
+        ) : null}
+
+        {stage === "error" ? (
+          <LiveError
+            agentLastSeen={agentLastSeen}
+            agentReason={agentReason}
+            errorKey={errorKey}
+            kind={errorKind}
+            onRefreshList={onRefreshList}
+            onRetry={() => void startSession()}
+          />
+        ) : null}
       </div>
 
       {stage === "expiring" ? (
-          /*
-           * ⚠ MODAL EMAS VA VIDEONI TO'SMAYDI: video davom etadi,
-           *   qator ramka OSTIDA turadi. Ogohlantirishni videoning
-           *   ustiga qo'yish foydalanuvchini aynan kerakli lahzada
-           *   ko'rishdan mahrum qilardi.
-           */
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-surface-muted px-3 py-2">
-            <p className="text-sm" role="status">
-              {t("cameras.liveExpiring", { seconds: secondsLeft(elapsedMs) })}
-            </p>
-            <Button
-              onClick={() => {
-                void startSession();
-                frameRef.current?.focus();
-              }}
-              size="sm"
-              variant="secondary"
-            >
-              {t("cameras.resume")}
-            </Button>
-          </div>
-        ) : null}
-
-      {stage === "error" ? (
-        <LiveError
-          agentReason={agentReason}
-          errorKey={errorKey}
-          kind={errorKind}
-          onRefreshList={onRefreshList}
-          onRetry={() => void startSession()}
-        />
+        /*
+         * ⚠ MODAL EMAS VA VIDEONI TO'SMAYDI: video davom etadi,
+         *   qator ramka OSTIDA turadi. Ogohlantirishni videoning
+         *   ustiga qo'yish foydalanuvchini aynan kerakli lahzada
+         *   ko'rishdan mahrum qilardi.
+         */
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-surface-muted px-3 py-2">
+          <p className="text-sm" role="status">
+            {t("cameras.liveExpiring", { seconds: secondsLeft(elapsedMs) })}
+          </p>
+          <Button
+            onClick={() => {
+              void startSession();
+              frameRef.current?.focus();
+            }}
+            size="sm"
+            variant="secondary"
+          >
+            {t("cameras.resume")}
+          </Button>
+        </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Kadr ustidagi holat plashkasi — barcha holatlar uchun BITTA shakl.
+ *
+ * ⚠ RANGLAR MAVZUGA BOG'LIQ EMAS (`bg-black/75`, `text-white`): plashka
+ *   FOTOSURAT ustida turadi va fotosurat mavzu bilan o'zgarmaydi. Mavzu
+ *   tokeni qorong'i rejimda qora fonga qora matn chizardi.
+ */
+function Plashka({
+  children,
+  role,
+}: {
+  children: ReactNode;
+  role?: "status" | "alert";
+}) {
+  return (
+    <div
+      className="relative z-20 mx-4 flex max-w-md flex-col items-center gap-3 rounded-lg bg-black/75 px-5 py-4 text-center text-white"
+      role={role}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -466,36 +526,57 @@ function errorKindOf(cause: unknown): "not-found" | "forbidden" | "network" | "s
   return "network";
 }
 
-/**
- * AGENT aytgan izohni xato tanasidan oladi — bo'lmasa `null`.
- *
- * ⛔⛔ `detail` DAN EMAS, TANADAN (261005): `detail` SATR bo'lib qoladi
- *     va frontendning butun xato xaritasi aynan shu satr ustida
- *     qurilgan. Sabab yonma-yon maydonda keladi, ya'ni yangi ma'lumot
- *     qo'shilib, eski shartnoma buzilmaydi (`cameras.LiveUnavailable`).
- *
- * ⚠ KO'PINCHA `null` VA BU KUTILGAN: agent sababni heartbeatda (60 s)
- *   yuboradi, gateway esa oqimni bir necha soniya kutadi — birinchi
- *   urinishda sabab hali kelmagan bo'ladi.
- */
-function agentReasonOf(cause: unknown): string | null {
+/** Xato tanasining satr maydoni — bo'lmasa `null`. */
+function bodyField(cause: unknown, field: string): string | null {
   if (!(cause instanceof ApiError)) return null;
   const tana = cause.body;
   if (typeof tana !== "object" || tana === null) return null;
-  const sabab = (tana as { agent_reason?: unknown }).agent_reason;
-  return typeof sabab === "string" && sabab.length > 0 ? sabab : null;
+  const qiymat = (tana as Record<string, unknown>)[field];
+  return typeof qiymat === "string" && qiymat.length > 0 ? qiymat : null;
+}
+
+/**
+ * AGENT aytgan izoh (ffmpeg xatosi) — bo'lmasa `null`.
+ *
+ * ⛔⛔ `detail` DAN EMAS, TANADAN (261005): `detail` SATR bo'lib qoladi
+ *     va frontendning butun xato xaritasi aynan shu satr ustida
+ *     qurilgan. Sabab yonma-yon maydonda keladi.
+ *
+ * ⚠ KO'PINCHA `null` VA BU KUTILGAN: agent sababni heartbeatda (60 s)
+ *   yuboradi — birinchi urinishda sabab hali kelmagan bo'ladi.
+ */
+function agentReasonOf(cause: unknown): string | null {
+  return bodyField(cause, "agent_reason");
+}
+
+/** Bozor kompyuterining oxirgi aloqasi (ISO) — `live_agent_offline` da (261011). */
+export function agentLastSeenOf(cause: unknown): string | null {
+  return bodyField(cause, "agent_last_seen_at");
+}
+
+/**
+ * Bozor kompyuteri (CamAgent) aloqada emasmi — `live_agent_offline` (261011).
+ *
+ * ⚠ Devor ham shu funksiyadan foydalanadi (`camera-wall.tsx`): kodni
+ *   ikki joyda qayta tahlil qilish ikki xil xulq tug'dirardi.
+ */
+export function isAgentOffline(cause: unknown): boolean {
+  return cause instanceof ApiError && cause.detail === "live_agent_offline";
 }
 
 /** `marketErrorMessageKey()` qaytaradigan kalitlar — `t()` uchun tiplangan. */
 type LiveErrorKey = ReturnType<typeof marketErrorMessageKey>;
 
 function LiveError({
+  agentLastSeen,
   agentReason,
   errorKey,
   kind,
   onRefreshList,
   onRetry,
 }: {
+  /** Bozor kompyuterining oxirgi aloqasi (ISO) — faqat agent oflayn bo'lsa. */
+  agentLastSeen: string | null;
   /** AGENT aytgan izoh — asosiy xabar OSTIDA, kichik shriftda. */
   agentReason: string | null;
   /** Server aytgan sababning tarjima kaliti (`marketErrorMessageKey`). */
@@ -505,61 +586,68 @@ function LiveError({
   onRetry: () => void;
 }) {
   const t = useTranslations();
+  const format = useFormatter();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
 
   /*
    * ⚠ `[Qayta urinish]` BU YERDA XAVFSIZ va §4.4 qulfi bu yerga
    *   QO'LLANMAYDI: jonli ko'rish NVR hisobiga autentifikatsiya
-   *   urinishini YUBORMAYDI — u go2rtc'ning allaqachon ochiq
-   *   sessiyasidan foydalanadi. Qulfni bu yerga ham yoyish adminni
-   *   hech qanday xavf yo'q joyda to'xtatib qo'yardi.
+   *   urinishini YUBORMAYDI.
    */
-  if (kind === "stream") {
+  if (kind === "stream" && errorKey === "cameras.liveAgentOffline") {
     /*
-     * =====================================================================
-     * ⛔⛔ UI SABABNI O'YLAB TOPMAYDI (261005, jonli serverda o'lchandi).
-     * =====================================================================
-     * Bu yerda `code="nvr_stream_limit"` QOTIRILGAN edi, ya'ni 404 va
-     * 403 dan BOSHQA har qanday server xatosi ekranda aniq NVR tashxisi
-     * bo'lib ko'rinardi: «Ehtimol NVR bir vaqtda ochiladigan oqimlar
-     * chegarasiga yetgan».
-     *
-     * Karmanada o'lchandi va u YOLG'ON chiqdi — zanjirda NVR umuman
-     * ishtirok etmagan:
-     *
-     *     gateway: "oqim ... belgilangan vaqtda tayyor bo'lmadi"
-     *     go2rtc:  error=EOF (hech kim nashr qilmayapti)
-     *     agent:   "ok, boshlandi" (ffmpeg 0.8 s dan keyin o'lgan)
-     *
-     * Yomoni shundaki, matn operatorni ANIQ, lekin NOTO'G'RI yo'lga
-     * yuborardi: u NVR'dagi oqim chegarasini qidirib yurardi.
-     *
-     * Endi server AYTGAN sabab ko'rsatiladi (`marketErrorMessageKey`),
-     * va u uchun tayyor matn ham bor edi: `live_view_unavailable` ->
-     * `cameras.liveUnavailable` («Jonli ko'rish xizmati javob bermadi»).
-     * Ya'ni rost javob allaqachon mavjud edi, UI uni chetlab o'tardi.
+     * ⛔⛔ BOZOR KOMPYUTERI O'CHIQ (261011, prod'da o'lchandi).
+     *     Karmanada kompyuter 11:32 da o'chgan va kechqurun «Ko'rish» 38
+     *     marta bosilgan: har safar «xizmat javob bermadi, qayta urinib
+     *     ko'ring» chiqqan. Qayta urinish bu holatda HECH QACHON
+     *     yordam bermaydi — operatorga NIMA o'chiqligi va QACHONDAN beri
+     *     ekani aytiladi.
      */
     return (
-      <div
-        className="flex flex-col items-start gap-3 rounded-md bg-danger/10 p-4 text-danger-text"
-        role="alert"
-      >
+      <Plashka role="alert">
+        <WifiOff aria-hidden="true" className="size-6 text-white/80" />
+        <p className="text-sm font-semibold">{t("cameras.liveAgentOffline")}</p>
+        {agentLastSeen === null ? null : (
+          <p className="text-sm text-white/80">
+            {t("cameras.liveAgentLastSeen", {
+              time: formatInstant(format, new Date(agentLastSeen), locale, timeZone),
+            })}
+          </p>
+        )}
+        <p className="text-xs text-white/70">{t("cameras.liveAgentOfflineHint")}</p>
+        <Button onClick={onRetry} size="sm" variant="secondary">
+          {t("common.retry")}
+        </Button>
+      </Plashka>
+    );
+  }
+
+  if (kind === "stream") {
+    /*
+     * ⛔⛔ UI SABABNI O'YLAB TOPMAYDI (261005, jonli serverda o'lchandi).
+     *     Bu yerda `code="nvr_stream_limit"` QOTIRILGAN edi va har qanday
+     *     server xatosi ekranda aniq NVR tashxisi bo'lib ko'rinardi —
+     *     Karmanada o'lchandi va u YOLG'ON chiqdi. Endi server AYTGAN
+     *     sabab ko'rsatiladi (`marketErrorMessageKey`).
+     */
+    return (
+      <Plashka role="alert">
+        <TriangleAlert aria-hidden="true" className="size-6 text-white/80" />
         <p className="text-sm">{t(errorKey ?? "cameras.liveUnavailable")}</p>
         {/*
-          ⛔ AGENT IZOHI — ASOSIY XABAR OSTIDA, O'RNIGA EMAS. Yuqoridagi
-             qator operator uchun («ishlamayapti, qayta urinib ko'ring»),
-             bu qator esa TEXNIK dalil: ffmpeg nima deganini aynan
-             ko'rsatadi va u bozor kompyuteriga bormasdan tashxis
-             qo'yish imkonini beradi.
+          ⛔ AGENT IZOHI — ASOSIY XABAR OSTIDA, O'RNIGA EMAS: yuqoridagi
+             qator operator uchun, bu esa TEXNIK dalil (ffmpeg nima dedi).
         */}
         {agentReason === null ? null : (
-          <p className="font-mono text-xs break-all opacity-80">
+          <p className="font-mono text-xs break-all text-white/70">
             {t("cameras.liveAgentReason", { reason: agentReason })}
           </p>
         )}
         <Button onClick={onRetry} size="sm" variant="secondary">
           {t("common.retry")}
         </Button>
-      </div>
+      </Plashka>
     );
   }
 
@@ -571,10 +659,8 @@ function LiveError({
         : t("errors.network");
 
   return (
-    <div
-      className="flex flex-col items-start gap-3 rounded-md bg-danger/10 p-4 text-danger-text"
-      role="alert"
-    >
+    <Plashka role="alert">
+      <TriangleAlert aria-hidden="true" className="size-6 text-white/80" />
       <p className="text-sm">{message}</p>
       {kind === "not-found" && onRefreshList !== undefined ? (
         <Button onClick={onRefreshList} size="sm" variant="secondary">
@@ -586,7 +672,7 @@ function LiveError({
           {t("common.retry")}
         </Button>
       ) : null}
-    </div>
+    </Plashka>
   );
 }
 
