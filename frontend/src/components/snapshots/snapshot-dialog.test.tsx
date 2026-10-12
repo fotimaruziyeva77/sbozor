@@ -106,6 +106,7 @@ function seedSession(): void {
 }
 
 function renderDialog(options: {
+  cameraIp?: string | null;
   detail?: SnapshotDetail | null;
   run?: CaptureRun;
 }): ReturnType<typeof render> {
@@ -137,6 +138,7 @@ function renderDialog(options: {
       <QueryClientProvider client={client}>
         <AuthProvider>
           <SnapshotDialog
+            cameraIp={options.cameraIp ?? null}
             cameraName={CAMERA}
             canNext
             canPrev
@@ -314,5 +316,19 @@ describe("texnik tafsilot", () => {
     expect(
       screen.getByText(messages.snapshots.thresholdsVersion),
     ).toBeInTheDocument();
+  });
+});
+
+describe("bir xil nomli kamera — sarlavhada IP (261012)", () => {
+  test("IP berilsa sarlavhada nom yonida turadi", () => {
+    renderDialog({ cameraIp: "192.168.1.124" });
+
+    expect(screen.getByRole("dialog")).toHaveTextContent(`${CAMERA} · 192.168.1.124`);
+  });
+
+  test("NAZORAT: IP berilmasa sarlavha avvalgidek — faqat nom", () => {
+    renderDialog({});
+
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("192.168.");
   });
 });

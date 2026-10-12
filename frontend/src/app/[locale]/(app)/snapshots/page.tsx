@@ -1,13 +1,20 @@
 "use client";
 
 import { Suspense, useId, useState } from "react";
+import type { ReactNode } from "react";
+import { Info } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { BrandLoader } from "@/components/ui/brand-loader";
 import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { AlertList } from "@/components/snapshots/alert-list";
 import { captureCellState } from "@/components/snapshots/capture-cell";
-import { CaptureGrid } from "@/components/snapshots/capture-grid";
+import {
+  CaptureGrid,
+  cameraNameCounts,
+  duplicatedName,
+} from "@/components/snapshots/capture-grid";
+import type { CaptureCameraMeta } from "@/components/snapshots/capture-grid";
 import { CaptureLegend } from "@/components/snapshots/capture-legend";
 import {
   DayPicker,
@@ -168,9 +175,37 @@ function SnapshotsWorkspace() {
     );
   }
 
+  /*
+   * IP — bir xil nomli kameralarni jadvalda ajratish uchun (261012).
+   * Ro'yxat hali kelmagan bo'lsa bo'sh xarita: jadval baribir chiziladi.
+   */
+  const cameraMeta: CaptureCameraMeta = new Map(
+    (cameras.data?.items ?? []).map((camera) => [camera.id, { ip: camera.source_ip }]),
+  );
+
   return (
     <div className="flex flex-col gap-6">
-      {/* --- ZONA (A): jadval kartasi ------------------------------------ */}
+      {/*
+       * ⛔⛔ ZONALAR TARTIBI O'ZGARDI (261012, foydalanuvchi: «kadr olishni
+       *     ui qismini yaxshila, ishlatishga noqulay»).
+       *
+       *     Ilgari sahifa JADVAL KARTASI bilan boshlanardi: kunda bir marta
+       *     ham o'zgarmaydigan sozlama butun birinchi ekranni (telefonda
+       *     to'liq) egallardi, har kuni qaraladigan narsa — bugun nima
+       *     olindi, nima olinmadi — pastga surilardi. Endi tartib ish
+       *     tartibida: kun va xulosa (C) -> ogohlantirishlar (B) -> jurnal
+       *     (D) -> jadval (A).
+       *
+       *     ⚠ §4.2 («zonalar hech qachon almashmaydi») BUZILMAYDI: u
+       *       zonalar HOLATGA qarab o'rin almashmasligi haqida. Tartib
+       *       avvalgidek sobit — faqat boshqa.
+       */}
+      <CaptureLog
+        alerts={<AlertZone />}
+        cameraMeta={cameraMeta}
+        canManage={canManage}
+      />
+
       <section aria-label={t("snapshots.scheduleTitle")}>
         <ScheduleCard
           canManage={canManage}
@@ -180,12 +215,6 @@ function SnapshotsWorkspace() {
           }
         />
       </section>
-
-      {/* --- ZONA (B): ogohlantirishlar --------------------------------- */}
-      <AlertZone />
-
-      {/* --- ZONA (C) va (D): kun jurnali -------------------------------- */}
-      <CaptureLog />
 
       {/*
        * DL-1 va DL-2 — bitta qobiq. Dialog ZONA EMAS: u sahifa holati
@@ -226,7 +255,16 @@ function AlertZone() {
 /** Muammoli hujayra holatlari — `?issues=1` filtri aynan shularni qidiradi. */
 const ISSUE_STATES = new Set(["dark", "blank", "corrupt", "failed", "missed"]);
 
-function CaptureLog() {
+function CaptureLog({
+  alerts,
+  cameraMeta,
+  canManage,
+}: {
+  /** Ogohlantirishlar zonasi — xulosa bilan jurnal ORASIDA chiziladi. */
+  alerts: ReactNode;
+  cameraMeta: CaptureCameraMeta;
+  canManage: boolean;
+}) {
   const t = useTranslations();
   const { day, todayIso } = useDaySelection();
   const [issuesOnly, setIssuesOnly] = useIssuesOnly();
@@ -274,6 +312,19 @@ function CaptureLog() {
   /* Z-7 — reja yo'q: xulosa E-2 ni chizadi, JURNAL umuman chizilmaydi. */
   const hasPlan = captureDay.data !== undefined && captureDay.data.summary.planned > 0;
 
+  /*
+   * ⛔ BIR XIL NOMLI KAMERALAR (261012, prod: 16 kameradan 11 tasi
+   *   «Camera 01»). Jadval ularni IP bilan ajratadi, lekin IP bozor
+   *   xodimiga hech narsa demaydi — haqiqiy yechim kameraga JOY nomini
+   *   berish. Shu sababli eng ko'p takrorlangan nom jadval ustida aytiladi.
+   */
+  const duplicate = duplicatedName(rows);
+  /* Ochilgan kadr nomi takrorlangan bo'lsa — sarlavhada IP (jadval bilan AYNI qoida). */
+  const openIp =
+    openRun !== null && (cameraNameCounts(rows).get(openRun.camera_name) ?? 0) > 1
+      ? (cameraMeta.get(openRun.camera_id)?.ip ?? null)
+      : null;
+
   return (
     <>
       <section
@@ -284,6 +335,8 @@ function CaptureLog() {
         <DayPicker />
         <DaySummary day={day} onShowIssues={() => setIssuesOnly(true)} todayIso={todayIso} />
       </section>
+
+      {alerts}
 
       {captureDay.isPending ? (
         /* Z-5 — uchta `Skeleton` qator REAL qator balandligida (§6.2). */
@@ -356,6 +409,36 @@ function CaptureLog() {
                 </div>
               </div>
 
+              {duplicate === null ? null : (
+                /*
+                 * ⚠ TELEFONDA USTMA-UST (261012, o'lchandi): yonma-yon
+                 *   joylashuvda havola kenglikni olib, matn bir-ikki so'zli
+                 *   tor ustunga siqilardi.
+                 */
+                <div
+                  className="flex flex-col items-start gap-1 rounded-md bg-surface-muted px-3 py-2 text-sm sm:flex-row sm:items-center sm:gap-3"
+                  role="note"
+                >
+                  <p className="flex min-w-0 flex-1 items-start gap-2">
+                    <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-text-muted" />
+                    <span>
+                      {t("snapshots.duplicateNames", {
+                        count: duplicate.count,
+                        name: duplicate.name,
+                      })}
+                    </span>
+                  </p>
+                  {canManage ? (
+                    <Link
+                      className="inline-flex min-h-11 shrink-0 items-center text-sm font-semibold text-accent-text underline underline-offset-4"
+                      href="/cameras"
+                    >
+                      {t("snapshots.nameCameras")}
+                    </Link>
+                  ) : null}
+                </div>
+              )}
+
               {visibleRows.length === 0 ? (
                 /*
                  * Z-10 — filtr hech narsa topmadi. ⚠ Bu «hammasi yaxshi»
@@ -372,7 +455,11 @@ function CaptureLog() {
                   title={t("snapshots.emptyFiltered")}
                 />
               ) : (
-                <CaptureGrid onOpen={setOpenRun} rows={visibleRows} />
+                <CaptureGrid
+                  cameraMeta={cameraMeta}
+                  onOpen={setOpenRun}
+                  rows={visibleRows}
+                />
               )}
             </CardContent>
           </Card>
@@ -380,6 +467,7 @@ function CaptureLog() {
       ) : null}
 
       <SnapshotDialog
+        cameraIp={openIp}
         cameraName={openRun?.camera_name ?? ""}
         canNext={openIndex >= 0 && openIndex < rowRuns.length - 1}
         canPrev={openIndex > 0}

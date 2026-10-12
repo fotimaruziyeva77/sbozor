@@ -1068,7 +1068,9 @@
     "prevSlot": "Oldingi vaqt",
     "nextSlot": "Keyingi vaqt",
     "emptyFiltered": "Muammoli qator topilmadi",
-    "emptyFilteredHint": "Bu kunda barcha kadrlar yaroqli."
+    "emptyFilteredHint": "Bu kunda barcha kadrlar yaroqli.",
+    "duplicateNames": "{count} ta kamera bir xil «{name}» nomida — jadvalda ular IP manzili bilan ajratilgan. Kameralarga joy yoki rasta nomini bersangiz, kerakli kadrni topish osonlashadi.",
+    "nameCameras": "Kameralarga nom berish"
   },
   "cameraZones": {
     "title": "Kamera zonalari",

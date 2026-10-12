@@ -178,6 +178,7 @@ export function snapshotImageKey(
 }
 
 export function SnapshotDialog({
+  cameraIp = null,
   cameraName,
   canNext,
   canPrev,
@@ -187,6 +188,11 @@ export function SnapshotDialog({
   open,
   run,
 }: {
+  /**
+   * Bir xil nomli kameralarni ajratish uchun IP (261012) — jadvaldagi
+   * qator bilan AYNI qoida: faqat nom takrorlanganda beriladi.
+   */
+  cameraIp?: string | null;
   cameraName: string;
   canNext: boolean;
   canPrev: boolean;
@@ -203,7 +209,7 @@ export function SnapshotDialog({
     run === null
       ? t("snapshots.logTitle")
       : t("snapshots.detailTitle", {
-          camera: cameraName,
+          camera: cameraIp === null ? cameraName : `${cameraName} · ${cameraIp}`,
           channel: channelLabel(channelNo),
           time: formatSlotTime(run.slot_time),
         });
@@ -213,7 +219,13 @@ export function SnapshotDialog({
       <Dialog.Content
         description={t("snapshots.detailDescription")}
         sheetOnMobile
-        size="lg"
+        /*
+         * ⛔ `xl` (261012): kadr — dalil va uni ko'rish kerak. `lg` (30rem)
+         *   da rasm 430px eni bilan chiqardi va rastadagi mol ko'rinmasdi
+         *   (jonli ko'rish oynasidagi «juda kichkina» shikoyatining aynan
+         *   takrori, `dialog.tsx::SIZE_CENTERED.xl`).
+         */
+        size="xl"
         srOnlyDescription
         title={title}
       >
@@ -475,8 +487,14 @@ function SnapshotImage({ snapshotId }: { snapshotId: string }) {
   return (
     <div
       className={cn(
-        "flex aspect-video items-center justify-center overflow-hidden rounded-md",
-        source === null ? "bg-surface-muted" : "bg-text",
+        /*
+         * ⚠ `max-h-[65vh]` — `xl` oynada 16:9 quti past ekrandan oshib,
+         *   pastdagi «Oldingi/Keyingi vaqt» tugmalari qirqilardi. Fon QORA
+         *   va mavzuga bog'liq emas: `bg-text` qorong'i mavzuda och bo'lib,
+         *   rasm atrofida oq hoshiya chizardi.
+         */
+        "flex aspect-video max-h-[65vh] items-center justify-center overflow-hidden rounded-md",
+        source === null ? "bg-surface-muted" : "bg-black",
       )}
     >
       {image.isPending ? (

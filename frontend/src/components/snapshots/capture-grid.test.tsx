@@ -30,7 +30,7 @@ import type { ReactElement } from "react";
 import { describe, expect, test, vi } from "vitest";
 
 import messages from "../../../messages/uz-Latn.json";
-import { CaptureGrid, buildMatrix } from "@/components/snapshots/capture-grid";
+import { CaptureGrid, buildMatrix, duplicatedName } from "@/components/snapshots/capture-grid";
 import type { CaptureRun } from "@/lib/api-types";
 
 const CAMERA_A = "11111111-aaaa-4aaa-8aaa-111111111111";
@@ -344,5 +344,84 @@ describe("SC#2: `missed` hujayra MATRITSADA ham ko'rinadi", () => {
     expect(camera?.cells).toHaveLength(3);
     expect(camera?.cells[1]?.status).toBe("missed");
     expect(camera?.cells[1]?.attempts).toBe(0);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * 261012 — NVR'SIZ BOZOR: HAMMA KANAL = 1, KO'P KAMERA BIR XIL NOMDA
+ *
+ * Prod (Karmana): 16 kameradan 11 tasi «Camera 01», hammasida kanal 1.
+ * Jadvalda 11 ta qator «01 Camera 01» bo'lib ko'rinardi — qaysi qator qaysi
+ * kamera ekanini bilib bo'lmasdi.
+ * ------------------------------------------------------------------------ */
+
+const NVRSIZ = [
+  { id: "aaaaaaaa-0000-4000-8000-000000000001", name: "Camera 01", ip: "192.168.1.124" },
+  { id: "aaaaaaaa-0000-4000-8000-000000000002", name: "KB 1-4", ip: "192.168.1.110" },
+  { id: "aaaaaaaa-0000-4000-8000-000000000003", name: "Camera 01", ip: "192.168.1.9" },
+];
+
+function nvrsizRows(): CaptureRun[] {
+  return NVRSIZ.flatMap((camera) =>
+    TIMES.map((slot) => makeRun(camera.id, 1, camera.name, slot)),
+  );
+}
+
+const NVRSIZ_META = new Map(NVRSIZ.map((camera) => [camera.id, { ip: camera.ip }]));
+
+describe("NVR'siz bozor — bir xil kanal va bir xil nomlar (261012)", () => {
+  test("teng kanalda tartib: nom, keyin IP RAQAMLI (`.9` < `.124`)", () => {
+    const matrix = buildMatrix(nvrsizRows(), NVRSIZ_META);
+
+    expect(matrix.cameras.map((camera) => camera.ip)).toEqual([
+      "192.168.1.9",
+      "192.168.1.124",
+      "192.168.1.110",
+    ]);
+  });
+
+  test("⛔ hamma kanal bir xil bo'lsa kanal belgisi CHIZILMAYDI", () => {
+    const tree: ReactElement = (
+      <NextIntlClientProvider locale="uz-Latn" messages={messages} timeZone="Asia/Tashkent">
+        <CaptureGrid cameraMeta={NVRSIZ_META} onOpen={() => {}} rows={nvrsizRows()} />
+      </NextIntlClientProvider>
+    );
+    render(tree);
+
+    const sarlavhalar = screen.getAllByRole("rowheader");
+    for (const th of sarlavhalar) {
+      expect(th.textContent ?? "", "«01» hamma qatorda bir xil — u hech narsani ajratmaydi").not.toMatch(/^01/);
+    }
+  });
+
+  test("⛔ takrorlangan nom ostida IP ko'rinadi, noyob nom ostida YO'Q", () => {
+    const tree: ReactElement = (
+      <NextIntlClientProvider locale="uz-Latn" messages={messages} timeZone="Asia/Tashkent">
+        <CaptureGrid cameraMeta={NVRSIZ_META} onOpen={() => {}} rows={nvrsizRows()} />
+      </NextIntlClientProvider>
+    );
+    render(tree);
+
+    expect(screen.getByText("192.168.1.9")).toBeInTheDocument();
+    expect(screen.getByText("192.168.1.124")).toBeInTheDocument();
+    expect(screen.queryByText("192.168.1.110"), "«KB 1-4» noyob — IP shovqin bo'lardi").toBeNull();
+  });
+
+  test("NAZORAT: kanallar HAR XIL bo'lsa (NVR) kanal belgisi saqlanadi", () => {
+    renderGrid(makeRows());
+
+    const sarlavhalar = screen.getAllByRole("rowheader").map((th) => th.textContent ?? "");
+    expect(sarlavhalar.some((matn) => matn.includes("Sabzavot qatori"))).toBe(true);
+    expect(sarlavhalar.every((matn) => /\d/.test(matn)), "NVR'da kanal — identifikator").toBe(true);
+  });
+});
+
+describe("duplicatedName — jadval ustidagi ogohlantirish uchun", () => {
+  test("eng ko'p takrorlangan nom va KAMERALAR soni (qatorlar emas)", () => {
+    expect(duplicatedName(nvrsizRows())).toEqual({ count: 2, name: "Camera 01" });
+  });
+
+  test("hamma nom noyob bo'lsa `null`", () => {
+    expect(duplicatedName(makeRows())).toBeNull();
   });
 });
