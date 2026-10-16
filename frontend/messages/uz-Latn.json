@@ -1568,7 +1568,8 @@
     "anomaliesHint": "Kameralar kadrdan aniqlagan holatlar: sotuvchisi yo'q rastada savdo, yopiq kunda savdo va kamera ko'rmaydigan rastalar.",
     "shiftsHint": "Smena yopilganda kassir topshirgan pul tizimga kiritilgan to'lovlar bilan solishtiriladi. Minus — kamomad, plyus — ortiqcha.",
     "paidStatus": "To'langan",
-    "chargesTotal": "Jami"
+    "chargesTotal": "Jami",
+    "correctedNote": "Tuzatilgan · kassir: {sum}"
   },
   "recon": {
     "title": "Nomuvofiqliklar",

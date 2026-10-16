@@ -693,5 +693,10 @@ def test_a_full_payment_today_leaves_only_the_debt_quotes() -> None:
 
 def test_nothing_paid_today_leaves_the_quote_set_byte_for_byte_unchanged() -> None:
     """`paid_today_soum=0` (standart) — xulq 261016 dan OLDINGIDEK."""
-    for args in ((17_000, 45_000, 2_000), (15_000, 0, 0), (None, 45_000, 2_000), (17_000, 0, 2_000)):
+    for args in (
+        (17_000, 45_000, 2_000),
+        (15_000, 0, 0),
+        (None, 45_000, 2_000),
+        (17_000, 0, 2_000),
+    ):
         assert payment_quote_set(*args, paid_today_soum=0) == payment_quote_set(*args), args

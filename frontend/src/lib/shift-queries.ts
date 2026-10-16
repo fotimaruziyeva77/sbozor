@@ -77,6 +77,15 @@ export const SHIFT_STATUSES = ["open", "closed"] as const;
 
 export type ShiftStatus = (typeof SHIFT_STATUSES)[number];
 
+/**
+ * Deklaratsiya tuzatishining YOPIQ sabab ro'yxati (261016) — backenddagi
+ * `ShiftCorrectionReason` ning ko'zgusi. `other` YO'Q: erkin sabab har
+ * qanday tenglashtirishni oqlab yuborardi.
+ */
+export const SHIFT_CORRECTION_REASONS = ["entry_error", "recount"] as const;
+
+export type ShiftCorrectionReason = (typeof SHIFT_CORRECTION_REASONS)[number];
+
 /* --- Yopish javobi — ⛔⛔ AYNAN TO'RT KALIT ------------------------------- */
 
 /**
@@ -150,8 +159,16 @@ export const shiftReportRowSchema = z.strictObject({
   opened_at: z.string(),
   /** Hali yopilmagan smena hisobot kunida ochiq bo'lishi mumkin. */
   closed_at: z.string().nullable(),
+  /** KASSIRNING o'z deklaratsiyasi — tuzatilgan bo'lsa ham O'ZGARMAYDI (D-25). */
   declared_soum: soumSchema.nullable(),
   system_soum: soumSchema,
+  /**
+   * 261016: deklaratsiya tuzatishi (eng oxirgisi); `null` — tuzatish yo'q.
+   * Bor bo'lsa farq SHU sondan hisoblangan, kassirning soni esa joyida.
+   */
+  corrected_soum: soumSchema.nullable(),
+  correction_reason: z.enum(SHIFT_CORRECTION_REASONS).nullable(),
+  corrected_at: z.string().nullable(),
   /**
    * ⛔ SERVERDA hisoblangan farq — klientda AYIRISH qilinmaydi.
    *
@@ -322,10 +339,10 @@ export function useCloseShift() {
  * `GET /shifts?day=` — kun kesimidagi smenalar va farqlar (§11.5).
  *
  * ⛔ Bu blokda YOZUV YUZASI AYNAN NOL: [To'g'rilash], [Tasdiqlash],
- *    [Izoh qo'shish], [Kechirish] — birortasi ham yo'q, chunki farq
- *    HECH QACHON avtomatik to'g'rilanmaydi (D-26) va qo'lda to'g'rilash
- *    marshruti 6-fazada ochilmaydi. Shuning uchun bu modulda hisobotga
- *    yozadigan MUTATSIYA ham yo'q.
+ *    [Izoh qo'shish], [Kechirish] — birortasi ham yo'q (D-26). 261016 da
+ *    rahbariyat qarori bilan BITTA smena ops orqali tuzatildi: hisobot
+ *    `corrected_soum` ni ko'rsatadi, lekin ekranda tuzatish amali YO'Q va
+ *    bu modulda hisobotga yozadigan MUTATSIYA ham yo'q.
  *
  * ⚠ Blok `day = bugun` da ham, `day < bugun` da ham chiziladi (§11.2,
  *   E qatori) — smena kun ichida yopiladi.

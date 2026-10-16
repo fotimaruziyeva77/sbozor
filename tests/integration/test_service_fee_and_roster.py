@@ -434,7 +434,12 @@ async def test_a_stall_paid_without_the_fee_is_not_offered_the_full_patta_again(
         return await api_client.post(
             "/api/v1/payments",
             headers=cashier_headers,
-            json={"stall_code": code, "amount_soum": amount, "method": "cash", "idempotency_key": key},
+            json={
+                "stall_code": code,
+                "amount_soum": amount,
+                "method": "cash",
+                "idempotency_key": key,
+            },
         )
 
     # 1. Tarozisiz to'lov.

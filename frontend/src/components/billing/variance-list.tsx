@@ -157,9 +157,28 @@ export function VarianceList({ day }: { day: string }) {
                   </td>
                   <td className="py-2 pr-3 font-mono tabular-nums">
                     {/* Ochiq smenada deklaratsiya hali YO'Q — to'qilmaydi. */}
-                    {row.declared_soum === null
-                      ? "—"
-                      : formatAmount(format, row.declared_soum, locale)}
+                    {row.corrected_soum !== null ? (
+                      /*
+                       * 261016: rahbariyat qarori bilan tuzatilgan — amaldagi
+                       * son tepada, kassirning o'z soni ostida (u O'ZGARMAGAN,
+                       * D-25). Tuzatish faqat ops orqali, ekranda amal yo'q.
+                       */
+                      <span className="flex flex-col">
+                        <span>{formatAmount(format, row.corrected_soum, locale)}</span>
+                        <span className="font-sans text-xs text-text-muted">
+                          {t("billing.correctedNote", {
+                            sum:
+                              row.declared_soum === null
+                                ? "—"
+                                : formatAmount(format, row.declared_soum, locale),
+                          })}
+                        </span>
+                      </span>
+                    ) : row.declared_soum === null ? (
+                      "—"
+                    ) : (
+                      formatAmount(format, row.declared_soum, locale)
+                    )}
                   </td>
                   <td className="py-2 pr-3 font-mono tabular-nums">
                     {formatAmount(format, row.system_soum, locale)}

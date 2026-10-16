@@ -442,6 +442,8 @@ CLEANUP_ORDER: tuple[str, ...] = (
     "payments",
     "billing_anomalies",
     "daily_charges",
+    # 0030 — deklaratsiya tuzatishi `cashier_shifts` ga kompozit FK bilan tayanadi.
+    "shift_declaration_corrections",
     "cashier_shifts",
 )
 """Billing jadvallarining O'CHIRISH TARTIBI — FK bo'yicha bolalardan yuqoriga.

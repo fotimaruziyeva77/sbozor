@@ -40,6 +40,7 @@ __all__ = [
     "ReviewPurpose",
     "ReviewQueueKind",
     "Role",
+    "ShiftCorrectionReason",
     "ShiftStatus",
     "SnapshotLightMode",
     "SnapshotQuality",
@@ -655,6 +656,31 @@ class ShiftStatus(StrEnum):
 
     OPEN = "open"
     CLOSED = "closed"
+
+
+class ShiftCorrectionReason(StrEnum):
+    """`shift_declaration_corrections.reason_code` — YOPIQ sabab ro'yxati (261016).
+
+    =========================================================================
+    ⛔⛔ RAHBARIYAT QARORI (261016): BITTA SMENANING DEKLARATSIYASI TUZATILDI.
+
+    16-oktabrda kassir smenani 1 318 000 bilan yopdi, tizimda esa 1 289 000
+    edi; rahbariyat «kassir xato kiritgan» dedi. Yopilgan smena (D-25)
+    qulflangan va u QULFLANGANICHA qoladi — tuzatish ALOHIDA QATOR bo'lib
+    yoziladi (`charge_adjustments` / storno naqshi): kassirning asl soni
+    o'chmaydi, nizoda ikkalasi ham ko'rinadi, «kim va nega» esa auditda.
+
+    ⛔ `other` / `custom` A'ZOSI YO'Q — `AdjustmentReason` docstringidagi
+       sabab: bitta erkin maydon har qanday tenglashtirishni oqlab
+       yuborardi.
+
+    `entry_error` — kassir sanagan pulni NOTO'G'RI KIRITGAN (raqam xatosi).
+    `recount`     — pul QAYTA SANALDI va boshqa son chiqdi.
+    =========================================================================
+    """
+
+    ENTRY_ERROR = "entry_error"
+    RECOUNT = "recount"
 
 
 class AuditAction(StrEnum):

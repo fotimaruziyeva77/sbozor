@@ -116,17 +116,20 @@ if TYPE_CHECKING:
     from datetime import date, datetime
     from uuid import UUID
 
+    from sqlalchemy.engine import RowMapping
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = [
     "ShiftAlreadyClosed",
     "ShiftAlreadyOpen",
+    "ShiftNotClosed",
     "ShiftNotFound",
     "ShiftNotOwned",
     "ShiftReport",
     "ShiftReportRow",
     "ShiftRow",
     "close_shift",
+    "correct_declaration",
     "open_shift",
     "open_shift_for",
     "shift_report",
@@ -205,6 +208,14 @@ class ShiftNotFound(RuntimeError):
     """
 
 
+class ShiftNotClosed(RuntimeError):
+    """Smena hali OCHIQ — tuzatiladigan deklaratsiya yo'q (marshrut **409**).
+
+    Ochiq smenada `declared_soum` `NULL` (kassir hali sanamagan); tuzatish
+    faqat YOPILGAN smenaning deklaratsiyasi haqida bo'lishi mumkin.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class ShiftRow:
     """Smena qatori — ⛔ **TO'LIQ**, ya'ni `system_soum` BILAN.
@@ -251,9 +262,20 @@ class ShiftReportRow:
     opened_at: datetime
     closed_at: datetime
     declared_soum: int
+    """KASSIRNING o'z deklaratsiyasi — tuzatilgan bo'lsa ham O'ZGARMAYDI (D-25)."""
     system_soum: int
+    corrected_soum: int | None
+    """Deklaratsiya tuzatishi (261016, `shift_declaration_corrections`) — eng oxirgisi.
+
+    `None` — tuzatish yo'q. Bor bo'lsa farq SHU sondan hisoblanadi, kassirning
+    soni esa `declared_soum` da joyida qoladi: nizoda ikkalasi ham ko'rinadi.
+    """
+    correction_reason: str | None
+    """`ShiftCorrectionReason` — tuzatish yo'q bo'lsa `None`."""
+    corrected_at: datetime | None
+    """Tuzatish yozilgan lahza — tuzatish yo'q bo'lsa `None`."""
     variance_soum: int
-    """⛔ `declared - system` — BELGILI son (D-26).
+    """⛔ `(tuzatilgan ?? kassir) − system` — BELGILI son (D-26).
 
     Manfiy = **kamomad**, musbat = **ortiqcha**, nol = **mos keldi**.
     `sbozor_core.billing.variance()` dan keladi va SQL da ⛔ **ikkinchi
@@ -408,6 +430,25 @@ _SELECT_SHIFT = text(
 )
 """Yopish oldidan smenani o'qish — UCH darvoza uchun (404 / 403 / 409)."""
 
+_INSERT_CORRECTION = text(
+    """
+    INSERT INTO shift_declaration_corrections
+           (market_id, shift_id, declared_soum, reason_code, actor_user_id)
+    VALUES (:market_id, :shift_id, :declared_soum, :reason_code, :actor_user_id)
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("shift_id", type_=_UUID),
+    bindparam("declared_soum", type_=BigInteger()),
+    bindparam("reason_code", type_=Text()),
+    bindparam("actor_user_id", type_=_UUID),
+)
+"""Deklaratsiya tuzatishi — ⛔ YANGI QATOR, `cashier_shifts` ga TEGILMAYDI (D-25).
+
+Audit qatorini DB-trigger yozadi (`AUDITED_TABLES`), aktor — sessiyaning
+`app.actor_id` GUC'i (`TenantSessionDep` uni so'rovchidan o'rnatadi).
+"""
+
 _CLOSE_SHIFT = text(
     f"""
     UPDATE cashier_shifts
@@ -460,14 +501,36 @@ ya'ni dala sinovida chiqardi.
   yerdagisi esa POYGANI yopadi. Ikkalasi ham kerak.
 """
 
+_REPORT_SELECT: Final[str] = """
+    SELECT s.id, s.cashier_id, s.opened_at, s.closed_at,
+           s.declared_soum, s.system_soum,
+           c.declared_soum AS corrected_soum,
+           c.reason_code   AS correction_reason,
+           c.created_at    AS corrected_at
+      FROM cashier_shifts s
+      LEFT JOIN LATERAL (
+        SELECT sc.declared_soum, sc.reason_code, sc.created_at
+          FROM shift_declaration_corrections sc
+         WHERE sc.market_id = s.market_id
+           AND sc.shift_id = s.id
+         ORDER BY sc.created_at DESC, sc.id DESC
+         LIMIT 1
+      ) c ON true
+"""
+"""Hisobot qatorining USTUNLARI — kun so'rovi ham, bitta smena so'rovi ham shundan.
+
+⚠ 261016: deklaratsiya tuzatishi `LEFT JOIN LATERAL` bilan — smenaning ENG
+  OXIRGI tuzatishi (`created_at`, keyin `id`: bir tranzaksiyadagi ikki
+  qator `now()` ning bir xil qiymatini oladi, `uuidv7()` esa tartiblangan).
+"""
+
 _SHIFT_REPORT_ROWS = text(
     f"""
-    SELECT {_SHIFT_COLUMNS}
-      FROM cashier_shifts
-     WHERE market_id = :market_id
-       AND business_date = :day
-       AND status = :closed
-     ORDER BY opened_at, id
+    {_REPORT_SELECT}
+     WHERE s.market_id = :market_id
+       AND s.business_date = :day
+       AND s.status = :closed
+     ORDER BY s.opened_at, s.id
     """  # noqa: S608
 ).bindparams(
     bindparam("market_id", type_=_UUID),
@@ -522,6 +585,20 @@ ya'ni ⛔ **qator INSERT qilingan lahza** = smena OCHILGAN payt
   tranzaksiyada yozilgan ikki qator `now()` ning BIR XIL qiymatini oladi
   (`payment_repo._RECENT_PAYMENTS` da o'rnatilgan qoida).
 """
+
+_SHIFT_REPORT_ROW = text(
+    f"""
+    {_REPORT_SELECT}
+     WHERE s.market_id = :market_id
+       AND s.id = :shift_id
+       AND s.status = :closed
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("shift_id", type_=_UUID),
+    bindparam("closed", type_=Text()),
+)
+"""Bitta yopilgan smenaning hisobot qatori — tuzatish javobi uchun (261016)."""
 
 _SHIFTLESS_PAYMENTS = text(
     f"""
@@ -745,6 +822,83 @@ async def close_shift(
     return _row(dict(closed))
 
 
+def _report_row(raw: RowMapping) -> ShiftReportRow:
+    """Hisobot qatori — kun so'rovi ham, tuzatish javobi ham AYNI qoidadan.
+
+    ⛔ Farq `sbozor_core.billing.variance()` dan (D-16): ayirish bu yerda
+       yozilmaydi. 261016: tuzatish bo'lsa — TUZATILGAN son, bo'lmasa —
+       kassirniki.
+    """
+    corrected = raw["corrected_soum"]
+    effective = int(raw["declared_soum"]) if corrected is None else int(corrected)
+    return ShiftReportRow(
+        shift_id=raw["id"],
+        cashier_id=raw["cashier_id"],
+        opened_at=raw["opened_at"],
+        closed_at=raw["closed_at"],
+        declared_soum=int(raw["declared_soum"]),
+        system_soum=int(raw["system_soum"]),
+        corrected_soum=None if corrected is None else int(corrected),
+        correction_reason=raw["correction_reason"],
+        corrected_at=raw["corrected_at"],
+        variance_soum=variance(effective, int(raw["system_soum"])),
+    )
+
+
+async def correct_declaration(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    shift_id: UUID,
+    declared_soum: int,
+    reason_code: str,
+    actor_user_id: UUID | None,
+) -> ShiftReportRow:
+    """Yopilgan smena deklaratsiyasining TUZATISHI (261016).
+
+    =======================================================================
+    ⛔⛔ `cashier_shifts` GA TEGILMAYDI (D-25 qulfi joyida qoladi).
+
+    Tuzatish `shift_declaration_corrections` ga YANGI QATOR bo'lib yoziladi
+    (`charge_adjustments` / storno naqshi): kassirning soni o'chmaydi,
+    hisobot esa smenaning ENG OXIRGI tuzatishini oladi.
+
+      1. smenani o'qish            -> topilmasa `ShiftNotFound`  (**404**)
+      2. `status != 'closed'`      -> `ShiftNotClosed`           (**409**)
+      3. ⛔ BITTA `INSERT`          -> tuzatish qatori (audit triggeri bilan)
+    =======================================================================
+
+    ⛔ HTTP MARSHRUTI YO'Q (rahbariyat: «bir marta bo'ldi, endi bo'lmaydi»):
+       chaqiruvchi — ops skripti, rahbariyat qarori bilan. `actor_user_id`
+       `None` — tizim yozdi (odam nomi to'qilmaydi).
+
+    Returns:
+        Smenaning tuzatishdan KEYINGI hisobot qatori.
+    """
+    existing = await session.execute(_SELECT_SHIFT, {"market_id": market_id, "shift_id": shift_id})
+    found = existing.mappings().one_or_none()
+    if found is None:
+        raise ShiftNotFound(str(shift_id))
+    if found["status"] != _CLOSED:
+        raise ShiftNotClosed(str(shift_id))
+
+    await session.execute(
+        _INSERT_CORRECTION,
+        {
+            "market_id": market_id,
+            "shift_id": shift_id,
+            "declared_soum": declared_soum,
+            "reason_code": reason_code,
+            "actor_user_id": actor_user_id,
+        },
+    )
+
+    result = await session.execute(
+        _SHIFT_REPORT_ROW, {"market_id": market_id, "shift_id": shift_id, "closed": _CLOSED}
+    )
+    return _report_row(result.mappings().one())
+
+
 async def shift_report(session: AsyncSession, *, market_id: UUID, day: date) -> ShiftReport:
     """Kun kesimidagi smenalar va variance — ⛔ **YAGONA** variance yuzasi.
 
@@ -767,9 +921,11 @@ async def shift_report(session: AsyncSession, *, market_id: UUID, day: date) -> 
        keldi. «Ortiqcha naqdni jimgina yutish kamomadni yashirish bilan
        BIR XIL xato.»
 
-    ⛔ **BU YERDA «TO'G'RILASH» YO'LI YO'Q** (D-26): variance ni
-       o'zgartiradigan, tasdiqlaydigan yoki kechiradigan funksiya bu
-       modulda ⛔ **umuman yozilmagan** va marshruti ham yo'q.
+    ⛔ **FARQ AVTOMATIK TENGLASHTIRILMAYDI** (D-26). 261016 da rahbariyat
+       qarori bilan BITTA smena `correct_declaration()` orqali (ops)
+       tuzatildi: kassirning soni O'ZGARMADI, alohida qator yozildi va farq
+       o'sha qatordan hisoblanadi. HTTP marshruti ham, tasdiqlash yoki
+       kechirish funksiyasi ham yo'q.
 
     Args:
         session: tenant konteksti o'rnatilgan ochiq sessiya.
@@ -784,20 +940,7 @@ async def shift_report(session: AsyncSession, *, market_id: UUID, day: date) -> 
     shifts = await session.execute(
         _SHIFT_REPORT_ROWS, {"market_id": market_id, "day": day, "closed": _CLOSED}
     )
-    rows = tuple(
-        ShiftReportRow(
-            shift_id=raw["id"],
-            cashier_id=raw["cashier_id"],
-            opened_at=raw["opened_at"],
-            closed_at=raw["closed_at"],
-            declared_soum=int(raw["declared_soum"]),
-            system_soum=int(raw["system_soum"]),
-            # ⛔ SOF FUNKSIYA QAYTA ISHLATILADI — ayirish bu yerda
-            #    YOZILMAYDI (D-16 ning shakli: bitta haqiqat manbai).
-            variance_soum=variance(int(raw["declared_soum"]), int(raw["system_soum"])),
-        )
-        for raw in shifts.mappings()
-    )
+    rows = tuple(_report_row(raw) for raw in shifts.mappings())
 
     shiftless = await session.execute(
         _SHIFTLESS_PAYMENTS,

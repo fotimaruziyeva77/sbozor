@@ -54,8 +54,10 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
+import psycopg
 import pytest
 from app.main import app as fastapi_app
+from app.repositories.shift_repo import ShiftNotClosed, correct_declaration
 from fixtures.admin_api import session_headers
 from fixtures.billing_domain import (
     TARIFF_SOUM,
@@ -68,14 +70,14 @@ from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import SEED_PASSWORD, TwoMarketSeed
-from sbozor_core.enums import PaymentKind, ShiftStatus
+from sbozor_core.enums import ActorKind, PaymentKind, ShiftStatus
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import date
 
     import httpx
-    from fixtures import MarketScope
+    from fixtures import MarketScope, TenantSessionFactory
     from psycopg import Connection
     from psycopg.rows import TupleRow
 
@@ -118,10 +120,14 @@ REPORT_ROW_KEYS = frozenset(
         "closed_at",
         "declared_soum",
         "system_soum",
+        # 261016: direktor tuzatishi — kassirning soni `declared_soum` da qoladi.
+        "corrected_soum",
+        "correction_reason",
+        "corrected_at",
         "variance_soum",
     }
 )
-"""§11.5 jadvalining AYNAN YETTI kaliti — ⛔ ISM YO'Q (C-10)."""
+"""§11.5 jadvalining AYNAN O'N kaliti — ⛔ ISM YO'Q (C-10)."""
 
 PERSONAL_FIELDS = frozenset({"cashier_name", "full_name", "vendor_name", "phone"})
 """C-10 darvozasining maydonlari — `test_payments_api.py:105` bilan AYNI ruh."""
@@ -272,6 +278,12 @@ def env(
                 "UPDATE markets SET is_active = false WHERE id = %s", (str(market_id),)
             )
             sync_owner_conn.execute("DELETE FROM payments WHERE market_id = %s", (str(market_id),))
+            # 0030: tuzatishlar smenalardan OLDIN (kompozit FK) — seed smenasiga
+            # yozilganlari ham, chunki seed tozalovi uni keyin o'chiradi.
+            sync_owner_conn.execute(
+                "DELETE FROM shift_declaration_corrections WHERE market_id = %s",
+                (str(market_id),),
+            )
             sync_owner_conn.execute(
                 "DELETE FROM cashier_shifts WHERE market_id = %s AND id <> %s",
                 (str(market_id), str(billing.market_a.open_shift_id)),
@@ -966,3 +978,129 @@ async def test_an_empty_day_still_returns_all_three_fields(
     assert report["rows"] == []
     assert report["shiftless_payment_count"] == 0
     assert report["shiftless_payment_soum"] == 0
+
+
+# ===========================================================================
+# 261016 — YOPILGAN SMENA DEKLARATSIYASINING TUZATISHI (ops, HTTP marshrutsiz)
+# ===========================================================================
+
+
+async def _correct(
+    tenant_session: TenantSessionFactory,
+    env: Env,
+    declared_soum: int,
+    reason_code: str = "entry_error",
+) -> None:
+    """Rahbariyat qarori bilan ops tuzatishi — TIZIM aktori, odam nomi to'qilmaydi."""
+    async with tenant_session(env.market_id, actor_kind=ActorKind.SYSTEM) as session:
+        await correct_declaration(
+            session,
+            market_id=env.market_id,
+            shift_id=env.seed_shift_id,
+            declared_soum=declared_soum,
+            reason_code=reason_code,
+            actor_user_id=None,
+        )
+
+
+async def test_a_correction_shows_in_the_report_and_the_cashiers_number_stays(
+    api_client: httpx.AsyncClient,
+    env: Env,
+    tenant_session: TenantSessionFactory,
+    cashier_headers: dict[str, str],
+    director_headers: dict[str, str],
+) -> None:
+    """⛔ Tuzatish ALOHIDA qator: kassirning soni joyida, farq tuzatishdan.
+
+    261016 holati: kassir 1 318 000 kiritdi, tizimda 1 289 000 bor edi.
+    """
+    env.pay(shift_id=env.seed_shift_id, amount_soum=1_289_000)
+    await _close_ok(api_client, cashier_headers, env.seed_shift_id, 1_318_000)
+
+    await _correct(tenant_session, env, 1_289_000)
+
+    # ⛔ `cashier_shifts` ga TEGILMAGAN — D-25 qulfi joyida.
+    status, declared, system, _ = env.shift(env.seed_shift_id)
+    assert (status, declared, system) == ("closed", 1_318_000, 1_289_000)
+
+    report = await _report(api_client, director_headers, env.today)
+    row = next(item for item in report["rows"] if item["id"] == str(env.seed_shift_id))
+    assert set(row) == REPORT_ROW_KEYS, sorted(row)
+    assert (
+        row["declared_soum"],
+        row["corrected_soum"],
+        row["correction_reason"],
+        row["variance_soum"],
+    ) == (1_318_000, 1_289_000, "entry_error", 0)
+
+
+async def test_the_latest_correction_wins_and_both_stay_in_history(
+    api_client: httpx.AsyncClient,
+    env: Env,
+    tenant_session: TenantSessionFactory,
+    cashier_headers: dict[str, str],
+    director_headers: dict[str, str],
+) -> None:
+    """Qayta tuzatish — yangi qator; hisobot ENG OXIRGISINI oladi."""
+    env.pay(shift_id=env.seed_shift_id, amount_soum=50_000)
+    await _close_ok(api_client, cashier_headers, env.seed_shift_id, 60_000)
+
+    await _correct(tenant_session, env, 40_000)
+    await _correct(tenant_session, env, 50_000, "recount")
+
+    report = await _report(api_client, director_headers, env.today)
+    row = next(item for item in report["rows"] if item["id"] == str(env.seed_shift_id))
+    assert (row["corrected_soum"], row["correction_reason"], row["variance_soum"]) == (
+        50_000,
+        "recount",
+        0,
+    )
+    rows = env.conn.execute(
+        "SELECT count(*) FROM shift_declaration_corrections WHERE market_id = %s AND shift_id = %s",
+        (str(env.market_id), str(env.seed_shift_id)),
+    ).fetchone()
+    assert rows is not None and int(rows[0]) == 2, "birinchi tuzatish ham tarixda qolishi shart"
+
+
+async def test_an_open_shift_cannot_be_corrected(
+    env: Env, tenant_session: TenantSessionFactory
+) -> None:
+    """Ochiq smenada deklaratsiya yo'q — `ShiftNotClosed`, qator yozilmaydi."""
+    with pytest.raises(ShiftNotClosed):
+        await _correct(tenant_session, env, 1_000)
+
+    count = env.conn.execute(
+        "SELECT count(*) FROM shift_declaration_corrections WHERE market_id = %s",
+        (str(env.market_id),),
+    ).fetchone()
+    assert count is not None and int(count[0]) == 0
+
+
+async def test_a_correction_is_append_only_and_recorded_as_the_system(
+    api_client: httpx.AsyncClient,
+    env: Env,
+    tenant_session: TenantSessionFactory,
+    cashier_headers: dict[str, str],
+) -> None:
+    """⛔ Tuzatish qatori tahrirlanmaydi va o'chirilmaydi; jurnalda aktor — TIZIM."""
+    await _close_ok(api_client, cashier_headers, env.seed_shift_id, 1_000)
+    await _correct(tenant_session, env, 900)
+
+    for statement in (
+        "UPDATE shift_declaration_corrections SET declared_soum = 1 WHERE market_id = %s",
+        "DELETE FROM shift_declaration_corrections WHERE market_id = %s",
+    ):
+        with pytest.raises(psycopg.Error, match="append-only"):
+            env.conn.execute(statement, (str(env.market_id),))
+
+    # `audit_read` policy'si tenant-scoped va jadval EGASIGA ham qo'llanadi
+    # (`test_debt_settlement.py::_SET_MARKET` bilan bir xil sabab).
+    env.conn.execute("SELECT set_config('app.market_id', %s, false)", (str(env.market_id),))
+    try:
+        audit = env.conn.execute(
+            "SELECT actor_user_id, actor_kind, action FROM audit_log "
+            "WHERE table_name = 'shift_declaration_corrections'"
+        ).fetchall()
+    finally:
+        env.conn.execute("SELECT set_config('app.market_id', %s, false)", ("",))
+    assert audit == [(None, "system", "insert")], audit

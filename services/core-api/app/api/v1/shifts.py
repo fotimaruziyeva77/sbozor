@@ -76,6 +76,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sbozor_core.enums import ShiftCorrectionReason
 from sbozor_core.timeutil import business_today
 
 from app.deps import Principal, TenantSessionDep, require_permission
@@ -447,20 +448,27 @@ async def shift_report(
 
     return ShiftReportResponse(
         day=business_date,
-        rows=[
-            ShiftReportRow(
-                id=row.shift_id,
-                cashier_id=row.cashier_id,
-                opened_at=row.opened_at,
-                closed_at=row.closed_at,
-                declared_soum=row.declared_soum,
-                system_soum=row.system_soum,
-                variance_soum=row.variance_soum,
-            )
-            for row in report.rows
-        ],
+        rows=[_report_row(row) for row in report.rows],
         # ⛔ NOL BO'LGANDA HAM QAYTADI — «smenasiz to'lov yo'q» bilan
         #    «hisoblagich ishlamayapti» bir xil ko'rinmasligi kerak.
         shiftless_payment_count=report.shiftless_payment_count,
         shiftless_payment_soum=report.shiftless_payment_soum,
+    )
+
+
+def _report_row(row: shift_repo.ShiftReportRow) -> ShiftReportRow:
+    """Repo qatori -> javob qatori (261016: tuzatish maydonlari bilan)."""
+    return ShiftReportRow(
+        id=row.shift_id,
+        cashier_id=row.cashier_id,
+        opened_at=row.opened_at,
+        closed_at=row.closed_at,
+        declared_soum=row.declared_soum,
+        system_soum=row.system_soum,
+        corrected_soum=row.corrected_soum,
+        correction_reason=(
+            None if row.correction_reason is None else ShiftCorrectionReason(row.correction_reason)
+        ),
+        corrected_at=row.corrected_at,
+        variance_soum=row.variance_soum,
     )

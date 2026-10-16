@@ -1238,6 +1238,11 @@ BEGIN
   DELETE FROM public.payments                   WHERE market_id = p_market_id;
   DELETE FROM public.billing_anomalies          WHERE market_id = p_market_id;
   DELETE FROM public.daily_charges              WHERE market_id = p_market_id;
+  -- 0030 — deklaratsiya tuzatishi `cashier_shifts` ga kompozit FK bilan
+  -- tayanadi, ya'ni smenalardan OLDIN. Jadvaldagi o'zgarmaslik qo'riqchisi
+  -- (`shift_correction_immutable()`) `DELETE` ni faqat qoralama bozor
+  -- uchun o'tkazadi — yuqoridagi uchala billing qo'riqchisi bilan bir xil.
+  DELETE FROM public.shift_declaration_corrections WHERE market_id = p_market_id;
   DELETE FROM public.cashier_shifts             WHERE market_id = p_market_id;
 
   -- 5-faza bandlik domeni (0018_occupancy_domain). BLOK SNAPSHOT BLOKIDAN

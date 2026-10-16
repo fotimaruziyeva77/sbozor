@@ -68,6 +68,9 @@ function row(overrides: Partial<ShiftReportRow> = {}): ShiftReportRow {
     closed_at: "2026-08-09T12:00:00Z",
     declared_soum: 100_000,
     system_soum: 100_000,
+    corrected_soum: null,
+    correction_reason: null,
+    corrected_at: null,
     variance_soum: 0,
     ...overrides,
   };
@@ -305,6 +308,30 @@ describe("⛔ G-27(d): yozuv yuzasi AYNAN NOL (D-26)", () => {
      *   [Kechirish] — har qanday YANGI tugma ham shu yerda qizaradi.
      */
     expect(interactive).toEqual(new Set());
+  });
+});
+
+describe("261016: deklaratsiya tuzatishi (faqat ko'rinish)", () => {
+  test("tuzatilgan smena: amaldagi son tepada, kassirniki ostida", async () => {
+    routeFetch(
+      report({
+        rows: [
+          row({
+            declared_soum: 1_318_000,
+            system_soum: 1_289_000,
+            corrected_soum: 1_289_000,
+            correction_reason: "entry_error",
+            corrected_at: "2026-08-09T13:00:00Z",
+            variance_soum: 0,
+          }),
+        ],
+      }),
+    );
+    renderList();
+
+    await screen.findByText(messages.billing.varianceMatch);
+    const text = (block().textContent ?? "").replace(/\u00a0/gu, " ");
+    expect(text).toContain(messages.billing.correctedNote.replace("{sum}", "1 318 000"));
   });
 });
 

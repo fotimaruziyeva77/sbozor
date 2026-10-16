@@ -118,6 +118,7 @@ from sbozor_core.enums import (
     PaymentKind,
     PaymentMethod,
     ReversalReason,
+    ShiftCorrectionReason,
     ShiftStatus,
 )
 from sbozor_core.models.base import Base, TenantMixin, uuid_pk
@@ -157,6 +158,9 @@ __all__ = [
     "SHIFT_CLOSED_HAS_DECLARATION_CHECK",
     "SHIFT_CLOSED_HAS_SYSTEM_TOTAL_CHECK",
     "SHIFT_CLOSED_IS_PAIRED_CHECK",
+    "SHIFT_CORRECTION_INDEX",
+    "SHIFT_CORRECTION_REASON_CHECK",
+    "SHIFT_CORRECTION_REASON_VALUES",
     "SHIFT_OPEN_INDEX",
     "SHIFT_OPEN_PREDICATE",
     "SHIFT_STATUS_CHECK",
@@ -167,6 +171,7 @@ __all__ = [
     "ChargeEvidence",
     "DailyCharge",
     "Payment",
+    "ShiftDeclarationCorrection",
 ]
 
 BILLING_BUSINESS_DATE_EXPR: Final = TARIFF_BUSINESS_DATE_EXPR
@@ -207,6 +212,7 @@ ADJUSTMENT_DIRECTION_VALUES: tuple[str, ...] = tuple(d.value for d in Adjustment
 ADJUSTMENT_REASON_VALUES: tuple[str, ...] = tuple(r.value for r in AdjustmentReason)
 REVERSAL_REASON_VALUES: tuple[str, ...] = tuple(r.value for r in ReversalReason)
 ANOMALY_KIND_VALUES: tuple[str, ...] = tuple(k.value for k in AnomalyKind)
+SHIFT_CORRECTION_REASON_VALUES: tuple[str, ...] = tuple(r.value for r in ShiftCorrectionReason)
 
 
 def _quoted(values: tuple[str, ...]) -> str:
@@ -370,6 +376,12 @@ zanjirining yarmi.
 """
 
 SERVICE_DATE_NOT_IN_FUTURE_CHECK = "service_date <= business_date"
+
+SHIFT_CORRECTION_REASON_CHECK = f"reason_code IN ({_quoted(SHIFT_CORRECTION_REASON_VALUES)})"
+"""`shift_declaration_corrections.reason_code` — `ShiftCorrectionReason` DAN HOSILA (0030).
+
+⛔ `other` A'ZOSI YO'Q — `ADJUSTMENT_REASON_CHECK` docstringidagi sabab.
+"""
 """KELAJAK KUNI UCHUN HISOB YOZIB BO'LMAYDI (D-06).
 
 `business_date` `created_at` dan hosila, ya'ni u HAR DOIM «bugun». Shart
@@ -408,6 +420,9 @@ PAYMENT_STALL_INDEX = "ix_payments_market_stall_service_date"
 
 CHARGE_ADJUSTMENT_INDEX = "ix_charge_adjustments_market_charge"
 """Hisob kartochkasidagi tuzatishlar ro'yxati (UI-SPEC §11.3)."""
+
+SHIFT_CORRECTION_INDEX = "ix_shift_declaration_corrections_market_shift"
+"""Smena hisobotidagi «amaldagi deklaratsiya» — smenaning eng oxirgi tuzatishi (0030)."""
 
 LATE_REVIEW_ADJUSTMENT_INDEX = "uq_charge_adjustments_market_charge_late_review"
 """BIR HISOBGA BITTA `late_review` TUZATISHI — qisman UNIQUE indeks (0022).
@@ -1136,6 +1151,78 @@ class BillingAnomaly(Base, TenantMixin):
     occupancy_event_id: Mapped[UUID | None] = mapped_column(PgUuid(as_uuid=True), nullable=True)
     # Hodisa bilan JUFTLIKDA (`evidence_is_paired`).
     snapshot_id: Mapped[UUID | None] = mapped_column(PgUuid(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    business_date: Mapped[date] = mapped_column(
+        Date(), Computed(BILLING_BUSINESS_DATE_EXPR, persisted=True), nullable=False
+    )
+
+
+class ShiftDeclarationCorrection(Base, TenantMixin):
+    """Yopilgan smena deklaratsiyasining TUZATISHI — ALOHIDA QATOR (0030).
+
+    =========================================================================
+    ⛔⛔ BUYURTMACHI QARORI (261016) VA NEGA `UPDATE` EMAS.
+
+    16-oktabrda kassir smenani 1 318 000 bilan yopdi, tizimda 1 289 000 edi
+    va rahbariyat «kassir xato kiritgan» dedi. `cashier_shifts` yopilgach
+    QULFLANADI (D-25, `shift_declaration_immutable()`) va u QULFLANGANICHA
+    qoladi: joyida tahrirlash kassirning asl sonini IZSIZ o'chirardi, ya'ni
+    nizoda «kassir aslida nima yozgan edi?» savoliga javob qolmasdi.
+
+    Tuzatish — `charge_adjustments` / storno bilan AYNI naqsh: yangi qator,
+    asl yozuv joyida. Smena hisobotidagi «amaldagi deklaratsiya» —
+    smenaning ENG OXIRGI tuzatishi (bo'lmasa — kassirning soni); farq ham
+    shundan hisoblanadi.
+    =========================================================================
+    ⛔ HTTP MARSHRUTI YO'Q (rahbariyat: «bir marta bo'ldi, endi bo'lmaydi»):
+       tuzatish faqat ops orqali, rahbariyat qarori bilan yoziladi
+       (`shift_repo.correct_declaration`). Faqat YOPILGAN smena.
+
+    ⛔ JADVAL APPEND-ONLY (`shift_correction_immutable()`) va AUDIT OSTIDA
+       (`AUDITED_TABLES`): «kim, qachon, nega» — DB-trigger yozadi.
+
+    ⚠ BIR SMENAGA BIR NECHTA TUZATISH QONUNIY: qayta tuzatish kerak bo'lsa,
+      yangi qator oldingisini almashtiradi va ikkalasi ham tarixda qoladi.
+    """
+
+    __tablename__ = "shift_declaration_corrections"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["market_id"],
+            ["markets.id"],
+            name="fk_shift_declaration_corrections_market_id_markets",
+        ),
+        ForeignKeyConstraint(
+            ["market_id", "shift_id"],
+            ["cashier_shifts.market_id", "cashier_shifts.id"],
+            name="fk_shift_declaration_corrections_shift",
+        ),
+        # ⛔ `ondelete` YO'Q — `CashierShift.cashier_id` bilan bir xil sabab.
+        ForeignKeyConstraint(
+            ["actor_user_id"],
+            ["users.id"],
+            name="fk_shift_declaration_corrections_actor_user_id_users",
+        ),
+        UniqueConstraint("market_id", "id", name="uq_shift_declaration_corrections_market_id_id"),
+        CheckConstraint(SHIFT_CORRECTION_REASON_CHECK, name="reason_code_allowed"),
+        # ⚠ `>= 0` — `CashierShift.declared_soum` bilan bir xil sabab: butun
+        #   smena terminal orqali o'tgan kun REAL holat.
+        CheckConstraint("declared_soum >= 0", name="declared_soum_non_negative"),
+        Index(SHIFT_CORRECTION_INDEX, "market_id", "shift_id"),
+    )
+
+    id: Mapped[UUID] = uuid_pk()
+    shift_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), nullable=False)
+    # Tuzatilgan (amaldagi) deklaratsiya — `bigint` so'm.
+    declared_soum: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    # `sbozor_core.enums.ShiftCorrectionReason` — YOPIQ ro'yxat.
+    reason_code: Mapped[str] = mapped_column(Text(), nullable=False)
+    # Kim yozdi. `NULL` — ops (tizim) yozgan, rahbariyat qarori bilan: odamning
+    # `user_id` sini to'qib qo'yish «kim qaror qildi?» savoliga YOLG'ON javob
+    # bo'lardi (`ChargeAdjustment.actor_user_id` bilan bir xil qoida).
+    actor_user_id: Mapped[UUID | None] = mapped_column(PgUuid(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

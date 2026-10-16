@@ -49,6 +49,7 @@ from sbozor_core.enums import (
     ReconciliationSubjectKind,
     ReversalReason,
     Role,
+    ShiftCorrectionReason,
     StallStatus,
 )
 from sbozor_core.money import MAX_SAFE_SOUM
@@ -4251,7 +4252,16 @@ class ShiftReportRow(BaseModel):
     opened_at: datetime
     closed_at: datetime
     declared_soum: int
+    """KASSIRNING o'z deklaratsiyasi — tuzatilgan bo'lsa ham O'ZGARMAYDI (D-25)."""
     system_soum: int
+    corrected_soum: int | None
+    """Deklaratsiya tuzatishi (261016) — eng oxirgisi; `None`: tuzatish yo'q.
+
+    Bor bo'lsa `variance_soum` SHU sondan hisoblanadi. Kassirning soni
+    `declared_soum` da qoladi — nizoda ikkalasi ham ko'rinishi shart.
+    """
+    correction_reason: ShiftCorrectionReason | None
+    corrected_at: datetime | None
     variance_soum: int
     """⛔ SERVERDA hisoblangan (`sbozor_core.billing.variance()`).
 

@@ -62,6 +62,9 @@ __all__ = [
     "SERVICE_FEE_DELETE_ORDER",
     "SERVICE_FEE_TENANT_TABLES",
     "SETTINGS_AUDITED_TABLES",
+    "SHIFT_CORRECTION_AUDITED_TABLES",
+    "SHIFT_CORRECTION_DELETE_ORDER",
+    "SHIFT_CORRECTION_TENANT_TABLES",
     "SNAPSHOT_AUDITED_TABLES",
     "SNAPSHOT_DELETE_ORDER",
     "SNAPSHOT_TENANT_TABLES",
@@ -813,6 +816,34 @@ O'RNI ERKIN va bu O'LCHANGAN: jadvalning YAGONA FK'si
 ikkalasi ham «bozor narxi» oilasidan.
 """
 
+# ===========================================================================
+# 0030 — SMENA DEKLARATSIYASINING TUZATISHI (261016)
+# ===========================================================================
+
+SHIFT_CORRECTION_TENANT_TABLES: tuple[str, ...] = ("shift_declaration_corrections",)
+"""`0030_shift_declaration_corrections` yaratadigan tenant jadvali.
+
+BITTA JADVAL, lekin shakl TUPLE (`SERVICE_FEE_TENANT_TABLES` bilan bir xil
+sabab). ⛔ `ALL_TENANT_TABLES` GA SHU MIGRATSIYA BILAN AYNI COMMITDA splice
+qilinadi (OP-3 naqshining BESHINCHI qo'llanishi).
+"""
+
+SHIFT_CORRECTION_AUDITED_TABLES: tuple[str, ...] = ("shift_declaration_corrections",)
+"""`0030` da `attach_audit_trigger()` ULANADIGAN jadval.
+
+Deklaratsiya tuzatishi — rahbariyatning moliyaviy oqibatli qarori
+(`charge_adjustments` bilan bir oila). Nom `schema_contract.AUDITED_TABLES`
+GA AYNI COMMITDA qo'shildi, ya'ni `PENDING_AUDIT_TRIGGERS` BO'SH qoladi.
+"""
+
+SHIFT_CORRECTION_DELETE_ORDER: tuple[str, ...] = ("shift_declaration_corrections",)
+"""`market_delete_draft()` kaskadiga qo'shiladigan tartib (`0030`).
+
+⛔ RO'YXAT LITERAL — HOSILA EMAS. O'RNI QAT'IY: jadval `cashier_shifts` ga
+`(market_id, shift_id)` kompozit FK bilan tayanadi, ya'ni u `cashier_shifts`
+dan OLDIN o'chiriladi (billing blokining ichida).
+"""
+
 ALL_TENANT_TABLES: tuple[str, ...] = (
     *TENANT_TABLES,
     *MARKET_DOMAIN_TENANT_TABLES,
@@ -899,6 +930,9 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     # BILAN AYNI COMMITDA, ya'ni OP-3 qadami TO'RTINCHI marta qo'llanadi.
     # Ikki tomonlama qulf yuqoridagi bandlarda o'lchov bilan yozilgan.
     *SERVICE_FEE_TENANT_TABLES,
+    # ✅ QARZ UMUMAN OCHILMADI (`0030`) — splice `0030_shift_declaration_
+    # corrections` BILAN AYNI COMMITDA, OP-3 qadami BESHINCHI marta.
+    *SHIFT_CORRECTION_TENANT_TABLES,
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 

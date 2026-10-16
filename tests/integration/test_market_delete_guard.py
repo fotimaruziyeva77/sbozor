@@ -123,6 +123,8 @@ BILLING_TABLES: tuple[str, ...] = (
     "payments",
     "billing_anomalies",
     "daily_charges",
+    # 0030 — deklaratsiya tuzatishi: `cashier_shifts` ga tayanadi, ya'ni undan OLDIN.
+    "shift_declaration_corrections",
     "cashier_shifts",
 )
 """06-04 qo'shgan olti jadval — `0021` kaskadga qo'shishi kerak bo'lganlari.
@@ -165,7 +167,11 @@ FUNCTION_BODY = "SELECT pg_get_functiondef('public.market_delete_draft(uuid)'::r
 # jadval `markets` ga FK'siz yaratilgan taqdirda ham quyi chegara
 # qanoatlanardi, ya'ni `test_cascade_covers_every_table_referencing_
 # markets` uni UMUMAN ko'rmasdi va kaskad qarzi JIMGINA ochiq qolardi.
-KNOWN_TENANT_TABLE_COUNT = 35
+#
+# ⚠ SON `35` DAN `37` GA KO'TARILDI (`0030`) — `0027` (`market_service_fees`)
+# va `0030` (`shift_declaration_corrections`) bittadan jadval qo'shdi;
+# yuqoridagi bandlardagi sabab bilan ko'tarish MAJBURIY.
+KNOWN_TENANT_TABLE_COUNT = 37
 
 # Tuzatish yo'riqnomasi ALOHIDA konstantada, f-satr ICHIDA emas: ruff'ning
 # `S608` qoidasi SQL kalit so'zi bo'lgan formatlangan satrni "so'rov
@@ -641,6 +647,14 @@ def _seed_billing_for_market(conn: Connection[TupleRow], market_id: UUID) -> _Bi
         "(id, market_id, cashier_id, status, closed_at, declared_soum, system_soum) "
         "VALUES (%s, %s, %s, 'closed', now(), 0, 0)",
         (str(closed_shift_id), str(market_id), str(cashier_id)),
+    )
+    # 0030 — YOPILGAN smenaga deklaratsiya tuzatishi. Kaskad uni smenadan OLDIN
+    # o'chirmasa chaqiruv chet el kaliti buzilishi bilan yiqiladi.
+    conn.execute(
+        "INSERT INTO shift_declaration_corrections "
+        "(market_id, shift_id, declared_soum, reason_code, actor_user_id) "
+        "VALUES (%s, %s, 0, 'entry_error', %s)",
+        (str(market_id), str(closed_shift_id), str(cashier_id)),
     )
     # ⚠ IKKINCHI SMENA `open`: `uq_cashier_shifts_market_id_cashier_open`
     #   bir kassirda BITTA ochiq smenaga ruxsat beradi (D-27), ya'ni

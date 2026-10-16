@@ -317,6 +317,14 @@ AUDITED_TABLES: frozenset[str] = frozenset(
         # yozadi. Bu «o'zgarmas jadvalga audit qo'yilmaydi» qoidasiga zid
         # emas, u qoidaning TESKARI tomoni.
         "cashier_shifts",
+        # --- 0030: smena deklaratsiyasining tuzatishi (261016) ---
+        # Yopilgan smena qulflangan (D-25) va u QULFLANGANICHA qoladi;
+        # tuzatish ALOHIDA qator. Bu rahbariyatning moliyaviy oqibatli
+        # qarori — `charge_adjustments` bilan BIR OILADA: «qaysi sabab»
+        # qatorda, «kim va qachon» esa faqat jurnalda. Jadval append-only,
+        # ya'ni audit faqat INSERT ni ko'radi — lekin bu yerda u «ikkinchi
+        # nusxa» emas: aktorning GUC'dan olingan izi faqat jurnalda.
+        "shift_declaration_corrections",
         # --- 7-faza bildirishnoma domeni (0023_notification_domain) ---
         # Nomuvofiqlik case'i — INSONNING qarori va u nizoda dalil bo'ladi
         # (D-14): «bu nomuvofiqlik asosli deb kim, qachon belgiladi?».

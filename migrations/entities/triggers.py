@@ -56,6 +56,8 @@ __all__ = [
     "OCCUPANCY_TRIGGER_FUNCTIONS",
     "PAYMENT_IMMUTABLE",
     "SERVICE_FEE_PAST_IMMUTABLE",
+    "SHIFT_CORRECTION_IMMUTABLE",
+    "SHIFT_CORRECTION_TRIGGER_FUNCTIONS",
     "SHIFT_DECLARATION_IMMUTABLE",
     "STALL_CODE_CLAIM",
     "TARIFF_PAST_IMMUTABLE",
@@ -1048,6 +1050,50 @@ bo'ysunadi: har migratsiya O'Z scope'li ro'yxatini oladi,
 `ALL_TRIGGER_FUNCTIONS` esa faqat KUZATUV aggregati.
 """
 
+# ===========================================================================
+# 0030 — SMENA DEKLARATSIYASINING TUZATISHI (261016)
+# ===========================================================================
+
+SHIFT_CORRECTION_IMMUTABLE = PGFunction(
+    schema="public",
+    signature="shift_correction_immutable()",
+    definition="""
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF TG_OP = 'DELETE'
+     AND EXISTS (
+       SELECT 1 FROM public.markets AS m
+       WHERE m.id = OLD.market_id AND m.is_active = false
+     ) THEN
+    RETURN OLD;
+  END IF;
+
+  RAISE EXCEPTION 'shift_declaration_corrections is append-only (attempted %)', TG_OP;
+END $$
+""",
+)
+"""`BEFORE UPDATE OR DELETE ON shift_declaration_corrections` — TUZATISH O'CHIRILMAYDI.
+
+`PAYMENT_IMMUTABLE` ning AYNAN shakli va sabab ham bir xil: tuzatish
+qatori DIREKTORNING qarori va uni jimgina o'zgartirish (`UPDATE`) yoki
+o'chirish (`DELETE`) nizoda «kim, qachon, qancha deb tuzatdi?» savolini
+javobsiz qoldirardi. Qayta tuzatish kerak bo'lsa — YANGI qator yoziladi,
+hisobot esa smenaning ENG OXIRGI tuzatishini oladi.
+
+Qoralama bozor istisnosi `market_delete_draft()` kaskadi uchun (yuqoridagi
+uchala billing qo'riqchisi bilan bir xil).
+"""
+
+SHIFT_CORRECTION_TRIGGER_FUNCTIONS: list[PGFunction] = [SHIFT_CORRECTION_IMMUTABLE]
+"""`0030_shift_declaration_corrections` yaratadigan qo'riqchi.
+
+ALOHIDA ro'yxat (`BILLING_TRIGGER_FUNCTIONS` ga qo'shilmaydi): u ro'yxat
+«`0020` yaratadi» degan da'vo va funksiyasi boshqa migratsiyada tug'iladi.
+"""
+
 ALL_TRIGGER_FUNCTIONS: list[PGFunction] = [
     *AUDIT_TRIGGER_FUNCTIONS,
     *MARKET_DOMAIN_TRIGGER_FUNCTIONS,
@@ -1055,6 +1101,7 @@ ALL_TRIGGER_FUNCTIONS: list[PGFunction] = [
     *OCCUPANCY_TRIGGER_FUNCTIONS,
     *BILLING_TRIGGER_FUNCTIONS,
     *NOTIFICATION_TRIGGER_FUNCTIONS,
+    *SHIFT_CORRECTION_TRIGGER_FUNCTIONS,
 ]
 """BARCHA trigger funksiyalari — autogenerate reyestri (`ALL_ENTITIES`) uchun.
 
