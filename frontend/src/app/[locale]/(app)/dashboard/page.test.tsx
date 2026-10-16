@@ -491,6 +491,14 @@ describe("G-motion-6(b) — direktor OLTI KATAKNI va trendni KO'RADI", () => {
       expect(document.body.textContent).toContain(messages.director.tileDebt);
       /* Trend kartasi. */
       expect(document.body.textContent).toContain(messages.director.trendTitle);
+      /*
+       * 261016: grafik kartalari (buyurtmachi: «direktor bittada nima
+       * bo'layotganini tushunsin»). Ular kataklar bilan BIRGA chiziladi.
+       */
+      expect(document.body.textContent).toContain(messages.director.methodTitle);
+      expect(document.body.textContent).toContain(messages.director.stallTitle);
+      expect(document.body.textContent).toContain(messages.director.debtorsTitle);
+      expect(document.body.textContent).toContain(messages.director.captureTitle);
     });
 
     /* Teskari nazorat: so'rovlar HAQIQATAN ketgan — 0-so'rov holatida

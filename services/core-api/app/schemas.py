@@ -4930,6 +4930,15 @@ class LiveRevenueResponse(BaseModel):
     total_collected_soum: int
     total_charged_soum: int
     charged_complete: bool
+    collected_cash_soum: int
+    """Davrda NAQD yig'ilgan belgili pul (storno MINUS) — «To'lov turlari» grafigi."""
+    collected_terminal_soum: int
+    """Davrda TERMINAL orqali yig'ilgan belgili pul.
+
+    ⚠ Ikkala qism ham MANFIY bo'lishi mumkin (o'tgan kun to'lovining bugungi
+      stornosi) va klient o'shanda ulush chizmaydi
+      (`report_repo._COLLECTED_BY_METHOD` docstringi).
+    """
 
 
 class ReceivablesReportRow(BaseModel):

@@ -64,6 +64,7 @@ from sbozor_core.enums import (
     AnomalyKind,
     OccupancyVerdict,
     PaymentKind,
+    PaymentMethod,
     ReconciliationSubjectKind,
     ResolutionSource,
 )
@@ -97,6 +98,7 @@ __all__ = [
     "DIFF_SYSTEM_OVER",
     "AnomalyArchive",
     "AnomalyArchiveRow",
+    "CollectedByMethod",
     "LedgerDay",
     "LedgerDayRow",
     "ReceivableRow",
@@ -108,6 +110,7 @@ __all__ = [
     "ThreeWayReport",
     "ThreeWayRow",
     "anomaly_archive",
+    "collected_by_method",
     "ledger_day",
     "ledger_upsert",
     "receivables",
@@ -365,6 +368,84 @@ async def revenue_by_day(
         #    ketardi (`total_due_soum()` ning aynan o'sha darsi).
         total_collected_soum=int(mapped[0]["total_collected_soum"]) if mapped else 0,
         total_charged_soum=int(mapped[0]["total_charged_soum"]) if mapped else 0,
+    )
+
+
+# ===========================================================================
+# 1b. TUSHUM TO'LOV TURI BO'YICHA — PANELNING «TO'LOV TURLARI» GRAFIGI (261016)
+# ===========================================================================
+
+_COLLECTED_BY_METHOD = text(
+    f"""
+    SELECT COALESCE(sum({_SIGNED_PAYMENT_EXPR}) FILTER (WHERE p.method = :cash), 0)::bigint
+               AS cash_soum,
+           COALESCE(sum({_SIGNED_PAYMENT_EXPR}) FILTER (WHERE p.method = :terminal), 0)::bigint
+               AS terminal_soum
+      FROM payments p
+     WHERE p.market_id = :market_id
+       AND p.business_date BETWEEN CAST(:from_date AS date) AND CAST(:to_date AS date)
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("from_date", type_=Date()),
+    bindparam("to_date", type_=Date()),
+    bindparam("reversal", type_=Text()),
+    bindparam("cash", type_=Text()),
+    bindparam("terminal", type_=Text()),
+)
+"""Davr tushumi NAQD va TERMINAL ga ajratilgan — ⛔ `revenue_by_day` GA TEGILMAYDI.
+
+⛔ ALOHIDA SO'ROV, `_REVENUE_BY_DAY` GA USTUN QO'SHILMADI: o'sha so'rov
+   imzolanadigan `.xlsx` ning manbai va unga panel uchun ustun qo'shish
+   hujjat yuzasini panel ehtiyoji bilan o'zgartirardi.
+
+⛔ BELGI `_SIGNED_PAYMENT_EXPR` DAN (ikkinchi nusxa yozilmaydi): storno
+   asl to'lovning `method` ini NUSXALAYDI (`payment_repo._REVERSE_PAYMENT`),
+   ya'ni bekor qilingan terminal to'lovi TERMINAL ulushidan ayriladi va
+   ikki qism yig'indisi `revenue_by_day` dagi `collected_soum` bilan bir
+   xil qoidadan chiqadi.
+
+⚠ QISM MANFIY BO'LISHI MUMKIN: kechagi terminal to'lovi bugun bekor
+  qilinsa, bugungi terminal yig'indisi minus bo'ladi. Bu HALOL javob —
+  klient manfiy qismda ulush chizmaydi.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class CollectedByMethod:
+    """Davrda yig'ilgan BELGILI pul — to'lov turi kesimida."""
+
+    cash_soum: int
+    terminal_soum: int
+
+
+async def collected_by_method(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    from_date: date,
+    to_date: date,
+) -> CollectedByMethod:
+    """Davr tushumini NAQD va TERMINAL ga ajratadi (`payments.business_date` bo'yicha).
+
+    ⛔ CHAQIRUVCHI TENANT KONTEKSTINI O'RNATGAN BO'LISHI SHART
+       (`TenantSessionDep`) — `revenue_by_day` bilan bir xil qoida.
+    """
+    result = await session.execute(
+        _COLLECTED_BY_METHOD,
+        {
+            "market_id": market_id,
+            "from_date": from_date,
+            "to_date": to_date,
+            "reversal": _REVERSAL,
+            "cash": PaymentMethod.CASH.value,
+            "terminal": PaymentMethod.TERMINAL.value,
+        },
+    )
+    row = result.mappings().one()
+    return CollectedByMethod(
+        cash_soum=int(row["cash_soum"]),
+        terminal_soum=int(row["terminal_soum"]),
     )
 
 

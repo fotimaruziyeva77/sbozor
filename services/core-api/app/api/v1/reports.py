@@ -657,6 +657,9 @@ async def live_revenue(
     period = await report_repo.revenue_by_day(
         session, market_id=market_id, from_date=from_date, to_date=to_date
     )
+    by_method = await report_repo.collected_by_method(
+        session, market_id=market_id, from_date=from_date, to_date=to_date
+    )
 
     return LiveRevenueResponse(
         from_date=from_date,
@@ -664,6 +667,8 @@ async def live_revenue(
         total_collected_soum=period.total_collected_soum,
         total_charged_soum=period.total_charged_soum,
         charged_complete=to_date < today,
+        collected_cash_soum=by_method.cash_soum,
+        collected_terminal_soum=by_method.terminal_soum,
     )
 
 

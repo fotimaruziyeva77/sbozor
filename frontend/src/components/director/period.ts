@@ -121,3 +121,30 @@ export function compareNoteKey(
     ? "director.compareDay"
     : "director.compareSpan";
 }
+
+/** Qarzdorlik oynasi — oxirgi 30 kun. */
+export const DEBT_WINDOW_DAYS = 30;
+
+/**
+ * Qarzdorlik reestri so'rovining oynasi — «Qarz jami» katagi VA «Eng katta
+ * qarzdorlar» grafigi uchun BITTA joyda (261016).
+ *
+ * ⛔ IKKALASI AYNI KALIT bilan so'raydi: grafik katakdagi jami bilan bir
+ *    javobdan chiziladi va ikki joyda ikki xil qarz ko'rinmaydi.
+ *
+ * ⛔ OYNANING OXIRI HECH QACHON BUGUN EMAS (2026-08-25, jonli o'lchandi):
+ *    `GET /reports/debtors?...&to=<bugun>` 422 `report_period_future`
+ *    bilan rad etiladi (hisobot kuni yopilmagan) va katak abadiy bo'sh
+ *    qolardi. «Bugun» davri tanlanganda oxiri KECHAGA qisqartiriladi —
+ *    qarz baribir o'tgan kunlarning fakti.
+ */
+export function debtWindow(
+  period: Period,
+  todayIso: string,
+): { from: string; to: string } {
+  const day = period.to;
+  return {
+    from: shiftIsoDay(day, -(DEBT_WINDOW_DAYS - 1)),
+    to: day === todayIso ? shiftIsoDay(day, -1) : day,
+  };
+}

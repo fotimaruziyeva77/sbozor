@@ -809,6 +809,18 @@ export const liveRevenueSchema = z.object({
   total_collected_soum: soumSchema,
   total_charged_soum: soumSchema,
   charged_complete: z.boolean(),
+  /*
+   * «To'lov turlari» (261016). ⚠ MANFIY bo'lishi mumkin — o'tgan kun
+   * to'lovining bugungi stornosi o'z turidan ayriladi
+   * (`report_repo._COLLECTED_BY_METHOD`). Grafik o'shanda ulush chizmaydi.
+   *
+   * ⛔ IXTIYORIY — va bu ONGLI: frontend serverdan oldin yangilansa, majburiy
+   *    maydon butun javobni rad etib, bosh katak va «Tushum» katagini ham
+   *    sindirardi. Maydon yo'q bo'lsa faqat «To'lov turlari» kartasi
+   *    «yuklanmadi» deydi.
+   */
+  collected_cash_soum: z.number().int().optional(),
+  collected_terminal_soum: z.number().int().optional(),
 });
 export type LiveRevenue = z.infer<typeof liveRevenueSchema>;
 

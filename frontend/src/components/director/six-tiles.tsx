@@ -24,7 +24,12 @@ import { PanelTile } from "@/components/panel/tile";
 import { cn } from "@/lib/cn";
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
 import type { Period } from "@/components/director/period";
-import { compareNoteKey, comparePeriod, includesToday } from "@/components/director/period";
+import {
+  compareNoteKey,
+  comparePeriod,
+  debtWindow,
+  includesToday,
+} from "@/components/director/period";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { CountUp } from "@/components/ui/count-up";
@@ -167,15 +172,11 @@ export function SixTiles({ period }: { period: Period }) {
   const leak = useReconciliationReport(day);
   const leakPrev = useReconciliationReport(shiftIsoDay(day, -7));
   /*
-   * ⛔ QARZDORLIK OYNASINING OXIRI HECH QACHON BUGUN EMAS (2026-08-25,
-   *    jonli o'lchandi): `GET /reports/debtors?...&to=<bugun>` server
-   *    tomonidan 422 `report_period_future` bilan rad etiladi (hisobot
-   *    kuni yopilmagan) va katak abadiy bo'sh qolardi. «Bugun» davri
-   *    tanlanganda oxiri KECHAGA qisqartiriladi — qarz baribir o'tgan
-   *    kunlarning fakti.
+   * ⛔ Oyna `debtWindow` da (`period.ts`): «Eng katta qarzdorlar» grafigi
+   *    AYNI kalit bilan so'raydi va bir javobdan chiziladi. Oxiri hech
+   *    qachon bugun emas — sabab o'sha funksiyaning izohida.
    */
-  const debtorsTo = day === todayIso ? shiftIsoDay(day, -1) : day;
-  const debtors = useReceivablesReport({ from: windowFrom, to: debtorsTo });
+  const debtors = useReceivablesReport(debtWindow(period, todayIso));
   const occupancy = useOccupancyDay(day, todayIso);
   const accuracy = useAccuracyReport({ from: windowFrom, to: day });
   const shifts = useShiftReport(day);

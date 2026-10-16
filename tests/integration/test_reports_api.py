@@ -57,6 +57,7 @@ from fixtures.billing_domain import (
     TARIFF_SOUM,
     BillingDomainSeed,
     add_daily_charge,
+    add_payment,
     billing_domain_before_day_close,
 )
 from fixtures.market_domain import MarketDomainSeed
@@ -65,7 +66,7 @@ from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
 from fixtures.snapshot_domain import snapshot_rows
 from fixtures.two_markets import SEED_PASSWORD, TwoMarketSeed
-from sbozor_core.enums import AuditAction
+from sbozor_core.enums import AuditAction, PaymentKind, PaymentMethod, ReversalReason
 from sbozor_core.timeutil import business_today
 
 if TYPE_CHECKING:
@@ -86,6 +87,7 @@ REVENUE_URL = "/api/v1/reports/revenue"
 DEBTORS_URL = "/api/v1/reports/debtors"
 VENDOR_HISTORY_URL = "/api/v1/reports/vendor-history"
 ANOMALIES_URL = "/api/v1/reports/anomalies"
+LIVE_URL = "/api/v1/reports/live"
 
 REPORT_URLS = (REVENUE_URL, DEBTORS_URL, ANOMALIES_URL)
 REPORT_IDS = ("revenue", "debtors", "anomalies")
@@ -1028,6 +1030,66 @@ async def test_the_revenue_row_carries_the_server_computed_difference(
     assert charged_day["diff_soum"] == -TARIFF_SOUM, charged_day
     assert payload["total_charged_soum"] == TARIFF_SOUM, payload
     assert payload["total_collected_soum"] == 0, payload
+
+
+async def test_the_live_revenue_splits_the_money_by_payment_method(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    reports: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """«To'lov turlari» (261016) — naqd va terminal SERVERDA ajratiladi.
+
+    ⛔ STORNO O'Z TURIDAN AYRILADI: bekor qilingan terminal to'lovi naqd
+       ulushiga tegmaydi, ikki qism yig'indisi esa `total_collected_soum`
+       bilan AYNAN teng — panel bir ekranda ikki xil tushum ko'rsatmaydi.
+
+    ⚠ DAVR — BUGUN: `payments.business_date` `created_at` dan generated
+      ustun, ya'ni seed qilingan to'lov HAR DOIM bugunga tushadi va `/live`
+      bugunni qamraydi (`/revenue` esa qamramaydi — `_seed_unpaid_charge`
+      docstringi).
+    """
+    today = business_today()
+    market_a = reports.billing.market_a
+
+    def pay(
+        stall_index: int,
+        method: PaymentMethod,
+        *,
+        reverses: UUID | None = None,
+    ) -> UUID:
+        return add_payment(
+            sync_owner_conn,
+            market_id=market_a.market_id,
+            stall_id=reports.stall_ids[stall_index],
+            vendor_id=market_a.vendor_id,
+            cashier_id=market_a.cashier_id,
+            shift_id=market_a.open_shift_id,
+            method=method.value,
+            kind=(PaymentKind.PAYMENT if reverses is None else PaymentKind.REVERSAL).value,
+            reverses_payment_id=reverses,
+            reversal_reason=None if reverses is None else ReversalReason.WRONG_STALL.value,
+        )
+
+    pay(0, PaymentMethod.CASH)
+    pay(1, PaymentMethod.TERMINAL)
+    wrong = pay(2, PaymentMethod.TERMINAL)
+    pay(2, PaymentMethod.TERMINAL, reverses=wrong)
+
+    response = await api_client.get(
+        LIVE_URL,
+        params={"from": today.isoformat(), "to": today.isoformat()},
+        headers=director_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["collected_cash_soum"] == TARIFF_SOUM, payload
+    assert payload["collected_terminal_soum"] == TARIFF_SOUM, payload
+    assert (
+        payload["collected_cash_soum"] + payload["collected_terminal_soum"]
+        == payload["total_collected_soum"]
+    ), payload
 
 
 # ===========================================================================

@@ -21,7 +21,11 @@ import type { Period } from "@/components/director/period";
 import { includesToday, periodRange } from "@/components/director/period";
 import { PeriodPicker } from "@/components/director/period-picker";
 import { AuditSheet } from "@/components/director/audit-sheet";
+import { CaptureWeek } from "@/components/director/capture-week";
+import { PaymentMix } from "@/components/director/payment-mix";
 import { RevenueTrend } from "@/components/director/revenue-trend";
+import { StallDayCard } from "@/components/director/stall-day-card";
+import { TopDebtors } from "@/components/director/top-debtors";
 import { DebtorsReport } from "@/components/reports/debtors-report";
 import { RevenueReport } from "@/components/reports/revenue-report";
 import { SixTiles } from "@/components/director/six-tiles";
@@ -187,10 +191,38 @@ export function DirectorPanel({
           <SixTiles period={period} />
 
           {/*
-           * ⛔ TREND KATAKLARDAN KEYIN — dizayn tartibi. Kataklar «bugun
-           *    qanday» savoliga javob beradi, trend esa «qanday ketyapti».
+           * ⛔ GRAFIKLAR KATAKLARDAN KEYIN (261016, buyurtmachi maketi:
+           *    «direktor bittada nima bo'layotganini tushunsin»). Kataklar
+           *    «qancha» savoliga javob beradi, grafiklar esa «qanday
+           *    ketyapti, kimda qolyapti, qayerda to'xtadi».
+           *
+           * ⛔ Har karta O'Z DAVRINI sarlavhasida aytadi: tushum va to'lov
+           *    turlari tanlangan davrga, rastalar holati — bugunga, kamera
+           *    kadrlari — oxirgi 7 kunga tegishli.
            */}
-          <RevenueTrend />
+          {/*
+           * ⛔ IKKI QATOR, buyurtmachi maketining tuzilishi: yuqorida pul
+           *    dinamikasi (2/3) va uning yonida ikki kichik karta ustma-ust;
+           *    pastda «hozir bozorda» — rastalar va qarzdorlar teng yarmida.
+           *    Kichik karta yolg'iz tursa qatorning balandligida bo'sh joy
+           *    qolardi (brauzerda ko'rildi).
+           */}
+          <section aria-label={t("director.chartsLabel")} className="dir-charts">
+            <div className="dir-charts-main">
+              <RevenueTrend />
+              <div className="dir-chart-stack">
+                <PaymentMix period={period} />
+                <CaptureWeek />
+              </div>
+            </div>
+            <div className="dir-charts-pair">
+              <StallDayCard />
+              <TopDebtors
+                onShowAll={() => setActiveTab("vendor")}
+                period={period}
+              />
+            </div>
+          </section>
         </>
       ) : activeTab === "reports" ? (
         <RevenueReport />

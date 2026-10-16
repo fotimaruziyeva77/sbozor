@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   useFormatter,
   useLocale,
@@ -8,101 +8,71 @@ import {
   useTimeZone,
   useTranslations,
 } from "next-intl";
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { TooltipContentProps } from "recharts";
 
+import { compactSoum, niceMax } from "@/components/director/chart-data";
+import type { CompactUnits } from "@/components/director/chart-data";
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartTooltipBox,
+} from "@/components/ui/chart";
+import type { ChartConfig } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBusinessDay } from "@/lib/format-day";
-import { formatSoum, groupDigits } from "@/lib/format-number";
+import { formatSoum } from "@/lib/format-number";
 import { useRevenueReport } from "@/lib/report-queries";
 
 /*
  * =============================================================================
- * TUSHUM TRENDI — `Sbozor Direktor.dc.html` ning grafik kartasi.
+ * TUSHUM DINAMIKASI — Recharts maydon grafigi (261016, buyurtmachi:
+ * «chartslar ishlat, direktor bittada nima bo'layotganini tushunsin»).
  *
- * Manba MCP orqali o'qildi (claude.ai/design `7bb95baa…`, 2026-08-18).
- * Geometriya dizayndan AYNAN: viewBox 1000x240, chap chegara 128, yuqori
- * 16, past 44, o'ng 14; to'rt to'r chizig'i (max*k/3), max = eng katta
- * qiymatning 1.1 barobari.
+ * ⛔⛔ IKKI SERIYA, BITTA O'Q: «Yig'ilgan» (aksent maydon) va «Hisoblangan»
+ *     (kulrang chiziq). Ular bir xil birlikda (so'm) va bitta o'qda —
+ *     ikki o'qli grafik ikki seriya orasida mavjud bo'lmagan bog'liqlik
+ *     yasardi. Urg'u bitta: yig'ilgan pul; hisoblangan patta — uning
+ *     KONTEKSTI, shuning uchun kulrang.
  *
  * ⛔⛔ TUGAMAGAN DAVR UZUQ CHIZIQ BILAN — DIZAYNNING QAT'IY BANDI.
+ *     Oxirgi hafta/oy tugamagan bo'lsa u asosiy chiziqqa KIRMAYDI —
+ *     alohida uzuq chiziq bilan ulanadi. Aks holda avgustning 18-kunidagi
+ *     qiymat butun avgust deb o'qilardi va grafik har oy boshida «qulash»
+ *     ko'rsatardi.
  *
- * Dizayn 12-bo'limi «to'liq bo'lmagan davr uchun foiz» ni TAQIQLAYDI.
- * Grafikda bu shunday bajariladi: oxirgi nuqta tugamagan bo'lsa u
- * ASOSIY chiziqqa KIRMAYDI — alohida uzuq chiziq bilan ulanadi, nuqtasi
- * bo'sh (ichi fon rangida) va o'qdagi yorlig'i ogohlantirish rangida.
- *
- * ⛔ Nega bu muhim: to'liq chiziq davom etsa, avgustning 18-kunidagi
- *    qiymat butun avgust deb o'qilardi va grafik har oy boshida
- *    «qulash» ko'rsatardi.
- *
- * -----------------------------------------------------------------------
  * ⛔ SERVER 366 KUNDAN KO'PINI BERMAYDI (`report_max_period_days`).
- *    Shuning uchun «12 oy» oralig'i 365 kunlik so'rov bilan olinadi va
- *    oylarga KLIENTDA yig'iladi. Bu ikkinchi haqiqat manbai EMAS:
- *    yig'indi serverning kunlik qatorlaridan chiqadi, qayta
- *    hisoblanmaydi.
+ *    «12 oy» oralig'i 365 kunlik so'rov bilan olinadi va oylarga KLIENTDA
+ *    yig'iladi. Bu ikkinchi haqiqat manbai EMAS: yig'indi serverning
+ *    kunlik qatorlaridan chiqadi, qayta hisoblanmaydi.
+ *
+ * ⛔ Server davrning HAR kuni uchun qator beradi (to'lovsiz kun ham,
+ *    `report_repo._REVENUE_BY_DAY` — `generate_series`): nol — natija,
+ *    grafikdagi «chuqurlik» haqiqiy.
  * =============================================================================
  */
 
-/** Dizayn geometriyasi — o'zgartirilmaydi. */
-const VIEW_W = 1000;
-const VIEW_H = 240;
-const PAD_L = 128;
-const PAD_T = 16;
-const PAD_B = 44;
-const PAD_R = 14;
-
-/** To'r chiziqlari soni (dizayn: k = 0..3). */
+/** To'r chiziqlari soni (0 dan tashqari). */
 const GRID_LINES = 3;
 
-/**
- * Shiftni «chiroyli qadam» ga keltiradi: `max / lines` BUTUN bo'ladi.
- *
- * ⛔ Qadam faqat 1 · 2 · 2.5 · 5 · 10 ×10ⁿ dan tanlanadi — odam
- *    o'qiydigan qadamlar shular. 3.7 yoki 6 400 lik qadam texnik
- *    jihatdan to'g'ri, lekin o'qda hech kim uni o'qiy olmaydi.
- *
- * ⛔ Bo'sh ma'lumotda (`peak <= 0`) shift `lines` ga teng bo'ladi,
- *    ya'ni o'q 0 · 1 · 2 · 3 bo'lib chiqadi va nolga bo'linish yo'q.
- */
-export function niceMax(peak: number, lines: number): number {
-  if (!Number.isFinite(peak) || peak <= 0) return lines;
-
-  const rough = peak / lines;
-  const magnitude = 10 ** Math.floor(Math.log10(rough));
-  const normalized = rough / magnitude;
-
-  /*
-   * ⛔ ZINAPOYA {1,2,3,4,5,6,8,10} — {1,2,5,10} DAN QAYTA TANLANDI.
-   *
-   *    Dag'al zinapoyada 16 000 lik ustun uchun qadam 10 000 chiqib,
-   *    shift 30 000 bo'lardi — diagrammaning YARMI bo'sh qolardi.
-   *    3 va 6 qo'shilgach, o'sha ustun 18 000 shiftni oladi va
-   *    balandlikning 89% i ishlatiladi.
-   *
-   *    Zinapoyada 2.5 va 7.5 YO'Q: kichik oraliqda (magnitude = 1)
-   *    ular butun bo'lmagan qadam berardi va o'qda «2.5 so'm» degan
-   *    ma'nosiz yorliq paydo bo'lardi. Pul BUTUN so'mda o'lchanadi.
-   */
-  const ladder = [1, 2, 3, 4, 5, 6, 8, 10];
-  const chosen = ladder.find((value) => normalized <= value) ?? 10;
-
-  /*
-   * ⛔ Qadam kamida 1: juda kichik ustunda (`peak` 1–3) magnitude 0.1
-   *    bo'lib, qadam 0.4 chiqardi va o'qda kasr son yozilardi.
-   */
-  const step = Math.max(1, Math.round(chosen * magnitude));
-
-  return step * lines;
-}
+/* `niceMax` — `chart-data.ts` da (kamera grafigi ham ishlatadi); trend testi shu yerdan o'qiydi. */
+export { niceMax };
 
 type RangeId = "7" | "30" | "12h" | "12o";
 
-/* Yorliqlar i18n KALIT bo'lib qoldi (2026-08-26 tarjima tuzatishi):
-   7/30 kun direktor davr filtri bilan BIR kalitni ishlatadi. */
+/* Yorliqlar i18n KALIT: 7/30 kun direktor davr filtri bilan BIR kalit. */
 const RANGES = [
   { id: "7", labelKey: "director.periodWeek", days: 7 },
   { id: "30", labelKey: "director.periodMonth", days: 30 },
@@ -110,13 +80,22 @@ const RANGES = [
   { id: "12o", labelKey: "director.range12m", days: 365 },
 ] as const satisfies readonly { id: RangeId; labelKey: string; days: number }[];
 
-type Point = {
+export type TrendPoint = {
+  /** O'qdagi qisqa yorliq. */
   label: string;
-  full: string;
-  value: number;
-  /** Davr tugamagan — uzuq chiziq va bo'sh nuqta. */
+  /** Nuqtaning birinchi va oxirgi kuni (kunlik kesimda bir xil). */
+  from: string;
+  to: string;
+  collected: number;
+  charged: number;
+  /** Davr tugamagan — uzuq chiziq. */
   partial: boolean;
 };
+
+const SERIES = {
+  collected: { color: "var(--color-accent)" },
+  charged: { color: "var(--color-border-ui)" },
+} as const;
 
 export function RevenueTrend() {
   const t = useTranslations();
@@ -134,15 +113,11 @@ export function RevenueTrend() {
   const from = shiftIsoDay(to, -(days - 1));
 
   const report = useRevenueReport({ from, to });
-
-  const points = buildPoints(report.data?.rows ?? [], range, format, locale, {
-    week: t("director.trendUnitWeek"),
-    month: t("director.trendUnitMonth"),
-  });
+  const points = buildTrendPoints(report.data?.rows ?? [], range);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row flex-wrap items-end justify-between gap-4">
+    <Card className="dir-chart-card dir-chart-wide hover:translate-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="dir-trend-title">{t("director.trendTitle")}</h2>
           <p className="dir-tile-sub">
@@ -156,8 +131,7 @@ export function RevenueTrend() {
         </div>
 
         {/*
-         * ⛔ Oraliq tugmalari — dizaynda `secondary`/`ghost` juftligi va
-         *    `aria-pressed`. Tanlanganini FAQAT rang bilan bildirmaydi:
+         * ⛔ Tanlangan oraliq FAQAT rang bilan bildirilmaydi:
          *    `aria-pressed` skrinriderga ham aytadi.
          */}
         <div className="flex flex-wrap gap-1.5">
@@ -175,7 +149,7 @@ export function RevenueTrend() {
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="flex flex-1 flex-col">
         {report.isPending ? (
           <Skeleton className="dir-trend-skeleton" />
         ) : report.isError ? (
@@ -202,12 +176,45 @@ export function RevenueTrend() {
             />
           </div>
         ) : (
-          <TrendChart
-            format={format}
-            key={range}
-            locale={locale}
-            points={points}
-          />
+          <div className="flex flex-1 flex-col gap-3">
+            {/*
+             * ⛔ LEGENDA IKKI SERIYADA MAJBURIY va unda davr YIG'INDISI:
+             *    yig'indi SERVERDAN (`total_*_soum`), nuqtalarni qo'shib
+             *    chiqarilmaydi.
+             */}
+            <ChartLegend
+              items={[
+                {
+                  key: "collected",
+                  kind: "rect",
+                  color: SERIES.collected.color,
+                  label: t("director.collected"),
+                  value: formatSoum(
+                    format,
+                    report.data?.total_collected_soum ?? 0,
+                    locale,
+                  ),
+                },
+                {
+                  key: "charged",
+                  kind: "line",
+                  color: SERIES.charged.color,
+                  label: t("director.charged"),
+                  value: formatSoum(
+                    format,
+                    report.data?.total_charged_soum ?? 0,
+                    locale,
+                  ),
+                },
+              ]}
+            />
+            <TrendChart key={range} points={points} />
+            <p className="dir-tile-note">
+              {points.some((point) => point.partial)
+                ? t("director.trendFootPartial")
+                : t("director.trendFootFull")}
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -218,30 +225,41 @@ export function RevenueTrend() {
 /* NUQTALAR — serverning KUNLIK qatorlaridan                                  */
 /* -------------------------------------------------------------------------- */
 
-type RevenueRow = { business_date: string; collected_soum: number };
+type RevenueRow = {
+  business_date: string;
+  collected_soum: number;
+  charged_soum: number;
+};
 
-function buildPoints(
+/** `2026-10-16` -> `16.10`. */
+function dayMonth(iso: string): string {
+  return `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+}
+
+export function buildTrendPoints(
   rows: readonly RevenueRow[],
   range: RangeId,
-  format: ReturnType<typeof useFormatter>,
-  locale: string,
-  /* Birlik so'zlari TARJIMA bo'lib keladi — bu funksiya hook chaqira olmaydi. */
-  units: { week: string; month: string },
-): Point[] {
+): TrendPoint[] {
   if (rows.length === 0) return [];
 
   if (range === "7" || range === "30") {
     /* Kunlik kesim — server qatorlari BEVOSITA nuqta bo'ladi. */
     return rows.map((row) => ({
-      label: row.business_date.slice(8),
-      full: formatBusinessDay(format, row.business_date, locale),
-      value: row.collected_soum,
+      label: dayMonth(row.business_date),
+      from: row.business_date,
+      to: row.business_date,
+      collected: row.collected_soum,
+      charged: row.charged_soum,
       partial: false,
     }));
   }
 
-  if (range === "12h") return bucketBy(rows, isoWeekKey, units.week);
-  return bucketBy(rows, (iso) => iso.slice(0, 7), units.month);
+  if (range === "12h") return bucketBy(rows, isoWeekKey, (from) => dayMonth(from));
+  return bucketBy(
+    rows,
+    (iso) => iso.slice(0, 7),
+    (from) => `${from.slice(5, 7)}.${from.slice(0, 4)}`,
+  );
 }
 
 /**
@@ -254,23 +272,43 @@ function buildPoints(
 function bucketBy(
   rows: readonly RevenueRow[],
   keyOf: (iso: string) => string,
-  unit: string,
-): Point[] {
+  labelOf: (from: string) => string,
+): TrendPoint[] {
   const order: string[] = [];
-  const sums = new Map<string, number>();
+  const buckets = new Map<
+    string,
+    { from: string; to: string; collected: number; charged: number }
+  >();
 
   for (const row of rows) {
     const key = keyOf(row.business_date);
-    if (!sums.has(key)) order.push(key);
-    sums.set(key, (sums.get(key) ?? 0) + row.collected_soum);
+    const bucket = buckets.get(key);
+    if (bucket === undefined) {
+      order.push(key);
+      buckets.set(key, {
+        from: row.business_date,
+        to: row.business_date,
+        collected: row.collected_soum,
+        charged: row.charged_soum,
+      });
+    } else {
+      bucket.to = row.business_date;
+      bucket.collected += row.collected_soum;
+      bucket.charged += row.charged_soum;
+    }
   }
 
-  return order.map((key, index) => ({
-    label: key.slice(-2),
-    full: `${key} · ${unit}`,
-    value: sums.get(key) ?? 0,
-    partial: index === order.length - 1,
-  }));
+  return order.map((key, index) => {
+    const bucket = buckets.get(key);
+    return {
+      label: labelOf(bucket?.from ?? key),
+      from: bucket?.from ?? key,
+      to: bucket?.to ?? key,
+      collected: bucket?.collected ?? 0,
+      charged: bucket?.charged ?? 0,
+      partial: index === order.length - 1,
+    };
+  });
 }
 
 /** ISO hafta kaliti — `2026-W33` shaklida. */
@@ -285,214 +323,220 @@ function isoWeekKey(iso: string): string {
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
+/**
+ * Chiziladigan qatorlar: to'liq qism va tugamagan «dum».
+ *
+ * ⛔ Dum OXIRGI IKKI nuqtadan iborat — u to'liq chiziqning uchidan
+ *    tugamagan nuqtaga ulanadi. To'liq qismda tugamagan nuqta `null`:
+ *    Recharts `null` da chiziqni uzadi.
+ */
+export function trendSeries(points: readonly TrendPoint[]) {
+  const last = points.length - 1;
+  const hasTail = last >= 1 && points[last]?.partial === true;
+
+  return points.map((point, index) => {
+    const inSolid = !hasTail || index < last;
+    const inTail = hasTail && index >= last - 1;
+    return {
+      ...point,
+      collectedSolid: inSolid ? point.collected : null,
+      chargedSolid: inSolid ? point.charged : null,
+      collectedTail: inTail ? point.collected : null,
+      chargedTail: inTail ? point.charged : null,
+    };
+  });
+}
+
 /* -------------------------------------------------------------------------- */
-/* SVG — dizayn geometriyasining AYNAN o'zi                                   */
+/* GRAFIK                                                                     */
 /* -------------------------------------------------------------------------- */
 
-function TrendChart({
-  points,
-  format,
-  locale,
-}: {
-  points: Point[];
-  format: ReturnType<typeof useFormatter>;
-  locale: string;
-}) {
+function TrendChart({ points }: { points: readonly TrendPoint[] }) {
   const t = useTranslations();
+  const format = useFormatter();
+  const locale = useLocale();
+  /* Gradient identifikatori — bir sahifada ikki grafik bo'lsa TO'QNASHMASIN. */
+  const gradientId = `trend-fill-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+
+  const units: CompactUnits = {
+    thousand: t("director.unitThousand"),
+    million: t("director.unitMillion"),
+    billion: t("director.unitBillion"),
+  };
+
   /*
-   * 2026-08-25 (buyurtmachi): «nuqtaga olib borganda nima ko'ramiz» —
-   * endi KO'RINADIGAN tooltip: sana + aniq summa. Brauzerning sekin
-   * `<title>` i a11y uchun qoladi, vizual javob esa shu holatdan.
+   * ⛔ O'Q YOLG'ON GAPIRMAYDI: ticklar «chiroyli qadam» dan va har biri
+   *    o'z chizig'ining HAQIQIY qiymati (`niceMax` testi).
    */
-  const [hover, setHover] = useState<number | null>(null);
-  /*
-   * ⛔⛔ O'Q YOLG'ON GAPIRMASLIGI KERAK (260819, ekranga qarab).
-   *
-   *     Avval `max` xom qiymatning 1.1 baravari edi, yorliq esa
-   *     `Math.round(value / 10_000) * 10_000` bilan yozilardi — ya'ni
-   *     HAR CHIZIQ 10 000 ga yaxlitlanardi. Natijada 16 000 lik
-   *     ustunda o'q shunday chiqdi:
-   *
-   *         20 000 · 10 000 · 10 000 · 0
-   *
-   *     Ikki xil BALANDLIKDAGI chiziq bir xil son bilan belgilangan.
-   *     Bu bezak nuqsoni emas — diagramma o'qi soxta bo'lib qoldi,
-   *     va u hokimga ko'rsatiladigan ekranda.
-   *
-   * ⛔ TO'G'RI YECHIM — «CHIROYLI QADAM». Chiziq soniga bo'linganda
-   *    BUTUN chiqadigan qadam tanlanadi (1 · 2 · 2.5 · 5 · 10 ×10ⁿ)
-   *    va shift shu qadamdan hosil qilinadi. Shunda har yorliq o'z
-   *    chizig'ining HAQIQIY qiymati bo'ladi va yaxlitlash umuman
-   *    kerak bo'lmaydi.
-   */
-  const max = niceMax(
-    Math.max(0, ...points.map((point) => point.value)),
-    GRID_LINES,
+  const peak = Math.max(
+    0,
+    ...points.map((point) => Math.max(point.collected, point.charged)),
   );
-  const count = points.length;
+  const max = niceMax(peak, GRID_LINES);
+  const ticks = Array.from(
+    { length: GRID_LINES + 1 },
+    (_, k) => (max * k) / GRID_LINES,
+  );
 
-  const x = (index: number): number =>
-    PAD_L +
-    (count === 1 ? 0 : (index * (VIEW_W - PAD_L - PAD_R)) / (count - 1));
-  const y = (value: number): number =>
-    PAD_T + (1 - value / max) * (VIEW_H - PAD_T - PAD_B);
+  const config: ChartConfig = {
+    collected: { label: t("director.collected"), color: SERIES.collected.color },
+    charged: { label: t("director.charged"), color: SERIES.charged.color },
+  };
 
-  /* ⛔ Yorliq zichligi dizayndan: 7 kun -> har biri, 30 kun -> har 5-si. */
-  const every = count > 20 ? 5 : count > 12 ? 2 : 1;
+  const data = trendSeries(points);
 
-  const solid = points.filter((point) => !point.partial);
-  const line = solid
-    .map(
-      (point, index) =>
-        `${index === 0 ? "M" : "L"}${x(index).toFixed(1)} ${y(point.value).toFixed(1)}`,
-    )
-    .join(" ");
+  const titleOf = (point: TrendPoint): string =>
+    point.from === point.to
+      ? formatBusinessDay(format, point.from, locale)
+      : `${formatBusinessDay(format, point.from, locale)} — ${formatBusinessDay(format, point.to, locale)}`;
+
+  const renderTooltip = ({ active, payload }: TooltipContentProps) => {
+    const point = payload?.[0]?.payload as TrendPoint | undefined;
+    if (!active || point === undefined) return null;
+    return (
+      <ChartTooltipBox
+        note={point.partial ? t("director.trendPartialTip") : undefined}
+        rows={[
+          {
+            key: "collected",
+            label: t("director.collected"),
+            value: formatSoum(format, point.collected, locale),
+            color: SERIES.collected.color,
+            kind: point.partial ? "dashed" : "line",
+          },
+          {
+            key: "charged",
+            label: t("director.charged"),
+            value: formatSoum(format, point.charged, locale),
+            color: SERIES.charged.color,
+            kind: point.partial ? "dashed" : "line",
+          },
+        ]}
+        title={titleOf(point)}
+      />
+    );
+  };
 
   return (
-    <div className="dir-trend-wrap">
-      {hover !== null && points[hover] ? (
-        <div
-          aria-hidden="true"
-          className="dir-trend-tip"
-          style={{
-            left: `${(x(hover) / VIEW_W) * 100}%`,
-            top: `${(y(points[hover].value) / VIEW_H) * 100}%`,
-          }}
-        >
-          <span className="dir-trend-tip-date">
-            {points[hover].full}
-            {points[hover].partial
-              ? ` · ${t("director.trendPartialTip")}`
-              : ""}
-          </span>
-          <span className="dir-trend-tip-sum">
-            {formatSoum(format, points[hover].value, locale)}
-          </span>
-        </div>
-      ) : null}
-      <svg
-        aria-label={t("director.trendTitle")}
-        className="dir-trend-svg"
-        role="img"
-        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-      >
-        {/* To'r chiziqlari va ularning yorliqlari. */}
-        {Array.from({ length: GRID_LINES + 1 }, (_, k) => {
-          const value = (max * k) / GRID_LINES;
-          const gy = y(value);
-          return (
-            <g key={k}>
-              <line
-                stroke="var(--color-border)"
-                strokeWidth={1}
-                x1={PAD_L}
-                x2={VIEW_W - PAD_R}
-                y1={gy}
-                y2={gy}
-              />
-              <text
-                className="dir-trend-grid-label"
-                textAnchor="end"
-                x={PAD_L - 12}
-                y={gy + 4}
-              >
-                {groupDigits(value)}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Asosiy chiziq — chizilib chiqadi (`pathLength=1` + dirDraw). */}
-        <path
-          className="dir-trend-line"
-          d={line}
-          fill="none"
-          pathLength={1}
-          stroke="var(--color-accent)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2.5}
-        />
-
-        {/*
-         * ⛔ TUGAMAGAN DAVRGA ULANISH — ALOHIDA UZUQ CHIZIQ. Asosiy
-         *    chiziqqa qo'shilsa, u to'liq davr bilan bir xil ko'rinardi.
-         */}
-        {count > solid.length && solid.length > 0 ? (
-          <path
-            className="dir-trend-tail"
-            d={`M${x(solid.length - 1).toFixed(1)} ${y(points[solid.length - 1].value).toFixed(1)} L${x(solid.length).toFixed(1)} ${y(points[solid.length].value).toFixed(1)}`}
-            fill="none"
-            stroke="var(--color-text-muted)"
-            strokeDasharray="6 6"
-            strokeWidth={2.5}
+    <>
+      <ChartContainer className="dir-chart-plot" config={config}>
+        <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="var(--chart-collected)" stopOpacity={0.22} />
+              <stop offset="100%" stopColor="var(--chart-collected)" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="var(--color-border)" vertical={false} />
+          <XAxis
+            axisLine={false}
+            dataKey="label"
+            minTickGap={18}
+            tickLine={false}
+            tickMargin={8}
           />
-        ) : null}
+          <YAxis
+            axisLine={false}
+            domain={[0, max]}
+            tickFormatter={(value: number) => compactSoum(value, units)}
+            tickLine={false}
+            ticks={ticks}
+            width={72}
+          />
+          <Tooltip
+            content={renderTooltip}
+            cursor={{ stroke: "var(--color-border-ui)", strokeWidth: 1 }}
+            isAnimationActive={false}
+          />
 
-        {points.map((point, index) => (
-          <g key={point.full}>
-            {/* Ko'rinmas keng nishon — kichik nuqtaga «tegish» oson. */}
-            <circle
-              className="dir-trend-hit"
-              cx={x(index)}
-              cy={y(point.value)}
-              fill="transparent"
-              onMouseEnter={() => setHover(index)}
-              onMouseLeave={() => setHover(null)}
-              r={14}
-            />
-            <circle
-              className="dir-trend-dot"
-              cx={x(index)}
-              cy={y(point.value)}
-              fill={point.partial ? "var(--color-bg)" : "var(--color-accent)"}
-              r={count > 14 ? 2.6 : 4}
-              stroke={point.partial ? "var(--color-text-muted)" : "none"}
-              strokeWidth={1.5}
-              style={{ animationDelay: `${Math.round((index / count) * 600)}ms` }}
-            >
-              {/*
-               * ⛔ `<title>` — nuqtaning ANIQ qiymati. Grafik o'zi
-               *    taqribiy, aniq son esa hover/fokusda ochiladi va u
-               *    skrinriderga ham yetadi.
-               */}
-              <title>
-                {point.full} — {formatSoum(format, point.value, locale)}
-                {point.partial ? ` (${t("director.trendPartialTip")})` : ""}
-              </title>
-            </circle>
-            {index % every === 0 || index === count - 1 ? (
-              <text
-                className={
-                  point.partial ? "dir-trend-axis-partial" : "dir-trend-axis"
-                }
-                textAnchor="middle"
-                x={x(index)}
-                y={VIEW_H - 22}
-              >
-                {point.label}
-              </text>
-            ) : null}
-          </g>
-        ))}
+          {/* Kontekst seriyasi OLDIN — urg'u seriyasi uning ustida chiziladi. */}
+          <Line
+            activeDot={{ r: 4, fill: "var(--chart-charged)", stroke: "var(--color-surface)", strokeWidth: 2 }}
+            className="dir-trend-line"
+            connectNulls={false}
+            dataKey="chargedSolid"
+            dot={false}
+            isAnimationActive={false}
+            pathLength={1}
+            stroke="var(--chart-charged)"
+            strokeWidth={2}
+            type="monotone"
+          />
+          <Line
+            activeDot={false}
+            connectNulls={false}
+            dataKey="chargedTail"
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--chart-charged)"
+            strokeDasharray="5 5"
+            strokeWidth={2}
+            type="monotone"
+          />
+          {/*
+           * ⛔ Chiziladigan chiziq — FAQAT to'liq qism (`.dir-trend-line`,
+           *    `dirDraw`). Recharts'ning o'z JS animatsiyasi o'chiq: u
+           *    reduced-motion sozlamasini bilmaydi, CSS kadri esa biladi.
+           */}
+          <Area
+            activeDot={{ r: 4, fill: "var(--chart-collected)", stroke: "var(--color-surface)", strokeWidth: 2 }}
+            className="dir-trend-line"
+            connectNulls={false}
+            dataKey="collectedSolid"
+            fill={`url(#${gradientId})`}
+            isAnimationActive={false}
+            pathLength={1}
+            stroke="var(--chart-collected)"
+            strokeWidth={2}
+            type="monotone"
+          />
+          <Line
+            activeDot={false}
+            connectNulls={false}
+            dataKey="collectedTail"
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--chart-collected)"
+            strokeDasharray="5 5"
+            strokeWidth={2}
+            type="monotone"
+          />
+        </ComposedChart>
+      </ChartContainer>
 
-        <text
-          className="dir-trend-axis"
-          textAnchor="end"
-          x={PAD_L - 12}
-          y={VIEW_H - 22}
-        >
-          {t("reports.amountUnit")}
-        </text>
-      </svg>
-
-      <div className="dir-trend-foot">
-        <span className="dir-tile-note">
-          {points.some((point) => point.partial)
-            ? t("director.trendFootPartial")
-            : t("director.trendFootFull")}
-        </span>
+      {/*
+       * ⛔ JADVAL — GRAFIKNING EGIZAGI: tooltip qiymatni yolg'iz
+       *    ko'rsatadigan joy bo'lmasligi kerak. Skrinrider shu jadvalni
+       *    o'qiydi.
+       *
+       * ⛔ `sr-only` O'RAMDA, JADVALNING O'ZIDA EMAS: jadval `width: 1px` ni
+       *    tan olmaydi va matn kengligiga cho'zilib sahifada gorizontal
+       *    aylantirish paydo qilardi (brauzerda o'lchandi).
+       */}
+      <div className="sr-only">
+        <table>
+          <caption>{t("director.trendTitle")}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("director.chartPeriodColumn")}</th>
+              <th scope="col">{t("director.collected")}</th>
+              <th scope="col">{t("director.charged")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {points.map((point) => (
+              <tr key={point.from}>
+                <th scope="row">
+                  {titleOf(point)}
+                  {point.partial ? ` (${t("director.trendPartialTip")})` : ""}
+                </th>
+                <td>{formatSoum(format, point.collected, locale)}</td>
+                <td>{formatSoum(format, point.charged, locale)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </div>
+    </>
   );
 }

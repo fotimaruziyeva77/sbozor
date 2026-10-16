@@ -1516,6 +1516,7 @@ def add_payment(
     reverses_payment_id: UUID | None = None,
     reversal_reason: str | None = None,
     override_reason: str | None = None,
+    method: str = PaymentMethod.CASH.value,
 ) -> UUID:
     """Bitta `payments` qatori — STORNO ham shu funksiya orqali yoziladi.
 
@@ -1541,7 +1542,7 @@ def add_payment(
             amount_soum,
             quote_soum,
             kind,
-            PaymentMethod.CASH.value,
+            method,
             None if reverses_payment_id is None else str(reverses_payment_id),
             reversal_reason,
             override_reason,

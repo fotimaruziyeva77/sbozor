@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api-client";
@@ -287,6 +287,36 @@ export function useCaptureDay(
     refetchInterval: (query) =>
       capturePollInterval({ day, todayIso, rows: query.state.data?.rows }),
     refetchIntervalInBackground: false,
+  });
+}
+
+/**
+ * Bir NECHA kunning xulosasi — direktor panelining «Kamera kadrlari»
+ * grafigi uchun (261016).
+ *
+ * ⛔ KALIT VA SXEMA `useCaptureDay` BILAN AYNAN BIR XIL: kadr sahifasi
+ *    ochilganda o'sha kunlar keshdan olinadi va ikki ekran bir kun uchun
+ *    ikki xil son ko'rsatmaydi.
+ *
+ * ⚠ POLL YO'Q: panel — bir qarashda o'qiladigan xulosa. Kun ichidagi
+ *   jonli kuzatuv kadr sahifasining ishi (§6.8), bu yerda esa oynaga
+ *   qaytilganda yangilanish yetarli.
+ */
+export function useCaptureDays(
+  days: readonly string[],
+  options?: { enabled?: boolean },
+) {
+  const marketId = useMarketId();
+
+  return useQueries({
+    queries: days.map((day) => ({
+      queryKey: captureDayKey(marketId ?? "", day),
+      queryFn: () =>
+        apiFetch(`${CAPTURE_RUNS_PATH}?day=${encodeURIComponent(day)}`, {
+          schema: captureDaySchema,
+        }),
+      enabled: marketId !== null && (options?.enabled ?? true),
+    })),
   });
 }
 
