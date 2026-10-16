@@ -11,6 +11,7 @@ import { StallCategoryDialog } from "@/components/stalls/stall-category-dialog";
 import { StallDialog } from "@/components/stalls/stall-dialog";
 import { StallFiltersPanel } from "@/components/stalls/stall-filters";
 import { StallList } from "@/components/stalls/stall-list";
+import { StallsSummary } from "@/components/stalls/stalls-summary";
 import { Button } from "@/components/ui/button";
 import type { StallListItem } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
@@ -65,9 +66,13 @@ export default function StallsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {t("stalls.title")}
-        </h1>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {t("stalls.title")}
+          </h1>
+          {/* 261016: sahifa nima haqida — bir gap, oddiy tilda. */}
+          <p className="text-sm text-text-muted">{t("stalls.subtitle")}</p>
+        </div>
 
         {/* Huquq yo'q -> tugma RENDER QILINMAYDI (yashirilmaydi). */}
         {canManage ? (
@@ -83,6 +88,11 @@ export default function StallsPage() {
           <BrandLoader />
         }
       >
+        <StallsSummary />
+        {/* Faqat ko'ruvchi (direktor) — tugmalar nega yo'qligi AYTILADI. */}
+        {canManage ? null : (
+          <p className="text-sm text-text-muted">{t("common.readOnlyNote")}</p>
+        )}
         <StallFiltersPanel onOpenStall={openStall} />
         <StallList
           canManage={canManage}

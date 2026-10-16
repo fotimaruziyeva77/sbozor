@@ -73,8 +73,12 @@ export function VarianceList({ day }: { day: string }) {
      * ⛔ G-25 (b): atribut eng tashqi elementda va HAR holatda — bo'sh
      *    natija ham NATIJA.
      */
-    <div className="flex flex-col gap-3" data-billing-content="shifts">
-      <h2 className="text-sm font-semibold">{t("billing.shiftsTitle")}</h2>
+    <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-4 shadow-card sm:p-5" data-billing-content="shifts">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold">{t("billing.shiftsTitle")}</h2>
+        {/* 261016: «topshirdi», «qayd etilgan», «farq» qanday solishtirilishi. */}
+        <p className="text-sm text-text-muted">{t("billing.shiftsHint")}</p>
+      </div>
 
       {report.isPending ? (
         <div aria-busy="true" role="status">

@@ -7,6 +7,7 @@ import { BrandLoader } from "@/components/ui/brand-loader";
 import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { AnomalyList } from "@/components/billing/anomaly-list";
 import { ChargeList } from "@/components/billing/charge-list";
+import { BillingDaySummary } from "@/components/billing/day-summary";
 import { BillingDayPicker, useBillingDay } from "@/components/billing/day-picker";
 import { PendingSummary } from "@/components/billing/pending-summary";
 import { VarianceList } from "@/components/billing/variance-list";
@@ -91,9 +92,13 @@ export default function BillingPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {t("billing.title")}
-      </h1>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {t("billing.title")}
+        </h1>
+        {/* 261016: «tushunarsiz» — sahifa nimani ko'rsatishi bir jumlada. */}
+        <p className="text-sm text-text-muted">{t("billing.subtitle")}</p>
+      </div>
 
       <Suspense
         fallback={
@@ -119,6 +124,14 @@ function BillingWorkspace() {
       <section data-billing-block="day">
         <BillingDayPicker />
       </section>
+
+      {/*
+       * 261016: o'tgan kun XULOSASI — pastdagi bloklarning to'rtta javobi.
+       * ⛔ Blok EMAS (atributsiz): G-25 to'plamlari o'zgarmaydi. Bugun
+       *    chizilmaydi — kutilayotgan summa bilan yozilgan hisob bir
+       *    ekranda uchrashmaydi.
+       */}
+      {selection.isToday ? null : <BillingDaySummary day={selection.day} />}
 
       {/*
        * --- B: KUTILAYOTGAN PATTA — ⛔ FAQAT `day = bugun` ----------------

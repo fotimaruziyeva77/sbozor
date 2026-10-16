@@ -48,7 +48,7 @@ function LegendSwatch({
     <span
       aria-hidden="true"
       className={cn(
-        "relative inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-border-ui",
+        "relative inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-border-ui",
         className,
       )}
     >
@@ -89,21 +89,21 @@ export function StallMapLegend({
   const t = useTranslations();
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
-      <h2 className="text-sm font-semibold">{t("map.legendTitle")}</h2>
+    <div className="map-legend">
+      <h2 className="map-legend-title">{t("map.legendTitle")}</h2>
 
-      <ul className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-        <li className="flex items-center gap-2">
+      <ul className="map-legend-list">
+        <li className="map-legend-item">
           <LegendSwatch className={cn(TONE_STYLES.neutral, "border-solid")} />
           {t("map.legendActive")}
         </li>
 
-        <li className="flex items-center gap-2">
+        <li className="map-legend-item">
           <LegendSwatch className={cn(TONE_STYLES.neutral, "border-dashed")} />
           {t("map.legendNoVendor")}
         </li>
 
-        <li className="flex items-center gap-2">
+        <li className="map-legend-item">
           <LegendSwatch
             className={cn(TONE_STYLES.muted, "border-solid")}
             icon={INVENTORY_TONE_ICONS.muted}
@@ -111,7 +111,7 @@ export function StallMapLegend({
           {t("map.legendMaintenance")}
         </li>
 
-        <li className="flex items-center gap-2">
+        <li className="map-legend-item">
           <LegendSwatch
             className={cn(TONE_STYLES.off, "border-solid")}
             icon={INVENTORY_TONE_ICONS.off}
@@ -121,9 +121,9 @@ export function StallMapLegend({
       </ul>
 
       {showPaymentStates ? (
-        <ul className="flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-2 text-sm">
+        <ul className="map-legend-list map-legend-payment">
           {PAYMENT_LEGEND.map(({ tone, labelKey }) => (
-            <li className="flex items-center gap-2" key={tone}>
+            <li className="map-legend-item" key={tone}>
               <LegendSwatch
                 className={cn(TONE_STYLES[tone], "border-solid")}
                 icon={DAY_TONE_ICONS[tone]}
@@ -138,7 +138,7 @@ export function StallMapLegend({
            *   ADASHTIRILARDI. Namuna katagi ATAYIN inventar tonida —
            *   u aynan shu ko'rinishni ko'rsatadi.
            */}
-          <li className="flex items-center gap-2">
+          <li className="map-legend-item">
             <LegendSwatch className={cn(TONE_STYLES.neutral, "border-solid")} />
             {t("map.legendNoBilling")}
           </li>

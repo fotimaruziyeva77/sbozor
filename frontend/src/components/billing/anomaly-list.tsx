@@ -110,8 +110,12 @@ export function AnomalyList({ day }: { day: string }) {
 
   return (
     /* ⛔ G-25 (b): atribut eng tashqi elementda, HAR holatda. */
-    <div className="flex flex-col gap-3" data-billing-content="anomalies">
-      <h2 className="text-sm font-semibold">{t("billing.anomaliesTitle")}</h2>
+    <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-4 shadow-card sm:p-5" data-billing-content="anomalies">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold">{t("billing.anomaliesTitle")}</h2>
+        {/* 261016: uch tur nima ekani — atamani bilmagan direktor uchun. */}
+        <p className="text-sm text-text-muted">{t("billing.anomaliesHint")}</p>
+      </div>
 
       {anomalies.isPending ? (
         <div aria-busy="true" role="status">
@@ -135,12 +139,15 @@ export function AnomalyList({ day }: { day: string }) {
          *    yuradi, ya'ni tanlash bosqichi ham, «nolmaslarini
          *    ko'rsatish» sharti ham bu yerda YO'Q.
          */
-        <dl className="flex flex-wrap gap-x-6 gap-y-2" role="status">
+        <dl className="flex flex-wrap gap-2" role="status">
           {ANOMALY_KINDS.map((kind) => {
             const view = KIND_VIEW[kind];
             return (
-              <div className="flex items-center gap-2" key={kind}>
-                <dt className="order-2 text-xs">
+              <div
+                className="flex items-center gap-2 rounded-lg border border-border px-3 py-2"
+                key={kind}
+              >
+                <dt className="order-2 text-sm">
                   {t(`billing.anomalyKind.${kind}`)}
                 </dt>
                 <dd className="order-1 m-0">

@@ -1,7 +1,18 @@
 "use client";
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Ban, CalendarClock, Ellipsis, Pencil, Wrench } from "lucide-react";
+import {
+  AlertCircle,
+  Ban,
+  CalendarClock,
+  Check,
+  Ellipsis,
+  Minus,
+  Pencil,
+  Tent,
+  TriangleAlert,
+  Wrench,
+} from "lucide-react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { formatSoum } from "@/lib/format-number";
@@ -14,6 +25,8 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StallListItem, StallStatusValue } from "@/lib/api-types";
+import type { MapDayRow } from "@/lib/map-day-queries";
+import { useMapDayStatusQuery } from "@/lib/map-day-queries";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import { useStallsQuery } from "@/lib/market-queries";
 
@@ -83,6 +96,11 @@ export function StallList({
   const t = useTranslations();
   const { filters, isEmpty } = useStallFilters();
   const stallsQuery = useStallsQuery(filters);
+  /*
+   * 261016: har qatorda BUGUNGI to'lov holati — xarita bilan AYNI javob
+   * (`/billing/map`). Huquq bo'lmasa so'rov ketmaydi va qatorda holat yo'q.
+   */
+  const dayLayer = useMapDayStatusQuery();
 
   /*
    * TO'RT HOLAT (UI-SPEC §9): yuklanish / xato / bo'sh / natija.
@@ -156,6 +174,7 @@ export function StallList({
           <li key={stall.id}>
             <StallRow
               canManage={canManage}
+              day={dayLayer.byStallId.get(stall.id) ?? null}
               onChangeCategory={onChangeCategory}
               onEditStall={onEditStall}
               onOpenStall={onOpenStall}
@@ -184,12 +203,15 @@ export function StallList({
 
 function StallRow({
   canManage,
+  day,
   onChangeCategory,
   onEditStall,
   onOpenStall,
   stall,
 }: {
   canManage: boolean;
+  /** Bugungi to'lov holati (`/billing/map`) — qatlam yo'q bo'lsa `null`. */
+  day: MapDayRow | null;
   onChangeCategory: (stall: StallListItem) => void;
   onEditStall: (stall: StallListItem) => void;
   onOpenStall: (stallId: string) => void;
@@ -206,8 +228,8 @@ function StallRow({
   const vendorLabel = stall.vendor_name ?? t("stalls.noVendor");
 
   return (
-    <Card className="px-4 py-3 transition-shadow hover:shadow-raised">
-      <div className="grid gap-1 sm:grid-cols-[auto_1fr_auto_auto] sm:items-center sm:gap-4">
+    <Card className="relative px-4 py-3 transition-shadow hover:shadow-raised">
+      <div className="grid gap-2 sm:grid-cols-[auto_1fr_auto_auto_auto] sm:items-center sm:gap-4">
         <div className="flex items-center justify-between gap-3 sm:justify-start">
           {/*
            * Raqamning O'ZI kartani ochadi. D-16: raqam DB kontenti.
@@ -215,15 +237,25 @@ function StallRow({
            * yalang'och matn -> CHIP disk (maket uslubi) — bosiladigan
            * ekani endi shakldan ham ko'rinadi.
            */}
+          {/*
+           * 261016: BUTUN QATOR bosiladi — kod tugmasining `after:` qatlami
+           * kartani qoplaydi (ichma-ich tugma yo'q, skrinrider uchun bitta
+           * tugma). Amallar menyusi `z-10` bilan uning ustida qoladi.
+           */}
           <button
-            className="grid min-h-11 min-w-11 place-items-center rounded-lg bg-accent/12 px-2 font-mono text-sm font-semibold tabular-nums text-accent-text transition-colors hover:bg-accent/8"
+            className="grid min-h-12 min-w-12 place-items-center rounded-xl bg-accent/12 px-2 font-mono text-sm font-semibold tabular-nums text-accent-text transition-colors after:absolute after:inset-0 after:rounded-lg after:content-[''] hover:bg-accent/8"
             onClick={() => onOpenStall(stall.id)}
             type="button"
           >
             {stall.code}
           </button>
 
-          <StallStatusBadge status={stall.status} />
+          {/*
+           * 261016: «Faol» — oddiy holat va har qatorda takrorlanib shovqin
+           * edi. Belgi faqat ODATDAN tashqari holatda: ta'mirda, yopiq,
+           * yarmarka.
+           */}
+          {stall.status === "active" ? null : <StallStatusBadge status={stall.status} />}
         </div>
 
         <div className="min-w-0">
@@ -241,6 +273,10 @@ function StallRow({
          * chiqadi: pul BIRLIGI tarjima katalogida takrorlanmaydi va uchala
          * tilda CLDR beradigan shaklda ko'rinadi.
          */}
+        <div className="justify-self-start sm:justify-self-end">
+          {day === null ? null : <DayPill day={day} />}
+        </div>
+
         <p className="hidden font-mono text-sm font-semibold tabular-nums lg:block">
           <span className="sr-only">{t("stalls.tariffLabel")}: </span>
           {stall.tariff_soum === null
@@ -248,7 +284,7 @@ function StallRow({
             : formatSoum(format, stall.tariff_soum, locale)}
         </p>
 
-        <div className="justify-self-end">
+        <div className="relative z-10 justify-self-end">
           {canManage ? (
             <StallRowActions
               onChangeCategory={() => onChangeCategory(stall)}
@@ -320,4 +356,59 @@ function StallRowActions({
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
   );
+}
+
+/**
+ * Bugungi to'lov holati — rangli yorliq + ikonka + so'z (261016).
+ *
+ * ⛔ Holat va qoldiq SERVERDAN (`state`, `remaining_soum`); klient faqat
+ *    yozadi. Rang yolg'iz emas: ikonka va so'z bor.
+ */
+function DayPill({ day }: { day: MapDayRow }) {
+  const t = useTranslations();
+  const format = useFormatter();
+  const locale = useLocale();
+
+  switch (day.state) {
+    case "paid":
+      return (
+        <Badge className="gap-1" tone="success">
+          <Check aria-hidden="true" className="size-3" />
+          {t("map.tilePaid")}
+        </Badge>
+      );
+    case "due":
+      return (
+        <Badge className="gap-1" tone="danger">
+          <AlertCircle aria-hidden="true" className="size-3" />
+          {t("map.tileDue")}
+          {day.remaining_soum !== null && day.remaining_soum > 0
+            ? ` · ${formatSoum(format, day.remaining_soum, locale)}`
+            : ""}
+        </Badge>
+      );
+    case "mismatch":
+      return (
+        <Badge className="gap-1" tone="warning">
+          <TriangleAlert aria-hidden="true" className="size-3" />
+          {t("map.tileMismatch")}
+        </Badge>
+      );
+    case "free":
+      return (
+        <Badge className="gap-1" tone="muted">
+          <Minus aria-hidden="true" className="size-3" />
+          {t("map.tileFree")}
+        </Badge>
+      );
+    case "fair":
+      return (
+        <Badge className="gap-1" tone="neutral">
+          <Tent aria-hidden="true" className="size-3" />
+          {t("director.stallFair")}
+        </Badge>
+      );
+    case "no_billing":
+      return <Badge tone="muted">{t("director.stallNoBilling")}</Badge>;
+  }
 }

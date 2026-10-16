@@ -1,8 +1,11 @@
 "use client";
 
 import { useId, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useNow, useTimeZone, useTranslations } from "next-intl";
 import { parseAsString, useQueryState } from "nuqs";
+
+import { Button } from "@/components/ui/button";
 
 import {
   businessDayIn,
@@ -130,6 +133,20 @@ export function BillingDayPicker() {
    *   almashtirilganda qayta o'qilardi.
    */
   const [rejected, setRejected] = useState(false);
+  /* «›» bugundan keyin bosilsa — maydon yaroqsiz EMAS, faqat e'lon. */
+  const [blockedNext, setBlockedNext] = useState(false);
+
+  /*
+   * 261016: «‹ Kecha · Bugun ›» — telefonda sana maydonini ochmasdan kun
+   * almashadi (buyurtmachi: «foydalanuvchiga qulay va oson qilish kerak»).
+   * Tanlangan tezkor kun aksent rangda — qaysi kun ochiqligi ko'rinadi.
+   */
+  function go(next: string): void {
+    setRejected(false);
+    setBlockedNext(false);
+    selection.setDay(next);
+  }
+  const isYesterday = selection.day === selection.yesterdayIso;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -137,6 +154,32 @@ export function BillingDayPicker() {
       <label className="text-sm text-text-muted" htmlFor={inputId}>
         {t("billing.dayLabel")}
       </label>
+
+      <Button
+        aria-label={t("billing.dayPrev")}
+        onClick={() => go(shiftIsoDay(selection.day, -1))}
+        size="sm"
+        title={t("billing.dayPrev")}
+        variant="secondary"
+      >
+        <ChevronLeft aria-hidden="true" />
+      </Button>
+      <Button
+        aria-pressed={isYesterday}
+        onClick={() => go(selection.yesterdayIso)}
+        size="sm"
+        variant={isYesterday ? "default" : "secondary"}
+      >
+        {t("billing.dayYesterday")}
+      </Button>
+      <Button
+        aria-pressed={selection.isToday}
+        onClick={() => go(selection.todayIso)}
+        size="sm"
+        variant={selection.isToday ? "default" : "secondary"}
+      >
+        {t("billing.dayToday")}
+      </Button>
 
       <input
         aria-invalid={rejected}
@@ -162,8 +205,25 @@ export function BillingDayPicker() {
         value={selection.day}
       />
 
+      <Button
+        aria-disabled={selection.isToday}
+        aria-label={t("billing.dayNext")}
+        onClick={() => {
+          if (selection.isToday) {
+            setBlockedNext(true);
+            return;
+          }
+          go(shiftIsoDay(selection.day, 1));
+        }}
+        size="sm"
+        title={selection.isToday ? t("billing.noFutureDays") : t("billing.dayNext")}
+        variant="secondary"
+      >
+        <ChevronRight aria-hidden="true" />
+      </Button>
+
       <p className="sr-only" role="status">
-        {rejected ? t("billing.noFutureDays") : ""}
+        {rejected || blockedNext ? t("billing.noFutureDays") : ""}
       </p>
     </div>
   );

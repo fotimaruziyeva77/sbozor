@@ -11,13 +11,12 @@ import {
 } from "lucide-react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 
-import { Badge } from "@/components/ui/badge";
-import type { BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CaptureDaySummary } from "@/lib/api-types";
+import { cn } from "@/lib/cn";
 import { formatBusinessDay } from "@/lib/format-day";
 import { useCaptureDay } from "@/lib/snapshot-queries";
 
@@ -63,6 +62,14 @@ import { useCaptureDay } from "@/lib/snapshot-queries";
 
 type CounterView = {
   Icon: typeof CheckCircle2;
+  /** 261016: yorliq ostidagi bir-ikki so'zli izoh — «xato» va «olinmadi» farqi. */
+  hintKey:
+    | "snapshots.countOkHint"
+    | "snapshots.countDarkHint"
+    | "snapshots.countBlankHint"
+    | "snapshots.countCorruptHint"
+    | "snapshots.countFailedHint"
+    | "snapshots.countMissedHint";
   labelKey:
     | "snapshots.countOk"
     | "snapshots.countDark"
@@ -70,7 +77,8 @@ type CounterView = {
     | "snapshots.countCorrupt"
     | "snapshots.countFailed"
     | "snapshots.countMissed";
-  tone: BadgeTone;
+  /** Nol bo'lmaganda ikonka doirasining rangi; nolda — neytral. */
+  tone: "success" | "warning" | "danger";
   value: (summary: CaptureDaySummary) => number;
 };
 
@@ -85,36 +93,42 @@ type CounterView = {
 const COUNTERS: readonly CounterView[] = [
   {
     Icon: CheckCircle2,
+    hintKey: "snapshots.countOkHint",
     labelKey: "snapshots.countOk",
     tone: "success",
     value: (summary) => summary.ok,
   },
   {
     Icon: MoonStar,
+    hintKey: "snapshots.countDarkHint",
     labelKey: "snapshots.countDark",
     tone: "warning",
     value: (summary) => summary.dark,
   },
   {
     Icon: ImageOff,
+    hintKey: "snapshots.countBlankHint",
     labelKey: "snapshots.countBlank",
     tone: "warning",
     value: (summary) => summary.blank,
   },
   {
     Icon: FileWarning,
+    hintKey: "snapshots.countCorruptHint",
     labelKey: "snapshots.countCorrupt",
     tone: "warning",
     value: (summary) => summary.corrupt,
   },
   {
     Icon: XCircle,
+    hintKey: "snapshots.countFailedHint",
     labelKey: "snapshots.countFailed",
     tone: "danger",
     value: (summary) => summary.failed,
   },
   {
     Icon: CircleSlash,
+    hintKey: "snapshots.countMissedHint",
     labelKey: "snapshots.countMissed",
     tone: "danger",
     value: (summary) => summary.missed,
@@ -200,9 +214,34 @@ export function DaySummary({
 
   const dayLabel = formatBusinessDay(format, day, locale);
 
+  /*
+   * 261016: chiziq — natijaning SHAKLI (yashil/sariq/qizil/kutilmoqda).
+   * ⛔ U `aria-hidden` va SON BERMAYDI: aniq qiymat ostidagi oltita
+   *    hisoblagichda. Har bo'lak kamida 4px — 175 tadan 2 ta yo'qolgan
+   *    kadr ham ko'zga tashlanadi (ulush soni esa uni yashirardi).
+   */
+  const poor = summary.dark + summary.blank + summary.corrupt;
+  const lost = summary.failed + summary.missed;
+  const waiting = Math.max(0, summary.planned - summary.ok - poor - lost);
+  const segments = [
+    { className: "bg-success", key: "ok", value: summary.ok },
+    { className: "bg-warning", key: "poor", value: poor },
+    { className: "bg-danger", key: "lost", value: lost },
+    { className: "bg-border-ui", key: "waiting", value: waiting },
+  ];
+
+  /*
+   * «48 qayerdan?» — reja kamera × vaqt ko'paytmasiga teng bo'lsa, shu
+   * ko'rinishda aytiladi. Teng bo'lmasa (kun o'rtasida kamera qo'shilgan)
+   * jumla chiqmaydi: noto'g'ri ko'paytma yolg'on bo'lardi.
+   */
+  const cameraCount = new Set(query.data.rows.map((row) => row.camera_id)).size;
+  const timeCount = new Set(query.data.rows.map((row) => row.slot_time)).size;
+  const showBreakdown = cameraCount > 0 && cameraCount * timeCount === summary.planned;
+
   return (
     <Card>
-      <CardContent className="flex flex-col gap-3 pt-5">
+      <CardContent className="flex flex-col gap-4 pt-5">
         {/*
          * ⚠ SANA `font-mono` EMAS (§8.3): u o'qiladigan matn. Format
          *   `next-intl` locale'idan keladi va hafta kuni bilan birga —
@@ -211,16 +250,34 @@ export function DaySummary({
          */}
         <p className="text-sm text-text-muted">{dayLabel}</p>
 
-        <div className="flex flex-col gap-3" role="status">
-          <p className="text-lg font-semibold">
-            {t("snapshots.captured")}{" "}
-            <span className="tabular-nums">
-              {t("snapshots.capturedOf", {
-                done: summary.done,
-                planned: summary.planned,
-              })}
+        <div className="flex flex-col gap-4" role="status">
+          <div className="flex flex-col gap-2">
+            <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="text-sm text-text-muted">{t("snapshots.captured")}</span>
+              <span className="text-2xl font-semibold tabular-nums">
+                {t("snapshots.capturedOf", {
+                  done: summary.done,
+                  planned: summary.planned,
+                })}
+              </span>
+            </p>
+            <span aria-hidden="true" className="dir-split">
+              {segments.map((segment) =>
+                segment.value === 0 ? null : (
+                  <span
+                    className={`dir-split-part ${segment.className}`}
+                    key={segment.key}
+                    style={{ flexGrow: segment.value }}
+                  />
+                ),
+              )}
             </span>
-          </p>
+            {showBreakdown ? (
+              <p className="text-xs text-text-muted">
+                {t("snapshots.planBreakdown", { cameras: cameraCount, times: timeCount })}
+              </p>
+            ) : null}
+          </div>
 
           {/*
            * ⛔ BU RO'YXATDA TANLASH BOSQICHI YO'Q. Har qanday shart —
@@ -228,10 +285,11 @@ export function DaySummary({
            *    ko'rsatish» — G-8 ni buzadi va yuqoridagi izohdagi
            *    sababni yo'q qiladi.
            */}
-          <dl className="flex flex-wrap gap-x-4 gap-y-2">
+          <dl className="capture-counters">
             {COUNTERS.map((counter) => (
               <Counter
-                icon={<counter.Icon aria-hidden="true" className="size-3" />}
+                Icon={counter.Icon}
+                hint={t(counter.hintKey)}
                 key={counter.labelKey}
                 label={t(counter.labelKey)}
                 tone={counter.tone}
@@ -282,24 +340,36 @@ export function DaySummary({
  *   ya'ni «2» hech qachon yolg'iz kelmaydi.
  */
 function Counter({
-  icon,
+  Icon,
+  hint,
   label,
   tone,
   value,
 }: {
-  icon: ReactNode;
+  Icon: typeof CheckCircle2;
+  hint: string;
   label: string;
-  tone: BadgeTone;
+  tone: CounterView["tone"];
   value: number;
 }) {
   return (
-    <div className="flex items-center gap-x-2">
-      <dt className="order-2 text-xs">{label}</dt>
-      <dd className="order-1 m-0">
-        <Badge className="min-w-10 justify-center gap-1 tabular-nums" tone={tone}>
-          {icon}
-          {value}
-        </Badge>
+    <div className={cn("capture-counter", value === 0 && "capture-counter-zero")}>
+      <dt className="order-2 flex flex-col">
+        <span className="capture-counter-label">{label}</span>
+        <span className="capture-counter-hint">{hint}</span>
+      </dt>
+      <dd className="capture-counter-value order-1 m-0">
+        {/* Ikonka matnsiz: `dd` ning matni faqat son (G-8 testi shuni o'qiydi). */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            "capture-counter-icon",
+            value === 0 ? "stat-tone-neutral" : `stat-tone-${tone}`,
+          )}
+        >
+          <Icon className="size-3.5" />
+        </span>
+        {value}
       </dd>
     </div>
   );

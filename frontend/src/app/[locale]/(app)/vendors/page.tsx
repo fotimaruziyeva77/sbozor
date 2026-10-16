@@ -9,6 +9,7 @@ import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
 import { ReadOnlyNote } from "@/components/auth/read-only-note";
 import { Button } from "@/components/ui/button";
 import { VendorList } from "@/components/vendors/vendor-list";
+import { VendorsSummary } from "@/components/vendors/vendors-summary";
 import { useAuthStore } from "@/lib/auth-store";
 import { hasPermission } from "@/lib/rbac";
 
@@ -95,6 +96,8 @@ export default function VendorsPage() {
           <BrandLoader />
         }
       >
+        {/* 261016: ro'yxatdan oldin — jami, qarzdorlar, avans, bo'sh rastalar. */}
+        <VendorsSummary />
         <VendorList
           canManage={canManage}
           canSeeHistory={hasPermission(roles, "vendor_history_view")}

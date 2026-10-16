@@ -8,8 +8,10 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, FocusEvent } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 
+import { matchesMapFilter } from "@/components/stalls/map-summary";
+import type { MapFilter } from "@/components/stalls/map-summary";
 import { StallCell } from "@/components/stalls/stall-cell";
 import { StallMapLegend } from "@/components/stalls/stall-map-legend";
 import type { ZoneBlock } from "@/components/stalls/stall-map-types";
@@ -17,6 +19,7 @@ import { DAY_STATE_KEYS, dayToneOf, toneOf } from "@/components/stalls/stall-ton
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMapDayStatusQuery } from "@/lib/map-day-queries";
+import { formatSoum } from "@/lib/format-number";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import { useStallMapQuery } from "@/lib/market-queries";
 
@@ -69,14 +72,19 @@ function useIsDesktop(): boolean {
 }
 
 export function StallMap({
+  filter = null,
   focusCode,
   onSelectStall,
 }: {
+  /** Xulosa katagi bosilganda — mos kelmaydigan kataklar xiralashadi. */
+  filter?: MapFilter | null;
   /** `/map?q=` dagi raqam: mos katak topiladi va fokuslanadi (§6.9). */
   focusCode: string;
   onSelectStall: (stallId: string) => void;
 }) {
   const t = useTranslations();
+  const format = useFormatter();
+  const locale = useLocale();
   const mapQuery = useStallMapQuery();
   /*
    * ⛔ TO'LOV QATLAMI XARITANI KUTTIRMAYDI (MARKET-06).
@@ -141,6 +149,24 @@ export function StallMap({
     (stallId: string) => onSelectStall(stallId),
     [onSelectStall],
   );
+
+  /*
+   * 261016: sichqoncha ustida — kod, bugungi holat so'zi va (bo'lsa)
+   * qolgan summa. Summa serverdan (`remaining_soum`), qayta hisoblanmaydi.
+   */
+  const hintOf = (cellId: string, code: string): string | undefined => {
+    const day = dayLayer.byStallId.get(cellId);
+    if (day === undefined) return undefined;
+    const parts = [code, t(DAY_STATE_KEYS[day.state])];
+    if (day.remaining_soum !== null && day.remaining_soum > 0) {
+      parts.push(
+        t("map.cellHintRemaining", {
+          sum: formatSoum(format, day.remaining_soum, locale),
+        }),
+      );
+    }
+    return parts.join(" · ");
+  };
 
   const hasFocusMatch = useMemo(
     () =>
@@ -375,26 +401,26 @@ export function StallMap({
            * skrollning oldini oladi), `>=768px` da hammasi doim ochiq.
            */}
           <details className="flex flex-col gap-3" open={isDesktop || zoneIndex === 0}>
-            <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-lg font-semibold">
+            <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-x-3 gap-y-2">
               {/* D-16: zona nomi DB kontenti — tarjima qilinmaydi. */}
-              {zone.name}
-              <span className="text-sm font-normal text-text-muted">
+              <span className="text-lg font-semibold">{zone.name}</span>
+              <span className="text-sm text-text-muted">
                 {t("map.zoneStallCount", { count: zone.cells.length })}
               </span>
+              <ZoneProgress cells={zone.cells} />
             </summary>
 
             <div
-              className="mt-3 grid gap-2"
+              className="map-cell-grid mt-3"
               onFocus={(event) => handleZoneFocus(zone.id, event)}
               onKeyDown={handleZoneKeyDown}
-              style={{
-                gridTemplateColumns: "repeat(auto-fill, minmax(2.75rem, 1fr))",
-              }}
             >
               {zone.cells.map((cell, cellIndex) => (
                 <StallCell
                   categoryName={null}
                   cell={cell}
+                  dimmed={!matchesMapFilter(cell, filter)}
+                  hint={hintOf(cell.id, cell.code)}
                   /*
                    * Kalit — rastaning O'Z identifikatori. Massivdagi
                    * POZITSIYANI kalit qilish TAQIQLANGAN: kod tartibi
@@ -420,5 +446,50 @@ export function StallMap({
 
       <div id="stall-map-end" tabIndex={-1} />
     </div>
+  );
+}
+
+/*
+ * Zona sarlavhasidagi to'lov chizig'i (261016) — «bu qatorda nechta rasta
+ * to'ladi». FAQAT to'lov qatlami bo'lganda: inventar rejimida sanaladigan
+ * to'lov yo'q va bo'sh chiziq yolg'on «hech kim to'lamadi» bo'lardi.
+ */
+const ZONE_SEGMENTS = [
+  { tone: "paid", className: "bg-success" },
+  { tone: "mismatch", className: "bg-warning" },
+  { tone: "debt", className: "bg-danger" },
+  { tone: "fair", className: "bg-info" },
+  { tone: "free", className: "bg-border-ui" },
+] as const;
+
+function ZoneProgress({ cells }: { cells: readonly ZoneBlock["cells"][number][] }) {
+  const t = useTranslations();
+  const withDay = cells.filter((cell) => cell.dayTone !== null);
+  if (withDay.length === 0) return null;
+
+  const count = (tone: string) => withDay.filter((cell) => cell.dayTone === tone).length;
+  const paid = count("paid");
+  const expected = paid + count("debt") + count("mismatch");
+
+  return (
+    <span className="map-zone-progress">
+      <span aria-hidden="true" className="dir-split dir-split-thin">
+        {ZONE_SEGMENTS.map((segment) => {
+          const n = count(segment.tone);
+          return n === 0 ? null : (
+            <span
+              className={`dir-split-part ${segment.className}`}
+              key={segment.tone}
+              style={{ flexGrow: n }}
+            />
+          );
+        })}
+      </span>
+      {expected === 0 ? null : (
+        <span className="text-xs text-text-muted">
+          {t("map.zonePaid", { paid, expected })}
+        </span>
+      )}
+    </span>
   );
 }

@@ -34,9 +34,12 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import messages from "../../../messages/uz-Latn.json";
 import VendorsPage from "@/app/[locale]/(app)/vendors/page";
+import { debtWindow, periodRange } from "@/components/director/period";
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
+import type { ReceivablesReport } from "@/lib/api-types";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 import { vendorsKey } from "@/lib/market-queries";
+import { reportKey } from "@/lib/report-queries";
 
 /** `+998` bilan boshlanadigan E.164 — server aynan shu shaklda yuboradi. */
 const VENDOR_PHONE = "+998901234567";
@@ -105,7 +108,9 @@ const AUDIT_NOTICE = messages.vendors.auditNotice;
  * `staleTime: Infinity` MAJBURIY: usiz TanStack Query montajdan keyin
  * ekilgan ma'lumotni "eskirgan" deb bilib, haqiqiy so'rov yuborardi.
  */
-function renderVendorsPage(): ReturnType<typeof render> {
+function renderVendorsPage(
+  seed: { vendors?: (typeof VENDOR)[]; debtors?: ReceivablesReport } = {},
+): ReturnType<typeof render> {
   // `retry: false` — xato holatida test uch marta qayta urinishni kutmasin.
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -115,9 +120,22 @@ function renderVendorsPage(): ReturnType<typeof render> {
   });
 
   queryClient.setQueryData(vendorsKey(MARKET_ID, { q: "" }), {
-    pages: [{ items: [VENDOR], next_cursor: null }],
+    pages: [{ items: seed.vendors ?? [VENDOR], next_cursor: null }],
     pageParams: [null],
   });
+
+  /*
+   * 261016: kartadagi qarz/avans belgisi — bosh panel «Qarz» katagi bilan
+   * AYNI qarzdorlik oynasi (`debtWindow`, bugungi davr).
+   */
+  if (seed.debtors !== undefined) {
+    const today = businessDayIn("Asia/Tashkent", new Date());
+    const window = debtWindow(periodRange("today", today), today);
+    queryClient.setQueryData(
+      reportKey(MARKET_ID, "debtors", window.from, window.to),
+      seed.debtors,
+    );
+  }
 
   /*
    * Panel ochilganda tarix so'rovi ketadi — u ham KESHGA ekiladi (HTTP
@@ -280,5 +298,51 @@ describe("Sotuvchilar ekrani — shaxsiy ma'lumot kontrakti (§8.6)", () => {
     // Sanoq badge'i ham bor: `stall_codes` serverda 20 tada kesiladi,
     // `stall_count` esa to'liq son.
     expect(screen.getByText("2 ta rasta")).toBeInTheDocument();
+  });
+});
+
+describe("Sotuvchilar ekrani — qarz va avans belgisi (261016)", () => {
+  test("musbat qoldiq — «Qarz», manfiy — «Avans», nol qoldiqda belgi yo'q", async () => {
+    const vendor = (n: number, name: string) => ({
+      ...VENDOR,
+      id: `55555555-5555-4555-8555-00000000000${n}`,
+      full_name: name,
+      stall_codes: [`C-${n}`],
+      stall_count: 1,
+    });
+    const paid = vendor(1, "Karimova Dilnoza");
+    const debtor = vendor(2, "Rasulov Bekzod");
+    const ahead = vendor(3, "Sobirov Jasur");
+    const row = (id: string, name: string, soum: number) => ({
+      vendor_id: id,
+      vendor_name: name,
+      stall_codes: ["C-0"],
+      outstanding_soum: soum,
+      oldest_debt_date: soum > 0 ? "2026-10-01" : null,
+    });
+
+    renderVendorsPage({
+      vendors: [paid, debtor, ahead],
+      debtors: {
+        from_date: "2026-09-17",
+        to_date: "2026-10-15",
+        rows: [
+          row(debtor.id, debtor.full_name, 186_000),
+          row(ahead.id, ahead.full_name, -20_000),
+          row(paid.id, paid.full_name, 0),
+        ],
+        total_outstanding_soum: 166_000,
+        row_count: 3,
+        shown_count: 3,
+      },
+    });
+
+    await screen.findByText(debtor.full_name);
+
+    const badges = await screen.findAllByText(/^(Qarz|Avans): /u);
+    expect(badges.map((badge) => badge.textContent?.replace(/\s/gu, " "))).toEqual([
+      "Qarz: 186 000 so'm",
+      "Avans: 20 000 so'm",
+    ]);
   });
 });

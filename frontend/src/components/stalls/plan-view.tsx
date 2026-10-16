@@ -3,6 +3,8 @@
 import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 
+import { matchesMapFilter } from "@/components/stalls/map-summary";
+import type { MapFilter } from "@/components/stalls/map-summary";
 import { gridSize } from "@/components/stalls/plan-model";
 import { StallCell } from "@/components/stalls/stall-cell";
 import { StallMapLegend } from "@/components/stalls/stall-map-legend";
@@ -44,9 +46,12 @@ import { useStallMapQuery } from "@/lib/market-queries";
 const CELL_PX = 44;
 
 export function PlanView({
+  filter = null,
   focusCode,
   onSelectStall,
 }: {
+  /** Xulosa katagi bosilganda — mos kelmaydigan kataklar xiralashadi. */
+  filter?: MapFilter | null;
   /** `/map?q=` dagi raqam — sxematik ko'rinishdagi bilan BIR XIL xulq. */
   focusCode: string;
   onSelectStall: (stallId: string) => void;
@@ -193,6 +198,7 @@ export function PlanView({
               <StallCell
                 categoryName={null}
                 cell={item.cell}
+                dimmed={!matchesMapFilter(item.cell, filter)}
                 onSelect={onSelectStall}
                 tabIndex={0}
                 vendorName={null}

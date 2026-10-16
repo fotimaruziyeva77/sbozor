@@ -16,6 +16,7 @@ import {
 } from "@/components/snapshots/capture-grid";
 import type { CaptureCameraMeta } from "@/components/snapshots/capture-grid";
 import { CaptureLegend } from "@/components/snapshots/capture-legend";
+import { CaptureVerdictBanner } from "@/components/snapshots/capture-verdict";
 import {
   DayPicker,
   useDaySelection,
@@ -95,9 +96,13 @@ export default function SnapshotsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {t("snapshots.title")}
-      </h1>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {t("snapshots.title")}
+        </h1>
+        {/* 261016: «tushunarsiz» — sahifa nima uchunligi bir jumlada. */}
+        <p className="text-sm text-text-muted">{t("snapshots.subtitle")}</p>
+      </div>
 
       {/*
        * `Suspense` MAJBURIY (`audit/page.tsx` va `cameras/page.tsx`
@@ -128,6 +133,7 @@ function SnapshotsWorkspace() {
   const t = useTranslations();
   const { principal } = useAuthStore();
   const canManage = hasPermission(principal?.roles ?? [], "camera_manage");
+  const scheduleHeadingId = useId();
 
   /*
    * E-1 ning sharti (§10.4). ⚠ `isSuccess` MAJBURIY: `items.length === 0`
@@ -204,9 +210,17 @@ function SnapshotsWorkspace() {
         alerts={<AlertZone />}
         cameraMeta={cameraMeta}
         canManage={canManage}
+        newestCaptureAt={cameras.data?.newest_capture_at ?? null}
       />
 
-      <section aria-label={t("snapshots.scheduleTitle")}>
+      <section aria-labelledby={scheduleHeadingId} className="flex flex-col gap-3">
+        {/* 261016: jadval kartasi — ko'rinadigan sarlavha bilan. */}
+        <div className="flex flex-col gap-1">
+          <h2 className="text-lg font-semibold" id={scheduleHeadingId}>
+            {t("snapshots.scheduleHeading")}
+          </h2>
+          <p className="text-sm text-text-muted">{t("snapshots.scheduleHint")}</p>
+        </div>
         <ScheduleCard
           canManage={canManage}
           onAddSeasonal={() => setDialog({ kind: "create" })}
@@ -259,16 +273,34 @@ function CaptureLog({
   alerts,
   cameraMeta,
   canManage,
+  newestCaptureAt,
 }: {
   /** Ogohlantirishlar zonasi — xulosa bilan jurnal ORASIDA chiziladi. */
   alerts: ReactNode;
   cameraMeta: CaptureCameraMeta;
   canManage: boolean;
+  /** `/cameras` javobidan — bannerdagi «oxirgi kadr» uchun. */
+  newestCaptureAt: string | null;
 }) {
   const t = useTranslations();
-  const { day, todayIso } = useDaySelection();
+  const { day, isToday, todayIso } = useDaySelection();
   const [issuesOnly, setIssuesOnly] = useIssuesOnly();
   const issuesId = useId();
+  const logId = useId();
+  const logHeadingId = useId();
+
+  /*
+   * Bannerdagi tugma: filtrni yoqadi va jurnalga olib boradi. ⚠ `smooth`
+   * EMAS (`billing/page.tsx` bilan bir xil) va `typeof` tekshiruvi —
+   * jsdom'da `scrollIntoView` yo'q (`wizard-stepper.tsx` izohi).
+   */
+  const showIssues = () => {
+    setIssuesOnly(true);
+    const log = document.getElementById(logId);
+    if (log !== null && typeof log.scrollIntoView === "function") {
+      log.scrollIntoView({ block: "start" });
+    }
+  };
 
   const captureDay = useCaptureDay(day, todayIso);
 
@@ -333,7 +365,17 @@ function CaptureLog({
         className="flex flex-col gap-3"
       >
         <DayPicker />
-        <DaySummary day={day} onShowIssues={() => setIssuesOnly(true)} todayIso={todayIso} />
+        {/* 261016: bitta jumlali javob — «kameralar ishlayaptimi?». */}
+        {hasPlan ? (
+          <CaptureVerdictBanner
+            cameraMeta={cameraMeta}
+            isToday={isToday}
+            newestCaptureAt={newestCaptureAt}
+            onShowIssues={showIssues}
+            rows={rows}
+          />
+        ) : null}
+        <DaySummary day={day} onShowIssues={showIssues} todayIso={todayIso} />
       </section>
 
       {alerts}
@@ -378,11 +420,19 @@ function CaptureLog({
       {hasPlan ? (
         <section
           aria-busy={captureDay.isFetching}
-          aria-label={t("snapshots.logTitle")}
-          className="flex flex-col gap-3"
+          aria-labelledby={logHeadingId}
+          className="flex scroll-mt-4 flex-col gap-3"
+          id={logId}
         >
           <Card>
             <CardContent className="flex flex-col gap-4 pt-5">
+              {/* 261016: matritsa nima ekanini bir jumlada aytadi. */}
+              <div className="flex flex-col gap-1">
+                <h2 className="text-lg font-semibold" id={logHeadingId}>
+                  {t("snapshots.logTitle")}
+                </h2>
+                <p className="text-sm text-text-muted">{t("snapshots.logHint")}</p>
+              </div>
               {/*
                * ⛔ LEGENDA MATRITSANING USTIDA va u YIG'ILMAYDI (§6.5):
                *    hujayrada matn yo'q, ya'ni ikonka lug'ati birdan-bir

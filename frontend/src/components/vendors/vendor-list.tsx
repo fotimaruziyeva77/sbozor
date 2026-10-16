@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { CalendarPlus, Ellipsis, Pencil, UserMinus } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,8 @@ import { AssignmentDialog } from "@/components/vendors/assignment-dialog";
 import type { AssignmentMode } from "@/components/vendors/assignment-dialog";
 import { VendorDialog } from "@/components/vendors/vendor-dialog";
 import { VendorPanel } from "@/components/vendors/vendor-panel";
+import { useVendorBalances } from "@/components/vendors/vendors-summary";
+import { formatSoum } from "@/lib/format-number";
 import type { VendorListItem } from "@/lib/api-types";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import { useVendorsQuery } from "@/lib/market-queries";
@@ -105,6 +107,16 @@ export function VendorList({
 
   const isFiltered = urlFilters.q !== "";
   const items = vendorsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  /*
+   * 261016: har kartada qarz yoki avans — bosh panel «Qarz» katagi bilan
+   * AYNI reestr javobidan. Huquq bo'lmasa so'rov ketmaydi, belgi chiqmaydi.
+   */
+  const { report: balances } = useVendorBalances();
+  const balanceOf = new Map(
+    (balances.data?.rows ?? []).flatMap((row) =>
+      row.vendor_id === null ? [] : [[row.vendor_id, row.outstanding_soum] as const],
+    ),
+  );
 
   let content: ReactNode;
 
@@ -183,6 +195,7 @@ export function VendorList({
           {items.map((vendor) => (
             <li key={vendor.id}>
               <VendorCard
+                balance={balanceOf.get(vendor.id) ?? null}
                 canManage={canManage}
                 onAssign={(mode) => setAssignment({ mode, vendor })}
                 onEdit={() => setEditing(vendor)}
@@ -288,7 +301,21 @@ export function VendorList({
   );
 }
 
+/** Ism bosh harflari — avatar doirasi uchun (D-16: ism tarjima qilinmaydi). */
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/u)
+    .filter((part) => part !== "")
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+/** Kartada ko'rinadigan rasta raqamlari soni — qolgani «+N». */
+const VISIBLE_CODES = 4;
+
 function VendorCard({
+  balance,
   canManage,
   onAssign,
   onEdit,
@@ -296,6 +323,8 @@ function VendorCard({
   searchTerm,
   vendor,
 }: {
+  /** Qarzdorlik reestridagi qoldiq: musbat — qarz, manfiy — avans. */
+  balance: number | null;
   canManage: boolean;
   onAssign: (mode: AssignmentMode) => void;
   onEdit: () => void;
@@ -305,7 +334,11 @@ function VendorCard({
   vendor: VendorListItem;
 }) {
   const t = useTranslations();
+  const format = useFormatter();
+  const locale = useLocale();
   const qidiruv = searchTerm.trim().toLowerCase();
+  const shownCodes = vendor.stall_codes.slice(0, VISIBLE_CODES);
+  const hiddenCodes = vendor.stall_codes.length - shownCodes.length;
 
   return (
     // §8.1: reestr kartasi ZICH — `px-4 py-3`, 10 foydalanuvchi emas,
@@ -328,6 +361,14 @@ function VendorCard({
       }}
     >
       <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+        {/* 261016: avatar — ro'yxatda odamni ko'z bilan tez topish uchun. */}
+        <span
+          aria-hidden="true"
+          className="grid size-11 shrink-0 place-items-center rounded-full bg-accent/12 text-sm font-semibold text-accent-text"
+        >
+          {initialsOf(vendor.full_name)}
+        </span>
         <div className="flex min-w-0 flex-col gap-1">
           {/* D-16: ism DB kontenti — tarjima qilinmaydi. */}
           <button
@@ -372,9 +413,9 @@ function VendorCard({
              *   qator NEGA topilganini aynan shu belgidan ko'radi.
              */}
             {vendor.stall_codes.length > 0 ? (
-              <div className="hidden flex-wrap items-center gap-1 sm:flex">
+              <div className="flex flex-wrap items-center gap-1">
                 <span className="sr-only">{t("vendors.stallCodesLabel")}: </span>
-                {vendor.stall_codes.map((code) => (
+                {shownCodes.map((code) => (
                   <Badge
                     className="font-mono tabular-nums"
                     key={code}
@@ -387,9 +428,11 @@ function VendorCard({
                     {code}
                   </Badge>
                 ))}
+                {hiddenCodes > 0 ? <Badge tone="muted">+{hiddenCodes}</Badge> : null}
               </div>
             ) : null}
           </div>
+        </div>
         </div>
 
         {/*
@@ -401,6 +444,19 @@ function VendorCard({
          *    bo'linadi; keng ekranda ko'rinish o'zgarmaydi.
          */}
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {/*
+           * ⛔ Qarz — qizil, avans — neytral (ortiqcha to'lov «yaxshi
+           *    natija» emas, u ham tekshiriladigan holat). Summa serverdan.
+           */}
+          {balance === null || balance === 0 ? null : balance > 0 ? (
+            <Badge tone="danger">
+              {t("vendors.balanceDebt", { sum: formatSoum(format, balance, locale) })}
+            </Badge>
+          ) : (
+            <Badge tone="accent">
+              {t("vendors.balanceAdvance", { sum: formatSoum(format, -balance, locale) })}
+            </Badge>
+          )}
           <Badge tone="muted">
             {t("vendors.stallCount", { count: vendor.stall_count })}
           </Badge>

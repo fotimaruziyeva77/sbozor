@@ -16,6 +16,8 @@ import { Pencil } from "lucide-react";
 
 import { BrandLoader } from "@/components/ui/brand-loader";
 import { ForbiddenNotice } from "@/components/auth/forbidden-notice";
+import { MapSummary } from "@/components/stalls/map-summary";
+import type { MapFilter } from "@/components/stalls/map-summary";
 import { PlanView } from "@/components/stalls/plan-view";
 import { StallCardDialog } from "@/components/stalls/stall-card-dialog";
 import { StallMap } from "@/components/stalls/stall-map";
@@ -165,18 +167,31 @@ function MapSurface({
 }) {
   const t = useTranslations();
   const [view, setView] = useState<"schematic" | "plan">("schematic");
+  /*
+   * 261016: xulosa katagi bosilganda tanlangan holat — ikkala ko'rinishga
+   * ham tegishli (sxematik va chizilgan plan), shuning uchun shu yerda.
+   */
+  const [filter, setFilter] = useState<MapFilter | null>(null);
   const mapQuery = useStallMapQuery();
 
   const hasPlan = (mapQuery.data?.zones ?? []).some((zone) =>
     zone.cells.some((cell) => cell.plan_x !== null),
   );
 
+  const summary = <MapSummary filter={filter} onFilter={setFilter} />;
+
   if (!hasPlan) {
-    return <StallMap focusCode={focusCode} onSelectStall={onSelectStall} />;
+    return (
+      <div className="flex flex-col gap-6">
+        {summary}
+        <StallMap filter={filter} focusCode={focusCode} onSelectStall={onSelectStall} />
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {summary}
       <div className="flex gap-1" role="group">
         <Button
           aria-pressed={view === "schematic"}
@@ -197,9 +212,9 @@ function MapSurface({
       </div>
 
       {view === "schematic" ? (
-        <StallMap focusCode={focusCode} onSelectStall={onSelectStall} />
+        <StallMap filter={filter} focusCode={focusCode} onSelectStall={onSelectStall} />
       ) : (
-        <PlanView focusCode={focusCode} onSelectStall={onSelectStall} />
+        <PlanView filter={filter} focusCode={focusCode} onSelectStall={onSelectStall} />
       )}
     </div>
   );

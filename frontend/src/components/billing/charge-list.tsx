@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { ChargeDetailDialog } from "@/components/billing/charge-detail-dialog";
@@ -99,6 +100,17 @@ export function ChargeList({
   const vendors = useVendorsQuery(EMPTY_VENDOR_FILTERS);
 
   /*
+   * 261016: ism 50-sotuvchidan keyin BO'SH chiqardi — `/vendors`
+   * sahifalangan, o'qilgani esa faqat birinchi sahifa edi. Qolgan
+   * sahifalar ketma-ket yuklanadi (server izohi ham shuni aytadi:
+   * to'g'ri tuzatish — `/vendors` ni sahifalash, javobga ism qo'shish emas).
+   */
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = vendors;
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  /*
    * ⛔ DL-3 HOLATI — RO'YXATNIKI. URL'da emas (§4.4): tafsilotni
    *    ulashiladigan havolaga aylantirish uni sahifa holatidan marshrutga
    *    ko'chirardi va «orqaga» tugmasi dialogni qayta ochardi.
@@ -107,6 +119,7 @@ export function ChargeList({
 
   const rows = charges.data?.rows ?? [];
   const showTariffColumn = hasAdjustedRow(rows);
+  const outstandingTotal = rows.reduce((sum, row) => sum + row.outstanding_soum, 0);
 
   const vendorNames = new Map(
     (vendors.data?.pages ?? []).flatMap((page) =>
@@ -119,8 +132,12 @@ export function ChargeList({
      * ⛔ G-25 (b): ATRIBUT ENG TASHQI ELEMENTDA va HAR HOLATDA —
      *    yuklanish, xato, bo'sh va to'la shoxlarda.
      */
-    <div className="flex flex-col gap-3" data-billing-content="charges">
-      <h2 className="text-sm font-semibold">{t("billing.chargesTitle")}</h2>
+    <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-4 shadow-card sm:p-5" data-billing-content="charges">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold">{t("billing.chargesTitle")}</h2>
+        {/* 261016: «patta», «qoldiq» nima ekani — bir jumlada. */}
+        <p className="text-sm text-text-muted">{t("billing.chargesHint")}</p>
+      </div>
 
       {charges.isPending ? (
         <div aria-busy="true" role="status">
@@ -194,7 +211,7 @@ export function ChargeList({
                 >
                   <td className="py-2 pr-3 font-semibold">{row.stall_code}</td>
                   <td className="py-2 pr-3 text-text-muted">
-                    {vendorNames.get(row.vendor_id) ?? ""}
+                    {vendorNames.get(row.vendor_id) ?? (hasNextPage ? "…" : "—")}
                   </td>
                   {showTariffColumn ? (
                     <td className="py-2 pr-3 font-mono tabular-nums">
@@ -204,8 +221,18 @@ export function ChargeList({
                   <td className="py-2 pr-3 font-mono tabular-nums">
                     {formatAmount(format, row.amount_soum, locale)}
                   </td>
-                  <td className="py-2 pr-3 font-mono tabular-nums">
-                    {formatAmount(format, row.outstanding_soum, locale)}
+                  <td className="py-2 pr-3">
+                    {/* 261016: to'langan qator — yashil belgi, qarzli — qizil summa. */}
+                    {row.outstanding_soum === 0 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-success/12 px-2 py-0.5 text-xs font-semibold text-success-text">
+                        <CheckCircle2 aria-hidden="true" className="size-3" />
+                        {t("billing.paidStatus")}
+                      </span>
+                    ) : (
+                      <span className="font-mono font-semibold text-danger-text tabular-nums">
+                        {formatAmount(format, row.outstanding_soum, locale)}
+                      </span>
+                    )}
                   </td>
                   <td className="py-2">
                     <Button
@@ -219,6 +246,23 @@ export function ChargeList({
                 </tr>
               ))}
             </tbody>
+            {/* Jami — `tfoot` da: `tbody` qatorlari soni javobdagi qatorlarga TENG qoladi. */}
+            <tfoot>
+              <tr className="text-sm font-semibold">
+                <td className="pt-3 pr-3" colSpan={showTariffColumn ? 3 : 2}>
+                  {t("billing.chargesTotal")}
+                </td>
+                <td className="pt-3 pr-3 font-mono tabular-nums">
+                  {formatAmount(format, charges.data?.charged_soum ?? 0, locale)}
+                </td>
+                <td
+                  className={`pt-3 pr-3 font-mono tabular-nums ${outstandingTotal > 0 ? "text-danger-text" : ""}`}
+                >
+                  {formatAmount(format, outstandingTotal, locale)}
+                </td>
+                <td className="pt-3" />
+              </tr>
+            </tfoot>
           </table>
         </div>
       ) : null}

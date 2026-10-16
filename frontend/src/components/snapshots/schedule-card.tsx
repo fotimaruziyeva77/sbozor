@@ -1,6 +1,5 @@
 "use client";
 
-import { Fragment } from "react";
 import { CalendarDays, TriangleAlert } from "lucide-react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 
@@ -284,24 +283,24 @@ function DayRow({
   timesCount: string;
 }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <dt className="w-16 shrink-0 text-sm font-semibold">{label}</dt>
-      <dd className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="text-sm">{timesCount}</span>
-        {/*
-         * Vaqtlar `font-mono`: proporsional shriftda `06:00` va `18:00`
-         * turli kenglikda bo'lib, ro'yxat qiyshayardi (§8.3). Ajratgich
-         * `aria-hidden` — skrinrider har vaqtdan keyin «nuqta» demasin.
-         */}
-        {day.times.map((time, index) => (
-          <Fragment key={time}>
-            {index > 0 ? (
-              <span aria-hidden="true" className="text-xs text-text-muted">
-                ·
-              </span>
-            ) : null}
-            <span className="font-mono text-xs">{formatSlotTime(time)}</span>
-          </Fragment>
+    <div className="flex flex-col gap-2 rounded-xl border border-border p-3 sm:flex-row sm:items-start sm:gap-4">
+      <dt className="flex shrink-0 items-baseline gap-2 sm:w-32 sm:flex-col sm:gap-0.5">
+        <span className="text-sm font-semibold">{label}</span>
+        <span className="text-xs text-text-muted">{timesCount}</span>
+      </dt>
+      {/*
+       * Vaqtlar `font-mono`: proporsional shriftda `06:00` va `18:00`
+       * turli kenglikda bo'lib, ro'yxat qiyshayardi (§8.3). 261016: har
+       * vaqt alohida yorliqda — nuqtali qatorni ko'z bilan sanash qiyin edi.
+       */}
+      <dd className="m-0 flex min-w-0 flex-1 flex-wrap gap-1.5">
+        {day.times.map((time) => (
+          <span
+            className="rounded-md bg-surface-muted px-2 py-1 font-mono text-xs tabular-nums"
+            key={time}
+          >
+            {formatSlotTime(time)}
+          </span>
         ))}
       </dd>
     </div>

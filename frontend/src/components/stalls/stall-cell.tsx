@@ -45,6 +45,17 @@ export type StallCellProps = {
   onSelect: (stallId: string) => void;
   /** Roving tabindex: zonada AYNAN BITTA katak `0` oladi (§7.7). */
   tabIndex: number;
+  /**
+   * Sichqoncha ustida turganda chiqadigan qisqa izoh — kod, holat va
+   * qolgan summa (261016). Berilmasa eski qoida: faqat uzun kodda.
+   */
+  hint?: string;
+  /**
+   * Xulosa filtri tanlanganda MOS KELMAYDIGAN katak xiralashadi (261016).
+   * ⛔ Yashirilmaydi: joylashuv saqlanadi — «qayerda to'lamaganlar
+   *    to'plangan» savoli xaritaning o'zida ko'rinadi.
+   */
+  dimmed?: boolean;
 };
 
 /**
@@ -63,6 +74,8 @@ function codeClassName(code: string): string {
 export const StallCell = memo(function StallCell({
   categoryName,
   cell,
+  dimmed = false,
+  hint,
   onSelect,
   tabIndex,
   vendorName,
@@ -118,12 +131,13 @@ export const StallCell = memo(function StallCell({
       aria-label={label}
       className={cn(
         // 44x44 — WCAG 2.5.5 barmoq nishoni (§2 hujjatlashtirilgan istisnosi).
-        "relative inline-flex aspect-square min-h-11 min-w-11 items-center justify-center",
-        "rounded-sm border border-border-ui p-1 tabular-nums",
-        "transition-colors",
+        // 261016: plan-xarita «juda oddiy» edi — katak 52px, yumaloq, soyali.
+        "relative inline-flex aspect-square min-h-11 min-w-11 items-center justify-center md:min-h-13 md:min-w-13",
+        "rounded-lg border border-border-ui p-1 tabular-nums shadow-card",
+        "transition",
         // Hover CHEGARA rangi bilan: `hover:bg-surface-muted` "ta'mirda" va
         // "yopiq" kataklarida umuman ko'rinmasdi — ular allaqachon shu fonda.
-        "hover:border-text-muted",
+        "hover:-translate-y-0.5 hover:border-text-muted hover:shadow-raised",
         "active:scale-[0.97] motion-reduce:scale-100",
         // Global fokus qoidasi `offset: 2px` beradi; 8px oraliqda ikki
         // tomondan 2+2 = 4px halqalar tegib ketardi. Katak uchun `offset-1`
@@ -143,7 +157,9 @@ export const StallCell = memo(function StallCell({
         // ikkinchi kanal (§4.4) va legendada tushuntiriladi.
         cell.hasVendor ? "border-solid" : "border-dashed",
         codeClassName(cell.code),
+        dimmed && "opacity-25",
       )}
+      data-dimmed={dimmed ? "true" : undefined}
       data-stall-code={cell.code}
       onClick={() => onSelect(cell.id)}
       tabIndex={tabIndex}
@@ -153,7 +169,9 @@ export const StallCell = memo(function StallCell({
        * "bu qaysi zona edi?" savoliga ham javob bersin. D-16: ikkalasi
        * ham DB kontenti — tarjima qilinmaydi.
        */
-      title={cell.code.length > 6 ? `${cell.code} · ${zoneName}` : undefined}
+      title={
+        hint ?? (cell.code.length > 6 ? `${cell.code} · ${zoneName}` : undefined)
+      }
       type="button"
     >
       {/* INVENTAR ikonkasi — yuqori-o'ng, rangdan mustaqil kanal (§4.4). */}
@@ -179,7 +197,7 @@ export const StallCell = memo(function StallCell({
       {DayIcon === null ? null : (
         <span
           aria-hidden="true"
-          className="absolute bottom-1 left-1 inline-flex"
+          className="absolute top-1 left-1 inline-flex"
           data-day-tone={cell.dayTone}
         >
           <DayIcon className="size-3" />
@@ -195,6 +213,19 @@ export const StallCell = memo(function StallCell({
       <span aria-hidden="true" className="max-w-full">
         {cell.code}
       </span>
+
+      {/*
+       * 261016: holat chizig'i — katak pastida, o'z ohangining rangida
+       * (`bg-current`). Fon tusi och, chiziq esa uzoqdan ham ko'rinadi:
+       * to'langan / to'lanmagan qator BIR QARASHDA ajraladi. Sotuvchisiz
+       * rasta uchun chiziq yo'q — u to'lov o'yinida qatnashmaydi.
+       */}
+      {cell.dayTone === null || cell.dayTone === "free" ? null : (
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-2 bottom-1 h-1 rounded-full bg-current opacity-60"
+        />
+      )}
     </button>
   );
 });
