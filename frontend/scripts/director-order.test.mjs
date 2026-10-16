@@ -26,9 +26,19 @@
  * =============================================================================
  *
  * ⚠ NEGA MANBA MATNI, DOM EMAS: bu faylda JSX tartibi = setka tartibi
- *   (tekis grid, `order` xossasi ishlatilmaydi, bosh katak esa butun
- *   qatorni egallaydi). Ya'ni manbadagi ketma-ketlik ko'rinadigan
- *   ketma-ketlikning O'ZI.
+ *   (tekis grid, `order` xossasi ishlatilmaydi). Ya'ni manbadagi
+ *   ketma-ketlik ko'rinadigan ketma-ketlikning O'ZI.
+ *
+ * =============================================================================
+ * ⛔ 261016: OBYEKT ALMASHDI, DA'VO O'ZGARMADI.
+ *
+ *   Bosh katak + olti katak (`six-tiles.tsx`) foydalanuvchi qarori bilan
+ *   olib tashlandi («buni hech kim tushunmayapti») va o'rniga to'rtta
+ *   oddiy savol keldi (`kpi-row.tsx`). Darvoza endi o'sha faylni o'qiydi:
+ *   kirish navbati hamon O'QISH TARTIBIDA va burchak raqami hamon YO'Q.
+ *   Katak bitta komponentda emas, to'rtta kichik funksiyada — shuning
+ *   uchun navbat ham ular fayldagi tartibda o'qiladi.
+ * =============================================================================
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -37,7 +47,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const TILES = join(HERE, "..", "src", "components", "director", "six-tiles.tsx");
+const TILES = join(HERE, "..", "src", "components", "director", "kpi-row.tsx");
 const TILE = join(HERE, "..", "src", "components", "panel", "tile.tsx");
 
 const source = readFileSync(TILES, "utf8");
@@ -76,18 +86,18 @@ function tiles() {
   return found;
 }
 
-test("G-dir-1(a) — panelda bosh katak + oltita katak bor", () => {
+test("G-dir-1(a) — panelda to'rtta katak bor (261016)", () => {
   const list = tiles();
-  assert.equal(list.length, 7, `kutilgan 7 ta katak, topildi ${list.length}`);
+  assert.equal(list.length, 4, `kutilgan 4 ta katak, topildi ${list.length}`);
   for (const tile of list) {
     assert.notEqual(tile.step, null, `«${tile.label}» katagida \`step\` yo'q`);
   }
 });
 
-test("G-dir-1(b) — kirish navbati O'QISH TARTIBIDA 0..6", () => {
+test("G-dir-1(b) — kirish navbati O'QISH TARTIBIDA 0..3", () => {
   const list = tiles();
   const actual = list.map((tile) => tile.step);
-  const expected = [0, 1, 2, 3, 4, 5, 6];
+  const expected = [0, 1, 2, 3];
 
   assert.deepEqual(
     actual,
@@ -103,7 +113,7 @@ test("G-dir-1(c) — katak burchagidagi tartib raqami QAYTMAYDI", () => {
   assert.doesNotMatch(
     source,
     /\bindex=\{/,
-    "`six-tiles.tsx` da `index` propi qaytdi — Stitch maketida katak " +
+    "`kpi-row.tsx` da `index` propi qaytdi — Stitch maketida katak " +
       "burchagida raqam YO'Q",
   );
 

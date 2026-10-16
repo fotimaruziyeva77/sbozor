@@ -22,13 +22,13 @@ import { includesToday, periodRange } from "@/components/director/period";
 import { PeriodPicker } from "@/components/director/period-picker";
 import { AuditSheet } from "@/components/director/audit-sheet";
 import { CaptureWeek } from "@/components/director/capture-week";
+import { DirectorKpis } from "@/components/director/kpi-row";
 import { PaymentMix } from "@/components/director/payment-mix";
 import { RevenueTrend } from "@/components/director/revenue-trend";
 import { StallDayCard } from "@/components/director/stall-day-card";
 import { TopDebtors } from "@/components/director/top-debtors";
 import { DebtorsReport } from "@/components/reports/debtors-report";
 import { RevenueReport } from "@/components/reports/revenue-report";
-import { SixTiles } from "@/components/director/six-tiles";
 import { businessDayIn } from "@/components/snapshots/day-picker";
 import { formatBusinessDay } from "@/lib/format-day";
 
@@ -188,7 +188,12 @@ export function DirectorPanel({
 
       {activeTab === "today" ? (
         <>
-          <SixTiles period={period} />
+          {/*
+           * ⛔ 261016: bosh katak + olti katak o'rniga TO'RTTA ODDIY SAVOL
+           *    (buyurtmachi: «buni hech kim tushunmayapti»). Sabab
+           *    `kpi-row.tsx` sarlavhasida.
+           */}
+          <DirectorKpis period={period} />
 
           {/*
            * ⛔ GRAFIKLAR KATAKLARDAN KEYIN (261016, buyurtmachi maketi:

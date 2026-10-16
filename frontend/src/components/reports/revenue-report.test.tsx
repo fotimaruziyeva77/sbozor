@@ -33,7 +33,7 @@
  * =============================================================================
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { RenderResult } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
@@ -333,12 +333,47 @@ describe("bo'sh davr", () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* (c2) KALENDAR — STANDART KO'RINISH (261016)                                */
+/* -------------------------------------------------------------------------- */
+
+describe("kunlar kalendari", () => {
+  test("standart holatda KALENDAR: har kun bitta tugma, jadval yo'q", async () => {
+    const view = await renderRevenue(REVENUE_RESPONSE);
+
+    /*
+     * ⛔ Buyurtmachi: «scroll qilib o'tirmaydi». Jadval ochilmagan holatda
+     *    DOM'da yo'q — telefonda sahifa uzunligi kalendar bilan cheklanadi.
+     */
+    expect(view.container.querySelector("table")).toBeNull();
+    const group = screen.getByRole("group", { name: messages.reports.calLabel });
+    expect(group.querySelectorAll("button")).toHaveLength(REVENUE_ROWS.length);
+    expect(
+      screen.getByRole("button", { name: messages.reports.viewCalendar }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("«Jadval» bosilsa jadval chiziladi va kalendar yo'qoladi", async () => {
+    const view = await renderRevenue(REVENUE_RESPONSE);
+
+    fireEvent.click(screen.getByRole("button", { name: messages.reports.viewTable }));
+
+    expect(view.container.querySelector("table")).not.toBeNull();
+    expect(
+      screen.queryByRole("group", { name: messages.reports.calLabel }),
+    ).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* (d) FARQ USTUNI — MANFIY QIZIL, MUSBAT ⛔ YASHIL EMAS (§8.2, §13.4)        */
 /* -------------------------------------------------------------------------- */
 
 describe("⛔ farq ustunining rang kanali", () => {
   test("manfiy farq `text-danger-text` oladi, musbat farq ⛔ OLMAYDI", async () => {
     const view = await renderRevenue(REVENUE_RESPONSE);
+
+    /* 261016: kunlar standart holatda KALENDARDA — jadval bir bosishda. */
+    fireEvent.click(screen.getByRole("button", { name: messages.reports.viewTable }));
 
     const rows = [...view.container.querySelectorAll("tbody tr")];
     expect(rows).toHaveLength(REVENUE_ROWS.length);

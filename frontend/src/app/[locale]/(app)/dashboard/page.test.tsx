@@ -457,7 +457,7 @@ describe("G-motion-6(b) — kassir tushum va bandlikni KO'RMAYDI", () => {
   });
 });
 
-describe("G-motion-6(b) — direktor OLTI KATAKNI va trendni KO'RADI", () => {
+describe("G-motion-6(b) — direktor TO'RT KATAKNI va grafiklarni KO'RADI", () => {
   /*
    * ⛔⛔ DA'VO O'ZGARMADI, YUZA O'ZGARDI (260818, dizayn importi).
    *
@@ -470,8 +470,14 @@ describe("G-motion-6(b) — direktor OLTI KATAKNI va trendni KO'RADI", () => {
    * ⛔ Tekshiriladigan narsa BIR XIL qoladi va u eng muhimi: direktorda
    *    tushum va bandlik SO'ROVLARI HAQIQATAN ketadi (pastdagi teskari
    *    nazorat) — ya'ni bu test bo'sh detektor ustida yashil qolmaydi.
+   *
+   * ⛔ 261016: olti katak to'rtta oddiy savolga almashdi (buyurtmachi:
+   *    «buni hech kim tushunmayapti»). Bandlik va AI aniqligi katagi
+   *    olib tashlandi, ya'ni `/occupancy` so'rovi ENDI KETMAYDI — teskari
+   *    nazorat bugungi tushum (`/reports/live`) va rastalar holatiga
+   *    (`/billing/map`) ko'chdi.
    */
-  test("olti katak, trend va so'rovlar — hammasi BOR", async () => {
+  test("to'rt katak, grafiklar va so'rovlar — hammasi BOR", async () => {
     routeFetch();
     renderPage(["director"], { marketIsActive: true });
 
@@ -486,9 +492,10 @@ describe("G-motion-6(b) — direktor OLTI KATAKNI va trendni KO'RADI", () => {
        *   bog'langan tasdiq matn tahririga chidaydi, katak YO'QOLSA esa
        *   baribir qizaradi.
        */
-      expect(document.body.textContent).toContain(messages.director.tileRevenue);
-      expect(document.body.textContent).toContain(messages.director.tileLeak);
-      expect(document.body.textContent).toContain(messages.director.tileDebt);
+      expect(document.body.textContent).toContain(messages.director.kpiRevenue);
+      expect(document.body.textContent).toContain(messages.director.kpiStalls);
+      expect(document.body.textContent).toContain(messages.director.kpiDebt);
+      expect(document.body.textContent).toContain(messages.director.kpiCamera);
       /* Trend kartasi. */
       expect(document.body.textContent).toContain(messages.director.trendTitle);
       /*
@@ -507,7 +514,10 @@ describe("G-motion-6(b) — direktor OLTI KATAKNI va trendni KO'RADI", () => {
       requestedPaths().some((path) => path.startsWith("/reports/revenue")),
     ).toBe(true);
     expect(
-      requestedPaths().some((path) => path.startsWith("/occupancy")),
+      requestedPaths().some((path) => path.startsWith("/reports/live")),
+    ).toBe(true);
+    expect(
+      requestedPaths().some((path) => path.startsWith("/billing/map")),
     ).toBe(true);
   });
 });

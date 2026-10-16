@@ -1,9 +1,11 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { useReportPeriod } from "@/components/reports/period-picker";
+import { RevenueCalendar } from "@/components/reports/revenue-calendar";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { RevenueReportRow } from "@/lib/api-types";
@@ -102,6 +104,12 @@ export function RevenueReport() {
 
   const periodId = useId();
   const rowsShownId = useId();
+  /*
+   * ⛔ 261016: KUNLAR STANDART HOLATDA KALENDARDA (buyurtmachi: «scroll
+   *    qilib o'tirmaydi — telefonda juda ko'p vaqt oladi»). Jadval
+   *    YO'QOLMADI: aniq qatorlar kerak bo'lganda bir bosishda ochiladi.
+   */
+  const [view, setView] = useState<"calendar" | "table">("calendar");
 
   const data = report.data;
 
@@ -221,6 +229,33 @@ export function RevenueReport() {
               title={t("reports.emptyRevenue")}
             />
           ) : (
+            <>
+              <div
+                aria-label={t("reports.viewLabel")}
+                className="flex flex-wrap gap-1.5"
+                role="group"
+              >
+                <Button
+                  aria-pressed={view === "calendar"}
+                  onClick={() => setView("calendar")}
+                  size="sm"
+                  variant={view === "calendar" ? "secondary" : "ghost"}
+                >
+                  {t("reports.viewCalendar")}
+                </Button>
+                <Button
+                  aria-pressed={view === "table"}
+                  onClick={() => setView("table")}
+                  size="sm"
+                  variant={view === "table" ? "secondary" : "ghost"}
+                >
+                  {t("reports.viewTable")}
+                </Button>
+              </div>
+
+              {view === "calendar" ? (
+                <RevenueCalendar rows={data.rows} />
+              ) : (
             <div className="overflow-x-auto">
               {/*
                * ⛔ NATIVE `<table>` + `<caption class="sr-only">` +
@@ -268,6 +303,8 @@ export function RevenueReport() {
                 </tbody>
               </table>
             </div>
+              )}
+            </>
           )}
         </>
       ) : null}

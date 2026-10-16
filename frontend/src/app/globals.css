@@ -1551,47 +1551,6 @@
 
 /*
  * ============================================================================
- * BOSH KO'RSATKICH — Stitch `hero-stat` shkalasi (260819).
- *
- * 56px / 1.1 / −0.02em / 700. Bu panel ekranidagi ENG KATTA son va u
- * shunday bo'lishi kerak: kelgan tekshiruvchi birinchi shuni ko'radi.
- * ⛔ `text-hero` utilitasi EMAS — u landing h1 ga qulflangan (G-land-5(a)).
- * ============================================================================
- */
-.dir-hero-stat {
-  margin: 0;
-  font-family: var(--font-mono), ui-monospace, monospace;
-  /*
-   * ⛔⛔ 56px -> 48px, VA BU O'LCHOVDAN KELDI (260819).
-   *
-   *     Stitch maketida foiz halqaning ICHIDA va uning kengligi
-   *     halqaning TASHQI diametriga teng — raqam halqa chizig'ini
-   *     ikki chetdan bosib turadi va shakl yaxlit ko'rinadi.
-   *
-   *     Bizda 56px mono edi: «95.7%» = 5 belgi × 33.6px = 168px,
-   *     halqa esa 144px. Raqam halqadan 12px chiqib ketardi. 100%
-   *     bo'lganda («100.0%», 6 belgi) farq 58px ga chiqardi.
-   *
-   *     48px + 176px halqa: «95.7%» 144px, «100.0%» 173px — ikkalasi
-   *     ham halqa ichida qoladi.
-   */
-  font-size: 3rem;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 760px) {
-  /* Telefonda halqa o'lchami o'zgarmaydi (176px), shuning uchun
-     raqam ham 36px gacha tushadi — «100.0%» 130px bo'lib sig'adi. */
-  .dir-hero-stat {
-    font-size: 2.25rem;
-  }
-}
-
-/*
- * ============================================================================
  * SARLAVHA OSTIDAGI ERISH QATLAMI — Stitch'dan (260819).
  *
  * ⛔⛔ NEGA KO'CHIRILDI: `stitch.withgoogle.com` ning butun sahifasida
@@ -1715,15 +1674,6 @@
   font-size: 0.8125rem;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
-}
-
-/* Izoh qatorining ichida chap/o'ng juftlik («14 sotuvchi» · «eng eski …»). */
-.dir-tile-note-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
 }
 
 /* --- Katakning pastki qatori ------------------------------------------ */
@@ -1920,13 +1870,6 @@
   }
 }
 
-/* Bandlik donuti — 76px (dizayn qiymati), arbitrar Tailwind emas. */
-.dir-donut {
-  width: 4.75rem;
-  height: 4.75rem;
-  flex-shrink: 0;
-}
-
 /* Smena farqi — ogohlantirish rangida (dizayn 6-kataki). */
 .dir-tile-diff {
   color: var(--color-warning-text);
@@ -1959,11 +1902,6 @@
   to {
     opacity: 1;
   }
-}
-
-/* Gero halqasi to'lib boradi (№5 «wow») — transition, kadr emas. */
-.dir-hero-ring {
-  transition: stroke-dashoffset 900ms var(--ease-out);
 }
 
 /* Gero yumshoq nur qatlami — STATIK bezak (harakat yo'q), yorug'/tun
@@ -2251,80 +2189,299 @@
   }
 }
 
-/* ===========================================================================
- * PUL OQIMI CHIZIG'I — gero katagining o'ng yarmi (260902)
- * =========================================================================== */
-
-.dir-flow {
-  /*
-   * ⛔ MIN-WIDTH 0 MAJBURIY: flex bolasi standart holatda o'z
-   *    kontentidan kichrayolmaydi va SVG konteynerni kengaytirib,
-   *    chapdagi halqani siqib qo'yardi.
-   */
-  min-width: 0;
-  flex: 1 1 320px;
-}
-
-.dir-flow-svg {
-  display: block;
-  width: 100%;
-  height: 9.5rem;
-}
 
 /*
- * Chiziq chapdan o'ngga CHIZILADI — ma'lumot «kelayotgani» hissi.
+ * ============================================================================
+ * TUSHUM KALENDARI (261016, `reports/revenue-calendar.tsx`) — oy bitta
+ * ekranda. Buyurtmachi: «kunlarni ko'rish uchun scroll qilish kerak —
+ * telefonda juda ko'p vaqt oladi».
  *
- * ⚠ `pathLength="1"` ISHLATILMAYDI: u Safari'ning eski versiyalarida
- *   `stroke-dasharray` bilan birga noto'g'ri hisoblanadi. O'rniga katta
- *   qiymat olinadi — u har qanday uzunlikni qoplaydi.
+ * ⛔ Fon to'qligi — BITTA aksent ohangi sirt bilan aralashtirilgan
+ *    (`color-mix`): har temada o'zi moslashadi, yangi token yo'q. Holat
+ *    — alohida nuqta, ohang emas: ikki kanal aralashmaydi.
+ * ============================================================================
  */
-@keyframes dirFlowDraw {
-  from {
-    stroke-dashoffset: 2000;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
+.rev-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.dir-flow-line {
-  stroke-dasharray: 2000;
-  animation: dirFlowDraw 1100ms var(--ease-out) both;
+.rev-cal-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
 }
 
-/*
- * ⛔ GERO ENDI IKKI USTUN: chapda halqa, o'ngda oqim. 900 px dan tor
- *    ekranda ular ustma-ust tushadi — telefonda yonma-yon ikkalasi ham
- *    o'qilmas darajada kichrayardi.
- */
-.dir-hero-flow {
+.rev-cal-weekday {
+  padding-bottom: 0.25rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.rev-cal-pad {
+  min-height: 3.25rem;
+}
+
+.rev-cal-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.125rem;
+  min-height: 3.25rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rev-cal-cell:hover {
+  border-color: var(--color-border-ui);
+}
+
+.rev-cal-cell:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Tanlangan kun — aksent hoshiya (fon to'qligi o'zgarmaydi). */
+.rev-cal-cell[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.rev-cal-day {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rev-cal-sum {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rev-cal-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+}
+
+.rev-cal-cell .rev-cal-dot {
+  position: absolute;
+  top: 0.375rem;
+  right: 0.375rem;
+}
+
+.rev-cal-dot-short {
+  background: var(--color-danger);
+}
+
+.rev-cal-dot-uncharged {
+  background: var(--color-border-ui);
+}
+
+.rev-cal-heat-1 {
+  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-surface));
+}
+
+.rev-cal-heat-2 {
+  background: color-mix(in oklab, var(--color-accent) 16%, var(--color-surface));
+}
+
+.rev-cal-heat-3 {
+  background: color-mix(in oklab, var(--color-accent) 26%, var(--color-surface));
+}
+
+.rev-cal-heat-4 {
+  background: color-mix(in oklab, var(--color-accent) 38%, var(--color-surface));
+}
+
+.rev-cal-legend {
   display: flex;
   flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.rev-cal-legend li {
+  display: inline-flex;
   align-items: center;
-  gap: 1.75rem;
+  gap: 0.5rem;
+}
+
+.rev-cal-scale {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.rev-cal-scale > span {
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+}
+
+.rev-cal-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface-muted);
+}
+
+.rev-cal-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.rev-cal-detail-grid dt {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.rev-cal-detail-grid dd {
+  margin: 0.25rem 0 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .rev-cal-cell {
+    min-height: 2.875rem;
+    padding: 0.25rem 0.3rem;
+  }
+
+  .rev-cal-pad {
+    min-height: 2.875rem;
+  }
+
+  .rev-cal-sum {
+    font-size: 0.75rem;
+  }
+
+  .rev-cal-cell .rev-cal-dot {
+    top: 0.25rem;
+    right: 0.25rem;
+  }
+
+  /* Telefonda har son bitta qatorda: yorliq chapda, summa o'ngda. */
+  .rev-cal-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+
+  .rev-cal-detail-grid > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .rev-cal-detail-grid dd {
+    margin: 0;
+    white-space: nowrap;
+  }
 }
 
 /*
- * ⚠ BU YERDA `prefers-reduced-motion` BLOKI YO'Q va u KERAK EMAS:
- *   global qoida (`globals.css` yuqorisida) barcha animatsiyalarni
- *   `0.01ms` ga tushiradi, `both` esa chiziqni oxirgi holatda —
- *   `stroke-dashoffset: 0` da — qoldiradi. Alohida `animation: none`
- *   yozish G-motion-3(c) darvozasini buzardi: u `none` ni kadr NOMI deb
- *   o'qiydi va reyestrda topa olmaydi.
- */
-
-/*
- * Katak mini-grafigi — raqamning yonidagi shakl (260902).
+ * ============================================================================
+ * BOSH QATOR — TO'RTTA ODDIY SAVOL (261016, `kpi-row.tsx`).
  *
- * ⛔ BALANDLIK QAT'IY: `ResponsiveContainer` ota-elementning
- *    balandligini o'lchaydi va u `auto` bo'lsa NOLGA teng chiqadi —
- *    grafik jimgina chizilmasdi (Recharts ning eng ko'p uchraydigan
- *    tuzog'i).
+ * ⛔ TELEFONDA HAM IKKI USTUN: to'rt katak bitta ekranga sig'adi va
+ *    direktor javobni pastga aylantirmasdan ko'radi (buyurtmachi:
+ *    «telefonda scroll qilib o'tirmaydi»). Shuning uchun son telefonda
+ *    kichrayadi, birlik esa kerak bo'lsa keyingi qatorga tushadi.
+ * ============================================================================
  */
-.dir-spark {
-  height: 2.75rem;
-  margin-top: 0.75rem;
-  width: 100%;
+.dir-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 1180px) {
+  .dir-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.dir-kpi-value {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 1.75rem;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.dir-kpi-unit {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+}
+
+.dir-kpi-skeleton {
+  height: 2.25rem;
+  width: 75%;
+}
+
+/* To'langan ulushi — yashil: «qancha qismi yopildi». Fon — o'sha ohangning sust izi. */
+.dir-kpi-meter {
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--color-surface-muted);
+}
+
+.dir-kpi-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--color-success);
+}
+
+@media (max-width: 760px) {
+  .dir-kpis {
+    gap: 0.75rem;
+  }
+
+  .dir-kpi-value {
+    font-size: 1.25rem;
+  }
+
+  .dir-kpi-unit {
+    font-size: 0.8125rem;
+  }
+
+  /* Tor katakda ikonka yorliqni siqmasin. */
+  .dir-kpis .dir-tile-icon {
+    width: 2rem;
+    height: 2rem;
+    padding: 0.375rem;
+  }
 }
 
 /*

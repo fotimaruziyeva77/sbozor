@@ -34,7 +34,7 @@
  * =============================================================================
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
@@ -470,6 +470,27 @@ describe("⛔ G-37 (08-UI-SPEC) (e): mazmun MOCK'DAGI AYNAN QIYMATGA qadalgan", 
     const block = container.querySelector('[data-report-content="revenue"]');
 
     expect(block).not.toBeNull();
+
+    /*
+     * ⛔ 261016: KUNLAR STANDART HOLATDA KALENDARDA (buyurtmachi: «scroll
+     *   qilib o'tirmaydi»). Da'vo O'ZGARMADI — mazmun mock'dagi AYNAN
+     *   qiymatga qadalgan: kalendarda AYNAN shuncha kun tugmasi va birinchi
+     *   kun o'z sanasi bilan; jadvalga o'tilganda AYNAN shuncha qator.
+     */
+    const calendar = within(block as HTMLElement).getByRole("group", {
+      name: messages.reports.calLabel,
+    });
+    const days = within(calendar).getAllByRole("button");
+    expect(days).toHaveLength(REVENUE_ROWS.length);
+    expect(days[0]?.getAttribute("aria-label")).toContain(
+      shownDay(REVENUE_ROWS[0].business_date),
+    );
+
+    fireEvent.click(
+      within(block as HTMLElement).getByRole("button", {
+        name: messages.reports.viewTable,
+      }),
+    );
     expect(block?.textContent).toContain(shownDay(REVENUE_ROWS[0].business_date));
 
     /*
