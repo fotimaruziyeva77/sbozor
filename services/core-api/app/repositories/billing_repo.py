@@ -212,6 +212,49 @@ topilgan «ikki haqiqat manbai» sinfi.
   ifodada tug'iladi.
 """
 
+_PAYMENT_CASH_DAY_EXPR: Final[str] = (
+    "CASE WHEN p.reversal_reason = :duplicate_entry "
+    "THEN COALESCE(o.business_date, p.business_date) "
+    "ELSE p.business_date END"
+)
+"""To'lovning KASSA KUNI — tushum qaysi kunga yoziladi (261016).
+
+=============================================================================
+⛔⛔ TAKROR YOZUVNING STORNOSI ASL YOZUV KUNIGA TEGISHLI, BOSHQASI — O'Z KUNIGA.
+
+Storno qatorining `business_date` i — u YOZILGAN kun (`created_at` dan
+generated). Kassirning o'sha smenadagi tuzatishi uchun bu to'g'ri: asl
+yozuv ham, storno ham bir kunda. Lekin 261016 da 22-avgust — 15-oktabr
+oralig'idagi 43 ta takror yozuv (`duplicate_entry`) bugun bekor qilindi va
+bosh paneldagi «Bugun» tushumi 1 289 000 o'rniga 251 000 ko'rindi: o'tgan
+kunlardagi xato bugungi rasta pulidan ayirildi.
+
+Takror yozuv HECH QACHON pul olib kelmagan — u kassaga tushmagan pulning
+yozuvi. Uni bekor qilish o'sha yozuv kiritilgan kunning tushumini
+to'g'rilaydi, bugungi kassaga tegmaydi.
+
+⛔ QOLGAN SABABLAR O'Z KUNIDA QOLADI va bu ATAYIN:
+   `wrong_stall` / `wrong_amount` — pul haqiqatan olingan, kassir uni
+   tuzatish paytida TO'G'RI yozuv bilan qayta kiritadi (bugungi sana
+   bilan). Stornoni asl kunga ko'chirish asl kunni kamaytirib, bugunni
+   oshirardi — pul esa asl kunda olingan edi. `customer_refund` — pul
+   haqiqatan BUGUN qaytariladi.
+
+⚠ `o` ALIASI `_ORIGINAL_PAYMENT_JOIN` bilan ulanadi va `:duplicate_entry`
+  — `ReversalReason.DUPLICATE_ENTRY.value` parametri (matnda literal emas).
+⚠ Storno asl yozuvdan KEYIN yoziladi, ya'ni kassa kuni hech qachon qator
+  yozilgan kundan KEYIN bo'lmaydi: davr filtri `p.business_date >= :from`
+  indeksdan foydalanadi va hech narsa tushib qolmaydi.
+⚠ Qarz yopishdagi `_SETTLEMENT_CREDIT` boshqa savolga javob beradi
+  (sotuvchi krediti qaysi davrniki) va u HAMMA stornoni asl kunga
+  bog'laydi — bu ifoda unga tegmaydi.
+"""
+
+_ORIGINAL_PAYMENT_JOIN: Final[str] = (
+    "LEFT JOIN payments o ON o.market_id = p.market_id AND o.id = p.reverses_payment_id"
+)
+"""Storno qatorining ASL to'lovi — `_PAYMENT_CASH_DAY_EXPR` ning `o` aliasi."""
+
 _SIGNED_ADJUSTMENT_EXPR: Final[str] = (
     "CASE WHEN a.direction = :increase THEN a.amount_soum ELSE -a.amount_soum END"
 )

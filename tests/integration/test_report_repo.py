@@ -51,9 +51,11 @@ from app.repositories.report_repo import (
     AnomalyArchive,
     AnomalyArchiveRow,
     anomaly_archive,
+    collected_by_method,
     receivables,
     revenue_by_day,
 )
+from app.repositories.shift_repo import shift_report
 from fixtures.billing_domain import (
     BILLING_VALID_FROM,
     TARIFF_SOUM,
@@ -74,6 +76,7 @@ from sbozor_core.enums import (
     AdjustmentReason,
     AnomalyKind,
     PaymentKind,
+    PaymentMethod,
     ReconciliationCaseStatus,
     ReversalReason,
 )
@@ -505,6 +508,165 @@ async def test_revenue_splits_a_yesterday_charge_from_a_today_payment(
     assert rows[pay_day].charged_soum == 0, (
         "bugun PATTA HISOBLANMAGAN — hisob kechagi `service_date` ga yozilgan"
     )
+
+
+# ===========================================================================
+# 1c. KASSA KUNI — TAKROR YOZUVNING STORNOSI ASL YOZUV KUNIGA (261016)
+# ===========================================================================
+
+_INSERT_PAYMENT_AT = (
+    "INSERT INTO payments "
+    "(id, market_id, stall_id, vendor_id, service_date, amount_soum, quote_soum, kind, "
+    " method, reverses_payment_id, reversal_reason, idempotency_key, request_fingerprint, "
+    " cashier_id, created_at) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+    " now() - make_interval(days => %s))"
+)
+"""To'lov — `created_at` O'TMISHGA qo'yiladi (`test_debt_settlement.py` naqshi).
+
+`business_date` `created_at` dan generated, ya'ni «uch kun oldin yozilgan
+to'lov» faqat shu yo'l bilan quriladi. `shift_id` YO'Q — prod'dagi 261016
+stornolari ham smenasiz yozilgan.
+"""
+
+OLD_SOUM = 20_000
+"""Uch kun oldingi yozuv — ⛔ bugungi to'lovdan (`TARIFF_SOUM`) FARQLI summa.
+
+Teng summalarda «storno bugunga tushdi» va «asl kunga tushdi» natijalari
+bir xil sonni berib qolishi mumkin edi; farqli summa ikkalasini ajratadi:
+
+    takror yozuv:  eski kun 0,       bugun 15 000
+    noto'g'ri rasta: eski kun 20 000, bugun −5 000
+"""
+
+_DAYS_AGO = 3
+
+
+def _payment_at(
+    conn: Connection[TupleRow],
+    env: Env,
+    *,
+    amount: int,
+    days_ago: int,
+    service_date: date,
+    reverses: UUID | None = None,
+    reason: ReversalReason | None = None,
+) -> UUID:
+    payment_id = uuid4()
+    conn.execute(
+        _INSERT_PAYMENT_AT,
+        (
+            str(payment_id),
+            str(env.market_id),
+            str(env.stall("stall_with_two_occupied_slots")),
+            str(env.live.vendor_id),
+            service_date,
+            amount,
+            amount,
+            PaymentKind.REVERSAL.value if reverses is not None else PaymentKind.PAYMENT.value,
+            PaymentMethod.CASH.value,
+            None if reverses is None else str(reverses),
+            None if reason is None else reason.value,
+            f"cash-day-{payment_id}",
+            "cash-day-fingerprint",
+            str(env.live.cashier_id),
+            days_ago,
+        ),
+    )
+    return payment_id
+
+
+def _old_entry_reversed_today(
+    conn: Connection[TupleRow], env: Env, reason: ReversalReason
+) -> tuple[date, date]:
+    """Uch kun oldin yozilgan to'lov, bugungi to'lov va BUGUN yozilgan storno.
+
+    ⚠ Storno asl yozuvning `service_date` ini oladi — prod'dagi
+      `payment_repo._REVERSE_PAYMENT` bilan bir xil.
+    """
+    today_row = conn.execute("SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date").fetchone()
+    assert today_row is not None
+    old_service_day: date = today_row[0] - timedelta(days=_DAYS_AGO)
+
+    old = _payment_at(conn, env, amount=OLD_SOUM, days_ago=_DAYS_AGO, service_date=old_service_day)
+    fresh = _payment_at(conn, env, amount=TARIFF_SOUM, days_ago=0, service_date=today_row[0])
+    _payment_at(
+        conn,
+        env,
+        amount=OLD_SOUM,
+        days_ago=0,
+        service_date=old_service_day,
+        reverses=old,
+        reason=reason,
+    )
+    return _business_date_of_payment(conn, old), _business_date_of_payment(conn, fresh)
+
+
+async def test_revenue_puts_a_duplicate_reversal_on_the_day_of_the_duplicate(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """⛔ Takror yozuv pul olib kelmagan — uning stornosi BUGUNGI tushumni kamaytirmaydi.
+
+    261016, prod: 43 ta eski takror yozuv bugun bekor qilindi va panelning
+    «Bugun» katagi 1 289 000 o'rniga 251 000 ko'rsatdi. Kalendar, to'lov
+    turlari grafigi va smena hisobotining «smenasiz to'lovlar» qatori ham
+    AYNI qoidaga bo'ysunadi — ular bir-biridan ajralmasligi shu yerda
+    o'lchanadi.
+    """
+    old_day, today = _old_entry_reversed_today(sync_owner_conn, env, ReversalReason.DUPLICATE_ENTRY)
+
+    async with tenant_session(env.market_id) as session:
+        period = await revenue_by_day(
+            session, market_id=env.market_id, from_date=old_day, to_date=today
+        )
+        today_methods = await collected_by_method(
+            session, market_id=env.market_id, from_date=today, to_date=today
+        )
+        old_methods = await collected_by_method(
+            session, market_id=env.market_id, from_date=old_day, to_date=old_day
+        )
+        today_shifts = await shift_report(session, market_id=env.market_id, day=today)
+        old_shifts = await shift_report(session, market_id=env.market_id, day=old_day)
+
+    rows = _by_day(period.rows)
+    assert rows[today].collected_soum == TARIFF_SOUM, (
+        "bugungi tushum — faqat bugun olingan pul; eski takror yozuvning "
+        "stornosi bugundan ayrilmasligi kerak"
+    )
+    assert rows[old_day].collected_soum == 0, "takror yozuv o'z kunida bekor bo'ladi"
+    assert period.total_collected_soum == TARIFF_SOUM
+
+    assert today_methods.cash_soum == TARIFF_SOUM
+    assert old_methods.cash_soum == 0
+
+    assert (today_shifts.shiftless_payment_count, today_shifts.shiftless_payment_soum) == (
+        1,
+        TARIFF_SOUM,
+    ), "bugungi smenasiz qator — faqat bugungi to'lov"
+    assert (old_shifts.shiftless_payment_count, old_shifts.shiftless_payment_soum) == (2, 0), (
+        "eski kunda — takror yozuv VA uning stornosi"
+    )
+
+
+async def test_revenue_keeps_a_wrong_stall_reversal_on_its_own_day(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """⛔ Takror yozuvdan BOSHQA sabab — storno o'z (bugungi) kunida qoladi.
+
+    Noto'g'ri rastaga yozilgan pul haqiqatan o'sha kuni olingan va kassir
+    uni tuzatishda to'g'ri yozuv bilan BUGUN qayta kiritadi. Stornoni eski
+    kunga ko'chirish eski kunni kamaytirib, bugunni oshirardi.
+    """
+    old_day, today = _old_entry_reversed_today(sync_owner_conn, env, ReversalReason.WRONG_STALL)
+
+    async with tenant_session(env.market_id) as session:
+        period = await revenue_by_day(
+            session, market_id=env.market_id, from_date=old_day, to_date=today
+        )
+
+    rows = _by_day(period.rows)
+    assert rows[old_day].collected_soum == OLD_SOUM
+    assert rows[today].collected_soum == TARIFF_SOUM - OLD_SOUM
 
 
 # ===========================================================================

@@ -67,12 +67,15 @@ from sbozor_core.enums import (
     PaymentMethod,
     ReconciliationSubjectKind,
     ResolutionSource,
+    ReversalReason,
 )
 from sqlalchemy import BigInteger, Date, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 
 from app.repositories.billing_repo import (
+    _ORIGINAL_PAYMENT_JOIN,
+    _PAYMENT_CASH_DAY_EXPR,
     _SIGNED_ADJUSTMENT_EXPR,
     _SIGNED_PAYMENT_EXPR,
     vendor_charge_allocation,
@@ -123,6 +126,7 @@ _UUID_ARRAY = ARRAY(PgUuid(as_uuid=True))
 _BIGINT_ARRAY = ARRAY(BigInteger())
 
 _REVERSAL: Final[str] = PaymentKind.REVERSAL.value
+_DUPLICATE_ENTRY: Final[str] = ReversalReason.DUPLICATE_ENTRY.value
 _INCREASE: Final[str] = AdjustmentDirection.INCREASE.value
 _DECREASE: Final[str] = AdjustmentDirection.DECREASE.value
 _WAIVER: Final[str] = AdjustmentReason.DIRECTOR_WAIVER.value
@@ -148,6 +152,16 @@ _REVENUE_BY_DAY = text(
                    '1 day'::interval
                ) AS gs
     ),
+    pay AS (
+        SELECT {_PAYMENT_CASH_DAY_EXPR}            AS cash_day,
+               sum({_SIGNED_PAYMENT_EXPR})::bigint AS collected_soum,
+               count(*)                            AS payment_count
+          FROM payments p
+          {_ORIGINAL_PAYMENT_JOIN}
+         WHERE p.market_id = :market_id
+           AND p.business_date >= CAST(:from_date AS date)
+         GROUP BY 1
+    ),
     per_day AS (
         SELECT d.business_date                         AS business_date,
                COALESCE(pay.collected_soum, 0)::bigint AS collected_soum,
@@ -155,13 +169,7 @@ _REVENUE_BY_DAY = text(
                COALESCE(chg.charged_soum, 0)::bigint   AS charged_soum,
                COALESCE(chg.charge_count, 0)::bigint   AS charge_count
           FROM days d
-          LEFT JOIN LATERAL (
-            SELECT sum({_SIGNED_PAYMENT_EXPR})::bigint AS collected_soum,
-                   count(*)                            AS payment_count
-              FROM payments p
-             WHERE p.market_id = :market_id
-               AND p.business_date = d.business_date
-          ) pay ON true
+          LEFT JOIN pay ON pay.cash_day = d.business_date
           LEFT JOIN LATERAL (
             SELECT sum(ch.amount_soum + COALESCE(adj.total, 0))::bigint AS charged_soum,
                    count(*)                                             AS charge_count
@@ -191,9 +199,14 @@ _REVENUE_BY_DAY = text(
     bindparam("from_date", type_=Date()),
     bindparam("to_date", type_=Date()),
     bindparam("reversal", type_=Text()),
+    bindparam("duplicate_entry", type_=Text()),
     bindparam("increase", type_=Text()),
 )
 """Kunlik tushum — ⛔ `generate_series` MAJBURIY VA SABABI MEXANIK.
+
+⛔ KASSA KUNI `_PAYMENT_CASH_DAY_EXPR` DAN (261016): takror yozuvning
+   stornosi asl yozuv kuniga tushadi, qolgani — o'z kuniga. Sabab va
+   misol o'sha ifodaning docstringida (`billing_repo`).
 
 =============================================================================
 ⛔⛔ NEGA `generate_series`, NEGA YOLG'IZ `GROUP BY` EMAS.
@@ -273,7 +286,8 @@ class RevenueRow:
     """Bir KUNNING tushumi — ⛔ IKKI SUMMA IKKI ALOHIDA USTUNDA (T-08-15).
 
     `collected_soum` — o'sha KASSA KUNIDA yig'ilgan BELGILI pul
-        (`payments.business_date`, storno MINUS bilan).
+        (`_PAYMENT_CASH_DAY_EXPR`, storno MINUS bilan; takror yozuvning
+        stornosi asl yozuv kunida).
     `charged_soum`   — o'sha kunning HISOBLANGAN pattasi, tuzatishlar bilan
         netlangan (`daily_charges.service_date`).
 
@@ -347,6 +361,7 @@ async def revenue_by_day(
             "from_date": from_date,
             "to_date": to_date,
             "reversal": _REVERSAL,
+            "duplicate_entry": _DUPLICATE_ENTRY,
             "increase": _INCREASE,
         },
     )
@@ -382,14 +397,17 @@ _COLLECTED_BY_METHOD = text(
            COALESCE(sum({_SIGNED_PAYMENT_EXPR}) FILTER (WHERE p.method = :terminal), 0)::bigint
                AS terminal_soum
       FROM payments p
+      {_ORIGINAL_PAYMENT_JOIN}
      WHERE p.market_id = :market_id
-       AND p.business_date BETWEEN CAST(:from_date AS date) AND CAST(:to_date AS date)
+       AND p.business_date >= CAST(:from_date AS date)
+       AND {_PAYMENT_CASH_DAY_EXPR} BETWEEN CAST(:from_date AS date) AND CAST(:to_date AS date)
     """  # noqa: S608
 ).bindparams(
     bindparam("market_id", type_=_UUID),
     bindparam("from_date", type_=Date()),
     bindparam("to_date", type_=Date()),
     bindparam("reversal", type_=Text()),
+    bindparam("duplicate_entry", type_=Text()),
     bindparam("cash", type_=Text()),
     bindparam("terminal", type_=Text()),
 )
@@ -405,9 +423,13 @@ _COLLECTED_BY_METHOD = text(
    ikki qism yig'indisi `revenue_by_day` dagi `collected_soum` bilan bir
    xil qoidadan chiqadi.
 
+⛔ KASSA KUNI `revenue_by_day` BILAN AYNI ifodadan (`_PAYMENT_CASH_DAY_EXPR`):
+   ikki qism yig'indisi o'sha kunning `collected_soum` iga teng qoladi.
+
 ⚠ QISM MANFIY BO'LISHI MUMKIN: kechagi terminal to'lovi bugun bekor
-  qilinsa, bugungi terminal yig'indisi minus bo'ladi. Bu HALOL javob —
-  klient manfiy qismda ulush chizmaydi.
+  qilinsa (takror yozuvdan boshqa sabab bilan), bugungi terminal
+  yig'indisi minus bo'ladi. Bu HALOL javob — klient manfiy qismda ulush
+  chizmaydi.
 """
 
 
@@ -438,6 +460,7 @@ async def collected_by_method(
             "from_date": from_date,
             "to_date": to_date,
             "reversal": _REVERSAL,
+            "duplicate_entry": _DUPLICATE_ENTRY,
             "cash": PaymentMethod.CASH.value,
             "terminal": PaymentMethod.TERMINAL.value,
         },

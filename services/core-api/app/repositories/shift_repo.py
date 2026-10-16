@@ -103,11 +103,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
 from sbozor_core.billing import variance
-from sbozor_core.enums import PaymentKind, ShiftStatus
+from sbozor_core.enums import PaymentKind, ReversalReason, ShiftStatus
 from sqlalchemy import BigInteger, Date, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.exc import IntegrityError
 
+from app.repositories.billing_repo import _ORIGINAL_PAYMENT_JOIN, _PAYMENT_CASH_DAY_EXPR
 from app.repositories.payment_repo import shift_system_total
 from app.repositories.stall_repo import sqlstate_of
 
@@ -523,21 +524,24 @@ ya'ni ⛔ **qator INSERT qilingan lahza** = smena OCHILGAN payt
 """
 
 _SHIFTLESS_PAYMENTS = text(
-    """
+    f"""
     SELECT count(*)::bigint AS shiftless_payment_count,
            COALESCE(
                sum(CASE WHEN p.kind = :reversal THEN -p.amount_soum ELSE p.amount_soum END),
                0
            )::bigint AS shiftless_payment_soum
       FROM payments p
+      {_ORIGINAL_PAYMENT_JOIN}
      WHERE p.market_id = :market_id
-       AND p.business_date = :day
+       AND p.business_date >= :day
+       AND {_PAYMENT_CASH_DAY_EXPR} = :day
        AND p.shift_id IS NULL
-    """
+    """  # noqa: S608
 ).bindparams(
     bindparam("market_id", type_=_UUID),
     bindparam("day", type_=Date()),
     bindparam("reversal", type_=Text()),
+    bindparam("duplicate_entry", type_=Text()),
 )
 """⛔ SMENASIZ to'lovlar — §11.5 FLAG'ining o'lchovi (OQ-6/A5).
 
@@ -554,6 +558,12 @@ _SHIFTLESS_PAYMENTS = text(
 ⛔ `COALESCE(..., 0)`: smenasiz to'lov bo'lmagan kunda natija `NULL`
    emas, **0** — «to'lov yo'q» ni «o'lchov yo'q» dan ajratmaydigan
    `NULL` klientda bo'sh katak bo'lib ko'rinardi.
+
+⛔ KUN — `_PAYMENT_CASH_DAY_EXPR` (261016), tushum hisoboti bilan AYNI:
+   takror yozuvning smenasiz stornosi asl yozuv kunining qatorida
+   ko'rinadi. Aks holda o'tgan kunlar uchun bugun qilingan 43 ta tuzatish
+   bugungi smena hisobotida «smenasiz to'lov −1 038 000» bo'lib turardi.
+   `S608` — f-string ga faqat `billing_repo` ning sobit ifodalari tushadi.
 """
 
 
@@ -791,7 +801,12 @@ async def shift_report(session: AsyncSession, *, market_id: UUID, day: date) -> 
 
     shiftless = await session.execute(
         _SHIFTLESS_PAYMENTS,
-        {"market_id": market_id, "day": day, "reversal": PaymentKind.REVERSAL.value},
+        {
+            "market_id": market_id,
+            "day": day,
+            "reversal": PaymentKind.REVERSAL.value,
+            "duplicate_entry": ReversalReason.DUPLICATE_ENTRY.value,
+        },
     )
     aggregate = shiftless.mappings().one()
 
