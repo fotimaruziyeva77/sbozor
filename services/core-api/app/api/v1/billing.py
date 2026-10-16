@@ -296,6 +296,7 @@ async def billing_pending(
             total_due_soum=stall.total_due_soum,
             stall_status=stall.stall_status,  # type: ignore[arg-type]
             vendor_assigned=stall.vendor_assigned,
+            paid_today_soum=stall.paid_today_soum,
         )
 
     if not projection.matches:

@@ -381,6 +381,98 @@ async def test_paying_only_the_stall_part_needs_no_reason_code(
     )
 
 
+async def test_a_stall_paid_without_the_fee_is_not_offered_the_full_patta_again(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+    cashier_headers: dict[str, str],
+) -> None:
+    """⛔⛔ 261016 — TAROZISIZ TO'LANGAN RASTA IKKINCHI MARTA TO'LANMAYDI.
+
+    =======================================================================
+    Prod'da o'lchangan: kassir tarozi belgisini olib rasta pulini yozardi,
+    №10 qulfi esa faqat TO'LIQ summaga yetganda ishlardi. Karta yana to'liq
+    pattani ko'rsatardi va bir rasta-kunga ikkinchi to'lov sababsiz o'tardi
+    (avgustdan beri 43 marta, 1 078 000 so'm, hammasi bir kassir).
+
+    Oqim to'liq o'lchanadi — kartadagi son va serverning qabul qilishi
+    AYNI qoidadan (`today_remainder`) chiqishi shart:
+
+      1. tarozisiz to'lov — 201;
+      2. karta: `paid_today_soum` = o'sha summa, qoldiq FAQAT tarozi,
+         jami esa to'lov qadar kamaygan (ikki marta ayirilmagan);
+      3. yana rasta puli — 422 `reason_required` (adashib olinmaydi);
+      4. qolgan tarozi — sababsiz 201;
+      5. endi to'liq to'langan — 409 `stall_already_paid`.
+    =======================================================================
+    """
+    anchor_id = env.stall("stall_with_two_occupied_slots")
+    probe = await api_client.get(
+        PENDING_URL,
+        params={"stall_code": _stall_code(sync_owner_conn, anchor_id)},
+        headers=cashier_headers,
+    )
+    assert probe.status_code == 200, probe.text
+    kun = probe.json()["service_date"]
+
+    # Tarozi sotuvchining BITTA rastasida — o'shani bazadan topamiz.
+    oldin: dict[str, Any] | None = None
+    code = ""
+    for kod in _vendor_stalls_on(sync_owner_conn, anchor_id, kun):
+        body = (
+            await api_client.get(PENDING_URL, params={"stall_code": kod}, headers=cashier_headers)
+        ).json()
+        if body.get("fee_amount_soum"):
+            oldin, code = body, kod
+            break
+    assert oldin is not None, "nazorat: seedda tarozili rasta topilmadi — qoida O'LCHANMAYDI"
+    assert oldin["paid_today_soum"] == 0, oldin
+    fee = oldin["fee_amount_soum"]
+    stall_part = oldin["stall_amount_soum"]
+
+    async def pay(amount: int, key: str) -> httpx.Response:
+        return await api_client.post(
+            "/api/v1/payments",
+            headers=cashier_headers,
+            json={"stall_code": code, "amount_soum": amount, "method": "cash", "idempotency_key": key},
+        )
+
+    # 1. Tarozisiz to'lov.
+    first = await pay(stall_part, "fee-off-twice-0001")
+    assert first.status_code == 201, first.text
+
+    # 2. Karta — faqat qoldiq.
+    keyin = (
+        await api_client.get(PENDING_URL, params={"stall_code": code}, headers=cashier_headers)
+    ).json()
+    assert keyin["paid_today_soum"] == stall_part, keyin
+    assert (keyin["amount_soum"], keyin["stall_amount_soum"], keyin["fee_amount_soum"]) == (
+        fee,
+        0,
+        fee,
+    ), f"tarozisiz to'langan rastaga yana to'liq patta ko'rsatildi: {keyin}"
+    assert keyin["total_due_soum"] == oldin["total_due_soum"] - stall_part, (
+        "jami qarz to'lov qadar kamayishi kerak edi — ikki marta ayirilgan yoki umuman ayirilmagan"
+    )
+    assert keyin["outstanding_soum"] + keyin["amount_soum"] == keyin["total_due_soum"], (
+        "kartadagi eski qarz + bugungi qoldiq jamiga teng emas — kassir ikki xil son ko'radi"
+    )
+
+    # 3. Yana rasta puli — adashib olinmaydi.
+    second = await pay(stall_part, "fee-off-twice-0002")
+    assert second.status_code == 422, second.text
+    assert second.json()["detail"] == "reason_required"
+
+    # 4. Qolgan tarozi — sababsiz.
+    third = await pay(fee, "fee-off-twice-0003")
+    assert third.status_code == 201, third.text
+
+    # 5. Endi to'liq to'langan.
+    fourth = await pay(fee, "fee-off-twice-0004")
+    assert fourth.status_code == 409, fourth.text
+    assert fourth.json()["detail"] == "stall_already_paid"
+
+
 # ===========================================================================
 # 2. KASSIR RO'YXATI — SUMMASIZ
 # ===========================================================================

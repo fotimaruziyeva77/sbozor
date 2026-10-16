@@ -80,6 +80,8 @@ const CLEAN: PendingStall = {
   total_due_soum: 15_000,
   stall_status: "active",
   vendor_assigned: true,
+  // 261016: bugun hali to'lanmagan — karta TO'LIQ pattani ko'rsatadi.
+  paid_today_soum: 0,
 };
 
 /**
@@ -194,6 +196,7 @@ describe("G-23(a) (06-UI-SPEC): proyeksiya sxemasi", () => {
       stall_amount_soum,
       fee_amount_soum,
       fee_label,
+      paid_today_soum,
       ...seven
     } = CLEAN;
     void stall_status;
@@ -201,6 +204,7 @@ describe("G-23(a) (06-UI-SPEC): proyeksiya sxemasi", () => {
     void stall_amount_soum;
     void fee_amount_soum;
     void fee_label;
+    void paid_today_soum;
 
     expect(Object.keys(seven)).toHaveLength(7);
     expect(() => pendingStallSchema.parse(seven)).toThrow();
@@ -542,6 +546,54 @@ describe("Topilma №L: rasta holati va sotuvchi konteksti", () => {
       screen.getByText(statusNotice(messages.stalls.status.maintenance)),
     ).toBeInTheDocument();
     expect(screen.getByText(NOT_ASSIGNED_CAUSE)).toBeInTheDocument();
+  });
+
+  test("F7 (261016): bugun qisman to'langan — to'langan summa va «qolgan qism» yozuvi", () => {
+    const paidPrefix = messages.collect.paidToday.split("{amount}")[0];
+    renderPending({
+      ...CLEAN,
+      amount_soum: 2_000,
+      stall_amount_soum: 0,
+      fee_amount_soum: 2_000,
+      fee_label: "Tarozi xizmati",
+      total_due_soum: 2_000,
+      paid_today_soum: 15_000,
+    });
+
+    expect(
+      screen.getByText((content) => content.startsWith(paidPrefix)),
+    ).toBeInTheDocument();
+    expect(screen.getByText(messages.collect.paidTodayRest)).toBeInTheDocument();
+    /* Qoldiq bor — katta summa (faqat qoldiq) chiziladi. */
+    expect(screen.getByText(AMOUNT_LABEL)).toBeInTheDocument();
+  });
+
+  test("F8 (261016): bugun TO'LIQ to'langan — katta summa YO'Q, sabab yo'li aytiladi", () => {
+    renderPending({
+      ...CLEAN,
+      amount_soum: 0,
+      stall_amount_soum: 0,
+      fee_amount_soum: 0,
+      total_due_soum: 0,
+      paid_today_soum: 15_000,
+    });
+
+    expect(screen.getByText(messages.collect.paidTodayFull)).toBeInTheDocument();
+    expect(screen.queryByText(AMOUNT_LABEL)).toBeNull();
+  });
+
+  test("F9 (261016): hali to'lanmagan rasta — «bugun to'langan» yozuvi YO'Q", () => {
+    renderPending(CLEAN);
+
+    const paidPrefix = messages.collect.paidToday.split("{amount}")[0];
+    expect(screen.queryByText((content) => content.startsWith(paidPrefix))).toBeNull();
+  });
+
+  test("F10 (261016): `paid_today_soum` siz javob sxemadan O'TMAYDI", () => {
+    const { paid_today_soum: _omitted, ...withoutField } = CLEAN;
+
+    expect(pendingStallSchema.safeParse(withoutField).success).toBe(false);
+    expect(pendingStallSchema.safeParse(CLEAN).success).toBe(true);
   });
 
   test("F6: ⛔ ogohlantirish SUMMANI O'CHIRMAYDI", () => {

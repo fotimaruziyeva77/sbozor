@@ -71,6 +71,7 @@ from sbozor_core.billing import (
     ChargeDue,
     allocate_charge_credit,
     billable_from_slots,
+    today_remainder,
     total_due_soum,
 )
 from sbozor_core.enums import (
@@ -92,6 +93,7 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.repositories.payment_repo import stall_paid_today
 from app.repositories.stall_repo import like_term
 from app.services.billing_errors import (
     AMOUNT_UNAVAILABLE_REASONS,
@@ -1788,6 +1790,14 @@ class PendingStall:
     total_due_soum: int
     stall_status: str
     vendor_assigned: bool
+    paid_today_soum: int
+    """Shu rasta-kunga BUGUN allaqachon to'langan sof summa (261016).
+
+    `> 0` bo'lsa `amount_soum`/`stall_amount_soum`/`fee_amount_soum` —
+    QOLDIQ (`today_remainder()`), `outstanding_soum` esa shu to'lovni
+    bugungi pattaga tegishli deb ko'rsatadi. ⛔ `total_due_soum` o'zgarmaydi:
+    `outstanding_soum + amount_soum == total_due_soum` saqlanadi.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -1910,22 +1920,46 @@ async def pending_projection(
         )
         outstanding = balances.get(row.vendor_id, 0)
 
+    # ⛔⛔ BUGUNGI TO'LOV — `POST /payments` ning 4-qadami bilan AYNI manba
+    #     (`stall_paid_today`) va AYNI qoldiq (`today_remainder`), 261016.
+    #     Usiz tarozisiz to'langan rasta kartada yana TO'LIQ patta bilan
+    #     chiqardi va kassir uni ikkinchi marta olardi.
+    #
+    # ⚠ `outstanding_soum` shu rastaning bugungi to'lovini «eski qarzni
+    #   yopdi» deb emas, «bugungi pattaga ketdi» deb ko'rsatadi — kassir
+    #   uchun bo'linish. Yig'indi (`total_due_soum`, FIFO) O'ZGARMAYDI:
+    #   `outstanding_soum + amount_soum == total_due_soum`.
+    paid_today = await stall_paid_today(
+        session, market_id=market_id, stall_id=row.stall_id, service_date=as_of
+    )
+    amount_soum = row.amount_soum
+    stall_amount_soum = row.tariff_amount_soum
+    fee_amount_soum = row.fee_amount_soum
+    shown_outstanding = outstanding
+    if row.amount_soum is not None and paid_today > 0:
+        rest = today_remainder(row.amount_soum, row.fee_amount_soum or 0, paid_today)
+        amount_soum = rest.amount_soum
+        stall_amount_soum = rest.stall_amount_soum
+        fee_amount_soum = rest.fee_amount_soum
+        shown_outstanding = outstanding + (row.amount_soum - rest.amount_soum)
+
     return PendingProjection(
         stall=PendingStall(
             stall_code=row.stall_code,
             service_date=as_of,
             market_open=row.market_open,
-            amount_soum=row.amount_soum,
-            stall_amount_soum=row.tariff_amount_soum,
-            fee_amount_soum=row.fee_amount_soum,
+            amount_soum=amount_soum,
+            stall_amount_soum=stall_amount_soum,
+            fee_amount_soum=fee_amount_soum,
             fee_label=row.fee_label,
             amount_unavailable_reason=row.unavailable_reason,
-            outstanding_soum=outstanding,
+            outstanding_soum=shown_outstanding,
             total_due_soum=total_due_soum(row.amount_soum, outstanding),
             stall_status=row.status,
             # ⛔ `vendor_id` NING O'ZI CHIQMAYDI — u yuqoridagi
             #    `outstanding` shoxida LOKAL qoladi (C-10).
             vendor_assigned=row.vendor_id is not None,
+            paid_today_soum=max(paid_today, 0),
         ),
         matches=(),
         market=None,

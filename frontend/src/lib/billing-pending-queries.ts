@@ -173,6 +173,19 @@ export const pendingStallSchema = z.strictObject({
   stall_status: stallStatusSchema,
   /** Bugungi kunda biriktirish BORMI — BUL, identifikator EMAS (C-10). */
   vendor_assigned: z.boolean(),
+  /**
+   * Shu rasta-kunga BUGUN allaqachon to'langan sof summa (261016).
+   *
+   * `> 0` bo'lsa `amount_soum` / `stall_amount_soum` / `fee_amount_soum`
+   * — QOLDIQ (server hisoblaydi): tarozisiz to'langan rastada karta faqat
+   * tarozini ko'rsatadi. Bu maydon bo'lmaganda kassir bir rastadan bir
+   * kunda ikki marta patta olgan edi (prod'da 43 marta).
+   *
+   * ⛔ MAJBURIY, `.optional()` EMAS — yuqoridagi `stall_status` bilan bir
+   *    xil sabab: eski serverda u jimgina `undefined` bo'lib kelardi va
+   *    «bugun to'langan» ogohlantirishi HECH QACHON chizilmasdi.
+   */
+  paid_today_soum: soumSchema.min(0),
 })
   /*
    * ⛔ JUFTLANGAN INVARIANT — naqsh `NO_COVERAGE_IS_PAIRED_CHECK` dan

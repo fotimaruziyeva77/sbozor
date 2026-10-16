@@ -428,20 +428,40 @@ async def create_payment(
             session, market_id=market_id, vendor_ids=[vendor_id], as_of=as_of
         )
     ).get(vendor_id, 0)
+    paid_today = await payment_repo.stall_paid_today(
+        session, market_id=market_id, stall_id=money.stall_id, service_date=as_of
+    )
     # ⛔ XIZMAT HAQI ULUSHI UZATILADI (0027): usiz «faqat rasta puli»
     #   summasi to'plamdan tushib qolar va kassir tarozi belgisini olib
     #   tashlaganda 422 `reason_required` olardi — ya'ni kuniga yuzlab
     #   marta takrorlanadigan NORMAL harakat override dialogidan o'tardi.
-    quotes = payment_quote_set(money.amount_soum, outstanding, money.fee_amount_soum or 0)
-
-    # ---- 4.5-QADAM (№10, 2026-08-25): BUGUN TO'LANGAN RASTA QAYTA
-    #      TO'LANMAYDI — sababsiz. Kvota to'plami bugungi to'lovlarni
-    #      bilmaydi (jonli serverda ikki marta to'lov o'tdi — o'lchandi);
-    #      qulf ADASHISHGA qarshi: ataylab qo'shimcha yozish sabab-kod
-    #      bilan ochiq qoladi (quyida 5-qadam override shoxi).
-    paid_today = await payment_repo.stall_paid_today(
-        session, market_id=market_id, stall_id=money.stall_id, service_date=as_of
+    #
+    # ⛔⛔ BUGUNGI TO'LOV UZATILADI (261016): usiz tarozisiz to'langan
+    #     rastaga (22 000 / 26 000) keyingi kartada yana TO'LIQ patta
+    #     taklif qilinardi va u sababsiz o'tardi — prod'da 43 marta
+    #     ikkinchi to'lov shu yo'l bilan yozildi. Endi taklif — QOLDIQ
+    #     (masalan tarozi 4 000); yana 22 000 yozish sabab-kod talab
+    #     qiladi (5-qadam override shoxi). `pending_projection()` kartada
+    #     AYNI qoldiqni ko'rsatadi.
+    quotes = payment_quote_set(
+        money.amount_soum,
+        outstanding,
+        money.fee_amount_soum or 0,
+        paid_today_soum=paid_today,
     )
+    # ⛔ BUGUNGI TO'LOVNI BILMAYDIGAN to'plam — FAQAT ikki savol uchun:
+    #   «bu rastaga umuman asoslangan summa bormi?» (yopiq kun / tarifsiz
+    #   rasta) va override'ning zaxira taklifi. Bugun to'liq to'langan
+    #   rastada `quotes` BO'SH bo'ladi, lekin bu «summa yo'q» EMAS — sabab
+    #   bilan ataylab qo'shimcha olish yo'li (№10 ning 3-shoxi) ochiq qolishi
+    #   shart va u avvalgidek to'liq pattani zaxira taklif sifatida yozadi.
+    day_quotes = payment_quote_set(money.amount_soum, outstanding, money.fee_amount_soum or 0)
+
+    # ---- 4.5-QADAM (№10, 2026-08-25): BUGUN TO'LIQ TO'LANGAN RASTA QAYTA
+    #      TO'LANMAYDI — sababsiz. Qulf ADASHISHGA qarshi: ataylab
+    #      qo'shimcha yozish sabab-kod bilan ochiq qoladi (quyida 5-qadam
+    #      override shoxi). QISMAN to'langan rastani esa yuqoridagi qoldiq
+    #      taklifi qo'riqlaydi.
     already_paid = money.amount_soum is not None and paid_today >= money.amount_soum
     if already_paid and payload.reason_code is None:
         log.info(
@@ -450,7 +470,7 @@ async def create_payment(
             paid_today=paid_today,
         )
         raise _reject(STALL_ALREADY_PAID, status.HTTP_409_CONFLICT)
-    if not quotes:
+    if not day_quotes:
         # ⛔ YAGONA TO'LIQ RAD ETISH YO'LI. Sabab NOMLANGAN va u
         #    KO'RINADI: yopiq kun / tarif yo'qligi -> o'sha kod; texnik
         #    holat (tarif bor, qarz nol, summa nol) -> `amount_unavailable`.
@@ -464,7 +484,9 @@ async def create_payment(
         if payload.reason_code is not None:
             raise _reject(OVERRIDE_NOT_APPLICABLE, status.HTTP_422_UNPROCESSABLE_CONTENT)
     else:
-        quote_soum = quotes[0]
+        # Zaxira taklif — kassir AYNAN shu lahzada ko'rgan son (qoldiq);
+        # qoldiq yo'q bo'lsa (bugun to'liq to'langan) — to'liq patta.
+        quote_soum = quotes[0] if quotes else day_quotes[0]
         if payload.reason_code is None:
             raise _reject(REASON_REQUIRED, status.HTTP_422_UNPROCESSABLE_CONTENT)
 

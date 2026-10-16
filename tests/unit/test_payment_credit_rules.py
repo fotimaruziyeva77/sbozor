@@ -41,8 +41,10 @@ import pytest
 from sbozor_core.billing import (
     ALLOCATION_RULE,
     ChargeDue,
+    TodayRemainder,
     allocate_charge_credit,
     payment_quote_set,
+    today_remainder,
     total_due_soum,
 )
 
@@ -620,3 +622,76 @@ def test_a_closed_day_never_produces_a_stall_only_quote() -> None:
     """
     assert payment_quote_set(None, 45_000, 2_000) == (45_000,)
     assert payment_quote_set(None, 0, 2_000) == ()
+
+
+# ===========================================================================
+# 261016 — BUGUN TO'LANGAN RASTAGA FAQAT QOLDIQ TAKLIF QILINADI
+# ===========================================================================
+#
+# Prod'da o'lchangan: kassir tarozi belgisini olib 22 000 yozardi (0027 ning
+# NORMAL yo'li), №10 qulfi esa faqat TO'LIQ 26 000 ga yetganda ishlardi.
+# Karta yana to'liq pattani ko'rsatardi va avgustdan beri 43 marta bir
+# rasta-kunga ikkinchi to'lov yozildi (1 078 000 so'm).
+
+
+def test_a_fee_free_payment_leaves_only_the_fee() -> None:
+    """Tarozisiz to'lov rasta pulini yopadi — qoladigani FAQAT tarozi."""
+    assert today_remainder(26_000, 4_000, 22_000) == TodayRemainder(
+        amount_soum=4_000, stall_amount_soum=0, fee_amount_soum=4_000
+    )
+
+
+def test_the_triple_invariant_holds_for_every_payment() -> None:
+    """⛔ `stall + fee == amount` (0027) HAR qanday to'lovdan keyin saqlanadi.
+
+    Klient sxemasi shu tenglikni tekshiradi: buzilsa kassir kartasi
+    parse paytida yiqilardi va to'lov ekrani umuman ochilmasdi.
+    """
+    for paid in (0, 1, 10_000, 21_999, 22_000, 23_000, 26_000, 44_000):
+        rest = today_remainder(26_000, 4_000, paid)
+        assert rest.stall_amount_soum + rest.fee_amount_soum == rest.amount_soum, paid
+        assert min(rest.amount_soum, rest.stall_amount_soum, rest.fee_amount_soum) >= 0, paid
+
+
+def test_an_overpaid_or_reversed_day_never_goes_negative() -> None:
+    """Ortiqcha to'lov qoldiqni MANFIY qilmaydi; storno ko'pi nol deb olinadi."""
+    assert today_remainder(26_000, 4_000, 44_000) == TodayRemainder(0, 0, 0)
+    assert today_remainder(26_000, 4_000, -5_000) == today_remainder(26_000, 4_000, 0)
+
+
+def test_a_paid_stall_is_not_offered_the_full_patta_again() -> None:
+    """⛔ ASOSIY DA'VO: tarozisiz to'langan rastaga 22 000 YANA taklif qilinmaydi.
+
+    `outstanding_soum` bugungi to'lovni ALLAQACHON ayirgan (FIFO): qarzi
+    yo'q sotuvchida u −22 000 bo'ladi va jami (4) ham 4 000 ga tushadi.
+    Yana 22 000 yozish endi takliflar to'plamidan tashqarida — `POST
+    /payments` sabab-kod talab qiladi.
+    """
+    quotes = payment_quote_set(26_000, -22_000, 4_000, paid_today_soum=22_000)
+
+    assert quotes == (4_000,)
+    assert 22_000 not in quotes and 26_000 not in quotes
+
+
+def test_the_old_debt_and_the_total_survive_a_payment_today() -> None:
+    """⛔ JAMI QARZ IKKI MARTA AYIRILMAYDI.
+
+    Sotuvchida 30 000 eski qarz bor, bugun 22 000 to'ladi: FIFO bo'yicha
+    `outstanding_soum` = 8 000. Haqiqiy jami — 30 000 + 26 000 − 22 000
+    = 34 000. Qoldiq (4 000) ni qarzga qo'shib jami qilish 12 000 berardi.
+    """
+    quotes = payment_quote_set(26_000, 8_000, 4_000, paid_today_soum=22_000)
+
+    assert quotes == (4_000, 8_000, 34_000)
+
+
+def test_a_full_payment_today_leaves_only_the_debt_quotes() -> None:
+    """To'liq to'langan kunda bugungi taklif YO'Q — faqat qarz qoladi."""
+    assert payment_quote_set(26_000, 4_000, 4_000, paid_today_soum=26_000) == (4_000, 30_000)
+    assert payment_quote_set(26_000, -26_000, 4_000, paid_today_soum=26_000) == ()
+
+
+def test_nothing_paid_today_leaves_the_quote_set_byte_for_byte_unchanged() -> None:
+    """`paid_today_soum=0` (standart) — xulq 261016 dan OLDINGIDEK."""
+    for args in ((17_000, 45_000, 2_000), (15_000, 0, 0), (None, 45_000, 2_000), (17_000, 0, 2_000)):
+        assert payment_quote_set(*args, paid_today_soum=0) == payment_quote_set(*args), args

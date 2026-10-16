@@ -128,6 +128,8 @@ const PENDING = {
   total_due_soum: 15_000,
   stall_status: "active",
   vendor_assigned: true,
+  // 261016: bugun hali to'lanmagan — karta TO'LIQ pattani ko'rsatadi.
+  paid_today_soum: 0,
 };
 
 /** Ro'yxat (0027) — bo'sh, lekin YAROQLI javob: sanoqlar nol. */
@@ -349,6 +351,47 @@ describe("G-20 (06-UI-SPEC §8.2): qadam sanog'i", () => {
     expect(steps).toBe(3);
     /* (c) tartib + to'plam tengligi. */
     expect(visited).toEqual(["stall", "method", "confirm"]);
+  });
+
+  test("⛔ 261016: bugun TO'LIQ to'langan rasta — standart summa YO'Q va POST KETMAYDI", async () => {
+    /*
+     * Server bugungi to'lovdan keyingi QOLDIQNI beradi. Qoldiq nol bo'lsa
+     * to'lov paneli bloklanishi shart: aks holda kassir tarozisiz olingan
+     * rastaga qaytib kelib, yana pattani olardi (prod'da 43 marta).
+     */
+    routeFetch({
+      "14-C": {
+        ...PENDING,
+        amount_soum: 0,
+        stall_amount_soum: 0,
+        fee_amount_soum: 0,
+        total_due_soum: 0,
+        paid_today_soum: PENDING.amount_soum,
+      },
+    });
+    renderSession();
+
+    await waitFor(() => expect(stepElements()).toHaveLength(1));
+    actOn(stepElements()[0], "14-C");
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(messages.collect.paidTodayFull),
+    );
+
+    const methodStep = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>('[data-collect-step="method"]');
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    actOn(methodStep, "14-C");
+
+    const confirm = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>('[data-collect-step="confirm"]');
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(confirm).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(confirm);
+    expect(paymentCalls()).toHaveLength(0);
   });
 
   test("⛔ POST tanasidagi summa SERVER bergan qiymatga TENG (D-20)", async () => {

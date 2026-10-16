@@ -1528,6 +1528,8 @@ PENDING_STALL_FIELDS = {
     "stall_amount_soum",
     "fee_amount_soum",
     "fee_label",
+    # 261016 — bugungi to'lovdan keyin QOLDIQ ko'rsatiladi.
+    "paid_today_soum",
 }
 """UI-SPEC §9.2 ning kalitlari — TESTDA literal, mahsulotdan EMAS.
 

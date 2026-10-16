@@ -1299,6 +1299,8 @@ PENDING_STALL_KEYS = frozenset(
         "stall_amount_soum",
         "fee_amount_soum",
         "fee_label",
+        # 261016 — bugungi to'lovdan keyin QOLDIQ ko'rsatiladi.
+        "paid_today_soum",
     }
 )
 """UI-SPEC §9.2 ning kalitlari — ⛔ `charge_id` UMUMAN YO'Q (D-17).

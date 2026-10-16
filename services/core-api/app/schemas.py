@@ -3371,6 +3371,14 @@ class PendingStallResponse(BaseModel):
     `stall_not_assigned`); bu yerda faqat uning VAQTI oldinga suriladi.
     `vendor_id`/`vendor_name`/`phone` esa yuqoridagi taqiqda QOLADI.
     """
+    paid_today_soum: int = Field(ge=0)
+    """Shu rasta-kunga BUGUN allaqachon to'langan sof summa (261016).
+
+    `> 0` bo'lsa `amount_soum`, `stall_amount_soum`, `fee_amount_soum` —
+    QOLDIQ: tarozisiz to'langan rastada (22 000 / 26 000) karta faqat
+    tarozini (4 000) taklif qiladi. Prod'da shu maydonsiz kassir avgustdan
+    beri 43 marta bir rasta-kunga ikkinchi to'lov yozgan edi.
+    """
 
     @model_validator(mode="after")
     def _amount_and_reason_are_paired(self) -> Self:

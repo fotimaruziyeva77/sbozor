@@ -87,9 +87,11 @@ PENDING_STALL_KEYS = frozenset(
         "stall_amount_soum",
         "fee_amount_soum",
         "fee_label",
+        # 261016 — bugungi to'lovdan keyin QOLDIQ ko'rsatiladi.
+        "paid_today_soum",
     }
 )
-"""UI-SPEC §9.2 ning kalitlari — 0027 dan keyin AYNAN O'N IKKI.
+"""UI-SPEC §9.2 ning kalitlari — 0027 dan keyin O'N IKKI, 261016 dan AYNAN O'N UCH.
 
 ⛔ RO'YXAT SHU YERDA QO'LDA YOZILGAN VA BU ATAYIN: u KUTILGAN NATIJA,
    o'lchov emas. Uni `PendingStallResponse.model_fields` dan hosila

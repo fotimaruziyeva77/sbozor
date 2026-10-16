@@ -62,13 +62,15 @@ __all__ = (
     "ChargeAllocationRow",
     "ChargeCreditAllocation",
     "ChargeDue",
+    "TodayRemainder",
     "allocate_charge_credit",
     "billable_from_slots",
     "payment_quote_set",
+    "today_remainder",
     "total_due_soum",
     "variance",
 )
-"""⛔ EKSPORT YUZASI — BESH FUNKSIYA, TO'RT TIP VA BITTA QOIDA NOMI.
+"""⛔ EKSPORT YUZASI — OLTI FUNKSIYA, BESH TIP VA BITTA QOIDA NOMI.
 
 Kortej ATAYIN (ro'yxat emas), `occupancy.py:77-82` bilan aynan bir xil
 sabab: yuzani kengaytirish MANBA MATNINI o'zgartirishni talab qiladi,
@@ -365,10 +367,69 @@ def total_due_soum(today_soum: int | None, outstanding_soum: int) -> int:
     return today + outstanding_soum
 
 
+@dataclass(frozen=True, slots=True)
+class TodayRemainder:
+    """Bugungi pattaning SHU RASTA bo'yicha bugun to'langandan keyin QOLGANI.
+
+    ⛔ UCHLIK INVARIANTI SAQLANADI: `stall_amount_soum + fee_amount_soum
+       == amount_soum` (0027). Kassir kartasi tarozi belgisi olinganda
+       `stall_amount_soum` ni yuboradi va u takliflar to'plamida bo'lishi
+       shart — klient sxemasi ham shu tenglikni tekshiradi.
+    """
+
+    amount_soum: int
+    """Qolgan TO'LIQ summa — rasta puli + tarozi."""
+    stall_amount_soum: int
+    """Qolgan rasta puli — tarozi belgisi olinganda yuboriladi."""
+    fee_amount_soum: int
+    """Qolgan xizmat haqi (tarozi)."""
+
+
+def today_remainder(amount_soum: int, fee_soum: int, paid_today_soum: int) -> TodayRemainder:
+    """Bugungi to'lovdan keyin shu rasta-kunga QANCHA qoldi.
+
+    =======================================================================
+    ⛔⛔ NEGA KERAK (261016, prod'da o'lchangan).
+
+    №10 qulfi (2026-08-25) rastani faqat TO'LIQ summa (rasta + tarozi)
+    to'langanda «bugun to'langan» deb bilardi. Kassir tarozi belgisini
+    olib 22 000 yozsa (0027 ning NORMAL yo'li), rasta 26 000 lik
+    hisobga yetmay qolardi va kartada yana TO'LIQ summa chiqardi —
+    Karmanada avgustdan beri 43 marta bir rasta-kunga ikkinchi to'lov
+    yozildi (1 078 000 so'm), hammasi bir kassir, ~1 soat oraliqda.
+    =======================================================================
+
+    ⚠ TO'LOV AVVAL RASTA PULIGA, KEYIN TAROZIGA yoziladi: tarozisiz
+      to'lov (0027) aynan rasta pulini yopadi va tarozini qoldiradi.
+
+    ⚠ Bu KASSIR NIYATI bo'yicha bo'linish, FIFO EMAS: qarz va avans
+      hisobi (`vendor_outstanding`, D-24) bunga TEGMAYDI. Funksiya faqat
+      «bugun shu rastadan yana nima olinadi?» savoliga javob beradi.
+
+    Args:
+        amount_soum: bugungi TO'LIQ patta (rasta + tarozi).
+        fee_soum: shu summaning ichidagi tarozi ulushi.
+        paid_today_soum: shu rasta-kunga bugungi SOF to'lov (storno
+            ayirilgan). ⚠ Manfiy bo'lishi mumkin — nol deb olinadi.
+    """
+    full = assert_safe_soum(amount_soum)
+    fee = min(assert_safe_soum(fee_soum), full)
+    paid = max(_assert_signed_soum(paid_today_soum), 0)
+    remaining = max(full - paid, 0)
+    remaining_stall = max(full - fee - paid, 0)
+    return TodayRemainder(
+        amount_soum=remaining,
+        stall_amount_soum=remaining_stall,
+        fee_amount_soum=remaining - remaining_stall,
+    )
+
+
 def payment_quote_set(
     today_soum: int | None,
     outstanding_soum: int,
     fee_soum: int = 0,
+    *,
+    paid_today_soum: int = 0,
 ) -> tuple[int, ...]:
     """Serverning ASOSLANGAN takliflari — ⛔ USTUVORLIK tartibida (UI-SPEC §9.4/§9.6).
 
@@ -435,21 +496,29 @@ def payment_quote_set(
         fee_soum: `today_soum` ICHIDAGI majburiy xizmat haqi (tarozi)
             ulushi. ⛔ Standart `0` — chaqiruvchi uni bermasa xulq 0027
             dan OLDINGIDEK qoladi.
+        paid_today_soum: shu rasta-kunga BUGUN allaqachon to'langan sof
+            summa (261016). (1) va (2) shundan keyingi QOLDIQ bo'ladi
+            (`today_remainder()`), ya'ni tarozisiz to'langan rastaga
+            yana to'liq patta taklif qilinmaydi. ⛔ (4) `total_due_soum`
+            TO'LIQ bugungi summa bilan qoladi: `outstanding_soum` bugungi
+            to'lovni ALLAQACHON ayirgan va ikkinchi ayirish jami qarzni
+            kamaytirib ko'rsatardi. Standart `0` — xulq o'zgarishsiz.
 
     Returns:
         Ustuvorlik tartibida, dublikatsiz, faqat qat'iy musbat takliflar.
     """
     fee = assert_safe_soum(fee_soum)
     today = 0 if today_soum is None else assert_safe_soum(today_soum)
+    rest = today_remainder(today, fee, paid_today_soum) if today > 0 else None
 
     candidates = (
-        today,
-        # ⛔ AYIRISH FAQAT `today` MAVJUD BO'LGANDA MA'NOLI: `today == 0`
+        0 if rest is None else rest.amount_soum,
+        # ⛔ RASTA PULI FAQAT `today` MAVJUD BO'LGANDA MA'NOLI: `today == 0`
         #   (yopiq kun / tarifsiz rasta) bo'lganda «rasta puli» degan
-        #   tushunchaning o'zi yo'q va manfiy nomzod filtrdan o'tmasdi
-        #   ham — shart baribir ATAYIN yozilgan, chunki u NIYATNI
-        #   ko'rsatadi, filtrga tayanish esa tasodifga tayanish bo'lardi.
-        today - fee if today > 0 else 0,
+        #   tushunchaning o'zi yo'q — shart ATAYIN yozilgan, chunki u
+        #   NIYATNI ko'rsatadi, filtrga tayanish esa tasodifga tayanish
+        #   bo'lardi.
+        0 if rest is None else rest.stall_amount_soum,
         _assert_signed_soum(outstanding_soum),
         total_due_soum(today_soum, outstanding_soum),
     )

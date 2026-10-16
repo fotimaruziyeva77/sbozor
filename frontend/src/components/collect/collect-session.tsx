@@ -295,20 +295,36 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
    *   undiriladi). `[Qarzni ham olish]` esa serverdan kelgan tayyor
    *   qiymatni beradi va u `extraAmount` da saqlanadi.
    */
+  /*
+   * ⛔ IKKALA QIYMAT HAM SERVERDAN — AYIRISH YO'Q (D-20, 0027).
+   *
+   *   Belgi olib tashlanganda `stall_amount_soum` YUBORILADI,
+   *   `amount_soum - fee_amount_soum` HISOBLANMAYDI. Ayirish pulni klientda
+   *   hisoblash bo'lardi va ikkala qiymat ham `payment_quote_set()` ning
+   *   takliflar to'plamida — ya'ni ikkalasi ham sabab kodisiz o'tadi.
+   *
+   * ⛔⛔ NOL — «BUGUN TO'LANGAN», TO'LOV EMAS (261016). Server bugungi
+   *     to'lovdan keyingi QOLDIQNI beradi; u `0` bo'lsa standart summa
+   *     YO'Q va to'lov paneli bloklanadi. Eski qarzga ham tushib
+   *     ketilmaydi: u faqat summaning O'ZI yo'q (`null` — yopiq kun /
+   *     tarifsiz rasta) bo'lganda standart bo'ladi.
+   */
+  const todayAmount =
+    stall === null
+      ? null
+      : feeIncluded
+        ? stall.amount_soum
+        : stall.stall_amount_soum;
   const baseAmount =
     stall === null
       ? null
-      : /*
-         * ⛔ IKKALA QIYMAT HAM SERVERDAN — AYIRISH YO'Q (D-20, 0027).
-         *
-         *   Belgi olib tashlanganda `stall_amount_soum` YUBORILADI,
-         *   `amount_soum - fee_amount_soum` HISOBLANMAYDI. Ayirish
-         *   pulni klientda hisoblash bo'lardi va ikkala qiymat ham
-         *   `payment_quote_set()` ning takliflar to'plamida — ya'ni
-         *   ikkalasi ham sabab kodisiz o'tadi.
-         */
-        ((feeIncluded ? stall.amount_soum : stall.stall_amount_soum) ??
-        (stall.outstanding_soum > 0 ? stall.outstanding_soum : null));
+      : todayAmount === null
+        ? stall.outstanding_soum > 0
+          ? stall.outstanding_soum
+          : null
+        : todayAmount > 0
+          ? todayAmount
+          : null;
   /*
    * ⛔ DL-1 ning natijasi eng ustuvor: kassir sabab-kod bilan ATAYIN
    *    boshqa qiymat kiritdi va u serverga AYNAN shu qiymat bilan

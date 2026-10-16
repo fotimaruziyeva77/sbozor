@@ -1,7 +1,16 @@
 "use client";
 
 import { useId, type Ref } from "react";
-import { CalendarDays, Check, Clock, DoorClosed, PiggyBank, Tent, Wrench } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  CircleCheck,
+  Clock,
+  DoorClosed,
+  PiggyBank,
+  Tent,
+  Wrench,
+} from "lucide-react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
@@ -370,7 +379,37 @@ function PendingBody({
         {pending.stall_code}
       </p>
 
-      {payable === null ? null : (
+      {/*
+       * ⛔⛔ BUGUN TO'LANGAN (261016) — KATTA SUMMADAN OLDIN.
+       *
+       *   Kassir avval shu yozuvni ko'radi, keyin summani. Usiz u tarozisiz
+       *   olingan rastaga qaytib kelib yana to'liq pattani olardi (prod'da
+       *   43 marta). Summa — server bergan son, klientda hisoblanmaydi.
+       *
+       * ⛔ `role="alert"` YO'Q: bu nosozlik emas, kontekst (§14.5).
+       */}
+      {pending.paid_today_soum > 0 ? (
+        <div className="flex items-start gap-2 rounded-sm bg-success/10 px-3 py-2">
+          <CircleCheck
+            aria-hidden="true"
+            className="mt-0.5 size-5 shrink-0 text-success-text"
+          />
+          <div className="flex flex-col gap-0.5">
+            <p className="text-sm font-semibold text-success-text">
+              {t("collect.paidToday", {
+                amount: money(pending.paid_today_soum),
+              })}
+            </p>
+            <p className="text-sm text-text">
+              {pending.amount_soum === 0
+                ? t("collect.paidTodayFull")
+                : t("collect.paidTodayRest")}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {payable === null || payable === 0 ? null : (
         /*
          * ⛔ DISPLAY-XL ROLI — 40px / 1.1 + 600 + `font-mono` (09-UI-SPEC
          *    §7.1, L-9). Beshinchi tipografiya roli 09-fazada RASMAN
