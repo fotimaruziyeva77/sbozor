@@ -532,6 +532,8 @@ class StallRow:
     # 0031: qaror bilan solishtirish uchun — pulga ta'sir qilmaydi.
     product_type: str | None = None
     area_m2: Decimal | None = None
+    # 0032: tarozi olinmaydi — PULGA ta'sir qiladi (`billing_repo` ning `carrier` CTE'si).
+    service_fee_exempt: bool = False
 
 
 @dataclass(frozen=True)
@@ -601,6 +603,7 @@ _STALL_ROWS = text(
            s.note,
            s.product_type,
            s.area_m2,
+           s.service_fee_exempt,
            s.created_at,
            v.id           AS vendor_id,
            v.full_name    AS vendor_name,
@@ -953,6 +956,7 @@ class StallRepository(TenantScopedRepository):
         note: str | None,
         product_type: str | None = None,
         area_m2: Decimal | None = None,
+        service_fee_exempt: bool = False,
     ) -> UUID:
         """Rastani va uning BOSHLANG'ICH toifa davrini BIR TRANZAKSIYADA yozadi.
 
@@ -994,6 +998,7 @@ class StallRepository(TenantScopedRepository):
                 note=note,
                 product_type=product_type,
                 area_m2=area_m2,
+                service_fee_exempt=service_fee_exempt,
             )
             .returning(Stall.id)
         )
@@ -1150,4 +1155,5 @@ def _stall_row(row: Any) -> StallRow:
         tariff_soum=row.tariff_soum,
         product_type=row.product_type,
         area_m2=row.area_m2,
+        service_fee_exempt=row.service_fee_exempt,
     )

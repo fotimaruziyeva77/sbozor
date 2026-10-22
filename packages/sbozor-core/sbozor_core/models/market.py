@@ -56,6 +56,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Computed,
     Date,
@@ -456,6 +457,30 @@ class Stall(Base, TenantMixin, TimestampMixin):
     # =====================================================================
     product_type: Mapped[str | None] = mapped_column(Text(), nullable=True)
     area_m2: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+
+    # =====================================================================
+    # ⛔⛔ TAROZI OLINMAYDIGAN RASTA (0032, foydalanuvchi 261022).
+    #
+    # Xizmat haqi (tarozi) — bozor tarozisining IJARASI (131-5-0-Q/25:
+    # «tosh-tarozi ijarasi»). Ko'kat bog'lab sotiladi va tarozi
+    # ishlatilmaydi — Karmanadagi 5-rastadan u olinmaydi.
+    #
+    # ⛔ BU USTUN PULGA TA'SIR QILADI — `product_type` dan farqli o'laroq.
+    #    Ta'siri FAQAT tarozini kim ko'tarishida (`billing_repo.
+    #    _STALL_DAY_MONEY` ning `carrier` CTE'si): belgilangan rasta
+    #    ko'taruvchi bo'lmaydi, rasta puli (tarif) o'zgarmaydi.
+    #
+    # ⚠ Mahsulot turidan HOSILA QILINMAYDI: «ko'kat» qiymati jimgina pul
+    #   qaroriga aylanardi va turini kiritgan odam buni bilmasdi. Belgi
+    #   alohida va ko'rinadigan.
+    #
+    # ⚠ Vaqt bo'yicha emas (`status` kabi): o'zgarish kun yopilguncha
+    #   o'sha kunning pattasiga ham tegadi, yozilgan hisob esa o'zgarmas
+    #   (D-07). Kim va qachon o'zgartirgani `stalls` audit triggerida.
+    # =====================================================================
+    service_fee_exempt: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, server_default=text("false")
+    )
 
 
 class StallCodeRegistry(Base, TenantMixin):

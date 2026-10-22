@@ -379,6 +379,17 @@ function StallCardBody({
         </dd>
 
         {/*
+         * 0032: tarozi belgisi — pulga ta'sir qiladi, shuning uchun tarif
+         * yonida. «Olinmaydi» NEYTRAL uslubda: bu nosozlik emas, qaror.
+         */}
+        <dt className="text-text-muted">{t("stalls.serviceFeeLabel")}</dt>
+        <dd className="font-semibold">
+          {stall.service_fee_exempt
+            ? t("stalls.serviceFeeExempt")
+            : t("stalls.serviceFeeCharged")}
+        </dd>
+
+        {/*
          * 0031: kiritilmagan — NEYTRAL uslub, ogohlantirish emas: bu pulga
          * ta'sir qilmaydigan ma'lumot (tarifsiz rastadan farqli).
          */}

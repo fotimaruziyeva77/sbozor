@@ -235,6 +235,8 @@ function StallRow({
       }),
     );
   }
+  // 0032: faqat ISTISNO ko'rinadi — tarozi olinadigan rasta odatiy holat.
+  if (stall.service_fee_exempt) placeParts.push(t("stalls.serviceFeeExemptShort"));
   const placeLabel = placeParts.join(" · ");
   const vendorLabel = stall.vendor_name ?? t("stalls.noVendor");
 

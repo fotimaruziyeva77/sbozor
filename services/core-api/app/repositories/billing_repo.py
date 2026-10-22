@@ -313,8 +313,14 @@ _STALL_DAY_MONEY = text(
     --
     -- ⚠ SOTUVCHISIZ RASTA O'ZGARMAYDI: guruhlash uchun kalit yo'q, shu
     --   sababdan u tarozini o'zi ko'taradi (bugungi xatti-harakat).
+    --
+    -- ⛔ TAROZI OLINMAYDIGAN RASTA KO'TARUVCHI BO'LMAYDI (0032, 261022):
+    --   `service_fee_exempt` belgisi bor rasta (ko'kat — tarozi ishlatilmaydi)
+    --   tanlovdan chiqadi va tarozi sotuvchining KEYINGI hisob oladigan
+    --   rastasiga o'tadi; hammasi belgilangan bo'lsa — hech qayerda yo'q.
+    --   Sotuvchisiz rastada ham belgi ustun. Tarif (rasta puli) tegilmaydi.
     stall_day AS (
-        SELECT s.id, s.code, s.code_sort, s.status,
+        SELECT s.id, s.code, s.code_sort, s.status, s.service_fee_exempt,
                asg.vendor_id,
                tar.tariff_id,
                tar.amount_soum AS tariff_amount_soum
@@ -375,6 +381,7 @@ _STALL_DAY_MONEY = text(
                AND cal.market_open
                AND sd.status <> ALL(:unbillable_statuses)
                AND sd.tariff_amount_soum IS NOT NULL
+               AND NOT sd.service_fee_exempt
           ) ranked
          WHERE ranked.rn = 1
     )
@@ -388,8 +395,11 @@ _STALL_DAY_MONEY = text(
            fee.label              AS fee_label,
            cal.market_open        AS market_open,
            (
-               sd.vendor_id IS NULL
-               OR sd.id IN (SELECT id FROM carrier)
+               NOT sd.service_fee_exempt
+               AND (
+                   sd.vendor_id IS NULL
+                   OR sd.id IN (SELECT id FROM carrier)
+               )
            )                      AS carries_fee
       FROM stall_day sd
       JOIN target tg ON tg.id = sd.id

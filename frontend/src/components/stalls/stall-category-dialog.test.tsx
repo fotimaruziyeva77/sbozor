@@ -71,6 +71,7 @@ const STALL: StallListItem = {
   created_at: "2026-08-16T05:00:00Z",
   product_type: null,
   area_m2: null,
+  service_fee_exempt: false,
 };
 
 function seedSession(): void {

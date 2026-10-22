@@ -140,9 +140,11 @@ class ProductType(StrEnum):
        o'zgartirmaydi — u «tarif qarorga mosmi?» savoliga javob beradigan
        ma'lumot.
 
-    ⚠ ARALASH SAVDO: qarorning 1-ilova 2-izohiga ko'ra bir rastada bir necha
-      mahsulot sotilsa, ENG YUQORI stavkali mahsulot olinadi — shuning uchun
-      rastaga bitta tur yoziladi (o'sha eng qimmati), qolganlari `note` da.
+    ⚠ ARALASH SAVDO — `mixed` (0033, foydalanuvchi talabi 261022): rasta bir
+      necha turdagi mahsulot sotadi, nimalar sotilishi `note` ga yoziladi.
+      Qarorning 1-ilova 2-izohiga ko'ra bunday rastaga ENG YUQORI stavkali
+      mahsulotning stavkasi qo'llanadi. Bu a'zo qarorning qatori EMAS —
+      ro'yxatdagi yagona istisno (`other` bilan birga).
 
     Qiymatlar DB KONTENTI va bitta tilda (`StallStatus` bilan bir xil qoida):
     UI ularni `stalls.productType.*` kalitlari orqali uch tilda ko'rsatadi.
@@ -179,6 +181,7 @@ class ProductType(StrEnum):
     USED_GOODS = "used_goods"
     PETS = "pets"
     SHOE_REPAIR = "shoe_repair"
+    MIXED = "mixed"
     OTHER = "other"
 
 

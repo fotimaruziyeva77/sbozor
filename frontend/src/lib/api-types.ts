@@ -513,6 +513,7 @@ export const PRODUCT_TYPES = [
   "used_goods",
   "pets",
   "shoe_repair",
+  "mixed",
   "other",
 ] as const;
 export type ProductTypeValue = (typeof PRODUCT_TYPES)[number];
@@ -595,6 +596,12 @@ export const stallListItemSchema = z.object({
    */
   product_type: productTypeSchema.nullable().default(null),
   area_m2: z.number().positive().nullable().default(null),
+  /*
+   * 0032: tarozi olinmaydi — PULGA TA'SIR QILADI (rasta tarozini
+   * ko'tarmaydi). `.default(false)` — eski backend javobida maydon yo'q
+   * va bu «olinadi» degani (migratsiyadan oldingi xulq).
+   */
+  service_fee_exempt: z.boolean().default(false),
 });
 export type StallListItem = z.infer<typeof stallListItemSchema>;
 

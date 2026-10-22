@@ -313,6 +313,7 @@ _FEE_CARRIER_SQL = """
      WHERE a_self.stall_id = %(stall_id)s
        AND a_self.period @> %(day)s::date
        AND s2.status = 'active'
+       AND NOT s2.service_fee_exempt
        AND EXISTS (
              SELECT 1
                FROM stall_category_periods p
@@ -332,6 +333,9 @@ _FEE_CARRIER_SQL = """
 ⚠ «Hisob oladigan» sharti (`status = 'active'` + tarifi bor) MAJBURIY:
   usiz ko'taruvchi yopiq yoki tarifsiz rasta bo'lib chiqishi va tarozi
   HECH QAYERDA yozilmasligi mumkin edi.
+
+⚠ Tarozi olinmaydigan rasta (0032) ko'taruvchi BO'LMAYDI — tarozi
+  sotuvchining keyingi rastasiga o'tadi.
 """
 
 
@@ -369,6 +373,15 @@ def stall_day_total_soum(conn: Connection[TupleRow], *, stall_id: UUID, day: dat
     2026-09-24 dagi aynan shunday hodisani yozgan — qadalgan narx tarif
     zanjiri surilganda testlarni JIMGINA eskirtirgan edi.
     """
+    # ⛔ TAROZI OLINMAYDIGAN RASTA (0032) HECH QACHON KO'TARMAYDI — sotuvchisi
+    #    bo'lsa ham, bo'lmasa ham. Mahsulotdagi `carries_fee` ning
+    #    `NOT sd.service_fee_exempt` sharti.
+    belgi = conn.execute(
+        "SELECT service_fee_exempt FROM stalls WHERE id = %s", (str(stall_id),)
+    ).fetchone()
+    if belgi is not None and belgi[0]:
+        return day_tariff_soum(day)
+
     # ⛔ SOTUVCHISI YO'Q RASTA TAROZINI O'ZI KO'TARADI — mahsulotdagi
     #    `carries_fee` ning `vendor_id IS NULL` shoxi. Guruhlash uchun kalit
     #    yo'q, ya'ni «sotuvchiga bir marta» qoidasi unga qo'llanmaydi.

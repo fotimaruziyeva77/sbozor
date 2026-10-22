@@ -114,9 +114,13 @@ const CASE_DETAIL = {
 };
 
 /** ⛔ Mock YO'L bo'yicha marshrutlanadi; noma'lum yo'l RAD ETILADI. */
-function routeFetch(rows: readonly DayRow[], caseDetail: unknown = CASE_DETAIL) {
+function routeFetch(
+  rows: readonly DayRow[],
+  caseDetail: unknown = CASE_DETAIL,
+  stallDetail: unknown = STALL_DETAIL,
+) {
   apiFetch.mockImplementation((path: string) => {
-    if (path === `/stalls/${STALL_ID}`) return Promise.resolve(STALL_DETAIL);
+    if (path === `/stalls/${STALL_ID}`) return Promise.resolve(stallDetail);
     if (path === MAP_DAY_PATH) {
       return Promise.resolve({
         service_date: "2026-08-16",
@@ -181,6 +185,14 @@ function definitionTerms(): string[] {
   return Array.from(document.querySelectorAll("dt")).map(
     (node) => node.textContent ?? "",
   );
+}
+
+/** `<dt>` yorlig'idan keyingi `<dd>` matni — yorliq topilmasa `null`. */
+function definitionFor(term: string): string | null {
+  const dt = Array.from(document.querySelectorAll("dt")).find(
+    (node) => node.textContent === term,
+  );
+  return dt?.nextElementSibling?.textContent ?? null;
 }
 
 /**
@@ -395,5 +407,28 @@ describe("Nomuvofiqlik ishiga havola (260924-hpm)", () => {
     await screen.findByText(messages.map.dayStatusTitle);
 
     expect(screen.queryByText(messages.map.dayStatusOpenCase)).toBeNull();
+  });
+});
+
+describe("Tarozi puli qatori (0032)", () => {
+  test("belgisiz rastada «Olinadi» — eski javobda maydon yo'q bo'lsa ham", async () => {
+    // `STALL_DETAIL` da `service_fee_exempt` YO'Q: sxema uni `false` deb oladi.
+    routeFetch([dayRow()]);
+    renderCard(["market_admin"]);
+
+    await screen.findByText(messages.stalls.serviceFeeLabel);
+    expect(definitionFor(messages.stalls.serviceFeeLabel)).toBe(
+      messages.stalls.serviceFeeCharged,
+    );
+  });
+
+  test("belgilangan rastada «Olinmaydi»", async () => {
+    routeFetch([dayRow()], CASE_DETAIL, { ...STALL_DETAIL, service_fee_exempt: true });
+    renderCard(["market_admin"]);
+
+    await screen.findByText(messages.stalls.serviceFeeLabel);
+    expect(definitionFor(messages.stalls.serviceFeeLabel)).toBe(
+      messages.stalls.serviceFeeExempt,
+    );
   });
 });

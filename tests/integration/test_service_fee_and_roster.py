@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import pytest
-from fixtures.admin_api import session_headers
+from fixtures.admin_api import STALLS_URL, session_headers
 from fixtures.billing_domain import (
     billing_domain_before_day_close,
     day_tariff_soum,
@@ -820,4 +820,167 @@ async def test_a_fair_stall_is_named_not_billed_and_left_out_of_the_roster(
     finally:
         sync_owner_conn.execute(
             "UPDATE stalls SET status = 'active' WHERE id = %s", (str(stall_id),)
+        )
+
+
+# ===========================================================================
+# 5. TAROZI OLINMAYDIGAN RASTA (0032) — ko'kat: bozor tarozisi ishlatilmaydi
+# ===========================================================================
+
+
+def _stall_ids_by_code(
+    conn: Connection[TupleRow], market_id: UUID, codes: list[str]
+) -> dict[str, str]:
+    """Kod -> id, SHU bozorda: B bozorida ham xuddi shu kodlar bor."""
+    rows = conn.execute(
+        "SELECT code, id FROM stalls WHERE market_id = %s AND code = ANY(%s)",
+        (str(market_id), codes),
+    ).fetchall()
+    return {str(row[0]): str(row[1]) for row in rows}
+
+
+async def test_a_fee_exempt_stall_never_carries_the_fee(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+    cashier_headers: dict[str, str],
+    admin_headers: dict[str, str],
+) -> None:
+    """⛔⛔ BELGILANGAN RASTA TAROZINI KO'TARMAYDI, TAROZI YO'QOLMAYDI (0032, 261022).
+
+    =======================================================================
+    Karmanadagi 5-rastada ko'kat sotiladi — tarozi ishlatilmaydi va undan
+    tarozi puli olinmaydi. Uchta da'vo:
+
+      1. belgilangan ko'taruvchida tarozi `0`, nomi `None`, rasta puli
+         O'ZGARMAGAN (belgi tarifga tegmaydi);
+      2. tarozi sotuvchining KEYINGI hisob oladigan rastasiga O'TADI —
+         sotuvchi tarozini bitta ko'kat rastasi bilan chetlab o'tmasin;
+      3. sotuvchining hisob oladigan hamma rastasi belgilansa — tarozi
+         HECH QAYERDA yo'q.
+
+    Belgi ma'muriyatning yo'li bilan qo'yiladi (`PATCH /stalls/{id}`).
+
+    ⚠ SABOTAJ: `carrier` CTE'sidagi `AND NOT sd.service_fee_exempt` ni
+      olib tashlang — 2-da'vo qizaradi (tarozi belgilangan rastada
+      `0` bo'ladi, keyingisida ham `0` — ya'ni hech qayerda yo'q).
+    =======================================================================
+    """
+    anchor_id = env.stall("stall_with_two_occupied_slots")
+    anchor_code = _stall_code(sync_owner_conn, anchor_id)
+    birinchi_javob = await api_client.get(
+        PENDING_URL, params={"stall_code": anchor_code}, headers=cashier_headers
+    )
+    assert birinchi_javob.status_code == 200, birinchi_javob.text
+    tartib = _vendor_stalls_on(sync_owner_conn, anchor_id, birinchi_javob.json()["service_date"])
+
+    async def pending() -> dict[str, dict[str, Any]]:
+        javob: dict[str, dict[str, Any]] = {}
+        for kod in tartib:
+            response = await api_client.get(
+                PENDING_URL, params={"stall_code": kod}, headers=cashier_headers
+            )
+            assert response.status_code == 200, response.text
+            javob[kod] = response.json()
+        return javob
+
+    oldin = await pending()
+    hisobli = sorted(
+        (kod for kod, body in oldin.items() if body["amount_unavailable_reason"] is None),
+        key=tartib.__getitem__,
+    )
+    assert len(hisobli) >= 2, (
+        f"nazorat: sotuvchining hisob oladigan rastasi {len(hisobli)} ta — tarozining "
+        f"keyingi rastaga o'tishi O'LCHANMAYDI: {tartib}"
+    )
+    kotaruvchi, keyingi = hisobli[0], hisobli[1]
+    assert oldin[kotaruvchi]["fee_amount_soum"] == A_SERVICE_FEE_SOUM, "nazorat: ko'taruvchi"
+    assert oldin[keyingi]["fee_amount_soum"] == 0, "nazorat: keyingisi hali ko'tarmaydi"
+
+    ids = _stall_ids_by_code(sync_owner_conn, env.market_id, list(tartib))
+    try:
+        # --- 1-2. Ko'taruvchi belgilanadi.
+        belgi = await api_client.patch(
+            f"{STALLS_URL}/{ids[kotaruvchi]}",
+            json={"service_fee_exempt": True},
+            headers=admin_headers,
+        )
+        assert belgi.status_code == 200, belgi.text
+        assert belgi.json()["service_fee_exempt"] is True
+
+        keyin = await pending()
+        assert keyin[kotaruvchi]["fee_amount_soum"] == 0, "belgilangan rastada tarozi olindi"
+        assert keyin[kotaruvchi]["fee_label"] is None, (
+            "summasiz «Tarozi» qatori kassirni chalg'itadi"
+        )
+        assert keyin[kotaruvchi]["stall_amount_soum"] == oldin[kotaruvchi]["stall_amount_soum"], (
+            "belgi rasta puliga (tarifga) tegdi"
+        )
+        assert keyin[kotaruvchi]["amount_soum"] == oldin[kotaruvchi]["stall_amount_soum"]
+
+        assert keyin[keyingi]["fee_amount_soum"] == A_SERVICE_FEE_SOUM, (
+            "tarozi sotuvchining keyingi hisob oladigan rastasiga o'tmadi — yo'qoldi"
+        )
+        tarozili = [kod for kod, body in keyin.items() if body["fee_amount_soum"]]
+        assert tarozili == [keyingi], f"tarozi sotuvchiga AYNAN bir marta: {tarozili}"
+
+        # --- 3. Hisob oladigan hamma rastasi belgilanadi.
+        for kod in hisobli[1:]:
+            response = await api_client.patch(
+                f"{STALLS_URL}/{ids[kod]}",
+                json={"service_fee_exempt": True},
+                headers=admin_headers,
+            )
+            assert response.status_code == 200, response.text
+
+        hammasi = await pending()
+        for kod in hisobli:
+            assert hammasi[kod]["fee_amount_soum"] == 0, f"{kod}: tarozi olindi"
+            assert hammasi[kod]["amount_soum"] == oldin[kod]["stall_amount_soum"]
+    finally:
+        sync_owner_conn.execute(
+            "UPDATE stalls SET service_fee_exempt = false WHERE id = ANY(%s::uuid[])",
+            (list(ids.values()),),
+        )
+
+
+async def test_a_fee_exempt_stall_without_a_vendor_does_not_carry_the_fee_either(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    env: Env,
+    cashier_headers: dict[str, str],
+) -> None:
+    """Sotuvchisiz rasta tarozini o'zi ko'taradi — lekin belgi undan USTUN (0032).
+
+    ⚠ SABOTAJ: `carries_fee` dagi `NOT sd.service_fee_exempt AND (...)`
+      ni faqat `(...)` ga qaytaring — bu test qizaradi, yuqoridagisi esa
+      YASHIL qoladi (u faqat sotuvchili rastalarni o'lchaydi).
+    """
+    unassigned = (
+        await api_client.get(ROSTER_URL, params={"state": "unassigned"}, headers=cashier_headers)
+    ).json()
+    kodlar = [row["stall_code"] for row in unassigned["rows"]]
+    assert kodlar, "nazorat: seedda bugun sotuvchisiz rasta yo'q — test bo'sh o'lchardi"
+    kod = kodlar[0]
+
+    oldin = (
+        await api_client.get(PENDING_URL, params={"stall_code": kod}, headers=cashier_headers)
+    ).json()
+    assert oldin["vendor_assigned"] is False, "nazorat: rasta sotuvchisiz bo'lishi kerak"
+    assert oldin["fee_amount_soum"] == A_SERVICE_FEE_SOUM, "nazorat: sotuvchisiz rasta ko'taradi"
+
+    stall_id = _stall_ids_by_code(sync_owner_conn, env.market_id, [kod])[kod]
+    sync_owner_conn.execute(
+        "UPDATE stalls SET service_fee_exempt = true WHERE id = %s", (stall_id,)
+    )
+    try:
+        keyin = (
+            await api_client.get(PENDING_URL, params={"stall_code": kod}, headers=cashier_headers)
+        ).json()
+        assert keyin["fee_amount_soum"] == 0, "belgilangan sotuvchisiz rastada tarozi olindi"
+        assert keyin["fee_label"] is None
+        assert keyin["amount_soum"] == oldin["stall_amount_soum"]
+    finally:
+        sync_owner_conn.execute(
+            "UPDATE stalls SET service_fee_exempt = false WHERE id = %s", (stall_id,)
         )

@@ -283,6 +283,7 @@ def _list_item(row: StallRow) -> StallListItem:
         product_type=None if row.product_type is None else ProductType(row.product_type),
         # `NUMERIC(6,2)` -> JSON son: ikki kasr xonasi `float` da aniq ifodalanadi.
         area_m2=None if row.area_m2 is None else float(row.area_m2),
+        service_fee_exempt=row.service_fee_exempt,
     )
 
 
@@ -498,6 +499,7 @@ async def create_stall(
             note=payload.note,
             product_type=None if payload.product_type is None else str(payload.product_type),
             area_m2=payload.area_m2,
+            service_fee_exempt=payload.service_fee_exempt,
         )
     except MarketProfileMissingError as exc:
         log.warning("market_profile_missing", market_id=str(_market_id(principal)))
@@ -518,7 +520,7 @@ async def update_stall(
     principal: StallManagerDep,
     session: TenantSessionDep,
 ) -> StallDetail:
-    """Rasta raqami, zonasi, holati, izohi, mahsulot turi va maydonini tahrirlaydi.
+    """Rasta raqami, zonasi, holati, izohi, mahsulot turi, maydoni va tarozi belgisini tahrirlaydi.
 
     Huquq — `STALL_MANAGE`.
 

@@ -139,6 +139,7 @@ describe("rasta mutatsiyalari", () => {
       note: null,
       product_type: null,
       area_m2: null,
+      service_fee_exempt: false,
     });
 
     // Rejaning qabul mezoni: uchtasi HAM bo'lishi shart.
@@ -156,6 +157,7 @@ describe("rasta mutatsiyalari", () => {
       note: null,
       product_type: null,
       area_m2: null,
+      service_fee_exempt: false,
     });
 
     // `ZoneItem.stall_count` va `CategoryItem.stall_count` yangi rasta bilan
@@ -302,6 +304,7 @@ describe("NAZORAT: o'lchov usuli haqiqiy", () => {
       note: null,
       product_type: null,
       area_m2: null,
+      service_fee_exempt: false,
     });
 
     /*

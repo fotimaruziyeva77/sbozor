@@ -120,6 +120,23 @@ async def test_patch_sets_then_clears_only_what_was_sent(
     assert clear_area.json()["product_type"] == "imported_fruit"
 
 
+async def test_mixed_stall_keeps_its_items_in_the_note(
+    api_client: httpx.AsyncClient,
+    market_domain: MarketDomainSeed,
+    admin_headers: dict[str, str],
+) -> None:
+    """Aralash savdo (0033): tur — `mixed`, nimalar sotilishi — izohda; ikkalasi saqlanadi."""
+    stall_id = market_domain.market_a.unassigned_stall_id
+    response = await api_client.patch(
+        f"{STALLS_URL}/{stall_id}",
+        json={"product_type": "mixed", "note": "sabzavot, ko'kat, tuxum"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["product_type"] == "mixed"
+    assert response.json()["note"] == "sabzavot, ko'kat, tuxum"
+
+
 @pytest.mark.parametrize(
     "payload",
     [

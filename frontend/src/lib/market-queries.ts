@@ -411,6 +411,8 @@ export type StallCreateInput = {
   product_type: ProductTypeValue | null;
   /** 0031 — m², ikki kasr xonasigacha; `null`: o'lchanmagan. */
   area_m2: number | null;
+  /** 0032 — tarozi olinmaydi. PULGA ta'sir qiladi. */
+  service_fee_exempt: boolean;
 };
 
 /**
@@ -443,6 +445,7 @@ export type StallUpdateInput = {
   note?: string | null;
   product_type?: ProductTypeValue | null;
   area_m2?: number | null;
+  service_fee_exempt?: boolean;
 };
 
 /**

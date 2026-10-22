@@ -1072,6 +1072,8 @@ class StallListItem(BaseModel):
     """Rasta nima sotadi (0031) — `None`: hali kiritilmagan. Pulga ta'sir qilmaydi."""
     area_m2: float | None = None
     """Rasta maydoni, m² (0031) — `None`: hali o'lchanmagan."""
+    service_fee_exempt: bool = False
+    """Tarozi olinmaydi (0032) — `True`: rasta tarozini ko'tarmaydi. PULGA ta'sir qiladi."""
 
 
 class StallDetail(StallListItem):
@@ -1145,6 +1147,7 @@ class StallCreateRequest(BaseModel):
     note: _NoteStr | None = None
     product_type: ProductType | None = None
     area_m2: _AreaM2 | None = None
+    service_fee_exempt: bool = False
 
 
 class StallUpdateRequest(BaseModel):
@@ -1166,6 +1169,9 @@ class StallUpdateRequest(BaseModel):
     note: _NoteStr | None = None
     product_type: ProductType | None = None
     area_m2: _AreaM2 | None = None
+    service_fee_exempt: bool = False
+    """⚠ `bool | None` EMAS: ustun `NOT NULL` va `null` 422 bilan qaytadi.
+    Berilmasa `exclude_unset` uni o'tkazib yuboradi — standart qiymat yozilmaydi."""
 
 
 class StallCategoryRequest(BaseModel):

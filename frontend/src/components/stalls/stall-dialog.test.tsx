@@ -113,6 +113,7 @@ const CREATED_STALL = {
   note: null,
   product_type: null,
   area_m2: null,
+  service_fee_exempt: false,
 };
 
 /**
@@ -476,6 +477,7 @@ describe("`create` rejimi (⛔ `enabled: false` tuzog'ining nazorati)", () => {
 const PRODUCT_LABEL = messages.stalls.productTypeLabel;
 const AREA_LABEL = messages.stalls.areaLabel;
 const AREA_ERROR_ID = "stall-form-area-error";
+const FEE_EXEMPT_LABEL = messages.stalls.serviceFeeExemptLabel;
 
 /** `PATCH /stalls/{id}` chaqiruvlari. */
 function updateCalls(): unknown[][] {
@@ -564,5 +566,79 @@ describe("mahsulot turi va maydon", () => {
     const options = updateCalls()[0][1] as { body: Record<string, unknown> };
     expect(options.body.area_m2).toBeNull();
     expect(options.body.product_type).toBe("imported_fruit");
+  });
+});
+
+describe("tarozi olinmaydi (0032)", () => {
+  test("yangi rastada belgi standart o'chiq va `false` bo'lib ketadi", async () => {
+    mockLookups();
+    renderDialog();
+    await chooseZoneAndCategory();
+
+    expect(screen.getByLabelText(FEE_EXEMPT_LABEL)).not.toBeChecked();
+    fireEvent.change(screen.getByLabelText(CODE_LABEL), { target: { value: "12" } });
+    clickSave();
+
+    await waitFor(() => {
+      expect(createCalls()).toHaveLength(1);
+    });
+    const options = createCalls()[0][1] as { body: Record<string, unknown> };
+    expect(options.body.service_fee_exempt).toBe(false);
+  });
+
+  test("belgilansa `true` bo'lib ketadi — nom faqat yorliq, tavsif alohida", async () => {
+    mockLookups();
+    renderDialog();
+    await chooseZoneAndCategory();
+
+    const checkbox = screen.getByLabelText(FEE_EXEMPT_LABEL);
+    expect(checkbox).toHaveAccessibleDescription(messages.stalls.serviceFeeExemptHint);
+    fireEvent.change(screen.getByLabelText(CODE_LABEL), { target: { value: "12" } });
+    fireEvent.click(checkbox);
+    clickSave();
+
+    await waitFor(() => {
+      expect(createCalls()).toHaveLength(1);
+    });
+    const options = createCalls()[0][1] as { body: Record<string, unknown> };
+    expect(options.body.service_fee_exempt).toBe(true);
+  });
+
+  test("tahrirda javobdan urug'lanadi va olib tashlansa `false` ketadi", async () => {
+    mockEditDetail(() => Promise.resolve({ ...STALL_DETAIL, service_fee_exempt: true }));
+    renderDialog("edit", STALL_ID);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(FEE_EXEMPT_LABEL)).toBeChecked();
+    });
+
+    fireEvent.click(screen.getByLabelText(FEE_EXEMPT_LABEL));
+    clickSave();
+
+    await waitFor(() => {
+      expect(updateCalls()).toHaveLength(1);
+    });
+    const options = updateCalls()[0][1] as { body: Record<string, unknown> };
+    expect(options.body.service_fee_exempt).toBe(false);
+  });
+});
+
+describe("aralash mahsulotlar (0033)", () => {
+  test("«Aralash» tanlanadi, maslahat maydonga bog'langan va `mixed` ketadi", async () => {
+    mockLookups();
+    renderDialog();
+    await chooseZoneAndCategory();
+
+    const select = screen.getByLabelText(PRODUCT_LABEL);
+    expect(select).toHaveAccessibleDescription(messages.stalls.productTypeHint);
+    fireEvent.change(screen.getByLabelText(CODE_LABEL), { target: { value: "12" } });
+    fireEvent.change(select, { target: { value: "mixed" } });
+    clickSave();
+
+    await waitFor(() => {
+      expect(createCalls()).toHaveLength(1);
+    });
+    const options = createCalls()[0][1] as { body: Record<string, unknown> };
+    expect(options.body.product_type).toBe("mixed");
   });
 });

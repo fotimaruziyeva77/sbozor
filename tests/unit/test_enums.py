@@ -86,6 +86,7 @@ def test_product_type_is_a_closed_set() -> None:
         "used_goods",
         "pets",
         "shoe_repair",
+        "mixed",
         "other",
     ]
 

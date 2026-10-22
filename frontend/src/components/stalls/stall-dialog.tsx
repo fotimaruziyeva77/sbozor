@@ -67,6 +67,8 @@ type StallFormValues = {
   product_type: ProductTypeValue | "";
   /** Forma MATNI: «3,6» ham, «3.6» ham qabul qilinadi; `""` — o'lchanmagan. */
   area_m2: string;
+  /** 0032 — tarozi olinmaydi (PULGA ta'sir qiladi). */
+  service_fee_exempt: boolean;
 };
 
 const EMPTY_VALUES: StallFormValues = {
@@ -77,6 +79,7 @@ const EMPTY_VALUES: StallFormValues = {
   note: "",
   product_type: "",
   area_m2: "",
+  service_fee_exempt: false,
 };
 
 /**
@@ -155,6 +158,7 @@ export function StallDialog({
         area_m2: z.string().refine((raw) => parseAreaM2(raw) !== undefined, {
           error: t("stalls.areaInvalid"),
         }),
+        service_fee_exempt: z.boolean(),
       }),
     [mode, t],
   );
@@ -201,6 +205,7 @@ export function StallDialog({
       note: detail.note ?? "",
       product_type: detail.product_type ?? "",
       area_m2: detail.area_m2 === null ? "" : String(detail.area_m2),
+      service_fee_exempt: detail.service_fee_exempt,
     });
   }, [detail, mode, open, reset]);
 
@@ -239,6 +244,7 @@ export function StallDialog({
           note,
           product_type,
           area_m2,
+          service_fee_exempt: values.service_fee_exempt,
         });
       } else if (stallId) {
         await updateStall.mutateAsync({
@@ -249,6 +255,7 @@ export function StallDialog({
           note,
           product_type,
           area_m2,
+          service_fee_exempt: values.service_fee_exempt,
         });
       }
       handleOpenChange(false);
@@ -417,11 +424,20 @@ export function StallDialog({
 
         {/*
          * 0031 — mahsulot turi va maydon: PULGA TA'SIR QILMAYDI (tarif
-         * toifadan keladi). Aralash savdoda eng qimmat mahsulot tanlanadi
-         * (qaror 1-ilova 2-izohi), qolganlari izohga yoziladi.
+         * toifadan keladi). Aralash savdoda (0033) «Aralash mahsulotlar»
+         * tanlanadi va nimalar sotilishi izohga yoziladi — maslahat
+         * maydon ostida.
          */}
-        <Field id="stall-form-product" label={t("stalls.productTypeLabel")}>
-          <Select id="stall-form-product" {...register("product_type")}>
+        <Field
+          hint={t("stalls.productTypeHint")}
+          id="stall-form-product"
+          label={t("stalls.productTypeLabel")}
+        >
+          <Select
+            aria-describedby="stall-form-product-hint"
+            id="stall-form-product"
+            {...register("product_type")}
+          >
             <option value="">{t("stalls.productTypeUnset")}</option>
             {PRODUCT_TYPES.map((product) => (
               <option key={product} value={product}>
@@ -445,6 +461,37 @@ export function StallDialog({
             {...register("area_m2")}
           />
         </Field>
+
+        {/*
+         * 0032 — TAROZI OLINMAYDI: bu katakcha PULGA TA'SIR QILADI
+         * (yuqoridagi ikki maydondan farqli). Belgilangan rasta tarozini
+         * ko'tarmaydi; sotuvchining boshqa rastasi bo'lsa tarozi o'sha
+         * rastaga o'tadi. Tarif (rasta puli) o'zgarmaydi.
+         *
+         * ⚠ `aria-labelledby` — NOM faqat yorliq; tavsif
+         *   `aria-describedby` da (`RoleCheckbox` bilan bir xil sabab).
+         */}
+        <label
+          className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-border-ui px-3 py-2.5 text-sm transition-colors hover:bg-surface-muted"
+          htmlFor="stall-form-fee-exempt"
+        >
+          <input
+            aria-describedby="stall-form-fee-exempt-hint"
+            aria-labelledby="stall-form-fee-exempt-label"
+            className="mt-0.5 size-5 shrink-0 accent-accent"
+            id="stall-form-fee-exempt"
+            type="checkbox"
+            {...register("service_fee_exempt")}
+          />
+          <span className="flex min-w-0 flex-col">
+            <span className="font-semibold" id="stall-form-fee-exempt-label">
+              {t("stalls.serviceFeeExemptLabel")}
+            </span>
+            <span className="text-xs text-text-muted" id="stall-form-fee-exempt-hint">
+              {t("stalls.serviceFeeExemptHint")}
+            </span>
+          </span>
+        </label>
 
         <Field id="stall-form-note" label={t("stalls.noteLabel")}>
           <Input autoComplete="off" id="stall-form-note" {...register("note")} />
