@@ -339,6 +339,7 @@ function StallCardBody({
 }) {
   const t = useTranslations();
   const tStatus = useTranslations("stalls.status");
+  const tProduct = useTranslations("stalls.productType");
   const format = useFormatter();
   const locale = useLocale();
 
@@ -375,6 +376,30 @@ function StallCardBody({
           ) : (
             formatSoum(format, stall.tariff_soum, locale)
           )}
+        </dd>
+
+        {/*
+         * 0031: kiritilmagan — NEYTRAL uslub, ogohlantirish emas: bu pulga
+         * ta'sir qilmaydigan ma'lumot (tarifsiz rastadan farqli).
+         */}
+        <dt className="text-text-muted">{t("stalls.productTypeLabel")}</dt>
+        <dd className={stall.product_type === null ? "text-text-muted" : "font-semibold"}>
+          {stall.product_type === null
+            ? t("stalls.productTypeUnset")
+            : tProduct(stall.product_type)}
+        </dd>
+
+        <dt className="text-text-muted">{t("stalls.areaLabel")}</dt>
+        <dd
+          className={
+            stall.area_m2 === null ? "text-text-muted" : "font-semibold tabular-nums"
+          }
+        >
+          {stall.area_m2 === null
+            ? t("stalls.productTypeUnset")
+            : t("stalls.areaValue", {
+                area: format.number(stall.area_m2, { maximumFractionDigits: 2 }),
+              })}
         </dd>
 
         <dt className="text-text-muted">{t("stalls.vendorLabel")}</dt>

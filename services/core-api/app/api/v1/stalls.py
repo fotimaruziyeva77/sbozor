@@ -91,7 +91,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sbozor_core.enums import StallStatus
+from sbozor_core.enums import ProductType, StallStatus
 from sbozor_core.timeutil import business_today
 from sqlalchemy.exc import IntegrityError
 
@@ -279,6 +279,10 @@ def _list_item(row: StallRow) -> StallListItem:
         vendor_name=row.vendor_name,
         tariff_soum=row.tariff_soum,
         created_at=row.created_at,
+        # `StallStatus` bilan bir xil sabab: noma'lum qiymat 500 beradi.
+        product_type=None if row.product_type is None else ProductType(row.product_type),
+        # `NUMERIC(6,2)` -> JSON son: ikki kasr xonasi `float` da aniq ifodalanadi.
+        area_m2=None if row.area_m2 is None else float(row.area_m2),
     )
 
 
@@ -492,6 +496,8 @@ async def create_stall(
             category_id=payload.category_id,
             status=str(payload.status),
             note=payload.note,
+            product_type=None if payload.product_type is None else str(payload.product_type),
+            area_m2=payload.area_m2,
         )
     except MarketProfileMissingError as exc:
         log.warning("market_profile_missing", market_id=str(_market_id(principal)))
@@ -512,7 +518,9 @@ async def update_stall(
     principal: StallManagerDep,
     session: TenantSessionDep,
 ) -> StallDetail:
-    """Rasta raqami / zonasi / holati / izohini tahrirlaydi (`STALL_MANAGE`).
+    """Rasta raqami, zonasi, holati, izohi, mahsulot turi va maydonini tahrirlaydi.
+
+    Huquq — `STALL_MANAGE`.
 
     `exclude_unset=True` MAJBURIY: usiz har `PATCH` berilmagan maydonlarni
     `null` bilan tozalab ketardi (masalan izohni). Shu bilan "berilmagan"

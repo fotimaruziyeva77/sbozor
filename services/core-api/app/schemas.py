@@ -22,6 +22,7 @@ to'sqinlik qilmaydi — shakllar bo'lim izohlari ostida guruhlangan.
 from __future__ import annotations
 
 from datetime import date, datetime, time
+from decimal import Decimal
 from typing import Annotated, Any, Final, Literal, Self, get_args
 from uuid import UUID
 
@@ -45,6 +46,7 @@ from sbozor_core.enums import (
     OutboxKind,
     OutboxRecipientKind,
     OutboxStatus,
+    ProductType,
     ReconciliationCaseStatus,
     ReconciliationSubjectKind,
     ReversalReason,
@@ -929,6 +931,12 @@ _LongNameStr = Annotated[
 ]
 _CodeStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 _NoteStr = Annotated[str, StringConstraints(max_length=500)]
+_AreaM2 = Annotated[Decimal, Field(gt=0, lt=10000, max_digits=6, decimal_places=2)]
+"""Rasta maydoni, m² — `stalls.area_m2 NUMERIC(6,2)` va `AREA_M2_CHECK` ning jufti.
+
+`Decimal`, `float` EMAS: chegarada ikki kasr xonasi tekshiriladi va
+`3.666` 422 bilan qaytadi — DB'da jimgina `3.67` ga yaxlitlanib qolmaydi.
+"""
 _ShortNoteStr = Annotated[str, StringConstraints(max_length=200)]
 _SearchStr = Annotated[str, StringConstraints(max_length=64)]
 _WeekdayList = Annotated[list[int], Field(min_length=1, max_length=7)]
@@ -1060,6 +1068,10 @@ class StallListItem(BaseModel):
     vendor_name: str | None
     tariff_soum: int | None
     created_at: datetime
+    product_type: ProductType | None = None
+    """Rasta nima sotadi (0031) — `None`: hali kiritilmagan. Pulga ta'sir qilmaydi."""
+    area_m2: float | None = None
+    """Rasta maydoni, m² (0031) — `None`: hali o'lchanmagan."""
 
 
 class StallDetail(StallListItem):
@@ -1131,6 +1143,8 @@ class StallCreateRequest(BaseModel):
     category_id: UUID
     status: StallStatus = StallStatus.ACTIVE
     note: _NoteStr | None = None
+    product_type: ProductType | None = None
+    area_m2: _AreaM2 | None = None
 
 
 class StallUpdateRequest(BaseModel):
@@ -1150,6 +1164,8 @@ class StallUpdateRequest(BaseModel):
     zone_id: UUID | None = None
     status: StallStatus | None = None
     note: _NoteStr | None = None
+    product_type: ProductType | None = None
+    area_m2: _AreaM2 | None = None
 
 
 class StallCategoryRequest(BaseModel):

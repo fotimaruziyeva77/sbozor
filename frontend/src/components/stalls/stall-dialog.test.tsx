@@ -111,6 +111,8 @@ const CREATED_STALL = {
   phone: null,
   assignment_from: null,
   note: null,
+  product_type: null,
+  area_m2: null,
 };
 
 /**
@@ -464,5 +466,103 @@ describe("`create` rejimi (⛔ `enabled: false` tuzog'ining nazorati)", () => {
 
     // Batafsil so'rov `create` da UMUMAN yuborilmaydi.
     expect(detailCalls()).toHaveLength(0);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * T9 — MAHSULOT TURI VA MAYDON (0031, 261022)
+ * ------------------------------------------------------------------------ */
+
+const PRODUCT_LABEL = messages.stalls.productTypeLabel;
+const AREA_LABEL = messages.stalls.areaLabel;
+const AREA_ERROR_ID = "stall-form-area-error";
+
+/** `PATCH /stalls/{id}` chaqiruvlari. */
+function updateCalls(): unknown[][] {
+  return apiFetch.mock.calls.filter(
+    (args: unknown[]) =>
+      args[0] === STALL_DETAIL_PATH &&
+      (args[1] as { method?: string } | undefined)?.method === "PATCH",
+  );
+}
+
+describe("mahsulot turi va maydon", () => {
+  test("tanlangan tur va VERGULLI maydon («3,6») son bo'lib ketadi", async () => {
+    mockLookups();
+    renderDialog();
+    await chooseZoneAndCategory();
+
+    fireEvent.change(screen.getByLabelText(CODE_LABEL), { target: { value: "12" } });
+    fireEvent.change(screen.getByLabelText(PRODUCT_LABEL), {
+      target: { value: "vegetables" },
+    });
+    fireEvent.change(screen.getByLabelText(AREA_LABEL), { target: { value: "3,6" } });
+    clickSave();
+
+    await waitFor(() => {
+      expect(createCalls()).toHaveLength(1);
+    });
+    const options = createCalls()[0][1] as { body: Record<string, unknown> };
+    expect(options.body.product_type).toBe("vegetables");
+    expect(options.body.area_m2).toBe(3.6);
+  });
+
+  test("kiritilmagan tur va maydon `null` bo'lib ketadi (bo'sh satr EMAS)", async () => {
+    mockLookups();
+    renderDialog();
+    await chooseZoneAndCategory();
+
+    fireEvent.change(screen.getByLabelText(CODE_LABEL), { target: { value: "12" } });
+    clickSave();
+
+    await waitFor(() => {
+      expect(createCalls()).toHaveLength(1);
+    });
+    const options = createCalls()[0][1] as { body: Record<string, unknown> };
+    expect(options.body.product_type).toBeNull();
+    expect(options.body.area_m2).toBeNull();
+  });
+
+  test.each(["0", "abc", "3,666", "12000"])(
+    "⛔ yaroqsiz maydon «%s» — xabar ko'rinadi va `POST` KETMAYDI",
+    async (value) => {
+      mockLookups();
+      renderDialog();
+      await chooseZoneAndCategory();
+
+      fireEvent.change(screen.getByLabelText(CODE_LABEL), { target: { value: "12" } });
+      fireEvent.change(screen.getByLabelText(AREA_LABEL), { target: { value } });
+      clickSave();
+
+      await waitFor(() => {
+        expect(document.getElementById(AREA_ERROR_ID)?.textContent).toBe(
+          messages.stalls.areaInvalid,
+        );
+      });
+      expect(screen.getByLabelText(AREA_LABEL)).toHaveAttribute("aria-invalid", "true");
+      expect(createCalls()).toHaveLength(0);
+    },
+  );
+
+  test("tahrirda javobdan urug'lanadi; maydon tozalansa `null`, tur o'z joyida", async () => {
+    mockEditDetail(() =>
+      Promise.resolve({ ...STALL_DETAIL, product_type: "imported_fruit", area_m2: 12.5 }),
+    );
+    renderDialog("edit", STALL_ID);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(AREA_LABEL)).toHaveValue("12.5");
+    });
+    expect(screen.getByLabelText(PRODUCT_LABEL)).toHaveValue("imported_fruit");
+
+    fireEvent.change(screen.getByLabelText(AREA_LABEL), { target: { value: "" } });
+    clickSave();
+
+    await waitFor(() => {
+      expect(updateCalls()).toHaveLength(1);
+    });
+    const options = updateCalls()[0][1] as { body: Record<string, unknown> };
+    expect(options.body.area_m2).toBeNull();
+    expect(options.body.product_type).toBe("imported_fruit");
   });
 });

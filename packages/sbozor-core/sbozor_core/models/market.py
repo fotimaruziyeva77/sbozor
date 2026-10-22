@@ -51,6 +51,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
@@ -62,6 +63,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    Numeric,
     PrimaryKeyConstraint,
     SmallInteger,
     Text,
@@ -73,11 +75,14 @@ from sqlalchemy.dialects.postgresql import ARRAY, DATERANGE, ExcludeConstraint, 
 from sqlalchemy.dialects.postgresql import UUID as PgUuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from sbozor_core.enums import StallStatus
+from sbozor_core.enums import ProductType, StallStatus
 from sbozor_core.models.base import Base, TenantMixin, TimestampMixin, uuid_pk
 
 __all__ = [
+    "AREA_M2_CHECK",
     "OPEN_WEEKDAYS_CHECK",
+    "PRODUCT_TYPE_CHECK",
+    "PRODUCT_TYPE_VALUES",
     "STALL_CODE_SORT_EXPR",
     "STALL_STATUS_CHECK",
     "STALL_STATUS_VALUES",
@@ -117,6 +122,25 @@ Ifoda `sbozor_core.enums.StallStatus` dan HOSIL QILINADI, qo'lda
 ko'chirilmaydi — `identity.py::ROLES_SUBSET_CHECK` bilan aynan bir xil sabab.
 Enum kengayib migratsiya unutilsa, bazadagi amaldagi konstrayt enum bilan
 solishtiriladi va darvoza yopiladi.
+"""
+
+PRODUCT_TYPE_VALUES: tuple[str, ...] = tuple(product.value for product in ProductType)
+
+PRODUCT_TYPE_CHECK = f"product_type IS NULL OR product_type IN ({_quoted(PRODUCT_TYPE_VALUES)})"
+"""`stalls.product_type` — `NULL` (hali kiritilmagan) yoki `ProductType` a'zosi.
+
+`STALL_STATUS_CHECK` bilan aynan bir xil naqsh: ro'yxat enumdan hosil
+qilinadi va migratsiya (0031) shu konstantani import qiladi.
+"""
+
+AREA_M2_CHECK = "area_m2 IS NULL OR (area_m2 > 0 AND area_m2 < 10000)"
+"""`stalls.area_m2` — `NULL` (o'lchanmagan) yoki musbat, 10 000 m² dan kichik.
+
+⛔ NOL TAQIQLANADI: «o'lchanmagan» `NULL` bilan ifodalanadi. `0` ruxsat
+   etilsa «maydoni nol rasta» degan ma'nosiz qiymat bilan «hali
+   o'lchanmagan» bir xil ko'rinardi (`plan_x` dagi «yo'q» va «(0,0)» farqi).
+⚠ YUQORI CHEGARA — TASODIF UCHUN: vergul o'rniga nuqta (yoki aksincha)
+  bilan xato kiritilgan son (`45` o'rniga `4500`) sezilmay qolmasin.
 """
 
 OPEN_WEEKDAYS_CHECK = (
@@ -363,6 +387,8 @@ class Stall(Base, TenantMixin, TimestampMixin):
         UniqueConstraint("market_id", "code", name="uq_stalls_market_id_code"),
         UniqueConstraint("market_id", "id", name="uq_stalls_market_id_id"),
         CheckConstraint(STALL_STATUS_CHECK, name="status_allowed"),
+        CheckConstraint(PRODUCT_TYPE_CHECK, name="product_type_allowed"),
+        CheckConstraint(AREA_M2_CHECK, name="area_m2_range"),
         CheckConstraint("length(btrim(code)) > 0", name="code_not_blank"),
         # Keyset kursori `(code_sort, id)` shu indeksdan foydalanadi.
         # Tenant invarianti #5 bo'yicha `market_id` bilan BOSHLANADI.
@@ -414,6 +440,22 @@ class Stall(Base, TenantMixin, TimestampMixin):
     # =====================================================================
     plan_x: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     plan_y: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+
+    # =====================================================================
+    # ⛔ MAHSULOT TURI VA MAYDON — IXTIYORIY (0031, foydalanuvchi 261022).
+    #
+    # Ikkalasi ham 131-5-0-Q/25 qarori bilan solishtirish uchun: qaror joy
+    # haqini mahsulot turi va joy o'lchami bo'yicha belgilaydi. Bu ustunlar
+    # PULNI O'ZGARTIRMAYDI — kunlik tarif hamon toifa → tarif zanjiridan
+    # (D-04/D-05). `NULL` — «hali kiritilmagan», mavjud rastalar hech narsa
+    # yo'qotmaydi.
+    #
+    # ⚠ `area_m2` — `NUMERIC(6,2)`, `float` EMAS: 1,2 × 3 = 3,6 kabi
+    #   o'lchovlar ikkilik kasrda 3,5999… bo'lib saqlanardi va jadvalda
+    #   «3,6» o'rniga g'alati son ko'rinardi.
+    # =====================================================================
+    product_type: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    area_m2: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
 
 
 class StallCodeRegistry(Base, TenantMixin):

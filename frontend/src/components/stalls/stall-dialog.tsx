@@ -14,8 +14,8 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { STALL_STATUSES } from "@/lib/api-types";
-import type { StallStatusValue } from "@/lib/api-types";
+import { PRODUCT_TYPES, STALL_STATUSES } from "@/lib/api-types";
+import type { ProductTypeValue, StallStatusValue } from "@/lib/api-types";
 import { marketErrorMessageKey } from "@/lib/market-errors";
 import {
   useCategoriesQuery,
@@ -63,6 +63,10 @@ type StallFormValues = {
   category_id: string;
   status: StallStatusValue;
   note: string;
+  /** `""` — kiritilmagan (0031). */
+  product_type: ProductTypeValue | "";
+  /** Forma MATNI: «3,6» ham, «3.6» ham qabul qilinadi; `""` — o'lchanmagan. */
+  area_m2: string;
 };
 
 const EMPTY_VALUES: StallFormValues = {
@@ -71,7 +75,26 @@ const EMPTY_VALUES: StallFormValues = {
   category_id: "",
   status: "active",
   note: "",
+  product_type: "",
+  area_m2: "",
 };
+
+/**
+ * Maydon matnini songa o'giradi: bo'sh -> `null`, yaroqsiz -> `undefined`.
+ *
+ * ⚠ VERGUL QABUL QILINADI: o'zbek va rus klaviaturasida kasr belgisi vergul,
+ *   va «3,6» ni rad etish foydalanuvchiga tushunarsiz xato bo'lardi.
+ * ⚠ CHEGARALAR SERVER BILAN BIR XIL (`_AreaM2`, `AREA_M2_CHECK`): musbat,
+ *   10 000 dan kichik, ikki kasr xonasigacha — ya'ni forma o'tkazgan son
+ *   serverda 422 olmaydi.
+ */
+export function parseAreaM2(raw: string): number | null | undefined {
+  const text = raw.trim().replace(",", ".");
+  if (text === "") return null;
+  if (!/^\d{1,4}(\.\d{1,2})?$/u.test(text)) return undefined;
+  const value = Number(text);
+  return value > 0 ? value : undefined;
+}
 
 export function StallDialog({
   mode,
@@ -93,6 +116,7 @@ export function StallDialog({
 }) {
   const t = useTranslations();
   const tStatus = useTranslations("stalls.status");
+  const tProduct = useTranslations("stalls.productType");
   const [formError, setFormError] = useState<string | null>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
@@ -127,6 +151,10 @@ export function StallDialog({
             : z.string(),
         status: z.enum(STALL_STATUSES),
         note: z.string(),
+        product_type: z.union([z.literal(""), z.enum(PRODUCT_TYPES)]),
+        area_m2: z.string().refine((raw) => parseAreaM2(raw) !== undefined, {
+          error: t("stalls.areaInvalid"),
+        }),
       }),
     [mode, t],
   );
@@ -171,6 +199,8 @@ export function StallDialog({
       category_id: "",
       status: detail.status,
       note: detail.note ?? "",
+      product_type: detail.product_type ?? "",
+      area_m2: detail.area_m2 === null ? "" : String(detail.area_m2),
     });
   }, [detail, mode, open, reset]);
 
@@ -193,6 +223,9 @@ export function StallDialog({
   async function onSubmit(values: StallFormValues) {
     setFormError(null);
     const note = values.note.trim() === "" ? null : values.note.trim();
+    const product_type = values.product_type === "" ? null : values.product_type;
+    // Validatsiyadan o'tgan — `undefined` bu yerga yetib kelmaydi.
+    const area_m2 = parseAreaM2(values.area_m2) ?? null;
 
     try {
       if (mode === "create") {
@@ -204,6 +237,8 @@ export function StallDialog({
           category_id: values.category_id,
           status: values.status,
           note,
+          product_type,
+          area_m2,
         });
       } else if (stallId) {
         await updateStall.mutateAsync({
@@ -212,6 +247,8 @@ export function StallDialog({
           zone_id: values.zone_id,
           status: values.status,
           note,
+          product_type,
+          area_m2,
         });
       }
       handleOpenChange(false);
@@ -376,6 +413,37 @@ export function StallDialog({
               </option>
             ))}
           </Select>
+        </Field>
+
+        {/*
+         * 0031 — mahsulot turi va maydon: PULGA TA'SIR QILMAYDI (tarif
+         * toifadan keladi). Aralash savdoda eng qimmat mahsulot tanlanadi
+         * (qaror 1-ilova 2-izohi), qolganlari izohga yoziladi.
+         */}
+        <Field id="stall-form-product" label={t("stalls.productTypeLabel")}>
+          <Select id="stall-form-product" {...register("product_type")}>
+            <option value="">{t("stalls.productTypeUnset")}</option>
+            {PRODUCT_TYPES.map((product) => (
+              <option key={product} value={product}>
+                {tProduct(product)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field
+          error={errors.area_m2?.message}
+          id="stall-form-area"
+          label={t("stalls.areaLabel")}
+        >
+          <Input
+            aria-describedby={errors.area_m2 ? "stall-form-area-error" : undefined}
+            aria-invalid={errors.area_m2 ? true : undefined}
+            autoComplete="off"
+            id="stall-form-area"
+            inputMode="decimal"
+            {...register("area_m2")}
+          />
         </Field>
 
         <Field id="stall-form-note" label={t("stalls.noteLabel")}>

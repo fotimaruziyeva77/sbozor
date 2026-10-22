@@ -67,6 +67,7 @@ from app.repositories.audit_repo import InvalidCursorError
 
 if TYPE_CHECKING:
     from datetime import date, datetime
+    from decimal import Decimal
 
     from sqlalchemy import CursorResult, Select
     from sqlalchemy.exc import IntegrityError
@@ -528,6 +529,9 @@ class StallRow:
     phone: str | None
     assignment_from: date | None
     tariff_soum: int | None
+    # 0031: qaror bilan solishtirish uchun — pulga ta'sir qilmaydi.
+    product_type: str | None = None
+    area_m2: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -595,6 +599,8 @@ _STALL_ROWS = text(
            c.name         AS category_name,
            s.status,
            s.note,
+           s.product_type,
+           s.area_m2,
            s.created_at,
            v.id           AS vendor_id,
            v.full_name    AS vendor_name,
@@ -945,6 +951,8 @@ class StallRepository(TenantScopedRepository):
         category_id: UUID,
         status: str,
         note: str | None,
+        product_type: str | None = None,
+        area_m2: Decimal | None = None,
     ) -> UUID:
         """Rastani va uning BOSHLANG'ICH toifa davrini BIR TRANZAKSIYADA yozadi.
 
@@ -984,6 +992,8 @@ class StallRepository(TenantScopedRepository):
                 code=code,
                 status=status,
                 note=note,
+                product_type=product_type,
+                area_m2=area_m2,
             )
             .returning(Stall.id)
         )
@@ -1138,4 +1148,6 @@ def _stall_row(row: Any) -> StallRow:
         phone=row.phone,
         assignment_from=row.assignment_from,
         tariff_soum=row.tariff_soum,
+        product_type=row.product_type,
+        area_m2=row.area_m2,
     )

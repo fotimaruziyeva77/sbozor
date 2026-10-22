@@ -218,13 +218,24 @@ function StallRow({
   stall: StallListItem;
 }) {
   const t = useTranslations();
+  const tProduct = useTranslations("stalls.productType");
   const format = useFormatter();
   const locale = useLocale();
 
   // D-16: zona, toifa va sotuvchi nomi DB kontenti — TARJIMA QILINMAYDI.
   // Ular `truncate` bo'ladi va yoniga doim `title` qo'yiladi (§5.1 qoida 4).
   const categoryLabel = stall.category_name ?? t("stalls.categoryUnset");
-  const placeLabel = `${stall.zone_name} · ${categoryLabel}`;
+  // 0031: mahsulot turi va maydon — faqat KIRITILGAN bo'lsa (bo'shi shovqin).
+  const placeParts = [stall.zone_name, categoryLabel];
+  if (stall.product_type !== null) placeParts.push(tProduct(stall.product_type));
+  if (stall.area_m2 !== null) {
+    placeParts.push(
+      t("stalls.areaValue", {
+        area: format.number(stall.area_m2, { maximumFractionDigits: 2 }),
+      }),
+    );
+  }
+  const placeLabel = placeParts.join(" · ");
   const vendorLabel = stall.vendor_name ?? t("stalls.noVendor");
 
   return (

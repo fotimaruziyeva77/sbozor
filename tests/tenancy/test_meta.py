@@ -29,6 +29,7 @@ import pytest
 from psycopg import Connection
 from psycopg.rows import TupleRow
 from sbozor_core.models.identity import LOCALE_VALUES, ROLE_VALUES
+from sbozor_core.models.market import PRODUCT_TYPE_VALUES
 from sbozor_core.schema_contract import (
     AUDITED_TABLES,
     FINANCIAL_TABLES,
@@ -920,6 +921,21 @@ def test_locale_check_constraint_matches_enum(
 ) -> None:
     """DB dagi til ro'yxati `sbozor_core.enums.Locale` bilan AYNAN mos (D-13)."""
     assert _check_literals(sync_app_conn, "ck_users_locale_allowed") == set(LOCALE_VALUES)
+
+
+def test_product_type_check_constraint_matches_enum(
+    sync_app_conn: Connection[TupleRow], migrated: None
+) -> None:
+    """DB dagi mahsulot turlari `sbozor_core.enums.ProductType` bilan AYNAN mos (0031).
+
+    Enum'ga yangi tur qo'shilib migratsiya unutilsa, rastaga o'sha turni
+    yozish `check constraint` bilan yiqilardi — sabab esa kod bilan sxema
+    orasidagi jimgina drift bo'lardi (`test_role_check_constraint_matches_enum`
+    bilan bir xil darvoza).
+    """
+    assert _check_literals(sync_app_conn, "ck_stalls_product_type_allowed") == set(
+        PRODUCT_TYPE_VALUES
+    )
 
 
 def test_audited_tables_have_trigger(sync_app_conn: Connection[TupleRow], migrated: None) -> None:

@@ -57,6 +57,7 @@ import type {
   ImportErrorItem,
   ImportErrorResponse,
   ImportResult,
+  ProductTypeValue,
   StaffImportResult,
 } from "@/lib/api-types";
 import { usersKey } from "@/lib/queries";
@@ -406,6 +407,10 @@ export type StallCreateInput = {
   category_id: string;
   status: string;
   note: string | null;
+  /** 0031 — `null`: kiritilmagan. Pulga ta'sir qilmaydi. */
+  product_type: ProductTypeValue | null;
+  /** 0031 — m², ikki kasr xonasigacha; `null`: o'lchanmagan. */
+  area_m2: number | null;
 };
 
 /**
@@ -436,6 +441,8 @@ export type StallUpdateInput = {
   zone_id?: string;
   status?: string;
   note?: string | null;
+  product_type?: ProductTypeValue | null;
+  area_m2?: number | null;
 };
 
 /**

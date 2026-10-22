@@ -471,6 +471,54 @@ export function isStallStatus(value: string): value is StallStatusValue {
 
 export const stallStatusSchema = z.enum(STALL_STATUSES);
 
+/*
+ * Rasta NIMA sotadi (0031, 261022) — Navoiy viloyati hokimining
+ * 131-5-0-Q/25-son qarori 1-ilovasining mahsulot qatorlari. Backend
+ * `ProductType` enumi bilan ko'zgu: qiymatlar ham, TARTIB ham bir xil
+ * (forma ro'yxati qarordagi tartibda chiqadi).
+ *
+ * ⛔ PUL EMAS: tarif hamon toifadan keladi. Mahsulot turi «tarif qarorga
+ *    mosmi?» savoliga javob beradigan ma'lumot. UI qiymatlarni
+ *    `stalls.productType.<qiymat>` kalitlari orqali uch tilda ko'rsatadi.
+ */
+export const PRODUCT_TYPES = [
+  "fresh_fruit",
+  "imported_fruit",
+  "dried_fruit",
+  "vegetables",
+  "melons",
+  "grains",
+  "legumes",
+  "dairy",
+  "pickles",
+  "spices_honey",
+  "greens",
+  "eggs",
+  "flowers",
+  "bread",
+  "homemade",
+  "packaged_food",
+  "fast_food",
+  "national_dishes",
+  "packaging",
+  "brooms",
+  "fish",
+  "handicrafts",
+  "meat",
+  "poultry_meat",
+  "offal",
+  "building_materials",
+  "hardware",
+  "used_auto_parts",
+  "used_goods",
+  "pets",
+  "shoe_repair",
+  "other",
+] as const;
+export type ProductTypeValue = (typeof PRODUCT_TYPES)[number];
+
+export const productTypeSchema = z.enum(PRODUCT_TYPES);
+
 /* --- Zonalar (D-03) ------------------------------------------------------ */
 
 /**
@@ -540,6 +588,13 @@ export const stallListItemSchema = z.object({
   vendor_name: z.string().nullable(),
   tariff_soum: soumSchema.nullable(),
   created_at: z.string(),
+  /*
+   * 0031: `null` — hali kiritilmagan / o'lchanmagan. `.default(null)` —
+   * chiqarish oralig'ida eski backend javobi (maydonsiz) ro'yxatni
+   * yiqitmasin.
+   */
+  product_type: productTypeSchema.nullable().default(null),
+  area_m2: z.number().positive().nullable().default(null),
 });
 export type StallListItem = z.infer<typeof stallListItemSchema>;
 

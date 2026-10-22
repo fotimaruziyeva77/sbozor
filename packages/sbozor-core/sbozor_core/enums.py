@@ -33,6 +33,7 @@ __all__ = [
     "OutboxStatus",
     "PaymentKind",
     "PaymentMethod",
+    "ProductType",
     "ReconciliationCaseStatus",
     "ReconciliationSubjectKind",
     "ResolutionSource",
@@ -124,6 +125,61 @@ class StallStatus(StrEnum):
       o'tmishda yozilgan qarzni O'CHIRMAYDI (D-07 — yozilgan hisob
       o'zgarmas). Kassir yarmarka rastasidan eski qarzni olishi mumkin.
     """
+
+
+class ProductType(StrEnum):
+    """`stalls.product_type` — rasta NIMA sotadi (0031, foydalanuvchi talabi 261022).
+
+    Ro'yxat Navoiy viloyati hokimining 2025-yil 28-maydagi 131-5-0-Q/25-son
+    qarori 1-ilovasining mahsulot qatorlaridan olingan: har a'zo o'sha
+    jadvalning bitta (yoki bir-biriga teng stavkali qo'shni) qatori. Ya'ni
+    rastaning mahsulot turi — qarordagi joy haqi stavkasining KALITI.
+
+    ⛔ BU TARIF EMAS: rastaning kunlik puli hamon `stall_categories` →
+       `tariffs` zanjiridan keladi (D-04/D-05). Mahsulot turi pulni
+       o'zgartirmaydi — u «tarif qarorga mosmi?» savoliga javob beradigan
+       ma'lumot.
+
+    ⚠ ARALASH SAVDO: qarorning 1-ilova 2-izohiga ko'ra bir rastada bir necha
+      mahsulot sotilsa, ENG YUQORI stavkali mahsulot olinadi — shuning uchun
+      rastaga bitta tur yoziladi (o'sha eng qimmati), qolganlari `note` da.
+
+    Qiymatlar DB KONTENTI va bitta tilda (`StallStatus` bilan bir xil qoida):
+    UI ularni `stalls.productType.*` kalitlari orqali uch tilda ko'rsatadi.
+    """
+
+    FRESH_FRUIT = "fresh_fruit"
+    IMPORTED_FRUIT = "imported_fruit"
+    DRIED_FRUIT = "dried_fruit"
+    VEGETABLES = "vegetables"
+    MELONS = "melons"
+    GRAINS = "grains"
+    LEGUMES = "legumes"
+    DAIRY = "dairy"
+    PICKLES = "pickles"
+    SPICES_HONEY = "spices_honey"
+    GREENS = "greens"
+    EGGS = "eggs"
+    FLOWERS = "flowers"
+    BREAD = "bread"
+    HOMEMADE = "homemade"
+    PACKAGED_FOOD = "packaged_food"
+    FAST_FOOD = "fast_food"
+    NATIONAL_DISHES = "national_dishes"
+    PACKAGING = "packaging"
+    BROOMS = "brooms"
+    FISH = "fish"
+    HANDICRAFTS = "handicrafts"
+    MEAT = "meat"
+    POULTRY_MEAT = "poultry_meat"
+    OFFAL = "offal"
+    BUILDING_MATERIALS = "building_materials"
+    HARDWARE = "hardware"
+    USED_AUTO_PARTS = "used_auto_parts"
+    USED_GOODS = "used_goods"
+    PETS = "pets"
+    SHOE_REPAIR = "shoe_repair"
+    OTHER = "other"
 
 
 class CameraStatus(StrEnum):

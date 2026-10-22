@@ -22,6 +22,7 @@ from sbozor_core.enums import (
     OutboxKind,
     OutboxRecipientKind,
     OutboxStatus,
+    ProductType,
     ReconciliationCaseStatus,
     ReconciliationSubjectKind,
     Role,
@@ -45,6 +46,48 @@ bo'lgan yagona joy. Yopiqlik (to'plam tengligi) esa BOSHQA faylda —
 `tests/unit/test_reconciliation_enums.py`: bu yerda «ro'yxatga olinganmi»,
 u yerda «to'plami yopiqmi» o'lchanadi va ikkalasi mustaqil buziladi.
 """
+
+
+def test_product_type_is_a_closed_set() -> None:
+    """`PRODUCT_TYPE_CHECK` shu to'plamdan hosil qilinadi — DB uni qulflaydi.
+
+    Qiymatlar 131-5-0-Q/25 qarori 1-ilovasining mahsulot qatorlari; ularni
+    qayta nomlash — migratsiya, chunki eski qatorlar eski matn bilan qoladi.
+    """
+    assert [product.value for product in ProductType] == [
+        "fresh_fruit",
+        "imported_fruit",
+        "dried_fruit",
+        "vegetables",
+        "melons",
+        "grains",
+        "legumes",
+        "dairy",
+        "pickles",
+        "spices_honey",
+        "greens",
+        "eggs",
+        "flowers",
+        "bread",
+        "homemade",
+        "packaged_food",
+        "fast_food",
+        "national_dishes",
+        "packaging",
+        "brooms",
+        "fish",
+        "handicrafts",
+        "meat",
+        "poultry_meat",
+        "offal",
+        "building_materials",
+        "hardware",
+        "used_auto_parts",
+        "used_goods",
+        "pets",
+        "shoe_repair",
+        "other",
+    ]
 
 
 def test_role_has_exactly_five_panel_roles() -> None:
