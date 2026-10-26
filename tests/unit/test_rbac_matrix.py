@@ -284,7 +284,7 @@ def test_camera_manage_holders_are_exactly_the_two_admins() -> None:
 
 
 def test_vendor_history_view_is_granted_without_report_view() -> None:
-    """`VENDOR_HISTORY_VIEW` AYNAN uch rolda va platforma admini `REPORT_VIEW` OLMAYDI.
+    """`VENDOR_HISTORY_VIEW` AYNAN to'rt rolda va platforma admini `REPORT_VIEW` OLMAYDI.
 
     =========================================================================
     ⛔ BUYURTMACHI QARORI (261006) — IKKI YO'NALISHDA QULFLANADI.
@@ -306,7 +306,8 @@ def test_vendor_history_view_is_granted_without_report_view() -> None:
         if Permission.VENDOR_HISTORY_VIEW in granted
     }
 
-    assert holders == {Role.PLATFORM_ADMIN, Role.DIRECTOR, Role.MARKET_ADMIN}, (
+    # Buxgalter (0034) — tarix uning hisobotlarining bir qismi.
+    assert holders == {Role.PLATFORM_ADMIN, Role.DIRECTOR, Role.MARKET_ADMIN, Role.ACCOUNTANT}, (
         f"`VENDOR_HISTORY_VIEW` quyidagi rollarda: {sorted(str(role) for role in holders)}."
     )
     assert Permission.REPORT_VIEW not in ROLE_PERMISSIONS[Role.PLATFORM_ADMIN], (
@@ -352,8 +353,8 @@ def test_cashier_scope_minimal() -> None:
     )
 
 
-def test_billing_collect_view_holders_are_exactly_three_roles() -> None:
-    """`BILLING_COLLECT_VIEW` AYNAN uch rolda — HUQUQ bo'yicha, rol bo'yicha emas.
+def test_billing_collect_view_holders_are_exactly_four_roles() -> None:
+    """`BILLING_COLLECT_VIEW` AYNAN to'rt rolda — HUQUQ bo'yicha, rol bo'yicha emas.
 
     `test_cashier_scope_minimal` "kassirda nima bor" ni qulflaydi. Bu esa
     teskari yo'nalish: yangi rol qo'shilib unga yig'ish yuzasi "zarari yo'q"
@@ -369,9 +370,10 @@ def test_billing_collect_view_holders_are_exactly_three_roles() -> None:
         if Permission.BILLING_COLLECT_VIEW in granted
     }
 
-    assert holders == {Role.CASHIER, Role.MARKET_ADMIN, Role.DIRECTOR}, (
+    assert holders == {Role.CASHIER, Role.MARKET_ADMIN, Role.DIRECTOR, Role.ACCOUNTANT}, (
         f"`BILLING_COLLECT_VIEW` quyidagi rollarda: {sorted(str(role) for role in holders)}. "
-        "U AYNAN kassir, bozor admini va direktorda bo'lishi kerak (06-UI-SPEC §5.6)."
+        "U AYNAN kassir, bozor admini, direktor va buxgalterda bo'lishi kerak "
+        "(06-UI-SPEC §5.6; buxgalter — 0034)."
     )
 
 
@@ -391,6 +393,28 @@ def test_shift_manage_holders_exclude_the_director() -> None:
         f"`SHIFT_MANAGE` quyidagi rollarda: {sorted(str(role) for role in holders)}. "
         "U AYNAN kassir va bozor adminida bo'lishi kerak (D-26/D-27)."
     )
+
+
+def test_accountant_is_read_only_money_scope() -> None:
+    """Buxgalter (0034) — AYNAN pul hisobotlarini o'qish, boshqa hech narsa.
+
+    ⛔ To'plam TENGLIGI bilan: kamera, audit, nizo yoki `*_MANAGE` «zarari yo'q»
+       deb qo'shilsa shu test qizaradi.
+    """
+    assert ROLE_PERMISSIONS[Role.ACCOUNTANT] == frozenset(
+        {
+            Permission.REPORT_VIEW,
+            Permission.VENDOR_HISTORY_VIEW,
+            Permission.MARKET_DATA_VIEW,
+            Permission.VENDOR_VIEW,
+            Permission.BILLING_COLLECT_VIEW,
+        }
+    )
+
+
+def test_accountant_rights_are_within_market_admin_rights() -> None:
+    """Bozor admini buxgalterni tayinlay oladi — demak o'zida yo'q huquqni bermasin."""
+    assert ROLE_PERMISSIONS[Role.ACCOUNTANT] <= ROLE_PERMISSIONS[Role.MARKET_ADMIN]
 
 
 def test_inspector_scope_minimal() -> None:

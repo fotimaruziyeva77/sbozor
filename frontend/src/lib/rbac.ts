@@ -22,6 +22,7 @@ export const ROLES = [
   "market_admin",
   "cashier",
   "inspector",
+  "accountant",
 ] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -138,6 +139,15 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
   // imkonsiz bo'lib qoladi (C-10). Sabablar `rbac.py` docstringida.
   cashier: ["payment_create", "billing_collect_view", "shift_manage"],
   inspector: ["occupancy_review"],
+  // Buxgalter (0034) — FAQAT o'qish, pul tomoni. Kamera, audit, nizo va
+  // `*_manage` ATAYIN yo'q (sabab `rbac.py` da).
+  accountant: [
+    "report_view",
+    "vendor_history_view",
+    "market_data_view",
+    "vendor_view",
+    "billing_collect_view",
+  ],
 };
 
 /**
@@ -163,7 +173,8 @@ export type RoleLabelKey =
   | "director"
   | "marketAdmin"
   | "cashier"
-  | "inspector";
+  | "inspector"
+  | "accountant";
 
 /**
  * Rol nomining tarjima kaliti. Noma'lum rol — `null`, ya'ni xom
@@ -181,6 +192,8 @@ export function roleLabelKey(role: string): RoleLabelKey | null {
       return "cashier";
     case "inspector":
       return "inspector";
+    case "accountant":
+      return "accountant";
     default:
       return null;
   }

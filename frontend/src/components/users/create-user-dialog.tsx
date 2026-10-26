@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ComponentType } from "react";
-import { BarChart3, HandCoins, Info, Settings2, ShieldCheck, UserPlus } from "lucide-react";
+import { BarChart3, Calculator, HandCoins, Info, Settings2, ShieldCheck, UserPlus } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
 import { useForm, useWatch } from "react-hook-form";
@@ -38,13 +38,15 @@ export const ROLE_CARD_META: Record<
   market_admin: { icon: Settings2, descKey: "marketAdminDesc" },
   cashier: { icon: HandCoins, descKey: "cashierDesc" },
   inspector: { icon: ShieldCheck, descKey: "inspectorDesc" },
+  accountant: { icon: Calculator, descKey: "accountantDesc" },
 };
 
 type RoleDescKey =
   | "directorDesc"
   | "marketAdminDesc"
   | "cashierDesc"
-  | "inspectorDesc";
+  | "inspectorDesc"
+  | "accountantDesc";
 
 /*
  * Yangi foydalanuvchi (D-04 ikki bosqichli yaratish, D-05 rollar to'plami).

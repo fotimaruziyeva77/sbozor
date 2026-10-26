@@ -51,7 +51,10 @@ __all__ = [
 
 
 class Role(StrEnum):
-    """Panel rollari — AYNAN beshta (D-05: foydalanuvchida rollar TO'PLAMI).
+    """Panel rollari — AYNAN oltita (D-05: foydalanuvchida rollar TO'PLAMI).
+
+    `accountant` (buxgalter, 0034, foydalanuvchi talabi 261026) — FAQAT pul
+    hisobotlarini O'QIYDI; huquqlari `rbac.py` da.
 
     Sotuvchi (`vendor`) roli bu yerda ATAYIN YO'Q: sotuvchi veb-panelga
     umuman kirmaydi, u Telegram-bot identifikatori bo'lib, 7-fazadagi
@@ -64,6 +67,7 @@ class Role(StrEnum):
     MARKET_ADMIN = "market_admin"
     CASHIER = "cashier"
     INSPECTOR = "inspector"
+    ACCOUNTANT = "accountant"
 
 
 class Locale(StrEnum):

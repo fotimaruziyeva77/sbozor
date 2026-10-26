@@ -322,6 +322,25 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     # Nazoratchi — HITL navbati. U to'lov ham kirita olmaydi, jurnal ham
     # ko'rmaydi: uning ishi faqat "band/bo'sh" qarorini tasdiqlash.
     Role.INSPECTOR: frozenset({Permission.OCCUPANCY_REVIEW}),
+    # Buxgalter (0034, 261026) — FAQAT O'QISH, pul tomoni: hisobotlar va ularning
+    # Excel'i, sotuvchi to'lov tarixi, patta yuzasi (bozor kesimida), rasta/tarif
+    # reestri va sotuvchilar (hisobotdagi ismlar shulardan).
+    #
+    # ⛔ ATAYIN YO'Q: `CAMERA_VIEW` (kadrlar — pul emas), `AUDIT_VIEW`,
+    #    `DISPUTE_DECIDE` (nizo — direktor qarori), `USER_VIEW`, har qanday
+    #    `*_MANAGE`, `PAYMENT_CREATE`/`SHIFT_MANAGE` (pulga tegmaydi).
+    # ⚠ To'plam bozor adminining to'plami ICHIDA — shuning uchun bozor admini
+    #   bu rolni bera oladi (`staff_accounts.MARKET_ADMIN_ASSIGNABLE_ROLES`):
+    #   u o'zida yo'q huquqni hech kimga bera olmaydi.
+    Role.ACCOUNTANT: frozenset(
+        {
+            Permission.REPORT_VIEW,
+            Permission.VENDOR_HISTORY_VIEW,
+            Permission.MARKET_DATA_VIEW,
+            Permission.VENDOR_VIEW,
+            Permission.BILLING_COLLECT_VIEW,
+        }
+    ),
 }
 """Rol -> huquqlar. HAR BIR `Role` a'zosi shu yerda bo'lishi SHART.
 

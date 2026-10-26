@@ -33,7 +33,9 @@
     "inspectorDesc": "Суратларни текшириш ва тасдиқлаш",
     "marketAdmin": "Бозор админи",
     "marketAdminDesc": "Расталар, тарифлар ва ходимларни бошқариш",
-    "platformAdmin": "Платформа админи"
+    "platformAdmin": "Платформа админи",
+    "accountant": "Бухгалтер",
+    "accountantDesc": "Пул ҳисоботлари ва Excel, патта ва қарзлар — фақат кўриш"
   },
   "nav": {
     "dashboard": "Бошқарув панели",

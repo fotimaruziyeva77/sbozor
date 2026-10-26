@@ -84,7 +84,7 @@ def test_assignable_roles_matches_the_d04_table() -> None:
     """Ikkala daraja ham D-04 jadvalidagi AYNAN to'plamni beradi."""
     assert assignable_roles(is_platform_admin=False) == MARKET_ADMIN_ASSIGNABLE_ROLES
     assert assignable_roles(is_platform_admin=True) == frozenset(
-        {Role.MARKET_ADMIN, Role.DIRECTOR, Role.CASHIER, Role.INSPECTOR}
+        {Role.MARKET_ADMIN, Role.DIRECTOR, Role.CASHIER, Role.INSPECTOR, Role.ACCOUNTANT}
     )
 
 

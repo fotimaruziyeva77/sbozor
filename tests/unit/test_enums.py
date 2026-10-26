@@ -91,7 +91,7 @@ def test_product_type_is_a_closed_set() -> None:
     ]
 
 
-def test_role_has_exactly_five_panel_roles() -> None:
+def test_role_has_exactly_six_panel_roles() -> None:
     """Sotuvchi (`vendor`) roli bu yerda YO'Q — u Telegram-bot identifikatori."""
     assert [role.value for role in Role] == [
         "platform_admin",
@@ -99,6 +99,7 @@ def test_role_has_exactly_five_panel_roles() -> None:
         "market_admin",
         "cashier",
         "inspector",
+        "accountant",
     ]
 
 

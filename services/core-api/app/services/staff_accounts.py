@@ -51,7 +51,7 @@ __all__ = [
     "temporary_password",
 ]
 
-MARKET_ADMIN_ASSIGNABLE_ROLES = frozenset({Role.CASHIER, Role.INSPECTOR})
+MARKET_ADMIN_ASSIGNABLE_ROLES = frozenset({Role.CASHIER, Role.INSPECTOR, Role.ACCOUNTANT})
 """Bozor admini bera oladigan rollar to'plami (D-04 ikkinchi bosqichi).
 
 `frozenset` — ro'yxat ish paytida o'zgartirilishi mumkin bo'lmasligi kerak.
@@ -63,10 +63,13 @@ testidan o'tishi shart.
 (`director`) rol berolmaydi: aks holda u bir so'rov bilan o'zining
 nazoratchisini yoki cheksiz sonli teng huquqli adminni tug'dira olardi
 (T-01-50, ASVS V8).
+
+`accountant` (0034) bu yerda: uning huquqlari bozor adminining huquqlari ICHIDA
+(`rbac.py`), ya'ni bozor admini o'zida yo'q huquqni berib qo'ya olmaydi.
 """
 
 PLATFORM_ADMIN_ASSIGNABLE_ROLES = frozenset(
-    {Role.MARKET_ADMIN, Role.DIRECTOR, Role.CASHIER, Role.INSPECTOR}
+    {Role.MARKET_ADMIN, Role.DIRECTOR, Role.CASHIER, Role.INSPECTOR, Role.ACCOUNTANT}
 )
 """Platforma admini bera oladigan rollar (D-04 birinchi bosqichi).
 

@@ -194,7 +194,7 @@ export const meLocaleResponseSchema = z.object({ locale: localeSchema });
  *
  * Nomi backend'dagi `services/core-api/app/api/v1/users.py::
  * MARKET_ADMIN_ASSIGNABLE_ROLES` bilan AYNAN bir xil va qiymati ham
- * o'sha `frozenset({CASHIER, INSPECTOR})` ning nusxasi.
+ * o'sha `frozenset({CASHIER, INSPECTOR, ACCOUNTANT})` ning nusxasi.
  *
  * DIQQAT: bu ro'yxat XAVFSIZLIK CHEGARASI EMAS. Haqiqiy darvoza serverda,
  * `_assert_roles_assignable()` ichida va u yaratishdan OLDIN 403
@@ -203,7 +203,7 @@ export const meLocaleResponseSchema = z.object({ locale: localeSchema });
  * umuman ko'rsatmaydi, ya'ni u kutilgan rad javobini oldindan biladi.
  * Ikkisi ajralib qolsa foydalanuvchi 403 oladi — ma'lumot ochilmaydi.
  */
-export const MARKET_ADMIN_ASSIGNABLE_ROLES = ["cashier", "inspector"] as const;
+export const MARKET_ADMIN_ASSIGNABLE_ROLES = ["cashier", "inspector", "accountant"] as const;
 
 /**
  * Platforma admini bera oladigan rollar — TO'RTTA (CR-03).
@@ -229,6 +229,7 @@ export const PLATFORM_ADMIN_ASSIGNABLE_ROLES = [
   "market_admin",
   "cashier",
   "inspector",
+  "accountant",
 ] as const;
 
 /**

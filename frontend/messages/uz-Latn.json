@@ -33,7 +33,9 @@
     "inspectorDesc": "Suratlarni tekshirish va tasdiqlash",
     "marketAdmin": "Bozor admini",
     "marketAdminDesc": "Rastalar, tariflar va xodimlarni boshqarish",
-    "platformAdmin": "Platforma admini"
+    "platformAdmin": "Platforma admini",
+    "accountant": "Buxgalter",
+    "accountantDesc": "Pul hisobotlari va Excel, patta va qarzlar — faqat ko'rish"
   },
   "nav": {
     "dashboard": "Boshqaruv paneli",

@@ -197,7 +197,7 @@ test("D-04: bozor admini bera oladigan rollar backend bilan AYNAN mos", () => {
     [...backend].sort(),
     "Forma ko'rsatadigan rollar server darvozasidan farq qiladi (D-04)",
   );
-  assert.deepEqual([...frontend].sort(), ["cashier", "inspector"]);
+  assert.deepEqual([...frontend].sort(), ["accountant", "cashier", "inspector"]);
 });
 
 /*
@@ -215,7 +215,7 @@ test("`rbac.ts::ROLES` yorliq ro'yxati `sbozor_core.enums.Role` bilan aynan mos"
   const backend = readPythonEnumValues(read(CORE_ENUMS), "Role");
 
   assert.deepEqual([...frontend].sort(), [...backend].sort());
-  assert.equal(frontend.length, 5);
+  assert.equal(frontend.length, 6);
 });
 
 /*
@@ -287,7 +287,7 @@ test("G-8: rol-huquq matritsasi ikkala faylda AYNAN bir xil", () => {
 
   // Nazorat holati: parser haqiqatan ham matritsani o'qidi. Bo'sh
   // to'plamlarda yuqoridagi solishtirish JIMGINA yashil qolardi.
-  assert.equal(Object.keys(backend).length, 5, "backend matritsasida 5 rol");
+  assert.equal(Object.keys(backend).length, 6, "backend matritsasida 6 rol");
   assert.ok(
     backend.platform_admin.includes("market_manage"),
     "nazorat qiymati yo'qoldi — parser matritsani o'qimayapti",
@@ -356,7 +356,7 @@ test("CR-03: `platform_admin` beriladigan rollar ro'yxatlarida YO'Q", () => {
 
   assert.deepEqual(
     [...platformAdminAssignable].sort(),
-    ["cashier", "director", "inspector", "market_admin"],
+    ["accountant", "cashier", "director", "inspector", "market_admin"],
   );
 
   /*
