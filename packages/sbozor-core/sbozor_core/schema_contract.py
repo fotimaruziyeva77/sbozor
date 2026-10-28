@@ -325,6 +325,9 @@ AUDITED_TABLES: frozenset[str] = frozenset(
         # ya'ni audit faqat INSERT ni ko'radi — lekin bu yerda u «ikkinchi
         # nusxa» emas: aktorning GUC'dan olingan izi faqat jurnalda.
         "shift_declaration_corrections",
+        # 0035 — Payme tranzaksiyasi: holati o'zgaradi (1 -> 2 -> -2) va har
+        # o'zgarish onlayn to'lov nizosida dalil.
+        "payme_transactions",
         # --- 7-faza bildirishnoma domeni (0023_notification_domain) ---
         # Nomuvofiqlik case'i — INSONNING qarori va u nizoda dalil bo'ladi
         # (D-14): «bu nomuvofiqlik asosli deb kim, qachon belgiladi?».

@@ -57,6 +57,7 @@ from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
 from app.api.v1.nvr import router as nvr_router
 from app.api.v1.occupancy import router as occupancy_router
+from app.api.v1.payme import router as payme_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.public import router as public_router
 from app.api.v1.reconciliation import router as reconciliation_router
@@ -548,6 +549,12 @@ app.include_router(reports_router, prefix=f"{API_V1_PREFIX}/reports")
 # tiklangan (autsiz 200, Set-Cookie yo'q, javob kalitlari, 429, 422,
 # honeypot, delivery_failed + DB'da 0 yangi qator).
 app.include_router(public_router, prefix=f"{API_V1_PREFIX}/public")
+
+# Payme Merchant API (0035): sessiyasiz, `Basic Paycom:<kalit>` bilan; bozor
+# `Settings.payme_market_id` dan. Cross-tenant matritsasidan chiqarilishi
+# `tests/tenancy/test_cross_tenant.py::EXEMPT_ROUTES` da sabab bilan, qamrovi
+# `tests/integration/test_payme.py` da.
+app.include_router(payme_router, prefix=f"{API_V1_PREFIX}/payme")
 
 
 @app.exception_handler(LiveUnavailable)

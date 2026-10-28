@@ -7,8 +7,8 @@ import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api-client";
-import { PAYMENT_METHODS } from "@/lib/api-types";
-import type { AdjustmentReasonValue, PaymentMethodValue } from "@/lib/api-types";
+import { CASHIER_PAYMENT_METHODS } from "@/lib/api-types";
+import type { AdjustmentReasonValue, CashierPaymentMethodValue } from "@/lib/api-types";
 import { billingErrorView } from "@/lib/billing-errors";
 import { usePayment } from "@/lib/payment-queries";
 import type { PaymentRecord } from "@/lib/payment-queries";
@@ -123,7 +123,7 @@ function billingErrorCodeOf(error: unknown): string {
 }
 
 const METHOD_LABEL: Record<
-  PaymentMethodValue,
+  CashierPaymentMethodValue,
   "collect.methodCash" | "collect.methodTerminal"
 > = {
   cash: "collect.methodCash",
@@ -138,8 +138,8 @@ export type PaymentBarProps = {
   reasonCode?: AdjustmentReasonValue;
   /** ⛔ Kalit SAHIFA HOLATIDA tug'iladi (§8.7) — bu yerda EMAS. */
   idempotencyKey: string | null;
-  method: PaymentMethodValue | null;
-  onMethodChange: (method: PaymentMethodValue) => void;
+  method: CashierPaymentMethodValue | null;
+  onMethodChange: (method: CashierPaymentMethodValue) => void;
   onWritten: (record: PaymentRecord) => void;
   /**
    * Rastaga sotuvchi biriktirilganmi (serverdagi `vendor_assigned`).
@@ -287,7 +287,7 @@ export function PaymentBar({
         </legend>
 
         <div className="flex gap-2">
-          {PAYMENT_METHODS.map((value) => (
+          {CASHIER_PAYMENT_METHODS.map((value) => (
             <label
               /*
                * ⛔⛔ TANLANGAN HOLAT KUCHAYTIRILDI (260819, o'lchandi).

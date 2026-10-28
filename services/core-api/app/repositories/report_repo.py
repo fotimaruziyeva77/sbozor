@@ -395,7 +395,9 @@ _COLLECTED_BY_METHOD = text(
     SELECT COALESCE(sum({_SIGNED_PAYMENT_EXPR}) FILTER (WHERE p.method = :cash), 0)::bigint
                AS cash_soum,
            COALESCE(sum({_SIGNED_PAYMENT_EXPR}) FILTER (WHERE p.method = :terminal), 0)::bigint
-               AS terminal_soum
+               AS terminal_soum,
+           COALESCE(sum({_SIGNED_PAYMENT_EXPR}) FILTER (WHERE p.method = :payme), 0)::bigint
+               AS payme_soum
       FROM payments p
       {_ORIGINAL_PAYMENT_JOIN}
      WHERE p.market_id = :market_id
@@ -410,8 +412,9 @@ _COLLECTED_BY_METHOD = text(
     bindparam("duplicate_entry", type_=Text()),
     bindparam("cash", type_=Text()),
     bindparam("terminal", type_=Text()),
+    bindparam("payme", type_=Text()),
 )
-"""Davr tushumi NAQD va TERMINAL ga ajratilgan — ⛔ `revenue_by_day` GA TEGILMAYDI.
+"""Davr tushumi NAQD, TERMINAL va PAYME (0035) ga ajratilgan — ⛔ `revenue_by_day` GA TEGILMAYDI.
 
 ⛔ ALOHIDA SO'ROV, `_REVENUE_BY_DAY` GA USTUN QO'SHILMADI: o'sha so'rov
    imzolanadigan `.xlsx` ning manbai va unga panel uchun ustun qo'shish
@@ -439,6 +442,7 @@ class CollectedByMethod:
 
     cash_soum: int
     terminal_soum: int
+    payme_soum: int = 0
 
 
 async def collected_by_method(
@@ -463,12 +467,14 @@ async def collected_by_method(
             "duplicate_entry": _DUPLICATE_ENTRY,
             "cash": PaymentMethod.CASH.value,
             "terminal": PaymentMethod.TERMINAL.value,
+            "payme": PaymentMethod.PAYME.value,
         },
     )
     row = result.mappings().one()
     return CollectedByMethod(
         cash_soum=int(row["cash_soum"]),
         terminal_soum=int(row["terminal_soum"]),
+        payme_soum=int(row["payme_soum"]),
     )
 
 

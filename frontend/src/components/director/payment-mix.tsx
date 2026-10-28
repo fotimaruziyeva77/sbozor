@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormatter, useLocale, useTranslations } from "next-intl";
-import { Banknote, CreditCard } from "lucide-react";
+import { Banknote, CreditCard, Smartphone } from "lucide-react";
 
 import { methodShares } from "@/components/director/chart-data";
 import type { Period } from "@/components/director/period";
@@ -44,7 +44,10 @@ export function PaymentMix({ period }: { period: Period }) {
 
   const cash = live.data?.collected_cash_soum ?? null;
   const terminal = live.data?.collected_terminal_soum ?? null;
-  const shares = cash === null || terminal === null ? null : methodShares(cash, terminal);
+  // 0035: Payme — maydon yo'q (eski server) yoki 0 bo'lsa qator chizilmaydi.
+  const payme = live.data?.collected_payme_soum ?? 0;
+  const shares =
+    cash === null || terminal === null ? null : methodShares(cash, terminal, payme);
 
   const parts = [
     {
@@ -63,7 +66,19 @@ export function PaymentMix({ period }: { period: Period }) {
       share: shares?.terminal ?? null,
       color: "var(--color-info)",
     },
-  ] as const;
+    ...(payme === 0
+      ? []
+      : [
+          {
+            key: "payme",
+            Icon: Smartphone,
+            label: t("director.methodPayme"),
+            value: payme,
+            share: shares?.payme ?? null,
+            color: "var(--color-success)",
+          },
+        ]),
+  ];
 
   return (
     <Card className="dir-chart-card hover:translate-y-0">
@@ -92,7 +107,7 @@ export function PaymentMix({ period }: { period: Period }) {
              */}
             {shares === null ? (
               <p className="dir-tile-note">
-                {cash === 0 && terminal === 0
+                {cash === 0 && terminal === 0 && payme === 0
                   ? t("director.methodEmpty")
                   : t("director.methodNoShare")}
               </p>

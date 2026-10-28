@@ -292,6 +292,19 @@ EXEMPT_ROUTES: dict[str, str] = {
         "javob natijasida tug'iladi), ya'ni unda 'boshqa bozorning obyekti' tushunchasining "
         "o'zi yo'q"
     ),
+    "/api/v1/payme": (
+        "global — Payme Merchant API (0035): uni FOYDALANUVCHI emas, Payme serveri "
+        "chaqiradi va unda access token UMUMAN bo'lmaydi. Autentifikatsiya — "
+        "`Basic Paycom:<kalit>` (`Settings.payme_key`, `hmac.compare_digest`), "
+        "bozor so'rovdan EMAS, `Settings.payme_market_id` dan; kontekst SYSTEM. "
+        "Qamrovi `tests/integration/test_payme.py` da."
+    ),
+    "/api/v1/payme/pay/{stall_code}": (
+        "global — rastadagi QR-kod (0035): sessiyasiz GET, bozor "
+        "`Settings.payme_market_id` dan; javob — Payme to'lov sahifasiga 302 "
+        "(faqat summa va rasta raqami, shaxsiy ma'lumot yo'q). Qamrovi "
+        "`tests/integration/test_payme.py` da."
+    ),
     "/api/v1/public/demo-requests": (
         "global — anonim marketing (demo) so'rovi, kodbazadagi YAGONA "
         "autentifikatsiyasiz yozuv marshruti (10-UI-SPEC §12.5): tenant konteksti "

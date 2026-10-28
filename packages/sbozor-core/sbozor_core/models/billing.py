@@ -102,6 +102,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKeyConstraint,
     Index,
+    SmallInteger,
     Text,
     Time,
     UniqueConstraint,
@@ -147,6 +148,10 @@ __all__ = [
     "PAYMENT_KIND_VALUES",
     "PAYMENT_METHOD_CHECK",
     "PAYMENT_METHOD_VALUES",
+    "PAYMENT_CASHIER_CHECK",
+    "PAYME_STATE_CHECK",
+    "PAYME_TRANSACTION_STALL_INDEX",
+    "PaymeTransaction",
     "PAYMENT_STALL_INDEX",
     "PAYMENT_VENDOR_INDEX",
     "REVERSAL_HAS_NO_OVERRIDE_CHECK",
@@ -251,6 +256,20 @@ PAYMENT_METHOD_CHECK = f"method IN ({_quoted(PAYMENT_METHOD_VALUES)})"
 sabablangan: referenssiz «o'tkazma» nizoda hech qanday dalil
 qoldirmaydigan to'lov turi bo'lardi.
 """
+
+PAYMENT_CASHIER_CHECK = f"cashier_id IS NOT NULL OR method = '{PaymentMethod.PAYME.value}'"
+"""`payments.cashier_id` — FAQAT onlayn (Payme) to'lovda bo'sh (0035).
+
+Kassir yozgan har to'lovda kassir MAJBURIY qoladi; Payme to'lovini esa
+hech qanday kassir qabul qilmagan va uning nomini to'qib qo'yish «kim
+oldi?» savoliga yolg'on javob bo'lardi.
+"""
+
+PAYME_STATE_CHECK = "state IN (1, 2, -1, -2)"
+"""Payme Merchant API holatlari: 1 yaratildi, 2 bajarildi, -1 bajarilmasdan
+bekor, -2 bajarilgandan keyin bekor."""
+
+PAYME_TRANSACTION_STALL_INDEX = "ix_payme_transactions_market_id_stall_id_state"
 
 ADJUSTMENT_DIRECTION_CHECK = f"direction IN ({_quoted(ADJUSTMENT_DIRECTION_VALUES)})"
 """`charge_adjustments.direction` — `AdjustmentDirection` DAN HOSILA (C-5)."""
@@ -1022,6 +1041,7 @@ class Payment(Base, TenantMixin):
         CheckConstraint(REVERSAL_REASON_IS_PAIRED_CHECK, name="reversal_reason_is_paired"),
         CheckConstraint(OVERRIDE_IS_PAIRED_CHECK, name="override_is_paired"),
         CheckConstraint(REVERSAL_HAS_NO_OVERRIDE_CHECK, name="reversal_has_no_override"),
+        CheckConstraint(PAYMENT_CASHIER_CHECK, name="cashier_required_unless_online"),
         Index(PAYMENT_VENDOR_INDEX, "market_id", "vendor_id", "service_date"),
         Index(PAYMENT_STALL_INDEX, "market_id", "stall_id", "service_date"),
     )
@@ -1061,7 +1081,8 @@ class Payment(Base, TenantMixin):
     request_fingerprint: Mapped[str] = mapped_column(Text(), nullable=False)
     # `NULL` RUXSAT — direktor smenasiz kiritishi mumkin (OQ-6/A5).
     shift_id: Mapped[UUID | None] = mapped_column(PgUuid(as_uuid=True), nullable=True)
-    cashier_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), nullable=False)
+    # 0035: `NULL` faqat Payme to'lovida (`PAYMENT_CASHIER_CHECK`).
+    cashier_id: Mapped[UUID | None] = mapped_column(PgUuid(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -1228,4 +1249,70 @@ class ShiftDeclarationCorrection(Base, TenantMixin):
     )
     business_date: Mapped[date] = mapped_column(
         Date(), Computed(BILLING_BUSINESS_DATE_EXPR, persisted=True), nullable=False
+    )
+
+
+class PaymeTransaction(Base, TenantMixin):
+    """Payme Merchant API tranzaksiyasi (0035) — onlayn to'lovning REFERENSI.
+
+    Payme har to'lovni o'z tranzaksiyasi bilan boshqaradi (yaratildi ->
+    bajarildi yoki bekor qilindi) va holatni bizdan so'raydi. Pul yozuvi
+    o'zi `payments` da (`method='payme'`): bu jadval «qaysi Payme
+    tranzaksiyasi qaysi to'lov edi» degan savolga javob beradi — nizoda
+    dalil shu yerda (Payme `id`, vaqtlari, bekor qilish sababi).
+
+    ⚠ Holat O'ZGARADI (1 -> 2 -> -2), shuning uchun o'zgarmaslik qo'riqchisi
+      YO'Q; har o'zgarish audit triggeri bilan yoziladi.
+    ⚠ Vaqtlar — Payme protokoli bo'yicha millisekund (`bigint`).
+    """
+
+    __tablename__ = "payme_transactions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["market_id"], ["markets.id"], name="fk_payme_transactions_market_id_markets"
+        ),
+        ForeignKeyConstraint(
+            ["market_id", "stall_id"],
+            ["stalls.market_id", "stalls.id"],
+            name="fk_payme_transactions_stall",
+        ),
+        ForeignKeyConstraint(
+            ["market_id", "vendor_id"],
+            ["vendors.market_id", "vendors.id"],
+            name="fk_payme_transactions_vendor",
+        ),
+        ForeignKeyConstraint(
+            ["market_id", "payment_id"],
+            ["payments.market_id", "payments.id"],
+            name="fk_payme_transactions_payment",
+        ),
+        ForeignKeyConstraint(
+            ["market_id", "reversal_payment_id"],
+            ["payments.market_id", "payments.id"],
+            name="fk_payme_transactions_reversal_payment",
+        ),
+        UniqueConstraint("market_id", "id", name="uq_payme_transactions_market_id_id"),
+        UniqueConstraint(
+            "market_id", "paycom_id", name="uq_payme_transactions_market_id_paycom_id"
+        ),
+        CheckConstraint(PAYME_STATE_CHECK, name="state_allowed"),
+        CheckConstraint("amount_soum > 0", name="amount_soum_positive"),
+        Index(PAYME_TRANSACTION_STALL_INDEX, "market_id", "stall_id", "state"),
+    )
+
+    id: Mapped[UUID] = uuid_pk()
+    paycom_id: Mapped[str] = mapped_column(Text(), nullable=False)
+    paycom_time: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    amount_soum: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    stall_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), nullable=False)
+    vendor_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), nullable=False)
+    state: Mapped[int] = mapped_column(SmallInteger(), nullable=False)
+    create_time: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    perform_time: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
+    cancel_time: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
+    reason: Mapped[int | None] = mapped_column(SmallInteger(), nullable=True)
+    payment_id: Mapped[UUID | None] = mapped_column(PgUuid(as_uuid=True), nullable=True)
+    reversal_payment_id: Mapped[UUID | None] = mapped_column(PgUuid(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )

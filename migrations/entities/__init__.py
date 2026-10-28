@@ -62,6 +62,9 @@ __all__ = [
     "SERVICE_FEE_DELETE_ORDER",
     "SERVICE_FEE_TENANT_TABLES",
     "SETTINGS_AUDITED_TABLES",
+    "PAYME_AUDITED_TABLES",
+    "PAYME_DELETE_ORDER",
+    "PAYME_TENANT_TABLES",
     "SHIFT_CORRECTION_AUDITED_TABLES",
     "SHIFT_CORRECTION_DELETE_ORDER",
     "SHIFT_CORRECTION_TENANT_TABLES",
@@ -836,6 +839,16 @@ Deklaratsiya tuzatishi — rahbariyatning moliyaviy oqibatli qarori
 GA AYNI COMMITDA qo'shildi, ya'ni `PENDING_AUDIT_TRIGGERS` BO'SH qoladi.
 """
 
+PAYME_TENANT_TABLES: tuple[str, ...] = ("payme_transactions",)
+"""`0035_payme` yaratadigan tenant jadvali — `ALL_TENANT_TABLES` ga AYNI COMMITDA."""
+
+PAYME_AUDITED_TABLES: tuple[str, ...] = ("payme_transactions",)
+"""`0035` da `attach_audit_trigger()` ulanadigan jadval (`AUDITED_TABLES` da)."""
+
+PAYME_DELETE_ORDER: tuple[str, ...] = ("payme_transactions",)
+"""`market_delete_draft()` kaskadi: jadval `payments`, `stalls`, `vendors` ga
+kompozit FK bilan tayanadi, ya'ni `payments` dan OLDIN o'chiriladi."""
+
 SHIFT_CORRECTION_DELETE_ORDER: tuple[str, ...] = ("shift_declaration_corrections",)
 """`market_delete_draft()` kaskadiga qo'shiladigan tartib (`0030`).
 
@@ -933,6 +946,8 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     # ✅ QARZ UMUMAN OCHILMADI (`0030`) — splice `0030_shift_declaration_
     # corrections` BILAN AYNI COMMITDA, OP-3 qadami BESHINCHI marta.
     *SHIFT_CORRECTION_TENANT_TABLES,
+    # ✅ `0035` — splice migratsiya bilan AYNI COMMITDA.
+    *PAYME_TENANT_TABLES,
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 

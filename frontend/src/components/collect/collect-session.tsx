@@ -18,7 +18,7 @@ import { flyAmountToList } from "@/components/collect/success-choreography";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ApiError } from "@/lib/api-client";
-import type { AdjustmentReasonValue, PaymentMethodValue } from "@/lib/api-types";
+import type { AdjustmentReasonValue, CashierPaymentMethodValue } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import {
   dropPendingAfterPayment,
@@ -169,7 +169,7 @@ export function CollectSession({ shiftHref }: CollectSessionProps) {
   /* ⛔ Rasta kodi SAHIFA HOLATIDA — URL'da EMAS (§4.5). */
   const [draft, setDraft] = useState("");
   const [submittedCode, setSubmittedCode] = useState("");
-  const [method, setMethod] = useState<PaymentMethodValue | null>(null);
+  const [method, setMethod] = useState<CashierPaymentMethodValue | null>(null);
   const [extraAmount, setExtraAmount] = useState<number | null>(null);
   /*
    * ⛔⛔ TAROZI BELGISI — STANDART YOQILGAN (0027, buyurtmachi qarori).

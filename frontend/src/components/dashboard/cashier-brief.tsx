@@ -541,6 +541,7 @@ function QuickLink({
 const METHOD_KEY = {
   cash: "collect.methodCash",
   terminal: "collect.methodTerminal",
+  payme: "collect.methodPayme",
 } as const;
 
 function RecentPaymentsCard({ items }: { items: PaymentRecord[] | null }) {

@@ -184,6 +184,15 @@ describe("to'lov turlari — ulush", () => {
     expect(shares?.cash).toBeCloseTo(64.6, 1);
   });
 
+  test("Payme uchinchi qism — uchala foiz yig'indisi 100 (0035)", () => {
+    const shares = methodShares(30_000, 10_000, 10_000);
+
+    expect(shares?.payme).toBeCloseTo(20);
+    expect((shares?.cash ?? 0) + (shares?.terminal ?? 0) + (shares?.payme ?? 0)).toBeCloseTo(100);
+    expect(methodShares(0, 0, 22_000)?.payme).toBeCloseTo(100);
+    expect(methodShares(10_000, 0, -22_000)).toBeNull();
+  });
+
   test("pul yo'q yoki qism MANFIY (storno) — ulush CHIZILMAYDI", () => {
     expect(methodShares(0, 0)).toBeNull();
     expect(methodShares(12_000, -4_000)).toBeNull();

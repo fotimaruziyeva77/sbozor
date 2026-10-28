@@ -507,6 +507,24 @@ class Settings(BaseSettings):
     #     beradi — kadr olish va boshqa hammasi ishlayveradi.
     camagent_gateway_url: str = ""
 
+    # --- Payme (0035, 261028) ---
+    #
+    # ⛔ KALIT BO'SH BO'LSA `/api/v1/payme` 503 QAYTARADI (fail-closed),
+    #   «tekshiruvsiz o'tkazish» EMAS. Payme so'rovi `Basic Paycom:<kalit>`
+    #   bilan keladi va `hmac.compare_digest` bilan solishtiriladi.
+    payme_key: SecretStr = SecretStr("")
+    # Kassa ID — chek havolasidagi `m=` (sir emas, havolada ochiq turadi).
+    payme_merchant_id: str = ""
+    # Kassa BITTA bozorga tegishli: Payme so'rovida bozor yo'q, faqat rasta
+    # raqami (`account.rasta`). Bo'sh bo'lsa yuza yopiq.
+    payme_market_id: str = ""
+    # Test kassasida `https://test.paycom.uz`.
+    payme_checkout_url: str = "https://checkout.paycom.uz"
+    # Fiskal chek: IKPU va o'lchov birligi kodi. Bo'sh bo'lsa `detail`
+    # yuborilmaydi.
+    payme_ikpu: str = ""
+    payme_package_code: str = ""
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"

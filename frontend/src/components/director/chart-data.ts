@@ -198,7 +198,7 @@ export function topDebtors(
 /* To'lov turlari                                                             */
 /* -------------------------------------------------------------------------- */
 
-export type MethodShares = { cash: number; terminal: number };
+export type MethodShares = { cash: number; terminal: number; payme: number };
 
 /**
  * Naqd va terminal ULUSHI (foizda).
@@ -208,11 +208,19 @@ export type MethodShares = { cash: number; terminal: number };
  *    · qismlardan biri MANFIY (o'tgan kun to'lovining bugungi stornosi) —
  *      manfiy bo'lakli «100%» ma'nosiz va u ekranda yolg'on nisbat berardi.
  */
-export function methodShares(cash: number, terminal: number): MethodShares | null {
-  if (cash < 0 || terminal < 0) return null;
-  const total = cash + terminal;
+export function methodShares(
+  cash: number,
+  terminal: number,
+  payme = 0,
+): MethodShares | null {
+  if (cash < 0 || terminal < 0 || payme < 0) return null;
+  const total = cash + terminal + payme;
   if (total <= 0) return null;
-  return { cash: (cash / total) * 100, terminal: (terminal / total) * 100 };
+  return {
+    cash: (cash / total) * 100,
+    terminal: (terminal / total) * 100,
+    payme: (payme / total) * 100,
+  };
 }
 
 /* -------------------------------------------------------------------------- */

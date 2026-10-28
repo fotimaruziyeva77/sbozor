@@ -254,7 +254,8 @@ class PaymentWrite:
     method: str
     override_reason: str | None
     shift_id: UUID | None
-    cashier_id: UUID
+    # 0035: `None` faqat Payme to'lovida (`PAYMENT_CASHIER_CHECK`).
+    cashier_id: UUID | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,7 +281,7 @@ class PaymentRow:
     reversal_reason: str | None
     request_fingerprint: str
     shift_id: UUID | None
-    cashier_id: UUID
+    cashier_id: UUID | None
     created_at: datetime
 
 
@@ -647,7 +648,7 @@ async def reverse_payment(
     market_id: UUID,
     payment_id: UUID,
     reason_code: str,
-    cashier_id: UUID,
+    cashier_id: UUID | None,
     shift_id: UUID | None,
 ) -> PaymentRow:
     """Storno — ⛔ **YANGI QATOR**, asl qator TEGILMAYDI (D-23).

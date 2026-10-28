@@ -562,6 +562,11 @@ class PaymentMethod(StrEnum):
 
     CASH = "cash"
     TERMINAL = "terminal"
+    # 0035 (261028): Payme orqali onlayn to'lov. Referens (Payme tranzaksiya
+    # identifikatori, vaqtlari, holati) `payme_transactions` da — ya'ni
+    # docstringdagi «referenssiz o'tkazma» e'tirozi bu turga tegmaydi.
+    # Kassir yo'q: `payments.cashier_id` faqat shu turda `NULL` bo'ladi.
+    PAYME = "payme"
 
 
 class AdjustmentDirection(StrEnum):
