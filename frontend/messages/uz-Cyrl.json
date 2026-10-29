@@ -61,7 +61,8 @@
     "billing": "Патта ҳисоби",
     "reconciliation": "Номувофиқликлар",
     "reports": "Ҳисоботлар",
-    "switchMarket": "Бозорни алмаштириш"
+    "switchMarket": "Бозорни алмаштириш",
+    "agents": "Агентлар"
   },
   "auth": {
     "phoneLabel": "Телефон рақами",
@@ -2464,5 +2465,143 @@
     "changesAll": "Тўлиқ журнал",
     "changesUnread": "Журнал ўқилмади.",
     "changesEmpty": "Ҳали ўзгариш ёзилмаган."
+  },
+  "edgeAgents": {
+    "title": "Агентлар",
+    "subtitle": "Бозор, автотураргоҳ ва мол бозоридаги компютерларга ўрнатилган агентлар.",
+    "newSite": "Янги объект",
+    "kind": {
+      "parking": "Автотураргоҳ",
+      "market": "Бозор",
+      "livestock": "Мол бозори"
+    },
+    "colName": "Номи",
+    "colKind": "Тури",
+    "colStatus": "Ҳолати",
+    "colVersion": "Версия",
+    "colHost": "Компьютер",
+    "colLastSeen": "Охирги алоқа",
+    "colDevices": "Қурилмалар",
+    "status": {
+      "online": "Онлайн",
+      "offline": "Офлайн",
+      "never": "Ҳали уланмаган"
+    },
+    "devicesSummary": "{online}/{total} онлайн",
+    "devicesNone": "Маълумот йўқ",
+    "deviceStatus": {
+      "online": "Ишлаяпти",
+      "offline": "Ишламаяпти",
+      "degraded": "Қисман ишлаяпти"
+    },
+    "emptyTitle": "Ҳали объект йўқ",
+    "emptyHint": "«Янги объект» тугмаси билан қўшинг ва чиққан кодни агент ойнасига киритинг.",
+    "open": "Очиш",
+    "backToList": "Агентлар рўйхати",
+    "agentVersion": "Версия {version}",
+    "agentHost": "Компьютер: {host}",
+    "createDescription": "Объект турини ва номини киритинг. Сақлангач агент учун активация коди чиқади.",
+    "fieldKind": "Тури",
+    "fieldName": "Номи",
+    "nameRequired": "Номни киритинг",
+    "create": "Яратиш",
+    "codeButton": "Активация коди",
+    "codeTitle": "Активация коди",
+    "codeInstruction": "Агент ойнасига шу кодни киритинг.",
+    "codeExpires": "Код {date} гача амал қилади.",
+    "copy": "Нусхалаш",
+    "copied": "Нусхаланди",
+    "config": {
+      "title": "Созлама",
+      "hint": "Агент созламаси JSON кўринишида. Сақлангач агент уни кейинги уланишда олади.",
+      "version": "Версия {version}",
+      "label": "Созлама матни",
+      "save": "Сақлаш",
+      "reset": "Асл ҳолига қайтариш",
+      "saved": "Созлама сақланди — версия {version}",
+      "invalidJson": "JSON матнида хато бор. Қавс ва вергулларни текширинг.",
+      "notObject": "Созлама JSON объекти бўлиши керак.",
+      "errorsTitle": "Сервер созламани қабул қилмади:",
+      "rootPath": "бутун ҳужжат"
+    },
+    "commands": {
+      "title": "Буйруқлар",
+      "openGate": "Шлагбаумни очиш: {lane}",
+      "direction": {
+        "in": "кириш",
+        "out": "чиқиш"
+      },
+      "refreshConfig": "Созламани янгилаш",
+      "updateAgent": "Агентни янгилаш",
+      "gateOpenType": "Шлагбаумни очиш",
+      "sent": "Буйруқ юборилди",
+      "invalidType": "Агент бу буйруқни танимайди.",
+      "confirmGateTitle": "Шлагбаум очилсинми?",
+      "confirmGateBody": "«{lane}» йўлагидаги шлагбаум масофадан очилади.",
+      "confirmGate": "Очиш",
+      "confirmUpdateTitle": "Агент янгилансинми?",
+      "confirmUpdateBody": "Агент янги версияни юклаб, қайта ишга тушади. Бу бир неча дақиқа олиши мумкин.",
+      "confirmUpdate": "Янгилаш",
+      "recentTitle": "Сўнгги буйруқлар",
+      "colType": "Буйруқ",
+      "colIssued": "Берилган вақти",
+      "colResult": "Натижа",
+      "empty": "Ҳали буйруқ берилмаган.",
+      "noLanes": "Шлагбаумли йўлак созланмаган.",
+      "result": {
+        "pending": "Кутилмоқда",
+        "delivered": "Етказилди",
+        "done": "Бажарилди",
+        "rejected": "Рад этилди",
+        "failed": "Бажарилмади",
+        "expired": "Муддати ўтди"
+      }
+    },
+    "parking": {
+      "title": "Бугунги ҳолат",
+      "entries": "Кирди",
+      "exits": "Чиқди",
+      "open": "Ичкарида (тахминан)",
+      "cash": "Тушум",
+      "byCash": "Нақд: {amount}",
+      "byTerminal": "Терминал: {amount}",
+      "lastPlates": "Сўнгги рақамлар",
+      "noPlates": "Бугун рақам ўқилмади."
+    },
+    "events": {
+      "title": "Сўнгги ҳодисалар",
+      "filterType": "Ҳодиса тури",
+      "filterAll": "Ҳаммаси",
+      "colTime": "Вақт",
+      "colType": "Тури",
+      "colData": "Тафсилот",
+      "colFrames": "Кадр",
+      "more": "Кўпроқ",
+      "empty": "Ҳодиса йўқ.",
+      "clockWarn": "Агент соати нотўғри бўлган",
+      "type": {
+        "plateRead": "Рақам ўқилди",
+        "sessionOpened": "Кириш қайд этилди",
+        "sessionClosed": "Чиқиш қайд этилди",
+        "gateOpened": "Шлагбаум очилди",
+        "anomaly": "Шубҳали ҳолат",
+        "paymentCash": "Нақд тўлов",
+        "agentStarted": "Агент ишга тушди",
+        "deviceStatus": "Қурилма ҳолати",
+        "configApplied": "Созлама қўлланди",
+        "updateStatus": "Янгиланиш ҳолати",
+        "alertRaised": "Огоҳлантириш",
+        "vehicleEntered": "Машина кирди",
+        "feeCollected": "Тўлов олинди",
+        "occupancyObserved": "Бандлик кузатилди"
+      }
+    },
+    "frame": {
+      "open": "Кадрни катталаштириш",
+      "title": "Кадр",
+      "description": "Кадрни очиш журналга ёзилади.",
+      "alt": "Ҳодиса кадри",
+      "unavailable": "Кадр очилмади"
+    }
   }
 }

@@ -114,6 +114,12 @@ xil mulohaza).
 """
 
 BINARY_PERSONAL_ROUTES: dict[str, str] = {
+    "/api/v1/edge-sites/{site_id}/files/{file_id}": (
+        "universal agent (0036) yuklagan kadr BAYTLARI — avtoturargoh/bozor "
+        "tashrifchilari va mashina raqamlari tasviri, ya'ni dalil-kadr bilan "
+        "AYNI sinf. Javob modeli YO'Q, shuning uchun `PERSONAL_FIELDS` uni "
+        "HECH QACHON topa olmaydi."
+    ),
     "/api/v1/snapshots/{snapshot_id}/image": (
         "dalil-kadr BAYTLARI — bozor tashrifchilarining tasviri, ya'ni O'zR "
         "shaxsiy ma'lumotlar qonuni ostidagi ma'lumot. Javob modeli YO'Q, "
@@ -165,6 +171,25 @@ qayta yozilsa kafolat jimgina yo'qolardi.
 """
 
 NON_PERSONAL_BINARY_ROUTES: dict[str, str] = {
+    "/api/v1/pay/{stall_code}": (
+        "rastadagi QR-kod sahifasi (0035) — HTML: rasta raqami va to'lanadigan "
+        "summa, shaxsiy ma'lumot YO'Q (modul docstringi)."
+    ),
+    "/api/v1/payme/pay/{stall_code}": (
+        "Payme to'lov sahifasiga 302 (0035) — havolada faqat summa va rasta "
+        "raqami, shaxsiy ma'lumot YO'Q."
+    ),
+    "/api/v1/edge/releases/latest": (
+        "imzolangan reliz manifesti (versiya, sha256, hajm) — so'zma-so'z fayl, "
+        "bozor yoki odam ma'lumoti YO'Q (0036)."
+    ),
+    "/api/v1/edge/releases/binary/{version}": (
+        "agent dasturining `.exe` fayli — hamma obyekt uchun bir xil (0036)."
+    ),
+    "/api/v1/edge/download": (
+        "agentning so'nggi barqaror `.exe` fayli — birinchi o'rnatish uchun, "
+        "hamma uchun bir xil (0036)."
+    ),
     "/api/v1/imports/template": (
         "BO'SH shablon — sarlavha qatori va namunaviy qator. Bozorning "
         "birorta qatori bu faylga tushmaydi, ya'ni shaxsiy ma'lumot YO'Q."
@@ -563,6 +588,7 @@ EVIDENCE_FRAME_ALLOWED = frozenset({Permission.CAMERA_VIEW, Permission.OCCUPANCY
 """
 
 BINARY_PERSONAL_ALLOWED: dict[str, frozenset[Permission]] = {
+    "/api/v1/edge-sites/{site_id}/files/{file_id}": frozenset({Permission.CAMERA_VIEW}),
     "/api/v1/snapshots/{snapshot_id}/image": EVIDENCE_FRAME_ALLOWED,
     "/api/v1/reports/debtors.xlsx": frozenset({Permission.REPORT_VIEW, Permission.VENDOR_VIEW}),
     "/api/v1/reports/compare.xlsx": frozenset({Permission.REPORT_VIEW, Permission.VENDOR_VIEW}),

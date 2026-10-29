@@ -307,7 +307,20 @@ shunday funksiya qo'shmaydi — `market_delete_draft(uuid)` ning faqat
 TANASI kengaydi, IMZOSI o'zgarmadi.
 """
 
-EXTRA_DEFINER_FUNCTIONS: frozenset[str] = frozenset({"capture_due_markets"})
+EXTRA_DEFINER_FUNCTIONS: frozenset[str] = frozenset(
+    {
+        "capture_due_markets",
+        # ⛔ 0036 — ONGLI QAROR (universal agent): agent so'rovi kelganda bozor
+        #   NOMA'LUM, ya'ni token xeshi va aktivatsiya kodi bo'yicha qidiruv
+        #   RLS'siz bo'lishi SHART (`refresh_tokens.jti` naqshi). Yuza tor:
+        #   har biri BITTA aniq kalit bo'yicha faqat identifikatorlar
+        #   (bozor, obyekt, agent, nusxa) qaytaradi; keyingi hamma narsa RLS
+        #   ostida. `PHASE_SIX_DEFINER_COUNT` ATAYIN o'zgarmadi — o'sish shu
+        #   yerda, nomma-nom va sababi bilan ko'rinadi.
+        "edge_agent_auth",
+        "edge_activation_find",
+    }
+)
 """Bazada BOR, lekin `EXPECTED_DEFINER_FUNCTIONS` da YO'Q definer funksiyalar.
 
 `test_meta.py` ning solishtiruvi `found >= EXPECTED_DEFINER_FUNCTIONS`,

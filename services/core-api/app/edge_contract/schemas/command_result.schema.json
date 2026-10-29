@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sbozor.uz/agent/v1/command_result.schema.json",
+  "title": "Buyruq natijasi (agent -> server)",
+  "type": "object",
+  "required": ["command_id", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "command_id": {"type": "string", "format": "uuid"},
+    "status": {"type": "string", "enum": ["done", "rejected", "failed", "expired"]},
+    "reason": {"type": "string", "maxLength": 500}
+  }
+}

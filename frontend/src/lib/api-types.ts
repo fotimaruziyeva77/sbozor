@@ -2830,3 +2830,178 @@ export const ledgerImportResultSchema = z.strictObject({
   replaced: z.boolean(),
 });
 export type LedgerImportResult = z.infer<typeof ledgerImportResultSchema>;
+
+/* ===========================================================================
+ * Universal agentlar (edge sites) — `/api/v1/edge-sites` kontrakti.
+ *
+ * ⚠ ATAYIN `z.object` (strict EMAS): backend shu bilan PARALLEL yozilmoqda
+ *   va yangi maydon qo'shilishi sahifani yiqitmasligi kerak. Qurilma va
+ *   yo'lak yozuvlari agent konfiguratsiyasidan O'TKAZIB yuboriladigan
+ *   obyektlar — ularning qolgan maydonlari `looseObject` bilan saqlanadi.
+ * ========================================================================= */
+
+export const EDGE_SITE_KINDS = ["parking", "market", "livestock"] as const;
+export const edgeSiteKindSchema = z.enum(EDGE_SITE_KINDS);
+export type EdgeSiteKind = z.infer<typeof edgeSiteKindSchema>;
+
+const edgeDataSchema = z.record(z.string(), z.unknown());
+
+export const edgeDeviceStatusSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  reason: z.string().nullish(),
+});
+export type EdgeDeviceStatus = z.infer<typeof edgeDeviceStatusSchema>;
+
+export const edgeHeartbeatSchema = z.object({
+  version: z.string().nullish(),
+  uptime_s: z.number().nullish(),
+  outbox_pending: z.number().nullish(),
+  outbox_dead: z.number().nullish(),
+  disk_free_mb: z.number().nullish(),
+  clock_offset_ms: z.number().nullish(),
+  devices: z.array(edgeDeviceStatusSchema).nullish(),
+  plugins: z.array(z.string()).nullish(),
+});
+export type EdgeHeartbeat = z.infer<typeof edgeHeartbeatSchema>;
+
+export const edgeAgentSchema = z.object({
+  id: z.string(),
+  hostname: z.string(),
+  version: z.string(),
+  os: z.string(),
+  last_seen_at: z.string().nullable(),
+  online: z.boolean(),
+  heartbeat: edgeHeartbeatSchema.nullable(),
+});
+export type EdgeAgent = z.infer<typeof edgeAgentSchema>;
+
+export const edgeDeviceSchema = z.looseObject({
+  id: z.string(),
+  kind: z.string(),
+  driver: z.string(),
+  name: z.string().nullish(),
+  host: z.string().nullish(),
+});
+export type EdgeDevice = z.infer<typeof edgeDeviceSchema>;
+
+export const edgeLaneSchema = z.looseObject({
+  id: z.string(),
+  direction: z.string(),
+  mode: z.string(),
+  name: z.string().nullish(),
+  kind: z.string().nullish(),
+  camera: z.string().nullish(),
+  barrier: z.string().nullish(),
+});
+export type EdgeLane = z.infer<typeof edgeLaneSchema>;
+
+export const edgeSiteSchema = z.object({
+  id: z.string(),
+  kind: edgeSiteKindSchema,
+  name: z.string(),
+  created_at: z.string(),
+  config_version: z.number().int(),
+  setup: z.object({
+    devices: z.array(edgeDeviceSchema),
+    lanes: z.array(edgeLaneSchema),
+  }),
+  agent: edgeAgentSchema.nullable(),
+});
+export type EdgeSite = z.infer<typeof edgeSiteSchema>;
+
+export const edgeSiteListSchema = z.object({ items: z.array(edgeSiteSchema) });
+
+export const edgeActivationCodeSchema = z.object({
+  code: z.string(),
+  expires_at: z.string(),
+});
+export type EdgeActivationCode = z.infer<typeof edgeActivationCodeSchema>;
+
+export const edgeSiteCreatedSchema = z.object({
+  site: edgeSiteSchema,
+  activation_code: edgeActivationCodeSchema,
+});
+
+export const edgeConfigSchema = z.object({
+  version: z.number().int(),
+  doc: edgeDataSchema,
+  created_at: z.string(),
+});
+export type EdgeConfig = z.infer<typeof edgeConfigSchema>;
+
+/** 422 `config_invalid` — `errors[].message` serverda o'zbekcha yozilgan. */
+export const edgeConfigInvalidSchema = z.object({
+  detail: z.object({
+    code: z.literal("config_invalid"),
+    errors: z.array(z.object({ path: z.string(), message: z.string() })),
+  }),
+});
+export type EdgeConfigIssue = z.infer<
+  typeof edgeConfigInvalidSchema
+>["detail"]["errors"][number];
+
+export const EDGE_COMMAND_RESULTS = [
+  "done",
+  "rejected",
+  "failed",
+  "expired",
+] as const;
+
+export const edgeCommandSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  data: edgeDataSchema,
+  issued_by: z.string(),
+  issued_at: z.string(),
+  expires_at: z.string(),
+  delivered_at: z.string().nullable(),
+  result_status: z.enum(EDGE_COMMAND_RESULTS).nullable(),
+  result_reason: z.string().nullable(),
+  result_at: z.string().nullable(),
+});
+export type EdgeCommand = z.infer<typeof edgeCommandSchema>;
+
+export const edgeCommandListSchema = z.object({
+  items: z.array(edgeCommandSchema),
+});
+
+export const edgeEventSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  v: z.number(),
+  seq: z.number(),
+  occurred_at: z.string(),
+  received_at: z.string(),
+  clock_ok: z.boolean(),
+  correlation_id: z.string().nullable(),
+  data: edgeDataSchema,
+  file_ids: z.array(z.string()),
+});
+export type EdgeEvent = z.infer<typeof edgeEventSchema>;
+
+export const edgeEventPageSchema = z.object({
+  items: z.array(edgeEventSchema),
+  has_more: z.boolean(),
+});
+export type EdgeEventPage = z.infer<typeof edgeEventPageSchema>;
+
+export const edgePlateReadSchema = z.object({
+  occurred_at: z.string(),
+  plate: z.string(),
+  lane_id: z.string(),
+  direction: z.string(),
+  file_id: z.string().nullable(),
+});
+export type EdgePlateRead = z.infer<typeof edgePlateReadSchema>;
+
+export const edgeParkingSummarySchema = z.object({
+  date: z.string(),
+  entries: z.number().int(),
+  exits: z.number().int(),
+  open_estimate: z.number().int(),
+  cash_total_soum: soumSchema,
+  cash_by_method: z.object({ cash: soumSchema, terminal: soumSchema }),
+  last_plates: z.array(edgePlateReadSchema),
+});
+export type EdgeParkingSummary = z.infer<typeof edgeParkingSummarySchema>;

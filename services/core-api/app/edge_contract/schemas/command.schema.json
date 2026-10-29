@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sbozor.uz/agent/v1/command.schema.json",
+  "title": "Buyruq konverti (server -> agent)",
+  "description": "WebSocket orqali keladi. `expires_at` o'tgan buyruq BAJARILMAYDI (9-bo'lim).",
+  "type": "object",
+  "required": ["id", "type", "v", "site_id", "issued_at", "expires_at", "issued_by", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string", "format": "uuid"},
+    "type": {
+      "type": "string",
+      "enum": [
+        "core.config.refresh",
+        "core.snapshot.request",
+        "core.live.start",
+        "core.live.stop",
+        "core.outbox.resend",
+        "core.agent.update",
+        "core.agent.restart",
+        "core.logs.upload",
+        "parking.gate.open",
+        "parking.gate.set_mode",
+        "parking.invoice.paid",
+        "parking.display.show",
+        "parking.session.close_manual",
+        "market.snapshot.run",
+        "livestock.watchlist.sync"
+      ]
+    },
+    "v": {"type": "integer", "minimum": 1},
+    "site_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "issued_by": {
+      "description": "Foydalanuvchi ID si yoki `system`. Ism yozilmaydi.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "data": {"type": "object"}
+  }
+}

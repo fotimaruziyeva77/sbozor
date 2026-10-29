@@ -259,9 +259,17 @@ services:
       CLICK_MERCHANT_ID: ${CLICK_MERCHANT_ID:-}
       CLICK_MARKET_ID: ${CLICK_MARKET_ID:-}
       CLICK_PAY_URL: ${CLICK_PAY_URL:-https://my.click.uz/services/pay}
+      # Universal agent relizlari (0036): {stable,pilot}/latest.json va
+      # bin/sbozor-agent-<versiya>.exe. Konteyner ichidagi yo'l QAT'IY,
+      # xostdagisi `EDGE_RELEASES_HOST_DIR` bilan (pastdagi `volumes`).
+      EDGE_RELEASES_DIR: /srv/edge-releases
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: Asia/Tashkent
+    volumes:
+      # ⚠ FAQAT O'QISH (`:ro`): relizlar imzolangan va ularni server
+      #   o'zgartirmaydi — manifest agentga SO'ZMA-SO'Z beriladi.
+      - ${EDGE_RELEASES_HOST_DIR:-/srv/edge-releases}:/srv/edge-releases:ro
     depends_on:
       db:
         condition: service_healthy

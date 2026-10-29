@@ -536,6 +536,14 @@ class Settings(BaseSettings):
     click_market_id: str = ""
     click_pay_url: str = "https://my.click.uz/services/pay"
 
+    # --- Universal agent (edge, 0036) ---
+    #
+    # Imzolangan relizlar katalogi (xostdan FAQAT O'QISH uchun mount):
+    #   {dir}/{stable,pilot}/latest.json   — imzolangan manifest (SO'ZMA-SO'Z beriladi)
+    #   {dir}/bin/sbozor-agent-{versiya}.exe
+    # Katalog yo'q bo'lsa `/api/v1/edge/releases/latest` 204, binar — 404.
+    edge_releases_dir: str = "/srv/edge-releases"
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"

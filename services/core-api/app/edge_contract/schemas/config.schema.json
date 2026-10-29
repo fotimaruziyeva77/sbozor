@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sbozor.uz/agent/v1/config.schema.json",
+  "title": "Obyekt sozlamasi (server -> agent, desired state)",
+  "description": "Serverdagi BITTA versiyalangan hujjat; agent uni to'liq oladi va atomik qo'llaydi (10-bo'lim).",
+  "type": "object",
+  "required": ["config_version", "site", "plugins", "devices", "update"],
+  "additionalProperties": false,
+  "properties": {
+    "config_version": {"type": "integer", "minimum": 1},
+    "site": {
+      "type": "object",
+      "required": ["id", "type", "timezone"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "type": {"type": "string", "enum": ["market", "parking", "livestock"]},
+        "timezone": {"type": "string", "const": "Asia/Tashkent"}
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "enum": ["market", "parking", "livestock"]}
+    },
+    "devices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "driver"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 64},
+          "kind": {
+            "type": "string",
+            "enum": ["camera", "anpr_camera", "nvr", "relay", "sensor", "printer", "display"]
+          },
+          "driver": {
+            "type": "string",
+            "enum": ["hik_isapi", "hik_io", "hik_barrier", "http_relay", "escpos_usb", "escpos_net"]
+          },
+          "host": {"type": "string"},
+          "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+          "name": {"type": "string", "maxLength": 100},
+          "channel": {"type": "integer", "minimum": 1},
+          "username": {"type": "string", "maxLength": 64},
+          "output": {"description": "hik_io: chiqish porti raqami", "type": "integer", "minimum": 1},
+          "pulse_ms": {"type": "integer", "minimum": 100, "maximum": 10000},
+          "url": {"description": "http_relay: ochish so'rovi", "type": "string"},
+          "url_off": {"description": "http_relay: yopish so'rovi (ixtiyoriy)", "type": "string"},
+          "printer_name": {"description": "escpos_usb: Windows'dagi printer nomi", "type": "string"},
+          "paper_chars": {"description": "Qator uzunligi: 58 mm = 32, 80 mm = 48", "type": "integer", "enum": [32, 42, 48]},
+          "camera_class": {"description": "livestock: shu kamera sanaydigan sinf", "type": "string", "enum": ["large", "small"]},
+          "secret_ref": {
+            "description": "Qurilma paroli OCHIQ kelmaydi: faqat shu agent ochadigan shifrlangan maydon havolasi.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "lanes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "direction", "mode"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "direction": {"type": "string", "enum": ["in", "out"]},
+          "mode": {"type": "string", "enum": ["auto", "manual", "free"]},
+          "camera": {"type": "string"},
+          "barrier": {"type": "string"},
+          "sensor": {"type": "string"},
+          "printer": {"type": "string"},
+          "display": {"type": "string"},
+          "name": {"type": "string", "maxLength": 100},
+          "kind": {"description": "parking — avtoturargoh yo'lagi, livestock — mol bozori darvozasi", "type": "string", "enum": ["parking", "livestock"]}
+        }
+      }
+    },
+    "tariff": {
+      "description": "Avtoturargoh tarifi. Narx = flat + (birinchi soat + keyingi soatlar), bepul daqiqadan keyin, sutkalik shift bilan.",
+      "type": "object",
+      "required": ["version", "rules"],
+      "additionalProperties": false,
+      "properties": {
+        "version": {"type": "integer", "minimum": 1},
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["category", "title"],
+            "additionalProperties": false,
+            "properties": {
+              "category": {"type": "string", "pattern": "^[a-z][a-z_]*$"},
+              "title": {"type": "string"},
+              "free_minutes": {"type": "integer", "minimum": 0},
+              "flat_soum": {"description": "Har kirish uchun qat'iy narx", "type": "integer", "minimum": 0},
+              "first_hour_soum": {"type": "integer", "minimum": 0},
+              "next_hour_soum": {"type": "integer", "minimum": 0},
+              "day_max_soum": {"description": "24 soatlik shift (0 = yo'q)", "type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    },
+    "parking": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ikpu": {"type": "string", "pattern": "^[0-9]{17}$"},
+        "package_code": {"type": "string"},
+        "receipt_header": {"type": "string", "maxLength": 200},
+        "entry_ticket": {"description": "Kirishda chek chiqarilsinmi", "type": "boolean"},
+        "exit_grace_minutes": {"description": "To'lovdan keyin chiqish uchun berilgan vaqt", "type": "integer", "minimum": 0, "maximum": 120},
+        "staff": {"description": "Kassirlar: ID va ko'rinadigan yorliq (ism emas).", "type": "array",
+          "items": {"type": "object", "required": ["id", "label"], "additionalProperties": false,
+            "properties": {"id": {"type": "string"}, "label": {"type": "string"}}}}
+      }
+    },
+    "livestock": {
+      "description": "Mol bozori: toifalar va bir martalik yig'im (131-5-0-Q/25). Ro'yxat serverda sozlanadi.",
+      "type": "object",
+      "required": ["categories"],
+      "additionalProperties": false,
+      "properties": {
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["code", "title", "fee_soum", "camera_class"],
+            "additionalProperties": false,
+            "properties": {
+              "code": {"type": "string", "pattern": "^[a-z][a-z_]*$"},
+              "title": {"type": "string", "minLength": 1},
+              "fee_soum": {"type": "integer", "minimum": 0},
+              "camera_class": {
+                "description": "Kamera ajrata oladigan sinf: yirik yoki mayda. Pul nazoratchi kiritgan toifadan.",
+                "type": "string",
+                "enum": ["large", "small", "none"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "schedules": {"type": "array"},
+    "thresholds": {"type": "object"},
+    "payments": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "click": {"type": "boolean"},
+        "payme": {"type": "boolean"},
+        "invoice_ttl_minutes": {"type": "integer", "minimum": 1, "maximum": 1440}
+      }
+    },
+    "update": {
+      "description": "Avtomatik yangilanish: tuzatishlar o'zi yuklanadi, qayta o'rnatish kerak emas.",
+      "type": "object",
+      "required": ["channel", "auto"],
+      "additionalProperties": false,
+      "properties": {
+        "channel": {"type": "string", "enum": ["stable", "pilot"]},
+        "auto": {"type": "boolean"},
+        "window": {
+          "description": "Avtomatik o'rnatish oynasi (mahalliy vaqt, HH:MM-HH:MM). Bo'sh bo'lsa — darvozalar bo'sh bo'lgan birinchi payt.",
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$"
+        },
+        "skip_weekdays": {
+          "description": "Yangilanmaydigan kunlar (1=dushanba ... 7=yakshanba): mol bozori ish kunlari.",
+          "type": "array",
+          "items": {"type": "integer", "minimum": 1, "maximum": 7},
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

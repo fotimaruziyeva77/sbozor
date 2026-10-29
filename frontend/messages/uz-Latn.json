@@ -61,7 +61,8 @@
     "billing": "Patta hisobi",
     "reconciliation": "Nomuvofiqliklar",
     "reports": "Hisobotlar",
-    "switchMarket": "Bozorni almashtirish"
+    "switchMarket": "Bozorni almashtirish",
+    "agents": "Agentlar"
   },
   "auth": {
     "phoneLabel": "Telefon raqami",
@@ -2464,5 +2465,143 @@
     "changesAll": "To'liq jurnal",
     "changesUnread": "Jurnal o'qilmadi.",
     "changesEmpty": "Hali o'zgarish yozilmagan."
+  },
+  "edgeAgents": {
+    "title": "Agentlar",
+    "subtitle": "Bozor, avtoturargoh va mol bozoridagi kompyuterlarga o'rnatilgan agentlar.",
+    "newSite": "Yangi obyekt",
+    "kind": {
+      "parking": "Avtoturargoh",
+      "market": "Bozor",
+      "livestock": "Mol bozori"
+    },
+    "colName": "Nomi",
+    "colKind": "Turi",
+    "colStatus": "Holati",
+    "colVersion": "Versiya",
+    "colHost": "Kompyuter",
+    "colLastSeen": "Oxirgi aloqa",
+    "colDevices": "Qurilmalar",
+    "status": {
+      "online": "Onlayn",
+      "offline": "Oflayn",
+      "never": "Hali ulanmagan"
+    },
+    "devicesSummary": "{online}/{total} onlayn",
+    "devicesNone": "Ma'lumot yo'q",
+    "deviceStatus": {
+      "online": "Ishlayapti",
+      "offline": "Ishlamayapti",
+      "degraded": "Qisman ishlayapti"
+    },
+    "emptyTitle": "Hali obyekt yo'q",
+    "emptyHint": "«Yangi obyekt» tugmasi bilan qo'shing va chiqqan kodni agent oynasiga kiriting.",
+    "open": "Ochish",
+    "backToList": "Agentlar ro'yxati",
+    "agentVersion": "Versiya {version}",
+    "agentHost": "Kompyuter: {host}",
+    "createDescription": "Obyekt turini va nomini kiriting. Saqlangach agent uchun aktivatsiya kodi chiqadi.",
+    "fieldKind": "Turi",
+    "fieldName": "Nomi",
+    "nameRequired": "Nomni kiriting",
+    "create": "Yaratish",
+    "codeButton": "Aktivatsiya kodi",
+    "codeTitle": "Aktivatsiya kodi",
+    "codeInstruction": "Agent oynasiga shu kodni kiriting.",
+    "codeExpires": "Kod {date} gacha amal qiladi.",
+    "copy": "Nusxalash",
+    "copied": "Nusxalandi",
+    "config": {
+      "title": "Sozlama",
+      "hint": "Agent sozlamasi JSON ko'rinishida. Saqlangach agent uni keyingi ulanishda oladi.",
+      "version": "Versiya {version}",
+      "label": "Sozlama matni",
+      "save": "Saqlash",
+      "reset": "Asl holiga qaytarish",
+      "saved": "Sozlama saqlandi — versiya {version}",
+      "invalidJson": "JSON matnida xato bor. Qavs va vergullarni tekshiring.",
+      "notObject": "Sozlama JSON obyekti bo'lishi kerak.",
+      "errorsTitle": "Server sozlamani qabul qilmadi:",
+      "rootPath": "butun hujjat"
+    },
+    "commands": {
+      "title": "Buyruqlar",
+      "openGate": "Shlagbaumni ochish: {lane}",
+      "direction": {
+        "in": "kirish",
+        "out": "chiqish"
+      },
+      "refreshConfig": "Sozlamani yangilash",
+      "updateAgent": "Agentni yangilash",
+      "gateOpenType": "Shlagbaumni ochish",
+      "sent": "Buyruq yuborildi",
+      "invalidType": "Agent bu buyruqni tanimaydi.",
+      "confirmGateTitle": "Shlagbaum ochilsinmi?",
+      "confirmGateBody": "«{lane}» yo'lagidagi shlagbaum masofadan ochiladi.",
+      "confirmGate": "Ochish",
+      "confirmUpdateTitle": "Agent yangilansinmi?",
+      "confirmUpdateBody": "Agent yangi versiyani yuklab, qayta ishga tushadi. Bu bir necha daqiqa olishi mumkin.",
+      "confirmUpdate": "Yangilash",
+      "recentTitle": "So'nggi buyruqlar",
+      "colType": "Buyruq",
+      "colIssued": "Berilgan vaqti",
+      "colResult": "Natija",
+      "empty": "Hali buyruq berilmagan.",
+      "noLanes": "Shlagbaumli yo'lak sozlanmagan.",
+      "result": {
+        "pending": "Kutilmoqda",
+        "delivered": "Yetkazildi",
+        "done": "Bajarildi",
+        "rejected": "Rad etildi",
+        "failed": "Bajarilmadi",
+        "expired": "Muddati o'tdi"
+      }
+    },
+    "parking": {
+      "title": "Bugungi holat",
+      "entries": "Kirdi",
+      "exits": "Chiqdi",
+      "open": "Ichkarida (taxminan)",
+      "cash": "Tushum",
+      "byCash": "Naqd: {amount}",
+      "byTerminal": "Terminal: {amount}",
+      "lastPlates": "So'nggi raqamlar",
+      "noPlates": "Bugun raqam o'qilmadi."
+    },
+    "events": {
+      "title": "So'nggi hodisalar",
+      "filterType": "Hodisa turi",
+      "filterAll": "Hammasi",
+      "colTime": "Vaqt",
+      "colType": "Turi",
+      "colData": "Tafsilot",
+      "colFrames": "Kadr",
+      "more": "Ko'proq",
+      "empty": "Hodisa yo'q.",
+      "clockWarn": "Agent soati noto'g'ri bo'lgan",
+      "type": {
+        "plateRead": "Raqam o'qildi",
+        "sessionOpened": "Kirish qayd etildi",
+        "sessionClosed": "Chiqish qayd etildi",
+        "gateOpened": "Shlagbaum ochildi",
+        "anomaly": "Shubhali holat",
+        "paymentCash": "Naqd to'lov",
+        "agentStarted": "Agent ishga tushdi",
+        "deviceStatus": "Qurilma holati",
+        "configApplied": "Sozlama qo'llandi",
+        "updateStatus": "Yangilanish holati",
+        "alertRaised": "Ogohlantirish",
+        "vehicleEntered": "Mashina kirdi",
+        "feeCollected": "To'lov olindi",
+        "occupancyObserved": "Bandlik kuzatildi"
+      }
+    },
+    "frame": {
+      "open": "Kadrni kattalashtirish",
+      "title": "Kadr",
+      "description": "Kadrni ochish jurnalga yoziladi.",
+      "alt": "Hodisa kadri",
+      "unavailable": "Kadr ochilmadi"
+    }
   }
 }

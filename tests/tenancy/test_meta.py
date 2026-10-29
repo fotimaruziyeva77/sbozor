@@ -153,6 +153,16 @@ INDEX_EXCEPTIONS = {
     #     nusxani `'uncertain'` deb yozish «ko'r, lekin ko'rsatilgan»
     #     qatoriga yo'l ochardi.
     "uq_review_assignments_queue_anchor",
+    # --- 0036, universal agent (edge). IKKALASI HAM `uq_refresh_tokens_jti`
+    # BILAN AYNAN BIR SINF: agent so'rovi kelganda bozor HALI NOMA'LUM —
+    # u faqat token (xeshi) yoki aktivatsiya kodi bilan keladi va qator
+    # shu GLOBAL kalit bo'yicha `SECURITY DEFINER` funksiya orqali topiladi
+    # (`edge_agent_auth()`, `edge_activation_find()`). Bozor undan KEYIN
+    # aniqlanadi va keyingi har so'rov RLS ostida. Noyoblikni
+    # `(market_id, ...)` ga tushirish ikki bozorda bir xil kod/xesh
+    # bo'lishiga yo'l qo'yardi va qidiruv bir ma'noli bo'lmasdi.
+    "uq_edge_agents_token_sha256",
+    "uq_edge_activation_codes_code",
 }
 
 EXPECTED_DEFINER_FUNCTIONS = {

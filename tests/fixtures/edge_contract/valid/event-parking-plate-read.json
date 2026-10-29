@@ -1,0 +1,1 @@
+{"id":"0192d6a0-7c00-7abc-8def-0123456789ab","v":1,"site_id":"navoiy-mol-bozori","agent_id":"agt-01","seq":42,"occurred_at":"2026-10-29T06:15:00+05:00","clock_ok":true,"type":"parking.plate.read","data":{"lane_id":"kirish-1","plate":"01A777AA","raw_text":"01 A 777 AA","confidence":97,"direction":"in","file_id":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}

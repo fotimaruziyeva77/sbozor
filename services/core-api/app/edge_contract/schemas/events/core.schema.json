@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.sbozor.uz/agent/v1/events/core.schema.json",
+  "title": "Yadro hodisalari (core.*) — `data` sxemalari",
+  "$defs": {
+    "file_id": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Faylning SHA-256 xeshi."},
+    "soum": {"type": "integer", "minimum": 0},
+    "core.agent.started": {
+      "type": "object",
+      "required": ["version", "plugins"],
+      "additionalProperties": false,
+      "properties": {
+        "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"},
+        "plugins": {"type": "array", "items": {"type": "string"}},
+        "last_stop_reason": {"type": "string", "enum": ["clean", "crash", "update", "power_loss", "unknown"]}
+      }
+    },
+    "core.device.discovered": {
+      "type": "object",
+      "required": ["kind", "ip", "serial"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"type": "string"},
+        "model": {"type": "string"},
+        "firmware": {"type": "string"},
+        "ip": {"type": "string"},
+        "serial": {"type": "string", "minLength": 1},
+        "channels": {"type": "integer", "minimum": 0}
+      }
+    },
+    "core.device.status": {
+      "type": "object",
+      "required": ["device_id", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {"type": "string"},
+        "status": {"type": "string", "enum": ["online", "offline", "degraded"]},
+        "reason": {"type": "string", "maxLength": 500}
+      }
+    },
+    "core.config.applied": {
+      "type": "object",
+      "required": ["config_version", "result"],
+      "additionalProperties": false,
+      "properties": {
+        "config_version": {"type": "integer", "minimum": 1},
+        "result": {"type": "string", "enum": ["applied", "rejected"]},
+        "errors": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "core.alert.raised": {
+      "type": "object",
+      "required": ["kind", "level", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"type": "string"},
+        "level": {"type": "string", "enum": ["info", "warning", "critical"]},
+        "message": {"type": "string", "maxLength": 1000},
+        "file_id": {"$ref": "#/$defs/file_id"}
+      }
+    },
+    "core.audit.entry": {
+      "type": "object",
+      "required": ["actor", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "actor": {"type": "string", "description": "Lokal foydalanuvchi ID si — ism emas."},
+        "action": {"type": "string"},
+        "before": {},
+        "after": {}
+      }
+    },
+    "core.shift.opened": {
+      "type": "object",
+      "required": ["shift_id", "staff_id"],
+      "additionalProperties": false,
+      "properties": {"shift_id": {"type": "string", "format": "uuid"}, "staff_id": {"type": "string"}}
+    },
+    "core.shift.closed": {
+      "type": "object",
+      "required": ["shift_id", "staff_id", "declared_cash_soum"],
+      "additionalProperties": false,
+      "properties": {
+        "shift_id": {"type": "string", "format": "uuid"},
+        "staff_id": {"type": "string"},
+        "declared_cash_soum": {"$ref": "#/$defs/soum"},
+        "system_cash_soum": {"$ref": "#/$defs/soum"}
+      }
+    },
+    "core.payment.cash": {
+      "type": "object",
+      "required": ["payment_id", "amount_soum", "method", "subject", "staff_id", "fiscal_status"],
+      "additionalProperties": false,
+      "properties": {
+        "payment_id": {"type": "string", "format": "uuid"},
+        "amount_soum": {"type": "integer", "minimum": 1},
+        "method": {"type": "string", "enum": ["cash", "terminal"]},
+        "subject": {
+          "description": "Nimaga to'landi: seans, rasta yoki mol yozuvi havolasi.",
+          "type": "object",
+          "required": ["kind", "id"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {"type": "string", "enum": ["parking_session", "stall", "livestock_vehicle"]},
+            "id": {"type": "string"}
+          }
+        },
+        "staff_id": {"type": "string"},
+        "shift_id": {"type": "string", "format": "uuid"},
+        "ikpu": {"type": "string", "pattern": "^\\d{17}$"},
+        "package_code": {"type": "string"},
+        "kkm_receipt_no": {"type": "string"},
+        "fm_number": {"type": "string"},
+        "fiscal_status": {"type": "string", "enum": ["manual", "fiscalized", "failed"]}
+      }
+    },
+    "core.receipt.printed": {
+      "type": "object",
+      "required": ["payment_id", "receipt_no"],
+      "additionalProperties": false,
+      "properties": {"payment_id": {"type": "string", "format": "uuid"}, "receipt_no": {"type": "string"}}
+    },
+    "core.snapshot.taken": {
+      "type": "object",
+      "required": ["camera_id", "file_id", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "camera_id": {"type": "string"},
+        "file_id": {"$ref": "#/$defs/file_id"},
+        "reason": {"type": "string", "enum": ["schedule", "request", "event"]},
+        "slot": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+        "late": {"type": "boolean"}
+      }
+    },
+    "core.update.status": {
+      "description": "Yangilanish jarayoni (UI va server ko'rsatadi).",
+      "type": "object",
+      "required": ["from_version", "to_version", "stage"],
+      "additionalProperties": false,
+      "properties": {
+        "from_version": {"type": "string"},
+        "to_version": {"type": "string"},
+        "stage": {"type": "string", "enum": ["downloading", "verified", "installing", "installed", "rolled_back", "failed"]},
+        "trigger": {"type": "string", "enum": ["auto", "button", "server"]},
+        "reason": {"type": "string", "maxLength": 500}
+      }
+    }
+  }
+}

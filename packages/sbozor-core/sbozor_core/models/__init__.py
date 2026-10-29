@@ -70,6 +70,24 @@ from sbozor_core.models.billing import (
     PaymeTransaction,
     ShiftDeclarationCorrection,
 )
+from sbozor_core.models.edge import (
+    EDGE_ACTIVATION_SITE_INDEX,
+    EDGE_AGENT_SITE_INDEX,
+    EDGE_COMMAND_PENDING_INDEX,
+    EDGE_COMMAND_RESULT_CHECK,
+    EDGE_COMMAND_RESULT_VALUES,
+    EDGE_EVENT_SITE_TIME_INDEX,
+    EDGE_EVENT_SITE_TYPE_INDEX,
+    EDGE_SITE_KIND_CHECK,
+    EDGE_SITE_KIND_VALUES,
+    EdgeActivationCode,
+    EdgeAgent,
+    EdgeCommand,
+    EdgeConfig,
+    EdgeEvent,
+    EdgeFile,
+    EdgeSite,
+)
 from sbozor_core.models.identity import (
     LOCALE_CHECK,
     LOCALE_VALUES,
@@ -218,6 +236,22 @@ from sbozor_core.models.snapshot import (
 )
 
 __all__ = [
+    "EDGE_ACTIVATION_SITE_INDEX",
+    "EDGE_AGENT_SITE_INDEX",
+    "EDGE_COMMAND_PENDING_INDEX",
+    "EDGE_COMMAND_RESULT_CHECK",
+    "EDGE_COMMAND_RESULT_VALUES",
+    "EDGE_EVENT_SITE_TIME_INDEX",
+    "EDGE_EVENT_SITE_TYPE_INDEX",
+    "EDGE_SITE_KIND_CHECK",
+    "EDGE_SITE_KIND_VALUES",
+    "EdgeActivationCode",
+    "EdgeAgent",
+    "EdgeCommand",
+    "EdgeConfig",
+    "EdgeEvent",
+    "EdgeFile",
+    "EdgeSite",
     "ADJUSTMENT_DIRECTION_CHECK",
     "ADJUSTMENT_DIRECTION_VALUES",
     "ADJUSTMENT_REASON_CHECK",

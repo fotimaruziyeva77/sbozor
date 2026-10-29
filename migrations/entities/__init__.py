@@ -17,6 +17,7 @@ from typing import Any, Final
 from migrations.entities.functions import (
     ALL_FUNCTIONS,
     AUTH_SUPPORT_FUNCTIONS,
+    EDGE_FUNCTIONS,
     MARKET_DOMAIN_FUNCTIONS,
     OCCUPANCY_FUNCTIONS,
     PLATFORM_AUDIT_FUNCTIONS,
@@ -62,6 +63,8 @@ __all__ = [
     "SERVICE_FEE_DELETE_ORDER",
     "SERVICE_FEE_TENANT_TABLES",
     "SETTINGS_AUDITED_TABLES",
+    "EDGE_DELETE_ORDER",
+    "EDGE_TENANT_TABLES",
     "PAYME_AUDITED_TABLES",
     "PAYME_DELETE_ORDER",
     "PAYME_TENANT_TABLES",
@@ -839,6 +842,38 @@ Deklaratsiya tuzatishi — rahbariyatning moliyaviy oqibatli qarori
 GA AYNI COMMITDA qo'shildi, ya'ni `PENDING_AUDIT_TRIGGERS` BO'SH qoladi.
 """
 
+EDGE_TENANT_TABLES: tuple[str, ...] = (
+    "edge_sites",
+    "edge_activation_codes",
+    "edge_agents",
+    "edge_configs",
+    "edge_commands",
+    "edge_events",
+    "edge_files",
+)
+"""`0036_edge_domain` yaratadigan tenant jadvallari — `ALL_TENANT_TABLES` ga AYNI COMMITDA.
+
+⚠ HECH BIRI `AUDITED_TABLES` DA EMAS va bu ATAYIN: `edge_events` va
+`edge_files` — agentdan keladigan HODISA JURNALI (`capture_runs` /
+`alert_events` sinfi, hajm katta); `edge_configs` — append-only
+versiyalar, ya'ni jadvalning O'ZI tarix (`vendor_telegram_bindings`
+naqshi); `edge_commands` / `edge_agents` holati agent tomonidan har
+daqiqada yangilanadi (texnik shovqin). Panel orqali qilingan har yozuv
+(obyekt, kod, sozlama, buyruq) ilova qatlamida `write_app_audit()` bilan
+yoziladi.
+"""
+
+EDGE_DELETE_ORDER: tuple[str, ...] = (
+    "edge_events",
+    "edge_files",
+    "edge_commands",
+    "edge_configs",
+    "edge_agents",
+    "edge_activation_codes",
+    "edge_sites",
+)
+"""`market_delete_draft()` kaskadi: bolalar `edge_sites` dan OLDIN (LITERAL)."""
+
 PAYME_TENANT_TABLES: tuple[str, ...] = ("payme_transactions", "click_transactions")
 """`0035_payme` yaratadigan tenant jadvali — `ALL_TENANT_TABLES` ga AYNI COMMITDA."""
 
@@ -948,6 +983,8 @@ ALL_TENANT_TABLES: tuple[str, ...] = (
     *SHIFT_CORRECTION_TENANT_TABLES,
     # ✅ `0035` — splice migratsiya bilan AYNI COMMITDA.
     *PAYME_TENANT_TABLES,
+    # ✅ `0036` — universal agent (edge) domeni, splice migratsiya bilan AYNI COMMITDA.
+    *EDGE_TENANT_TABLES,
 )
 """BARCHA tenant jadvallari — policy reyestrining yagona manbai.
 
@@ -1011,6 +1048,9 @@ ALL_ENTITIES: list[Any] = [
     # tananing keyingi o'zgarishi autogenerate'da ko'rinmasdi va bazadagi
     # ta'rif koddagisidan jimgina ajralib ketardi.
     *OCCUPANCY_FUNCTIONS,
+    # Universal agent (0036): token xeshi va aktivatsiya kodi bo'yicha TOR
+    # qidiruv — `refresh_tokens.jti` naqshi (bozor hali noma'lum).
+    *EDGE_FUNCTIONS,
     # Audit yozuvchisi + append-only qo'riqchisi (D-10) + 2-faza domen
     # qoidalari (kod reyestri, tarif/toifa daxlsizligi) + 5-faza bandlik
     # domenining ikki o'zgarmaslik qo'riqchisi (D-12/D-17.4).

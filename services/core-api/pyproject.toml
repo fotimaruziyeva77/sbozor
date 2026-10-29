@@ -96,6 +96,16 @@ dependencies = [
     # qo'shardi.
     "aiobotocore==3.9.0",
     "Pillow==12.3.0",
+    # --- Universal agent (edge, 0036) ---
+    #
+    # `app/edge_contract/` agent protokolining JSON sxemalarini (draft
+    # 2020-12) TEKSHIRADI: hodisa konverti + `data`, buyruq, sozlama. Agent
+    # o'zi Go'da `santhosh-tekuri/jsonschema` bilan AYNAN shu fayllarni
+    # tekshiradi; server tomonida qo'lda yozilgan validator sxemadan
+    # jimgina ajralib ketardi. MIT, python-jsonschema loyihasi (2013 dan).
+    # ⚠ PROD GURUHIDA — `httpx`/`aiobotocore` epizodi (D-16): `dev` da
+    #   qolsa testlar yashil, prod esa `ModuleNotFoundError` bilan yiqiladi.
+    "jsonschema==4.25.1",
     "sbozor-core",
 ]
 

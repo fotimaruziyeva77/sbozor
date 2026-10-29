@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CalendarDays,
   ClipboardCheck,
+  Cpu,
   Ellipsis,
   FileSpreadsheet,
   FileWarning,
@@ -69,6 +70,7 @@ type NavItem = {
     | "/calendar"
     | "/cameras"
     | "/snapshots"
+    | "/agents"
     | "/review"
     | "/occupancy"
     | "/collect"
@@ -87,6 +89,7 @@ type NavItem = {
     | "calendar"
     | "cameras"
     | "snapshots"
+    | "agents"
     | "review"
     | "occupancy"
     | "collect"
@@ -219,6 +222,23 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "snapshots",
     icon: CalendarClock,
     permission: "camera_view",
+    group: "watch",
+  },
+  /*
+   * «Agentlar» — bozor / avtoturargoh / mol bozoridagi universal agentlar.
+   *
+   * `camera_manage`, `camera_view` EMAS: bu bo'lim agentni O'RNATISH va
+   * BOSHQARISH yuzasi (aktivatsiya kodi, sozlama, buyruqlar) — kuzatuvchi
+   * rolga u menyuda shovqin bo'lardi. Yangi `Permission` QO'SHILMAYDI.
+   * «Kuzatuv» guruhida: admin uchun guruh 5 ta bo'ladi (chegara 6,
+   * `app-shell.test.tsx`), mobil pastki panel o'zgarmaydi — yozuv
+   * birinchi to'rttadan keyin, «Ko'proq» varag'ida.
+   */
+  {
+    href: "/agents",
+    labelKey: "agents",
+    icon: Cpu,
+    permission: "camera_manage",
     group: "watch",
   },
   /*

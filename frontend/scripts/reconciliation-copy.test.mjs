@@ -1269,8 +1269,14 @@ test("⛔ G-34 (07-UI-SPEC) (b): NAZORAT — detektor sun'iy da'voni USHLAYDI", 
 /* NAVIGATSIYA — M-5 NING MEXANIK SHAKLI                                      */
 /* -------------------------------------------------------------------------- */
 
-test("⛔ NAV: reyestr AYNAN 17 yozuv va yangi huquq QO'SHILMAGAN", () => {
+test("⛔ NAV: reyestr AYNAN 18 yozuv va yangi huquq QO'SHILMAGAN", () => {
   /*
+   * ⛔⛔ 17 -> 18: «Agentlar» (`/agents`, `camera_manage`) — universal
+   * agentlarni boshqarish yuzasi. YANGI HUQUQ YO'Q (mavjud
+   * `camera_manage`), joyi ham qulflandi: `/snapshots` dan bevosita keyin
+   * («Kuzatuv» guruhi), ya'ni mobil panelning birinchi to'rttasi va
+   * quyidagi zanjir (`billing` -> `reconciliation` -> `reports`) o'zgarmaydi.
+   *
    * ⛔⛔ 16 -> 17: BU BO'SHATISH EMAS, ⛔ HUJJATLASHGAN O'SISH.
    *
    * 08-UI-SPEC §4.7 [M-5] raqamni NOMMA-NOM yozgan: «`NAV_ITEMS`
@@ -1292,7 +1298,11 @@ test("⛔ NAV: reyestr AYNAN 17 yozuv va yangi huquq QO'SHILMAGAN", () => {
 
   const entries = [...block.matchAll(/labelKey:\s*"([a-zA-Z]+)"/gu)].map((m) => m[1]);
 
-  assert.equal(entries.length, 17, `NAV_ITEMS da ${entries.length} yozuv (kutilgan 17)`);
+  assert.equal(entries.length, 18, `NAV_ITEMS da ${entries.length} yozuv (kutilgan 18)`);
+  assert.ok(
+    entries.indexOf("agents") === entries.indexOf("snapshots") + 1,
+    "«Agentlar» `/snapshots` dan bevosita keyin turishi SHART",
+  );
   assert.ok(entries.includes("reconciliation"), "«Nomuvofiqliklar» yozuvi yo'q");
   assert.ok(entries.includes("reports"), "«Hisobotlar» yozuvi yo'q (08-UI-SPEC §4.7)");
 

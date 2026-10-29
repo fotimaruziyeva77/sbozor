@@ -80,6 +80,10 @@ __all__ = [
     "CAPTURE_DUE_MARKETS",
     "DEFAULT_SCHEDULE_NAME",
     "DEFAULT_SLOT_VALUES",
+    "EDGE_ACTIVATION_FIND",
+    "EDGE_AGENT_AUTH",
+    "EDGE_FUNCTIONS",
+    "EDGE_GRANT_SIGNATURES",
     "GRANT_SIGNATURES",
     "MARKET_ACTIVATE",
     "MARKET_CALENDAR_FUNCTIONS",
@@ -1153,6 +1157,16 @@ BEGIN
     RETURN false;
   END IF;
 
+  -- 0036 — universal agent (edge) domeni. Boshqa domendan hech kim
+  -- tayanmaydi; ichki tartib — bolalar `edge_sites` dan OLDIN.
+  DELETE FROM public.edge_events              WHERE market_id = p_market_id;
+  DELETE FROM public.edge_files               WHERE market_id = p_market_id;
+  DELETE FROM public.edge_commands            WHERE market_id = p_market_id;
+  DELETE FROM public.edge_configs             WHERE market_id = p_market_id;
+  DELETE FROM public.edge_agents              WHERE market_id = p_market_id;
+  DELETE FROM public.edge_activation_codes    WHERE market_id = p_market_id;
+  DELETE FROM public.edge_sites               WHERE market_id = p_market_id;
+
   -- 8-faza qog'oz daftar reyestri (0024_ledger_entries). BLOK ENG BOSHDA
   -- va bu ENG XAVFSIZ o'rin: `ledger_entries` ga HECH KIM tayanmaydi
   -- (unga kompozit FK bilan keladigan bola yo'q), ya'ni uni birinchi
@@ -1927,3 +1941,90 @@ umuman ta'sir qilmaydi.
 `REVOKE ALL ... FROM PUBLIC` ning nega majburiyligi `0018:242-251` va
 `0019:154-163` da yozilgan.
 """
+
+
+# ===========================================================================
+# 0036 — UNIVERSAL AGENT (EDGE): TOKEN VA AKTIVATSIYA KODI QIDIRUVI
+# ===========================================================================
+#
+# `refresh_tokens.jti` bilan AYNAN bir xil mexanizm: agent so'rovi kelganda
+# bozor HALI NOMA'LUM — u faqat tokenning SHA-256 xeshi (yoki aktivatsiya
+# kodi) bilan keladi. `edge_agents` / `edge_activation_codes` esa tenant
+# jadvallari (RLS ENABLE + FORCE), ya'ni kontekstsiz qidiruv 0 qator berardi.
+#
+# YUZA QASDDAN TOR: har funksiya BITTA aniq kalit bo'yicha qidiradi va
+# faqat identifikatorlarni (bozor, obyekt, agent) qaytaradi. Keyingi BARCHA
+# o'qish/yozish `set_tenant_context(market_id=...)` bilan RLS ostida.
+
+EDGE_AGENT_AUTH = PGFunction(
+    schema="public",
+    signature="edge_agent_auth(p_token_sha256 text)",
+    definition="""
+RETURNS TABLE (
+    agent_id text,
+    site_id text,
+    market_id uuid,
+    instance_id text
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT a.id,
+           a.site_id,
+           a.market_id,
+           a.instance_id
+    FROM public.edge_agents AS a
+    WHERE a.token_sha256 = p_token_sha256
+      AND a.revoked_at IS NULL
+$$
+""",
+)
+"""Token xeshi bo'yicha agentni topadi (bekor qilinmaganini).
+
+Topilmasa 0 qator — chaqiruvchi `401` qaytaradi. `instance_id` qaytariladi,
+chunki «bitta token = bitta nusxa» tekshiruvi (`409`) shu qiymatga tayanadi.
+"""
+
+EDGE_ACTIVATION_FIND = PGFunction(
+    schema="public",
+    signature="edge_activation_find(p_code text)",
+    definition="""
+RETURNS TABLE (
+    code_id uuid,
+    site_id text,
+    market_id uuid,
+    expires_at timestamptz,
+    used_at timestamptz
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+STABLE
+AS $$
+    SELECT c.id,
+           c.site_id,
+           c.market_id,
+           c.expires_at,
+           c.used_at
+    FROM public.edge_activation_codes AS c
+    WHERE c.code = p_code
+$$
+""",
+)
+"""Aktivatsiya kodi bo'yicha obyektni topadi.
+
+Ishlatilgan va muddati o'tgan qator ham QAYTARILADI — qaror (`404`)
+chaqiruvchida. Kodni «band qilish» (`used_at`) RLS ostida, shartli
+`UPDATE ... WHERE used_at IS NULL` bilan bajariladi (poyga xavfsiz).
+"""
+
+EDGE_FUNCTIONS: list[PGFunction] = [EDGE_AGENT_AUTH, EDGE_ACTIVATION_FIND]
+"""`0036_edge_domain` YARATADIGAN to'plam."""
+
+EDGE_GRANT_SIGNATURES: tuple[str, ...] = (
+    "edge_agent_auth(text)",
+    "edge_activation_find(text)",
+)
+"""`EDGE_FUNCTIONS` bilan bir xil TARTIBDA (`REVOKE PUBLIC` + `GRANT sbozor_app`)."""

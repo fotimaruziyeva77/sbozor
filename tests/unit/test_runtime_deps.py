@@ -69,6 +69,9 @@ REQUIRED_RUNTIME_PACKAGES = {
     # 04-04 + 04-08: `app/services/quality.py` sifat metrikalari
     # (`ImageStat`) va saqlash siyosatining JPEG qayta siqishi (D-13).
     "pillow",
+    # 0036: `app/edge_contract/` — universal agent protokolining JSON
+    # sxemalarini tekshirish (`/api/v1/edge/events`, sozlama tahriri).
+    "jsonschema",
 }
 
 # HECH BIR guruhda bo'lmasligi kerak bo'lgan paketlar — har biri uchun

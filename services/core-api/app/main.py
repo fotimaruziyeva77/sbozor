@@ -53,6 +53,8 @@ from app.api.v1.cameras import LiveUnavailable
 from app.api.v1.cameras import router as cameras_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.click import router as click_router
+from app.api.v1.edge import router as edge_router
+from app.api.v1.edge_sites import router as edge_sites_router
 from app.api.v1.imports import router as imports_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
@@ -557,6 +559,14 @@ app.include_router(public_router, prefix=f"{API_V1_PREFIX}/public")
 # `tests/tenancy/test_cross_tenant.py::EXEMPT_ROUTES` da sabab bilan, qamrovi
 # `tests/integration/test_payme.py` da.
 app.include_router(payme_router, prefix=f"{API_V1_PREFIX}/payme")
+
+# Universal agent (0036). `/edge/*` — agent protokoli: sessiyasiz, agent
+# tokeni (`Bearer` + `X-Instance-Id`) bilan; cross-tenant matritsasidan
+# chiqarilishi `tests/tenancy/test_cross_tenant.py::EXEMPT_ROUTES` da sabab
+# bilan, qamrovi `tests/integration/test_edge.py` da. `/edge-sites` — panel
+# yuzasi, odatdagi tenant sessiyasi va matritsa ostida.
+app.include_router(edge_router, prefix=f"{API_V1_PREFIX}/edge")
+app.include_router(edge_sites_router, prefix=f"{API_V1_PREFIX}/edge-sites")
 # Click Shop API va rastadagi QR-kod sahifasi (0035) — xuddi shu tartib.
 app.include_router(click_router, prefix=f"{API_V1_PREFIX}/click")
 app.include_router(pay_router, prefix=f"{API_V1_PREFIX}/pay")

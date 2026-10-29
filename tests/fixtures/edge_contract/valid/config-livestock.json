@@ -1,0 +1,22 @@
+{
+  "config_version": 3,
+  "site": {"id": "navoiy-mol-bozori", "type": "livestock", "timezone": "Asia/Tashkent"},
+  "plugins": ["livestock", "parking"],
+  "devices": [
+    {"id": "cam-darvoza-1", "kind": "anpr_camera", "driver": "hik_isapi", "host": "192.168.1.64", "port": 80, "secret_ref": "sec-1"},
+    {"id": "cam-yolak-1", "kind": "camera", "driver": "hik_isapi", "host": "192.168.1.65", "channel": 1, "secret_ref": "sec-2"},
+    {"id": "printer-1", "kind": "printer", "driver": "escpos_usb"}
+  ],
+  "lanes": [{"id": "darvoza-1", "direction": "in", "mode": "auto", "camera": "cam-darvoza-1", "printer": "printer-1"}],
+  "livestock": {"categories": [
+    {"code": "qoramol", "title": "Qoramol", "fee_soum": 25000, "camera_class": "large"},
+    {"code": "buzoq", "title": "Buzoq", "fee_soum": 15000, "camera_class": "large"},
+    {"code": "qoy_echki", "title": "Qo'y-echki", "fee_soum": 14000, "camera_class": "small"},
+    {"code": "qozi_uloq", "title": "Qo'zi-uloq", "fee_soum": 10000, "camera_class": "small"},
+    {"code": "ot_tuya", "title": "Ot, tuya, toy", "fee_soum": 20000, "camera_class": "large"},
+    {"code": "eshak", "title": "Eshak, bo'taloq", "fee_soum": 15000, "camera_class": "large"},
+    {"code": "chochqa", "title": "Cho'chqa", "fee_soum": 10000, "camera_class": "none"}
+  ]},
+  "payments": {"click": true, "payme": true, "invoice_ttl_minutes": 15},
+  "update": {"channel": "stable", "auto": true, "window": "22:00-05:00", "skip_weekdays": [3, 7]}
+}

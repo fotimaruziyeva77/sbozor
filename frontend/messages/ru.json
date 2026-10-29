@@ -61,7 +61,8 @@
     "billing": "Начисление патты",
     "reconciliation": "Расхождения",
     "reports": "Отчёты",
-    "switchMarket": "Сменить рынок"
+    "switchMarket": "Сменить рынок",
+    "agents": "Агенты"
   },
   "auth": {
     "phoneLabel": "Номер телефона",
@@ -2464,5 +2465,143 @@
     "changesAll": "Полный журнал",
     "changesUnread": "Журнал не прочитан.",
     "changesEmpty": "Изменений ещё не записано."
+  },
+  "edgeAgents": {
+    "title": "Агенты",
+    "subtitle": "Агенты, установленные на компьютерах рынков, автостоянок и скотных рынков.",
+    "newSite": "Новый объект",
+    "kind": {
+      "parking": "Автостоянка",
+      "market": "Рынок",
+      "livestock": "Скотный рынок"
+    },
+    "colName": "Название",
+    "colKind": "Тип",
+    "colStatus": "Состояние",
+    "colVersion": "Версия",
+    "colHost": "Компьютер",
+    "colLastSeen": "Последняя связь",
+    "colDevices": "Устройства",
+    "status": {
+      "online": "В сети",
+      "offline": "Не в сети",
+      "never": "Ещё не подключён"
+    },
+    "devicesSummary": "{online}/{total} в сети",
+    "devicesNone": "Нет данных",
+    "deviceStatus": {
+      "online": "Работает",
+      "offline": "Не работает",
+      "degraded": "Работает частично"
+    },
+    "emptyTitle": "Объектов пока нет",
+    "emptyHint": "Добавьте объект кнопкой «Новый объект» и введите полученный код в окне агента.",
+    "open": "Открыть",
+    "backToList": "Список агентов",
+    "agentVersion": "Версия {version}",
+    "agentHost": "Компьютер: {host}",
+    "createDescription": "Укажите тип и название объекта. После сохранения появится код активации для агента.",
+    "fieldKind": "Тип",
+    "fieldName": "Название",
+    "nameRequired": "Введите название",
+    "create": "Создать",
+    "codeButton": "Код активации",
+    "codeTitle": "Код активации",
+    "codeInstruction": "Введите этот код в окне агента.",
+    "codeExpires": "Код действует до {date}.",
+    "copy": "Копировать",
+    "copied": "Скопировано",
+    "config": {
+      "title": "Настройки",
+      "hint": "Настройки агента в формате JSON. После сохранения агент получит их при следующем подключении.",
+      "version": "Версия {version}",
+      "label": "Текст настроек",
+      "save": "Сохранить",
+      "reset": "Вернуть как было",
+      "saved": "Настройки сохранены — версия {version}",
+      "invalidJson": "В тексте JSON есть ошибка. Проверьте скобки и запятые.",
+      "notObject": "Настройки должны быть JSON-объектом.",
+      "errorsTitle": "Сервер не принял настройки:",
+      "rootPath": "весь документ"
+    },
+    "commands": {
+      "title": "Команды",
+      "openGate": "Открыть шлагбаум: {lane}",
+      "direction": {
+        "in": "въезд",
+        "out": "выезд"
+      },
+      "refreshConfig": "Обновить настройки",
+      "updateAgent": "Обновить агента",
+      "gateOpenType": "Открыть шлагбаум",
+      "sent": "Команда отправлена",
+      "invalidType": "Агент не знает эту команду.",
+      "confirmGateTitle": "Открыть шлагбаум?",
+      "confirmGateBody": "Шлагбаум на полосе «{lane}» будет открыт удалённо.",
+      "confirmGate": "Открыть",
+      "confirmUpdateTitle": "Обновить агента?",
+      "confirmUpdateBody": "Агент скачает новую версию и перезапустится. Это может занять несколько минут.",
+      "confirmUpdate": "Обновить",
+      "recentTitle": "Последние команды",
+      "colType": "Команда",
+      "colIssued": "Время отправки",
+      "colResult": "Результат",
+      "empty": "Команд ещё не было.",
+      "noLanes": "Полосы со шлагбаумом не настроены.",
+      "result": {
+        "pending": "Ожидает",
+        "delivered": "Доставлена",
+        "done": "Выполнена",
+        "rejected": "Отклонена",
+        "failed": "Не выполнена",
+        "expired": "Срок истёк"
+      }
+    },
+    "parking": {
+      "title": "Сегодня",
+      "entries": "Въехало",
+      "exits": "Выехало",
+      "open": "Внутри (примерно)",
+      "cash": "Выручка",
+      "byCash": "Наличные: {amount}",
+      "byTerminal": "Терминал: {amount}",
+      "lastPlates": "Последние номера",
+      "noPlates": "Сегодня номера не распознавались."
+    },
+    "events": {
+      "title": "Последние события",
+      "filterType": "Тип события",
+      "filterAll": "Все",
+      "colTime": "Время",
+      "colType": "Тип",
+      "colData": "Подробности",
+      "colFrames": "Кадр",
+      "more": "Ещё",
+      "empty": "Событий нет.",
+      "clockWarn": "Часы агента были неверны",
+      "type": {
+        "plateRead": "Номер распознан",
+        "sessionOpened": "Въезд зафиксирован",
+        "sessionClosed": "Выезд зафиксирован",
+        "gateOpened": "Шлагбаум открыт",
+        "anomaly": "Подозрительный случай",
+        "paymentCash": "Оплата наличными",
+        "agentStarted": "Агент запущен",
+        "deviceStatus": "Состояние устройства",
+        "configApplied": "Настройки применены",
+        "updateStatus": "Состояние обновления",
+        "alertRaised": "Предупреждение",
+        "vehicleEntered": "Машина въехала",
+        "feeCollected": "Оплата получена",
+        "occupancyObserved": "Занятость отмечена"
+      }
+    },
+    "frame": {
+      "open": "Увеличить кадр",
+      "title": "Кадр",
+      "description": "Открытие кадра записывается в журнал.",
+      "alt": "Кадр события",
+      "unavailable": "Кадр не открылся"
+    }
   }
 }

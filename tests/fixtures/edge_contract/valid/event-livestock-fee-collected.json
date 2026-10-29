@@ -1,0 +1,1 @@
+{"id":"0192d6a0-7c00-7abc-8def-0123456789ab","v":1,"site_id":"navoiy-mol-bozori","agent_id":"agt-01","seq":42,"occurred_at":"2026-10-29T06:15:00+05:00","clock_ok":true,"type":"livestock.fee.collected","data":{"vehicle_id":"0b7c2a52-6a0e-4d43-9a7e-3f1f0c9d2b11","counts":{"qoramol":2,"qoy_echki":11,"qozi_uloq":0},"amount_soum":204000,"method":"cash"}}

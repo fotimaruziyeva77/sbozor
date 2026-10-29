@@ -49,6 +49,7 @@ from fixtures.admin_api import (
     session_headers,
 )
 from fixtures.billing_domain import add_daily_charge, add_payment
+from fixtures.edge_domain import edge_rows
 from fixtures.market_domain import A_CATEGORY_NAMES, A_ZONE_NAMES
 from fixtures.notification_domain import seed_case
 from fixtures.nvr_domain import add_discovery_run, nvr_rows
@@ -65,6 +66,7 @@ if TYPE_CHECKING:
     from app.settings import Settings
     from fastapi import FastAPI
     from fixtures.auth_users import AuthSeed
+    from fixtures.edge_domain import EdgeDomainSeed
     from fixtures.market_domain import MarketDomainSeed
     from fixtures.nvr_domain import NvrDomainSeed
     from fixtures.occupancy_domain import OccupancyDomainSeed
@@ -228,6 +230,13 @@ class TenantSeed(NamedTuple):
       yashil bo'lib turib, boshqa narsani o'lchardi.
     """
 
+    edge: EdgeDomainSeed
+    """0036 qatlami: universal agent obyekti, agenti va fayli (ikkala bozorda).
+
+    ⚠ B bozorida HAQIQIY obyekt va fayl bor — `site_id` / `file_id`
+      fillerlari «obyekt BOR, lekin boshqa bozorniki» holatini o'lchaydi.
+    """
+
     billing: MatrixBillingRows
     """6-faza qatlami: B bozorining HAQIQIY `daily_charges` qatori (06-08).
 
@@ -267,6 +276,16 @@ o'qigan odam «nega to'rttasi to'rt xil?» degan savolga javob topmasdi.
   Aynan shu tenglik uchun bu yerda yangi matn YOZILMAYDI.
 """
 
+_EDGE_AGENT_REASON = (
+    "global — universal agent protokoli (0036, `/api/v1/edge/*`): uni FOYDALANUVCHI emas,"
+    " obyektdagi agent chaqiradi va unda access token UMUMAN bo'lmaydi. Autentifikatsiya "
+    "— agent tokeni (`Bearer`, serverda faqat SHA-256) + `X-Instance-Id`; bozor tokendan "
+    "`edge_agent_auth()` orqali topiladi va keyingi so'rovlar SYSTEM konteksti bilan RLS "
+    "ostida. Agent faqat o'z obyektini ko'radi. Qamrovi `tests/integration/test_edge.py` "
+    "da."
+)
+"""Universal agent marshrutlarining istisno sababi — o'nta yo'l uchun bitta matn."""
+
 EXEMPT_ROUTES: dict[str, str] = {
     # --- health: autentifikatsiyasiz, hech qanday tenant ma'lumoti yo'q ---
     "/healthz": "health — autentifikatsiyasiz liveness, tenant ma'lumoti qaytarmaydi",
@@ -292,6 +311,16 @@ EXEMPT_ROUTES: dict[str, str] = {
         "javob natijasida tug'iladi), ya'ni unda 'boshqa bozorning obyekti' tushunchasining "
         "o'zi yo'q"
     ),
+    "/api/v1/edge/activate": _EDGE_AGENT_REASON,
+    "/api/v1/edge/poll": _EDGE_AGENT_REASON,
+    "/api/v1/edge/events": _EDGE_AGENT_REASON,
+    "/api/v1/edge/files/{sha256}": _EDGE_AGENT_REASON,
+    "/api/v1/edge/results": _EDGE_AGENT_REASON,
+    "/api/v1/edge/heartbeat": _EDGE_AGENT_REASON,
+    "/api/v1/edge/site-setup": _EDGE_AGENT_REASON,
+    "/api/v1/edge/releases/latest": _EDGE_AGENT_REASON,
+    "/api/v1/edge/releases/binary/{version}": _EDGE_AGENT_REASON,
+    "/api/v1/edge/download": _EDGE_AGENT_REASON,
     "/api/v1/payme": (
         "global — Payme Merchant API (0035): uni FOYDALANUVCHI emas, Payme serveri "
         "chaqiradi va unda access token UMUMAN bo'lmaydi. Autentifikatsiya — "
@@ -568,6 +597,11 @@ PARAM_FILLERS: dict[str, Callable[[TenantSeed], str]] = {
     # ⚠ QATORNI `billing_rows` fixture'i YOZADI, seed EMAS
     # (`TenantSeed.billing` docstringi).
     "shift_id": lambda seed: str(seed.billing.shift_id),
+    # --- 0036: universal agent obyekti va uning fayli ---
+    #
+    # ⚠ IKKALASI HAM B BOZORINING HAQIQIY QATORI (`fixtures/edge_domain.py`).
+    "site_id": lambda seed: seed.edge.market_b.site_id,
+    "file_id": lambda seed: seed.edge.market_b.file_sha256,
 }
 """Yo'l parametri -> **B bozoridan** olingan qiymat.
 
@@ -697,6 +731,15 @@ ularning yig'indisi. Uchalasi ham seed qiymatlaridan chiqadi va ular
 
 BODY_FILLERS: dict[RouteSpec, Callable[[TenantSeed], dict[str, Any]]] = {
     RouteSpec("POST", "/api/v1/zones"): lambda _: {"name": "Matritsa zonasi"},
+    # --- 0036: universal agent obyektlari ---
+    RouteSpec("POST", "/api/v1/edge-sites"): lambda _: {"kind": "parking", "name": "Matritsa"},
+    RouteSpec("PUT", "/api/v1/edge-sites/{site_id}/config"): lambda _: {
+        "doc": {"plugins": ["parking"], "update": {"channel": "stable", "auto": True}}
+    },
+    RouteSpec("POST", "/api/v1/edge-sites/{site_id}/commands"): lambda _: {
+        "type": "core.config.refresh",
+        "data": {},
+    },
     RouteSpec("PATCH", "/api/v1/zones/{zone_id}"): lambda _: {"name": "Matritsa zonasi"},
     RouteSpec("POST", "/api/v1/categories"): lambda _: {"name": "Matritsa toifasi"},
     RouteSpec("PATCH", "/api/v1/categories/{category_id}"): lambda _: {"name": "Matritsa toifasi"},
@@ -1456,6 +1499,10 @@ def foreign_markers(seed: TenantSeed) -> tuple[str, ...]:
         # o'sha qiymat uchraydi — ya'ni u YOLG'ON-QIZIL generatori
         # bo'lardi (`audit_log.id` bilan bir xil qaror).
         str(seed.billing.charge_id),
+        # --- 0036: universal agent qatlami ---
+        seed.edge.market_b.site_id,
+        seed.edge.market_b.agent_id,
+        seed.edge.market_b.file_sha256,
     )
 
 
@@ -1464,6 +1511,16 @@ def assert_no_foreign_data(response: httpx.Response, seed: TenantSeed, label: st
     body = response.text
     for marker in foreign_markers(seed):
         assert marker not in body, f"{label}: javobda B bozorining `{marker}` qiymati sizib chiqdi"
+
+
+@pytest.fixture
+def edge_domain(
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+) -> Iterator[EdgeDomainSeed]:
+    """`two_markets` USTIGA universal agent qatlami (0036) — bozor bo'yicha tozalanadi."""
+    with edge_rows(sync_owner_conn, two_markets) as seed:
+        yield seed
 
 
 @pytest.fixture
@@ -1806,6 +1863,7 @@ def tenant_seed(
     snapshot_domain: SnapshotDomainSeed,
     occupancy_domain: OccupancyDomainSeed,
     billing_rows: MatrixBillingRows,
+    edge_domain: EdgeDomainSeed,
 ) -> TenantSeed:
     """A'zolik, domen, NVR, snapshot, bandlik va billing qatlamlarini bog'laydi.
 
@@ -1821,6 +1879,7 @@ def tenant_seed(
         snapshot=snapshot_domain,
         occupancy=occupancy_domain,
         billing=billing_rows,
+        edge=edge_domain,
     )
 
 
@@ -2210,6 +2269,13 @@ async def test_expired_token_is_rejected(
 # ===========================================================================
 
 
+NON_UUID_PARAMS: dict[str, str] = {
+    "site_id": "edge obyekti (0036) — server yaratgan matnli ID (`parking-3fa9c1b2d4`)",
+    "file_id": "edge kadri (0036) — faylning SHA-256 xeshi (64 hex belgi)",
+}
+"""UUID bo'lmagan yo'l parametrlari — sabab bilan; B ga tegishliligi baribir tekshiriladi."""
+
+
 def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> None:
     """`PARAM_FILLERS` HAQIQATAN B bozorining qiymatlarini beradi.
 
@@ -2290,6 +2356,9 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
             #   case'i (`charge_id` ga bog'langan). A bozorida case
             #   UMUMAN yo'q, ya'ni bu ro'yxat bo'shashmaydi.
             tenant_seed.billing.case_id,
+            # --- 0036 ---
+            tenant_seed.edge.market_b.site_id,
+            tenant_seed.edge.market_b.file_sha256,
         )
     }
 
@@ -2297,6 +2366,8 @@ def test_param_fillers_point_at_the_other_market(tenant_seed: TenantSeed) -> Non
     for name, filler in PARAM_FILLERS.items():
         value = filler(tenant_seed)
         assert value in foreign_values, f"`{name}` filleri B bozoriga tegishli emas: {value}"
+        if name in NON_UUID_PARAMS:
+            continue
         UUID(value)
 
 
