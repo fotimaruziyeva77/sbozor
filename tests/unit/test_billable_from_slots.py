@@ -73,14 +73,17 @@ SLOT_COMBINATION_TABLE: Final[tuple[tuple[Combination, bool, bool], ...]] = (
     (((OCCUPIED, HUMAN), (EMPTY, AI)), True, False),
     (((OCCUPIED, AI), (EMPTY, AI)), False, False),
     (((OCCUPIED, AI), (NO_COVERAGE, NO_COVERAGE)), False, False),
-    (((EMPTY, DEFAULT_EMPTY), (EMPTY, DEFAULT_EMPTY)), False, False),
+    # 2026-10-30: ko'rib chiqilmagan noaniqlik hisobda band deb olinadi.
+    (((EMPTY, DEFAULT_EMPTY), (EMPTY, DEFAULT_EMPTY)), True, False),
+    (((OCCUPIED, AI), (EMPTY, DEFAULT_EMPTY)), True, False),
+    (((EMPTY, AI), (EMPTY, DEFAULT_EMPTY)), False, False),
     (((NO_COVERAGE, NO_COVERAGE), (NO_COVERAGE, NO_COVERAGE)), False, True),
     (((EMPTY, NO_COVERAGE), (EMPTY, NO_COVERAGE)), False, True),
     # --- uch slot ---
     (((OCCUPIED, AI), (OCCUPIED, AI), (EMPTY, AI)), True, False),
     (((OCCUPIED, AI), (EMPTY, HUMAN), (EMPTY, HUMAN)), False, False),
     (((OCCUPIED, HUMAN), (NO_COVERAGE, NO_COVERAGE), (EMPTY, AI)), True, False),
-    (((UNCERTAIN, AI), (UNCERTAIN, AI), (UNCERTAIN, AI)), False, False),
+    (((UNCERTAIN, AI), (UNCERTAIN, AI), (UNCERTAIN, AI)), True, False),
     (
         (
             (NO_COVERAGE, NO_COVERAGE),
@@ -91,7 +94,7 @@ SLOT_COMBINATION_TABLE: Final[tuple[tuple[Combination, bool, bool], ...]] = (
         True,
     ),
 )
-"""22 holat, QO'LDA yozilgan: `(slotlar, kutilgan billable, kutilgan no_coverage_only)`.
+"""24 holat, QO'LDA yozilgan: `(slotlar, kutilgan billable, kutilgan no_coverage_only)`.
 
 ⚠ `((occupied, ai), (empty, human))` VA `((occupied, human), (empty, ai))`
   IKKALASI HAM bor va bu ataylab: ular AYNAN TESKARI javob berishi kerak.
@@ -125,6 +128,8 @@ EXPECTED_BY_SLOT_SET: Final[dict[frozenset[Slot], tuple[bool, bool]]] = {
     frozenset({(OCCUPIED, AI), (EMPTY, AI)}): (False, False),
     frozenset({(OCCUPIED, AI), (NO_COVERAGE, NO_COVERAGE)}): (False, False),
     frozenset({(OCCUPIED, HUMAN), (NO_COVERAGE, NO_COVERAGE), (EMPTY, AI)}): (True, False),
+    frozenset({(OCCUPIED, AI), (EMPTY, DEFAULT_EMPTY)}): (True, False),
+    frozenset({(EMPTY, AI), (EMPTY, DEFAULT_EMPTY)}): (False, False),
 }
 """To'plam -> `(billable, no_coverage_only)`, QO'LDA yozilgan.
 
@@ -153,15 +158,15 @@ def test_the_combination_table_covers_every_case() -> None:
       bo'sh ro'yxatda pytest birorta test yaratmaydi va to'plam
       «hammasi o'tdi» deb tugaydi (`test_aggregate_stall_slot.py:127-133`).
     """
-    assert len(SLOT_COMBINATION_TABLE) == 22, (
-        f"1-jadvalda {len(SLOT_COMBINATION_TABLE)} qator, 22 kutilgan — "
+    assert len(SLOT_COMBINATION_TABLE) == 24, (
+        f"1-jadvalda {len(SLOT_COMBINATION_TABLE)} qator, 24 kutilgan — "
         "qator jimgina olib tashlangan yoki qo'shilgan"
     )
     assert len({row[0] for row in SLOT_COMBINATION_TABLE}) == len(SLOT_COMBINATION_TABLE), (
         "1-jadvalda takrorlangan kombinatsiya bor"
     )
-    assert len(EXPECTED_BY_SLOT_SET) == 14, (
-        f"2-jadvalda {len(EXPECTED_BY_SLOT_SET)} kalit, 14 kutilgan"
+    assert len(EXPECTED_BY_SLOT_SET) == 16, (
+        f"2-jadvalda {len(EXPECTED_BY_SLOT_SET)} kalit, 16 kutilgan"
     )
 
     # ⛔ TO'PLAM TENGLIGI (D-31), `not in` EMAS: 2-jadvalga hech qachon

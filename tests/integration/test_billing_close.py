@@ -1308,6 +1308,63 @@ async def test_a_market_without_cameras_charges_by_assignment(
     assert set(charges(sync_owner_conn, env.market_id, scenario.day)) == expected
 
 
+async def test_a_camera_outage_day_is_charged_by_assignment(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    scenario: Scenario,
+    env: Env,
+) -> None:
+    """⛔ KAMERA UZILISHI (2026-10-30 buyurtmachi qarori).
+
+    =========================================================================
+    PROD'DA O'LCHANGAN BO'SHLIQ: Karmanada 15 faol kamera bor, lekin 10-12
+    dan kadr kelmay qoldi — kamera-rejim verdiktsiz kunni JIMGINA o'tkazdi
+    va 11 kun davomida 0 ta hisob yozildi.
+
+    DA'VOLAR:
+      (1) kamerasi bor, lekin o'sha kunga BIRORTA kadr yo'q bozor
+          biriktirish bo'yicha yopiladi (`markets_camera_outage`);
+      (2) kadri bor kun (`scenario.day`) bu shoxga TUSHMAYDI — u
+          `test_a_run_before_day_close_reports_no_slot_rows_instead_of_silence`
+          da «materializatsiyagacha hisob yo'q» bo'lib qoladi;
+      (3) ikkinchi yugurish hech nima yozmaydi (D-06).
+    =========================================================================
+    """
+    outage_day = _open_past_days(sync_owner_conn, 2)[1]
+    assert outage_day != scenario.day
+
+    assigned = {
+        row[0]
+        for row in sync_owner_conn.execute(
+            "SELECT s.id FROM stalls s "
+            "WHERE s.market_id = %s AND s.status = 'active' "
+            "AND EXISTS (SELECT 1 FROM stall_assignments a "
+            "            WHERE a.stall_id = s.id AND a.period @> %s::date)",
+            (str(env.market_id), outage_day),
+        ).fetchall()
+    }
+    assert assigned, "fixture nazorati: biriktirilgan rasta kerak"
+
+    result = await billing_close(app_sessionmaker, business_date=outage_day)
+
+    assert result.markets_camera_outage >= 1, "kadrsiz kun kamera-rejimda jim qoldi"
+    assert result.markets_no_camera == 0, "kamerali bozor kamerasiz deb sanaldi"
+    assert result.errors == [], f"kutilmagan xato: {result.errors}"
+    written = set(charges(sync_owner_conn, env.market_id, outage_day))
+    assert written and written <= assigned, (
+        f"hisoblar biriktirilgan rastalardan tashqariga chiqdi: {sorted(written - assigned)}"
+    )
+
+    again = await billing_close(app_sessionmaker, business_date=outage_day)
+    assert again.charged_auto == 0, "ikkinchi yugurish yana hisob yozdi (D-06 buzildi)"
+    assert set(charges(sync_owner_conn, env.market_id, outage_day)) == written
+
+    # (2) kadri bor kun materializatsiyagacha hamon hisobsiz.
+    before = await billing_close(app_sessionmaker, business_date=scenario.day)
+    assert before.charged == 0
+    assert charges(sync_owner_conn, env.market_id, scenario.day) == {}
+
+
 # ===========================================================================
 # 10. ⛔⛔ GIBRID QOIDA — ZONASIZ RASTA KAMERALI BOZORDA HAM HISOBLANADI
 # ===========================================================================
