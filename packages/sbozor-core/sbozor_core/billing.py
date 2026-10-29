@@ -102,6 +102,8 @@ nomlanmasa u har hisobotda qaytadan ixtiro qilinardi.
 
 _OCCUPIED: Final[str] = OccupancyVerdict.OCCUPIED.value
 _HUMAN: Final[str] = ResolutionSource.HUMAN.value
+_DEFAULT_EMPTY: Final[str] = ResolutionSource.DEFAULT_EMPTY.value
+_UNCERTAIN: Final[str] = OccupancyVerdict.UNCERTAIN.value
 _NO_COVERAGE: Final[str] = ResolutionSource.NO_COVERAGE.value
 
 _ALLOWED_VERDICTS: Final[frozenset[str]] = frozenset(
@@ -158,6 +160,9 @@ class BillableDecision:
     no_coverage_slots:       `resolution_source = 'no_coverage'` slotlar
     billable:                D-04 predikatining natijasi
     no_coverage_only:        BARCHA slotlar qamrovsiz (D-05, anomaliya EMAS)
+    presumed_slots:          ko'rib chiqilmagan noaniq slotlar (2026-10-30
+                             qarori: hisobda band deb olinadi, lekin
+                             `occupied_slots` ga qo'shilmaydi)
     """
 
     slots: int
@@ -166,6 +171,7 @@ class BillableDecision:
     no_coverage_slots: int
     billable: bool
     no_coverage_only: bool
+    presumed_slots: int = 0
 
 
 def billable_from_slots(slots: Sequence[tuple[str, str]]) -> BillableDecision:
@@ -177,8 +183,21 @@ def billable_from_slots(slots: Sequence[tuple[str, str]]) -> BillableDecision:
         occupied_slots >= 2
         YOKI (occupied_slots >= 1 VA human_confirmed_occupied)
 
-    Bitta TASDIQLANMAGAN AI sloti hisob BERMAYDI — noaniqlik sotuvchi
-    foydasiga hal qilinadi (`06-CONTEXT.md` D-04).
+    Bitta TASDIQLANMAGAN AI sloti hisob BERMAYDI (`06-CONTEXT.md` D-04).
+    =======================================================================
+    ⛔⛔ 2026-10-30 BUYURTMACHI QARORI — KO'RIB CHIQILMAGAN NOANIQLIK BAND.
+
+    Karmanada 09-25 … 10-11 da AI hukmlarining hammasi `uncertain` edi va
+    birortasini nazoratchi ko'rmadi: kun oxirida ular `default_empty` ga
+    tushdi va zonali rastalarning birortasiga ham patta yozilmadi,
+    holbuki savdo bo'ldi. Qaror: ko'rib chiqilmagan noaniq slot
+    (`uncertain` hukmi nazoratchisiz yoki `default_empty` manbali) HISOBDA
+    band deb olinadi (`presumed_slots`). Shart o'zgarmaydi — kamida IKKI
+    slot kerak; bitta noaniq slot hamon hisob bermaydi.
+
+    ⚠ SAQLANGAN BANDLIK O'ZGARMAYDI (D-12): bu faqat hisob qoidasi.
+      Nazoratchi keyin «bo'sh» desa — `human` qatori ustun va kech tasdiq
+      hisobni `charge_adjustments` bilan kamaytiradi.
     =======================================================================
     ⛔⛔ C-6 — `human_confirmed_occupied` AYNI SLOTNI TALAB QILADI.
 
@@ -238,6 +257,7 @@ def billable_from_slots(slots: Sequence[tuple[str, str]]) -> BillableDecision:
         ValueError: verdikt yoki manba ruxsat etilgan to'plamdan tashqarida.
     """
     occupied_slots = 0
+    presumed_slots = 0
     no_coverage_slots = 0
     human_confirmed_occupied = False
 
@@ -253,9 +273,13 @@ def billable_from_slots(slots: Sequence[tuple[str, str]]) -> BillableDecision:
 
         if source == _NO_COVERAGE:
             no_coverage_slots += 1
+        elif source == _DEFAULT_EMPTY or (verdict == _UNCERTAIN and source != _HUMAN):
+            presumed_slots += 1
 
     total = len(slots)
-    billable = occupied_slots >= 2 or (occupied_slots >= 1 and human_confirmed_occupied)
+    billable = occupied_slots + presumed_slots >= 2 or (
+        occupied_slots >= 1 and human_confirmed_occupied
+    )
 
     return BillableDecision(
         slots=total,
@@ -264,6 +288,7 @@ def billable_from_slots(slots: Sequence[tuple[str, str]]) -> BillableDecision:
         no_coverage_slots=no_coverage_slots,
         billable=billable,
         no_coverage_only=total > 0 and no_coverage_slots == total,
+        presumed_slots=presumed_slots,
     )
 
 

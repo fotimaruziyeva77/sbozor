@@ -245,6 +245,17 @@ class BillingCloseResult:
       o'lchovga o'tkazadi: zonasiz rasta biriktirish bo'yicha hisoblanishda
       davom etadi (`_close_stall` (1)-shoxi, 2026-09-24).
     """
+    markets_camera_outage: int = 0
+    """KAMERALI bozor, lekin kun bo'yi BIRORTA kadr yo'q (2026-10-30).
+
+    Karmanada 10-12 dan kameralar rasm yubormay qoldi va kamera-rejim
+    verdiktsiz kunni JIMGINA o'tkazib yubordi: 11 kun davomida 0 ta hisob,
+    to'lovlar esa avans bo'lib ko'rindi. Endi kadr umuman bo'lmagan kun
+    kamerasiz bozor qoidasi bilan (biriktirish bo'yicha) yopiladi.
+
+    ⚠ SHART «VERDIKT YO'Q» EMAS, «KADR YO'Q»: kadr bor-u `day_close` hali
+      materializatsiya qilmagan kunda biriktirish bo'yicha yozib qo'yish
+      o'lchovni oldindan bekor qilardi."""
     charged_auto: int = 0
     """BIRIKTIRISH bo'yicha yozilgan hisoblar — `charged` dan ATAYIN alohida:
     daydjestda «kameradan tasdiqlangan» va «biriktirishdan avtomatik»
@@ -353,6 +364,7 @@ async def billing_close(
         skipped_fair=result.skipped_fair,
         skipped_inactive=result.skipped_inactive,
         markets_no_camera=result.markets_no_camera,
+        markets_camera_outage=result.markets_camera_outage,
         charged_auto=result.charged_auto,
         skipped_unassigned_auto=result.skipped_unassigned_auto,
         no_slot_rows=result.no_slot_rows,
@@ -453,6 +465,24 @@ async def _close_market(
             )
             result.markets_no_camera += 1
             return
+        if not verdicts:
+            snapshots = await session.scalar(
+                _DAY_SNAPSHOT_COUNT, {"market_id": market_id, "business_date": business_date}
+            )
+            if int(snapshots or 0) == 0:
+                log.warning(
+                    "billing_close_camera_outage",
+                    market_id=str(market_id),
+                    business_date=business_date.isoformat(),
+                )
+                await _close_market_without_cameras(
+                    session,
+                    market_id=market_id,
+                    business_date=business_date,
+                    result=result,
+                )
+                result.markets_camera_outage += 1
+                return
 
         # ⛔ Pitfall 2 — MAXRAJ `day_close` NIKI BILAN AYNAN BIR XIL
         #   manbadan (`BillingCloseResult.no_slot_rows` docstringi).
@@ -483,6 +513,19 @@ async def _close_market(
                 charge=existing.get(verdict.stall_id),
                 result=result,
             )
+
+
+_DAY_SNAPSHOT_COUNT = text(
+    """
+    SELECT count(*) FROM snapshots
+     WHERE market_id = :market_id
+       AND business_date = :business_date
+    """
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("business_date", type_=Date()),
+)
+"""Kamera uzilishi belgisi — o'sha kun uchun BIRORTA kadr yo'q."""
 
 
 _ACTIVE_CAMERA_COUNT = text(
@@ -891,6 +934,8 @@ async def _write_heartbeat(
                     "skipped_unbilled": result.skipped_unbilled,
                     "skipped_fair": result.skipped_fair,
                     "no_slot_rows": result.no_slot_rows,
+                    "markets_camera_outage": result.markets_camera_outage,
+                    "charged_auto": result.charged_auto,
                     "anomalies_unassigned": result.anomalies_unassigned,
                     "anomalies_closed_day": result.anomalies_closed_day,
                     "anomalies_no_coverage": result.anomalies_no_coverage,
