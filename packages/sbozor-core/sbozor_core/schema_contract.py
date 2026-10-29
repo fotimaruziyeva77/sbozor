@@ -328,6 +328,7 @@ AUDITED_TABLES: frozenset[str] = frozenset(
         # 0035 — Payme tranzaksiyasi: holati o'zgaradi (1 -> 2 -> -2) va har
         # o'zgarish onlayn to'lov nizosida dalil.
         "payme_transactions",
+        "click_transactions",
         # --- 7-faza bildirishnoma domeni (0023_notification_domain) ---
         # Nomuvofiqlik case'i — INSONNING qarori va u nizoda dalil bo'ladi
         # (D-14): «bu nomuvofiqlik asosli deb kim, qachon belgiladi?».

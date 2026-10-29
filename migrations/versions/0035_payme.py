@@ -1,4 +1,4 @@
-"""payme — onlayn to'lov: payments.method 'payme' + payme_transactions
+"""payme/click — onlayn to'lov: payments.method 'payme'/'click' + tranzaksiya jadvallari
 
 Revision ID: 0035
 Revises: 0034
@@ -27,6 +27,8 @@ import sqlalchemy as sa
 from alembic import op
 from alembic_utils.pg_function import PGFunction
 from sbozor_core.models.billing import (
+    CLICK_STATE_CHECK,
+    CLICK_TRANSACTION_STALL_INDEX,
     PAYME_STATE_CHECK,
     PAYME_TRANSACTION_STALL_INDEX,
     PAYMENT_CASHIER_CHECK,
@@ -60,7 +62,10 @@ _ADDED_METHOD = "payme"
 _PAYME_DELETE_LINE = (
     "  -- 0035 — Payme tranzaksiyasi `payments` ga kompozit FK bilan tayanadi.\n"
     "  DELETE FROM public.payme_transactions         WHERE market_id = p_market_id;\n"
+    "  DELETE FROM public.click_transactions         WHERE market_id = p_market_id;\n"
 )
+CLICK_TABLE = "click_transactions"
+_ADDED_CLICK = "click"
 
 MARKET_DELETE_DRAFT_WITHOUT_PAYME = PGFunction(
     schema="public",
@@ -135,6 +140,56 @@ def upgrade() -> None:
     )
     op.create_index(PAYME_TRANSACTION_STALL_INDEX, TABLE, ["market_id", "stall_id", "state"])
 
+    op.create_table(
+        CLICK_TABLE,
+        sa.Column("market_id", pg.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", pg.UUID(as_uuid=True), server_default=sa.text("uuidv7()"), nullable=False),
+        sa.Column("prepare_id", sa.BigInteger(), sa.Identity(always=True), nullable=False),
+        sa.Column("click_trans_id", sa.BigInteger(), nullable=False),
+        sa.Column("click_paydoc_id", sa.BigInteger(), nullable=False),
+        sa.Column("amount_soum", sa.BigInteger(), nullable=False),
+        sa.Column("stall_id", pg.UUID(as_uuid=True), nullable=False),
+        sa.Column("vendor_id", pg.UUID(as_uuid=True), nullable=False),
+        sa.Column("state", sa.Text(), nullable=False),
+        sa.Column("payment_id", pg.UUID(as_uuid=True), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint("id", name="pk_click_transactions"),
+        sa.ForeignKeyConstraint(
+            ["market_id"], ["markets.id"], name="fk_click_transactions_market_id_markets"
+        ),
+        sa.ForeignKeyConstraint(
+            ["market_id", "stall_id"],
+            ["stalls.market_id", "stalls.id"],
+            name="fk_click_transactions_stall",
+        ),
+        sa.ForeignKeyConstraint(
+            ["market_id", "vendor_id"],
+            ["vendors.market_id", "vendors.id"],
+            name="fk_click_transactions_vendor",
+        ),
+        sa.ForeignKeyConstraint(
+            ["market_id", "payment_id"],
+            ["payments.market_id", "payments.id"],
+            name="fk_click_transactions_payment",
+        ),
+        sa.UniqueConstraint("market_id", "id", name="uq_click_transactions_market_id_id"),
+        sa.UniqueConstraint(
+            "market_id", "click_trans_id", name="uq_click_transactions_market_id_click_trans_id"
+        ),
+        sa.UniqueConstraint(
+            "market_id", "prepare_id", name="uq_click_transactions_market_id_prepare_id"
+        ),
+        sa.CheckConstraint(CLICK_STATE_CHECK, name="state_allowed"),
+        sa.CheckConstraint("amount_soum > 0", name="amount_soum_positive"),
+    )
+    op.create_index(CLICK_TRANSACTION_STALL_INDEX, CLICK_TABLE, ["market_id", "stall_id", "state"])
+
     for table in PAYME_TENANT_TABLES:
         enable_tenant_rls(table)
         grant_app_dml(table)
@@ -160,11 +215,17 @@ def downgrade() -> None:
         drop_entity(owner_bootstrap_policy(table))
         drop_entity(tenant_policy(table))
 
+    op.drop_index(CLICK_TRANSACTION_STALL_INDEX, table_name=CLICK_TABLE)
+    op.drop_table(CLICK_TABLE)
     op.drop_index(PAYME_TRANSACTION_STALL_INDEX, table_name=TABLE)
     op.drop_table(TABLE)
 
     op.drop_constraint("cashier_required_unless_online", "payments", type_="check")
     op.alter_column("payments", "cashier_id", existing_type=pg.UUID(as_uuid=True), nullable=False)
-    previous = ", ".join(f"'{value}'" for value in PAYMENT_METHOD_VALUES if value != _ADDED_METHOD)
+    previous = ", ".join(
+        f"'{value}'"
+        for value in PAYMENT_METHOD_VALUES
+        if value not in (_ADDED_METHOD, _ADDED_CLICK)
+    )
     op.drop_constraint("method_allowed", "payments", type_="check")
     op.create_check_constraint("method_allowed", "payments", f"method IN ({previous})")

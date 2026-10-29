@@ -101,6 +101,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKeyConstraint,
+    Identity,
     Index,
     SmallInteger,
     Text,
@@ -152,6 +153,9 @@ __all__ = [
     "PAYME_STATE_CHECK",
     "PAYME_TRANSACTION_STALL_INDEX",
     "PaymeTransaction",
+    "CLICK_STATE_CHECK",
+    "CLICK_TRANSACTION_STALL_INDEX",
+    "ClickTransaction",
     "PAYMENT_STALL_INDEX",
     "PAYMENT_VENDOR_INDEX",
     "REVERSAL_HAS_NO_OVERRIDE_CHECK",
@@ -257,8 +261,11 @@ sabablangan: referenssiz «o'tkazma» nizoda hech qanday dalil
 qoldirmaydigan to'lov turi bo'lardi.
 """
 
-PAYMENT_CASHIER_CHECK = f"cashier_id IS NOT NULL OR method = '{PaymentMethod.PAYME.value}'"
-"""`payments.cashier_id` — FAQAT onlayn (Payme) to'lovda bo'sh (0035).
+PAYMENT_CASHIER_CHECK = (
+    f"cashier_id IS NOT NULL OR method IN "
+    f"('{PaymentMethod.PAYME.value}', '{PaymentMethod.CLICK.value}')"
+)
+"""`payments.cashier_id` — FAQAT onlayn (Payme, Click) to'lovda bo'sh (0035).
 
 Kassir yozgan har to'lovda kassir MAJBURIY qoladi; Payme to'lovini esa
 hech qanday kassir qabul qilmagan va uning nomini to'qib qo'yish «kim
@@ -270,6 +277,11 @@ PAYME_STATE_CHECK = "state IN (1, 2, -1, -2)"
 bekor, -2 bajarilgandan keyin bekor."""
 
 PAYME_TRANSACTION_STALL_INDEX = "ix_payme_transactions_market_id_stall_id_state"
+
+CLICK_STATE_CHECK = "state IN ('prepared', 'completed', 'cancelled')"
+"""Click Shop API: Prepare -> `prepared`, Complete -> `completed` yoki `cancelled`."""
+
+CLICK_TRANSACTION_STALL_INDEX = "ix_click_transactions_market_id_stall_id_state"
 
 ADJUSTMENT_DIRECTION_CHECK = f"direction IN ({_quoted(ADJUSTMENT_DIRECTION_VALUES)})"
 """`charge_adjustments.direction` — `AdjustmentDirection` DAN HOSILA (C-5)."""
@@ -1316,3 +1328,58 @@ class PaymeTransaction(Base, TenantMixin):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class ClickTransaction(Base, TenantMixin):
+    """Click Shop API tranzaksiyasi (0035) — onlayn to'lovning REFERENSI.
+
+    Click ikki so'rov yuboradi: Prepare (tekshirish) va Complete (natija).
+    `prepare_id` — Click kutadigan butun son (`merchant_prepare_id` va
+    `merchant_confirm_id`). Pul yozuvi `payments` da (`method='click'`).
+    """
+
+    __tablename__ = "click_transactions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["market_id"], ["markets.id"], name="fk_click_transactions_market_id_markets"
+        ),
+        ForeignKeyConstraint(
+            ["market_id", "stall_id"],
+            ["stalls.market_id", "stalls.id"],
+            name="fk_click_transactions_stall",
+        ),
+        ForeignKeyConstraint(
+            ["market_id", "vendor_id"],
+            ["vendors.market_id", "vendors.id"],
+            name="fk_click_transactions_vendor",
+        ),
+        ForeignKeyConstraint(
+            ["market_id", "payment_id"],
+            ["payments.market_id", "payments.id"],
+            name="fk_click_transactions_payment",
+        ),
+        UniqueConstraint("market_id", "id", name="uq_click_transactions_market_id_id"),
+        UniqueConstraint(
+            "market_id", "click_trans_id", name="uq_click_transactions_market_id_click_trans_id"
+        ),
+        UniqueConstraint(
+            "market_id", "prepare_id", name="uq_click_transactions_market_id_prepare_id"
+        ),
+        CheckConstraint(CLICK_STATE_CHECK, name="state_allowed"),
+        CheckConstraint("amount_soum > 0", name="amount_soum_positive"),
+        Index(CLICK_TRANSACTION_STALL_INDEX, "market_id", "stall_id", "state"),
+    )
+
+    id: Mapped[UUID] = uuid_pk()
+    prepare_id: Mapped[int] = mapped_column(BigInteger(), Identity(always=True), nullable=False)
+    click_trans_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    click_paydoc_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    amount_soum: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    stall_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), nullable=False)
+    vendor_id: Mapped[UUID] = mapped_column(PgUuid(as_uuid=True), nullable=False)
+    state: Mapped[str] = mapped_column(Text(), nullable=False)
+    payment_id: Mapped[UUID | None] = mapped_column(PgUuid(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

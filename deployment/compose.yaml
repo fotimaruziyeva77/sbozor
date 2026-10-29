@@ -253,6 +253,12 @@ services:
       PAYME_CHECKOUT_URL: ${PAYME_CHECKOUT_URL:-https://checkout.paycom.uz}
       PAYME_IKPU: ${PAYME_IKPU:-}
       PAYME_PACKAGE_CODE: ${PAYME_PACKAGE_CODE:-}
+      # Click (0035). Bo'sh kalit `/api/v1/click/*` ni 503 bilan yopadi.
+      CLICK_SECRET_KEY: ${CLICK_SECRET_KEY:-}
+      CLICK_SERVICE_ID: ${CLICK_SERVICE_ID:-}
+      CLICK_MERCHANT_ID: ${CLICK_MERCHANT_ID:-}
+      CLICK_MARKET_ID: ${CLICK_MARKET_ID:-}
+      CLICK_PAY_URL: ${CLICK_PAY_URL:-https://my.click.uz/services/pay}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TZ: Asia/Tashkent

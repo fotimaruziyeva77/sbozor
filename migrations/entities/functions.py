@@ -1237,6 +1237,7 @@ BEGIN
   DELETE FROM public.charge_adjustments         WHERE market_id = p_market_id;
   -- 0035 — Payme tranzaksiyasi `payments` ga kompozit FK bilan tayanadi.
   DELETE FROM public.payme_transactions         WHERE market_id = p_market_id;
+  DELETE FROM public.click_transactions         WHERE market_id = p_market_id;
   DELETE FROM public.payments                   WHERE market_id = p_market_id;
   DELETE FROM public.billing_anomalies          WHERE market_id = p_market_id;
   DELETE FROM public.daily_charges              WHERE market_id = p_market_id;

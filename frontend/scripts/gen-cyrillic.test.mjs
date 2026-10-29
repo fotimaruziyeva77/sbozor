@@ -508,7 +508,7 @@ describe("uz-Cyrl.json — yetkazilayotgan fayl toza", () => {
     //   izchillikni saqlaydi (rus tilida ham `AI`). Yozuv
     //   `uz-Cyrl.overrides.json` -> `words` bilan JUFT.
     //
-    // ⚠ 0035: `Payme` — to'lov tizimining brend nomi (`Telegram` bilan bir xil
+    // ⚠ 0035: `Payme`, `Click` — to'lov tizimlarining brend nomlari (`Telegram` bilan bir xil
     //   sabab). `uz-Cyrl.overrides.json` -> `words` bilan JUFT.
     //
     // ⚠ 10-04: rich-text TEGLARI (`<privacy>...</privacy>`) qo'shildi.
@@ -519,7 +519,7 @@ describe("uz-Cyrl.json — yetkazilayotgan fayl toza", () => {
     //   ikkitasini (URL, e-mail) allaqachon olib tashlar edi — teg
     //   naqshi uchinchisini tenglashtiradi (AYNAN o'sha shakl).
     const allowed =
-      /SBOZOR|Excel|xlsx|CSV|csv|https?:\/\/\S+|[\w.%+-]+@[\w.-]+|<\/?[A-Za-z][^>]*>|\b(?:Hikvision|WireGuard|WebRTC|ISAPI|RTSP|HLS|MSE|NVR|NTP|VPN|GMT|IP|IR|AI|Telegram|Payme)\b|\b(?:firmware|digest|basic|https|http)\b/gu;
+      /SBOZOR|Excel|xlsx|CSV|csv|https?:\/\/\S+|[\w.%+-]+@[\w.-]+|<\/?[A-Za-z][^>]*>|\b(?:Hikvision|WireGuard|WebRTC|ISAPI|RTSP|HLS|MSE|NVR|NTP|VPN|GMT|IP|IR|AI|Telegram|Payme|Click)\b|\b(?:firmware|digest|basic|https|http)\b/gu;
 
     const walk = (node, prefix) => {
       for (const [key, value] of Object.entries(node)) {

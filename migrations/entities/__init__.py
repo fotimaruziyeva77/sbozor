@@ -839,13 +839,13 @@ Deklaratsiya tuzatishi — rahbariyatning moliyaviy oqibatli qarori
 GA AYNI COMMITDA qo'shildi, ya'ni `PENDING_AUDIT_TRIGGERS` BO'SH qoladi.
 """
 
-PAYME_TENANT_TABLES: tuple[str, ...] = ("payme_transactions",)
+PAYME_TENANT_TABLES: tuple[str, ...] = ("payme_transactions", "click_transactions")
 """`0035_payme` yaratadigan tenant jadvali — `ALL_TENANT_TABLES` ga AYNI COMMITDA."""
 
-PAYME_AUDITED_TABLES: tuple[str, ...] = ("payme_transactions",)
+PAYME_AUDITED_TABLES: tuple[str, ...] = ("payme_transactions", "click_transactions")
 """`0035` da `attach_audit_trigger()` ulanadigan jadval (`AUDITED_TABLES` da)."""
 
-PAYME_DELETE_ORDER: tuple[str, ...] = ("payme_transactions",)
+PAYME_DELETE_ORDER: tuple[str, ...] = ("payme_transactions", "click_transactions")
 """`market_delete_draft()` kaskadi: jadval `payments`, `stalls`, `vendors` ga
 kompozit FK bilan tayanadi, ya'ni `payments` dan OLDIN o'chiriladi."""
 

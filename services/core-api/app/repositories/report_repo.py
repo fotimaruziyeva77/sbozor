@@ -397,7 +397,9 @@ _COLLECTED_BY_METHOD = text(
            COALESCE(sum({_SIGNED_PAYMENT_EXPR}) FILTER (WHERE p.method = :terminal), 0)::bigint
                AS terminal_soum,
            COALESCE(sum({_SIGNED_PAYMENT_EXPR}) FILTER (WHERE p.method = :payme), 0)::bigint
-               AS payme_soum
+               AS payme_soum,
+           COALESCE(sum({_SIGNED_PAYMENT_EXPR}) FILTER (WHERE p.method = :click), 0)::bigint
+               AS click_soum
       FROM payments p
       {_ORIGINAL_PAYMENT_JOIN}
      WHERE p.market_id = :market_id
@@ -413,6 +415,7 @@ _COLLECTED_BY_METHOD = text(
     bindparam("cash", type_=Text()),
     bindparam("terminal", type_=Text()),
     bindparam("payme", type_=Text()),
+    bindparam("click", type_=Text()),
 )
 """Davr tushumi NAQD, TERMINAL va PAYME (0035) ga ajratilgan — ⛔ `revenue_by_day` GA TEGILMAYDI.
 
@@ -443,6 +446,7 @@ class CollectedByMethod:
     cash_soum: int
     terminal_soum: int
     payme_soum: int = 0
+    click_soum: int = 0
 
 
 async def collected_by_method(
@@ -468,6 +472,7 @@ async def collected_by_method(
             "cash": PaymentMethod.CASH.value,
             "terminal": PaymentMethod.TERMINAL.value,
             "payme": PaymentMethod.PAYME.value,
+            "click": PaymentMethod.CLICK.value,
         },
     )
     row = result.mappings().one()
@@ -475,6 +480,7 @@ async def collected_by_method(
         cash_soum=int(row["cash_soum"]),
         terminal_soum=int(row["terminal_soum"]),
         payme_soum=int(row["payme_soum"]),
+        click_soum=int(row["click_soum"]),
     )
 
 

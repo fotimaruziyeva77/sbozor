@@ -82,12 +82,16 @@ import type { PaymentRecord } from "@/lib/payment-queries";
 
 const METHOD_LABEL: Record<
   PaymentMethodValue,
-  "collect.methodCash" | "collect.methodTerminal" | "collect.methodPayme"
+  | "collect.methodCash"
+  | "collect.methodTerminal"
+  | "collect.methodPayme"
+  | "collect.methodClick"
 > = {
   cash: "collect.methodCash",
   terminal: "collect.methodTerminal",
   // 0035: smena oynasiga Payme to'lovi tushmaydi (smenasiz), lekin tip to'liq.
   payme: "collect.methodPayme",
+  click: "collect.methodClick",
 };
 
 /** Qatorning UCH holatidan biri — ⛔ ikkitasi bitta bool'ga siqilmaydi. */

@@ -4076,7 +4076,7 @@ class PaymentResponse(BaseModel):
     """
     amount_soum: int
     kind: Literal["payment", "reversal"]
-    method: Literal["cash", "terminal", "payme"]
+    method: Literal["cash", "terminal", "payme", "click"]
     created_at: datetime
     reversed: bool
 
@@ -4965,6 +4965,8 @@ class LiveRevenueResponse(BaseModel):
     collected_cash_soum: int
     """Davrda NAQD yig'ilgan belgili pul (storno MINUS) — «To'lov turlari» grafigi."""
     collected_payme_soum: int = 0
+    collected_click_soum: int = 0
+    """Davrda CLICK orqali yig'ilgan belgili pul (0035)."""
     """Davrda PAYME orqali yig'ilgan belgili pul (0035)."""
     collected_terminal_soum: int
     """Davrda TERMINAL orqali yig'ilgan belgili pul.

@@ -567,6 +567,8 @@ class PaymentMethod(StrEnum):
     # docstringdagi «referenssiz o'tkazma» e'tirozi bu turga tegmaydi.
     # Kassir yo'q: `payments.cashier_id` faqat shu turda `NULL` bo'ladi.
     PAYME = "payme"
+    # 0035: Click (Shop API) — `click_transactions` referens; kassir yo'q.
+    CLICK = "click"
 
 
 class AdjustmentDirection(StrEnum):

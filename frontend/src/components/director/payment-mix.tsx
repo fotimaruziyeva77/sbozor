@@ -46,8 +46,9 @@ export function PaymentMix({ period }: { period: Period }) {
   const terminal = live.data?.collected_terminal_soum ?? null;
   // 0035: Payme — maydon yo'q (eski server) yoki 0 bo'lsa qator chizilmaydi.
   const payme = live.data?.collected_payme_soum ?? 0;
+  const click = live.data?.collected_click_soum ?? 0;
   const shares =
-    cash === null || terminal === null ? null : methodShares(cash, terminal, payme);
+    cash === null || terminal === null ? null : methodShares(cash, terminal, payme, click);
 
   const parts = [
     {
@@ -76,6 +77,18 @@ export function PaymentMix({ period }: { period: Period }) {
             value: payme,
             share: shares?.payme ?? null,
             color: "var(--color-success)",
+          },
+        ]),
+    ...(click === 0
+      ? []
+      : [
+          {
+            key: "click",
+            Icon: Smartphone,
+            label: t("director.methodClick"),
+            value: click,
+            share: shares?.click ?? null,
+            color: "var(--color-warning)",
           },
         ]),
   ];
@@ -107,7 +120,7 @@ export function PaymentMix({ period }: { period: Period }) {
              */}
             {shares === null ? (
               <p className="dir-tile-note">
-                {cash === 0 && terminal === 0 && payme === 0
+                {cash === 0 && terminal === 0 && payme === 0 && click === 0
                   ? t("director.methodEmpty")
                   : t("director.methodNoShare")}
               </p>

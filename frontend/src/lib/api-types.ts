@@ -886,6 +886,7 @@ export const liveRevenueSchema = z.object({
   collected_terminal_soum: z.number().int().optional(),
   // 0035: Payme orqali yig'ilgan pul — ixtiyoriy (yuqoridagi bilan bir xil sabab).
   collected_payme_soum: z.number().int().optional(),
+  collected_click_soum: z.number().int().optional(),
 });
 export type LiveRevenue = z.infer<typeof liveRevenueSchema>;
 
@@ -2314,12 +2315,12 @@ export type AuditRound = z.infer<typeof auditRoundSchema>;
  * ⛔ UCHINCHI TUR YO'Q (`V2-CASH-03`): QR / bank o'tkazmasi referens
  * maydonlarisiz nizoda hech qanday dalil qoldirmaydi.
  */
-export const PAYMENT_METHODS = ["cash", "terminal", "payme"] as const;
+export const PAYMENT_METHODS = ["cash", "terminal", "payme", "click"] as const;
 export type PaymentMethodValue = (typeof PAYMENT_METHODS)[number];
 
 /**
- * Kassir TANLAYDIGAN usullar — `payme` (0035) bu yerda YO'Q: Payme to'lovini
- * kassir emas, Payme serveri yozadi (`/api/v1/payme`).
+ * Kassir TANLAYDIGAN usullar — `payme`/`click` (0035) bu yerda YO'Q: onlayn
+ * to'lovni kassir emas, to'lov tizimining serveri yozadi.
  */
 export const CASHIER_PAYMENT_METHODS = ["cash", "terminal"] as const;
 export type CashierPaymentMethodValue = (typeof CASHIER_PAYMENT_METHODS)[number];

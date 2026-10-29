@@ -670,6 +670,7 @@ async def live_revenue(
         collected_cash_soum=by_method.cash_soum,
         collected_terminal_soum=by_method.terminal_soum,
         collected_payme_soum=by_method.payme_soum,
+        collected_click_soum=by_method.click_soum,
     )
 
 

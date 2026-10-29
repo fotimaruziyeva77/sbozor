@@ -542,6 +542,7 @@ const METHOD_KEY = {
   cash: "collect.methodCash",
   terminal: "collect.methodTerminal",
   payme: "collect.methodPayme",
+  click: "collect.methodClick",
 } as const;
 
 function RecentPaymentsCard({ items }: { items: PaymentRecord[] | null }) {

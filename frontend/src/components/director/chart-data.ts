@@ -198,7 +198,7 @@ export function topDebtors(
 /* To'lov turlari                                                             */
 /* -------------------------------------------------------------------------- */
 
-export type MethodShares = { cash: number; terminal: number; payme: number };
+export type MethodShares = { cash: number; terminal: number; payme: number; click: number };
 
 /**
  * Naqd va terminal ULUSHI (foizda).
@@ -212,14 +212,16 @@ export function methodShares(
   cash: number,
   terminal: number,
   payme = 0,
+  click = 0,
 ): MethodShares | null {
-  if (cash < 0 || terminal < 0 || payme < 0) return null;
-  const total = cash + terminal + payme;
+  if (cash < 0 || terminal < 0 || payme < 0 || click < 0) return null;
+  const total = cash + terminal + payme + click;
   if (total <= 0) return null;
   return {
     cash: (cash / total) * 100,
     terminal: (terminal / total) * 100,
     payme: (payme / total) * 100,
+    click: (click / total) * 100,
   };
 }
 

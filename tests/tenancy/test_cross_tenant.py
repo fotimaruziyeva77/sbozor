@@ -305,6 +305,21 @@ EXEMPT_ROUTES: dict[str, str] = {
         "(faqat summa va rasta raqami, shaxsiy ma'lumot yo'q). Qamrovi "
         "`tests/integration/test_payme.py` da."
     ),
+    "/api/v1/click/prepare": (
+        "global — Click Shop API Prepare (0035): Click serveri chaqiradi, access "
+        "token yo'q; MD5 imzo (`Settings.click_secret_key`), bozor "
+        "`Settings.click_market_id` dan, kontekst SYSTEM. Qamrovi "
+        "`tests/integration/test_click.py` da."
+    ),
+    "/api/v1/click/complete": (
+        "global — Click Shop API Complete (0035): Prepare bilan bir xil. Qamrovi "
+        "`tests/integration/test_click.py` da."
+    ),
+    "/api/v1/pay/{stall_code}": (
+        "global — rastadagi QR-kod sahifasi (0035): sessiyasiz GET, faqat rasta "
+        "raqami va summa (shaxsiy ma'lumot yo'q). Qamrovi "
+        "`tests/integration/test_click.py` da."
+    ),
     "/api/v1/public/demo-requests": (
         "global — anonim marketing (demo) so'rovi, kodbazadagi YAGONA "
         "autentifikatsiyasiz yozuv marshruti (10-UI-SPEC §12.5): tenant konteksti "

@@ -45,7 +45,8 @@ from sbozor_core.enums import OutboxKind, OutboxRecipientKind, PaymentMethod, Re
 from sbozor_core.timeutil import business_today
 
 from app.jobs.notification_meta import outbox_payload
-from app.repositories import billing_repo, binding_repo, outbox_repo, payme_repo, payment_repo
+from app.repositories import binding_repo, outbox_repo, payme_repo, payment_repo
+from app.services.online_payment import DueUnavailable, StallDue, stall_due
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -160,34 +161,19 @@ def _market_id(settings: Settings) -> UUID | None:
 # ===========================================================================
 
 
-class _Due:
-    """Rastaning bugungi to'lovi: identifikatorlar + to'lanadigan jami summa."""
-
-    def __init__(self, stall_id: UUID, vendor_id: UUID, stall_code: str, total_soum: int) -> None:
-        self.stall_id = stall_id
-        self.vendor_id = vendor_id
-        self.stall_code = stall_code
-        self.total_soum = total_soum
+_REASON_CODES = {
+    "stall_not_found": ERR_STALL_NOT_FOUND,
+    "stall_not_assigned": ERR_STALL_NOT_ASSIGNED,
+    "nothing_due": ERR_NOTHING_DUE,
+}
 
 
-async def _due(session: AsyncSession, *, market_id: UUID, stall_code: str) -> _Due:
-    """Raise `PaymeError` — rasta yo'q / sotuvchisiz / to'lanadigan summa yo'q."""
-    as_of = business_today()
-    money = await billing_repo.resolve_stall_day_money(
-        session, market_id=market_id, as_of=as_of, stall_code=stall_code
-    )
-    if not money or money[0].stall_code != stall_code:
-        raise PaymeError(ERR_STALL_NOT_FOUND, data=ACCOUNT_FIELD)
-    row = money[0]
-    if row.vendor_id is None:
-        raise PaymeError(ERR_STALL_NOT_ASSIGNED, data=ACCOUNT_FIELD)
-    projection = await billing_repo.pending_projection(
-        session, market_id=market_id, as_of=as_of, stall_code=stall_code
-    )
-    stall = projection.stall
-    if stall is None or stall.stall_code != stall_code or stall.total_due_soum <= 0:
-        raise PaymeError(ERR_NOTHING_DUE, data=ACCOUNT_FIELD)
-    return _Due(row.stall_id, row.vendor_id, row.stall_code, int(stall.total_due_soum))
+async def _due(session: AsyncSession, *, market_id: UUID, stall_code: str) -> StallDue:
+    """Umumiy `stall_due()` — sababi Payme xato kodiga aylanadi."""
+    try:
+        return await stall_due(session, market_id=market_id, stall_code=stall_code)
+    except DueUnavailable as exc:
+        raise PaymeError(_REASON_CODES[exc.reason], data=ACCOUNT_FIELD) from exc
 
 
 def _account_code(params: dict[str, Any]) -> str:
@@ -206,7 +192,7 @@ def _amount_soum(params: dict[str, Any]) -> int:
     return amount // 100
 
 
-def _fiscal_detail(settings: Settings, due: _Due) -> dict[str, Any] | None:
+def _fiscal_detail(settings: Settings, due: StallDue) -> dict[str, Any] | None:
     if not settings.payme_ikpu or not settings.payme_package_code:
         return None
     return {

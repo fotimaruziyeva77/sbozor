@@ -191,6 +191,7 @@ describe("to'lov turlari — ulush", () => {
     expect((shares?.cash ?? 0) + (shares?.terminal ?? 0) + (shares?.payme ?? 0)).toBeCloseTo(100);
     expect(methodShares(0, 0, 22_000)?.payme).toBeCloseTo(100);
     expect(methodShares(10_000, 0, -22_000)).toBeNull();
+    expect(methodShares(0, 0, 10_000, 30_000)?.click).toBeCloseTo(75);
   });
 
   test("pul yo'q yoki qism MANFIY (storno) — ulush CHIZILMAYDI", () => {

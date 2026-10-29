@@ -52,11 +52,13 @@ from app.api.v1.camera_zones import router as camera_zones_router
 from app.api.v1.cameras import LiveUnavailable
 from app.api.v1.cameras import router as cameras_router
 from app.api.v1.categories import router as categories_router
+from app.api.v1.click import router as click_router
 from app.api.v1.imports import router as imports_router
 from app.api.v1.markets import router as markets_router
 from app.api.v1.me import router as me_router
 from app.api.v1.nvr import router as nvr_router
 from app.api.v1.occupancy import router as occupancy_router
+from app.api.v1.pay import router as pay_router
 from app.api.v1.payme import router as payme_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.public import router as public_router
@@ -555,6 +557,9 @@ app.include_router(public_router, prefix=f"{API_V1_PREFIX}/public")
 # `tests/tenancy/test_cross_tenant.py::EXEMPT_ROUTES` da sabab bilan, qamrovi
 # `tests/integration/test_payme.py` da.
 app.include_router(payme_router, prefix=f"{API_V1_PREFIX}/payme")
+# Click Shop API va rastadagi QR-kod sahifasi (0035) — xuddi shu tartib.
+app.include_router(click_router, prefix=f"{API_V1_PREFIX}/click")
+app.include_router(pay_router, prefix=f"{API_V1_PREFIX}/pay")
 
 
 @app.exception_handler(LiveUnavailable)

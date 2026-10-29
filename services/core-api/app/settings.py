@@ -525,6 +525,17 @@ class Settings(BaseSettings):
     payme_ikpu: str = ""
     payme_package_code: str = ""
 
+    # --- Click Shop API (0035, 261029) ---
+    #
+    # ⛔ `secret_key` BO'SH BO'LSA `/api/v1/click/*` 503 QAYTARADI (fail-closed).
+    #   Imzo: md5(... + secret_key + ...), `hmac.compare_digest`.
+    click_secret_key: SecretStr = SecretStr("")
+    click_service_id: str = ""
+    click_merchant_id: str = ""
+    # Kassa BITTA bozorga tegishli (Payme bilan bir xil sabab).
+    click_market_id: str = ""
+    click_pay_url: str = "https://my.click.uz/services/pay"
+
     # --- Kuzatuv ---
     sentry_dsn: str = ""
     log_level: str = "info"
