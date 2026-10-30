@@ -31,6 +31,7 @@ def _settings(
         payme_merchant_id=legacy.get("payme_merchant_id", ""),
         payme_ikpu="",
         payme_package_code="",
+        payme_account_field=legacy.get("payme_account_field", "rasta"),
         click_secret_key=SecretStr(legacy.get("click_secret_key", "")),
         click_service_id=legacy.get("click_service_id", ""),
         click_merchant_id=legacy.get("click_merchant_id", ""),
@@ -110,3 +111,16 @@ def test_secrets_do_not_leak_into_repr() -> None:
     s = _settings([_payme("karmana", A, "juda-maxfiy")], [_click("karmana", A, "100")])
     text = repr(pm.payme_merchants(s)) + repr(pm.click_merchants(s))  # type: ignore[arg-type]
     assert "juda-maxfiy" not in text and "s-karmana" not in text
+
+
+def test_account_field_follows_the_kassa_setting() -> None:
+    """Karmana kassasida maydon `rasta_id` (261030) — QR havolasi shu nomni oladi."""
+    s = _settings(
+        payme_key="old",
+        payme_market_id=str(A),
+        payme_merchant_id="m",
+        payme_account_field="rasta_id",
+    )
+    assert pm.payme_by_key(s, "old").account_field == "rasta_id"  # type: ignore[union-attr, arg-type]
+    bad = _settings([{**_payme("navoiy", B, "nv"), "account_field": "Yomon Nom!"}])
+    assert pm.payme_by_key(bad, "nv").account_field == "rasta"  # type: ignore[union-attr, arg-type]

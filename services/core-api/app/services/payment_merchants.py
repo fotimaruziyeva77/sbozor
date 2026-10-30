@@ -64,6 +64,7 @@ __all__ = [
 log = structlog.get_logger(__name__)
 
 _SLUG = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
+_FIELD = re.compile(r"^[a-z][a-z0-9_]{1,31}$")
 LEGACY_SLUG = "asosiy"
 
 
@@ -75,6 +76,7 @@ class PaymeMerchant:
     key: str = field(repr=False)
     ikpu: str = ""
     package_code: str = ""
+    account_field: str = "rasta"
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,15 +133,16 @@ def _unique[T](merchants: list[T], *keys: str, source: str) -> tuple[T, ...]:
 
 
 @lru_cache(maxsize=8)
-def _payme(raw: str, legacy: tuple[str, str, str, str, str, str]) -> tuple[PaymeMerchant, ...]:
+def _payme(raw: str, legacy: tuple[str, str, str, str, str, str, str]) -> tuple[PaymeMerchant, ...]:
     out: list[PaymeMerchant] = []
-    key, market, merchant_id, ikpu, package_code, slug = legacy
+    key, market, merchant_id, ikpu, package_code, slug, field_ = legacy
+    field_ = field_ if _FIELD.match(field_) else "rasta"
     if key and market:
         market_id = _uuid(market)
         if market_id is None:
             log.error("payment_merchant_invalid", source="PAYME_MARKET_ID", reason="uuid")
         else:
-            out.append(PaymeMerchant(slug, market_id, merchant_id, key, ikpu, package_code))
+            out.append(PaymeMerchant(slug, market_id, merchant_id, key, ikpu, package_code, field_))
     for item in _items(raw, "PAYME_MERCHANTS"):
         market_id = _uuid(item.get("market_id"))
         slug_i, key_i = _text(item, "slug"), _text(item, "key")
@@ -159,6 +162,7 @@ def _payme(raw: str, legacy: tuple[str, str, str, str, str, str]) -> tuple[Payme
                 key_i,
                 _text(item, "ikpu"),
                 _text(item, "package_code"),
+                field_i if _FIELD.match(field_i := _text(item, "account_field")) else "rasta",
             )
         )
     return _unique(out, "slug", "market_id", "key", source="payme")
@@ -201,6 +205,7 @@ def payme_merchants(settings: Settings) -> tuple[PaymeMerchant, ...]:
             settings.payme_ikpu,
             settings.payme_package_code,
             _legacy_slug(settings),
+            settings.payme_account_field,
         ),
     )
 

@@ -67,7 +67,10 @@ def _payme_url(settings: Settings, market_id: UUID, due: StallDue) -> str | None
     merchant = payme_for_market(settings, market_id)
     if merchant is None or not merchant.merchant_id:
         return None
-    params = f"m={merchant.merchant_id};ac.rasta={due.stall_code};a={due.total_soum * 100};l=uz"
+    params = (
+        f"m={merchant.merchant_id};ac.{merchant.account_field}={due.stall_code};"
+        f"a={due.total_soum * 100};l=uz"
+    )
     encoded = base64.b64encode(params.encode()).decode()
     return f"{settings.payme_checkout_url.rstrip('/')}/{encoded}"
 

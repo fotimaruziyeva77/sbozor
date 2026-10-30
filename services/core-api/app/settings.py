@@ -524,6 +524,10 @@ class Settings(BaseSettings):
     # yuborilmaydi.
     payme_ikpu: str = ""
     payme_package_code: str = ""
+    # Kassadagi hisob maydonining nomi (Payme kabinetida kim qanday nomlasa).
+    # Karmana kassasida `rasta_id` (261030). Server `rasta` va `rasta_id`
+    # ikkalasini ham qabul qiladi; bu nom QR havolasida ishlatiladi.
+    payme_account_field: str = "rasta"
 
     # --- Click Shop API (0035, 261029) ---
     #

@@ -362,6 +362,11 @@ async def test_each_market_kassa_resolves_its_own_market(
         params = {"amount": total * 100, "account": {"rasta": code}}
         own = await _rpc(api_client, "CheckPerformTransaction", params, key="key-a")
         assert own["result"]["allow"] is True
+        # Kassada maydon `rasta_id` deb nomlangan bo'lsa ham (Karmana, 261030).
+        by_id = {"amount": total * 100, "account": {"rasta_id": code}}
+        assert (await _rpc(api_client, "CheckPerformTransaction", by_id, key="key-a"))["result"][
+            "allow"
+        ] is True
         foreign = await _rpc(api_client, "CheckPerformTransaction", params, key="key-b")
         assert foreign["error"]["code"] == -31050, foreign
         unknown = await _rpc(api_client, "CheckPerformTransaction", params, key="key-x")

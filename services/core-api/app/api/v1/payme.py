@@ -70,6 +70,8 @@ TIMEOUT_MS = 43_200_000
 
 REASON_TIMEOUT = 4
 ACCOUNT_FIELD = "rasta"
+# Kassada maydon nomi har xil bo'lishi mumkin (Karmanada `rasta_id`, 261030).
+ACCOUNT_FIELDS: tuple[str, ...] = ("rasta", "rasta_id")
 
 # --- JSON-RPC / Payme xato kodlari ---
 ERR_PARSE = -32700
@@ -180,7 +182,9 @@ async def _due(session: AsyncSession, *, market_id: UUID, stall_code: str) -> St
 
 def _account_code(params: dict[str, Any]) -> str:
     account = params.get("account")
-    value = account.get(ACCOUNT_FIELD) if isinstance(account, dict) else None
+    value = None
+    if isinstance(account, dict):
+        value = next((account[k] for k in ACCOUNT_FIELDS if account.get(k) is not None), None)
     if value is None or not str(value).strip():
         raise PaymeError(ERR_STALL_NOT_FOUND, data=ACCOUNT_FIELD)
     return str(value).strip()
@@ -446,7 +450,7 @@ async def _statement(
                 "id": tx.paycom_id,
                 "time": tx.paycom_time,
                 "amount": tx.amount_soum * 100,
-                "account": {ACCOUNT_FIELD: tx.stall_code},
+                "account": {merchant.account_field: tx.stall_code},
                 "create_time": tx.create_time,
                 "perform_time": tx.perform_time or 0,
                 "cancel_time": tx.cancel_time or 0,
@@ -551,7 +555,7 @@ async def payme_pay(stall_code: str, request: Request) -> Response:
             return _page(uz, "Savol bo'lsa, kassirga murojaat qiling.", 404)
 
     params = (
-        f"m={merchant.merchant_id};ac.{ACCOUNT_FIELD}={due.stall_code};"
+        f"m={merchant.merchant_id};ac.{merchant.account_field}={due.stall_code};"
         f"a={due.total_soum * 100};l=uz"
     )
     encoded = base64.b64encode(params.encode()).decode()

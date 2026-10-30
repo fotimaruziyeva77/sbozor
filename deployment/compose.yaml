@@ -253,6 +253,7 @@ services:
       PAYME_CHECKOUT_URL: ${PAYME_CHECKOUT_URL:-https://checkout.paycom.uz}
       PAYME_IKPU: ${PAYME_IKPU:-}
       PAYME_PACKAGE_CODE: ${PAYME_PACKAGE_CODE:-}
+      PAYME_ACCOUNT_FIELD: ${PAYME_ACCOUNT_FIELD:-rasta}
       # Click (0035). Bo'sh kalit `/api/v1/click/*` ni 503 bilan yopadi.
       CLICK_SECRET_KEY: ${CLICK_SECRET_KEY:-}
       CLICK_SERVICE_ID: ${CLICK_SERVICE_ID:-}
