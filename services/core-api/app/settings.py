@@ -536,6 +536,17 @@ class Settings(BaseSettings):
     click_market_id: str = ""
     click_pay_url: str = "https://my.click.uz/services/pay"
 
+    # --- Ko'p bozorli kassalar (261030) ---
+    #
+    # Har bozor — alohida yuridik shaxs va alohida kassa. JSON ro'yxat;
+    # format va qoidalar `app/services/payment_merchants.py` da. Eski
+    # bitta-kassa sozlamalari (yuqorida) ham o'qiladi va `pay_default_market`
+    # nomi bilan ro'yxatga qo'shiladi.
+    payme_merchants: SecretStr = SecretStr("")
+    click_merchants: SecretStr = SecretStr("")
+    # Eski QR manzili `/pay/{rasta}` qaysi bozorniki (slug).
+    pay_default_market: str = ""
+
     # --- Universal agent (edge, 0036) ---
     #
     # Imzolangan relizlar katalogi (xostdan FAQAT O'QISH uchun mount):

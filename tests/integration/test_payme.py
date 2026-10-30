@@ -17,6 +17,7 @@ O'lchanadigan da'volar:
 from __future__ import annotations
 
 import base64
+import json
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -310,3 +311,66 @@ async def test_qr_page_redirects_to_payme_with_the_due_amount(
     missing = await api_client.get(f"{URL}/pay/no-such")
     assert missing.status_code == 404
     assert "Rasta topilmadi" in missing.text
+
+
+async def test_each_market_kassa_resolves_its_own_market(
+    api_app: FastAPI,
+    api_client: httpx.AsyncClient,
+    test_settings: Settings,
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    env: Any,
+) -> None:
+    """261030: har bozor alohida yuridik shaxs — bozor KALITDAN aniqlanadi.
+
+    A bozorining rastasi B kassasining kaliti bilan so'ralsa, B bozorida
+    qidiriladi va topilmaydi: pul hech qachon boshqa bozor hisobiga ketmaydi.
+    """
+    code = _stall_code(sync_owner_conn, env.market_a.stall_with_two_occupied_slots)
+    in_b = sync_owner_conn.execute(
+        "SELECT count(*) FROM stalls WHERE market_id = %s AND code = %s",
+        (str(two_markets.market_b.id), code),
+    ).fetchone()
+    assert in_b is not None and in_b[0] == 0, "nazorat: rasta kodi B bozorida bo'lmasin"
+    total = await _due(api_client, two_markets, code)
+
+    original = api_app.state.settings
+    api_app.state.settings = test_settings.model_copy(
+        update={
+            "payme_merchants": SecretStr(
+                json.dumps(
+                    [
+                        {
+                            "slug": "bozor-a",
+                            "market_id": str(two_markets.market_a.id),
+                            "merchant_id": MERCHANT,
+                            "key": "key-a",
+                        },
+                        {
+                            "slug": "bozor-b",
+                            "market_id": str(two_markets.market_b.id),
+                            "merchant_id": "m-b",
+                            "key": "key-b",
+                        },
+                    ]
+                )
+            ),
+            "payme_checkout_url": CHECKOUT,
+        }
+    )
+    try:
+        params = {"amount": total * 100, "account": {"rasta": code}}
+        own = await _rpc(api_client, "CheckPerformTransaction", params, key="key-a")
+        assert own["result"]["allow"] is True
+        foreign = await _rpc(api_client, "CheckPerformTransaction", params, key="key-b")
+        assert foreign["error"]["code"] == -31050, foreign
+        unknown = await _rpc(api_client, "CheckPerformTransaction", params, key="key-x")
+        assert unknown["error"]["code"] == -32504
+
+        page = await api_client.get(f"/api/v1/pay/bozor-a/{code}")
+        assert page.status_code == 200, page.text
+        assert f"{total:,}".replace(",", " ") in page.text
+        assert (await api_client.get(f"/api/v1/pay/bozor-b/{code}")).status_code == 404
+        assert (await api_client.get(f"/api/v1/pay/yoq-bozor/{code}")).status_code == 503
+    finally:
+        api_app.state.settings = original

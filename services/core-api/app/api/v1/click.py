@@ -38,6 +38,7 @@ from sbozor_core.timeutil import business_today
 from app.jobs.notification_meta import outbox_payload
 from app.repositories import binding_repo, click_repo, outbox_repo, payment_repo
 from app.services.online_payment import DueUnavailable, stall_due
+from app.services.payment_merchants import ClickMerchant, click_by_service, click_merchants
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -81,22 +82,6 @@ _REQUIRED = (
     "sign_time",
     "sign_string",
 )
-
-
-class _Config:
-    def __init__(self, settings: Settings) -> None:
-        self.secret = settings.click_secret_key.get_secret_value()
-        self.service_id = settings.click_service_id
-        try:
-            self.market_id: UUID | None = (
-                UUID(settings.click_market_id) if settings.click_market_id else None
-            )
-        except ValueError:
-            self.market_id = None
-
-    @property
-    def ready(self) -> bool:
-        return bool(self.secret and self.service_id and self.market_id)
 
 
 async def _form(request: Request) -> dict[str, str]:
@@ -144,9 +129,9 @@ def _ints(form: dict[str, str], *names: str) -> dict[str, int] | None:
 
 async def _validated(
     request: Request, *, complete: bool
-) -> tuple[_Config, dict[str, str], dict[str, int]] | Response:
-    config = _Config(request.app.state.settings)
-    if not config.ready:
+) -> tuple[ClickMerchant, dict[str, str], dict[str, int]] | Response:
+    settings: Settings = request.app.state.settings
+    if not click_merchants(settings):
         log.warning("click_not_configured")
         return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={})
     form = await _form(request)
@@ -156,11 +141,14 @@ async def _validated(
     numbers = _ints(form, *names) if all(key in form for key in _REQUIRED) else None
     if numbers is None:
         return _reply(form, ERR_REQUEST)
-    if not _sign_ok(form, config.secret, complete=complete):
+    # ⛔ Bozor `service_id` dan: har bozorning o'z kassasi va o'z kaliti.
+    config = click_by_service(settings, form["service_id"])
+    if config is None:
+        log.warning("click_unknown_service")
+        return _reply(form, ERR_REQUEST)
+    if not _sign_ok(form, config.secret_key, complete=complete):
         log.warning("click_sign_rejected")
         return _reply(form, ERR_SIGN)
-    if form["service_id"] != config.service_id:
-        return _reply(form, ERR_REQUEST)
     if numbers["action"] != (1 if complete else 0):
         return _reply(form, ERR_ACTION)
     return config, form, numbers
@@ -180,8 +168,6 @@ async def click_prepare(request: Request) -> Response:
         return checked
     config, form, numbers = checked
     market_id = config.market_id
-    if market_id is None:  # pragma: no cover - `ready` buni kafolatlaydi
-        return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={})
     amount = _amount(form)
     code = form["merchant_trans_id"].strip()
 
@@ -220,8 +206,6 @@ async def click_complete(request: Request) -> Response:
         return checked
     config, form, numbers = checked
     market_id = config.market_id
-    if market_id is None:  # pragma: no cover - `ready` buni kafolatlaydi
-        return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={})
     amount = _amount(form)
 
     async with _session(request, market_id, "complete") as session:

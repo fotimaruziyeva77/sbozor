@@ -259,6 +259,10 @@ services:
       CLICK_MERCHANT_ID: ${CLICK_MERCHANT_ID:-}
       CLICK_MARKET_ID: ${CLICK_MARKET_ID:-}
       CLICK_PAY_URL: ${CLICK_PAY_URL:-https://my.click.uz/services/pay}
+      # Ko'p bozorli kassalar (261030): JSON ro'yxat, `payment_merchants.py`.
+      PAYME_MERCHANTS: ${PAYME_MERCHANTS:-}
+      CLICK_MERCHANTS: ${CLICK_MERCHANTS:-}
+      PAY_DEFAULT_MARKET: ${PAY_DEFAULT_MARKET:-}
       # Universal agent relizlari (0036): {stable,pilot}/latest.json va
       # bin/sbozor-agent-<versiya>.exe. Konteyner ichidagi yo'l QAT'IY,
       # xostdagisi `EDGE_RELEASES_HOST_DIR` bilan (pastdagi `volumes`).

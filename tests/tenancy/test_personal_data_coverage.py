@@ -175,6 +175,10 @@ NON_PERSONAL_BINARY_ROUTES: dict[str, str] = {
         "rastadagi QR-kod sahifasi (0035) — HTML: rasta raqami va to'lanadigan "
         "summa, shaxsiy ma'lumot YO'Q (modul docstringi)."
     ),
+    "/api/v1/pay/{market}/{stall_code}": (
+        "ko'p bozorli QR-kod sahifasi (261030) — HTML: rasta raqami va to'lanadigan "
+        "summa, shaxsiy ma'lumot YO'Q."
+    ),
     "/api/v1/payme/pay/{stall_code}": (
         "Payme to'lov sahifasiga 302 (0035) — havolada faqat summa va rasta "
         "raqami, shaxsiy ma'lumot YO'Q."

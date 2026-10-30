@@ -349,6 +349,11 @@ EXEMPT_ROUTES: dict[str, str] = {
         "raqami va summa (shaxsiy ma'lumot yo'q). Qamrovi "
         "`tests/integration/test_click.py` da."
     ),
+    "/api/v1/pay/{market}/{stall_code}": (
+        "global — ko'p bozorli QR-kod sahifasi (261030): bozor manzildagi nomdan, "
+        "o'sha bozor kassasi sozlamasi orqali; sessiyasiz GET, faqat rasta raqami va "
+        "summa. Qamrovi `tests/integration/test_payme.py` da."
+    ),
     "/api/v1/public/demo-requests": (
         "global — anonim marketing (demo) so'rovi, kodbazadagi YAGONA "
         "autentifikatsiyasiz yozuv marshruti (10-UI-SPEC §12.5): tenant konteksti "

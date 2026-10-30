@@ -33,7 +33,6 @@ IKKI YO'L:
 from __future__ import annotations
 
 import base64
-import hmac
 import time
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -47,6 +46,13 @@ from sbozor_core.timeutil import business_today
 from app.jobs.notification_meta import outbox_payload
 from app.repositories import binding_repo, outbox_repo, payme_repo, payment_repo
 from app.services.online_payment import DueUnavailable, StallDue, stall_due
+from app.services.payment_merchants import (
+    PaymeMerchant,
+    default_market,
+    payme_by_key,
+    payme_configured,
+    payme_for_market,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -136,24 +142,20 @@ def _error_body(request_id: Any, code: int, data: str | None = None) -> dict[str
     return {"jsonrpc": "2.0", "id": request_id, "error": error}
 
 
-def _authorized(request: Request, key: str) -> bool:
+def _merchant(request: Request, settings: Settings) -> PaymeMerchant | None:
+    """`Basic Paycom:<kalit>` -> kassa (va u orqali bozor). Mos kelmasa None."""
     header = request.headers.get("authorization", "")
     scheme, _, value = header.partition(" ")
     if scheme.lower() != "basic":
-        return False
+        return None
     try:
         decoded = base64.b64decode(value.strip(), validate=True).decode("utf-8")
     except (ValueError, UnicodeDecodeError):
-        return False
-    _, _, password = decoded.partition(":")
-    return hmac.compare_digest(password.encode(), key.encode())
-
-
-def _market_id(settings: Settings) -> UUID | None:
-    try:
-        return UUID(settings.payme_market_id) if settings.payme_market_id else None
-    except ValueError:
         return None
+    _, _, password = decoded.partition(":")
+    if not password:
+        return None
+    return payme_by_key(settings, password)
 
 
 # ===========================================================================
@@ -192,8 +194,8 @@ def _amount_soum(params: dict[str, Any]) -> int:
     return amount // 100
 
 
-def _fiscal_detail(settings: Settings, due: StallDue) -> dict[str, Any] | None:
-    if not settings.payme_ikpu or not settings.payme_package_code:
+def _fiscal_detail(merchant: PaymeMerchant, due: StallDue) -> dict[str, Any] | None:
+    if not merchant.ikpu or not merchant.package_code:
         return None
     return {
         "receipt_type": 0,
@@ -202,8 +204,8 @@ def _fiscal_detail(settings: Settings, due: StallDue) -> dict[str, Any] | None:
                 "title": f"Bozor savdo joyi ijarasi, {due.stall_code}-rasta",
                 "price": due.total_soum * 100,
                 "count": 1,
-                "code": settings.payme_ikpu,
-                "package_code": settings.payme_package_code,
+                "code": merchant.ikpu,
+                "package_code": merchant.package_code,
                 "vat_percent": 0,
             }
         ],
@@ -216,7 +218,7 @@ def _fiscal_detail(settings: Settings, due: StallDue) -> dict[str, Any] | None:
 
 
 async def _check_perform(
-    session: AsyncSession, settings: Settings, market_id: UUID, params: dict[str, Any]
+    session: AsyncSession, merchant: PaymeMerchant, market_id: UUID, params: dict[str, Any]
 ) -> dict[str, Any]:
     code = _account_code(params)
     due = await _due(session, market_id=market_id, stall_code=code)
@@ -228,14 +230,14 @@ async def _check_perform(
     if pending is not None:
         raise PaymeError(ERR_STALL_BUSY, data=ACCOUNT_FIELD)
     result: dict[str, Any] = {"allow": True}
-    detail = _fiscal_detail(settings, due)
+    detail = _fiscal_detail(merchant, due)
     if detail is not None:
         result["detail"] = detail
     return result
 
 
 async def _create(
-    session: AsyncSession, settings: Settings, market_id: UUID, params: dict[str, Any]
+    session: AsyncSession, merchant: PaymeMerchant, market_id: UUID, params: dict[str, Any]
 ) -> dict[str, Any]:
     paycom_id = str(params.get("id") or "")
     if not paycom_id:
@@ -286,7 +288,7 @@ async def _create(
 
 
 async def _perform(
-    session: AsyncSession, settings: Settings, market_id: UUID, params: dict[str, Any]
+    session: AsyncSession, merchant: PaymeMerchant, market_id: UUID, params: dict[str, Any]
 ) -> dict[str, Any]:
     tx = await payme_repo.by_paycom_id(
         session, market_id=market_id, paycom_id=str(params.get("id") or ""), lock=True
@@ -357,7 +359,7 @@ async def _perform(
 
 
 async def _cancel(
-    session: AsyncSession, settings: Settings, market_id: UUID, params: dict[str, Any]
+    session: AsyncSession, merchant: PaymeMerchant, market_id: UUID, params: dict[str, Any]
 ) -> dict[str, Any]:
     tx = await payme_repo.by_paycom_id(
         session, market_id=market_id, paycom_id=str(params.get("id") or ""), lock=True
@@ -414,7 +416,7 @@ async def _cancel(
 
 
 async def _check(
-    session: AsyncSession, settings: Settings, market_id: UUID, params: dict[str, Any]
+    session: AsyncSession, merchant: PaymeMerchant, market_id: UUID, params: dict[str, Any]
 ) -> dict[str, Any]:
     tx = await payme_repo.by_paycom_id(
         session, market_id=market_id, paycom_id=str(params.get("id") or "")
@@ -432,7 +434,7 @@ async def _check(
 
 
 async def _statement(
-    session: AsyncSession, settings: Settings, market_id: UUID, params: dict[str, Any]
+    session: AsyncSession, merchant: PaymeMerchant, market_id: UUID, params: dict[str, Any]
 ) -> dict[str, Any]:
     from_ms, to_ms = params.get("from"), params.get("to")
     if not isinstance(from_ms, int) or not isinstance(to_ms, int):
@@ -471,9 +473,7 @@ _METHODS = {
 async def payme_merchant_api(request: Request) -> Response:
     """Payme JSON-RPC kirish nuqtasi — xatolar ham HTTP 200 bilan (protokol talabi)."""
     settings: Settings = request.app.state.settings
-    key = settings.payme_key.get_secret_value()
-    market_id = _market_id(settings)
-    if not key or market_id is None:
+    if not payme_configured(settings):
         log.warning("payme_not_configured")
         return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={})
 
@@ -483,9 +483,11 @@ async def payme_merchant_api(request: Request) -> Response:
         return JSONResponse(_error_body(None, ERR_PARSE))
     request_id = body.get("id") if isinstance(body, dict) else None
 
-    if not _authorized(request, key):
+    merchant = _merchant(request, settings)
+    if merchant is None:
         log.warning("payme_auth_rejected")
         return JSONResponse(_error_body(request_id, ERR_AUTH))
+    market_id = merchant.market_id
     if not isinstance(body, dict) or not isinstance(body.get("params", {}), dict):
         return JSONResponse(_error_body(request_id, ERR_INVALID_REQUEST))
 
@@ -499,7 +501,7 @@ async def payme_merchant_api(request: Request) -> Response:
             sessionmaker, market_id=market_id, request_id=f"payme:{body.get('method')}"
         ) as session:
             try:
-                result = await handler(session, settings, market_id, body.get("params") or {})
+                result = await handler(session, merchant, market_id, body.get("params") or {})
             except PaymeError as exc:
                 # ⛔ Xato JAVOBI tranzaksiyani BEKOR QILMAYDI: muddati o'tgan
                 #    tranzaksiyaning bekor holati xato bilan birga saqlanishi
@@ -532,8 +534,9 @@ def _page(title: str, body: str, code: int = 200) -> HTMLResponse:
 async def payme_pay(stall_code: str, request: Request) -> Response:
     """Rastadagi QR-kod: bugungi summa bilan Payme to'lov sahifasiga yo'naltiradi."""
     settings: Settings = request.app.state.settings
-    market_id = _market_id(settings)
-    if market_id is None or not settings.payme_merchant_id:
+    market_id = default_market(settings)
+    merchant = payme_for_market(settings, market_id) if market_id else None
+    if market_id is None or merchant is None or not merchant.merchant_id:
         return _page("To'lov hozircha ulanmagan", "Iltimos, kassirga murojaat qiling.", 503)
 
     code = stall_code.strip()[:32]
@@ -548,7 +551,7 @@ async def payme_pay(stall_code: str, request: Request) -> Response:
             return _page(uz, "Savol bo'lsa, kassirga murojaat qiling.", 404)
 
     params = (
-        f"m={settings.payme_merchant_id};ac.{ACCOUNT_FIELD}={due.stall_code};"
+        f"m={merchant.merchant_id};ac.{ACCOUNT_FIELD}={due.stall_code};"
         f"a={due.total_soum * 100};l=uz"
     )
     encoded = base64.b64encode(params.encode()).decode()

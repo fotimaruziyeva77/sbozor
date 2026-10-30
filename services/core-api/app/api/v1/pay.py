@@ -6,7 +6,9 @@ summa va sozlangan to'lov tizimlarining tugmalari (Payme, Click). Summa
 AYNI son tekshiriladi.
 
 ⛔ Sahifada shaxsiy ma'lumot yo'q: faqat rasta raqami va summa.
-⛔ Sessiyasiz: bozor `Settings.payme_market_id` / `click_market_id` dan.
+⛔ Sessiyasiz. Bozor manzildan: `/pay/{bozor}/{rasta}` (har bozor o'z kassasi,
+   261030). Eski `/pay/{rasta}` — `PAY_DEFAULT_MARKET` bozori: Karmanadagi
+   rastalarga yopishtirilgan QR-kodlar o'zgarmaydi.
 """
 
 from __future__ import annotations
@@ -22,6 +24,12 @@ from fastapi.responses import HTMLResponse
 
 from app.repositories import binding_repo
 from app.services.online_payment import DueUnavailable, StallDue, stall_due
+from app.services.payment_merchants import (
+    click_for_market,
+    default_market,
+    market_by_slug,
+    payme_for_market,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -55,35 +63,23 @@ font-weight:600;text-decoration:none;color:#fff}}
 </style></head><body>{body}</body></html>"""
 
 
-def _market_id(settings: Settings) -> UUID | None:
-    raw = settings.payme_market_id or settings.click_market_id
-    try:
-        return UUID(raw) if raw else None
-    except ValueError:
+def _payme_url(settings: Settings, market_id: UUID, due: StallDue) -> str | None:
+    merchant = payme_for_market(settings, market_id)
+    if merchant is None or not merchant.merchant_id:
         return None
-
-
-def _payme_url(settings: Settings, due: StallDue) -> str | None:
-    if not (settings.payme_merchant_id and settings.payme_key.get_secret_value()):
-        return None
-    params = (
-        f"m={settings.payme_merchant_id};ac.rasta={due.stall_code};a={due.total_soum * 100};l=uz"
-    )
+    params = f"m={merchant.merchant_id};ac.rasta={due.stall_code};a={due.total_soum * 100};l=uz"
     encoded = base64.b64encode(params.encode()).decode()
     return f"{settings.payme_checkout_url.rstrip('/')}/{encoded}"
 
 
-def _click_url(settings: Settings, due: StallDue) -> str | None:
-    if not (
-        settings.click_service_id
-        and settings.click_merchant_id
-        and settings.click_secret_key.get_secret_value()
-    ):
+def _click_url(settings: Settings, market_id: UUID, due: StallDue) -> str | None:
+    merchant = click_for_market(settings, market_id)
+    if merchant is None or not merchant.merchant_id:
         return None
     query = urlencode(
         {
-            "service_id": settings.click_service_id,
-            "merchant_id": settings.click_merchant_id,
+            "service_id": merchant.service_id,
+            "merchant_id": merchant.merchant_id,
             "amount": due.total_soum,
             "transaction_param": due.stall_code,
         }
@@ -97,9 +93,20 @@ def _page(body: str, status_code: int = 200) -> HTMLResponse:
 
 @router.get("/{stall_code}", include_in_schema=False)
 async def pay_page(stall_code: str, request: Request) -> HTMLResponse:
-    """QR-kod sahifasi: summa + to'lov tugmalari."""
+    """Eski QR-kod (Karmana): bozor `PAY_DEFAULT_MARKET` dan."""
     settings: Settings = request.app.state.settings
-    market_id = _market_id(settings)
+    return await _render(request, default_market(settings), stall_code)
+
+
+@router.get("/{market}/{stall_code}", include_in_schema=False)
+async def pay_page_for_market(market: str, stall_code: str, request: Request) -> HTMLResponse:
+    """QR-kod sahifasi: `/pay/{bozor}/{rasta}` — summa + o'sha bozor kassasi tugmalari."""
+    settings: Settings = request.app.state.settings
+    return await _render(request, market_by_slug(settings, market.strip().lower()[:32]), stall_code)
+
+
+async def _render(request: Request, market_id: UUID | None, stall_code: str) -> HTMLResponse:
+    settings: Settings = request.app.state.settings
     if market_id is None:
         return _page(_NOT_CONNECTED, 503)
 
@@ -116,10 +123,10 @@ async def pay_page(stall_code: str, request: Request) -> HTMLResponse:
             )
 
     buttons = []
-    payme = _payme_url(settings, due)
+    payme = _payme_url(settings, market_id, due)
     if payme is not None:
         buttons.append(f'<a class="btn payme" href="{html.escape(payme)}">Payme bilan to\'lash</a>')
-    click = _click_url(settings, due)
+    click = _click_url(settings, market_id, due)
     if click is not None:
         buttons.append(f'<a class="btn click" href="{html.escape(click)}">Click bilan to\'lash</a>')
     if not buttons:
