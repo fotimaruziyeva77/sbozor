@@ -223,6 +223,33 @@ def _fiscal_detail(merchant: PaymeMerchant, due: StallDue) -> dict[str, Any] | N
 # ===========================================================================
 
 
+async def _live_pending(session: AsyncSession, *, market_id: UUID, stall_id: UUID) -> bool:
+    """Rastada TIRIK kutilayotgan Payme tranzaksiyasi bormi.
+
+    261030: sotuvchi to'lovni boshlab tashlab ketsa, tranzaksiya `state=1` da
+    qoladi va Payme bekor qilish xabarini yubormasa rasta onlayn to'lov uchun
+    CHEKSIZ band bo'lardi. 12 soatdan eskisi (Payme muddati, `TIMEOUT_MS`)
+    shu yerda o'zi bekor qilinadi (`reason=4`) — `_perform` dagi qoida bilan
+    bir xil. Kassadagi naqd to'lovga bu umuman ta'sir qilmaydi.
+    """
+    pending = await payme_repo.pending_for_stall(session, market_id=market_id, stall_id=stall_id)
+    if pending is None:
+        return False
+    now = _now_ms()
+    if now - pending.create_time <= TIMEOUT_MS:
+        return True
+    await payme_repo.set_state(
+        session,
+        market_id=market_id,
+        tx_id=pending.id,
+        state=payme_repo.STATE_CANCELLED,
+        cancel_time=now,
+        reason=REASON_TIMEOUT,
+    )
+    log.info("payme_stale_pending_cancelled", transaction=str(pending.id))
+    return False
+
+
 async def _check_perform(
     session: AsyncSession, merchant: PaymeMerchant, market_id: UUID, params: dict[str, Any]
 ) -> dict[str, Any]:
@@ -230,10 +257,7 @@ async def _check_perform(
     due = await _due(session, market_id=market_id, stall_code=code, field=merchant.account_field)
     if _amount_soum(params) != due.total_soum:
         raise PaymeError(ERR_AMOUNT)
-    pending = await payme_repo.pending_for_stall(
-        session, market_id=market_id, stall_id=due.stall_id
-    )
-    if pending is not None:
+    if await _live_pending(session, market_id=market_id, stall_id=due.stall_id):
         raise PaymeError(ERR_STALL_BUSY, data=merchant.account_field)
     result: dict[str, Any] = {"allow": True}
     detail = _fiscal_detail(merchant, due)
@@ -276,7 +300,7 @@ async def _create(
     amount = _amount_soum(params)
     if amount != due.total_soum:
         raise PaymeError(ERR_AMOUNT)
-    if await payme_repo.pending_for_stall(session, market_id=market_id, stall_id=due.stall_id):
+    if await _live_pending(session, market_id=market_id, stall_id=due.stall_id):
         raise PaymeError(ERR_STALL_BUSY, data=merchant.account_field)
     paycom_time = params.get("time")
     tx = await payme_repo.create(

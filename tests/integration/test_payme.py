@@ -380,3 +380,38 @@ async def test_each_market_kassa_resolves_its_own_market(
         assert (await api_client.get(f"/api/v1/pay/yoq-bozor/{code}")).status_code == 503
     finally:
         api_app.state.settings = original
+
+
+async def test_an_abandoned_payme_payment_frees_the_stall_after_twelve_hours(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    two_markets: TwoMarketSeed,
+    env: Any,
+    payme: None,
+) -> None:
+    """261030: sotuvchi to'lovni boshlab tashlab ketdi, Payme bekor qilish yubormadi.
+
+    12 soat ichida rasta onlayn to'lov uchun band (Payme sandbox talabi),
+    undan keyin server eski tranzaksiyani o'zi bekor qiladi va rasta ochiladi.
+    """
+    code = _stall_code(sync_owner_conn, env.market_a.stall_with_two_occupied_slots)
+    total = await _due(api_client, two_markets, code)
+    params = {"amount": total * 100, "account": {"rasta": code}}
+    await _rpc(api_client, "CreateTransaction", {**params, "id": "stale-1", "time": 1})
+
+    busy = await _rpc(api_client, "CheckPerformTransaction", params)
+    assert busy["error"]["code"] == -31053
+
+    sync_owner_conn.execute(
+        "UPDATE payme_transactions SET create_time = create_time - 43200001 "
+        "WHERE market_id = %s AND paycom_id = 'stale-1'",
+        (str(two_markets.market_a.id),),
+    )
+    free = await _rpc(api_client, "CheckPerformTransaction", params)
+    assert free["result"]["allow"] is True
+    row = sync_owner_conn.execute(
+        "SELECT state, reason FROM payme_transactions "
+        "WHERE market_id = %s AND paycom_id = 'stale-1'",
+        (str(two_markets.market_a.id),),
+    ).fetchone()
+    assert row == (-1, 4), row
