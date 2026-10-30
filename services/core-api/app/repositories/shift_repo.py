@@ -506,7 +506,16 @@ _REPORT_SELECT: Final[str] = """
            s.declared_soum, s.system_soum,
            c.declared_soum AS corrected_soum,
            c.reason_code   AS correction_reason,
-           c.created_at    AS corrected_at
+           c.created_at    AS corrected_at,
+           COALESCE((
+             SELECT sum(r.amount_soum)
+               FROM payments r
+               JOIN payments o ON o.market_id = r.market_id AND o.id = r.reverses_payment_id
+              WHERE r.market_id = s.market_id
+                AND r.kind = 'reversal'
+                AND o.shift_id = s.id
+                AND r.shift_id IS DISTINCT FROM s.id
+           ), 0)::bigint AS reversed_after_close_soum
       FROM cashier_shifts s
       LEFT JOIN LATERAL (
         SELECT sc.declared_soum, sc.reason_code, sc.created_at
@@ -518,6 +527,13 @@ _REPORT_SELECT: Final[str] = """
       ) c ON true
 """
 """Hisobot qatorining USTUNLARI — kun so'rovi ham, bitta smena so'rovi ham shundan.
+
+⚠ 261030: `reversed_after_close_soum` — smena YOPILGANDAN keyin uning
+  to'lovlariga BOSHQA joyda (smenasiz) yozilgan stornolar. Yopiq smenaning
+  `system_soum` i yopilish paytidagi snapshot va u keyingi stornoni
+  ko'rmaydi: Karmanada 38 ta xato to'lov bekor qilinib deklaratsiya 0 ga
+  tuzatilganda hisobot kassirga −2 583 000 «kamomad» ko'rsatdi. Hisobotdagi
+  tizim summasi endi shu stornolarni AYIRADI; `cashier_shifts` ga tegilmaydi.
 
 ⚠ 261016: deklaratsiya tuzatishi `LEFT JOIN LATERAL` bilan — smenaning ENG
   OXIRGI tuzatishi (`created_at`, keyin `id`: bir tranzaksiyadagi ikki
@@ -831,17 +847,19 @@ def _report_row(raw: RowMapping) -> ShiftReportRow:
     """
     corrected = raw["corrected_soum"]
     effective = int(raw["declared_soum"]) if corrected is None else int(corrected)
+    # Yopilgandan keyin bekor qilingan to'lovlar tizim summasidan chiqadi (261030).
+    system = int(raw["system_soum"]) - int(raw["reversed_after_close_soum"])
     return ShiftReportRow(
         shift_id=raw["id"],
         cashier_id=raw["cashier_id"],
         opened_at=raw["opened_at"],
         closed_at=raw["closed_at"],
         declared_soum=int(raw["declared_soum"]),
-        system_soum=int(raw["system_soum"]),
+        system_soum=system,
         corrected_soum=None if corrected is None else int(corrected),
         correction_reason=raw["correction_reason"],
         corrected_at=raw["corrected_at"],
-        variance_soum=variance(effective, int(raw["system_soum"])),
+        variance_soum=variance(effective, system),
     )
 
 

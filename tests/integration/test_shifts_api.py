@@ -196,7 +196,7 @@ class Env:
             quote_soum=amount_soum,
         )
 
-    def reverse(self, *, shift_id: UUID, payment_id: UUID, amount_soum: int) -> UUID:
+    def reverse(self, *, shift_id: UUID | None, payment_id: UUID, amount_soum: int) -> UUID:
         """Storno qatori — tizim summasini MANFIY tomonga suradi (C-5)."""
         return add_payment(
             self.conn,
@@ -1060,6 +1060,35 @@ async def test_the_latest_correction_wins_and_both_stay_in_history(
         (str(env.market_id), str(env.seed_shift_id)),
     ).fetchone()
     assert rows is not None and int(rows[0]) == 2, "birinchi tuzatish ham tarixda qolishi shart"
+
+
+async def test_reversals_after_close_leave_the_report_without_a_false_shortage(
+    api_client: httpx.AsyncClient,
+    env: Env,
+    tenant_session: TenantSessionFactory,
+    cashier_headers: dict[str, str],
+    director_headers: dict[str, str],
+) -> None:
+    """261030, Karmana: xato kiritilgan to'lovlar smena YOPILGACH bekor qilindi.
+
+    Storno smenasiz yoziladi (yopiq smenaga tegilmaydi), deklaratsiya 0 ga
+    tuzatiladi. Hisobot kassirga soxta «kamomad» ko'rsatmasligi kerak: tizim
+    summasi stornoni ayiradi va farq 0.
+    """
+    first = env.pay(shift_id=env.seed_shift_id, amount_soum=166_000)
+    second = env.pay(shift_id=env.seed_shift_id, amount_soum=22_000)
+    await _close_ok(api_client, cashier_headers, env.seed_shift_id, 188_000)
+
+    env.reverse(shift_id=None, payment_id=first, amount_soum=166_000)
+    env.reverse(shift_id=None, payment_id=second, amount_soum=22_000)
+    await _correct(tenant_session, env, 0)
+
+    status, declared, system, _ = env.shift(env.seed_shift_id)
+    assert (status, declared, system) == ("closed", 188_000, 188_000), "smena qatori tegilmagan"
+
+    report = await _report(api_client, director_headers, env.today)
+    row = next(item for item in report["rows"] if item["id"] == str(env.seed_shift_id))
+    assert (row["corrected_soum"], row["variance_soum"]) == (0, 0), row
 
 
 async def test_an_open_shift_cannot_be_corrected(
