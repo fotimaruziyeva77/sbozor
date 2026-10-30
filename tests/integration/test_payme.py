@@ -369,6 +369,7 @@ async def test_each_market_kassa_resolves_its_own_market(
         ] is True
         foreign = await _rpc(api_client, "CheckPerformTransaction", params, key="key-b")
         assert foreign["error"]["code"] == -31050, foreign
+        assert foreign["error"]["data"] == "rasta", "xato maydon nomi kassaning maydonidan"
         unknown = await _rpc(api_client, "CheckPerformTransaction", params, key="key-x")
         assert unknown["error"]["code"] == -32504
 

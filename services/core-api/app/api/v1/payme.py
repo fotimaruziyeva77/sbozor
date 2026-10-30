@@ -172,21 +172,23 @@ _REASON_CODES = {
 }
 
 
-async def _due(session: AsyncSession, *, market_id: UUID, stall_code: str) -> StallDue:
+async def _due(
+    session: AsyncSession, *, market_id: UUID, stall_code: str, field: str = ACCOUNT_FIELD
+) -> StallDue:
     """Umumiy `stall_due()` — sababi Payme xato kodiga aylanadi."""
     try:
         return await stall_due(session, market_id=market_id, stall_code=stall_code)
     except DueUnavailable as exc:
-        raise PaymeError(_REASON_CODES[exc.reason], data=ACCOUNT_FIELD) from exc
+        raise PaymeError(_REASON_CODES[exc.reason], data=field) from exc
 
 
-def _account_code(params: dict[str, Any]) -> str:
+def _account_code(params: dict[str, Any], field: str = ACCOUNT_FIELD) -> str:
     account = params.get("account")
     value = None
     if isinstance(account, dict):
         value = next((account[k] for k in ACCOUNT_FIELDS if account.get(k) is not None), None)
     if value is None or not str(value).strip():
-        raise PaymeError(ERR_STALL_NOT_FOUND, data=ACCOUNT_FIELD)
+        raise PaymeError(ERR_STALL_NOT_FOUND, data=field)
     return str(value).strip()
 
 
@@ -224,15 +226,15 @@ def _fiscal_detail(merchant: PaymeMerchant, due: StallDue) -> dict[str, Any] | N
 async def _check_perform(
     session: AsyncSession, merchant: PaymeMerchant, market_id: UUID, params: dict[str, Any]
 ) -> dict[str, Any]:
-    code = _account_code(params)
-    due = await _due(session, market_id=market_id, stall_code=code)
+    code = _account_code(params, merchant.account_field)
+    due = await _due(session, market_id=market_id, stall_code=code, field=merchant.account_field)
     if _amount_soum(params) != due.total_soum:
         raise PaymeError(ERR_AMOUNT)
     pending = await payme_repo.pending_for_stall(
         session, market_id=market_id, stall_id=due.stall_id
     )
     if pending is not None:
-        raise PaymeError(ERR_STALL_BUSY, data=ACCOUNT_FIELD)
+        raise PaymeError(ERR_STALL_BUSY, data=merchant.account_field)
     result: dict[str, Any] = {"allow": True}
     detail = _fiscal_detail(merchant, due)
     if detail is not None:
@@ -269,13 +271,13 @@ async def _create(
             "state": existing.state,
         }
 
-    code = _account_code(params)
-    due = await _due(session, market_id=market_id, stall_code=code)
+    code = _account_code(params, merchant.account_field)
+    due = await _due(session, market_id=market_id, stall_code=code, field=merchant.account_field)
     amount = _amount_soum(params)
     if amount != due.total_soum:
         raise PaymeError(ERR_AMOUNT)
     if await payme_repo.pending_for_stall(session, market_id=market_id, stall_id=due.stall_id):
-        raise PaymeError(ERR_STALL_BUSY, data=ACCOUNT_FIELD)
+        raise PaymeError(ERR_STALL_BUSY, data=merchant.account_field)
     paycom_time = params.get("time")
     tx = await payme_repo.create(
         session,
@@ -549,7 +551,9 @@ async def payme_pay(stall_code: str, request: Request) -> Response:
         sessionmaker, market_id=market_id, request_id="payme:pay"
     ) as session:
         try:
-            due = await _due(session, market_id=market_id, stall_code=code)
+            due = await _due(
+                session, market_id=market_id, stall_code=code, field=merchant.account_field
+            )
         except PaymeError as exc:
             _, uz, _ = _MESSAGES[exc.code]
             return _page(uz, "Savol bo'lsa, kassirga murojaat qiling.", 404)
