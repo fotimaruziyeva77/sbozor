@@ -117,7 +117,17 @@
         "exit_grace_minutes": {"description": "To'lovdan keyin chiqish uchun berilgan vaqt", "type": "integer", "minimum": 0, "maximum": 120},
         "staff": {"description": "Kassirlar: ID va ko'rinadigan yorliq (ism emas).", "type": "array",
           "items": {"type": "object", "required": ["id", "label"], "additionalProperties": false,
-            "properties": {"id": {"type": "string"}, "label": {"type": "string"}}}}
+            "properties": {"id": {"type": "string"}, "label": {"type": "string"}}}},
+        "exempt_plates": {
+          "description": "Pul olinmaydigan mashinalar (xodimlar, ijarachilar). Chiqishda shlagbaum o'zi ochiladi, seans «exempt» bilan yopiladi. Raqam bo'shliqsiz solishtiriladi.",
+          "type": "array",
+          "maxItems": 500,
+          "items": {"type": "object", "required": ["plate"], "additionalProperties": false,
+            "properties": {
+              "plate": {"type": "string", "minLength": 4, "maxLength": 12},
+              "label": {"description": "Kimniki (ko'rinadigan yorliq)", "type": "string", "maxLength": 60}
+            }}
+        }
       }
     },
     "livestock": {

@@ -93,7 +93,7 @@
         "amount_soum": {"type": "integer", "minimum": 0},
         "payment_ids": {"type": "array", "items": {"type": "string"}},
         "duration_minutes": {"type": "integer", "minimum": 0},
-        "reason": {"type": "string", "enum": ["paid", "free", "manual", "online"]}
+        "reason": {"description": "exempt — pul olinmaydigan ro'yxatdagi mashina", "type": "string", "enum": ["paid", "free", "manual", "online", "exempt"]}
       }
     },
     "parking.gate.opened": {
@@ -102,10 +102,22 @@
       "additionalProperties": false,
       "properties": {
         "lane_id": {"type": "string"},
-        "reason": {"type": "string", "enum": ["session", "paid", "pass", "manual", "free_mode"]},
+        "reason": {"type": "string", "enum": ["session", "paid", "pass", "manual", "free_mode", "exempt"]},
         "staff_id": {"type": "string"},
         "command_id": {"type": "string", "format": "uuid"},
         "file_id": {"$ref": "#/$defs/file_id"}
+      }
+    },
+    "parking.gate.closed": {
+      "description": "Kassir shlagbaumni qo'lda yopdi (odatda hammasini birdan, kun oxirida).",
+      "type": "object",
+      "required": ["lane_id", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "lane_id": {"type": "string"},
+        "reason": {"type": "string", "enum": ["manual"]},
+        "staff_id": {"type": "string"},
+        "command_id": {"type": "string", "format": "uuid"}
       }
     },
     "parking.gate.passage": {
