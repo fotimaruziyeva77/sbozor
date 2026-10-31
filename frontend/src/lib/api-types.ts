@@ -3005,3 +3005,49 @@ export const edgeParkingSummarySchema = z.object({
   last_plates: z.array(edgePlateReadSchema),
 });
 export type EdgeParkingSummary = z.infer<typeof edgeParkingSummarySchema>;
+
+/*
+ * Avtoturargoh DAVR hisoboti — `GET /edge-sites/{id}/parking-report`.
+ * `.xlsx` jufti bir xil ma'lumotni fayl qilib beradi (`edge-site-queries.ts`).
+ */
+export const edgeParkingReportTotalsSchema = z.object({
+  entries: z.number().int(),
+  exits: z.number().int(),
+  cash: soumSchema,
+  terminal: soumSchema,
+  total: soumSchema,
+  free_count: z.number().int(),
+});
+export type EdgeParkingReportTotals = z.infer<
+  typeof edgeParkingReportTotalsSchema
+>;
+
+export const edgeParkingReportDaySchema = edgeParkingReportTotalsSchema.extend({
+  date: z.string(),
+});
+export type EdgeParkingReportDay = z.infer<typeof edgeParkingReportDaySchema>;
+
+/** `null` — hodisa kelmagan (ochiq seans, raqamsiz kirish); `0` EMAS. */
+export const edgeParkingReportSessionSchema = z.object({
+  plate: z.string().nullable(),
+  entered_at: z.string().nullable(),
+  exited_at: z.string().nullable(),
+  duration_minutes: z.number().int().nullable(),
+  amount_soum: soumSchema,
+  method: z.string().nullable(),
+  reason: z.string().nullable(),
+});
+export type EdgeParkingReportSession = z.infer<
+  typeof edgeParkingReportSessionSchema
+>;
+
+export const edgeParkingReportSchema = z.object({
+  site_id: z.string(),
+  site_name: z.string(),
+  from_date: z.string(),
+  to_date: z.string(),
+  days: z.array(edgeParkingReportDaySchema),
+  total: edgeParkingReportTotalsSchema,
+  sessions: z.array(edgeParkingReportSessionSchema),
+});
+export type EdgeParkingReport = z.infer<typeof edgeParkingReportSchema>;

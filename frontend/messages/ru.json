@@ -62,7 +62,8 @@
     "reconciliation": "Расхождения",
     "reports": "Отчёты",
     "switchMarket": "Сменить рынок",
-    "agents": "Агенты"
+    "agents": "Агенты",
+    "parking": "Автостоянка"
   },
   "auth": {
     "phoneLabel": "Номер телефона",
@@ -2603,5 +2604,44 @@
       "alt": "Кадр события",
       "unavailable": "Кадр не открылся"
     }
+  },
+  "parkingReport": {
+    "title": "Отчёт по автостоянке",
+    "subtitle": "Сколько машин въехало и выехало за выбранный период и какая была выручка. Список машин — в Excel файле.",
+    "siteLabel": "Объект",
+    "periodLabel": "Период",
+    "periodFrom": "Начало",
+    "periodTo": "Конец",
+    "preset": {
+      "thisMonth": "Текущий месяц",
+      "lastMonth": "Прошлый месяц",
+      "lastWeek": "Последняя неделя"
+    },
+    "periodHint": "Не более 92 дней; дата окончания не позже сегодняшней.",
+    "periodShown": "{from} — {to}",
+    "summaryLabel": "Итоги периода",
+    "entries": "Въехало",
+    "exits": "Выехало",
+    "revenue": "Выручка",
+    "free": "Выехало бесплатно",
+    "amountUnit": "сум",
+    "byCash": "Наличные: {amount}",
+    "byTerminal": "Терминал: {amount}",
+    "sessionsCount": "{count, plural, one {# сеанс} few {# сеанса} other {# сеансов}} — полный список в Excel файле.",
+    "daysTitle": "По дням",
+    "colDate": "Дата",
+    "colEntries": "Въехало",
+    "colExits": "Выехало",
+    "colCash": "Наличные",
+    "colTerminal": "Терминал",
+    "colTotal": "Итого",
+    "colFree": "Бесплатно",
+    "totalRow": "Итого",
+    "export": "Скачать Excel",
+    "exportHint": "Два листа: дни и список машин.",
+    "noSitesTitle": "Нет объекта автостоянки",
+    "noSitesHint": "Добавьте агента автостоянки в разделе «Агенты» — отчёт строится по событиям этого объекта.",
+    "emptyTitle": "За этот период событий нет",
+    "emptyHint": "Агент не подключён или в выбранные дни машины не въезжали."
   }
 }

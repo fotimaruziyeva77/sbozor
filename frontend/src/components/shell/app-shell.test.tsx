@@ -485,7 +485,7 @@ describe("AppShell — yon panelda guruh uyumi bo'lmaydi (261004)", () => {
    * qaytarardi va «oshgan guruh yo'q» asserti yashil bo'lardi. Aynan
    * `MINIMUM_SCANNED_ROUTES` qo'riqlaydigan nosozlik sinfi.
    */
-  test("QUYI CHEGARA: direktor haqiqatan to'rt guruhni va 14 havolani ko'radi", () => {
+  test("QUYI CHEGARA: direktor haqiqatan to'rt guruhni va 15 havolani ko'radi", () => {
     seedRoles(["director"]);
     renderShell();
 
@@ -497,9 +497,10 @@ describe("AppShell — yon panelda guruh uyumi bo'lmaydi (261004)", () => {
       [...GURUHLAR].sort((a, b) => a.localeCompare(b)),
     );
 
-    // Jami havola soni: 14 band, biri («Boshqaruv paneli») guruhsiz.
+    // Jami havola soni: 15 band, biri («Boshqaruv paneli») guruhsiz.
+    // 15-band — «Avtoturargoh» (`camera_view`, «Pul» guruhi 3 -> 4).
     const jami = [...sanoq.values()].reduce((a, b) => a + b, 0);
-    expect(jami, "direktorda guruhli havolalar soni kutilganidan kam").toBe(13);
+    expect(jami, "direktorda guruhli havolalar soni kutilganidan kam").toBe(14);
 
     // Va eng kattasi AYNAN 5 — o'lchangan holat kodda qotib qolsin.
     expect(Math.max(...sanoq.values())).toBe(5);

@@ -62,7 +62,8 @@
     "reconciliation": "Номувофиқликлар",
     "reports": "Ҳисоботлар",
     "switchMarket": "Бозорни алмаштириш",
-    "agents": "Агентлар"
+    "agents": "Агентлар",
+    "parking": "Автотураргоҳ"
   },
   "auth": {
     "phoneLabel": "Телефон рақами",
@@ -2603,5 +2604,44 @@
       "alt": "Ҳодиса кадри",
       "unavailable": "Кадр очилмади"
     }
+  },
+  "parkingReport": {
+    "title": "Автотураргоҳ ҳисоботи",
+    "subtitle": "Танланган даврда қанча машина киргани, чиққани ва қанча тушум бўлгани. Машиналар рўйхати Excel файлда.",
+    "siteLabel": "Объект",
+    "periodLabel": "Давр",
+    "periodFrom": "Бошланиши",
+    "periodTo": "Тугаши",
+    "preset": {
+      "thisMonth": "Жорий ой",
+      "lastMonth": "Ўтган ой",
+      "lastWeek": "Охирги ҳафта"
+    },
+    "periodHint": "Энг кўпи 92 кун; тугаш санаси бугундан ошмайди.",
+    "periodShown": "{from} — {to}",
+    "summaryLabel": "Давр хулосаси",
+    "entries": "Кирди",
+    "exits": "Чиқди",
+    "revenue": "Тушум",
+    "free": "Бепул чиқди",
+    "amountUnit": "сўм",
+    "byCash": "Нақд: {amount}",
+    "byTerminal": "Терминал: {amount}",
+    "sessionsCount": "{count} та машина сеанси — тўлиқ рўйхат Excel файлда.",
+    "daysTitle": "Кунлар бўйича",
+    "colDate": "Сана",
+    "colEntries": "Кирди",
+    "colExits": "Чиқди",
+    "colCash": "Нақд",
+    "colTerminal": "Терминал",
+    "colTotal": "Жами",
+    "colFree": "Бепул",
+    "totalRow": "Жами",
+    "export": "Excel юклаб олиш",
+    "exportHint": "Икки варақ: кунлар ва машиналар рўйхати.",
+    "noSitesTitle": "Автотураргоҳ объекти йўқ",
+    "noSitesHint": "Автотураргоҳ агентини «Агентлар» бўлимида қўшинг — ҳисобот шу обектнинг ҳодисаларидан йиғилади.",
+    "emptyTitle": "Бу даврда ҳодиса йўқ",
+    "emptyHint": "Агент уланмаган ёки танланган кунларда машина кирмаган."
   }
 }

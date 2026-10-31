@@ -2,7 +2,8 @@
 
 Tanlangan bozor doirasida (`TenantSessionDep`, RLS): obyektlar va ularning
 agentlari, aktivatsiya kodi, biznes sozlamasi (versiyalangan), buyruqlar,
-hodisalar, avtoturargoh kunlik xulosasi va kadr.
+hodisalar, avtoturargoh kunlik xulosasi, davr hisoboti (JSON + `.xlsx`)
+va kadr.
 
 HUQUQLAR — mavjud matritsadan, YANGI HUQUQ QO'SHILMADI:
   * o'qish — `CAMERA_VIEW` (platforma admini, bozor admini, direktor);
@@ -16,6 +17,7 @@ Har yozuv `audit_log` ga ilova qatlamida yoziladi; kadr ochilishi —
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import UUID
@@ -28,12 +30,15 @@ from pydantic import BaseModel, Field
 from sbozor_core.enums import AuditAction
 from sqlalchemy.exc import IntegrityError
 
+# `_locale_of` va `_xlsx_response` `imports.py` DAN — `reports.py` bilan bir
+# xil qaror: profil tili va yuklab olish javobining qoidasi BITTA joyda.
+from app.api.v1.imports import _locale_of, _xlsx_response
 from app.deps import Principal, SettingsDep, TenantSessionDep, require_permission
 from app.edge_contract import COMMAND_TYPES
 from app.repositories import edge_repo
 from app.security.audit import AuditReadIntent, audit_read, write_app_audit
 from app.security.rbac import Permission
-from app.services import storage
+from app.services import parking_report, storage
 from app.services.edge_config import default_doc, strip_derived, validate_doc
 from app.services.storage import StorageError
 
@@ -193,6 +198,41 @@ class ParkingSummaryOut(BaseModel):
     cash_total_soum: int
     cash_by_method: CashByMethod
     last_plates: list[PlateOut]
+
+
+class ParkingReportTotalsOut(BaseModel):
+    entries: int
+    exits: int
+    cash: int
+    terminal: int
+    total: int
+    free_count: int
+
+
+class ParkingReportDayOut(ParkingReportTotalsOut):
+    date: date
+
+
+class ParkingReportSessionOut(BaseModel):
+    """Bitta mashina. `None` — hodisa kelmagan (ochiq seans, raqamsiz kirish)."""
+
+    plate: str | None
+    entered_at: datetime | None
+    exited_at: datetime | None
+    duration_minutes: int | None
+    amount_soum: int
+    method: str | None
+    reason: str | None
+
+
+class ParkingReportOut(BaseModel):
+    site_id: str
+    site_name: str
+    from_date: date
+    to_date: date
+    days: list[ParkingReportDayOut]
+    total: ParkingReportTotalsOut
+    sessions: list[ParkingReportSessionOut]
 
 
 # ---------------------------------------------------------------------------
@@ -566,6 +606,170 @@ async def parking_summary(
         cash_by_method=CashByMethod(cash=cash, terminal=terminal),
         last_plates=list(reversed(plates))[:20],
     )
+
+
+# ---------------------------------------------------------------------------
+# Avtoturargoh davr hisoboti
+# ---------------------------------------------------------------------------
+
+# ⛔ KODLAR `reports.py` NIKI BILAN AYNAN BIR XIL: frontend ularni
+#    `report-errors.ts::REPORT_ERROR_CODES` orqali uch tilda sabab + keyingi
+#    qadam matniga o'giradi. Yangi kod yozilsa ekranda «noma'lum xato»
+#    chiqardi, holbuki sabab oddiy — «davr juda uzun».
+_REPORT_PERIOD_FUTURE = "report_period_future"
+_REPORT_PERIOD_INVALID = "report_period_invalid"
+_REPORT_PERIOD_TOO_LONG = "report_period_too_long"
+_REPORT_TOO_LARGE = "report_too_large"
+
+_FILENAME_UNSAFE = re.compile(r"[^A-Za-z0-9_-]+")
+
+ReportFromDep = Annotated[date, Query(alias="from")]
+ReportToDep = Annotated[date, Query(alias="to")]
+
+
+def _check_report_period(from_date: date, to_date: date) -> None:
+    """Davr tekshiruvi — ⛔ JIMGINA KESILMAYDI, rad etiladi (`reports.py` qoidasi).
+
+    `reports.py::_report_period` dan FARQI: yuqori chegara BUGUN, kecha
+    emas. Avtoturargoh hodisalari real vaqtda keladi (D+1 yopilish yo'q),
+    ya'ni bugungi kun ham to'liq ma'noli — direktor «bugun qancha kirdi?»
+    deb so'raydi.
+    """
+    today = datetime.now(TASHKENT).date()
+    if to_date > today:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_REPORT_PERIOD_FUTURE
+        )
+    if from_date > to_date:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_REPORT_PERIOD_INVALID
+        )
+    if (to_date - from_date).days + 1 > parking_report.MAX_PERIOD_DAYS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_REPORT_PERIOD_TOO_LONG
+        )
+
+
+async def _parking_report(
+    session: Any,
+    principal: Principal,
+    settings: Any,
+    site_id: str,
+    from_date: date,
+    to_date: date,
+) -> tuple[edge_repo.SiteRow, parking_report.ParkingReport]:
+    """JSON va `.xlsx` marshrutlarining UMUMIY boshi — bitta hisob, ikki shakl.
+
+    Hisob `parking_report.build_parking_report` da (sof funksiya); bu yerda
+    faqat davr tekshiruvi, hodisalarni olish va hajm darvozasi.
+    """
+    market_id = _market_id(principal)
+    site = await _site_or_404(session, market_id, site_id)
+    _check_report_period(from_date, to_date)
+
+    start = datetime.combine(from_date, time.min, tzinfo=TASHKENT)
+    end = datetime.combine(to_date, time.min, tzinfo=TASHKENT) + timedelta(days=1)
+    rows = await edge_repo.summary_events(
+        session, market_id, site.id, types=parking_report.EVENT_TYPES, start=start, end=end
+    )
+    report = parking_report.build_parking_report(rows, from_date=from_date, to_date=to_date)
+
+    # ⛔ Seanslar ro'yxati JIMGINA KESILMAYDI (`reports.py::_guard_row_count`
+    #    qoidasi): kesilgan varaq to'liq ko'rinardi va direktor yetishmagan
+    #    mashinalarni hech qachon sezmasdi.
+    if len(report.sessions) > settings.report_max_rows:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_REPORT_TOO_LARGE
+        )
+    return site, report
+
+
+def _report_out(site: edge_repo.SiteRow, report: parking_report.ParkingReport) -> ParkingReportOut:
+    return ParkingReportOut(
+        site_id=site.id,
+        site_name=site.name,
+        from_date=report.from_date,
+        to_date=report.to_date,
+        days=[
+            ParkingReportDayOut(
+                date=day.day,
+                entries=day.entries,
+                exits=day.exits,
+                cash=day.cash_soum,
+                terminal=day.terminal_soum,
+                total=day.total_soum,
+                free_count=day.free_count,
+            )
+            for day in report.days
+        ],
+        total=ParkingReportTotalsOut(
+            entries=report.total.entries,
+            exits=report.total.exits,
+            cash=report.total.cash_soum,
+            terminal=report.total.terminal_soum,
+            total=report.total.total_soum,
+            free_count=report.total.free_count,
+        ),
+        sessions=[
+            ParkingReportSessionOut(
+                plate=row.plate,
+                entered_at=row.entered_at,
+                exited_at=row.exited_at,
+                duration_minutes=row.duration_minutes,
+                amount_soum=row.amount_soum,
+                method=row.method,
+                reason=row.reason,
+            )
+            for row in report.sessions
+        ],
+    )
+
+
+@router.get("/{site_id}/parking-report", response_model=ParkingReportOut)
+async def parking_report_json(
+    site_id: str,
+    principal: ViewerDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    from_date: ReportFromDep,
+    to_date: ReportToDep,
+) -> ParkingReportOut:
+    """Davr (Toshkent kunlari, `to` kiradi, eng ko'pi 92 kun): kunlar,
+    yig'indi va mashinalar ro'yxati.
+
+    Huquq `parking-summary` bilan AYNI (`CAMERA_VIEW`) — direktor va
+    ma'muriyat ko'radi, kassir yo'q.
+    """
+    site, report = await _parking_report(session, principal, settings, site_id, from_date, to_date)
+    return _report_out(site, report)
+
+
+@router.get("/{site_id}/parking-report.xlsx", response_class=StreamingResponse)
+async def parking_report_xlsx(
+    site_id: str,
+    principal: ViewerDep,
+    session: TenantSessionDep,
+    settings: SettingsDep,
+    from_date: ReportFromDep,
+    to_date: ReportToDep,
+) -> StreamingResponse:
+    """Xuddi shu hisobot `.xlsx` bo'lib: «Kunlar» (JAMI qatori bilan) va
+    «Mashinalar» varaqlari. Til — so'rovchining profilidan (D-06).
+
+    Fayl nomi `avtoturargoh_{site_id}_{from}_{to}.xlsx` — TO'LIQ ASCII
+    (`Content-Disposition` sarlavhasiga tushadi), obyekt identifikatori
+    serverniki va ASCII, lekin baribir tozalanadi.
+    """
+    site, report = await _parking_report(session, principal, settings, site_id, from_date, to_date)
+    locale = await _locale_of(session, principal)
+    payload = parking_report.build_parking_report_workbook(
+        report, locale=locale, site_name=site.name
+    )
+    filename = (
+        f"avtoturargoh_{_FILENAME_UNSAFE.sub('-', site.id)}"
+        f"_{from_date.isoformat()}_{to_date.isoformat()}.xlsx"
+    )
+    return _xlsx_response(payload, filename)
 
 
 # ---------------------------------------------------------------------------

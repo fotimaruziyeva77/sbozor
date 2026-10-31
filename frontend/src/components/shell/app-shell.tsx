@@ -5,6 +5,7 @@ import {
   Banknote,
   CalendarClock,
   CalendarDays,
+  CarFront,
   ClipboardCheck,
   Cpu,
   Ellipsis,
@@ -77,6 +78,7 @@ type NavItem = {
     | "/billing"
     | "/reconciliation"
     | "/reports"
+    | "/parking"
     | "/users"
     | "/audit"
     | "/markets/new";
@@ -96,6 +98,7 @@ type NavItem = {
     | "billing"
     | "reconciliation"
     | "reports"
+    | "parking"
     | "users"
     | "audit"
     | "newMarket";
@@ -423,6 +426,33 @@ const NAV_ITEMS: readonly NavItem[] = [
     labelKey: "reports",
     icon: FileSpreadsheet,
     permission: "report_view",
+    group: "money",
+  },
+  /*
+   * «Avtoturargoh» — universal agent (edge) obyektining DAVR hisoboti:
+   * kirdi/chiqdi/tushum + Excel.
+   *
+   * `/reports` DAN KEYIN, `money` GURUHIDA: bu ham PUL hisoboti, lekin
+   * manbasi boshqa — `daily_charges` emas, agent hodisalari. Shuning
+   * uchun u `/reports` sahifasining ichiga QO'SHILMADI: u yerdagi davr
+   * «maksimum kecha» qoidasi bilan yashaydi (D+1 yopilish), avtoturargoh
+   * hodisalari esa real vaqtda keladi va bugungi kun ham ma'noli.
+   *
+   * ⛔ HUQUQ `camera_view`, `report_view` EMAS — server marshruti
+   *    (`edge_sites.py::parking_report_*`) AYNAN `CAMERA_VIEW` ostida,
+   *    `parking-summary` bilan bir xil. Menyu serverdagi darvozaning
+   *    ko'zgusi bo'lishi shart: `report_view` yozilsa buxgalter tugmani
+   *    ko'rib turib 403 olardi, platforma admini esa ko'rmay qolardi.
+   *    Yangi `Permission` QO'SHILMAYDI.
+   *
+   * Guruh chegarasi (`app-shell.test.tsx`, 6): direktor va bozor adminida
+   * «Pul» 3 -> 4. Mobil kontrakt buzilmaydi — yozuv «Ko'proq» varag'ida.
+   */
+  {
+    href: "/parking",
+    labelKey: "parking",
+    icon: CarFront,
+    permission: "camera_view",
     group: "money",
   },
   /*

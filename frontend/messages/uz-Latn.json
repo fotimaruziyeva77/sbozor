@@ -62,7 +62,8 @@
     "reconciliation": "Nomuvofiqliklar",
     "reports": "Hisobotlar",
     "switchMarket": "Bozorni almashtirish",
-    "agents": "Agentlar"
+    "agents": "Agentlar",
+    "parking": "Avtoturargoh"
   },
   "auth": {
     "phoneLabel": "Telefon raqami",
@@ -2603,5 +2604,44 @@
       "alt": "Hodisa kadri",
       "unavailable": "Kadr ochilmadi"
     }
+  },
+  "parkingReport": {
+    "title": "Avtoturargoh hisoboti",
+    "subtitle": "Tanlangan davrda qancha mashina kirgani, chiqqani va qancha tushum bo'lgani. Mashinalar ro'yxati Excel faylda.",
+    "siteLabel": "Obyekt",
+    "periodLabel": "Davr",
+    "periodFrom": "Boshlanishi",
+    "periodTo": "Tugashi",
+    "preset": {
+      "thisMonth": "Joriy oy",
+      "lastMonth": "O'tgan oy",
+      "lastWeek": "Oxirgi hafta"
+    },
+    "periodHint": "Eng ko'pi 92 kun; tugash sanasi bugundan oshmaydi.",
+    "periodShown": "{from} — {to}",
+    "summaryLabel": "Davr xulosasi",
+    "entries": "Kirdi",
+    "exits": "Chiqdi",
+    "revenue": "Tushum",
+    "free": "Bepul chiqdi",
+    "amountUnit": "so'm",
+    "byCash": "Naqd: {amount}",
+    "byTerminal": "Terminal: {amount}",
+    "sessionsCount": "{count} ta mashina seansi — to'liq ro'yxat Excel faylda.",
+    "daysTitle": "Kunlar bo'yicha",
+    "colDate": "Sana",
+    "colEntries": "Kirdi",
+    "colExits": "Chiqdi",
+    "colCash": "Naqd",
+    "colTerminal": "Terminal",
+    "colTotal": "Jami",
+    "colFree": "Bepul",
+    "totalRow": "Jami",
+    "export": "Excel yuklab olish",
+    "exportHint": "Ikki varaq: kunlar va mashinalar ro'yxati.",
+    "noSitesTitle": "Avtoturargoh obyekti yo'q",
+    "noSitesHint": "Avtoturargoh agentini «Agentlar» bo'limida qo'shing — hisobot shu obyektning hodisalaridan yig'iladi.",
+    "emptyTitle": "Bu davrda hodisa yo'q",
+    "emptyHint": "Agent ulanmagan yoki tanlangan kunlarda mashina kirmagan."
   }
 }

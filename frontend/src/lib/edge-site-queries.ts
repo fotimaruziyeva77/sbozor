@@ -16,6 +16,7 @@ import {
   edgeConfigInvalidSchema,
   edgeConfigSchema,
   edgeEventPageSchema,
+  edgeParkingReportSchema,
   edgeParkingSummarySchema,
   edgeSiteCreatedSchema,
   edgeSiteListSchema,
@@ -27,7 +28,7 @@ import type {
   EdgeSiteKind,
 } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
-import { domainKey } from "@/lib/market-queries";
+import { domainKey, saveBlob } from "@/lib/market-queries";
 
 /*
  * =============================================================================
@@ -62,6 +63,12 @@ export const edgeEventsKey = (marketId: string, siteId: string, type: string) =>
   domainKey(marketId, "edge-sites", "events", siteId, type);
 export const edgeParkingSummaryKey = (marketId: string, siteId: string) =>
   domainKey(marketId, "edge-sites", "parking-summary", siteId);
+export const edgeParkingReportKey = (
+  marketId: string,
+  siteId: string,
+  from: string,
+  to: string,
+) => domainKey(marketId, "edge-sites", "parking-report", siteId, from, to);
 export const edgeFileKey = (marketId: string, siteId: string, fileId: string) =>
   domainKey(marketId, "edge-file", siteId, fileId);
 
@@ -250,6 +257,96 @@ export function useEdgeParkingSummaryQuery(
     refetchInterval: SITE_POLL_MS,
     refetchIntervalInBackground: false,
   });
+}
+
+/* --- Avtoturargoh davr hisoboti -------------------------------------------- */
+
+/** Hisobot davri — ⛔ IKKALA chegara ham MAJBURIY (fayl davrsiz tarqalmasin). */
+export type ParkingReportPeriod = {
+  readonly from: string;
+  readonly to: string;
+};
+
+/**
+ * ⛔ IKKI YO'L, IKKI FUNKSIYA (`report-queries.ts::buildReportDataPath` /
+ *    `buildReportPath` bilan AYNI mulohaza): bitta funksiyaga format
+ *    argumenti qo'shilsa uni unutish mumkin bo'lardi va `saveBlob` diskka
+ *    `.xlsx` nomi bilan JSON yozardi.
+ */
+function buildParkingReportDataPath(
+  siteId: string,
+  period: ParkingReportPeriod,
+): string {
+  const query = new URLSearchParams({ from: period.from, to: period.to });
+  return `${sitePath(siteId)}/parking-report?${query.toString()}`;
+}
+
+function buildParkingReportExportPath(
+  siteId: string,
+  period: ParkingReportPeriod,
+): string {
+  const query = new URLSearchParams({ from: period.from, to: period.to });
+  return `${sitePath(siteId)}/parking-report.xlsx?${query.toString()}`;
+}
+
+/**
+ * `GET /edge-sites/{id}/parking-report?from=&to=` — kunlar, yig'indi, seanslar.
+ *
+ * `staleTime` 1 daqiqa: bugungi kun ham davrga kiradi va hodisalar real
+ * vaqtda keladi — lekin har fokusda qayta so'rash direktor ekranini
+ * sababsiz miltillatardi.
+ */
+export function useEdgeParkingReportQuery(
+  siteId: string,
+  period: ParkingReportPeriod,
+  options: { enabled: boolean },
+) {
+  const marketId = useMarketId();
+  return useQuery({
+    queryKey: edgeParkingReportKey(marketId ?? "", siteId, period.from, period.to),
+    queryFn: ({ signal }) =>
+      apiFetch(buildParkingReportDataPath(siteId, period), {
+        schema: edgeParkingReportSchema,
+        signal,
+      }),
+    enabled: marketId !== null && siteId !== "" && options.enabled,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * `Content-Disposition` dan fayl nomini O'QIYDI — server quradi (D-06).
+ * Sarlavha yo'q/bo'sh/`download` bo'lsa ASCII zaxira shablon.
+ */
+function parkingReportFilename(
+  response: Response,
+  siteId: string,
+  period: ParkingReportPeriod,
+): string {
+  const header = response.headers.get("content-disposition") ?? "";
+  const quoted = /filename\s*=\s*"([^"]*)"/iu.exec(header);
+  const name = (quoted?.[1] ?? "").split(/[/\\]/u).pop()?.trim() ?? "";
+  if (name === "" || name === "download") {
+    return `avtoturargoh_${siteId}_${period.from}_${period.to}.xlsx`;
+  }
+  return name;
+}
+
+/**
+ * `.xlsx` ni diskka tushiradi — `report-queries.ts::downloadReport` naqshi.
+ *
+ * ⛔ `window.open` / `location.href` / xom anchor YO'Q: access token
+ *    XOTIRADA va SARLAVHADA ketadi (`api-client.ts`), brauzer boshlagan
+ *    yuklab olish tokensiz 401 olardi va 401 tanasini `.xlsx` nomi bilan
+ *    saqlardi. Yagona zanjir: `apiRequest` -> `blob` -> `saveBlob`.
+ */
+export async function downloadParkingReport(
+  siteId: string,
+  period: ParkingReportPeriod,
+): Promise<void> {
+  const response = await apiRequest(buildParkingReportExportPath(siteId, period));
+  saveBlob(await response.blob(), parkingReportFilename(response, siteId, period));
 }
 
 /* --- Kadr fayllari -------------------------------------------------------- */
