@@ -11,6 +11,7 @@ import {
 } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 
+import { ExemptPlatesCard } from "@/components/parking/exempt-plates-card";
 import { ParkingExportButton } from "@/components/parking/parking-export-button";
 import {
   businessDayIn,
@@ -227,6 +228,12 @@ export function ParkingReportWorkspace() {
           siteId={selectedSite.id}
         />
       ) : null}
+
+      {/*
+       * Bepul ro'yxat hisobotdan MUSTAQIL: hisobot yiqilsa ham ro'yxat
+       * o'zgartirilaveradi (u boshqa so'rov — obyekt sozlamasi).
+       */}
+      <ExemptPlatesCard key={selectedSite.id} siteId={selectedSite.id} />
     </div>
   );
 }

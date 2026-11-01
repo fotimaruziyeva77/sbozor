@@ -2642,6 +2642,30 @@
     "noSitesTitle": "Avtoturargoh obyekti yo'q",
     "noSitesHint": "Avtoturargoh agentini «Agentlar» bo'limida qo'shing — hisobot shu obyektning hodisalaridan yig'iladi.",
     "emptyTitle": "Bu davrda hodisa yo'q",
-    "emptyHint": "Agent ulanmagan yoki tanlangan kunlarda mashina kirmagan."
+    "emptyHint": "Agent ulanmagan yoki tanlangan kunlarda mashina kirmagan.",
+    "exempt": {
+      "title": "Pul olinmaydigan mashinalar",
+      "hint": "Bozor xodimlari va ijarachilar: chiqishda shlagbaum o'zi ochiladi, summa 0. O'zgarish agentga bir daqiqada yetib boradi.",
+      "count": "{count} ta mashina",
+      "colPlate": "Raqam",
+      "colLabel": "Kimniki",
+      "plateLabel": "Davlat raqami",
+      "plateHint": "Masalan 85C525OA — bo'shliq va harf o'lchami farq qilmaydi",
+      "labelLabel": "Kimniki (ixtiyoriy)",
+      "labelHint": "Ism yoki lavozim, masalan «Sardor (ishchi)»",
+      "add": "Ro'yxatga qo'shish",
+      "remove": "Olib tashlash",
+      "removeTitle": "Ro'yxatdan olib tashlash",
+      "removeDescription": "{plate} keyingi chiqishda oddiy tarif bo'yicha to'laydi.",
+      "errPlate": "Raqam 4 tadan 12 tagacha harf yoki raqamdan iborat bo'lsin",
+      "errDuplicate": "Bu raqam ro'yxatda allaqachon bor",
+      "errLabel": "Yorliq 60 belgidan oshmasin",
+      "errFull": "Ro'yxat to'lgan: eng ko'pi 500 ta mashina",
+      "saved": "Saqlandi — ro'yxat agentga yuborildi (versiya {version})",
+      "conflict": "Kimdir hozirgina shu ro'yxatni o'zgartirdi. Ro'yxat yangilandi, qayta urinib ko'ring.",
+      "empty": "Ro'yxat bo'sh",
+      "emptyHint": "Raqamni qo'shing — mashina shu zahoti bepul chiqadigan bo'ladi.",
+      "readOnly": "Ro'yxatni bozor administratori o'zgartiradi."
+    }
   }
 }

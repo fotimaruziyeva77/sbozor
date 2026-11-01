@@ -16,6 +16,7 @@ import {
 import { EventList } from "@/components/edge-agents/event-list";
 import { ParkingSummary } from "@/components/edge-agents/parking-summary";
 import { DevicesSummary } from "@/components/edge-agents/site-list";
+import { ExemptPlatesCard } from "@/components/parking/exempt-plates-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -81,6 +82,8 @@ export function SiteDetail({
       {hasParkingSummary(site.data) ? <ParkingSummary siteId={siteId} /> : null}
       <CommandPanel canManage={canManage} site={site.data} />
       <EventList siteId={siteId} />
+      {/* Avtoturargohda bepul ro'yxat — JSON muharriridan oldin, oddiy forma. */}
+      {site.data.kind === "parking" ? <ExemptPlatesCard siteId={siteId} /> : null}
       <ConfigEditor canManage={canManage} siteId={siteId} />
     </div>
   );
