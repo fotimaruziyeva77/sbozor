@@ -254,6 +254,10 @@ services:
       PAYME_IKPU: ${PAYME_IKPU:-}
       PAYME_PACKAGE_CODE: ${PAYME_PACKAGE_CODE:-}
       PAYME_ACCOUNT_FIELD: ${PAYME_ACCOUNT_FIELD:-rasta}
+      # Payme sinov muhiti (test.paycom.uz) kaliti — asosiy kalit bilan birga
+      # ishlaydi, faqat PAYME_TEST_IPS tarmog'idan qabul qilinadi (261102).
+      PAYME_TEST_KEY: ${PAYME_TEST_KEY:-}
+      PAYME_TEST_IPS: ${PAYME_TEST_IPS:-185.234.113.0/24}
       # Click (0035). Bo'sh kalit `/api/v1/click/*` ni 503 bilan yopadi.
       CLICK_SECRET_KEY: ${CLICK_SECRET_KEY:-}
       CLICK_SERVICE_ID: ${CLICK_SERVICE_ID:-}

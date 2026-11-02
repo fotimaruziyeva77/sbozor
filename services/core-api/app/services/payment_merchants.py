@@ -39,7 +39,7 @@ from __future__ import annotations
 import hmac
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -58,6 +58,7 @@ __all__ = [
     "market_by_slug",
     "payme_by_key",
     "payme_configured",
+    "payme_match",
     "payme_for_market",
 ]
 
@@ -77,6 +78,10 @@ class PaymeMerchant:
     ikpu: str = ""
     package_code: str = ""
     account_field: str = "rasta"
+    # Payme sinov muhiti (test.paycom.uz) shu kassaning SINOV kaliti bilan
+    # so'raydi. Bo'sh bo'lsa sinov so'rovlari -32504 oladi. Qaysi manzildan
+    # qabul qilinishi `payme.py::_merchant` da tekshiriladi.
+    test_key: str = field(default="", repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +130,8 @@ def _unique[T](merchants: list[T], *keys: str, source: str) -> tuple[T, ...]:
         seen: dict[str, int] = {}
         for index, merchant in enumerate(merchants):
             value = str(getattr(merchant, key))
+            if not value:  # ixtiyoriy maydon (sinov kaliti) — bo'shlar takror emas
+                continue
             if value in seen:
                 bad |= {index, seen[value]}
                 log.error("payment_merchant_invalid", source=source, reason=f"duplicate_{key}")
@@ -133,16 +140,22 @@ def _unique[T](merchants: list[T], *keys: str, source: str) -> tuple[T, ...]:
 
 
 @lru_cache(maxsize=8)
-def _payme(raw: str, legacy: tuple[str, str, str, str, str, str, str]) -> tuple[PaymeMerchant, ...]:
+def _payme(
+    raw: str, legacy: tuple[str, str, str, str, str, str, str, str]
+) -> tuple[PaymeMerchant, ...]:
     out: list[PaymeMerchant] = []
-    key, market, merchant_id, ikpu, package_code, slug, field_ = legacy
+    key, market, merchant_id, ikpu, package_code, slug, field_, test_key = legacy
     field_ = field_ if _FIELD.match(field_) else "rasta"
     if key and market:
         market_id = _uuid(market)
         if market_id is None:
             log.error("payment_merchant_invalid", source="PAYME_MARKET_ID", reason="uuid")
         else:
-            out.append(PaymeMerchant(slug, market_id, merchant_id, key, ikpu, package_code, field_))
+            out.append(
+                PaymeMerchant(
+                    slug, market_id, merchant_id, key, ikpu, package_code, field_, test_key
+                )
+            )
     for item in _items(raw, "PAYME_MERCHANTS"):
         market_id = _uuid(item.get("market_id"))
         slug_i, key_i = _text(item, "slug"), _text(item, "key")
@@ -163,9 +176,22 @@ def _payme(raw: str, legacy: tuple[str, str, str, str, str, str, str]) -> tuple[
                 _text(item, "ikpu"),
                 _text(item, "package_code"),
                 field_i if _FIELD.match(field_i := _text(item, "account_field")) else "rasta",
+                _text(item, "test_key"),
             )
         )
-    return _unique(out, "slug", "market_id", "key", source="payme")
+    merchants = _unique(out, "slug", "market_id", "key", "test_key", source="payme")
+    # Sinov kaliti boshqa (yoki o'sha) kassaning ASOSIY kaliti bilan bir xil
+    # bo'lsa, qaysi biri ekanini bilib bo'lmaydi — sinov kaliti o'chiriladi.
+    main_keys = {m.key for m in merchants}
+    clean: list[PaymeMerchant] = []
+    for m in merchants:
+        if m.test_key and m.test_key in main_keys:
+            log.error(
+                "payment_merchant_invalid", source="payme", slug=m.slug, reason="test_key_is_main"
+            )
+            m = replace(m, test_key="")
+        clean.append(m)
+    return tuple(clean)
 
 
 @lru_cache(maxsize=8)
@@ -206,6 +232,7 @@ def payme_merchants(settings: Settings) -> tuple[PaymeMerchant, ...]:
             settings.payme_package_code,
             _legacy_slug(settings),
             settings.payme_account_field,
+            settings.payme_test_key.get_secret_value(),
         ),
     )
 
@@ -227,13 +254,27 @@ def payme_configured(settings: Settings) -> bool:
     return bool(payme_merchants(settings))
 
 
-def payme_by_key(settings: Settings, key: str) -> PaymeMerchant | None:
-    """Kalit bo'yicha kassa. Hamma kassa solishtiriladi (vaqt farqi bermaslik uchun)."""
+def payme_match(settings: Settings, key: str) -> tuple[PaymeMerchant | None, bool]:
+    """Kalit bo'yicha kassa va bu SINOV kalitimi.
+
+    Hamma kassaning hamma kaliti solishtiriladi (vaqt farqi bermaslik uchun).
+    Sinov kaliti qaysi manzildan qabul qilinishini chaqiruvchi hal qiladi.
+    """
     found: PaymeMerchant | None = None
+    is_test = False
+    raw = key.encode()
     for merchant in payme_merchants(settings):
-        if hmac.compare_digest(merchant.key.encode(), key.encode()):
-            found = merchant
-    return found
+        if hmac.compare_digest(merchant.key.encode(), raw):
+            found, is_test = merchant, False
+        if merchant.test_key and hmac.compare_digest(merchant.test_key.encode(), raw):
+            found, is_test = merchant, True
+    return found, is_test
+
+
+def payme_by_key(settings: Settings, key: str) -> PaymeMerchant | None:
+    """Faqat ASOSIY kalit bo'yicha kassa (sinov kaliti bu yerda o'tmaydi)."""
+    merchant, is_test = payme_match(settings, key)
+    return None if is_test else merchant
 
 
 def payme_for_market(settings: Settings, market_id: UUID) -> PaymeMerchant | None:

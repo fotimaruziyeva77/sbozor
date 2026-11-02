@@ -33,6 +33,7 @@ IKKI YO'L:
 from __future__ import annotations
 
 import base64
+import ipaddress
 import time
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -49,9 +50,9 @@ from app.services.online_payment import DueUnavailable, StallDue, stall_due
 from app.services.payment_merchants import (
     PaymeMerchant,
     default_market,
-    payme_by_key,
     payme_configured,
     payme_for_market,
+    payme_match,
 )
 
 if TYPE_CHECKING:
@@ -157,7 +158,36 @@ def _merchant(request: Request, settings: Settings) -> PaymeMerchant | None:
     _, _, password = decoded.partition(":")
     if not password:
         return None
-    return payme_by_key(settings, password)
+    merchant, is_test = payme_match(settings, password)
+    if merchant is None or not is_test:
+        return merchant
+    # ⛔ Sinov kaliti faqat Payme sinov tarmog'idan (test.paycom.uz). Mijoz IP'si
+    #    proksi zanjirida qayta yoziladi, sarlavha bilan soxtalashtirib bo'lmaydi
+    #    (compose.yaml: --forwarded-allow-ips; 261102 da tekshirildi).
+    client = request.client.host if request.client else ""
+    if not _in_networks(client, settings.payme_test_ips):
+        log.warning("payme_test_key_rejected_ip", client=client)
+        return None
+    log.info("payme_sandbox_request", client=client)
+    return merchant
+
+
+def _in_networks(host: str, networks: str) -> bool:
+    """`host` vergul bilan ajratilgan tarmoqlardan biriga tegishlimi."""
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    for part in networks.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            if address in ipaddress.ip_network(part, strict=False):
+                return True
+        except ValueError:
+            log.error("payme_test_ips_invalid", value=part)
+    return False
 
 
 # ===========================================================================

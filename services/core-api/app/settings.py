@@ -528,6 +528,15 @@ class Settings(BaseSettings):
     # Karmana kassasida `rasta_id` (261030). Server `rasta` va `rasta_id`
     # ikkalasini ham qabul qiladi; bu nom QR havolasida ishlatiladi.
     payme_account_field: str = "rasta"
+    # Payme SINOV muhiti (test.paycom.uz) kassaning SINOV kaliti bilan so'raydi.
+    # U asosiy kalit bilan BIRGA qabul qilinadi: Payme qabul sinovlarini
+    # o'tkazayotganda sotuvchilarning haqiqiy to'lovlari to'xtamaydi (261102:
+    # sinov -32504 olardi, chunki serverda faqat asosiy kalit bor edi).
+    # ⛔ Sinov kaliti FAQAT `payme_test_ips` tarmog'idan kelgan so'rovda
+    # qabul qilinadi: kalit yozishmalarda yurgan, u bilan boshqa manzildan
+    # «to'lov bajarildi» deb rastani yopib bo'lmasin. Bo'sh — sinov o'chiq.
+    payme_test_key: SecretStr = SecretStr("")
+    payme_test_ips: str = "185.234.113.0/24"
 
     # --- Click Shop API (0035, 261029) ---
     #

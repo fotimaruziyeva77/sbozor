@@ -32,6 +32,7 @@ def _settings(
         payme_ikpu="",
         payme_package_code="",
         payme_account_field=legacy.get("payme_account_field", "rasta"),
+        payme_test_key=SecretStr(legacy.get("payme_test_key", "")),
         click_secret_key=SecretStr(legacy.get("click_secret_key", "")),
         click_service_id=legacy.get("click_service_id", ""),
         click_merchant_id=legacy.get("click_merchant_id", ""),
@@ -124,3 +125,40 @@ def test_account_field_follows_the_kassa_setting() -> None:
     assert pm.payme_by_key(s, "old").account_field == "rasta_id"  # type: ignore[union-attr, arg-type]
     bad = _settings([{**_payme("navoiy", B, "nv"), "account_field": "Yomon Nom!"}])
     assert pm.payme_by_key(bad, "nv").account_field == "rasta"  # type: ignore[union-attr, arg-type]
+
+def test_test_key_works_alongside_the_main_key() -> None:
+    """261102: Payme sinov muhiti (test.paycom.uz) sinov kaliti bilan so'raydi.
+
+    Asosiy kalit ham ishlashda davom etadi — qabul sinovi paytida sotuvchilar
+    to'lovi to'xtamaydi. `payme_by_key` esa sinov kalitini qabul QILMAYDI.
+    """
+    s = _settings(
+        payme_key="asosiy", payme_market_id=str(A), payme_merchant_id="m", payme_test_key="sinov"
+    )
+    merchant, is_test = pm.payme_match(s, "asosiy")  # type: ignore[arg-type]
+    assert merchant is not None and merchant.market_id == A and is_test is False
+    merchant, is_test = pm.payme_match(s, "sinov")  # type: ignore[arg-type]
+    assert merchant is not None and merchant.market_id == A and is_test is True
+    assert pm.payme_match(s, "boshqa") == (None, False)  # type: ignore[arg-type]
+    assert pm.payme_by_key(s, "sinov") is None  # type: ignore[arg-type]
+    assert "sinov" not in repr(pm.payme_merchants(s))  # type: ignore[arg-type]
+
+
+def test_test_key_equal_to_a_main_key_is_disabled() -> None:
+    """Sinov kaliti boshqa kassaning asosiy kaliti bilan bir xil — sinov o'chadi, kassa qoladi."""
+    s = _settings(
+        [{**_payme("navoiy", B, "nv")}],
+        payme_key="asosiy",
+        payme_market_id=str(A),
+        payme_merchant_id="m",
+        payme_test_key="nv",
+    )
+    merchant, is_test = pm.payme_match(s, "nv")  # type: ignore[arg-type]
+    assert merchant is not None and merchant.market_id == B and is_test is False
+    assert pm.payme_match(s, "asosiy")[0].market_id == A  # type: ignore[union-attr, arg-type]
+
+
+def test_empty_test_keys_are_not_duplicates() -> None:
+    s = _settings([_payme("karmana", A, "ka"), _payme("navoiy", B, "nv")])
+    slugs = {m.slug for m in pm.payme_merchants(s)}  # type: ignore[arg-type]
+    assert slugs == {"karmana", "navoiy"}
