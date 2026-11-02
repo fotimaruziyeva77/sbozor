@@ -1,7 +1,6 @@
 "use client";
 
 import { useId } from "react";
-import { Banknote, LogIn, LogOut, Ticket } from "lucide-react";
 import {
   useFormatter,
   useLocale,
@@ -11,8 +10,16 @@ import {
 } from "next-intl";
 import { parseAsString, useQueryStates } from "nuqs";
 
-import { ExemptPlatesCard } from "@/components/parking/exempt-plates-card";
+import {
+  ExitReasonsCard,
+  RegularsCard,
+  StayCard,
+} from "@/components/parking/parking-breakdowns";
+import { DailyCard, HourlyCard } from "@/components/parking/parking-charts";
 import { ParkingExportButton } from "@/components/parking/parking-export-button";
+import { ParkingFlow } from "@/components/parking/parking-flow";
+import { JournalCard } from "@/components/parking/parking-journal";
+import { GalleryCard } from "@/components/parking/parking-photos";
 import {
   businessDayIn,
   isValidIsoDay,
@@ -20,9 +27,7 @@ import {
 } from "@/components/snapshots/day-picker";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatStrip, StatTile } from "@/components/ui/stat-tile";
 import { ApiError } from "@/lib/api-client";
 import type {
   EdgeParkingReport,
@@ -35,17 +40,22 @@ import {
 } from "@/lib/edge-site-queries";
 import type { ParkingReportPeriod } from "@/lib/edge-site-queries";
 import { daysBetweenIsoDays, formatBusinessDay } from "@/lib/format-day";
-import { formatAmount, formatSoum } from "@/lib/format-number";
+import { formatAmount } from "@/lib/format-number";
 import { reportErrorView } from "@/lib/report-errors";
 
 /*
  * =============================================================================
  * AVTOTURARGOH DAVR HISOBOTI — `/parking` sahifasining ish maydoni.
  *
- * Direktorning savoli bitta: «shu kunlar orasida qancha mashina kirdi,
- * chiqdi va qancha pul tushdi?». Javob to'rt katak + kunlar jadvali;
- * mashinalar ro'yxati EKRANGA CHIZILMAYDI — u Excel faylning ikkinchi
- * varag'ida (oyiga minglab qator telefonda o'qilmaydi).
+ * Direktorning savoli: «shu kunlar orasida qancha mashina kirdi, chiqdi,
+ * qancha pul tushdi va qachon gavjum?». Javob tartibi (261102):
+ * darvoza oqimi va tushum -> kunlar grafigi -> soatlar va turish vaqti ->
+ * so'nggi mashinalar surati -> chiqish turlari va doimiy mashinalar ->
+ * qidiriladigan jurnal. Kunlar jadvali grafikning matnli egizagi.
+ *
+ * ⛔ «Pul olinmaydigan mashinalar» ro'yxati BU SAHIFADA YO'Q — u obyekt
+ *    sozlamasi va «Agentlar» sahifasida boshqariladi; hisobot faqat
+ *    o'qiydi.
  *
  * ⛔ DAVR «MAKSIMUM KECHA» EMAS, BUGUNGACHA — `reports/period-picker.tsx`
  *    dan ATAYIN FARQ. U yerdagi chegara `daily_charges` D+1 yopilishidan
@@ -153,7 +163,13 @@ export function ParkingReportWorkspace() {
   }
 
   const sites = useEdgeSitesQuery();
-  /* Faqat `parking` turidagi obyektlar — bittasi bo'lsa avtomatik tanlanadi. */
+  /*
+   * ⛔ OBYEKT TANLAGICHI YO'Q (foydalanuvchi qarori, 261102): bozorda
+   *    haqiqiy avtoturargoh bitta, ikkinchisi — noutbukdagi sinov obyekti.
+   *    Ro'yxat yaratilgan vaqt bo'yicha keladi (`edge_repo.list_sites`),
+   *    ya'ni BIRINCHI QO'SHILGAN avtoturargoh — asosiy. Boshqasi faqat
+   *    to'g'ridan-to'g'ri havola bilan (`?site=`) ochiladi.
+   */
   const parkingSites: EdgeSite[] = (sites.data?.items ?? []).filter(
     (site) => site.kind === "parking",
   );
@@ -204,59 +220,42 @@ export function ParkingReportWorkspace() {
     <div className="flex flex-col gap-6">
       <PeriodControls
         onPeriod={writePeriod}
-        onSite={(siteId) => void setRaw({ [SITE_PARAM]: siteId })}
         period={period}
-        selectedSite={selectedSite}
-        sites={parkingSites}
+        siteId={selectedSite.id}
         todayIso={todayIso}
       />
 
       {report.isPending ? (
         <div aria-busy="true" className="flex flex-col gap-4" role="status">
           <span className="sr-only">{t("common.loading")}</span>
-          <Skeleton className="h-24" />
-          <Skeleton className="h-64" />
+          <Skeleton className="h-40" />
+          <Skeleton className="h-72" />
         </div>
       ) : null}
 
       {report.isError ? <ReportError error={report.error} /> : null}
 
       {report.data !== undefined ? (
-        <ReportBody
-          data={report.data}
-          period={period}
-          siteId={selectedSite.id}
-        />
+        <ReportBody data={report.data} siteId={selectedSite.id} />
       ) : null}
-
-      {/*
-       * Bepul ro'yxat hisobotdan MUSTAQIL: hisobot yiqilsa ham ro'yxat
-       * o'zgartirilaveradi (u boshqa so'rov — obyekt sozlamasi).
-       */}
-      <ExemptPlatesCard key={selectedSite.id} siteId={selectedSite.id} />
     </div>
   );
 }
 
-/* --- Boshqaruv: obyekt + davr -------------------------------------------- */
+/* --- Boshqaruv: davr + Excel --------------------------------------------- */
 
 function PeriodControls({
-  sites,
-  selectedSite,
+  siteId,
   period,
   todayIso,
-  onSite,
   onPeriod,
 }: {
-  sites: EdgeSite[];
-  selectedSite: EdgeSite;
+  siteId: string;
   period: ParkingReportPeriod;
   todayIso: string;
-  onSite: (siteId: string) => void;
   onPeriod: (next: ParkingReportPeriod) => void;
 }) {
   const t = useTranslations();
-  const siteFieldId = useId();
   const fromId = useId();
   const toId = useId();
   const activePreset = parkingPresetOf(period, todayIso);
@@ -274,33 +273,7 @@ function PeriodControls({
     "h-10 rounded-sm border border-border-ui bg-surface px-3 text-sm text-text outline-none transition-colors focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25";
 
   return (
-    <div className="flex flex-col gap-4">
-      {sites.length > 1 ? (
-        <div className="flex flex-col gap-1">
-          <label className="text-sm text-text-muted" htmlFor={siteFieldId}>
-            {t("parkingReport.siteLabel")}
-          </label>
-          <Select
-            className="w-auto"
-            id={siteFieldId}
-            onChange={(event) => onSite(event.target.value)}
-            value={selectedSite.id}
-          >
-            {/* D-16: obyekt nomi DB kontenti — tarjima qilinmaydi. */}
-            {sites.map((site) => (
-              <option key={site.id} value={site.id}>
-                {site.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-      ) : (
-        <p className="text-sm text-text-muted">
-          {t("parkingReport.siteLabel")}:{" "}
-          <span className="font-semibold text-text">{selectedSite.name}</span>
-        </p>
-      )}
-
+    <div className="flex flex-wrap items-start justify-between gap-4">
       <fieldset className="flex flex-col gap-2">
         <legend className="text-sm font-semibold text-text">
           {t("parkingReport.periodLabel")}
@@ -355,92 +328,45 @@ function PeriodControls({
 
         <p className="text-sm text-text-muted">{t("parkingReport.periodHint")}</p>
       </fieldset>
+      <ParkingExportButton period={period} siteId={siteId} />
     </div>
   );
 }
 
 /* --- Hisobot tanasi -------------------------------------------------------- */
 
-function ReportBody({
-  data,
-  period,
-  siteId,
-}: {
-  data: EdgeParkingReport;
-  period: ParkingReportPeriod;
-  siteId: string;
-}) {
+function ReportBody({ data, siteId }: { data: EdgeParkingReport; siteId: string }) {
   const t = useTranslations();
-  const format = useFormatter();
-  const locale = useLocale();
-  const periodId = useId();
-
   const hasEvents = data.total.entries + data.total.exits + data.total.total > 0;
+  /* Jurnal holati (qidiruv, filtr) boshqa davr yoki obyektda boshidan boshlanadi. */
+  const scope = `${siteId}:${data.from_date}:${data.to_date}`;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* ⛔ Davr jumlasi JAVOBDAN, URL holatidan emas. */}
-      <p className="text-sm text-text-muted" id={periodId}>
-        {t("parkingReport.periodShown", {
-          from: formatBusinessDay(format, data.from_date, locale),
-          to: formatBusinessDay(format, data.to_date, locale),
-        })}
-      </p>
+    /* `park-report` — kartalar to'ri shu blok kengligiga moslashadi (`@container`). */
+    <div className="park-report flex flex-col gap-4">
+      <ParkingFlow data={data} />
 
-      <StatStrip label={t("parkingReport.summaryLabel")}>
-        <StatTile
-          icon={LogIn}
-          label={t("parkingReport.entries")}
-          value={formatAmount(format, data.total.entries, locale)}
+      {hasEvents ? (
+        <>
+          <DailyCard data={data} table={<DaysTable data={data} />} />
+          <div className="park-grid-2">
+            <HourlyCard data={data} />
+            <StayCard data={data} />
+          </div>
+          <GalleryCard data={data} siteId={siteId} />
+          <div className="park-grid-2">
+            <ExitReasonsCard data={data} />
+            <RegularsCard data={data} />
+          </div>
+          <JournalCard data={data} key={scope} siteId={siteId} />
+        </>
+      ) : (
+        /* Bo'sh davr — NOMLANGAN HOLAT, nollar bilan to'la grafiklar emas. */
+        <EmptyState
+          description={t("parkingReport.emptyHint")}
+          title={t("parkingReport.emptyTitle")}
         />
-        <StatTile
-          icon={LogOut}
-          label={t("parkingReport.exits")}
-          value={formatAmount(format, data.total.exits, locale)}
-        />
-        <StatTile
-          icon={Banknote}
-          label={t("parkingReport.revenue")}
-          note={`${t("parkingReport.byCash", {
-            amount: formatSoum(format, data.total.cash, locale),
-          })} · ${t("parkingReport.byTerminal", {
-            amount: formatSoum(format, data.total.terminal, locale),
-          })}`}
-          tone="accent"
-          unit={t("parkingReport.amountUnit")}
-          value={formatAmount(format, data.total.total, locale)}
-        />
-        <StatTile
-          icon={Ticket}
-          label={t("parkingReport.free")}
-          value={formatAmount(format, data.total.free_count, locale)}
-        />
-      </StatStrip>
-
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="text-sm text-text-muted">
-          {t("parkingReport.sessionsCount", { count: data.sessions.length })}
-        </p>
-        <div className="flex flex-col gap-1">
-          <ParkingExportButton period={period} siteId={siteId} />
-          <p className="text-xs text-text-muted">{t("parkingReport.exportHint")}</p>
-        </div>
-      </div>
-
-      <section aria-labelledby={`${periodId}-days`} className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold" id={`${periodId}-days`}>
-          {t("parkingReport.daysTitle")}
-        </h2>
-        {hasEvents ? (
-          <DaysTable data={data} />
-        ) : (
-          /* Bo'sh davr — NOMLANGAN HOLAT, nollar bilan to'la jadval emas. */
-          <EmptyState
-            description={t("parkingReport.emptyHint")}
-            title={t("parkingReport.emptyTitle")}
-          />
-        )}
-      </section>
+      )}
     </div>
   );
 }
@@ -451,7 +377,7 @@ function DaysTable({ data }: { data: EdgeParkingReport }) {
   const locale = useLocale();
 
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto pt-3">
       {/* Native `<table>` + `<caption class="sr-only">` + `<th scope>` (§15). */}
       <table className="w-full border-collapse text-sm">
         <caption className="sr-only">{t("parkingReport.daysTitle")}</caption>

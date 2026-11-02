@@ -360,16 +360,22 @@ export async function downloadParkingReport(
  * qilinadi. Har ochilish serverda auditga yoziladi — shuning uchun
  * `retry` va fokusda qayta so'rash YO'Q, `enabled` esa faqat qator
  * ko'rinishga kirganda yoqiladi.
+ *
+ * `scope` — bitta sahifada AYNI kadr ikki mustaqil joyda ochilsa (hisobot
+ * galereyasi va jurnal oynasi): umumiy kesh yozuvida birinchisi yopilganda
+ * obyekt havolasini bekor qilib, ikkinchisining rasmini buzardi.
  */
 export function useEdgeFileHref(
   siteId: string,
   fileId: string | null,
   enabled: boolean,
+  scope = "",
 ): { href: string | null; isPending: boolean; isError: boolean } {
   const marketId = useMarketId();
+  const key = edgeFileKey(marketId ?? "", siteId, fileId ?? "");
 
   const image = useQuery({
-    queryKey: edgeFileKey(marketId ?? "", siteId, fileId ?? ""),
+    queryKey: scope === "" ? key : [...key, scope],
     queryFn: async () => {
       const response = await apiRequest(
         `${sitePath(siteId)}/files/${encodeURIComponent(fileId ?? "")}`,

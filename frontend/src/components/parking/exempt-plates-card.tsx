@@ -13,6 +13,8 @@ import {
   withExemptPlates,
 } from "@/components/parking/exempt-plates";
 import type { ExemptPlate } from "@/components/parking/exempt-plates";
+import { PLATE_EXAMPLE } from "@/components/parking/parking-data";
+import { PlateBadge } from "@/components/parking/plate-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -186,7 +188,7 @@ function ExemptPlatesBody({
           <Field
             className="sm:w-56"
             error={formError ?? undefined}
-            hint={t("parkingReport.exempt.plateHint")}
+            hint={t("parkingReport.exempt.plateHint", { example: PLATE_EXAMPLE })}
             id={plateId}
             label={t("parkingReport.exempt.plateLabel")}
           >
@@ -260,7 +262,9 @@ function ExemptPlatesBody({
                   className="border-b border-border transition-colors last:border-b-0 hover:bg-surface-muted"
                   key={item.plate}
                 >
-                  <td className="p-2 font-mono text-base tabular-nums">{item.plate}</td>
+                  <td className="p-2">
+                    <PlateBadge plate={item.plate} size="sm" />
+                  </td>
                   <td className="p-2">{item.label ?? "—"}</td>
                   {canManage ? (
                     <td className="p-2 text-right">

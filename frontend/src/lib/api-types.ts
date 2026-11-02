@@ -3029,6 +3029,8 @@ export type EdgeParkingReportDay = z.infer<typeof edgeParkingReportDaySchema>;
 
 /** `null` — hodisa kelmagan (ochiq seans, raqamsiz kirish); `0` EMAS. */
 export const edgeParkingReportSessionSchema = z.object({
+  /** Agent bergan seans identifikatori — ro'yxat kaliti. */
+  session_id: z.string(),
   plate: z.string().nullable(),
   entered_at: z.string().nullable(),
   exited_at: z.string().nullable(),
@@ -3036,9 +3038,43 @@ export const edgeParkingReportSessionSchema = z.object({
   amount_soum: soumSchema,
   method: z.string().nullable(),
   reason: z.string().nullable(),
+  /** Seans ochilgandagi kadr — `GET /edge-sites/{id}/files/{file_id}` (ochilishi auditda). */
+  entry_file_id: z.string().nullable(),
+  /**
+   * Chiqishda ro'yxatga olingan (kirish kamerasi ko'rmagan): kirgan vaqti
+   * va turish vaqti NOMA'LUM, kadr esa chiqishdagi kadr.
+   */
+  opened_at_exit: z.boolean(),
 });
 export type EdgeParkingReportSession = z.infer<
   typeof edgeParkingReportSessionSchema
+>;
+
+/** Toshkent soati (0–23) — davrning barcha kunlari bo'yicha yig'indi. */
+export const edgeParkingReportHourSchema = z.object({
+  hour: z.number().int(),
+  entries: z.number().int(),
+  exits: z.number().int(),
+});
+export type EdgeParkingReportHour = z.infer<typeof edgeParkingReportHourSchema>;
+
+export const edgeParkingReportStaySchema = z.object({
+  measured: z.number().int(),
+  median_minutes: z.number().int().nullable(),
+  buckets: z.array(z.object({ key: z.string(), count: z.number().int() })),
+  /** Chiqishda ro'yxatga olinganlar — turish vaqtiga kirmagan. */
+  unrecorded_entries: z.number().int(),
+});
+export type EdgeParkingReportStay = z.infer<typeof edgeParkingReportStaySchema>;
+
+export const edgeParkingReportRegularSchema = z.object({
+  plate: z.string(),
+  visits: z.number().int(),
+  amount_soum: soumSchema,
+  last_seen_at: z.string(),
+});
+export type EdgeParkingReportRegular = z.infer<
+  typeof edgeParkingReportRegularSchema
 >;
 
 export const edgeParkingReportSchema = z.object({
@@ -3049,5 +3085,14 @@ export const edgeParkingReportSchema = z.object({
   days: z.array(edgeParkingReportDaySchema),
   total: edgeParkingReportTotalsSchema,
   sessions: z.array(edgeParkingReportSessionSchema),
+  hours: z.array(edgeParkingReportHourSchema),
+  stay: edgeParkingReportStaySchema,
+  exit_reasons: z.array(
+    z.object({ reason: z.string(), count: z.number().int() }),
+  ),
+  inside: z.number().int(),
+  paid_sessions: z.number().int(),
+  average_check_soum: soumSchema.nullable(),
+  regulars: z.array(edgeParkingReportRegularSchema),
 });
 export type EdgeParkingReport = z.infer<typeof edgeParkingReportSchema>;

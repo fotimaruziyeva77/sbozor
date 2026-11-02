@@ -2607,8 +2607,7 @@
   },
   "parkingReport": {
     "title": "Avtoturargoh hisoboti",
-    "subtitle": "Tanlangan davrda qancha mashina kirgani, chiqqani va qancha tushum bo'lgani. Mashinalar ro'yxati Excel faylda.",
-    "siteLabel": "Obyekt",
+    "subtitle": "Mashinalar oqimi, tushum, gavjum soatlar va kirish kamerasi kadrlari — tanlangan davr bo'yicha.",
     "periodLabel": "Davr",
     "periodFrom": "Boshlanishi",
     "periodTo": "Tugashi",
@@ -2618,16 +2617,7 @@
       "lastWeek": "Oxirgi hafta"
     },
     "periodHint": "Eng ko'pi 92 kun; tugash sanasi bugundan oshmaydi.",
-    "periodShown": "{from} — {to}",
-    "summaryLabel": "Davr xulosasi",
-    "entries": "Kirdi",
-    "exits": "Chiqdi",
-    "revenue": "Tushum",
-    "free": "Bepul chiqdi",
     "amountUnit": "so'm",
-    "byCash": "Naqd: {amount}",
-    "byTerminal": "Terminal: {amount}",
-    "sessionsCount": "{count} ta mashina seansi — to'liq ro'yxat Excel faylda.",
     "daysTitle": "Kunlar bo'yicha",
     "colDate": "Sana",
     "colEntries": "Kirdi",
@@ -2638,11 +2628,134 @@
     "colFree": "Bepul",
     "totalRow": "Jami",
     "export": "Excel yuklab olish",
-    "exportHint": "Ikki varaq: kunlar va mashinalar ro'yxati.",
     "noSitesTitle": "Avtoturargoh obyekti yo'q",
     "noSitesHint": "Avtoturargoh agentini «Agentlar» bo'limida qo'shing — hisobot shu obyektning hodisalaridan yig'iladi.",
     "emptyTitle": "Bu davrda hodisa yo'q",
     "emptyHint": "Agent ulanmagan yoki tanlangan kunlarda mashina kirmagan.",
+    "noPlate": "Raqamsiz",
+    "unknown": "—",
+    "flow": {
+      "label": "Darvoza oqimi",
+      "entries": "Kirdi",
+      "inside": "Ichkarida",
+      "exits": "Chiqdi",
+      "peak": "Eng gavjum: {from}–{to}",
+      "insideNote": "Kirgan, chiqishi hali yozilmagan",
+      "medianStay": "Odatda {duration} turadi"
+    },
+    "money": {
+      "title": "Tushum",
+      "cash": "Naqd",
+      "terminal": "Terminal",
+      "none": "Bu davrda to'lov bo'lmagan",
+      "averageCheck": "O'rtacha chek",
+      "paidCars": "To'laganlar",
+      "freeExits": "Bepul chiqdi"
+    },
+    "daily": {
+      "title": "Kunlar bo'yicha",
+      "viewLabel": "Grafik ko'rinishi",
+      "money": "Tushum",
+      "cars": "Mashinalar",
+      "table": "Jadval ko'rinishi"
+    },
+    "hourly": {
+      "title": "Soatlar bo'yicha oqim",
+      "sub": "Davrdagi barcha kunlar, Toshkent vaqti bilan",
+      "peak": "Eng gavjum soat — {from}–{to}: {count} ta kirish",
+      "noPeak": "Bu davrda kirish bo'lmagan",
+      "colHour": "Soat"
+    },
+    "stay": {
+      "title": "Qancha turishadi",
+      "sub": "{count} ta chiqqan mashina bo'yicha",
+      "empty": "Kirishi ham, chiqishi ham yozilgan mashina yo'q — turish vaqti o'lchanmadi.",
+      "median": "Odatiy turish vaqti",
+      "medianHint": "Mashinalarning yarmi bundan qisqa turgan.",
+      "bucket": {
+        "under_15m": "15 daqiqagacha",
+        "under_1h": "15–60 daqiqa",
+        "under_2h": "1–2 soat",
+        "under_4h": "2–4 soat",
+        "under_8h": "4–8 soat",
+        "over_8h": "8 soatdan ko'p"
+      },
+      "unrecorded": "Yana {count} ta mashina chiqishda ro'yxatga olingan — kirgan vaqti noma'lum, shuning uchun hisobga kirmadi."
+    },
+    "exitReasons": {
+      "title": "Qanday chiqdi",
+      "sub": "Chiqishlar to'lov turi bo'yicha",
+      "empty": "Bu davrda chiqish bo'lmagan.",
+      "manualNote": "«Qo'lda chiqarilgan» — kassir shlagbaumni o'zi ochgan. Bu son o'ssa, jurnaldagi kadrlarni tekshiring."
+    },
+    "status": {
+      "open": "Ichkarida",
+      "paid": "To'langan",
+      "online": "Onlayn to'langan",
+      "free": "Bepul vaqtda",
+      "exempt": "Imtiyozli",
+      "manual": "Qo'lda chiqarilgan",
+      "other": "Boshqa"
+    },
+    "method": {
+      "cash": "naqd",
+      "terminal": "terminal",
+      "mixed": "naqd + terminal"
+    },
+    "regulars": {
+      "title": "Doimiy mashinalar",
+      "sub": "Davrda kamida ikki marta kelganlar",
+      "empty": "Bu davrda ikki marta kelgan mashina yo'q.",
+      "visits": "{count} marta",
+      "lastSeen": "oxirgi: {when}"
+    },
+    "gallery": {
+      "title": "So'nggi kirgan mashinalar",
+      "sub": "Kirish kamerasi kadrlari · har kadrni ochish jurnalga yoziladi",
+      "empty": "Kirish kadrlari yo'q",
+      "emptyHint": "Kamera kadr yubormagan yoki bu davrda mashina kirmagan.",
+      "open": "{plate} — kadrni kattalashtirish",
+      "alt": "{plate} — kirishdagi kadr",
+      "unavailable": "Kadr ochilmadi"
+    },
+    "dialog": {
+      "title": "{plate} — kirish kadri",
+      "titleExit": "{plate} — chiqishdagi kadr"
+    },
+    "journal": {
+      "title": "Mashinalar jurnali",
+      "shown": "{shown} / {total} ta mashina",
+      "searchLabel": "Raqam bo'yicha qidirish",
+      "searchPlaceholder": "Raqam, masalan {example}",
+      "filterLabel": "Holat bo'yicha saralash",
+      "filter": {
+        "all": "Hammasi",
+        "open": "Ichkarida",
+        "paid": "To'langan",
+        "free": "Bepul",
+        "manual": "Qo'lda"
+      },
+      "noMatch": "Mos mashina topilmadi",
+      "noMatchHint": "Raqamning bir qismini yozing yoki «Hammasi» filtrini tanlang.",
+      "colPlate": "Raqam",
+      "colEntered": "Kirdi",
+      "colExited": "Chiqdi",
+      "colDuration": "Turdi",
+      "colAmount": "Summa",
+      "colStatus": "Holat",
+      "colPhoto": "Kadr",
+      "more": "Yana {count} ta ko'rsatish",
+      "photo": "{plate} — kirish kadrini ochish",
+      "atExit": "chiqishda yozilgan",
+      "photoExit": "{plate} — chiqish kadrini ochish"
+    },
+    "duration": {
+      "minutes": "{m} daq",
+      "hours": "{h} soat",
+      "hoursMinutes": "{h} soat {m} daq",
+      "days": "{d} kun {h} soat",
+      "underMinute": "1 daqiqadan kam"
+    },
     "exempt": {
       "title": "Pul olinmaydigan mashinalar",
       "hint": "Bozor xodimlari va ijarachilar: chiqishda shlagbaum o'zi ochiladi, summa 0. O'zgarish agentga bir daqiqada yetib boradi.",
@@ -2650,7 +2763,7 @@
       "colPlate": "Raqam",
       "colLabel": "Kimniki",
       "plateLabel": "Davlat raqami",
-      "plateHint": "Masalan 85C525OA — bo'shliq va harf o'lchami farq qilmaydi",
+      "plateHint": "Masalan {example} — bo'shliq va harf o'lchami farq qilmaydi",
       "labelLabel": "Kimniki (ixtiyoriy)",
       "labelHint": "Ism yoki lavozim, masalan «Sardor (ishchi)»",
       "add": "Ro'yxatga qo'shish",

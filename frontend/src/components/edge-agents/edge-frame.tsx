@@ -14,9 +14,10 @@ import { useEdgeFileHref } from "@/lib/edge-site-queries";
  * erta yuklangani yaxshi.
  *
  * Bir marta `true` bo'lgach qaytmaydi: kadr qayta-qayta so'ralmasin
- * (har ochilish serverda auditga yoziladi).
+ * (har ochilish serverda auditga yoziladi). Avtoturargoh hisobotining
+ * galereyasi ham shuni ishlatadi.
  */
-function useSeenOnce<T extends Element>(): [React.RefObject<T | null>, boolean] {
+export function useSeenOnce<T extends Element>(): [React.RefObject<T | null>, boolean] {
   const ref = useRef<T | null>(null);
   const [seen, setSeen] = useState(
     () => typeof IntersectionObserver === "undefined",
