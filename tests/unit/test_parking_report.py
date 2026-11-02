@@ -253,6 +253,191 @@ def test_event_types_and_period_limit_are_locked() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Panel grafiklari uchun yig'indilar
+# ---------------------------------------------------------------------------
+
+FRAME = "ab" * 32
+
+
+def test_hours_are_tashkent_hours_and_add_up_to_the_totals(report: ParkingReport) -> None:
+    """A 23:30 da kirdi va 00:10 da chiqdi — kirish 23-soatga, chiqish 0-soatga."""
+    assert [row.hour for row in report.hours] == list(range(24))
+    entries = {row.hour: row.entries for row in report.hours if row.entries}
+    exits = {row.hour: row.exits for row in report.hours if row.exits}
+    assert entries == {8: 1, 10: 1, 11: 1, 14: 1, 23: 1}
+    assert exits == {0: 1, 9: 1, 13: 1, 14: 1}
+    assert sum(entries.values()) == report.total.entries
+    assert sum(exits.values()) == report.total.exits
+
+
+def test_exit_reasons_follow_a_fixed_order_and_add_up_to_exits(report: ParkingReport) -> None:
+    assert [(item.reason, item.count) for item in report.exit_reasons] == [
+        ("paid", 2),
+        ("online", 0),
+        ("free", 1),
+        ("exempt", 0),
+        ("manual", 1),
+    ]
+    assert sum(item.count for item in report.exit_reasons) == report.total.exits
+
+
+def test_unknown_or_missing_exit_reason_is_counted_as_other() -> None:
+    """Agentning yangi sababi yoki bo'sh sabab yo'qolmaydi — `other` oxirida."""
+    events = [
+        closed(A, utc(10, 1, 6, 0), amount=0, reason="towed"),
+        Event("parking.session.closed", utc(10, 1, 7, 0), {"session_id": B, "amount_soum": 0}),
+    ]
+    built = build_parking_report(events, from_date=FROM, to_date=FROM)
+    assert built.exit_reasons[-1].reason == "other"
+    assert built.exit_reasons[-1].count == 2
+    assert sum(item.count for item in built.exit_reasons) == built.total.exits == 2
+
+
+def test_stay_counts_only_closed_sessions_with_a_known_duration(report: ParkingReport) -> None:
+    """A 40 (hodisadan), B 60, D 120, E 30 daqiqa; C hali ichkarida — kirmaydi."""
+    stay = report.stay
+    assert stay.measured == 4
+    assert stay.median_minutes == 40  # [30, 40, 60, 120] — pastki o'rta
+    assert [(bucket.key, bucket.count) for bucket in stay.buckets] == [
+        ("under_15m", 0),
+        ("under_1h", 2),
+        ("under_2h", 1),
+        ("under_4h", 1),
+        ("under_8h", 0),
+        ("over_8h", 0),
+    ]
+
+
+def test_session_registered_at_exit_is_flagged_and_left_out_of_stay() -> None:
+    """Kirish kamerasi ko'rmagan mashina chiqishda ro'yxatga olinadi: seans
+    chiqish yo'lagida ochilib, o'sha zahoti yopiladi. Uning «0 daqiqa» si
+    turish vaqti EMAS — taqsimotga kirmaydi, alohida sanaladi.
+
+    Ikki tomonlama yo'lak: bir yo'lakda ochilib SOATLAB keyin yopilgan seans
+    haqiqiy turish va belgilanmaydi."""
+    at_exit = opened(A, utc(10, 1, 5, 0), plate="85W523OA")
+    at_exit.data["lane_id"] = "chiqish-1"
+    two_way = opened(B, utc(10, 1, 3, 0), plate="85V230OA")
+    two_way.data["lane_id"] = "chiqish-1"
+    events = [
+        at_exit,
+        closed(A, utc(10, 1, 5, 0), amount=4000, reason="paid", duration_minutes=0),
+        two_way,
+        closed(B, utc(10, 1, 5, 0), amount=8000, reason="paid"),
+        opened(C, utc(10, 1, 4, 0), plate="01A123BC"),
+        closed(C, utc(10, 1, 4, 30), amount=4000, reason="paid"),
+    ]
+    built = build_parking_report(events, from_date=FROM, to_date=FROM)
+    rows = {row.session_id: row for row in built.sessions}
+    assert rows[A].opened_at_exit is True
+    assert rows[B].opened_at_exit is False
+    assert rows[C].opened_at_exit is False
+    assert built.stay.unrecorded_entries == 1
+    assert built.stay.measured == 2
+    assert built.stay.median_minutes == 30  # [30, 120] — A ning noli kirmadi
+
+
+def test_regulars_skip_text_without_digits() -> None:
+    """Kameraning `UNKNOWN` i raqam emas — doimiy mashinalar ro'yxatiga tushmaydi."""
+    events = []
+    for hour in (3, 4, 5):
+        sid = str(uuid4())
+        events += [
+            opened(sid, utc(10, 1, hour, 0), plate="UNKNOWN"),
+            closed(sid, utc(10, 1, hour, 30), amount=4000, reason="paid"),
+        ]
+    built = build_parking_report(events, from_date=FROM, to_date=FROM)
+    assert built.regulars == ()
+    assert [row.plate for row in built.sessions] == ["UNKNOWN"] * 3  # seansda xom qoladi
+
+
+def test_stay_buckets_are_contiguous_and_open_ended() -> None:
+    """Har daqiqa AYNAN bitta guruhga tushadi — oraliq yo'q, ustma-ust tushish yo'q."""
+    assert parking_report.STAY_BUCKETS[0][1] == 0
+    assert parking_report.STAY_BUCKETS[-1][2] is None
+    for (_, _, high), (_, low, _) in zip(
+        parking_report.STAY_BUCKETS, parking_report.STAY_BUCKETS[1:], strict=False
+    ):
+        assert high == low
+
+
+def test_empty_period_has_no_median_and_no_average_check() -> None:
+    built = build_parking_report([], from_date=FROM, to_date=FROM)
+    assert built.stay.measured == 0
+    assert built.stay.unrecorded_entries == 0
+    assert built.stay.median_minutes is None
+    assert all(bucket.count == 0 for bucket in built.stay.buckets)
+    assert (built.inside, built.paid_sessions, built.average_check_soum) == (0, 0, None)
+    assert built.regulars == ()
+    assert len(built.hours) == 24
+
+
+def test_inside_paid_sessions_and_average_check(report: ParkingReport) -> None:
+    """C ichkarida; to'langan seanslar A (5 000) va D (12 000) — o'rtacha 8 500."""
+    assert report.inside == 1
+    assert report.paid_sessions == 2
+    assert report.average_check_soum == 8500
+
+
+def test_average_check_rounds_half_up_to_whole_soum() -> None:
+    events = [
+        closed(A, utc(10, 1, 6, 0), amount=1000, reason="paid"),
+        closed(B, utc(10, 1, 7, 0), amount=2001, reason="paid"),
+    ]
+    built = build_parking_report(events, from_date=FROM, to_date=FROM)
+    assert built.average_check_soum == 1501  # 1500.5 -> 1501
+
+
+def test_entry_frame_comes_from_opened_and_is_validated() -> None:
+    """Kadr — `opened.file_id`; SHA-256 hex bo'lmagan qiymat panelga chiqmaydi."""
+    good = opened(A, utc(10, 1, 6, 0), plate="01A123BC")
+    good.data["file_id"] = FRAME
+    bad = opened(B, utc(10, 1, 6, 5), plate="01B456CD")
+    bad.data["file_id"] = "../../etc/passwd"
+    built = build_parking_report([good, bad], from_date=FROM, to_date=FROM)
+    rows = {row.session_id: row for row in built.sessions}
+    assert rows[A].entry_file_id == FRAME
+    assert rows[B].entry_file_id is None
+
+
+def test_regulars_need_two_visits_and_rank_by_visits_then_money() -> None:
+    def visit(plate: str, hour: int, amount: int) -> list[Event]:
+        sid = str(uuid4())
+        return [
+            opened(sid, utc(10, 1, hour, 0), plate=plate),
+            closed(sid, utc(10, 1, hour, 30), amount=amount, reason="paid" if amount else "free"),
+        ]
+
+    events = [
+        *visit("01A111AA", 3, 4000),
+        *visit("01A111AA", 5, 0),
+        *visit("01A111AA", 7, 4000),
+        *visit("01B222BB", 4, 8000),
+        *visit("01B222BB", 6, 8000),
+        *visit("01C333CC", 8, 4000),
+        *visit("01C333CC", 9, 0),
+        *visit("01D444DD", 10, 99_000),  # bir marta — doimiy emas
+    ]
+    built = build_parking_report(events, from_date=FROM, to_date=FROM)
+    assert [(r.plate, r.visits, r.amount_soum) for r in built.regulars] == [
+        ("01A111AA", 3, 8000),
+        ("01B222BB", 2, 16_000),
+        ("01C333CC", 2, 4000),
+    ]
+    assert built.regulars[0].last_seen_at == utc(10, 1, 7, 30)
+
+
+def test_regulars_list_is_capped() -> None:
+    events: list[Event] = []
+    for n in range(parking_report.REGULARS_LIMIT + 3):
+        for hour in (3, 4):
+            sid = str(uuid4())
+            events.append(opened(sid, utc(10, 1, hour, n), plate=f"01A{n:03d}AA"))
+    built = build_parking_report(events, from_date=FROM, to_date=FROM)
+    assert len(built.regulars) == parking_report.REGULARS_LIMIT
+
+
+# ---------------------------------------------------------------------------
 # `.xlsx`
 # ---------------------------------------------------------------------------
 

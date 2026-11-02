@@ -33,6 +33,11 @@ Uch qoida, keyingi o'quvchi uchun literal:
   `opened` hodisasi tanlovga tushmaydi — seans varag'ida u raqamsiz va
   «kirgan vaqti» bo'sh qator bo'lib chiqadi. Bu yashirilmaydi: bo'sh
   katak «o'lchanmagan» degani (D-10), to'qilgan vaqt emas.
+
+Panel grafiklari uchun yig'indilar ham SHU YERDA (261102): soatlar
+bo'yicha oqim, turish vaqti guruhlari, chiqish turlari, ichkarida qolgan
+mashinalar, o'rtacha chek va doimiy mashinalar. Ekran ularni faqat
+CHIZADI — klientdagi qayta hisob ikkinchi javob bo'lib chiqardi.
 """
 
 from __future__ import annotations
@@ -66,10 +71,18 @@ if TYPE_CHECKING:
 
 __all__ = [
     "EVENT_TYPES",
+    "EXIT_REASONS",
     "MAX_PERIOD_DAYS",
+    "REGULARS_LIMIT",
+    "STAY_BUCKETS",
     "ParkingDayRow",
+    "ParkingExitReason",
+    "ParkingHourRow",
+    "ParkingRegular",
     "ParkingReport",
     "ParkingSessionRow",
+    "ParkingStay",
+    "ParkingStayBucket",
     "ParkingTotals",
     "build_parking_report",
     "build_parking_report_workbook",
@@ -111,6 +124,38 @@ qo'shishi mumkin — ikkalasi ham bepul deb sanaladi, tushumga kirmaydi.
 
 _DATETIME_FORMAT: Final = "%d.%m.%Y %H:%M"
 """Varaqdagi vaqt shakli — Toshkent vaqti, `DD.MM.YYYY HH:MM`."""
+
+STAY_BUCKETS: Final[tuple[tuple[str, int, int | None], ...]] = (
+    ("under_15m", 0, 15),
+    ("under_1h", 15, 60),
+    ("under_2h", 60, 120),
+    ("under_4h", 120, 240),
+    ("under_8h", 240, 480),
+    ("over_8h", 480, None),
+)
+"""Turish vaqti guruhlari: `(kalit, boshi, oxiri)` daqiqada, oxiri KIRMAYDI.
+
+Chegaralar tarif soatiga qarab tanlangan (soatbay to'lov): birinchi
+guruh — bepul vaqt ichida chiqib ketganlar, oxirgisi — tunab qolganlar.
+Kalitlar frontend katalogida uch tilga o'giriladi.
+"""
+
+EXIT_REASONS: Final = ("paid", "online", "free", "exempt", "manual")
+"""`closed.reason` ning ma'lum qiymatlari — chiqish turlari ro'yxatining TARTIBI.
+
+Noma'lum yoki bo'sh sabab `other` bo'lib sanaladi: chiqishlar yig'indisi
+`total.exits` bilan har doim teng qolsin.
+"""
+
+_REASON_OTHER: Final = "other"
+
+REGULARS_LIMIT: Final = 6
+"""«Doimiy mashinalar» ro'yxatining uzunligi — davrda kamida ikki marta kelganlar."""
+
+_REGULAR_MIN_VISITS: Final = 2
+
+_FILE_ID_LENGTH: Final = 64
+_HEX_DIGITS: Final = frozenset("0123456789abcdef")
 
 
 class EventLike(Protocol):
@@ -175,6 +220,59 @@ class ParkingSessionRow:
     amount_soum: int
     method: str | None
     reason: str | None
+    entry_file_id: str | None
+    """Seans ochilgandagi kadr (`opened.file_id`) — panelda mashina surati."""
+    opened_at_exit: bool
+    """Seans CHIQISH yo'lagida ochilib, o'sha zahoti yopilgan: kirish kamerasi
+    mashinani ko'rmagan, kassir uni chiqishda ro'yxatga olgan. Kirgan vaqti
+    va turish vaqti NOMA'LUM (nol emas), kadr esa chiqishdagi kadr."""
+
+
+@dataclass(frozen=True, slots=True)
+class ParkingHourRow:
+    """Toshkent soati (0–23) — davrning barcha kunlari bo'yicha yig'indi."""
+
+    hour: int
+    entries: int
+    exits: int
+
+
+@dataclass(frozen=True, slots=True)
+class ParkingStayBucket:
+    key: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ParkingStay:
+    """Chiqqan va davomiyligi ma'lum seanslarning turish vaqti.
+
+    `median_minutes` — o'rta qiymat (yarmi undan qisqa turgan); o'rtacha
+    arifmetik EMAS: uch kun turib qolgan bitta mashina uni soatlab surardi.
+    """
+
+    measured: int
+    median_minutes: int | None
+    buckets: tuple[ParkingStayBucket, ...]
+    unrecorded_entries: int
+    """Chiqishda ro'yxatga olingan (kirishi yozilmagan) seanslar — turish
+    vaqtiga KIRMAYDI, chunki ularning «0 daqiqa» si o'lchov emas."""
+
+
+@dataclass(frozen=True, slots=True)
+class ParkingExitReason:
+    reason: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ParkingRegular:
+    """Davrda kamida ikki marta kelgan raqam."""
+
+    plate: str
+    visits: int
+    amount_soum: int
+    last_seen_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +282,15 @@ class ParkingReport:
     days: tuple[ParkingDayRow, ...]
     total: ParkingTotals
     sessions: tuple[ParkingSessionRow, ...]
+    hours: tuple[ParkingHourRow, ...]
+    stay: ParkingStay
+    exit_reasons: tuple[ParkingExitReason, ...]
+    inside: int
+    """Davrda kirgan, chiqishi esa hali qayd etilmagan seanslar."""
+    paid_sessions: int
+    average_check_soum: int | None
+    """To'langan seanslar summasining o'rtachasi (butun so'm)."""
+    regulars: tuple[ParkingRegular, ...]
 
 
 @dataclass(slots=True)
@@ -206,6 +313,9 @@ class _SessionState:
     reason: str | None = None
     payments_soum: int = 0
     methods: set[str] = field(default_factory=set)
+    entry_file_id: str | None = None
+    entry_lane: str | None = None
+    exit_lane: str | None = None
 
 
 def _int_or(value: Any, default: int) -> int:
@@ -222,6 +332,14 @@ def _int_or(value: Any, default: int) -> int:
 
 def _str_or_none(value: Any) -> str | None:
     return value if isinstance(value, str) and value else None
+
+
+def _file_id_or_none(value: Any) -> str | None:
+    """Kadr identifikatori — SHA-256 hex (`edge_sites.site_file` bilan bir xil
+    tekshiruv): boshqa shakl panelga yetib bormaydi, u yerda baribir 404 bo'lardi."""
+    if not isinstance(value, str) or len(value) != _FILE_ID_LENGTH:
+        return None
+    return value if set(value) <= _HEX_DIGITS else None
 
 
 def _payment_session_id(event: EventLike) -> str | None:
@@ -258,6 +376,13 @@ def _session_row(state: _SessionState) -> ParkingSessionRow:
     if duration is None and state.entered_at is not None and state.exited_at is not None:
         duration = max(int((state.exited_at - state.entered_at).total_seconds() // 60), 0)
 
+    # Bir yo'lakda ochilib-yopilgan nol daqiqalik seans — haqiqiy turish emas:
+    # mashina chiqishda ro'yxatga olingan (ikki tomonlama yo'lakda ham nol
+    # daqiqada kirib-chiqish jismonan bo'lmaydi).
+    opened_at_exit = (
+        state.entry_lane is not None and state.entry_lane == state.exit_lane and duration == 0
+    )
+
     return ParkingSessionRow(
         session_id=state.session_id,
         plate=state.plate,
@@ -267,7 +392,68 @@ def _session_row(state: _SessionState) -> ParkingSessionRow:
         amount_soum=amount,
         method=method,
         reason=state.reason,
+        entry_file_id=state.entry_file_id,
+        opened_at_exit=opened_at_exit,
     )
+
+
+def _stay(rows: Sequence[ParkingSessionRow]) -> ParkingStay:
+    """Turish vaqti — faqat CHIQQAN va davomiyligi ma'lum seanslardan.
+
+    Ichkaridagi mashina hisobga kirmaydi: uning «turishi» hali tugamagan
+    va kesib olingan qiymat taqsimotni qisqa tomonga surardi. Chiqishda
+    ro'yxatga olingan seans ham kirmaydi — uning kirgan vaqti noma'lum.
+    """
+    minutes = sorted(
+        row.duration_minutes
+        for row in rows
+        if row.exited_at is not None and row.duration_minutes is not None and not row.opened_at_exit
+    )
+    buckets = tuple(
+        ParkingStayBucket(
+            key=key,
+            count=sum(1 for m in minutes if m >= low and (high is None or m < high)),
+        )
+        for key, low, high in STAY_BUCKETS
+    )
+    # Pastki o'rta (juft sonda kichigi) — butun daqiqa, kasr to'qilmaydi.
+    median = minutes[(len(minutes) - 1) // 2] if minutes else None
+    return ParkingStay(
+        measured=len(minutes),
+        median_minutes=median,
+        buckets=buckets,
+        unrecorded_entries=sum(1 for row in rows if row.opened_at_exit),
+    )
+
+
+def _regulars(rows: Sequence[ParkingSessionRow]) -> tuple[ParkingRegular, ...]:
+    """Kamida ikki marta kelgan raqamlar: ko'p kelgani, teng bo'lsa ko'p to'lagani oldin.
+
+    Raqamsiz matn (kameraning `UNKNOWN` i va h.k.) mashina emas — agentning
+    `NormalizePlate` qoidasi bilan bir xil: raqamda kamida bitta son bor.
+    """
+    visits: defaultdict[str, list[ParkingSessionRow]] = defaultdict(list)
+    for row in rows:
+        if row.plate is not None and any(ch.isdigit() for ch in row.plate):
+            visits[row.plate].append(row)
+
+    regulars = [
+        ParkingRegular(
+            plate=plate,
+            visits=len(seen),
+            amount_soum=sum(row.amount_soum for row in seen),
+            last_seen_at=max(_row_anchor(row) for row in seen),
+        )
+        for plate, seen in visits.items()
+        if len(seen) >= _REGULAR_MIN_VISITS
+    ]
+    regulars.sort(key=lambda r: (-r.visits, -r.amount_soum, r.plate))
+    return tuple(regulars[:REGULARS_LIMIT])
+
+
+def _row_anchor(row: ParkingSessionRow) -> datetime:
+    anchor = row.exited_at if row.exited_at is not None else row.entered_at
+    return anchor if anchor is not None else datetime.min.replace(tzinfo=TASHKENT)
 
 
 def build_parking_report(
@@ -294,6 +480,9 @@ def build_parking_report(
         raise ValueError(msg)
 
     counters: defaultdict[date, _DayCounters] = defaultdict(_DayCounters)
+    hour_entries = [0] * 24
+    hour_exits = [0] * 24
+    reasons: defaultdict[str, int] = defaultdict(int)
     sessions: dict[str, _SessionState] = {}
 
     def state_of(session_id: str) -> _SessionState:
@@ -305,12 +494,14 @@ def build_parking_report(
 
     for event in events:
         data = event.data
-        day = event.occurred_at.astimezone(TASHKENT).date()
+        local = event.occurred_at.astimezone(TASHKENT)
+        day = local.date()
         if not from_date <= day <= to_date:
             continue
 
         if event.type == _TYPE_OPENED:
             counters[day].entries += 1
+            hour_entries[local.hour] += 1
             session_id = _str_or_none(data.get("session_id"))
             if session_id is None:
                 continue
@@ -321,10 +512,16 @@ def build_parking_report(
                 state.entered_at = event.occurred_at
             if state.plate is None:
                 state.plate = _str_or_none(data.get("plate"))
+            if state.entry_file_id is None:
+                state.entry_file_id = _file_id_or_none(data.get("file_id"))
+            if state.entry_lane is None:
+                state.entry_lane = _str_or_none(data.get("lane_id"))
 
         elif event.type == _TYPE_CLOSED:
             reason = _str_or_none(data.get("reason"))
             counters[day].exits += 1
+            hour_exits[local.hour] += 1
+            reasons[reason if reason in EXIT_REASONS else _REASON_OTHER] += 1
             if reason in _FREE_REASONS:
                 counters[day].free_count += 1
             session_id = _str_or_none(data.get("session_id"))
@@ -334,6 +531,7 @@ def build_parking_report(
             if state.exited_at is None or event.occurred_at > state.exited_at:
                 state.exited_at = event.occurred_at
                 state.reason = reason
+                state.exit_lane = _str_or_none(data.get("lane_id"))
                 state.closed_amount_soum = _int_or(data.get("amount_soum"), 0)
                 explicit = data.get("duration_minutes")
                 state.duration_minutes = None if explicit is None else max(_int_or(explicit, 0), 0)
@@ -379,12 +577,30 @@ def build_parking_report(
     )
 
     ordered = sorted(sessions.values(), key=lambda s: (_session_anchor(s), s.session_id))
+    rows = tuple(_session_row(s) for s in ordered)
+    paid = [row.amount_soum for row in rows if row.amount_soum > 0]
     return ParkingReport(
         from_date=from_date,
         to_date=to_date,
         days=tuple(days),
         total=total,
-        sessions=tuple(_session_row(s) for s in ordered),
+        sessions=rows,
+        hours=tuple(
+            ParkingHourRow(hour=hour, entries=hour_entries[hour], exits=hour_exits[hour])
+            for hour in range(24)
+        ),
+        stay=_stay(rows),
+        # `other` faqat uchragan bo'lsa — ro'yxat oxirida, yig'indi `exits` ga teng.
+        exit_reasons=tuple(
+            ParkingExitReason(reason=reason, count=reasons[reason])
+            for reason in (*EXIT_REASONS, _REASON_OTHER)
+            if reason != _REASON_OTHER or reasons[reason] > 0
+        ),
+        inside=sum(1 for row in rows if row.entered_at is not None and row.exited_at is None),
+        paid_sessions=len(paid),
+        # Butun so'mga yaxlitlash (yarmi yuqoriga) — kasr tiyin to'qilmaydi.
+        average_check_soum=(sum(paid) + len(paid) // 2) // len(paid) if paid else None,
+        regulars=_regulars(rows),
     )
 
 

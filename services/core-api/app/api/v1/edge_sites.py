@@ -216,6 +216,7 @@ class ParkingReportDayOut(ParkingReportTotalsOut):
 class ParkingReportSessionOut(BaseModel):
     """Bitta mashina. `None` — hodisa kelmagan (ochiq seans, raqamsiz kirish)."""
 
+    session_id: str
     plate: str | None
     entered_at: datetime | None
     exited_at: datetime | None
@@ -223,6 +224,38 @@ class ParkingReportSessionOut(BaseModel):
     amount_soum: int
     method: str | None
     reason: str | None
+    entry_file_id: str | None
+    opened_at_exit: bool
+
+
+class ParkingReportHourOut(BaseModel):
+    hour: int
+    entries: int
+    exits: int
+
+
+class ParkingReportStayBucketOut(BaseModel):
+    key: str
+    count: int
+
+
+class ParkingReportStayOut(BaseModel):
+    measured: int
+    median_minutes: int | None
+    buckets: list[ParkingReportStayBucketOut]
+    unrecorded_entries: int
+
+
+class ParkingReportExitReasonOut(BaseModel):
+    reason: str
+    count: int
+
+
+class ParkingReportRegularOut(BaseModel):
+    plate: str
+    visits: int
+    amount_soum: int
+    last_seen_at: datetime
 
 
 class ParkingReportOut(BaseModel):
@@ -233,6 +266,13 @@ class ParkingReportOut(BaseModel):
     days: list[ParkingReportDayOut]
     total: ParkingReportTotalsOut
     sessions: list[ParkingReportSessionOut]
+    hours: list[ParkingReportHourOut]
+    stay: ParkingReportStayOut
+    exit_reasons: list[ParkingReportExitReasonOut]
+    inside: int
+    paid_sessions: int
+    average_check_soum: int | None
+    regulars: list[ParkingReportRegularOut]
 
 
 # ---------------------------------------------------------------------------
@@ -712,6 +752,7 @@ def _report_out(site: edge_repo.SiteRow, report: parking_report.ParkingReport) -
         ),
         sessions=[
             ParkingReportSessionOut(
+                session_id=row.session_id,
                 plate=row.plate,
                 entered_at=row.entered_at,
                 exited_at=row.exited_at,
@@ -719,8 +760,39 @@ def _report_out(site: edge_repo.SiteRow, report: parking_report.ParkingReport) -
                 amount_soum=row.amount_soum,
                 method=row.method,
                 reason=row.reason,
+                entry_file_id=row.entry_file_id,
+                opened_at_exit=row.opened_at_exit,
             )
             for row in report.sessions
+        ],
+        hours=[
+            ParkingReportHourOut(hour=row.hour, entries=row.entries, exits=row.exits)
+            for row in report.hours
+        ],
+        stay=ParkingReportStayOut(
+            measured=report.stay.measured,
+            median_minutes=report.stay.median_minutes,
+            buckets=[
+                ParkingReportStayBucketOut(key=bucket.key, count=bucket.count)
+                for bucket in report.stay.buckets
+            ],
+            unrecorded_entries=report.stay.unrecorded_entries,
+        ),
+        exit_reasons=[
+            ParkingReportExitReasonOut(reason=item.reason, count=item.count)
+            for item in report.exit_reasons
+        ],
+        inside=report.inside,
+        paid_sessions=report.paid_sessions,
+        average_check_soum=report.average_check_soum,
+        regulars=[
+            ParkingReportRegularOut(
+                plate=item.plate,
+                visits=item.visits,
+                amount_soum=item.amount_soum,
+                last_seen_at=item.last_seen_at,
+            )
+            for item in report.regulars
         ],
     )
 
