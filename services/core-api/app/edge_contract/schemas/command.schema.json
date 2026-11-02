@@ -24,6 +24,7 @@
         "parking.invoice.paid",
         "parking.display.show",
         "parking.session.close_manual",
+        "parking.data.reset",
         "market.snapshot.run",
         "livestock.watchlist.sync"
       ]
