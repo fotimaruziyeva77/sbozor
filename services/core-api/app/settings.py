@@ -524,6 +524,8 @@ class Settings(BaseSettings):
     # yuborilmaydi.
     payme_ikpu: str = ""
     payme_package_code: str = ""
+    # Chekdagi QQS foizi: bozor QQS to'lovchi bo'lsa 12, aks holda 0.
+    payme_vat_percent: int = 0
     # Kassadagi hisob maydonining nomi (Payme kabinetida kim qanday nomlasa).
     # Karmana kassasida `rasta_id` (261030). Server `rasta` va `rasta_id`
     # ikkalasini ham qabul qiladi; bu nom QR havolasida ishlatiladi.

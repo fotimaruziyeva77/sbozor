@@ -33,6 +33,7 @@ def _settings(
         payme_package_code="",
         payme_account_field=legacy.get("payme_account_field", "rasta"),
         payme_test_key=SecretStr(legacy.get("payme_test_key", "")),
+        payme_vat_percent=legacy.get("payme_vat_percent", 0),
         click_secret_key=SecretStr(legacy.get("click_secret_key", "")),
         click_service_id=legacy.get("click_service_id", ""),
         click_merchant_id=legacy.get("click_merchant_id", ""),
@@ -162,3 +163,18 @@ def test_empty_test_keys_are_not_duplicates() -> None:
     s = _settings([_payme("karmana", A, "ka"), _payme("navoiy", B, "nv")])
     slugs = {m.slug for m in pm.payme_merchants(s)}  # type: ignore[arg-type]
     assert slugs == {"karmana", "navoiy"}
+
+
+def test_vat_percent_comes_from_the_kassa_setting() -> None:
+    """261102: Karmana QQS to'lovchi — chekda 12%. Noto'g'ri qiymat 0 bo'ladi."""
+    s = _settings(
+        [{**_payme("navoiy", B, "nv"), "vat_percent": "15"}],
+        payme_key="old",
+        payme_market_id=str(A),
+        payme_merchant_id="m",
+        payme_vat_percent=12,  # type: ignore[arg-type]
+    )
+    assert pm.payme_by_key(s, "old").vat_percent == 12  # type: ignore[union-attr, arg-type]
+    assert pm.payme_by_key(s, "nv").vat_percent == 15  # type: ignore[union-attr, arg-type]
+    bad = _settings([{**_payme("navoiy", B, "nv"), "vat_percent": "o'n ikki"}])
+    assert pm.payme_by_key(bad, "nv").vat_percent == 0  # type: ignore[union-attr, arg-type]

@@ -242,7 +242,7 @@ def _fiscal_detail(merchant: PaymeMerchant, due: StallDue) -> dict[str, Any] | N
                 "count": 1,
                 "code": merchant.ikpu,
                 "package_code": merchant.package_code,
-                "vat_percent": 0,
+                "vat_percent": merchant.vat_percent,
             }
         ],
     }

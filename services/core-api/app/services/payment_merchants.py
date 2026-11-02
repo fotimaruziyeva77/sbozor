@@ -82,6 +82,9 @@ class PaymeMerchant:
     # so'raydi. Bo'sh bo'lsa sinov so'rovlari -32504 oladi. Qaysi manzildan
     # qabul qilinishi `payme.py::_merchant` da tekshiriladi.
     test_key: str = field(default="", repr=False)
+    # Fiskal chekdagi QQS foizi (Payme `detail.items[].vat_percent`). Bozor QQS
+    # to'lovchi bo'lsa 12, aks holda 0 (261102: Karmana — 12%).
+    vat_percent: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,11 +143,23 @@ def _unique[T](merchants: list[T], *keys: str, source: str) -> tuple[T, ...]:
 
 
 @lru_cache(maxsize=8)
+def _vat(value: Any, source: str) -> int:
+    """QQS foizi 0..100 butun son; noto'g'ri bo'lsa 0 va jurnalga xato."""
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        return 0
+    if text.isdigit() and 0 <= int(text) <= 100:
+        return int(text)
+    log.error("payment_merchant_invalid", source=source, reason="vat_percent")
+    return 0
+
+
+@lru_cache(maxsize=8)
 def _payme(
-    raw: str, legacy: tuple[str, str, str, str, str, str, str, str]
+    raw: str, legacy: tuple[str, str, str, str, str, str, str, str, str]
 ) -> tuple[PaymeMerchant, ...]:
     out: list[PaymeMerchant] = []
-    key, market, merchant_id, ikpu, package_code, slug, field_, test_key = legacy
+    key, market, merchant_id, ikpu, package_code, slug, field_, test_key, vat = legacy
     field_ = field_ if _FIELD.match(field_) else "rasta"
     if key and market:
         market_id = _uuid(market)
@@ -153,7 +168,15 @@ def _payme(
         else:
             out.append(
                 PaymeMerchant(
-                    slug, market_id, merchant_id, key, ikpu, package_code, field_, test_key
+                    slug,
+                    market_id,
+                    merchant_id,
+                    key,
+                    ikpu,
+                    package_code,
+                    field_,
+                    test_key,
+                    _vat(vat, "PAYME_VAT_PERCENT"),
                 )
             )
     for item in _items(raw, "PAYME_MERCHANTS"):
@@ -177,6 +200,7 @@ def _payme(
                 _text(item, "package_code"),
                 field_i if _FIELD.match(field_i := _text(item, "account_field")) else "rasta",
                 _text(item, "test_key"),
+                _vat(item.get("vat_percent"), "PAYME_MERCHANTS"),
             )
         )
     merchants = _unique(out, "slug", "market_id", "key", "test_key", source="payme")
@@ -233,6 +257,7 @@ def payme_merchants(settings: Settings) -> tuple[PaymeMerchant, ...]:
             _legacy_slug(settings),
             settings.payme_account_field,
             settings.payme_test_key.get_secret_value(),
+            str(settings.payme_vat_percent),
         ),
     )
 

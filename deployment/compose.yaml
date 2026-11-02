@@ -253,6 +253,7 @@ services:
       PAYME_CHECKOUT_URL: ${PAYME_CHECKOUT_URL:-https://checkout.paycom.uz}
       PAYME_IKPU: ${PAYME_IKPU:-}
       PAYME_PACKAGE_CODE: ${PAYME_PACKAGE_CODE:-}
+      PAYME_VAT_PERCENT: ${PAYME_VAT_PERCENT:-0}
       PAYME_ACCOUNT_FIELD: ${PAYME_ACCOUNT_FIELD:-rasta}
       # Payme sinov muhiti (test.paycom.uz) kaliti — asosiy kalit bilan birga
       # ishlaydi, faqat PAYME_TEST_IPS tarmog'idan qabul qilinadi (261102).
