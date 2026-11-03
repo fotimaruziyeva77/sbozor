@@ -97,6 +97,20 @@ Bunday hisobda dalil-kadr YO'Q va kech tasdiq uni kamaytirmaydi
 (`_late_review` docstringi).
 
 =============================================================================
+7. ⛔⛔ TO'LOV — BANDLIK DALILI (2026-11-03).
+
+Karmanada 29-avgust – 11-oktabr kunlari kamera ba'zi zonali rastalarni
+HAR KUNI «bo'sh» degan, sotuvchilar esa har kuni kassaga to'lagan: 469
+rasta-kun hisobsiz qoldi, to'lovlar 12 mln «avans» bo'lib ko'rindi va QR
+sahifasi «summa yo'q» dedi. Kassir pul olgan kun — rasta ishlagan kun.
+
+Shu kun uchun BELGILI to'lovi musbat (`paid_stall_ids()`, storno ayriladi)
+rasta kamera «band emas» desa ham biriktirish bo'yicha hisoblanadi
+(`_charge_by_assignment`, dalilsiz) va kech tasdiq uni KAMAYTIRMAYDI.
+To'lovsiz «band emas» rasta D-04 da qoladi — bu qoida o'lchov bilan faqat
+pul olingan kunda bahslashadi.
+
+=============================================================================
 ⚠ HAR BOZOR UCHUN ALOHIDA TRANZAKSIYA (`day_close.py` ning qoidasi):
   bitta tranzaksiyada ikki bozor — tenant sizib chiqishining eng qisqa
   yo'li; qolaversa bitta bozordagi nosozlik qolganlarining kunini ham
@@ -135,6 +149,7 @@ from app.repositories.billing_repo import (
     billable_stalls,
     event_snapshots,
     market_day_charges,
+    paid_stall_ids,
     resolve_stall_day_money,
     write_anomaly,
     write_charge,
@@ -261,8 +276,15 @@ class BillingCloseResult:
     daydjestda «kameradan tasdiqlangan» va «biriktirishdan avtomatik»
     farqlanishi kerak (dalil-kadr YO'Q).
 
-    Ikki manbadan: kamerasiz bozor (`markets_no_camera`) va kamerali
-    bozorning ZONASIZ rastalari (gibrid qoida, `_close_stall` (1)-shoxi)."""
+    Uch manbadan: kamerasiz bozor (`markets_no_camera`), kamerali bozorning
+    ZONASIZ rastalari (gibrid qoida, `_close_stall` (1)-shoxi) va kamera
+    «bo'sh» degan, lekin to'lovi bor rastalar (`charged_paid`)."""
+    charged_paid: int = 0
+    """`charged_auto` ning QISMI: kamera «band emas» dedi, lekin o'sha kun uchun
+    to'lov bor — hisob to'lov dalili bilan yozildi (fayl docstringining 7-bandi).
+
+    ⚠ ALOHIDA sanaladi: bu son o'sib borsa kamera zonalari yoki AI hukmi
+      haqiqatdan uzoqlashgan — daydjestda shu ko'rinishi kerak."""
     skipped_unassigned_auto: int = 0
     """Biriktirish bo'yicha yo'lda sotuvchisiz qolgan faol rastalar — hisob
     yozilmaydi (D-28: egasiz qarz yo'q) va bandlik dalili ham yo'qligi uchun
@@ -366,6 +388,7 @@ async def billing_close(
         markets_no_camera=result.markets_no_camera,
         markets_camera_outage=result.markets_camera_outage,
         charged_auto=result.charged_auto,
+        charged_paid=result.charged_paid,
         skipped_unassigned_auto=result.skipped_unassigned_auto,
         no_slot_rows=result.no_slot_rows,
         anomalies_unassigned=result.anomalies_unassigned,
@@ -502,6 +525,7 @@ async def _close_market(
         existing = await market_day_charges(
             session, market_id=market_id, service_date=business_date
         )
+        paid = await paid_stall_ids(session, market_id=market_id, service_date=business_date)
 
         for verdict in verdicts:
             await _close_stall(
@@ -511,6 +535,7 @@ async def _close_market(
                 verdict=verdict,
                 money=money_by_stall.get(verdict.stall_id),
                 charge=existing.get(verdict.stall_id),
+                paid=verdict.stall_id in paid,
                 result=result,
             )
 
@@ -641,6 +666,7 @@ async def _close_stall(
     verdict: StallSlotVerdict,
     money: StallDayMoney | None,
     charge: ExistingCharge | None,
+    paid: bool,
     result: BillingCloseResult,
 ) -> None:
     """Bir rastaning bir kuni — BESH SHOX, har biri ALOHIDA hisoblagich bilan.
@@ -700,6 +726,21 @@ async def _close_stall(
 
     # (2) KO'RDIK, LEKIN BAND EMAS — va shu yerda KECH KELGAN TASDIQ shoxi.
     if not decision.billable:
+        # (2.5) ⛔ TO'LOV — BANDLIK DALILI (fayl docstringining 7-bandi):
+        #       pul olingan kun kamera «bo'sh» desa ham hisoblanadi va
+        #       kech tasdiq shoxiga TUSHMAYDI (to'langan kun tekin qolmasin).
+        if paid and money is not None:
+            written = result.charged_auto
+            await _charge_by_assignment(
+                session,
+                market_id=market_id,
+                business_date=business_date,
+                money=money,
+                existing=charge,
+                result=result,
+            )
+            result.charged_paid += result.charged_auto - written
+            return
         result.skipped_unbilled += 1
         await _late_review(session, market_id=market_id, charge=charge, result=result)
         return
@@ -936,6 +977,7 @@ async def _write_heartbeat(
                     "no_slot_rows": result.no_slot_rows,
                     "markets_camera_outage": result.markets_camera_outage,
                     "charged_auto": result.charged_auto,
+                    "charged_paid": result.charged_paid,
                     "anomalies_unassigned": result.anomalies_unassigned,
                     "anomalies_closed_day": result.anomalies_closed_day,
                     "anomalies_no_coverage": result.anomalies_no_coverage,

@@ -139,6 +139,7 @@ __all__ = [
     "event_snapshots",
     "map_day_status",
     "market_day_charges",
+    "paid_stall_ids",
     "pending_projection",
     "resolve_stall_day_money",
     "settlement_charge_dues",
@@ -197,9 +198,10 @@ _SIGNED_PAYMENT_EXPR: Final[str] = (
 """To'lovning BELGILI qiymati — ustun har doim MUSBAT, belgi KO'RINISHDA (C-5).
 
 =============================================================================
-⛔⛔ BU KONSTANTA IKKI FUNKSIYA TOMONIDAN ISHLATILADI VA IKKINCHI NUSXA
-   YOZILMAYDI: `vendor_outstanding()` (hisoblanadigan qoldiq, BILL-03) va
-   `vendor_charge_allocation()` (hosila FIFO ko'rinish, D-24).
+⛔⛔ BU KONSTANTA UCH FUNKSIYA TOMONIDAN ISHLATILADI VA IKKINCHI NUSXA
+   YOZILMAYDI: `vendor_outstanding()` (hisoblanadigan qoldiq, BILL-03),
+   `vendor_charge_allocation()` (hosila FIFO ko'rinish, D-24) va
+   `paid_stall_ids()` (to'lov — bandlik dalili, 2026-11-03).
 
 G-14 ning butun da'vosi shu satrga tayanadi: ikki hosila ko'rinish AYNAN
 bir xil kredit sonidan chiqadi, ya'ni ular **ajralib keta olmaydi**. Ikki
@@ -1244,6 +1246,47 @@ async def market_day_charges(
         )
         for row in result.mappings()
     }
+
+
+_PAID_STALL_IDS = text(
+    f"""
+    SELECT p.stall_id
+      FROM payments p
+     WHERE p.market_id = :market_id
+       AND p.service_date = :service_date
+     GROUP BY p.stall_id
+    HAVING sum({_SIGNED_PAYMENT_EXPR}) > 0
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("service_date", type_=Date()),
+    bindparam("reversal", type_=Text()),
+)
+"""Shu kun uchun to'lovi bor rastalar — BELGILI yig'indi musbat.
+
+⚠ `service_date` bo'yicha (qaysi kunning pattasi to'landi), `business_date`
+  bo'yicha EMAS — `_MARKET_DAY_CHARGES` bilan bir xil sabab. Storno o'z
+  to'lovini bekor qiladi: to'liq qaytarilgan to'lov dalil EMAS.
+"""
+
+
+async def paid_stall_ids(
+    session: AsyncSession, *, market_id: UUID, service_date: date
+) -> frozenset[UUID]:
+    """Kassir (yoki Payme/Click) shu kun uchun pul olgan rastalar.
+
+    `billing_close` uni BANDLIK DALILI sifatida o'qiydi: kamera «bo'sh» desa
+    ham to'lovi bor rasta hisoblanadi (`billing_close` docstringining 7-bandi).
+    """
+    result = await session.execute(
+        _PAID_STALL_IDS,
+        {
+            "market_id": market_id,
+            "service_date": service_date,
+            "reversal": PaymentKind.REVERSAL.value,
+        },
+    )
+    return frozenset(row[0] for row in result)
 
 
 async def write_late_review_adjustment(

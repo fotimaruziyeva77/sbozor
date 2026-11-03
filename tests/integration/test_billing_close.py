@@ -70,6 +70,9 @@ from sbozor_core.enums import (
     AdjustmentReason,
     AnomalyKind,
     OccupancyVerdict,
+    PaymentKind,
+    PaymentMethod,
+    ReversalReason,
     ReviewPurpose,
     ReviewQueueKind,
 )
@@ -1492,3 +1495,110 @@ async def test_a_late_review_never_decreases_a_charge_by_assignment(
     )
     assert adjustments(sync_owner_conn, env.market_id) == []
     assert charges(sync_owner_conn, env.market_id, day)[stall_id] == before[stall_id]
+
+
+# ===========================================================================
+# 11. TO'LOV — BANDLIK DALILI (2026-11-03)
+# ===========================================================================
+
+
+_INSERT_PAYMENT = (
+    "INSERT INTO payments "
+    "(id, market_id, stall_id, vendor_id, service_date, amount_soum, quote_soum, kind, "
+    " method, reverses_payment_id, reversal_reason, idempotency_key, request_fingerprint, "
+    " cashier_id) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+)
+"""Kassir to'lovi — `test_debt_settlement.py::_INSERT_PAYMENT_AT` shakli, `created_at` standart."""
+
+_ASSIGNED_VENDOR = (
+    "SELECT vendor_id FROM stall_assignments WHERE stall_id = %s AND period @> %s::date"
+)
+
+
+def _pay(
+    conn: Connection[TupleRow],
+    env: Env,
+    *,
+    stall_id: UUID,
+    day: date,
+    amount: int,
+    reverses: UUID | None = None,
+) -> UUID:
+    vendor = conn.execute(_ASSIGNED_VENDOR, (str(stall_id), day)).fetchone()
+    assert vendor is not None, "nazorat: rastaga o'sha kun sotuvchi biriktirilmagan"
+    payment_id = uuid4()
+    conn.execute(
+        _INSERT_PAYMENT,
+        (
+            str(payment_id),
+            str(env.market_id),
+            str(stall_id),
+            str(vendor[0]),
+            day,
+            amount,
+            amount,
+            PaymentKind.PAYMENT.value if reverses is None else PaymentKind.REVERSAL.value,
+            PaymentMethod.CASH.value,
+            None if reverses is None else str(reverses),
+            None if reverses is None else ReversalReason.WRONG_AMOUNT.value,
+            f"paid-{payment_id}",
+            "paid-fingerprint",
+            str(env.live.cashier_id),
+        ),
+    )
+    return payment_id
+
+
+async def test_a_paid_stall_the_camera_saw_empty_is_still_charged(
+    sync_owner_conn: Connection[TupleRow],
+    app_sessionmaker: async_sessionmaker[AsyncSession],
+    scenario: Scenario,
+    env: Env,
+) -> None:
+    """⛔⛔ PROD'DAGI 469 RASTA-KUNLIK «SOXTA AVANS» NING REGRESSIYA DARVOZASI.
+
+    =========================================================================
+    Karmanada 29-avgust – 11-oktabr kamera ba'zi zonali rastalarni har kuni
+    «bo'sh» dedi, sotuvchilar esa har kuni kassaga to'ladi: hisob yozilmadi,
+    to'lovlar avans bo'lib ko'rindi va QR sahifasi «summa yo'q» dedi.
+
+    DA'VOLAR (`one_slot` — D-04 sharti bajarilmagan rasta):
+      (1) to'lovsiz «band emas» rasta hamon hisobsiz (D-04 o'zgarmadi);
+      (2) to'liq storno qilingan to'lov dalil EMAS;
+      (3) o'sha kun uchun to'lovi bor rasta hisob OLADI — o'sha kunning
+          summasi bo'yicha, DALILSIZ, `charged_paid` da sanaladi;
+      (4) qayta yugurish hech nima yozmaydi (D-06).
+    =========================================================================
+    """
+    day, stall_id = scenario.day, scenario.one_slot
+    amount = stall_day_total_soum(sync_owner_conn, stall_id=stall_id, day=day)
+
+    await day_close(app_sessionmaker, business_date=day)
+    first = await billing_close(app_sessionmaker, business_date=day)
+    assert stall_id not in charges(sync_owner_conn, env.market_id, day), (
+        "nazorat: to'lovsiz «band emas» rastaga hisob yozildi (D-04 buzildi)"
+    )
+    assert first.charged_paid == 0
+
+    refunded = _pay(sync_owner_conn, env, stall_id=stall_id, day=day, amount=amount)
+    _pay(sync_owner_conn, env, stall_id=stall_id, day=day, amount=amount, reverses=refunded)
+    reversed_run = await billing_close(app_sessionmaker, business_date=day)
+    assert stall_id not in charges(sync_owner_conn, env.market_id, day), (
+        "storno qilingan to'lov bandlik dalili deb olindi"
+    )
+    assert reversed_run.charged_paid == 0
+
+    _pay(sync_owner_conn, env, stall_id=stall_id, day=day, amount=amount)
+    paid_run = await billing_close(app_sessionmaker, business_date=day)
+    written = charges(sync_owner_conn, env.market_id, day)
+    assert stall_id in written, "kassir pul olgan kun hisobsiz qoldi — soxta avans qaytdi"
+    assert written[stall_id][0] == amount
+    assert paid_run.charged_paid == 1, f"`charged_paid` {paid_run.charged_paid}"
+    assert _evidence_by_stall(sync_owner_conn, env.market_id, day)[stall_id] == 0, (
+        "to'lov bo'yicha hisobga kamera dalili yozildi"
+    )
+
+    again = await billing_close(app_sessionmaker, business_date=day)
+    assert (again.charged, again.charged_auto, again.charged_paid) == (0, 0, 0)
+    assert charges(sync_owner_conn, env.market_id, day) == written
