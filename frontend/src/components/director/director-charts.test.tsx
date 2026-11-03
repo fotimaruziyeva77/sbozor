@@ -13,7 +13,7 @@
  * =============================================================================
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -370,32 +370,170 @@ describe("Kamera kadrlari", () => {
 
 /* -------------------------------------------------------------------------- */
 
+/*
+ * ⛔ 261103: karta qayta qurildi (buyurtmachi: «tushunarsiz bo'lib qoldi»).
+ *    Endi u BITTA savolga javob beradi — «qancha pul tushdi?»: tepada davr
+ *    jami va o'rtacha, ustunlar «Rastalar» + «Avtoturargoh». «Hisoblangan»
+ *    chizig'i bu kartada YO'Q (u «Tekshiruv uchun» tabida).
+ */
+const PARKING_SITE_ID = "parking-karmana01";
+
+const REVENUE_WEEK = {
+  from_date: "2026-10-09",
+  to_date: "2026-10-15",
+  rows: Array.from({ length: 7 }, (_, i) => ({
+    business_date: `2026-10-${String(9 + i).padStart(2, "0")}`,
+    charged_soum: 100_000,
+    collected_soum: 90_000,
+    diff_soum: -10_000,
+  })),
+  /* ⛔ Ataylab qatorlar yig'indisidan FARQLI: tepadagi jami serverni ko'rsatishi shart. */
+  total_collected_soum: 777_000,
+  total_charged_soum: 700_000,
+  row_count: 7,
+  shown_count: 7,
+};
+
+const PARKING_SITES = {
+  items: [
+    {
+      id: PARKING_SITE_ID,
+      kind: "parking",
+      name: "Karmana avtoturargohi",
+      created_at: "2026-10-01T00:00:00Z",
+      config_version: 1,
+      setup: { devices: [], lanes: [] },
+      agent: null,
+    },
+  ],
+};
+
+const parkingDay = (date: string, cash: number, terminal: number) => ({
+  date,
+  entries: 40,
+  exits: 38,
+  cash,
+  terminal,
+  total: cash + terminal,
+  free_count: 3,
+});
+
+const PARKING_WEEK = {
+  site_id: PARKING_SITE_ID,
+  site_name: "Karmana avtoturargohi",
+  from_date: "2026-10-09",
+  to_date: "2026-10-15",
+  days: Array.from({ length: 7 }, (_, i) =>
+    parkingDay(`2026-10-${String(9 + i).padStart(2, "0")}`, 120_000, 30_000),
+  ),
+  /* ⛔ Bu ham qatorlar yig'indisidan FARQLI — legenda serverni ko'rsatadi. */
+  total: { entries: 280, exits: 266, cash: 840_000, terminal: 210_000, total: 1_050_500, free_count: 21 },
+  sessions: [],
+  hours: Array.from({ length: 24 }, (_, hour) => ({ hour, entries: 0, exits: 0 })),
+  stay: { measured: 0, median_minutes: null, buckets: [], unrecorded_entries: 0 },
+  exit_reasons: [],
+  inside: 2,
+  paid_sessions: 240,
+  average_check_soum: 4_377,
+  regulars: [],
+};
+
 describe("Tushum dinamikasi", () => {
-  test("legenda davr YIG'INDISINI serverdan oladi, jadvalda har kun bor", async () => {
+  test("avtoturargohsiz: tepada SERVER jami va kuniga o'rtacha, jadvalda har kun", async () => {
+    route({ "/reports/revenue": REVENUE_WEEK });
+    renderWith(<RevenueTrend />);
+
+    /* ⚠ Guruh ajratgichi NBSP; testing-library matnni oddiy bo'shliqqa keltiradi. */
+    expect(await screen.findByText("777 000")).toBeInTheDocument();
+    expect(screen.getByText("Kuniga o'rtacha: 111 000 so'm")).toBeInTheDocument();
+    /* Bitta qism — legenda yo'q (sarlavha nomlaydi), «Hisoblangan» ham yo'q. */
+    expect(screen.queryByText(D.trendParking)).not.toBeInTheDocument();
+    expect(screen.queryByText(D.charged)).not.toBeInTheDocument();
+    expect(screen.queryByText("700 000 so'm")).not.toBeInTheDocument();
+
+    const table = screen.getByRole("table");
+    expect(within(table).getAllByRole("row")).toHaveLength(1 + 7);
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(2);
+    expect(requested()).toContain("/reports/revenue?from=2026-10-09&to=2026-10-15");
+    /* Direktorda avtoturargoh obyektlari so'raladi — ro'yxat rad etildi, karta sinmadi. */
+    expect(requested()).toContain("/edge-sites");
+  });
+
+  test("avtoturargohli: jami = rastalar + avtoturargoh, legendada qismlar, jadvalda «Jami»", async () => {
+    route({
+      "/reports/revenue": REVENUE_WEEK,
+      "/edge-sites/": PARKING_WEEK,
+      "/edge-sites": PARKING_SITES,
+    });
+    renderWith(<RevenueTrend />);
+
+    /* 777 000 + 1 050 500 — ikkala yig'indi ham SERVERDAN. */
+    expect(await screen.findByText("1 827 500")).toBeInTheDocument();
+    /* Legenda — qism nomi VA uning server yig'indisi (rang yolg'iz emas). */
+    const legend = screen.getByRole("list");
+    expect(within(legend).getByText(D.trendStalls)).toBeInTheDocument();
+    expect(within(legend).getByText(D.trendParking)).toBeInTheDocument();
+    expect(within(legend).getByText("777 000 so'm")).toBeInTheDocument();
+    expect(within(legend).getByText("1 050 500 so'm")).toBeInTheDocument();
+    /* 1 827 500 / 7 = 261 071,4 -> 261 071. */
+    expect(screen.getByText("Kuniga o'rtacha: 261 071 so'm")).toBeInTheDocument();
+
+    const table = screen.getByRole("table");
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(4);
+    const firstDay = within(table).getAllByRole("row")[1] as HTMLElement;
+    expect(within(firstDay).getByText("150 000 so'm")).toBeInTheDocument();
+    expect(within(firstDay).getByText("240 000 so'm")).toBeInTheDocument();
+
+    /* ⛔ Panel seanslarsiz yig'indini so'raydi — mashinalar ro'yxati kerak emas. */
+    expect(requested()).toContain(
+      `/edge-sites/${PARKING_SITE_ID}/parking-report?from=2026-10-09&to=2026-10-15&sessions=0`,
+    );
+  });
+
+  test("avtoturargoh so'rovi yiqilsa (422) — qism JIMGINA tushadi, karta sinmaydi", async () => {
+    apiClientMock.apiFetch.mockImplementation((path: string) => {
+      if (path.startsWith("/reports/revenue")) return Promise.resolve(REVENUE_WEEK);
+      if (path === "/edge-sites") return Promise.resolve(PARKING_SITES);
+      return Promise.reject(new Error("422 report_period_too_long"));
+    });
+    renderWith(<RevenueTrend />);
+
+    expect(await screen.findByText("777 000")).toBeInTheDocument();
+    expect(screen.queryByText(D.trendParking)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("12 hafta: oxirgi (tugamagan) hafta jadvalda «davom etmoqda» va izoh aytiladi", async () => {
+    const days = Array.from({ length: 84 }, (_, i) => {
+      const date = new Date(Date.UTC(2026, 6, 24 + i)).toISOString().slice(0, 10);
+      return { business_date: date, charged_soum: 0, collected_soum: 10_000, diff_soum: 0 };
+    });
     route({
       "/reports/revenue": {
-        from_date: "2026-10-09",
-        to_date: "2026-10-15",
-        rows: Array.from({ length: 7 }, (_, i) => ({
-          business_date: `2026-10-${String(9 + i).padStart(2, "0")}`,
-          charged_soum: 100_000,
-          collected_soum: 90_000,
-          diff_soum: -10_000,
-        })),
-        /* ⛔ Ataylab qatorlar yig'indisidan FARQLI: legenda serverni ko'rsatishi shart. */
-        total_collected_soum: 777_000,
-        total_charged_soum: 700_000,
-        row_count: 7,
-        shown_count: 7,
+        from_date: days[0]?.business_date,
+        to_date: days[83]?.business_date,
+        rows: days,
+        total_collected_soum: 840_000,
+        total_charged_soum: 0,
+        row_count: 84,
+        shown_count: 84,
       },
     });
     renderWith(<RevenueTrend />);
 
-    /* ⚠ Guruh ajratgichi NBSP; testing-library matnni oddiy bo'shliqqa keltiradi. */
-    expect(await screen.findByText("777 000 so'm")).toBeInTheDocument();
-    expect(screen.getByText("700 000 so'm")).toBeInTheDocument();
-    const table = screen.getByRole("table");
-    expect(within(table).getAllByRole("row")).toHaveLength(1 + 7);
-    expect(requested()).toContain("/reports/revenue?from=2026-10-09&to=2026-10-15");
+    fireEvent.click(await screen.findByRole("button", { name: D.range12w }));
+    /* 840 000 / 12 hafta = 70 000. */
+    expect(await screen.findByText("Haftasiga o'rtacha: 70 000 so'm")).toBeInTheDocument();
+    expect(screen.getByText(D.trendFootPartial)).toBeInTheDocument();
+    const rows = within(screen.getByRole("table")).getAllByRole("row");
+    expect(rows[rows.length - 1]?.textContent).toContain(`(${D.trendPartialTip})`);
+  });
+
+  test("huquqsiz sessiyada (buxgalter) avtoturargoh SO'RALMAYDI", async () => {
+    route({ "/reports/revenue": REVENUE_WEEK });
+    renderWith(<RevenueTrend />, ["accountant"]);
+
+    expect(await screen.findByText("777 000")).toBeInTheDocument();
+    expect(requested().some((path) => path.startsWith("/edge-sites"))).toBe(false);
   });
 });

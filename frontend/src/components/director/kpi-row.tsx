@@ -23,6 +23,10 @@ import {
   includesToday,
   periodDays,
 } from "@/components/director/period";
+import {
+  parkingTotalOf,
+  usePanelParkingReport,
+} from "@/components/director/use-panel-parking";
 import { PanelTile } from "@/components/panel/tile";
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +55,8 @@ import { useCaptureDays } from "@/lib/snapshot-queries";
  * Endi to'rt katak — har biri ODDIY SAVOLGA bitta son bilan javob beradi
  * va sonning ostida u nimani anglatishi ODDIY GAP bilan yoziladi:
  *
- *   1. Tushum       — «qancha pul yig'ildi?»       (tanlangan davr)
+ *   1. Tushum       — «qancha pul yig'ildi?»       (tanlangan davr;
+ *                     261103 dan rastalar + avtoturargoh)
  *   2. To'lagan     — «nechta rasta to'ladi?»      (bugun, xaritadan)
  *   3. Qarz         — «kimda qancha qarz bor?»     (reestr holati)
  *   4. Kameralar    — «kameralar ishlayaptimi?»    (bugungi kadrlar)
@@ -123,6 +128,33 @@ function KpiNote({
 /* 1. Tushum                                                                  */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Katakning soni: rastalar + avtoturargoh (261103, buyurtmachi: «faqat
+ * rasta pulini emas, avtoturargoh pulini ham qo'sh»).
+ *
+ *   `parking === null` — avtoturargoh yo'q, huquq yo'q yoki so'rov
+ *   yiqildi: son BUGUNGI holicha (faqat rastalar), bo'linish chizilmaydi.
+ *
+ * ⛔ Taqqoslash ham JAMI bilan: joriy jami oldingi davrning faqat rasta
+ *    puli bilan solishtirilsa foiz soxta o'sishni ko'rsatardi. Oldingi
+ *    davrning avtoturargoh soni noma'lum bo'lsa taqqoslash CHIZILMAYDI.
+ */
+export function revenueTotals(
+  stalls: number | null,
+  parking: number | null,
+  previousStalls: number | null,
+  previousParking: number | null,
+): { current: number | null; previous: number | null } {
+  if (parking === null) return { current: stalls, previous: previousStalls };
+  return {
+    current: stalls === null ? null : stalls + parking,
+    previous:
+      previousStalls === null || previousParking === null
+        ? null
+        : previousStalls + previousParking,
+  };
+}
+
 function RevenueKpi({ period }: { period: Period }) {
   const t = useTranslations();
   const format = useFormatter();
@@ -134,9 +166,17 @@ function RevenueKpi({ period }: { period: Period }) {
   const prev = comparePeriod(period);
   const live = useLiveRevenue({ from: period.from, to: period.to });
   const livePrev = useLiveRevenue({ from: prev.from, to: prev.to });
+  const parking = usePanelParkingReport(period);
+  const parkingPrev = usePanelParkingReport(prev);
 
-  const current = live.data?.total_collected_soum ?? null;
-  const previous = livePrev.data?.total_collected_soum ?? null;
+  const stalls = live.data?.total_collected_soum ?? null;
+  const parkingSum = parking.pending ? null : parkingTotalOf(parking);
+  const { current, previous } = revenueTotals(
+    stalls,
+    parkingSum,
+    livePrev.data?.total_collected_soum ?? null,
+    parkingPrev.pending ? null : parkingTotalOf(parkingPrev),
+  );
   const open = includesToday(period, todayIso);
 
   /* ⛔ Foiz FAQAT ikkala davr yopilganda (modul izohi). */
@@ -172,14 +212,36 @@ function RevenueKpi({ period }: { period: Period }) {
       step={0}
       sub={sub}
     >
-      {live.isLoading ? (
+      {/*
+       * ⛔ Avtoturargoh soni kelguncha skeleton: rastalar summasini «jami»
+       *    deb ko'rsatib, bir lahzadan keyin kattaroq songa sakrash —
+       *    direktorga ikki xil javob berish bo'lardi.
+       */}
+      {live.isLoading || parking.pending ? (
         <KpiLoading />
       ) : current === null ? (
         <p className="dir-kpi-value text-text-muted">—</p>
       ) : (
-        <div className="flex flex-wrap items-baseline gap-2">
-          <KpiAmount value={current} />
-          {delta === null ? null : <Badge tone={delta.tone}>{delta.text}</Badge>}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <KpiAmount value={current} />
+            {delta === null ? null : <Badge tone={delta.tone}>{delta.text}</Badge>}
+          </div>
+          {/* Bo'linish — FAQAT avtoturargoh soni ma'lum bo'lganda. */}
+          {stalls === null || parkingSum === null ? null : (
+            <p className="dir-kpi-split">
+              <span>
+                {t("director.kpiRevenueStalls", {
+                  sum: formatAmount(format, stalls, locale),
+                })}
+              </span>
+              <span>
+                {t("director.kpiRevenueParking", {
+                  sum: formatAmount(format, parkingSum, locale),
+                })}
+              </span>
+            </p>
+          )}
         </div>
       )}
     </PanelTile>

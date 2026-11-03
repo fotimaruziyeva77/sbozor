@@ -27,6 +27,8 @@ import { PaymentMix } from "@/components/director/payment-mix";
 import { RevenueTrend } from "@/components/director/revenue-trend";
 import { StallDayCard } from "@/components/director/stall-day-card";
 import { TopDebtors } from "@/components/director/top-debtors";
+import { DirectorParking } from "@/components/director/parking-section";
+import { MarketLogo } from "@/components/ui/market-logo";
 import { DebtorsReport } from "@/components/reports/debtors-report";
 import { RevenueReport } from "@/components/reports/revenue-report";
 import { businessDayIn } from "@/components/snapshots/day-picker";
@@ -96,9 +98,12 @@ const TABS = [
 ] as const;
 
 export function DirectorPanel({
+  marketId,
   marketName,
   roleLabel,
 }: {
+  /** Logotip fayli shu nom bilan (`public/markets/<id>.webp`). */
+  marketId: string;
   marketName: string;
   /*
    * ⛔⛔ ROL YORLIG'I TASHQARIDAN — VA U «Direktor» DEB QOTIRILMAYDI
@@ -138,8 +143,19 @@ export function DirectorPanel({
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <div className="dir-eyebrow">
-            {marketName} · {roleLabel}
+          {/*
+           * ⛔ 261103: bozor nomi o'rnida BOZORNING O'Z LOGOSI (buyurtmachi:
+           *    «Karmana bozorining o'z logosini qo'y»). Logo bo'lmasa —
+           *    avvalgidek «BOZOR NOMI · ROL» matni. Rol yorlig'i ikkala
+           *    holatda ham qoladi (sabab — `roleLabel` izohi).
+           */}
+          <div className="dir-eyebrow dir-brand">
+            <MarketLogo
+              className="dir-brand-logo"
+              marketId={marketId}
+              marketName={marketName}
+            />
+            <span className="dir-brand-role">{roleLabel}</span>
           </div>
           <h1 className="dir-title">{t("director.title")}</h1>
           {/*
@@ -228,6 +244,13 @@ export function DirectorPanel({
               />
             </div>
           </section>
+
+          {/*
+           * ⛔ 261103: AVTOTURARGOH — rastalar grafiklaridan KEYIN, alohida
+           *    sarlavhali bo'lim (agentning «Statistika» ekrani). Avtoturargohi
+           *    yo'q bozorda va `camera_view` siz sessiyada umuman chizilmaydi.
+           */}
+          <DirectorParking period={period} />
         </>
       ) : activeTab === "reports" ? (
         <RevenueReport />

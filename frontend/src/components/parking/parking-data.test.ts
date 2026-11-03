@@ -9,12 +9,15 @@ import { describe, expect, test } from "vitest";
 
 import {
   barWidth,
+  businessHourIndex,
   durationParts,
   filterJournal,
   hourLabel,
+  hoursFromDayStart,
   journalCounts,
   looksLikePlate,
   normalizePlateQuery,
+  parkingBusinessDay,
   peakHour,
   recentWithPhotos,
   sessionStatus,
@@ -167,5 +170,48 @@ describe("ustunlar", () => {
   test("ulush — umumiy nol bo'lsa null", () => {
     expect(shareOf(1, 4)).toBe(25);
     expect(shareOf(0, 0)).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 261103: ish kuni 06:00 da boshlanadi                                       */
+/* -------------------------------------------------------------------------- */
+
+describe("ish kuni — 06:00 dan 06:00 gacha", () => {
+  test("05:59 — hali kechagi kun, 06:00 — bugungi kun (Toshkent)", () => {
+    /* 2026-11-03 05:59 / 06:00 Toshkent = 00:59 / 01:00 UTC. */
+    expect(parkingBusinessDay("Asia/Tashkent", new Date("2026-11-03T00:59:00Z"))).toBe(
+      "2026-11-02",
+    );
+    expect(parkingBusinessDay("Asia/Tashkent", new Date("2026-11-03T01:00:00Z"))).toBe(
+      "2026-11-03",
+    );
+    expect(parkingBusinessDay("Asia/Tashkent", new Date("2026-11-03T18:59:00Z"))).toBe(
+      "2026-11-03",
+    );
+  });
+
+  test("soatlar 06 dan 05 gacha; yetishmagan soat — nol qator", () => {
+    const ordered = hoursFromDayStart([
+      { hour: 0, entries: 1, exits: 0 },
+      { hour: 6, entries: 2, exits: 1 },
+    ]);
+
+    expect(ordered.map((row) => row.hour)).toEqual([
+      6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5,
+    ]);
+    expect(ordered[0]).toEqual({ hour: 6, entries: 2, exits: 1 });
+    expect(ordered[1]).toEqual({ hour: 7, entries: 0, exits: 0 });
+    expect(ordered[18]).toEqual({ hour: 0, entries: 1, exits: 0 });
+    expect(businessHourIndex(6)).toBe(0);
+    expect(businessHourIndex(5)).toBe(23);
+  });
+
+  test("eng gavjum soat teng bo'lsa — ISH KUNIDA ertarog'i (02:00 emas, 07:00)", () => {
+    const hours = [
+      { hour: 2, entries: 5, exits: 0 },
+      { hour: 7, entries: 5, exits: 0 },
+    ];
+    expect(peakHour(hours)?.hour).toBe(7);
   });
 });

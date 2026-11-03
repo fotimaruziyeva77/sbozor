@@ -69,6 +69,17 @@ export const edgeParkingReportKey = (
   from: string,
   to: string,
 ) => domainKey(marketId, "edge-sites", "parking-report", siteId, from, to);
+/**
+ * Seanslarsiz yig'indi (`sessions=0`) — direktor paneli. ⛔ ALOHIDA kalit:
+ * `/parking` sahifasi to'liq javobni (seanslar bilan) shu davr uchun
+ * keshdan bo'sh ro'yxat bilan olib qo'ymasin.
+ */
+export const edgeParkingTotalsKey = (
+  marketId: string,
+  siteId: string,
+  from: string,
+  to: string,
+) => domainKey(marketId, "edge-sites", "parking-report-totals", siteId, from, to);
 export const edgeFileKey = (marketId: string, siteId: string, fileId: string) =>
   domainKey(marketId, "edge-file", siteId, fileId);
 
@@ -83,12 +94,16 @@ function sitePath(siteId: string): string {
 
 /* --- Obyektlar ------------------------------------------------------------ */
 
-export function useEdgeSitesQuery() {
+/**
+ * `options.enabled` — huquq tekshiruvi SO'ROVDAN OLDIN (direktor paneli:
+ * `camera_view` siz sessiyada ro'yxat so'ralmaydi va 403 yozilmaydi).
+ */
+export function useEdgeSitesQuery(options?: { enabled?: boolean }) {
   const marketId = useMarketId();
   return useQuery({
     queryKey: edgeSitesKey(marketId ?? ""),
     queryFn: () => apiFetch(EDGE_SITES_PATH, { schema: edgeSiteListSchema }),
-    enabled: marketId !== null,
+    enabled: marketId !== null && (options?.enabled ?? true),
     refetchInterval: SITE_POLL_MS,
     refetchIntervalInBackground: false,
   });
@@ -276,8 +291,11 @@ export type ParkingReportPeriod = {
 function buildParkingReportDataPath(
   siteId: string,
   period: ParkingReportPeriod,
+  sessions: boolean,
 ): string {
   const query = new URLSearchParams({ from: period.from, to: period.to });
+  /* `sessions=0`: javob AYNI, faqat `sessions: []` va davr 366 kungacha. */
+  if (!sessions) query.set("sessions", "0");
   return `${sitePath(siteId)}/parking-report?${query.toString()}`;
 }
 
@@ -295,17 +313,24 @@ function buildParkingReportExportPath(
  * `staleTime` 1 daqiqa: bugungi kun ham davrga kiradi va hodisalar real
  * vaqtda keladi — lekin har fokusda qayta so'rash direktor ekranini
  * sababsiz miltillatardi.
+ *
+ * `options.sessions === false` — seanslarsiz yig'indi (`sessions=0`,
+ * direktor paneli): kunlar, soatlar va yig'indilar AYNI, mashinalar
+ * ro'yxati bo'sh, davr 366 kungacha. Standart — to'liq javob (`/parking`
+ * sahifasi jurnal va galereya uchun seanslarni talab qiladi).
  */
 export function useEdgeParkingReportQuery(
   siteId: string,
   period: ParkingReportPeriod,
-  options: { enabled: boolean },
+  options: { enabled: boolean; sessions?: boolean },
 ) {
   const marketId = useMarketId();
+  const sessions = options.sessions ?? true;
+  const keyOf = sessions ? edgeParkingReportKey : edgeParkingTotalsKey;
   return useQuery({
-    queryKey: edgeParkingReportKey(marketId ?? "", siteId, period.from, period.to),
+    queryKey: keyOf(marketId ?? "", siteId, period.from, period.to),
     queryFn: ({ signal }) =>
-      apiFetch(buildParkingReportDataPath(siteId, period), {
+      apiFetch(buildParkingReportDataPath(siteId, period, sessions), {
         schema: edgeParkingReportSchema,
         signal,
       }),

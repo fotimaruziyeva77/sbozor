@@ -1,3 +1,4 @@
+import { businessDayIn } from "@/components/snapshots/day-picker";
 import type {
   EdgeParkingReportHour,
   EdgeParkingReportSession,
@@ -106,8 +107,50 @@ export function durationParts(totalMinutes: number): DurationParts {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Soatlar                                                                    */
+/* Ish kuni va soatlar                                                        */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Avtoturargoh ish kuni shu soatda boshlanadi (Toshkent): D kuni —
+ * [D 06:00, D+1 06:00). Serverdagi `parking_report.DAY_START_HOUR` va agent
+ * kassasi bilan AYNI chegara (261103) — uchala ekran bir kunni bir xil sanaydi.
+ */
+export const PARKING_DAY_START_HOUR = 6;
+
+/**
+ * Hozirgi avtoturargoh ish kuni (ISO). 00:00–06:00 orasida — KECHAGI sana.
+ *
+ * ⛔ `businessDayIn` (kalendar kuni) bilan almashtirilmaydi: tunda server
+ *    kalendar «bugun» ni kelajak deb `422 report_period_future` qaytaradi.
+ *    Toshkentda yozgi vaqt yo'q — 6 soat ayirish aniq.
+ */
+export function parkingBusinessDay(timeZone: string, now: Date): string {
+  return businessDayIn(
+    timeZone,
+    new Date(now.getTime() - PARKING_DAY_START_HOUR * 3_600_000),
+  );
+}
+
+/** Soatning ish kunidagi o'rni: 06 -> 0, 23 -> 17, 00 -> 18, 05 -> 23. */
+export function businessHourIndex(hour: number): number {
+  return (((hour - PARKING_DAY_START_HOUR) % 24) + 24) % 24;
+}
+
+/**
+ * Soat qatorlari ish kuni tartibida: 06, 07, …, 23, 00, …, 05.
+ *
+ * Server soatlarni kalendar tartibida (0..23) beradi — tartib ekranniki.
+ * Yetishmagan soat nol qator bo'ladi: o'q hamisha 24 ta katak.
+ */
+export function hoursFromDayStart(
+  hours: readonly EdgeParkingReportHour[],
+): EdgeParkingReportHour[] {
+  const byHour = new Map(hours.map((row) => [row.hour, row]));
+  return Array.from({ length: 24 }, (_, index) => {
+    const hour = (PARKING_DAY_START_HOUR + index) % 24;
+    return byHour.get(hour) ?? { hour, entries: 0, exits: 0 };
+  });
+}
 
 /** `8` -> `08:00`. */
 export function hourLabel(hour: number): string {
@@ -115,14 +158,18 @@ export function hourLabel(hour: number): string {
 }
 
 /**
- * Eng ko'p kirish bo'lgan soat. Teng bo'lsa ERTAROG'I — kun boshidagi
- * gavjumlik keyingisidan oldin ko'rinadi. Kirish umuman bo'lmasa `null`.
+ * Eng ko'p kirish bo'lgan soat. Teng bo'lsa ISH KUNIDA ERTAROG'I (06:00 dan
+ * sanaladi) — kun boshidagi gavjumlik keyingisidan oldin ko'rinadi. Kirish
+ * umuman bo'lmasa `null`.
  */
 export function peakHour(
   hours: readonly EdgeParkingReportHour[],
 ): EdgeParkingReportHour | null {
+  const ordered = [...hours].sort(
+    (a, b) => businessHourIndex(a.hour) - businessHourIndex(b.hour),
+  );
   let best: EdgeParkingReportHour | null = null;
-  for (const row of hours) {
+  for (const row of ordered) {
     if (row.entries > 0 && (best === null || row.entries > best.entries)) best = row;
   }
   return best;

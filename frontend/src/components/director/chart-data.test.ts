@@ -17,7 +17,7 @@ import {
   topDebtors,
   zoneDayRows,
 } from "./chart-data";
-import { buildTrendPoints, trendSeries } from "./revenue-trend";
+import { buildTrendPoints } from "./revenue-trend";
 import type { MapDayRow, MapDayState } from "@/lib/map-day-queries";
 import type { ReceivablesReportRow } from "@/lib/api-types";
 
@@ -233,7 +233,7 @@ describe("kamera kadrlari — to'rt guruh", () => {
   });
 });
 
-describe("tushum trendi — nuqtalar va uzuq dum", () => {
+describe("tushum trendi — ustunlar, avtoturargoh va tugamagan davr", () => {
   const rows = Array.from({ length: 10 }, (_, index) => {
     const day = String(index + 1).padStart(2, "0");
     return {
@@ -243,23 +243,41 @@ describe("tushum trendi — nuqtalar va uzuq dum", () => {
     };
   });
 
-  test("kunlik kesim: server qatori BEVOSITA nuqta, dum yo'q", () => {
+  test("kunlik kesim: server qatori BEVOSITA ustun, tugamagan ustun yo'q", () => {
     const points = buildTrendPoints(rows, "7");
 
     expect(points).toHaveLength(10);
-    expect(points[0]).toMatchObject({
+    expect(points[0]).toEqual({
       label: "01.10",
+      from: "2026-10-01",
+      to: "2026-10-01",
       collected: 1_000,
-      charged: 2_000,
+      /* Avtoturargohsiz bozor — ikkinchi qism nol, «yo'q» emas. */
+      parking: 0,
       partial: false,
     });
-    const series = trendSeries(points);
-    expect(series.every((point) => point.collectedTail === null)).toBe(true);
-    expect(series.every((point) => point.collectedSolid !== null)).toBe(true);
+    expect(points.some((point) => point.partial)).toBe(false);
   });
 
-  test("haftalik kesim: yig'indi kunlardan, OXIRGI hafta tugamagan", () => {
-    const points = buildTrendPoints(rows, "12h");
+  test("avtoturargoh shu KUNGA biriktiriladi; davrdan tashqari kun tushib qoladi", () => {
+    const points = buildTrendPoints(rows, "7", [
+      { date: "2026-10-02", total: 150_000 },
+      { date: "2026-10-03", total: 90_000 },
+      /* Rastalar qatori yo'q kun — o'q rastalarniki, ustun yasalmaydi. */
+      { date: "2026-11-30", total: 5_000_000 },
+    ]);
+
+    expect(points.map((point) => point.parking).slice(0, 4)).toEqual([
+      0, 150_000, 90_000, 0,
+    ]);
+    expect(points).toHaveLength(10);
+  });
+
+  test("haftalik kesim: yig'indi kunlardan (avtoturargoh ham), OXIRGI hafta tugamagan", () => {
+    const points = buildTrendPoints(rows, "12h", [
+      { date: "2026-10-02", total: 150_000 },
+      { date: "2026-10-06", total: 40_000 },
+    ]);
 
     /* 2026-10-01 — payshanba: 1–4 (W40), 5–10 (W41). */
     expect(points.map((point) => point.label)).toEqual(["01.10", "05.10"]);
@@ -267,19 +285,22 @@ describe("tushum trendi — nuqtalar va uzuq dum", () => {
       from: "2026-10-01",
       to: "2026-10-04",
       collected: 10_000,
-      charged: 8_000,
+      parking: 150_000,
       partial: false,
     });
-    expect(points[1]?.partial).toBe(true);
+    expect(points[1]).toMatchObject({ parking: 40_000, partial: true });
   });
 
-  test("dum oxirgi IKKI nuqtadan, to'liq qismda tugamagan nuqta `null`", () => {
-    const points = buildTrendPoints(rows, "12h");
-    const series = trendSeries(points);
+  test("oylik kesim: oy kaliti va yorlig'i, oxirgi oy tugamagan", () => {
+    const points = buildTrendPoints(
+      [
+        { business_date: "2026-09-30", collected_soum: 5_000 },
+        { business_date: "2026-10-01", collected_soum: 7_000 },
+      ],
+      "12o",
+    );
 
-    expect(series[0]?.collectedSolid).toBe(10_000);
-    expect(series[1]?.collectedSolid).toBeNull();
-    expect(series[0]?.collectedTail).toBe(10_000);
-    expect(series[1]?.collectedTail).toBe(points[1]?.collected);
+    expect(points.map((point) => point.label)).toEqual(["09.2026", "10.2026"]);
+    expect(points.map((point) => point.partial)).toEqual([false, true]);
   });
 });

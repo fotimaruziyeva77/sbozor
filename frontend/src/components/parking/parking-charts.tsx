@@ -15,7 +15,11 @@ import type { TooltipContentProps } from "recharts";
 
 import { compactSoum, niceMax } from "@/components/director/chart-data";
 import type { CompactUnits } from "@/components/director/chart-data";
-import { hourLabel, peakHour } from "@/components/parking/parking-data";
+import {
+  hourLabel,
+  hoursFromDayStart,
+  peakHour,
+} from "@/components/parking/parking-data";
 import { MONEY_COLORS } from "@/components/parking/parking-flow";
 import { useParkingFormat } from "@/components/parking/use-parking-format";
 import { Button } from "@/components/ui/button";
@@ -345,7 +349,8 @@ export function HourlyCard({ data }: { data: EdgeParkingReport }) {
   const fmt = useParkingFormat();
   const captionId = useId();
 
-  const points: HourPoint[] = data.hours.map((row) => ({
+  /* ⛔ O'q ish kuni tartibida — 06 dan 05 gacha (kun 06:00 da boshlanadi). */
+  const points: HourPoint[] = hoursFromDayStart(data.hours).map((row) => ({
     ...row,
     label: String(row.hour).padStart(2, "0"),
   }));

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import {
   useFormatter,
   useLocale,
@@ -9,18 +9,19 @@ import {
   useTranslations,
 } from "next-intl";
 import {
-  Area,
+  Bar,
+  BarChart,
   CartesianGrid,
-  ComposedChart,
-  Line,
+  Rectangle,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { TooltipContentProps } from "recharts";
+import type { BarShapeProps, TooltipContentProps } from "recharts";
 
 import { compactSoum, niceMax } from "@/components/director/chart-data";
 import type { CompactUnits } from "@/components/director/chart-data";
+import { usePanelParkingReport } from "@/components/director/use-panel-parking";
 import { businessDayIn, shiftIsoDay } from "@/components/snapshots/day-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -33,34 +34,44 @@ import type { ChartConfig } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBusinessDay } from "@/lib/format-day";
-import { formatSoum } from "@/lib/format-number";
+import { formatAmount, formatSoum } from "@/lib/format-number";
 import { useRevenueReport } from "@/lib/report-queries";
 
 /*
  * =============================================================================
- * TUSHUM DINAMIKASI — Recharts maydon grafigi (261016, buyurtmachi:
- * «chartslar ishlat, direktor bittada nima bo'layotganini tushunsin»).
+ * TUSHUM DINAMIKASI — BITTA SAVOL: «har kuni (hafta, oy) qancha pul
+ * tushdi?» (261103 qayta qurildi, buyurtmachi: «tushunarsiz bo'lib qoldi»).
  *
- * ⛔⛔ IKKI SERIYA, BITTA O'Q: «Yig'ilgan» (aksent maydon) va «Hisoblangan»
- *     (kulrang chiziq). Ular bir xil birlikda (so'm) va bitta o'qda —
- *     ikki o'qli grafik ikki seriya orasida mavjud bo'lmagan bog'liqlik
- *     yasardi. Urg'u bitta: yig'ilgan pul; hisoblangan patta — uning
- *     KONTEKSTI, shuning uchun kulrang.
+ * ⛔⛔ NEGA QAYTA QURILDI. Kartada maydon + kulrang «Hisoblangan» chizig'i
+ *     + uzuq dumlar + avtoturargoh qatlami bir vaqtda turardi — direktor
+ *     to'rt xil belgini o'qishi kerak edi va birortasining javobini bir
+ *     qarashda ololmasdi. Endi karta FAQAT yig'ilgan pulni ko'rsatadi:
  *
- * ⛔⛔ TUGAMAGAN DAVR UZUQ CHIZIQ BILAN — DIZAYNNING QAT'IY BANDI.
- *     Oxirgi hafta/oy tugamagan bo'lsa u asosiy chiziqqa KIRMAYDI —
- *     alohida uzuq chiziq bilan ulanadi. Aks holda avgustning 18-kunidagi
- *     qiymat butun avgust deb o'qilardi va grafik har oy boshida «qulash»
- *     ko'rsatardi.
+ *       tepada  — davr JAMI va «kuniga o'rtacha» (savolning javobi);
+ *       grafik  — ustunlar: «Rastalar» (pastda) + «Avtoturargoh» (ustida);
+ *       tooltip — sana, har qism so'mi va «Jami».
  *
- * ⛔ SERVER 366 KUNDAN KO'PINI BERMAYDI (`report_max_period_days`).
- *    «12 oy» oralig'i 365 kunlik so'rov bilan olinadi va oylarga KLIENTDA
- *    yig'iladi. Bu ikkinchi haqiqat manbai EMAS: yig'indi serverning
- *    kunlik qatorlaridan chiqadi, qayta hisoblanmaydi.
+ * ⛔ «HISOBLANGAN» (patta hisobi) BU YERDA YO'Q — u «Tekshiruv uchun»
+ *    tabida, izohi bilan (`audit-sheet.tsx`). Hisob va yig'imni yonma-yon
+ *    solishtirish nazorat savoli, «qancha tushdi» savoli emas.
  *
- * ⛔ Server davrning HAR kuni uchun qator beradi (to'lovsiz kun ham,
- *    `report_repo._REVENUE_BY_DAY` — `generate_series`): nol — natija,
- *    grafikdagi «chuqurlik» haqiqiy.
+ * ⛔ TUGAMAGAN HAFTA/OY — OCH RANGLI USTUN, uzuq chiziq emas: oxirgi
+ *    ustun hali to'lib bormoqda va to'liq davr bilan solishtirilmasligi
+ *    tooltip va pastki izohda aytiladi. Aks holda avgustning 18-kunidagi
+ *    qiymat butun avgust deb o'qilardi.
+ *
+ * ⛔ YIG'INDILAR SERVERDAN: tepadagi jami — `total_collected_soum` +
+ *    avtoturargohning `total.total` i; o'rtacha — o'sha jamining kunlar
+ *    (hafta, oy) soniga bo'linmasi. Ustunlar serverning KUNLIK qatorlaridan
+ *    (to'lovsiz kun ham qator — nol natija), hafta/oyga klientda yig'iladi
+ *    (server 366 kundan ko'pini bermaydi, `report_max_period_days`).
+ *
+ * ⛔ AVTOTURARGOH — ikkinchi qism, faqat bozorda avtoturargoh bo'lsa va
+ *    javob kelsa (`use-panel-parking.ts`, seanslarsiz so'rov). So'rov
+ *    yiqilsa (eski serverda 92 kundan uzun davr — 422) qism JIMGINA
+ *    tushib qoladi, karta sinmaydi. Rangi — aksent va qizil aralashmasi:
+ *    `info` (terminal), `success` (Payme), `warning` (Click) panelda band;
+ *    juftlik CVD tekshiruvidan o'tgan (yorug' ΔE 9.4, tun ΔE 8.6).
  * =============================================================================
  */
 
@@ -72,30 +83,47 @@ export { niceMax };
 
 type RangeId = "7" | "30" | "12h" | "12o";
 
-/* Yorliqlar i18n KALIT: 7/30 kun direktor davr filtri bilan BIR kalit. */
+/*
+ * Yorliqlar i18n KALIT: 7/30 kun direktor davr filtri bilan BIR kalit.
+ * `perUnit` — «o'rtacha» ning maxraji: kunlik kesimda kunlar, 12 hafta va
+ * 12 oyda — 12 (84 kun = 12 hafta, 365 kun ≈ 12 oy).
+ */
 const RANGES = [
-  { id: "7", labelKey: "director.periodWeek", days: 7 },
-  { id: "30", labelKey: "director.periodMonth", days: 30 },
-  { id: "12h", labelKey: "director.range12w", days: 84 },
-  { id: "12o", labelKey: "director.range12m", days: 365 },
-] as const satisfies readonly { id: RangeId; labelKey: string; days: number }[];
+  { id: "7", labelKey: "director.periodWeek", days: 7, avgKey: "director.trendAvgDay", perUnit: 7 },
+  { id: "30", labelKey: "director.periodMonth", days: 30, avgKey: "director.trendAvgDay", perUnit: 30 },
+  { id: "12h", labelKey: "director.range12w", days: 84, avgKey: "director.trendAvgWeek", perUnit: 12 },
+  { id: "12o", labelKey: "director.range12m", days: 365, avgKey: "director.trendAvgMonth", perUnit: 12 },
+] as const satisfies readonly {
+  id: RangeId;
+  labelKey: string;
+  days: number;
+  avgKey: string;
+  perUnit: number;
+}[];
 
 export type TrendPoint = {
   /** O'qdagi qisqa yorliq. */
   label: string;
-  /** Nuqtaning birinchi va oxirgi kuni (kunlik kesimda bir xil). */
+  /** Ustunning birinchi va oxirgi kuni (kunlik kesimda bir xil). */
   from: string;
   to: string;
+  /** Rastalardan yig'ilgan pul. */
   collected: number;
-  charged: number;
-  /** Davr tugamagan — uzuq chiziq. */
+  /** Avtoturargoh tushumi (naqd + terminal); avtoturargohsiz bozorda 0. */
+  parking: number;
+  /** Hafta/oy tugamagan — och rangli ustun. */
   partial: boolean;
 };
 
 const SERIES = {
   collected: { color: "var(--color-accent)" },
-  charged: { color: "var(--color-border-ui)" },
+  parking: {
+    color: "color-mix(in oklch, var(--color-accent) 50%, var(--color-danger))",
+  },
 } as const;
+
+/** Tugamagan davr ustunining shaffofligi — «hali to'lib bormoqda». */
+const PARTIAL_OPACITY = 0.42;
 
 export function RevenueTrend() {
   const t = useTranslations();
@@ -109,11 +137,23 @@ export function RevenueTrend() {
   const todayIso = businessDayIn(timeZone, now);
   /* ⛔ Kecha bilan tugaydi: bugungi kun hali yopilmagan. */
   const to = shiftIsoDay(todayIso, -1);
-  const days = RANGES.find((item) => item.id === range)?.days ?? 7;
-  const from = shiftIsoDay(to, -(days - 1));
+  const current = RANGES.find((item) => item.id === range) ?? RANGES[0];
+  const from = shiftIsoDay(to, -(current.days - 1));
 
   const report = useRevenueReport({ from, to });
-  const points = buildTrendPoints(report.data?.rows ?? [], range);
+  const parking = usePanelParkingReport({ from, to });
+  /* `null` — avtoturargoh yo'q yoki so'rov yiqildi: ustunlar faqat rastalar. */
+  const parkingData = parking.data;
+  const withParking = parkingData !== null;
+  const points = buildTrendPoints(
+    report.data?.rows ?? [],
+    range,
+    parkingData?.days ?? null,
+  );
+
+  const stallsTotal = report.data?.total_collected_soum ?? 0;
+  const parkingTotal = parkingData?.total.total ?? 0;
+  const total = stallsTotal + parkingTotal;
 
   return (
     <Card className="dir-chart-card dir-chart-wide hover:translate-y-0">
@@ -122,10 +162,7 @@ export function RevenueTrend() {
           <h2 className="dir-trend-title">{t("director.trendTitle")}</h2>
           <p className="dir-tile-sub">
             {report.data === undefined
-              ? t(
-                  RANGES.find((item) => item.id === range)?.labelKey ??
-                    "director.periodWeek",
-                )
+              ? t(current.labelKey)
               : `${formatBusinessDay(format, report.data.from_date, locale)} — ${formatBusinessDay(format, report.data.to_date, locale)}`}
           </p>
         </div>
@@ -150,7 +187,11 @@ export function RevenueTrend() {
       </CardHeader>
 
       <CardContent className="flex flex-1 flex-col">
-        {report.isPending ? (
+        {/*
+         * ⛔ Avtoturargoh qismi kelguncha ham skeleton: jami va o'q avval
+         *    faqat rastalar bo'yicha chizilib, keyin «sakramasin».
+         */}
+        {report.isPending || parking.pending ? (
           <Skeleton className="dir-trend-skeleton" />
         ) : report.isError ? (
           <div className="dir-trend-state" role="alert">
@@ -178,37 +219,44 @@ export function RevenueTrend() {
         ) : (
           <div className="flex flex-1 flex-col gap-3">
             {/*
-             * ⛔ LEGENDA IKKI SERIYADA MAJBURIY va unda davr YIG'INDISI:
-             *    yig'indi SERVERDAN (`total_*_soum`), nuqtalarni qo'shib
-             *    chiqarilmaydi.
+             * ⛔ JAVOB TEPADA: davr jami va o'rtachasi. Ikki qism bo'lsa
+             *    legenda qismlarning o'z yig'indisini ham aytadi — rang
+             *    yolg'iz identifikator emas, har bandda nom bor.
              */}
-            <ChartLegend
-              items={[
-                {
-                  key: "collected",
-                  kind: "rect",
-                  color: SERIES.collected.color,
-                  label: t("director.collected"),
-                  value: formatSoum(
-                    format,
-                    report.data?.total_collected_soum ?? 0,
-                    locale,
-                  ),
-                },
-                {
-                  key: "charged",
-                  kind: "line",
-                  color: SERIES.charged.color,
-                  label: t("director.charged"),
-                  value: formatSoum(
-                    format,
-                    report.data?.total_charged_soum ?? 0,
-                    locale,
-                  ),
-                },
-              ]}
-            />
-            <TrendChart key={range} points={points} />
+            <div className="dir-trend-summary">
+              <p className="dir-kpi-value">
+                {formatAmount(format, total, locale)}{" "}
+                <span className="dir-kpi-unit">{t("reports.amountUnit")}</span>
+              </p>
+              <div className="dir-trend-breakdown">
+                {withParking ? (
+                  <ChartLegend
+                    items={[
+                      {
+                        key: "collected",
+                        kind: "rect",
+                        color: SERIES.collected.color,
+                        label: t("director.trendStalls"),
+                        value: formatSoum(format, stallsTotal, locale),
+                      },
+                      {
+                        key: "parking",
+                        kind: "rect",
+                        color: SERIES.parking.color,
+                        label: t("director.trendParking"),
+                        value: formatSoum(format, parkingTotal, locale),
+                      },
+                    ]}
+                  />
+                ) : null}
+                <p className="dir-trend-average">
+                  {t(current.avgKey, {
+                    sum: formatSoum(format, Math.round(total / current.perUnit), locale),
+                  })}
+                </p>
+              </div>
+            </div>
+            <TrendChart key={range} points={points} withParking={withParking} />
             <p className="dir-tile-note">
               {points.some((point) => point.partial)
                 ? t("director.trendFootPartial")
@@ -222,41 +270,59 @@ export function RevenueTrend() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* NUQTALAR — serverning KUNLIK qatorlaridan                                  */
+/* USTUNLAR — serverning KUNLIK qatorlaridan                                  */
 /* -------------------------------------------------------------------------- */
 
 type RevenueRow = {
   business_date: string;
   collected_soum: number;
-  charged_soum: number;
 };
+
+/** Avtoturargohning bitta kuni — hisobotning `days[]` qatori. */
+type ParkingDay = { date: string; total: number };
 
 /** `2026-10-16` -> `16.10`. */
 function dayMonth(iso: string): string {
   return `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 }
 
+/**
+ * Ustunlar: rastalar (server qatorlari) + avtoturargoh (shu KUNNING
+ * `days[].total` i; yo'q kun — 0).
+ *
+ * ⛔ O'q RASTALAR qatorlaridan: server davrning har kuni uchun qator
+ *    beradi, avtoturargoh esa o'sha kunlarga BIRIKTIRILADI.
+ */
 export function buildTrendPoints(
   rows: readonly RevenueRow[],
   range: RangeId,
+  parkingDays: readonly ParkingDay[] | null = null,
 ): TrendPoint[] {
   if (rows.length === 0) return [];
 
+  const parkingByDay = new Map(
+    (parkingDays ?? []).map((day) => [day.date, day.total]),
+  );
+  const parkingOf = (iso: string): number => parkingByDay.get(iso) ?? 0;
+
   if (range === "7" || range === "30") {
-    /* Kunlik kesim — server qatorlari BEVOSITA nuqta bo'ladi. */
+    /* Kunlik kesim — server qatorlari BEVOSITA ustun bo'ladi. */
     return rows.map((row) => ({
       label: dayMonth(row.business_date),
       from: row.business_date,
       to: row.business_date,
       collected: row.collected_soum,
-      charged: row.charged_soum,
+      parking: parkingOf(row.business_date),
       partial: false,
     }));
   }
 
-  if (range === "12h") return bucketBy(rows, isoWeekKey, (from) => dayMonth(from));
+  if (range === "12h") {
+    return bucketBy(rows, parkingOf, isoWeekKey, (from) => dayMonth(from));
+  }
   return bucketBy(
     rows,
+    parkingOf,
     (iso) => iso.slice(0, 7),
     (from) => `${from.slice(5, 7)}.${from.slice(0, 4)}`,
   );
@@ -267,17 +333,18 @@ export function buildTrendPoints(
  *
  * ⛔ OXIRGI GURUH TUGAMAGAN deb belgilanadi: oraliq kecha bilan tugaydi,
  *    ya'ni joriy hafta/oy hali to'liq emas. Aynan shu bayroq grafikda
- *    uzuq chiziq beradi.
+ *    och rangli ustun beradi.
  */
 function bucketBy(
   rows: readonly RevenueRow[],
+  parkingOf: (iso: string) => number,
   keyOf: (iso: string) => string,
   labelOf: (from: string) => string,
 ): TrendPoint[] {
   const order: string[] = [];
   const buckets = new Map<
     string,
-    { from: string; to: string; collected: number; charged: number }
+    { from: string; to: string; collected: number; parking: number }
   >();
 
   for (const row of rows) {
@@ -289,12 +356,12 @@ function bucketBy(
         from: row.business_date,
         to: row.business_date,
         collected: row.collected_soum,
-        charged: row.charged_soum,
+        parking: parkingOf(row.business_date),
       });
     } else {
       bucket.to = row.business_date;
       bucket.collected += row.collected_soum;
-      bucket.charged += row.charged_soum;
+      bucket.parking += parkingOf(row.business_date);
     }
   }
 
@@ -305,7 +372,7 @@ function bucketBy(
       from: bucket?.from ?? key,
       to: bucket?.to ?? key,
       collected: bucket?.collected ?? 0,
-      charged: bucket?.charged ?? 0,
+      parking: bucket?.parking ?? 0,
       partial: index === order.length - 1,
     };
   });
@@ -323,40 +390,50 @@ function isoWeekKey(iso: string): string {
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
-/**
- * Chiziladigan qatorlar: to'liq qism va tugamagan «dum».
- *
- * ⛔ Dum OXIRGI IKKI nuqtadan iborat — u to'liq chiziqning uchidan
- *    tugamagan nuqtaga ulanadi. To'liq qismda tugamagan nuqta `null`:
- *    Recharts `null` da chiziqni uzadi.
- */
-export function trendSeries(points: readonly TrendPoint[]) {
-  const last = points.length - 1;
-  const hasTail = last >= 1 && points[last]?.partial === true;
-
-  return points.map((point, index) => {
-    const inSolid = !hasTail || index < last;
-    const inTail = hasTail && index >= last - 1;
-    return {
-      ...point,
-      collectedSolid: inSolid ? point.collected : null,
-      chargedSolid: inSolid ? point.charged : null,
-      collectedTail: inTail ? point.collected : null,
-      chargedTail: inTail ? point.charged : null,
-    };
-  });
-}
-
 /* -------------------------------------------------------------------------- */
 /* GRAFIK                                                                     */
 /* -------------------------------------------------------------------------- */
 
-function TrendChart({ points }: { points: readonly TrendPoint[] }) {
+/*
+ * Ustun bo'laklari: yumaloq uch FAQAT ustunning eng ustki bo'lagida
+ * (ma'lumot uchi), tugamagan davr — och rangda.
+ */
+
+/** Rastalar bo'lagi — ustida avtoturargoh bo'lmasa, ustunning uchi o'zi. */
+function stallsSegment(props: BarShapeProps) {
+  const point = props.payload as TrendPoint | undefined;
+  return (
+    <Rectangle
+      {...props}
+      fillOpacity={point?.partial ? PARTIAL_OPACITY : 1}
+      radius={(point?.parking ?? 0) > 0 ? 0 : [4, 4, 0, 0]}
+    />
+  );
+}
+
+/** Avtoturargoh bo'lagi — har doim ustunning uchi. */
+function parkingSegment(props: BarShapeProps) {
+  const point = props.payload as TrendPoint | undefined;
+  return (
+    <Rectangle
+      {...props}
+      fillOpacity={point?.partial ? PARTIAL_OPACITY : 1}
+      radius={[4, 4, 0, 0]}
+    />
+  );
+}
+
+function TrendChart({
+  points,
+  withParking,
+}: {
+  points: readonly TrendPoint[];
+  /** Avtoturargoh qismi chiziladi (bozorda avtoturargoh bor va javob kelgan). */
+  withParking: boolean;
+}) {
   const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
-  /* Gradient identifikatori — bir sahifada ikki grafik bo'lsa TO'QNASHMASIN. */
-  const gradientId = `trend-fill-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   const units: CompactUnits = {
     thousand: t("director.unitThousand"),
@@ -366,11 +443,12 @@ function TrendChart({ points }: { points: readonly TrendPoint[] }) {
 
   /*
    * ⛔ O'Q YOLG'ON GAPIRMAYDI: ticklar «chiroyli qadam» dan va har biri
-   *    o'z chizig'ining HAQIQIY qiymati (`niceMax` testi).
+   *    o'z chizig'ining HAQIQIY qiymati (`niceMax` testi). Shift — ustunning
+   *    to'liq balandligi (rastalar + avtoturargoh).
    */
   const peak = Math.max(
     0,
-    ...points.map((point) => Math.max(point.collected, point.charged)),
+    ...points.map((point) => point.collected + (withParking ? point.parking : 0)),
   );
   const max = niceMax(peak, GRID_LINES);
   const ticks = Array.from(
@@ -379,11 +457,11 @@ function TrendChart({ points }: { points: readonly TrendPoint[] }) {
   );
 
   const config: ChartConfig = {
-    collected: { label: t("director.collected"), color: SERIES.collected.color },
-    charged: { label: t("director.charged"), color: SERIES.charged.color },
+    collected: { label: t("director.trendStalls"), color: SERIES.collected.color },
+    ...(withParking
+      ? { parking: { label: t("director.trendParking"), color: SERIES.parking.color } }
+      : {}),
   };
-
-  const data = trendSeries(points);
 
   const titleOf = (point: TrendPoint): string =>
     point.from === point.to
@@ -399,39 +477,49 @@ function TrendChart({ points }: { points: readonly TrendPoint[] }) {
         rows={[
           {
             key: "collected",
-            label: t("director.collected"),
+            label: t("director.trendStalls"),
             value: formatSoum(format, point.collected, locale),
             color: SERIES.collected.color,
-            kind: point.partial ? "dashed" : "line",
           },
-          {
-            key: "charged",
-            label: t("director.charged"),
-            value: formatSoum(format, point.charged, locale),
-            color: SERIES.charged.color,
-            kind: point.partial ? "dashed" : "line",
-          },
+          ...(withParking
+            ? [
+                {
+                  key: "parking",
+                  label: t("director.trendParking"),
+                  value: formatSoum(format, point.parking, locale),
+                  color: SERIES.parking.color,
+                },
+              ]
+            : []),
         ]}
         title={titleOf(point)}
+        total={
+          withParking
+            ? {
+                label: t("director.trendTotal"),
+                value: formatSoum(format, point.collected + point.parking, locale),
+              }
+            : undefined
+        }
       />
     );
   };
 
+  /* Ikki bo'lak orasida 2px sirt oralig'i (`stroke`) — chegara chizig'i emas. */
+  const gap = withParking ? { stroke: "var(--color-surface)", strokeWidth: 2 } : {};
+
   return (
     <>
       <ChartContainer className="dir-chart-plot" config={config}>
-        <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="var(--chart-collected)" stopOpacity={0.22} />
-              <stop offset="100%" stopColor="var(--chart-collected)" stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
+        <BarChart
+          data={points as TrendPoint[]}
+          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+        >
           <CartesianGrid stroke="var(--color-border)" vertical={false} />
           <XAxis
             axisLine={false}
             dataKey="label"
-            minTickGap={18}
+            minTickGap={12}
             tickLine={false}
             tickMargin={8}
           />
@@ -441,67 +529,38 @@ function TrendChart({ points }: { points: readonly TrendPoint[] }) {
             tickFormatter={(value: number) => compactSoum(value, units)}
             tickLine={false}
             ticks={ticks}
-            width={72}
+            width={64}
           />
           <Tooltip
             content={renderTooltip}
-            cursor={{ stroke: "var(--color-border-ui)", strokeWidth: 1 }}
+            cursor={{ fill: "var(--color-surface-muted)" }}
             isAnimationActive={false}
-          />
-
-          {/* Kontekst seriyasi OLDIN — urg'u seriyasi uning ustida chiziladi. */}
-          <Line
-            activeDot={{ r: 4, fill: "var(--chart-charged)", stroke: "var(--color-surface)", strokeWidth: 2 }}
-            className="dir-trend-line"
-            connectNulls={false}
-            dataKey="chargedSolid"
-            dot={false}
-            isAnimationActive={false}
-            pathLength={1}
-            stroke="var(--chart-charged)"
-            strokeWidth={2}
-            type="monotone"
-          />
-          <Line
-            activeDot={false}
-            connectNulls={false}
-            dataKey="chargedTail"
-            dot={false}
-            isAnimationActive={false}
-            stroke="var(--chart-charged)"
-            strokeDasharray="5 5"
-            strokeWidth={2}
-            type="monotone"
           />
           {/*
-           * ⛔ Chiziladigan chiziq — FAQAT to'liq qism (`.dir-trend-line`,
-           *    `dirDraw`). Recharts'ning o'z JS animatsiyasi o'chiq: u
-           *    reduced-motion sozlamasini bilmaydi, CSS kadri esa biladi.
+           * ⛔ Recharts'ning o'z JS animatsiyasi O'CHIQ: u reduced-motion
+           *    sozlamasini bilmaydi.
            */}
-          <Area
-            activeDot={{ r: 4, fill: "var(--chart-collected)", stroke: "var(--color-surface)", strokeWidth: 2 }}
-            className="dir-trend-line"
-            connectNulls={false}
-            dataKey="collectedSolid"
-            fill={`url(#${gradientId})`}
+          <Bar
+            dataKey="collected"
+            fill="var(--chart-collected)"
             isAnimationActive={false}
-            pathLength={1}
-            stroke="var(--chart-collected)"
-            strokeWidth={2}
-            type="monotone"
+            maxBarSize={32}
+            shape={stallsSegment}
+            stackId="income"
+            {...gap}
           />
-          <Line
-            activeDot={false}
-            connectNulls={false}
-            dataKey="collectedTail"
-            dot={false}
-            isAnimationActive={false}
-            stroke="var(--chart-collected)"
-            strokeDasharray="5 5"
-            strokeWidth={2}
-            type="monotone"
-          />
-        </ComposedChart>
+          {withParking ? (
+            <Bar
+              dataKey="parking"
+              fill="var(--chart-parking)"
+              isAnimationActive={false}
+              maxBarSize={32}
+              shape={parkingSegment}
+              stackId="income"
+              {...gap}
+            />
+          ) : null}
+        </BarChart>
       </ChartContainer>
 
       {/*
@@ -519,8 +578,13 @@ function TrendChart({ points }: { points: readonly TrendPoint[] }) {
           <thead>
             <tr>
               <th scope="col">{t("director.chartPeriodColumn")}</th>
-              <th scope="col">{t("director.collected")}</th>
-              <th scope="col">{t("director.charged")}</th>
+              <th scope="col">{t("director.trendStalls")}</th>
+              {withParking ? (
+                <>
+                  <th scope="col">{t("director.trendParking")}</th>
+                  <th scope="col">{t("director.trendTotal")}</th>
+                </>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -531,7 +595,12 @@ function TrendChart({ points }: { points: readonly TrendPoint[] }) {
                   {point.partial ? ` (${t("director.trendPartialTip")})` : ""}
                 </th>
                 <td>{formatSoum(format, point.collected, locale)}</td>
-                <td>{formatSoum(format, point.charged, locale)}</td>
+                {withParking ? (
+                  <>
+                    <td>{formatSoum(format, point.parking, locale)}</td>
+                    <td>{formatSoum(format, point.collected + point.parking, locale)}</td>
+                  </>
+                ) : null}
               </tr>
             ))}
           </tbody>

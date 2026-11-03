@@ -293,6 +293,7 @@ export default function DashboardPage() {
         />
       ) : hasPermission(roles, "report_view") && principal?.marketId ? (
         <DirectorPanel
+          marketId={principal.marketId}
           marketName={principal.marketName ?? "Bozor"}
           /* Rollar TO'PLAM (D-05): bir odam ham direktor, ham admin
              bo'lishi mumkin — ikkalasi ham yoziladi. */

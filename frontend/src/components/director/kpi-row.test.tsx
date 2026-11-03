@@ -26,7 +26,7 @@ vi.mock("@/i18n/navigation", () => ({
 }));
 
 import messages from "../../../messages/uz-Latn.json";
-import { DirectorKpis, daysWithoutFrames } from "@/components/director/kpi-row";
+import { DirectorKpis, daysWithoutFrames, revenueTotals } from "@/components/director/kpi-row";
 import { AuthProvider, clearSession, setSession } from "@/lib/auth-store";
 
 const MARKET_ID = "11111111-1111-4111-8111-111111111111";
@@ -127,7 +127,10 @@ function route(opts: { liveToday: number; liveWeekAgo: number; liveYesterday?: n
 
 let client: QueryClient;
 
-function renderKpis(period: { kind: "today" | "yesterday"; from: string; to: string }) {
+function renderKpis(
+  period: { kind: "today" | "yesterday"; from: string; to: string },
+  now: Date = NOW,
+) {
   setSession({
     accessToken: "test-access-token",
     markets: [],
@@ -145,7 +148,7 @@ function renderKpis(period: { kind: "today" | "yesterday"; from: string; to: str
     },
   });
   return render(
-    <NextIntlClientProvider locale="uz-Latn" messages={messages} now={NOW} timeZone="Asia/Tashkent">
+    <NextIntlClientProvider locale="uz-Latn" messages={messages} now={now} timeZone="Asia/Tashkent">
       <QueryClientProvider client={client}>
         <AuthProvider>
           <DirectorKpis period={period} />
@@ -222,5 +225,117 @@ describe("to'rt katak", () => {
 
     expect(await screen.findByText("5 kundan beri kadr kelmayapti")).toBeInTheDocument();
     expect(screen.getByText(D.kpiCamera)).toBeInTheDocument();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 261103: Tushum = rastalar + avtoturargoh                                   */
+/* -------------------------------------------------------------------------- */
+
+const PARKING_SITE_ID = "parking-karmana01";
+
+const PARKING_SITES = {
+  items: [
+    {
+      id: PARKING_SITE_ID,
+      kind: "parking",
+      name: "Karmana avtoturargohi",
+      created_at: "2026-10-01T00:00:00Z",
+      config_version: 1,
+      setup: { devices: [], lanes: [] },
+      agent: null,
+    },
+  ],
+};
+
+function parkingReport(day: string, total: number) {
+  return {
+    site_id: PARKING_SITE_ID,
+    site_name: "Karmana avtoturargohi",
+    from_date: day,
+    to_date: day,
+    days: [{ date: day, entries: 40, exits: 38, cash: total, terminal: 0, total, free_count: 2 }],
+    total: { entries: 40, exits: 38, cash: total, terminal: 0, total, free_count: 2 },
+    sessions: [],
+    hours: Array.from({ length: 24 }, (_, hour) => ({ hour, entries: 0, exits: 0 })),
+    stay: { measured: 0, median_minutes: null, buckets: [], unrecorded_entries: 0 },
+    exit_reasons: [],
+    inside: 2,
+    paid_sessions: 30,
+    average_check_soum: 5_000,
+    regulars: [],
+  };
+}
+
+/** Avtoturargoh marshrutlari `route()` ning USTIGA; `byDay` da yo'q kun — rad. */
+function routeParking(byDay: Record<string, number>): void {
+  const base = apiClientMock.apiFetch.getMockImplementation();
+  apiClientMock.apiFetch.mockImplementation((path: string) => {
+    if (path === "/edge-sites") return Promise.resolve(PARKING_SITES);
+    if (path.startsWith(`/edge-sites/${PARKING_SITE_ID}/parking-report?`)) {
+      const from = new URL(path, "http://x").searchParams.get("from") ?? "";
+      const total = byDay[from];
+      return total === undefined
+        ? Promise.reject(new Error("422 report_period_too_long"))
+        : Promise.resolve(parkingReport(from, total));
+    }
+    return base === undefined ? Promise.reject(new Error(path)) : base(path);
+  });
+}
+
+function parkingRequests(): string[] {
+  return apiClientMock.apiFetch.mock.calls
+    .map((call) => String(call[0]))
+    .filter((path) => path.includes("/parking-report"));
+}
+
+describe("tushum — rastalar + avtoturargoh", () => {
+  test("katakda JAMI, ostida bo'linish; taqqoslash ham JAMI bilan", async () => {
+    route({ liveToday: 357_000, liveWeekAgo: 1_245_000 });
+    routeParking({ "2026-10-16": 150_000, "2026-10-09": 100_000 });
+    renderKpis(TODAY);
+
+    expect(await screen.findByText("507 000")).toBeInTheDocument();
+    expect(screen.getByText("Rastalar 357 000")).toBeInTheDocument();
+    expect(screen.getByText("Avtoturargoh 150 000")).toBeInTheDocument();
+    /* O'tgan hafta shu kuni ham jami: 1 245 000 + 100 000. */
+    expect(await screen.findByText("O'tgan hafta shu kuni: 1 345 000 so'm")).toBeInTheDocument();
+    /* ⛔ Seanslarsiz yig'indi — panelga mashinalar ro'yxati kerak emas. */
+    expect(parkingRequests()).toContain(
+      `/edge-sites/${PARKING_SITE_ID}/parking-report?from=2026-10-16&to=2026-10-16&sessions=0`,
+    );
+  });
+
+  test("avtoturargoh so'rovi yiqilsa — katak bugungi holicha (faqat rastalar)", async () => {
+    route({ liveToday: 357_000, liveWeekAgo: 1_245_000 });
+    routeParking({});
+    renderKpis(TODAY);
+
+    expect(await screen.findByText("357 000")).toBeInTheDocument();
+    expect(screen.getByText("O'tgan hafta shu kuni: 1 245 000 so'm")).toBeInTheDocument();
+    expect(screen.queryByText(/^Avtoturargoh/u)).toBeNull();
+  });
+
+  test("tunda (02:00) avtoturargoh kuni boshlanmagan: bugun uchun so'rov YO'Q, qismi 0", async () => {
+    route({ liveToday: 357_000, liveWeekAgo: 1_245_000 });
+    routeParking({ "2026-10-09": 100_000 });
+    /* 2026-10-16 02:00 Toshkent — kalendar «bugun», avtoturargoh kuni hali 15-oktabr. */
+    renderKpis(TODAY, new Date("2026-10-15T21:00:00Z"));
+
+    expect(await screen.findByText("357 000")).toBeInTheDocument();
+    expect(screen.getByText("Avtoturargoh 0")).toBeInTheDocument();
+    expect(parkingRequests().some((path) => path.includes("from=2026-10-16"))).toBe(false);
+  });
+});
+
+describe("jami tushum hisobi", () => {
+  test("avtoturargoh yo'q (null) — bugungi holicha: faqat rastalar", () => {
+    expect(revenueTotals(100, null, 80, 5)).toEqual({ current: 100, previous: 80 });
+  });
+
+  test("avtoturargoh bor — ikkala davr ham JAMI; oldingisi noma'lum bo'lsa taqqoslash yo'q", () => {
+    expect(revenueTotals(100, 20, 80, 5)).toEqual({ current: 120, previous: 85 });
+    expect(revenueTotals(100, 20, 80, null)).toEqual({ current: 120, previous: null });
+    expect(revenueTotals(null, 20, 80, 5)).toEqual({ current: null, previous: 85 });
   });
 });

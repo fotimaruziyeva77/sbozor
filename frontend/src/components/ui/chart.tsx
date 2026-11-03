@@ -90,10 +90,16 @@ export function ChartTooltipBox({
   title,
   rows,
   note,
+  total,
 }: {
   title: ReactNode;
   rows: readonly ChartTooltipRow[];
   note?: ReactNode;
+  /**
+   * Qatlamli (stack) grafikda qismlar YIG'INDISI — chiziq ostida, belgisiz:
+   * u seriya emas, ustunning to'liq balandligi.
+   */
+  total?: { label: string; value: string };
 }) {
   return (
     <div className="chart-tooltip">
@@ -113,6 +119,12 @@ export function ChartTooltipBox({
           </li>
         ))}
       </ul>
+      {total === undefined ? null : (
+        <p className="chart-tooltip-total">
+          <span className="chart-tooltip-label">{total.label}</span>
+          <span className="chart-tooltip-value">{total.value}</span>
+        </p>
+      )}
       {note === undefined ? null : <p className="chart-tooltip-note">{note}</p>}
     </div>
   );

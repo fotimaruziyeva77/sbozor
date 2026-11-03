@@ -29,6 +29,7 @@ import { NavMoreSheet } from "@/components/shell/nav-more-sheet";
 import type { NavSheetItem } from "@/components/shell/nav-more-sheet";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { UserMenu } from "@/components/shell/user-menu";
+import { MarketLogo } from "@/components/ui/market-logo";
 import { Link, usePathname } from "@/i18n/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import { cn } from "@/lib/cn";
@@ -614,12 +615,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
        */}
       <header className="app-surface relative z-40 border-b border-border md:sticky md:top-0">
         <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:flex-nowrap md:justify-between">
-          <div className="mr-auto min-w-0">
-            <p className="text-xs text-text-muted">{t("shell.marketLabel")}</p>
-            {/* D-16: bozor nomi DB kontenti — tarjima qilinmaydi. */}
-            <p className="truncate text-sm font-semibold">
-              {principal?.marketName ?? t("common.appName")}
-            </p>
+          <div className="mr-auto flex min-w-0 items-center gap-3">
+            {/*
+             * ⛔ 261103: bozorning o'z logosi nom YONIDA (bezak — nom matn
+             *    bo'lib turibdi, `alt=""`). Logo fayli yo'q bozorda hech
+             *    narsa chizilmaydi: sarlavha bugungidek qoladi.
+             */}
+            {principal?.marketId ? (
+              <MarketLogo
+                className="shell-market-logo"
+                decorative
+                fallback={null}
+                marketId={principal.marketId}
+                marketName={principal.marketName ?? ""}
+              />
+            ) : null}
+            <div className="min-w-0">
+              <p className="text-xs text-text-muted">{t("shell.marketLabel")}</p>
+              {/* D-16: bozor nomi DB kontenti — tarjima qilinmaydi. */}
+              <p className="truncate text-sm font-semibold">
+                {principal?.marketName ?? t("common.appName")}
+              </p>
+            </div>
           </div>
           {/* Foydalanuvchi menyusi — mobil 1-qatorning o'ng chekkasida. */}
           <div className="order-2 shrink-0 md:order-3">

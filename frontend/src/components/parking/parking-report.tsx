@@ -18,13 +18,10 @@ import {
 import { DailyCard, HourlyCard } from "@/components/parking/parking-charts";
 import { ParkingExportButton } from "@/components/parking/parking-export-button";
 import { ParkingFlow } from "@/components/parking/parking-flow";
+import { parkingBusinessDay } from "@/components/parking/parking-data";
 import { JournalCard } from "@/components/parking/parking-journal";
 import { GalleryCard } from "@/components/parking/parking-photos";
-import {
-  businessDayIn,
-  isValidIsoDay,
-  shiftIsoDay,
-} from "@/components/snapshots/day-picker";
+import { isValidIsoDay, shiftIsoDay } from "@/components/snapshots/day-picker";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -139,7 +136,12 @@ export function ParkingReportWorkspace() {
   const t = useTranslations();
   const timeZone = useTimeZone() ?? "Asia/Tashkent";
   const now = useNow();
-  const todayIso = businessDayIn(timeZone, now);
+  /*
+   * ⛔ «Bugun» — avtoturargoh ISH KUNI (06:00 dan), kalendar kuni emas:
+   *    00:00–06:00 orasida server kalendar sanasini kelajak deb rad etadi
+   *    (`422 report_period_future`) va sahifa tunda bo'sh qolardi.
+   */
+  const todayIso = parkingBusinessDay(timeZone, now);
 
   const [raw, setRaw] = useQueryStates(
     {
@@ -371,7 +373,7 @@ function ReportBody({ data, siteId }: { data: EdgeParkingReport; siteId: string 
   );
 }
 
-function DaysTable({ data }: { data: EdgeParkingReport }) {
+export function DaysTable({ data }: { data: EdgeParkingReport }) {
   const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
@@ -473,7 +475,7 @@ function DayRow({ row }: { row: EdgeParkingReportDay }) {
 
 /* --- Xato -------------------------------------------------------------------- */
 
-function ReportError({ error }: { error: unknown }) {
+export function ReportError({ error }: { error: unknown }) {
   const t = useTranslations();
   /* Server kodlari (`report_period_*`) hisobot marshrutlariniki bilan bir xil. */
   const view = error instanceof ApiError ? reportErrorView(error.detail) : null;
