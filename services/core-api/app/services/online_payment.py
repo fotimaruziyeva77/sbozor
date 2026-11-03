@@ -30,12 +30,22 @@ DueReason = Literal["stall_not_found", "stall_not_assigned", "nothing_due"]
 
 @dataclass(frozen=True, slots=True)
 class StallDue:
-    """Rastaning bugungi to'lovi: identifikatorlar + to'lanadigan jami summa (so'm)."""
+    """Rastaning bugungi to'lovi: identifikatorlar + to'lanadigan jami summa (so'm).
+
+    `today_soum` / `debt_soum` / `paid_today_soum` — QR sahifasidagi izoh
+    qatorlari uchun, kassir kartasidagi AYNI maydonlar (`PendingStall`):
+    `amount_soum` (bugungi patta yoki uning qoldig'i, `None` — bugun patta
+    yo'q), `outstanding_soum` (oldingi qarz; manfiy — avans). To'lov tizimlari
+    faqat `total_soum` ni ishlatadi.
+    """
 
     stall_id: UUID
     vendor_id: UUID
     stall_code: str
     total_soum: int
+    today_soum: int | None = None
+    debt_soum: int = 0
+    paid_today_soum: int = 0
 
 
 class DueUnavailable(Exception):
@@ -67,4 +77,12 @@ async def stall_due(session: AsyncSession, *, market_id: UUID, stall_code: str) 
     stall = projection.stall
     if stall is None or stall.stall_code != stall_code or stall.total_due_soum <= 0:
         raise DueUnavailable("nothing_due")
-    return StallDue(row.stall_id, row.vendor_id, row.stall_code, int(stall.total_due_soum))
+    return StallDue(
+        row.stall_id,
+        row.vendor_id,
+        row.stall_code,
+        int(stall.total_due_soum),
+        today_soum=None if stall.amount_soum is None else int(stall.amount_soum),
+        debt_soum=int(stall.outstanding_soum),
+        paid_today_soum=int(stall.paid_today_soum),
+    )

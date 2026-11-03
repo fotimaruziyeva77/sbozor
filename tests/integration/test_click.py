@@ -302,6 +302,7 @@ async def test_qr_page_shows_the_amount_and_both_buttons(
 
     page = await api_client.get(f"/api/v1/pay/{code}")
     assert page.status_code == 200, page.text
+    assert page.headers["cache-control"] == "no-store", "to'lovdan keyin eski summa chiqmasin"
     assert f"{total:,}".replace(",", " ") in page.text
     assert "Payme bilan to&#x27;lash" in page.text or "Payme bilan to'lash" in page.text
     assert f"service_id={SERVICE_ID}" in page.text

@@ -55,6 +55,7 @@ __all__ = [
     "click_by_service",
     "click_for_market",
     "default_market",
+    "default_slug",
     "market_by_slug",
     "payme_by_key",
     "payme_configured",
@@ -328,3 +329,8 @@ def market_by_slug(settings: Settings, slug: str) -> UUID | None:
 def default_market(settings: Settings) -> UUID | None:
     """Eski QR manzili `/pay/{rasta}` — `PAY_DEFAULT_MARKET` bozori."""
     return market_by_slug(settings, _legacy_slug(settings))
+
+
+def default_slug(settings: Settings) -> str:
+    """Eski QR manzili `/pay/{rasta}` dagi bozorning nomi (sahifa logosi shu nom bilan)."""
+    return _legacy_slug(settings)
