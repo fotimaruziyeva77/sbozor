@@ -18,7 +18,7 @@ Har yozuv `audit_log` ga ilova qatlamida yoziladi; kadr ochilishi —
 from __future__ import annotations
 
 import re
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -607,8 +607,9 @@ async def parking_summary(
     """Kun (Asia/Tashkent) bo'yicha: kirish, chiqish, naqd tushum, so'nggi raqamlar."""
     market_id = _market_id(principal)
     site = await _site_or_404(session, market_id, site_id)
-    target = day or datetime.now(TASHKENT).date()
-    start = datetime.combine(target, time.min, tzinfo=TASHKENT)
+    # Kun — avtoturargoh ISH KUNI (06:00 dan), hisobot bilan bir chegara.
+    target = day or parking_report.business_day_of(datetime.now(TASHKENT))
+    start = parking_report.business_day_start(target)
     end = start + timedelta(days=1)
     rows = await edge_repo.summary_events(
         session, market_id, site.id, types=_SUMMARY_TYPES, start=start, end=end
@@ -667,7 +668,9 @@ ReportFromDep = Annotated[date, Query(alias="from")]
 ReportToDep = Annotated[date, Query(alias="to")]
 
 
-def _check_report_period(from_date: date, to_date: date) -> None:
+def _check_report_period(
+    from_date: date, to_date: date, max_days: int = parking_report.MAX_PERIOD_DAYS
+) -> None:
     """Davr tekshiruvi — ⛔ JIMGINA KESILMAYDI, rad etiladi (`reports.py` qoidasi).
 
     `reports.py::_report_period` dan FARQI: yuqori chegara BUGUN, kecha
@@ -675,7 +678,7 @@ def _check_report_period(from_date: date, to_date: date) -> None:
     ya'ni bugungi kun ham to'liq ma'noli — direktor «bugun qancha kirdi?»
     deb so'raydi.
     """
-    today = datetime.now(TASHKENT).date()
+    today = parking_report.business_day_of(datetime.now(TASHKENT))
     if to_date > today:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_REPORT_PERIOD_FUTURE
@@ -684,7 +687,7 @@ def _check_report_period(from_date: date, to_date: date) -> None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_REPORT_PERIOD_INVALID
         )
-    if (to_date - from_date).days + 1 > parking_report.MAX_PERIOD_DAYS:
+    if (to_date - from_date).days + 1 > max_days:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_REPORT_PERIOD_TOO_LONG
         )
@@ -697,6 +700,8 @@ async def _parking_report(
     site_id: str,
     from_date: date,
     to_date: date,
+    *,
+    with_sessions: bool = True,
 ) -> tuple[edge_repo.SiteRow, parking_report.ParkingReport]:
     """JSON va `.xlsx` marshrutlarining UMUMIY boshi — bitta hisob, ikki shakl.
 
@@ -705,10 +710,14 @@ async def _parking_report(
     """
     market_id = _market_id(principal)
     site = await _site_or_404(session, market_id, site_id)
-    _check_report_period(from_date, to_date)
+    _check_report_period(
+        from_date,
+        to_date,
+        parking_report.MAX_PERIOD_DAYS if with_sessions else parking_report.SUMMARY_MAX_PERIOD_DAYS,
+    )
 
-    start = datetime.combine(from_date, time.min, tzinfo=TASHKENT)
-    end = datetime.combine(to_date, time.min, tzinfo=TASHKENT) + timedelta(days=1)
+    start = parking_report.business_day_start(from_date)
+    end = parking_report.business_day_start(to_date) + timedelta(days=1)
     rows = await edge_repo.summary_events(
         session, market_id, site.id, types=parking_report.EVENT_TYPES, start=start, end=end
     )
@@ -717,14 +726,19 @@ async def _parking_report(
     # ⛔ Seanslar ro'yxati JIMGINA KESILMAYDI (`reports.py::_guard_row_count`
     #    qoidasi): kesilgan varaq to'liq ko'rinardi va direktor yetishmagan
     #    mashinalarni hech qachon sezmasdi.
-    if len(report.sessions) > settings.report_max_rows:
+    if with_sessions and len(report.sessions) > settings.report_max_rows:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=_REPORT_TOO_LARGE
         )
     return site, report
 
 
-def _report_out(site: edge_repo.SiteRow, report: parking_report.ParkingReport) -> ParkingReportOut:
+def _report_out(
+    site: edge_repo.SiteRow,
+    report: parking_report.ParkingReport,
+    *,
+    with_sessions: bool = True,
+) -> ParkingReportOut:
     return ParkingReportOut(
         site_id=site.id,
         site_name=site.name,
@@ -763,7 +777,7 @@ def _report_out(site: edge_repo.SiteRow, report: parking_report.ParkingReport) -
                 entry_file_id=row.entry_file_id,
                 opened_at_exit=row.opened_at_exit,
             )
-            for row in report.sessions
+            for row in (report.sessions if with_sessions else ())
         ],
         hours=[
             ParkingReportHourOut(hour=row.hour, entries=row.entries, exits=row.exits)
@@ -805,15 +819,21 @@ async def parking_report_json(
     settings: SettingsDep,
     from_date: ReportFromDep,
     to_date: ReportToDep,
+    sessions: Annotated[bool, Query()] = True,
 ) -> ParkingReportOut:
-    """Davr (Toshkent kunlari, `to` kiradi, eng ko'pi 92 kun): kunlar,
+    """Davr (ish kunlari 06:00 dan, `to` kiradi, eng ko'pi 92 kun): kunlar,
     yig'indi va mashinalar ro'yxati.
+
+    `sessions=0` — direktor panelining yig'indisi: javob AYNI, faqat
+    `sessions` bo'sh va davr 366 kungacha (yillik tushum grafigi).
 
     Huquq `parking-summary` bilan AYNI (`CAMERA_VIEW`) — direktor va
     ma'muriyat ko'radi, kassir yo'q.
     """
-    site, report = await _parking_report(session, principal, settings, site_id, from_date, to_date)
-    return _report_out(site, report)
+    site, report = await _parking_report(
+        session, principal, settings, site_id, from_date, to_date, with_sessions=sessions
+    )
+    return _report_out(site, report, with_sessions=sessions)
 
 
 @router.get("/{site_id}/parking-report.xlsx", response_class=StreamingResponse)

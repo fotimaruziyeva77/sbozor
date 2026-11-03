@@ -21,11 +21,15 @@ import openpyxl
 import pytest
 from app.services import parking_report
 from app.services.parking_report import (
+    DAY_START_HOUR,
     EVENT_TYPES,
     MAX_PERIOD_DAYS,
+    SUMMARY_MAX_PERIOD_DAYS,
     ParkingReport,
     build_parking_report,
     build_parking_report_workbook,
+    business_day_of,
+    business_day_start,
     parking_report_texts,
 )
 
@@ -150,24 +154,39 @@ def open_book(raw: bytes) -> openpyxl.Workbook:
 # ---------------------------------------------------------------------------
 
 
-def test_days_are_tashkent_days_and_every_day_of_the_period_is_present(
+def test_days_are_business_days_from_six_and_every_day_of_the_period_is_present(
     report: ParkingReport,
 ) -> None:
-    """A 18:30Z da kirdi (Toshkent 23:30, 1-kun) va 19:10Z da chiqdi (00:10, 2-kun)."""
+    """A 18:30Z da kirdi (Toshkent 23:30) va 19:10Z da chiqdi (00:10) — ikkalasi ham
+    1-ish kuniga: kun 06:00 da almashadi (2026-11-03 qarori)."""
     assert [d.day for d in report.days] == [FROM, TO]
 
     first, second = report.days
-    assert (first.entries, first.exits) == (1, 0)
-    # 2-kun: B, C, D, E kirdi; A (00:10), B, D, E chiqdi — C hali ichkarida.
-    assert (second.entries, second.exits) == (4, 4)
+    assert (first.entries, first.exits) == (1, 1)
+    # 2-kun: B, C, D, E kirdi; B, D, E chiqdi — C hali ichkarida.
+    assert (second.entries, second.exits) == (4, 3)
+
+
+def test_the_day_turns_over_at_six_in_the_morning() -> None:
+    """05:59 dagi chiqish — kechagi kunniki, 06:00 dagi kirish — bugungi."""
+    late = closed(B, utc(10, 2, 0, 59), amount=0, reason="free")
+    early = opened(C, utc(10, 2, 1, 0), plate="20B456CD")
+    built = build_parking_report([late, early], from_date=FROM, to_date=TO)
+    first, second = built.days
+    assert (first.entries, first.exits) == (0, 1)
+    assert (second.entries, second.exits) == (1, 0)
+    assert business_day_of(utc(10, 2, 0, 59)) == FROM
+    assert business_day_of(utc(10, 2, 1, 0)) == TO
+    assert business_day_start(TO) == utc(10, 2, 1, 0)
 
 
 def test_money_comes_from_payment_events_split_by_method(report: ParkingReport) -> None:
     """Pul `core.payment.cash` dan: bog'lanmagan to'lov ham kunga kiradi,
     davrdan tashqaridagi (99 000) esa KIRMAYDI."""
     first, second = report.days
-    assert (first.cash_soum, first.terminal_soum, first.total_soum) == (3000, 0, 3000)
-    assert (second.cash_soum, second.terminal_soum, second.total_soum) == (10_000, 7000, 17_000)
+    # A ning 00:09 dagi to'lovi ham 1-ish kunida (06:00 dan oldin).
+    assert (first.cash_soum, first.terminal_soum, first.total_soum) == (8000, 0, 8000)
+    assert (second.cash_soum, second.terminal_soum, second.total_soum) == (5000, 7000, 12_000)
     assert (first.free_count, second.free_count) == (0, 1)
 
 
@@ -250,6 +269,8 @@ def test_event_types_and_period_limit_are_locked() -> None:
         "core.payment.cash",
     }
     assert MAX_PERIOD_DAYS == 92
+    assert SUMMARY_MAX_PERIOD_DAYS == 366
+    assert DAY_START_HOUR == 6
 
 
 # ---------------------------------------------------------------------------
@@ -471,10 +492,10 @@ def test_days_sheet_carries_site_period_bold_header_and_a_total_row(
     assert all(sheet.cell(row=3, column=c).font.bold for c in range(1, 8))
 
     assert [sheet.cell(row=4, column=c).value for c in range(1, 8)] == [
-        "2026-10-01", 1, 0, 3000, 0, 3000, 0
+        "2026-10-01", 1, 1, 8000, 0, 8000, 0
     ]  # fmt: skip
     assert [sheet.cell(row=5, column=c).value for c in range(1, 8)] == [
-        "2026-10-02", 4, 4, 10_000, 7000, 17_000, 1
+        "2026-10-02", 4, 3, 5000, 7000, 12_000, 1
     ]  # fmt: skip
 
     # JAMI — bir qator tashlab (filtr diapazonidan tashqarida), qalin.

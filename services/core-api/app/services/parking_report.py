@@ -9,11 +9,14 @@ shuning uchun u `tests/unit/` da konteynersiz to'liq o'lchanadi
 
 Uch qoida, keyingi o'quvchi uchun literal:
 
-1. KUN — TOSHKENT KUNI. Hodisa `occurred_at` i UTC'da saqlanadi va bu
-   yerda `Asia/Tashkent` ga o'girilib, keyin sanaga tushadi. 23:30 da
-   kirgan va 00:10 da chiqqan mashina ikki KUNGA yoziladi (kirish —
-   birinchi kunga, chiqish — ikkinchisiga): hisobot «kuni nima bo'ldi»
-   degan savolga javob beradi, seans varag'i esa ikkalasini bog'laydi.
+1. KUN — ISH KUNI, 06:00 DAN 06:00 GACHA (2026-11-03, buyurtmachi: «har
+   kun ertalab soat 6:00 dan yangi hisob boshlansin»). Hodisa `occurred_at`
+   i UTC'da saqlanadi, `Asia/Tashkent` ga o'giriladi va 06:00 dan oldingi
+   lahza OLDINGI kunga tushadi (`business_day_of`). 23:30 da kirgan va
+   00:10 da chiqqan mashina BITTA kunga yoziladi; 05:50 da chiqqani ham
+   kechagi kunniki. Agent kassasi ham kunni 06:00 da almashtiradi — ikki
+   ekran bir kunni bir xil chegarada sanaydi. Soatlar (`hours`) esa soat
+   bo'yicha qoladi (0..23), tartibni ekran 06 dan boshlaydi.
 
 2. PUL — `core.payment.cash` HODISASIDAN, `closed.amount_soum` DAN EMAS.
    Kunlik «Naqd/Terminal/Jami» ustunlari aynan to'lov hodisalaridan
@@ -45,7 +48,7 @@ from __future__ import annotations
 import io
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, Final, Protocol
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -70,11 +73,13 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
 __all__ = [
+    "DAY_START_HOUR",
     "EVENT_TYPES",
     "EXIT_REASONS",
     "MAX_PERIOD_DAYS",
     "REGULARS_LIMIT",
     "STAY_BUCKETS",
+    "SUMMARY_MAX_PERIOD_DAYS",
     "ParkingDayRow",
     "ParkingExitReason",
     "ParkingHourRow",
@@ -86,10 +91,15 @@ __all__ = [
     "ParkingTotals",
     "build_parking_report",
     "build_parking_report_workbook",
+    "business_day_of",
+    "business_day_start",
     "parking_report_texts",
 ]
 
 TASHKENT: Final = ZoneInfo("Asia/Tashkent")
+
+DAY_START_HOUR: Final = 6
+"""Avtoturargoh ish kuni shu soatda boshlanadi (modul docstringining 1-bandi)."""
 
 MAX_PERIOD_DAYS: Final = 92
 """Davrning eng katta uzunligi — bir chorak.
@@ -98,6 +108,22 @@ Avtoturargohda kuniga yuzlab seans bo'ladi; 92 kun × ~500 seans ≈ 46 000
 qator — `.xlsx` va JSON uchun hali ko'tariladigan hajm. Yillik so'rov
 esa `settings.report_max_rows` ga uriladi va ochiq rad etiladi.
 """
+
+SUMMARY_MAX_PERIOD_DAYS: Final = 366
+"""Seanslarsiz yig'indi (`sessions=0`) uchun chegara — direktor panelidagi yillik
+tushum grafigi. Seanslar ro'yxati bo'lmagani uchun javob hajmi kunlar soniga
+bog'liq, `report_max_rows` ga urilmaydi."""
+
+
+def business_day_of(moment: datetime) -> date:
+    """Lahza qaysi ish kuniga tegishli: 06:00 dan oldingisi — oldingi kunniki."""
+    return (moment.astimezone(TASHKENT) - timedelta(hours=DAY_START_HOUR)).date()
+
+
+def business_day_start(day: date) -> datetime:
+    """Ish kunining boshlanishi — o'sha sananing 06:00 i (Toshkent)."""
+    return datetime.combine(day, time(DAY_START_HOUR), tzinfo=TASHKENT)
+
 
 EVENT_TYPES: Final = (
     "parking.session.opened",
@@ -467,8 +493,8 @@ def build_parking_report(
     Args:
         events: `[from, to]` oralig'idagi `EVENT_TYPES` hodisalari
             (tartib ahamiyatsiz — kunlar va seanslar bu yerda saralanadi).
-        from_date: davrning birinchi Toshkent kuni (kiradi).
-        to_date: davrning oxirgi Toshkent kuni (kiradi).
+        from_date: davrning birinchi ish kuni (06:00 dan, kiradi).
+        to_date: davrning oxirgi ish kuni (kiradi).
 
     Oraliqdan tashqaridagi kunga tushgan hodisa (chaqiruvchi filtrlamagan
     bo'lsa) BUTUNLAY e'tiborsiz qoldiriladi — kunlik jadvalga ham, seansga
@@ -495,7 +521,7 @@ def build_parking_report(
     for event in events:
         data = event.data
         local = event.occurred_at.astimezone(TASHKENT)
-        day = local.date()
+        day = business_day_of(event.occurred_at)
         if not from_date <= day <= to_date:
             continue
 

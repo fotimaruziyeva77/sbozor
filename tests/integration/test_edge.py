@@ -28,6 +28,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from app.services import parking_report
 from fixtures.admin_api import session_headers
 from fixtures.edge_domain import edge_rows
 from fixtures.two_markets import SEED_PASSWORD
@@ -487,6 +488,30 @@ async def test_parking_summary_counts_the_day(
     assert body["cash_by_method"] == {"cash": 3000, "terminal": 2000}
     assert body["last_plates"][0]["plate"] == "01A123BC"
     assert body["last_plates"][0]["file_id"] == edge.market_a.file_sha256
+
+    # Davr hisoboti: ish kuni (06:00 dan) — summary bilan AYNI son; `sessions=0`
+    # direktor panelining yig'indisi: seanslarsiz va 366 kungacha.
+    day = parking_report.business_day_of(datetime.now(UTC))
+    report_url = f"{SITES}/{rows.site_id}/parking-report"
+    full = await api_client.get(
+        report_url, params={"from": day.isoformat(), "to": day.isoformat()}, headers=headers
+    )
+    assert full.status_code == 200, full.text
+    assert len(full.json()["sessions"]) == 2
+    assert full.json()["total"]["total"] == 5000
+    lean = await api_client.get(
+        report_url,
+        params={"from": day.isoformat(), "to": day.isoformat(), "sessions": "0"},
+        headers=headers,
+    )
+    assert lean.status_code == 200, lean.text
+    assert lean.json()["sessions"] == []
+    assert lean.json()["total"] == full.json()["total"]
+    year = {"from": (day - timedelta(days=365)).isoformat(), "to": day.isoformat()}
+    assert (await api_client.get(report_url, params=year, headers=headers)).status_code == 422
+    yearly = await api_client.get(report_url, params={**year, "sessions": "0"}, headers=headers)
+    assert yearly.status_code == 200, yearly.text
+    assert len(yearly.json()["days"]) == 366
 
     listed = await api_client.get(
         f"{SITES}/{rows.site_id}/events",
