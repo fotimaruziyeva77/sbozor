@@ -1174,6 +1174,30 @@ Ikkala xarita ham bir vaqtda berilmaydi: `call_route()` avval
 `FILE_FILLERS` ga qaraydi va topsa `json=` ni umuman ishlatmaydi.
 """
 
+_PARKING_REPORT_PERIOD: dict[str, str] = {"from": "2026-01-01", "to": "2026-01-01"}
+"""Avtoturargoh hisoboti uchun YAROQLI davr — o'tmishda va bir kunlik.
+
+Qiymat qotirilgan (`date.today()` emas): `to` bugundan katta bo'lolmaydi,
+o'tmishdagi sana esa soatga bog'liq emas. Davr YAROQLI bo'lgani uchun
+`_check_report_period` `_site_or_404` dan oldinga ko'chirilsa ham test 422
+ga qaytmaydi va hamon tenant chegarasini o'lchaydi.
+"""
+
+QUERY_FILLERS: dict[RouteSpec, dict[str, str]] = {
+    RouteSpec("GET", "/api/v1/edge-sites/{site_id}/parking-report"): _PARKING_REPORT_PERIOD,
+    RouteSpec("GET", "/api/v1/edge-sites/{site_id}/parking-report.xlsx"): _PARKING_REPORT_PERIOD,
+}
+"""MAJBURIY query parametri bor, YO'L parametrli marshrutlar uchun YAROQLI qiymatlar.
+
+NEGA KERAK: usiz so'rov FastAPI validatsiyasida **422** bilan to'xtardi va
+`test_cross_tenant_object_returns_404` obyekt qidiruviga UMUMAN yetib
+bormasdi — tenant chegarasi sinalmay qolardi (`BODY_FILLERS`/`FILE_FILLERS`
+bilan AYNAN bir xil sinf).
+
+⛔ `QUERY_PARAM_ROUTES` ga yozish TO'G'RI YECHIM EMAS: u «422 kutilgan» degan
+   istisno, bu yerda esa AYNAN 404 o'lchanishi kerak.
+"""
+
 INSPECTOR_ROUTES: frozenset[RouteSpec] = frozenset(
     {
         RouteSpec("GET", "/api/v1/review/uncertain/next"),
@@ -1416,7 +1440,7 @@ async def call_route(
     headers: dict[str, str] | None = None,
     path: str | None = None,
 ) -> httpx.Response:
-    """Marshrutni chaqiradi va (kerak bo'lsa) YAROQLI tana yoki FAYL yuboradi.
+    """Marshrutni chaqiradi va (kerak bo'lsa) YAROQLI query, tana yoki FAYL yuboradi.
 
     Barcha matritsa testlari SHU yordamchidan o'tadi. Har testda alohida
     `client.request(...)` yozilganda tana faqat ba'zilariga qo'shilardi va
@@ -1440,6 +1464,7 @@ async def call_route(
         route.method,
         fill_path(route, seed) if path is None else path,
         headers=headers,
+        params=QUERY_FILLERS.get(route),
         json=None if body is None else body(seed),
     )
 
@@ -2429,7 +2454,7 @@ KELMAYDI.
 
 `PUT /api/v1/camera-zones` `camera_id` ni QUERY parametri sifatida oladi
 (`main.py:213-218`: yo'l parametri bo'lsa u `cameras/coverage` shabloniga
-tushib qolardi). Matritsa esa faqat YO'L parametrlarini to'ldiradi, ya'ni
+tushib qolardi). Matritsa unga query bermaydi (`QUERY_FILLERS` da yo'q), ya'ni
 so'rov tanadan qat'i nazar validatsiya darvozasida to'xtaydi.
 
 `POST /api/v1/reports/compare/ledger` (daftar importi, 08-14) IKKI narsani
@@ -2464,6 +2489,14 @@ def test_query_param_routes_point_at_live_routes() -> None:
     stale = sorted(route.test_id for route in QUERY_PARAM_ROUTES if route not in live)
 
     assert not stale, f"`QUERY_PARAM_ROUTES` da mavjud bo'lmagan marshrutlar qolgan: {stale}"
+
+
+def test_query_fillers_point_at_live_routes() -> None:
+    """`QUERY_FILLERS` da o'chirilgan marshrut QOLIB KETMAGAN."""
+    live = set(all_routes(fastapi_app))
+    stale = sorted(route.test_id for route in QUERY_FILLERS if route not in live)
+
+    assert not stale, f"`QUERY_FILLERS` da mavjud bo'lmagan marshrutlar qolgan: {stale}"
 
 
 BODY_ROUTES = tuple(

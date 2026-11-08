@@ -30,8 +30,10 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from app.services import parking_report
 from fixtures.admin_api import session_headers
+from fixtures.auth_api import audit_rows
 from fixtures.edge_domain import edge_rows
 from fixtures.two_markets import SEED_PASSWORD
+from sbozor_core.enums import AuditAction
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
     from app.services.storage import SnapshotStorage
     from app.settings import Settings
     from fastapi import FastAPI
+    from fixtures import TenantSessionFactory
     from fixtures.edge_domain import EdgeDomainSeed, MarketEdgeRows
     from fixtures.two_markets import TwoMarketSeed
     from psycopg import Connection
@@ -521,6 +524,55 @@ async def test_parking_summary_counts_the_day(
     items = listed.json()["items"]
     assert len(items) == 1
     assert items[0]["file_ids"] == [edge.market_a.file_sha256]
+
+
+@pytest.mark.parametrize(
+    ("route", "reason"),
+    [
+        ("events", "edge_events_view"),
+        ("parking-summary", "parking_summary"),
+        ("parking-report", "report_parking"),
+        ("parking-report.xlsx", "report_parking_export"),
+    ],
+)
+async def test_plate_surfaces_write_exactly_one_audit_row(
+    api_client: httpx.AsyncClient,
+    two_markets: TwoMarketSeed,
+    edge: EdgeDomainSeed,
+    tenant_session: TenantSessionFactory,
+    route: str,
+    reason: str,
+) -> None:
+    """Raqam qaytaradigan har o'qish AYNAN bitta audit qatori yozadi; begona bozor iz qoldirmaydi.
+
+    Darvoza (`test_personal_data_coverage.py`) faqat `audit_read` E'LON qilinganini
+    ko'radi. Yozuvning O'ZI fon vazifasida ketadi va u yerdagi xato mijozga yetib
+    bormaydi, ya'ni uni faqat shu test tutadi.
+    """
+    rows = edge.market_a
+    url = f"{SITES}/{rows.site_id}/{route}"
+    day = parking_report.business_day_of(datetime.now(UTC)).isoformat()
+    period = {"from": day, "to": day}
+
+    async def written_in(market_id: uuid.UUID) -> list[Any]:
+        found = await audit_rows(tenant_session, market_id, action=str(AuditAction.READ))
+        return [r for r in found if (r.new_value or {}).get("reason") == reason]
+
+    foreign = await api_client.get(
+        url, params=period, headers=await admin_b(api_client, two_markets)
+    )
+    assert foreign.status_code == 404, foreign.text
+    assert await written_in(edge.market_b.market_id) == []
+
+    response = await api_client.get(
+        url, params=period, headers=await admin_a(api_client, two_markets)
+    )
+    assert response.status_code == 200, response.text
+
+    written = await written_in(rows.market_id)
+    assert len(written) == 1
+    assert written[0].table_name == "edge_events"
+    assert written[0].new_value["filters"]["site_id"] == rows.site_id
 
 
 # ===========================================================================

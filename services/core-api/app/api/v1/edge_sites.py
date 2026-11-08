@@ -11,8 +11,8 @@ HUQUQLAR — mavjud matritsadan, YANGI HUQUQ QO'SHILMADI:
   Agent kamera/shlagbaum qurilmalarini boshqaradi, ya'ni bu NVR sozlamasi
   bilan bir sinf (`CAMERA_MANAGE` docstringi): direktor ko'radi, o'zgartirmaydi.
 
-Har yozuv `audit_log` ga ilova qatlamida yoziladi; kadr ochilishi —
-`audit_read` (dalil-kadr bilan bir xil qoida).
+Har yozuv `audit_log` ga ilova qatlamida yoziladi; kadr ochilishi va avtomobil
+raqami qaytaradigan har o'qish — `audit_read` (dalil-kadr bilan bir xil qoida).
 """
 
 from __future__ import annotations
@@ -54,9 +54,22 @@ router = APIRouter(tags=["edge-sites"])
 TASHKENT = ZoneInfo("Asia/Tashkent")
 TABLE_EDGE_SITES = "edge_sites"
 TABLE_EDGE_FILES = "edge_files"
+TABLE_EDGE_EVENTS = "edge_events"
 
 ViewerDep = Annotated[Principal, Depends(require_permission(Permission.CAMERA_VIEW))]
 ManagerDep = Annotated[Principal, Depends(require_permission(Permission.CAMERA_MANAGE))]
+EventListIntentDep = Annotated[
+    AuditReadIntent, Depends(audit_read(TABLE_EDGE_EVENTS, reason="edge_events_view"))
+]
+ParkingSummaryIntentDep = Annotated[
+    AuditReadIntent, Depends(audit_read(TABLE_EDGE_EVENTS, reason="parking_summary"))
+]
+ParkingReportIntentDep = Annotated[
+    AuditReadIntent, Depends(audit_read(TABLE_EDGE_EVENTS, reason="report_parking"))
+]
+ParkingExportIntentDep = Annotated[
+    AuditReadIntent, Depends(audit_read(TABLE_EDGE_EVENTS, reason="report_parking_export"))
+]
 FrameIntentDep = Annotated[
     AuditReadIntent, Depends(audit_read(TABLE_EDGE_FILES, reason="edge_frame_view"))
 ]
@@ -561,6 +574,7 @@ async def list_commands(
 async def list_events(
     site_id: str,
     principal: ViewerDep,
+    intent: EventListIntentDep,
     session: TenantSessionDep,
     type: Annotated[str | None, Query(max_length=64)] = None,  # noqa: A002 — protokol nomi
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -586,6 +600,8 @@ async def list_events(
         )
         for row in rows[:limit]
     ]
+    intent.filters = {"site_id": site.id, "type": type}
+    intent.result_count = len(items)
     return EdgeEventListResponse(items=items, has_more=len(rows) > limit)
 
 
@@ -601,10 +617,15 @@ _SUMMARY_TYPES = (
 async def parking_summary(
     site_id: str,
     principal: ViewerDep,
+    intent: ParkingSummaryIntentDep,
     session: TenantSessionDep,
     day: Annotated[date | None, Query(alias="date")] = None,
 ) -> ParkingSummaryOut:
-    """Kun (Asia/Tashkent) bo'yicha: kirish, chiqish, naqd tushum, so'nggi raqamlar."""
+    """Kun (Asia/Tashkent) bo'yicha: kirish, chiqish, naqd tushum, so'nggi raqamlar.
+
+    ⚠ Panel buni 30 soniyada so'raydi (`SITE_POLL_MS`), ya'ni sahifa ko'rinib
+    turganda har so'rov bitta audit qatori yozadi.
+    """
     market_id = _market_id(principal)
     site = await _site_or_404(session, market_id, site_id)
     # Kun — avtoturargoh ISH KUNI (06:00 dan), hisobot bilan bir chegara.
@@ -638,6 +659,9 @@ async def parking_summary(
                     file_id=data.get("file_id") if isinstance(data.get("file_id"), str) else None,
                 )
             )
+    last_plates = list(reversed(plates))[:20]
+    intent.filters = {"site_id": site.id, "date": target.isoformat()}
+    intent.result_count = len(last_plates)
     return ParkingSummaryOut(
         date=target,
         entries=entries,
@@ -645,7 +669,7 @@ async def parking_summary(
         open_estimate=max(entries - exits, 0),
         cash_total_soum=cash + terminal,
         cash_by_method=CashByMethod(cash=cash, terminal=terminal),
-        last_plates=list(reversed(plates))[:20],
+        last_plates=last_plates,
     )
 
 
@@ -815,6 +839,7 @@ def _report_out(
 async def parking_report_json(
     site_id: str,
     principal: ViewerDep,
+    intent: ParkingReportIntentDep,
     session: TenantSessionDep,
     settings: SettingsDep,
     from_date: ReportFromDep,
@@ -828,11 +853,19 @@ async def parking_report_json(
     `sessions` bo'sh va davr 366 kungacha (yillik tushum grafigi).
 
     Huquq `parking-summary` bilan AYNI (`CAMERA_VIEW`) — direktor va
-    ma'muriyat ko'radi, kassir yo'q.
+    ma'muriyat ko'radi, kassir yo'q. `sessions=0` da ham `regulars` raqam
+    qaytaradi, shuning uchun audit ikkala shaklda yoziladi.
     """
     site, report = await _parking_report(
         session, principal, settings, site_id, from_date, to_date, with_sessions=sessions
     )
+    intent.filters = {
+        "site_id": site.id,
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
+        "sessions": sessions,
+    }
+    intent.result_count = len(report.regulars) + (len(report.sessions) if sessions else 0)
     return _report_out(site, report, with_sessions=sessions)
 
 
@@ -840,6 +873,7 @@ async def parking_report_json(
 async def parking_report_xlsx(
     site_id: str,
     principal: ViewerDep,
+    intent: ParkingExportIntentDep,
     session: TenantSessionDep,
     settings: SettingsDep,
     from_date: ReportFromDep,
@@ -848,11 +882,25 @@ async def parking_report_xlsx(
     """Xuddi shu hisobot `.xlsx` bo'lib: «Kunlar» (JAMI qatori bilan) va
     «Mashinalar» varaqlari. Til — so'rovchining profilidan (D-06).
 
+    ⛔ SHAXSIY HUJJAT, AUDIT MAJBURIY: «Mashinalar» varag'ida avtomobil
+    raqamlari bor, javob modeli esa yo'q — shuning uchun marshrut
+    `test_personal_data_coverage.py::BINARY_PERSONAL_ROUTES` da. Tartib
+    huquq -> niyat -> ma'lumot: 403 olgan so'rov `audit_read` gacha yetmaydi.
+
     Fayl nomi `avtoturargoh_{site_id}_{from}_{to}.xlsx` — TO'LIQ ASCII
     (`Content-Disposition` sarlavhasiga tushadi), obyekt identifikatori
     serverniki va ASCII, lekin baribir tozalanadi.
     """
     site, report = await _parking_report(session, principal, settings, site_id, from_date, to_date)
+    # Niyat hujjat qurilishidan OLDIN to'ldiriladi (`reports.py::receivables_export`
+    # bilan AYNI sabab): bo'sh niyat jurnalda foydasiz qator qoldirardi.
+    intent.filters = {
+        "site_id": site.id,
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
+        "format": "xlsx",
+    }
+    intent.result_count = len(report.sessions)
     locale = await _locale_of(session, principal)
     payload = parking_report.build_parking_report_workbook(
         report, locale=locale, site_name=site.name

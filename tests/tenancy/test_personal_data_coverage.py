@@ -120,6 +120,12 @@ BINARY_PERSONAL_ROUTES: dict[str, str] = {
         "AYNI sinf. Javob modeli YO'Q, shuning uchun `PERSONAL_FIELDS` uni "
         "HECH QACHON topa olmaydi."
     ),
+    "/api/v1/edge-sites/{site_id}/parking-report.xlsx": (
+        "avtoturargoh davr hisobotining `.xlsx` HUJJATI — «Mashinalar» varag'ida har "
+        "seansning AVTOMOBIL RAQAMI va kirish/chiqish vaqti bor, ya'ni u aniq mashina "
+        "qachon kelib-ketganini ochadi. Javob MODELI YO'Q, shuning uchun "
+        "`PERSONAL_FIELDS` uni HECH QACHON topa olmaydi; fayl esa tizimdan CHIQIB ketadi."
+    ),
     "/api/v1/snapshots/{snapshot_id}/image": (
         "dalil-kadr BAYTLARI — bozor tashrifchilarining tasviri, ya'ni O'zR "
         "shaxsiy ma'lumotlar qonuni ostidagi ma'lumot. Javob modeli YO'Q, "
@@ -593,6 +599,7 @@ EVIDENCE_FRAME_ALLOWED = frozenset({Permission.CAMERA_VIEW, Permission.OCCUPANCY
 
 BINARY_PERSONAL_ALLOWED: dict[str, frozenset[Permission]] = {
     "/api/v1/edge-sites/{site_id}/files/{file_id}": frozenset({Permission.CAMERA_VIEW}),
+    "/api/v1/edge-sites/{site_id}/parking-report.xlsx": frozenset({Permission.CAMERA_VIEW}),
     "/api/v1/snapshots/{snapshot_id}/image": EVIDENCE_FRAME_ALLOWED,
     "/api/v1/reports/debtors.xlsx": frozenset({Permission.REPORT_VIEW, Permission.VENDOR_VIEW}),
     "/api/v1/reports/compare.xlsx": frozenset({Permission.REPORT_VIEW, Permission.VENDOR_VIEW}),
@@ -1240,6 +1247,61 @@ def test_market_data_view_holders_already_have_vendor_view() -> None:
         "ular uchun `GET /stalls` endi 403 beradi. Qarorni ONGLI qiling: yo "
         f"matritsaga `VENDOR_VIEW` qo'shing, yo bu testni sabab bilan "
         f"yangilang: {offenders}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# AVTOMOBIL RAQAMI — `PERSONAL_FIELDS` dan ALOHIDA darvoza
+# ---------------------------------------------------------------------------
+
+VEHICLE_PLATE_FIELDS = frozenset({"plate"})
+"""Avtomobil raqami — egasini aniqlaydi va mashinaning kelib-ketishini ochadi.
+
+⛔ `PERSONAL_FIELDS` GA QO'SHILMAYDI (`TELEGRAM_IDENTIFIER_FIELDS` bilan bir xil
+   qaror): u yerdagi marshrutlardan `VENDOR_VIEW` talab qilinadi, raqam esa
+   sotuvchi reyestri emas, kamera ma'lumoti va uning huquqi `CAMERA_VIEW`.
+"""
+
+PLATE_IN_RAW_PAYLOAD_ROUTES = ("/api/v1/edge-sites/{site_id}/events",)
+"""Raqam javob MODELIDA emas, xom hodisaning `data` lug'atida — maydon nomi KO'RMAYDI."""
+
+
+def plate_routes(app: FastAPI) -> dict[str, APIRoute]:
+    """Avtomobil raqami qaytaradigan `GET` marshrutlari."""
+    return {
+        path: route
+        for path, route in get_routes(app).items()
+        if path in PLATE_IN_RAW_PAYLOAD_ROUTES
+        or response_field_names(route.response_model) & VEHICLE_PLATE_FIELDS
+    }
+
+
+def test_plate_routes_declare_read_audit_and_camera_view() -> None:
+    """Raqam qaytaradigan har `GET` o'qish auditi va `CAMERA_VIEW` ni e'lon qiladi."""
+    routes = plate_routes(fastapi_app)
+
+    # BO'SH to'plam ustida yashil bo'lmasin: `plate` qayta nomlansa darvoza hech nima topmasdi.
+    assert {
+        "/api/v1/edge-sites/{site_id}/events",
+        "/api/v1/edge-sites/{site_id}/parking-summary",
+        "/api/v1/edge-sites/{site_id}/parking-report",
+    } <= set(routes), sorted(routes)
+
+    unaudited = sorted(path for path, route in routes.items() if not audit_resources(route))
+    assert not unaudited, (
+        "Quyidagi `GET` marshrutlari avtomobil raqamini qaytaradi, lekin o'qish "
+        "auditini e'lon qilmaydi — `Depends(audit_read(<resurs>, reason=...))` "
+        "qo'shing:\n  " + "\n  ".join(unaudited)
+    )
+
+    ungated = sorted(
+        path
+        for path, route in routes.items()
+        if Permission.CAMERA_VIEW not in required_permissions(route)
+    )
+    assert not ungated, (
+        "Quyidagi `GET` marshrutlari avtomobil raqamini `CAMERA_VIEW` siz "
+        "qaytaradi:\n  " + "\n  ".join(ungated)
     )
 
 

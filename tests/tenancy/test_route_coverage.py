@@ -849,10 +849,10 @@ def test_only_the_ledger_import_needs_a_query_param_exemption() -> None:
     ⛔⛔ TO'QQIZ `GET` MARSHRUTI ISTISNOSIZ QOLADI — O'LCHANGAN.
 
     Ularning hammasida MAJBURIY query parametri bor (`from`/`to`, yoki
-    solishtiruvda `day`) va cross-tenant matritsasi query
-    parametrlarini TO'LDIRMAYDI (`call_route()` faqat YO'L
-    parametrlarini va tanani beradi), ya'ni so'rov validatsiya
-    darvozasida **422** bilan to'xtaydi.
+    solishtiruvda `day`) va cross-tenant matritsasi ularga query
+    BERMAYDI (`QUERY_FILLERS` faqat YO'L parametrli marshrutlar uchun:
+    bu yerda «B obyekti» yo'q, ya'ni 404 da'vosi ham yo'q), ya'ni so'rov
+    validatsiya darvozasida **422** bilan to'xtaydi.
 
     ⛔ LEKIN 422 ULAR UCHUN HECH NIMANI BUZMAYDI: `QUERY_PARAM_ROUTES`
        ning YAGONA iste'molchisi — `test_no_matrix_route_returns_422`, u
