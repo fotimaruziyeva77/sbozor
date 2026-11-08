@@ -80,7 +80,7 @@
       }
     },
     "tariff": {
-      "description": "Avtoturargoh tarifi. Narx = flat + (birinchi soat + keyingi soatlar), bepul daqiqadan keyin, sutkalik shift bilan.",
+      "description": "Avtoturargoh tarifi. Narx = flat + (birinchi soat + keyingi soatlar YOKI steps bosqichi), bepul daqiqadan keyin, sutkalik shift bilan.",
       "type": "object",
       "required": ["version", "rules"],
       "additionalProperties": false,
@@ -100,7 +100,21 @@
               "flat_soum": {"description": "Har kirish uchun qat'iy narx", "type": "integer", "minimum": 0},
               "first_hour_soum": {"type": "integer", "minimum": 0},
               "next_hour_soum": {"type": "integer", "minimum": 0},
-              "day_max_soum": {"description": "24 soatlik shift (0 = yo'q)", "type": "integer", "minimum": 0}
+              "day_max_soum": {"description": "24 soatlik shift (0 = yo'q)", "type": "integer", "minimum": 0},
+              "steps": {
+                "description": "Bosqichli narx: turish vaqti tushgan eng qisqa bosqich summasi (har sutka ichida). Berilsa, birinchi/keyingi soat hisobga olinmaydi.",
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["up_to_minutes", "amount_soum"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "up_to_minutes": {"description": "Shu daqiqagacha (kiradi)", "type": "integer", "minimum": 1, "maximum": 1440},
+                    "amount_soum": {"type": "integer", "minimum": 0}
+                  }
+                }
+              }
             }
           }
         }

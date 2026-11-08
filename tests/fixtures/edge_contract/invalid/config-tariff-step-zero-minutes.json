@@ -1,0 +1,1 @@
+{"config_version":1,"site":{"id":"s","type":"parking","timezone":"Asia/Tashkent"},"plugins":["parking"],"devices":[],"tariff":{"version":1,"rules":[{"category":"car","title":"Yengil","steps":[{"up_to_minutes":0,"amount_soum":4000}]}]},"update":{"channel":"stable","auto":true}}

@@ -35,6 +35,17 @@ DERIVED_KEYS: tuple[str, ...] = ("config_version", "site", "devices", "lanes")
 
 _UPDATE: dict[str, Any] = {"channel": "stable", "auto": True, "window": "22:00-05:00"}
 
+_PARKING_STEPS: list[dict[str, int]] = [
+    {"up_to_minutes": 120, "amount_soum": 4000},
+    {"up_to_minutes": 240, "amount_soum": 6000},
+    {"up_to_minutes": 1440, "amount_soum": 10000},
+]
+"""Buyurtmachi tarifi (2026-11-08): 2 soatgacha, 2-4 soat, 4 soatdan 1 sutkagacha.
+
+Narxni agent hisoblaydi (`sbozor-agent/internal/parking/tariff.go`). 24 soatdan
+oshsa har to'liq sutka alohida, qoldiq vaqt shu shkala bo'yicha.
+"""
+
 _PARKING_TARIFF: dict[str, Any] = {
     "version": 1,
     "rules": [
@@ -42,19 +53,13 @@ _PARKING_TARIFF: dict[str, Any] = {
             "category": "car",
             "title": "Yengil avtomobil",
             "free_minutes": 15,
-            "flat_soum": 0,
-            "first_hour_soum": 3000,
-            "next_hour_soum": 2000,
-            "day_max_soum": 20000,
+            "steps": _PARKING_STEPS,
         },
         {
             "category": "truck",
             "title": "Yuk mashinasi",
             "free_minutes": 15,
-            "flat_soum": 0,
-            "first_hour_soum": 5000,
-            "next_hour_soum": 4000,
-            "day_max_soum": 40000,
+            "steps": _PARKING_STEPS,
         },
     ],
 }

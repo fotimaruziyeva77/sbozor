@@ -1,0 +1,14 @@
+{
+  "config_version": 4,
+  "site": {"id": "karmana-avtoturargoh", "type": "parking", "timezone": "Asia/Tashkent"},
+  "plugins": ["parking"],
+  "devices": [],
+  "tariff": {"version": 1, "rules": [
+    {"category": "car", "title": "Yengil avtomobil", "free_minutes": 15, "steps": [
+      {"up_to_minutes": 120, "amount_soum": 4000},
+      {"up_to_minutes": 240, "amount_soum": 6000},
+      {"up_to_minutes": 1440, "amount_soum": 10000}
+    ]}
+  ]},
+  "update": {"channel": "stable", "auto": true}
+}
