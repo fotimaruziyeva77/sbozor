@@ -58,6 +58,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Final, Literal
 
+from sbozor_core.billing import payment_fee_part
 from sbozor_core.enums import (
     AdjustmentDirection,
     AdjustmentReason,
@@ -102,6 +103,7 @@ __all__ = [
     "AnomalyArchive",
     "AnomalyArchiveRow",
     "CollectedByMethod",
+    "CollectedParts",
     "LedgerDay",
     "LedgerDayRow",
     "ReceivableRow",
@@ -114,6 +116,7 @@ __all__ = [
     "ThreeWayRow",
     "anomaly_archive",
     "collected_by_method",
+    "collected_parts",
     "ledger_day",
     "ledger_upsert",
     "receivables",
@@ -482,6 +485,159 @@ async def collected_by_method(
         payme_soum=int(row["payme_soum"]),
         click_soum=int(row["click_soum"]),
     )
+
+
+# ===========================================================================
+# 1c. TUSHUM PATTA VA TAROZIGA BO'LINGAN — BUXGALTER PANELI (261108)
+# ===========================================================================
+
+_COLLECTED_PAYMENT_ROWS = text(
+    f"""
+    WITH scope AS (
+        SELECT DISTINCT p.stall_id, p.service_date
+          FROM payments p
+          {_ORIGINAL_PAYMENT_JOIN}
+         WHERE p.market_id = :market_id
+           AND p.business_date >= CAST(:from_date AS date)
+           AND {_PAYMENT_CASH_DAY_EXPR} BETWEEN CAST(:from_date AS date) AND CAST(:to_date AS date)
+    )
+    SELECT p.id                                           AS payment_id,
+           p.stall_id                                     AS stall_id,
+           p.service_date                                 AS service_date,
+           p.amount_soum                                  AS amount_soum,
+           p.reverses_payment_id                          AS reverses_payment_id,
+           ({_SIGNED_PAYMENT_EXPR})::bigint               AS signed_soum,
+           ({_PAYMENT_CASH_DAY_EXPR}
+                BETWEEN CAST(:from_date AS date) AND CAST(:to_date AS date)) AS in_period,
+           COALESCE(ch.tariff_amount_soum, tar.amount_soum) AS tariff_soum,
+           COALESCE(fee.amount_soum, 0)::bigint           AS fee_soum
+      FROM scope
+      JOIN payments p
+        ON p.market_id = :market_id
+       AND p.stall_id = scope.stall_id
+       AND p.service_date = scope.service_date
+      {_ORIGINAL_PAYMENT_JOIN}
+      LEFT JOIN daily_charges ch
+        ON ch.market_id = p.market_id
+       AND ch.stall_id = p.stall_id
+       AND ch.service_date = p.service_date
+      LEFT JOIN LATERAL (
+        SELECT c.category_id
+          FROM stall_category_periods c
+         WHERE c.market_id = p.market_id
+           AND c.stall_id = p.stall_id
+           AND c.valid_from <= p.service_date
+         ORDER BY c.valid_from DESC
+         LIMIT 1
+      ) cat ON ch.id IS NULL
+      LEFT JOIN LATERAL (
+        SELECT t.amount_soum
+          FROM tariffs t
+         WHERE t.market_id = p.market_id
+           AND t.category_id = cat.category_id
+           AND t.valid_from <= p.service_date
+         ORDER BY t.valid_from DESC
+         LIMIT 1
+      ) tar ON ch.id IS NULL
+      LEFT JOIN LATERAL (
+        SELECT f.amount_soum
+          FROM market_service_fees f
+         WHERE f.market_id = p.market_id
+           AND f.valid_from <= p.service_date
+         ORDER BY f.valid_from DESC
+         LIMIT 1
+      ) fee ON true
+     ORDER BY p.stall_id, p.service_date, p.created_at, p.id
+    """  # noqa: S608
+).bindparams(
+    bindparam("market_id", type_=_UUID),
+    bindparam("from_date", type_=Date()),
+    bindparam("to_date", type_=Date()),
+    bindparam("reversal", type_=Text()),
+    bindparam("duplicate_entry", type_=Text()),
+)
+"""Davrga tegadigan rasta-kunlarning BARCHA to'lovlari — arifmetika Python'da.
+
+⛔ QOIDA SQL DA YOZILMAYDI: u `sbozor_core.billing.payment_fee_part()` da
+   yashaydi (modul sarlavhasidagi «SQL takrorlamaydi, chaqiradi»).
+
+⛔ `scope` KERAK: bir to'lovning bo'linishi shu rasta-kundagi OLDINGI
+   to'lovlarga bog'liq, ular esa davrdan tashqarida yozilgan bo'lishi mumkin.
+   Davrga kirmaydigan qator `in_period = false` bilan keladi va faqat
+   navbatni aniqlaydi.
+
+⛔ TARIF — MUZLATILGAN HISOBDAN (D-09), hisob bo'lmasa o'sha kundagi tarifdan.
+   `daily_charges` ertasi kuni tug'iladi (C-3), ya'ni BUGUNGI to'lovning
+   hisobi hali yo'q. Tuzatishlar (`charge_adjustments`) ATAYIN qo'shilmaydi:
+   prod'da ular tarozini kechirish yoki pulni hisobga tenglashtirish uchun
+   yozilgan, to'lovning tarkibini o'zgartirmaydi.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class CollectedParts:
+    """Davr tushumi: `stall_soum` + `fee_soum` = `revenue_by_day` yig'indisi.
+
+    ⚠ Ikkalasi ham MANFIY bo'lishi mumkin (`CollectedByMethod` bilan bir xil
+      sabab: o'tgan kun to'lovining bugungi stornosi).
+    """
+
+    stall_soum: int
+    fee_soum: int
+
+
+async def collected_parts(
+    session: AsyncSession,
+    *,
+    market_id: UUID,
+    from_date: date,
+    to_date: date,
+) -> CollectedParts:
+    """Davr tushumini PATTA PULI va TAROZI PULI ga ajratadi (`payment_fee_part`).
+
+    ⛔ BEKOR QILINGAN TO'LOV YOLG'IZ HISOBLANADI va uning stornosi ham: ikkalasi
+       bir xil bo'linib, kunlari boshqa-boshqa bo'lsa ham aniq yeyishadi; tirik
+       to'lovlarning navbatiga esa ular TA'SIR QILMAYDI (22 000 xato yozilib
+       bekor qilingan, keyin 26 000 to'g'ri yozilgan kunda tarozi saqlanadi).
+
+    ⛔ CHAQIRUVCHI TENANT KONTEKSTINI O'RNATGAN BO'LISHI SHART
+       (`TenantSessionDep`) — `revenue_by_day` bilan bir xil qoida.
+    """
+    result = await session.execute(
+        _COLLECTED_PAYMENT_ROWS,
+        {
+            "market_id": market_id,
+            "from_date": from_date,
+            "to_date": to_date,
+            "reversal": _REVERSAL,
+            "duplicate_entry": _DUPLICATE_ENTRY,
+        },
+    )
+    rows = list(result.mappings())
+    cancelled = {row["reverses_payment_id"] for row in rows} - {None}
+
+    paid_before: dict[tuple[UUID, date], int] = {}
+    total = 0
+    fee_total = 0
+    for row in rows:
+        amount = int(row["amount_soum"])
+        day_key = (row["stall_id"], row["service_date"])
+        counts_in_turn = row["reverses_payment_id"] is None and row["payment_id"] not in cancelled
+        before = paid_before.get(day_key, 0) if counts_in_turn else 0
+        fee_part = payment_fee_part(
+            amount,
+            paid_before_soum=before,
+            tariff_soum=None if row["tariff_soum"] is None else int(row["tariff_soum"]),
+            fee_soum=int(row["fee_soum"]),
+        )
+        if counts_in_turn:
+            paid_before[day_key] = before + amount
+        if row["in_period"]:
+            signed = int(row["signed_soum"])
+            total += signed
+            fee_total += fee_part if signed > 0 else -fee_part
+
+    return CollectedParts(stall_soum=total - fee_total, fee_soum=fee_total)
 
 
 # ===========================================================================

@@ -660,6 +660,9 @@ async def live_revenue(
     by_method = await report_repo.collected_by_method(
         session, market_id=market_id, from_date=from_date, to_date=to_date
     )
+    parts = await report_repo.collected_parts(
+        session, market_id=market_id, from_date=from_date, to_date=to_date
+    )
 
     return LiveRevenueResponse(
         from_date=from_date,
@@ -671,6 +674,8 @@ async def live_revenue(
         collected_terminal_soum=by_method.terminal_soum,
         collected_payme_soum=by_method.payme_soum,
         collected_click_soum=by_method.click_soum,
+        collected_stall_soum=parts.stall_soum,
+        collected_fee_soum=parts.fee_soum,
     )
 
 

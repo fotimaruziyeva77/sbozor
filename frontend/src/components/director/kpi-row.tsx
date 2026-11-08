@@ -15,9 +15,12 @@ import {
   countStallDays,
   expectedStalls,
 } from "@/components/director/chart-data";
+import {
+  CollectedPartTiles,
+  usePeriodSub,
+} from "@/components/director/collected-parts";
 import type { Period } from "@/components/director/period";
 import {
-  PERIOD_LABEL_KEY,
   comparePeriod,
   debtWindow,
   includesToday,
@@ -76,6 +79,35 @@ import { useCaptureDays } from "@/lib/snapshot-queries";
 const CAPTURE_DAYS = 7;
 
 export function DirectorKpis({ period }: { period: Period }) {
+  const t = useTranslations();
+  const roles = useAuthStore().principal?.roles ?? [];
+
+  /*
+   * ⛔ 261108 (buyurtmachi): buxgalterga pul UCH alohida son bilan — umumiy,
+   *    patta, tarozi. Bu pulni ko'rish huquqi emas (u direktorda ham bor),
+   *    balki buxgalter ekranining tartibi, shuning uchun shart ROLDA.
+   *    Direktor paneli o'zgarmaydi.
+   */
+  if (roles.includes("accountant")) {
+    return (
+      <div className="dir-kpis">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+          <RevenueKpi
+            className="col-span-2 lg:col-span-1"
+            label={t("director.kpiTotalMoney")}
+            period={period}
+          />
+          <CollectedPartTiles period={period} />
+        </div>
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:gap-4">
+          <StallsKpi />
+          <DebtKpi period={period} />
+          <CameraKpi />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="dir-kpis">
       <RevenueKpi period={period} />
@@ -155,13 +187,23 @@ export function revenueTotals(
   };
 }
 
-function RevenueKpi({ period }: { period: Period }) {
+function RevenueKpi({
+  period,
+  label,
+  className,
+}: {
+  period: Period;
+  /** Buxgalterda «Umumiy pul»; berilmasa — «Tushum». */
+  label?: string;
+  className?: string;
+}) {
   const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
   const timeZone = useTimeZone() ?? "Asia/Tashkent";
   const now = useNow();
   const todayIso = businessDayIn(timeZone, now);
+  const sub = usePeriodSub(period);
 
   const prev = comparePeriod(period);
   const live = useLiveRevenue({ from: period.from, to: period.to });
@@ -190,16 +232,12 @@ function RevenueKpi({ period }: { period: Period }) {
           noChangeText: t("common.deltaNoChange"),
         });
 
-  const sub =
-    period.kind === "custom"
-      ? `${formatBusinessDay(format, period.from, locale)} — ${formatBusinessDay(format, period.to, locale)}`
-      : t(PERIOD_LABEL_KEY[period.kind]);
-
   return (
     <PanelTile
+      className={className}
       href="/reports"
       icon={Banknote}
-      label={t("director.kpiRevenue")}
+      label={label ?? t("director.kpiRevenue")}
       note={
         previous === null ? undefined : (
           <KpiNote>

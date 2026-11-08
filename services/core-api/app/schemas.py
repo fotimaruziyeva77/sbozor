@@ -4975,6 +4975,10 @@ class LiveRevenueResponse(BaseModel):
       stornosi) va klient o'shanda ulush chizmaydi
       (`report_repo._COLLECTED_BY_METHOD` docstringi).
     """
+    collected_stall_soum: int
+    """Davr tushumining PATTA puli qismi — buxgalter paneli (`report_repo.collected_parts`)."""
+    collected_fee_soum: int
+    """Davr tushumining TAROZI puli qismi; `stall` + `fee` = `total_collected_soum`."""
 
 
 class ReceivablesReportRow(BaseModel):

@@ -52,6 +52,7 @@ from app.repositories.report_repo import (
     AnomalyArchiveRow,
     anomaly_archive,
     collected_by_method,
+    collected_parts,
     receivables,
     revenue_by_day,
 )
@@ -64,8 +65,9 @@ from fixtures.billing_domain import (
     add_daily_charge,
     add_payment,
     billing_domain_before_day_close,
+    day_tariff_soum,
 )
-from fixtures.market_domain import MarketDomainSeed
+from fixtures.market_domain import A_SERVICE_FEE_SOUM, MarketDomainSeed
 from fixtures.notification_domain import cleanup_notification_domain, seed_case
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
@@ -667,6 +669,174 @@ async def test_revenue_keeps_a_wrong_stall_reversal_on_its_own_day(
     rows = _by_day(period.rows)
     assert rows[old_day].collected_soum == OLD_SOUM
     assert rows[today].collected_soum == TARIFF_SOUM - OLD_SOUM
+
+
+# ===========================================================================
+# 1c. PATTA PULI VA TAROZI PULI — BUXGALTER PANELI (261108)
+# ===========================================================================
+
+
+def _today(conn: Connection[TupleRow]) -> date:
+    row = conn.execute("SELECT (now() AT TIME ZONE 'Asia/Tashkent')::date").fetchone()
+    assert row is not None
+    today: date = row[0]
+    return today
+
+
+def _pay_on(
+    conn: Connection[TupleRow],
+    env: Env,
+    stall_name: str,
+    amount: int,
+    *,
+    service_date: date,
+    reverses: UUID | None = None,
+    reason: ReversalReason | None = None,
+) -> UUID:
+    return add_payment(
+        conn,
+        market_id=env.market_id,
+        stall_id=env.stall(stall_name),
+        vendor_id=env.live.vendor_id,
+        cashier_id=env.live.cashier_id,
+        shift_id=env.live.open_shift_id,
+        service_date=service_date,
+        amount_soum=amount,
+        quote_soum=amount,
+        kind=(PaymentKind.PAYMENT if reverses is None else PaymentKind.REVERSAL).value,
+        reverses_payment_id=reverses,
+        reversal_reason=None if reason is None else reason.value,
+    )
+
+
+async def test_collected_parts_split_today_by_the_tariff_of_the_day(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """Bugungi hisob hali yo'q (C-3) — patta o'sha kundagi tarifdan olinadi.
+
+    Bekor qilingan to'lov jamiga ham, tarozi puliga ham kirmaydi.
+    """
+    today = _today(sync_owner_conn)
+    tariff = day_tariff_soum(today)
+    full = tariff + A_SERVICE_FEE_SOUM
+
+    _pay_on(sync_owner_conn, env, "stall_with_two_occupied_slots", full, service_date=today)
+    _pay_on(sync_owner_conn, env, "stall_with_one_ai_occupied_slot", tariff, service_date=today)
+    wrong = _pay_on(
+        sync_owner_conn,
+        env,
+        "stall_with_one_human_confirmed_occupied_slot",
+        full,
+        service_date=today,
+    )
+    _pay_on(
+        sync_owner_conn,
+        env,
+        "stall_with_one_human_confirmed_occupied_slot",
+        full,
+        service_date=today,
+        reverses=wrong,
+        reason=ReversalReason.DUPLICATE_ENTRY,
+    )
+
+    async with tenant_session(env.market_id) as session:
+        parts = await collected_parts(
+            session, market_id=env.market_id, from_date=today, to_date=today
+        )
+        period = await revenue_by_day(
+            session, market_id=env.market_id, from_date=today, to_date=today
+        )
+
+    assert parts.fee_soum == A_SERVICE_FEE_SOUM
+    assert parts.stall_soum == 2 * tariff
+    assert parts.stall_soum + parts.fee_soum == period.total_collected_soum
+
+
+async def test_collected_parts_count_the_fee_taken_on_a_stall_billed_without_it(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """Hisobida tarozi yo'q rastada kassir patta + tarozi olgan — bu tarozi puli.
+
+    Patta MUZLATILGAN hisobdan olinadi: o'sha kunning tarifi keyin o'zgargan
+    bo'lsa ham to'lov o'z kunidagi narx bilan bo'linadi.
+    """
+    today = _today(sync_owner_conn)
+    _, charged_day = add_daily_charge(
+        sync_owner_conn,
+        market_id=env.market_id,
+        stall_id=env.stall("stall_with_two_occupied_slots"),
+        vendor_id=env.live.vendor_id,
+        tariff_id=env.live.tariff_id,
+        amount_soum=TARIFF_SOUM,
+        fee_soum=0,
+    )
+    _pay_on(
+        sync_owner_conn,
+        env,
+        "stall_with_two_occupied_slots",
+        TARIFF_SOUM + A_SERVICE_FEE_SOUM,
+        service_date=charged_day,
+    )
+
+    async with tenant_session(env.market_id) as session:
+        parts = await collected_parts(
+            session, market_id=env.market_id, from_date=today, to_date=today
+        )
+
+    assert parts.stall_soum == TARIFF_SOUM
+    assert parts.fee_soum == A_SERVICE_FEE_SOUM
+
+
+async def test_collected_parts_ignore_a_cancelled_payment_in_the_turn(
+    sync_owner_conn: Connection[TupleRow], tenant_session: TenantSessionFactory, env: Env
+) -> None:
+    """Xato yozilib bekor qilingan patta to'g'ri to'lovning tarozisini yemaydi."""
+    today = _today(sync_owner_conn)
+    tariff = day_tariff_soum(today)
+    stall = "stall_with_two_occupied_slots"
+
+    wrong = _pay_on(sync_owner_conn, env, stall, tariff, service_date=today)
+    _pay_on(
+        sync_owner_conn,
+        env,
+        stall,
+        tariff,
+        service_date=today,
+        reverses=wrong,
+        reason=ReversalReason.WRONG_AMOUNT,
+    )
+    _pay_on(sync_owner_conn, env, stall, tariff + A_SERVICE_FEE_SOUM, service_date=today)
+
+    async with tenant_session(env.market_id) as session:
+        parts = await collected_parts(
+            session, market_id=env.market_id, from_date=today, to_date=today
+        )
+
+    assert parts.stall_soum == tariff
+    assert parts.fee_soum == A_SERVICE_FEE_SOUM
+
+
+@pytest.mark.parametrize(
+    "reason", [ReversalReason.DUPLICATE_ENTRY, ReversalReason.WRONG_STALL], ids=lambda r: r.value
+)
+async def test_collected_parts_add_up_to_the_revenue_of_every_period(
+    sync_owner_conn: Connection[TupleRow],
+    tenant_session: TenantSessionFactory,
+    env: Env,
+    reason: ReversalReason,
+) -> None:
+    """Storno boshqa kunda bo'lsa ham har davrda patta + tarozi = tushum."""
+    old_day, today = _old_entry_reversed_today(sync_owner_conn, env, reason)
+
+    async with tenant_session(env.market_id) as session:
+        for start, end in ((old_day, old_day), (today, today), (old_day, today)):
+            parts = await collected_parts(
+                session, market_id=env.market_id, from_date=start, to_date=end
+            )
+            period = await revenue_by_day(
+                session, market_id=env.market_id, from_date=start, to_date=end
+            )
+            assert parts.stall_soum + parts.fee_soum == period.total_collected_soum, (start, end)
 
 
 # ===========================================================================

@@ -65,12 +65,13 @@ __all__ = (
     "TodayRemainder",
     "allocate_charge_credit",
     "billable_from_slots",
+    "payment_fee_part",
     "payment_quote_set",
     "today_remainder",
     "total_due_soum",
     "variance",
 )
-"""⛔ EKSPORT YUZASI — OLTI FUNKSIYA, BESH TIP VA BITTA QOIDA NOMI.
+"""⛔ EKSPORT YUZASI — YETTI FUNKSIYA, BESH TIP VA BITTA QOIDA NOMI.
 
 Kortej ATAYIN (ro'yxat emas), `occupancy.py:77-82` bilan aynan bir xil
 sabab: yuzani kengaytirish MANBA MATNINI o'zgartirishni talab qiladi,
@@ -447,6 +448,62 @@ def today_remainder(amount_soum: int, fee_soum: int, paid_today_soum: int) -> To
         stall_amount_soum=remaining_stall,
         fee_amount_soum=remaining - remaining_stall,
     )
+
+
+def _fee_within(total_soum: int, tariff_soum: int, fee_soum: int) -> int:
+    """Rasta-kunga tushgan `total_soum` ning TAROZI qismi (`payment_fee_part`)."""
+    days, rest = divmod(total_soum, tariff_soum + fee_soum)
+    return days * fee_soum + max(rest - tariff_soum, 0)
+
+
+def payment_fee_part(
+    amount_soum: int,
+    *,
+    paid_before_soum: int,
+    tariff_soum: int | None,
+    fee_soum: int,
+) -> int:
+    """To'lovning TAROZI qismi — qolgani patta puli (buxgalter paneli, 261108).
+
+    =======================================================================
+    ⛔⛔ BO'LINISH TO'LOVDA SAQLANMAYDI (C-4), U KASSIR NIYATIDAN TIKLANADI.
+
+    Qoida `today_remainder()` bilan bitta: shu rasta-kunga tushgan pul avval
+    PATTANI, keyin TAROZINI yopadi. Undan ortig'i (ikki kunlik to'lov, eski
+    qarz) — xuddi shu tartibning keyingi aylanishi: patta, tarozi, patta…
+    Summa har doim butun so'mda ikkiga bo'linadi va qoldiq qolmaydi.
+
+    ⛔ FIFO EMAS: `allocate_charge_credit()` «qaysi KUN yopildi?» savoliga
+       javob beradi. Sotuvchi har kuni tarozisiz 22 000 to'lasa, FIFO
+       ertangi to'lovning bir qismini kechagi tarozi deb yozardi — holbuki
+       kassir tarozi olmagan.
+
+    ⚠ `fee_soum` — BOZORNING o'sha kundagi tarozi narxi,
+      `daily_charges.fee_amount_soum` EMAS: tarozi sotuvchining bitta
+      rastasiga yoziladi, kassir esa uni boshqa rastasida olgan bo'lishi
+      mumkin (prod'da hisobida tarozi yo'q 34 rasta-kunda 22 000 + 4 000
+      olingan, 261108 da o'lchandi).
+    =======================================================================
+
+    Args:
+        amount_soum: to'lov summasi (MUSBAT kattalik, storno ham shunday).
+        paid_before_soum: shu rasta-kunga bu to'lovdan OLDIN tushgan va bekor
+            qilinmagan pul.
+        tariff_soum: o'sha kundagi rasta puli; `None` yoki `0` — tarif
+            noma'lum, tarozi qaysi summadan keyin boshlanishi aytib
+            bo'lmaydi va hammasi patta deb olinadi.
+        fee_soum: o'sha kundagi tarozi narxi.
+
+    Returns:
+        Tarozi qismi. Patta qismi — `amount_soum` dan shuning ayirmasi.
+    """
+    amount = assert_safe_soum(amount_soum)
+    before = assert_safe_soum(paid_before_soum)
+    fee = assert_safe_soum(fee_soum)
+    tariff = 0 if tariff_soum is None else assert_safe_soum(tariff_soum)
+    if tariff == 0 or fee == 0:
+        return 0
+    return _fee_within(before + amount, tariff, fee) - _fee_within(before, tariff, fee)
 
 
 def payment_quote_set(

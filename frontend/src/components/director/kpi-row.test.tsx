@@ -37,7 +37,11 @@ const YESTERDAY = { kind: "yesterday" as const, from: "2026-10-15", to: "2026-10
 
 const uuid = (n: number) => `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
-const live = (from: string, collected: number) => ({
+const live = (
+  from: string,
+  collected: number,
+  parts?: { stall: number; fee: number },
+) => ({
   from_date: from,
   to_date: from,
   total_collected_soum: collected,
@@ -45,6 +49,9 @@ const live = (from: string, collected: number) => ({
   charged_complete: false,
   collected_cash_soum: collected,
   collected_terminal_soum: 0,
+  ...(parts === undefined
+    ? {}
+    : { collected_stall_soum: parts.stall, collected_fee_soum: parts.fee }),
 });
 
 const mapRow = (n: number, state: string) => ({
@@ -75,7 +82,12 @@ const SETUP = {
   can_activate: true, blocking: [],
 };
 
-function route(opts: { liveToday: number; liveWeekAgo: number; liveYesterday?: number }) {
+function route(opts: {
+  liveToday: number;
+  liveWeekAgo: number;
+  liveYesterday?: number;
+  parts?: { stall: number; fee: number };
+}) {
   apiClientMock.apiFetch.mockImplementation((path: string) => {
     const url = new URL(path, "http://x");
     if (path.startsWith("/reports/live")) {
@@ -86,7 +98,9 @@ function route(opts: { liveToday: number; liveWeekAgo: number; liveYesterday?: n
           : from === "2026-10-15"
             ? (opts.liveYesterday ?? 0)
             : opts.liveWeekAgo;
-      return Promise.resolve(live(from, value));
+      return Promise.resolve(
+        live(from, value, from === "2026-10-16" ? opts.parts : undefined),
+      );
     }
     if (path.startsWith("/billing/map")) {
       return Promise.resolve({
@@ -130,6 +144,7 @@ let client: QueryClient;
 function renderKpis(
   period: { kind: "today" | "yesterday"; from: string; to: string },
   now: Date = NOW,
+  roles: readonly string[] = ["director"],
 ) {
   setSession({
     accessToken: "test-access-token",
@@ -138,7 +153,7 @@ function renderKpis(
       userId: "33333333-3333-4333-8333-333333333333",
       phone: "+998900000000",
       fullName: "Test Direktor",
-      roles: ["director"],
+      roles,
       marketId: MARKET_ID,
       marketName: "Karmana markaziy bozori",
       isPlatformAdmin: false,
@@ -225,6 +240,47 @@ describe("to'rt katak", () => {
 
     expect(await screen.findByText("5 kundan beri kadr kelmayapti")).toBeInTheDocument();
     expect(screen.getByText(D.kpiCamera)).toBeInTheDocument();
+  });
+});
+
+describe("buxgalter paneli: umumiy, patta va tarozi (261108)", () => {
+  test("uchala son alohida katakda, ikkalasi ham serverdan", async () => {
+    route({
+      liveToday: 1_124_000,
+      liveWeekAgo: 0,
+      parts: { stall: 1_004_000, fee: 120_000 },
+    });
+    renderKpis(TODAY, NOW, ["accountant"]);
+
+    expect(await screen.findByText("1 124 000")).toBeInTheDocument();
+    expect(screen.getByText("1 004 000")).toBeInTheDocument();
+    expect(screen.getByText("120 000")).toBeInTheDocument();
+    expect(screen.getByText(D.kpiTotalMoney)).toBeInTheDocument();
+    expect(screen.getByText(D.kpiStallMoney)).toBeInTheDocument();
+    expect(screen.getByText(D.kpiFeeMoney)).toBeInTheDocument();
+    expect(screen.queryByText(D.kpiRevenue)).toBeNull();
+  });
+
+  test("direktor paneli o'zgarmaydi", async () => {
+    route({
+      liveToday: 1_124_000,
+      liveWeekAgo: 0,
+      parts: { stall: 1_004_000, fee: 120_000 },
+    });
+    renderKpis(TODAY);
+
+    expect(await screen.findByText("1 124 000")).toBeInTheDocument();
+    expect(screen.getByText(D.kpiRevenue)).toBeInTheDocument();
+    expect(screen.queryByText(D.kpiStallMoney)).toBeNull();
+    expect(screen.queryByText(D.kpiFeeMoney)).toBeNull();
+  });
+
+  test("server bo'linishni bermasa nol emas, «—» yoziladi", async () => {
+    route({ liveToday: 1_124_000, liveWeekAgo: 0 });
+    renderKpis(TODAY, NOW, ["accountant"]);
+
+    expect(await screen.findByText("1 124 000")).toBeInTheDocument();
+    expect(screen.getAllByText("—")).toHaveLength(2);
   });
 });
 

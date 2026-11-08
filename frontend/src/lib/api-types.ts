@@ -887,6 +887,12 @@ export const liveRevenueSchema = z.object({
   // 0035: Payme orqali yig'ilgan pul — ixtiyoriy (yuqoridagi bilan bir xil sabab).
   collected_payme_soum: z.number().int().optional(),
   collected_click_soum: z.number().int().optional(),
+  /*
+   * Buxgalter paneli (261108): tushumning patta va tarozi qismi; ikkalasining
+   * yig'indisi `total_collected_soum` ga teng. Ixtiyoriy — yuqoridagi sabab.
+   */
+  collected_stall_soum: z.number().int().optional(),
+  collected_fee_soum: z.number().int().optional(),
 });
 export type LiveRevenue = z.infer<typeof liveRevenueSchema>;
 

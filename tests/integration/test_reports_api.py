@@ -59,8 +59,9 @@ from fixtures.billing_domain import (
     add_daily_charge,
     add_payment,
     billing_domain_before_day_close,
+    day_tariff_soum,
 )
-from fixtures.market_domain import MarketDomainSeed
+from fixtures.market_domain import A_SERVICE_FEE_SOUM, MarketDomainSeed
 from fixtures.notification_domain import cleanup_notification_domain, seed_case
 from fixtures.nvr_domain import nvr_rows
 from fixtures.occupancy_domain import occupancy_rows
@@ -1088,6 +1089,50 @@ async def test_the_live_revenue_splits_the_money_by_payment_method(
     assert payload["collected_terminal_soum"] == TARIFF_SOUM, payload
     assert (
         payload["collected_cash_soum"] + payload["collected_terminal_soum"]
+        == payload["total_collected_soum"]
+    ), payload
+
+
+async def test_the_live_revenue_splits_the_money_into_stall_and_fee(
+    api_client: httpx.AsyncClient,
+    sync_owner_conn: Connection[TupleRow],
+    reports: Env,
+    director_headers: dict[str, str],
+) -> None:
+    """Buxgalter paneli (261108): patta + tarozi = tushum, summalar SERVERDAN."""
+    today = business_today()
+    market_a = reports.billing.market_a
+    tariff = day_tariff_soum(today)
+
+    for stall_id, amount in (
+        (market_a.stall_with_two_occupied_slots, tariff + A_SERVICE_FEE_SOUM),
+        (market_a.stall_with_one_ai_occupied_slot, tariff),
+    ):
+        assert stall_id is not None
+        add_payment(
+            sync_owner_conn,
+            market_id=market_a.market_id,
+            stall_id=stall_id,
+            vendor_id=market_a.vendor_id,
+            cashier_id=market_a.cashier_id,
+            shift_id=market_a.open_shift_id,
+            service_date=today,
+            amount_soum=amount,
+            quote_soum=amount,
+        )
+
+    response = await api_client.get(
+        LIVE_URL,
+        params={"from": today.isoformat(), "to": today.isoformat()},
+        headers=director_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["collected_fee_soum"] == A_SERVICE_FEE_SOUM, payload
+    assert payload["collected_stall_soum"] == 2 * tariff, payload
+    assert (
+        payload["collected_stall_soum"] + payload["collected_fee_soum"]
         == payload["total_collected_soum"]
     ), payload
 
