@@ -46,10 +46,28 @@ key-decisions:
 | ruff, mypy (`edge_config.py`) | toza |
 | Sxema va namunalar ikki repoda | aynan bir xil |
 
-## Bajarilmagan (buyurtmachi aytganda)
+## Deploy (2026-11-08)
 
-Commit, agent relizi, deploy va mavjud obyektlarning `edge_configs` i. Tartib: server sxemasi -> agent
-relizi -> obyekt sozlamasiga `steps`. Eski agent noma'lum maydonli sozlamani rad etadi; server deploy
-bo'lgach yangi obyektlar `steps` bilan yaratiladi, shuning uchun reliz server bilan birga chiqishi kerak.
+Server `a55503f` da, faqat `core-api` qayta qurildi (`worker`/`scheduler` eski holatda: ularni qurish boshqa
+commit'larni ham chiqarardi). Orqaga qaytish nuqtasi: `8755bb5`.
 
-Agent oynasi haqiqiy brauzerda ko'rilmadi: `ruleText` matni kod darajasida tekshirildi.
+Agent `1.0.30` (`sbozor-agent` `3d10c9a`, tarmoq `claude/agent-1.0.30`) imzolandi va `pilot` + `stable` ga chiqdi.
+Sinov obyekti `parking-c951e998be`: agent `1.0.30`, sozlama `v4` qo'llandi, oyna matni haqiqiy sahifada tekshirildi.
+Bir martalik skript `PUT /config` yo'lini takrorlaydi; `first_hour_soum`/`next_hour_soum` ataylab qoldirildi
+(agent `1.0.29` ga qaytsa mashina bepul chiqmasin). Buyurtmachi «hammasini o'zing qil» dedi, shuning uchun README'dagi
+bir kunlik pilot kuzatuvi qisqardi.
+
+## Karmana (2026-11-09)
+
+Buyurtmachi agentni tugma bilan `1.0.30` ga o'tkazdi (09:31). `parking-5f2939163c` `v13` 10:19 da yozildi: agent qabul qildi
+(`core.config.applied`), kamera oqimlari qayta ochilmadi (`streamSig` tarifni o'z ichiga olmaydi).
+
+Shu kuni ikkala kamera raqam oqimini uzgan: `alertStream` ga ulanish 0,02 s da javobsiz EOF, `deviceInfo` esa 200. Kirish 08:20 da,
+hali `1.0.29` da to'xtagan; `1.0.30` da kamera kodi o'zgarmagan. Kameralar Reboot qilingach (10:12) oqim bir daqiqada tiklandi.
+Tiqilish sababi isbotlanmagan (ehtimol HikCentral yoki kameradagi eski sessiya).
+
+⚠ `v13` agent yangilanishidan KEYIN yozilishi shart edi. Avval «`1.0.29` rad etadi» deb yozilgan edi, bu xato:
+`applyServerConfig` sxemani struct'dan qayta yig'ilgan hujjat ustida tekshiradi, ya'ni eski agent `steps` ni jimgina tashlab, `v13` ni
+o'zida saqlab qolardi va yangilangach uni qayta olmasdi (kod o'qildi, sinov yakunlanmadi).
+
+Agent oynasi sinov obyektida haqiqiy sahifada tekshirildi.
