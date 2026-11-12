@@ -33,6 +33,7 @@ import { DebtorsReport } from "@/components/reports/debtors-report";
 import { RevenueReport } from "@/components/reports/revenue-report";
 import { businessDayIn } from "@/components/snapshots/day-picker";
 import { formatBusinessDay } from "@/lib/format-day";
+import { LIVE_REFRESH_MS } from "@/lib/live-refresh";
 
 /*
  * =============================================================================
@@ -121,7 +122,8 @@ export function DirectorPanel({
   const format = useFormatter();
   const locale = useLocale();
   const timeZone = useTimeZone() ?? "Asia/Tashkent";
-  const now = useNow();
+  /* 261112: raqamlar har LIVE_REFRESH_MS da yangilanadi — «yangilandi» soati ham. */
+  const now = useNow({ updateInterval: LIVE_REFRESH_MS });
 
   const todayIso = businessDayIn(timeZone, now);
   /*

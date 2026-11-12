@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api-client";
 import { soumSchema } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
 import { AMOUNT_UNAVAILABLE_REASONS } from "@/lib/billing-pending-queries";
+import { LIVE_REFRESH_MS } from "@/lib/live-refresh";
 import { domainKey } from "@/lib/market-queries";
 import { hasPermission } from "@/lib/rbac";
 
@@ -191,9 +192,10 @@ export type MapDayLayer = {
  *   ko'rinardi. Bu `useMarketPending` bilan aynan bir xil qaror va
  *   aynan bir xil sabab.
  *
- * ⚠ AVTOMATIK TAYMER YO'Q (`refetchInterval` yozilmaydi): raqamni o'qib
- *   turgan paytda uni jimgina o'zgartirib qo'yish «men boshqa raqam
- *   ko'rgandim» nizosining manbai.
+ * ⚠ 261112 DAN O'ZI YANGILANADI (`live-refresh.ts`): buyurtmachi kassir
+ *   kiritgan to'lov sahifani qayta yuklamasdan ko'rinishini so'radi.
+ *   Ilgari taymer ATAYIN yo'q edi (raqam o'qilayotganda o'zgarmasin) —
+ *   bu qaror buyurtmachi tomonidan bekor qilindi. Yashirin tabda so'rov yo'q.
  *
  * ⚠ `retry: false`: to'lov qatlami xaritani BLOKLAMAYDI — nosozlikda
  *   bitta sabab qatori chiziladi va inventar ranglari joyida qoladi.
@@ -216,6 +218,8 @@ export function useMapDayStatusQuery(): MapDayLayer {
     retry: false,
     staleTime: 0,
     gcTime: 0,
+    refetchInterval: LIVE_REFRESH_MS,
+    refetchIntervalInBackground: false,
   });
 
   const status = query.data ?? null;

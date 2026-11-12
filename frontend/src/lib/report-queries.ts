@@ -14,6 +14,7 @@ import {
   vendorHistorySchema,
 } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
+import { includesMarketToday, LIVE_REFRESH_MS } from "@/lib/live-refresh";
 import { domainKey, IMPORTS_PATH, saveBlob } from "@/lib/market-queries";
 
 /*
@@ -227,6 +228,12 @@ export function useLiveRevenue(
   options?: { enabled?: boolean },
 ) {
   const marketId = useMarketId();
+  /*
+   * ⛔ 261112: davr bugunni qamrasa raqam kun ichida o'zgaradi (kassir to'lov
+   *    yozadi), shuning uchun ochiq tabda o'zi yangilanadi (`live-refresh.ts`).
+   *    Yopilgan davr avvalgidek 5 daqiqa keshda turadi.
+   */
+  const live = includesMarketToday(period.to);
 
   return useQuery({
     queryKey: liveRevenueKey(marketId ?? "", period.from, period.to),
@@ -235,8 +242,10 @@ export function useLiveRevenue(
         schema: liveRevenueSchema,
       }),
     enabled: marketId !== null && (options?.enabled ?? true),
-    staleTime: REPORT_STALE_TIME_MS,
-    refetchOnWindowFocus: false,
+    staleTime: live ? LIVE_REFRESH_MS / 2 : REPORT_STALE_TIME_MS,
+    refetchOnWindowFocus: live,
+    refetchInterval: live ? LIVE_REFRESH_MS : false,
+    refetchIntervalInBackground: false,
   });
 }
 

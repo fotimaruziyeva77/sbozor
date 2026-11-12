@@ -7,6 +7,7 @@ import { z } from "zod";
 import { apiFetch } from "@/lib/api-client";
 import { soumSchema, stallStatusSchema } from "@/lib/api-types";
 import { useAuthStore } from "@/lib/auth-store";
+import { LIVE_REFRESH_MS } from "@/lib/live-refresh";
 import { domainKey } from "@/lib/market-queries";
 
 /*
@@ -477,9 +478,11 @@ export function usePendingStall(
  *   §9.5 ning so'zma-so'z qarori. Kassir yuzasidan farqi ochiq: u yerda
  *   fokus qaytishi so'rov TUG'DIRMASLIGI kerak (kassir bir rastada
  *   turadi), bu yerda esa direktor sahifaga qaytganda eng yangi raqamni
- *   ko'rgani ma'qul. AVTOMATIK TAYMER esa ikkala yuzada ham YO'Q:
- *   raqamni o'qib turgan paytda uni jimgina o'zgartirib qo'yish
- *   «men boshqa raqam ko'rgandim» nizosining manbai.
+ *   ko'rgani ma'qul.
+ *
+ * ⚠ 261112 DAN DIREKTOR YUZASI O'ZI YANGILANADI (`live-refresh.ts`):
+ *   buyurtmachi kassir kiritgan to'lov qayta yuklamasdan ko'rinishini
+ *   so'radi. Kassir yuzasida (`usePendingStall`) taymer hamon YO'Q.
  */
 export function useMarketPending(options?: { enabled?: boolean }) {
   const marketId = useMarketId();
@@ -492,6 +495,8 @@ export function useMarketPending(options?: { enabled?: boolean }) {
     retry: false,
     staleTime: 0,
     gcTime: 0,
+    refetchInterval: LIVE_REFRESH_MS,
+    refetchIntervalInBackground: false,
   });
 }
 
